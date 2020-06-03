@@ -305,7 +305,8 @@ finalize_qtc_gtest(unittest ".c$")
 target_include_directories(unittest
   PRIVATE
     BEFORE $<TARGET_PROPERTY:clangrefactoringbackend_lib,INTERFACE_INCLUDE_DIRECTORIES>
-    BEFORE $<TARGET_PROPERTY:ClangRefactoring,INTERFACE_INCLUDE_DIRECTORIES>
+    BEFORE ../../../src/plugins/clangrefactoring
+    BEFORE ../../../src/plugins
 )
 
 get_target_property(ClangSupportSources ClangSupport SOURCES)
@@ -377,9 +378,8 @@ extend_qtc_test(unittest
     projectmacro.cpp projectmacro.h
 )
 
-get_target_property(ClangRefactoringSourcesDir ClangRefactoring SOURCES_DIR)
 extend_qtc_test(unittest
-  SOURCES_PREFIX "${ClangRefactoringSourcesDir}"
+  SOURCES_PREFIX ../../../src/plugins/clangrefactoring
   SOURCES
     clangqueryexamplehighlighter.cpp clangqueryexamplehighlighter.h
     clangqueryexamplehighlightmarker.h
@@ -401,9 +401,8 @@ extend_qtc_test(unittest
     locatorfilter.cpp locatorfilter.h
 )
 
-get_target_property(ClangPchManagerSourcesDir ClangPchManager SOURCES_DIR)
 extend_qtc_test(unittest
-  SOURCES_PREFIX "${ClangPchManagerSourcesDir}"
+  SOURCES_PREFIX ../../../src/plugins/clangpchmanager
   DEFINES CLANGPCHMANAGER_STATIC_LIB
   SOURCES
     clangindexingprojectsettings.cpp clangindexingprojectsettings.h
