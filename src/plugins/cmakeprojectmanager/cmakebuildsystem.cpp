@@ -553,7 +553,8 @@ static Utils::FilePaths librarySearchPaths(const CMakeBuildSystem *bs, const QSt
     const CMakeBuildTarget cmakeBuildTarget
         = Utils::findOrDefault(bs->buildTargets(), Utils::equal(&CMakeBuildTarget::title, buildKey));
 
-    return cmakeBuildTarget.libraryDirectories;
+    // Filter out anything not a directory (e.g. .lib files):
+    return Utils::filtered(cmakeBuildTarget.libraryDirectories, &Utils::FilePath::isDir);
 }
 
 const QList<BuildTargetInfo> CMakeBuildSystem::appTargets() const
