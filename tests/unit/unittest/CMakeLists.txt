@@ -12,6 +12,10 @@ if (MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj")
 endif()
 
+if (MINGW)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wa,-mbig-obj")
+endif()
+
 add_qtc_test(unittest GTEST
   INCLUDES
     BEFORE "../mockup"
