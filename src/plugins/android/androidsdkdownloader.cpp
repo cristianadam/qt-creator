@@ -61,7 +61,7 @@ void AndroidSdkDownloader::sslErrors(const QList<QSslError> &sslErrors)
 }
 #endif
 
-void AndroidSdkDownloader::downloadAndExtractSdk(const FilePath &sdkExtractPath)
+void AndroidSdkDownloader::downloadAndExtractSdk()
 {
     if (m_androidConfig.sdkToolsUrl().isEmpty()) {
         logError(tr("The SDK Tools download URL is empty."));
@@ -88,11 +88,16 @@ void AndroidSdkDownloader::downloadAndExtractSdk(const FilePath &sdkExtractPath)
 
     connect(m_progressDialog, &QProgressDialog::canceled, this, &AndroidSdkDownloader::cancel);
 
-    connect(this, &AndroidSdkDownloader::sdkPackageWriteFinished, this, [this, sdkExtractPath]() {
-        if (Archive *archive = Archive::unarchive(m_sdkFilename, sdkExtractPath)) {
-            connect(archive, &Archive::finished, [this, sdkExtractPath](bool success){
-                if (success)
+    connect(this, &AndroidSdkDownloader::sdkPackageWriteFinished, this, [this]() {
+        const FilePath extractDir = m_sdkFilename.parentDir();
+        if (Archive *archive = Archive::unarchive(m_sdkFilename, extractDir)) {
+            connect(archive, &Archive::finished, [this, extractDir](bool success) {
+                if (success) {
+                    // Save the extraction path temporarily which can be used by sdkmanager
+                    // to install essential packages at firt time setup.
+                    m_androidConfig.setTemporarySdkToolsPath(extractDir.pathAppended("cmdline-tools"));
                     emit sdkExtracted();
+                }
             });
         }
     });
@@ -153,7 +158,7 @@ FilePath AndroidSdkDownloader::getSaveFilename(const QUrl &url)
         basename += QString::number(i);
     }
 
-    return FilePath::fromString(QStandardPaths::writableLocation(QStandardPaths::DownloadLocation))
+    return FilePath::fromString(QStandardPaths::writableLocation(QStandardPaths::TempLocation))
             / basename;
 }
 

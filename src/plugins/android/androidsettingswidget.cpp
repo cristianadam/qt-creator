@@ -428,6 +428,13 @@ AndroidSettingsWidget::AndroidSettingsWidget()
         QMessageBox::warning(this, AndroidSdkDownloader::dialogTitle(), error);
     });
     connect(&m_sdkDownloader, &AndroidSdkDownloader::sdkExtracted, this, [this] {
+        // Make sure the sdk path is created before installing packages
+        const FilePath sdkPath = m_androidConfig.sdkLocation();
+        if (!sdkPath.createDir()) {
+            QMessageBox::warning(this, AndroidSdkDownloader::dialogTitle(),
+                                 tr("Failed to create the SDK Tools path\n\"%1\".")
+                                 .arg(sdkPath.toUserOutput()));
+        }
         m_sdkManager.reloadPackages(true);
         updateUI();
         apply();
@@ -681,7 +688,7 @@ void AndroidSettingsWidget::downloadSdk()
     auto userInput = QMessageBox::information(this, AndroidSdkDownloader::dialogTitle(),
                                               message, QMessageBox::Yes | QMessageBox::No);
     if (userInput == QMessageBox::Yes)
-        m_sdkDownloader.downloadAndExtractSdk(m_ui.SDKLocationPathChooser->filePath().cleanPath());
+        m_sdkDownloader.downloadAndExtractSdk();
 }
 
 // AndroidSettingsPage
