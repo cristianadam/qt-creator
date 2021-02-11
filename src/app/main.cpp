@@ -60,6 +60,7 @@
 #include <QProcess>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QTextCodec>
 
 #include <string>
 #include <vector>
@@ -484,6 +485,10 @@ int main(int argc, char **argv)
     if (!qEnvironmentVariableIsSet("QT_OPENGL"))
         QCoreApplication::setAttribute(Qt::AA_UseOpenGLES);
 #endif
+
+    QString codecForLocale = qEnvironmentVariable("QTC_CODEC_FOR_LOCALE");
+    if (!codecForLocale.isEmpty())
+        QTextCodec::setCodecForLocale(QTextCodec::codecForName(codecForLocale.toLocal8Bit()));
 
     if (qEnvironmentVariableIsSet("QTCREATOR_DISABLE_NATIVE_MENUBAR")
             || qgetenv("XDG_CURRENT_DESKTOP").startsWith("Unity")) {
