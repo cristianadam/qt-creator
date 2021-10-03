@@ -167,6 +167,7 @@ public:
     bool isValid() const override;
     PackageType type() const override;
 };
+using BuildToolsList = QList<BuildTools*>;
 
 class PlatformTools : public AndroidSdkPackage
 {

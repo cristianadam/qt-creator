@@ -76,6 +76,9 @@ public:
     SdkPlatformList filteredSdkPlatforms(int minApiLevel,
                                          AndroidSdkPackage::PackageState state
                                          = AndroidSdkPackage::Installed);
+    BuildToolsList filteredBuildTools(int minApiLevel,
+                                      AndroidSdkPackage::PackageState state
+                                      = AndroidSdkPackage::Installed);
     void reloadPackages(bool forceReload = false);
     bool isBusy() const;
 

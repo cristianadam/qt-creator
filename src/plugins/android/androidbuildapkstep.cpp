@@ -95,6 +95,7 @@ static Q_LOGGING_CATEGORY(buildapkstepLog, "qtc.android.build.androidbuildapkste
 
 const char KeystoreLocationKey[] = "KeystoreLocation";
 const char BuildTargetSdkKey[] = "BuildTargetSdk";
+const char BuildToolsVersionKey[] = "BuildToolsVersion";
 const char VerboseOutputKey[] = "VerboseOutput";
 
 class PasswordInputDialog : public QDialog
@@ -185,18 +186,37 @@ QWidget *AndroidBuildApkWidget::createApplicationGroup()
 
     auto group = new QGroupBox(tr("Application"), this);
 
+    const auto cbActivated = QOverload<int>::of(&QComboBox::activated);
+
     auto targetSDKComboBox = new QComboBox();
     targetSDKComboBox->addItems(targets);
-    targetSDKComboBox->setCurrentIndex(targets.indexOf(m_step->buildTargetSdk()));
-
-    const auto cbActivated = QOverload<int>::of(&QComboBox::activated);
     connect(targetSDKComboBox, cbActivated, this, [this, targetSDKComboBox](int idx) {
        const QString sdk = targetSDKComboBox->itemText(idx);
        m_step->setBuildTargetSdk(sdk);
        AndroidManager::updateGradleProperties(m_step->target(), QString()); // FIXME: Use real key.
    });
+    targetSDKComboBox->setCurrentIndex(targets.indexOf(m_step->buildTargetSdk()));
+
+    const QList<QVersionNumber> buildToolsVersions = Utils::transform(
+                AndroidConfigurations::sdkManager()->filteredBuildTools(minApiSupported),
+                [](const BuildTools *pkg) {
+        return pkg->revision();
+    });
+
+    auto buildToolsSdkComboBox = new QComboBox();
+    for (const QVersionNumber &version : buildToolsVersions)
+        buildToolsSdkComboBox->addItem(version.toString(), QVariant::fromValue(version));
+    connect(buildToolsSdkComboBox, cbActivated, this, [this, buildToolsSdkComboBox](int idx) {
+       m_step->setBuildToolsVersion(buildToolsSdkComboBox->itemData(idx).value<QVersionNumber>());
+   });
+
+    const int initIdx = (m_step->buildToolsVersion().majorVersion() < 1)
+            ? buildToolsVersions.indexOf(buildToolsVersions.last())
+            : buildToolsVersions.indexOf(m_step->buildToolsVersion());
+    buildToolsSdkComboBox->setCurrentIndex(initIdx);
 
     auto formLayout = new QFormLayout(group);
+    formLayout->addRow(tr("Android build-tools version:"), buildToolsSdkComboBox);
     formLayout->addRow(tr("Android build platform SDK:"), targetSDKComboBox);
 
     auto createAndroidTemplatesButton = new QPushButton(tr("Create Templates"));
@@ -595,6 +615,8 @@ bool AndroidBuildApkStep::init()
         return false;
     }
 
+    updateBuildToolsVersionInJsonFile();
+
     QStringList arguments = {"--input", m_inputFile.toString(),
                              "--output", outputDir.toString(),
                              "--android-platform", m_buildTargetSdk,
@@ -893,6 +915,35 @@ void AndroidBuildApkStep::reportWarningOrError(const QString &message, Task::Tas
     TaskHub::addTask(BuildSystemTask(type, message));
 }
 
+void AndroidBuildApkStep::updateBuildToolsVersionInJsonFile()
+{
+    // Handle build-tools version
+    QFile jsonfile(m_inputFile.toString());
+    jsonfile.open(QIODevice::ReadOnly);
+    QStringList newJsonContent;
+    QTextStream jsonStream(&jsonfile);
+    QString buildToolsVersion = m_buildToolsVersion.toString();
+    while (!jsonStream.atEnd()) {
+        const QString line = jsonStream.readLine();
+        if (!line.contains("sdkBuildToolsRevision") || buildToolsVersion.isEmpty()) {
+            newJsonContent.append(line);
+        } else {
+            newJsonContent.append(QLatin1String("%1: \"%2\",")
+                                  .arg(line.left(line.lastIndexOf(':')))
+                                  .arg(buildToolsVersion));
+
+        }
+    }
+    jsonfile.close();
+
+    // Write back correct data
+    if (newJsonContent.count() > 1) {
+        jsonfile.open(QFile::WriteOnly);
+        jsonfile.write(newJsonContent.join('\n').toUtf8().data());
+        jsonfile.close();
+    }
+}
+
 void AndroidBuildApkStep::processStarted()
 {
     emit addOutput(tr("Starting: \"%1\" %2")
@@ -905,6 +956,7 @@ bool AndroidBuildApkStep::fromMap(const QVariantMap &map)
     m_keystorePath = FilePath::fromVariant(map.value(KeystoreLocationKey));
     m_signPackage = false; // don't restore this
     m_buildTargetSdk = map.value(BuildTargetSdkKey).toString();
+    m_buildToolsVersion = QVersionNumber::fromString(map.value(BuildToolsVersionKey).toString());
     if (m_buildTargetSdk.isEmpty()) {
         m_buildTargetSdk = AndroidConfig::apiLevelNameFor(AndroidConfigurations::
                                                           sdkManager()->latestAndroidSdkPlatform());
@@ -918,6 +970,7 @@ QVariantMap AndroidBuildApkStep::toMap() const
     QVariantMap map = ProjectExplorer::AbstractProcessStep::toMap();
     map.insert(KeystoreLocationKey, m_keystorePath.toVariant());
     map.insert(BuildTargetSdkKey, m_buildTargetSdk);
+    map.insert(BuildToolsVersionKey, m_buildToolsVersion.toString());
     map.insert(VerboseOutputKey, m_verbose);
     return map;
 }
@@ -935,6 +988,16 @@ QString AndroidBuildApkStep::buildTargetSdk() const
 void AndroidBuildApkStep::setBuildTargetSdk(const QString &sdk)
 {
     m_buildTargetSdk = sdk;
+}
+
+QVersionNumber AndroidBuildApkStep::buildToolsVersion() const
+{
+    return m_buildToolsVersion;
+}
+
+void AndroidBuildApkStep::setBuildToolsVersion(const QVersionNumber &version)
+{
+    m_buildToolsVersion = version;
 }
 
 void AndroidBuildApkStep::stdError(const QString &output)

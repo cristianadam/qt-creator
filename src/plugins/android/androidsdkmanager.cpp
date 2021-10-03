@@ -394,6 +394,20 @@ SdkPlatformList AndroidSdkManager::filteredSdkPlatforms(int minApiLevel,
     return result;
 }
 
+BuildToolsList AndroidSdkManager::filteredBuildTools(int minApiLevel,
+                                                      AndroidSdkPackage::PackageState state)
+{
+    const AndroidSdkPackageList list = m_d->filteredPackages(state,
+                                                             AndroidSdkPackage::BuildToolsPackage);
+    BuildToolsList result;
+    for (AndroidSdkPackage *p : list) {
+        auto platform = static_cast<BuildTools *>(p);
+        if (platform && platform->revision().majorVersion() >= minApiLevel)
+            result << platform;
+    }
+    return result;
+}
+
 void AndroidSdkManager::reloadPackages(bool forceReload)
 {
     m_d->refreshSdkPackages(forceReload);

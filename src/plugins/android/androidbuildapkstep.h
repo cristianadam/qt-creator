@@ -32,6 +32,8 @@
 
 #include <utils/fileutils.h>
 
+#include <QVersionNumber>
+
 QT_BEGIN_NAMESPACE
 class QAbstractItemModel;
 QT_END_NAMESPACE
@@ -75,6 +77,9 @@ public:
     QString buildTargetSdk() const;
     void setBuildTargetSdk(const QString &sdk);
 
+    QVersionNumber buildToolsVersion() const;
+    void setBuildToolsVersion(const QVersionNumber &version);
+
     void stdError(const QString &output) override;
 
     QVariant data(Utils::Id id) const override;
@@ -93,6 +98,7 @@ private:
     void doRun() override;
 
     void reportWarningOrError(const QString &message, ProjectExplorer::Task::TaskType type);
+    void updateBuildToolsVersionInJsonFile();
 
     bool m_buildAAB = false;
     bool m_signPackage = false;
@@ -101,6 +107,7 @@ private:
     bool m_openPackageLocationForRun = false;
     bool m_addDebugger = true;
     QString m_buildTargetSdk;
+    QVersionNumber m_buildToolsVersion;
 
     Utils::FilePath m_keystorePath;
     QString m_keystorePasswd;
