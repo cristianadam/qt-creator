@@ -144,10 +144,6 @@ ProjectExplorer::IDevice::Ptr AvdDialog::device() const
         qCWarning(avdDialogLog) << "System image of the created AVD is nullptr";
         return IDevice::Ptr();
     }
-    dev->setExtraData(Constants::AndroidSdk, m_createdAvdInfo.systemImage->apiLevel());
-    dev->setExtraData(Constants::AndroidAvdSdcard, QString("%1 MB")
-                      .arg(m_createdAvdInfo.sdcardSize));
-    dev->setExtraData(Constants::AndroidAvdDevice, m_createdAvdInfo.deviceDefinition);
 
     return IDevice::Ptr(dev);
 }
