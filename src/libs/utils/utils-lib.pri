@@ -45,6 +45,8 @@ SOURCES += \
     $$PWD/wizard.cpp \
     $$PWD/wizardpage.cpp \
     $$PWD/filewizardpage.cpp \
+    $$PWD/fileinfogatherer.cpp \
+    $$PWD/filesystemmodel.cpp \
     $$PWD/filesystemwatcher.cpp \
     $$PWD/projectintropage.cpp \
     $$PWD/filenamevalidatinglineedit.cpp \
@@ -184,6 +186,9 @@ HEADERS += \
     $$PWD/wizard.h \
     $$PWD/wizardpage.h \
     $$PWD/filewizardpage.h \
+    $$PWD/fileinfogatherer.h \
+    $$PWD/filesystemodel.h \
+    $$PWD/filesystemodel_p.h \
     $$PWD/filesystemwatcher.h \
     $$PWD/projectintropage.h \
     $$PWD/filenamevalidatinglineedit.h \
