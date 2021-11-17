@@ -41,13 +41,13 @@ class IEditor;
 namespace Utils {
 class NavigationTreeView;
 class FileCrumbLabel;
+class FileSystemModel;
 class QtcSettings;
 }
 
 QT_BEGIN_NAMESPACE
 class QAction;
 class QComboBox;
-class QFileSystemModel;
 class QMenu;
 class QModelIndex;
 class QSortFilterProxyModel;
@@ -148,7 +148,7 @@ private:
     void createNewFolder(const QModelIndex &parent);
 
     Utils::NavigationTreeView *m_listView = nullptr;
-    QFileSystemModel *m_fileSystemModel = nullptr;
+    Utils::FileSystemModel *m_fileSystemModel = nullptr;
     QSortFilterProxyModel *m_sortProxyModel = nullptr;
     QAction *m_filterHiddenFilesAction = nullptr;
     QAction *m_showBreadCrumbsAction = nullptr;

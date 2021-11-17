@@ -45,6 +45,7 @@
 
 #include <utils/algorithm.h>
 #include <utils/filecrumblabel.h>
+#include <utils/filesystemmodel.h>
 #include <utils/fileutils.h>
 #include <utils/hostosinfo.h>
 #include <utils/navigationtreeview.h>
@@ -60,7 +61,6 @@
 #include <QContextMenuEvent>
 #include <QDir>
 #include <QFileInfo>
-#include <QFileSystemModel>
 #include <QHeaderView>
 #include <QMenu>
 #include <QMessageBox>
@@ -70,6 +70,8 @@
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
+
+#include <utils/filesystemmodel.h>
 
 using namespace Utils;
 
@@ -135,11 +137,11 @@ private:
 };
 
 // FolderNavigationModel: Shows path as tooltip.
-class FolderNavigationModel : public QFileSystemModel
+class FolderNavigationModel : public FileSystemModel
 {
 public:
     enum Roles {
-        IsFolderRole = Qt::UserRole + 50 // leave some gap for the custom roles in QFileSystemModel
+        IsFolderRole = Qt::UserRole + 50 // leave some gap for the custom roles in FileSystemModel
     };
 
     explicit FolderNavigationModel(QObject *parent = nullptr);
@@ -175,12 +177,12 @@ bool FolderSortProxyModel::lessThan(const QModelIndex &source_left, const QModel
         if (leftIsFolder != rightIsFolder)
             return leftIsFolder;
     }
-    const QString leftName = src->data(source_left, QFileSystemModel::FileNameRole).toString();
-    const QString rightName = src->data(source_right, QFileSystemModel::FileNameRole).toString();
+    const QString leftName = src->data(source_left, FileSystemModel::FileNameRole).toString();
+    const QString rightName = src->data(source_right, FileSystemModel::FileNameRole).toString();
     return Utils::FilePath::fromString(leftName) < Utils::FilePath::fromString(rightName);
 }
 
-FolderNavigationModel::FolderNavigationModel(QObject *parent) : QFileSystemModel(parent)
+FolderNavigationModel::FolderNavigationModel(QObject *parent) : FileSystemModel(parent)
 { }
 
 QVariant FolderNavigationModel::data(const QModelIndex &index, int role) const
@@ -190,7 +192,7 @@ QVariant FolderNavigationModel::data(const QModelIndex &index, int role) const
     else if (role == IsFolderRole)
         return isDir(index);
     else
-        return QFileSystemModel::data(index, role);
+        return FileSystemModel::data(index, role);
 }
 
 Qt::DropActions FolderNavigationModel::supportedDragActions() const
@@ -201,8 +203,8 @@ Qt::DropActions FolderNavigationModel::supportedDragActions() const
 Qt::ItemFlags FolderNavigationModel::flags(const QModelIndex &index) const
 {
     if (index.isValid() && !fileInfo(index).isRoot())
-        return QFileSystemModel::flags(index) | Qt::ItemIsEditable;
-    return QFileSystemModel::flags(index);
+        return FileSystemModel::flags(index) | Qt::ItemIsEditable;
+    return FileSystemModel::flags(index);
 }
 
 bool FolderNavigationModel::setData(const QModelIndex &index, const QVariant &value, int role)
@@ -217,7 +219,7 @@ bool FolderNavigationModel::setData(const QModelIndex &index, const QVariant &va
     if (beforeFilePath == afterFilePath)
         return false;
     // need to rename through file system model, which takes care of not changing our selection
-    const bool success = QFileSystemModel::setData(index, value, role);
+    const bool success = FileSystemModel::setData(index, value, role);
     // for files we can do more than just rename on disk, for directories the user is on his/her own
     if (success && fileInfo(index).isFile()) {
         Core::DocumentManager::renamedFile(beforeFilePath, afterFilePath);
@@ -419,7 +421,7 @@ void FolderNavigationWidget::setShowFoldersOnTop(bool onTop)
 {
     m_showFoldersOnTopAction->setChecked(onTop);
     m_sortProxyModel->setSortRole(onTop ? int(FolderNavigationModel::IsFolderRole)
-                                        : int(QFileSystemModel::FileNameRole));
+                                        : int(FileSystemModel::FileNameRole));
 }
 
 static bool itemLessThan(QComboBox *combo,
