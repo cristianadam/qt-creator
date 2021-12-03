@@ -50,8 +50,13 @@
     \uicontrol {Local File Path} field displays the location of the file on the
     development PC. The \uicontrol {Remote Directory} field displays the folder
     where the file is installed on the device. Text in red color indicates that
-    the information is missing. Edit the qmake \l{Variables#installs}
-    {INSTALLS variable} in the project \c .pro file to add the missing files.
+    the information is missing.
+
+    When using CMake as the build system, define the \l{CMake: install command}
+    {install} command in the CMakeLists.txt file to add the missing files.
+
+    When using qmake, edit the \l{Variables#installs}{INSTALLS variable} in
+    the project \c .pro file.
 
     When you run the application, \QC copies the necessary files to the device
     and starts the application on it.
