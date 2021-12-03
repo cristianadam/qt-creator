@@ -61,4 +61,54 @@
     \l Projects and \l {File System} views in \QDS and Qt Creator:
 
     \image studio-project-structure.png "\QDS project in \QDS and Qt Creator views"
+    
+    \section1 Converting project structure for CMake
+    
+    If you have an older QML project use these steps to convert it's file structure to the
+    form that can be compiled into an executable.
+
+    \list 1
+    \li Create folder \a content in the project's folder. This folder contains the application's main module.
+        \list
+        \li Move all qml files of the project's main module into \a content folder. If your project has multiple
+        modules, the other modules should be placed under \a imports or \a asset_imports.
+        \li If your project's main module has resource folders such as \a fonts or \a images move them into \a content.
+        \endlist
+    \li Create folder \a src in the project's folder. This folder contains c++ code for compiling the project.
+    \li If your project doesn't already have an \a imports folder for other QML modules, create it now even if
+    you do not have other modules. The CMake file generator expects it.
+    \li Edit project's .qmlproject file.
+        \list
+        \li Add \a "." in importPaths.
+        \li Change mainFile to \a "content/App.qml" . \a App.qml will be created in the next step.
+        \endlist
+    \li Create \a App.qml .
+        \list
+        \li Copy this content as \a App.qml :
+        
+            \qml
+            import QtQuick
+            import QtQuick.Window
+            import <YourImportModuleHere>
+
+            Window {
+                width: Constants.width
+                height: Constants.height
+
+                visible: true
+                title: "YourWindowTitleHere"
+
+                <YourMainQmlClassHere> {
+                }
+            }
+            \endqml
+        
+        \li Modify imported module, window dimensions, window title and main QML class appropriately.
+        
+            This template assumes your project has a module called <YourImportModuleHere> in \a imports folder
+            and contains a singleton class called \a Constants . This isn't mandatory.
+        \endlist
+    \li Generate CMake files and c++ source files that are used to compile the application into
+    an executable file by selecting \b Build > Generate CMakeLists.txt files .
+    \endlist
 */
