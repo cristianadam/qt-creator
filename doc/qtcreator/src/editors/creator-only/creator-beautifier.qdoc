@@ -121,8 +121,16 @@
 
                 \li Select \uicontrol {Use file *.astylerc defined in project files}
                     or \uicontrol {Use file uncrustify.cfg defined in project files},
-                    to use the configuration file defined in the qmake DISTFILES
-                    variable as the configuration file for the selected tool.
+                    to use the configuration file defined in the project file as
+                    the configuration file for the selected tool:
+                    \list
+                        \li When using CMake, add the configuration file as
+                            a value of the \l{CMake: target_sources command}
+                            {target_sources} command in the CMakeLists.txt file.
+                        \li When using qmake, add the configuration file as
+                            a value of the \l DISTFILES property in the .pro
+                            file.
+                    \endlist
 
                 \li Select \uicontrol {Use specific config file} or
                     \uicontrol {Use file specific uncrustify.cfg} to
