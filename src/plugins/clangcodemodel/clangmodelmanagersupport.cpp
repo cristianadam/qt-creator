@@ -344,11 +344,23 @@ void ClangModelManagerSupport::updateLanguageClient(
 
             // Acquaint the client with all open C++ documents for this project.
             bool hasDocuments = false;
+            const QList<Client *> allClients = LanguageClientManager::clients();
             for (TextEditor::BaseTextEditor * const editor : allCppEditors()) {
-                if (!project->isKnownFile(editor->textDocument()->filePath()))
+                TextEditor::TextDocument * const doc = editor->textDocument();
+                if (!project->isKnownFile(doc->filePath()))
                     continue;
-                LanguageClientManager::openDocumentWithClient(editor->textDocument(), client);
-                ClangEditorDocumentProcessor::clearTextMarks(editor->textDocument()->filePath());
+                LanguageClientManager::openDocumentWithClient(doc, client);
+                // In contrast to other clients the clangdclient only open files that are part of
+                // the project. So we need to manually close them if we open them in another client.
+                for (Client * const otherClient : allClients) {
+                    if (otherClient == client)
+                        continue;
+                    if (otherClient->documentOpen(doc) && otherClient->reachable()) {
+                        if (auto oldClangdClient = qobject_cast<ClangdClient *>(otherClient))
+                            oldClangdClient->closeDocument(doc);
+                    }
+                }
+                ClangEditorDocumentProcessor::clearTextMarks(doc->filePath());
                 hasDocuments = true;
             }
 
