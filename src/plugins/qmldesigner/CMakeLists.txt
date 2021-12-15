@@ -3,11 +3,28 @@ if (APPLE)
   set(QmlDesignerPluginInstallPrefix "${IDE_PLUGIN_PATH}/QmlDesigner")
 endif()
 
+get_filename_component(
+    QMLDOM_STANDALONE_CMAKELISTS
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../../qmldom_standalone/src/qmldom/standalone/"
+    ABSOLUTE
+)
+
+if(EXISTS ${QMLDOM_STANDALONE_CMAKELISTS} AND Qt6_FOUND AND NOT TARGET qmldomlib)
+  add_subdirectory(
+    ../../../../qmldom_standalone/src/qmldom/standalone
+    ${CMAKE_BINARY_DIR}/qmldom_standalone)
+
+  set_target_properties(qmldomlib PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "$<TARGET_PROPERTY:QmlJS,RUNTIME_OUTPUT_DIRECTORY>"
+    LIBRARY_OUTPUT_DIRECTORY "$<TARGET_PROPERTY:QmlJS,LIBRARY_OUTPUT_DIRECTORY>")
+endif()
+
 add_qtc_plugin(QmlDesigner
   CONDITION TARGET Qt5::QuickWidgets AND TARGET Qt5::Svg
   DEPENDS
     QmlJS LanguageUtils QmlEditorWidgets AdvancedDockingSystem
     Qt5::QuickWidgets Qt5::CorePrivate Sqlite Qt5::Xml Qt5::Svg
+    qmldomlib
   DEFINES
     DESIGNER_CORE_LIBRARY
     IDE_LIBRARY_BASENAME=\"${IDE_LIBRARY_BASE_PATH}\"
@@ -344,6 +361,39 @@ extend_qtc_plugin(QmlDesigner
     include/qmlvisualnode.h
 
 )
+
+extend_qtc_plugin(QmlDesigner
+  SOURCES_PREFIX designercore/projectstorage
+  SOURCES
+    directorypathcompressor.h
+    filesysteminterface.h
+    filesystem.cpp filesystem.h
+    filestatus.h
+    filestatuscache.cpp filestatuscache.h
+    nonlockingmutex.h
+    projectstorageinterface.h
+    projectstorage.h
+    projectstoragepathwatcher.h
+    projectstoragepathwatcherinterface.h
+    projectstoragepathwatchernotifierinterface.h
+    projectstoragepathwatcher.h
+    projectstoragepathwatchertypes.h
+    projectstoragetypes.h
+    projectstorageupdater.cpp projectstorageupdater.h
+    sourcepath.h
+    sourcepathcache.h
+    sourcepathcache.h
+    sourcepathcachetypes.h
+    sourcepathview.h
+    storagecache.h
+    storagecacheentry.h
+    storagecachefwd.h
+    qmldocumentparserinterface.h
+    qmltypesparserinterface.h
+    qmltypesparser.cpp qmltypesparser.h
+    qmldocumentparser.cpp qmldocumentparser.h
+)
+
 
 extend_qtc_plugin(QmlDesigner
   SOURCES_PREFIX designercore/instances
