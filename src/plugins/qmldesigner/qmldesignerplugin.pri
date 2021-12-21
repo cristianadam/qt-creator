@@ -7,8 +7,9 @@ HEADERS += $$PWD/qmldesignerconstants.h \
     $$PWD/generateresource.h \
     $$PWD/generatecmakelists.h \
     $$PWD/generatecmakelistsconstants.h \
-    $$PWD/checkablefilelistmodel.h \
+    $$PWD/checkablefiletreeitem.h \
     $$PWD/cmakegeneratordialog.h \
+    $$PWD/cmakegeneratordialogtreemodel.h \
     $$PWD/settingspage.h \
     $$PWD/designmodecontext.h \
     $$PWD/documentmanager.h \
@@ -25,8 +26,9 @@ SOURCES += $$PWD/qmldesignerplugin.cpp \
     $$PWD/editorproxy.cpp \
     $$PWD/generateresource.cpp \
     $$PWD/generatecmakelists.cpp \
-    $$PWD/checkablefilelistmodel.cpp \
+    $$PWD/checkablefiletreeitem.cpp \
     $$PWD/cmakegeneratordialog.cpp \
+    $$PWD/cmakegeneratordialogtreemodel.cpp \
     $$PWD/settingspage.cpp \
     $$PWD/designmodecontext.cpp \
     $$PWD/documentmanager.cpp \
