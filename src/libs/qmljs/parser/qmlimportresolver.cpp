@@ -49,8 +49,11 @@ QStringList qQmlResolveImportPaths(QStringView uri, const QStringList &basePaths
     static const QLatin1Char Slash('/');
     static const QLatin1Char Backslash('\\');
 
+#if QT_VERSION < QT_VERSION_CHECK(5, 15, 2)
+    const QList<QString> parts = uri.toString().split(u'.', Qt::SkipEmptyParts);
+#else
     const QList<QStringView> parts = uri.split(u'.', Qt::SkipEmptyParts);
-
+#endif
     QStringList importPaths;
     // fully & partially versioned parts + 1 unversioned for each base path
     importPaths.reserve(2 * parts.count() + 1);
@@ -70,7 +73,11 @@ QStringList qQmlResolveImportPaths(QStringView uri, const QStringList &basePaths
         return QString();
     };
 
+#if QT_VERSION < QT_VERSION_CHECK(5, 15, 2)
+    auto joinStringRefs = [](const QList<QString> & refs, const QChar &sep) {
+#else
     auto joinStringRefs = [](const QList<QStringView> &refs, const QChar &sep) {
+#endif
         QString str;
         for (auto it = refs.cbegin(); it != refs.cend(); ++it) {
             if (it != refs.cbegin())
