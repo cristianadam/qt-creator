@@ -676,40 +676,6 @@ bool LinuxDevice::setPermissions(const Utils::FilePath &filePath, QFileDevice::P
     return d->runInShell({"chmod", {QString::number(flags, 16), filePath.path()}});
 }
 
-static void filterEntriesHelper(const FilePath &base,
-                                const std::function<bool(const FilePath &)> &callBack,
-                                const QStringList &entries,
-                                const FileFilter &filter)
-{
-    const QList<QRegularExpression> nameRegexps =
-        transform(filter.nameFilters, [](const QString &filter) {
-            QRegularExpression re;
-            re.setPattern(QRegularExpression::wildcardToRegularExpression(filter));
-            QTC_CHECK(re.isValid());
-            return re;
-        });
-
-    const auto nameMatches = [&nameRegexps](const QString &fileName) {
-        for (const QRegularExpression &re : nameRegexps) {
-            const QRegularExpressionMatch match = re.match(fileName);
-            if (match.hasMatch())
-                return true;
-        }
-        return nameRegexps.isEmpty();
-    };
-
-    // FIXME: Handle filters. For now bark on unsupported options.
-    QTC_CHECK(filter.fileFilters == QDir::NoFilter);
-    QTC_CHECK(filter.iteratorFlags == QDirIterator::NoIteratorFlags);
-
-    for (const QString &entry : entries) {
-        if (!nameMatches(entry))
-            continue;
-        if (!callBack(base.pathAppended(entry)))
-            break;
-    }
-}
-
 void LinuxDevice::iterateDirectory(const FilePath &filePath,
                                    const std::function<bool(const FilePath &)> &callBack,
                                    const FileFilter &filter) const
@@ -718,7 +684,7 @@ void LinuxDevice::iterateDirectory(const FilePath &filePath,
     // if we do not have find - use ls as fallback
     const QString output = d->outputForRunInShell({"ls", {"-1", "-b", "--", filePath.path()}});
     const QStringList entries = output.split('\n', Qt::SkipEmptyParts);
-    filterEntriesHelper(filePath, callBack, entries, filter);
+    FileUtils::iterateLsOutput(filePath, entries, filter, callBack);
 }
 
 QByteArray LinuxDevice::fileContents(const FilePath &filePath, qint64 limit, qint64 offset) const
