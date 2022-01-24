@@ -79,6 +79,9 @@
             anchor button to anchor \e adventurePage to its
             parent in the \uicontrol Target field. This attaches the background
             image to the rectangle on all sides.
+            Note: Selecting the anchor button should automatically select the
+            four buttons on the left side of it. If it doesnt, refresh
+            \uicontrol{Form Editor}.
             \image loginui2-layout.png "Layout properties"
         \li Select \e qt_logo_green_128x128px in \l Navigator.
         \li In \uicontrol Properties > \uicontrol Layout, select the
