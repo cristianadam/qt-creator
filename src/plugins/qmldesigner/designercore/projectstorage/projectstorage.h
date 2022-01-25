@@ -79,6 +79,7 @@ public:
         TypeIds typeIdsToBeDeleted;
 
         std::sort(package.updatedSourceIds.begin(), package.updatedSourceIds.end());
+        removeNonUnique(package.updatedSourceIds);
 
         synchronizeFileStatuses(package.fileStatuses, package.updatedFileStatusSourceIds);
         synchronizeImports(package.imports, package.updatedSourceIds);
@@ -347,6 +348,12 @@ private:
     static bool moduleNameLess(Utils::SmallStringView first, Utils::SmallStringView second) noexcept
     {
         return Utils::reverseCompare(first, second) < 0;
+    }
+
+    template<typename Container>
+    static void removeNonUnique(Container &container)
+    {
+        container.erase(std::unique(container.begin(), container.end()), container.end());
     }
 
     using ModuleCache = StorageCache<Utils::PathString,
@@ -650,9 +657,9 @@ private:
             return &first.sourceId - &second.sourceId;
         };
 
-        std::sort(fileStatuses.begin(), fileStatuses.end(), [&](auto &&first, auto &&second) {
-            return first.sourceId < second.sourceId;
-        });
+        std::sort(fileStatuses.begin(), fileStatuses.end());
+
+        removeNonUnique(fileStatuses);
 
         auto range = selectFileStatusesForSourceIdsStatement.template range<FileStatus>(
             toIntegers(updatedSourceIds));
@@ -698,6 +705,8 @@ private:
                                                                 });
 
         std::sort(importSourceIds.begin(), importSourceIds.end());
+
+        removeNonUnique(importSourceIds);
 
         SourceIds documentSourceIdsToBeDeleted;
 
@@ -972,10 +981,9 @@ private:
                                   PropertyDeclarations &relinkablePropertyDeclarations,
                                   Prototypes &relinkablePrototypes)
     {
-        std::sort(exportedTypes.begin(), exportedTypes.end(), [](auto &&first, auto &&second) {
-            return std::tie(first.moduleId, first.name, first.version)
-                   < std::tie(second.moduleId, second.name, second.version);
-        });
+        std::sort(exportedTypes.begin(), exportedTypes.end());
+
+        removeNonUnique(exportedTypes);
 
         auto range = selectExportedTypesForSourceIdsStatement.template range<Storage::ExportedTypeView>(
             toIntegers(updatedTypeIds));
@@ -1020,7 +1028,7 @@ private:
                                                                          &type.typeId);
                 }
             } catch (const Sqlite::ConstraintPreventsModification &) {
-                throw QmlDesigner::ModuleDoesNotExists{};
+                throw QmlDesigner::ModuleAlreadyExists{};
             }
         };
 
@@ -1265,10 +1273,9 @@ private:
 
     void synchronizeDocumentImports(Storage::Imports &imports, const SourceIds &updatedSourceIds)
     {
-        std::sort(imports.begin(), imports.end(), [](auto &&first, auto &&second) {
-            return std::tie(first.sourceId, first.moduleId, first.version)
-                   < std::tie(second.sourceId, second.moduleId, second.version);
-        });
+        std::sort(imports.begin(), imports.end());
+
+        removeNonUnique(imports);
 
         auto range = selectDocumentImportForSourceIdStatement.template range<Storage::ImportView>(
             toIntegers(updatedSourceIds));
