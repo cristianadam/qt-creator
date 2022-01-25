@@ -333,7 +333,7 @@ void QmlDesignerProjectManager::update()
     if (!m_projectData)
         return;
 
-    m_projectData->projectStorageData.updater.update(qmlDirs(m_projectData->activeTarget));
+    m_projectData->projectStorageData.updater.update(qmlDirs(m_projectData->activeTarget), {});
 }
 
 } // namespace QmlDesigner
