@@ -255,6 +255,22 @@ QStringList qmlDirs(::ProjectExplorer::Target *target)
     return qmldirPaths;
 }
 
+QStringList qmlTypes(::ProjectExplorer::Target *target)
+{
+    if (!target)
+        return {};
+
+    QStringList qmlTypesPaths;
+    qmlTypesPaths.reserve(10);
+
+    const QString installDirectory = qmlPath(target).toString();
+
+    qmlTypesPaths.push_back(installDirectory + "/builtins.qmltypes");
+    qmlTypesPaths.push_back(installDirectory + "/jsroot.qmltypes");
+
+    return qmlTypesPaths;
+}
+
 } // namespace
 
 void QmlDesignerProjectManager::projectAdded(::ProjectExplorer::Project *project)
@@ -278,7 +294,7 @@ void QmlDesignerProjectManager::projectAdded(::ProjectExplorer::Project *project
         activeTargetChanged(target);
 }
 
-void QmlDesignerProjectManager::aboutToRemoveProject(::ProjectExplorer::Project *project)
+void QmlDesignerProjectManager::aboutToRemoveProject(::ProjectExplorer::Project *)
 {
     if (m_projectData) {
         m_imageCacheData->collector.setTarget(m_projectData->activeTarget);
@@ -333,7 +349,8 @@ void QmlDesignerProjectManager::update()
     if (!m_projectData)
         return;
 
-    m_projectData->projectStorageData.updater.update(qmlDirs(m_projectData->activeTarget), {});
+    m_projectData->projectStorageData.updater.update(qmlDirs(m_projectData->activeTarget),
+                                                     qmlTypes(m_projectData->activeTarget));
 }
 
 } // namespace QmlDesigner
