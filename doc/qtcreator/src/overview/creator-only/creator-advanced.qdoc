@@ -95,6 +95,11 @@
             corresponding source code by clicking the error message or by using
             keyboard shortcuts.
 
+        \li \l{Inspecting Internal Logging}
+
+            You can inspect internal logging messages of \QC. These may be
+            helpful when developing \QC or investigating problems.
+
         \li \l{Managing Data Collection}
 
             If you agreed to pseudonymous data collection during \QC

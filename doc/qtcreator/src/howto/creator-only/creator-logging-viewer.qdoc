@@ -1,0 +1,107 @@
+/****************************************************************************
+**
+** Copyright (C) 2022 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of the Qt Creator documentation.
+**
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU Free Documentation License Usage
+** Alternatively, this file may be used under the terms of the GNU Free
+** Documentation License version 1.3 as published by the Free Software
+** Foundation and appearing in the file included in the packaging of
+** this file. Please review the following information to ensure
+** the GNU Free Documentation License version 1.3 requirements
+** will be met: https://www.gnu.org/licenses/fdl-1.3.html.
+**
+****************************************************************************/
+
+/*!
+    \page creator-logging-viewer.html
+    \if defined(qtdesignstudio)
+    \previouspage creator-quick-ui-forms.html
+    \else
+    \previouspage creator-task-lists.html
+    \endif
+    \nextpage creator-telemetry.html
+
+    \title Inspecting Internal Logging
+
+    You can inspect internal logging messages of \QC at runtime without the
+    need to restart or the need to configure the logging rules.
+
+    Loggings are usually interesting if you develop \QC, if you need to
+    investigate some problem you are facing, or if you want to have a look
+    behind the scenes.
+
+    To open the logging viewer select \uicontrol Tools >
+    \uicontrol {Debug \QC} > \uicontrol {Show Logs...}. This will open
+    a dialog and start gathering information about internal logging messages.
+
+    On the left side of the dialog you can see enabled logging messages.
+    Only enabled logging categories will end up here.
+    On the right side you have a list of known logging categories.
+    By default both sides will be empty when opening the dialog. If you have
+    logging rules defined these can be already listed.
+    If you continue to use \QC the list of categories will fill up
+    automatically.
+    
+    \note Messages do not get cached, so you have to enable a category to
+    get it displayed. Enabling a category does not display messages that
+    were logged while the category was disabled.
+
+    \section1 Using the Logging Viewer
+    To enable a logging category select the check box in front of the
+    category name.
+    The message type next to the cateory specifies the minimum level of
+    which messages coming from the respective category should be displayed.
+    If you want to change the minimum level double click on the type and
+    select the preferred level for this category.
+    If you have more than one category enabled you may want to give these
+    different colors inside the message window to be able to distinguish
+    them easier. To do so, double click on the colored square on the right
+    and choose the favored color.
+
+    You can store and load presets of the currently enabled categories
+    by using the context menu on the category list. This preset will only
+    contain information about enabled categories.
+
+    To save the content of the displayed messages select the
+    //! insert image here \inlineimage
+    \uicontrol {Save Log}. You may also use the context menu to copy a
+    single or multiple selected message.
+
+    To clean the content of displayed messages select the
+    //! insert image here \inlineimage
+    \uicontrol Clear.
+
+    You can temporarily stop to gather logging categories and messages by
+    selecting //! insert image here \inlineimage
+    \uicontrol {Stop Logging} and in turn continue to work by selecting
+    //! insert image here \inlineimage
+    \uicontrol {Start Logging}.
+
+    By default logging categories and messages coming directly from Qt are
+    disabled. If you intend to see them as well select
+    //! insert image here \inlineimage
+    \uicontrol {Toggle logging of Qt internal loggings.}
+
+    New message will automatically scroll the message display to the bottom.
+    To change this behavior select
+    //! insert image here \inlineimage
+    \uicontrol {Auto Scroll}.
+
+    The messages will be listed by default with a timestamp and without the
+    message type. If you want to change this you can deselect
+    //! insert image here \inlineimage
+    \uicontrol Timestamps or select
+    //! insert image here \inlineimage
+    \uicontrol {Message Types}.
+*/
