@@ -40,8 +40,17 @@
 
 #include <algorithm>
 #include <tuple>
+#include <type_traits>
+#include <utility>
 
 namespace QmlDesigner {
+
+template<typename Enumeration>
+constexpr std::underlying_type_t<Enumeration> to_underlying(Enumeration enumeration) noexcept
+{
+    static_assert(std::is_enum_v<Enumeration>, "to_underlying expect an enumeration");
+    return static_cast<std::underlying_type_t<Enumeration>>(enumeration);
+}
 
 template<typename Database>
 class ProjectStorage final : public ProjectStorageInterface
@@ -1089,7 +1098,7 @@ private:
             updateAliasIdPropertyDeclarationStatement.write(&nextPropertyDeclarationId,
                                                             &propertyDeclarationId);
             updatePropertyAliasDeclarationRecursivelyWithTypeAndTraitsStatement
-                .write(&propertyDeclarationId, &propertyTypeId, static_cast<int>(value.traits));
+                .write(&propertyDeclarationId, &propertyTypeId, to_underlying(value.traits));
         }
     }
 
@@ -1125,10 +1134,10 @@ private:
 
         updatePropertyDeclarationStatement.write(&view.id,
                                                  &propertyTypeId,
-                                                 static_cast<int>(value.traits),
+                                                 to_underlying(value.traits),
                                                  &propertyImportedTypeNameId);
         updatePropertyAliasDeclarationRecursivelyWithTypeAndTraitsStatement
-            .write(&view.id, &propertyTypeId, static_cast<int>(value.traits));
+            .write(&view.id, &propertyTypeId, to_underlying(value.traits));
         propertyDeclarationIds.push_back(view.id);
         return Sqlite::UpdateChange::Update;
     }
@@ -1294,14 +1303,18 @@ private:
             if (import.version.minor) {
                 insertDocumentImportWithVersionStatement.write(&import.sourceId,
                                                                &import.moduleId,
+                                                               to_underlying(importKind),
                                                                import.version.major.value,
                                                                import.version.minor.value);
             } else if (import.version.major) {
                 insertDocumentImportWithMajorVersionStatement.write(&import.sourceId,
                                                                     &import.moduleId,
+                                                                    to_underlying(importKind),
                                                                     import.version.major.value);
             } else {
-                insertDocumentImportWithoutVersionStatement.write(&import.sourceId, &import.moduleId);
+                insertDocumentImportWithoutVersionStatement.write(&import.sourceId,
+                                                                  &import.moduleId,
+                                                                  to_underlying(importKind));
             }
         };
 
@@ -1334,7 +1347,7 @@ private:
                 json.append("\"}");
             } else {
                 json.append("\",\"tr\":");
-                json.append(Utils::SmallString::number(static_cast<int>(parameter.traits)));
+                json.append(Utils::SmallString::number(to_underlying(parameter.traits)));
                 json.append("}");
             }
         }
@@ -1513,8 +1526,7 @@ private:
 
         type.typeId = upsertTypeStatement.template value<TypeId>(&type.sourceId,
                                                                  type.typeName,
-                                                                 static_cast<int>(
-                                                                     type.accessSemantics));
+                                                                 to_underlying(type.accessSemantics));
 
         if (!type.typeId)
             type.typeId = selectTypeIdBySourceIdAndNameStatement.template value<TypeId>(&type.sourceId,
@@ -1689,13 +1701,14 @@ private:
                                                Utils::SmallStringView typeName)
     {
         auto importedTypeNameId = selectImportedTypeNameIdStatement.template value<ImportedTypeNameId>(
-            static_cast<int>(kind), id, typeName);
+            to_underlying(kind), id, typeName);
 
         if (importedTypeNameId)
             return importedTypeNameId;
 
-        return insertImportedTypeNameIdStatement
-            .template value<ImportedTypeNameId>(static_cast<int>(kind), id, typeName);
+        return insertImportedTypeNameIdStatement.template value<ImportedTypeNameId>(to_underlying(kind),
+                                                                                    id,
+                                                                                    typeName);
     }
 
     TypeId fetchTypeId(ImportedTypeNameId typeNameId) const
