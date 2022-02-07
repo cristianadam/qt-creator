@@ -101,6 +101,18 @@ using namespace Utils;
 namespace Core {
 namespace Internal {
 
+static bool hideToolsMenu()
+{
+    return Core::ICore::settings()->value(Constants::SETTINGS_MENU_HIDE_TOOLS, false).toBool();
+}
+
+static bool moveOptionsToEdit()
+{
+    return Core::ICore::settings()
+        ->value(Constants::SETTINGS_MENU_MOVE_OPTIONS_TO_EDIT, false)
+        .toBool();
+}
+
 enum { debugMainWindow = 0 };
 
 MainWindow::MainWindow()
@@ -457,7 +469,8 @@ void MainWindow::registerDefaultContainers()
 
     // Tools Menu
     ActionContainer *ac = ActionManager::createMenu(Constants::M_TOOLS);
-    menubar->addMenu(ac, Constants::G_TOOLS);
+    if (!hideToolsMenu())
+        menubar->addMenu(ac, Constants::G_TOOLS);
     ac->menu()->setTitle(tr("&Tools"));
 
     // Window Menu
@@ -713,14 +726,18 @@ void MainWindow::registerDefaultActions()
     connect(m_loggerAction, &QAction::triggered, this, [] { LoggingViewer::showLoggingView(); });
 
     // Options Action
-    mtools->appendGroup(Constants::G_TOOLS_OPTIONS);
-    mtools->addSeparator(Constants::G_TOOLS_OPTIONS);
+
+    ActionContainer *optionMenuTarget = mtools;
+    if (moveOptionsToEdit())
+        optionMenuTarget = medit;
+    optionMenuTarget->appendGroup(Constants::G_TOOLS_OPTIONS);
+    optionMenuTarget->addSeparator(Constants::G_TOOLS_OPTIONS);
 
     m_optionsAction = new QAction(tr("&Options..."), this);
     m_optionsAction->setMenuRole(QAction::PreferencesRole);
     cmd = ActionManager::registerAction(m_optionsAction, Constants::OPTIONS);
     cmd->setDefaultKeySequence(QKeySequence::Preferences);
-    mtools->addAction(cmd, Constants::G_TOOLS_OPTIONS);
+    optionMenuTarget->addAction(cmd, Constants::G_TOOLS_OPTIONS);
     connect(m_optionsAction, &QAction::triggered, this, [] { ICore::showOptionsDialog(Id()); });
 
     mwindow->addSeparator(Constants::G_WINDOW_LIST);

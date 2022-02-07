@@ -229,6 +229,9 @@ const char SETTINGS_THEME[] = "Core/CreatorTheme";
 const char DEFAULT_THEME[] = "flat";
 const char DEFAULT_DARK_THEME[] = "flat-dark";
 
+const char SETTINGS_MENU_HIDE_TOOLS[] = "Menu/HideTools";
+const char SETTINGS_MENU_MOVE_OPTIONS_TO_EDIT[] = "Menu/MoveOptionsToEdit";
+
 const char TR_CLEAR_MENU[]         = QT_TRANSLATE_NOOP("Core", "Clear Menu");
 
 const int MODEBAR_ICON_SIZE = 34;
