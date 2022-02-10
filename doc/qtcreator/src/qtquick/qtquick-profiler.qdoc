@@ -348,6 +348,14 @@
         \li Qt 5.3
         \li Qt Quick 2
 
+    \row
+        \li \uicontrol Quick3D
+        \li Displays the time when Quick3D frames are rendered and some
+            additional timing information for frame preparation and synchronization
+            as well as memory allocations and consumption.
+        \li Qt 6.3
+        \li Qt Quick 3D
+
     \endtable
 
     \section2 Analyzing Scene Graph Events
@@ -548,6 +556,63 @@
         \li plain texture deleted
         \li Deleting a texture from the GPU that became unnecessary.
         \li None
+    \endtable
+
+    \section2 Analyzing Quick 3D Events
+
+    The following is the list of events for Quick 3D.
+
+    \table
+    \header
+        \li Event Type
+        \li Thread
+        \li Description
+    \row
+        \li \uicontrol Render Frame
+        \li Render
+        \li Render time of Quick 3D Frame. Also shows the number of draw calls.
+    \row
+        \li \uicontrol Prepare Frame
+        \li Render
+        \li Prepare time of Quick 3D Frame. Shows the time taken for preparing a frame. Resources are
+            allocated and loaded in prepare phase. The first frame prepare usually takes longer than others.
+    \row
+        \li \uicontrol Synchronize Frame
+        \li Render
+        \li Synchronize time of Quick 3D Frame. Synchronize takes care of updating Quick 3D backend
+            values from frontend. Also manages shared resources betweenQuick Scene Graph and Quick 3D.
+    \row
+        \li \uicontrol Mesh Load
+        \li Render
+        \li Load time of a Mesh. Shows total memory usage of all meshes. Also shows unloads.
+    \row
+        \li \uicontrol Custom Mesh Load
+        \li Render
+        \li Load time of a Custom Mesh. Shows total memory usage of all meshes. Also shows unloads.
+    \row
+        \li \uicontrol Texture Load
+        \li Render
+        \li Load time of a Texture. Shows total memory usage of all textures. Also shows unloads.
+    \row
+        \li \uicontrol Generate Shader
+        \li Render
+        \li Time for generating a shader. Contains the time for generating shaders for materials.
+    \row
+        \li \uicontrol Load Shader
+        \li Render
+        \li Time for loading a shader. The time it takes to load a build-in shader.
+    \row
+        \li \uicontrol Particle Update
+        \li GUI
+        \li Update time of particle system. Shows the number of particles updated.
+    \row
+        \li \uicontrol Mesh memory consuption
+        \li Render
+        \li Shows bar view of total mesh memory consumption.
+    \row
+        \li \uicontrol Texture memory consuption
+        \li Render
+        \li Shows bar view of total texture memory consumption.
     \endtable
 
     \section1 Viewing Statistics
