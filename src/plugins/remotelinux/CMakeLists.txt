@@ -16,6 +16,7 @@ add_qtc_plugin(RemoteLinux
     linuxdevice.cpp linuxdevice.h
     linuxdeviceprocess.cpp linuxdeviceprocess.h
     linuxdevicetester.cpp linuxdevicetester.h
+    linuxprocessinterface.h
     makeinstallstep.cpp makeinstallstep.h
     packageuploader.cpp packageuploader.h
     publickeydeploymentdialog.cpp publickeydeploymentdialog.h
@@ -42,6 +43,7 @@ add_qtc_plugin(RemoteLinux
     remotelinuxx11forwardingaspect.cpp remotelinuxx11forwardingaspect.h
     rsyncdeploystep.cpp rsyncdeploystep.h
     sshkeydeployer.cpp sshkeydeployer.h
+    sshprocessinterface.h
     tarpackagecreationstep.cpp tarpackagecreationstep.h
     uploadandinstalltarpackagestep.cpp uploadandinstalltarpackagestep.h
 )
