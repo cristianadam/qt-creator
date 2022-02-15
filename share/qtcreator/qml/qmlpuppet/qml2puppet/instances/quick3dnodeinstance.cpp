@@ -97,7 +97,8 @@ void Quick3DNodeInstance::initialize(const ObjectNodeInstance::Pointer &objectNo
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     // In case this is the scene root, we need to create a dummy View3D for the scene
     // in preview puppets
-    if (instanceId() == 0 && nodeInstanceServer()->isPreviewServer()) {
+    if (instanceId() == 0 && (nodeInstanceServer()->isPreviewServer()
+                              || !nodeInstanceServer()->isInformationServer())) {
         auto helper = new QmlDesigner::Internal::GeneralHelper();
         engine()->rootContext()->setContextProperty("_generalHelper", helper);
 
@@ -122,6 +123,9 @@ QImage Quick3DNodeInstance::renderImage() const
     if (!isRootNodeInstance() || !m_dummyRootView)
         return {};
 
+
+    qDebug() << Q_FUNC_INFO;
+
     QSize size(640, 480);
     nodeInstanceServer()->quickWindow()->resize(size);
     m_dummyRootView->setSize(size);
@@ -132,6 +136,7 @@ QImage Quick3DNodeInstance::renderImage() const
     QMetaObject::invokeMethod(m_dummyRootView, "fitToViewPort", Qt::DirectConnection);
 
     QRectF renderBoundingRect = m_dummyRootView->boundingRect();
+    qDebug() << renderBoundingRect;
     QImage renderImage;
 
     if (QuickItemNodeInstance::unifiedRenderPath()) {
@@ -139,6 +144,10 @@ QImage Quick3DNodeInstance::renderImage() const
         renderImage = renderImage.copy(renderBoundingRect.toRect());
     } else {
         renderImage = nodeInstanceServer()->grabItem(m_dummyRootView);
+        renderImage = renderImage.copy(renderImage.width() - renderBoundingRect.width(),
+                                       renderImage.height() - renderBoundingRect.height(),
+                                       renderBoundingRect.width(),
+                                       renderBoundingRect.height());
     }
 
     // When grabbing an offscreen window the device pixel ratio is 1
@@ -190,11 +199,34 @@ bool Quick3DNodeInstance::isRenderable() const
     return m_dummyRootView;
 }
 
+bool Quick3DNodeInstance::hasContent() const
+{
+    return true;
+}
+
 QRectF Quick3DNodeInstance::boundingRect() const
 {
+    if (nodeInstanceServer()->isInformationServer())
+        return QRectF(0, 0, 640, 480);
+
     if (m_dummyRootView)
         return m_dummyRootView->boundingRect();
     return ObjectNodeInstance::boundingRect();
+}
+
+QRectF Quick3DNodeInstance::contentItemBoundingBox() const
+{
+    return boundingRect();
+}
+
+QPointF Quick3DNodeInstance::position() const
+{
+    return QPointF(0, 0);
+}
+
+QSizeF Quick3DNodeInstance::size() const
+{
+    return boundingRect().size();
 }
 
 QList<ServerNodeInstance> Quick3DNodeInstance::stateInstances() const
