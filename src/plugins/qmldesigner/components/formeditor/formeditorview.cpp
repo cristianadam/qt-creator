@@ -46,6 +46,7 @@
 #include <nodelistproperty.h>
 #include <nodemetainfo.h>
 #include <rewriterview.h>
+#include <qml3dnode.h>
 #include <zoomaction.h>
 
 #include <coreplugin/icore.h>
@@ -655,6 +656,19 @@ static void updateTransitions(FormEditorScene *scene, const QmlItemNode &qmlItem
 
 void FormEditorView::instancesCompleted(const QVector<ModelNode> &completedNodeList)
 {
+
+
+
+    if (Qml3DNode::isValidQml3DNode(rootModelNode())) {
+        qDebug() << Q_FUNC_INFO << "3d";
+        if (completedNodeList.contains(rootModelNode())) {
+            FormEditorItem *item = scene()->itemForQmlItemNode(rootModelNode());
+            qDebug() << "my case";
+            if (item)
+                scene()->synchronizeTransformation(item);
+        }
+    }
+
     const bool isFlow = rootModelNode().isValid() && QmlItemNode(rootModelNode()).isFlowView();
     QList<FormEditorItem*> itemNodeList;
     for (const ModelNode &node : completedNodeList) {
@@ -673,6 +687,8 @@ void FormEditorView::instancesCompleted(const QVector<ModelNode> &completedNodeL
 
 void FormEditorView::instanceInformationsChanged(const QMultiHash<ModelNode, InformationName> &informationChangedHash)
 {
+
+
     QList<FormEditorItem*> changedItems;
     const int rootElementInitWidth = DesignerSettings::getValue(DesignerSettingsKey::ROOT_ELEMENT_INIT_WIDTH).toInt();
     const int rootElementInitHeight = DesignerSettings::getValue(DesignerSettingsKey::ROOT_ELEMENT_INIT_HEIGHT).toInt();
@@ -724,6 +740,11 @@ void FormEditorView::instancesRenderImageChanged(const QVector<ModelNode> &nodeL
         if (QmlItemNode::isValidQmlItemNode(node))
              if (FormEditorItem *item = scene()->itemForQmlItemNode(QmlItemNode(node)))
                  item->update();
+        if (Qml3DNode::isValidQml3DNode(node))
+            if (FormEditorItem *item = scene()->itemForQmlItemNode(node)) {
+                qDebug() << "update for" << node;
+                item->update();
+            }
     }
 }
 
@@ -794,6 +815,9 @@ void FormEditorView::setupFormEditorWidget()
 
     if (QmlItemNode::isValidQmlItemNode(rootModelNode()))
         setupFormEditorItemTree(rootModelNode());
+
+    if (Qml3DNode::isValidQml3DNode(rootModelNode()))
+        setupFormEditor3DView();
 
     m_formEditorWidget->initialize();
 
@@ -903,12 +927,20 @@ void FormEditorView::checkRootModelNode()
 
     QTC_ASSERT(rootModelNode().isValid(), return);
 
-    if (!rootModelNode().metaInfo().isGraphicalItem())
+    if (!rootModelNode().metaInfo().isGraphicalItem()
+        && !Qml3DNode::isValidQml3DNode(rootModelNode()))
         m_formEditorWidget->showErrorMessageBox(
             {DocumentMessage(tr("%1 is not supported as the root element by Form Editor.")
                                  .arg(rootModelNode().simplifiedTypeName()))});
     else
         m_formEditorWidget->hideErrorMessageBox();
+}
+
+void FormEditorView::setupFormEditor3DView()
+{
+    m_scene->addFormEditorItem(rootModelNode(), FormEditorScene::Preview3d);
+    FormEditorItem *item = m_scene->itemForQmlItemNode(rootModelNode());
+    item->updateGeometry();
 }
 
 void FormEditorView::reset()

@@ -132,6 +132,15 @@ void Qt5RenderNodeInstanceServer::collectItemChangesAndSendChangeCommands()
             nodeInstanceClient()->flush();
             nodeInstanceClient()->synchronizeWithClientProcess();
         }
+        qDebug() << Q_FUNC_INFO;
+        {
+            qDebug() << "else" << rootNodeInstance();
+            if (rootNodeInstance().holdsGraphical()) {
+                qDebug() << "holdsG";
+                nodeInstanceClient()->pixmapChanged(
+                    createPixmapChangedCommand({rootNodeInstance()}));
+            }
+        }
 
         inFunction = false;
     }

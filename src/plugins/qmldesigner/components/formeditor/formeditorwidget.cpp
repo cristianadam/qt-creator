@@ -224,7 +224,11 @@ FormEditorWidget::FormEditorWidget(FormEditorView *view)
                     }
                 }
             } else {
-                bounds = qmlItemNode.instanceBoundingRect();
+                auto item = m_formEditorView->scene()->itemForQmlItemNode(qmlItemNode);
+                if (item)
+                    bounds = item->boundingRect();
+                else
+                    bounds = qmlItemNode.instanceBoundingRect();
             }
 
             m_graphicsView->frame(bounds);
