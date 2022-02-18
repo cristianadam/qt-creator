@@ -533,6 +533,9 @@ MimeType MimeDatabase::mimeTypeForName(const QString &nameOrAlias) const
 {
     QMutexLocker locker(&d->mutex);
 
+    if (d->m_startupPhase <= int(MimeStartupPhase::PluginsInitializing))
+        qWarning("Accessing MimeDatabase for %s before plugins are initialized", qPrintable(nameOrAlias));
+
     return d->mimeTypeForName(nameOrAlias);
 }
 
@@ -567,6 +570,9 @@ MimeType MimeDatabase::mimeTypeForName(const QString &nameOrAlias) const
 MimeType MimeDatabase::mimeTypeForFile(const QFileInfo &fileInfo, MatchMode mode) const
 {
     QMutexLocker locker(&d->mutex);
+
+    if (d->m_startupPhase <= int(MimeStartupPhase::PluginsInitializing))
+        qWarning("Accessing MimeDatabase for %s before plugins are initialized", qPrintable(fileInfo.filePath()));
 
     if (fileInfo.isDir())
         return d->mimeTypeForName(QLatin1String("inode/directory"));
@@ -621,6 +627,10 @@ MimeType MimeDatabase::mimeTypeForFile(const QString &fileName, MatchMode mode) 
 {
     if (mode == MatchExtension) {
         QMutexLocker locker(&d->mutex);
+
+        if (d->m_startupPhase <= int(MimeStartupPhase::PluginsInitializing))
+            qWarning("Accessing MimeDatabase for %s before plugins are initialized", qPrintable(fileName));
+
         const QStringList matches = d->mimeTypeForFileName(fileName);
         const int matchCount = matches.count();
         if (matchCount == 0) {
@@ -654,6 +664,9 @@ QList<MimeType> MimeDatabase::mimeTypesForFileName(const QString &fileName) cons
 {
     QMutexLocker locker(&d->mutex);
 
+    if (d->m_startupPhase <= int(MimeStartupPhase::PluginsInitializing))
+        qWarning("Accessing MimeDatabase for %s before plugins are initialized", qPrintable(fileName));
+
     const QStringList matches = d->mimeTypeForFileName(fileName);
     QList<MimeType> mimes;
     mimes.reserve(matches.count());
@@ -684,6 +697,9 @@ QString MimeDatabase::suffixForFileName(const QString &fileName) const
 MimeType MimeDatabase::mimeTypeForData(const QByteArray &data) const
 {
     QMutexLocker locker(&d->mutex);
+
+    if (d->m_startupPhase <= int(MimeStartupPhase::PluginsInitializing))
+        qWarning("Accessing MimeDatabase for data before plugins are initialized");
 
     int accuracy = 0;
     return d->findByData(data, &accuracy);
@@ -814,6 +830,9 @@ QList<MimeType> MimeDatabase::allMimeTypes() const
 {
     QMutexLocker locker(&d->mutex);
 
+    if (d->m_startupPhase <= int(MimeStartupPhase::PluginsInitializing))
+        qWarning("Accessing MimeDatabase for all mime types before plugins are initialized");
+
     return d->allMimeTypes();
 }
 
@@ -875,11 +894,11 @@ QList<MimeType> allMimeTypes()
 
 void setMimeStartupPhase(MimeStartupPhase phase)
 {
-//    auto d = MimeDatabasePrivate::instance();
-//    QMutexLocker locker(&d->mutex);
-//    if (int(phase) != d->m_startupPhase + 1)
-//        qWarning("Unexpected jump in MimedDatabase lifetime from %d to %d", d->m_startupPhase, int(phase));
-//    d->m_startupPhase = int(phase);
+    auto d = MimeDatabasePrivate::instance();
+    QMutexLocker locker(&d->mutex);
+    if (int(phase) != d->m_startupPhase + 1)
+        qWarning("Unexpected jump in MimedDatabase lifetime from %d to %d", d->m_startupPhase, int(phase));
+    d->m_startupPhase = int(phase);
 }
 
 void addMimeTypes(const QString &fileName, const QByteArray &data)
