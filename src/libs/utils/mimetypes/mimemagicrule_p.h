@@ -55,37 +55,42 @@
 #include <QtCore/qbytearray.h>
 #include <QtCore/qscopedpointer.h>
 #include <QtCore/qlist.h>
-#include <QtCore/qmap.h>
 
 namespace Utils {
-
-class MimeType;
-
-namespace Internal {
-
-class MimeMagicRulePrivate;
 
 class QTCREATOR_UTILS_EXPORT MimeMagicRule
 {
 public:
-    enum Type { Invalid = 0, String, RegExp, Host16, Host32, Big16, Big32, Little16, Little32, Byte };
+    enum Type { Invalid = 0, String, Host16, Host32, Big16, Big32, Little16, Little32, Byte };
 
-    MimeMagicRule(Type type, const QByteArray &value, int startPos, int endPos,
-                  const QByteArray &mask = QByteArray(), QString *errorString = nullptr);
-    MimeMagicRule(const MimeMagicRule &other);
-    ~MimeMagicRule();
+    MimeMagicRule(const QString &typeStr, const QByteArray &value, const QString &offsets,
+                   const QByteArray &mask, QString *errorString);
+    // added for Qt Creator
+    MimeMagicRule(const Type &type, const QByteArray &value, int startPos, int endPos,
+                  const QByteArray &mask = {}, QString *errorString = nullptr);
 
-    MimeMagicRule &operator=(const MimeMagicRule &other);
+    void swap(MimeMagicRule &other) noexcept
+    {
+        qSwap(m_type,          other.m_type);
+        qSwap(m_value,         other.m_value);
+        qSwap(m_startPos,      other.m_startPos);
+        qSwap(m_endPos,        other.m_endPos);
+        qSwap(m_mask,          other.m_mask);
+        qSwap(m_pattern,       other.m_pattern);
+        qSwap(m_number,        other.m_number);
+        qSwap(m_numberMask,    other.m_numberMask);
+        qSwap(m_matchFunction, other.m_matchFunction);
+    }
 
     bool operator==(const MimeMagicRule &other) const;
 
-    Type type() const;
-    QByteArray value() const;
-    int startPos() const;
-    int endPos() const;
+    Type type() const { return m_type; }
+    QByteArray value() const { return m_value; }
+    int startPos() const { return m_startPos; }
+    int endPos() const { return m_endPos; }
     QByteArray mask() const;
 
-    bool isValid() const;
+    bool isValid() const { return m_matchFunction != nullptr; }
 
     bool matches(const QByteArray &data) const;
 
@@ -97,12 +102,29 @@ public:
     static bool matchSubstring(const char *dataPtr, int dataSize, int rangeStart, int rangeLength, int valueLength, const char *valueData, const char *mask);
 
 private:
-    const QScopedPointer<MimeMagicRulePrivate> d;
+    // added for Qt Creator
+    void init(QString *errorString);
+
+    Type m_type;
+    QByteArray m_value;
+    int m_startPos;
+    int m_endPos;
+    QByteArray m_mask;
+
+    QByteArray m_pattern;
+    quint32 m_number;
+    quint32 m_numberMask;
+
+    typedef bool (MimeMagicRule::*MatchFunction)(const QByteArray &data) const;
+    MatchFunction m_matchFunction;
+
+private:
+    // match functions
+    bool matchString(const QByteArray &data) const;
+    template <typename T>
+    bool matchNumber(const QByteArray &data) const;
 };
 
-} // Internal
-} // Utils
+} // namespace Utils
 
-QT_BEGIN_NAMESPACE
-Q_DECLARE_TYPEINFO(Utils::Internal::MimeMagicRule, Q_MOVABLE_TYPE);
-QT_END_NAMESPACE
+Q_DECLARE_SHARED(Utils::MimeMagicRule)

@@ -1,6 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2015 Klaralvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author David Faure <david.faure@kdab.com>
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -41,42 +42,45 @@
 
 #include <utils/utils_global.h>
 
+#include <QtCore/qobjectdefs.h>
 #include <QtCore/qshareddata.h>
 #include <QtCore/qstring.h>
-
-QT_BEGIN_NAMESPACE
-class QFileinfo;
-QT_END_NAMESPACE
+#include <QtCore/qstringlist.h>
 
 namespace Utils {
 
-namespace Internal {
-class MimeTypeParserBase;
-class MimeTypeMapEntry;
-class MimeDatabasePrivate;
-class MimeXMLProvider;
-class MimeBinaryProvider;
 class MimeTypePrivate;
-}
+class MimeType;
+
+QTCREATOR_UTILS_EXPORT size_t qHash(const MimeType &key, size_t seed = 0) noexcept;
 
 class QTCREATOR_UTILS_EXPORT MimeType
 {
+    Q_GADGET
+    Q_PROPERTY(bool valid READ isValid CONSTANT)
+    Q_PROPERTY(bool isDefault READ isDefault CONSTANT)
+    Q_PROPERTY(QString name READ name CONSTANT)
+    Q_PROPERTY(QString comment READ comment CONSTANT)
+    Q_PROPERTY(QString genericIconName READ genericIconName CONSTANT)
+    Q_PROPERTY(QString iconName READ iconName CONSTANT)
+    Q_PROPERTY(QStringList globPatterns READ globPatterns CONSTANT)
+    Q_PROPERTY(QStringList parentMimeTypes READ parentMimeTypes CONSTANT)
+    Q_PROPERTY(QStringList allAncestors READ allAncestors CONSTANT)
+    Q_PROPERTY(QStringList aliases READ aliases CONSTANT)
+    Q_PROPERTY(QStringList suffixes READ suffixes CONSTANT)
+    Q_PROPERTY(QString preferredSuffix READ preferredSuffix CONSTANT)
+    Q_PROPERTY(QString filterString READ filterString CONSTANT)
+
 public:
     MimeType();
     MimeType(const MimeType &other);
     MimeType &operator=(const MimeType &other);
-//#ifdef Q_COMPILER_RVALUE_REFS
-//    MimeType &operator=(MimeType &&other)
-//    {
-//        qSwap(d, other.d);
-//        return *this;
-//    }
-//#endif
-//    void swap(MimeType &other)
-//    {
-//        qSwap(d, other.d);
-//    }
-    explicit MimeType(const Internal::MimeTypePrivate &dd);
+    QT_MOVE_ASSIGNMENT_OPERATOR_IMPL_VIA_PURE_SWAP(MimeType)
+    void swap(MimeType &other) noexcept
+    {
+        d.swap(other.d);
+    }
+    explicit MimeType(const MimeTypePrivate &dd);
     ~MimeType();
 
     bool operator==(const MimeType &other) const;
@@ -101,7 +105,7 @@ public:
     QStringList suffixes() const;
     QString preferredSuffix() const;
 
-    bool inherits(const QString &mimeTypeName) const;
+    Q_INVOKABLE bool inherits(const QString &mimeTypeName) const;
 
     QString filterString() const;
 
@@ -109,27 +113,24 @@ public:
     bool matchesName(const QString &nameOrAlias) const;
     void setPreferredSuffix(const QString &suffix);
 
-    friend auto qHash(const MimeType &mime) { return qHash(mime.name()); }
-
 protected:
-    friend class Internal::MimeTypeParserBase;
-    friend class Internal::MimeTypeMapEntry;
-    friend class Internal::MimeDatabasePrivate;
-    friend class Internal::MimeXMLProvider;
-    friend class Internal::MimeBinaryProvider;
-    friend class Internal::MimeTypePrivate;
+    friend class MimeTypeParserBase;
+    friend class MimeTypeMapEntry;
+    friend class MimeDatabasePrivate;
+    friend class MimeXMLProvider;
+    friend class MimeBinaryProvider;
+    friend class MimeTypePrivate;
+    friend QTCREATOR_UTILS_EXPORT size_t qHash(const MimeType &key, size_t seed) noexcept;
 
-    QExplicitlySharedDataPointer<Internal::MimeTypePrivate> d;
+    QExplicitlySharedDataPointer<MimeTypePrivate> d;
 };
 
-} // Utils
 
-//Q_DECLARE_SHARED(Utils::MimeType)
+} // namespace Utils
 
 #ifndef QT_NO_DEBUG_STREAM
-QT_BEGIN_NAMESPACE
 class QDebug;
 QTCREATOR_UTILS_EXPORT QDebug operator<<(QDebug debug, const Utils::MimeType &mime);
-QT_END_NAMESPACE
 #endif
 
+Q_DECLARE_SHARED(Utils::MimeType)

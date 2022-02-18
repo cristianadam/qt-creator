@@ -1,6 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2015 Klaralvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author David Faure <david.faure@kdab.com>
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -40,12 +41,18 @@
 #pragma once
 
 #include "mimetype.h"
+
 #include "mimemagicrule_p.h"
 
 #include <utils/utils_global.h>
 
+#include <QtCore/qstringlist.h>
+
 QT_BEGIN_NAMESPACE
+class QByteArray;
 class QFileInfo;
+class QIODevice;
+class QUrl;
 QT_END_NAMESPACE
 
 namespace Utils {
@@ -80,9 +87,47 @@ enum class MimeStartupPhase {
 
 QTCREATOR_UTILS_EXPORT void setMimeStartupPhase(MimeStartupPhase);
 QTCREATOR_UTILS_EXPORT void addMimeTypes(const QString &id, const QByteArray &data);
-QTCREATOR_UTILS_EXPORT QMap<int, QList<Internal::MimeMagicRule> > magicRulesForMimeType(const MimeType &mimeType); // priority -> rules
+QTCREATOR_UTILS_EXPORT QMap<int, QList<MimeMagicRule> > magicRulesForMimeType(const MimeType &mimeType); // priority -> rules
 QTCREATOR_UTILS_EXPORT void setGlobPatternsForMimeType(const MimeType &mimeType, const QStringList &patterns);
 QTCREATOR_UTILS_EXPORT void setMagicRulesForMimeType(const MimeType &mimeType,
-                                     const QMap<int, QList<Internal::MimeMagicRule> > &rules); // priority -> rules
+                                                     const QMap<int, QList<MimeMagicRule> > &rules); // priority -> rules
 
-} // Utils
+// Original
+
+class MimeDatabasePrivate;
+class QTCREATOR_UTILS_EXPORT MimeDatabase
+{
+    Q_DISABLE_COPY(MimeDatabase)
+
+public:
+    MimeDatabase();
+    ~MimeDatabase();
+
+    MimeType mimeTypeForName(const QString &nameOrAlias) const;
+
+    enum MatchMode {
+        MatchDefault = 0x0,
+        MatchExtension = 0x1,
+        MatchContent = 0x2
+    };
+
+    MimeType mimeTypeForFile(const QString &fileName, MatchMode mode = MatchDefault) const;
+    MimeType mimeTypeForFile(const QFileInfo &fileInfo, MatchMode mode = MatchDefault) const;
+    QList<MimeType> mimeTypesForFileName(const QString &fileName) const;
+
+    MimeType mimeTypeForData(const QByteArray &data) const;
+    MimeType mimeTypeForData(QIODevice *device) const;
+
+    MimeType mimeTypeForUrl(const QUrl &url) const;
+    MimeType mimeTypeForFileNameAndData(const QString &fileName, QIODevice *device) const;
+    MimeType mimeTypeForFileNameAndData(const QString &fileName, const QByteArray &data) const;
+
+    QString suffixForFileName(const QString &fileName) const;
+
+    QList<MimeType> allMimeTypes() const;
+
+private:
+    MimeDatabasePrivate *d;
+};
+
+} // namespace Utils

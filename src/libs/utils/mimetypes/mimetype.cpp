@@ -1,6 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2015 Klaralvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author David Faure <david.faure@kdab.com>
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -47,34 +48,23 @@
 
 #include <QtCore/QDebug>
 #include <QtCore/QLocale>
+#include <QtCore/QHashFunctions>
 
 #include <memory>
 
-using namespace Utils;
-using namespace Utils::Internal;
-
-static QString suffixFromPattern(const QString &pattern)
-{
-    // Not a simple suffix if it looks like: README or *. or *.* or *.JP*G or *.JP?
-    if (pattern.startsWith(QLatin1String("*.")) &&
-            pattern.length() > 2 &&
-            pattern.indexOf(QLatin1Char('*'), 2) < 0 && pattern.indexOf(QLatin1Char('?'), 2) < 0) {
-        return pattern.mid(2);
-    }
-    return QString();
-}
+namespace Utils {
 
 MimeTypePrivate::MimeTypePrivate()
-    : loaded(false)
+    : loaded(false), fromCache(false)
 {}
 
 MimeTypePrivate::MimeTypePrivate(const MimeType &other)
-        : name(other.d->name),
+      : loaded(other.d->loaded),
+        name(other.d->name),
         localeComments(other.d->localeComments),
         genericIconName(other.d->genericIconName),
         iconName(other.d->iconName),
-        globPatterns(other.d->globPatterns),
-        loaded(other.d->loaded)
+        globPatterns(other.d->globPatterns)
 {}
 
 void MimeTypePrivate::clear()
@@ -84,7 +74,6 @@ void MimeTypePrivate::clear()
     genericIconName.clear();
     iconName.clear();
     globPatterns.clear();
-    loaded = false;
 }
 
 void MimeTypePrivate::addGlobPattern(const QString &pattern)
@@ -94,13 +83,13 @@ void MimeTypePrivate::addGlobPattern(const QString &pattern)
 
 /*!
     \class MimeType
-    \inmodule QtCreator
+    \inmodule QtCore
     \ingroup shared
     \brief The MimeType class describes types of file or data, represented by a MIME type string.
 
     \since 5.0
 
-    For instance, a file named \c readme.txt has the MIME type \c text/plain.
+    For instance a file named "readme.txt" has the MIME type "text/plain".
     The MIME type can be determined from the file name, or from the file
     contents, or from both. MIME type determination can also be done on
     buffers of data not coming from files.
@@ -113,10 +102,21 @@ void MimeTypePrivate::addGlobPattern(const QString &pattern)
     To check if a file has the expected MIME type, you should use inherits()
     rather than a simple string comparison based on the name(). This is because
     MIME types can inherit from each other: for instance a C source file is
-    a specific type of plain text file, so \c text/x-csrc inherits \c text/plain.
+    a specific type of plain text file, so text/x-csrc inherits text/plain.
+
+    \sa MimeDatabase, {MIME Type Browser Example}
  */
 
 /*!
+    \fn MimeType &MimeType::operator=(MimeType &&other)
+
+    Move-assigns \a other to this MimeType instance.
+
+    \since 5.2
+*/
+
+/*!
+    \fn MimeType::MimeType();
     Constructs this MimeType object initialized with default property values that indicate an invalid MIME type.
  */
 MimeType::MimeType() :
@@ -125,11 +125,16 @@ MimeType::MimeType() :
 }
 
 /*!
+    \fn MimeType::MimeType(const MimeType &other);
     Constructs this MimeType object as a copy of \a other.
  */
-MimeType::MimeType(const MimeType &other) = default;
+MimeType::MimeType(const MimeType &other) :
+        d(other.d)
+{
+}
 
 /*!
+    \fn MimeType &MimeType::operator=(const MimeType &other);
     Assigns the data of \a other to this MimeType object, and returns a reference to this object.
  */
 MimeType &MimeType::operator=(const MimeType &other)
@@ -140,7 +145,8 @@ MimeType &MimeType::operator=(const MimeType &other)
 }
 
 /*!
-    \fn MimeType::MimeType(const Internal::MimeTypePrivate &dd)
+    \fn MimeType::MimeType(const MimeTypePrivate &dd);
+    Assigns the data of the MimeTypePrivate \a dd to this MimeType object, and returns a reference to this object.
     \internal
  */
 MimeType::MimeType(const MimeTypePrivate &dd) :
@@ -149,18 +155,46 @@ MimeType::MimeType(const MimeTypePrivate &dd) :
 }
 
 /*!
-    Destroys the MimeType object, and releases the d pointer.
+    \fn void MimeType::swap(MimeType &other);
+    Swaps MimeType \a other with this MimeType object.
+
+    This operation is very fast and never fails.
+
+    The swap() method helps with the implementation of assignment
+    operators in an exception-safe way. For more information consult
+    \l {http://en.wikibooks.org/wiki/More_C++_Idioms/Copy-and-swap}
+    {More C++ Idioms - Copy-and-swap}.
  */
-MimeType::~MimeType() = default;
 
 /*!
+    \fn MimeType::~MimeType();
+    Destroys the MimeType object, and releases the d pointer.
+ */
+MimeType::~MimeType()
+{
+}
+
+/*!
+    \fn bool MimeType::operator==(const MimeType &other) const;
     Returns \c true if \a other equals this MimeType object, otherwise returns \c false.
-    The name is the unique identifier for a MIME type, so two  MIME types with
-    the same name are equal.
+    The name is the unique identifier for a mimetype, so two mimetypes with
+    the same name, are equal.
  */
 bool MimeType::operator==(const MimeType &other) const
 {
     return d == other.d || d->name == other.d->name;
+}
+
+/*!
+    \since 5.6
+    \relates MimeType
+
+    Returns the hash value for \a key, using
+    \a seed to seed the calculation.
+ */
+size_t qHash(const MimeType &key, size_t seed) noexcept
+{
+    return qHash(key.d->name, seed);
 }
 
 /*!
@@ -169,14 +203,14 @@ bool MimeType::operator==(const MimeType &other) const
  */
 
 /*!
-    \fn inline uint Utils::qHash(const MimeType &mime)
-    \internal
-*/
+    \property MimeType::valid
+    \brief \c true if the MimeType object contains valid data, \c false otherwise
 
-/*!
-    Returns \c true if the MimeType object contains valid data, otherwise returns \c false.
     A valid MIME type has a non-empty name().
     The invalid MIME type is the default-constructed MimeType.
+
+    While this property was introduced in 5.10, the
+    corresponding accessor method has always been there.
  */
 bool MimeType::isValid() const
 {
@@ -184,8 +218,12 @@ bool MimeType::isValid() const
 }
 
 /*!
-    Returns \c true if this MIME type is the default MIME type which
-    applies to all files: \c application/octet-stream.
+    \property MimeType::isDefault
+    \brief \c true if this MIME type is the default MIME type which
+    applies to all files: application/octet-stream.
+
+    While this property was introduced in 5.10, the
+    corresponding accessor method has always been there.
  */
 bool MimeType::isDefault() const
 {
@@ -193,7 +231,11 @@ bool MimeType::isDefault() const
 }
 
 /*!
-    Returns the name of the MIME type.
+    \property MimeType::name
+    \brief the name of the MIME type
+
+    While this property was introduced in 5.10, the
+    corresponding accessor method has always been there.
  */
 QString MimeType::name() const
 {
@@ -201,18 +243,23 @@ QString MimeType::name() const
 }
 
 /*!
-    Returns the description of the MIME type to be displayed on user interfaces.
+    \property MimeType::comment
+    \brief the description of the MIME type to be displayed on user interfaces
 
-    The system language (QLocale::system().name()) is used to select the appropriate translation.
+    The default language (QLocale().name()) is used to select the appropriate translation.
+
+    While this property was introduced in 5.10, the
+    corresponding accessor method has always been there.
  */
 QString MimeType::comment() const
 {
-    MimeDatabasePrivate::instance()->provider()->loadMimeTypePrivate(*d);
+    MimeDatabasePrivate::instance()->loadMimeTypePrivate(const_cast<MimeTypePrivate&>(*d));
 
     QStringList languageList;
-    languageList << QLocale::system().name();
-    languageList << QLocale::system().uiLanguages();
-    Q_FOREACH (const QString &language, languageList) {
+    languageList << QLocale().name();
+    languageList << QLocale().uiLanguages();
+    languageList << QLatin1String("default"); // use the default locale if possible.
+    for (const QString &language : qAsConst(languageList)) {
         const QString lang = language == QLatin1String("C") ? QLatin1String("en_US") : language;
         const QString comm = d->localeComments.value(lang);
         if (!comm.isEmpty())
@@ -232,7 +279,8 @@ QString MimeType::comment() const
 }
 
 /*!
-    Returns the file name of a generic icon that represents the MIME type.
+    \property MimeType::genericIconName
+    \brief the file name of a generic icon that represents the MIME type
 
     This should be used if the icon returned by iconName() cannot be found on
     the system. It is used for categories of similar types (like spreadsheets
@@ -240,75 +288,94 @@ QString MimeType::comment() const
     The freedesktop.org Icon Naming Specification lists a set of such icon names.
 
     The icon name can be given to QIcon::fromTheme() in order to load the icon.
+
+    While this property was introduced in 5.10, the
+    corresponding accessor method has always been there.
  */
 QString MimeType::genericIconName() const
 {
-    MimeDatabasePrivate::instance()->provider()->loadGenericIcon(*d);
+    MimeDatabasePrivate::instance()->loadGenericIcon(const_cast<MimeTypePrivate&>(*d));
     if (d->genericIconName.isEmpty()) {
         // From the spec:
         // If the generic icon name is empty (not specified by the mimetype definition)
         // then the mimetype is used to generate the generic icon by using the top-level
         // media type (e.g.  "video" in "video/ogg") and appending "-x-generic"
         // (i.e. "video-x-generic" in the previous example).
-        QString group = name();
-        const int slashindex = group.indexOf(QLatin1Char('/'));
+        const QString group = name();
+        QStringView groupRef(group);
+        const int slashindex = groupRef.indexOf(QLatin1Char('/'));
         if (slashindex != -1)
-            group = group.left(slashindex);
-        return group + QLatin1String("-x-generic");
+            groupRef = groupRef.left(slashindex);
+        return groupRef + QLatin1String("-x-generic");
     }
     return d->genericIconName;
 }
 
+static QString make_default_icon_name_from_mimetype_name(QString iconName)
+{
+    const int slashindex = iconName.indexOf(QLatin1Char('/'));
+    if (slashindex != -1)
+        iconName[slashindex] = QLatin1Char('-');
+    return iconName;
+}
+
 /*!
-    Returns the file name of an icon image that represents the MIME type.
+    \property MimeType::iconName
+    \brief the file name of an icon image that represents the MIME type
 
     The icon name can be given to QIcon::fromTheme() in order to load the icon.
+
+    While this property was introduced in 5.10, the
+    corresponding accessor method has always been there.
  */
 QString MimeType::iconName() const
 {
-    MimeDatabasePrivate::instance()->provider()->loadIcon(*d);
+    MimeDatabasePrivate::instance()->loadIcon(const_cast<MimeTypePrivate&>(*d));
     if (d->iconName.isEmpty()) {
-        // Make default icon name from the mimetype name
-        d->iconName = name();
-        const int slashindex = d->iconName.indexOf(QLatin1Char('/'));
-        if (slashindex != -1)
-            d->iconName[slashindex] = QLatin1Char('-');
+        return make_default_icon_name_from_mimetype_name(name());
     }
     return d->iconName;
 }
 
 /*!
-    Returns the list of glob matching patterns.
+    \property MimeType::globPatterns
+    \brief the list of glob matching patterns
+
+    While this property was introduced in 5.10, the
+    corresponding accessor method has always been there.
  */
 QStringList MimeType::globPatterns() const
 {
-    MimeDatabasePrivate::instance()->provider()->loadMimeTypePrivate(*d);
+    MimeDatabasePrivate::instance()->loadMimeTypePrivate(const_cast<MimeTypePrivate&>(*d));
     return d->globPatterns;
 }
 
 /*!
+    \property MimeType::parentMimeTypes
+    \brief the names of parent MIME types
+
     A type is a subclass of another type if any instance of the first type is
-    also an instance of the second. For example, all \c image/svg+xml files are
-    also \c text/xml, \c text/plain and \c application/octet-stream files.
+    also an instance of the second. For example, all image/svg+xml files are also
+    text/xml, text/plain and application/octet-stream files. Subclassing is about
+    the format, rather than the category of the data (for example, there is no
+    'generic spreadsheet' class that all spreadsheets inherit from).
+    Conversely, the parent mimetype of image/svg+xml is text/xml.
 
-    Subclassing is about the format, rather than the category of the data.
-    For example, there is no \e {generic spreadsheet} class that all
-    spreadsheets inherit from.
-
-    Conversely, the parent  MIME type of \c image/svg+xml is \c text/xml.
-
-    A  MIME type can have multiple parents. For instance, \c application/x-perl
-    has two parents: \c application/x-executable and \c text/plain. This makes
+    A mimetype can have multiple parents. For instance application/x-perl
+    has two parents: application/x-executable and text/plain. This makes
     it possible to both execute perl scripts, and to open them in text editors.
+
+    While this property was introduced in 5.10, the
+    corresponding accessor method has always been there.
 */
 QStringList MimeType::parentMimeTypes() const
 {
-    return MimeDatabasePrivate::instance()->provider()->parents(d->name);
+    return MimeDatabasePrivate::instance()->mimeParents(d->name);
 }
 
 static void collectParentMimeTypes(const QString &mime, QStringList &allParents)
 {
-    const QStringList parents = MimeDatabasePrivate::instance()->provider()->parents(mime);
+    const QStringList parents = MimeDatabasePrivate::instance()->mimeParents(mime);
     for (const QString &parent : parents) {
         // I would use QSet, but since order matters I better not
         if (!allParents.contains(parent))
@@ -321,14 +388,20 @@ static void collectParentMimeTypes(const QString &mime, QStringList &allParents)
 }
 
 /*!
-    Returns all the parent MIME types of this type, direct and indirect.
-    This includes grandparents, and so on.
+    \property MimeType::allAncestors
+    \brief the names of direct and indirect parent MIME types
 
-    For instance, for \c image/svg+xml the list would be:
-    \c application/xml, \c text/plain, \c application/octet-stream.
+    Return all the parent mimetypes of this mimetype, direct and indirect.
+    This includes the parent(s) of its parent(s), etc.
 
-    \note The \c application/octet-stream type is the ultimate parent for all types
+    For instance, for image/svg+xml the list would be:
+    application/xml, text/plain, application/octet-stream.
+
+    Note that application/octet-stream is the ultimate parent for all types
     of files (but not directories).
+
+    While this property was introduced in 5.10, the
+    corresponding accessor method has always been there.
 */
 QStringList MimeType::allAncestors() const
 {
@@ -338,58 +411,80 @@ QStringList MimeType::allAncestors() const
 }
 
 /*!
-    Returns the list of aliases of this MIME type.
+    \property MimeType::aliases
+    \brief the list of aliases of this mimetype
 
-    For instance, for \c text/csv, the returned list would be:
-    \c text/x-csv, \c text/x-comma-separated-values.
+    For instance, for text/csv, the returned list would be:
+    text/x-csv, text/x-comma-separated-values.
 
-    \note All MimeType instances refer to proper  MIME types,
+    Note that all MimeType instances refer to proper mimetypes,
     never to aliases directly.
 
     The order of the aliases in the list is undefined.
+
+    While this property was introduced in 5.10, the
+    corresponding accessor method has always been there.
 */
 QStringList MimeType::aliases() const
 {
-    return MimeDatabasePrivate::instance()->provider()->listAliases(d->name);
+    return MimeDatabasePrivate::instance()->listAliases(d->name);
 }
 
 /*!
-    Returns the known suffixes for the MIME type.
-    No leading dot is included, so for instance this would return
-    \c {"jpg", "jpeg"} for \c image/jpeg.
+    \property MimeType::suffixes
+    \brief the known suffixes for the MIME type
+
+    No leading dot is included, so for instance this would return "jpg", "jpeg" for image/jpeg.
+
+    While this property was introduced in 5.10, the
+    corresponding accessor method has always been there.
  */
 QStringList MimeType::suffixes() const
 {
-    MimeDatabasePrivate::instance()->provider()->loadMimeTypePrivate(*d);
+    MimeDatabasePrivate::instance()->loadMimeTypePrivate(const_cast<MimeTypePrivate&>(*d));
 
     QStringList result;
     for (const QString &pattern : qAsConst(d->globPatterns)) {
-        const QString suffix = suffixFromPattern(pattern);
-        if (!suffix.isEmpty())
+        // Not a simple suffix if it looks like: README or *. or *.* or *.JP*G or *.JP?
+        if (pattern.startsWith(QLatin1String("*.")) &&
+            pattern.length() > 2 &&
+            pattern.indexOf(QLatin1Char('*'), 2) < 0 && pattern.indexOf(QLatin1Char('?'), 2) < 0) {
+            const QString suffix = pattern.mid(2);
             result.append(suffix);
+        }
     }
 
     return result;
 }
 
 /*!
-    Returns the preferred suffix for the MIME type.
-    No leading dot is included, so for instance this would return \c "pdf" for
-    \c application/pdf. The return value can be empty, for MIME types which do
-    not have any suffixes associated.
+    \property MimeType::preferredSuffix
+    \brief the preferred suffix for the MIME type
+
+    No leading dot is included, so for instance this would return "pdf" for application/pdf.
+    The return value can be empty, for mime types which do not have any suffixes associated.
+
+    While this property was introduced in 5.10, the
+    corresponding accessor method has always been there.
  */
 QString MimeType::preferredSuffix() const
 {
+    if (isDefault()) // workaround for unwanted *.bin suffix for octet-stream, https://bugs.freedesktop.org/show_bug.cgi?id=101667, fixed upstream in 1.10
+        return QString();
     const QStringList suffixList = suffixes();
     return suffixList.isEmpty() ? QString() : suffixList.at(0);
 }
 
 /*!
-    Returns a filter string usable for a file dialog.
+    \property MimeType::filterString
+    \brief a filter string usable for a file dialog
+
+    While this property was introduced in 5.10, the
+    corresponding accessor method has always been there.
 */
 QString MimeType::filterString() const
 {
-    MimeDatabasePrivate::instance()->provider()->loadMimeTypePrivate(*d);
+    MimeDatabasePrivate::instance()->loadMimeTypePrivate(const_cast<MimeTypePrivate&>(*d));
     QString filter;
 
     if (!d->globPatterns.empty()) {
@@ -406,14 +501,30 @@ QString MimeType::filterString() const
 }
 
 /*!
+    \fn bool MimeType::inherits(const QString &mimeTypeName) const;
+    Returns \c true if this mimetype is \a mimeTypeName,
+    or inherits \a mimeTypeName (see parentMimeTypes()),
+    or \a mimeTypeName is an alias for this mimetype.
+
+    This method has been made invokable from QML since 5.10.
+ */
+bool MimeType::inherits(const QString &mimeTypeName) const
+{
+    if (d->name == mimeTypeName)
+        return true;
+    return MimeDatabasePrivate::instance()->mimeInherits(d->name, mimeTypeName);
+}
+
+/*!
     Returns \c true if the name or alias of the MIME type matches
     \a nameOrAlias.
 */
 bool MimeType::matchesName(const QString &nameOrAlias) const
 {
-    if (d->name == nameOrAlias)
-        return true;
-    return MimeDatabasePrivate::instance()->provider()->resolveAlias(nameOrAlias) == d->name;
+//    if (d->name == nameOrAlias)
+//        return true;
+//    return MimeDatabasePrivate::instance()->provider()->resolveAlias(nameOrAlias) == d->name;
+    return true;
 }
 
 /*!
@@ -421,32 +532,21 @@ bool MimeType::matchesName(const QString &nameOrAlias) const
 */
 void MimeType::setPreferredSuffix(const QString &suffix)
 {
-    MimeDatabasePrivate::instance()->provider()->loadMimeTypePrivate(*d);
+//    MimeDatabasePrivate::instance()->provider()->loadMimeTypePrivate(*d);
 
-    auto it = std::find_if(d->globPatterns.begin(), d->globPatterns.end(),
-                           [suffix](const QString &pattern) {
-                               return suffixFromPattern(pattern) == suffix;
-                           });
-    if (it != d->globPatterns.end())
-        d->globPatterns.erase(it);
-    d->globPatterns.prepend(QLatin1String("*.") + suffix);
+//    auto it = std::find_if(d->globPatterns.begin(), d->globPatterns.end(),
+//                           [suffix](const QString &pattern) {
+//                               return suffixFromPattern(pattern) == suffix;
+//                           });
+//    if (it != d->globPatterns.end())
+//        d->globPatterns.erase(it);
+//    d->globPatterns.prepend(QLatin1String("*.") + suffix);
 }
 
-/*!
-    Returns \c true if this MIME type is \a mimeTypeName or inherits it,
-    or if \a mimeTypeName is an alias for this mimetype.
-
-    \sa parentMimeTypes()
- */
-bool MimeType::inherits(const QString &mimeTypeName) const
-{
-    if (d->name == mimeTypeName)
-        return true;
-    return MimeDatabasePrivate::instance()->inherits(d->name, mimeTypeName);
-}
+} // namespace Utils
 
 #ifndef QT_NO_DEBUG_STREAM
-QDebug operator<<(QDebug debug, const MimeType &mime)
+QDebug operator<<(QDebug debug, const Utils::MimeType &mime)
 {
     QDebugStateSaver saver(debug);
     if (!mime.isValid()) {
@@ -457,3 +557,5 @@ QDebug operator<<(QDebug debug, const MimeType &mime)
     return debug;
 }
 #endif
+
+#include "moc_mimetype.cpp"

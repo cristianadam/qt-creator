@@ -54,16 +54,16 @@
 #include <QtCore/qhash.h>
 
 namespace Utils {
-namespace Internal {
 
 struct MimeGlobMatchResult
 {
-    void addMatch(const QString &mimeType, int weight, const QString &pattern);
+    void addMatch(const QString &mimeType, int weight, const QString &pattern, int knownSuffixLength = 0);
 
-    QStringList m_matchingMimeTypes;
+    QStringList m_matchingMimeTypes; // only those with highest weight
+    QStringList m_allMatchingMimeTypes;
     int m_weight = 0;
     int m_matchingPatternLength = 0;
-    QString m_foundSuffix;
+    int m_knownSuffixLength = 0;
 };
 
 class MimeGlobPattern
@@ -73,9 +73,7 @@ public:
     static const unsigned DefaultWeight = 50;
     static const unsigned MinWeight = 1;
 
-    explicit MimeGlobPattern(const QString &thePattern, const QString &theMimeType,
-                             unsigned theWeight = DefaultWeight,
-                             Qt::CaseSensitivity s = Qt::CaseInsensitive) :
+    explicit MimeGlobPattern(const QString &thePattern, const QString &theMimeType, unsigned theWeight = DefaultWeight, Qt::CaseSensitivity s = Qt::CaseInsensitive) :
         m_pattern(s == Qt::CaseInsensitive ? thePattern.toLower() : thePattern),
         m_mimeType(theMimeType),
         m_weight(theWeight),
@@ -139,7 +137,7 @@ public:
         auto isMimeTypeEqual = [&mimeType](const MimeGlobPattern &pattern) {
             return pattern.mimeType() == mimeType;
         };
-        erase(std::remove_if(begin(), end(), isMimeTypeEqual), end());
+        removeIf(isMimeTypeEqual);
     }
 
     void match(MimeGlobMatchResult &result, const QString &fileName) const;
@@ -159,7 +157,7 @@ public:
 
     void addGlob(const MimeGlobPattern &glob);
     void removeMimeType(const QString &mimeType);
-    QStringList matchingGlobs(const QString &fileName, QString *foundSuffix) const;
+    void matchingGlobs(const QString &fileName, MimeGlobMatchResult &result) const;
     void clear();
 
     PatternsMap m_fastPatterns; // example: "doc" -> "application/msword", "text/plain"
@@ -167,5 +165,6 @@ public:
     MimeGlobPatternList m_lowWeightGlobs; // <= 50, including the non-fast 50 patterns
 };
 
-} // Internal
-} // Utils
+} // namespace Utils
+
+Q_DECLARE_SHARED(Utils::MimeGlobPattern)

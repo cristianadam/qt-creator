@@ -56,14 +56,19 @@
 #include <QtCore/qlist.h>
 #include <QtCore/qstring.h>
 
-
 namespace Utils {
-namespace Internal {
 
 class MimeMagicRuleMatcher
 {
 public:
     explicit MimeMagicRuleMatcher(const QString &mime, unsigned priority = 65535);
+
+    void swap(MimeMagicRuleMatcher &other) noexcept
+    {
+        qSwap(m_list,     other.m_list);
+        qSwap(m_priority, other.m_priority);
+        qSwap(m_mimetype, other.m_mimetype);
+    }
 
     bool operator==(const MimeMagicRuleMatcher &other) const;
 
@@ -83,5 +88,6 @@ private:
     QString m_mimetype;
 };
 
-} // Internal
-} // Utils
+} // namespace Utils
+
+Q_DECLARE_SHARED(Utils::MimeMagicRuleMatcher)

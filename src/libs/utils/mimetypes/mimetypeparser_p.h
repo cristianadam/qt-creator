@@ -51,23 +51,28 @@
 //
 
 #include "mimedatabase_p.h"
+
 #include "mimeprovider_p.h"
 
+QT_BEGIN_NAMESPACE
+class QIODevice;
+QT_END_NAMESPACE
+
 namespace Utils {
-namespace Internal {
 
 class MimeTypeParserBase
 {
-    Q_DISABLE_COPY(MimeTypeParserBase)
+    Q_DISABLE_COPY_MOVE(MimeTypeParserBase)
 
 public:
     MimeTypeParserBase() {}
     virtual ~MimeTypeParserBase() {}
 
-    bool parse(const QByteArray &content, const QString &fileName, QString *errorMessage);
+    bool parse(QIODevice *dev, const QString &fileName, QString *errorMessage);
+
+    static bool parseNumber(QStringView n, int *target, QString *errorMessage);
 
 protected:
-    virtual bool mimeTypeExists(const QString &mimeTypeName) = 0;
     virtual bool process(const MimeType &t, QString *errorMessage) = 0;
     virtual bool process(const MimeGlobPattern &t, QString *errorMessage) = 0;
     virtual void processParent(const QString &child, const QString &parent) = 0;
@@ -83,6 +88,7 @@ private:
         ParseGenericIcon,
         ParseIcon,
         ParseGlobPattern,
+        ParseGlobDeleteAll,
         ParseSubClass,
         ParseAlias,
         ParseMagic,
@@ -101,9 +107,6 @@ public:
     explicit MimeTypeParser(MimeXMLProvider &provider) : m_provider(provider) {}
 
 protected:
-    inline bool mimeTypeExists(const QString &mimeTypeName) override
-    { return m_provider.mimeTypeForName(mimeTypeName).isValid(); }
-
     inline bool process(const MimeType &t, QString *) override
     { m_provider.addMimeType(t); return true; }
 
@@ -123,5 +126,4 @@ private:
     MimeXMLProvider &m_provider;
 };
 
-} // Internal
-} // Utils
+} // namespace Utils

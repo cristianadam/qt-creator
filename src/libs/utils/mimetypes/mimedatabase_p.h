@@ -1,6 +1,7 @@
 /****************************************************************************
 **
 ** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2015 Klaralvdalens Datakonsult AB, a KDAB Group company, info@kdab.com, author David Faure <david.faure@kdab.com>
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -43,15 +44,6 @@
 //  W A R N I N G
 //  -------------
 //
-// This file is mostly copied from Qt code and should not be touched
-// unless really needed.
-//
-
-
-//
-//  W A R N I N G
-//  -------------
-//
 // This file is not part of the Qt API.  It exists purely as an
 // implementation detail.  This header file may change from version to
 // version without notice, or even be removed.
@@ -59,35 +51,36 @@
 // We mean it.
 //
 
-#include <QtCore/qhash.h>
+#include "mimetype.h"
+
+#include "mimeglobpattern_p.h"
+#include "mimetype_p.h"
+
+#include <QtCore/qelapsedtimer.h>
+#include <QtCore/qlist.h>
 #include <QtCore/qmutex.h>
+
+#include <vector>
+#include <memory>
+
 QT_BEGIN_NAMESPACE
-class QFileInfo;
 class QIODevice;
-class QUrl;
 QT_END_NAMESPACE
 
-#include "mimetype.h"
-#include "mimetype_p.h"
-#include "mimeglobpattern_p.h"
-
 namespace Utils {
-namespace Internal {
 
+class MimeDatabase;
 class MimeProviderBase;
 
 class MimeDatabasePrivate
 {
 public:
-    Q_DISABLE_COPY(MimeDatabasePrivate)
+    Q_DISABLE_COPY_MOVE(MimeDatabasePrivate)
 
     MimeDatabasePrivate();
     ~MimeDatabasePrivate();
 
     static MimeDatabasePrivate *instance();
-
-    MimeProviderBase *provider();
-    void setProvider(MimeProviderBase *theProvider);
 
     inline QString defaultMimeType() const { return m_defaultMimeType; }
 
@@ -95,63 +88,34 @@ public:
 
     QList<MimeType> allMimeTypes();
 
-
+    QString resolveAlias(const QString &nameOrAlias);
+    QStringList parents(const QString &mimeName);
     MimeType mimeTypeForName(const QString &nameOrAlias);
     MimeType mimeTypeForFileNameAndData(const QString &fileName, QIODevice *device, int *priorityPtr);
     MimeType findByData(const QByteArray &data, int *priorityPtr);
-    QStringList mimeTypeForFileName(const QString &fileName, QString *foundSuffix = nullptr);
+    QStringList mimeTypeForFileName(const QString &fileName);
+    MimeGlobMatchResult findByFileName(const QString &fileName);
 
-    mutable MimeProviderBase *m_provider;
-    const QString m_defaultMimeType;
-    QMutex mutex;
-
-    int m_startupPhase = 0;
-};
-
-class MimeDatabase
-{
-    Q_DISABLE_COPY(MimeDatabase)
-
-public:
-    MimeDatabase();
-    ~MimeDatabase();
-
-    MimeType mimeTypeForName(const QString &nameOrAlias) const;
-
-    enum MatchMode {
-        MatchDefault = 0x0,
-        MatchExtension = 0x1,
-        MatchContent = 0x2
-    };
-
-    MimeType mimeTypeForFile(const QString &fileName, MatchMode mode = MatchDefault) const;
-    MimeType mimeTypeForFile(const QFileInfo &fileInfo, MatchMode mode = MatchDefault) const;
-    QList<MimeType> mimeTypesForFileName(const QString &fileName) const;
-
-    MimeType mimeTypeForData(const QByteArray &data) const;
-    MimeType mimeTypeForData(QIODevice *device) const;
-
-    MimeType mimeTypeForUrl(const QUrl &url) const;
-    MimeType mimeTypeForFileNameAndData(const QString &fileName, QIODevice *device) const;
-    MimeType mimeTypeForFileNameAndData(const QString &fileName, const QByteArray &data) const;
-
-    QString suffixForFileName(const QString &fileName) const;
-
-    QList<MimeType> allMimeTypes() const;
-
-    // For debugging purposes.
-    enum StartupPhase {
-        BeforeInitialize,
-        PluginsLoading,
-        PluginsInitializing, // Register up to here.
-        PluginsDelayedInitializing, // Use from here on.
-        UpAndRunning
-    };
-    static void setStartupPhase(StartupPhase);
+    // API for MimeType. Takes care of locking the mutex.
+    void loadMimeTypePrivate(MimeTypePrivate &mimePrivate);
+    void loadGenericIcon(MimeTypePrivate &mimePrivate);
+    void loadIcon(MimeTypePrivate &mimePrivate);
+    QStringList mimeParents(const QString &mimeName);
+    QStringList listAliases(const QString &mimeName);
+    bool mimeInherits(const QString &mime, const QString &parent);
 
 private:
-    Internal::MimeDatabasePrivate *d;
+    using Providers = std::vector<std::unique_ptr<MimeProviderBase>>;
+    const Providers &providers();
+    bool shouldCheck();
+    void loadProviders();
+
+    mutable Providers m_providers;
+    QElapsedTimer m_lastCheck;
+
+public:
+    const QString m_defaultMimeType;
+    QMutex mutex;
 };
 
-} // Internal
-} // Utils
+} // namespace Utils

@@ -39,12 +39,13 @@
 
 #include "mimeglobpattern_p.h"
 
+#if QT_CONFIG(regularexpression)
 #include <QRegularExpression>
+#endif
 #include <QStringList>
 #include <QDebug>
 
-using namespace Utils;
-using namespace Utils::Internal;
+namespace Utils {
 
 /*!
     \internal
@@ -55,11 +56,15 @@ using namespace Utils::Internal;
     Handles glob weights, and preferring longer matches over shorter matches.
 */
 
-void MimeGlobMatchResult::addMatch(const QString &mimeType, int weight, const QString &pattern)
+void MimeGlobMatchResult::addMatch(const QString &mimeType, int weight, const QString &pattern, int knownSuffixLength)
 {
-    // Is this a lower-weight pattern than the last match? Skip this match then.
-    if (weight < m_weight)
+    if (m_allMatchingMimeTypes.contains(mimeType))
         return;
+    // Is this a lower-weight pattern than the last match? Skip this match then.
+    if (weight < m_weight) {
+        m_allMatchingMimeTypes.append(mimeType);
+        return;
+    }
     bool replace = weight > m_weight;
     if (!replace) {
         // Compare the length of the match
@@ -78,8 +83,11 @@ void MimeGlobMatchResult::addMatch(const QString &mimeType, int weight, const QS
     }
     if (!m_matchingMimeTypes.contains(mimeType)) {
         m_matchingMimeTypes.append(mimeType);
-        if (pattern.startsWith(QLatin1String("*.")))
-            m_foundSuffix = pattern.mid(2);
+        if (replace)
+            m_allMatchingMimeTypes.prepend(mimeType); // highest-weight first
+        else
+            m_allMatchingMimeTypes.append(mimeType);
+        m_knownSuffixLength = knownSuffixLength;
     }
 }
 
@@ -89,7 +97,7 @@ MimeGlobPattern::PatternType MimeGlobPattern::detectPatternType(const QString &p
     if (!patternLength)
         return OtherPattern;
 
-    const bool starCount = pattern.count(QLatin1Char('*')) == 1;
+    const int starCount = pattern.count(QLatin1Char('*'));
     const bool hasSquareBracket = pattern.indexOf(QLatin1Char('[')) != -1;
     const bool hasQuestionMark = pattern.indexOf(QLatin1Char('?')) != -1;
 
@@ -101,10 +109,10 @@ MimeGlobPattern::PatternType MimeGlobPattern::detectPatternType(const QString &p
             // Patterns like "README*" (well this is currently the only one like that...)
             if (pattern.at(patternLength - 1) == QLatin1Char('*'))
                 return PrefixPattern;
-        }
-        // Names without any wildcards like "README"
-        if (starCount == 0)
+        } else if (starCount == 0) {
+            // Names without any wildcards like "README"
             return LiteralPattern;
+        }
     }
 
     if (pattern == QLatin1String("[0-9][0-9][0-9].vdr"))
@@ -115,6 +123,7 @@ MimeGlobPattern::PatternType MimeGlobPattern::detectPatternType(const QString &p
 
     return OtherPattern;
 }
+
 
 /*!
     \internal
@@ -177,11 +186,26 @@ bool MimeGlobPattern::matchFileName(const QString &inputFileName) const
     }
     case OtherPattern:
         // Other fallback patterns: slow but correct method
-        const QRegularExpression rx(QRegularExpression::anchoredPattern(
-                                    QRegularExpression::wildcardToRegularExpression(m_pattern)));
+#if QT_CONFIG(regularexpression)
+        auto rx = QRegularExpression::fromWildcard(m_pattern);
         return rx.match(fileName).hasMatch();
+#else
+        return false;
+#endif
     }
     return false;
+}
+
+static bool isSimplePattern(const QString &pattern)
+{
+   // starts with "*.", has no other '*'
+   return pattern.lastIndexOf(QLatin1Char('*')) == 0
+      && pattern.length() > 1
+      && pattern.at(1) == QLatin1Char('.') // (other dots are OK, like *.tar.bz2)
+      // and contains no other special character
+      && !pattern.contains(QLatin1Char('?'))
+      && !pattern.contains(QLatin1Char('['))
+      ;
 }
 
 static bool isFastPattern(const QString &pattern)
@@ -223,9 +247,8 @@ void MimeAllGlobPatterns::addGlob(const MimeGlobPattern &glob)
 
 void MimeAllGlobPatterns::removeMimeType(const QString &mimeType)
 {
-    for (QStringList &x : m_fastPatterns)
+    for (auto &x : m_fastPatterns)
         x.removeAll(mimeType);
-
     m_highWeightGlobs.removeMimeType(mimeType);
     m_lowWeightGlobs.removeMimeType(mimeType);
 }
@@ -233,40 +256,42 @@ void MimeAllGlobPatterns::removeMimeType(const QString &mimeType)
 void MimeGlobPatternList::match(MimeGlobMatchResult &result,
                                  const QString &fileName) const
 {
-    for (const MimeGlobPattern &glob : *this) {
-        if (glob.matchFileName(fileName))
-            result.addMatch(glob.mimeType(), glob.weight(), glob.pattern());
+
+    MimeGlobPatternList::const_iterator it = this->constBegin();
+    const MimeGlobPatternList::const_iterator endIt = this->constEnd();
+    for (; it != endIt; ++it) {
+        const MimeGlobPattern &glob = *it;
+        if (glob.matchFileName(fileName)) {
+            const QString pattern = glob.pattern();
+            const int suffixLen = isSimplePattern(pattern) ? pattern.length() - 2 : 0;
+            result.addMatch(glob.mimeType(), glob.weight(), pattern, suffixLen);
+        }
     }
 }
 
-QStringList MimeAllGlobPatterns::matchingGlobs(const QString &fileName, QString *foundSuffix) const
+void MimeAllGlobPatterns::matchingGlobs(const QString &fileName, MimeGlobMatchResult &result) const
 {
     // First try the high weight matches (>50), if any.
-    MimeGlobMatchResult result;
     m_highWeightGlobs.match(result, fileName);
-    if (result.m_matchingMimeTypes.isEmpty()) {
 
-        // Now use the "fast patterns" dict, for simple *.foo patterns with weight 50
-        // (which is most of them, so this optimization is definitely worth it)
-        const int lastDot = fileName.lastIndexOf(QLatin1Char('.'));
-        if (lastDot != -1) { // if no '.', skip the extension lookup
-            const int ext_len = fileName.length() - lastDot - 1;
-            const QString simpleExtension = fileName.right(ext_len).toLower();
-            // (toLower because fast patterns are always case-insensitive and saved as lowercase)
+    // Now use the "fast patterns" dict, for simple *.foo patterns with weight 50
+    // (which is most of them, so this optimization is definitely worth it)
+    const int lastDot = fileName.lastIndexOf(QLatin1Char('.'));
+    if (lastDot != -1) { // if no '.', skip the extension lookup
+        const int ext_len = fileName.length() - lastDot - 1;
+        const QString simpleExtension = fileName.right(ext_len).toLower();
+        // (toLower because fast patterns are always case-insensitive and saved as lowercase)
 
-            const QStringList matchingMimeTypes = m_fastPatterns.value(simpleExtension);
-            for (const QString &mime : matchingMimeTypes)
-                result.addMatch(mime, 50, QLatin1String("*.") + simpleExtension);
-            // Can't return yet; *.tar.bz2 has to win over *.bz2, so we need the low-weight mimetypes anyway,
-            // at least those with weight 50.
-        }
-
-        // Finally, try the low weight matches (<=50)
-        m_lowWeightGlobs.match(result, fileName);
+        const QStringList matchingMimeTypes = m_fastPatterns.value(simpleExtension);
+        const QString simplePattern = QLatin1String("*.") + simpleExtension;
+        for (const QString &mime : matchingMimeTypes)
+            result.addMatch(mime, 50, simplePattern, simpleExtension.size());
+        // Can't return yet; *.tar.bz2 has to win over *.bz2, so we need the low-weight mimetypes anyway,
+        // at least those with weight 50.
     }
-    if (foundSuffix)
-        *foundSuffix = result.m_foundSuffix;
-    return result.m_matchingMimeTypes;
+
+    // Finally, try the low weight matches (<=50)
+    m_lowWeightGlobs.match(result, fileName);
 }
 
 void MimeAllGlobPatterns::clear()
@@ -275,3 +300,5 @@ void MimeAllGlobPatterns::clear()
     m_highWeightGlobs.clear();
     m_lowWeightGlobs.clear();
 }
+
+} // namespace Utils

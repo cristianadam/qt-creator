@@ -39,19 +39,17 @@
 
 #include "mimemagicrule_p.h"
 
+#include "mimetypeparser_p.h"
 #include <QtCore/QList>
-#include <QtCore/QRegularExpression>
 #include <QtCore/QDebug>
 #include <qendian.h>
 
-using namespace Utils;
-using namespace Utils::Internal;
+namespace Utils {
 
 // in the same order as Type!
 static const char magicRuleTypes_string[] =
     "invalid\0"
     "string\0"
-    "regexp\0"
     "host16\0"
     "host32\0"
     "big16\0"
@@ -62,7 +60,7 @@ static const char magicRuleTypes_string[] =
     "\0";
 
 static const int magicRuleTypes_indices[] = {
-    0, 8, 15, 22, 29, 36, 42, 48, 57, 66, 71, 0
+    0, 8, 15, 22, 29, 35, 41, 50, 59, 64, 0
 };
 
 MimeMagicRule::Type MimeMagicRule::type(const QByteArray &theTypeName)
@@ -79,44 +77,18 @@ QByteArray MimeMagicRule::typeName(MimeMagicRule::Type theType)
     return magicRuleTypes_string + magicRuleTypes_indices[theType];
 }
 
-namespace Utils {
-namespace Internal {
-
-class MimeMagicRulePrivate
+bool MimeMagicRule::operator==(const MimeMagicRule &other) const
 {
-public:
-    bool operator==(const MimeMagicRulePrivate &other) const;
-
-    MimeMagicRule::Type type;
-    QByteArray value;
-    int startPos;
-    int endPos;
-    QByteArray mask;
-
-    QRegularExpression regexp;
-    QByteArray pattern;
-    quint32 number;
-    quint32 numberMask;
-
-    using MatchFunction = bool (*)(const MimeMagicRulePrivate*, const QByteArray&);
-    MatchFunction matchFunction;
-};
-
-bool MimeMagicRulePrivate::operator==(const MimeMagicRulePrivate &other) const
-{
-    return type == other.type &&
-           value == other.value &&
-           startPos == other.startPos &&
-           endPos == other.endPos &&
-           mask == other.mask &&
-           pattern == other.pattern &&
-           number == other.number &&
-           numberMask == other.numberMask &&
-           matchFunction == other.matchFunction;
+    return m_type == other.m_type &&
+           m_value == other.m_value &&
+           m_startPos == other.m_startPos &&
+           m_endPos == other.m_endPos &&
+           m_mask == other.m_mask &&
+           m_pattern == other.m_pattern &&
+           m_number == other.m_number &&
+           m_numberMask == other.m_numberMask &&
+           m_matchFunction == other.m_matchFunction;
 }
-
-} // Internal
-} // Utils
 
 // Used by both providers
 bool MimeMagicRule::matchSubstring(const char *dataPtr, int dataSize, int rangeStart, int rangeLength,
@@ -168,35 +140,25 @@ bool MimeMagicRule::matchSubstring(const char *dataPtr, int dataSize, int rangeS
     return true;
 }
 
-static bool matchString(const MimeMagicRulePrivate *d, const QByteArray &data)
+bool MimeMagicRule::matchString(const QByteArray &data) const
 {
-    const int rangeLength = d->endPos - d->startPos + 1;
-    return MimeMagicRule::matchSubstring(data.constData(), data.size(), d->startPos, rangeLength, d->pattern.size(), d->pattern.constData(), d->mask.constData());
-}
-
-static bool matchRegExp(const MimeMagicRulePrivate *d, const QByteArray &data)
-{
-    const QString str = QString::fromUtf8(data);
-    int length = d->endPos;
-    if (length == d->startPos)
-        length = -1; // from startPos to end of string
-    const QString subStr = str.left(length);
-    return d->regexp.match(subStr, d->startPos).hasMatch();
+    const int rangeLength = m_endPos - m_startPos + 1;
+    return MimeMagicRule::matchSubstring(data.constData(), data.size(), m_startPos, rangeLength, m_pattern.size(), m_pattern.constData(), m_mask.constData());
 }
 
 template <typename T>
-static bool matchNumber(const MimeMagicRulePrivate *d, const QByteArray &data)
+bool MimeMagicRule::matchNumber(const QByteArray &data) const
 {
-    const T value(d->number);
-    const T mask(d->numberMask);
+    const T value(m_number);
+    const T mask(m_numberMask);
 
-    //qDebug() << "matchNumber" << "0x" << QString::number(d->number, 16) << "size" << sizeof(T);
-    //qDebug() << "mask" << QString::number(d->numberMask, 16);
+    //qDebug() << "matchNumber" << "0x" << QString::number(m_number, 16) << "size" << sizeof(T);
+    //qDebug() << "mask" << QString::number(m_numberMask, 16);
 
-    const char *p = data.constData() + d->startPos;
-    const char *e = data.constData() + qMin(data.size() - int(sizeof(T)), d->endPos + 1);
+    const char *p = data.constData() + m_startPos;
+    const char *e = data.constData() + qMin(data.size() - int(sizeof(T)), m_endPos);
     for ( ; p <= e; ++p) {
-        if ((*reinterpret_cast<const T*>(p) & mask) == (value & mask))
+        if ((qFromUnaligned<T>(p) & mask) == (value & mask))
             return true;
     }
 
@@ -238,6 +200,8 @@ static inline QByteArray makePattern(const QByteArray &value)
                 *data++ = '\n';
             } else if (*p == 'r') {
                 *data++ = '\r';
+            } else if (*p == 't') {
+                *data++ = '\t';
             } else { // escaped
                 *data++ = *p;
             }
@@ -250,173 +214,149 @@ static inline QByteArray makePattern(const QByteArray &value)
     return pattern;
 }
 
-MimeMagicRule::MimeMagicRule(MimeMagicRule::Type theType,
-                             const QByteArray &theValue,
-                             int theStartPos,
-                             int theEndPos,
-                             const QByteArray &theMask,
-                             QString *errorString) :
-    d(new MimeMagicRulePrivate)
+MimeMagicRule::MimeMagicRule(const Type &type,
+                             const QByteArray &value,
+                             int startPos,
+                             int endPos,
+                             const QByteArray &mask,
+                             QString *errorString)
+    : m_type(type)
+    , m_value(value)
+    , m_startPos(startPos)
+    , m_endPos(endPos)
+    , m_mask(mask)
 {
-    d->type = theType;
-    d->value = theValue;
-    d->startPos = theStartPos;
-    d->endPos = theEndPos;
-    d->mask = theMask;
-    d->matchFunction = nullptr;
+    init(errorString);
+}
 
-    if (d->value.isEmpty()) {
-        d->type = Invalid;
-        if (errorString)
-            *errorString = QLatin1String("Invalid empty magic rule value");
+// Evaluate a magic match rule like
+//  <match value="must be converted with BinHex" type="string" offset="11"/>
+//  <match value="0x9501" type="big16" offset="0:64"/>
+
+MimeMagicRule::MimeMagicRule(const QString &type,
+                               const QByteArray &value,
+                               const QString &offsets,
+                               const QByteArray &mask,
+                               QString *errorString)
+    : m_type(MimeMagicRule::type(type.toLatin1())),
+      m_value(value),
+      m_mask(mask),
+      m_matchFunction(nullptr)
+{
+    if (Q_UNLIKELY(m_type == Invalid))
+        *errorString = QLatin1String("Type ") + type + QLatin1String(" is not supported");
+
+    // Parse for offset as "1" or "1:10"
+    const int colonIndex = offsets.indexOf(QLatin1Char(':'));
+    const QStringView startPosStr = QStringView{offsets}.mid(0, colonIndex); // \ These decay to returning 'offsets'
+    const QStringView endPosStr   = QStringView{offsets}.mid(colonIndex + 1);// / unchanged when colonIndex == -1
+    if (Q_UNLIKELY(!MimeTypeParserBase::parseNumber(startPosStr, &m_startPos, errorString)) ||
+        Q_UNLIKELY(!MimeTypeParserBase::parseNumber(endPosStr, &m_endPos, errorString))) {
+        m_type = Invalid;
         return;
     }
 
-    if (d->type >= Host16 && d->type <= Byte) {
-        bool ok;
-        d->number = d->value.toUInt(&ok, 0); // autodetect
-        if (!ok) {
-            d->type = Invalid;
-            if (errorString)
-                *errorString = QString::fromLatin1("Invalid magic rule value \"%1\"").arg(
-                        QString::fromLatin1(d->value));
-            return;
-        }
-        d->numberMask = !d->mask.isEmpty() ? d->mask.toUInt(&ok, 0) : 0; // autodetect
+    if (Q_UNLIKELY(m_value.isEmpty())) {
+        m_type = Invalid;
+        if (errorString)
+            *errorString = QStringLiteral("Invalid empty magic rule value");
+        return;
     }
 
-    switch (d->type) {
+    init(errorString);
+}
+
+void MimeMagicRule::init(QString *errorString)
+{
+    if (m_type >= Host16 && m_type <= Byte) {
+        bool ok;
+        m_number = m_value.toUInt(&ok, 0); // autodetect base
+        if (Q_UNLIKELY(!ok)) {
+            m_type = Invalid;
+            if (errorString)
+                *errorString = QLatin1String("Invalid magic rule value \"") + QLatin1String(m_value) + QLatin1Char('"');
+            return;
+        }
+        m_numberMask = !m_mask.isEmpty() ? m_mask.toUInt(&ok, 0) : 0; // autodetect base
+    }
+
+    switch (m_type) {
     case String:
-        d->pattern = makePattern(d->value);
-        d->pattern.squeeze();
-        if (!d->mask.isEmpty()) {
-            if (d->mask.size() < 4 || !d->mask.startsWith("0x")) {
-                d->type = Invalid;
+        m_pattern = makePattern(m_value);
+        m_pattern.squeeze();
+        if (!m_mask.isEmpty()) {
+            if (Q_UNLIKELY(m_mask.size() < 4 || !m_mask.startsWith("0x"))) {
+                m_type = Invalid;
                 if (errorString)
-                    *errorString = QString::fromLatin1("Invalid magic rule mask \"%1\"").arg(
-                            QString::fromLatin1(d->mask));
+                    *errorString = QLatin1String("Invalid magic rule mask \"") + QLatin1String(m_mask) + QLatin1Char('"');
                 return;
             }
             const QByteArray &tempMask = QByteArray::fromHex(QByteArray::fromRawData(
-                                                     d->mask.constData() + 2, d->mask.size() - 2));
-            if (tempMask.size() != d->pattern.size()) {
-                d->type = Invalid;
+                                                     m_mask.constData() + 2, m_mask.size() - 2));
+            if (Q_UNLIKELY(tempMask.size() != m_pattern.size())) {
+                m_type = Invalid;
                 if (errorString)
-                    *errorString = QString::fromLatin1("Invalid magic rule mask size \"%1\"").arg(
-                            QString::fromLatin1(d->mask));
+                    *errorString = QLatin1String("Invalid magic rule mask size \"") + QLatin1String(m_mask) + QLatin1Char('"');
                 return;
             }
-            d->mask = tempMask;
+            m_mask = tempMask;
         } else {
-            d->mask.fill(char(-1), d->pattern.size());
+            m_mask.fill(char(-1), m_pattern.size());
         }
-        d->mask.squeeze();
-        d->matchFunction = matchString;
-        break;
-    case RegExp:
-        d->regexp.setPatternOptions(QRegularExpression::MultilineOption
-                                    | QRegularExpression::DotMatchesEverythingOption
-                                    );
-        d->regexp.setPattern(QString::fromUtf8(d->value));
-        if (!d->regexp.isValid()) {
-            d->type = Invalid;
-            if (errorString)
-                *errorString = QString::fromLatin1("Invalid magic rule regexp value \"%1\"").arg(
-                        QString::fromLatin1(d->value));
-            return;
-        }
-        d->matchFunction = matchRegExp;
+        m_mask.squeeze();
+        m_matchFunction = &MimeMagicRule::matchString;
         break;
     case Byte:
-        if (d->number <= quint8(-1)) {
-            if (d->numberMask == 0)
-                d->numberMask = quint8(-1);
-            d->matchFunction = matchNumber<quint8>;
+        if (m_number <= quint8(-1)) {
+            if (m_numberMask == 0)
+                m_numberMask = quint8(-1);
+            m_matchFunction = &MimeMagicRule::matchNumber<quint8>;
         }
         break;
     case Big16:
-    case Host16:
     case Little16:
-        if (d->number <= quint16(-1)) {
-            d->number = d->type == Little16 ? qFromLittleEndian<quint16>(d->number) : qFromBigEndian<quint16>(d->number);
-            if (d->numberMask == 0)
-                d->numberMask = quint16(-1);
-            d->matchFunction = matchNumber<quint16>;
+        if (m_number <= quint16(-1)) {
+            m_number = m_type == Little16 ? qFromLittleEndian<quint16>(m_number) : qFromBigEndian<quint16>(m_number);
+            if (m_numberMask != 0)
+                m_numberMask = m_type == Little16 ? qFromLittleEndian<quint16>(m_numberMask) : qFromBigEndian<quint16>(m_numberMask);
+        }
+        Q_FALLTHROUGH();
+    case Host16:
+        if (m_number <= quint16(-1)) {
+            if (m_numberMask == 0)
+                m_numberMask = quint16(-1);
+            m_matchFunction = &MimeMagicRule::matchNumber<quint16>;
         }
         break;
     case Big32:
-    case Host32:
     case Little32:
-        if (d->number <= quint32(-1)) {
-            d->number = d->type == Little32 ? qFromLittleEndian<quint32>(d->number) : qFromBigEndian<quint32>(d->number);
-            if (d->numberMask == 0)
-                d->numberMask = quint32(-1);
-            d->matchFunction = matchNumber<quint32>;
-        }
+        m_number = m_type == Little32 ? qFromLittleEndian<quint32>(m_number) : qFromBigEndian<quint32>(m_number);
+        if (m_numberMask != 0)
+            m_numberMask = m_type == Little32 ? qFromLittleEndian<quint32>(m_numberMask) : qFromBigEndian<quint32>(m_numberMask);
+        Q_FALLTHROUGH();
+    case Host32:
+        if (m_numberMask == 0)
+            m_numberMask = quint32(-1);
+        m_matchFunction = &MimeMagicRule::matchNumber<quint32>;
         break;
     default:
         break;
     }
 }
 
-MimeMagicRule::MimeMagicRule(const MimeMagicRule &other)
-    : m_subMatches(other.m_subMatches)
-    , d(new MimeMagicRulePrivate(*other.d))
-{
-}
-
-MimeMagicRule::~MimeMagicRule() = default;
-
-MimeMagicRule &MimeMagicRule::operator=(const MimeMagicRule &other)
-{
-    *d = *other.d;
-    m_subMatches = other.m_subMatches;
-    return *this;
-}
-
-bool MimeMagicRule::operator==(const MimeMagicRule &other) const
-{
-    return (d == other.d || *d == *other.d) && m_subMatches == other.m_subMatches;
-}
-
-MimeMagicRule::Type MimeMagicRule::type() const
-{
-    return d->type;
-}
-
-QByteArray MimeMagicRule::value() const
-{
-    return d->value;
-}
-
-int MimeMagicRule::startPos() const
-{
-    return d->startPos;
-}
-
-int MimeMagicRule::endPos() const
-{
-    return d->endPos;
-}
-
 QByteArray MimeMagicRule::mask() const
 {
-    QByteArray result = d->mask;
-    if (d->type == String) {
+    QByteArray result = m_mask;
+    if (m_type == String) {
         // restore '0x'
         result = "0x" + result.toHex();
     }
     return result;
 }
 
-bool MimeMagicRule::isValid() const
-{
-    return d->matchFunction;
-}
-
 bool MimeMagicRule::matches(const QByteArray &data) const
 {
-    const bool ok = d->matchFunction && d->matchFunction(d.data(), data);
+    const bool ok = m_matchFunction && (this->*m_matchFunction)(data);
     if (!ok)
         return false;
 
@@ -437,3 +377,5 @@ bool MimeMagicRule::matches(const QByteArray &data) const
 
 
 }
+
+} // namespace Utils

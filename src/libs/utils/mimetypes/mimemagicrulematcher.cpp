@@ -41,8 +41,7 @@
 
 #include "mimetype_p.h"
 
-using namespace Utils;
-using namespace Utils::Internal;
+namespace Utils {
 
 /*!
     \internal
@@ -101,3 +100,5 @@ unsigned MimeMagicRuleMatcher::priority() const
 {
     return m_priority;
 }
+
+} // namespace Utils
