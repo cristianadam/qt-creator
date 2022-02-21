@@ -688,6 +688,24 @@ MimeXMLProvider::MimeXMLProvider(MimeDatabasePrivate *db, const QString &directo
     ensureLoaded();
 }
 
+MimeXMLProvider::MimeXMLProvider(MimeDatabasePrivate *db, const QString &directory,
+                                 const QByteArray &data)
+    : MimeProviderBase(db, directory)
+{
+    QString errorMessage;
+    MimeTypeParser parser(*this);
+    QByteArray bufferData(data);
+    QBuffer buffer(&bufferData);
+    if (!buffer.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        qWarning("MimeDatabase: Error creating buffer for data with ID %ls.",
+                 qUtf16Printable(directory));
+    }
+    if (!parser.parse(&buffer, directory, &errorMessage)) {
+        qWarning("MimeDatabase: Error loading data for ID %ls\n%ls", qUtf16Printable(directory),
+                 qUtf16Printable(errorMessage));
+    }
+}
+
 MimeXMLProvider::~MimeXMLProvider()
 {
 }
