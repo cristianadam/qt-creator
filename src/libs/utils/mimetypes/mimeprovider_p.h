@@ -83,6 +83,10 @@ public:
 
     QString directory() const { return m_directory; }
 
+    // added for Qt Creator
+    virtual bool hasMimeType(const MimeType &mimeType) const = 0;
+    virtual QMap<int, QList<MimeMagicRule>> magicRulesForMimeType(const MimeType &mimeType) const = 0;
+
     MimeDatabasePrivate *m_db;
     QString m_directory;
 };
@@ -109,6 +113,9 @@ public:
     void loadIcon(MimeTypePrivate &) override;
     void loadGenericIcon(MimeTypePrivate &) override;
     void ensureLoaded() override;
+
+    bool hasMimeType(const MimeType &mimeType) const override;
+    QMap<int, QList<MimeMagicRule>> magicRulesForMimeType(const MimeType &mimeType) const override;
 
 private:
     struct CacheFile;
@@ -169,6 +176,9 @@ public:
     void addParent(const QString &child, const QString &parent);
     void addAlias(const QString &alias, const QString &name);
     void addMagicMatcher(const MimeMagicRuleMatcher &matcher);
+
+    bool hasMimeType(const MimeType &mimeType) const override;
+    QMap<int, QList<MimeMagicRule>> magicRulesForMimeType(const MimeType &mimeType) const override;
 
 private:
     void load(const QString &fileName);

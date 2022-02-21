@@ -881,4 +881,35 @@ void MimeXMLProvider::addMagicMatcher(const MimeMagicRuleMatcher &matcher)
     m_magicMatchers.append(matcher);
 }
 
+bool MimeBinaryProvider::hasMimeType(const MimeType &mimeType) const
+{
+    qWarning("Mimetypes: hasMimeType not implemented for binary provider");
+    return false;
+}
+
+QMap<int, QList<MimeMagicRule>> MimeBinaryProvider::magicRulesForMimeType(const MimeType &mimeType) const
+{
+    qWarning("Mimetypes: magicRulesForMimeType not implemented for binary provider");
+    return {};
+}
+
+bool MimeXMLProvider::hasMimeType(const MimeType &mimeType) const
+{
+    const auto mimeIt = std::find_if(m_nameMimeTypeMap.cbegin(), m_nameMimeTypeMap.cend(),
+                                     [mimeType](const MimeType &mt) {
+                                         return mt == mimeType;
+                                     });
+    return mimeIt != m_nameMimeTypeMap.cend();
+}
+
+QMap<int, QList<MimeMagicRule>> MimeXMLProvider::magicRulesForMimeType(const MimeType &mimeType) const
+{
+    QMap<int, QList<MimeMagicRule>> result;
+    for (const MimeMagicRuleMatcher &matcher : m_magicMatchers) {
+        if (mimeType.name() == matcher.mimetype())
+            result[matcher.priority()].append(matcher.magicRules());
+    }
+    return result;
+}
+
 } // namespace Utils

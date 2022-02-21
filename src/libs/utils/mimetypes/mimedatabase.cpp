@@ -935,12 +935,11 @@ void addMimeTypes(const QString &id, const QByteArray &data)
     d->addMimeData(id, data);
 }
 
-QMap<int, QList<MimeMagicRule> > magicRulesForMimeType(const MimeType &mimeType)
+QMap<int, QList<MimeMagicRule>> magicRulesForMimeType(const MimeType &mimeType)
 {
-//    auto d = MimeDatabasePrivate::instance();
-//    QMutexLocker locker(&d->mutex);
-//    return d->provider()->magicRulesForMimeType(mimeType);
-    return {};
+    auto d = MimeDatabasePrivate::instance();
+    QMutexLocker locker(&d->mutex);
+    return d->magicRulesForMimeType(mimeType);
 }
 
 void setGlobPatternsForMimeType(const MimeType &mimeType, const QStringList &patterns)
@@ -964,6 +963,15 @@ void MimeDatabasePrivate::addMimeData(const QString &id, const QByteArray &data)
 
     m_additionalData.insert(id, data);
     m_forceLoad = true;
+}
+
+QMap<int, QList<MimeMagicRule>> MimeDatabasePrivate::magicRulesForMimeType(const MimeType &mimeType)
+{
+    for (const auto &provider : providers()) {
+        if (provider->hasMimeType(mimeType))
+            return provider->magicRulesForMimeType(mimeType);
+    }
+    return {};
 }
 
 } // namespace Utils
