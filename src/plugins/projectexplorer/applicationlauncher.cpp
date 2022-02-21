@@ -334,9 +334,8 @@ void ApplicationLauncherPrivate::start()
     m_exitCode = 0;
     m_exitStatus = QProcess::NormalExit;
 
+    m_process.reset(new QtcProcess(this));
     if (m_isLocal) {
-        m_process.reset(new QtcProcess(this));
-
         connect(m_process.get(), &QtcProcess::finished, this, [this] {
             m_exitCode = m_process->exitCode();
             m_exitStatus = m_process->exitStatus();
@@ -396,12 +395,13 @@ void ApplicationLauncherPrivate::start()
 
         m_stopRequested = false;
 
-        m_process.reset(m_runnable.device->createProcess(this));
         connect(m_process.get(), &QtcProcess::errorOccurred,
                 this, &ApplicationLauncherPrivate::handleApplicationError);
         connect(m_process.get(), &QtcProcess::finished,
                 this, &ApplicationLauncherPrivate::handleApplicationFinished);
-        m_process->setCommand(m_runnable.command);
+        CommandLine cmd = m_runnable.command;
+        cmd.setExecutable(m_runnable.device->mapToGlobalPath(cmd.executable()));
+        m_process->setCommand(cmd);
         m_process->setWorkingDirectory(m_runnable.workingDirectory);
         m_process->setRemoteEnvironment(m_runnable.environment);
         m_process->setExtraData(m_runnable.extraData);

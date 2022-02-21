@@ -82,6 +82,8 @@ void GenericLinuxDeviceTester::testDevice(const IDevice::Ptr &deviceConfiguratio
     QTC_ASSERT(d->state == Inactive, return);
 
     d->deviceConfiguration = deviceConfiguration;
+    // TODO: drop SshConnectionManger in this file
+    // Here: invoke echo command and check if output contains '\n' - it means it's connected
     SshConnectionManager::forceNewConnection(deviceConfiguration->sshParameters());
     d->connection = SshConnectionManager::acquireConnection(deviceConfiguration->sshParameters());
     connect(d->connection, &SshConnection::connected,
@@ -125,6 +127,7 @@ void GenericLinuxDeviceTester::handleConnected()
 {
     QTC_ASSERT(d->state == Connecting, return);
 
+    // TODO: make remote uname with QtcProcess
     d->process = d->connection->createRemoteProcess("uname -rsm");
     connect(d->process.get(), &SshRemoteProcess::finished,
             this, &GenericLinuxDeviceTester::handleProcessFinished);
@@ -157,6 +160,7 @@ void GenericLinuxDeviceTester::handleProcessFinished()
         emit progressMessage(QString::fromUtf8(d->process->readAllStandardOutput()));
     }
 
+    // TODO: Refactor portsGatherer
     connect(&d->portsGatherer, &DeviceUsedPortsGatherer::error,
             this, &GenericLinuxDeviceTester::handlePortsGatheringError);
     connect(&d->portsGatherer, &DeviceUsedPortsGatherer::portListReady,
@@ -191,6 +195,7 @@ void GenericLinuxDeviceTester::handlePortListReady()
     }
 
     emit progressMessage(tr("Checking whether an SFTP connection can be set up..."));
+    // TODO: Look into createDownload
     d->sftpTransfer = d->connection->createDownload(FilesToTransfer(),
                                                     FileTransferErrorHandling::Abort);
     connect(d->sftpTransfer.get(), &SftpTransfer::done,
@@ -228,6 +233,7 @@ void GenericLinuxDeviceTester::testRsync()
     connect(&d->rsyncProcess, &Utils::QtcProcess::finished, this, [this] {
         handleRsyncFinished();
     });
+    // TODO: look into rsync
     const RsyncCommandLine cmdLine = RsyncDeployStep::rsyncCommand(*d->connection,
                                                                    RsyncDeployStep::defaultFlags());
     const QStringList args = QStringList(cmdLine.options)
