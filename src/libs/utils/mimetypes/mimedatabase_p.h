@@ -119,6 +119,7 @@ private:
     // added for Qt Creator
     QHash<QString, QByteArray> m_additionalData; // id -> data
     bool m_forceLoad = true;
+    bool m_useStandardPaths = false;
 
 public:
     const QString m_defaultMimeType;

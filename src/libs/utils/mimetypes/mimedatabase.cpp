@@ -102,7 +102,9 @@ bool MimeDatabasePrivate::shouldCheck()
 void MimeDatabasePrivate::loadProviders()
 {
     // We use QStandardPaths every time to check if new files appeared
-    const QStringList mimeDirs = QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QLatin1String("mime"), QStandardPaths::LocateDirectory);
+    const QStringList mimeDirs = m_useStandardPaths
+        ? QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QLatin1String("mime"), QStandardPaths::LocateDirectory)
+        : QStringList();
     const auto fdoIterator = std::find_if(mimeDirs.constBegin(), mimeDirs.constEnd(), [](const QString &mimeDir) -> bool {
         return QFileInfo::exists(mimeDir + QStringLiteral("/packages/freedesktop.org.xml")); }
     );
