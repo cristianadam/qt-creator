@@ -206,10 +206,12 @@ RunConfiguration::RunConfiguration(Target *target, Utils::Id id)
                                      [this] { return commandLine().executable(); });
 
 
-    m_commandLineGetter = [this] {
+    m_commandLineGetter = [this, target] {
         FilePath executable;
         if (const auto executableAspect = aspect<ExecutableAspect>())
             executable = executableAspect->executable();
+        if (IDevice::ConstPtr dev = DeviceKitAspect::device(target->kit()))
+            executable = dev->mapToGlobalPath(executable);
         QString arguments;
         if (const auto argumentsAspect = aspect<ArgumentsAspect>())
             arguments = argumentsAspect->arguments(macroExpander());
@@ -404,8 +406,11 @@ Runnable RunConfiguration::runnable() const
 {
     Runnable r;
     r.command = commandLine();
-    if (auto workingDirectoryAspect = aspect<WorkingDirectoryAspect>())
+    if (auto workingDirectoryAspect = aspect<WorkingDirectoryAspect>()) {
         r.workingDirectory = workingDirectoryAspect->workingDirectory();
+        if (IDevice::ConstPtr dev = DeviceKitAspect::device(target()->kit()))
+            r.workingDirectory = dev->mapToGlobalPath(r.workingDirectory);
+    }
     if (auto environmentAspect = aspect<EnvironmentAspect>())
         r.environment = environmentAspect->environment();
     if (m_runnableModifier)
