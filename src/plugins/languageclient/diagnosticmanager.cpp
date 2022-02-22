@@ -81,7 +81,10 @@ DiagnosticManager::DiagnosticManager(Client *client)
 
 DiagnosticManager::~DiagnosticManager()
 {
-    clearDiagnostics();
+    if (m_hideHandler)
+        m_hideHandler();
+    for (const QList<TextEditor::TextMark *> &marks : qAsConst(m_marks))
+        qDeleteAll(marks);
 }
 
 void DiagnosticManager::setDiagnostics(const LanguageServerProtocol::DocumentUri &uri,
@@ -101,7 +104,7 @@ void DiagnosticManager::hideDiagnostics(TextDocument *doc)
         m_hideHandler();
     for (BaseTextEditor *editor : BaseTextEditor::textEditorsForDocument(doc))
         editor->editorWidget()->setExtraSelections(TextEditorWidget::CodeWarningsSelection, {});
-    qDeleteAll(Utils::filtered(doc->marks(), Utils::equal(&TextMark::category, m_client->id())));
+    qDeleteAll(m_marks.take(doc));
 }
 
 void DiagnosticManager::removeDiagnostics(const LanguageServerProtocol::DocumentUri &uri)
@@ -130,11 +133,11 @@ void DiagnosticManager::showDiagnostics(const DocumentUri &uri, int version)
     const FilePath &filePath = uri.toFilePath();
     if (TextDocument *doc = TextDocument::textDocumentForFilePath(filePath)) {
         QList<QTextEdit::ExtraSelection> extraSelections;
-        const VersionedDiagnostics &versionedDiagnostics =  m_diagnostics.value(uri);
+        const VersionedDiagnostics &versionedDiagnostics = m_diagnostics.value(uri);
         if (versionedDiagnostics.version.value_or(version) == version) {
             for (const Diagnostic &diagnostic : versionedDiagnostics.diagnostics) {
                 extraSelections << toDiagnosticsSelections(diagnostic, doc->document());
-                doc->addMark(m_textMarkCreator(filePath, diagnostic));
+                m_marks[doc].append(m_textMarkCreator(filePath, diagnostic));
             }
         }
 
@@ -165,6 +168,11 @@ void DiagnosticManager::clearDiagnostics()
 {
     for (const DocumentUri &uri : m_diagnostics.keys())
         removeDiagnostics(uri);
+    if (!QTC_GUARD(m_marks.isEmpty())) {
+        for (const QList<TextEditor::TextMark *> &marks : qAsConst(m_marks))
+            qDeleteAll(marks);
+        m_marks.clear();
+    }
 }
 
 QList<Diagnostic> DiagnosticManager::diagnosticsAt(const DocumentUri &uri,

@@ -81,6 +81,7 @@ private:
         QList<LanguageServerProtocol::Diagnostic> diagnostics;
     };
     QMap<LanguageServerProtocol::DocumentUri, VersionedDiagnostics> m_diagnostics;
+    QMap<TextEditor::TextDocument *, QList<TextEditor::TextMark *>> m_marks;
     TextMarkCreator m_textMarkCreator;
     HideDiagnosticsHandler m_hideHandler;
     Client *m_client;
