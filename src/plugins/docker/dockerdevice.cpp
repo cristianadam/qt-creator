@@ -123,20 +123,29 @@ void DockerDeviceProcess::start()
     DockerDevice::ConstPtr dockerDevice = qSharedPointerCast<const DockerDevice>(device());
     QTC_ASSERT(dockerDevice, return);
 
-    connect(this, &DeviceProcess::readyReadStandardOutput, this, [this] {
-        MessageManager::writeSilently(QString::fromLocal8Bit(readAllStandardError()));
-    });
-    connect(this, &DeviceProcess::readyReadStandardError, this, [this] {
-        MessageManager::writeDisrupting(QString::fromLocal8Bit(readAllStandardError()));
-    });
-
     CommandLine command = commandLine();
     command.setExecutable(
         command.executable().withNewPath(dockerDevice->mapToDevicePath(command.executable())));
-    setCommand(command);
+
+    QtcProcess *proc = new QtcProcess;
+    connect(proc, &QtcProcess::finished, proc, &QObject::deleteLater);
+    proc->setCommand(command);
+    proc->setEnvironment(environment());
+    proc->setWorkingDirectory(workingDirectory());
+
+    connect(proc, &QtcProcess::readyReadStandardOutput, this, [this, proc] {
+        MessageManager::writeSilently(QString::fromLocal8Bit(proc->readAllStandardError()));
+    });
+    connect(proc, &QtcProcess::readyReadStandardError, this, [this, proc] {
+        MessageManager::writeDisrupting(QString::fromLocal8Bit(proc->readAllStandardError()));
+    });
+    connect(proc, &QtcProcess::started, this, &QtcProcess::started);
+    connect(proc, &QtcProcess::finished, this, &QtcProcess::finished);
+    connect(proc, &QtcProcess::errorOccurred, this, &QtcProcess::errorOccurred);
 
     LOG("Running process:" << command.toUserOutput() << "in" << workingDirectory().toUserOutput());
-    QtcProcess::start();
+
+    dockerDevice->runProcess(*proc);
 }
 
 void DockerDeviceProcess::interrupt()
