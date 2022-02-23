@@ -10,14 +10,41 @@ import QtQuick.Controls %{QtQuickVersion}
 import %{ImportModuleName} %{ImportModuleVersion}
 
 Rectangle {
+    id: rectangle
     width: Constants.width
     height: Constants.height
 
     color: Constants.backgroundColor
 
-    Text {
-        text: qsTr("Hello %{ProjectName}")
-        anchors.centerIn: parent
-        font.family: Constants.font.family
+    Button {
+        id: button
+        text: qsTr("Press me")
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.horizontalCenter: parent.horizontalCenter
+
+        Connections {
+            target: button
+            onClicked: rectangle.state = "clicked"
+        }
     }
+
+    Text {
+        id: text1
+        visible: false
+        text: qsTr("clicked")
+        anchors.top: button.bottom
+        font.pixelSize: 12
+        anchors.topMargin: 45
+        anchors.horizontalCenter: parent.horizontalCenter
+    }
+    states: [
+        State {
+            name: "clicked"
+
+            PropertyChanges {
+                target: text1
+                visible: true
+            }
+        }
+    ]
 }
