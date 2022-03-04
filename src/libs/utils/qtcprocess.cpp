@@ -647,6 +647,7 @@ public:
 
     void slotTimeout();
     void slotFinished();
+    void handleFinished(int exitCode, QProcess::ExitStatus status);
     void handleError(QProcess::ProcessError error);
     void clearForRun();
 
@@ -1357,7 +1358,7 @@ void QtcProcess::beginFeed()
 
 void QtcProcess::endFeed()
 {
-    d->slotFinished();
+    d->handleFinished(0, QProcess::NormalExit);
 }
 
 void QtcProcess::feedStdOut(const QByteArray &data)
@@ -1709,8 +1710,12 @@ void QtcProcessPrivate::slotTimeout()
 
 void QtcProcessPrivate::slotFinished()
 {
-    const int exitCode = m_process->exitCode();
-    const QProcess::ExitStatus status = m_process->exitStatus();
+    handleFinished(m_process->exitCode(), m_process->exitStatus());
+    q->emitFinished();
+}
+
+void QtcProcessPrivate::handleFinished(int exitCode, QProcess::ExitStatus status)
+{
     if (debug)
         qDebug() << Q_FUNC_INFO << exitCode << status;
     m_hangTimerCount = 0;
@@ -1730,8 +1735,6 @@ void QtcProcessPrivate::slotFinished()
 
     m_stdOut.handleRest();
     m_stdErr.handleRest();
-
-    q->emitFinished();
 }
 
 void QtcProcessPrivate::handleError(QProcess::ProcessError error)
