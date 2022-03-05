@@ -82,7 +82,7 @@ protected:
     void fromMap(const QVariantMap &map) final;
 
 private:
-    void addEmulatorActionsIfNotFound();
+    void addActionsIfNotFound();
     ProjectExplorer::IDevice::DeviceInfo deviceInformation() const override;
     ProjectExplorer::IDeviceWidget *createWidget() override;
     bool canAutoDetectPorts() const override;
@@ -114,7 +114,8 @@ public:
     void updateDeviceState(const ProjectExplorer::IDevice::ConstPtr &device);
 
     void startAvd(const ProjectExplorer::IDevice::Ptr &device, QWidget *parent = nullptr);
-    void eraseAvd(const ProjectExplorer::IDevice::Ptr &device, QWidget *parent = nullptr);
+    void eraseAvd(const ProjectExplorer::IDevice::Ptr &device, QWidget *parent = nullptr);    
+    void setupWifiForDevice(const ProjectExplorer::IDevice::Ptr &device, QWidget *parent = nullptr);
 
     void setEmulatorArguments(QWidget *parent = nullptr);
 
