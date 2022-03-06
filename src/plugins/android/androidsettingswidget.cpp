@@ -683,7 +683,7 @@ void AndroidSettingsWidget::downloadSdk()
         return;
     }
 
-    const QString message = tr("Download and install Android SDK Tools to: %1?")
+    const QString message = tr("Download and install Android SDK Tools to\n\"%1\"?")
                         .arg(m_ui.SDKLocationPathChooser->filePath().cleanPath().toUserOutput());
     auto userInput = QMessageBox::information(this, AndroidSdkDownloader::dialogTitle(),
                                               message, QMessageBox::Yes | QMessageBox::No);
