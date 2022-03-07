@@ -104,7 +104,7 @@
     \list 1
         \li In the \l States view, select \uicontrol {Create New State}.
         \li Enter \e login as the state name.
-            \image loginui3-login-state.jpg "States view"
+            \image loginui3-login-state.png "States view"
         \li Select \e repeatPassword in \uicontrol Navigator to display its
             properties in \uicontrol Properties.
         \li In the \uicontrol Visibility section, deselect the
@@ -129,7 +129,7 @@
 
     You can now see all the states in the \uicontrol States view:
 
-    \image loginui3-states.jpg "All states in the States view"
+    \image loginui3-states.png "All states in the States view"
 
     The live preview displays the default state, \e login:
 

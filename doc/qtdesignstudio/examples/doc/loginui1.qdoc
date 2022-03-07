@@ -394,7 +394,7 @@
 
     Your button should now look something like this:
 
-    \image loginui1-entry-field-styled.jpg "Modified button in the Form Editor"
+    \image loginui1-entry-field-styled.png "Modified button in the Form Editor"
 
     Next, you will add instances of the \e EntryField component to the
     \e Screen01 component and modify their properties.
