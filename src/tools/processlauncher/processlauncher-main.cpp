@@ -25,7 +25,6 @@
 
 #include "launcherlogging.h"
 #include "launchersockethandler.h"
-#include "singleton.h"
 
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qscopeguard.h>
@@ -52,8 +51,6 @@ int main(int argc, char *argv[])
         Utils::Internal::logError("Need exactly one argument (path to socket)");
         return 1;
     }
-
-    auto cleanup = qScopeGuard([] { Utils::Singleton::deleteAll(); });
 
     Utils::Internal::LauncherSocketHandler launcher(app.arguments().constLast());
     QTimer::singleShot(0, &launcher, &Utils::Internal::LauncherSocketHandler::start);

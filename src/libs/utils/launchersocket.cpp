@@ -824,7 +824,6 @@ void LauncherSocket::shutdown()
     const auto socket = m_socket.exchange(nullptr);
     if (!socket)
         return;
-    socket->disconnect();
     socket->write(ShutdownPacket().serialize());
     socket->waitForBytesWritten(1000);
     socket->deleteLater(); // or schedule a queued call to delete later?
@@ -884,6 +883,8 @@ void LauncherSocket::handleError(const QString &error)
 {
     QTC_ASSERT(isCalledFromLaunchersThread(), return);
     const auto socket = m_socket.exchange(nullptr);
+    if (!socket)
+        return;
     socket->disconnect();
     socket->deleteLater();
     emit errorOccurred(error);

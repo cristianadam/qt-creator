@@ -140,7 +140,6 @@ void LauncherInterfacePrivate::doStop()
     m_server->close();
     if (!m_process)
         return;
-    m_process->disconnect();
     m_socket->shutdown();
     m_process->waitForFinished(3000);
     ProcessReaper::reap(m_process);
