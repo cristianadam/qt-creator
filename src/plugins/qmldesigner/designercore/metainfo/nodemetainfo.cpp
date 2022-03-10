@@ -767,12 +767,16 @@ NodeMetaInfoPrivate::NodeMetaInfoPrivate(Model *model, TypeName type, int maj, i
             const ObjectValue *objectValue = getObjectValue();
             if (objectValue) {
                 const CppComponentValue *qmlValue = value_cast<CppComponentValue>(objectValue);
+
                 if (qmlValue) {
                     if (m_majorVersion == -1 && m_minorVersion == -1) {
                         m_majorVersion = qmlValue->componentVersion().majorVersion();
                         m_minorVersion = qmlValue->componentVersion().minorVersion();
-                        m_qualfiedTypeName = qmlValue->moduleName().toUtf8() + '.' + qmlValue->className().toUtf8();
-                    } else if (m_majorVersion == qmlValue->componentVersion().majorVersion() && m_minorVersion == qmlValue->componentVersion().minorVersion()) {
+                        m_qualfiedTypeName = qmlValue->moduleName().toUtf8() + '.'
+                                             + qmlValue->className().toUtf8();
+
+                    } else if (m_majorVersion == qmlValue->componentVersion().majorVersion()
+                               && m_minorVersion == qmlValue->componentVersion().minorVersion()) {
                         m_qualfiedTypeName = qmlValue->moduleName().toUtf8() + '.' + qmlValue->className().toUtf8();
                     } else {
                         return;
@@ -784,6 +788,13 @@ NodeMetaInfoPrivate::NodeMetaInfoPrivate(Model *model, TypeName type, int maj, i
                     if (importInfo.isValid() && importInfo.type() == ImportType::Library) {
                         m_majorVersion = importInfo.version().majorVersion();
                         m_minorVersion = importInfo.version().minorVersion();
+                        QString name = importInfo.name();
+                        if (!m_qualfiedTypeName.contains('.'))
+                            m_qualfiedTypeName.prepend(name.toUtf8() + '.');
+                    } else if (importInfo.isValid() && importInfo.type() == ImportType::Directory) {
+                        QString name = importInfo.name();
+                        if (!m_qualfiedTypeName.contains('.'))
+                            m_qualfiedTypeName.prepend(name.toUtf8() + '.');
                     }
                 }
                 m_objectValue = objectValue;
