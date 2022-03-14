@@ -109,7 +109,7 @@ public:
 
     void setWriteData(const QByteArray &writeData);
 
-    void setUseCtrlCStub(bool enabled); // debug only
+    void setUseCtrlCStub(bool enabled); // release only
     void setLowPriority();
     void setDisableUnixTerminal();
     void setRunAsRoot(bool on);
