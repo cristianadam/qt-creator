@@ -753,10 +753,11 @@ void AndroidDeviceManager::HandleDevicesListChange(const QString &serialNumber)
     }
 }
 
+static AndroidDeviceManager *s_instance = nullptr;
+
 AndroidDeviceManager *AndroidDeviceManager::instance()
 {
-    static AndroidDeviceManager obj;
-    return &obj;
+    return s_instance;
 }
 
 AndroidDeviceManager::AndroidDeviceManager(QObject *parent)
@@ -776,6 +777,16 @@ AndroidDeviceManager::AndroidDeviceManager(QObject *parent)
 
     connect(&m_removeAvdFutureWatcher, &QFutureWatcherBase::finished,
             this, &AndroidDeviceManager::handleAvdRemoved);
+    QTC_ASSERT(!s_instance, return);
+    s_instance = this;
+}
+
+AndroidDeviceManager::~AndroidDeviceManager()
+{
+    m_avdsFutureWatcher.waitForFinished();
+    m_removeAvdFutureWatcher.waitForFinished();
+    QTC_ASSERT(s_instance == this, return);
+    s_instance = nullptr;
 }
 
 // Factory
