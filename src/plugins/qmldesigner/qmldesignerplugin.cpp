@@ -321,6 +321,8 @@ bool QmlDesignerPlugin::delayedInitialize()
     if (QmlProjectManager::QmlProject::isQtDesignStudio())
         d->mainWidget.initialize();
 
+    MetaInfo::global();
+
     return true;
 }
 
