@@ -326,10 +326,17 @@ void NodeInstanceView::endPuppetTransaction()
     }
 }
 
+
+void NodeInstanceView::clearErrors()
+{
+    for (NodeInstance &instance : instances()) {
+        instance.setError({});
+    }
+}
+
 void NodeInstanceView::restartProcess()
 {
-    if (rootNodeInstance().isValid())
-        rootNodeInstance().setError({});
+    clearErrors();
     emitInstanceErrorChange({});
     emitDocumentMessage({}, {});
 
@@ -956,6 +963,8 @@ CreateSceneCommand NodeInstanceView::createCreateSceneCommand()
                 instanceList.append(instance);
         }
     }
+
+    clearErrors();
 
     nodeList = filterNodesForSkipItems(nodeList);
 
