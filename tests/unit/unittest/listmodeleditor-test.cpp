@@ -42,6 +42,8 @@ using QmlDesigner::AbstractView;
 using QmlDesigner::ListModelEditorModel;
 using QmlDesigner::ModelNode;
 
+#if 0
+
 MATCHER_P2(HasItem,
            name,
            value,
@@ -1416,5 +1418,7 @@ TEST_F(ListModelEditor, GoIntoComponentForModelNode)
 
     ASSERT_THAT(displayValues(), ElementsAre(ElementsAre("com", 11, 55)));
 }
+
+#endif
 
 } // namespace
