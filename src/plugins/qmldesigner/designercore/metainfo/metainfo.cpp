@@ -30,10 +30,16 @@
 #include "iwidgetplugin.h"
 
 #include <coreplugin/messagebox.h>
+#include <coreplugin/icore.h>
+
+#include <utils/filepath.h>
+
 #include "pluginmanager/widgetpluginmanager.h"
 
 #include <QDebug>
 #include <QMessageBox>
+#include <QDir>
+#include <QDirIterator>
 #include <QMutex>
 
 enum {
@@ -42,6 +48,26 @@ enum {
 
 namespace QmlDesigner {
 namespace Internal {
+
+
+static QString globalMetaInfoPath()
+{
+#ifdef SHARE_QML_PATH
+    if (qEnvironmentVariableIsSet("LOAD_QML_FROM_SOURCE"))
+        return QLatin1String(SHARE_QML_PATH) + "/globalMetaInfo";
+#endif
+    return Core::ICore::resourcePath("qmldesigner/globalMetaInfo").toString();
+}
+
+Utils::FilePaths allGlobalMetaInfoFiles()
+{
+    Utils::FilePaths paths;
+    QDirIterator it(globalMetaInfoPath(), { "*.metainfo" }, QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext())
+        paths.append(Utils::FilePath::fromString(it.next()));
+
+    return paths;
+}
 
 class MetaInfoPrivate
 {
@@ -95,6 +121,19 @@ void MetaInfoPrivate::parseItemLibraryDescriptions()
         } catch (const InvalidMetaInfoException &e) {
             qWarning() << e.description();
             const QString errorMessage = plugin->metaInfo() + QLatin1Char('\n') + QLatin1Char('\n') + reader.errors().join(QLatin1Char('\n'));
+            Core::AsynchronousMessageBox::warning(QCoreApplication::translate("QmlDesigner::Internal::MetaInfoPrivate", "Invalid meta info"),
+                                  errorMessage);
+        }
+    }
+
+    for (const Utils::FilePath &path : allGlobalMetaInfoFiles()) {
+        Internal::MetaInfoReader reader(*m_q);
+        try {
+            qDebug() << path.toString();
+            reader.readMetaInfoFile(path.toString());
+        } catch (const InvalidMetaInfoException &e) {
+            qWarning() << e.description();
+            const QString errorMessage = path.toString() + QLatin1Char('\n') + QLatin1Char('\n') + reader.errors().join(QLatin1Char('\n'));
             Core::AsynchronousMessageBox::warning(QCoreApplication::translate("QmlDesigner::Internal::MetaInfoPrivate", "Invalid meta info"),
                                   errorMessage);
         }
