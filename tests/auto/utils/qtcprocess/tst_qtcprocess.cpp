@@ -29,6 +29,7 @@
 #include <utils/hostosinfo.h>
 #include <utils/launcherinterface.h>
 #include <utils/porting.h>
+#include <utils/processinfo.h>
 #include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
 #include <utils/singleton.h>
@@ -209,6 +210,7 @@ private slots:
     void emitOneErrorOnCrash();
     void crashAfterOneSecond();
     void recursiveCrashingProcess();
+    void recursiveBlockingProcess();
 
     void cleanupTestCase();
 
@@ -230,6 +232,7 @@ private:
     SUB_CREATOR_PROCESS(EmitOneErrorOnCrash);
     SUB_CREATOR_PROCESS(CrashAfterOneSecond);
     SUB_CREATOR_PROCESS(RecursiveCrashingProcess);
+    SUB_CREATOR_PROCESS(RecursiveBlockingProcess);
 
     // In order to get a value associated with the certain subprocess use SubProcessClass::envVar().
     // The classes above define different custom executables. Inside initTestCase()
@@ -1403,6 +1406,54 @@ void tst_QtcProcess::recursiveCrashingProcess()
     QCOMPARE(process.exitStatus(), QProcess::NormalExit);
     QVERIFY(process.exitCode() != 0);
 }
+
+void tst_QtcProcess::RecursiveBlockingProcess::main()
+{
+    const int currentDepth = qEnvironmentVariableIntValue(envVar());
+    if (currentDepth == 0) {
+        while (true)
+            ;
+    }
+    SubCreatorConfig subConfig(envVar(), QString::number(currentDepth - 1));
+    TestProcess process;
+    subConfig.setupSubProcess(&process);
+
+    process.start();
+    process.waitForFinished();
+    exit(process.exitCode());
+}
+
+static int runningTestProcessCount()
+{
+    Singleton::deleteAll();
+    const int ownPid = qApp->applicationPid();
+    int testProcessCounter = 0;
+    const QList<ProcessInfo> processInfoList = ProcessInfo::processInfoList();
+    for (const ProcessInfo &processInfo : processInfoList) {
+        if (processInfo.executable.contains("tst_qtcprocess") && processInfo.processId != ownPid)
+            ++testProcessCounter;
+    }
+    return testProcessCounter;
+}
+
+void tst_QtcProcess::recursiveBlockingProcess()
+{
+    QCOMPARE(runningTestProcessCount(), 0);
+
+    const int recursionDepth = 5; // must be at least 1
+    SubCreatorConfig subConfig(RecursiveBlockingProcess::envVar(), QString::number(recursionDepth));
+    {
+        TestProcess process;
+        subConfig.setupSubProcess(&process);
+
+        process.start();
+        QVERIFY(process.waitForStarted(1000));
+        QVERIFY(!process.waitForFinished(3000));
+    }
+
+    QCOMPARE(runningTestProcessCount(), 0);
+}
+
 
 QTEST_MAIN(tst_QtcProcess)
 
