@@ -208,6 +208,7 @@ private slots:
     void flushFinishedWhileWaitingForReadyRead();
     void emitOneErrorOnCrash();
     void crashAfterOneSecond();
+    void recursiveCrashingProcess();
 
     void cleanupTestCase();
 
@@ -228,6 +229,7 @@ private:
     SUB_CREATOR_PROCESS(KillBlockingProcess);
     SUB_CREATOR_PROCESS(EmitOneErrorOnCrash);
     SUB_CREATOR_PROCESS(CrashAfterOneSecond);
+    SUB_CREATOR_PROCESS(RecursiveCrashingProcess);
 
     // In order to get a value associated with the certain subprocess use SubProcessClass::envVar().
     // The classes above define different custom executables. Inside initTestCase()
@@ -1369,6 +1371,37 @@ void tst_QtcProcess::crashAfterOneSecond()
     QVERIFY(timer.elapsed() < 2000);
     QCOMPARE(process.state(), QProcess::NotRunning);
     QCOMPARE(process.error(), QProcess::Crashed);
+}
+
+void tst_QtcProcess::RecursiveCrashingProcess::main()
+{
+    const int currentDepth = qEnvironmentVariableIntValue(envVar());
+    if (currentDepth == 0) {
+        QThread::sleep(1);
+        doCrash();
+    }
+    SubCreatorConfig subConfig(envVar(), QString::number(currentDepth - 1));
+    TestProcess process;
+    subConfig.setupSubProcess(&process);
+
+    process.start();
+    process.waitForFinished();
+    exit(process.exitCode());
+}
+
+void tst_QtcProcess::recursiveCrashingProcess()
+{
+    const int recursionDepth = 5; // must be at least 1
+    SubCreatorConfig subConfig(RecursiveCrashingProcess::envVar(), QString::number(recursionDepth));
+    TestProcess process;
+    subConfig.setupSubProcess(&process);
+
+    process.start();
+    QVERIFY(process.waitForStarted(1000));
+    QVERIFY(process.waitForFinished(3000));
+    QCOMPARE(process.state(), QProcess::NotRunning);
+    QCOMPARE(process.exitStatus(), QProcess::NormalExit);
+    QVERIFY(process.exitCode() != 0);
 }
 
 QTEST_MAIN(tst_QtcProcess)
