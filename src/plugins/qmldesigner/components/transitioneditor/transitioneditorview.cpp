@@ -319,6 +319,9 @@ TransitionEditorWidget *TransitionEditorView::createWidget()
     if (!m_transitionEditorWidget)
         m_transitionEditorWidget = new TransitionEditorWidget(this);
 
+    auto *timelineContext = new TransitionContext(m_transitionEditorWidget);
+    Core::ICore::addContextObject(timelineContext);
+
     return m_transitionEditorWidget;
 }
 
