@@ -30,6 +30,7 @@
 #include "dockerbuildstep.h"
 #include "dockerdevice.h"
 #include "dockersettings.h"
+#include "dockerapi.h"
 
 #include <projectexplorer/projectexplorerconstants.h>
 
@@ -50,6 +51,8 @@ public:
 
 //    DockerBuildStepFactory buildStepFactory;
     Utils::optional<bool> daemonRunning;
+
+    DockerApi dockerApi;
 };
 
 static DockerPlugin *s_instance = nullptr;
@@ -59,17 +62,34 @@ DockerPlugin::DockerPlugin()
     s_instance = this;
 }
 
-// Utils::null_opt for not evaluated, true or false if it had been evaluated already
-Utils::optional<bool> DockerPlugin::isDaemonRunning()
+DockerApi *DockerPlugin::dockerApi()
 {
-    return s_instance ? s_instance->d->daemonRunning : Utils::nullopt;
+    QTC_ASSERT(s_instance, return nullptr);
+    return &s_instance->d->dockerApi;
 }
 
-void DockerPlugin::setGlobalDaemonState(Utils::optional<bool> state)
+/*DockerPlugin *DockerPlugin::instance()
 {
-    QTC_ASSERT(s_instance, return);
-    s_instance->d->daemonRunning = state;
+    return s_instance;
 }
+
+Utils::optional<bool> DockerPlugin::dockerDaemonAvailable()
+{
+    QTC_ASSERT(s_instance, return Utils::optional<bool>());
+    return s_instance->d->dockerApi.dockerDaemonAvailable();
+}
+
+Utils::optional<bool> DockerPlugin::isDockerDaemonAvailable()
+{
+    QTC_ASSERT(s_instance, return Utils::optional<bool>());
+    return s_instance->dockerDaemonAvailable();
+}
+
+void DockerPlugin::recheckDockerDaemon()
+{
+    s_instance->d->dockerApi.checkCanConnect();
+}
+*/
 
 DockerPlugin::~DockerPlugin()
 {
@@ -83,6 +103,8 @@ bool DockerPlugin::initialize(const QStringList &arguments, QString *errorString
     Q_UNUSED(errorString)
 
     d = new DockerPluginPrivate;
+
+//    connect(&d->dockerApi, &DockerApi::dockerDaemonAvailableChanged, this, &DockerPlugin::dockerDaemonAvailableChanged);
 
     return true;
 }

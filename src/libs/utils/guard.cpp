@@ -98,14 +98,22 @@ bool Guard::isLocked() const
 }
 
 GuardLocker::GuardLocker(Guard &guard)
-    : m_guard(guard)
+    : m_guard(&guard)
 {
-    ++m_guard.m_lockCount;
+    ++m_guard->m_lockCount;
+}
+
+GuardLocker::GuardLocker(GuardLocker &&other) noexcept
+    : m_guard(std::move(other.m_guard))
+{
+    other.m_guard = nullptr;
 }
 
 GuardLocker::~GuardLocker()
 {
-    --m_guard.m_lockCount;
+    if (m_guard) {
+        --m_guard->m_lockCount;
+    }
 }
 
 } // namespace Utils

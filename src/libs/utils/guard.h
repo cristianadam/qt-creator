@@ -47,10 +47,11 @@ class QTCREATOR_UTILS_EXPORT GuardLocker
     Q_DISABLE_COPY(GuardLocker)
 public:
     GuardLocker(Guard &guard);
+    GuardLocker(GuardLocker&& other) noexcept;
     ~GuardLocker();
 
 private:
-    Guard &m_guard;
+    Guard *m_guard;
 };
 
 } // namespace Utils
