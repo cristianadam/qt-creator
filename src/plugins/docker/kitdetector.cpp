@@ -24,6 +24,7 @@
 ****************************************************************************/
 
 #include "kitdetector.h"
+
 #include "dockerconstants.h"
 
 #include <extensionsystem/pluginmanager.h>
@@ -109,7 +110,7 @@ void KitDetectorPrivate::undoAutoDetect() const
     emit q->logOutput(tr("Start removing auto-detected items associated with this docker image."));
 
     emit q->logOutput('\n' + tr("Removing kits..."));
-    for (Kit *kit : KitManager::kits()) {
+    for (auto kit : KitManager::kits()) {
         if (kit->autoDetectionSource() == m_sharedId) {
             emit q->logOutput(tr("Removed \"%1\"").arg(kit->displayName()));
             KitManager::deregisterKit(kit);
@@ -117,7 +118,7 @@ void KitDetectorPrivate::undoAutoDetect() const
     };
 
     emit q->logOutput('\n' + tr("Removing Qt version entries..."));
-    for (QtVersion *qtVersion : QtVersionManager::versions()) {
+    for (auto qtVersion : QtVersionManager::versions()) {
         if (qtVersion->detectionSource() == m_sharedId) {
             emit q->logOutput(tr("Removed \"%1\"").arg(qtVersion->displayName()));
             QtVersionManager::removeVersion(qtVersion);
@@ -126,14 +127,14 @@ void KitDetectorPrivate::undoAutoDetect() const
 
     emit q->logOutput('\n' + tr("Removing toolchain entries..."));
     const Toolchains toolchains = ToolChainManager::toolchains();
-    for (ToolChain *toolChain : toolchains) {
+    for (auto toolChain : toolchains) {
         if (toolChain && toolChain->detectionSource() == m_sharedId) {
             emit q->logOutput(tr("Removed \"%1\"").arg(toolChain->displayName()));
             ToolChainManager::deregisterToolChain(toolChain);
         }
     };
 
-    if (QObject *cmakeManager = ExtensionSystem::PluginManager::getObjectByName("CMakeToolManager")) {
+    if (auto cmakeManager = ExtensionSystem::PluginManager::getObjectByName("CMakeToolManager")) {
         QString logMessage;
         const bool res = QMetaObject::invokeMethod(cmakeManager,
                                                    "removeDetectedCMake",
@@ -143,7 +144,7 @@ void KitDetectorPrivate::undoAutoDetect() const
         emit q->logOutput('\n' + logMessage);
     }
 
-    if (QObject *debuggerPlugin = ExtensionSystem::PluginManager::getObjectByName("DebuggerPlugin")) {
+    if (auto debuggerPlugin = ExtensionSystem::PluginManager::getObjectByName("DebuggerPlugin")) {
         QString logMessage;
         const bool res = QMetaObject::invokeMethod(debuggerPlugin,
                                                    "removeDetectedDebuggers",
@@ -161,24 +162,24 @@ void KitDetectorPrivate::listAutoDetected() const
     emit q->logOutput(tr("Start listing auto-detected items associated with this docker image."));
 
     emit q->logOutput('\n' + tr("Kits:"));
-    for (Kit *kit : KitManager::kits()) {
+    for (auto kit : KitManager::kits()) {
         if (kit->autoDetectionSource() == m_sharedId)
             emit q->logOutput(kit->displayName());
     };
 
     emit q->logOutput('\n' + tr("Qt versions:"));
-    for (QtVersion *qtVersion : QtVersionManager::versions()) {
+    for (auto qtVersion : QtVersionManager::versions()) {
         if (qtVersion->detectionSource() == m_sharedId)
             emit q->logOutput(qtVersion->displayName());
     };
 
     emit q->logOutput('\n' + tr("Toolchains:"));
-    for (ToolChain *toolChain : ToolChainManager::toolchains()) {
+    for (auto toolChain : ToolChainManager::toolchains()) {
         if (toolChain->detectionSource() == m_sharedId)
             emit q->logOutput(toolChain->displayName());
     };
 
-    if (QObject *cmakeManager = ExtensionSystem::PluginManager::getObjectByName("CMakeToolManager")) {
+    if (auto cmakeManager = ExtensionSystem::PluginManager::getObjectByName("CMakeToolManager")) {
         QString logMessage;
         const bool res = QMetaObject::invokeMethod(cmakeManager,
                                                    "listDetectedCMake",
@@ -188,7 +189,7 @@ void KitDetectorPrivate::listAutoDetected() const
         emit q->logOutput('\n' + logMessage);
     }
 
-    if (QObject *debuggerPlugin = ExtensionSystem::PluginManager::getObjectByName("DebuggerPlugin")) {
+    if (auto debuggerPlugin = ExtensionSystem::PluginManager::getObjectByName("DebuggerPlugin")) {
         QString logMessage;
         const bool res = QMetaObject::invokeMethod(debuggerPlugin,
                                                    "listDetectedDebuggers",
@@ -208,7 +209,7 @@ QtVersions KitDetectorPrivate::autoDetectQtVersions() const
     QString error;
 
     const auto handleQmake = [this, &qtVersions, &error](const FilePath &qmake) {
-        if (QtVersion *qtVersion = QtVersionFactory::createQtVersionFromQMakePath(qmake, false, m_sharedId, &error)) {
+        if (auto qtVersion = QtVersionFactory::createQtVersionFromQMakePath(qmake, false, m_sharedId, &error)) {
             qtVersions.append(qtVersion);
             QtVersionManager::addVersion(qtVersion);
             emit q->logOutput(tr("Found \"%1\"").arg(qtVersion->qmakeFilePath().toUserOutput()));
@@ -219,7 +220,7 @@ QtVersions KitDetectorPrivate::autoDetectQtVersions() const
     emit q->logOutput(tr("Searching for qmake executables..."));
 
     const QStringList candidates = {"qmake-qt6", "qmake-qt5", "qmake"};
-    for (const FilePath &searchPath : m_searchPaths) {
+    for (const auto &searchPath : m_searchPaths) {
         searchPath.iterateDirectory(handleQmake, {candidates, QDir::Files | QDir::Executable,
                                                   QDirIterator::Subdirectories});
     }
@@ -239,11 +240,11 @@ Toolchains KitDetectorPrivate::autoDetectToolChains()
     Toolchains allNewToolChains;
     QApplication::processEvents();
     emit q->logOutput('\n' + tr("Searching toolchains..."));
-    for (ToolChainFactory *factory : factories) {
+    for (auto factory : factories) {
         emit q->logOutput(tr("Searching toolchains of type %1").arg(factory->displayName()));
         const ToolchainDetector detector(alreadyKnown, m_device, m_searchPaths);
         const Toolchains newToolChains = factory->autoDetect(detector);
-        for (ToolChain *toolChain : newToolChains) {
+        for (auto toolChain : newToolChains) {
             emit q->logOutput(tr("Found \"%1\"").arg(toolChain->compilerCommand().toUserOutput()));
             toolChain->setDetectionSource(m_sharedId);
             ToolChainManager::registerToolChain(toolChain);
