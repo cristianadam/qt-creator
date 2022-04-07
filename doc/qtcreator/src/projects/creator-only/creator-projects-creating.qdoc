@@ -285,6 +285,9 @@
 
     \endcode
 
+    To display files associated with the project that should not be installed,
+    add them to the \c OTHER_FILES variable instead.
+
     \section1 Adding Subprojects to Projects
 
     In addition to Qt libraries, you can link your application to other

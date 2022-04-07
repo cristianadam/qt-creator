@@ -143,7 +143,10 @@
                     \image qtcreator-search-allprojects.png
 
                 \li \uicontrol {Current Project} searches from the project you
-                    are currently editing.
+                    are currently editing. If you cannot find files that you
+                    know are a part of the project, add them to the
+                    \c OTHER_FILES variable in the .pro file to make them
+                    visible to \QC.
 
                 \li \uicontrol {Files in All Project Directories} searches from
                     all project directories.
