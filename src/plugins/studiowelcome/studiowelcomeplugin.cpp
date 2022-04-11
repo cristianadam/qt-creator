@@ -134,11 +134,13 @@ class UsageStatisticPluginModel : public QObject
 
     Q_PROPERTY(bool usageStatisticEnabled MEMBER m_usageStatisticEnabled NOTIFY usageStatisticChanged)
     Q_PROPERTY(bool crashReporterEnabled MEMBER m_crashReporterEnabled NOTIFY crashReporterEnabledChanged)
+    Q_PROPERTY(QString version MEMBER m_versionString)
 
 public:
     explicit UsageStatisticPluginModel(QObject *parent = nullptr)
         : QObject(parent)
     {
+        m_versionString = Core::Constants::IDE_VERSION_DISPLAY;
         setupModel();
     }
 
@@ -198,6 +200,7 @@ signals:
 private:
     bool m_usageStatisticEnabled = false;
     bool m_crashReporterEnabled = false;
+    QString m_versionString;
 };
 
 class ProjectModel : public QAbstractListModel
