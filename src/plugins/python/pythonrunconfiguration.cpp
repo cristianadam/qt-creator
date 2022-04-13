@@ -135,29 +135,33 @@ private:
 
 ////////////////////////////////////////////////////////////////
 
-class MainScriptAspect : public StringAspect
-{
-    Q_OBJECT
-
-public:
-    MainScriptAspect() = default;
-};
-
 PythonRunConfiguration::PythonRunConfiguration(Target *target, Utils::Id id)
     : RunConfiguration(target, id)
 {
     auto interpreterAspect = addAspect<InterpreterAspect>();
     interpreterAspect->setSettingsKey("PythonEditor.RunConfiguation.Interpreter");
     interpreterAspect->setSettingsDialogId(Constants::C_PYTHONOPTIONS_PAGE_ID);
-    connect(interpreterAspect, &InterpreterAspect::changed,
-            this, &PythonRunConfiguration::interpreterChanged);
+
+    connect(interpreterAspect, &InterpreterAspect::changed, this, [this, interpreterAspect] {
+        using namespace LanguageClient;
+        const FilePath python = interpreterAspect->currentInterpreter().command;
+
+        for (FilePath &file : project()->files(Project::AllFiles)) {
+            if (auto document = TextEditor::TextDocument::textDocumentForFilePath(file)) {
+                if (document->mimeType() == Constants::C_PY_MIMETYPE) {
+                    PyLSConfigureAssistant::instance()->openDocumentWithPython(python, document);
+                    PySideInstaller::instance()->checkPySideInstallation(python, document);
+                }
+            }
+        }
+    });
 
     connect(PythonSettings::instance(), &PythonSettings::interpretersChanged,
             interpreterAspect, &InterpreterAspect::updateInterpreters);
 
     QList<Interpreter> interpreters = PythonSettings::detectPythonVenvs(project()->projectDirectory());
-    aspect<InterpreterAspect>()->updateInterpreters(PythonSettings::interpreters());
-    aspect<InterpreterAspect>()->setDefaultInterpreter(
+    interpreterAspect->updateInterpreters(PythonSettings::interpreters());
+    interpreterAspect->setDefaultInterpreter(
         interpreters.isEmpty() ? PythonSettings::defaultInterpreter() : interpreters.first());
 
     auto bufferedAspect = addAspect<BoolAspect>();
@@ -178,11 +182,11 @@ PythonRunConfiguration::PythonRunConfiguration(Target *target, Utils::Id id)
     addAspect<WorkingDirectoryAspect>(nullptr);
     addAspect<TerminalAspect>();
 
-    setCommandLineGetter([this, bufferedAspect, interpreterAspect, argumentsAspect] {
+    setCommandLineGetter([this, bufferedAspect, interpreterAspect, argumentsAspect, scriptAspect] {
         CommandLine cmd{interpreterAspect->currentInterpreter().command};
         if (!bufferedAspect->value())
             cmd.addArg("-u");
-        cmd.addArg(mainScript());
+        cmd.addArg(scriptAspect->filePath().fileName());
         cmd.addArgs(argumentsAspect->arguments(macroExpander()), CommandLine::Raw);
         return cmd;
     });
@@ -196,52 +200,6 @@ PythonRunConfiguration::PythonRunConfiguration(Target *target, Utils::Id id)
     });
 
     connect(target, &Target::buildSystemUpdated, this, &RunConfiguration::update);
-}
-
-void PythonRunConfiguration::interpreterChanged()
-{
-    using namespace LanguageClient;
-
-    const FilePath python = interpreter().command;
-
-    for (FilePath &file : project()->files(Project::AllFiles)) {
-        if (auto document = TextEditor::TextDocument::textDocumentForFilePath(file)) {
-            if (document->mimeType() == Constants::C_PY_MIMETYPE) {
-                PyLSConfigureAssistant::instance()->openDocumentWithPython(python, document);
-                PySideInstaller::instance()->checkPySideInstallation(python, document);
-            }
-        }
-    }
-}
-
-bool PythonRunConfiguration::supportsDebugger() const
-{
-    return true;
-}
-
-QString PythonRunConfiguration::mainScript() const
-{
-    return aspect<MainScriptAspect>()->value();
-}
-
-QString PythonRunConfiguration::arguments() const
-{
-    return aspect<ArgumentsAspect>()->arguments(macroExpander());
-}
-
-Interpreter PythonRunConfiguration::interpreter() const
-{
-    return aspect<InterpreterAspect>()->currentInterpreter();
-}
-
-QString PythonRunConfiguration::interpreterPath() const
-{
-    return interpreter().command.toString();
-}
-
-void PythonRunConfiguration::setInterpreter(const ProjectExplorer::Interpreter &interpreter)
-{
-    aspect<InterpreterAspect>()->setCurrentInterpreter(interpreter);
 }
 
 PythonRunConfigurationFactory::PythonRunConfigurationFactory()

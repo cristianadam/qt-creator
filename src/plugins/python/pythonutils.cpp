@@ -58,9 +58,9 @@ FilePath detectPython(const FilePath &documentPath)
 
     if (project) {
         if (auto target = project->activeTarget()) {
-            if (auto runConfig = qobject_cast<PythonRunConfiguration *>(
-                    target->activeRunConfiguration())) {
-                python = runConfig->interpreter().command;
+            if (auto runConfig = target->activeRunConfiguration()) {
+                if (auto interpreter = runConfig->aspect<InterpreterAspect>())
+                    python = interpreter->currentInterpreter().command;
             }
         }
     }

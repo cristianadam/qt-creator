@@ -113,8 +113,10 @@ void PySideInstaller::installPyside(const Utils::FilePath &python,
 void PySideInstaller::changeInterpreter(const QString &interpreterId,
                                         PythonRunConfiguration *runConfig)
 {
-    if (runConfig)
-        runConfig->setInterpreter(PythonSettings::interpreter(interpreterId));
+    if (runConfig) {
+        if (auto aspect = runConfig->aspect<InterpreterAspect>())
+            aspect->setCurrentInterpreter(PythonSettings::interpreter(interpreterId));
+    }
 }
 
 void PySideInstaller::handlePySideMissing(const FilePath &python,
@@ -145,9 +147,11 @@ void PySideInstaller::handlePySideMissing(const FilePath &python,
                         changeInterpreter(info.data.toString(), rc);
                     };
 
-                const auto isCurrentInterpreter
-                    = Utils::equal(&InfoBarEntry::ComboInfo::data,
-                                   QVariant(runConfiguration->interpreter().id));
+                auto interpreterAspect = runConfiguration->aspect<InterpreterAspect>();
+                QTC_ASSERT(interpreterAspect, return);
+                const QString id = interpreterAspect->currentInterpreter().id;
+                const auto isCurrentInterpreter = Utils::equal(&InfoBarEntry::ComboInfo::data,
+                                                               QVariant(id));
                 const QString switchTooltip = tr("Switch the Python interpreter for %1")
                                                   .arg(runConfiguration->displayName());
                 info.setComboInfo(interpreters,
