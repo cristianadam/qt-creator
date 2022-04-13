@@ -1191,6 +1191,7 @@ CMakeBuildConfiguration::CMakeBuildConfiguration(Target *target, Id id)
 
     addAspect<SourceDirectoryAspect>();
     addAspect<BuildTypeAspect>();
+    addAspect<QtSupport::QmlDebuggingAspect>(this);
 
     appendInitialBuildStep(Constants::CMAKE_BUILD_STEP_ID);
     appendInitialCleanStep(Constants::CMAKE_BUILD_STEP_ID);
@@ -1290,8 +1291,6 @@ CMakeBuildConfiguration::CMakeBuildConfiguration(Target *target, Id id)
         setCMakeBuildType(info.typeName);
     });
 
-    const auto qmlDebuggingAspect = addAspect<QtSupport::QmlDebuggingAspect>();
-    qmlDebuggingAspect->setKit(target->kit());
     setIsMultiConfig(CMakeGeneratorKitAspect::isMultiConfigGenerator(target->kit()));
 }
 
