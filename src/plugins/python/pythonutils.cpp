@@ -39,6 +39,7 @@
 #include <utils/mimeutils.h>
 #include <utils/qtcprocess.h>
 
+using namespace ProjectExplorer;
 using namespace Utils;
 
 namespace Python {
@@ -51,9 +52,9 @@ FilePath detectPython(const FilePath &documentPath)
     PythonProject *project = documentPath.isEmpty()
                                  ? nullptr
                                  : qobject_cast<PythonProject *>(
-                                     ProjectExplorer::SessionManager::projectForFile(documentPath));
+                                     SessionManager::projectForFile(documentPath));
     if (!project)
-        project = qobject_cast<PythonProject *>(ProjectExplorer::SessionManager::startupProject());
+        project = qobject_cast<PythonProject *>(SessionManager::startupProject());
 
     if (project) {
         if (auto target = project->activeTarget()) {
@@ -99,7 +100,7 @@ void openPythonRepl(QObject *parent, const FilePath &file, ReplType type)
 {
     static const auto workingDir = [](const FilePath &file) {
         if (file.isEmpty()) {
-            if (ProjectExplorer::Project *project = ProjectExplorer::SessionManager::startupProject())
+            if (Project *project = SessionManager::startupProject())
                 return project->projectDirectory();
             return FilePath::fromString(QDir::currentPath());
         }
@@ -148,7 +149,7 @@ QString pythonName(const FilePath &pythonPath)
 
 PythonProject *pythonProjectForFile(const FilePath &pythonFile)
 {
-    for (ProjectExplorer::Project *project : ProjectExplorer::SessionManager::projects()) {
+    for (Project *project : SessionManager::projects()) {
         if (auto pythonProject = qobject_cast<PythonProject *>(project)) {
             if (pythonProject->isKnownFile(pythonFile))
                 return pythonProject;
