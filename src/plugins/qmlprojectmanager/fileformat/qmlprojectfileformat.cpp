@@ -70,7 +70,8 @@ QmlProjectManager::FileFilterBaseItem *setupFileFilterItem(QmlProjectManager::Fi
 
 namespace QmlProjectManager {
 
-QmlProjectItem *QmlProjectFileFormat::parseProjectFile(const Utils::FilePath &fileName, QString *errorMessage)
+std::unique_ptr<QmlProjectItem> QmlProjectFileFormat::parseProjectFile(const Utils::FilePath &fileName,
+                                                                       QString *errorMessage)
 {
     QmlJS::SimpleReader simpleQmlJSReader;
 
@@ -85,7 +86,7 @@ QmlProjectItem *QmlProjectFileFormat::parseProjectFile(const Utils::FilePath &fi
     }
 
     if (rootNode->name() == QLatin1String("Project")) {
-        auto projectItem = new QmlProjectItem;
+        auto projectItem = std::make_unique<QmlProjectItem>();
 
         const auto mainFileProperty = rootNode->property(QLatin1String("mainFile"));
         if (mainFileProperty.isValid())
@@ -147,7 +148,8 @@ QmlProjectItem *QmlProjectFileFormat::parseProjectFile(const Utils::FilePath &fi
             } else if (childNode->name() == QLatin1String("JavaScriptFiles")) {
                 projectItem->appendContent(setupFileFilterItem(new FileFilterItem("*.js"), childNode));
             } else if (childNode->name() == QLatin1String("ImageFiles")) {
-                projectItem->appendContent(setupFileFilterItem(new ImageFileFilterItem(projectItem), childNode));
+                projectItem->appendContent(
+                    setupFileFilterItem(new ImageFileFilterItem(projectItem.get()), childNode));
             } else if (childNode->name() == QLatin1String("CssFiles")) {
                 projectItem->appendContent(setupFileFilterItem(new FileFilterItem("*.css"), childNode));
             } else if (childNode->name() == QLatin1String("FontFiles")) {
