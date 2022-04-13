@@ -252,6 +252,8 @@ public:
     void toMap(QVariantMap &) const override;
     void addToLayout(Utils::LayoutBuilder &builder) override;
 
+    struct Data : Utils::BaseAspect::Data { Interpreter interpreter; };
+
 private:
     void updateCurrentInterpreter();
     void updateComboBox();
@@ -260,6 +262,14 @@ private:
     QString m_defaultId;
     QString m_currentId;
     Utils::Id m_settingsDialogId;
+};
+
+class PROJECTEXPLORER_EXPORT MainScriptAspect : public Utils::StringAspect
+{
+    Q_OBJECT
+
+public:
+    MainScriptAspect() = default;
 };
 
 } // namespace ProjectExplorer

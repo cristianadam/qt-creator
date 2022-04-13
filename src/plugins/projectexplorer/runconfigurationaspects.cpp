@@ -788,7 +788,7 @@ Interpreter::Interpreter(const QString &_id,
 
 InterpreterAspect::InterpreterAspect()
 {
-
+    addDataExtractor(this, &InterpreterAspect::currentInterpreter, &Data::interpreter);
 }
 
 Interpreter InterpreterAspect::currentInterpreter() const
