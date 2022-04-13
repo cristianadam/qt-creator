@@ -2387,7 +2387,7 @@ void DebuggerUnitTests::testStateMachine()
     QVERIFY(rc);
 
     auto runControl = new RunControl(ProjectExplorer::Constants::DEBUG_RUN_MODE);
-    runControl->setRunConfiguration(rc);
+    runControl->copyDataFromRunConfiguration(rc);
     auto debugger = new DebuggerRunTool(runControl);
 
     debugger->setInferior(rc->runnable());
