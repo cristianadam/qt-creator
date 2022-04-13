@@ -25,13 +25,11 @@
 
 #pragma once
 
-#include <projectexplorer/runconfiguration.h>
+#include <projectexplorer/runconfigurationaspects.h>
 #include <projectexplorer/runcontrol.h>
 
 namespace Python {
 namespace Internal {
-
-class Interpreter;
 
 class PythonRunConfiguration : public ProjectExplorer::RunConfiguration
 {
@@ -44,9 +42,9 @@ class PythonRunConfiguration : public ProjectExplorer::RunConfiguration
 
 public:
     PythonRunConfiguration(ProjectExplorer::Target *target, Utils::Id id);
-    Interpreter interpreter() const;
+    ProjectExplorer::Interpreter interpreter() const;
     QString interpreterPath() const;
-    void setInterpreter(const Interpreter &interpreterId);
+    void setInterpreter(const ProjectExplorer::Interpreter &interpreterId);
 
 private:
     void interpreterChanged();

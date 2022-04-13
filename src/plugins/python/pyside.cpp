@@ -32,8 +32,12 @@
 #include "pythonutils.h"
 
 #include <coreplugin/icore.h>
+
+#include <projectexplorer/runconfigurationaspects.h>
 #include <projectexplorer/target.h>
+
 #include <texteditor/textdocument.h>
+
 #include <utils/algorithm.h>
 #include <utils/infobar.h>
 #include <utils/runextensions.h>
@@ -42,6 +46,7 @@
 #include <QTextCursor>
 
 using namespace Utils;
+using namespace ProjectExplorer;
 
 namespace Python {
 namespace Internal {
