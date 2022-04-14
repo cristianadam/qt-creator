@@ -34,9 +34,9 @@
 
 #include <utils/environmentfwd.h>
 #include <utils/fileutils.h>
+#include <utils/filesystemmodel/filesystemmodel.h>
 
 #include <QObject>
-#include <QFileSystemModel>
 
 #include <functional>
 #include <memory>
@@ -70,7 +70,7 @@ public:
     // Roles to be implemented by all models that are exported via model()
     enum ModelRoles {
         // Absolute file path
-        FilePathRole = QFileSystemModel::FilePathRole,
+        FilePathRole = Utils::FileSystemModel::FilePathRole,
         isParsingRole
     };
 

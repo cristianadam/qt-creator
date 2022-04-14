@@ -39,7 +39,9 @@
 
 #pragma once
 
-#include "utils_global.h"
+
+#include "../utils_global.h"
+#include "../filepath.h"
 
 #include <QAbstractItemModel>
 #include <QPair>
@@ -79,7 +81,7 @@ public:
     ~FileSystemModel();
 
     QModelIndex index(int row, int column, const QModelIndex &parent = QModelIndex()) const override;
-    QModelIndex index(const QString &path, int column = 0) const;
+    QModelIndex index(const Utils::FilePath &path, int column = 0) const;
     QModelIndex parent(const QModelIndex &child) const override;
     using QObject::parent;
     QModelIndex sibling(int row, int column, const QModelIndex &idx) const override;
@@ -108,8 +110,8 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     // FileSystemModel specific API
-    QModelIndex setRootPath(const QString &path);
-    QString rootPath() const;
+    QModelIndex setRootPath(const FilePath &path);
+    FilePath rootPath() const;
     QDir rootDirectory() const;
 
     void setIconProvider(QFileIconProvider *provider);
@@ -135,7 +137,7 @@ public:
     void setOptions(Options options);
     Options options() const;
 
-    QString filePath(const QModelIndex &index) const;
+    FilePath filePath(const QModelIndex &index) const;
     bool isDir(const QModelIndex &index) const;
     qint64 size(const QModelIndex &index) const;
     QString type(const QModelIndex &index) const;

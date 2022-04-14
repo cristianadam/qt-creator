@@ -204,6 +204,7 @@ public:
     [[nodiscard]] FilePath absolutePath() const; // Avoid. Use resolvePath(...)[.parent()] with proper base.
     [[nodiscard]] FilePath absoluteFilePath() const; // Avoid. Use resolvePath(...) with proper base.
 
+    bool isSymLink() const;
 private:
     friend class ::tst_fileutils;
     static QString calcRelativePath(const QString &absolutePath, const QString &absoluteAnchorPath);

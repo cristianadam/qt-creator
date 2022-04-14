@@ -51,7 +51,15 @@ add_qtc_library(Utils
     filenamevalidatinglineedit.cpp filenamevalidatinglineedit.h
     filepath.cpp filepath.h
     filesearch.cpp filesearch.h
-    filesystemmodel.cpp filesystemmodel.h
+    filesystemmodel/extendedinformation.h
+    filesystemmodel/fileinfogatherer.cpp filesystemmodel/fileinfogatherer.h
+    filesystemmodel/filesystemmodel_p.cpp filesystemmodel/filesystemmodel_p.h
+    filesystemmodel/filesystemmodel.cpp filesystemmodel/filesystemmodel.h
+    filesystemmodel/filesystemmodelslots.cpp filesystemmodel/filesystemmodelslots.h
+    filesystemmodel/filesystemmodelsorter.h
+    filesystemmodel/filesystemmodelutils.h
+    filesystemmodel/filesystemnode.h
+    filesystemmodel/pathkey.h
     filesystemwatcher.cpp filesystemwatcher.h
     fileutils.cpp fileutils.h
     filewizardpage.cpp filewizardpage.h

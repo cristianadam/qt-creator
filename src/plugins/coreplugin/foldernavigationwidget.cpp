@@ -53,6 +53,7 @@
 #include <utils/stringutils.h>
 #include <utils/styledbar.h>
 #include <utils/utilsicons.h>
+#include <utils/filesystemmodel/filesystemmodel.h>
 
 #include <QAction>
 #include <QApplication>
@@ -60,7 +61,6 @@
 #include <QContextMenuEvent>
 #include <QDir>
 #include <QFileInfo>
-#include <QFileSystemModel>
 #include <QHeaderView>
 #include <QMenu>
 #include <QMessageBox>
@@ -136,7 +136,7 @@ private:
 };
 
 // FolderNavigationModel: Shows path as tooltip.
-class FolderNavigationModel : public QFileSystemModel
+class FolderNavigationModel : public Utils::FileSystemModel
 {
 public:
     enum Roles {
@@ -176,22 +176,22 @@ bool FolderSortProxyModel::lessThan(const QModelIndex &source_left, const QModel
         if (leftIsFolder != rightIsFolder)
             return leftIsFolder;
     }
-    const QString leftName = src->data(source_left, QFileSystemModel::FileNameRole).toString();
-    const QString rightName = src->data(source_right, QFileSystemModel::FileNameRole).toString();
+    const QString leftName = src->data(source_left, FileSystemModel::FileNameRole).toString();
+    const QString rightName = src->data(source_right, FileSystemModel::FileNameRole).toString();
     return Utils::FilePath::fromString(leftName) < Utils::FilePath::fromString(rightName);
 }
 
-FolderNavigationModel::FolderNavigationModel(QObject *parent) : QFileSystemModel(parent)
+FolderNavigationModel::FolderNavigationModel(QObject *parent) : FileSystemModel(parent)
 { }
 
 QVariant FolderNavigationModel::data(const QModelIndex &index, int role) const
 {
     if (role == Qt::ToolTipRole)
-        return QDir::toNativeSeparators(QDir::cleanPath(filePath(index)));
+        return filePath(index).toUserOutput();
     else if (role == IsFolderRole)
         return isDir(index);
     else
-        return QFileSystemModel::data(index, role);
+        return FileSystemModel::data(index, role);
 }
 
 Qt::DropActions FolderNavigationModel::supportedDragActions() const
@@ -202,12 +202,14 @@ Qt::DropActions FolderNavigationModel::supportedDragActions() const
 Qt::ItemFlags FolderNavigationModel::flags(const QModelIndex &index) const
 {
     if (index.isValid() && !fileInfo(index).isRoot())
-        return QFileSystemModel::flags(index) | Qt::ItemIsEditable;
-    return QFileSystemModel::flags(index);
+        return FileSystemModel::flags(index) | Qt::ItemIsEditable;
+    return FileSystemModel::flags(index);
 }
 
 bool FolderNavigationModel::setData(const QModelIndex &index, const QVariant &value, int role)
 {
+    /*
+    // TODO: IMPLEMENT
     QTC_ASSERT(index.isValid() && parent(index).isValid() && index.column() == 0
                    && role == Qt::EditRole && value.canConvert<QString>(),
                return false);
@@ -218,13 +220,15 @@ bool FolderNavigationModel::setData(const QModelIndex &index, const QVariant &va
     if (beforeFilePath == afterFilePath)
         return false;
     // need to rename through file system model, which takes care of not changing our selection
-    const bool success = QFileSystemModel::setData(index, value, role);
+    const bool success = FileSystemModel::setData(index, value, role);
     // for files we can do more than just rename on disk, for directories the user is on his/her own
     if (success && fileInfo(index).isFile()) {
         Core::DocumentManager::renamedFile(beforeFilePath, afterFilePath);
         emit m_instance->fileRenamed(beforeFilePath, afterFilePath);
     }
     return success;
+    */
+    return false;
 }
 
 static void showOnlyFirstColumn(QTreeView *view)
@@ -287,7 +291,7 @@ FolderNavigationWidget::FolderNavigationWidget(QWidget *parent) : QWidget(parent
     if (Utils::HostOsInfo::isWindowsHost()) // Symlinked directories can cause file watcher warnings on Win32.
         filters |= QDir::NoSymLinks;
     m_fileSystemModel->setFilter(filters);
-    m_fileSystemModel->setRootPath(QString());
+    m_fileSystemModel->setRootPath({});
     m_filterHiddenFilesAction->setCheckable(true);
     setHiddenFilesFilter(false);
     m_showBreadCrumbsAction->setCheckable(true);
@@ -347,7 +351,7 @@ FolderNavigationWidget::FolderNavigationWidget(QWidget *parent) : QWidget(parent
     connect(m_listView, &QAbstractItemView::activated, this, [this](const QModelIndex &index) {
         openItem(m_sortProxyModel->mapToSource(index));
     });
-    // Delay updating crumble path by event loop cylce, because that can scroll, which doesn't
+    // Delay updating crumble path by event loop cycle, because that can scroll, which doesn't
     // work well when done directly in currentChanged (the wrong item can get highlighted).
     // We cannot use Qt::QueuedConnection directly, because the QModelIndex could get invalidated
     // in the meantime, so use a queued invokeMethod instead.
@@ -356,8 +360,7 @@ FolderNavigationWidget::FolderNavigationWidget(QWidget *parent) : QWidget(parent
             this,
             [this](const QModelIndex &index) {
                 const QModelIndex sourceIndex = m_sortProxyModel->mapToSource(index);
-                const auto filePath = Utils::FilePath::fromString(
-                    m_fileSystemModel->filePath(sourceIndex));
+                const auto filePath = m_fileSystemModel->filePath(sourceIndex);
                 // QTimer::singleShot only posts directly onto the event loop if you use the SLOT("...")
                 // notation, so using a singleShot with a lambda would flicker
                 // QTimer::singleShot(0, this, [this, filePath]() { setCrumblePath(filePath); });
@@ -366,7 +369,7 @@ FolderNavigationWidget::FolderNavigationWidget(QWidget *parent) : QWidget(parent
             });
     connect(m_crumbLabel, &Utils::FileCrumbLabel::pathClicked, [this](const Utils::FilePath &path) {
         const QModelIndex rootIndex = m_sortProxyModel->mapToSource(m_listView->rootIndex());
-        const QModelIndex fileIndex = m_fileSystemModel->index(path.toString());
+        const QModelIndex fileIndex = m_fileSystemModel->index(path);
         if (!isChildOf(fileIndex, rootIndex))
             selectBestRootForFile(path);
         selectFile(path);
@@ -421,7 +424,7 @@ void FolderNavigationWidget::setShowFoldersOnTop(bool onTop)
 {
     m_showFoldersOnTopAction->setChecked(onTop);
     m_sortProxyModel->setSortRole(onTop ? int(FolderNavigationModel::IsFolderRole)
-                                        : int(QFileSystemModel::FileNameRole));
+                                        : int(FileSystemModel::FileNameRole));
 }
 
 static bool itemLessThan(QComboBox *combo,
@@ -483,7 +486,7 @@ void FolderNavigationWidget::addNewItem()
     const QModelIndex current = m_sortProxyModel->mapToSource(m_listView->currentIndex());
     if (!current.isValid())
         return;
-    const auto filePath = Utils::FilePath::fromString(m_fileSystemModel->filePath(current));
+    const auto filePath = m_fileSystemModel->filePath(current);
     const Utils::FilePath path = filePath.isDir() ? filePath : filePath.parentDir();
     Core::ICore::showNewItemDialog(tr("New File", "Title of dialog"),
                                    Utils::filtered(Core::IWizardFactory::allWizardFactories(),
@@ -504,7 +507,7 @@ void FolderNavigationWidget::removeCurrentItem()
     const QModelIndex current = m_sortProxyModel->mapToSource(m_listView->currentIndex());
     if (!current.isValid() || m_fileSystemModel->isDir(current))
         return;
-    const FilePath filePath = FilePath::fromString(m_fileSystemModel->filePath(current));
+    const FilePath filePath = m_fileSystemModel->filePath(current);
     RemoveFileDialog dialog(filePath, Core::ICore::dialogParent());
     dialog.setDeleteFileVisible(false);
     if (dialog.exec() == QDialog::Accepted) {
@@ -581,7 +584,7 @@ void FolderNavigationWidget::selectBestRootForFile(const Utils::FilePath &filePa
 void FolderNavigationWidget::selectFile(const Utils::FilePath &filePath)
 {
     const QModelIndex fileIndex = m_sortProxyModel->mapFromSource(
-        m_fileSystemModel->index(filePath.toString()));
+        m_fileSystemModel->index(filePath));
     if (fileIndex.isValid() || filePath.isEmpty() /* Computer root */) {
         // TODO This only scrolls to the right position if all directory contents are loaded.
         // Unfortunately listening to directoryLoaded was still not enough (there might also
@@ -590,7 +593,7 @@ void FolderNavigationWidget::selectFile(const Utils::FilePath &filePath)
         m_listView->setCurrentIndex(fileIndex);
         QTimer::singleShot(200, this, [this, filePath] {
             const QModelIndex fileIndex = m_sortProxyModel->mapFromSource(
-                m_fileSystemModel->index(filePath.toString()));
+                m_fileSystemModel->index(filePath));
             if (fileIndex == m_listView->rootIndex()) {
                 m_listView->horizontalScrollBar()->setValue(0);
                 m_listView->verticalScrollBar()->setValue(0);
@@ -605,7 +608,7 @@ void FolderNavigationWidget::selectFile(const Utils::FilePath &filePath)
 void FolderNavigationWidget::setRootDirectory(const Utils::FilePath &directory)
 {
     const QModelIndex index = m_sortProxyModel->mapFromSource(
-        m_fileSystemModel->setRootPath(directory.toString()));
+        m_fileSystemModel->setRootPath(directory));
     m_listView->setRootIndex(index);
 }
 
@@ -631,8 +634,8 @@ void FolderNavigationWidget::openItem(const QModelIndex &index)
     // but we don't want to do anything in that case
     if (m_fileSystemModel->isDir(index))
         return;
-    const QString path = m_fileSystemModel->filePath(index);
-    Core::EditorManager::openEditor(FilePath::fromString(path),
+    const FilePath path = m_fileSystemModel->filePath(index);
+    Core::EditorManager::openEditor(path,
                                     {},
                                     Core::EditorManager::AllowExternalEditor);
 }
@@ -641,12 +644,9 @@ void FolderNavigationWidget::createNewFolder(const QModelIndex &parent)
 {
     static const QString baseName = tr("New Folder");
     // find non-existing name
-    const QDir dir(m_fileSystemModel->filePath(parent));
-    const QSet<Utils::FilePath> existingItems
-        = Utils::transform<QSet>(dir.entryList({baseName + '*'}, QDir::AllEntries),
-                                 [](const QString &entry) {
-                                     return Utils::FilePath::fromString(entry);
-                                 });
+    FilePath path = m_fileSystemModel->filePath(parent);
+    const FilePaths existingItems = path.dirEntries(FileFilter({baseName+'*'}, QDir::AllEntries));
+
     const Utils::FilePath name = Utils::makeUniquelyNumbered(Utils::FilePath::fromString(baseName),
                                                    existingItems);
     // create directory and edit
@@ -660,7 +660,7 @@ void FolderNavigationWidget::createNewFolder(const QModelIndex &parent)
 
 void FolderNavigationWidget::setCrumblePath(const Utils::FilePath &filePath)
 {
-    const QModelIndex index = m_fileSystemModel->index(filePath.toString());
+    const QModelIndex index = m_fileSystemModel->index(filePath);
     const int width = m_crumbLabel->width();
     const int previousHeight = m_crumbLabel->immediateHeightForWidth(width);
     m_crumbLabel->setPath(filePath);
@@ -696,8 +696,7 @@ void FolderNavigationWidget::contextMenuEvent(QContextMenuEvent *ev)
     QAction *newFolder = nullptr;
     QAction *removeFolder = nullptr;
     const bool isDir = m_fileSystemModel->isDir(current);
-    const Utils::FilePath filePath = hasCurrentItem ? Utils::FilePath::fromString(
-                                                          m_fileSystemModel->filePath(current))
+    const Utils::FilePath filePath = hasCurrentItem ? m_fileSystemModel->filePath(current)
                                                     : Utils::FilePath();
     if (hasCurrentItem) {
         if (!isDir)

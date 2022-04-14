@@ -441,6 +441,8 @@ FilePath FilePath::fromFileInfo(const QFileInfo &info)
 /// \returns a QFileInfo
 QFileInfo FilePath::toFileInfo() const
 {
+    if (needsDevice())
+        return QFileInfo();
     QTC_ASSERT(!needsDevice(), return QFileInfo());
     return QFileInfo(cleanPath().path());
 }
@@ -842,6 +844,17 @@ void FilePath::asyncWriteFileContents(const Continuation<bool> &cont, const QByt
 bool FilePath::needsDevice() const
 {
     return !m_scheme.isEmpty();
+}
+
+bool FilePath::isSymLink() const
+{
+    if (needsDevice()) {
+        QTC_ASSERT(s_deviceHooks.symLinkTarget, return {});
+        // TODO: Add isSymLink to device hooks
+        return !s_deviceHooks.symLinkTarget(*this).isEmpty();
+    }
+    const QFileInfo info(m_data);
+    return info.isSymLink();
 }
 
 /// \returns an empty FilePath if this is not a symbolic linl
