@@ -651,32 +651,6 @@ void ProcessArgs::addArgs(QString *args, const QStringList &inArgs)
         addArg(args, arg);
 }
 
-bool ProcessArgs::prepareCommand(const CommandLine &cmdLine, QString *outCmd, ProcessArgs *outArgs,
-                                 const Environment *env, const FilePath *pwd)
-{
-    FilePath executable = cmdLine.executable();
-    const QString arguments = cmdLine.arguments();
-    if (env && executable.isRelativePath())
-        executable = env->searchInPath(executable.toString());
-    ProcessArgs::SplitError err;
-    *outArgs = ProcessArgs::prepareArgs(arguments, &err, executable.osType(), env, pwd);
-    if (err == ProcessArgs::SplitOk) {
-        *outCmd = executable.toString();
-    } else {
-        if (executable.osType() == OsTypeWindows) {
-            *outCmd = QString::fromLatin1(qgetenv("COMSPEC"));
-            *outArgs = ProcessArgs::createWindowsArgs(QLatin1String("/v:off /s /c \"")
-                    + quoteArg(executable.toUserOutput()) + ' ' + arguments + '"');
-        } else {
-            if (err != ProcessArgs::FoundMeta)
-                return false;
-            *outCmd = qEnvironmentVariable("SHELL", "/bin/sh");
-            *outArgs = ProcessArgs::createUnixArgs({"-c", quoteArg(executable.toString()) + ' ' + arguments});
-        }
-    }
-    return true;
-}
-
 // This function assumes that the resulting string will be quoted.
 // That's irrelevant if it does not contain quotes itself.
 static int quoteArgInternalWin(QString &ret, int bslashes)

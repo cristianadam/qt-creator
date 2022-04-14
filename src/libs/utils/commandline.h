@@ -67,9 +67,6 @@ public:
     static ProcessArgs prepareArgs(const QString &args, SplitError *err, OsType osType,
                                    const Environment *env = nullptr, const FilePath *pwd = nullptr,
                                    bool abortOnMeta = true);
-    //! Prepare a shell command for feeding into QProcess
-    static bool prepareCommand(const CommandLine &cmdLine, QString *outCmd, ProcessArgs *outArgs,
-                               const Environment *env = nullptr, const FilePath *pwd = nullptr);
     //! Quote and append each argument to a shell command
     static void addArgs(QString *args, const QStringList &inArgs);
     //! Append already quoted arguments to a shell command

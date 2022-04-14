@@ -258,12 +258,39 @@ void DefaultImpl::start()
     s_start.measureAndRun(&DefaultImpl::doDefaultStart, this, program, arguments);
 }
 
+static bool prepareCommand(const CommandLine &cmdLine, QString *outCmd, ProcessArgs *outArgs,
+                           const Environment *env, const FilePath *pwd)
+{
+    FilePath executable = cmdLine.executable();
+    const QString arguments = cmdLine.arguments();
+    if (env && executable.isRelativePath())
+        executable = env->searchInPath(executable.toString());
+    ProcessArgs::SplitError err;
+    *outArgs = ProcessArgs::prepareArgs(arguments, &err, executable.osType(), env, pwd);
+    if (err == ProcessArgs::SplitOk) {
+        *outCmd = executable.toString();
+    } else {
+        if (executable.osType() == OsTypeWindows) {
+            const QString exe = ProcessArgs::quoteArg(executable.toUserOutput());
+            *outCmd = QString::fromLatin1(qgetenv("COMSPEC"));
+            *outArgs = ProcessArgs::createWindowsArgs("/v:off /s /c \"" + exe + ' ' + arguments + '"');
+        } else {
+            if (err != ProcessArgs::FoundMeta)
+                return false;
+            const QString exe = ProcessArgs::quoteArg(executable.toString());
+            *outCmd = qEnvironmentVariable("SHELL", "/bin/sh");
+            *outArgs = ProcessArgs::createUnixArgs({"-c", exe + ' ' + arguments});
+        }
+    }
+    return true;
+}
+
 bool DefaultImpl::dissolveCommand(QString *program, QStringList *arguments)
 {
     const CommandLine &commandLine = m_setup.m_commandLine;
     QString commandString;
     ProcessArgs processArgs;
-    const bool success = ProcessArgs::prepareCommand(commandLine, &commandString, &processArgs,
+    const bool success = prepareCommand(commandLine, &commandString, &processArgs,
                                                      &m_setup.m_environment,
                                                      &m_setup.m_workingDirectory);
 
