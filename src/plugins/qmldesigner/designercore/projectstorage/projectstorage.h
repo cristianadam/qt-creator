@@ -27,6 +27,7 @@
 
 #include "projectstorageexceptions.h"
 #include "projectstorageinterface.h"
+#include "projectstorageprinting.h"
 #include "sourcepathcachetypes.h"
 #include "storagecache.h"
 
@@ -80,41 +81,43 @@ public:
 
         TypeIds typeIdsToBeDeleted;
 
-        std::sort(package.updatedSourceIds.begin(), package.updatedSourceIds.end());
+        try {
+            std::sort(package.updatedSourceIds.begin(), package.updatedSourceIds.end());
+            synchronizeFileStatuses(package.fileStatuses, package.updatedFileStatusSourceIds);
+            synchronizeImports(package.imports,
+                               package.updatedSourceIds,
+                               package.moduleDependencies,
+                               package.updatedModuleDependencySourceIds,
+                               package.moduleExportedImports,
+                               package.updatedModuleIds);
+            synchronizeTypes(package.types,
+                             updatedTypeIds,
+                             insertedAliasPropertyDeclarations,
+                             updatedAliasPropertyDeclarations,
+                             relinkableAliasPropertyDeclarations,
+                             relinkablePropertyDeclarations,
+                             relinkablePrototypes,
+                             package.updatedSourceIds);
 
-        synchronizeFileStatuses(package.fileStatuses, package.updatedFileStatusSourceIds);
-        synchronizeImports(package.imports,
-                           package.updatedSourceIds,
-                           package.moduleDependencies,
-                           package.updatedModuleDependencySourceIds,
-                           package.moduleExportedImports,
-                           package.updatedModuleIds);
-        synchronizeTypes(package.types,
-                         updatedTypeIds,
-                         insertedAliasPropertyDeclarations,
-                         updatedAliasPropertyDeclarations,
-                         relinkableAliasPropertyDeclarations,
-                         relinkablePropertyDeclarations,
-                         relinkablePrototypes,
-                         package.updatedSourceIds);
+            deleteNotUpdatedTypes(updatedTypeIds,
+                                  package.updatedSourceIds,
+                                  typeIdsToBeDeleted,
+                                  relinkableAliasPropertyDeclarations,
+                                  relinkablePropertyDeclarations,
+                                  relinkablePrototypes,
+                                  deletedTypeIds);
 
-        deleteNotUpdatedTypes(updatedTypeIds,
-                              package.updatedSourceIds,
-                              typeIdsToBeDeleted,
-                              relinkableAliasPropertyDeclarations,
-                              relinkablePropertyDeclarations,
-                              relinkablePrototypes,
-                              deletedTypeIds);
+            relink(relinkableAliasPropertyDeclarations,
+                   relinkablePropertyDeclarations,
+                   relinkablePrototypes,
+                   deletedTypeIds);
 
-        relink(relinkableAliasPropertyDeclarations,
-               relinkablePropertyDeclarations,
-               relinkablePrototypes,
-               deletedTypeIds);
+            linkAliases(insertedAliasPropertyDeclarations, updatedAliasPropertyDeclarations);
 
-        linkAliases(insertedAliasPropertyDeclarations, updatedAliasPropertyDeclarations);
+            synchronizeProjectDatas(package.projectDatas, package.updatedProjectSourceIds);
 
-        synchronizeProjectDatas(package.projectDatas, package.updatedProjectSourceIds);
-
+        } catch (...) {
+        }
         transaction.commit();
     }
 
@@ -1693,8 +1696,10 @@ private:
     void checkForPrototypeChainCycle(TypeId typeId) const
     {
         auto callback = [=](long long currentTypeId) {
-            if (typeId == TypeId{currentTypeId})
+            if (typeId == TypeId{currentTypeId}) {
+                qDebug() << "typeId:" << currentTypeId;
                 throw PrototypeChainCycle{};
+            }
 
             return Sqlite::CallbackControl::Continue;
         };
@@ -1729,8 +1734,10 @@ private:
 
             TypeId prototypeId = fetchTypeId(prototypeTypeNameId);
 
-            if (!prototypeId)
+            if (!prototypeId) {
+                qDebug() << type;
                 throw TypeNameDoesNotExists{};
+            }
 
             updatePrototypeStatement.write(&type.typeId, &prototypeId, &prototypeTypeNameId);
             checkForPrototypeChainCycle(type.typeId);
