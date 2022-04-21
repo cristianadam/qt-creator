@@ -36,6 +36,7 @@ class ModelTest : public QObject
 public:
     ModelTest(QAbstractItemModel *model, QObject *parent = nullptr);
 
+    QAbstractItemModel* model() { return m_model; }
 private Q_SLOTS:
     void nonDestructiveBasicTest();
     void rowCount();
@@ -57,7 +58,7 @@ protected Q_SLOTS:
 private:
     void checkChildren(const QModelIndex &parent, int currentDepth = 0);
 
-    QAbstractItemModel *model;
+    QAbstractItemModel *m_model;
 
     struct Changing
     {

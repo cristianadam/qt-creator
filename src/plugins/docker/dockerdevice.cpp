@@ -34,6 +34,7 @@
 
 #include <coreplugin/icore.h>
 #include <coreplugin/messagemanager.h>
+#include <coreplugin/foldernavigationwidget.h>
 
 #include <projectexplorer/devicesupport/devicemanager.h>
 #include <projectexplorer/devicesupport/idevicewidget.h>
@@ -220,6 +221,7 @@ public:
     Environment m_cachedEnviroment;
 
     bool m_useFind = true;  // prefer find over ls and hacks, but be able to use ls as fallback
+    bool m_wasAddedToFolderNavWidget = false;
 };
 
 IDeviceWidget *DockerDevice::createWidget()
@@ -268,6 +270,8 @@ DockerDevice::DockerDevice(const DockerDeviceData &data)
     setOpenTerminal([this](const Environment &env, const FilePath &workingDir) {
         Q_UNUSED(env); // TODO: That's the runnable's environment in general. Use it via -e below.
         updateContainerAccess();
+        qDebug() << "Y:" << displayName() << this->rootPath().toUserOutput();
+
         if (d->m_container.isEmpty()) {
             MessageManager::writeDisrupting(tr("Error starting remote shell. No container."));
             return;
@@ -291,6 +295,16 @@ DockerDevice::DockerDevice(const DockerDeviceData &data)
     addDeviceAction({tr("Open Shell in Container"), [](const IDevice::Ptr &device, QWidget *) {
                          device->openTerminal(device->systemEnvironment(), FilePath());
     }});
+
+    /*
+    struct RootDirectory {
+        QString id;
+        int sortValue;
+        QString displayName;
+        Utils::FilePath path;
+        QIcon icon;
+    };
+*/
 }
 
 DockerDevice::~DockerDevice()
@@ -313,6 +327,16 @@ DockerDeviceData &DockerDevice::data()
 void DockerDevice::updateContainerAccess() const
 {
     d->updateContainerAccess();
+
+    if (!d->m_wasAddedToFolderNavWidget) {
+        d->m_wasAddedToFolderNavWidget = true;
+
+        Core::FolderNavigationWidgetFactory::insertRootDirectory({this->id().toString(),
+                                                            0,
+                                                            this->displayName(),
+                                                            this->rootPath(),
+                                                                  {}});
+    }
 }
 
 void DockerDevicePrivate::stopCurrentContainer()
@@ -431,7 +455,7 @@ void DockerDevicePrivate::startContainer()
         DockerApi::recheckDockerDaemon();
         LOG("DOCKER SHELL FAILED");
         return;
-    }
+    }    
 }
 
 void DockerDevicePrivate::updateContainerAccess()
@@ -759,17 +783,27 @@ void DockerDevice::iterateWithFind(const FilePath &filePath,
     else
         arguments.prepend("-L");
 
+    arguments.append({"-mindepth", "1"});
+
     if (!filter.iteratorFlags.testFlag(QDirIterator::Subdirectories))
         arguments.append({"-maxdepth", "1"});
 
     QStringList filterOptions;
-    if (filters & QDir::Dirs)
-        filterOptions << "-type" << "d";
-    if (filters & QDir::Files) {
-        if (!filterOptions.isEmpty())
-            filterOptions << "-o";
-        filterOptions << "-type" << "f";
+
+    if (!(filters & QDir::Hidden)) {
+        filterOptions << "!" << "-name" << ".*";
     }
+
+    QStringList filterFilesAndDirs;
+    if (filters & QDir::Dirs)
+        filterFilesAndDirs << "-type" << "d";
+    if (filters & QDir::Files) {
+        if (!filterFilesAndDirs.isEmpty())
+            filterFilesAndDirs << "-o";
+        filterFilesAndDirs << "-type" << "f";
+    }
+    if (!filterFilesAndDirs.isEmpty())
+        filterOptions << "(" << filterFilesAndDirs << ")";
 
     if (filters & QDir::Readable)
         filterOptions << "-readable";
@@ -778,6 +812,7 @@ void DockerDevice::iterateWithFind(const FilePath &filePath,
     if (filters & QDir::Executable)
         filterOptions << "-executable";
 
+    // TODO: Exclude System files ( sockets, character devices etc. )
     QTC_CHECK(filters ^ QDir::AllDirs);
     QTC_CHECK(filters ^ QDir::Drives);
     QTC_CHECK(filters ^ QDir::NoDot);

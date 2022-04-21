@@ -911,6 +911,14 @@ FilePath FilePath::parentDir() const
     return result;
 }
 
+FilePath FilePath::rootDir() const
+{
+    // TODO: Is this correct? Windows?
+    FilePath result = *this;
+    result.setPath("/");
+    return result;
+}
+
 FilePath FilePath::absolutePath() const
 {
     if (isAbsolutePath())
@@ -1075,6 +1083,8 @@ FilePath FilePath::operator+(const QString &s) const
 bool FilePath::isChildOf(const FilePath &s) const
 {
     if (s.isEmpty())
+        return false;
+    if (s.host() != host())
         return false;
     if (!m_data.startsWith(s.m_data, caseSensitivity()))
         return false;

@@ -106,6 +106,8 @@ public:
 
     bool exists() const;
 
+    FilePath rootDir() const;
+
     FilePath parentDir() const;
     bool isChildOf(const FilePath &s) const;
 

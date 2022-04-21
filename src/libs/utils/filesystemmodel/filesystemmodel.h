@@ -46,15 +46,14 @@
 #include <QAbstractItemModel>
 #include <QPair>
 #include <QDir>
+#include <QFileIconProvider>
+#include <QMutex>
 
 QT_BEGIN_NAMESPACE
 class QFileIconProvider;
 QT_END_NAMESPACE
 
 namespace Utils {
-
-class ExtendedInformation;
-class FileSystemModelPrivate;
 
 class QTCREATOR_UTILS_EXPORT FileSystemModel : public QAbstractItemModel
 {
@@ -81,7 +80,7 @@ public:
     ~FileSystemModel();
 
     QModelIndex index(int row, int column, const QModelIndex &parent = QModelIndex()) const override;
-    QModelIndex index(const Utils::FilePath &path, int column = 0) const;
+    QModelIndex index(const FilePath &path, int column = 0) const;
     QModelIndex parent(const QModelIndex &child) const override;
     using QObject::parent;
     QModelIndex sibling(int row, int column, const QModelIndex &idx) const override;
@@ -110,7 +109,7 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     // FileSystemModel specific API
-    QModelIndex setRootPath(const FilePath &path);
+    QModelIndex setRootPath(FilePath path);
     FilePath rootPath() const;
     QDir rootDirectory() const;
 
@@ -145,7 +144,7 @@ public:
 
     QModelIndex mkdir(const QModelIndex &parent, const QString &name);
     bool rmdir(const QModelIndex &index);
-    QString fileName(const QModelIndex &aindex) const;
+    QString fileName(const QModelIndex &index) const;
     QIcon fileIcon(const QModelIndex &aindex) const;
     QFile::Permissions permissions(const QModelIndex &index) const;
     QFileInfo fileInfo(const QModelIndex &index) const;
@@ -160,11 +159,32 @@ protected:
     void timerEvent(QTimerEvent *event) override;
     bool event(QEvent *event) override;
 
-private:
-    FileSystemModelPrivate *d = nullptr;
+    const FilePaths &getFilePathMapEntry(const FilePath &parentPath) const;
+    const FilePaths &getFilePathMapEntry(const QModelIndex &index) const;
 
-    friend class FileSystemModelPrivate;
+    const FilePaths &getFilePathMapEntryOrCreate(const QModelIndex& index);
+    const FilePaths &getFilePathMapEntryOrCreate(const FilePath& parentPath);
+
+    bool hasPathMapEntry(const QModelIndex& index) const;
+    bool hasPathMapEntry(const FilePath& path) const;
+
+    const FilePath &filePathFromIndex(const QModelIndex& index) const;
+
+    struct FilePathCache {
+        bool isDir;
+    };
+
+    const FilePathCache getCachedInfo(const FilePath& path);
+
+private:
+    QHash<FilePath, FilePathCache> m_filePathCache;
+    QDir::Filters m_dirFilters;
+    FilePath m_rootFilePath;
+    QMutex m_filePathMapMutex;
+    QHash<FilePath, FilePaths> m_filePathMap;
     friend class QFileDialogPrivate;
+    FilePaths m_knownRoots;
+    QFileIconProvider* m_iconProvider;
 };
 
 } // Utils
