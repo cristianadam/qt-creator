@@ -31,30 +31,53 @@
 
 namespace QmlDesigner::Storage {
 
-inline QDebug &operator<<(QDebug debug, const Version &version)
+inline QDebug operator<<(QDebug debug, const Version &version)
 {
     debug.noquote() << "(" << version.major.value << ", " << version.minor.value << ")";
 
     return debug;
 }
+template<auto Type, typename InternalIntergerType = long long>
+inline QDebug operator<<(QDebug debug, BasicId<Type, InternalIntergerType> id)
+{
+    debug.noquote() << "(" << id.id << ")";
 
-inline QDebug &operator<<(QDebug debug, const ExportedType &type)
+    return debug;
+}
+
+inline QDebug operator<<(QDebug debug, const Import &import)
+{
+    debug.noquote() << "(" << import.moduleId << ", " << import.sourceId << ", " << import.version
+                    << ")";
+
+    return debug;
+}
+
+inline QDebug operator<<(QDebug debug, const ExportedType &type)
 {
     debug.noquote() << "(" << type.name << ", " << type.version << ")";
 
     return debug;
 }
 
-inline QDebug &operator<<(QDebug debug, const Type &type)
+inline QDebug operator<<(QDebug debug, const ImportedTypeName &importedTypeName)
 {
-    debug.noquote() << "(" << type.typeName << ", " << type.exportedTypes << ")";
+    std::visit(
+        [&](auto &&type) {
+            if constexpr (std::is_same_v<decltype(type), QualifiedImportedType>)
+                debug.noquote() << "(" << type.name << ", " << type.import << ")";
+            else
+                debug.noquote() << "(" << type.name << ")";
+        },
+        importedTypeName);
 
     return debug;
 }
 
-inline QDebug &operator<<(QDebug debug, const ImportedTypeName &importedTypeName)
+inline QDebug operator<<(QDebug debug, const Type &type)
 {
-    std::visit([&](auto &&type) { debug.noquote() << "(" << type.name << ")"; }, importedTypeName);
+    debug.noquote() << "(" << type.typeName << ", " << type.prototype << ", " << type.exportedTypes
+                    << ")";
 
     return debug;
 }
