@@ -43,50 +43,11 @@ namespace Constants { const char CALLGRIND_TEXT_MARK_CATEGORY[] = "Callgrind.Tex
 
 CallgrindTextMark::CallgrindTextMark(const QPersistentModelIndex &index,
                                      const FilePath &fileName, int lineNumber)
-    : TextEditor::TextMark(fileName, lineNumber, Constants::CALLGRIND_TEXT_MARK_CATEGORY, 4.0)
+    : TextEditor::TextMark(fileName, lineNumber, Constants::CALLGRIND_TEXT_MARK_CATEGORY)
     , m_modelIndex(index)
 {
     setPriority(TextEditor::TextMark::HighPriority);
-}
-
-void CallgrindTextMark::paintIcon(QPainter *painter, const QRect &paintRect) const
-{
-    if (!m_modelIndex.isValid())
-        return;
-
-    bool ok;
-    qreal costs = m_modelIndex.data(RelativeTotalCostRole).toReal(&ok);
-    QTC_ASSERT(ok, return);
-    QTC_ASSERT(costs >= 0.0 && costs <= 100.0, return);
-
-    painter->save();
-
-    // set up
-    painter->setPen(Qt::black);
-
-    // draw bar
-    QRect fillRect = paintRect;
-    fillRect.setWidth(paintRect.width() * costs);
-    painter->fillRect(paintRect, Qt::white);
-    painter->fillRect(fillRect, CallgrindHelper::colorForCostRatio(costs));
-    painter->drawRect(paintRect);
-
-    // draw text
-    const QTextOption flags = Qt::AlignHCenter | Qt::AlignVCenter;
-    const QString text = CallgrindHelper::toPercent(costs * 100.0f);
-
-    // decrease font size if paint rect is too small (very unlikely, but may happen)
-    QFont font = painter->font();
-    QFontMetrics fm = QFontMetrics(font);
-    while (fm.boundingRect(text).width() > paintRect.width()) {
-        font.setPointSize(font.pointSize() - 1);
-        fm = QFontMetrics(font);
-    }
-    painter->setFont(font);
-
-    painter->drawText(paintRect, text, flags);
-
-    painter->restore();
+    setLineAnnotation(CallgrindHelper::toPercent(costs() * 100.0f));
 }
 
 const Function *CallgrindTextMark::function() const
@@ -95,5 +56,15 @@ const Function *CallgrindTextMark::function() const
         return nullptr;
 
     return m_modelIndex.data(DataModel::FunctionRole).value<const Function *>();
+
 }
 
+qreal CallgrindTextMark::costs() const
+{
+    bool ok;
+    qreal costs = m_modelIndex.data(RelativeTotalCostRole).toReal(&ok);
+    QTC_ASSERT(ok, return 0.0);
+    QTC_ASSERT(costs >= 0.0 && costs <= 100.0, return 0.0);
+
+    return costs;
+}
