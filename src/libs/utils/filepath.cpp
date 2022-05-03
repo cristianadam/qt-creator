@@ -456,6 +456,8 @@ FilePath FilePath::fromUrl(const QUrl &url)
 
 static QString hostEncoded(QString host)
 {
+    QTC_ASSERT(!host.contains("%25"), return host);
+    QTC_ASSERT(!host.contains("%2f"), return host);
     host.replace('%', "%25");
     host.replace('/', "%2f");
     return host;
