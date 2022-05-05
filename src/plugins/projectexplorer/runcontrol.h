@@ -25,7 +25,6 @@
 
 #pragma once
 
-#include "applicationlauncher.h"
 #include "buildconfiguration.h"
 #include "devicesupport/idevicefwd.h"
 #include "projectexplorerconstants.h"
@@ -33,9 +32,11 @@
 
 #include <utils/commandline.h>
 #include <utils/environment.h>
+#include <utils/icon.h>
+#include <utils/outputformat.h>
 #include <utils/processhandle.h>
 #include <utils/qtcassert.h>
-#include <utils/icon.h>
+#include <utils/qtcprocess.h>
 
 #include <QHash>
 #include <QVariant>
@@ -284,7 +285,7 @@ private:
 
 
 /**
- * A simple TargetRunner for cases where a plain ApplicationLauncher is
+ * A simple TargetRunner for cases where a plain QtcProcess is
  * sufficient for running purposes.
  */
 
@@ -305,12 +306,10 @@ private:
 
     const Runnable &runnable() const = delete;
 
-    ApplicationLauncher m_launcher;
+    Utils::QtcProcess m_launcher;
     std::function<void()> m_starter;
 
     bool m_stopReported = false;
-    bool m_useTerminal = false;
-    bool m_runAsRoot = false;
     bool m_stopForced = false;
 };
 

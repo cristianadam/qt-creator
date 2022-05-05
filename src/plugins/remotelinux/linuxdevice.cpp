@@ -222,9 +222,9 @@ void SshSharedConnection::connectToHost()
             << connectionArgs(sshBinary);
     if (!m_sshParameters.x11DisplayName.isEmpty()) {
         args.prepend("-X");
-        Environment env = m_masterProcess->environment();
+        Environment env = m_masterProcess->controlEnvironment();
         env.set("DISPLAY", m_sshParameters.x11DisplayName);
-        m_masterProcess->setEnvironment(env);
+        m_masterProcess->setControlEnvironment(env);
     }
     m_masterProcess->setCommand(CommandLine(sshBinary, args));
     m_masterProcess->start();
@@ -596,7 +596,7 @@ QString LinuxProcessInterface::fullCommandLine(const CommandLine &commandLine) c
     if (m_setup.m_terminalMode == TerminalMode::Off)
         cmd.addArgs(QString("echo ") + s_pidMarker + "$$" + s_pidMarker + " && ", CommandLine::Raw);
 
-    const Environment &env = m_setup.m_remoteEnvironment;
+    const Environment &env = m_setup.m_environment;
     for (auto it = env.constBegin(); it != env.constEnd(); ++it)
         cmd.addArgs(env.key(it) + "='" + env.expandedValueForKey(env.key(it)) + '\'', CommandLine::Raw);
 
@@ -761,11 +761,11 @@ void SshProcessInterfacePrivate::doStart()
     // TODO: what about other fields from m_setup?
     SshRemoteProcess::setupSshEnvironment(&m_process);
     if (!m_sshParameters.x11DisplayName.isEmpty()) {
-        Environment env = m_process.environment();
+        Environment env = m_process.controlEnvironment();
         // Note: it seems this is no-op when shared connection is used.
         // In this case the display is taken from master process.
         env.set("DISPLAY", m_sshParameters.x11DisplayName);
-        m_process.setEnvironment(env);
+        m_process.setControlEnvironment(env);
     }
     m_process.setCommand(fullLocalCommandLine());
     m_process.start();
@@ -1031,7 +1031,7 @@ LinuxDevice::LinuxDevice()
         proc->setCommand({ mapToGlobalPath({}), {}});
         proc->setTerminalMode(TerminalMode::On);
         proc->setEnvironment(env);
-        proc->setRemoteEnvironment(env);
+        proc->setEnvironment(env);
         proc->setWorkingDirectory(workingDir);
         proc->start();
     });

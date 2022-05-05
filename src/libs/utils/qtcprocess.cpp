@@ -1044,14 +1044,14 @@ bool QtcProcess::hasEnvironment() const
     return d->m_setup.m_haveEnv;
 }
 
-void QtcProcess::setRemoteEnvironment(const Environment &environment)
+void QtcProcess::setControlEnvironment(const Environment &environment)
 {
-    d->m_setup.m_remoteEnvironment = environment;
+    d->m_setup.m_controlEnvironment = environment;
 }
 
-Environment QtcProcess::remoteEnvironment() const
+Environment QtcProcess::controlEnvironment() const
 {
-    return d->m_setup.m_remoteEnvironment;
+    return d->m_setup.m_controlEnvironment;
 }
 
 void QtcProcess::setCommand(const CommandLine &cmdLine)

@@ -46,8 +46,8 @@ public:
 
     CommandLine m_commandLine;
     FilePath m_workingDirectory;
-    Environment m_environment;
-    Environment m_remoteEnvironment;
+    Environment m_environment; // For actual process on target device (can be equal to host)
+    Environment m_controlEnvironment; // For local control processes
     QByteArray m_writeData;
     QProcess::ProcessChannelMode m_processChannelMode = QProcess::SeparateChannels;
     QVariantHash m_extraData;
