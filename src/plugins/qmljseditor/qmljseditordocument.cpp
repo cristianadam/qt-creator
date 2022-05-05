@@ -43,11 +43,12 @@
 #include <qmljstools/qmljsqtstylecodeformatter.h>
 
 #include <utils/infobar.h>
+#include <utils/minimizableinfobars.h>
 
 #include <QDebug>
 #include <QTextCodec>
 
-const char QML_UI_FILE_WARNING[] = "QmlJSEditor.QmlUiFileWarning";
+const char QML_UI_FILE_WARNING[] = "UiFileWarning";
 
 using namespace QmlJSEditor;
 using namespace QmlJS;
@@ -669,6 +670,14 @@ QmlJSEditorDocument::QmlJSEditorDocument(Utils::Id id)
     setSyntaxHighlighter(new QmlJSHighlighter(document()));
     setCodec(QTextCodec::codecForName("UTF-8")); // qml files are defined to be utf-8
     setIndenter(new Internal::Indenter(document()));
+
+    minimizableInfoBars()->setSettingsGroup(Constants::SETTINGS_CATEGORY_QML);
+    Utils::InfoBarEntry uiFileWarning(QML_UI_FILE_WARNING,
+                                      tr("This file should only be edited in <b>Design</b> mode."));
+    uiFileWarning.addCustomButton(tr("Switch Mode"), []() {
+        Core::ModeManager::activateMode(Core::Constants::MODE_DESIGN);
+    });
+    minimizableInfoBars()->setPossibleInfoBarEntries({uiFileWarning});
 }
 
 bool QmlJSEditorDocument::supportsCodec(const QTextCodec *codec) const
@@ -709,18 +718,7 @@ TextEditor::IAssistProvider *QmlJSEditorDocument::quickFixAssistProvider() const
 void QmlJSEditorDocument::setIsDesignModePreferred(bool value)
 {
     d->m_isDesignModePreferred = value;
-    if (value) {
-        if (infoBar()->canInfoBeAdded(QML_UI_FILE_WARNING)) {
-            Utils::InfoBarEntry info(QML_UI_FILE_WARNING,
-                                     tr("This file should only be edited in <b>Design</b> mode."));
-            info.addCustomButton(tr("Switch Mode"), []() {
-                Core::ModeManager::activateMode(Core::Constants::MODE_DESIGN);
-            });
-            infoBar()->addInfo(info);
-        }
-    } else if (infoBar()->containsInfo(QML_UI_FILE_WARNING)) {
-        infoBar()->removeInfo(QML_UI_FILE_WARNING);
-    }
+    minimizableInfoBars()->setInfoVisible(QML_UI_FILE_WARNING, value);
 }
 
 bool QmlJSEditorDocument::isDesignModePreferred() const
