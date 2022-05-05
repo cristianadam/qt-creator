@@ -38,6 +38,9 @@
 #include <coreplugin/coreconstants.h>
 #include <coreplugin/modemanager.h>
 
+#include <projectexplorer/projectexplorer.h>
+#include <projectexplorer/session.h>
+
 #include <qmljstools/qmljsindenter.h>
 #include <qmljstools/qmljsmodelmanager.h>
 #include <qmljstools/qmljsqtstylecodeformatter.h>
@@ -49,6 +52,7 @@
 #include <QTextCodec>
 
 const char QML_UI_FILE_WARNING[] = "UiFileWarning";
+const char NO_PROJECT_CONFIGURATION[] = "NoProject";
 
 using namespace QmlJSEditor;
 using namespace QmlJS;
@@ -677,7 +681,21 @@ QmlJSEditorDocument::QmlJSEditorDocument(Utils::Id id)
     uiFileWarning.addCustomButton(tr("Switch Mode"), []() {
         Core::ModeManager::activateMode(Core::Constants::MODE_DESIGN);
     });
-    minimizableInfoBars()->setPossibleInfoBarEntries({uiFileWarning});
+    minimizableInfoBars()->setPossibleInfoBarEntries(
+        {uiFileWarning,
+         {NO_PROJECT_CONFIGURATION,
+          tr("<b>Warning</b>: This file is not part of any project. "
+             "The code model might have issues parsing this file properly.")}});
+    using namespace ProjectExplorer;
+    const auto checkForProject = [this] {
+        Project *project = SessionManager::projectForFile(filePath());
+        minimizableInfoBars()->setInfoVisible(NO_PROJECT_CONFIGURATION, project == nullptr);
+    };
+    checkForProject();
+    connect(ProjectExplorerPlugin::instance(),
+            &ProjectExplorerPlugin::fileListChanged,
+            this,
+            checkForProject);
 }
 
 bool QmlJSEditorDocument::supportsCodec(const QTextCodec *codec) const
