@@ -204,6 +204,8 @@ public:
     void handleRest();
     void append(const QByteArray &text);
 
+    QByteArray readAllData();
+
     QByteArray rawData;
     QString incompleteLineBuffer; // lines not yet signaled
     QTextCodec *codec = nullptr; // Not owner
@@ -1501,16 +1503,12 @@ bool QtcProcess::waitForFinished(int msecs)
 
 QByteArray QtcProcess::readAllStandardOutput()
 {
-    QByteArray buf = d->m_stdOut.rawData;
-    d->m_stdOut.rawData.clear();
-    return buf;
+    return d->m_stdOut.readAllData();
 }
 
 QByteArray QtcProcess::readAllStandardError()
 {
-    QByteArray buf = d->m_stdErr.rawData;
-    d->m_stdErr.rawData.clear();
-    return buf;
+    return d->m_stdErr.readAllData();
 }
 
 qint64 QtcProcess::write(const QString &input)
@@ -1735,6 +1733,13 @@ void ChannelBuffer::append(const QByteArray &text)
         if (!emitSingleLines)
             break;
     } while (true);
+}
+
+QByteArray ChannelBuffer::readAllData()
+{
+    QByteArray buf = rawData;
+    rawData.clear();
+    return buf;
 }
 
 void ChannelBuffer::handleRest()
