@@ -217,8 +217,10 @@ void Edit3DView::modelAttached(Model *model)
 void Edit3DView::modelAboutToBeDetached(Model *model)
 {
     // Hide the canvas when model is detached (i.e. changing documents)
-    m_canvasCache.insert(model, edit3DWidget()->canvas()->renderImage());
-    edit3DWidget()->showCanvas(false);
+    if (edit3DWidget() && edit3DWidget()->canvas()) {
+        m_canvasCache.insert(model, edit3DWidget()->canvas()->renderImage());
+        edit3DWidget()->showCanvas(false);
+    }
 
     AbstractView::modelAboutToBeDetached(model);
 }
