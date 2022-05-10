@@ -36,10 +36,13 @@ namespace QmlDesigner {
 
 static QString styleConfigFileName(const QString &qmlFileName)
 {
-    ProjectExplorer::Project *currentProject = ProjectExplorer::SessionManager::projectForFile(Utils::FilePath::fromString(qmlFileName));
+    const ProjectExplorer::Project *currentProject = ProjectExplorer::SessionManager::projectForFile(
+        Utils::FilePath::fromString(qmlFileName));
 
     if (currentProject) {
-        foreach (const Utils::FilePath &fileName, currentProject->files(ProjectExplorer::Project::SourceFiles))
+        const QList<Utils::FilePath> fileNames = currentProject->files(
+            ProjectExplorer::Project::SourceFiles);
+        for (const Utils::FilePath &fileName : fileNames)
             if (fileName.endsWith("qtquickcontrols2.conf"))
                 return fileName.toString();
     }
