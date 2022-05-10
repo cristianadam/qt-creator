@@ -221,6 +221,11 @@ QString IDevice::mapToDevicePath(const FilePath &globalPath) const
     return globalPath.path();
 }
 
+FilePath IDevice::filePath(const QString &pathOnDevice) const
+{
+    return mapToGlobalPath(FilePath::fromString(pathOnDevice));
+}
+
 bool IDevice::handlesFile(const FilePath &filePath) const
 {
     Q_UNUSED(filePath);
@@ -558,11 +563,6 @@ void IDevice::addDeviceAction(const DeviceAction &deviceAction)
 const QList<IDevice::DeviceAction> IDevice::deviceActions() const
 {
     return d->deviceActions;
-}
-
-PortsGatheringMethod::Ptr IDevice::portsGatheringMethod() const
-{
-    return PortsGatheringMethod::Ptr();
 }
 
 DeviceProcessList *IDevice::createProcessListModel(QObject *parent) const
