@@ -29,6 +29,8 @@
 
 #include <projectexplorer/devicesupport/idevice.h>
 
+namespace Utils { class ProcessResultData; }
+
 namespace RemoteLinux {
 
 namespace Internal { class GenericLinuxDeviceTesterPrivate; }
@@ -55,8 +57,17 @@ private:
     void handlePortsGathererError(const QString &message);
     void handlePortsGathererDone();
 
-    void testSftp();
-    void handleSftpDone(const QString &error);
+    void testSftpInit();
+
+    void testSftpUpload();
+    void handleSftpUploadDone(const Utils::ProcessResultData &resultData);
+
+    void testSftpDownload();
+    void handleSftpDownloadDone(const Utils::ProcessResultData &resultData);
+
+    void testSftpTransfer();
+
+    void testSftpCleanup();
 
     void testRsync();
     void handleRsyncDone();
