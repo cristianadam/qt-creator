@@ -4562,7 +4562,7 @@ public:
         static_assert(std::size(CheckBoxColumn) == checkBoxes.size(),
                       "Must contain the same number of elements");
         for (std::size_t i = 0; i < checkBoxes.size(); ++i) {
-            if (Utils::anyOf(candidates, [i, CheckBoxColumn](const MemberInfo &mi) {
+            if (Utils::anyOf(candidates, [i](const MemberInfo &mi) {
                     return mi.possibleFlags & CandidateTreeItem::ColumnFlag[CheckBoxColumn[i]];
                 })) {
                 const Column column = CheckBoxColumn[i];
@@ -4578,7 +4578,7 @@ public:
                 createConnections(checkBoxes[i], column);
             }
         }
-        connect(model, &QAbstractItemModel::dataChanged, this, [this, checkBoxes, CheckBoxColumn] {
+        connect(model, &QAbstractItemModel::dataChanged, this, [this, checkBoxes] {
             const auto countExisting = [this](Flags flag) {
                 return Utils::count(m_candidates, [flag](const MemberInfo &mi) {
                     return !(mi.possibleFlags & flag);
