@@ -25,7 +25,7 @@
 
 #include "linuxdevicetester.h"
 
-#include "linuxdevice.h"
+#include "filetransfer.h"
 #include "remotelinux_constants.h"
 #include "rsyncdeploystep.h"
 
@@ -273,11 +273,11 @@ void GenericLinuxDeviceTesterPrivate::testSftpTransfer(const FilesToTransfer &fi
     state = newState;
     emit q->progressMessage(progressMessage);
 
-    LinuxDevice::ConstPtr linuxDevice = device.dynamicCast<const LinuxDevice>();
-    QTC_ASSERT(linuxDevice, return);
     if (m_fileTransfer)
         m_fileTransfer.release()->deleteLater();
-    m_fileTransfer.reset(linuxDevice->createFileTransfer(files));
+    m_fileTransfer.reset(new FileTransfer);
+    m_fileTransfer->setDevice(device);
+    m_fileTransfer->setFilesToTransfer(files);
     QObject::connect(m_fileTransfer.get(), &FileTransfer::done, q, doneHandler);
     QObject::connect(m_fileTransfer.get(), &FileTransfer::progress,
                      q, [this] (const QString &message) {
