@@ -2396,7 +2396,7 @@ void AspectContainer::forEachAspect(const std::function<void(BaseAspect *)> &run
     }
 }
 
-BaseAspect::Data::Ptr BaseAspect::extractData(const MacroExpander *expander) const
+BaseAspect::Data::Ptr BaseAspect::extractData() const
 {
     QTC_ASSERT(d->m_dataCreator, return {});
     Data *data = d->m_dataCreator();
@@ -2404,7 +2404,7 @@ BaseAspect::Data::Ptr BaseAspect::extractData(const MacroExpander *expander) con
     data->m_id = id();
     data->m_cloner = d->m_dataCloner;
     for (const DataExtractor &extractor : d->m_dataExtractors)
-        extractor(data, expander);
+        extractor(data);
     return Data::Ptr(data);
 }
 
