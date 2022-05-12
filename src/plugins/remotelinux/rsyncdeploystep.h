@@ -28,8 +28,6 @@
 #include "abstractremotelinuxdeploystep.h"
 #include "remotelinux_export.h"
 
-namespace QSsh { class SshConnection; }
-
 namespace RemoteLinux {
 
 class RsyncCommandLine
@@ -50,10 +48,6 @@ public:
 
     static Utils::Id stepId();
     static QString displayName();
-
-    static QString defaultFlags();
-    static RsyncCommandLine rsyncCommand(const QSsh::SshConnection &sshConnection,
-                                         const QString &flags);
 };
 
 } // namespace RemoteLinux
