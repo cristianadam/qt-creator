@@ -48,9 +48,10 @@ public:
 
 private:
     void testNext();
+    void handleStdOut(const QString &message);
 
-    void handleConnectionFailure();
-    void handleConnected();
+    void testEcho();
+    void handleEchoDone();
 
     void testUname();
     void handleUnameDone();

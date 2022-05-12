@@ -27,11 +27,8 @@
 
 #include "filetransfer.h"
 #include "remotelinux_constants.h"
-#include "rsyncdeploystep.h"
 
 #include <projectexplorer/devicesupport/deviceusedportsgatherer.h>
-#include <ssh/sshconnection.h>
-#include <ssh/sshconnectionmanager.h>
 #include <utils/port.h>
 #include <utils/processinterface.h>
 #include <utils/qtcassert.h>
@@ -50,7 +47,7 @@ namespace {
 
 enum State {
     Inactive,
-    Connecting,
+    TestingEcho,
     TestingUname,
     TestingPorts,
     TestingSftpUpload,
@@ -64,18 +61,18 @@ enum State {
 class GenericLinuxDeviceTesterPrivate
 {
 public:
-    IDevice::Ptr device;
-    SshConnection *connection = nullptr;
-    QtcProcess unameProcess;
-    DeviceUsedPortsGatherer portsGatherer;
+    IDevice::Ptr m_device;
+    QtcProcess m_echoProcess;
+    QtcProcess m_unameProcess;
+    DeviceUsedPortsGatherer m_portsGatherer;
     std::unique_ptr<QTemporaryDir> m_tempDir;
     QByteArray m_tempFileContents;
     FileToTransfer m_uploadTransfer;
     FileToTransfer m_downloadTransfer;
     FileTransfer m_fileTransfer;
-    State state = Inactive;
-    bool sftpWorks = false;
-    bool rsyncWorks = false;
+    State m_state = Inactive;
+    bool m_sftpWorks = false;
+    bool m_rsyncWorks = false;
 };
 
 } // namespace Internal
@@ -85,58 +82,45 @@ using namespace Internal;
 GenericLinuxDeviceTester::GenericLinuxDeviceTester(QObject *parent)
     : DeviceTester(parent), d(new GenericLinuxDeviceTesterPrivate)
 {
-    connect(&d->unameProcess, &QtcProcess::done,
+    connect(&d->m_echoProcess, &QtcProcess::done,
+            this, &GenericLinuxDeviceTester::handleEchoDone);
+    connect(&d->m_unameProcess, &QtcProcess::done,
             this, &GenericLinuxDeviceTester::handleUnameDone);
-    connect(&d->portsGatherer, &DeviceUsedPortsGatherer::error,
+    connect(&d->m_portsGatherer, &DeviceUsedPortsGatherer::error,
             this, &GenericLinuxDeviceTester::handlePortsGathererError);
-    connect(&d->portsGatherer, &DeviceUsedPortsGatherer::portListReady,
+    connect(&d->m_portsGatherer, &DeviceUsedPortsGatherer::portListReady,
             this, &GenericLinuxDeviceTester::handlePortsGathererDone);
     connect(&d->m_fileTransfer, &FileTransfer::done,
             this, &GenericLinuxDeviceTester::handleTransferDone);
-    connect(&d->m_fileTransfer, &FileTransfer::progress, this, [this] (const QString &message) {
-        const QStringList messageList = message.split('\n', Qt::SkipEmptyParts);
-        for (const QString &msg : messageList)
-            emit stdOutMessage(msg);
-    });
+    connect(&d->m_fileTransfer, &FileTransfer::progress,
+            this, &GenericLinuxDeviceTester::handleStdOut);
 }
 
-GenericLinuxDeviceTester::~GenericLinuxDeviceTester()
-{
-    if (d->connection)
-        SshConnectionManager::releaseConnection(d->connection);
-}
+GenericLinuxDeviceTester::~GenericLinuxDeviceTester() = default;
 
 void GenericLinuxDeviceTester::testDevice(const IDevice::Ptr &deviceConfiguration)
 {
-    QTC_ASSERT(d->state == Inactive, return);
+    QTC_ASSERT(d->m_state == Inactive, return);
 
-    d->device = deviceConfiguration;
-    d->m_fileTransfer.setDevice(d->device);
-    SshConnectionManager::forceNewConnection(deviceConfiguration->sshParameters());
-    d->connection = SshConnectionManager::acquireConnection(deviceConfiguration->sshParameters());
-    connect(d->connection, &SshConnection::connected,
-            this, &GenericLinuxDeviceTester::handleConnected);
-    connect(d->connection, &SshConnection::errorOccurred,
-            this, &GenericLinuxDeviceTester::handleConnectionFailure);
+    d->m_device = deviceConfiguration;
+    d->m_fileTransfer.setDevice(d->m_device);
 
-    emit progressMessage(tr("Connecting to device..."));
-    d->state = Connecting;
-    d->connection->connectToHost();
+    testNext();
 }
 
 void GenericLinuxDeviceTester::stopTest()
 {
-    QTC_ASSERT(d->state != Inactive, return);
+    QTC_ASSERT(d->m_state != Inactive, return);
 
-    switch (d->state) {
-    case Connecting:
-        d->connection->disconnectFromHost();
+    switch (d->m_state) {
+    case TestingEcho:
+        d->m_echoProcess.close();
         break;
     case TestingUname:
-        d->unameProcess.close();
+        d->m_unameProcess.close();
         break;
     case TestingPorts:
-        d->portsGatherer.stop();
+        d->m_portsGatherer.stop();
         break;
     case TestingSftpUpload:
     case TestingSftpDownload:
@@ -154,8 +138,11 @@ void GenericLinuxDeviceTester::stopTest()
 
 void GenericLinuxDeviceTester::testNext()
 {
-    switch (d->state) {
-    case Connecting:
+    switch (d->m_state) {
+    case Inactive:
+        testEcho();
+        break;
+    case Internal::TestingEcho:
         testUname();
         break;
     case TestingUname:
@@ -176,49 +163,71 @@ void GenericLinuxDeviceTester::testNext()
     case TestingRsyncDownload:
         testTransferredFiles();
         break;
-    case Inactive:
-        break;
     }
 }
 
-void GenericLinuxDeviceTester::handleConnectionFailure()
+void GenericLinuxDeviceTester::handleStdOut(const QString &message)
 {
-    QTC_ASSERT(d->state != Inactive, return);
-
-    emit errorMessage(d->connection->errorString() + '\n');
-
-    setFinished(TestFailure);
+    const QStringList messageList = message.split('\n', Qt::SkipEmptyParts);
+    for (const QString &msg : messageList)
+        emit stdOutMessage(msg);
 }
 
-void GenericLinuxDeviceTester::handleConnected()
+static const char s_echoContents[] = "Hello Remote World!";
+
+void GenericLinuxDeviceTester::testEcho()
 {
-    QTC_ASSERT(d->state == Connecting, return);
-    emit progressMessage(tr("Connection to device established.") + '\n');
+    d->m_state = TestingEcho;
+    emit progressMessage(tr("Sending echo to device..."));
+
+    d->m_echoProcess.setCommand({d->m_device->filePath("echo"), {s_echoContents}});
+    d->m_echoProcess.start();
+}
+
+void GenericLinuxDeviceTester::handleEchoDone()
+{
+    QTC_ASSERT(d->m_state == TestingEcho, return);
+    if (d->m_echoProcess.result() != ProcessResult::FinishedWithSuccess) {
+        const QByteArray stdErrOutput = d->m_echoProcess.readAllStandardError();
+        if (!stdErrOutput.isEmpty())
+            emit errorMessage(tr("echo failed: %1").arg(QString::fromUtf8(stdErrOutput)) + '\n');
+        else
+            emit errorMessage(tr("echo failed.") + '\n');
+    } else {
+        const QString reply = d->m_echoProcess.stdOut().chopped(1); // Remove trailing \n
+        handleStdOut(reply);
+
+        if (reply != s_echoContents)
+            emit errorMessage(tr("Device replied to echo with unexpected contents.") + '\n');
+        else
+            emit progressMessage(tr("Device replied to echo with expected contents.") + '\n');
+    }
 
     testNext();
 }
 
 void GenericLinuxDeviceTester::testUname()
 {
-    d->state = TestingUname;
+    d->m_state = TestingUname;
     emit progressMessage(tr("Checking kernel version..."));
 
-    d->unameProcess.setCommand({d->device->filePath("uname"), {"-rsm"}});
-    d->unameProcess.start();
+    d->m_unameProcess.setCommand({d->m_device->filePath("uname"), {"-rsm"}});
+    d->m_unameProcess.start();
 }
 
 void GenericLinuxDeviceTester::handleUnameDone()
 {
-    QTC_ASSERT(d->state == TestingUname, return);
+    QTC_ASSERT(d->m_state == TestingUname, return);
 
-    if (!d->unameProcess.errorString().isEmpty() || d->unameProcess.exitCode() != 0) {
-        const QByteArray stderrOutput = d->unameProcess.readAllStandardError();
-        if (!stderrOutput.isEmpty())
-            emit errorMessage(tr("uname failed: %1").arg(QString::fromUtf8(stderrOutput)) + QLatin1Char('\n'));
+    if (d->m_unameProcess.result() != ProcessResult::FinishedWithSuccess) {
+        const QByteArray stdErrOutput = d->m_unameProcess.readAllStandardError();
+        if (!stdErrOutput.isEmpty())
+            emit errorMessage(tr("uname failed: %1").arg(QString::fromUtf8(stdErrOutput)) + '\n');
         else
-            emit errorMessage(tr("uname failed.") + QLatin1Char('\n'));
+            emit errorMessage(tr("uname failed.") + '\n');
     } else {
-        emit progressMessage(QString::fromUtf8(d->unameProcess.readAllStandardOutput()));
+        handleStdOut(d->m_unameProcess.stdOut());
+        emit progressMessage(tr("Checking kernel version succeeded.") + '\n');
     }
 
     testNext();
@@ -226,15 +235,15 @@ void GenericLinuxDeviceTester::handleUnameDone()
 
 void GenericLinuxDeviceTester::testPortsGatherer()
 {
-    d->state = TestingPorts;
+    d->m_state = TestingPorts;
     emit progressMessage(tr("Checking if specified ports are available..."));
 
-    d->portsGatherer.start(d->device);
+    d->m_portsGatherer.start(d->m_device);
 }
 
 void GenericLinuxDeviceTester::handlePortsGathererError(const QString &message)
 {
-    QTC_ASSERT(d->state == TestingPorts, return);
+    QTC_ASSERT(d->m_state == TestingPorts, return);
 
     emit errorMessage(tr("Error gathering ports: %1").arg(message) + '\n');
     setFinished(TestFailure);
@@ -242,12 +251,12 @@ void GenericLinuxDeviceTester::handlePortsGathererError(const QString &message)
 
 void GenericLinuxDeviceTester::handlePortsGathererDone()
 {
-    QTC_ASSERT(d->state == TestingPorts, return);
+    QTC_ASSERT(d->m_state == TestingPorts, return);
 
-    if (d->portsGatherer.usedPorts().isEmpty()) {
+    if (d->m_portsGatherer.usedPorts().isEmpty()) {
         emit progressMessage(tr("All specified ports are available.") + '\n');
     } else {
-        const QString portList = transform(d->portsGatherer.usedPorts(), [](const Port &port) {
+        const QString portList = transform(d->m_portsGatherer.usedPorts(), [](const Port &port) {
             return QString::number(port.number());
         }).join(", ");
         emit errorMessage(tr("The following specified ports are currently in use: %1")
@@ -273,7 +282,7 @@ void GenericLinuxDeviceTester::testTransferInit()
     }
     const QString localUploadPath = d->m_tempDir->filePath("forUpload.txt");
     const QString localDownloadPath = d->m_tempDir->filePath("fromDownload.txt");
-    const FilePath remotePath = d->device->filePath("/tmp/test_remote.txt");
+    const FilePath remotePath = d->m_device->filePath("/tmp/test_remote.txt");
     QFile tempFile(localUploadPath);
     if (!tempFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
         tempFileFailed();
@@ -292,7 +301,7 @@ void GenericLinuxDeviceTester::testTransferInit()
 
 void GenericLinuxDeviceTester::handleTransferDone(const ProcessResultData &resultData)
 {
-    switch (d->state) {
+    switch (d->m_state) {
     case TestingSftpUpload:
     case TestingSftpDownload:
     case TestingRsyncUpload:
@@ -303,7 +312,7 @@ void GenericLinuxDeviceTester::handleTransferDone(const ProcessResultData &resul
     }
 
     const QString method = FileTransfer::methodName(d->m_fileTransfer.transferMethod());
-    const QString direction = (d->state == TestingSftpUpload || d->state == TestingRsyncUpload)
+    const QString direction = (d->m_state == TestingSftpUpload || d->m_state == TestingRsyncUpload)
             ? tr("upload") : tr("download");
 
     if (resultData.m_error == QProcess::UnknownError) {
@@ -312,7 +321,7 @@ void GenericLinuxDeviceTester::handleTransferDone(const ProcessResultData &resul
     } else {
         emit errorMessage(tr("%1 %2 error: %3").arg(method, direction, resultData.m_errorString)
                           + '\n');
-        if (d->state == TestingSftpUpload || d->state == TestingSftpDownload)
+        if (d->m_state == TestingSftpUpload || d->m_state == TestingSftpDownload)
             testRsyncUpload();
         else
             testTransferCleanup();
@@ -321,7 +330,7 @@ void GenericLinuxDeviceTester::handleTransferDone(const ProcessResultData &resul
 
 void GenericLinuxDeviceTester::testTransferredFiles()
 {
-    switch (d->state) {
+    switch (d->m_state) {
     case TestingSftpDownload:
     case TestingRsyncDownload:
         break;
@@ -333,7 +342,7 @@ void GenericLinuxDeviceTester::testTransferredFiles()
     emit progressMessage(tr("Checking transferred files via %1...").arg(method));
 
     auto nextTest = [this] {
-        if (d->state == TestingSftpDownload)
+        if (d->m_state == TestingSftpDownload)
             testRsyncUpload();
         else
             testTransferCleanup();
@@ -351,10 +360,10 @@ void GenericLinuxDeviceTester::testTransferredFiles()
         return testFailed(tr("Failed to remove the file uploaded via %1.").arg(method) + '\n');
 
     emit progressMessage(tr("Files successfully transferred via %1.").arg(method) + '\n');
-    if (d->state == TestingSftpDownload)
-        d->sftpWorks = true;
+    if (d->m_state == TestingSftpDownload)
+        d->m_sftpWorks = true;
     else
-        d->rsyncWorks = true;
+        d->m_rsyncWorks = true;
     nextTest();
 }
 
@@ -363,8 +372,8 @@ void GenericLinuxDeviceTester::testTransferCleanup()
     d->m_tempDir.reset();
     d->m_fileTransfer.stop();
 
-    if (!d->rsyncWorks) {
-        if (d->sftpWorks) {
+    if (!d->m_rsyncWorks) {
+        if (d->m_sftpWorks) {
             emit progressMessage(tr("SFTP will be used for deployment, because rsync "
                                     "is not available.") + '\n');
         } else {
@@ -372,13 +381,13 @@ void GenericLinuxDeviceTester::testTransferCleanup()
         }
     }
 
-    d->device->setExtraData(Constants::SupportsRSync, d->rsyncWorks);
-    setFinished(d->rsyncWorks || d->sftpWorks ? TestSuccess : TestFailure);
+    d->m_device->setExtraData(Constants::SupportsRSync, d->m_rsyncWorks);
+    setFinished(d->m_rsyncWorks || d->m_sftpWorks ? TestSuccess : TestFailure);
 }
 
 void GenericLinuxDeviceTester::testSftpUpload()
 {
-    d->state = TestingSftpUpload;
+    d->m_state = TestingSftpUpload;
     emit progressMessage(tr("Checking whether an Sftp upload works..."));
 
     d->m_fileTransfer.stop();
@@ -389,7 +398,7 @@ void GenericLinuxDeviceTester::testSftpUpload()
 
 void GenericLinuxDeviceTester::testSftpDownload()
 {
-    d->state = TestingSftpDownload;
+    d->m_state = TestingSftpDownload;
     emit progressMessage(tr("Checking whether an Sftp download works..."));
 
     d->m_fileTransfer.stop();
@@ -400,7 +409,7 @@ void GenericLinuxDeviceTester::testSftpDownload()
 
 void GenericLinuxDeviceTester::testRsyncUpload()
 {
-    d->state = TestingRsyncUpload;
+    d->m_state = TestingRsyncUpload;
     emit progressMessage(tr("Checking whether an Rsync upload works..."));
 
     d->m_fileTransfer.stop();
@@ -411,7 +420,7 @@ void GenericLinuxDeviceTester::testRsyncUpload()
 
 void GenericLinuxDeviceTester::testRsyncDownload()
 {
-    d->state = TestingRsyncDownload;
+    d->m_state = TestingRsyncDownload;
     emit progressMessage(tr("Checking whether an Rsync download works..."));
 
     d->m_fileTransfer.stop();
@@ -422,13 +431,7 @@ void GenericLinuxDeviceTester::testRsyncDownload()
 
 void GenericLinuxDeviceTester::setFinished(TestResult result)
 {
-    d->state = Inactive;
-    d->m_fileTransfer.stop();
-    if (d->connection) {
-        disconnect(d->connection, nullptr, this, nullptr);
-        SshConnectionManager::releaseConnection(d->connection);
-        d->connection = nullptr;
-    }
+    d->m_state = Inactive;
     emit finished(result);
 }
 
