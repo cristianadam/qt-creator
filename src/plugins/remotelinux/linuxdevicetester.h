@@ -47,6 +47,8 @@ public:
     void stopTest() override;
 
 private:
+    void testNext();
+
     void handleConnectionFailure();
     void handleConnected();
 
@@ -57,20 +59,16 @@ private:
     void handlePortsGathererError(const QString &message);
     void handlePortsGathererDone();
 
-    void testSftpInit();
+    void testTransferInit();
+    void handleTransferDone(const Utils::ProcessResultData &resultData);
+    void testTransferredFiles();
+    void testTransferCleanup();
 
     void testSftpUpload();
-    void handleSftpUploadDone(const Utils::ProcessResultData &resultData);
-
     void testSftpDownload();
-    void handleSftpDownloadDone(const Utils::ProcessResultData &resultData);
 
-    void testSftpTransfer();
-
-    void testSftpCleanup();
-
-    void testRsync();
-    void handleRsyncDone();
+    void testRsyncUpload();
+    void testRsyncDownload();
 
     void setFinished(ProjectExplorer::DeviceTester::TestResult result);
 

@@ -1477,16 +1477,6 @@ static QByteArray transferCommand(const TransferDirection transferDirection, boo
     return {};
 }
 
-static QString methodName(FileTransferMethod method)
-{
-    switch (method) {
-    case FileTransferMethod::Sftp:  return FileTransfer::tr("sftp");  break;
-    case FileTransferMethod::Rsync: return FileTransfer::tr("rsync"); break;
-    }
-    QTC_CHECK(false);
-    return {};
-}
-
 class FileTransferInterface : public QObject
 {
     Q_OBJECT
@@ -1525,10 +1515,10 @@ protected:
     {
         ProcessResultData resultData = m_process.resultData();
         if (resultData.m_error == QProcess::FailedToStart) {
-            resultData.m_errorString = tr("\"%1\" failed to start: %2")
-                    .arg(methodName(m_method), resultData.m_errorString);
+            resultData.m_errorString = tr("%1 failed to start: %2")
+                    .arg(FileTransfer::methodName(m_method), resultData.m_errorString);
         } else if (resultData.m_exitStatus != QProcess::NormalExit) {
-            resultData.m_errorString = tr("\"%1\" crashed.").arg(methodName(m_method));
+            resultData.m_errorString = tr("%1 crashed.").arg(FileTransfer::methodName(m_method));
         } else if (resultData.m_exitCode != 0) {
             resultData.m_errorString = QString::fromLocal8Bit(m_process.readAllStandardError());
         } else {
@@ -1718,13 +1708,13 @@ class FileTransferPrivate : public QObject
     Q_OBJECT
 
 public:
-    void setDevice(const ProjectExplorer::IDeviceConstPtr &device) { m_device = device; }
-    void setTransferMethod(FileTransferMethod method) { m_method = method; }
-    void setFilesToTransfer(const FilesToTransfer &files) { m_files = files; }
-    void setRsyncFlags(const QString &flags) { m_rsyncFlags = flags; }
-
     void start();
     void stop();
+
+    FileTransferMethod m_method = FileTransferMethod::Default;
+    IDevice::ConstPtr m_device;
+    FilesToTransfer m_files;
+    QString m_rsyncFlags = {"-av"}; // TODO: see RsyncDeployStep::defaultFlags(), reuse it
 
 signals:
     void progress(const QString &progressMessage);
@@ -1732,11 +1722,6 @@ signals:
 
 private:
     void startFailed(const QString &errorString);
-
-    FileTransferMethod m_method = FileTransferMethod::Default;
-    IDevice::ConstPtr m_device;
-    FilesToTransfer m_files;
-    QString m_rsyncFlags = {"-av"}; // TODO: see RsyncDeployStep::defaultFlags(), reuse it
 
     std::unique_ptr<FileTransferInterface> m_transfer;
 };
@@ -1799,22 +1784,27 @@ FileTransfer::~FileTransfer()
 
 void FileTransfer::setDevice(const ProjectExplorer::IDeviceConstPtr &device)
 {
-    d->setDevice(device);
+    d->m_device = device;
 }
 
 void FileTransfer::setTransferMethod(FileTransferMethod method)
 {
-    d->setTransferMethod(method);
+    d->m_method = method;
+}
+
+FileTransferMethod FileTransfer::transferMethod() const
+{
+    return d->m_method;
 }
 
 void FileTransfer::setFilesToTransfer(const FilesToTransfer &files)
 {
-    d->setFilesToTransfer(files);
+    d->m_files = files;
 }
 
 void FileTransfer::setRsyncFlags(const QString &flags)
 {
-    d->setRsyncFlags(flags);
+    d->m_rsyncFlags = flags;
 }
 
 void FileTransfer::start()
@@ -1825,6 +1815,16 @@ void FileTransfer::start()
 void FileTransfer::stop()
 {
     d->stop();
+}
+
+QString FileTransfer::methodName(FileTransferMethod method)
+{
+    switch (method) {
+    case FileTransferMethod::Sftp:  return FileTransfer::tr("Sftp");  break;
+    case FileTransferMethod::Rsync: return FileTransfer::tr("Rsync"); break;
+    }
+    QTC_CHECK(false);
+    return {};
 }
 
 namespace Internal {

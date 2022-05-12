@@ -60,6 +60,8 @@ DeviceTestDialog::DeviceTestDialog(const IDevice::Ptr &deviceConfiguration,
     d->deviceTester->setParent(this);
     connect(d->deviceTester, &DeviceTester::progressMessage,
             this, &DeviceTestDialog::handleProgressMessage);
+    connect(d->deviceTester, &DeviceTester::stdOutMessage,
+            this, &DeviceTestDialog::handleStdOutMessage);
     connect(d->deviceTester, &DeviceTester::errorMessage,
             this, &DeviceTestDialog::handleErrorMessage);
     connect(d->deviceTester, &DeviceTester::finished,
@@ -81,6 +83,11 @@ void DeviceTestDialog::reject()
 void DeviceTestDialog::handleProgressMessage(const QString &message)
 {
     addText(message, Utils::Theme::OutputPanes_NormalMessageTextColor, false);
+}
+
+void DeviceTestDialog::handleStdOutMessage(const QString &message)
+{
+    addText(message, Utils::Theme::OutputPanes_StdOutTextColor, false);
 }
 
 void DeviceTestDialog::handleErrorMessage(const QString &message)

@@ -68,11 +68,14 @@ public:
 
     void setDevice(const ProjectExplorer::IDeviceConstPtr &device);
     void setTransferMethod(FileTransferMethod method);
+    FileTransferMethod transferMethod() const;
     void setFilesToTransfer(const FilesToTransfer &files);
     void setRsyncFlags(const QString &flags);
 
     void start();
     void stop();
+
+    static QString methodName(FileTransferMethod method);
 
 signals:
     void progress(const QString &progressMessage);

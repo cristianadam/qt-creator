@@ -313,6 +313,7 @@ public:
 
 signals:
     void progressMessage(const QString &message);
+    void stdOutMessage(const QString &message);
     void errorMessage(const QString &message);
     void finished(ProjectExplorer::DeviceTester::TestResult result);
 

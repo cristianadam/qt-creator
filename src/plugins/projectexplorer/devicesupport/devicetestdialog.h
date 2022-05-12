@@ -48,6 +48,7 @@ public:
 
 private:
     void handleProgressMessage(const QString &message);
+    void handleStdOutMessage(const QString &message);
     void handleErrorMessage(const QString &message);
     void handleTestFinished(ProjectExplorer::DeviceTester::TestResult result);
 
