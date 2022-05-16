@@ -96,12 +96,14 @@ public:
                 font.setBold(changed);
                 return font;
              }
-            case Qt::ToolTipRole:
-                if (!toolChain->isValid())
-                    return ToolChainOptionsPage::tr("This toolchain is invalid.");
-                return ToolChainOptionsPage::tr("<nobr><b>ABI:</b> %1").arg(
-                    changed ? ToolChainOptionsPage::tr("not up-to-date")
-                            : toolChain->targetAbi().toString());
+            case Qt::ToolTipRole: {
+                const QString toolTip = toolChain->isValid()
+                        ? ToolChainOptionsPage::tr("<nobr><b>ABI:</b> %1").arg(
+                               changed ? ToolChainOptionsPage::tr("not up-to-date")
+                                       : toolChain->targetAbi().toString())
+                        : ToolChainOptionsPage::tr("This toolchain is invalid.");
+                return QVariant("<div style=\"white-space:pre\">" + toolTip + "</div>");
+            }
             case Qt::DecorationRole:
                 return column == 0 && !toolChain->isValid()
                         ? Utils::Icons::CRITICAL.icon() : QVariant();
