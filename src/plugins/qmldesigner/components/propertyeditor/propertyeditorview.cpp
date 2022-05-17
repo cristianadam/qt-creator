@@ -64,6 +64,20 @@ enum {
 
 namespace QmlDesigner {
 
+template<typename Functor>
+class ScopeExit
+{
+public:
+    explicit ScopeExit(Functor &&onScopeExitFunction)
+        : m_onScopeExitFunction(std::forward<Functor>(onScopeExitFunction))
+    {}
+
+    ~ScopeExit() { m_onScopeExitFunction(); }
+
+private:
+    Functor m_onScopeExitFunction;
+};
+
 static bool propertyIsAttachedLayoutProperty(const PropertyName &propertyName)
 {
     return propertyName.contains("Layout.");
@@ -256,6 +270,9 @@ void PropertyEditorView::changeExpression(const QString &propertyName)
     if (noValidSelection())
         return;
 
+    ScopeExit scopeExit([&](){ m_locked = false; });
+    m_locked = true;
+
     executeInTransaction("PropertyEditorView::changeExpression", [this, name](){
         PropertyName underscoreName(name);
         underscoreName.replace('.', '_');
@@ -317,9 +334,9 @@ void PropertyEditorView::changeExpression(const QString &propertyName)
             return;
         }
 
-        if (qmlObjectNode->expression(name) != value->expression() || !qmlObjectNode->propertyAffectedByCurrentState(name))
+        if (qmlObjectNode->expression(name) != value->expression()
+            || !qmlObjectNode->propertyAffectedByCurrentState(name))
             qmlObjectNode->setBindingProperty(name, value->expression());
-
     }); /* end of transaction */
 }
 
@@ -692,6 +709,9 @@ void PropertyEditorView::variantPropertiesChanged(const QList<VariantProperty>& 
 
 void PropertyEditorView::bindingPropertiesChanged(const QList<BindingProperty>& propertyList, PropertyChangeFlags /*propertyChange*/)
 {
+    if (locked())
+        return;
+
     if (noValidSelection())
         return;
 
