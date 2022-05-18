@@ -663,8 +663,8 @@ WelcomeMode::WelcomeMode()
                                           m_dataModelDownloader->targetFolder());
         m_dataModelDownloader->setForceDownload(true);
     }
-    Utils::FilePath readme = Utils::FilePath::fromUserInput(welcomePagePath
-                                                            + "/dataImports/readme.txt");
+    Utils::FilePath readme = Utils::FilePath::fromUserInput(m_dataModelDownloader->targetFolder().toString()
+                                                            + "/readme.txt");
 
     m_dataModelDownloader->start();
 
