@@ -236,8 +236,7 @@ LocalQmlProfilerSupport::LocalQmlProfilerSupport(RunControl *runControl, const Q
     // In the TCP case, it doesn't hurt either to start the profiler before.
     addStartDependency(profiler);
 
-    setStarter([this, runControl, profiler, serverUrl] {
-        Runnable debuggee = runControl->runnable();
+    setStartModifier([this, profiler, serverUrl] {
 
         QUrl serverUrl = profiler->serverUrl();
         QString code;
@@ -251,12 +250,13 @@ LocalQmlProfilerSupport::LocalQmlProfilerSupport(RunControl *runControl, const Q
         QString arguments = Utils::ProcessArgs::quoteArg(
                                 QmlDebug::qmlDebugCommandLineArguments(QmlDebug::QmlProfilerServices, code, true));
 
-        if (!debuggee.command.arguments().isEmpty())
-            arguments += ' ' + debuggee.command.arguments();
+        Utils::CommandLine cmd = commandLine();
+        const QString oldArgs = cmd.arguments();
+        cmd.setArguments(arguments);
+        cmd.addArgs(arguments, Utils::CommandLine::Raw);
+        setCommandLine(cmd);
 
-        debuggee.command.setArguments(arguments);
-        debuggee.device.reset();
-        doStart(debuggee);
+        forceRunOnHost();
     });
 }
 
