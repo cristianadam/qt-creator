@@ -26,6 +26,7 @@
 #include "environment.h"
 
 #include "algorithm.h"
+#include "fileutils.h"
 #include "qtcassert.h"
 
 #include <QDebug>

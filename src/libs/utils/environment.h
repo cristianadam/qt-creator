@@ -25,13 +25,12 @@
 
 #pragma once
 
-#include "fileutils.h"
-#include "hostosinfo.h"
-#include "namevaluedictionary.h"
-#include "namevalueitem.h"
-#include "optional.h"
+#include "utils_global.h"
 
-#include <QStringList>
+#include "environmentfwd.h"
+#include "filepath.h"
+#include "namevaluedictionary.h"
+#include "optional.h"
 
 #include <functional>
 
