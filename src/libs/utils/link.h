@@ -25,21 +25,22 @@
 
 #pragma once
 
+#include "utils_global.h"
+
 #include "filepath.h"
 #include "porting.h"
 
+#include <QMetaType>
 #include <QString>
-#include <qmetatype.h>
 
 #include <functional>
-
 
 namespace Utils {
 
 class QTCREATOR_UTILS_EXPORT Link
 {
 public:
-    Link(const Utils::FilePath &filePath = Utils::FilePath(), int line = 0, int column = 0)
+    Link(const FilePath &filePath = FilePath(), int line = 0, int column = 0)
         : targetFilePath(filePath)
         , targetLine(line)
         , targetColumn(column)
@@ -71,7 +72,7 @@ public:
     int linkTextStart = -1;
     int linkTextEnd = -1;
 
-    Utils::FilePath targetFilePath;
+    FilePath targetFilePath;
     int targetLine;
     int targetColumn;
 };
