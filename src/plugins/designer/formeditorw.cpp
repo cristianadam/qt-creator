@@ -271,6 +271,8 @@ FormEditorData::FormEditorData() :
     });
 
     m_xmlEditorFactory = new FormWindowEditorFactory;
+
+    qDebug() << m_formeditor->findChildren<QAction *>();
 }
 
 FormEditorData::~FormEditorData()
@@ -376,6 +378,8 @@ void FormEditorData::fullInit()
                 formEditorPlugin->initialize(m_formeditor);
         }
     }
+
+    qDebug() << m_integration->findChildren<QAction *>();
 
     if (m_actionAboutPlugins)
         m_actionAboutPlugins->setEnabled(true);
