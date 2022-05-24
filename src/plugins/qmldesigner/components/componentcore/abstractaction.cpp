@@ -25,6 +25,7 @@
 
 #include "abstractaction.h"
 
+#include <utils/filepath.h>
 #include <utils/icon.h>
 
 namespace QmlDesigner {

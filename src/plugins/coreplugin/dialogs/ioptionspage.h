@@ -27,6 +27,7 @@
 
 #include <coreplugin/core_global.h>
 
+#include <utils/filepath.h>
 #include <utils/icon.h>
 #include <utils/id.h>
 

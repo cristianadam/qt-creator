@@ -24,8 +24,10 @@
 ****************************************************************************/
 
 #include "actionhandler.h"
+
 #include "mytypes.h"
 
+#include <utils/filepath.h>
 #include <utils/utilsicons.h>
 
 #include <QAction>

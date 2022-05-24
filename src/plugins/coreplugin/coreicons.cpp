@@ -25,6 +25,8 @@
 
 #include "coreicons.h"
 
+#include <utils/filepath.h>
+
 using namespace Utils;
 
 namespace Core {

@@ -27,8 +27,9 @@
 #include "qtcassert.h"
 #include "stylehelper.h"
 
-#include <utils/icon.h>
-#include <utils/theme/theme.h>
+#include "filepath.h"
+#include "icon.h"
+#include "theme/theme.h"
 
 #include <QHBoxLayout>
 #include <QMenu>

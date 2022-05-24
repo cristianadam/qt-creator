@@ -25,6 +25,8 @@
 
 #include "utilsicons.h"
 
+#include "filepath.h"
+
 namespace Utils {
 namespace Icons {
 

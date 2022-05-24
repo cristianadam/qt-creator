@@ -25,9 +25,9 @@
 
 #pragma once
 
-#include "fileutils.h"
-#include "theme/theme.h"
 #include "utils_global.h"
+
+#include "theme/theme.h"
 
 #include <QIcon>
 #include <QPair>
@@ -38,6 +38,8 @@ QT_FORWARD_DECLARE_CLASS(QPixmap)
 QT_FORWARD_DECLARE_CLASS(QString)
 
 namespace Utils {
+
+class FilePath;
 
 using IconMaskAndColor = QPair<FilePath, Theme::Color>;
 

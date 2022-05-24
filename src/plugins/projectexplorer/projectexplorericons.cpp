@@ -25,6 +25,8 @@
 
 #include "projectexplorericons.h"
 
+#include <utils/filepath.h>
+
 using namespace Utils;
 
 namespace ProjectExplorer {

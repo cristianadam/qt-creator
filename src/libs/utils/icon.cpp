@@ -24,6 +24,7 @@
 ****************************************************************************/
 
 #include "algorithm.h"
+#include "filepath.h"
 #include "icon.h"
 #include "qtcassert.h"
 #include "theme/theme.h"
@@ -34,6 +35,7 @@
 #include <QIcon>
 #include <QImage>
 #include <QPainter>
+#include <QWidget>
 
 namespace Utils {
 

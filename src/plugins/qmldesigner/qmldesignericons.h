@@ -25,6 +25,7 @@
 
 #pragma once
 
+#include <utils/filepath.h>
 #include <utils/icon.h>
 
 namespace QmlDesigner {

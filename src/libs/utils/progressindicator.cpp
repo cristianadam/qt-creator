@@ -25,8 +25,10 @@
 
 #include "progressindicator.h"
 
+#include "filepath.h"
 #include "icon.h"
 #include "qtcassert.h"
+#include "theme/theme.h"
 
 #include <QPainter>
 
