@@ -905,13 +905,13 @@ DebuggerRunTool::DebuggerRunTool(RunControl *runControl, AllowTerminal allowTerm
         }
     }
 
-    Runnable inferior = runnable();
     const FilePath &debuggerExecutable = m_runParameters.debugger.command.executable();
-    inferior.command.setExecutable(inferior.command.executable().onDevice(debuggerExecutable));
-    inferior.workingDirectory = inferior.workingDirectory.onDevice(debuggerExecutable);
+    m_runParameters.inferior.command.setExecutable(commandLine().executable().onDevice(debuggerExecutable));
+    m_runParameters.inferior.workingDirectory = workingDirectory().onDevice(debuggerExecutable);
     // Normalize to work around QTBUG-17529 (QtDeclarative fails with 'File name case mismatch'...)
-    inferior.workingDirectory = inferior.workingDirectory.normalizedPathName();
-    m_runParameters.inferior = inferior;
+    m_runParameters.inferior.workingDirectory = m_runParameters.inferior.workingDirectory.normalizedPathName();
+    m_runParameters.inferior.environment = environment();
+    m_runParameters.inferior.extraData = extraData();
 
     setUseTerminal(allowTerminal == DoAllowTerminal && m_runParameters.useTerminal);
 

@@ -124,7 +124,7 @@ void ValgrindToolRunner::stop()
 
 FilePath ValgrindToolRunner::executable() const
 {
-    return runnable().command.executable();
+    return commandLine().executable();
 }
 
 QStringList ValgrindToolRunner::genericToolArguments() const

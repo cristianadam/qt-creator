@@ -74,7 +74,7 @@ CallgrindToolRunner::CallgrindToolRunner(RunControl *runControl)
     m_controller.setValgrindRunnable(runnable());
 
     static int fileCount = 100;
-    m_valgrindOutputFile = runnable().workingDirectory / QString("callgrind.out.f%1").arg(++fileCount);
+    m_valgrindOutputFile = workingDirectory() / QString("callgrind.out.f%1").arg(++fileCount);
     m_controller.setValgrindOutputFile(m_valgrindOutputFile);
 
     setupCallgrindRunner(this);
