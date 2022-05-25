@@ -49,7 +49,9 @@ public:
     ~ValgrindRunner() override;
 
     void setValgrindCommand(const Utils::CommandLine &command);
-    void setDebuggee(const ProjectExplorer::Runnable &debuggee);
+    void setDebuggeeCommandLine(const Utils::CommandLine &debuggee);
+    void setDebuggeeWorkingDirectory(const Utils::FilePath &workingDir);
+    void setDebuggeeEnvironment(const Utils::Environment &env);
     void setProcessChannelMode(QProcess::ProcessChannelMode mode);
     void setLocalServerAddress(const QHostAddress &localServerAddress);
     void setDevice(const ProjectExplorer::IDeviceConstPtr &device);

@@ -25,7 +25,6 @@
 
 #include "callgrindengine.h"
 
-#include "callgrindtool.h"
 #include "valgrindsettings.h"
 
 #include <valgrind/callgrind/callgrindcontroller.h>
@@ -71,7 +70,9 @@ CallgrindToolRunner::CallgrindToolRunner(RunControl *runControl)
         triggerParse();
     });
 
-    m_controller.setValgrindRunnable(runnable());
+    m_controller.setValgrindCommandLine(commandLine());
+    m_controller.setValgrindWorkingDirectory(workingDirectory());
+    m_controller.setValgrindEnvironment(environment());
 
     static int fileCount = 100;
     m_valgrindOutputFile = workingDirectory() / QString("callgrind.out.f%1").arg(++fileCount);

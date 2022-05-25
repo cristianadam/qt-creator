@@ -60,7 +60,9 @@ public:
      */
     void getLocalDataFile();
     void setValgrindPid(qint64 pid);
-    void setValgrindRunnable(const ProjectExplorer::Runnable &runnable);
+    void setValgrindCommandLine(const Utils::CommandLine &cmd) { m_valgrindCommandLine = cmd; }
+    void setValgrindWorkingDirectory(const Utils::FilePath &wd) { m_valgrindWorkingDirectory = wd; };
+    void setValgrindEnvironment(const Utils::Environment &env) { m_valgrindEnvironment = env; };
     void setValgrindOutputFile(const Utils::FilePath &output) { m_valgrindOutputFile = output; }
 
 signals:
@@ -73,7 +75,10 @@ private:
     void controllerProcessDone();
 
     std::unique_ptr<Utils::QtcProcess> m_controllerProcess;
-    ProjectExplorer::Runnable m_valgrindRunnable;
+    Utils::CommandLine m_valgrindCommandLine;
+    Utils::FilePath m_valgrindWorkingDirectory;
+    Utils::Environment m_valgrindEnvironment;
+
     qint64 m_pid = 0;
 
     Option m_lastOption = Unknown;

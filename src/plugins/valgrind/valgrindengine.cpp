@@ -91,7 +91,9 @@ void ValgrindToolRunner::start()
 
     m_runner.setValgrindCommand(valgrind);
     m_runner.setDevice(device());
-    m_runner.setDebuggee(runnable());
+    m_runner.setDebuggeeCommandLine(commandLine());
+    m_runner.setDebuggeeWorkingDirectory(workingDirectory());
+    m_runner.setDebuggeeEnvironment(environment());
 
     if (auto aspect = runControl()->aspect<TerminalAspect>())
         m_runner.setUseTerminal(aspect->useTerminal);

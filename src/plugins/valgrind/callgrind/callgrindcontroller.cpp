@@ -113,10 +113,10 @@ void CallgrindController::run(Option option)
             this, &CallgrindController::controllerProcessDone);
 
     const FilePath control =
-            FilePath(CALLGRIND_CONTROL_BINARY).onDevice(m_valgrindRunnable.command.executable());
+            FilePath(CALLGRIND_CONTROL_BINARY).onDevice(m_valgrindCommandLine.executable());
     m_controllerProcess->setCommand({control, {toOptionString(option), QString::number(m_pid)}});
-    m_controllerProcess->setWorkingDirectory(m_valgrindRunnable.workingDirectory);
-    m_controllerProcess->setEnvironment(m_valgrindRunnable.environment);
+    m_controllerProcess->setWorkingDirectory(m_valgrindWorkingDirectory);
+    m_controllerProcess->setEnvironment(m_valgrindEnvironment);
     m_controllerProcess->start();
 }
 
@@ -182,11 +182,6 @@ void CallgrindController::cleanupTempFile()
         m_hostOutputFile.removeFile();
 
     m_hostOutputFile.clear();
-}
-
-void CallgrindController::setValgrindRunnable(const Runnable &runnable)
-{
-    m_valgrindRunnable = runnable;
 }
 
 } // namespace Callgrind

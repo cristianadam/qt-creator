@@ -499,12 +499,10 @@ void ValgrindMemcheckParserTest::testRealValgrind()
     QString executable = QProcessEnvironment::systemEnvironment().value("VALGRIND_TEST_BIN", fakeValgrindExecutable());
     qDebug() << "running exe:" << executable << " HINT: set VALGRIND_TEST_BIN to change this";
 
-    ProjectExplorer::Runnable debuggee;
-    debuggee.command.setExecutable(FilePath::fromString(executable));
-    debuggee.environment = sysEnv;
     ValgrindRunner runner;
     runner.setValgrindCommand({"valgrind", {}});
-    runner.setDebuggee(debuggee);
+    runner.setDebuggeeCommandLine({FilePath::fromString(executable), {}});
+    runner.setDebuggeeEnvironment(sysEnv);
     runner.setDevice(ProjectExplorer::DeviceManager::instance()->defaultDevice(
                          ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE));
     RunnerDumper dumper(&runner);
@@ -536,14 +534,10 @@ void ValgrindMemcheckParserTest::testValgrindStartError()
     QFETCH(QString, debuggee);
     QFETCH(QString, debuggeeArgs);
 
-    ProjectExplorer::Runnable debuggeeExecutable;
-    debuggeeExecutable.command.setExecutable(FilePath::fromString(debuggee));
-    debuggeeExecutable.command.setArguments(debuggeeArgs);
-    debuggeeExecutable.environment = Utils::Environment::systemEnvironment();
-
     ValgrindRunner runner;
     runner.setValgrindCommand({FilePath::fromString(valgrindExe), valgrindArgs});
-    runner.setDebuggee(debuggeeExecutable);
+    runner.setDebuggeeCommandLine({FilePath::fromString(debuggee), debuggeeArgs, CommandLine::Raw});
+    runner.setDebuggeeEnvironment(Environment::systemEnvironment());
     runner.setDevice(ProjectExplorer::DeviceManager::instance()->defaultDevice(
                          ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE));
     RunnerDumper dumper(&runner);

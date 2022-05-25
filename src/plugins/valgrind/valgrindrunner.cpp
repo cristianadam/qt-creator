@@ -55,7 +55,7 @@ public:
     void findPidProcessDone();
 
     ValgrindRunner *q;
-    Runnable m_debuggee;
+    CommandLine m_debuggeeCommand;
     QtcProcess m_valgrindProcess;
     IDevice::ConstPtr m_device;
 
@@ -137,13 +137,11 @@ bool ValgrindRunner::Private::run()
         cmd.addArg("--dsymutil=yes");
     }
 
-    cmd.addCommandLineAsArgs(m_debuggee.command);
+    cmd.addCommandLineAsArgs(m_debuggeeCommand);
 
     emit q->valgrindExecuted(cmd.toUserOutput());
 
     m_valgrindProcess.setCommand(cmd);
-    m_valgrindProcess.setWorkingDirectory(m_debuggee.workingDirectory);
-    m_valgrindProcess.setEnvironment(m_debuggee.environment);
     m_valgrindProcess.start();
 
     return true;
@@ -187,7 +185,7 @@ void ValgrindRunner::Private::remoteProcessStarted()
            " | grep '%1.*%2'"      // find valgrind process that runs with our exec
            " | awk '\\$5 ~ /^%3/"  // 5th column must start with valgrind process
            " {print \\$1;}'"       // print 1st then (with PID)
-           "\"").arg(proc, m_debuggee.command.executable().fileName(), procEscaped));
+           "\"").arg(proc, m_debuggeeCommand.executable().fileName(), procEscaped));
 
     m_findPID.setCommand(cmd);
 
@@ -236,14 +234,24 @@ ValgrindRunner::~ValgrindRunner()
     d = nullptr;
 }
 
-void ValgrindRunner::setValgrindCommand(const Utils::CommandLine &command)
+void ValgrindRunner::setValgrindCommand(const CommandLine &command)
 {
     d->m_valgrindCommand = command;
 }
 
-void ValgrindRunner::setDebuggee(const Runnable &debuggee)
+void ValgrindRunner::setDebuggeeCommandLine(const CommandLine &debuggee)
 {
-    d->m_debuggee = debuggee;
+    d->m_debuggeeCommand = debuggee;
+}
+
+void ValgrindRunner::setDebuggeeWorkingDirectory(const FilePath &workingDir)
+{
+    d->m_valgrindProcess.setWorkingDirectory(workingDir);
+}
+
+void ValgrindRunner::setDebuggeeEnvironment(const Environment &env)
+{
+    d->m_valgrindProcess.setEnvironment(env);
 }
 
 void ValgrindRunner::setProcessChannelMode(QProcess::ProcessChannelMode mode)
