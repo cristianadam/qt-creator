@@ -3936,7 +3936,7 @@ void ProjectExplorerPluginPrivate::openTerminalHereWithRunEnv()
     QTC_ASSERT(runConfig, return);
 
     const Runnable runnable = runConfig->runnable();
-    IDevice::ConstPtr device = runnable.device;
+    IDevice::ConstPtr device = DeviceManager::deviceForPath(runnable.command.executable());
     if (!device)
         device = DeviceKitAspect::device(target->kit());
     QTC_ASSERT(device && device->canOpenTerminal(), return);
