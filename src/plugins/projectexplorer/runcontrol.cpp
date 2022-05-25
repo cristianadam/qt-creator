@@ -323,7 +323,6 @@ public:
     QMap<Utils::Id, QVariantMap> settingsData;
     Utils::Id runConfigId;
     BuildTargetInfo buildTargetInfo;
-    BuildConfiguration::BuildType buildType = BuildConfiguration::Unknown;
     FilePath buildDirectory;
     Environment buildEnvironment;
     Kit *kit = nullptr; // Not owned.
@@ -430,7 +429,6 @@ void RunControl::setTarget(Target *target)
         d->buildTargetInfo = target->buildTarget(d->buildKey);
 
     if (auto bc = target->activeBuildConfiguration()) {
-        d->buildType = bc->buildType();
         d->buildDirectory = bc->buildDirectory();
         d->buildEnvironment = bc->environment();
     }
@@ -973,11 +971,6 @@ QVariantMap RunControl::settingsData(Id id) const
 QString RunControl::buildKey() const
 {
     return d->buildKey;
-}
-
-BuildConfiguration::BuildType RunControl::buildType() const
-{
-    return d->buildType;
 }
 
 FilePath RunControl::buildDirectory() const
