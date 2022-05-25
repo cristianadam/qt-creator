@@ -26,7 +26,6 @@
 
 #include "valgrindengine.h"
 #include "valgrindsettings.h"
-#include "valgrindplugin.h"
 
 #include <debugger/analyzer/analyzermanager.h>
 
@@ -90,10 +89,10 @@ void ValgrindToolRunner::start()
     valgrind.addArgs(toolArguments());
 
     m_runner.setValgrindCommand(valgrind);
-    m_runner.setDevice(device());
-    m_runner.setDebuggeeCommandLine(commandLine());
-    m_runner.setDebuggeeWorkingDirectory(workingDirectory());
-    m_runner.setDebuggeeEnvironment(environment());
+    m_runner.setDevice(runControl()->device());
+    m_runner.setDebuggeeCommandLine(runControl()->commandLine());
+    m_runner.setDebuggeeWorkingDirectory(runControl()->workingDirectory());
+    m_runner.setDebuggeeEnvironment(runControl()->environment());
 
     if (auto aspect = runControl()->aspect<TerminalAspect>())
         m_runner.setUseTerminal(aspect->useTerminal);
@@ -126,7 +125,7 @@ void ValgrindToolRunner::stop()
 
 FilePath ValgrindToolRunner::executable() const
 {
-    return commandLine().executable();
+    return runControl()->commandLine().executable();
 }
 
 QStringList ValgrindToolRunner::genericToolArguments() const

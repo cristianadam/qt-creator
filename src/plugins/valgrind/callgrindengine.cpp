@@ -70,12 +70,12 @@ CallgrindToolRunner::CallgrindToolRunner(RunControl *runControl)
         triggerParse();
     });
 
-    m_controller.setValgrindCommandLine(commandLine());
-    m_controller.setValgrindWorkingDirectory(workingDirectory());
-    m_controller.setValgrindEnvironment(environment());
+    m_controller.setValgrindCommandLine(runControl->commandLine());
+    m_controller.setValgrindWorkingDirectory(runControl->workingDirectory());
+    m_controller.setValgrindEnvironment(runControl->environment());
 
     static int fileCount = 100;
-    m_valgrindOutputFile = workingDirectory() / QString("callgrind.out.f%1").arg(++fileCount);
+    m_valgrindOutputFile = runControl->workingDirectory() / QString("callgrind.out.f%1").arg(++fileCount);
     m_controller.setValgrindOutputFile(m_valgrindOutputFile);
 
     setupCallgrindRunner(this);

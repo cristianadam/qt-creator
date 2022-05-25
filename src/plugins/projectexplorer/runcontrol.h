@@ -95,11 +95,6 @@ public:
     void appendMessage(const QString &msg, Utils::OutputFormat format, bool appendNewLine = true);
     IDeviceConstPtr device() const;
 
-    const Utils::CommandLine &commandLine() const;
-    const Utils::FilePath &workingDirectory() const;
-    const Utils::Environment &environment() const;
-    const QVariantHash &extraData() const;
-
     // States
     void initiateStart();
     void reportStarted();

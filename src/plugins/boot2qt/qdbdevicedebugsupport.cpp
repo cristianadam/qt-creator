@@ -116,11 +116,11 @@ public:
         }
         cmd.addArg("--port-range");
         cmd.addArg(QString("%1-%2").arg(lowerPort).arg(upperPort));
-        cmd.addCommandLineAsArgs(commandLine());
+        cmd.addCommandLineAsArgs(runControl()->commandLine());
 
         m_launcher.setCommand(cmd);
-        m_launcher.setWorkingDirectory(workingDirectory());
-        m_launcher.setEnvironment(environment());
+        m_launcher.setWorkingDirectory(runControl()->workingDirectory());
+        m_launcher.setEnvironment(runControl()->environment());
         m_launcher.start();
     }
 

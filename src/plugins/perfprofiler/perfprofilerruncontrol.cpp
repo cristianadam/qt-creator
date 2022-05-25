@@ -147,7 +147,7 @@ public:
         CommandLine cmd({device()->filePath("perf"), {"record"}});
         cmd.addArgs(m_perfRecordArguments);
         cmd.addArgs({"-o", "-", "--"});
-        cmd.addCommandLineAsArgs(commandLine(), CommandLine::Raw);
+        cmd.addCommandLineAsArgs(runControl()->commandLine(), CommandLine::Raw);
 
         m_process->setCommand(cmd);
         m_process->start();

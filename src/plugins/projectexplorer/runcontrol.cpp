@@ -1829,26 +1829,6 @@ IDevice::ConstPtr RunWorker::device() const
     return d->runControl->device();
 }
 
-const CommandLine &RunWorker::commandLine() const
-{
-    return d->runControl->commandLine();
-}
-
-const FilePath &RunWorker::workingDirectory() const
-{
-    return d->runControl->workingDirectory();
-}
-
-const Environment &RunWorker::environment() const
-{
-    return d->runControl->environment();
-}
-
-const QVariantHash &RunWorker::extraData() const
-{
-    return d->runControl->extraData();
-}
-
 void RunWorker::addStartDependency(RunWorker *dependency)
 {
     d->startDependencies.append(dependency);
