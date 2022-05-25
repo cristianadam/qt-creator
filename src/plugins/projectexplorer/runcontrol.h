@@ -96,6 +96,11 @@ public:
     IDeviceConstPtr device() const;
     const Runnable &runnable() const;
 
+    const Utils::CommandLine &commandLine() const;
+    const Utils::FilePath &workingDirectory() const;
+    const Utils::Environment &environment() const;
+    const QVariantHash &extraData() const;
+
     // States
     void initiateStart();
     void reportStarted();
