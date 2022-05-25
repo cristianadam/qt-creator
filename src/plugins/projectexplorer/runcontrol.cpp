@@ -1398,7 +1398,7 @@ void SimpleTargetRunnerPrivate::handleStandardError()
 
 void SimpleTargetRunnerPrivate::start()
 {
-    m_isLocal = m_runnable.device.isNull() || m_runnable.device.dynamicCast<const DesktopDevice>();
+    m_isLocal = !m_runnable.command.executable().needsDevice();
 
     m_resultData = {};
 
@@ -1500,8 +1500,7 @@ void SimpleTargetRunnerPrivate::forwardDone()
 
 void SimpleTargetRunnerPrivate::forwardStarted()
 {
-    const bool isDesktop = m_runnable.device.isNull()
-                        || m_runnable.device.dynamicCast<const DesktopDevice>();
+    const bool isDesktop = !m_runnable.command.executable().needsDevice();
     if (isDesktop) {
         // Console processes only know their pid after being started
         ProcessHandle pid{privateApplicationPID()};
@@ -1535,10 +1534,9 @@ void SimpleTargetRunner::start()
     d->m_runAsRoot = runAsRoot;
 
     const QString msg = RunControl::tr("Starting %1...").arg(d->m_runnable.command.toUserOutput());
-    appendMessage(msg, Utils::NormalMessageFormat);
+    appendMessage(msg, NormalMessageFormat);
 
-    const bool isDesktop = d->m_runnable.device.isNull()
-                        || d->m_runnable.device.dynamicCast<const DesktopDevice>();
+    const bool isDesktop = !d->m_runnable.command.executable().needsDevice();
     if (isDesktop && d->m_runnable.command.isEmpty()) {
         reportFailure(RunControl::tr("No executable specified."));
         return;
