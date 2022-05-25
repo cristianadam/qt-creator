@@ -232,20 +232,42 @@ def substituteCdb(settingsDir):
     test.log("Injected architecture '%s' and bitness '%s' in cdb path..." % (architecture, bitness))
 
 
-def substituteMsvcPaths(settingsDir):
+# in fact we should tweak this even more - there is always the possibility to only have the latest
+# VS installed and the others may be just provided by additional build tools
+def substituteMsvcPaths(settingsDir, targetBitness=64):
     for msvcFlavor in ["Community", "BuildTools"]:
         try:
             msvc2017Path = os.path.join("C:\\Program Files (x86)", "Microsoft Visual Studio",
                                         "2017", msvcFlavor, "VC", "Tools", "MSVC")
             msvc2017Path = os.path.join(msvc2017Path, os.listdir(msvc2017Path)[0], "bin",
-                                        "HostX64", "x64")
+                                        "HostX64", targetArch)
             __substitute__(os.path.join(settingsDir, "QtProject", 'qtcreator', 'toolchains.xml'),
-                           "SQUISH_MSVC2017_PATH", msvc2017Path)
+                           "SQUISH_MSVC2017_%d_PATH" % targetBitness, msvc2017Path)
             return
         except:
             continue
     test.warning("PATH variable for MSVC2017 could not be set, some tests will fail.",
                  "Please make sure that MSVC2017 is installed correctly.")
+
+
+def prependWindowsKit(settingsDir, targetBitness=64):
+    targetArch = "x64" if targetBitness == 64 else "x86"
+    profilesPath = os.path.join(settingsDir, 'QtProject', 'qtcreator', 'profiles.xml')
+    winkits = os.path.join("C:\\Program Files (x86)", "Windows Kits", "10")
+    if not os.path.exists(winkits):
+        __substitute__(profilesPath, "SQUISH_ENV_MODIFICATION", "")
+        return
+    possibleVersions = os.listdir(os.path.join(winkits, 'bin'))
+    possibleVersions.reverse() # prefer higher versions
+    for version in possibleVersions:
+        if not version.startswith("10"):
+            continue
+        toolsPath = os.path.join(winkits, 'bin', version, targetArch)
+        if os.path.exists(os.path.join(toolsPath, 'rc.exe')):
+            __substitute__(profilesPath, "SQUISH_ENV_MODIFICATION", "PATH=+%s" % toolsPath)
+            return
+    test.warning("Windows Kit path could not be added, some tests mail fail.")
+    __substitute__(profilesPath, "SQUISH_ENV_MODIFICATION", "")
 
 
 def __guessABI__(supportedABIs, use64Bit):
@@ -342,7 +364,9 @@ def copySettingsToTmpDir(destination=None, omitFiles=[]):
         substituteDefaultCompiler(tmpSettingsDir)
     elif platform.system() in ('Windows', 'Microsoft'):
         substituteCdb(tmpSettingsDir)
-        substituteMsvcPaths(tmpSettingsDir)
+        substituteMsvcPaths(tmpSettingsDir, 64)
+        substituteMsvcPaths(tmpSettingsDir, 32)
+        prependWindowsKit(tmpSettingsDir, 32)
     substituteUnchosenTargetABIs(tmpSettingsDir)
     SettingsPath = ['-settingspath', '"%s"' % tmpSettingsDir]
 
