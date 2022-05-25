@@ -120,8 +120,8 @@ static int queue(const QList<Project *> &projects, const QList<Id> &stepIds,
                 return projects.contains(rc->project());
             case StopBeforeBuild::SameBuildDir:
                 return Utils::contains(projects, [rc, configSelection](Project *p) {
-                    IDevice::ConstPtr device =
-                        DeviceManager::deviceForPath(rc->runnable().command.executable());
+                    const FilePath executable = rc->commandLine().executable();
+                    IDevice::ConstPtr device = DeviceManager::deviceForPath(executable);
                     for (const Target * const t : targetsForSelection(p, configSelection)) {
                         if (device.isNull())
                             device = DeviceKitAspect::device(t->kit());
@@ -129,7 +129,7 @@ static int queue(const QList<Project *> &projects, const QList<Id> &stepIds,
                             continue;
                         for (const BuildConfiguration * const bc
                              : buildConfigsForSelection(t, configSelection)) {
-                            if (rc->runnable().command.executable().isChildOf(bc->buildDirectory()))
+                            if (executable.isChildOf(bc->buildDirectory()))
                                 return true;
                         }
                     }

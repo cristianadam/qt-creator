@@ -44,6 +44,7 @@
 
 #include <extensionsystem/invoker.h>
 #include <extensionsystem/pluginmanager.h>
+
 #include <utils/algorithm.h>
 #include <utils/outputformatter.h>
 #include <utils/qtcassert.h>
@@ -65,6 +66,8 @@
 #include <QVBoxLayout>
 
 static Q_LOGGING_CATEGORY(appOutputLog, "qtc.projectexplorer.appoutput", QtWarningMsg);
+
+using namespace Utils;
 
 namespace ProjectExplorer {
 namespace Internal {
@@ -403,14 +406,15 @@ void AppOutputPane::createNewOutputWindow(RunControl *rc)
             });
 
     // First look if we can reuse a tab
-    const Runnable thisRunnable = rc->runnable();
+    const CommandLine thisCommand = rc->commandLine();
+    const FilePath thisWorkingDirectory = rc->workingDirectory();
+    const Environment thisEnvironment = rc->environment();
     const int tabIndex = Utils::indexOf(m_runControlTabs, [&](const RunControlTab &tab) {
         if (!tab.runControl || tab.runControl->isRunning())
             return false;
-        const Runnable otherRunnable = tab.runControl->runnable();
-        return thisRunnable.command == otherRunnable.command
-                && thisRunnable.workingDirectory == otherRunnable.workingDirectory
-                && thisRunnable.environment == otherRunnable.environment;
+        return thisCommand == tab.runControl->commandLine()
+                && thisWorkingDirectory == tab.runControl->workingDirectory()
+                && thisEnvironment == tab.runControl->environment();
     });
     if (tabIndex != -1) {
         RunControlTab &tab = m_runControlTabs[tabIndex];
