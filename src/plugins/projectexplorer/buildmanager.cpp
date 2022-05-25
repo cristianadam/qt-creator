@@ -30,6 +30,7 @@
 #include "buildsystem.h"
 #include "compileoutputwindow.h"
 #include "deployconfiguration.h"
+#include "devicesupport/devicemanager.h"
 #include "kit.h"
 #include "kitinformation.h"
 #include "project.h"
@@ -46,8 +47,9 @@
 #include <coreplugin/icore.h>
 #include <coreplugin/progressmanager/futureprogress.h>
 #include <coreplugin/progressmanager/progressmanager.h>
+
 #include <extensionsystem/pluginmanager.h>
-#include <projectexplorer/devicesupport/idevice.h>
+
 #include <utils/algorithm.h>
 #include <utils/outputformatter.h>
 #include <utils/runextensions.h>
@@ -118,7 +120,8 @@ static int queue(const QList<Project *> &projects, const QList<Id> &stepIds,
                 return projects.contains(rc->project());
             case StopBeforeBuild::SameBuildDir:
                 return Utils::contains(projects, [rc, configSelection](Project *p) {
-                    IDevice::ConstPtr device = rc->runnable().device;
+                    IDevice::ConstPtr device =
+                        DeviceManager::deviceForPath(rc->runnable().command.executable());
                     for (const Target * const t : targetsForSelection(p, configSelection)) {
                         if (device.isNull())
                             device = DeviceKitAspect::device(t->kit());
