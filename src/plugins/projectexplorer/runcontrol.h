@@ -94,7 +94,6 @@ public:
     // Part of read-only interface of RunControl for convenience.
     void appendMessage(const QString &msg, Utils::OutputFormat format, bool appendNewLine = true);
     IDeviceConstPtr device() const;
-    const Runnable &runnable() const;
 
     const Utils::CommandLine &commandLine() const;
     const Utils::FilePath &workingDirectory() const;
@@ -247,8 +246,6 @@ public:
     void setupFormatter(Utils::OutputFormatter *formatter) const;
     Utils::Id runMode() const;
 
-    const Runnable &runnable() const;
-
     const Utils::CommandLine &commandLine() const;
     void setCommandLine(const Utils::CommandLine &command);
 
@@ -318,9 +315,6 @@ protected:
 private:
     void start() final;
     void stop() final;
-
-    const Runnable &runnable() const = delete;
-    void setRunnable(const Runnable &) = delete;
 
     const std::unique_ptr<Internal::SimpleTargetRunnerPrivate> d;
 };

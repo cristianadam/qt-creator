@@ -314,14 +314,17 @@ class RunControlPrivateData
 {
 public:
     QString displayName;
-    Runnable runnable;
+    CommandLine commandLine;
+    FilePath workingDirectory;
+    Environment environment;
+    QVariantHash extraData;
     IDevice::ConstPtr device;
-    Utils::Icon icon;
+    Icon icon;
     const MacroExpander *macroExpander = nullptr;
     AspectContainerData aspectData;
     QString buildKey;
-    QMap<Utils::Id, QVariantMap> settingsData;
-    Utils::Id runConfigId;
+    QMap<Id, QVariantMap> settingsData;
+    Id runConfigId;
     BuildTargetInfo buildTargetInfo;
     FilePath buildDirectory;
     Environment buildEnvironment;
@@ -332,7 +335,7 @@ public:
     std::vector<RunWorkerFactory> m_factories;
 
     // A handle to the actual application process.
-    Utils::ProcessHandle applicationProcessHandle;
+    ProcessHandle applicationProcessHandle;
 
     RunControlState state = RunControlState::Initialized;
 
@@ -393,7 +396,7 @@ public:
 
 using namespace Internal;
 
-RunControl::RunControl(Utils::Id mode) :
+RunControl::RunControl(Id mode) :
     d(std::make_unique<RunControlPrivate>(this,  mode))
 {
 }
@@ -407,8 +410,12 @@ void RunControl::copyDataFromRunControl(RunControl *runControl)
 void RunControl::copyDataFromRunConfiguration(RunConfiguration *runConfig)
 {
     QTC_ASSERT(runConfig, return);
+    const Runnable runnable = runConfig->runnable();
     d->runConfigId = runConfig->id();
-    d->runnable = runConfig->runnable();
+    d->commandLine = runnable.command;
+    d->workingDirectory = runnable.workingDirectory;
+    d->environment = runnable.environment;
+    d->extraData = runnable.extraData;
     d->displayName = runConfig->expandedDisplayName();
     d->buildKey = runConfig->buildKey();
     d->settingsData = runConfig->settingsData();
@@ -445,8 +452,8 @@ void RunControl::setKit(Kit *kit)
     d->kit = kit;
     d->macroExpander = kit->macroExpander();
 
-    if (!d->runnable.command.isEmpty())
-        setDevice(DeviceManager::deviceForPath(d->runnable.command.executable()));
+    if (!d->commandLine.isEmpty())
+        setDevice(DeviceManager::deviceForPath(d->commandLine.executable()));
     else
         setDevice(DeviceKitAspect::device(kit));
 }
@@ -898,49 +905,44 @@ Utils::Id RunControl::runMode() const
     return d->runMode;
 }
 
-const Runnable &RunControl::runnable() const
-{
-    return d->runnable;
-}
-
 const CommandLine &RunControl::commandLine() const
 {
-    return d->runnable.command;
+    return d->commandLine;
 }
 
 void RunControl::setCommandLine(const CommandLine &command)
 {
-    d->runnable.command = command;
+    d->commandLine = command;
 }
 
 const FilePath &RunControl::workingDirectory() const
 {
-    return d->runnable.workingDirectory;
+    return d->workingDirectory;
 }
 
 void RunControl::setWorkingDirectory(const FilePath &workingDirectory)
 {
-    d->runnable.workingDirectory = workingDirectory;
+    d->workingDirectory = workingDirectory;
 }
 
 const Environment &RunControl::environment() const
 {
-    return d->runnable.environment;
+    return d->environment;
 }
 
 void RunControl::setEnvironment(const Environment &environment)
 {
-    d->runnable.environment = environment;
+    d->environment = environment;
 }
 
 const QVariantHash &RunControl::extraData() const
 {
-    return d->runnable.extraData;
+    return d->extraData;
 }
 
 void RunControl::setExtraData(const QVariantHash &extraData)
 {
-    d->runnable.extraData = extraData;
+    d->extraData = extraData;
 }
 
 QString RunControl::displayName() const
@@ -1825,11 +1827,6 @@ void RunWorker::appendMessage(const QString &msg, OutputFormat format, bool appe
 IDevice::ConstPtr RunWorker::device() const
 {
     return d->runControl->device();
-}
-
-const Runnable &RunWorker::runnable() const
-{
-    return d->runControl->runnable();
 }
 
 const CommandLine &RunWorker::commandLine() const
