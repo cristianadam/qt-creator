@@ -27,8 +27,8 @@
 
 #include "buildconfiguration.h"
 #include "customparser.h"
-#include "devicesupport/desktopdevice.h"
-#include "devicesupport/idevice.h"
+#include "devicesupport/devicemanager.h"
+#include "devicesupport/idevicefactory.h"
 #include "devicesupport/sshsettings.h"
 #include "kitinformation.h"
 #include "project.h"
@@ -1426,7 +1426,9 @@ void SimpleTargetRunnerPrivate::start()
     } else {
         QTC_ASSERT(m_state == Inactive, return);
 
-        if (!m_runnable.device) {
+        const IDevice::ConstPtr device =
+                DeviceManager::deviceForPath(m_runnable.command.executable());
+        if (!device) {
             m_resultData.m_errorString = tr("Cannot run: No device.");
             m_resultData.m_error = QProcess::FailedToStart;
             m_resultData.m_exitStatus = QProcess::CrashExit;
@@ -1434,7 +1436,7 @@ void SimpleTargetRunnerPrivate::start()
             return;
         }
 
-        if (!m_runnable.device->isEmptyCommandAllowed() && m_runnable.command.isEmpty()) {
+        if (!device->isEmptyCommandAllowed() && m_runnable.command.isEmpty()) {
             m_resultData.m_errorString = tr("Cannot run: No command given.");
             m_resultData.m_error = QProcess::FailedToStart;
             m_resultData.m_exitStatus = QProcess::CrashExit;
