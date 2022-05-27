@@ -43,15 +43,15 @@ public:
     RemoteLinuxEnvironmentAspectWidget(RemoteLinuxEnvironmentAspect *aspect,
                                        ProjectExplorer::Target *target);
 
-    RemoteLinuxEnvironmentAspect *aspect() const override;
+private:
     QPushButton *fetchButton() const;
 
-private:
     void fetchEnvironment();
     void fetchEnvironmentFinished();
     void fetchEnvironmentError(const QString &error);
     void stopFetchEnvironment();
 
+    RemoteLinuxEnvironmentAspect *m_aspect;
     Internal::RemoteLinuxEnvironmentReader *deviceEnvReader;
 };
 

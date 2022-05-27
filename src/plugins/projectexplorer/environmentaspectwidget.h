@@ -52,9 +52,8 @@ class PROJECTEXPLORER_EXPORT EnvironmentAspectWidget : public QWidget
 public:
     explicit EnvironmentAspectWidget(EnvironmentAspect *aspect, QWidget *additionalWidget = nullptr);
 
-    virtual EnvironmentAspect *aspect() const;
+protected:
     EnvironmentWidget *envWidget() const { return m_environmentWidget; }
-
     QWidget *additionalWidget() const;
 
 private:

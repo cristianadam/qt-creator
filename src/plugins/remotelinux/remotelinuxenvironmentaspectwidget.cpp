@@ -52,8 +52,9 @@ const QString FetchEnvButtonText
 namespace RemoteLinux {
 
 RemoteLinuxEnvironmentAspectWidget::RemoteLinuxEnvironmentAspectWidget
-        (RemoteLinuxEnvironmentAspect *aspect, Target *target) :
-    EnvironmentAspectWidget(aspect, new QPushButton)
+        (RemoteLinuxEnvironmentAspect *aspect, Target *target)
+    : EnvironmentAspectWidget(aspect, new QPushButton)
+    , m_aspect(aspect)
 {
     IDevice::ConstPtr device = DeviceKitAspect::device(target->kit());
 
@@ -85,11 +86,6 @@ RemoteLinuxEnvironmentAspectWidget::RemoteLinuxEnvironmentAspectWidget
     envWidget()->setOpenTerminalFunc(openTerminalFunc);
 }
 
-RemoteLinuxEnvironmentAspect *RemoteLinuxEnvironmentAspectWidget::aspect() const
-{
-    return dynamic_cast<RemoteLinuxEnvironmentAspect *>(EnvironmentAspectWidget::aspect());
-}
-
 QPushButton *RemoteLinuxEnvironmentAspectWidget::fetchButton() const
 {
     return qobject_cast<QPushButton *>(additionalWidget());
@@ -114,7 +110,7 @@ void RemoteLinuxEnvironmentAspectWidget::fetchEnvironmentFinished()
     connect(button, &QPushButton::clicked,
             this, &RemoteLinuxEnvironmentAspectWidget::fetchEnvironment);
     button->setText(FetchEnvButtonText);
-    aspect()->setRemoteEnvironment(deviceEnvReader->remoteEnvironment());
+    m_aspect->setRemoteEnvironment(deviceEnvReader->remoteEnvironment());
 }
 
 void RemoteLinuxEnvironmentAspectWidget::fetchEnvironmentError(const QString &error)
