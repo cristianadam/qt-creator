@@ -44,15 +44,14 @@ public:
                                        ProjectExplorer::Target *target);
 
 private:
-    QPushButton *fetchButton() const;
-
     void fetchEnvironment();
     void fetchEnvironmentFinished();
     void fetchEnvironmentError(const QString &error);
     void stopFetchEnvironment();
 
-    RemoteLinuxEnvironmentAspect *m_aspect;
-    Internal::RemoteLinuxEnvironmentReader *deviceEnvReader;
+    RemoteLinuxEnvironmentAspect *m_aspect = nullptr;
+    Internal::RemoteLinuxEnvironmentReader *deviceEnvReader = nullptr;
+    QPushButton *m_fetchButton = nullptr;
 };
 
 } // namespace RemoteLinux
