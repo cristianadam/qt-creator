@@ -66,22 +66,18 @@ QStringList SshParameters::connectionOptions(const FilePath &binary) const
     if (!userName().isEmpty())
         args.append({"-o", "User=" + userName()});
 
-    const bool keyOnly = authenticationType ==
-            SshParameters::AuthenticationTypeSpecificKey;
-    if (keyOnly) {
-        args << "-o" << "IdentitiesOnly=yes";
-        args << "-i" << privateKeyFile.path();
-    }
-    if (keyOnly || SshSettings::askpassFilePath().isEmpty())
-        args << "-o" << "BatchMode=yes";
+    const bool keyOnly = authenticationType == SshParameters::AuthenticationTypeSpecificKey;
+    if (keyOnly)
+        args.append({"-o", "IdentitiesOnly=yes", "-i", privateKeyFile.path()});
 
-    bool useTimeout = timeout != 0;
-    if (useTimeout && HostOsInfo::isWindowsHost()
-            && binary.toString().toLower().contains("/system32/")) {
-        useTimeout = false;
-    }
+    const QString batchModeEnabled = (keyOnly || SshSettings::askpassFilePath().isEmpty())
+            ? QLatin1String("yes") : QLatin1String("no");
+    args.append({"-o", "BatchMode=" + batchModeEnabled});
+
+    const bool useTimeout = timeout != 0 && (!HostOsInfo::isWindowsHost()
+            || !binary.toString().toLower().contains("/system32/"));
     if (useTimeout)
-        args << "-o" << ("ConnectTimeout=" + QString::number(timeout));
+        args.append({"-o", "ConnectTimeout=" + QString::number(timeout)});
 
     return args;
 }
