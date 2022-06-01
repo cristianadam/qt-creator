@@ -224,8 +224,7 @@ void ClangModelManagerSupport::globalRename(const CppEditor::CursorInEditor &cur
                                   CppModelManager::Backend::Builtin);
 }
 
-void ClangModelManagerSupport::findUsages(const CppEditor::CursorInEditor &cursor,
-                                   CppEditor::UsagesCallback &&callback) const
+void ClangModelManagerSupport::findUsages(const CppEditor::CursorInEditor &cursor) const
 {
     if (ClangdClient * const client = clientForFile(cursor.filePath());
             client && client->isFullyIndexed()) {
@@ -235,7 +234,7 @@ void ClangModelManagerSupport::findUsages(const CppEditor::CursorInEditor &curso
 
         return;
     }
-    CppModelManager::findUsages(cursor, std::move(callback), CppModelManager::Backend::Builtin);
+    CppModelManager::findUsages(cursor, CppModelManager::Backend::Builtin);
 }
 
 void ClangModelManagerSupport::switchHeaderSource(const Utils::FilePath &filePath, bool inNextSplit)
