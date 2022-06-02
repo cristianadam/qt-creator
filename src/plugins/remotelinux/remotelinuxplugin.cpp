@@ -74,12 +74,16 @@ public:
     RemoteLinuxRunConfigurationFactory runConfigurationFactory;
     RemoteLinuxCustomRunConfigurationFactory customRunConfigurationFactory;
     RemoteLinuxDeployConfigurationFactory deployConfigurationFactory;
+
     GenericDeployStepFactory<TarPackageCreationStep> tarPackageCreationStepFactory;
     TarPackageDeployStepFactory tarPackageDeployStepFactory;
     GenericDeployStepFactory<GenericDirectUploadStep> genericDirectUploadStepFactory;
     GenericDeployStepFactory<RsyncDeployStep> rsyncDeployStepFactory;
     CustomCommandDeployStepFactory customCommandDeployStepFactory;
-    GenericDeployStepFactory<CheckForFreeDiskSpaceStep> checkForFreeDiskSpaceStepFactory;
+
+    CheckForFreeDiskSpaceStepFactory
+        checkForFreeDiskSpaceStepFactory{RemoteLinux::Constants::DeployToGenericLinux};
+
     GenericDeployStepFactory<KillAppStep> killAppStepFactory;
     GenericDeployStepFactory<MakeInstallStep> makeInstallStepFactory;
 

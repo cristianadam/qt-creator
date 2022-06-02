@@ -176,8 +176,9 @@ public:
     QdbStopApplicationStepFactory m_stopApplicationStepFactory;
     QdbMakeDefaultAppStepFactory m_makeDefaultAppStepFactory;
 
-    QdbDeployStepFactory<RemoteLinux::CheckForFreeDiskSpaceStep>
-        m_checkForFreeDiskSpaceStepFactory{RemoteLinux::Constants::CheckForFreeDiskSpaceId};
+    RemoteLinux::CheckForFreeDiskSpaceStepFactory
+        m_checkForFreeDiskSpaceStepFactory{Constants::QdbDeployConfigurationId};
+
     QdbDeployStepFactory<RemoteLinux::GenericDirectUploadStep>
         m_directUploadStepFactory{RemoteLinux::Constants::DirectUploadStepId};
     QdbDeployStepFactory<RemoteLinux::MakeInstallStep>

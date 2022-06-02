@@ -27,19 +27,15 @@
 
 #include "remotelinux_export.h"
 
-#include "abstractremotelinuxdeploystep.h"
+#include <projectexplorer/buildstep.h>
 
 namespace RemoteLinux {
 
-class REMOTELINUX_EXPORT CheckForFreeDiskSpaceStep : public AbstractRemoteLinuxDeployStep
+class REMOTELINUX_EXPORT CheckForFreeDiskSpaceStepFactory
+        : public ProjectExplorer::BuildStepFactory
 {
-    Q_OBJECT
-
 public:
-    CheckForFreeDiskSpaceStep(ProjectExplorer::BuildStepList *bsl, Utils::Id id);
-
-    static Utils::Id stepId();
-    static QString displayName();
+    explicit CheckForFreeDiskSpaceStepFactory(Utils::Id deployConfigId);
 };
 
-} // namespace RemoteLinux
+} // RemoteLinux

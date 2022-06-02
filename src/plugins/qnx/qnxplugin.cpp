@@ -123,7 +123,8 @@ public:
     QnxDeviceFactory deviceFactory;
     QnxDeployConfigurationFactory deployConfigFactory;
     GenericQnxDeployStepFactory<QnxUploadStep> directUploadDeployFactory;
-    GenericQnxDeployStepFactory<RemoteLinux::CheckForFreeDiskSpaceStep> checkForFreeDiskSpaceDeployFactory;
+    RemoteLinux::CheckForFreeDiskSpaceStepFactory
+        checkForFreeDiskSpaceDeployFactory{Constants::QNX_QNX_DEPLOYCONFIGURATION_ID};
     GenericQnxDeployStepFactory<RemoteLinux::MakeInstallStep> makeInstallDeployFactory;
     GenericQnxDeployStepFactory<DeviceCheckBuildStep> checkBuildDeployFactory;
     QnxRunConfigurationFactory runConfigFactory;
