@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2020 The Qt Company Ltd.
+** Copyright (C) 2022 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Creator documentation.
@@ -137,6 +137,25 @@
     \if defined(qtcreator)
     For more information, see \l {Specifying Editor Settings}.
     \endif
+
+    \section1 Editing Selected Lines
+
+    The \uicontrol Edit > \uicontrol Advanced menu contains options for editing
+    selected lines of text.
+
+    To add the next search hit to the selected lines, select
+    \uicontrol {Add Selection to Next Find Match} or press \key {Ctrl+D}.
+
+    To duplicate the selected lines, select \uicontrol {Duplicate Selection}.
+    To format the duplicated lines as a comment, select
+    \uicontrol {Duplicate Selection and Comment}.
+
+    To turn selected text into lowercase, select \uicontrol {Lowercase Selection}
+    or press \key {Alt+U}. To turn it into uppercase, select
+    \uicontrol {Uppercase Selection} or press \key {Alt+Shift+U}.
+
+    To sort selected lines alphabetically, select \uicontrol {Sort Selected Lines}
+    or press \key {Alt+Shift+S}.
 
     \section1 Splitting the Editor View
 
