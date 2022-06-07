@@ -77,12 +77,13 @@ public:
 
     GenericDeployStepFactory<TarPackageCreationStep> tarPackageCreationStepFactory;
     TarPackageDeployStepFactory tarPackageDeployStepFactory;
-    GenericDeployStepFactory<GenericDirectUploadStep> genericDirectUploadStepFactory;
+    UploadWithIncrementalDeploymentStepFactory uploadWithIncrementalDeploymentStepFactory
+        {Constants::DirectUploadStepId, Constants::DeployToGenericLinux};
     GenericDeployStepFactory<RsyncDeployStep> rsyncDeployStepFactory;
     CustomCommandDeployStepFactory customCommandDeployStepFactory;
 
     CheckForFreeDiskSpaceStepFactory
-        checkForFreeDiskSpaceStepFactory{RemoteLinux::Constants::DeployToGenericLinux};
+        checkForFreeDiskSpaceStepFactory{Constants::DeployToGenericLinux};
 
     GenericDeployStepFactory<KillAppStep> killAppStepFactory;
     GenericDeployStepFactory<MakeInstallStep> makeInstallStepFactory;

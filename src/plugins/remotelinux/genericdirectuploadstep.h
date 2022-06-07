@@ -27,21 +27,24 @@
 
 #include "remotelinux_export.h"
 
-#include "abstractremotelinuxdeploystep.h"
+#include <projectexplorer/buildstep.h>
 
 namespace RemoteLinux {
 
-class REMOTELINUX_EXPORT GenericDirectUploadStep : public AbstractRemoteLinuxDeployStep
+class REMOTELINUX_EXPORT GenericDirectUploadStepFactory
+        : public ProjectExplorer::BuildStepFactory
 {
-    Q_OBJECT
-
 public:
-    GenericDirectUploadStep(ProjectExplorer::BuildStepList *bsl, Utils::Id id,
-                            bool offerIncrementalDeployment = true);
-    ~GenericDirectUploadStep() override;
-
-    static Utils::Id stepId();
-    static QString displayName();
+    GenericDirectUploadStepFactory(Utils::Id stepId, Utils::Id deployConfigId);
 };
 
-} //namespace RemoteLinux
+// FIXME: With C++20 we can pass parameter packs through the lambda capture
+// in registerStep
+class REMOTELINUX_EXPORT UploadWithIncrementalDeploymentStepFactory
+        : public ProjectExplorer::BuildStepFactory
+{
+public:
+   UploadWithIncrementalDeploymentStepFactory(Utils::Id stepId, Utils::Id deployConfigId);
+};
+
+} // RemoteLinux

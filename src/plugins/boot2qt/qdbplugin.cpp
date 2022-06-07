@@ -178,9 +178,8 @@ public:
 
     RemoteLinux::CheckForFreeDiskSpaceStepFactory
         m_checkForFreeDiskSpaceStepFactory{Constants::QdbDeployConfigurationId};
-
-    QdbDeployStepFactory<RemoteLinux::GenericDirectUploadStep>
-        m_directUploadStepFactory{RemoteLinux::Constants::DirectUploadStepId};
+    RemoteLinux::UploadWithIncrementalDeploymentStepFactory m_directUploadStepFactory
+        {RemoteLinux::Constants::DirectUploadStepId, RemoteLinux::Constants::DirectUploadStepId};
     QdbDeployStepFactory<RemoteLinux::MakeInstallStep>
         m_makeInstallStepFactory{RemoteLinux::Constants::MakeInstallStepId};
 

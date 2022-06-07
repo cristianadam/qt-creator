@@ -25,6 +25,7 @@
 
 #include "genericdirectuploadstep.h"
 
+#include "abstractremotelinuxdeploystep.h"
 #include "genericdirectuploadservice.h"
 #include "remotelinux_constants.h"
 
@@ -37,54 +38,73 @@ using namespace Utils;
 
 namespace RemoteLinux {
 
-GenericDirectUploadStep::GenericDirectUploadStep(BuildStepList *bsl, Utils::Id id,
-                                                 bool offerIncrementalDeployment)
-    : AbstractRemoteLinuxDeployStep(bsl, id)
+class GenericDirectUploadStep : public AbstractRemoteLinuxDeployStep
 {
-    auto service = createDeployService<GenericDirectUploadService>();
+    Q_DECLARE_TR_FUNCTIONS(RemoteLinux::GenericDirectUploadStep)
 
-    BoolAspect *incremental = nullptr;
-    if (offerIncrementalDeployment) {
-        incremental = addAspect<BoolAspect>();
-        incremental->setSettingsKey("RemoteLinux.GenericDirectUploadStep.Incremental");
-        incremental->setLabel(tr("Incremental deployment"),
-                              BoolAspect::LabelPlacement::AtCheckBox);
-        incremental->setValue(true);
-        incremental->setDefaultValue(true);
-    }
+public:
+    GenericDirectUploadStep(BuildStepList *bsl, Id id,
+                            bool offerIncrementalDeployment = false)
+        : AbstractRemoteLinuxDeployStep(bsl, id)
+    {
+        auto service = createDeployService<GenericDirectUploadService>();
 
-    auto ignoreMissingFiles = addAspect<BoolAspect>();
-    ignoreMissingFiles->setSettingsKey("RemoteLinux.GenericDirectUploadStep.IgnoreMissingFiles");
-    ignoreMissingFiles->setLabel(tr("Ignore missing files"),
-                                 BoolAspect::LabelPlacement::AtCheckBox);
-    ignoreMissingFiles->setValue(false);
-
-    setInternalInitializer([incremental, ignoreMissingFiles, service] {
-        if (incremental) {
-            service->setIncrementalDeployment(incremental->value()
-                ? IncrementalDeployment::Enabled : IncrementalDeployment::Disabled);
-        } else {
-            service->setIncrementalDeployment(IncrementalDeployment::NotSupported);
+        BoolAspect *incremental = nullptr;
+        if (offerIncrementalDeployment) {
+            incremental = addAspect<BoolAspect>();
+            incremental->setSettingsKey("RemoteLinux.GenericDirectUploadStep.Incremental");
+            incremental->setLabel(tr("Incremental deployment"),
+                                  BoolAspect::LabelPlacement::AtCheckBox);
+            incremental->setValue(true);
+            incremental->setDefaultValue(true);
         }
-        service->setIgnoreMissingFiles(ignoreMissingFiles->value());
-        return service->isDeploymentPossible();
-    });
 
-    setRunPreparer([this, service] {
-        service->setDeployableFiles(target()->deploymentData().allFiles());
-    });
+        auto ignoreMissingFiles = addAspect<BoolAspect>();
+        ignoreMissingFiles->setSettingsKey("RemoteLinux.GenericDirectUploadStep.IgnoreMissingFiles");
+        ignoreMissingFiles->setLabel(tr("Ignore missing files"),
+                                     BoolAspect::LabelPlacement::AtCheckBox);
+        ignoreMissingFiles->setValue(false);
+
+        setInternalInitializer([incremental, ignoreMissingFiles, service] {
+            if (incremental) {
+                service->setIncrementalDeployment(incremental->value()
+                                                  ? IncrementalDeployment::Enabled : IncrementalDeployment::Disabled);
+            } else {
+                service->setIncrementalDeployment(IncrementalDeployment::NotSupported);
+            }
+            service->setIgnoreMissingFiles(ignoreMissingFiles->value());
+            return service->isDeploymentPossible();
+        });
+
+        setRunPreparer([this, service] {
+            service->setDeployableFiles(target()->deploymentData().allFiles());
+        });
+    }
+};
+
+GenericDirectUploadStepFactory::GenericDirectUploadStepFactory(Id stepId, Id deployConfigId)
+{
+    registerStep<GenericDirectUploadStep>(stepId);
+    setDisplayName(GenericDirectUploadStep::tr("Upload files via SFTP"));
+    setSupportedConfiguration(deployConfigId);
+    setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_DEPLOY);
+
 }
 
-GenericDirectUploadStep::~GenericDirectUploadStep() = default;
-
-Utils::Id GenericDirectUploadStep::stepId()
+class UpdateWithIncrementalDeployStep : public GenericDirectUploadStep
 {
-    return Constants::DirectUploadStepId;
-}
+public:
+    UpdateWithIncrementalDeployStep(BuildStepList *bsl, Id id)
+        : GenericDirectUploadStep(bsl, id, true)
+    {}
+};
 
-QString GenericDirectUploadStep::displayName()
+// FIXME: Combined with GenericDirectUploadStepFactory if C++20 is ok
+UploadWithIncrementalDeploymentStepFactory::UploadWithIncrementalDeploymentStepFactory
+    (Id stepId, Id deployConfigId)
 {
-    return tr("Upload files via SFTP");
+    registerStep<UpdateWithIncrementalDeployStep>(stepId);
+    setSupportedConfiguration(deployConfigId);
 }
 
 } //namespace RemoteLinux

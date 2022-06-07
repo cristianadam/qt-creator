@@ -68,13 +68,6 @@ using namespace ProjectExplorer;
 namespace Qnx {
 namespace Internal {
 
-class QnxUploadStep : public RemoteLinux::GenericDirectUploadStep
-{
-public:
-    QnxUploadStep(BuildStepList *bsl, Utils::Id id) : GenericDirectUploadStep(bsl, id, false) {}
-    static Utils::Id stepId() { return "Qnx.DirectUploadStep"; }
-};
-
 template <class Step>
 class GenericQnxDeployStepFactory : public BuildStepFactory
 {
@@ -106,7 +99,7 @@ public:
         });
         addInitialStep(DeviceCheckBuildStep::stepId());
         addInitialStep(RemoteLinux::Constants::CheckForFreeDiskSpaceId);
-        addInitialStep(QnxUploadStep::stepId());
+        addInitialStep(Constants::QNX_DIRECTUPLOADSTEP_ID);
     }
 };
 
@@ -122,9 +115,10 @@ public:
     QnxQtVersionFactory qtVersionFactory;
     QnxDeviceFactory deviceFactory;
     QnxDeployConfigurationFactory deployConfigFactory;
-    GenericQnxDeployStepFactory<QnxUploadStep> directUploadDeployFactory;
-    RemoteLinux::CheckForFreeDiskSpaceStepFactory
-        checkForFreeDiskSpaceDeployFactory{Constants::QNX_QNX_DEPLOYCONFIGURATION_ID};
+    RemoteLinux::GenericDirectUploadStepFactory directUploadDeployFactory
+        {Constants::QNX_DIRECTUPLOADSTEP_ID, Constants::QNX_QNX_DEPLOYCONFIGURATION_ID};
+    RemoteLinux::CheckForFreeDiskSpaceStepFactory checkForFreeDiskSpaceDeployFactory
+        {Constants::QNX_QNX_DEPLOYCONFIGURATION_ID};
     GenericQnxDeployStepFactory<RemoteLinux::MakeInstallStep> makeInstallDeployFactory;
     GenericQnxDeployStepFactory<DeviceCheckBuildStep> checkBuildDeployFactory;
     QnxRunConfigurationFactory runConfigFactory;
