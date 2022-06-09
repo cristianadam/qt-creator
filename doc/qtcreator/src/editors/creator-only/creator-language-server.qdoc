@@ -79,9 +79,9 @@
 
     \section1 Specifying Settings for Language Clients
 
-    You can add a generic generic stdIO language server for Python, for example.
-    For \l{Connecting Android Devices}{Android development}, you can add a Java
-    language server.
+    \QC supports adding Python and Java language servers for Python and
+    \l{Connecting Android Devices}{Android development}. For other languages,
+    you can add generic stdIO language servers.
 
     \section2 Adding Language Servers
 
@@ -104,8 +104,9 @@
     \list 1
         \li Select \uicontrol Tools > \uicontrol Options >
             \uicontrol {Language Client} > \uicontrol Add >
-            \uicontrol {New Generic StdIO Language Server}
+            \uicontrol {Generic StdIO Language Server}
             to add a generic language server.
+            \image qtcreator-language-server-generic-stdio.png
         \li In the \uicontrol Name field, enter a name for the language server.
             Select the \inlineimage icons/replace.png
             (\uicontrol {Variables}) button to use a variable for the server
@@ -135,7 +136,7 @@
     \list 1
         \li Select \uicontrol Tools > \uicontrol Options >
             \uicontrol {Language Client} > \uicontrol Add >
-            \uicontrol {New Java Language Server} to add a Java language server.
+            \uicontrol {Java Language Server} to add a Java language server.
             \image qtcreator-language-client-options-java.png "Java language server options"
         \li In the \uicontrol Name field, enter a name for the language server.
             Select the \inlineimage icons/replace.png
@@ -146,6 +147,25 @@
             the Java language server \c .jar file.
     \endlist
 
+    \section2 Specifying Python Language Server Settings
+
+    To add a Python language server:
+
+    \list 1
+        \li Select \uicontrol Tools > \uicontrol Options >
+            \uicontrol {Language Client} > \uicontrol Add >
+            \uicontrol {Python Language Server} to add a Python language server.
+            \image qtcreator-language-client-options-python.png "Python language server options"
+        \li In the \uicontrol Name field, enter a name for the language server.
+            Select the \inlineimage icons/replace.png
+            (\uicontrol {Variables}) button to use a variable for the server
+            name. For more information, see \l{Using Qt Creator Variables}.
+        \li In the \uicontrol Python field, enter the path to the Python executable.
+        \li Select \uicontrol Configure to select the Python plugins to use.
+            \image qtcreator-language-client-options-python-plugins.png "Available Python plugins"
+        \li Select \uicontrol Advanced to configure the plugins.
+            \image qtcreator-language-client-options-python-plugin-config.png "Python plugin configuration"
+    \endlist
 
     \section1 Supported Locator Filters
 
