@@ -122,12 +122,10 @@ bool ValgrindRunner::Private::run()
             this, &ValgrindRunner::Private::processDone);
 
     connect(&m_valgrindProcess, &QtcProcess::readyReadStandardOutput, q, [this] {
-        q->processOutputReceived(QString::fromUtf8(m_valgrindProcess.readAllStandardOutput()),
-                                 Utils::StdOutFormat);
+        q->appendMessage(QString::fromUtf8(m_valgrindProcess.readAllStandardOutput()), StdOutFormat);
     });
     connect(&m_valgrindProcess, &QtcProcess::readyReadStandardError, q, [this] {
-        q->processOutputReceived(QString::fromUtf8(m_valgrindProcess.readAllStandardError()),
-                                 Utils::StdErrFormat);
+        q->appendMessage(QString::fromUtf8(m_valgrindProcess.readAllStandardError()), StdErrFormat);
     });
 
     if (cmd.executable().osType() == OsTypeMac) {
@@ -208,7 +206,7 @@ void ValgrindRunner::Private::remoteProcessStarted()
 void ValgrindRunner::Private::findPidProcessDone()
 {
     if (m_findPID.result() != ProcessResult::FinishedWithSuccess) {
-        emit q->processOutputReceived(m_findPID.allOutput(), StdErrFormat);
+        emit q->appendMessage(m_findPID.allOutput(), StdErrFormat);
         return;
     }
     QString out = m_findPID.stdOut();
