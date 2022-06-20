@@ -69,6 +69,7 @@ public:
             versionControl(vc), topLevel(tl)
         { }
         VcsInfo(const VcsInfo &other) = default;
+        VcsInfo& operator=(const VcsInfo &other) = default;
 
         bool operator == (const VcsInfo &other) const
         {

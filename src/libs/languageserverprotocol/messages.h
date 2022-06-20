@@ -66,6 +66,7 @@ class LANGUAGESERVERPROTOCOL_EXPORT MessageActionItem : public JsonObject
 public:
     using JsonObject::JsonObject;
     MessageActionItem &operator=(const MessageActionItem &) = default;
+    MessageActionItem(const MessageActionItem &) = default;
 
     QString title() const { return typedValue<QString>(titleKey); }
     void setTitle(QString title) { insert(titleKey, title); }

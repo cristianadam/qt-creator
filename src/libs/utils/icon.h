@@ -66,6 +66,7 @@ public:
     Icon(const FilePath &imageFileName);
 
     Icon(const Icon &other) = default;
+    Icon &operator=(const Icon &) = default;
 
     QIcon icon() const;
     // Same as icon() but without disabled state.
