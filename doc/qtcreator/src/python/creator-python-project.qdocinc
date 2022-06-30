@@ -33,6 +33,12 @@
     to gain access to individual Qt modules, such as \l {Qt Core}, \l {Qt GUI},
     and \l {Qt Widgets}.
 
+    To view and manage the available Python interpreters, select \uicontrol Edit
+    > \uicontrol Preferences > \uicontrol Python > \uicontrol Interpreters. You
+    can add and remove interpreters and clean up references to interpreters that
+    have been uninstalled, but still appear in the list. In addition, you can
+    set the interpreter to use by default.
+
     The Qt for Python Application wizards generate a \c {.pyproject} file that
     lists the files in the Python project and a \c {.py} file that contains
     some boilerplate code. In addition, the widget based UI wizard creates a
