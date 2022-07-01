@@ -33365,7 +33365,7 @@ In addition, device connectivity will be tested.</source>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::TarPackageCreationStep</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Packaging finished successfully.</source>
         <translation>パッケージ化が成功しました。</translation>
@@ -33439,7 +33439,7 @@ In addition, device connectivity will be tested.</source>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::UploadAndInstallTarPackageStep</name>
+    <name>RemoteLinux</name>
     <message>
         <source>No tarball creation step found.</source>
         <translation>tarball 作成ステップが見つかりません。</translation>

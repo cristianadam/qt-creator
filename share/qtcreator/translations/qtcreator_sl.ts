@@ -34327,15 +34327,7 @@ Omejitev se bo poskušalo zaobiti, a še vedno lahko pride do težav.</translati
     </message>
 </context>
 <context>
-    <name>RemoteLinux::Internal::CreateTarStepWidget</name>
-    <message>
-        <location line="+37"/>
-        <source>Create tarball:</source>
-        <translation>Ustvari arhiv tar:</translation>
-    </message>
-</context>
-<context>
-    <name>RemoteLinux::Internal::MaemoTarPackageCreationStep</name>
+    <name>RemoteLinux</name>
     <message>
         <location line="+48"/>
         <source>Create tarball</source>
@@ -35167,7 +35159,7 @@ Oddaljeni standardni izhod za napake je bil: %1</translation>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::Internal::MaemoUploadAndInstallTarPackageStep</name>
+    <name>RemoteLinux</name>
     <message>
         <location line="+30"/>
         <source>Deploy tarball via SFTP upload</source>

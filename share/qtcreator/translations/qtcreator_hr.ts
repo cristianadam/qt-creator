@@ -42630,11 +42630,7 @@ If you do not have a private key yet, you can also create one here.</source>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::TarPackageCreationStep</name>
-    <message>
-        <source>Ignore missing files</source>
-        <translation type="unfinished"></translation>
-    </message>
+    <name>RemoteLinux</name>
     <message>
         <source>Package modified files only</source>
         <translation type="unfinished"></translation>
@@ -42704,7 +42700,7 @@ If you do not have a private key yet, you can also create one here.</source>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::UploadAndInstallTarPackageStep</name>
+    <name>RemoteLinux</name>
     <message>
         <source>No tarball creation step found.</source>
         <translation type="unfinished"></translation>

@@ -19266,7 +19266,7 @@ Dodatkowo, przetestowane zostanie połączenie z urządzeniem.</translation>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::TarPackageCreationStep</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Packaging finished successfully.</source>
         <translation>Pakowanie poprawnie zakończone.</translation>
@@ -19324,7 +19324,7 @@ Dodatkowo, przetestowane zostanie połączenie z urządzeniem.</translation>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::UploadAndInstallTarPackageStep</name>
+    <name>RemoteLinux</name>
     <message>
         <source>No tarball creation step found.</source>
         <translation>Brak kroku tworzenia tarballa.</translation>

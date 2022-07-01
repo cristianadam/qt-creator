@@ -44054,13 +44054,6 @@ Remote stderr was: %1</source>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::Internal::MaemoUploadAndInstallTarPackageStep</name>
-    <message>
-        <source>Deploy tarball via SFTP upload</source>
-        <translation type="obsolete">通过SFTP来部署压缩包</translation>
-    </message>
-</context>
-<context>
     <name>RemoteLinux::Internal::MaemoUsedPortsGatherer</name>
     <message>
         <source>Connection error: %1</source>
@@ -45768,7 +45761,7 @@ To compile QML Observer, go to the Qt Versions page, select the current Qt versi
     </message>
 </context>
 <context>
-    <name>RemoteLinux::CreateTarStepWidget</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Tarball creation not possible.</source>
         <translation>不可能创建tarball。</translation>
@@ -45776,33 +45769,6 @@ To compile QML Observer, go to the Qt Versions page, select the current Qt versi
     <message>
         <source>Create tarball:</source>
         <translation>创建tarball:</translation>
-    </message>
-</context>
-<context>
-    <name>RemoteLinux::MaemoTarPackageCreationStep</name>
-    <message>
-        <source>Create tarball</source>
-        <translation type="obsolete">创建归档文件</translation>
-    </message>
-    <message>
-        <source>Error: tar file %1 cannot be opened (%2).</source>
-        <translation type="obsolete">错误: tar 文件%1 无法被打开(%2).</translation>
-    </message>
-    <message>
-        <source>Error writing tar file &apos;%1&apos;: %2.</source>
-        <translation type="obsolete">写入tar 文件 &apos;%1&apos;发生错误: %2.</translation>
-    </message>
-    <message>
-        <source>Error reading file &apos;%1&apos;: %2.</source>
-        <translation type="obsolete">读取文件&apos;%1&apos;错误: %2.</translation>
-    </message>
-    <message>
-        <source>Cannot add file &apos;%1&apos; to tar-archive: path too long.</source>
-        <translation type="obsolete">无法添加文件&apos;%1&apos; 到压缩包: 路径太长.</translation>
-    </message>
-    <message>
-        <source>Error writing tar file &apos;%1&apos;: %2</source>
-        <translation type="obsolete">写入tar 文件 &apos;%1&apos;发生错误: %2</translation>
     </message>
 </context>
 <context>
@@ -48607,7 +48573,7 @@ Remote error output was: %1</source>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::TarPackageCreationStep</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Packaging finished successfully.</source>
         <translation>打包顺利完成。</translation>
@@ -48669,7 +48635,7 @@ Remote error output was: %1</source>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::UploadAndInstallTarPackageStep</name>
+    <name>RemoteLinux</name>
     <message>
         <source>No tarball creation step found.</source>
         <translation>没有找到生成tarball所需的步骤。</translation>

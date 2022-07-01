@@ -17175,7 +17175,7 @@ Wenn falsch, wird das Zielobjekt sofort zur aktuellen Mouseposition bewegt.</tra
     </message>
 </context>
 <context>
-    <name>RemoteLinux::TarPackageCreationStep</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Packaging finished successfully.</source>
         <translation>Paketierung erfolgreich abgeschlossen.</translation>
@@ -17249,7 +17249,7 @@ Wenn falsch, wird das Zielobjekt sofort zur aktuellen Mouseposition bewegt.</tra
     </message>
 </context>
 <context>
-    <name>RemoteLinux::UploadAndInstallTarPackageStep</name>
+    <name>RemoteLinux</name>
     <message>
         <source>No tarball creation step found.</source>
         <translation>Es konnte kein passender Schritt zur Erzeugung eines Tarballs gefunden werden.</translation>

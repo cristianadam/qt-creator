@@ -44669,7 +44669,7 @@ Dojde k pokusu o vytvoření balíčku, mohou se ale vyskytnout potíže.</trans
     </message>
 </context>
 <context>
-    <name>RemoteLinux::CreateTarStepWidget</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Ignore missing files</source>
         <translation>Nevšímat si chybějících souborů</translation>
@@ -44681,34 +44681,6 @@ Dojde k pokusu o vytvoření balíčku, mohou se ale vyskytnout potíže.</trans
     <message>
         <source>Create tarball:</source>
         <translation>Vytvořit Tarovu kouli (tarball):</translation>
-    </message>
-</context>
-<context>
-    <name>RemoteLinux::MaemoTarPackageCreationStep</name>
-    <message>
-        <source>Create tarball</source>
-        <translation type="obsolete">Vytvořit Tarovu kouli (tarball)</translation>
-    </message>
-    <message>
-        <source>Error: tar file %1 cannot be opened (%2).</source>
-        <translation type="obsolete">Chyba: Soubor tar %1 se nepodařilo otevřít (%2).</translation>
-    </message>
-    <message>
-        <source>Error writing tar file &apos;%1&apos;: %2.</source>
-        <translation type="obsolete">Chyba při zápisu souboru tar %1: %2.</translation>
-    </message>
-    <message>
-        <source>Error reading file &apos;%1&apos;: %2.</source>
-        <translation type="obsolete">Chyba při čtení souboru %1: %2.</translation>
-    </message>
-    <message>
-        <source>Cannot add file &apos;%1&apos; to tar-archive: path too long.</source>
-        <translation type="obsolete">Soubor &apos;%1&apos; nelze do archivu tar přidat: Cesta je příliš dlouhá.
-</translation>
-    </message>
-    <message>
-        <source>Error writing tar file &apos;%1&apos;: %2</source>
-        <translation type="obsolete">Chyba při zápisu souboru tar &apos;%1&apos;: %2</translation>
     </message>
 </context>
 <context>
@@ -45359,7 +45331,7 @@ Vzdálený chybový výstup byl: &apos;%1&apos;</translation>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::Internal::MaemoUploadAndInstallTarPackageStep</name>
+    <name>RemoteLinux::Internal::Tr</name>
     <message>
         <source>Deploy tarball via SFTP upload</source>
         <translation type="obsolete">Nasazení balíčku tar prostřednictvím nahrání SFTS</translation>
@@ -50408,7 +50380,7 @@ Vzdálený chybový výstup byl: %1</translation>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::TarPackageCreationStep</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Packaging finished successfully.</source>
         <translation>Vytvoření balíčku úspěšně dokončeno.</translation>
@@ -50471,7 +50443,7 @@ Vzdálený chybový výstup byl: %1</translation>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::UploadAndInstallTarPackageStep</name>
+    <name>RemoteLinux</name>
     <message>
         <source>No tarball creation step found.</source>
         <translation>Nepodařilo se najít žádný odpovídající krok k vytvoření archivu tar.</translation>

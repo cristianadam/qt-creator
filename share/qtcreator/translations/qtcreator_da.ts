@@ -36158,7 +36158,7 @@ Derudover testes enhedens forbindelse.</translation>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::TarPackageCreationStep</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Packaging finished successfully.</source>
         <translation>Pakning afsluttede med succes.</translation>
@@ -36207,9 +36207,6 @@ Derudover testes enhedens forbindelse.</translation>
         <source>Create tarball</source>
         <translation>Opret tarball</translation>
     </message>
-</context>
-<context>
-    <name>RemoteLinux::UploadAndInstallTarPackageStep</name>
     <message>
         <source>No tarball creation step found.</source>
         <translation>Intet tarball oprettelsestrin fundet.</translation>

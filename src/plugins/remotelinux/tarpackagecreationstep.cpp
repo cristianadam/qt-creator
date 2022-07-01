@@ -27,9 +27,11 @@
 
 #include "deploymenttimeinfo.h"
 #include "remotelinux_constants.h"
+#include "remotelinuxtr.h"
 
 #include <projectexplorer/buildmanager.h>
 #include <projectexplorer/deploymentdata.h>
+#include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/project.h>
 #include <projectexplorer/target.h>
 
@@ -43,12 +45,13 @@
 using namespace ProjectExplorer;
 using namespace Utils;
 
-namespace RemoteLinux {
+namespace RemoteLinux::Internal {
 
 const char IgnoreMissingFilesKey[] = "RemoteLinux.TarPackageCreationStep.IgnoreMissingFiles";
 const char IncrementalDeploymentKey[] = "RemoteLinux.TarPackageCreationStep.IncrementalDeployment";
 
 const int TarBlockSize = 512;
+
 struct TarFileHeader {
     char fileName[100];
     char fileMode[8];
@@ -69,11 +72,29 @@ struct TarFileHeader {
     char padding[12];
 };
 
-namespace Internal {
-
-class TarPackageCreationStepPrivate
+class TarPackageCreationStep : public BuildStep
 {
 public:
+    explicit TarPackageCreationStep(BuildStepList *bsl, Id id);
+
+    FilePath packageFilePath() const;
+
+private:
+    bool init() final;
+    void doRun() final;
+    bool fromMap(const QVariantMap &map) final;
+    QVariantMap toMap() const final;
+    QVariant data(Id id) const final;
+
+    void raiseError(const QString &errorMessage);
+    void raiseWarning(const QString &warningMessage);
+    bool isPackagingNeeded() const;
+    void deployFinished(bool success);
+    void addNeededDeploymentFiles(const DeployableFile &deployable, const Kit *kit);
+    bool runImpl();
+    bool doPackage();
+    bool appendFile(QFile &tarFile, const QFileInfo &fileInfo, const QString &remoteFilePath);
+
     FilePath m_cachedPackageFilePath;
     bool m_deploymentDataModified = false;
     DeploymentTimeInfo m_deployTimes;
@@ -83,60 +104,45 @@ public:
     QList<DeployableFile> m_files;
 };
 
-} // namespace Internal
-
 TarPackageCreationStep::TarPackageCreationStep(BuildStepList *bsl, Id id)
     : BuildStep(bsl, id)
-    , d(new Internal::TarPackageCreationStepPrivate)
 {
     connect(target(), &Target::deploymentDataChanged, this, [this] {
-        d->m_deploymentDataModified = true;
+        m_deploymentDataModified = true;
     });
-    d->m_deploymentDataModified = true;
+    m_deploymentDataModified = true;
 
-    d->m_ignoreMissingFilesAspect = addAspect<BoolAspect>();
-    d->m_ignoreMissingFilesAspect->setLabel(tr("Ignore missing files"),
+    m_ignoreMissingFilesAspect = addAspect<BoolAspect>();
+    m_ignoreMissingFilesAspect->setLabel(Tr::tr("Ignore missing files"),
                                          BoolAspect::LabelPlacement::AtCheckBox);
-    d->m_ignoreMissingFilesAspect->setSettingsKey(IgnoreMissingFilesKey);
+    m_ignoreMissingFilesAspect->setSettingsKey(IgnoreMissingFilesKey);
 
-    d->m_incrementalDeploymentAspect = addAspect<BoolAspect>();
-    d->m_incrementalDeploymentAspect->setLabel(tr("Package modified files only"),
-                                            BoolAspect::LabelPlacement::AtCheckBox);
-    d->m_incrementalDeploymentAspect->setSettingsKey(IncrementalDeploymentKey);
+    m_incrementalDeploymentAspect = addAspect<BoolAspect>();
+    m_incrementalDeploymentAspect->setLabel(Tr::tr("Package modified files only"),
+                                         BoolAspect::LabelPlacement::AtCheckBox);
+    m_incrementalDeploymentAspect->setSettingsKey(IncrementalDeploymentKey);
 
     setSummaryUpdater([this] {
         FilePath path = packageFilePath();
         if (path.isEmpty())
-            return QString("<font color=\"red\">" + tr("Tarball creation not possible.")
+            return QString("<font color=\"red\">" + Tr::tr("Tarball creation not possible.")
                            + "</font>");
-        return QString("<b>" + tr("Create tarball:") + "</b> " + path.toUserOutput());
+        return QString("<b>" + Tr::tr("Create tarball:") + "</b> " + path.toUserOutput());
     });
-}
-
-TarPackageCreationStep::~TarPackageCreationStep() = default;
-
-Utils::Id TarPackageCreationStep::stepId()
-{
-    return Constants::TarPackageCreationStepId;
-}
-
-QString TarPackageCreationStep::displayName()
-{
-    return tr("Create tarball");
 }
 
 FilePath TarPackageCreationStep::packageFilePath() const
 {
     if (buildDirectory().isEmpty())
         return {};
-    const QString packageFileName = project()->displayName() + QLatin1String(".tar");
+    const QString packageFileName = project()->displayName() + ".tar";
     return buildDirectory().pathAppended(packageFileName);
 }
 
 bool TarPackageCreationStep::init()
 {
-    d->m_cachedPackageFilePath = packageFilePath();
-    d->m_packagingNeeded = isPackagingNeeded();
+    m_cachedPackageFilePath = packageFilePath();
+    m_packagingNeeded = isPackagingNeeded();
     return true;
 }
 
@@ -149,7 +155,7 @@ bool TarPackageCreationStep::fromMap(const QVariantMap &map)
 {
     if (!BuildStep::fromMap(map))
         return false;
-    d->m_deployTimes.importDeployTimes(map);
+    m_deployTimes.importDeployTimes(map);
     return true;
 }
 
@@ -157,17 +163,24 @@ QVariantMap TarPackageCreationStep::toMap() const
 {
     QVariantMap map = BuildStep::toMap();
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    map.insert(d->m_deployTimes.exportDeployTimes());
+    map.insert(m_deployTimes.exportDeployTimes());
 #else
-    map.unite(d->m_deployTimes.exportDeployTimes());
+    map.unite(m_deployTimes.exportDeployTimes());
 #endif
     return map;
+}
+
+QVariant TarPackageCreationStep::data(Id id) const
+{
+    if (id == Constants::TarPackageFilePathId)
+        return packageFilePath().toVariant();
+    return {};
 }
 
 void TarPackageCreationStep::raiseError(const QString &errorMessage)
 {
     emit addTask(DeploymentTask(Task::Error, errorMessage));
-    emit addOutput(errorMessage, BuildStep::OutputFormat::Stderr);
+    emit addOutput(errorMessage, OutputFormat::Stderr);
 }
 
 void TarPackageCreationStep::raiseWarning(const QString &warningMessage)
@@ -179,7 +192,7 @@ void TarPackageCreationStep::raiseWarning(const QString &warningMessage)
 bool TarPackageCreationStep::isPackagingNeeded() const
 {
     const FilePath packagePath = packageFilePath();
-    if (!packagePath.exists() || d->m_deploymentDataModified)
+    if (!packagePath.exists() || m_deploymentDataModified)
         return true;
 
     const DeploymentData &dd = target()->deploymentData();
@@ -202,19 +215,18 @@ void TarPackageCreationStep::deployFinished(bool success)
     const Kit *kit = target()->kit();
 
     // Store files that have been tar'd and successfully deployed
-    const auto files = d->m_files;
-    for (const DeployableFile &file : files)
-        d->m_deployTimes.saveDeploymentTimeStamp(file, kit, QDateTime());
+    for (const DeployableFile &file : qAsConst(m_files))
+        m_deployTimes.saveDeploymentTimeStamp(file, kit, QDateTime());
 }
 
 void TarPackageCreationStep::addNeededDeploymentFiles(
-        const ProjectExplorer::DeployableFile &deployable,
-        const ProjectExplorer::Kit *kit)
+        const DeployableFile &deployable,
+        const Kit *kit)
 {
     const QFileInfo fileInfo = deployable.localFilePath().toFileInfo();
     if (!fileInfo.isDir()) {
-        if (d->m_deployTimes.hasLocalFileChanged(deployable, kit))
-            d->m_files << deployable;
+        if (m_deployTimes.hasLocalFileChanged(deployable, kit))
+            m_files << deployable;
         return;
     }
 
@@ -222,7 +234,7 @@ void TarPackageCreationStep::addNeededDeploymentFiles(
             .entryList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
 
     if (files.isEmpty()) {
-        d->m_files << deployable;
+        m_files << deployable;
         return;
     }
 
@@ -240,21 +252,21 @@ bool TarPackageCreationStep::runImpl()
 {
     const QList<DeployableFile> &files = target()->deploymentData().allFiles();
 
-    if (d->m_incrementalDeploymentAspect->value()) {
-        d->m_files.clear();
+    if (m_incrementalDeploymentAspect->value()) {
+        m_files.clear();
         for (const DeployableFile &file : files)
             addNeededDeploymentFiles(file, kit());
     } else {
-        d->m_files = files;
+        m_files = files;
     }
 
     const bool success = doPackage();
 
     if (success) {
-        d->m_deploymentDataModified = false;
-        emit addOutput(tr("Packaging finished successfully."), OutputFormat::NormalMessage);
+        m_deploymentDataModified = false;
+        emit addOutput(Tr::tr("Packaging finished successfully."), OutputFormat::NormalMessage);
     } else {
-        emit addOutput(tr("Packaging failed."), OutputFormat::ErrorMessage);
+        emit addOutput(Tr::tr("Packaging failed."), OutputFormat::ErrorMessage);
     }
 
     connect(BuildManager::instance(), &BuildManager::buildQueueFinished,
@@ -265,25 +277,25 @@ bool TarPackageCreationStep::runImpl()
 
 bool TarPackageCreationStep::doPackage()
 {
-    emit addOutput(tr("Creating tarball..."), OutputFormat::NormalMessage);
-    if (!d->m_packagingNeeded) {
-        emit addOutput(tr("Tarball up to date, skipping packaging."), OutputFormat::NormalMessage);
+    emit addOutput(Tr::tr("Creating tarball..."), OutputFormat::NormalMessage);
+    if (!m_packagingNeeded) {
+        emit addOutput(Tr::tr("Tarball up to date, skipping packaging."), OutputFormat::NormalMessage);
         return true;
     }
 
     // TODO: Optimization: Only package changed files
-    const FilePath tarFilePath = d->m_cachedPackageFilePath;
+    const FilePath tarFilePath = m_cachedPackageFilePath;
     QFile tarFile(tarFilePath.toString());
 
     if (!tarFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        raiseError(tr("Error: tar file %1 cannot be opened (%2).")
+        raiseError(Tr::tr("Error: tar file %1 cannot be opened (%2).")
             .arg(tarFilePath.toUserOutput(), tarFile.errorString()));
         return false;
     }
 
-    for (const DeployableFile &d : qAsConst(d->m_files)) {
+    for (const DeployableFile &d : qAsConst(m_files)) {
         if (d.remoteDirectory().isEmpty()) {
-            emit addOutput(tr("No remote path specified for file \"%1\", skipping.")
+            emit addOutput(Tr::tr("No remote path specified for file \"%1\", skipping.")
                 .arg(d.localFilePath().toUserOutput()), OutputFormat::ErrorMessage);
             continue;
         }
@@ -296,7 +308,7 @@ bool TarPackageCreationStep::doPackage()
 
     const QByteArray eofIndicator(2*sizeof(TarFileHeader), 0);
     if (tarFile.write(eofIndicator) != eofIndicator.length()) {
-        raiseError(tr("Error writing tar file \"%1\": %2.")
+        raiseError(Tr::tr("Error writing tar file \"%1\": %2.")
             .arg(QDir::toNativeSeparators(tarFile.fileName()), tarFile.errorString()));
         return false;
     }
@@ -387,7 +399,7 @@ bool TarPackageCreationStep::appendFile(QFile &tarFile, const QFileInfo &fileInf
     const QString &remoteFilePath)
 {
     QString errorMessage;
-    if (!writeHeader(tarFile, fileInfo, remoteFilePath, d->m_cachedPackageFilePath.toUserOutput(),
+    if (!writeHeader(tarFile, fileInfo, remoteFilePath, m_cachedPackageFilePath.toUserOutput(),
                      &errorMessage)) {
         raiseError(errorMessage);
         return false;
@@ -407,9 +419,9 @@ bool TarPackageCreationStep::appendFile(QFile &tarFile, const QFileInfo &fileInf
     const QString nativePath = QDir::toNativeSeparators(fileInfo.filePath());
     QFile file(fileInfo.filePath());
     if (!file.open(QIODevice::ReadOnly)) {
-        const QString message = tr("Error reading file \"%1\": %2.")
+        const QString message = Tr::tr("Error reading file \"%1\": %2.")
                                 .arg(nativePath, file.errorString());
-        if (d->m_ignoreMissingFilesAspect->value()) {
+        if (m_ignoreMissingFilesAspect->value()) {
             raiseWarning(message);
             return true;
         } else {
@@ -420,7 +432,7 @@ bool TarPackageCreationStep::appendFile(QFile &tarFile, const QFileInfo &fileInf
 
     const int chunkSize = 1024*1024;
 
-    emit addOutput(tr("Adding file \"%1\" to tarball...").arg(nativePath),
+    emit addOutput(Tr::tr("Adding file \"%1\" to tarball...").arg(nativePath),
                    OutputFormat::NormalMessage);
 
     // TODO: Wasteful. Work with fixed-size buffer.
@@ -431,7 +443,7 @@ bool TarPackageCreationStep::appendFile(QFile &tarFile, const QFileInfo &fileInf
             return false;
     }
     if (file.error() != QFile::NoError) {
-        raiseError(tr("Error reading file \"%1\": %2.").arg(nativePath, file.errorString()));
+        raiseError(Tr::tr("Error reading file \"%1\": %2.").arg(nativePath, file.errorString()));
         return false;
     }
 
@@ -440,11 +452,20 @@ bool TarPackageCreationStep::appendFile(QFile &tarFile, const QFileInfo &fileInf
         tarFile.write(QByteArray(TarBlockSize - blockModulo, 0));
 
     if (tarFile.error() != QFile::NoError) {
-        raiseError(tr("Error writing tar file \"%1\": %2.")
+        raiseError(Tr::tr("Error writing tar file \"%1\": %2.")
             .arg(QDir::toNativeSeparators(tarFile.fileName()), tarFile.errorString()));
         return false;
     }
     return true;
 }
 
-} // namespace RemoteLinux
+TarPackageCreationStepFactory::TarPackageCreationStepFactory()
+{
+    registerStep<TarPackageCreationStep>(Constants::TarPackageCreationStepId);
+    setDisplayName(Tr::tr("Create tarball"));
+
+    setSupportedConfiguration(RemoteLinux::Constants::DeployToGenericLinux);
+    setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_DEPLOY);
+}
+
+} // RemoteLinux::Internal

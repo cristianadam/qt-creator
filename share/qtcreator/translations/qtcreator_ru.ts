@@ -46263,7 +46263,7 @@ If you do not have a private key yet, you can also create one here.</source>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::TarPackageCreationStep</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Packaging finished successfully.</source>
         <translation>Пакет успешно создан.</translation>
@@ -46328,9 +46328,6 @@ If you do not have a private key yet, you can also create one here.</source>
         <source>Create tarball</source>
         <translation>Создание тарбола</translation>
     </message>
-</context>
-<context>
-    <name>RemoteLinux::UploadAndInstallTarPackageStep</name>
     <message>
         <source>No tarball creation step found.</source>
         <translation>Не найден этап сборки тарбола.</translation>

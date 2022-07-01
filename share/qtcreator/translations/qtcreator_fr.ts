@@ -50155,14 +50155,7 @@ On va essayer avec ce nom, mais vous pourrez rencontrer des problèmes.</transla
     </message>
 </context>
 <context>
-    <name>RemoteLinux::Internal::CreateTarStepWidget</name>
-    <message>
-        <source>Create tarball:</source>
-        <translation type="obsolete">Créer un tarball :</translation>
-    </message>
-</context>
-<context>
-    <name>RemoteLinux::Internal::MaemoTarPackageCreationStep</name>
+    <name>RemoteLinux::Internal::Tr</name>
     <message>
         <source>Create tarball</source>
         <translation type="obsolete">Créer un tarball</translation>
@@ -50807,13 +50800,6 @@ Remote stderr was: %1</source>
     <message>
         <source>Deploy RPM package via SFTP upload</source>
         <translation type="obsolete">Déployer le paquet RPM par SFTP</translation>
-    </message>
-</context>
-<context>
-    <name>RemoteLinux::Internal::MaemoUploadAndInstallTarPackageStep</name>
-    <message>
-        <source>Deploy tarball via SFTP upload</source>
-        <translation type="obsolete">Déployer l&apos;archive par SFTP</translation>
     </message>
 </context>
 <context>
@@ -52087,7 +52073,7 @@ Nous allons essayer de travailler avec cela mais vous pourrez rencontrer des pro
     </message>
 </context>
 <context>
-    <name>RemoteLinux::CreateTarStepWidget</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Ignore missing files</source>
         <translation>Ignorer les fichiers manquants</translation>
@@ -52099,33 +52085,6 @@ Nous allons essayer de travailler avec cela mais vous pourrez rencontrer des pro
     <message>
         <source>Create tarball:</source>
         <translation>Créer un tarball :</translation>
-    </message>
-</context>
-<context>
-    <name>RemoteLinux::MaemoTarPackageCreationStep</name>
-    <message>
-        <source>Create tarball</source>
-        <translation type="obsolete">Créer un tarball</translation>
-    </message>
-    <message>
-        <source>Error: tar file %1 cannot be opened (%2).</source>
-        <translation type="obsolete">Erreur : le fichier %1 n&apos;a pas pu être ouvert (%2). </translation>
-    </message>
-    <message>
-        <source>Error writing tar file &apos;%1&apos;: %2.</source>
-        <translation type="obsolete">Erreur lors de l&apos;écriture du fichier &quot;%1&quot; : %2. </translation>
-    </message>
-    <message>
-        <source>Error reading file &apos;%1&apos;: %2.</source>
-        <translation type="obsolete">Erreur lors de la lecture du fichier &quot;%1&quot; : %2. </translation>
-    </message>
-    <message>
-        <source>Cannot add file &apos;%1&apos; to tar-archive: path too long.</source>
-        <translation type="obsolete">Impossible d&apos;ajouter le fichier &quot;%1&quot; à l&apos;archive : chemin trop long. </translation>
-    </message>
-    <message>
-        <source>Error writing tar file &apos;%1&apos;: %2</source>
-        <translation type="obsolete">Erreur lors de l&apos;écriture du fichier &quot;%1&quot; : %2</translation>
     </message>
 </context>
 <context>
@@ -55346,7 +55305,7 @@ Remote error output was: %1</source>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::TarPackageCreationStep</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Packaging finished successfully.</source>
         <translation>Paquetage terminé avec succès.</translation>
@@ -55388,10 +55347,6 @@ Remote error output was: %1</source>
         <translation>Impossible d&apos;ajouter le fichier &quot;%1&quot; à l&apos;archive : chemin trop long. </translation>
     </message>
     <message>
-        <source>Error writing tar file &apos;%1&apos;: %2</source>
-        <translation>Erreur lors de l&apos;écriture du fichier &quot;%1&quot; : %2</translation>
-    </message>
-    <message>
         <source>Create tarball</source>
         <translation>Créer un tarball</translation>
     </message>
@@ -55408,7 +55363,7 @@ Remote error output was: %1</source>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::UploadAndInstallTarPackageStep</name>
+    <name>RemoteLinux</name>
     <message>
         <source>No tarball creation step found.</source>
         <translation>Aucune étape de création d&apos;archive tarball trouvée.</translation>

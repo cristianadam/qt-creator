@@ -23428,7 +23428,7 @@ Remote stderr was: &apos;%1&apos;</source>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::TarPackageCreationStep</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Packaging finished successfully.</source>
         <translation>Створення пакунка завершено вдало.</translation>
@@ -23501,9 +23501,6 @@ Remote stderr was: &apos;%1&apos;</source>
         <source>Create tarball</source>
         <translation>Створити архів tar</translation>
     </message>
-</context>
-<context>
-    <name>RemoteLinux::UploadAndInstallTarPackageStep</name>
     <message>
         <source>No tarball creation step found.</source>
         <translation>Відсутній крок для створення архіву tar.</translation>

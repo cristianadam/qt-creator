@@ -28959,7 +28959,7 @@ Remote error output was: %1</source>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::TarPackageCreationStep</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Packaging finished successfully.</source>
         <translation>打包已順利完成。</translation>
@@ -29021,7 +29021,7 @@ Remote error output was: %1</source>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::UploadAndInstallTarPackageStep</name>
+    <name>RemoteLinux</name>
     <message>
         <source>No tarball creation step found.</source>
         <translation>找不到 tarball 建立步驟。</translation>
