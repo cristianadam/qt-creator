@@ -42525,7 +42525,7 @@ If you do not have a private key yet, you can also create one here.</source>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::Tr</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Trying to kill &quot;%1&quot; on remote device...</source>
         <translation type="unfinished"></translation>
@@ -42588,7 +42588,7 @@ If you do not have a private key yet, you can also create one here.</source>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::Internal::RsyncDeployService</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Failed to create remote directories: %1</source>
         <translation type="unfinished"></translation>
@@ -42605,9 +42605,6 @@ If you do not have a private key yet, you can also create one here.</source>
         <source>rsync failed with exit code %1.</source>
         <translation type="unfinished"></translation>
     </message>
-</context>
-<context>
-    <name>RemoteLinux::RsyncDeployStep</name>
     <message>
         <source>Ignore missing files</source>
         <translation type="unfinished"></translation>

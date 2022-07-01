@@ -58091,7 +58091,7 @@ Stepping into the module or setting breakpoints by file and line is expected to 
     </message>
 </context>
 <context>
-    <name>RemoteLinux::Tr</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Trying to kill &quot;%1&quot; on remote device...</source>
         <translation>リモート・デバイス上の &quot;%1&quot; を終了中です...</translation>
@@ -58136,7 +58136,7 @@ Stepping into the module or setting breakpoints by file and line is expected to 
     </message>
 </context>
 <context>
-    <name>RemoteLinux::Internal::RsyncDeployService</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Failed to create remote directories: %1</source>
         <translation>リモート・ディレクトリの作成に失敗しました: %1</translation>
@@ -58153,9 +58153,6 @@ Stepping into the module or setting breakpoints by file and line is expected to 
         <source>rsync failed with exit code %1.</source>
         <translation>rsync は終了コード %1 で失敗しました。</translation>
     </message>
-</context>
-<context>
-    <name>RemoteLinux::RsyncDeployStep</name>
     <message>
         <source>Flags:</source>
         <translation>フラグ:</translation>

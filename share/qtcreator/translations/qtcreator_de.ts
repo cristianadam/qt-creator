@@ -42027,7 +42027,7 @@ Breche ausstehende Operationen ab...
     </message>
 </context>
 <context>
-    <name>RemoteLinux::Tr</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Trying to kill &quot;%1&quot; on remote device...</source>
         <translation>Versuche &quot;%1&quot; auf anderem Gerät zu beenden...</translation>
@@ -45206,7 +45206,7 @@ Wenn Sie noch keinen privaten Schlüssel besitzen, können Sie hier auch einen e
     </message>
 </context>
 <context>
-    <name>RemoteLinux::Internal::RsyncDeployService</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Failed to create remote directories: %1</source>
         <translation>Entfernte Verzeichnisse konnten nicht erstellt werden: %1</translation>
@@ -45223,9 +45223,6 @@ Wenn Sie noch keinen privaten Schlüssel besitzen, können Sie hier auch einen e
         <source>rsync failed with exit code %1.</source>
         <translation>rsync scheiterte mit dem Rückgabewert %1.</translation>
     </message>
-</context>
-<context>
-    <name>RemoteLinux::RsyncDeployStep</name>
     <message>
         <source>Flags:</source>
         <translation>Optionen:</translation>

@@ -45615,7 +45615,7 @@ Gemning mislykkedes.</translation>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::Tr</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Trying to kill &quot;%1&quot; on remote device...</source>
         <translation>Prøver at dræbe &quot;%1&quot; på fjern-enhed...</translation>

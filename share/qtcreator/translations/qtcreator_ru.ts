@@ -45985,7 +45985,7 @@ If you do not have a private key yet, you can also create one here.</source>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::Internal::RsyncDeployService</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Failed to create remote directories: %1</source>
         <translation>Не удалось создать внешние каталоги: %1</translation>
@@ -46207,7 +46207,7 @@ If you do not have a private key yet, you can also create one here.</source>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::Tr</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Trying to kill &quot;%1&quot; on remote device...</source>
         <translation>Попытка уничтожить «%1» на внешнем устройстве...</translation>
@@ -46233,7 +46233,7 @@ If you do not have a private key yet, you can also create one here.</source>
     </message>
 </context>
 <context>
-    <name>RemoteLinux::RsyncDeployStep</name>
+    <name>RemoteLinux</name>
     <message>
         <source>Flags:</source>
         <translation>Флаги:</translation>
