@@ -28,7 +28,6 @@
 #include "abstractremotelinuxdeployservice.h"
 #include "abstractremotelinuxdeploystep.h"
 #include "remotelinux_constants.h"
-#include "tarpackagecreationstep.h"
 
 #include <projectexplorer/deployconfiguration.h>
 #include <projectexplorer/devicesupport/filetransfer.h>
@@ -247,18 +246,22 @@ public:
         setWidgetExpandedByDefault(false);
 
         setInternalInitializer([this, service] {
-            const TarPackageCreationStep *pStep = nullptr;
+            const BuildStep *tarCreationStep = nullptr;
 
             for (BuildStep *step : deployConfiguration()->stepList()->steps()) {
                 if (step == this)
                     break;
-                if ((pStep = qobject_cast<TarPackageCreationStep *>(step)))
+                if (step->id() == Constants::TarPackageCreationStepId) {
+                    tarCreationStep = step;
                     break;
+                }
             }
-            if (!pStep)
+            if (!tarCreationStep)
                 return CheckResult::failure(tr("No tarball creation step found."));
 
-            service->setPackageFilePath(pStep->packageFilePath());
+            const FilePath tarFile =
+                    FilePath::fromVariant(tarCreationStep->data(Constants::TarPackageFilePathId));
+            service->setPackageFilePath(tarFile);
             return service->isDeploymentPossible();
         });
     }
