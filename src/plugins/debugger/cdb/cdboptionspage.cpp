@@ -25,12 +25,11 @@
 
 #include "cdboptionspage.h"
 
-#include "cdbengine.h"
-
 #include <debugger/commonoptionspage.h>
 #include <debugger/debuggeractions.h>
 #include <debugger/debuggercore.h>
 #include <debugger/debuggerinternalconstants.h>
+#include <debugger/debuggertr.h>
 #include <debugger/shared/cdbsymbolpathlisteditor.h>
 
 #include <coreplugin/icore.h>
@@ -56,18 +55,12 @@ struct EventsDescription {
 // Parameters of the "sxe" command
 const EventsDescription eventDescriptions[] =
 {
-    {"eh", false, QT_TRANSLATE_NOOP("Debugger::Internal::CdbBreakEventWidget",
-                                    "C++ exception")},
-    {"ct", false, QT_TRANSLATE_NOOP("Debugger::Internal::CdbBreakEventWidget",
-                                    "Thread creation")},
-    {"et", false, QT_TRANSLATE_NOOP("Debugger::Internal::CdbBreakEventWidget",
-                                    "Thread exit")},
-    {"ld", true,  QT_TRANSLATE_NOOP("Debugger::Internal::CdbBreakEventWidget",
-                                    "Load module:")},
-    {"ud", true,  QT_TRANSLATE_NOOP("Debugger::Internal::CdbBreakEventWidget",
-                                    "Unload module:")},
-    {"out", true, QT_TRANSLATE_NOOP("Debugger::Internal::CdbBreakEventWidget",
-                                    "Output:")}
+    {"eh", false, QT_TRANSLATE_NOOP("Debugger", "C++ exception")},
+    {"ct", false, QT_TRANSLATE_NOOP("Debugger", "Thread creation")},
+    {"et", false, QT_TRANSLATE_NOOP("Debugger", "Thread exit")},
+    {"ld", true,  QT_TRANSLATE_NOOP("Debugger", "Load module:")},
+    {"ud", true,  QT_TRANSLATE_NOOP("Debugger", "Unload module:")},
+    {"out", true, QT_TRANSLATE_NOOP("Debugger", "Output:")}
 };
 
 static inline int indexOfEvent(const QString &abbrev)
@@ -86,8 +79,6 @@ static inline int indexOfEvent(const QString &abbrev)
 // events with parameters (like 'out:Needle').
 class CdbBreakEventWidget : public QWidget
 {
-    Q_DECLARE_TR_FUNCTIONS(Debugger::Internal::CdbBreakEventWidget)
-
 public:
     explicit CdbBreakEventWidget(QWidget *parent = nullptr);
 
@@ -185,8 +176,6 @@ QStringList CdbBreakEventWidget::breakEvents() const
 
 class CdbOptionsPageWidget : public Core::IOptionsPageWidget
 {
-    Q_DECLARE_TR_FUNCTIONS(Debugger::Internal::CdbOptionsPageWidget)
-
 public:
     CdbOptionsPageWidget();
 
@@ -209,7 +198,7 @@ CdbOptionsPageWidget::CdbOptionsPageWidget()
     Column {
         Row {
             Group {
-                Title(tr("Startup")),
+                Title(Tr::tr("Startup")),
                 s.cdbAdditionalArguments,
                 s.useCdbConsole,
                 Stretch()
@@ -255,7 +244,7 @@ void CdbOptionsPageWidget::finish()
 CdbOptionsPage::CdbOptionsPage()
 {
     setId("F.Debugger.Cda");
-    setDisplayName(CdbOptionsPageWidget::tr("CDB"));
+    setDisplayName(Tr::tr("CDB"));
     setCategory(Debugger::Constants::DEBUGGER_SETTINGS_CATEGORY);
     setWidgetCreator([] { return new CdbOptionsPageWidget; });
 }
@@ -265,8 +254,6 @@ CdbOptionsPage::CdbOptionsPage()
 
 class CdbPathsPageWidget : public Core::IOptionsPageWidget
 {
-    Q_DECLARE_TR_FUNCTIONS(Debugger::Internal::CdbPathsPageWidget)
-
 public:
     CdbPathsPageWidget();
 

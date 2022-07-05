@@ -25,7 +25,6 @@
 
 #include "debuggermainwindow.h"
 #include "debuggerconstants.h"
-#include "debuggerinternalconstants.h"
 #include "enginemanager.h"
 
 #include <coreplugin/actionmanager/actioncontainer.h>
