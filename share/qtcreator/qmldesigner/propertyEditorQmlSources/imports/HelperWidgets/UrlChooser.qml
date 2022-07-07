@@ -44,6 +44,9 @@ Row {
     // by QtQuick3D to add built-in primitives to the model.
     property var defaultItems
 
+    property alias comboBox: comboBox
+    property alias spacer: spacer
+
     FileResourcesModel {
         id: fileModel
         modelNodeBackendProperty: modelNodeBackend
@@ -345,7 +348,9 @@ Row {
         }
     }
 
-    Spacer { implicitWidth: StudioTheme.Values.twoControlColumnGap }
+    Spacer { id: spacer
+        implicitWidth: StudioTheme.Values.twoControlColumnGap
+    }
 
     IconIndicator {
         icon: StudioTheme.Constants.addFile
