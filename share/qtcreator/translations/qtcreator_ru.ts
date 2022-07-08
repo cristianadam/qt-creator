@@ -24849,7 +24849,7 @@ Add, modify, and remove document filters, which determine the documentation set 
     </message>
 </context>
 <context>
-    <name>ImageViewer::Internal::ExportDialog</name>
+    <name>ImageViewer</name>
     <message>
         <source>File:</source>
         <translation>Файл:</translation>
@@ -24871,7 +24871,7 @@ Would you like to overwrite it?</source>
     </message>
 </context>
 <context>
-    <name>ImageViewer::Internal::ImageView</name>
+    <name>ImageViewer</name>
     <message>
         <source>Export %1</source>
         <translation>Экспорт %1</translation>
@@ -24894,7 +24894,7 @@ Would you like to overwrite it?</source>
     </message>
 </context>
 <context>
-    <name>ImageViewer::Internal::ImageViewer</name>
+    <name>ImageViewer</name>
     <message>
         <source>Play Animation</source>
         <translation>Воспроизвести анимацию</translation>
@@ -24905,7 +24905,7 @@ Would you like to overwrite it?</source>
     </message>
 </context>
 <context>
-    <name>ImageViewer::Internal::ImageViewerFile</name>
+    <name>ImageViewer</name>
     <message>
         <source>Image format not supported.</source>
         <translation>Формат изображения не поддерживается.</translation>
@@ -24918,9 +24918,6 @@ Would you like to overwrite it?</source>
         <source>Failed to read image.</source>
         <translation>Не удалось прочитать изображение.</translation>
     </message>
-</context>
-<context>
-    <name>ImageViewer::Internal::ImageViewerToolbar</name>
     <message>
         <source>Zoom In</source>
         <translation>Увеличить</translation>
@@ -24953,16 +24950,9 @@ Would you like to overwrite it?</source>
         <source>Export Images of Multiple Sizes</source>
         <translation>Экспортировать многоразмерные изображения</translation>
     </message>
-</context>
-<context>
-    <name>ImageViewer::Internal::MultiExportDialog</name>
     <message>
         <source>Enter a file name containing place holders %1 which will be replaced by the width and height of the image, respectively.</source>
         <translation>Введите имя файла, содержащее метки %1, которые будут заменены соответственно на ширину и высоту изображения.</translation>
-    </message>
-    <message>
-        <source>File:</source>
-        <translation>Файл:</translation>
     </message>
     <message>
         <source>Clear</source>

@@ -20048,7 +20048,7 @@ GDB omogoča navedbo zaporedja ukazov, ki so ločeni z »\n«.</translation>
     </message>
 </context>
 <context>
-    <name>ImageViewer::Internal::ImageViewerToolbar</name>
+    <name>ImageViewer</name>
     <message>
         <source>Show background</source>
         <translation>Prikaži ozadje </translation>
@@ -25221,25 +25221,14 @@ ključe SSH išče na tem mestu in ne v mapi, kjer je nameščen.</translation>
     </message>
 </context>
 <context>
-    <name>ImageViewer::Internal::ImageViewer</name>
+    <name>ImageViewer</name>
     <message>
         <source>Cannot open image file %1</source>
         <translation>Slikovne datoteke %1 ni moč odpreti</translation>
     </message>
-</context>
-<context>
-    <name>ImageViewer::Internal::ImageViewerActionHandler</name>
-    <message>
-        <source>Zoom In</source>
-        <translation>Približaj</translation>
-    </message>
     <message>
         <source>Ctrl++</source>
         <translation>Ctrl++</translation>
-    </message>
-    <message>
-        <source>Zoom Out</source>
-        <translation>Oddalji</translation>
     </message>
     <message>
         <source>Ctrl+-</source>
