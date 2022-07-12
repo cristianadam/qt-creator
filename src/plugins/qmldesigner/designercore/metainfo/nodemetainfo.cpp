@@ -789,19 +789,47 @@ NodeMetaInfoPrivate::NodeMetaInfoPrivate(Model *model, TypeName type, int maj, i
                 } else {
                     m_isFileComponent = true;
                     const Imports *imports = context()->imports(document());
-                    const ImportInfo importInfo = imports->info(lookupNameComponent().constLast(), context().data());
+                    const ImportInfo importInfo = imports->info(lookupNameComponent().constLast(),
+                                                                context().data());
+
                     if (importInfo.isValid()) {
                         if (importInfo.type() == ImportType::Library) {
                             m_majorVersion = importInfo.version().majorVersion();
                             m_minorVersion = importInfo.version().minorVersion();
                         }
-                        bool prepandName = (importInfo.type() == ImportType::Library || importInfo.type() == ImportType::Directory)
-                                && !m_qualfiedTypeName.contains('.');
+                        bool prepandName = (importInfo.type() == ImportType::Library
+                                            || importInfo.type() == ImportType::Directory)
+                                           && !m_qualfiedTypeName.contains('.');
                         if (prepandName)
-                                m_qualfiedTypeName.prepend(importInfo.name().toUtf8() + '.');
+                            m_qualfiedTypeName.prepend(importInfo.name().toUtf8() + '.');
                     }
                 }
                 m_objectValue = objectValue;
+                m_defaultPropertyName = context()->defaultPropertyName(objectValue).toUtf8();
+                m_isValid = true;
+                setupPrototypes();
+            } else {
+                // Special case for aliased types for the rewriter
+
+                const Imports *imports = context()->imports(document());
+                const ImportInfo importInfo = imports->info(QString::fromUtf8(m_qualfiedTypeName),
+                                                            context().data());
+                if (importInfo.isValid()) {
+                    if (importInfo.type() == ImportType::Library) {
+                        m_majorVersion = importInfo.version().majorVersion();
+                        m_minorVersion = importInfo.version().minorVersion();
+                    }
+
+                    if (m_qualfiedTypeName.contains('.'))
+                        m_qualfiedTypeName = m_qualfiedTypeName.split('.').last();
+
+                    bool prepandName = (importInfo.type() == ImportType::Library
+                                        || importInfo.type() == ImportType::Directory);
+                    if (prepandName)
+                        m_qualfiedTypeName.prepend(importInfo.name().toUtf8() + '.');
+                }
+
+                m_objectValue = getObjectValue();
                 m_defaultPropertyName = context()->defaultPropertyName(objectValue).toUtf8();
                 m_isValid = true;
                 setupPrototypes();
