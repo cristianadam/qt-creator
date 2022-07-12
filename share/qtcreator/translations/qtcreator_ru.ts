@@ -50901,7 +50901,7 @@ The trace data is lost.</source>
     </message>
 </context>
 <context>
-    <name>Todo::Internal::KeywordDialog</name>
+    <name>Todo</name>
     <message>
         <source>Keyword</source>
         <translation>Ключевое слово</translation>
@@ -50928,22 +50928,14 @@ The trace data is lost.</source>
     </message>
 </context>
 <context>
-    <name>Todo::Internal::OptionsDialog</name>
+    <name>Todo</name>
     <message>
         <source>Keywords</source>
         <translation>Ключевые слова</translation>
     </message>
     <message>
-        <source>Add</source>
-        <translation>Добавить</translation>
-    </message>
-    <message>
         <source>Edit</source>
         <translation>Изменить</translation>
-    </message>
-    <message>
-        <source>Remove</source>
-        <translation>Удалить</translation>
     </message>
     <message>
         <source>Reset</source>
@@ -50967,7 +50959,7 @@ The trace data is lost.</source>
     </message>
 </context>
 <context>
-    <name>Todo::Internal::TodoItemsModel</name>
+    <name>Todo</name>
     <message>
         <source>Description</source>
         <translation>Описание</translation>
@@ -50982,14 +50974,7 @@ The trace data is lost.</source>
     </message>
 </context>
 <context>
-    <name>Todo::Internal::TodoOptionsPage</name>
-    <message>
-        <source>To-Do</source>
-        <translation>To-Do</translation>
-    </message>
-</context>
-<context>
-    <name>Todo::Internal::TodoOutputPane</name>
+    <name>Todo</name>
     <message>
         <source>To-Do Entries</source>
         <translation>Записи To-Do</translation>
@@ -51024,7 +51009,7 @@ The trace data is lost.</source>
     </message>
 </context>
 <context>
-    <name>Todo::Internal::TodoProjectSettingsWidget</name>
+    <name>Todo</name>
     <message>
         <source>Excluded Files</source>
         <translation>Исключаемые файлы</translation>

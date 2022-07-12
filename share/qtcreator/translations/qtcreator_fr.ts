@@ -51502,22 +51502,7 @@ Influence l&apos;indentation des lignes de continuation.
     </message>
 </context>
 <context>
-    <name>Todo::Internal::AddKeywordDialog</name>
-    <message>
-        <source>Keyword</source>
-        <translation type="obsolete">mot-clé</translation>
-    </message>
-    <message>
-        <source>Icon</source>
-        <translation type="obsolete">Icone</translation>
-    </message>
-    <message>
-        <source>Color</source>
-        <translation type="obsolete">Couleur</translation>
-    </message>
-</context>
-<context>
-    <name>Todo::Internal::OptionsDialog</name>
+    <name>Todo</name>
     <message>
         <source>Form</source>
         <translation>Formulaire</translation>
@@ -51545,14 +51530,6 @@ Influence l&apos;indentation des lignes de continuation.
     <message>
         <source>Scanning scope</source>
         <translation>Portée de la recherche</translation>
-    </message>
-    <message>
-        <source>Scan in the whole project</source>
-        <translation>Rechercher dans tout le projet</translation>
-    </message>
-    <message>
-        <source>Scan in the current opened file</source>
-        <translation>Rechercher dans le fichier courant</translation>
     </message>
 </context>
 <context>
@@ -53419,7 +53396,7 @@ Les modèles de code C++ et QML ont besoin d&apos;une version de Qt et d&apos;un
     </message>
 </context>
 <context>
-    <name>Todo::Internal::TodoItemsModel</name>
+    <name>Todo</name>
     <message>
         <source>Description</source>
         <translation>Description</translation>
@@ -53434,7 +53411,7 @@ Les modèles de code C++ et QML ont besoin d&apos;une version de Qt et d&apos;un
     </message>
 </context>
 <context>
-    <name>Todo::Internal::TodoOutputPane</name>
+    <name>Todo</name>
     <message>
         <source>To-Do Entries</source>
         <translatorcomment>Fonctionnalités qui recherche les entrées &quot;TODO&quot; dans le code, à voir comment ça s&apos;affiche en partique dans Qt Creator. [Pierre] ça je suis partisant de laisser TODO tel quel, c&apos;est du jargon informatique...</translatorcomment>
@@ -53458,7 +53435,7 @@ Les modèles de code C++ et QML ont besoin d&apos;une version de Qt et d&apos;un
     </message>
 </context>
 <context>
-    <name>Todo::Internal::OptionsPage</name>
+    <name>Todo</name>
     <message>
         <source>To-Do</source>
         <translatorcomment>Quoi que l&apos;on pourrait laisser TODO ? [Pierre] yep, je valide TODO</translatorcomment>
@@ -54491,7 +54468,7 @@ Le fichier APL ne sera pas utilisable sur d&apos;autres périphériques.</transl
     </message>
 </context>
 <context>
-    <name>Todo::Internal::KeywordDialog</name>
+    <name>Todo</name>
     <message>
         <source>Keyword</source>
         <translation>Mot-clé</translation>
