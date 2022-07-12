@@ -9160,7 +9160,7 @@ Utječe na uvlačenje neprekinutih redaka.
     </message>
 </context>
 <context>
-    <name>Todo::Internal::KeywordDialog</name>
+    <name>Todo</name>
     <message>
         <source>Keyword</source>
         <translation>Ključna riječ</translation>
@@ -9187,7 +9187,7 @@ Utječe na uvlačenje neprekinutih redaka.
     </message>
 </context>
 <context>
-    <name>Todo::Internal::OptionsDialog</name>
+    <name>Todo</name>
     <message>
         <source>Keywords</source>
         <translation>Ključne riječi</translation>
@@ -9226,7 +9226,7 @@ Utječe na uvlačenje neprekinutih redaka.
     </message>
 </context>
 <context>
-    <name>Todo::Internal::TodoProjectSettingsWidget</name>
+    <name>Todo</name>
     <message>
         <source>Excluded Files</source>
         <translation>Isključene datoteke</translation>
@@ -9234,18 +9234,6 @@ Utječe na uvlačenje neprekinutih redaka.
     <message>
         <source>Regular expressions for file paths to be excluded from scanning.</source>
         <translation>Regularni izrazi za staze datoteka koje se isključuju iz pretrage.</translation>
-    </message>
-    <message>
-        <source>Add</source>
-        <translation>Dodaj</translation>
-    </message>
-    <message>
-        <source>Remove</source>
-        <translation>Ukloni</translation>
-    </message>
-    <message>
-        <source>To-Do</source>
-        <translation>Zadatak</translation>
     </message>
     <message>
         <source>&lt;Enter regular expression to exclude&gt;</source>
@@ -41494,7 +41482,7 @@ Neće se primijeniti na bjeline u komentarima i znakovnim nizovima.</translation
     </message>
 </context>
 <context>
-    <name>Todo::Internal::TodoItemsModel</name>
+    <name>Todo</name>
     <message>
         <source>Description</source>
         <translation>Opis</translation>
@@ -41509,7 +41497,7 @@ Neće se primijeniti na bjeline u komentarima i znakovnim nizovima.</translation
     </message>
 </context>
 <context>
-    <name>Todo::Internal::TodoOutputPane</name>
+    <name>Todo</name>
     <message>
         <source>To-Do Entries</source>
         <translation>Unosi zadatka</translation>
@@ -41544,7 +41532,7 @@ Neće se primijeniti na bjeline u komentarima i znakovnim nizovima.</translation
     </message>
 </context>
 <context>
-    <name>Todo::Internal::OptionsPage</name>
+    <name>Todo</name>
     <message>
         <source>To-Do</source>
         <translation>Zadatak</translation>

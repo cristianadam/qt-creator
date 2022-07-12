@@ -40355,7 +40355,7 @@ Vil blive anvendt på blanktegn i kommentarer og strenge.</translation>
     </message>
 </context>
 <context>
-    <name>Todo::Internal::KeywordDialog</name>
+    <name>Todo</name>
     <message>
         <source>Keyword</source>
         <translation>Nøgleord</translation>
@@ -40382,22 +40382,14 @@ Vil blive anvendt på blanktegn i kommentarer og strenge.</translation>
     </message>
 </context>
 <context>
-    <name>Todo::Internal::OptionsDialog</name>
+    <name>Todo</name>
     <message>
         <source>Keywords</source>
         <translation>Nøgleord</translation>
     </message>
     <message>
-        <source>Add</source>
-        <translation>Tilføj</translation>
-    </message>
-    <message>
         <source>Edit</source>
         <translation>Rediger</translation>
-    </message>
-    <message>
-        <source>Remove</source>
-        <translation>Fjern</translation>
     </message>
     <message>
         <source>Reset</source>
@@ -40421,14 +40413,7 @@ Vil blive anvendt på blanktegn i kommentarer og strenge.</translation>
     </message>
 </context>
 <context>
-    <name>Todo::Internal::OptionsPage</name>
-    <message>
-        <source>To-Do</source>
-        <translation>To-do</translation>
-    </message>
-</context>
-<context>
-    <name>Todo::Internal::TodoItemsModel</name>
+    <name>Todo</name>
     <message>
         <source>Description</source>
         <translation>Beskrivelse</translation>
@@ -40443,7 +40428,7 @@ Vil blive anvendt på blanktegn i kommentarer og strenge.</translation>
     </message>
 </context>
 <context>
-    <name>Todo::Internal::TodoOutputPane</name>
+    <name>Todo</name>
     <message>
         <source>To-Do Entries</source>
         <translation>To-do-poster</translation>
@@ -40478,7 +40463,7 @@ Vil blive anvendt på blanktegn i kommentarer og strenge.</translation>
     </message>
 </context>
 <context>
-    <name>Todo::Internal::TodoProjectSettingsWidget</name>
+    <name>Todo</name>
     <message>
         <source>Excluded Files</source>
         <translation>Ekskluderet filer</translation>
