@@ -153,6 +153,12 @@ class SourceContext;
 std::ostream &operator<<(std::ostream &out, const SourceContext &sourceContext);
 } // namespace Cache
 
+namespace Storage {
+enum class PropertyDeclarationTraits : int;
+
+std::ostream &operator<<(std::ostream &out, PropertyDeclarationTraits traits);
+} // namespace Storage
+
 namespace Storage::Synchronization {
 class Type;
 class ExportedType;
@@ -161,7 +167,6 @@ class QualifiedImportedType;
 class Version;
 class VersionNumber;
 enum class TypeAccessSemantics : int;
-enum class PropertyDeclarationTraits : int;
 class PropertyDeclaration;
 class FunctionDeclaration;
 class ParameterDeclaration;
