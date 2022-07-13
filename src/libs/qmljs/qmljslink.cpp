@@ -32,7 +32,6 @@
 #include "qmljsmodelmanagerinterface.h"
 #include "qmljsconstants.h"
 
-#include <utils/porting.h>
 #include <utils/qrcparser.h>
 
 #include <QDir>
