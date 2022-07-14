@@ -28,7 +28,7 @@
 
 #include "ioptionspage.h"
 
-#include <coreplugin/icore.h>
+#include "icore.h"
 
 #include <utils/aspects.h>
 #include <utils/qtcassert.h>

@@ -85,6 +85,8 @@ private slots:
     void test_basefilefilter_data();
 
     void testOutputFormatter();
+
+    void testOptionPageScreenShotter();
 #endif
 
 private:

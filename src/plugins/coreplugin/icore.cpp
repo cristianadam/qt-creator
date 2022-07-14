@@ -25,8 +25,10 @@
 
 #include "icore.h"
 
+#include "coreplugin.h"
 #include "coreplugintr.h"
 #include "dialogs/settingsdialog.h"
+#include "dialogs/ioptionspage.h"
 #include "windowsupport.h"
 
 #include <app/app_version.h>
@@ -39,6 +41,10 @@
 #include <QDebug>
 #include <QStandardPaths>
 #include <QSysInfo>
+
+#ifdef WITH_TESTS
+#include <QtTest>
+#endif
 
 /*!
     \namespace Core
@@ -978,5 +984,27 @@ void ICore::setNewDialogFactory(const std::function<NewDialog *(QWidget *)> &new
 {
     m_newDialogFactory = newFactory;
 }
+
+#ifdef WITH_TESTS
+
+void Internal::CorePlugin::testOptionPageScreenShotter()
+{
+    const bool wantsScreenShots = !qEnvironmentVariableIsEmpty("QTC_SCREENSHOTS_PATH");
+
+    if (!wantsScreenShots) {
+        qDebug() << "Taking screenshots of settings dialog is disabled. Set QTC_SCREENSHOTS_PATH to enable.";
+        return;
+    }
+
+    for (IOptionsPage *page : IOptionsPage::allOptionsPages()) {
+        QWidget *w = page->widget();
+        auto s = new ScreenShooter(w, page->displayName(), {});
+        w->show();
+        QSignalSpy spy(s, &QObject::destroyed);
+        QVERIFY(spy.wait(3000));
+    }
+}
+
+#endif
 
 } // namespace Core
