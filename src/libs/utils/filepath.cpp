@@ -1660,6 +1660,15 @@ FilePath FilePath::resolvePath(const QString &tail) const
    return resolvePath(tailPath);
 }
 
+// Cleans path part similar to QDir::cleanPath()
+//  - directory separators normalized (that is, platform-native
+//    separators converted to "/") and redundant ones removed, and "."s and ".."s
+//    resolved (as far as possible).
+//   Symbolic links are kept. This function does not return the
+//    canonical path, but rather the simplest version of the input.
+//    For example, "./local" becomes "local", "local/../bin" becomes
+//    "bin" and "/local/usr/../bin" becomes "/local/bin".
+
 FilePath FilePath::cleanPath() const
 {
     return withNewPath(doCleanPath(path()));
@@ -1670,9 +1679,239 @@ QTextStream &operator<<(QTextStream &s, const FilePath &fn)
     return s << fn.toString();
 }
 
+// Return the length of the root part of an absolute path, for use by cleanPath(), cd().
+static int rootLength(const QString &name, bool isWindows)
+{
+    const int len = name.length();
+    // starts with double slash
+    if (isWindows && name.startsWith("//")) {
+        // Server name '//server/path' is part of the prefix.
+        const int nextSlash = name.indexOf(u'/', 2);
+        return nextSlash >= 0 ? nextSlash + 1 : len;
+    }
+    if (isWindows) {
+        if (len >= 2 && name.at(1) == u':') {
+            // Handle a possible drive letter
+            return len > 2 && name.at(2) == u'/' ? 3 : 2;
+        }
+    }
+    if (name.at(0) == u'/')
+        return 1;
+    return 0;
+}
+
+static QString normalizePathSegmentHelper(const QString &name, bool isWindows)
+{
+    const bool isRemote = false; // flags.testAnyFlag(RemotePath);
+    const int len = name.length();
+
+    if (len == 0)
+        return name;
+
+    int i = len - 1;
+    QVarLengthArray<char16_t> outVector(len);
+    int used = len;
+    char16_t *out = outVector.data();
+    const ushort *p = reinterpret_cast<const ushort *>(name.data());
+    const ushort *prefix = p;
+    int up = 0;
+
+    const int prefixLength = rootLength(name, isWindows);
+    p += prefixLength;
+    i -= prefixLength;
+
+    // replicate trailing slash (i > 0 checks for emptiness of input string p)
+    // except for remote paths because there can be /../ or /./ ending
+    if (i > 0 && p[i] == '/' && !isRemote) {
+        out[--used] = '/';
+        --i;
+    }
+
+    auto isDot = [](const ushort *p, int i) {
+        return i > 1 && p[i - 1] == '.' && p[i - 2] == '/';
+    };
+    auto isDotDot = [](const ushort *p, int i) {
+        return i > 2 && p[i - 1] == '.' && p[i - 2] == '.' && p[i - 3] == '/';
+    };
+
+    while (i >= 0) {
+        // copy trailing slashes for remote urls
+        if (p[i] == '/') {
+            if (isRemote && !up) {
+                if (isDot(p, i)) {
+                    i -= 2;
+                    continue;
+                }
+                out[--used] = p[i];
+            }
+
+            --i;
+            continue;
+        }
+
+        // remove current directory
+        if (p[i] == '.' && (i == 0 || p[i-1] == '/')) {
+            --i;
+            continue;
+        }
+
+        // detect up dir
+        if (i >= 1 && p[i] == '.' && p[i-1] == '.' && (i < 2 || p[i - 2] == '/')) {
+            ++up;
+            i -= i >= 2 ? 3 : 2;
+
+            if (isRemote) {
+                // moving up should consider empty path segments too (/path//../ -> /path/)
+                while (i > 0 && up && p[i] == '/') {
+                    --up;
+                    --i;
+                }
+            }
+            continue;
+        }
+
+        // prepend a slash before copying when not empty
+        if (!up && used != len && out[used] != '/')
+            out[--used] = '/';
+
+        // skip or copy
+        while (i >= 0) {
+            if (p[i] == '/') {
+                // copy all slashes as is for remote urls if they are not part of /./ or /../
+                if (isRemote && !up) {
+                    while (i > 0 && p[i] == '/' && !isDotDot(p, i)) {
+
+                        if (isDot(p, i)) {
+                            i -= 2;
+                            continue;
+                        }
+
+                        out[--used] = p[i];
+                        --i;
+                    }
+
+                    // in case of /./, jump over
+                    if (isDot(p, i))
+                        i -= 2;
+
+                    break;
+                }
+
+                --i;
+                break;
+            }
+
+            // actual copy
+            if (!up)
+                out[--used] = p[i];
+            --i;
+        }
+
+        // decrement up after copying/skipping
+        if (up)
+            --up;
+    }
+
+    // Indicate failure when ".." are left over for an absolute path.
+//    if (ok)
+//        *ok = prefixLength == 0 || up == 0;
+
+    // add remaining '..'
+    while (up && !isRemote) {
+        if (used != len && out[used] != '/') // is not empty and there isn't already a '/'
+            out[--used] = '/';
+        out[--used] = '.';
+        out[--used] = '.';
+        --up;
+    }
+
+    bool isEmpty = used == len;
+
+    if (prefixLength) {
+        if (!isEmpty && out[used] == '/') {
+            // Even though there is a prefix the out string is a slash. This happens, if the input
+            // string only consists of a prefix followed by one or more slashes. Just skip the slash.
+            ++used;
+        }
+        for (int i = prefixLength - 1; i >= 0; --i)
+            out[--used] = prefix[i];
+    } else {
+        if (isEmpty) {
+            // After resolving the input path, the resulting string is empty (e.g. "foo/.."). Return
+            // a dot in that case.
+            out[--used] = '.';
+        } else if (out[used] == '/') {
+            // After parsing the input string, out only contains a slash. That happens whenever all
+            // parts are resolved and there is a trailing slash ("./" or "foo/../" for example).
+            // Prepend a dot to have the correct return value.
+            out[--used] = '.';
+        }
+    }
+
+    // If path was not modified return the original value
+    if (used == 0)
+        return name;
+    return QString::fromUtf16(out + used, len - used);
+}
+
+QString cleanPathHelper(const QString &path, bool isWindows)
+{
+    if (path.isEmpty())
+        return path;
+
+    QString ret = normalizePathSegmentHelper(path, isWindows);
+
+    // Strip away last slash except for root directories
+    if (ret.length() > 1 && ret.endsWith(u'/')) {
+        if (isWindows) {
+            if (!(ret.length() == 3 && ret.at(1) == u':'))
+                ret.chop(1);
+        } else {
+            ret.chop(1);
+
+        }
+    }
+
+    return ret;
+}
+
+QString doCleanPath(const QString &input_)
+{
+    bool localIsWindows = HostOsInfo::isWindowsHost();
+    QString input = input_;
+    if (input.contains('\\')) {
+        localIsWindows = true;
+        input.replace('\\', '/');
+    }
+
+    if (input.startsWith("//?/")) {
+        input = input.mid(4);
+        if (input.startsWith("UNC/"))
+            input = '/' + input.mid(3);  // trick it into reporting two slashs at start
+    }
+
+    QString res;
+    const int shLen = FilePath::schemeAndHostLength(input);
+    if (shLen > 0) {
+        int prefixLen = shLen + FilePath::rootLength(input.mid(shLen));
+        res = input.left(prefixLen) + cleanPathHelper(input.mid(prefixLen), false);  // Assume non-Windows
+    } else {
+        int rootLen = FilePath::rootLength(input);
+        if (rootLen > 0 && input.at(rootLen - 1) == '/')
+            --rootLen;
+
+        res = input.left(rootLen) + cleanPathHelper(input.mid(rootLen), localIsWindows);
+    }
+
+    return res;
+}
+
+
+// FileFilter
+
 FileFilter::FileFilter(const QStringList &nameFilters,
-                               const QDir::Filters fileFilters,
-                               const QDirIterator::IteratorFlags flags)
+                       const QDir::Filters fileFilters,
+                       const QDirIterator::IteratorFlags flags)
     : nameFilters(nameFilters),
       fileFilters(fileFilters),
       iteratorFlags(flags)
