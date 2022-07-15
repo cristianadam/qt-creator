@@ -31,7 +31,6 @@ Project {
             "genericlinuxdeviceconfigurationwizard.h",
             "genericlinuxdeviceconfigurationwizardpages.cpp",
             "genericlinuxdeviceconfigurationwizardpages.h",
-            "genericlinuxdeviceconfigurationwizardsetuppage.ui",
             "killappstep.cpp",
             "killappstep.h",
             "linuxdevice.cpp",

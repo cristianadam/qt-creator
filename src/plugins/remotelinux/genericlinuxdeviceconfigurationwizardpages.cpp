@@ -24,7 +24,6 @@
 ****************************************************************************/
 
 #include "genericlinuxdeviceconfigurationwizardpages.h"
-#include "ui_genericlinuxdeviceconfigurationwizardsetuppage.h"
 
 #include "publickeydeploymentdialog.h"
 #include "sshkeycreationdialog.h"
@@ -32,6 +31,7 @@
 #include <projectexplorer/devicesupport/sshparameters.h>
 
 #include <utils/fileutils.h>
+#include <utils/layoutbuilder.h>
 #include <utils/pathchooser.h>
 #include <utils/utilsicons.h>
 
@@ -41,16 +41,29 @@
 #include <QStringList>
 #include <QVBoxLayout>
 
+#include <QtCore/QVariant>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QFormLayout>
+#include <QtWidgets/QHBoxLayout>
+#include <QtWidgets/QLabel>
+#include <QtWidgets/QLineEdit>
+#include <QtWidgets/QSpacerItem>
+#include <QtWidgets/QWizardPage>
+
 using namespace ProjectExplorer;
 using namespace Utils;
 
 namespace RemoteLinux {
 namespace Internal {
 
+
 class GenericLinuxDeviceConfigurationWizardSetupPagePrivate
 {
 public:
-    Ui::GenericLinuxDeviceConfigurationWizardSetupPage ui;
+    QLineEdit *nameLineEdit;
+    QLineEdit *hostNameLineEdit;
+    QLineEdit *userNameLineEdit;
+
     LinuxDevice::Ptr device;
 };
 
@@ -66,12 +79,27 @@ GenericLinuxDeviceConfigurationWizardSetupPage::GenericLinuxDeviceConfigurationW
         QWidget *parent) :
     QWizardPage(parent), d(new Internal::GenericLinuxDeviceConfigurationWizardSetupPagePrivate)
 {
-    d->ui.setupUi(this);
     setTitle(tr("Connection"));
+    setWindowTitle(tr("WizardPage"));
+
+    d->nameLineEdit = new QLineEdit(this);
+    d->hostNameLineEdit = new QLineEdit(this);
+    d->userNameLineEdit = new QLineEdit(this);
+
+    using namespace Layouting;
+    const Break nl;
+    const Stretch st;
+
+    Form {
+        tr("The name to identify this configuration:"), d->nameLineEdit, nl,
+        tr("The device's host name or IP address:"), d->hostNameLineEdit, st, nl,
+        tr("The username to log into the device:"), d->userNameLineEdit, st, nl
+    }.attachTo(this);
+
     setSubTitle(QLatin1String(" ")); // For Qt bug (background color)
-    connect(d->ui.nameLineEdit, &QLineEdit::textChanged, this, &QWizardPage::completeChanged);
-    connect(d->ui.hostNameLineEdit, &QLineEdit::textChanged, this, &QWizardPage::completeChanged);
-    connect(d->ui.userNameLineEdit, &QLineEdit::textChanged, this, &QWizardPage::completeChanged);
+    connect(d->nameLineEdit, &QLineEdit::textChanged, this, &QWizardPage::completeChanged);
+    connect(d->hostNameLineEdit, &QLineEdit::textChanged, this, &QWizardPage::completeChanged);
+    connect(d->userNameLineEdit, &QLineEdit::textChanged, this, &QWizardPage::completeChanged);
 }
 
 GenericLinuxDeviceConfigurationWizardSetupPage::~GenericLinuxDeviceConfigurationWizardSetupPage()
@@ -81,16 +109,16 @@ GenericLinuxDeviceConfigurationWizardSetupPage::~GenericLinuxDeviceConfiguration
 
 void GenericLinuxDeviceConfigurationWizardSetupPage::initializePage()
 {
-    d->ui.nameLineEdit->setText(d->device->displayName());
-    d->ui.hostNameLineEdit->setText(d->device->sshParameters().host());
-    d->ui.userNameLineEdit->setText(d->device->sshParameters().userName());
+    d->nameLineEdit->setText(d->device->displayName());
+    d->hostNameLineEdit->setText(d->device->sshParameters().host());
+    d->userNameLineEdit->setText(d->device->sshParameters().userName());
 }
 
 bool GenericLinuxDeviceConfigurationWizardSetupPage::isComplete() const
 {
     return !configurationName().isEmpty()
-            && !d->ui.hostNameLineEdit->text().trimmed().isEmpty()
-            && !d->ui.userNameLineEdit->text().trimmed().isEmpty();
+            && !d->hostNameLineEdit->text().trimmed().isEmpty()
+            && !d->userNameLineEdit->text().trimmed().isEmpty();
 }
 
 bool GenericLinuxDeviceConfigurationWizardSetupPage::validatePage()
@@ -104,14 +132,14 @@ bool GenericLinuxDeviceConfigurationWizardSetupPage::validatePage()
 
 QString GenericLinuxDeviceConfigurationWizardSetupPage::configurationName() const
 {
-    return d->ui.nameLineEdit->text().trimmed();
+    return d->nameLineEdit->text().trimmed();
 }
 
 QUrl GenericLinuxDeviceConfigurationWizardSetupPage::url() const
 {
     QUrl url;
-    url.setHost(d->ui.hostNameLineEdit->text().trimmed());
-    url.setUserName(d->ui.userNameLineEdit->text().trimmed());
+    url.setHost(d->hostNameLineEdit->text().trimmed());
+    url.setUserName(d->userNameLineEdit->text().trimmed());
     url.setPort(22);
     return url;
 }
