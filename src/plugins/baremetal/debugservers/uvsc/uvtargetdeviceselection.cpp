@@ -427,8 +427,7 @@ DeviceSelectionAlgorithmView::DeviceSelectionAlgorithmView(DeviceSelection &sele
     mapper->addMapping(ramStartEdit, DeviceSelectionAlgorithmItem::RamStartColumn);
     mapper->addMapping(ramSizeEdit, DeviceSelectionAlgorithmItem::RamSizeColumn);
 
-    connect(m_comboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, [mapper, this](int index) {
+    connect(m_comboBox, &QComboBox::currentIndexChanged, this, [mapper, this](int index) {
         mapper->setCurrentIndex(index);
         emit algorithmChanged(index);
     });

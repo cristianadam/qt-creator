@@ -316,8 +316,7 @@ EBlinkGdbServerProviderConfigWidget::EBlinkGdbServerProviderConfigWidget(
             this, &GdbServerProviderConfigWidget::dirty);
     connect(m_resetOnConnectCheckBox, &QAbstractButton::clicked,
             this, &GdbServerProviderConfigWidget::dirty);
-    connect(m_interfaceTypeComboBox,
-            QOverload<int>::of(&QComboBox::currentIndexChanged),
+    connect(m_interfaceTypeComboBox, &QComboBox::currentIndexChanged,
             this, &GdbServerProviderConfigWidget::dirty);
     connect(m_initCommandsTextEdit, &QPlainTextEdit::textChanged,
             this, &GdbServerProviderConfigWidget::dirty);
