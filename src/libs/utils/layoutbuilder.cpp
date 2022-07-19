@@ -104,6 +104,7 @@ LayoutBuilder::LayoutItem::LayoutItem(BaseAspect *aspect)
  */
 LayoutBuilder::LayoutItem::LayoutItem(const QString &text)
     : text(text)
+    , specialType(SpecialType::Text)
 {}
 
 QLayout *LayoutBuilder::createLayout() const
@@ -170,7 +171,7 @@ static void addItemToBoxLayout(QBoxLayout *layout, const LayoutBuilder::LayoutIt
         layout->addStretch(item.specialValue.toInt());
     } else if (item.specialType == LayoutBuilder::SpecialType::Space) {
         layout->addSpacing(item.specialValue.toInt());
-    } else if (!item.text.isEmpty()) {
+    } else if (item.specialType == LayoutBuilder::SpecialType::Text) {
         layout->addWidget(new QLabel(item.text));
     } else {
         QTC_CHECK(false);
@@ -231,6 +232,16 @@ static void flushPendingFormItems(QFormLayout *formLayout,
     pendingFormItems.clear();
 }
 
+static void flatten(const LayoutBuilder::LayoutItems &items, LayoutBuilder::LayoutItems &expanded)
+{
+    for (const LayoutBuilder::LayoutItem &item : items) {
+        if (item.specialType == LayoutBuilder::SpecialType::SubItems)
+            flatten(item.subItems, expanded);
+        else
+            expanded.append(item);
+    }
+}
+
 static void doLayoutHelper(QLayout *layout,
                            const LayoutBuilder::LayoutItems &items,
                            int currentGridRow = 0)
@@ -242,7 +253,11 @@ static void doLayoutHelper(QLayout *layout,
     auto gridLayout = qobject_cast<QGridLayout *>(layout);
     auto boxLayout = qobject_cast<QBoxLayout *>(layout);
 
-    for (const LayoutBuilder::LayoutItem &item : items) {
+    // expand items with subitems
+    LayoutBuilder::LayoutItems expandedItems;
+    flatten(items, expandedItems);
+
+    for (const LayoutBuilder::LayoutItem &item : expandedItems) {
         if (item.specialType == LayoutBuilder::SpecialType::Break) {
             if (formLayout)
                 flushPendingFormItems(formLayout, pendingFormItems);
@@ -445,6 +460,17 @@ LayoutExtender::~LayoutExtender()
 
 // Special items
 
+LayoutBuilder::Items::Items()
+{
+    specialType = SpecialType::SubItems;
+}
+
+LayoutBuilder::Items::Items(std::initializer_list<LayoutItem> items)
+{
+    specialType = SpecialType::SubItems;
+    subItems = LayoutItems(items);
+}
+
 LayoutBuilder::Break::Break()
 {
     specialType = SpecialType::Break;
@@ -505,5 +531,7 @@ Group::Group(std::initializer_list<LayoutItem> items)
     widget = box;
 }
 
-} // Layouting
+} // namespace Layouting
+
+// Layouting
 } // Utils

@@ -63,6 +63,8 @@ public:
         Space,
         Stretch,
         Break,
+        Text,
+        SubItems,
         Title,
     };
 
@@ -86,6 +88,7 @@ public:
         AlignmentType align = AlignmentType::DefaultAlignment;
         SpecialType specialType = SpecialType::NotSpecial;
         QVariant specialValue;
+        QList<LayoutItem> subItems;
     };
 
     using LayoutItems = QList<LayoutItem>;
@@ -112,6 +115,13 @@ public:
 
     void attachTo(QWidget *w, bool withMargins = true);
     QWidget *emerge(bool withMargins = true);
+
+    class QTCREATOR_UTILS_EXPORT Items : public LayoutItem
+    {
+    public:
+        Items();
+        Items(std::initializer_list<LayoutItem> items);
+    };
 
     class QTCREATOR_UTILS_EXPORT Space : public LayoutItem
     {
@@ -207,6 +217,7 @@ public:
     Form(std::initializer_list<LayoutItem> items) : LayoutBuilder(FormLayout, items) {}
 };
 
+using Items = LayoutBuilder::Items;
 using Stretch = LayoutBuilder::Stretch;
 using Space = LayoutBuilder::Space;
 using Span = LayoutBuilder::Span;
