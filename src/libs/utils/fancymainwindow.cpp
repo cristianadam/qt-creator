@@ -397,29 +397,22 @@ QDockWidget *FancyMainWindow::addDockForWidget(QWidget *widget, bool immutable)
     auto dockWidget = new DockWidget(widget, this, immutable);
 
     if (!immutable) {
-        connect(dockWidget, &QDockWidget::visibilityChanged,
-            [this, dockWidget](bool visible) {
-                if (d->m_handleDockVisibilityChanges)
-                    dockWidget->setProperty(dockWidgetActiveState, visible);
-            });
+        connect(dockWidget, &QDockWidget::visibilityChanged, this,
+                [this, dockWidget](bool visible) {
+            if (d->m_handleDockVisibilityChanges)
+                dockWidget->setProperty(dockWidgetActiveState, visible);
+        });
 
-        connect(dockWidget->toggleViewAction(), &QAction::triggered,
-                this, &FancyMainWindow::onDockActionTriggered,
-                Qt::QueuedConnection);
+        connect(dockWidget->toggleViewAction(), &QAction::triggered, this,
+                [dw = QPointer<QDockWidget>(dockWidget)] {
+            if (dw && dw->isVisible())
+                dw->raise();
+        }, Qt::QueuedConnection);
 
         dockWidget->setProperty(dockWidgetActiveState, true);
     }
 
     return dockWidget;
-}
-
-void FancyMainWindow::onDockActionTriggered()
-{
-    auto dw = qobject_cast<QDockWidget *>(sender()->parent());
-    if (dw) {
-        if (dw->isVisible())
-            dw->raise();
-    }
 }
 
 void FancyMainWindow::setTrackingEnabled(bool enabled)
