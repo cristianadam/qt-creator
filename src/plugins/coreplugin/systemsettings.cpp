@@ -94,13 +94,10 @@ public:
             for (const TerminalCommand &term : availableTerminals)
                 m_ui.terminalComboBox->addItem(term.command, QVariant::fromValue(term));
             updateTerminalUi(TerminalCommand::terminalEmulator());
-            connect(m_ui.terminalComboBox,
-                    QOverload<int>::of(&QComboBox::currentIndexChanged),
-                    this,
+            connect(m_ui.terminalComboBox, &QComboBox::currentIndexChanged, this,
                     [this](int index) {
-                        updateTerminalUi(
-                            m_ui.terminalComboBox->itemData(index).value<TerminalCommand>());
-                    });
+                updateTerminalUi(m_ui.terminalComboBox->itemData(index).value<TerminalCommand>());
+            });
         } else {
             m_ui.terminalLabel->hide();
             m_ui.terminalComboBox->hide();
