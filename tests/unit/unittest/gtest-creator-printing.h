@@ -137,11 +137,11 @@ class IdPaths;
 class ProjectChunkId;
 enum class SourceType : int;
 class FileStatus;
+enum class TypeAccessSemantics : int;
 
 std::ostream &operator<<(std::ostream &out, const ModelNode &node);
 std::ostream &operator<<(std::ostream &out, const VariantProperty &property);
-
-
+std::ostream &operator<<(std::ostream &out, TypeAccessSemantics accessSemantics);
 std::ostream &operator<<(std::ostream &out, const WatcherEntry &entry);
 std::ostream &operator<<(std::ostream &out, const IdPaths &idPaths);
 std::ostream &operator<<(std::ostream &out, const ProjectChunkId &id);
@@ -176,7 +176,6 @@ class ImportedType;
 class QualifiedImportedType;
 class Version;
 class VersionNumber;
-enum class TypeAccessSemantics : int;
 class PropertyDeclaration;
 class FunctionDeclaration;
 class ParameterDeclaration;
@@ -193,7 +192,6 @@ enum class FileType : char;
 enum class ChangeLevel : char;
 class ModuleExportedImport;
 
-std::ostream &operator<<(std::ostream &out, TypeAccessSemantics accessSemantics);
 std::ostream &operator<<(std::ostream &out, VersionNumber versionNumber);
 std::ostream &operator<<(std::ostream &out, Version version);
 std::ostream &operator<<(std::ostream &out, const Type &type);

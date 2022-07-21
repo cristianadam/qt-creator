@@ -473,6 +473,44 @@ const char *sourceTypeToText(SourceType sourceType)
 
     return "";
 }
+TypeAccessSemantics cleanFlags(TypeAccessSemantics accessSemantics)
+{
+    auto data = static_cast<int>(accessSemantics);
+    data &= ~static_cast<int>(TypeAccessSemantics::IsEnum);
+    return static_cast<TypeAccessSemantics>(data);
+}
+
+const char *typeAccessSemanticsToString(TypeAccessSemantics accessSemantics)
+{
+    switch (cleanFlags(accessSemantics)) {
+    case TypeAccessSemantics::None:
+        return "None";
+    case TypeAccessSemantics::Reference:
+        return "Reference";
+    case TypeAccessSemantics::Sequence:
+        return "Sequence";
+    case TypeAccessSemantics::Value:
+        return "Value";
+    default:
+        break;
+    }
+
+    return "";
+}
+
+bool operator&(TypeAccessSemantics first, TypeAccessSemantics second)
+{
+    return static_cast<int>(first) & static_cast<int>(second);
+}
+
+const char *typeAccessSemanticsFlagsToString(TypeAccessSemantics accessSemantics)
+{
+    if (accessSemantics & TypeAccessSemantics::IsEnum)
+        return "(IsEnum)";
+
+    return "";
+}
+
 } // namespace
 
 std::ostream &operator<<(std::ostream &out, const FileStatus &fileStatus)
@@ -517,6 +555,13 @@ std::ostream &operator<<(std::ostream &out, const VariantProperty &property)
     return out << "(" << property.parentModelNode() << ", " << property.name() << ", "
                << property.value() << ")";
 }
+
+std::ostream &operator<<(std::ostream &out, TypeAccessSemantics accessSemantics)
+{
+    return out << typeAccessSemanticsToString(accessSemantics)
+               << typeAccessSemanticsFlagsToString(accessSemantics);
+}
+
 namespace Cache {
 
 std::ostream &operator<<(std::ostream &out, const SourceContext &sourceContext)
@@ -566,44 +611,6 @@ std::ostream &operator<<(std::ostream &out, const Type &type)
 namespace Storage::Synchronization {
 
 namespace {
-
-TypeAccessSemantics cleanFlags(TypeAccessSemantics accessSemantics)
-{
-    auto data = static_cast<int>(accessSemantics);
-    data &= ~static_cast<int>(TypeAccessSemantics::IsEnum);
-    return static_cast<TypeAccessSemantics>(data);
-}
-
-const char *typeAccessSemanticsToString(TypeAccessSemantics accessSemantics)
-{
-    switch (cleanFlags(accessSemantics)) {
-    case TypeAccessSemantics::None:
-        return "None";
-    case TypeAccessSemantics::Reference:
-        return "Reference";
-    case TypeAccessSemantics::Sequence:
-        return "Sequence";
-    case TypeAccessSemantics::Value:
-        return "Value";
-    default:
-        break;
-    }
-
-    return "";
-}
-
-bool operator&(TypeAccessSemantics first, TypeAccessSemantics second)
-{
-    return static_cast<int>(first) & static_cast<int>(second);
-}
-
-const char *typeAccessSemanticsFlagsToString(TypeAccessSemantics accessSemantics)
-{
-    if (accessSemantics & TypeAccessSemantics::IsEnum)
-        return "(IsEnum)";
-
-    return "";
-}
 
 const char *isQualifiedToString(IsQualified isQualified)
 {
@@ -694,12 +701,6 @@ std::ostream &operator<<(std::ostream &out, const ProjectData &data)
 {
     return out << "(" << data.projectSourceId << ", " << data.sourceId << ", " << data.moduleId
                << ", " << data.fileType << ")";
-}
-
-std::ostream &operator<<(std::ostream &out, TypeAccessSemantics accessSemantics)
-{
-    return out << typeAccessSemanticsToString(accessSemantics)
-               << typeAccessSemanticsFlagsToString(accessSemantics);
 }
 
 std::ostream &operator<<(std::ostream &out, IsQualified isQualified)

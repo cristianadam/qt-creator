@@ -43,6 +43,13 @@ constexpr std::underlying_type_t<Enumeration> to_underlying(Enumeration enumerat
     return static_cast<std::underlying_type_t<Enumeration>>(enumeration);
 }
 
+enum class TypeAccessSemantics : int { None, Reference, Value, Sequence, IsEnum = 1 << 8 };
+
+constexpr TypeAccessSemantics operator|(TypeAccessSemantics first, TypeAccessSemantics second)
+{
+    return static_cast<TypeAccessSemantics>(static_cast<int>(first) | static_cast<int>(second));
+}
+
 } // namespace QmlDesigner
 
 namespace QmlDesigner::Storage {
@@ -68,13 +75,6 @@ using TypeNameString = Utils::BasicSmallString<63>;
 } // namespace QmlDesigner::Storage
 
 namespace QmlDesigner::Storage::Synchronization {
-
-enum class TypeAccessSemantics : int { None, Reference, Value, Sequence, IsEnum = 1 << 8 };
-
-constexpr TypeAccessSemantics operator|(TypeAccessSemantics first, TypeAccessSemantics second)
-{
-    return static_cast<TypeAccessSemantics>(static_cast<int>(first) | static_cast<int>(second));
-}
 
 enum class TypeNameKind { Exported = 1, QualifiedExported = 2 };
 
@@ -728,7 +728,7 @@ public:
     explicit Type() = default;
     explicit Type(Utils::SmallStringView typeName,
                   ImportedTypeName prototype,
-                  TypeAccessSemantics accessSemantics,
+                  QmlDesigner::TypeAccessSemantics accessSemantics,
                   SourceId sourceId,
                   ExportedTypes exportedTypes = {},
                   PropertyDeclarations propertyDeclarations = {},
@@ -752,7 +752,7 @@ public:
 
     explicit Type(Utils::SmallStringView typeName,
                   TypeId prototypeId,
-                  TypeAccessSemantics accessSemantics,
+                  QmlDesigner::TypeAccessSemantics accessSemantics,
                   SourceId sourceId)
         : typeName{typeName}
         , accessSemantics{accessSemantics}
@@ -762,7 +762,7 @@ public:
 
     explicit Type(Utils::SmallStringView typeName,
                   ImportedTypeName prototype,
-                  TypeAccessSemantics accessSemantics,
+                  QmlDesigner::TypeAccessSemantics accessSemantics,
                   SourceId sourceId,
                   ChangeLevel changeLevel)
         : typeName{typeName}
@@ -774,7 +774,7 @@ public:
 
     explicit Type(Utils::SmallStringView typeName,
                   Utils::SmallStringView prototype,
-                  TypeAccessSemantics accessSemantics,
+                  QmlDesigner::TypeAccessSemantics accessSemantics,
                   SourceId sourceId)
         : typeName{typeName}
         , prototype{ImportedType{prototype}}
@@ -787,7 +787,7 @@ public:
                   Utils::SmallStringView typeName,
                   TypeId typeId,
                   TypeId prototypeId,
-                  TypeAccessSemantics accessSemantics,
+                  QmlDesigner::TypeAccessSemantics accessSemantics,
                   Utils::SmallStringView defaultPropertyName)
         : typeName{typeName}
         , defaultPropertyName{defaultPropertyName}
@@ -817,7 +817,7 @@ public:
     FunctionDeclarations functionDeclarations;
     SignalDeclarations signalDeclarations;
     EnumerationDeclarations enumerationDeclarations;
-    TypeAccessSemantics accessSemantics = TypeAccessSemantics::None;
+    QmlDesigner::TypeAccessSemantics accessSemantics = QmlDesigner::TypeAccessSemantics::None;
     SourceId sourceId;
     TypeId typeId;
     TypeId prototypeId;

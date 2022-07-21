@@ -2231,6 +2231,7 @@ private:
             auto &sourceIdColumn = typesTable.addColumn("sourceId", Sqlite::StrictColumnType::Integer);
             auto &typesNameColumn = typesTable.addColumn("name", Sqlite::StrictColumnType::Text);
             typesTable.addColumn("accessSemantics", Sqlite::StrictColumnType::Integer);
+            typesTable.addColumn("traits", Sqlite::StrictColumnType::Integer);
             typesTable.addForeignKeyColumn("prototypeId",
                                            typesTable,
                                            Sqlite::ForeignKeyAction::NoAction,
