@@ -25,6 +25,7 @@
 
 #include "debugview.h"
 #include "debugviewwidget.h"
+#include "consoleengine.h"
 
 #include <qmldesignerplugin.h>
 
@@ -38,6 +39,7 @@
 #include <qmlitemnode.h>
 
 #include <utils/algorithm.h>
+#include <utils/fileutils.h>
 
 namespace   {
 const QString lineBreak = QStringLiteral("<br>");
@@ -61,8 +63,32 @@ namespace QmlDesigner {
 namespace  Internal {
 
 DebugView::DebugView(QObject *parent) : AbstractView(parent),
-    m_debugViewWidget(new DebugViewWidget)
+    m_debugViewWidget(new DebugViewWidget), m_consoleEngine(new ConsoleEngine(this))
 {
+    connect(m_debugViewWidget, &DebugViewWidget::consoleActivated, this, [this]() {
+        QJSValue result = m_consoleEngine->evaluate(m_debugViewWidget->consoleString());
+
+        m_debugViewWidget->appendConsoleOutput(m_debugViewWidget->consoleString());
+        if (!result.isUndefined())
+            m_debugViewWidget->appendConsoleOutput(
+                result.toString());
+        QTimer::singleShot(10, this, [this]() { m_debugViewWidget->clearConsoleString(); });
+    });
+
+    connect(m_consoleEngine, &ConsoleEngine::consoleMesage, [this](const QString &message){
+        m_debugViewWidget->appendConsoleOutput(message);
+    });
+
+    connect(m_debugViewWidget, &DebugViewWidget::runScriptFile, this, [this](const Utils::FilePath &file){
+        Utils::FileReader reader;
+        QString errorString;
+        if (reader.fetch(file, &errorString)) {
+            QString content = QString::fromUtf8(reader.data());
+            QJSValue result = m_consoleEngine->evaluate(content);
+            if (!result.isUndefined())
+                m_debugViewWidget->appendConsoleOutput(result.toString());
+        }
+    });
 }
 
 DebugView::~DebugView()
@@ -76,7 +102,9 @@ void DebugView::modelAttached(Model *model)
     m_debugViewWidget->setDebugViewEnabled(isDebugViewEnabled());
     if (isDebugViewEnabled())
         qDebug() << tr("Debug view is enabled");
+
     AbstractView::modelAttached(model);
+    m_consoleEngine->modelAttached();
 }
 
 void DebugView::modelAboutToBeDetached(Model *model)
@@ -296,6 +324,8 @@ void DebugView::selectedNodesChanged(const QList<ModelNode> &selectedNodes /*sel
 
         log("::selectedNodesChanged:", string);
     }
+
+    m_consoleEngine->selectionChanged();
 }
 
 void DebugView::scriptFunctionsChanged(const ModelNode & /*node*/, const QStringList & /*scriptFunctionList*/)

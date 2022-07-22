@@ -155,6 +155,8 @@ extend_qtc_plugin(QmlDesigner
   SOURCES
     debugview.cpp debugview.h
     debugviewwidget.cpp debugviewwidget.h debugviewwidget.ui
+    consoleengine.h consoleengine.cpp
+    consolebackend.h consolebackend.cpp
 )
 
 extend_qtc_plugin(QmlDesigner
