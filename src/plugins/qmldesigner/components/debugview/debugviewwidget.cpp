@@ -25,9 +25,13 @@
 
 #include "debugviewwidget.h"
 
-
-#include <qmldesignerplugin.h>
 #include <designersettings.h>
+#include <qmldesignerplugin.h>
+
+#include <coreplugin/icore.h>
+
+#include <utils/fancylineedit.h>
+#include <utils/fileutils.h>
 
 namespace QmlDesigner {
 
@@ -38,6 +42,17 @@ DebugViewWidget::DebugViewWidget(QWidget *parent) : QWidget(parent)
     m_ui.setupUi(this);
     connect(m_ui.enabledCheckBox, &QAbstractButton::toggled,
             this, &DebugViewWidget::enabledCheckBoxToggled);
+
+    m_ui.consoleLineEdit->setHistoryCompleter("QmlDesignerConsoleInput");
+
+    connect(m_ui.consoleLineEdit, &Utils::FancyLineEdit::editingFinished, this, &DebugViewWidget::consoleActivated);
+    connect(m_ui.javaScriptButton, &QPushButton::clicked, this, [this]() {
+        const Utils::FilePath script = Utils::FileUtils::getOpenFilePath(Core::ICore::dialogParent(),
+                                          tr("Open JavaScript script"),
+                                          Utils::FileUtils::homePath(),
+                                          tr("JavaScript script (*.js)"));
+        emit runScriptFile(script);
+    });
 }
 
 void DebugViewWidget::addLogMessage(const QString &topic, const QString &message, bool highlight)
@@ -101,6 +116,21 @@ void DebugViewWidget::setDebugViewEnabled(bool b)
 void DebugViewWidget::enabledCheckBoxToggled(bool b)
 {
     DesignerSettings::setValue(DesignerSettingsKey::WARNING_FOR_FEATURES_IN_DESIGNER, b);
+}
+
+void DebugViewWidget::appendConsoleOutput(const QString &string)
+{
+    m_ui.consoleOutput->appendPlainText(string);
+}
+
+QString DebugViewWidget::consoleString() const
+{
+    return m_ui.consoleLineEdit->text();
+}
+
+void DebugViewWidget::clearConsoleString()
+{
+    m_ui.consoleLineEdit->clear();
 }
 
 } //namespace Internal

@@ -33,6 +33,7 @@ namespace QmlDesigner {
 namespace Internal {
 
 class DebugViewWidget;
+class ConsoleEngine;
 
 class  DebugView : public AbstractView
 {
@@ -96,6 +97,8 @@ protected:
 
 private: //variables
     QPointer<DebugViewWidget> m_debugViewWidget;
+    ConsoleEngine *m_consoleEngine = nullptr;
+
 };
 
 } // namespace Internal

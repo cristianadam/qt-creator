@@ -29,6 +29,8 @@
 
 #include "ui_debugviewwidget.h"
 
+#include <utils/filepath.h>
+
 namespace QmlDesigner {
 
 namespace Internal {
@@ -47,6 +49,15 @@ public:
     void setDebugViewEnabled(bool b);
 
     void enabledCheckBoxToggled(bool b);
+
+    void appendConsoleOutput(const QString &string);
+
+    QString consoleString() const;
+    void clearConsoleString();
+
+signals:
+    void consoleActivated();
+    void runScriptFile(const Utils::FilePath &file);
 
 private:
     Ui::DebugViewWidget m_ui;
