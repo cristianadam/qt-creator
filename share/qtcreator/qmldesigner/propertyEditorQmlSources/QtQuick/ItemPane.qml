@@ -119,6 +119,9 @@ PropertyEditorPane {
         Column {
             width: parent.width
 
+            DynamicPropertiesSection {
+            }
+
             Loader {
                 id: specificsTwo
 

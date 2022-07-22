@@ -137,8 +137,6 @@ void DynamicPropertiesModel::resetModel()
         for (const ModelNode &modelNode : connectionView()->selectedModelNodes())
             addModelNode(modelNode);
     }
-
-    endResetModel();
 }
 
 
