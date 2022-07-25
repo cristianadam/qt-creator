@@ -151,8 +151,8 @@ QVariant properDefaultAuxiliaryProperties(const QmlObjectNode &qmlObjectNode,
     const ModelNode node = qmlObjectNode.modelNode();
     const PropertyName auxName = propertyName;
 
-    if (node.hasAuxiliaryData(auxName))
-        return node.auxiliaryData(auxName);
+    if (auto data = node.auxiliaryData(AuxiliaryDataType::Document, auxName))
+        return *data;
     if (propertyName == "transitionColor")
         return QColor(Qt::red);
     if (propertyName == "areaColor")
@@ -906,10 +906,11 @@ void PropertyEditorQmlBackend::setValueforLayoutAttachedProperties(const QmlObje
     }
 }
 
-void PropertyEditorQmlBackend::setValueforAuxiliaryProperties(const QmlObjectNode &qmlObjectNode, const PropertyName &name)
+void PropertyEditorQmlBackend::setValueforAuxiliaryProperties(const QmlObjectNode &qmlObjectNode,
+                                                              AuxiliaryDataKeyView key)
 {
-    const PropertyName propertyName = auxNamePostFix(name);
-     setValue(qmlObjectNode, propertyName, qmlObjectNode.modelNode().auxiliaryData(name));
+    const PropertyName propertyName = auxNamePostFix(PropertyName(key.name));
+    setValue(qmlObjectNode, propertyName, qmlObjectNode.modelNode().auxiliaryDataWithDefault(key));
 }
 
 QUrl PropertyEditorQmlBackend::getQmlUrlForMetaInfo(const NodeMetaInfo &metaInfo, TypeName &className)

@@ -109,7 +109,7 @@ void TimelineView::nodeAboutToBeRemoved(const ModelNode &removedNode)
             toolBar->removeTimeline(QmlTimeline(removedNode));
             QString currentId = toolBar->currentTimelineId();
 
-            removedNode.setAuxiliaryData("removed@Internal", true);
+            removedNode.setAuxiliaryData(AuxiliaryDataType::Temporary, "removed", true);
 
             if (currentId.isEmpty())
                 m_timelineWidget->graphicsScene()->clearTimeline();
@@ -239,12 +239,13 @@ void TimelineView::selectedNodesChanged(const QList<ModelNode> & /*selectedNodeL
 }
 
 void TimelineView::auxiliaryDataChanged(const ModelNode &modelNode,
-                                        const PropertyName &name,
+                                        AuxiliaryDataKeyView key,
                                         const QVariant &data)
 {
-    if (name == QmlDesigner::lockedProperty && data.toBool() && modelNode.isValid()) {
+    if (key.type == AuxiliaryDataType::Document && key.name == QmlDesigner::lockedProperty
+        && data.toBool() && modelNode.isValid()) {
         for (const auto &node : modelNode.allSubModelNodesAndThisNode()) {
-            if (node.hasAuxiliaryData("timeline_expanded"))
+            if (node.hasAuxiliaryData(AuxiliaryDataType::Document, "timeline_expanded"))
                 m_timelineWidget->graphicsScene()->invalidateHeightForTarget(node);
         }
     }
@@ -470,7 +471,7 @@ void TimelineView::customNotification(const AbstractView * /*view*/,
     if (identifier == QStringLiteral("reset QmlPuppet")) {
         QmlTimeline timeline = widget()->graphicsScene()->currentTimeline();
         if (timeline.isValid())
-            timeline.modelNode().removeAuxiliaryData("currentFrame@NodeInstance");
+            timeline.modelNode().removeAuxiliaryData(AuxiliaryDataType::NodeInstance, "currentFrame");
     }
 }
 
@@ -494,7 +495,7 @@ QList<QmlTimeline> TimelineView::getTimelines() const
 
     for (const ModelNode &modelNode : allModelNodes()) {
         if (QmlTimeline::isValidQmlTimeline(modelNode)
-            && !modelNode.hasAuxiliaryData("removed@Internal")) {
+            && !modelNode.hasAuxiliaryData(AuxiliaryDataType::Temporary, "removed")) {
             timelines.append(modelNode);
         }
     }

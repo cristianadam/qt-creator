@@ -63,7 +63,10 @@ void QmlObjectNode::setVariantProperty(const PropertyName &name, const QVariant 
 
         Q_ASSERT(timelineFrames.isValid());
 
-        qreal frame = currentTimeline().modelNode().auxiliaryData("currentFrame@NodeInstance").toReal();
+        qreal frame = currentTimeline()
+                          .modelNode()
+                          .auxiliaryDataWithDefault(AuxiliaryDataType::NodeInstance, "currentFrame")
+                          .toReal();
         timelineFrames.setValue(value, frame);
 
         return;
@@ -73,7 +76,10 @@ void QmlObjectNode::setVariantProperty(const PropertyName &name, const QVariant 
         Q_ASSERT(timelineFrames.isValid());
 
         if (timelineFrames.isRecording()) {
-            qreal frame = currentTimeline().modelNode().auxiliaryData("currentFrame@NodeInstance").toReal();
+            qreal frame = currentTimeline()
+                              .modelNode()
+                              .auxiliaryDataWithDefault(AuxiliaryDataType::NodeInstance, "currentFrame")
+                              .toReal();
             timelineFrames.setValue(value, frame);
 
             return;
@@ -220,7 +226,10 @@ QVariant QmlObjectNode::modelValue(const PropertyName &name) const
 
         Q_ASSERT(timelineFrames.isValid());
 
-        qreal frame = currentTimeline().modelNode().auxiliaryData("currentFrame@NodeInstance").toReal();
+        qreal frame = currentTimeline()
+                          .modelNode()
+                          .auxiliaryDataWithDefault(AuxiliaryDataType::NodeInstance, "currentFrame")
+                          .toReal();
 
         QVariant value = timelineFrames.value(frame);
 

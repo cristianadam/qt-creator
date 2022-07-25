@@ -114,8 +114,10 @@ void TransitionEditorGraphicsLayout::setTransition(const ModelNode &transition)
     m_rulerItem->setParentItem(this);
 
     qreal duration = 2000;
-    if (transition.isValid() && transition.hasAuxiliaryData("transitionDuration"))
-        duration = transition.auxiliaryData("transitionDuration").toDouble();
+    if (transition.isValid()) {
+        if (auto data = transition.auxiliaryData(AuxiliaryDataType::Document, "transitionDuration"))
+            duration = data->toDouble();
+    }
 
     setDuration(duration);
     m_layout->addItem(m_rulerItem);

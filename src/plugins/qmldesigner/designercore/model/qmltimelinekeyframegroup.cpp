@@ -130,7 +130,7 @@ bool QmlTimelineKeyframeGroup::isRecording() const
 {
     QTC_ASSERT(isValid(), return false);
 
-    return modelNode().hasAuxiliaryData("Record@Internal");
+    return modelNode().hasAuxiliaryData(AuxiliaryDataType::Temporary, "Record");
 }
 
 void QmlTimelineKeyframeGroup::toogleRecording(bool record) const
@@ -139,9 +139,9 @@ void QmlTimelineKeyframeGroup::toogleRecording(bool record) const
 
     if (!record) {
         if (isRecording())
-            modelNode().removeAuxiliaryData("Record@Internal");
+            modelNode().removeAuxiliaryData(AuxiliaryDataType::Temporary, "Record");
     } else {
-        modelNode().setAuxiliaryData("Record@Internal", true);
+        modelNode().setAuxiliaryData(AuxiliaryDataType::Temporary, "Record", true);
     }
 }
 

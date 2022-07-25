@@ -238,7 +238,7 @@ void TimelineGraphicsScene::setCurrentFrame(int frame)
     QmlTimeline timeline(timelineModelNode());
 
     if (timeline.isValid()) {
-        timeline.modelNode().setAuxiliaryData("currentFrame@NodeInstance", frame);
+        timeline.modelNode().setAuxiliaryData(AuxiliaryDataType::NodeInstance, "currentFrame", frame);
         m_currentFrameIndicator->setPosition(frame);
     } else {
         m_currentFrameIndicator->setPosition(0);
@@ -363,7 +363,9 @@ void TimelineGraphicsScene::setZoom(int scaleFactor, double pivot)
 
     if (timeline.isValid())
         setCurrenFrame(timeline,
-                       timeline.modelNode().auxiliaryData("currentFrame@NodeInstance").toReal());
+                       timeline.modelNode()
+                           .auxiliaryDataWithDefault(AuxiliaryDataType::NodeInstance, "currentFrame")
+                           .toReal());
 
     invalidateScrollbar();
     update();
@@ -375,7 +377,9 @@ void TimelineGraphicsScene::commitCurrentFrame(qreal frame)
 
     if (timeline.isValid()) {
         frame = setCurrenFrame(timeline, qRound(frame));
-        timeline.modelNode().setAuxiliaryData("currentFrame@NodeInstance", qRound(frame));
+        timeline.modelNode().setAuxiliaryData(AuxiliaryDataType::NodeInstance,
+                                              "currentFrame",
+                                              qRound(frame));
         invalidateCurrentValues();
     }
 }

@@ -123,7 +123,7 @@ void FormEditorItem::setup()
 
     setContentVisible(qmlItemNode().instanceValue("visible").toBool());
 
-    if (qmlItemNode().modelNode().auxiliaryData("invisible").toBool())
+    if (qmlItemNode().modelNode().auxiliaryDataWithDefault(AuxiliaryDataType::Document, "invisible").toBool())
         setVisible(false);
 
     setFlag(QGraphicsItem::ItemIsMovable, true);
@@ -633,11 +633,13 @@ void FormEditorFlowItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
 
     QColor flowColor(0xe71919);
 
-    if (qmlItemNode().rootModelNode().hasAuxiliaryData("areaColor"))
-        flowColor = qmlItemNode().rootModelNode().auxiliaryData("areaColor").value<QColor>();
+    if (auto data = qmlItemNode().rootModelNode().auxiliaryData(AuxiliaryDataType::Document,
+                                                                "areaColor");
+        data)
+        flowColor = data->value<QColor>();
 
-    if (qmlItemNode().modelNode().hasAuxiliaryData("color"))
-        flowColor = qmlItemNode().modelNode().auxiliaryData("color").value<QColor>();
+    if (auto data = qmlItemNode().modelNode().auxiliaryData(AuxiliaryDataType::Document, "color"))
+        flowColor = data->value<QColor>();
 
     pen.setColor(flowColor);
 
@@ -650,11 +652,10 @@ void FormEditorFlowItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
 
     pen.setWidthF(width);
 
-
     bool dash = false;
 
-    if (qmlItemNode().modelNode().hasAuxiliaryData("dash"))
-        dash = qmlItemNode().modelNode().auxiliaryData("dash").toBool();
+    if (auto data = qmlItemNode().modelNode().auxiliaryData(AuxiliaryDataType::Document, "dash"); data)
+        dash = data->toBool();
 
     if (dash)
         pen.setStyle(Qt::DashLine);
@@ -738,23 +739,24 @@ void FormEditorFlowActionItem::paint(QPainter *painter, const QStyleOptionGraphi
 
     QColor flowColor(0xe71919);
 
-    if (qmlItemNode().rootModelNode().hasAuxiliaryData("areaColor"))
-        flowColor = qmlItemNode().rootModelNode().auxiliaryData("areaColor").value<QColor>();
+    if (auto data = qmlItemNode().rootModelNode().auxiliaryData(AuxiliaryDataType::Document,
+                                                                "areaColor"))
+        flowColor = data->value<QColor>();
 
-    if (qmlItemNode().modelNode().hasAuxiliaryData("color"))
-        flowColor = qmlItemNode().modelNode().auxiliaryData("color").value<QColor>();
+    if (auto data = qmlItemNode().modelNode().auxiliaryData(AuxiliaryDataType::Document, "color"))
+        flowColor = data->value<QColor>();
 
     qreal width = 2;
 
-    if (qmlItemNode().modelNode().hasAuxiliaryData("width"))
-        width = qmlItemNode().modelNode().auxiliaryData("width").toInt();
+    if (auto data = qmlItemNode().modelNode().auxiliaryData(AuxiliaryDataType::NodeInstance, "width"))
+        width = data->toInt();
 
     width *= getLineScaleFactor();
 
     bool dash = false;
 
-    if (qmlItemNode().modelNode().hasAuxiliaryData("dash"))
-        dash = qmlItemNode().modelNode().auxiliaryData("dash").toBool();
+    if (auto data = qmlItemNode().modelNode().auxiliaryData(AuxiliaryDataType::Document, "dash"))
+        dash = data->toBool();
 
     pen.setColor(flowColor);
     if (dash)
@@ -768,11 +770,12 @@ void FormEditorFlowActionItem::paint(QPainter *painter, const QStyleOptionGraphi
 
     QColor fillColor = QColor(Qt::transparent);
 
-    if (qmlItemNode().rootModelNode().hasAuxiliaryData("areaFillColor"))
-        fillColor = qmlItemNode().rootModelNode().auxiliaryData("areaFillColor").value<QColor>();
+    if (auto data = qmlItemNode().rootModelNode().auxiliaryData(AuxiliaryDataType::Document,
+                                                                "areaFillColor"))
+        fillColor = data->value<QColor>();
 
-    if (qmlItemNode().modelNode().hasAuxiliaryData("fillColor"))
-        fillColor = qmlItemNode().modelNode().auxiliaryData("fillColor").value<QColor>();
+    if (auto data = qmlItemNode().modelNode().auxiliaryData(AuxiliaryDataType::Document, "fillColor"))
+        fillColor = data->value<QColor>();
 
     if (fillColor.alpha() > 0)
         painter->setBrush(fillColor);
@@ -882,8 +885,10 @@ public:
                     areaNode = ModelNode();
                 }
 
-                if (f.modelNode().hasAuxiliaryData("joinConnection"))
-                    joinConnection = f.modelNode().auxiliaryData("joinConnection").toBool();
+                if (auto data = f.modelNode().auxiliaryData(AuxiliaryDataType::Document,
+                                                            "joinConnection")) {
+                    joinConnection = data->toBool();
+                }
             } else {
                 if (f == node.rootModelNode())
                     isStartLine = true;
@@ -937,8 +942,8 @@ public:
         , events()
     {
         // width
-        if (node.modelNode().hasAuxiliaryData("width"))
-            width = node.modelNode().auxiliaryData("width").toFloat();
+        if (auto data = node.modelNode().auxiliaryData(AuxiliaryDataType::NodeInstance, "width"))
+            width = data->toFloat();
         // adjusted width
         if (node.modelNode().isSelected())
             width += 2;
@@ -949,41 +954,51 @@ public:
             color = QColor("blue");
         if (resolveConnection.isWildcardLine)
             color = QColor("green");
-        if (node.rootModelNode().hasAuxiliaryData("transitionColor"))
-            color = node.rootModelNode().auxiliaryData("transitionColor").value<QColor>();
-        if (node.modelNode().hasAuxiliaryData("color"))
-            color = node.modelNode().auxiliaryData("color").value<QColor>();
+        if (auto data = node.rootModelNode().auxiliaryData(AuxiliaryDataType::Document,
+                                                           "transitionColor")) {
+            color = data->value<QColor>();
+        }
+        if (auto data = node.modelNode().auxiliaryData(AuxiliaryDataType::Document, "color"))
+            color = data->value<QColor>();
         // linbe brush
         lineBrush = QBrush(color);
 
         // pen style
 
         // dash
-        if (node.modelNode().hasAuxiliaryData("dash") && node.modelNode().auxiliaryData("dash").toBool())
+        if (auto data = node.modelNode().auxiliaryData(AuxiliaryDataType::Document, "dash");
+            data && data->toBool()) {
             penStyle = Qt::DashLine;
+        }
         // in/out offset
-        if (node.modelNode().hasAuxiliaryData("outOffset"))
-            outOffset = node.modelNode().auxiliaryData("outOffset").toInt();
-        if (node.modelNode().hasAuxiliaryData("inOffset"))
-            inOffset = node.modelNode().auxiliaryData("inOffset").toInt();
+        if (auto data = node.modelNode().auxiliaryData(AuxiliaryDataType::Document, "outOffset"))
+            outOffset = data->toInt();
+        if (auto data = node.modelNode().auxiliaryData(AuxiliaryDataType::Document, "inOffset"))
+            inOffset = data->toInt();
         // break offset
-        if (node.modelNode().hasAuxiliaryData("breakPoint"))
-            breakOffset = node.modelNode().auxiliaryData("breakPoint").toInt();
+        if (auto data = node.modelNode().auxiliaryData(AuxiliaryDataType::Document, "breakPoint"))
+            breakOffset = data->toInt();
         // radius
-        if (node.rootModelNode().hasAuxiliaryData("transitionRadius"))
-            radius = node.rootModelNode().auxiliaryData("transitionRadius").toInt();
-        if (node.modelNode().hasAuxiliaryData("radius"))
-            radius = node.modelNode().auxiliaryData("radius").toInt();
+        if (auto data = node.rootModelNode().auxiliaryData(AuxiliaryDataType::Document,
+                                                           "transitionRadius")) {
+            radius = data->toInt();
+        }
+        if (auto data = node.modelNode().auxiliaryData(AuxiliaryDataType::Document, "radius"))
+            radius = data->toInt();
         // bezier
-        if (node.rootModelNode().hasAuxiliaryData("transitionBezier"))
-            bezier = node.rootModelNode().auxiliaryData("transitionBezier").toInt();
-        if (node.modelNode().hasAuxiliaryData("bezier"))
-            bezier = node.modelNode().auxiliaryData("bezier").toInt();
+        if (auto data = node.rootModelNode().auxiliaryData(AuxiliaryDataType::Document,
+                                                           "transitionBezier")) {
+            bezier = data->toInt();
+        }
+        if (auto data = node.modelNode().auxiliaryData(AuxiliaryDataType::Document, "bezier"))
+            bezier = data->toInt();
         // type
-        if (node.rootModelNode().hasAuxiliaryData("transitionType"))
-            type = static_cast<ConnectionType>(node.rootModelNode().auxiliaryData("transitionType").toInt());
-        if (node.modelNode().hasAuxiliaryData("type"))
-            type = static_cast<ConnectionType>(node.modelNode().auxiliaryData("type").toInt());
+        if (auto data = node.rootModelNode().auxiliaryData(AuxiliaryDataType::Document,
+                                                           "transitionType")) {
+            type = static_cast<ConnectionType>(data->toInt());
+        }
+        if (auto data = node.modelNode().auxiliaryData(AuxiliaryDataType::Document, "type"))
+            type = static_cast<ConnectionType>(data->toInt());
         // label
         if (node.modelNode().hasBindingProperty("condition"))
             label = node.modelNode().bindingProperty("condition").expression();
@@ -992,11 +1007,11 @@ public:
         // label offset
 
         // label position
-        if (node.modelNode().hasAuxiliaryData("labelPosition"))
-            labelPosition = node.modelNode().auxiliaryData("labelPosition").toReal();
+        if (auto data = node.modelNode().auxiliaryData(AuxiliaryDataType::Document, "labelPosition"))
+            labelPosition = data->toReal();
         // label flip side
-        if (node.modelNode().hasAuxiliaryData("labelFlipSide"))
-            labelFlipSide = node.modelNode().auxiliaryData("labelFlipSide").toBool();
+        if (auto data = node.modelNode().auxiliaryData(AuxiliaryDataType::Document, "labelFlipSide"))
+            labelFlipSide = data->toBool();
 
         isSelected = node.modelNode().isSelected();
 
@@ -1246,8 +1261,8 @@ public:
     {
         if (from.isFlowDecision()) {
             int size = flowBlockSize;
-            if (from.modelNode().hasAuxiliaryData("blockSize"))
-                size = from.modelNode().auxiliaryData("blockSize").toInt();
+            if (auto data = from.modelNode().auxiliaryData(AuxiliaryDataType::Document, "blockSize"))
+                size = data->toInt();
 
             fromRect = QRectF(0, 0, size, size);
 
@@ -1259,8 +1274,8 @@ public:
             fromRect = transform.mapRect(fromRect);
         } else if (from.isFlowWildcard()) {
             int size = flowBlockSize;
-            if (from.modelNode().hasAuxiliaryData("blockSize"))
-                size = from.modelNode().auxiliaryData("blockSize").toInt();
+            if (auto data = from.modelNode().auxiliaryData(AuxiliaryDataType::Document, "blockSize"))
+                size = data->toInt();
             fromRect = QRectF(0, 0, size, size);
         } else if (from.isFlowView()) {
             fromRect = QRectF(0, 0, flowBlockSize, flowBlockSize);
@@ -1278,8 +1293,8 @@ public:
 
         if (to.isFlowDecision()) {
             int size = flowBlockSize;
-            if (to.modelNode().hasAuxiliaryData("blockSize"))
-                size = to.modelNode().auxiliaryData("blockSize").toInt();
+            if (auto data = to.modelNode().auxiliaryData(AuxiliaryDataType::Document, "blockSize"))
+                size = data->toInt();
 
             toRect = QRectF(0, 0, size, size);
 
@@ -1998,8 +2013,8 @@ void FormEditorFlowDecisionItem::updateGeometry()
     prepareGeometryChange();
 
     int size = flowBlockSize;
-    if (qmlItemNode().modelNode().hasAuxiliaryData("blockSize"))
-        size = qmlItemNode().modelNode().auxiliaryData("blockSize").toInt();
+    if (auto data = qmlItemNode().modelNode().auxiliaryData(AuxiliaryDataType::Document, "blockSize"))
+        size = data->toInt();
 
     QRectF boundingRect(0, 0, size, size);
     QRectF selectionRect = boundingRect;
@@ -2012,8 +2027,10 @@ void FormEditorFlowDecisionItem::updateGeometry()
         // If drawing the dialog title is requested we need to add it to the bounding rect.
         QRectF labelBoundingRect;
         bool showDialogLabel = false;
-        if (qmlItemNode().modelNode().hasAuxiliaryData("showDialogLabel"))
-            showDialogLabel = qmlItemNode().modelNode().auxiliaryData("showDialogLabel").toBool();
+        if (auto data = qmlItemNode().modelNode().auxiliaryData(AuxiliaryDataType::Document,
+                                                                "showDialogLabel")) {
+            showDialogLabel = data->toBool();
+        }
 
         if (showDialogLabel) {
             QString dialogTitle;
@@ -2034,8 +2051,9 @@ void FormEditorFlowDecisionItem::updateGeometry()
                 QRectF textRect(0, 0, 100, 20);
 
                 Qt::Corner corner = Qt::TopRightCorner;
-                if (qmlItemNode().modelNode().hasAuxiliaryData("dialogLabelPosition"))
-                   corner = qmlItemNode().modelNode().auxiliaryData("dialogLabelPosition").value<Qt::Corner>();
+                if (auto data = qmlItemNode().modelNode().auxiliaryData(AuxiliaryDataType::Document,
+                                                                        "dialogLabelPosition"))
+                    corner = data->value<Qt::Corner>();
 
                 int flag = 0;
                 switch (corner) {
@@ -2093,26 +2111,28 @@ void FormEditorFlowDecisionItem::paint(QPainter *painter,
 
     QColor flowColor(0xe71919);
 
-    if (qmlItemNode().rootModelNode().hasAuxiliaryData("blockColor"))
-        flowColor = qmlItemNode().rootModelNode().auxiliaryData("blockColor").value<QColor>();
+    if (auto data = qmlItemNode().rootModelNode().auxiliaryData(AuxiliaryDataType::Document,
+                                                                "blockColor")) {
+        flowColor = data->value<QColor>();
+    }
 
-    if (qmlItemNode().modelNode().hasAuxiliaryData("color"))
-        flowColor = qmlItemNode().modelNode().auxiliaryData("color").value<QColor>();
+    if (auto data = qmlItemNode().modelNode().auxiliaryData(AuxiliaryDataType::Document, "color"))
+        flowColor = data->value<QColor>();
 
     pen.setColor(flowColor);
 
     qreal width = 2;
 
-    if (qmlItemNode().modelNode().hasAuxiliaryData("width"))
-        width = qmlItemNode().modelNode().auxiliaryData("width").toInt();
+    if (auto data = qmlItemNode().modelNode().auxiliaryData(AuxiliaryDataType::NodeInstance, "width"))
+        width = data->toInt();
 
     width *= getLineScaleFactor();
     pen.setWidthF(width);
 
     bool dash = false;
 
-    if (qmlItemNode().modelNode().hasAuxiliaryData("dash"))
-        dash = qmlItemNode().modelNode().auxiliaryData("dash").toBool();
+    if (auto data = qmlItemNode().modelNode().auxiliaryData(AuxiliaryDataType::Document, "dash"))
+        dash = data->toBool();
 
     if (dash)
         pen.setStyle(Qt::DashLine);
@@ -2123,8 +2143,8 @@ void FormEditorFlowDecisionItem::paint(QPainter *painter,
 
     QColor fillColor = QColor(Qt::transparent);
 
-    if (qmlItemNode().modelNode().hasAuxiliaryData("fillColor"))
-       fillColor = qmlItemNode().modelNode().auxiliaryData("fillColor").value<QColor>();
+    if (auto data = qmlItemNode().modelNode().auxiliaryData(AuxiliaryDataType::Document, "fillColor"))
+        fillColor = data->value<QColor>();
 
     painter->save();
 
@@ -2132,12 +2152,14 @@ void FormEditorFlowDecisionItem::paint(QPainter *painter,
         painter->setBrush(fillColor);
 
     int radius = blockRadius;
-    if (qmlItemNode().modelNode().hasAuxiliaryData("blockRadius"))
-        radius = qmlItemNode().modelNode().auxiliaryData("blockRadius").toInt();
+    if (auto data = qmlItemNode().modelNode().auxiliaryData(AuxiliaryDataType::Document,
+                                                            "blockRadius")) {
+        radius = data->toInt();
+    }
 
     int size = flowBlockSize;
-    if (qmlItemNode().modelNode().hasAuxiliaryData("blockSize"))
-        size = qmlItemNode().modelNode().auxiliaryData("blockSize").toInt();
+    if (auto data = qmlItemNode().modelNode().auxiliaryData(AuxiliaryDataType::Document, "blockSize"))
+        size = data->toInt();
 
     QRectF boundingRect(0, 0, size, size);
     QTransform transform;
@@ -2162,8 +2184,10 @@ void FormEditorFlowDecisionItem::paint(QPainter *painter,
 
     // Draw the dialog title inside the form view if requested. Decision item only.
     bool showDialogLabel = false;
-    if (qmlItemNode().modelNode().hasAuxiliaryData("showDialogLabel"))
-        showDialogLabel = qmlItemNode().modelNode().auxiliaryData("showDialogLabel").toBool();
+    if (auto data = qmlItemNode().modelNode().auxiliaryData(AuxiliaryDataType::Document,
+                                                            "showDialogLabel")) {
+        showDialogLabel = data->toBool();
+    }
 
     if (showDialogLabel && viewportTransform().m11() >= labelShowThreshold) {
         QString dialogTitle;
@@ -2179,8 +2203,9 @@ void FormEditorFlowDecisionItem::paint(QPainter *painter,
             QRectF textRect(0, 0, 100, 20);
 
             Qt::Corner corner = Qt::TopRightCorner;
-            if (qmlItemNode().modelNode().hasAuxiliaryData("dialogLabelPosition"))
-               corner = qmlItemNode().modelNode().auxiliaryData("dialogLabelPosition").value<Qt::Corner>();
+            if (auto data = qmlItemNode().modelNode().auxiliaryData(AuxiliaryDataType::Document,
+                                                                    "dialogLabelPosition"))
+                corner = data->value<Qt::Corner>();
 
             int flag = 0;
             switch (corner) {

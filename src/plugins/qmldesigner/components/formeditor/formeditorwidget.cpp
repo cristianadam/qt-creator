@@ -178,10 +178,16 @@ FormEditorWidget::FormEditorWidget(FormEditorView *view)
     auto writeZoomLevel = [this]() {
         double level = m_graphicsView->transform().m11();
         if (level == 1.0) {
-            if (m_formEditorView->rootModelNode().hasAuxiliaryData("formeditorZoom"))
-                m_formEditorView->rootModelNode().setAuxiliaryData("formeditorZoom", {});
+            if (m_formEditorView->rootModelNode().hasAuxiliaryData(AuxiliaryDataType::Temporary,
+                                                                   "formeditorZoom")) {
+                m_formEditorView->rootModelNode().setAuxiliaryData(AuxiliaryDataType::Temporary,
+                                                                   "formeditorZoom",
+                                                                   {});
+            }
         } else {
-            m_formEditorView->rootModelNode().setAuxiliaryData("formeditorZoom", level);
+            m_formEditorView->rootModelNode().setAuxiliaryData(AuxiliaryDataType::Temporary,
+                                                               "formeditorZoom",
+                                                               level);
         }
     };
 
@@ -312,31 +318,47 @@ void FormEditorWidget::changeRootItemWidth(const QString &widthText)
 {
     bool canConvert;
     int width = widthText.toInt(&canConvert);
-    if (canConvert)
-        m_formEditorView->rootModelNode().setAuxiliaryData("width", width);
-    else
-        m_formEditorView->rootModelNode().setAuxiliaryData("width", QVariant());
+    if (canConvert) {
+        m_formEditorView->rootModelNode().setAuxiliaryData(AuxiliaryDataType::NodeInstance,
+                                                           "width",
+                                                           width);
+    } else {
+        m_formEditorView->rootModelNode().setAuxiliaryData(AuxiliaryDataType::NodeInstance,
+                                                           "width",
+                                                           QVariant());
+    }
 }
 
 void FormEditorWidget::changeRootItemHeight(const QString &heighText)
 {
     bool canConvert;
     int height = heighText.toInt(&canConvert);
-    if (canConvert)
-        m_formEditorView->rootModelNode().setAuxiliaryData("height", height);
-    else
-        m_formEditorView->rootModelNode().setAuxiliaryData("height", QVariant());
+    if (canConvert) {
+        m_formEditorView->rootModelNode().setAuxiliaryData(AuxiliaryDataType::NodeInstance,
+                                                           "height",
+                                                           height);
+    } else {
+        m_formEditorView->rootModelNode().setAuxiliaryData(AuxiliaryDataType::NodeInstance,
+                                                           "height",
+                                                           QVariant());
+    }
 }
 
 void FormEditorWidget::changeBackgound(const QColor &color)
 {
     if (color.alpha() == 0) {
         m_graphicsView->activateCheckboardBackground();
-        if (m_formEditorView->rootModelNode().hasAuxiliaryData("formeditorColor"))
-            m_formEditorView->rootModelNode().setAuxiliaryData("formeditorColor", {});
+        if (m_formEditorView->rootModelNode().hasAuxiliaryData(AuxiliaryDataType::Temporary,
+                                                               "formeditorColor")) {
+            m_formEditorView->rootModelNode().setAuxiliaryData(AuxiliaryDataType::Temporary,
+                                                               "formeditorColor",
+                                                               {});
+        }
     } else {
         m_graphicsView->activateColoredBackground(color);
-        m_formEditorView->rootModelNode().setAuxiliaryData("formeditorColor", color);
+        m_formEditorView->rootModelNode().setAuxiliaryData(AuxiliaryDataType::Temporary,
+                                                           "formeditorColor",
+                                                           color);
     }
 }
 
@@ -353,8 +375,10 @@ void FormEditorWidget::initialize()
 {
     double defaultZoom = 1.0;
     if (m_formEditorView->model() && m_formEditorView->rootModelNode().isValid()) {
-        if (m_formEditorView->rootModelNode().hasAuxiliaryData("formeditorZoom"))
-            defaultZoom = m_formEditorView->rootModelNode().auxiliaryData("formeditorZoom").toDouble();
+        if (auto data = m_formEditorView->rootModelNode().auxiliaryData(AuxiliaryDataType::Temporary,
+                                                                        "formeditorZoom")) {
+            defaultZoom = data->toDouble();
+        }
     }
     m_graphicsView->setZoomFactor(defaultZoom);
     if (m_formEditorView->scene() && m_formEditorView->scene()->rootFormEditorItem())
@@ -366,25 +390,26 @@ void FormEditorWidget::initialize()
 void FormEditorWidget::updateActions()
 {
     if (m_formEditorView->model() && m_formEditorView->rootModelNode().isValid()) {
-        if (m_formEditorView->rootModelNode().hasAuxiliaryData("width")
-            && m_formEditorView->rootModelNode().auxiliaryData("width").isValid())
-            m_rootWidthAction->setLineEditText(
-                m_formEditorView->rootModelNode().auxiliaryData("width").toString());
-        else
+        if (auto data = m_formEditorView->rootModelNode().auxiliaryData(AuxiliaryDataType::NodeInstance,
+                                                                        "width")) {
+            m_rootWidthAction->setLineEditText(data->toString());
+        } else {
             m_rootWidthAction->clearLineEditText();
-        if (m_formEditorView->rootModelNode().hasAuxiliaryData("height")
-            && m_formEditorView->rootModelNode().auxiliaryData("height").isValid())
-            m_rootHeightAction->setLineEditText(
-                m_formEditorView->rootModelNode().auxiliaryData("height").toString());
-        else
+        }
+
+        if (auto data = m_formEditorView->rootModelNode().auxiliaryData(AuxiliaryDataType::NodeInstance,
+                                                                        "height")) {
+            m_rootHeightAction->setLineEditText(data->toString());
+        } else {
             m_rootHeightAction->clearLineEditText();
+        }
 
-        if (m_formEditorView->rootModelNode().hasAuxiliaryData("formeditorColor"))
-            m_backgroundAction->setColor(
-                m_formEditorView->rootModelNode().auxiliaryData("formeditorColor").value<QColor>());
-        else
+        if (auto data = m_formEditorView->rootModelNode().auxiliaryData(AuxiliaryDataType::Temporary,
+                                                                        "formeditorColor")) {
+            m_backgroundAction->setColor(data->value<QColor>());
+        } else {
             m_backgroundAction->setColor(Qt::transparent);
-
+        }
     } else {
         m_rootWidthAction->clearLineEditText();
         m_rootHeightAction->clearLineEditText();

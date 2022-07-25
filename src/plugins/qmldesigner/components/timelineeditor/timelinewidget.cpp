@@ -108,8 +108,8 @@ static qreal getcurrentFrame(const QmlTimeline &timeline)
     if (!timeline.isValid())
         return 0;
 
-    if (timeline.modelNode().hasAuxiliaryData("currentFrame@NodeInstance"))
-        return timeline.modelNode().auxiliaryData("currentFrame@NodeInstance").toReal();
+    if (auto data = timeline.modelNode().auxiliaryData(AuxiliaryDataType::NodeInstance, "currentFrame"))
+        return data->toReal();
     return timeline.currentKeyframe();
 }
 

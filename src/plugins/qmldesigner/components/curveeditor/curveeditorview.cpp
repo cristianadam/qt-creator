@@ -125,10 +125,10 @@ void CurveEditorView::nodeReparented([[maybe_unused]] const ModelNode &node,
 }
 
 void CurveEditorView::auxiliaryDataChanged(const ModelNode &node,
-                                           const PropertyName &name,
+                                           AuxiliaryDataKeyView key,
                                            const QVariant &data)
 {
-    if (name == "locked") {
+    if (key.type == AuxiliaryDataType::Document && key.name == "locked") {
         if (auto *item = m_model->find(node.id())) {
             QSignalBlocker blocker(m_model);
             m_model->setLocked(item, data.toBool());
@@ -300,20 +300,20 @@ void commitAuxiliaryData(ModelNode &node, TreeItem *item)
 {
     if (node.isValid()) {
         if (item->locked())
-            node.setAuxiliaryData("locked", true);
+            node.setAuxiliaryData(AuxiliaryDataType::Document, "locked", true);
         else
-            node.removeAuxiliaryData("locked");
+            node.removeAuxiliaryData(AuxiliaryDataType::Document, "locked");
 
         if (item->pinned())
-            node.setAuxiliaryData("pinned", true);
+            node.setAuxiliaryData(AuxiliaryDataType::Document, "pinned", true);
         else
-            node.removeAuxiliaryData("pinned");
+            node.removeAuxiliaryData(AuxiliaryDataType::Document, "pinned");
 
         if (auto *pitem = item->asPropertyItem()) {
             if (pitem->hasUnified())
-                node.setAuxiliaryData("unified", pitem->unifyString());
+                node.setAuxiliaryData(AuxiliaryDataType::Document, "unified", pitem->unifyString());
             else
-                node.removeAuxiliaryData("unified");
+                node.removeAuxiliaryData(AuxiliaryDataType::Document, "unified");
         }
     }
 }
@@ -383,7 +383,7 @@ void CurveEditorView::commitCurrentFrame(int frame)
 {
     QmlTimeline timeline = activeTimeline();
     if (timeline.isValid())
-        timeline.modelNode().setAuxiliaryData("currentFrame@NodeInstance", frame);
+        timeline.modelNode().setAuxiliaryData(AuxiliaryDataType::NodeInstance, "currentFrame", frame);
 }
 
 void CurveEditorView::commitStartFrame(int frame)

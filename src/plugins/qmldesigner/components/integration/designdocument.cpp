@@ -589,11 +589,14 @@ void DesignDocument::paste()
                                            [](const ModelNode &node) { return !node.isSubclassOf("QtQuick3D.Node"); })
                               == selectedNodes.cend();
             if (all3DNodes) {
-                int activeSceneId = rootModelNode().auxiliaryData("active3dScene@Internal").toInt();
-                if (activeSceneId != -1) {
-                    NodeListProperty sceneNodeProperty
-                            = QmlVisualNode::findSceneNodeProperty(rootModelNode().view(), activeSceneId);
-                    targetNode = sceneNodeProperty.parentModelNode();
+                auto data = rootModelNode().auxiliaryData(AuxiliaryDataType::Temporary,
+                                                          "active3dScene");
+                if (data) {
+                    if (int activeSceneId = data->toInt(); activeSceneId != -1) {
+                        NodeListProperty sceneNodeProperty = QmlVisualNode::findSceneNodeProperty(
+                            rootModelNode().view(), activeSceneId);
+                        targetNode = sceneNodeProperty.parentModelNode();
+                    }
                 }
             }
         }
@@ -636,11 +639,14 @@ void DesignDocument::paste()
             } else {
                 // if selection is empty and this is a 3D Node, paste it under the active scene
                 if (pastedNode.isSubclassOf("QtQuick3D.Node")) {
-                    int activeSceneId = rootModelNode().auxiliaryData("active3dScene@Internal").toInt();
-                    if (activeSceneId != -1) {
-                        NodeListProperty sceneNodeProperty
-                                = QmlVisualNode::findSceneNodeProperty(rootModelNode().view(), activeSceneId);
-                        targetNode = sceneNodeProperty.parentModelNode();
+                    auto data = rootModelNode().auxiliaryData(AuxiliaryDataType::Temporary,
+                                                              "active3dScene");
+                    if (data) {
+                        if (int activeSceneId = data->toInt(); activeSceneId != -1) {
+                            NodeListProperty sceneNodeProperty = QmlVisualNode::findSceneNodeProperty(
+                                rootModelNode().view(), activeSceneId);
+                            targetNode = sceneNodeProperty.parentModelNode();
+                        }
                     }
                 }
             }

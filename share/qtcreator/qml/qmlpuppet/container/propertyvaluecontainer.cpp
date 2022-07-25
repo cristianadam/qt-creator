@@ -34,11 +34,16 @@ PropertyValueContainer::PropertyValueContainer()
 {
 }
 
-PropertyValueContainer::PropertyValueContainer(qint32 instanceId, const PropertyName &name, const QVariant &value, const TypeName &dynamicTypeName)
-    : m_instanceId(instanceId),
-    m_name(name),
-    m_value(value),
-    m_dynamicTypeName(dynamicTypeName)
+PropertyValueContainer::PropertyValueContainer(qint32 instanceId,
+                                               const PropertyName &name,
+                                               const QVariant &value,
+                                               const TypeName &dynamicTypeName,
+                                               AuxiliaryDataType auxiliaryDataType)
+    : m_instanceId(instanceId)
+    , m_name(name)
+    , m_value(value)
+    , m_dynamicTypeName(dynamicTypeName)
+    , m_auxiliaryDataType{auxiliaryDataType}
 {
 }
 
@@ -88,6 +93,11 @@ void PropertyValueContainer::setReflectionFlag(bool b)
 bool PropertyValueContainer::isReflected() const
 {
     return m_isReflected;
+}
+
+AuxiliaryDataType PropertyValueContainer::auxiliaryDataType() const
+{
+    return m_auxiliaryDataType;
 }
 
 QDataStream &operator<<(QDataStream &out, const PropertyValueContainer &container)

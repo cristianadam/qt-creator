@@ -42,7 +42,11 @@ class PropertyValueContainer
 
 public:
     PropertyValueContainer();
-    PropertyValueContainer(qint32 instanceId, const PropertyName &name, const QVariant &value, const TypeName &dynamicTypeName);
+    PropertyValueContainer(qint32 instanceId,
+                           const PropertyName &name,
+                           const QVariant &value,
+                           const TypeName &dynamicTypeName,
+                           AuxiliaryDataType auxiliaryDataType = AuxiliaryDataType::None);
     PropertyValueContainer(qint32 option);
 
     qint32 instanceId() const;
@@ -52,12 +56,14 @@ public:
     TypeName dynamicTypeName() const;
     void setReflectionFlag(bool b);
     bool isReflected() const;
+    AuxiliaryDataType auxiliaryDataType() const;
 
 private:
     qint32 m_instanceId;
     PropertyName m_name;
     QVariant m_value;
     TypeName m_dynamicTypeName;
+    AuxiliaryDataType m_auxiliaryDataType = AuxiliaryDataType::None;
     bool m_isReflected = false;
 };
 

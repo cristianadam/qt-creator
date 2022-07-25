@@ -147,12 +147,13 @@ void TransitionEditorView::selectedNodesChanged(const QList<ModelNode> & /*selec
 }
 
 void TransitionEditorView::auxiliaryDataChanged(const ModelNode &modelNode,
-                                                const PropertyName &name,
+                                                AuxiliaryDataKeyView key,
                                                 const QVariant &data)
 {
-    if (name == QmlDesigner::lockedProperty && data.toBool() && modelNode.isValid()) {
+    if (key.type == AuxiliaryDataType::Document && key.name == QmlDesigner::lockedProperty
+        && data.toBool() && modelNode.isValid()) {
         for (const auto &node : modelNode.allSubModelNodesAndThisNode()) {
-            if (node.hasAuxiliaryData("transition_expanded"))
+            if (node.hasAuxiliaryData(AuxiliaryDataType::Document, "transition_expanded"))
                 m_transitionEditorWidget->graphicsScene()->invalidateHeightForTarget(node);
         }
     }
@@ -265,7 +266,7 @@ ModelNode TransitionEditorView::addNewTransition()
                                               "to",
                                               "*",
                                           }});
-            transition.setAuxiliaryData("transitionDuration", 2000);
+            transition.setAuxiliaryData(AuxiliaryDataType::Document, "transitionDuration", 2000);
             transition.validId();
             root.nodeListProperty("transitions").reparentHere(transition);
 

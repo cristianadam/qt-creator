@@ -224,7 +224,7 @@ bool QmlTimeline::isRecording() const
 {
     QTC_ASSERT(isValid(), return false);
 
-    return modelNode().hasAuxiliaryData("Record@Internal");
+    return modelNode().hasAuxiliaryData(AuxiliaryDataType::Temporary, "Record");
 }
 
 void QmlTimeline::toogleRecording(bool record) const
@@ -233,9 +233,9 @@ void QmlTimeline::toogleRecording(bool record) const
 
     if (!record) {
         if (isRecording())
-            modelNode().removeAuxiliaryData("Record@Internal");
+            modelNode().removeAuxiliaryData(AuxiliaryDataType::Temporary, "Record");
     } else {
-        modelNode().setAuxiliaryData("Record@Internal", true);
+        modelNode().setAuxiliaryData(AuxiliaryDataType::Temporary, "Record", true);
     }
 }
 
@@ -301,7 +301,7 @@ void QmlTimeline::insertKeyframe(const ModelNode &target, const PropertyName &pr
 
     QTC_ASSERT(timelineFrames.isValid(), return );
 
-    const qreal frame = modelNode().auxiliaryData("currentFrame@NodeInstance").toReal();
+    const qreal frame = modelNode().auxiliaryData(AuxiliaryDataType::NodeInstance, "currentFrame")->toReal();
     const QVariant value = QmlObjectNode(targetNode).instanceValue(propertyName);
 
     timelineFrames.setValue(value, frame);

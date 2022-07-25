@@ -450,8 +450,8 @@ void LayoutInGridLayout::setSpanning(const ModelNode &layoutNode)
                 rowSpan = 1;
             }
 
-            if (modelNode.hasAuxiliaryData("extraSpanning"))
-                columnSpan += modelNode.auxiliaryData("extraSpanning").toInt();
+            if (auto data = modelNode.auxiliaryData(AuxiliaryDataType::Document, "extraSpanning"))
+                columnSpan += data->toInt();
 
             if (columnSpan > 1)
                 qmlItemNode.setVariantProperty("Layout.columnSpan", columnSpan);
@@ -472,10 +472,14 @@ void LayoutInGridLayout::removeSpacersBySpanning(QList<ModelNode> &nodes)
                 m_layoutedNodes.removeAll(node);
                 nodes.removeAll(node);
                 ModelNode(node).destroy();
-                if (before.hasAuxiliaryData("extraSpanning")) {
-                    before.setAuxiliaryData("extraSpanning", before.auxiliaryData("extraSpanning").toInt() + 1);
+                auto extraSpanningData = before.auxiliaryData(AuxiliaryDataType::Document,
+                                                              "extraSpanning");
+                if (extraSpanningData) {
+                    before.setAuxiliaryData(AuxiliaryDataType::Document,
+                                            "extraSpanning",
+                                            extraSpanningData->toInt() + 1);
                 } else {
-                    before.setAuxiliaryData("extraSpanning", 1);
+                    before.setAuxiliaryData(AuxiliaryDataType::Document, "extraSpanning", 1);
                 }
             }
         }

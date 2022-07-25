@@ -41,7 +41,7 @@ QVariant NodeDumper::propertyValue(const PropertyName &name) const
 
 QString NodeDumper::uuid() const
 {
-    return m_node.auxiliaryData(Constants::UuidAuxTag).toString();
+    return m_node.auxiliaryDataWithDefault(AuxiliaryDataType::Document, Constants::UuidAuxTag).toString();
 }
 
 }

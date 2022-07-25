@@ -177,11 +177,12 @@ void ConnectionView::selectedNodesChanged(const QList<ModelNode> & selectedNodeL
 }
 
 void ConnectionView::auxiliaryDataChanged([[maybe_unused]] const ModelNode &node,
-                                          const PropertyName &name,
+                                          AuxiliaryDataKeyView key,
                                           const QVariant &data)
 {
     // Check if the auxiliary data is actually the locked property or if it is unlocked
-    if (name != QmlDesigner::lockedProperty || !data.toBool())
+    if ((key.type != AuxiliaryDataType::Document && key.name != QmlDesigner::lockedProperty)
+        || !data.toBool())
         return;
 
     QItemSelectionModel *selectionModel = connectionTableView()->selectionModel();

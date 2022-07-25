@@ -342,7 +342,9 @@ void TimelinePropertyItem::changePropertyValue(const QVariant &value)
         QmlTimelineKeyframeGroup frames = m_frames;
         auto deferredFunc = [frames, value, timeline]() {
             auto constFrames = frames;
-            qreal frame = timeline.modelNode().auxiliaryData("currentFrame@NodeInstance").toReal();
+            qreal frame = timeline.modelNode()
+                              .auxiliaryDataWithDefault(AuxiliaryDataType::NodeInstance, "currentFrame")
+                              .toReal();
             try {
                 constFrames.setValue(value, frame);
             } catch (const RewritingException &e) {

@@ -28,6 +28,10 @@
 #include <QtGlobal>
 #include <QList>
 
+#include <utils/smallstringview.h>
+
+#include <nodeinstanceglobal.h>
+
 // Unnecessary since core isn't a dll any more.
 
 #if defined(QMLDESIGNER_LIBRARY)
@@ -62,4 +66,46 @@ enum AnchorLineType {
     AnchorLineVerticalMask = AnchorLineTop | AnchorLineBottom | AnchorLineVerticalCenter | AnchorLineBaseline,
     AnchorLineAllMask = AnchorLineVerticalMask | AnchorLineHorizontalMask
 };
+
+template<typename NameType>
+class BasicAuxiliaryDataKey
+{
+public:
+    BasicAuxiliaryDataKey(AuxiliaryDataType type, NameType name)
+        : type{type}
+        , name{std::move(name)}
+    {}
+
+    template<typename OtherNameType, typename = std::enable_if_t<!std::is_same_v<NameType, OtherNameType>>>
+    explicit BasicAuxiliaryDataKey(const BasicAuxiliaryDataKey<OtherNameType> &other)
+        : type{other.type}
+        , name{NameType{other.name}}
+    {}
+
+public:
+    AuxiliaryDataType type;
+    NameType name;
+};
+
+template<typename First, typename Second>
+bool operator<(const BasicAuxiliaryDataKey<First> &first, const BasicAuxiliaryDataKey<Second> &second)
+{
+    return std::tie(first.type, first.name) < std::tie(second.type, second.name);
 }
+
+template<typename First, typename Second>
+bool operator==(const BasicAuxiliaryDataKey<First> &first, const BasicAuxiliaryDataKey<Second> &second)
+{
+    return std::tie(first.type, first.name) < std::tie(second.type, second.name);
+}
+
+template<typename First, typename Second>
+bool operator!=(const BasicAuxiliaryDataKey<First> &first, const BasicAuxiliaryDataKey<Second> &second)
+{
+    return !(first == second);
+}
+
+using AuxiliaryDataKey = BasicAuxiliaryDataKey<PropertyName>;
+using AuxiliaryDataKeyView = BasicAuxiliaryDataKey<Utils::SmallStringView>;
+
+} // namespace QmlDesigner

@@ -466,7 +466,8 @@ void AlignDistribute::distributeObjects(Target target, AlignTo alignTo, const QS
                 currentPosition = position.y();
                 position.ry() += equidistant;
             }
-            modelNode.setAuxiliaryData("tmp",
+            modelNode.setAuxiliaryData(AuxiliaryDataType::Temporary,
+                                       "tmp",
                                        qRound(currentPosition
                                               - distributePosition(target, qmlItemNode)));
         }
@@ -482,7 +483,8 @@ void AlignDistribute::distributeObjects(Target target, AlignTo alignTo, const QS
         const auto keyObjectModelNode = view->modelNodeForId(keyObject);
         const QmlItemNode keyObjectQmlItemNode(keyObjectModelNode);
         const auto scenePosition = keyObjectQmlItemNode.instanceScenePosition();
-        keyObjectModelNode.setAuxiliaryData("tmp",
+        keyObjectModelNode.setAuxiliaryData(AuxiliaryDataType::Temporary,
+                                            "tmp",
                                             (getDimension(target) == Dimension::X
                                                  ? scenePosition.x()
                                                  : scenePosition.y()));
@@ -512,10 +514,11 @@ void AlignDistribute::distributeObjects(Target target, AlignTo alignTo, const QS
                     break;
                 }
                 }
-                qmlItemNode.setVariantProperty(propertyName,
-                                               modelNode.auxiliaryData("tmp").toReal()
-                                                   - parentPosition);
-                modelNode.removeAuxiliaryData("tmp");
+                qmlItemNode.setVariantProperty(
+                    propertyName,
+                    modelNode.auxiliaryDataWithDefault(AuxiliaryDataType::Temporary, "tmp").toReal()
+                        - parentPosition);
+                modelNode.removeAuxiliaryData(AuxiliaryDataType::Temporary, "tmp");
             }
         }
     });
@@ -601,7 +604,7 @@ void AlignDistribute::distributeSpacing(Dimension dimension,
                 currentPosition = position.y();
                 position.ry() += height(qmlItemNode) + equidistant;
             }
-            modelNode.setAuxiliaryData("tmp", qRound(currentPosition));
+            modelNode.setAuxiliaryData(AuxiliaryDataType::Temporary, "tmp", qRound(currentPosition));
         }
     }
 
@@ -615,7 +618,8 @@ void AlignDistribute::distributeSpacing(Dimension dimension,
         const auto keyObjectModelNode = view->modelNodeForId(keyObject);
         const QmlItemNode keyObjectQmlItemNode(keyObjectModelNode);
         const auto scenePosition = keyObjectQmlItemNode.instanceScenePosition();
-        keyObjectModelNode.setAuxiliaryData("tmp",
+        keyObjectModelNode.setAuxiliaryData(AuxiliaryDataType::Temporary,
+                                            "tmp",
                                             (dimension == Dimension::X ? scenePosition.x()
                                                                        : scenePosition.y()));
         selectedNodes.append(keyObjectModelNode);
@@ -645,9 +649,11 @@ void AlignDistribute::distributeSpacing(Dimension dimension,
                     break;
                 }
                 }
-                qmlItemNode.setVariantProperty(propertyName,
-                                               modelNode.auxiliaryData("tmp").toReal() - parentPos);
-                modelNode.removeAuxiliaryData("tmp");
+                qmlItemNode.setVariantProperty(
+                    propertyName,
+                    modelNode.auxiliaryDataWithDefault(AuxiliaryDataType::Temporary, "tmp").toReal()
+                        - parentPos);
+                modelNode.removeAuxiliaryData(AuxiliaryDataType::Temporary, "tmp");
             }
         }
     });

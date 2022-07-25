@@ -29,8 +29,9 @@
 #include "internalnodeproperty.h"
 #include "internalnodelistproperty.h"
 
-
 #include <QDebug>
+
+#include <algorithm>
 
 namespace QmlDesigner {
 namespace Internal {
@@ -167,29 +168,74 @@ size_t qHash(const InternalNodePointer& node)
     return ::qHash(node->internalId());
 }
 
-QVariant InternalNode::auxiliaryData(const PropertyName &name) const
+namespace {
+
+template<typename Type>
+auto find(Type &&auxiliaryDatas, AuxiliaryDataKeyView key)
 {
-    return m_auxiliaryDataHash.value(name);
+    return std::find_if(auxiliaryDatas.begin(), auxiliaryDatas.end(), [&](const auto &element) {
+        return element.first == key;
+    });
 }
 
-void InternalNode::setAuxiliaryData(const PropertyName &name, const QVariant &data)
+} // namespace
+
+Utils::optional<QVariant> InternalNode::auxiliaryData(AuxiliaryDataKeyView key) const
 {
-    m_auxiliaryDataHash.insert(name, data);
+    auto found = find(m_auxiliaryDatas, key);
+
+    if (found != m_auxiliaryDatas.end())
+        return found->second;
+
+    return {};
 }
 
-void InternalNode::removeAuxiliaryData(const PropertyName &name)
+bool InternalNode::setAuxiliaryData(AuxiliaryDataKeyView key, const QVariant &data)
 {
-    m_auxiliaryDataHash.remove(name);
+    auto found = find(m_auxiliaryDatas, key);
+
+    if (found != m_auxiliaryDatas.end()) {
+        if (found->second == data)
+            return false;
+        found->second = data;
+    } else {
+        m_auxiliaryDatas.emplace_back(AuxiliaryDataKey{key}, data);
+    }
+
+    return true;
 }
 
-bool InternalNode::hasAuxiliaryData(const PropertyName &name) const
+bool InternalNode::removeAuxiliaryData(AuxiliaryDataKeyView key)
 {
-    return m_auxiliaryDataHash.contains(name);
+    auto found = find(m_auxiliaryDatas, key);
+
+    if (found == m_auxiliaryDatas.end())
+        return false;
+
+    std::swap(*found, m_auxiliaryDatas.back());
+    m_auxiliaryDatas.pop_back();
+
+    return true;
 }
 
-const QHash<PropertyName, QVariant> &InternalNode::auxiliaryData() const
+bool InternalNode::hasAuxiliaryData(AuxiliaryDataKeyView key) const
 {
-    return m_auxiliaryDataHash;
+    auto found = find(m_auxiliaryDatas, key);
+
+    return found != m_auxiliaryDatas.end();
+}
+
+std::vector<std::pair<PropertyName, QVariant>> InternalNode::auxiliaryData(AuxiliaryDataType type) const
+{
+    std::vector<std::pair<PropertyName, QVariant>> data;
+    data.reserve(m_auxiliaryDatas.size());
+
+    for (const auto &element : m_auxiliaryDatas) {
+        if (element.first.type == type)
+            data.emplace_back(element.first.name, element.second);
+    }
+
+    return data;
 }
 
 InternalProperty::Pointer InternalNode::property(const PropertyName &name) const

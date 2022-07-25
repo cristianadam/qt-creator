@@ -556,8 +556,8 @@ void QmlItemNode::setPostionInBaseState(const QPointF &position)
 
 void QmlItemNode::setFlowItemPosition(const QPointF &position)
 {
-    modelNode().setAuxiliaryData("flowX", position.x());
-    modelNode().setAuxiliaryData("flowY", position.y());
+    modelNode().setAuxiliaryData(AuxiliaryDataType::Document, "flowX", position.x());
+    modelNode().setAuxiliaryData(AuxiliaryDataType::Document, "flowY", position.y());
 }
 
 QPointF QmlItemNode::flowPosition() const
@@ -565,8 +565,8 @@ QPointF QmlItemNode::flowPosition() const
     if (!isValid())
         return QPointF();
 
-    return QPointF(modelNode().auxiliaryData("flowX").toInt(),
-                   modelNode().auxiliaryData("flowY").toInt());
+    return QPointF(modelNode().auxiliaryDataWithDefault(AuxiliaryDataType::Document, "flowX").toInt(),
+                   modelNode().auxiliaryDataWithDefault(AuxiliaryDataType::Document, "flowY").toInt());
 }
 
 bool QmlItemNode::isInLayout() const

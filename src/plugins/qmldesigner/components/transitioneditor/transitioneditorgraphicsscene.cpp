@@ -148,7 +148,7 @@ void TransitionEditorGraphicsScene::invalidateLayout()
 void TransitionEditorGraphicsScene::setDuration(int duration)
 {
     if (m_transition.isValid())
-        m_transition.setAuxiliaryData("transitionDuration", duration);
+        m_transition.setAuxiliaryData(AuxiliaryDataType::Document, "transitionDuration", duration);
     m_layout->setDuration(duration);
     qreal scaling = m_layout->rulerScaling();
     setZoom(scaling);
