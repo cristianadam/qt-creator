@@ -50,11 +50,11 @@ using namespace CPlusPlus;
 Macro::Macro()
     : _next(nullptr),
       _hashcode(0),
-      _fileRevision(0),
-      _line(0),
-      _bytesOffset(0),
-      _utf16charsOffset(0),
-      _length(0),
+      fileRevision(0),
+      line(0),
+      bytesOffset(0),
+      utf16charsOffset(0),
+      length(0),
       _state(0)
 { }
 
@@ -65,11 +65,11 @@ QString Macro::decoratedName() const
         text += QLatin1String("#undef ");
     else
         text += QLatin1String("#define ");
-    text += QString::fromUtf8(_name.constData(), _name.size());
+    text += QString::fromUtf8(name.constData(), name.size());
     if (f._functionLike) {
         text += QLatin1Char('(');
         bool first = true;
-        for (const QByteArray &formal : qAsConst(_formals)) {
+        for (const QByteArray &formal : formals) {
             if (! first)
                 text += QLatin1String(", ");
             else
@@ -88,7 +88,7 @@ QString Macro::decoratedName() const
 QString Macro::toString() const
 {
     QString text = decoratedName();
-    text.append(QString::fromUtf8(_definitionText.constData(), _definitionText.size()));
+    text.append(QString::fromUtf8(definitionText.constData(), definitionText.size()));
     return text;
 }
 

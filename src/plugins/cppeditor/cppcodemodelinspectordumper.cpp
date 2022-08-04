@@ -420,10 +420,9 @@ QString Utils::partsForFile(const QString &fileName)
 
 QString Utils::unresolvedFileNameWithDelimiters(const CPlusPlus::Document::Include &include)
 {
-    const QString unresolvedFileName = include.unresolvedFileName();
-    if (include.type() == CPlusPlus::Client::IncludeLocal)
-        return QLatin1Char('"') + unresolvedFileName + QLatin1Char('"');
-    return QLatin1Char('<') + unresolvedFileName + QLatin1Char('>');
+    if (include.type == CPlusPlus::Client::IncludeLocal)
+        return QLatin1Char('"') + include.unresolvedFileName + QLatin1Char('"');
+    return QLatin1Char('<') + include.unresolvedFileName + QLatin1Char('>');
 }
 
 QString Utils::pathListToString(const QStringList &pathList)
@@ -676,14 +675,14 @@ void Dumper::dumpDocuments(const QList<CPlusPlus::Document::Ptr> &documents, boo
         m_out << i3 << "Parsed         : " << Utils::toString(document->isParsed()) << "\n";
         m_out << i3 << "Project Parts  : " << Utils::partsForFile(document->fileName()) << "\n";
 
-        const QList<CPlusPlus::Document::Include> includes = document->unresolvedIncludes()
-                + document->resolvedIncludes();
+        const QList<CPlusPlus::Document::Include> includes = document->unresolvedIncludes
+                + document->resolvedIncludes;
         if (!includes.isEmpty()) {
             m_out << i3 << "Includes:{{{4\n";
             for (const CPlusPlus::Document::Include &include : includes) {
-                m_out << i4 << "at line " << include.line() << ": "
+                m_out << i4 << "at line " << include.line << ": "
                       << Utils::unresolvedFileNameWithDelimiters(include) << " ==> "
-                      << include.resolvedFileName() << "\n";
+                      << include.resolvedFileName << "\n";
             }
         }
 
@@ -693,30 +692,30 @@ void Dumper::dumpDocuments(const QList<CPlusPlus::Document::Ptr> &documents, boo
             m_out << i3 << "Diagnostic Messages:{{{4\n";
             for (const CPlusPlus::Document::DiagnosticMessage &msg : diagnosticMessages) {
                 const auto level =
-                    static_cast<CPlusPlus::Document::DiagnosticMessage::Level>(msg.level());
-                m_out << i4 << "at " << msg.line() << ":" << msg.column() << ", " << Utils::toString(level)
-                      << ": " << msg.text() << "\n";
+                    static_cast<CPlusPlus::Document::DiagnosticMessage::Level>(msg.level);
+                m_out << i4 << "at " << msg.line << ":" << msg.column << ", " << Utils::toString(level)
+                      << ": " << msg.text << "\n";
             }
         }
 
-        const QList<CPlusPlus::Macro> macroDefinitions = document->definedMacros();
+        const QList<CPlusPlus::Macro> &macroDefinitions = document->definedMacros;
         if (!macroDefinitions.isEmpty()) {
             m_out << i3 << "(Un)Defined Macros:{{{4\n";
             for (const CPlusPlus::Macro &macro : macroDefinitions)
-                m_out << i4 << "at line " << macro.line() << ": " << macro.toString() << "\n";
+                m_out << i4 << "at line " << macro.line << ": " << macro.toString() << "\n";
         }
 
-        const QList<CPlusPlus::Document::MacroUse> macroUses = document->macroUses();
+        const QList<CPlusPlus::Document::MacroUse> &macroUses = document->macroUses;
         if (!macroUses.isEmpty()) {
             m_out << i3 << "Macro Uses:{{{4\n";
             for (const CPlusPlus::Document::MacroUse &use : macroUses) {
                 const QString type = use.isFunctionLike()
                         ? QLatin1String("function-like") : QLatin1String("object-like");
-                m_out << i4 << "at line " << use.beginLine() << ", "
-                      << use.macro().nameToQString().size()
-                      << ", begin=" << use.utf16charsBegin() << ", end=" << use.utf16charsEnd()
+                m_out << i4 << "at line " << use.beginLine << ", "
+                      << use.macro.nameToQString().size()
+                      << ", begin=" << use.utf16charsBegin << ", end=" << use.utf16charsEnd
                       << ", " << type << ", args="
-                      << use.arguments().size() << "\n";
+                      << use.arguments.size() << "\n";
             }
         }
 

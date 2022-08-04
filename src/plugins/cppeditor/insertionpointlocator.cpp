@@ -802,7 +802,7 @@ InsertionLocation insertLocationForMethodDefinition(Symbol *symbol,
             = locator.methodDefinition(symbol, useSymbolFinder, fileName);
     const bool isHeader = ProjectFile::isHeader(ProjectFile::classify(fileName));
     const bool hasIncludeGuard = isHeader
-            && !file->cppDocument()->includeGuardMacroName().isEmpty();
+            && !file->cppDocument()->includeGuardMacroName.isEmpty();
     int lastLine;
     if (hasIncludeGuard) {
         const TranslationUnit * const tu = file->cppDocument()->translationUnit();

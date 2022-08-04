@@ -98,10 +98,10 @@ Macro *Environment::macroAt(unsigned index) const
 
 Macro *Environment::bind(const Macro &macro)
 {
-    Q_ASSERT(! macro.name().isEmpty());
+    Q_ASSERT(! macro.name.isEmpty());
 
     Macro *m = new Macro (macro);
-    const QByteArray &name = m->name();
+    const QByteArray &name = m->name;
     m->_hashcode = hashCode(name.begin(), name.size());
 
     if (++_macro_count == _allocated_macros) {
@@ -136,10 +136,10 @@ void Environment::addMacros(const QList<Macro> &macros)
 Macro *Environment::remove(const ByteArrayRef &name)
 {
     Macro macro;
-    macro.setName(name.toByteArray());
+    macro.name = name.toByteArray();
     macro.setHidden(true);
-    macro.setFileName(currentFile);
-    macro.setLine(currentLine);
+    macro.fileName = currentFile;
+    macro.line = currentLine;
     return bind(macro);
 }
 
@@ -234,7 +234,7 @@ Macro *Environment::resolve(const ByteArrayRef &name) const
 
     Macro *it = _hash[hashCode(name.start(), name.size()) % _hash_count];
     for (; it; it = it->_next) {
-        if (it->name() != name)
+        if (it->name != name)
             continue;
         else if (it->isHidden())
             return nullptr;

@@ -219,7 +219,7 @@ public:
         QList<Document::DiagnosticMessage> cleanedDiagnosticMessages;
         const auto diagnosticMessages = document->diagnosticMessages();
         for (const Document::DiagnosticMessage &message : diagnosticMessages) {
-            if (!ignoreList.contains(message.text()))
+            if (!ignoreList.contains(message.text))
                 cleanedDiagnosticMessages << message;
         }
 

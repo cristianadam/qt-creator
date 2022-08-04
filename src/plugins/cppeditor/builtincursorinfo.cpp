@@ -271,12 +271,12 @@ bool isSemanticInfoValidExceptLocalUses(const SemanticInfo &semanticInfo, int re
 
 bool isMacroUseOf(const Document::MacroUse &marcoUse, const Macro &macro)
 {
-    const Macro &candidate = marcoUse.macro();
+    const Macro &candidate = marcoUse.macro;
 
-    return candidate.line() == macro.line()
-        && candidate.utf16CharOffset() == macro.utf16CharOffset()
-        && candidate.length() == macro.length()
-        && candidate.fileName() == macro.fileName();
+    return candidate.line == macro.line
+        && candidate.utf16charsOffset == macro.utf16charsOffset
+        && candidate.length == macro.length
+        && candidate.fileName == macro.fileName;
 }
 
 bool handleMacroCase(const Document::Ptr document,
@@ -292,14 +292,13 @@ bool handleMacroCase(const Document::Ptr document,
     const int length = macro->nameToQString().size();
 
     // Macro definition
-    if (macro->fileName() == document->fileName())
-        ranges->append(toRange(textCursor, macro->utf16CharOffset(), length));
+    if (macro->fileName == document->fileName())
+        ranges->append(toRange(textCursor, macro->utf16charsOffset, length));
 
     // Other macro uses
-    const QList<Document::MacroUse> macroUses = document->macroUses();
-    for (const Document::MacroUse &use : macroUses) {
+    for (const Document::MacroUse &use : qAsConst(document->macroUses)) {
         if (isMacroUseOf(use, *macro))
-            ranges->append(toRange(textCursor, use.utf16charsBegin(), length));
+            ranges->append(toRange(textCursor, use.utf16charsBegin, length));
     }
 
     return true;

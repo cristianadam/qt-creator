@@ -64,65 +64,14 @@ class CPLUSPLUS_EXPORT Macro
 public:
     Macro();
 
-    QByteArray name() const
-    { return _name; }
-
     QString nameToQString() const
-    { return QString::fromUtf8(_name, _name.size()); }
-
-    void setName(const QByteArray &name)
-    { _name = name; }
-
-    const QByteArray definitionText() const
-    { return _definitionText; }
-
-    const QVector<PPToken> &definitionTokens() const
-    { return _definitionTokens; }
+    { return QString::fromUtf8(name, name.size()); }
 
     void setDefinition(const QByteArray &definitionText, const QVector<PPToken> &definitionTokens)
-    { _definitionText = definitionText; _definitionTokens = definitionTokens; }
-
-    const QVector<QByteArray> &formals() const
-    { return _formals; }
+    { this->definitionText = definitionText; this->definitionTokens = definitionTokens; }
 
     void addFormal(const QByteArray &formal)
-    { _formals.append(formal); }
-
-    QString fileName() const
-    { return _fileName; }
-
-    void setFileName(const QString &fileName)
-    { _fileName = fileName; }
-
-    unsigned fileRevision() const
-    { return _fileRevision; }
-
-    void setFileRevision(unsigned fileRevision)
-    { _fileRevision = fileRevision; }
-
-    int line() const
-    { return _line; }
-
-    void setLine(int line)
-    { _line = line; }
-
-    unsigned bytesOffset() const
-    { return _bytesOffset; }
-
-    void setBytesOffset(unsigned bytesOffset)
-    { _bytesOffset = bytesOffset; }
-
-    unsigned utf16CharOffset() const
-    { return _utf16charsOffset; }
-
-    void setUtf16charOffset(unsigned utf16charOffset)
-    { _utf16charsOffset = utf16charOffset; }
-
-    unsigned length() const
-    { return _length; }
-
-    void setLength(unsigned length)
-    { _length = length; }
+    { formals.append(formal); }
 
     bool isHidden() const
     { return f._hidden; }
@@ -158,17 +107,18 @@ private:
         unsigned _variadic: 1;
     };
 
-    QByteArray _name;
-    QByteArray _definitionText;
-    QVector<PPToken> _definitionTokens;
-    QVector<QByteArray> _formals;
-    QString _fileName;
+public:
+    QByteArray name;
+    QByteArray definitionText;
+    QVector<PPToken> definitionTokens;
+    QVector<QByteArray> formals;
+    QString fileName;
     unsigned _hashcode;
-    unsigned _fileRevision;
-    int _line;
-    unsigned _bytesOffset;
-    unsigned _utf16charsOffset;
-    unsigned _length;
+    unsigned fileRevision;
+    int line;
+    unsigned bytesOffset;
+    unsigned utf16charsOffset;
+    unsigned length;
 
     union
     {

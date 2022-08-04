@@ -95,11 +95,9 @@ static FileAndLines findIncluders(const QString &filePath)
     for (auto cit = snapshot.begin(), citEnd = snapshot.end(); cit != citEnd; ++cit) {
         const QString filePathFromSnapshot = cit.key().toString();
         Document::Ptr doc = cit.value();
-        const QList<Document::Include> resolvedIncludes = doc->resolvedIncludes();
-        for (const auto &includeFile : resolvedIncludes) {
-            const QString includedFilePath = includeFile.resolvedFileName();
-            if (includedFilePath == filePath)
-                result.append(FileAndLine(filePathFromSnapshot, int(includeFile.line())));
+        for (const CPlusPlus::Document::Include &includeFile : qAsConst(doc->resolvedIncludes)) {
+            if (includeFile.resolvedFileName == filePath)
+                result.append(FileAndLine(filePathFromSnapshot, int(includeFile.line)));
         }
     }
     return result;
@@ -109,9 +107,8 @@ static FileAndLines findIncludes(const QString &filePath, const Snapshot &snapsh
 {
     FileAndLines result;
     if (Document::Ptr doc = snapshot.document(filePath)) {
-        const QList<Document::Include> resolvedIncludes = doc->resolvedIncludes();
-        for (const auto &includeFile : resolvedIncludes)
-            result.append(FileAndLine(includeFile.resolvedFileName(), 0));
+        for (const auto &includeFile : qAsConst(doc->resolvedIncludes))
+            result.append(FileAndLine(includeFile.resolvedFileName, 0));
     }
     return result;
 }

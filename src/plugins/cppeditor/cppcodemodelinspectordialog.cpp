@@ -545,10 +545,9 @@ QVariant SnapshotModel::headerData(int section, Qt::Orientation orientation, int
 
 // --- IncludesModel ------------------------------------------------------------------------------
 
-static bool includesSorter(const Document::Include &i1,
-                           const Document::Include &i2)
+static bool includesSorter(const Document::Include &i1, const Document::Include &i2)
 {
-    return i1.line() < i2.line();
+    return i1.line < i2.line;
 }
 
 class IncludesModel : public QAbstractListModel
@@ -608,7 +607,7 @@ QVariant IncludesModel::data(const QModelIndex &index, int role) const
     static const QBrush redBrush(QColor(205, 38, 38));
 
     const Document::Include include = m_includes.at(index.row());
-    const QString resolvedFileName = QDir::toNativeSeparators(include.resolvedFileName());
+    const QString resolvedFileName = QDir::toNativeSeparators(include.resolvedFileName);
     const bool isResolved = !resolvedFileName.isEmpty();
 
     if (role == Qt::DisplayRole) {
@@ -616,7 +615,7 @@ QVariant IncludesModel::data(const QModelIndex &index, int role) const
         if (column == ResolvedOrNotColumn) {
             return CMI::Utils::toString(isResolved);
         } else if (column == LineNumberColumn) {
-            return include.line();
+            return include.line;
         } else if (column == FilePathsColumn) {
             return QVariant(CMI::Utils::unresolvedFileNameWithDelimiters(include)
                             + QLatin1String(" --> ") + resolvedFileName);
@@ -650,7 +649,7 @@ QVariant IncludesModel::headerData(int section, Qt::Orientation orientation, int
 static bool diagnosticMessagesModelSorter(const Document::DiagnosticMessage &m1,
                                           const Document::DiagnosticMessage &m2)
 {
-    return m1.line() < m2.line();
+    return m1.line < m2.line;
 }
 
 class DiagnosticMessagesModel : public QAbstractListModel
@@ -712,17 +711,17 @@ QVariant DiagnosticMessagesModel::data(const QModelIndex &index, int role) const
     static const QBrush darkRedBrushQColor(QColor(139, 0, 0));
 
     const Document::DiagnosticMessage message = m_messages.at(index.row());
-    const auto level = static_cast<Document::DiagnosticMessage::Level>(message.level());
+    const auto level = static_cast<Document::DiagnosticMessage::Level>(message.level);
 
     if (role == Qt::DisplayRole) {
         const int column = index.column();
         if (column == LevelColumn) {
             return CMI::Utils::toString(level);
         } else if (column == LineColumnNumberColumn) {
-            return QVariant(QString::number(message.line()) + QLatin1Char(':')
-                            + QString::number(message.column()));
+            return QVariant(QString::number(message.line) + QLatin1Char(':')
+                            + QString::number(message.column));
         } else if (column == MessageColumn) {
-            return message.text();
+            return message.text;
         }
     } else if (role == Qt::ForegroundRole) {
         switch (level) {
@@ -813,7 +812,7 @@ QVariant MacrosModel::data(const QModelIndex &index, int role) const
     if (role == Qt::DisplayRole || (role == Qt::ToolTipRole && column == MacroColumn)) {
         const CPlusPlus::Macro macro = m_macros.at(index.row());
         if (column == LineNumberColumn)
-            return macro.line();
+            return macro.line;
         else if (column == MacroColumn)
             return macro.toString();
     } else if (role == Qt::TextAlignmentRole) {
@@ -1694,7 +1693,7 @@ void CppCodeModelInspectorDialog::updateDocumentData(const Document::Ptr &docume
     resizeColumns<KeyValueModel>(m_ui->docGeneralView);
 
     // Includes
-    m_docIncludesModel->configure(document->resolvedIncludes() + document->unresolvedIncludes());
+    m_docIncludesModel->configure(document->resolvedIncludes + document->unresolvedIncludes);
     resizeColumns<IncludesModel>(m_ui->docIncludesView);
     m_ui->docTab->setTabText(DocumentIncludesTab,
         docTabName(DocumentIncludesTab, m_docIncludesModel->rowCount()));
@@ -1706,7 +1705,7 @@ void CppCodeModelInspectorDialog::updateDocumentData(const Document::Ptr &docume
         docTabName(DocumentDiagnosticsTab, m_docDiagnosticMessagesModel->rowCount()));
 
     // Macros
-    m_docMacrosModel->configure(document->definedMacros());
+    m_docMacrosModel->configure(document->definedMacros);
     resizeColumns<MacrosModel>(m_ui->docDefinedMacrosView);
     m_ui->docTab->setTabText(DocumentDefinedMacrosTab,
         docTabName(DocumentDefinedMacrosTab, m_docMacrosModel->rowCount()));

@@ -68,12 +68,10 @@ static bool includesQtQuickTest(const CPlusPlus::Document::Ptr &doc,
             ? QStringList({"QtQuickTest.framework/Headers", "QtQuickTest"})
             : QStringList({"QtQuickTest"});
 
-    const QList<CPlusPlus::Document::Include> includes = doc->resolvedIncludes();
-
-    for (const CPlusPlus::Document::Include &inc : includes) {
-        if (inc.unresolvedFileName() == "QtQuickTest/quicktest.h") {
+    for (const CPlusPlus::Document::Include &inc : qAsConst(doc->resolvedIncludes)) {
+        if (inc.unresolvedFileName == "QtQuickTest/quicktest.h") {
             for (const QString &prefix : expectedHeaderPrefixes) {
-                if (inc.resolvedFileName().endsWith(
+                if (inc.resolvedFileName.endsWith(
                             QString("%1/quicktest.h").arg(prefix))) {
                     return true;
                 }
@@ -122,17 +120,15 @@ static QString quickTestSrcDir(const CppEditor::CppModelManager *cppMM,
 
 QString QuickTestParser::quickTestName(const CPlusPlus::Document::Ptr &doc) const
 {
-    const QList<CPlusPlus::Document::MacroUse> macros = doc->macroUses();
     const Utils::FilePath filePath = Utils::FilePath::fromString(doc->fileName());
 
-    for (const CPlusPlus::Document::MacroUse &macro : macros) {
-        if (!macro.isFunctionLike() || macro.arguments().isEmpty())
+    for (const CPlusPlus::Document::MacroUse &macro : qAsConst(doc->macroUses)) {
+        if (!macro.isFunctionLike() || macro.arguments.isEmpty())
             continue;
-        const QByteArray name = macro.macro().name();
-        if (QuickTestUtils::isQuickTestMacro(name)) {
-            CPlusPlus::Document::Block arg = macro.arguments().at(0);
+        if (QuickTestUtils::isQuickTestMacro(macro.macro.name)) {
+            CPlusPlus::Document::Block arg = macro.arguments.at(0);
             return QLatin1String(getFileContent(filePath)
-                                 .mid(int(arg.bytesBegin()), int(arg.bytesEnd() - arg.bytesBegin())));
+                                 .mid(int(arg.bytesBegin), int(arg.bytesEnd - arg.bytesBegin)));
         }
     }
 

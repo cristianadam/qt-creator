@@ -325,7 +325,7 @@ F2TestCase::F2TestCase(CppEditorAction action,
             QVERIFY(document);
             if (document->checkMode() == Document::FullCheck) {
                 if (!document->diagnosticMessages().isEmpty())
-                    qDebug() << document->diagnosticMessages().first().text();
+                    qDebug() << document->diagnosticMessages().first().text;
                 QVERIFY(document->diagnosticMessages().isEmpty());
                 break;
             }

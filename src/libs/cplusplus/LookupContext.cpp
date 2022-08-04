@@ -357,18 +357,12 @@ QList<LookupItem> LookupContext::lookupByUsing(const Name *name,
     return candidates;
 }
 
-
-Document::Ptr LookupContext::expressionDocument() const
-{ return _expressionDocument; }
-
-Document::Ptr LookupContext::thisDocument() const
-{ return _thisDocument; }
-
 Document::Ptr LookupContext::document(const QString &fileName) const
-{ return _snapshot.document(fileName); }
+{
+    return _snapshot.document(fileName);
+}
 
-Snapshot LookupContext::snapshot() const
-{ return _snapshot; }
+
 
 ClassOrNamespace *LookupContext::globalNamespace() const
 {
@@ -1733,9 +1727,8 @@ void CreateBindings::process(Document::Ptr doc)
         if (! _processed.contains(globalNamespace)) {
             _processed.insert(globalNamespace);
 
-            const QList<Document::Include> includes = doc->resolvedIncludes();
-            for (const Document::Include &i : includes) {
-                if (Document::Ptr incl = _snapshot.document(i.resolvedFileName()))
+            for (const Document::Include &i : qAsConst(doc->resolvedIncludes)) {
+                if (Document::Ptr incl = _snapshot.document(i.resolvedFileName))
                     process(incl);
             }
 

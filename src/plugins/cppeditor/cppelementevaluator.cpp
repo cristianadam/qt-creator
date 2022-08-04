@@ -84,8 +84,8 @@ class CppInclude : public CppElement
 {
 public:
     explicit CppInclude(const Document::Include &includeFile)
-        : path(QDir::toNativeSeparators(includeFile.resolvedFileName()))
-        , fileName(Utils::FilePath::fromString(includeFile.resolvedFileName()).fileName())
+        : path(QDir::toNativeSeparators(includeFile.resolvedFileName))
+        , fileName(Utils::FilePath::fromString(includeFile.resolvedFileName).fileName())
     {
         helpCategory = Core::HelpItem::Brief;
         helpIdCandidates = QStringList(fileName);
@@ -105,10 +105,10 @@ public:
     explicit CppMacro(const Macro &macro)
     {
         helpCategory = Core::HelpItem::Macro;
-        const QString macroName = QString::fromUtf8(macro.name(), macro.name().size());
+        const QString macroName = QString::fromUtf8(macro.name, macro.name.size());
         helpIdCandidates = QStringList(macroName);
         helpMark = macroName;
-        link = Utils::Link(Utils::FilePath::fromString(macro.fileName()), macro.line());
+        link = Utils::Link(Utils::FilePath::fromString(macro.fileName), macro.line);
         tooltip = macro.toStringWithLineBreaks();
     }
 };
@@ -646,9 +646,8 @@ void FromGuiFunctor::checkDiagnosticMessage(int pos)
 
 bool FromGuiFunctor::matchIncludeFile(const Document::Ptr &document, int line)
 {
-    const QList<Document::Include> &includes = document->resolvedIncludes();
-    for (const Document::Include &includeFile : includes) {
-        if (includeFile.line() == line) {
+    for (const Document::Include &includeFile : qAsConst(document->resolvedIncludes)) {
+        if (includeFile.line == line) {
             m_element = QSharedPointer<CppElement>(new CppInclude(includeFile));
             return true;
         }
@@ -658,12 +657,11 @@ bool FromGuiFunctor::matchIncludeFile(const Document::Ptr &document, int line)
 
 bool FromGuiFunctor::matchMacroInUse(const Document::Ptr &document, int pos)
 {
-    const QList<Document::MacroUse> macros = document->macroUses();
-    for (const Document::MacroUse &use : macros) {
+    for (const Document::MacroUse &use : qAsConst(document->macroUses)) {
         if (use.containsUtf16charOffset(pos)) {
-            const int begin = use.utf16charsBegin();
-            if (pos < begin + use.macro().nameToQString().size()) {
-                m_element = QSharedPointer<CppElement>(new CppMacro(use.macro()));
+            const int begin = use.utf16charsBegin;
+            if (pos < begin + use.macro.nameToQString().size()) {
+                m_element = QSharedPointer<CppElement>(new CppMacro(use.macro));
                 return true;
             }
         }

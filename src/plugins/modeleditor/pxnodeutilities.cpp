@@ -244,10 +244,10 @@ bool PxNodeUtilities::isProxyHeader(const QString &file) const
 
     CPlusPlus::Document::Ptr document = snapshot.document(file);
     if (document) {
-        QList<CPlusPlus::Document::Include> includes = document->resolvedIncludes();
+        const QList<CPlusPlus::Document::Include> &includes = document->resolvedIncludes;
         if (includes.count() != 1)
             return false;
-        return QFileInfo(includes.at(0).resolvedFileName()).fileName() == QFileInfo(file).fileName();
+        return QFileInfo(includes.at(0).resolvedFileName).fileName() == QFileInfo(file).fileName();
     }
     return false;
 }

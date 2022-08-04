@@ -67,9 +67,9 @@ void tst_Misc::diagnosticClient_error()
     QVERIFY(diagnostics.size() == 1);
 
     const Document::DiagnosticMessage &msg = diagnostics.at(0);
-    QCOMPARE(msg.level(), (int) Document::DiagnosticMessage::Error);
-    QCOMPARE(msg.line(), 2);
-    QCOMPARE(msg.column(), 1);
+    QCOMPARE(msg.level, (int) Document::DiagnosticMessage::Error);
+    QCOMPARE(msg.line, 2);
+    QCOMPARE(msg.column, 1);
 }
 
 void tst_Misc::diagnosticClient_warning()
@@ -87,9 +87,9 @@ void tst_Misc::diagnosticClient_warning()
     QVERIFY(diagnostics.size() == 1);
 
     const Document::DiagnosticMessage &msg = diagnostics.at(0);
-    QCOMPARE(msg.level(), (int) Document::DiagnosticMessage::Warning);
-    QCOMPARE(msg.line(), 1);
-    QCOMPARE(msg.column(), 17);
+    QCOMPARE(msg.level, (int) Document::DiagnosticMessage::Warning);
+    QCOMPARE(msg.line, 1);
+    QCOMPARE(msg.column, 17);
 }
 
 void tst_Misc::findBreakpoints()

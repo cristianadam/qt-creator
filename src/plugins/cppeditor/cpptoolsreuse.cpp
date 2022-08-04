@@ -288,10 +288,10 @@ const Macro *findCanonicalMacro(const QTextCursor &cursor, Document::Ptr documen
     if (const Macro *macro = document->findMacroDefinitionAt(line)) {
         QTextCursor macroCursor = cursor;
         const QByteArray name = identifierUnderCursor(&macroCursor).toUtf8();
-        if (macro->name() == name)
+        if (macro->name == name)
             return macro;
     } else if (const Document::MacroUse *use = document->findMacroUseAt(cursor.position())) {
-        return &use->macro();
+        return &use->macro;
     }
 
     return nullptr;

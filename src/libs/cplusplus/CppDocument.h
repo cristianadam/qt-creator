@@ -62,16 +62,16 @@ public:
 public:
     ~Document();
 
-    unsigned revision() const;
+    unsigned revision() const { return _revision; }
     void setRevision(unsigned revision);
 
-    unsigned editorRevision() const;
+    unsigned editorRevision() const { return _editorRevision; }
     void setEditorRevision(unsigned editorRevision);
 
-    QDateTime lastModified() const;
+    QDateTime lastModified() const { return _lastModified; }
     void setLastModified(const QDateTime &lastModified);
 
-    QString fileName() const;
+    QString fileName() const { return _fileName; }
 
     void appendMacro(const Macro &macro);
     void addMacroUse(const Macro &macro,
@@ -81,9 +81,9 @@ public:
     void addUndefinedMacroUse(const QByteArray &name,
                               int bytesOffset, int utf16charsOffset);
 
-    Control *control() const;
+    Control *control() const { return _control; }
     Control *swapControl(Control *newControl);
-    TranslationUnit *translationUnit() const;
+    TranslationUnit *translationUnit() const { return _translationUnit; }
 
     bool skipFunctionBody() const;
     void setSkipFunctionBody(bool skipFunctionBody);
@@ -91,11 +91,8 @@ public:
     int globalSymbolCount() const;
     Symbol *globalSymbolAt(int index) const;
 
-    Namespace *globalNamespace() const;
+    Namespace *globalNamespace() const { return _globalNamespace; }
     void setGlobalNamespace(Namespace *globalNamespace); // ### internal
-
-    QList<Macro> definedMacros() const
-    { return _definedMacros; }
 
     QString functionAt(int line, int column, int *lineOpeningDeclaratorParenthesis = nullptr,
                        int *lineClosingBrace = nullptr) const;
@@ -153,51 +150,28 @@ public:
                           int line, int column,
                           const QString &text,
                           int length = 0)
-            : _level(level),
-              _line(line),
-              _fileName(fileName),
-              _column(column),
-              _length(length),
-              _text(text)
+            : level(level),
+              line(line),
+              fileName(fileName),
+              column(column),
+              length(length),
+              text(text)
         { }
 
-        int level() const
-        { return _level; }
-
-        bool isWarning() const
-        { return _level == Warning; }
-
-        bool isError() const
-        { return _level == Error; }
-
-        bool isFatal() const
-        { return _level == Fatal; }
-
-        QString fileName() const
-        { return _fileName; }
-
-        int line() const
-        { return _line; }
-
-        int column() const
-        { return _column; }
-
-        int length() const
-        { return _length; }
-
-        QString text() const
-        { return _text; }
+        bool isWarning() const { return level == Warning; }
+        bool isError() const { return level == Error; }
+        bool isFatal() const { return level == Fatal; }
 
         bool operator==(const DiagnosticMessage &other) const;
         bool operator!=(const DiagnosticMessage &other) const;
 
-    private:
-        int _level;
-        int _line;
-        QString _fileName;
-        int _column;
-        int _length;
-        QString _text;
+    public:
+        int level;
+        int line;
+        QString fileName;
+        int column;
+        int length;
+        QString text;
     };
 
     void addDiagnosticMessage(const DiagnosticMessage &d)
@@ -211,141 +185,78 @@ public:
 
     class Block
     {
-        int _bytesBegin;
-        int _bytesEnd;
-        int _utf16charsBegin;
-        int _utf16charsEnd;
-
     public:
-        inline Block(int bytesBegin = 0, int bytesEnd = 0,
-                     int utf16charsBegin = 0, int utf16charsEnd = 0)
-            : _bytesBegin(bytesBegin),
-              _bytesEnd(bytesEnd),
-              _utf16charsBegin(utf16charsBegin),
-              _utf16charsEnd(utf16charsEnd)
+        Block(int bytesBegin = 0, int bytesEnd = 0,
+              int utf16charsBegin= 0, int utf16charsEnd = 0)
+            : bytesBegin(bytesBegin),
+              bytesEnd(bytesEnd),
+              utf16charsBegin(utf16charsBegin),
+              utf16charsEnd(utf16charsEnd)
         {}
 
-        inline int bytesBegin() const
-        { return _bytesBegin; }
-
-        inline int bytesEnd() const
-        { return _bytesEnd; }
-
-        inline int utf16charsBegin() const
-        { return _utf16charsBegin; }
-
-        inline int utf16charsEnd() const
-        { return _utf16charsEnd; }
-
         bool containsUtf16charOffset(int utf16charOffset) const
-        { return utf16charOffset >= _utf16charsBegin && utf16charOffset < _utf16charsEnd; }
+        { return utf16charOffset >= utf16charsBegin && utf16charOffset < utf16charsEnd; }
+
+        int bytesBegin;
+        int bytesEnd;
+        int utf16charsBegin;
+        int utf16charsEnd;
     };
 
-    class Include {
-        QString _resolvedFileName;
-        QString _unresolvedFileName;
-        int _line;
-        Client::IncludeType _type;
-
+    class Include
+    {
     public:
         Include(const QString &unresolvedFileName, const QString &resolvedFileName, int line,
                 Client::IncludeType type)
-            : _resolvedFileName(resolvedFileName)
-            , _unresolvedFileName(unresolvedFileName)
-            , _line(line)
-            , _type(type)
+            : resolvedFileName(resolvedFileName)
+            , unresolvedFileName(unresolvedFileName)
+            , line(line)
+            , type(type)
         { }
 
-        QString resolvedFileName() const
-        { return _resolvedFileName; }
-
-        QString unresolvedFileName() const
-        { return _unresolvedFileName; }
-
-        int line() const
-        { return _line; }
-
-        Client::IncludeType type() const
-        { return _type; }
+        QString resolvedFileName;
+        QString unresolvedFileName;
+        int line;
+        Client::IncludeType type;
     };
 
-    class MacroUse: public Block {
-        Macro _macro;
-        QVector<Block> _arguments;
-        int _beginLine;
-
+    class MacroUse : public Block
+    {
     public:
-        inline MacroUse(const Macro &macro,
-                        int bytesBegin, int bytesEnd,
-                        int utf16charsBegin, int utf16charsEnd,
-                        int beginLine)
+        MacroUse(const Macro &macro,
+                 int bytesBegin, int bytesEnd,
+                 int utf16charsBegin, int utf16charsEnd,
+                 int beginLine)
             : Block(bytesBegin, bytesEnd, utf16charsBegin, utf16charsEnd),
-              _macro(macro),
-              _beginLine(beginLine)
+              macro(macro),
+              beginLine(beginLine)
         { }
 
-        const Macro &macro() const
-        { return _macro; }
+        void addArgument(const Block &block) { arguments.append(block); }
 
-        bool isFunctionLike() const
-        { return _macro.isFunctionLike(); }
+        bool isFunctionLike() const { return macro.isFunctionLike(); }
 
-        QVector<Block> arguments() const
-        { return _arguments; }
-
-        int beginLine() const
-        { return _beginLine; }
-
-    private:
-        void addArgument(const Block &block)
-        { _arguments.append(block); }
-
-        friend class Document;
+        Macro macro;
+        QVector<Block> arguments;
+        int beginLine;
     };
 
-    class UndefinedMacroUse: public Block {
-        QByteArray _name;
-
+    class UndefinedMacroUse: public Block
+    {
     public:
-        inline UndefinedMacroUse(
-                const QByteArray &name,
-                int bytesBegin,
-                int utf16charsBegin)
+        UndefinedMacroUse(const QByteArray &name, int bytesBegin, int utf16charsBegin)
             : Block(bytesBegin,
                     bytesBegin + name.length(),
                     utf16charsBegin,
                     utf16charsBegin + QString::fromUtf8(name, name.size()).size()),
-              _name(name)
-        { }
+              name(name)
+       { }
 
-        QByteArray name() const
-        {
-            return _name;
-        }
+       QByteArray name;
     };
 
     QStringList includedFiles() const;
     void addIncludeFile(const Include &include);
-
-    QList<Include> resolvedIncludes() const
-    { return _resolvedIncludes; }
-
-    QList<Include> unresolvedIncludes() const
-    { return _unresolvedIncludes; }
-
-    QList<Block> skippedBlocks() const
-    { return _skippedBlocks; }
-
-    QList<MacroUse> macroUses() const
-    { return _macroUses; }
-
-    QList<UndefinedMacroUse> undefinedMacroUses() const
-    { return _undefinedMacroUses; }
-
-    void setIncludeGuardMacroName(const QByteArray &includeGuardMacroName)
-    { _includeGuardMacroName = includeGuardMacroName; }
-    QByteArray includeGuardMacroName() const
-    { return _includeGuardMacroName; }
 
     const Macro *findMacroDefinitionAt(int line) const;
     const MacroUse *findMacroUseAt(int utf16charsOffset) const;
@@ -357,6 +268,16 @@ public:
     CheckMode checkMode() const
     { return static_cast<CheckMode>(_checkMode); }
 
+    QList<Include> resolvedIncludes;
+    QList<Include> unresolvedIncludes;
+    QList<Macro> definedMacros;
+    QList<Block> skippedBlocks;
+    QList<MacroUse> macroUses;
+    QList<UndefinedMacroUse> undefinedMacroUses;
+
+    /// the macro name of the include guard, if there is one.
+    QByteArray includeGuardMacroName;
+
 private:
     QString _fileName;
     Control *_control;
@@ -365,16 +286,6 @@ private:
 
     /// All messages generated during lexical/syntactic/semantic analysis.
     QList<DiagnosticMessage> _diagnosticMessages;
-
-    QList<Include> _resolvedIncludes;
-    QList<Include> _unresolvedIncludes;
-    QList<Macro> _definedMacros;
-    QList<Block> _skippedBlocks;
-    QList<MacroUse> _macroUses;
-    QList<UndefinedMacroUse> _undefinedMacroUses;
-
-     /// the macro name of the include guard, if there is one.
-    QByteArray _includeGuardMacroName;
 
     QByteArray m_fingerprint;
 

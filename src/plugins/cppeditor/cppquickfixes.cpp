@@ -2012,7 +2012,7 @@ Snapshot forwardingHeaders(const CppQuickFixInterface &interface)
 
     const Snapshot docs = interface.snapshot();
     for (Document::Ptr doc : docs) {
-        if (doc->globalSymbolCount() == 0 && doc->resolvedIncludes().size() == 1)
+        if (doc->globalSymbolCount() == 0 && doc->resolvedIncludes.size() == 1)
             result.insert(doc);
     }
 
@@ -8045,8 +8045,8 @@ private:
         auto handleFile = [&](const FilePath &filePath, Document::Ptr doc, auto shouldHandle) {
             Node &node = includeGraph[filePath];
             node.document = doc;
-            for (const Document::Include &include : doc->resolvedIncludes()) {
-                const auto filePath = FilePath::fromString(include.resolvedFileName());
+            for (const Document::Include &include : qAsConst(doc->resolvedIncludes)) {
+                const auto filePath = FilePath::fromString(include.resolvedFileName);
                 if (shouldHandle(filePath)) {
                     Node &includedNode = includeGraph[filePath];
                     includedNode.includedBy.push_back(node);

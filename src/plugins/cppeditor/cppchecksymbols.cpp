@@ -97,9 +97,8 @@ protected:
         if (!processed->contains(doc->globalNamespace())) {
             processed->insert(doc->globalNamespace());
 
-            const QList<Document::Include> includes = doc->resolvedIncludes();
-            for (const Document::Include &i : includes)
-                process(_snapshot.document(i.resolvedFileName()), processed);
+            for (const Document::Include &i : qAsConst(doc->resolvedIncludes))
+                process(_snapshot.document(i.resolvedFileName), processed);
 
             _mainDocument = (doc == _doc); // ### improve
             accept(doc->globalNamespace());

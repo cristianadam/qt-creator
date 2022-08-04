@@ -126,16 +126,16 @@ static QList<Document::Ptr> findDocumentsIncluding(const Snapshot &docTable,
 {
     QList<Document::Ptr> docList;
     for (const Document::Ptr &doc : docTable) { // we go through all documents
-        const QList<Document::Include> includes = doc->resolvedIncludes()
-            + doc->unresolvedIncludes();
+        const QList<Document::Include> includes = doc->resolvedIncludes
+            + doc->unresolvedIncludes;
         for (const Document::Include &include : includes) {
             if (checkFileNameOnly) {
-                const QFileInfo fi(include.unresolvedFileName());
+                const QFileInfo fi(include.unresolvedFileName);
                 if (fi.fileName() == fileName) { // we are only interested in docs which includes fileName only
                     docList.append(doc);
                 }
             } else {
-                if (include.resolvedFileName() == fileName)
+                if (include.resolvedFileName == fileName)
                     docList.append(doc);
             }
         }

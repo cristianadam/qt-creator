@@ -172,17 +172,16 @@ void UpdateIncludeDependenciesVisitor::visitMComponent(qmt::MComponent *componen
     for (const QString &filePath : filePaths) {
         CPlusPlus::Document::Ptr document = snapshot.document(filePath);
         if (document) {
-            const QList<CPlusPlus::Document::Include> includes = document->resolvedIncludes();
-            for (const CPlusPlus::Document::Include &include : includes) {
-                QString includeFilePath = include.resolvedFileName();
+            for (const CPlusPlus::Document::Include &include : qAsConst(document->resolvedIncludes)) {
+                QString includeFilePath = include.resolvedFileName;
                 // replace proxy header with real one
                 CPlusPlus::Document::Ptr includeDocument = snapshot.document(includeFilePath);
                 if (includeDocument) {
-                    QList<CPlusPlus::Document::Include> includes = includeDocument->resolvedIncludes();
+                    QList<CPlusPlus::Document::Include> &includes = includeDocument->resolvedIncludes;
                     if (includes.count() == 1 &&
-                            QFileInfo(includes.at(0).resolvedFileName()).fileName() == QFileInfo(includeFilePath).fileName())
+                            QFileInfo(includes.at(0).resolvedFileName).fileName() == QFileInfo(includeFilePath).fileName())
                     {
-                        includeFilePath = includes.at(0).resolvedFileName();
+                        includeFilePath = includes.at(0).resolvedFileName;
                     }
                 }
                 qmt::MComponent *includeComponent = findComponentFromFilePath(includeFilePath);

@@ -69,12 +69,12 @@ QList<QTextEdit::ExtraSelection> toTextEditorSelections(
         else
             sel.format = errorFormat;
 
-        QTextCursor c(textDocument->findBlockByNumber(m.line() - 1));
+        QTextCursor c(textDocument->findBlockByNumber(m.line - 1));
         const QString text = c.block().text();
-        const int startPos = m.column() > 0 ? m.column() - 1 : 0;
-        if (m.length() > 0 && startPos + m.length() <= text.size()) {
+        const int startPos = m.column > 0 ? m.column - 1 : 0;
+        if (m.length > 0 && startPos + m.length <= text.size()) {
             c.setPosition(c.position() + startPos);
-            c.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor, m.length());
+            c.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor, m.length);
         } else {
             for (int i = 0; i < text.size(); ++i) {
                 if (!text.at(i).isSpace()) {
@@ -85,7 +85,7 @@ QList<QTextEdit::ExtraSelection> toTextEditorSelections(
             c.movePosition(QTextCursor::EndOfBlock, QTextCursor::KeepAnchor);
         }
         sel.cursor = c;
-        sel.format.setToolTip(m.text());
+        sel.format.setToolTip(m.text);
         result.append(sel);
     }
 
@@ -108,10 +108,9 @@ CheckSymbols *createHighlighter(const CPlusPlus::Document::Ptr &doc,
     using Utils::Text::convertPosition;
 
     // Get macro definitions
-    const QList<CPlusPlus::Macro> definedMacros = doc->definedMacros();
-    for (const CPlusPlus::Macro &macro : definedMacros) {
+    for (const CPlusPlus::Macro &macro : qAsConst(doc->definedMacros)) {
         int line, column;
-        convertPosition(textDocument, macro.utf16CharOffset(), &line, &column);
+        convertPosition(textDocument, macro.utf16charsOffset, &line, &column);
 
         Result use(line, column, macro.nameToQString().size(), SemanticHighlighter::MacroUse);
         macroUses.append(use);
@@ -120,9 +119,8 @@ CheckSymbols *createHighlighter(const CPlusPlus::Document::Ptr &doc,
     const LanguageFeatures features = doc->languageFeatures();
 
     // Get macro uses
-    const QList<Document::MacroUse> macroUseList = doc->macroUses();
-    for (const Document::MacroUse &macro : macroUseList) {
-        const QString name = macro.macro().nameToQString();
+    for (const Document::MacroUse &macro : qAsConst(doc->macroUses)) {
+        const QString name = macro.macro.nameToQString();
 
         //Filter out QtKeywords
         if (features.qtKeywordsEnabled && isQtKeyword(name))
@@ -137,7 +135,7 @@ CheckSymbols *createHighlighter(const CPlusPlus::Document::Ptr &doc,
             continue;
 
         int line, column;
-        convertPosition(textDocument, macro.utf16charsBegin(), &line, &column);
+        convertPosition(textDocument, macro.utf16charsBegin, &line, &column);
 
         Result use(line, column, name.size(), SemanticHighlighter::MacroUse);
         macroUses.append(use);
@@ -153,7 +151,7 @@ QList<TextEditor::BlockRange> toTextEditorBlocks(
     QList<TextEditor::BlockRange> result;
     result.reserve(skippedBlocks.size());
     for (const CPlusPlus::Document::Block &block : skippedBlocks)
-        result.append(TextEditor::BlockRange(block.utf16charsBegin(), block.utf16charsEnd()));
+        result.append(TextEditor::BlockRange(block.utf16charsBegin, block.utf16charsEnd));
     return result;
 }
 
@@ -274,7 +272,7 @@ void BuiltinEditorDocumentProcessor::onParserFinished(CPlusPlus::Document::Ptr d
     qCDebug(log) << "document parsed" << document->fileName() << document->editorRevision();
 
     // Emit ifdefed out blocks
-    const auto ifdefoutBlocks = toTextEditorBlocks(document->skippedBlocks());
+    const auto ifdefoutBlocks = toTextEditorBlocks(document->skippedBlocks);
     emit ifdefedOutBlocksUpdated(revision(), ifdefoutBlocks);
 
     // Store parser warnings

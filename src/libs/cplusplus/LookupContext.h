@@ -296,10 +296,10 @@ public:
     LookupContext(const LookupContext &other);
     LookupContext &operator = (const LookupContext &other);
 
-    Document::Ptr expressionDocument() const;
-    Document::Ptr thisDocument() const;
+    Document::Ptr expressionDocument() const { return _expressionDocument; }
+    Document::Ptr thisDocument() const { return _thisDocument; }
     Document::Ptr document(const QString &fileName) const;
-    Snapshot snapshot() const;
+    Snapshot snapshot() const { return _snapshot; }
 
     ClassOrNamespace *globalNamespace() const;
 

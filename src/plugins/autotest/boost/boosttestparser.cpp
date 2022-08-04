@@ -74,8 +74,8 @@ static bool includesBoostTest(const CPlusPlus::Document::Ptr &doc,
                               const CPlusPlus::Snapshot &snapshot)
 {
     static const QRegularExpression boostTestHpp("^.*/boost/test/.*\\.hpp$");
-    for (const CPlusPlus::Document::Include &inc : doc->resolvedIncludes()) {
-        if (boostTestHpp.match(inc.resolvedFileName()).hasMatch())
+    for (const CPlusPlus::Document::Include &inc : doc->resolvedIncludes) {
+        if (boostTestHpp.match(inc.resolvedFileName).hasMatch())
             return true;
     }
 
@@ -91,10 +91,10 @@ static bool includesBoostTest(const CPlusPlus::Document::Ptr &doc,
 
 static bool hasBoostTestMacros(const CPlusPlus::Document::Ptr &doc)
 {
-    for (const CPlusPlus::Document::MacroUse &macro : doc->macroUses()) {
+    for (const CPlusPlus::Document::MacroUse &macro : doc->macroUses) {
         if (!macro.isFunctionLike())
             continue;
-        if (BoostTestUtils::isBoostTestMacro(QLatin1String(macro.macro().name())))
+        if (BoostTestUtils::isBoostTestMacro(QLatin1String(macro.macro.name)))
             return true;
     }
     return false;

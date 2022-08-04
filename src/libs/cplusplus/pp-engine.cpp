@@ -175,11 +175,11 @@ struct TokenBuffer
             return false;
 
         for (const TokenBuffer *it = this; it; it = it->next) {
-            if (it->macro && (it->macro == macro || it->macro->name() == macro->name()))
+            if (it->macro && (it->macro == macro || it->macro->name == macro->name))
                 return true;
         }
         for (const QByteArray &blockedMacroName : blockedMacroNames) {
-            if (macro->name() == blockedMacroName)
+            if (macro->name == blockedMacroName)
                 return true;
         }
         return false;
@@ -971,7 +971,7 @@ bool Preprocessor::handleIdentifier(PPToken *tk)
     // a "reference" line initialize set to the line where expansion happens.
     unsigned baseLine = idTk.lineno - m_state.m_lineRef + 1;
 
-    QVector<PPToken> body = macro->definitionTokens();
+    QVector<PPToken> body = macro->definitionTokens;
 
     // Within nested expansion we might reach a previously added marker token. In this case,
     // we need to move it from its current possition to outside the nesting.
@@ -992,7 +992,7 @@ bool Preprocessor::handleIdentifier(PPToken *tk)
 
         // Collect individual tokens that form the macro arguments.
         QVector<QVector<PPToken> > allArgTks;
-        bool hasArgs = collectActualArguments(tk, &allArgTks, macro->name());
+        bool hasArgs = collectActualArguments(tk, &allArgTks, macro->name);
 
         // Check whether collecting arguments failed due to a previously added marker
         // that goot nested in a sequence of expansions. If so, store it and try again.
@@ -1002,13 +1002,13 @@ bool Preprocessor::handleIdentifier(PPToken *tk)
                 && (m_state.m_expansionStatus == Expanding
                     || m_state.m_expansionStatus == ReadyForExpansion)) {
             oldMarkerTk = *tk;
-            hasArgs = collectActualArguments(tk, &allArgTks, macro->name());
+            hasArgs = collectActualArguments(tk, &allArgTks, macro->name);
         }
 
         // Check for matching parameter/argument count.
         bool hasMatchingArgs = false;
         if (hasArgs) {
-            const int expectedArgCount = macro->formals().size();
+            const int expectedArgCount = macro->formals.size();
             if (macro->isVariadic() && allArgTks.size() == expectedArgCount - 1)
                 allArgTks.push_back(QVector<PPToken>());
             const int actualArgCount = allArgTks.size();
@@ -1157,7 +1157,7 @@ bool Preprocessor::handleFunctionLikeMacro(const Macro *macro,
 
         if (bodyTk.is(T_IDENTIFIER)) {
             const ByteArrayRef id = bodyTk.asByteArrayRef();
-            const QVector<QByteArray> &formals = macro->formals();
+            const QVector<QByteArray> &formals = macro->formals;
             int j = 0;
             for (; j < formals.size() && expanded.size() < MAX_TOKEN_EXPANSION_COUNT; ++j) {
                 if (formals[j] == id) {
@@ -1713,12 +1713,12 @@ void Preprocessor::handleDefineDirective(PPToken *tk)
         return;
 
     Macro macro;
-    macro.setFileName(m_env->currentFile);
-    macro.setLine(tk->lineno);
-    QByteArray macroName = tk->asByteArrayRef().toByteArray();
-    macro.setName(macroName);
-    macro.setBytesOffset(tk->byteOffset);
-    macro.setUtf16charOffset(tk->utf16charOffset);
+    macro.fileName = m_env->currentFile;
+    macro.line = tk->lineno;
+    const QByteArray macroName = tk->asByteArrayRef().toByteArray();
+    macro.name = macroName;
+    macro.bytesOffset = tk->byteOffset;
+    macro.utf16charsOffset = tk->utf16charOffset;
 
     PPToken idToken(*tk);
 
@@ -1814,13 +1814,12 @@ void Preprocessor::handleDefineDirective(PPToken *tk)
     }
 
     if (isQtReservedWord(macroName.data(), macroName.size())) {
-        QByteArray macroId = macro.name();
+        QByteArray macroId = macro.name;
 
         if (macro.isFunctionLike()) {
             macroId += '(';
             bool fst = true;
-            const QVector<QByteArray> formals = macro.formals();
-            for (const QByteArray &formal : formals) {
+            for (const QByteArray &formal : qAsConst(macro.formals)) {
                 if (! fst)
                     macroId += ", ";
                 fst = false;
@@ -1846,7 +1845,7 @@ void Preprocessor::handleDefineDirective(PPToken *tk)
         macro.setDefinition(bodyText, bodyTokens);
     }
 
-    macro.setLength(tk->byteOffset - defineOffset);
+    macro.length = tk->byteOffset - defineOffset;
     m_env->bind(macro);
 
 //    qDebug() << "adding macro" << macro.name() << "defined at" << macro.fileName() << ":"<<macro.line();
@@ -2024,7 +2023,7 @@ void Preprocessor::handleIfDefDirective(bool checkUndefined, PPToken *tk)
 
             // the macro is a feature constraint(e.g. QT_NO_XXX)
             if (checkUndefined && macroName.startsWith("QT_NO_")) {
-                if (macro->fileName() == configurationFileName()) {
+                if (macro->fileName == configurationFileName()) {
                     // and it' defined in a pro file (e.g. DEFINES += QT_NO_QOBJECT)
 
                     value = false; // take the branch
@@ -2076,8 +2075,8 @@ void Preprocessor::handleUndefDirective(PPToken *tk)
         Macro *macro = m_env->remove(macroName);
 
         if (m_client && macro) {
-            macro->setBytesOffset(bytesOffset);
-            macro->setUtf16charOffset(utf16charsOffset);
+            macro->bytesOffset = bytesOffset;
+            macro->utf16charsOffset = utf16charsOffset;
             m_client->macroAdded(*macro);
         }
         lex(tk); // consume macro name

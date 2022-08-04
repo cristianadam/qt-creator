@@ -60,14 +60,12 @@ static bool includesQtTest(const CPlusPlus::Document::Ptr &doc, const CPlusPlus:
             = Utils::HostOsInfo::isMacHost()
             ? QStringList({"QtTest.framework/Headers", "QtTest"}) : QStringList({"QtTest"});
 
-    const QList<CPlusPlus::Document::Include> includes = doc->resolvedIncludes();
-
-    for (const CPlusPlus::Document::Include &inc : includes) {
+    for (const CPlusPlus::Document::Include &inc : qAsConst(doc->resolvedIncludes)) {
         // TODO this short cut works only for #include <QtTest>
         // bad, as there could be much more different approaches
-        if (inc.unresolvedFileName() == QString("QtTest")) {
+        if (inc.unresolvedFileName == QString("QtTest")) {
             for (const QString &prefix : expectedHeaderPrefixes) {
-                if (inc.resolvedFileName().endsWith(QString("%1/QtTest").arg(prefix)))
+                if (inc.resolvedFileName.endsWith(QString("%1/QtTest").arg(prefix)))
                     return true;
             }
         }
@@ -111,16 +109,14 @@ TestCases QtTestParser::testCases(const CppEditor::CppModelManager *modelManager
     if (document.isNull())
         return {};
 
-    const QList<CPlusPlus::Document::MacroUse> macros = document->macroUses();
-
-    for (const CPlusPlus::Document::MacroUse &macro : macros) {
+    for (const CPlusPlus::Document::MacroUse &macro : qAsConst(document->macroUses)) {
         if (!macro.isFunctionLike())
             continue;
-        const QByteArray name = macro.macro().name();
-        if (QTestUtils::isQTestMacro(name) && !macro.arguments().isEmpty()) {
-            const CPlusPlus::Document::Block arg = macro.arguments().at(0);
-            const QString name = QLatin1String(fileContent.mid(int(arg.bytesBegin()),
-                                                               int(arg.bytesEnd() - arg.bytesBegin())));
+        const QByteArray name = macro.macro.name;
+        if (QTestUtils::isQTestMacro(name) && !macro.arguments.isEmpty()) {
+            const CPlusPlus::Document::Block arg = macro.arguments.at(0);
+            const QString name = QLatin1String(fileContent.mid(int(arg.bytesBegin),
+                                                               int(arg.bytesEnd - arg.bytesBegin)));
             return { {name, false} };
         }
     }

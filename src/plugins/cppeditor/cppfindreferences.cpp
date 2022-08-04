@@ -732,26 +732,25 @@ restart_search:
             return usages;
 
         usages.clear();
-        const QList<CPlusPlus::Document::MacroUse> uses = doc->macroUses();
-        for (const CPlusPlus::Document::MacroUse &use : uses) {
-            const CPlusPlus::Macro &useMacro = use.macro();
+        for (const CPlusPlus::Document::MacroUse &use : qAsConst(doc->macroUses)) {
+            const CPlusPlus::Macro &useMacro = use.macro;
 
-            if (useMacro.fileName() == macro.fileName()) { // Check if this is a match, but possibly against an outdated document.
+            if (useMacro.fileName == macro.fileName) { // Check if this is a match, but possibly against an outdated document.
                 if (source.isEmpty())
                     source = getSource(fileName, workingCopy);
 
-                if (macro.fileRevision() > useMacro.fileRevision()) {
+                if (macro.fileRevision > useMacro.fileRevision) {
                     // yes, it is outdated, so re-preprocess and start from scratch for this file.
                     doc = snapshot.preprocessedDocument(source, fileName);
                     usages.clear();
                     goto restart_search;
                 }
 
-                if (macro.name() == useMacro.name()) {
+                if (macro.name == useMacro.name) {
                     unsigned column;
-                    const QString &lineSource = matchingLine(use.bytesBegin(), source, &column);
+                    const QString &lineSource = matchingLine(use.bytesBegin, source, &column);
                     usages.append(CPlusPlus::Usage(fileName, lineSource, {},
-                                                   CPlusPlus::Usage::Type::Other, use.beginLine(),
+                                                   CPlusPlus::Usage::Type::Other, use.beginLine,
                                                    column, useMacro.nameToQString().size()));
                 }
             }
@@ -792,7 +791,7 @@ static void findMacroUses_helper(QFutureInterface<CPlusPlus::Usage> &future,
                                  const CPlusPlus::Snapshot snapshot,
                                  const CPlusPlus::Macro macro)
 {
-    const Utils::FilePath sourceFile = Utils::FilePath::fromString(macro.fileName());
+    const Utils::FilePath sourceFile = Utils::FilePath::fromString(macro.fileName);
     Utils::FilePaths files{sourceFile};
     files = Utils::filteredUnique(files + snapshot.filesDependingOn(sourceFile));
 
@@ -838,16 +837,16 @@ void CppFindReferences::findMacroUses(const CPlusPlus::Macro &macro, const QStri
 
     // add the macro definition itself
     {
-        const QByteArray &source = getSource(Utils::FilePath::fromString(macro.fileName()),
+        const QByteArray &source = getSource(Utils::FilePath::fromString(macro.fileName),
                                              workingCopy);
         unsigned column;
-        const QString line = FindMacroUsesInFile::matchingLine(macro.bytesOffset(), source,
+        const QString line = FindMacroUsesInFile::matchingLine(macro.bytesOffset, source,
                                                                &column);
         SearchResultItem item;
-        const Utils::FilePath filePath = Utils::FilePath::fromString(macro.fileName());
+        const Utils::FilePath filePath = Utils::FilePath::fromString(macro.fileName);
         item.setFilePath(filePath);
         item.setLineText(line);
-        item.setMainRange(macro.line(), column, macro.nameToQString().length());
+        item.setMainRange(macro.line, column, macro.nameToQString().length());
         item.setUseTextEditorFont(true);
         if (search->supportsReplace())
             item.setSelectForReplacement(SessionManager::projectForFile(filePath));

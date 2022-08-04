@@ -100,7 +100,7 @@ public:
             ++m_processedDiagnostics;
 
             QString type;
-            switch (message.level()) {
+            switch (message.level) {
             case Document::DiagnosticMessage::Warning:
                 type = QLatin1String("warn"); break;
             case Document::DiagnosticMessage::Error:
@@ -112,9 +112,9 @@ public:
 
             // format: file\tline\ttype\tdescription
             m_out << fileName << "\t"
-                  << message.line() << "\t"
+                  << message.line << "\t"
                   << type << "\t"
-                  << message.text() << "\n";
+                  << message.text << "\n";
         }
     }
 

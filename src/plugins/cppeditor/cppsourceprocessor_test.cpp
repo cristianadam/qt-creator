@@ -98,19 +98,19 @@ void SourceProcessorTest::testIncludesResolvedUnresolved()
     Document::Ptr document = processor.run(testFilePath);
     QVERIFY(document);
 
-    const QList<Document::Include> resolvedIncludes = document->resolvedIncludes();
+    const QList<Document::Include> &resolvedIncludes = document->resolvedIncludes;
     QCOMPARE(resolvedIncludes.size(), 1);
-    QCOMPARE(resolvedIncludes.at(0).type(), Client::IncludeLocal);
-    QCOMPARE(resolvedIncludes.at(0).unresolvedFileName(), QLatin1String("header.h"));
+    QCOMPARE(resolvedIncludes.at(0).type, Client::IncludeLocal);
+    QCOMPARE(resolvedIncludes.at(0).unresolvedFileName, QLatin1String("header.h"));
     const QString expectedResolvedFileName
             = TestIncludePaths::testFilePath(QLatin1String("header.h"));
-    QCOMPARE(resolvedIncludes.at(0).resolvedFileName(), expectedResolvedFileName);
+    QCOMPARE(resolvedIncludes.at(0).resolvedFileName, expectedResolvedFileName);
 
-    const QList<Document::Include> unresolvedIncludes = document->unresolvedIncludes();
+    const QList<Document::Include> unresolvedIncludes = document->unresolvedIncludes;
     QCOMPARE(unresolvedIncludes.size(), 1);
-    QCOMPARE(unresolvedIncludes.at(0).type(), Client::IncludeLocal);
-    QCOMPARE(unresolvedIncludes.at(0).unresolvedFileName(), QLatin1String("notresolvable.h"));
-    QVERIFY(unresolvedIncludes.at(0).resolvedFileName().isEmpty());
+    QCOMPARE(unresolvedIncludes.at(0).type, Client::IncludeLocal);
+    QCOMPARE(unresolvedIncludes.at(0).unresolvedFileName, QLatin1String("notresolvable.h"));
+    QVERIFY(unresolvedIncludes.at(0).resolvedFileName.isEmpty());
 }
 
 /// Check: Avoid self-include entries due to cyclic includes.
@@ -143,13 +143,13 @@ void SourceProcessorTest::testIncludesCyclic()
     Document::Ptr doc2 = snapshot.document(fileName2);
     QVERIFY(doc2);
 
-    QCOMPARE(doc1->unresolvedIncludes().size(), 0);
-    QCOMPARE(doc1->resolvedIncludes().size(), 1);
-    QCOMPARE(doc1->resolvedIncludes().first().resolvedFileName(), fileName2);
+    QCOMPARE(doc1->unresolvedIncludes.size(), 0);
+    QCOMPARE(doc1->resolvedIncludes.size(), 1);
+    QCOMPARE(doc1->resolvedIncludes.first().resolvedFileName, fileName2);
 
-    QCOMPARE(doc2->unresolvedIncludes().size(), 0);
-    QCOMPARE(doc2->resolvedIncludes().size(), 1);
-    QCOMPARE(doc2->resolvedIncludes().first().resolvedFileName(), fileName1);
+    QCOMPARE(doc2->unresolvedIncludes.size(), 0);
+    QCOMPARE(doc2->resolvedIncludes.size(), 1);
+    QCOMPARE(doc2->resolvedIncludes.first().resolvedFileName, fileName1);
 }
 
 /// Check: All include errors are reported as diagnostic messages.
@@ -162,8 +162,8 @@ void SourceProcessorTest::testIncludesAllDiagnostics()
     Document::Ptr document = processor.run(testFilePath);
     QVERIFY(document);
 
-    QCOMPARE(document->resolvedIncludes().size(), 0);
-    QCOMPARE(document->unresolvedIncludes().size(), 3);
+    QCOMPARE(document->resolvedIncludes.size(), 0);
+    QCOMPARE(document->unresolvedIncludes.size(), 3);
     QCOMPARE(document->diagnosticMessages().size(), 3);
 }
 
@@ -175,21 +175,20 @@ void SourceProcessorTest::testMacroUses()
     SourcePreprocessor processor;
     Document::Ptr document = processor.run(testFilePath);
     QVERIFY(document);
-    const QList<Document::MacroUse> macroUses = document->macroUses();
+    const QList<Document::MacroUse> &macroUses = document->macroUses;
     QCOMPARE(macroUses.size(), 1);
     const Document::MacroUse macroUse = macroUses.at(0);
-    QCOMPARE(macroUse.bytesBegin(), 25);
-    QCOMPARE(macroUse.bytesEnd(), 35);
-    QCOMPARE(macroUse.utf16charsBegin(), 25);
-    QCOMPARE(macroUse.utf16charsEnd(), 35);
-    QCOMPARE(macroUse.beginLine(), 2);
+    QCOMPARE(macroUse.bytesBegin, 25);
+    QCOMPARE(macroUse.bytesEnd, 35);
+    QCOMPARE(macroUse.utf16charsBegin, 25);
+    QCOMPARE(macroUse.utf16charsEnd, 35);
+    QCOMPARE(macroUse.beginLine, 2);
 }
 
 static bool isMacroDefinedInDocument(const QByteArray &macroName, const Document::Ptr &document)
 {
-    const QList<Macro> macros = document->definedMacros();
-    for (const Macro &macro : macros) {
-        if (macro.name() == macroName)
+    for (const Macro &macro : qAsConst(document->definedMacros)) {
+        if (macro.name == macroName)
             return true;
     }
 

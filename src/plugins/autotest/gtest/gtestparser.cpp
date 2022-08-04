@@ -62,8 +62,8 @@ static bool includesGTest(const CPlusPlus::Document::Ptr &doc,
                           const CPlusPlus::Snapshot &snapshot)
 {
     static const QString gtestH("gtest/gtest.h");
-    for (const CPlusPlus::Document::Include &inc : doc->resolvedIncludes()) {
-        if (inc.resolvedFileName().endsWith(gtestH))
+    for (const CPlusPlus::Document::Include &inc : qAsConst(doc->resolvedIncludes)) {
+        if (inc.resolvedFileName.endsWith(gtestH))
             return true;
     }
 
@@ -79,12 +79,11 @@ static bool includesGTest(const CPlusPlus::Document::Ptr &doc,
 
 static bool hasGTestNames(const CPlusPlus::Document::Ptr &document)
 {
-    for (const CPlusPlus::Document::MacroUse &macro : document->macroUses()) {
+    for (const CPlusPlus::Document::MacroUse &macro : qAsConst(document)->macroUses) {
         if (!macro.isFunctionLike())
             continue;
-        if (GTestUtils::isGTestMacro(QLatin1String(macro.macro().name()))) {
-            const QVector<CPlusPlus::Document::Block> args = macro.arguments();
-            if (args.size() != 2)
+        if (GTestUtils::isGTestMacro(QLatin1String(macro.macro.name))) {
+            if (macro.arguments.size() != 2)
                 continue;
             return true;
         }

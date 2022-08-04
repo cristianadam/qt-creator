@@ -294,11 +294,6 @@ Document::~Document()
     _control = nullptr;
 }
 
-Control *Document::control() const
-{
-    return _control;
-}
-
 Control *Document::swapControl(Control *newControl)
 {
     if (newControl) {
@@ -318,19 +313,9 @@ Control *Document::swapControl(Control *newControl)
     return oldControl;
 }
 
-unsigned Document::revision() const
-{
-    return _revision;
-}
-
 void Document::setRevision(unsigned revision)
 {
     _revision = revision;
-}
-
-unsigned Document::editorRevision() const
-{
-    return _editorRevision;
 }
 
 void Document::setEditorRevision(unsigned editorRevision)
@@ -338,26 +323,16 @@ void Document::setEditorRevision(unsigned editorRevision)
     _editorRevision = editorRevision;
 }
 
-QDateTime Document::lastModified() const
-{
-    return _lastModified;
-}
-
 void Document::setLastModified(const QDateTime &lastModified)
 {
     _lastModified = lastModified;
 }
 
-QString Document::fileName() const
-{
-    return _fileName;
-}
-
 QStringList Document::includedFiles() const
 {
     QStringList files;
-    for (const Include &i : qAsConst(_resolvedIncludes))
-        files.append(i.resolvedFileName());
+    for (const Include &i : qAsConst(resolvedIncludes))
+        files.append(i.resolvedFileName);
     files.removeDuplicates();
     return files;
 }
@@ -365,15 +340,15 @@ QStringList Document::includedFiles() const
 // This assumes to be called with a QDir::cleanPath cleaned fileName.
 void Document::addIncludeFile(const Document::Include &include)
 {
-    if (include.resolvedFileName().isEmpty())
-        _unresolvedIncludes.append(include);
+    if (include.resolvedFileName.isEmpty())
+        unresolvedIncludes.append(include);
     else
-        _resolvedIncludes.append(include);
+        resolvedIncludes.append(include);
 }
 
 void Document::appendMacro(const Macro &macro)
 {
-    _definedMacros.append(macro);
+    definedMacros.append(macro);
 }
 
 void Document::addMacroUse(const Macro &macro,
@@ -395,7 +370,7 @@ void Document::addMacroUse(const Macro &macro,
         use.addArgument(arg);
     }
 
-    _macroUses.append(use);
+    macroUses.append(use);
 }
 
 void Document::addUndefinedMacroUse(const QByteArray &name,
@@ -403,7 +378,7 @@ void Document::addUndefinedMacroUse(const QByteArray &name,
 {
     QByteArray copy(name.data(), name.size());
     UndefinedMacroUse use(copy, bytesOffset, utf16charsOffset);
-    _undefinedMacroUses.append(use);
+    undefinedMacroUses.append(use);
 }
 
 /*!
@@ -455,11 +430,6 @@ void Document::addUndefinedMacroUse(const QByteArray &name,
     \sa Document::macroUses(), Document::undefinedMacroUses()
 */
 
-TranslationUnit *Document::translationUnit() const
-{
-    return _translationUnit;
-}
-
 bool Document::skipFunctionBody() const
 {
     return _translationUnit->skipFunctionBody();
@@ -481,11 +451,6 @@ int Document::globalSymbolCount() const
 Symbol *Document::globalSymbolAt(int index) const
 {
     return _globalNamespace->memberAt(index);
-}
-
-Namespace *Document::globalNamespace() const
-{
-    return _globalNamespace;
 }
 
 void Document::setGlobalNamespace(Namespace *globalNamespace)
@@ -555,8 +520,8 @@ Symbol *Document::lastVisibleSymbolAt(int line, int column) const
 
 const Macro *Document::findMacroDefinitionAt(int line) const
 {
-    for (const Macro &macro : qAsConst(_definedMacros)) {
-        if (macro.line() == line)
+    for (const Macro &macro : definedMacros) {
+        if (macro.line == line)
             return &macro;
     }
     return nullptr;
@@ -564,9 +529,9 @@ const Macro *Document::findMacroDefinitionAt(int line) const
 
 const Document::MacroUse *Document::findMacroUseAt(int utf16charsOffset) const
 {
-    for (const Document::MacroUse &use : qAsConst(_macroUses)) {
+    for (const Document::MacroUse &use : macroUses) {
         if (use.containsUtf16charOffset(utf16charsOffset)
-                && (utf16charsOffset < use.utf16charsBegin() + use.macro().nameToQString().size())) {
+                && (utf16charsOffset < use.utf16charsBegin + use.macro.nameToQString().size())) {
             return &use;
         }
     }
@@ -575,10 +540,10 @@ const Document::MacroUse *Document::findMacroUseAt(int utf16charsOffset) const
 
 const Document::UndefinedMacroUse *Document::findUndefinedMacroUseAt(int utf16charsOffset) const
 {
-    for (const Document::UndefinedMacroUse &use : qAsConst(_undefinedMacroUses)) {
+    for (const Document::UndefinedMacroUse &use : undefinedMacroUses) {
         if (use.containsUtf16charOffset(utf16charsOffset)
-                && (utf16charsOffset < use.utf16charsBegin()
-                    + QString::fromUtf8(use.name(), use.name().size()).length()))
+                && (utf16charsOffset < use.utf16charsBegin
+                    + QString::fromUtf8(use.name, use.name.size()).length()))
             return &use;
     }
     return nullptr;
@@ -614,19 +579,19 @@ void Document::setLanguageFeatures(LanguageFeatures features)
 
 void Document::startSkippingBlocks(int utf16charsOffset)
 {
-    _skippedBlocks.append(Block(0, 0, utf16charsOffset, 0));
+    skippedBlocks.append(Block(0, 0, utf16charsOffset, 0));
 }
 
 void Document::stopSkippingBlocks(int utf16charsOffset)
 {
-    if (_skippedBlocks.isEmpty())
+    if (skippedBlocks.isEmpty())
         return;
 
-    int start = _skippedBlocks.back().utf16charsBegin();
+    int start = skippedBlocks.back().utf16charsBegin;
     if (start > utf16charsOffset)
-        _skippedBlocks.removeLast(); // Ignore this block, it's invalid.
+        skippedBlocks.removeLast(); // Ignore this block, it's invalid.
     else
-        _skippedBlocks.back() = Block(0, 0, start, utf16charsOffset);
+        skippedBlocks.back() = Block(0, 0, start, utf16charsOffset);
 }
 
 bool Document::isTokenized() const
@@ -718,12 +683,12 @@ void Document::releaseSourceAndAST()
 bool Document::DiagnosticMessage::operator==(const Document::DiagnosticMessage &other) const
 {
     return
-            _line == other._line &&
-            _column == other._column &&
-            _length == other._length &&
-            _level == other._level &&
-            _fileName == other._fileName &&
-            _text == other._text;
+            line == other.line &&
+            column == other.column &&
+            length == other.length &&
+            level == other.level &&
+            fileName == other.fileName &&
+            text == other.text;
 }
 
 bool Document::DiagnosticMessage::operator!=(const Document::DiagnosticMessage &other) const
@@ -777,7 +742,7 @@ static QList<Macro> macrosDefinedUntilLine(const QList<Macro> &macros, int line)
     QList<Macro> filtered;
 
     for (const Macro &macro : macros) {
-        if (macro.line() <= line)
+        if (macro.line <= line)
             filtered.append(macro);
         else
             break;
@@ -795,17 +760,17 @@ Document::Ptr Snapshot::preprocessedDocument(const QByteArray &source,
         newDoc->_revision = thisDocument->_revision;
         newDoc->_editorRevision = thisDocument->_editorRevision;
         newDoc->_lastModified = thisDocument->_lastModified;
-        newDoc->_resolvedIncludes = thisDocument->_resolvedIncludes;
-        newDoc->_unresolvedIncludes = thisDocument->_unresolvedIncludes;
+        newDoc->resolvedIncludes = thisDocument->resolvedIncludes;
+        newDoc->unresolvedIncludes = thisDocument->unresolvedIncludes;
         newDoc->setLanguageFeatures(thisDocument->languageFeatures());
         if (withDefinedMacrosFromDocumentUntilLine != -1) {
-            newDoc->_definedMacros = macrosDefinedUntilLine(thisDocument->_definedMacros,
+            newDoc->definedMacros = macrosDefinedUntilLine(thisDocument->definedMacros,
                                                             withDefinedMacrosFromDocumentUntilLine);
         }
     }
 
     FastPreprocessor pp(*this);
-    const bool mergeDefinedMacrosOfDocument = !newDoc->_definedMacros.isEmpty();
+    const bool mergeDefinedMacrosOfDocument = !newDoc->definedMacros.isEmpty();
     const QByteArray preprocessedCode = pp.run(newDoc, source, mergeDefinedMacrosOfDocument);
     newDoc->setUtf8Source(preprocessedCode);
     return newDoc;
@@ -820,10 +785,10 @@ Document::Ptr Snapshot::documentFromSource(const QByteArray &preprocessedCode,
         newDoc->_revision = thisDocument->_revision;
         newDoc->_editorRevision = thisDocument->_editorRevision;
         newDoc->_lastModified = thisDocument->_lastModified;
-        newDoc->_resolvedIncludes = thisDocument->_resolvedIncludes;
-        newDoc->_unresolvedIncludes = thisDocument->_unresolvedIncludes;
-        newDoc->_definedMacros = thisDocument->_definedMacros;
-        newDoc->_macroUses = thisDocument->_macroUses;
+        newDoc->resolvedIncludes = thisDocument->resolvedIncludes;
+        newDoc->unresolvedIncludes = thisDocument->unresolvedIncludes;
+        newDoc->definedMacros = thisDocument->definedMacros;
+        newDoc->macroUses = thisDocument->macroUses;
         newDoc->setLanguageFeatures(thisDocument->languageFeatures());
     }
 
@@ -859,10 +824,9 @@ QList<Snapshot::IncludeLocation> Snapshot::includeLocationsOfDocument(const QStr
     QList<IncludeLocation> result;
     for (const_iterator cit = begin(), citEnd = end(); cit != citEnd; ++cit) {
         const Document::Ptr doc = cit.value();
-        const QList<Document::Include> includeFiles = doc->resolvedIncludes();
-        for (const Document::Include &includeFile : includeFiles) {
-            if (includeFile.resolvedFileName() == fileName)
-                result.append(qMakePair(doc, includeFile.line()));
+        for (const Document::Include &includeFile : qAsConst(doc->resolvedIncludes)) {
+            if (includeFile.resolvedFileName == fileName)
+                result.append(qMakePair(doc, includeFile.line));
         }
     }
     return result;

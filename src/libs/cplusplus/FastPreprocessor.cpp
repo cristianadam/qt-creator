@@ -43,8 +43,8 @@ QByteArray FastPreprocessor::run(Document::Ptr newDoc,
                                  bool mergeDefinedMacrosOfDocument)
 {
     std::swap(newDoc, _currentDoc);
-    _addIncludesToCurrentDoc = _currentDoc->resolvedIncludes().isEmpty()
-            && _currentDoc->unresolvedIncludes().isEmpty();
+    _addIncludesToCurrentDoc = _currentDoc->resolvedIncludes.isEmpty()
+            && _currentDoc->unresolvedIncludes.isEmpty();
     const QString fileName = _currentDoc->fileName();
     _preproc.setExpandFunctionlikeMacros(false);
     _preproc.setKeepComments(true);
@@ -57,12 +57,11 @@ QByteArray FastPreprocessor::run(Document::Ptr newDoc,
                 mergeEnvironment(i.key().toString());
         }
 
-        const QList<Document::Include> includes = doc->resolvedIncludes();
-        for (const Document::Include &i : includes)
-            mergeEnvironment(i.resolvedFileName());
+        for (const Document::Include &i : qAsConst(doc->resolvedIncludes))
+            mergeEnvironment(i.resolvedFileName);
 
         if (mergeDefinedMacrosOfDocument)
-            _env.addMacros(_currentDoc->definedMacros());
+            _env.addMacros(_currentDoc->definedMacros);
     }
 
     const QByteArray preprocessed = _preproc.run(fileName, source);
@@ -90,11 +89,10 @@ void FastPreprocessor::mergeEnvironment(const QString &fileName)
         _merged.insert(fileName);
 
         if (Document::Ptr doc = _snapshot.document(fileName)) {
-            const QList<Document::Include> includes = doc->resolvedIncludes();
-            for (const Document::Include &i : includes)
-                mergeEnvironment(i.resolvedFileName());
+            for (const Document::Include &i : qAsConst(doc->resolvedIncludes))
+                mergeEnvironment(i.resolvedFileName);
 
-            _env.addMacros(doc->definedMacros());
+            _env.addMacros(doc->definedMacros);
         }
     }
 }
@@ -108,9 +106,9 @@ void FastPreprocessor::macroAdded(const Macro &macro)
 
 static const Macro revision(const Snapshot &s, const Macro &m)
 {
-    if (Document::Ptr d = s.document(m.fileName())) {
+    if (Document::Ptr d = s.document(m.fileName)) {
         Macro newMacro(m);
-        newMacro.setFileRevision(d->revision());
+        newMacro.fileRevision = d->revision();
         return newMacro;
     }
 
@@ -123,7 +121,7 @@ void FastPreprocessor::passedMacroDefinitionCheck(int bytesOffset, int utf16char
     Q_ASSERT(_currentDoc);
 
     _currentDoc->addMacroUse(revision(_snapshot, macro),
-                             bytesOffset, macro.name().size(),
+                             bytesOffset, macro.name.size(),
                              utf16charsOffset, macro.nameToQString().size(),
                              line, QVector<MacroArgumentReference>());
 }
@@ -143,7 +141,7 @@ void FastPreprocessor::notifyMacroReference(int bytesOffset, int utf16charsOffse
     Q_ASSERT(_currentDoc);
 
     _currentDoc->addMacroUse(revision(_snapshot, macro),
-                             bytesOffset, macro.name().size(),
+                             bytesOffset, macro.name.size(),
                              utf16charsOffset, macro.nameToQString().size(),
                              line, QVector<MacroArgumentReference>());
 }
@@ -155,7 +153,7 @@ void FastPreprocessor::startExpandingMacro(int bytesOffset, int utf16charsOffset
     Q_ASSERT(_currentDoc);
 
     _currentDoc->addMacroUse(revision(_snapshot, macro),
-                             bytesOffset, macro.name().size(),
+                             bytesOffset, macro.name.size(),
                              utf16charsOffset, macro.nameToQString().size(),
                              line, actuals);
 }
@@ -165,5 +163,5 @@ void FastPreprocessor::markAsIncludeGuard(const QByteArray &macroName)
     if (!_currentDoc)
         return;
 
-    _currentDoc->setIncludeGuardMacroName(macroName);
+    _currentDoc->includeGuardMacroName = macroName;
 }

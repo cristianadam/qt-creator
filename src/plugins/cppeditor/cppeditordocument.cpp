@@ -498,12 +498,12 @@ void CppEditorDocument::onDiagnosticsChanged(const QString &fileName, const QStr
     const Utils::Id category = Utils::Id::fromString(kind);
 
     for (const auto &diagnostic : mm()->diagnosticMessages()) {
-        if (FilePath::fromString(diagnostic.fileName()) == filePath()) {
+        if (FilePath::fromString(diagnostic.fileName) == filePath()) {
             auto it = std::find_if(std::begin(removedMarks),
                                    std::end(removedMarks),
                                    [&category, &diagnostic](TextMark *existing) {
-                                       return (diagnostic.line() == existing->lineNumber()
-                                               && diagnostic.text() == existing->lineAnnotation()
+                                       return (diagnostic.line == existing->lineNumber()
+                                               && diagnostic.text == existing->lineAnnotation()
                                                && category == existing->category());
                                    });
 
@@ -512,9 +512,9 @@ void CppEditorDocument::onDiagnosticsChanged(const QString &fileName, const QStr
                 continue;
             }
 
-            auto mark = new TextMark(filePath(), diagnostic.line(), category);
-            mark->setLineAnnotation(diagnostic.text());
-            mark->setToolTip(diagnostic.text());
+            auto mark = new TextMark(filePath(), diagnostic.line, category);
+            mark->setLineAnnotation(diagnostic.text);
+            mark->setToolTip(diagnostic.text);
 
             mark->setIcon(diagnostic.isWarning() ? Utils::Icons::CODEMODEL_WARNING.icon()
                                                  : Utils::Icons::CODEMODEL_ERROR.icon());

@@ -73,9 +73,9 @@ static bool includesCatchHeader(const CPlusPlus::Document::Ptr &doc,
                                           "catch_test_macros.hpp",
                                           "catch_template_test_macros.hpp"
                                          };
-    for (const CPlusPlus::Document::Include &inc : doc->resolvedIncludes()) {
+    for (const CPlusPlus::Document::Include &inc : qAsConst(doc->resolvedIncludes)) {
         for (const QString &catchHeader : catchHeaders) {
-            if (inc.resolvedFileName().endsWith(catchHeader))
+            if (inc.resolvedFileName.endsWith(catchHeader))
                 return true;
         }
     }
@@ -98,13 +98,12 @@ static bool includesCatchHeader(const CPlusPlus::Document::Ptr &doc,
 
 static bool hasCatchNames(const CPlusPlus::Document::Ptr &document)
 {
-    for (const CPlusPlus::Document::MacroUse &macro : document->macroUses()) {
+    for (const CPlusPlus::Document::MacroUse &macro : qAsConst(document->macroUses)) {
         if (!macro.isFunctionLike())
             continue;
 
-        if (isCatchMacro(QLatin1String(macro.macro().name()))) {
-            const QVector<CPlusPlus::Document::Block> args = macro.arguments();
-            if (args.size() < 1)
+        if (isCatchMacro(QLatin1String(macro.macro.name))) {
+            if (macro.arguments.size() < 1)
                 continue;
             return true;
         }

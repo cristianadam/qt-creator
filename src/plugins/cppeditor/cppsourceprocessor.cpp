@@ -71,13 +71,13 @@ inline QByteArray generateFingerPrint(const QList<CPlusPlus::Macro> &definedMacr
         if (macro.isHidden()) {
             static const QByteArray undef("#undef ");
             hash.addData(undef);
-            hash.addData(macro.name());
+            hash.addData(macro.name);
         } else {
             static const QByteArray def("#define ");
-            hash.addData(macro.name());
+            hash.addData(macro.name);
             hash.addData(" ", 1);
             hash.addData(def);
-            hash.addData(macro.definitionText());
+            hash.addData(macro.definitionText);
         }
         hash.addData("\n", 1);
     }
@@ -103,7 +103,7 @@ inline const CPlusPlus::Macro revision(const WorkingCopy &workingCopy,
                                        const CPlusPlus::Macro &macro)
 {
     CPlusPlus::Macro newMacro(macro);
-    newMacro.setFileRevision(workingCopy.get(macro.fileName()).second);
+    newMacro.fileRevision = workingCopy.get(macro.fileName).second;
     return newMacro;
 }
 
@@ -335,7 +335,7 @@ void CppSourceProcessor::passedMacroDefinitionCheck(int bytesOffset, int utf16ch
         return;
 
     m_currentDoc->addMacroUse(revision(m_workingCopy, macro),
-                              bytesOffset, macro.name().length(),
+                              bytesOffset, macro.name.length(),
                               utf16charsOffset, macro.nameToQString().size(),
                               line, QVector<MacroArgumentReference>());
 }
@@ -357,7 +357,7 @@ void CppSourceProcessor::notifyMacroReference(int bytesOffset, int utf16charOffs
         return;
 
     m_currentDoc->addMacroUse(revision(m_workingCopy, macro),
-                              bytesOffset, macro.name().length(),
+                              bytesOffset, macro.name.length(),
                               utf16charOffset, macro.nameToQString().size(),
                               line, QVector<MacroArgumentReference>());
 }
@@ -370,7 +370,7 @@ void CppSourceProcessor::startExpandingMacro(int bytesOffset, int utf16charOffse
         return;
 
     m_currentDoc->addMacroUse(revision(m_workingCopy, macro),
-                              bytesOffset, macro.name().length(),
+                              bytesOffset, macro.name.length(),
                               utf16charOffset, macro.nameToQString().size(),
                               line, actuals);
 }
@@ -386,7 +386,7 @@ void CppSourceProcessor::markAsIncludeGuard(const QByteArray &macroName)
     if (!m_currentDoc)
         return;
 
-    m_currentDoc->setIncludeGuardMacroName(macroName);
+    m_currentDoc->includeGuardMacroName = macroName;
 }
 
 void CppSourceProcessor::mergeEnvironment(Document::Ptr doc)
@@ -401,9 +401,9 @@ void CppSourceProcessor::mergeEnvironment(Document::Ptr doc)
 
     m_processed.insert(fn);
 
-    const QList<Document::Include> includes = doc->resolvedIncludes();
+    const QList<Document::Include> includes = doc->resolvedIncludes;
     for (const Document::Include &incl : includes) {
-        const QString includedFile = incl.resolvedFileName();
+        const QString includedFile = incl.resolvedFileName;
 
         if (Document::Ptr includedDoc = m_snapshot.document(includedFile))
             mergeEnvironment(includedDoc);
@@ -411,7 +411,7 @@ void CppSourceProcessor::mergeEnvironment(Document::Ptr doc)
             run(includedFile);
     }
 
-    m_env.addMacros(doc->definedMacros());
+    m_env.addMacros(doc->definedMacros);
 }
 
 void CppSourceProcessor::startSkippingBlocks(int utf16charsOffset)
@@ -484,7 +484,7 @@ void CppSourceProcessor::sourceNeeded(int line, const QString &fileName, Include
 //        QByteArray b(preprocessedCode); b.replace("\n", "<<<\n");
 //        qDebug("Preprocessed code for \"%s\": [[%s]]", fileName.toUtf8().constData(), b.constData());
 //    }
-    document->setFingerprint(generateFingerPrint(document->definedMacros(), preprocessedCode));
+    document->setFingerprint(generateFingerPrint(document->definedMacros, preprocessedCode));
 
     // Re-use document from global snapshot if possible
     Document::Ptr globalDocument = m_globalSnapshot.document(absoluteFileName);

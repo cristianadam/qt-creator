@@ -207,20 +207,19 @@ Link findMacroLink_helper(const QByteArray &name, Document::Ptr doc, const Snaps
     if (doc && !name.startsWith('<') && !processed->contains(doc->fileName())) {
         processed->insert(doc->fileName());
 
-        const QList<Macro> macros = doc->definedMacros();
-        for (const Macro &macro : macros) {
-            if (macro.name() == name) {
+        for (const Macro &macro : qAsConst(doc->definedMacros)) {
+            if (macro.name == name) {
                 Link link;
-                link.targetFilePath = Utils::FilePath::fromString(macro.fileName());
-                link.targetLine = macro.line();
+                link.targetFilePath = Utils::FilePath::fromString(macro.fileName);
+                link.targetLine = macro.line;
                 return link;
             }
         }
 
-        const QList<Document::Include> includes = doc->resolvedIncludes();
+        const QList<Document::Include> &includes = doc->resolvedIncludes;
         for (int index = includes.size() - 1; index != -1; --index) {
             const Document::Include &i = includes.at(index);
-            Link link = findMacroLink_helper(name, snapshot.document(i.resolvedFileName()),
+            Link link = findMacroLink_helper(name, snapshot.document(i.resolvedFileName),
                                              snapshot, processed);
             if (link.hasValidTarget())
                 return link;
@@ -645,10 +644,9 @@ void FollowSymbolUnderCursor::findLink(
         // Handle include directives
         if (tk.is(T_STRING_LITERAL) || tk.is(T_ANGLE_STRING_LITERAL)) {
             const int lineno = cursor.blockNumber() + 1;
-            const QList<Document::Include> includes = doc->resolvedIncludes();
-            for (const Document::Include &incl : includes) {
-                if (incl.line() == lineno) {
-                    link.targetFilePath = Utils::FilePath::fromString(incl.resolvedFileName());
+            for (const Document::Include &incl : qAsConst(doc->resolvedIncludes)) {
+                if (incl.line == lineno) {
+                    link.targetFilePath = Utils::FilePath::fromString(incl.resolvedFileName);
                     link.linkTextStart = beginOfToken + 1;
                     link.linkTextEnd = endOfToken - 1;
                     processLinkCallback(link);
@@ -668,18 +666,18 @@ void FollowSymbolUnderCursor::findLink(
     if (macro) {
         QTextCursor macroCursor = cursor;
         const QByteArray name = identifierUnderCursor(&macroCursor).toUtf8();
-        if (macro->name() == name)
+        if (macro->name == name)
             return processLinkCallback(link); //already on definition!
     } else if (const Document::MacroUse *use = doc->findMacroUseAt(endOfToken - 1)) {
-        const QString fileName = use->macro().fileName();
+        const QString fileName = use->macro.fileName;
         if (fileName == CppModelManager::editorConfigurationFileName()) {
             editorWidget->showPreProcessorWidget();
         } else if (fileName != CppModelManager::configurationFileName()) {
-            const Macro &macro = use->macro();
-            link.targetFilePath = Utils::FilePath::fromString(macro.fileName());
-            link.targetLine = macro.line();
-            link.linkTextStart = use->utf16charsBegin();
-            link.linkTextEnd = use->utf16charsEnd();
+            const Macro &macro = use->macro;
+            link.targetFilePath = Utils::FilePath::fromString(macro.fileName);
+            link.targetLine = macro.line;
+            link.linkTextStart = use->utf16charsBegin;
+            link.linkTextEnd = use->utf16charsEnd;
         }
         processLinkCallback(link);
         return;

@@ -286,9 +286,9 @@ void ModelManagerTest::testRefreshAlsoIncludesOfProjectFiles()
     QVERIFY(snapshot.contains(testCpp));
 
     Document::Ptr headerDocumentBefore = snapshot.document(testHeader);
-    const QList<CPlusPlus::Macro> macrosInHeaderBefore = headerDocumentBefore->definedMacros();
+    const QList<CPlusPlus::Macro> &macrosInHeaderBefore = headerDocumentBefore->definedMacros;
     QCOMPARE(macrosInHeaderBefore.size(), 1);
-    QVERIFY(macrosInHeaderBefore.first().name() == "test_modelmanager_refresh_h");
+    QVERIFY(macrosInHeaderBefore.first().name == "test_modelmanager_refresh_h");
 
     // Introduce a define that will enable another define once the document is reparsed.
     rpp.setMacros({{"TEST_DEFINE", "1"}});
@@ -305,10 +305,10 @@ void ModelManagerTest::testRefreshAlsoIncludesOfProjectFiles()
     QVERIFY(snapshot.contains(testCpp));
 
     Document::Ptr headerDocumentAfter = snapshot.document(testHeader);
-    const QList<CPlusPlus::Macro> macrosInHeaderAfter = headerDocumentAfter->definedMacros();
+    const QList<CPlusPlus::Macro> &macrosInHeaderAfter = headerDocumentAfter->definedMacros;
     QCOMPARE(macrosInHeaderAfter.size(), 2);
-    QVERIFY(macrosInHeaderAfter.at(0).name() == "test_modelmanager_refresh_h");
-    QVERIFY(macrosInHeaderAfter.at(1).name() == "TEST_DEFINE_DEFINED");
+    QVERIFY(macrosInHeaderAfter.at(0).name == "test_modelmanager_refresh_h");
+    QVERIFY(macrosInHeaderAfter.at(1).name == "TEST_DEFINE_DEFINED");
 }
 
 /// QTCREATORBUG-9205

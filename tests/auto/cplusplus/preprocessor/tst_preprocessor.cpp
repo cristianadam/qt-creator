@@ -126,8 +126,8 @@ public:
 
     virtual void macroAdded(const Macro & macro)
     {
-        m_definedMacros.append(macro.name());
-        m_definedMacrosLine.append(macro.line());
+        m_definedMacros.append(macro.name);
+        m_definedMacrosLine.append(macro.line);
     }
 
     virtual void passedMacroDefinitionCheck(int /*bytesOffset*/,
@@ -135,7 +135,7 @@ public:
                                             int line,
                                             const Macro &macro)
     {
-        m_definitionsResolvedFromLines[macro.name()].append(line);
+        m_definitionsResolvedFromLines[macro.name].append(line);
     }
 
     virtual void failedMacroDefinitionCheck(int /*offset*/,
@@ -148,7 +148,7 @@ public:
     virtual void notifyMacroReference(int bytesOffset, int /*utf16charsOffset*/,
                                       int line, const Macro &macro)
     {
-        m_macroUsesLine[macro.name()].append(line);
+        m_macroUsesLine[macro.name].append(line);
         m_expandedMacrosOffset.append(bytesOffset);
     }
 
@@ -159,11 +159,11 @@ public:
                                      const QVector<MacroArgumentReference> &actuals
                                             = QVector<MacroArgumentReference>())
     {
-        m_expandedMacros.append(macro.name());
+        m_expandedMacros.append(macro.name);
         m_expandedMacrosOffset.append(bytesOffset);
-        m_macroUsesLine[macro.name()].append(line);
+        m_macroUsesLine[macro.name].append(line);
         m_macroArgsCount.append(actuals.size());
-        m_usedMacros.insert(macro.name(), actuals);
+        m_usedMacros.insert(macro.name, actuals);
     }
 
     virtual void stopExpandingMacro(int /*offset*/, const Macro &/*macro*/) {}
@@ -1987,24 +1987,24 @@ void tst_Preprocessor::undef()
     preprocess.run(QLatin1String("<stdin>"), input);
     QCOMPARE(env.macroCount(), 4U);
     Macro *macro = env.macroAt(0);
-    QCOMPARE(macro->name(), QByteArray("FOO"));
-    QCOMPARE(macro->bytesOffset(), 8U);
-    QCOMPARE(macro->line(), 1);
+    QCOMPARE(macro->name, QByteArray("FOO"));
+    QCOMPARE(macro->bytesOffset, 8U);
+    QCOMPARE(macro->line, 1);
     QVERIFY(!macro->isHidden());
     macro = env.macroAt(1);
-    QCOMPARE(macro->name(), QByteArray("FOO2"));
-    QCOMPARE(macro->bytesOffset(), 20U);
-    QCOMPARE(macro->line(), 2);
+    QCOMPARE(macro->name, QByteArray("FOO2"));
+    QCOMPARE(macro->bytesOffset, 20U);
+    QCOMPARE(macro->line, 2);
     QVERIFY(!macro->isHidden());
     macro = env.macroAt(2);
-    QCOMPARE(macro->name(), QByteArray("FOO"));
-    QCOMPARE(macro->bytesOffset(), 32U);
-    QCOMPARE(macro->line(), 3);
+    QCOMPARE(macro->name, QByteArray("FOO"));
+    QCOMPARE(macro->bytesOffset, 32U);
+    QCOMPARE(macro->line, 3);
     QVERIFY(macro->isHidden());
     macro = env.macroAt(3);
-    QCOMPARE(macro->name(), QByteArray("BAR"));
-    QCOMPARE(macro->bytesOffset(), 43U);
-    QCOMPARE(macro->line(), 4);
+    QCOMPARE(macro->name, QByteArray("BAR"));
+    QCOMPARE(macro->bytesOffset, 43U);
+    QCOMPARE(macro->line, 4);
     QVERIFY(macro->isHidden());
     QList<QByteArray> macros = client.definedMacros();
     QVERIFY(macros.contains("FOO"));

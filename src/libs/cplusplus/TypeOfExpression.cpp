@@ -157,12 +157,10 @@ void TypeOfExpression::processEnvironment(Document::Ptr doc, Environment *env,
     if (doc && ! processed->contains(doc->fileName())) {
         processed->insert(doc->fileName());
 
-        const QList<Document::Include> includes = doc->resolvedIncludes();
-        for (const Document::Include &incl : includes)
-            processEnvironment(m_snapshot.document(incl.resolvedFileName()), env, processed);
+        for (const Document::Include &incl : qAsConst(doc->resolvedIncludes))
+            processEnvironment(m_snapshot.document(incl.resolvedFileName), env, processed);
 
-        const QList<Macro> macros = doc->definedMacros();
-        for (const Macro &macro : macros)
+        for (const Macro &macro : qAsConst(doc->definedMacros))
             env->bind(macro);
     }
 }
