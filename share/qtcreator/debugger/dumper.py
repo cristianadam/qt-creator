@@ -2967,6 +2967,7 @@ class DumperBase():
             self.targetValue = None  # For references.
             self.isBaseClass = None
             self.nativeValue = None
+            self.nativeLldbValue = None
             self.autoDerefCount = 0
 
         def copy(self):
@@ -2983,6 +2984,7 @@ class DumperBase():
             val.lbitsize = self.lbitsize
             val.targetValue = self.targetValue
             val.nativeValue = self.nativeValue
+            val.nativeLldbValue = self.nativeLldbValue
             return val
 
         @property
@@ -3998,15 +4000,20 @@ class DumperBase():
             return typeobj
         raise RuntimeError('NEED TYPE, NOT %s' % type(typish))
 
+    def fromAddress(self, address, type):
+        val = self.Value(self)
+        val._type = self.createType(type)
+        #DumperBase.warn('CREATING %s AT 0x%x' % (val.type.name, datish))
+        val.laddress = address
+        if self.useDynamicType:
+            val._type = val.type.dynamicType(address)
+        return val
+
     def createValue(self, datish, typish):
         val = self.Value(self)
         val._type = self.createType(typish)
         if self.isInt(datish):  # Used as address.
-            #DumperBase.warn('CREATING %s AT 0x%x' % (val.type.name, datish))
-            val.laddress = datish
-            if self.useDynamicType:
-                val._type = val.type.dynamicType(datish)
-            return val
+            return self.fromAddress(datish, typish)
         if isinstance(datish, bytes):
             #DumperBase.warn('CREATING %s WITH DATA %s' % (val.type.name, self.hexencode(datish)))
             val.ldata = datish

@@ -24,7 +24,7 @@
 ############################################################################
 
 from utils import DisplayFormat
-from dumper import Children, SubItem
+from dumper import Children, SubItem, DumperBase
 
 
 def qform__std__array():
@@ -776,56 +776,87 @@ def qdumpHelper__std__string__MSVC(d, value, charType, format):
     d.putCharArrayHelper(data, size, charType, format)
 
 
-def qdump__std____1__string__alternateLayoutHelper(d, value):
-    try:
-        _d = value['__s']['__data_'].address()
-        alternateLayout = (_d - value.address()) == 0
-        if alternateLayout:
-            lastByte = value.split('b')[-1]
-            if int(lastByte & 0x80) == 0:
-                # Short/internal
-                size = value['__s']['__size_'].integer()
-                data = value.address()
-            else:
-                # Long/external
-                (data, size, _) = value.split('ppp')
-            return size, data
+def std_1_string_dumper(d, value):
+    if d.isLldb:
+        charType = value['__l']['__data_'].dereference().type
+        valobj = value.nativeLldbValue
+
+        D = valobj.GetChildAtIndex(0).GetChildAtIndex(0).GetChildAtIndex(0).GetChildAtIndex(0)
+        layoutDecider = D.GetChildAtIndex(0).GetChildAtIndex(0)
+        if not layoutDecider.IsValid():
+            raise Exception("Could not find layoutDecider")
+
+        size = 0
+        size_mode_value = 0
+        short_mode = False
+
+        layoutModeIsDSC = layoutDecider.name == '__data_'
+        if (layoutModeIsDSC):
+            size_mode = D.GetChildAtIndex(1).GetChildAtIndex(1).GetChildAtIndex(0)
+            if not size_mode:
+                raise Exception("Could not find size_mode")
+            if not size_mode.name == '__size_':
+                size_mode = D.GetChildAtIndex(1).GetChildAtIndex(1).GetChildAtIndex(1)
+                if not size_mode:
+                    raise Exception("Could not find size_mode")
+
+            size_mode_value = size_mode.GetValueAsUnsigned(0)
+            short_mode = ((size_mode_value & 0x80) == 0)
         else:
-            return None, None
-    except:
-        return None, None
+            size_mode = D.GetChildAtIndex(1).GetChildAtIndex(0).GetChildAtIndex(0)
+            if not size_mode.IsValid():
+                raise Exception("Could not find size_mode")
+
+            size_mode_value = size_mode.GetValueAsUnsigned(0)
+            short_mode = ((size_mode_value & 1) == 0)
+
+        if short_mode:
+            s = D.GetChildAtIndex(1)
+
+            if not s:
+                raise Exception("Could not find s")
+
+            location_sp = s.GetChildAtIndex(0) if layoutModeIsDSC else s.GetChildAtIndex(1)
+            size = size_mode_value if layoutModeIsDSC else ((size_mode_value >> 1) % 256)
+        else:
+            l = D.GetChildAtIndex(0)
+            if not l:
+                raise Exception("Could not find l")
+
+            # we can use the layout_decider object as the data pointer
+            location_sp = layoutDecider if layoutModeIsDSC else l.GetChildAtIndex(2)
+            size_vo = l.GetChildAtIndex(1)
+            if not size_vo or not location_sp:
+                raise Exception("Could not find size_vo or location_sp")
+            size = size_vo.GetValueAsUnsigned(0)
+
+        if short_mode and location_sp:
+            d.putCharArrayHelper(location_sp.GetLoadAddress(), size,
+                                 charType, d.currentItemFormat())
+        else:
+            d.putCharArrayHelper(location_sp.GetValueAsUnsigned(0),
+                                 size, charType, d.currentItemFormat())
+
+        return
+
+    else:
+        raise Exception("std::string is not supported for non-lldb debuggers")
 
 
 def qdump__std____1__string(d, value):
-    (size, data) = qdump__std____1__string__alternateLayoutHelper(d, value)
-    if size is None or data is None:
-        firstByte = value.split('b')[0]
-        if int(firstByte & 1) == 0:
-            # Short/internal.
-            size = int(firstByte / 2)
-            data = value.address() + 1
-        else:
-            # Long/external.
-            (_, size, data) = value.split('ppp')
-
-    d.putCharArrayHelper(data, size, d.charType(), d.currentItemFormat())
-    d.putType("std::string")
+    try:
+        std_1_string_dumper(d, value)
+    except Exception as e:
+        DumperBase.warn("Failed decoding std::string: %s (%s)" % (e, value))
+        d.putPlainChildren(value)
 
 
 def qdump__std____1__wstring(d, value):
-    (size, data) = qdump__std____1__string__alternateLayoutHelper(d, value)
-    if size is None or data is None:
-        firstByte = value.split('b')[0]
-        if int(firstByte & 1) == 0:
-            # Short/internal.
-            size = int(firstByte / 2)
-            data = value.address() + 4
-        else:
-            # Long/external.
-            (_, size, data) = value.split('ppp')
-
-    d.putCharArrayHelper(data, size, d.createType('wchar_t'))
-    d.putType("std::wstring")
+    try:
+        std_1_string_dumper(d, value)
+    except Exception as e:
+        DumperBase.warn("Failed decoding std::wstring: %s (%s)" % (e, value))
+        d.putPlainChildren(value)
 
 
 def qdump__std____weak_ptr(d, value):
@@ -1061,6 +1092,9 @@ def qdump__std____1__unordered_set(d, value):
 def qdump__std____debug__unordered_set(d, value):
     qdump__std__unordered_set(d, value)
 
+
+def qdump__std____1__unordered_multiset(d, value):
+    qdump__std____1__unordered_set(d, value)
 
 def qdump__std__unordered_multiset(d, value):
     qdump__std__unordered_set(d, value)

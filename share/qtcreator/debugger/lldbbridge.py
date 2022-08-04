@@ -148,6 +148,18 @@ class Dumper(DumperBase):
         print('@\nbridgemessage={msg="%s",channel="%s"}\n@'
                 % (message.replace('"', '$'), LogChannel.AppError))
 
+    def fromAddress(self, address, type):
+        try:
+            val = super().fromAddress(address, type)
+            nativeType = self.target.FindFirstType(type.name)
+            addr = lldb.SBAddress(address, self.target)
+            nativeValue = self.target.CreateValueFromAddress("[-]", addr, nativeType)
+            val.nativeLldbValue = nativeValue
+            return val
+        except Exception as e:
+            print('Exception in fromAddress: %s' % e)
+            return super().fromAddress(address,type)
+
     def fromNativeFrameValue(self, nativeValue):
         return self.fromNativeValue(nativeValue)
 
@@ -242,6 +254,7 @@ class Dumper(DumperBase):
         val.summary = summary
         val.lIsInScope = nativeValue.IsInScope()
         val.name = nativeValue.GetName()
+        val.nativeLldbValue = nativeValue
         return val
 
     def nativeStructAlignment(self, nativeType):
@@ -1935,6 +1948,12 @@ class Dumper(DumperBase):
         p = 0 if res is None else res.pointer()
         n = ns + 'QWidget'
         self.reportResult('selected="0x%x",expr="(%s*)0x%x"' % (p, n, p), args)
+
+    def nativeValueDereferencePointer(self, value):
+        deref = value.nativeValue.Dereference()
+        #if self.useDynamicType:
+        #    deref = deref.cast(deref.dynamic_type)
+        return self.fromNativeValue(deref)
 
     def createResolvePendingBreakpointsHookBreakpoint(self, args):
         bp = self.target.BreakpointCreateByName('qt_qmlDebugConnectorOpen')
