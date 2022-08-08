@@ -72,7 +72,6 @@ QtcPlugin {
             "navigatorslider.ui",
             "search.ui",
             "shapestoolbox.ui",
-            "stateview.ui",
             "statisticsdialog.ui",
         ]
     }

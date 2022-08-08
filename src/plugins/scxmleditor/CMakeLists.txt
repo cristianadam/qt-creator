@@ -23,7 +23,7 @@ add_qtc_plugin(ScxmlEditor
     common/shapestoolbox.cpp common/shapestoolbox.h common/shapestoolbox.ui
     common/sizegrip.cpp common/sizegrip.h
     common/stateproperties.cpp common/stateproperties.h
-    common/stateview.cpp common/stateview.h common/stateview.ui
+    common/stateview.cpp common/stateview.h
     common/statistics.cpp common/statistics.h
     common/statisticsdialog.cpp common/statisticsdialog.h common/statisticsdialog.ui
     common/structure.cpp common/structure.h

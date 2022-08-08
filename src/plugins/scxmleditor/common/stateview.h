@@ -25,8 +25,6 @@
 
 #pragma once
 
-#include "ui_stateview.h"
-
 #include <QWidget>
 
 namespace ScxmlEditor {
@@ -39,6 +37,8 @@ class ScxmlUiFactory;
 } // namespace PluginInterface
 
 namespace Common {
+
+class GraphicsView;
 
 class StateView : public QWidget
 {
@@ -64,7 +64,7 @@ private:
     PluginInterface::StateItem *m_parentState = nullptr;
     PluginInterface::GraphicsScene *m_scene = nullptr;
     bool m_isMainView;
-    Ui::StateView m_ui;
+    GraphicsView *m_graphicsView;
 };
 
 } // namespace Common

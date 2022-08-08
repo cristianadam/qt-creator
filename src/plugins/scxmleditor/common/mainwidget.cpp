@@ -30,6 +30,7 @@
 #include "colortoolbutton.h"
 #include "errorwidget.h"
 #include "graphicsscene.h"
+#include "graphicsview.h"
 #include "magnifier.h"
 #include "navigator.h"
 #include "outputtabwidget.h"
