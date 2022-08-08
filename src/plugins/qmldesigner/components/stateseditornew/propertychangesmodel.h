@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2022 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of Qt Creator.
@@ -25,36 +25,54 @@
 
 #pragma once
 
-#include <qmldesignercorelib_global.h>
+#include <QAbstractListModel>
+#include <QPointer>
+
 #include <modelnode.h>
-#include "qmlmodelnodefacade.h"
 
 namespace QmlDesigner {
+namespace Experimental {
 
-class QMLDESIGNERCORE_EXPORT QmlModelStateOperation : public QmlModelNodeFacade
+class StatesEditorView;
+
+class PropertyChangesModel : public QAbstractListModel
 {
+    Q_OBJECT
+
+    Q_PROPERTY(QVariant modelNodeBackendProperty READ modelNodeBackend WRITE setModelNodeBackend
+                   NOTIFY modelNodeBackendChanged)
+
+    enum {
+        Target = Qt::DisplayRole,
+        Explicit = Qt::UserRole,
+        RestoreEntryValues,
+        PropertyModelNode
+    };
+
 public:
-    QmlModelStateOperation() : QmlModelNodeFacade() {}
-    QmlModelStateOperation(const ModelNode &modelNode) : QmlModelNodeFacade(modelNode) {}
-    ModelNode target() const;
-    void setTarget(const ModelNode &target);
-    bool explicitValue() const;
-    void setExplicitValue(bool value);
-    bool restoreEntryValues() const;
-    void setRestoreEntryValues(bool value);
-    QList<AbstractProperty> targetProperties() const;
-    bool isValid() const override;
-    static bool isValidQmlModelStateOperation(const ModelNode &modelNode);
+    PropertyChangesModel(QObject *parent = nullptr);
+    ~PropertyChangesModel();
+
+    int rowCount(const QModelIndex &parent = QModelIndex()) const override;
+    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
+    QHash<int, QByteArray> roleNames() const override;
+
+    void setModelNodeBackend(const QVariant &modelNodeBackend);
+
+    void reset();
+
+    static void registerDeclarativeType();
+
+signals:
+    void modelNodeBackendChanged();
+
+private:
+    QVariant modelNodeBackend() const;
+
+private:
+    ModelNode m_modelNode;
+    QPointer<StatesEditorView> m_view;
 };
 
-class QMLDESIGNERCORE_EXPORT QmlPropertyChanges : public QmlModelStateOperation
-{
-public:
-    QmlPropertyChanges() : QmlModelStateOperation() {}
-    QmlPropertyChanges(const ModelNode &modelNode) : QmlModelStateOperation(modelNode) {}
-    bool isValid() const override;
-    static bool isValidQmlPropertyChanges(const ModelNode &modelNode);
-    void removeProperty(const PropertyName &name);
-};
-
-} //QmlDesigner
+} // namespace Experimental
+} // namespace QmlDesigner

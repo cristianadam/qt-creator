@@ -25,36 +25,56 @@
 
 #pragma once
 
-#include <qmldesignercorelib_global.h>
-#include <modelnode.h>
-#include "qmlmodelnodefacade.h"
+#include <QElapsedTimer>
+#include <QPointer>
+#include <QQmlPropertyMap>
+#include <QQuickWidget>
+
+QT_BEGIN_NAMESPACE
+class QShortcut;
+QT_END_NAMESPACE
 
 namespace QmlDesigner {
 
-class QMLDESIGNERCORE_EXPORT QmlModelStateOperation : public QmlModelNodeFacade
+class NodeInstanceView;
+
+namespace Experimental {
+
+class StatesEditorModel;
+class StatesEditorView;
+
+namespace Internal { class StatesEditorImageProvider; }
+
+class StatesEditorWidget : public QQuickWidget
 {
+    Q_OBJECT
+
 public:
-    QmlModelStateOperation() : QmlModelNodeFacade() {}
-    QmlModelStateOperation(const ModelNode &modelNode) : QmlModelNodeFacade(modelNode) {}
-    ModelNode target() const;
-    void setTarget(const ModelNode &target);
-    bool explicitValue() const;
-    void setExplicitValue(bool value);
-    bool restoreEntryValues() const;
-    void setRestoreEntryValues(bool value);
-    QList<AbstractProperty> targetProperties() const;
-    bool isValid() const override;
-    static bool isValidQmlModelStateOperation(const ModelNode &modelNode);
+    StatesEditorWidget(StatesEditorView *m_statesEditorView, StatesEditorModel *statesEditorModel);
+    ~StatesEditorWidget() override;
+
+    int currentStateInternalId() const;
+    void setCurrentStateInternalId(int internalId);
+    void setNodeInstanceView(NodeInstanceView *nodeInstanceView);
+
+    void showAddNewStatesButton(bool showAddNewStatesButton);
+
+    static QString qmlSourcesPath();
+
+protected:
+    void showEvent(QShowEvent *) override;
+    void focusOutEvent(QFocusEvent *focusEvent) override;
+    void focusInEvent(QFocusEvent *focusEvent) override;
+
+private:
+    void reloadQmlSource();
+
+private:
+    QPointer<StatesEditorView> m_statesEditorView;
+    Internal::StatesEditorImageProvider *m_imageProvider;
+    QShortcut *m_qmlSourceUpdateShortcut;
+    QElapsedTimer m_usageTimer;
 };
 
-class QMLDESIGNERCORE_EXPORT QmlPropertyChanges : public QmlModelStateOperation
-{
-public:
-    QmlPropertyChanges() : QmlModelStateOperation() {}
-    QmlPropertyChanges(const ModelNode &modelNode) : QmlModelStateOperation(modelNode) {}
-    bool isValid() const override;
-    static bool isValidQmlPropertyChanges(const ModelNode &modelNode);
-    void removeProperty(const PropertyName &name);
-};
-
-} //QmlDesigner
+} // namespace Experimental
+} // namespace QmlDesigner

@@ -368,6 +368,28 @@ void QmlModelState::removeAnnotation()
     }
 }
 
+QString QmlModelState::extend() const
+{
+    if (isBaseState())
+        return QString();
+
+    return modelNode().variantProperty("extend").value().toString();
+}
+
+void QmlModelState::setExtend(const QString &name)
+{
+    if ((!isBaseState()) && (modelNode().isValid()))
+        modelNode().variantProperty("extend").setValue(name);
+}
+
+bool QmlModelState::hasExtend() const
+{
+    if (!isBaseState() && modelNode().isValid())
+        return modelNode().hasVariantProperty("extend");
+
+    return false;
+}
+
 QmlModelState QmlModelState::createBaseState(const AbstractView *view)
 {
     QmlModelState qmlModelState(view->rootModelNode());

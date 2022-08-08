@@ -1,0 +1,364 @@
+/****************************************************************************
+**
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
+**
+** This file is part of Qt Creator.
+**
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and The Qt Company. For licensing terms
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
+**
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
+**
+****************************************************************************/
+
+#include "stateseditormodel.h"
+#include "stateseditorview.h"
+
+#include <bindingproperty.h>
+#include <modelnode.h>
+#include <nodelistproperty.h>
+#include <rewriterview.h>
+#include <variantproperty.h>
+
+#include <coreplugin/icore.h>
+#include <coreplugin/messagebox.h>
+
+#include <QDebug>
+#include <QWidget>
+
+enum {
+    debug = false
+};
+
+namespace QmlDesigner {
+namespace Experimental {
+
+StatesEditorModel::StatesEditorModel(StatesEditorView *view)
+    : QAbstractListModel(view)
+    , m_statesEditorView(view)
+    , m_hasExtend(false)
+    , m_extendedStates()
+{
+    QObject::connect(this, &StatesEditorModel::dataChanged, [this]() { emit baseStateChanged(); });
+}
+
+int StatesEditorModel::count() const
+{
+    return rowCount();
+}
+
+QModelIndex StatesEditorModel::index(int row, int column, const QModelIndex &parent) const
+{
+    if (m_statesEditorView.isNull())
+        return {};
+
+    int internalNodeId = 0;
+    if (row > 0)
+        internalNodeId = m_statesEditorView->activeStatesGroupNode()
+                             .nodeListProperty("states")
+                             .at(row - 1)
+                             .internalId();
+
+    return hasIndex(row, column, parent) ? createIndex(row, column, internalNodeId) : QModelIndex();
+}
+
+int StatesEditorModel::rowCount(const QModelIndex &parent) const
+{
+    if (parent.isValid() || m_statesEditorView.isNull() || !m_statesEditorView->model())
+        return 0;
+
+    if (!m_statesEditorView->activeStatesGroupNode().hasNodeListProperty("states"))
+        return 1; // base state
+
+    return m_statesEditorView->activeStatesGroupNode().nodeListProperty("states").count() + 1;
+}
+
+void StatesEditorModel::reset()
+{
+    QAbstractListModel::beginResetModel();
+    QAbstractListModel::endResetModel();
+
+    evaluateExtend(); // TODO maybe not here
+}
+
+QVariant StatesEditorModel::data(const QModelIndex &index, int role) const
+{
+    if (index.parent().isValid() || index.column() != 0 || m_statesEditorView.isNull()
+        || !m_statesEditorView->hasModelNodeForInternalId(index.internalId()))
+        return QVariant();
+
+    ModelNode stateNode;
+
+    if (index.internalId() > 0)
+        stateNode = m_statesEditorView->modelNodeForInternalId(index.internalId());
+
+    switch (role) {
+    case StateNameRole: {
+        if (index.row() == 0) {
+            return tr("base state", "Implicit default state");
+        } else {
+            if (stateNode.hasVariantProperty("name"))
+                return stateNode.variantProperty("name").value();
+            else
+                return QVariant();
+        }
+    }
+
+    case StateImageSourceRole: {
+        static int randomNumber = 0;
+        randomNumber++;
+        if (index.row() == 0)
+            return QString("image://qmldesigner_stateseditor/baseState-%1").arg(randomNumber);
+        else
+            return QString("image://qmldesigner_stateseditor/%1-%2").arg(index.internalId()).arg(randomNumber);
+    }
+
+    case InternalNodeId:
+        return index.internalId();
+
+    case HasWhenCondition:
+        return stateNode.isValid() && stateNode.hasProperty("when");
+
+    case WhenConditionString: {
+        if (stateNode.isValid() && stateNode.hasBindingProperty("when"))
+            return stateNode.bindingProperty("when").expression();
+        else
+            return QString();
+    }
+
+    case IsDefault: {
+        QmlModelState modelState(stateNode);
+        if (modelState.isValid())
+            return modelState.isDefault();
+        return false;
+    }
+
+    case ModelHasDefaultState:
+        return hasDefaultState();
+
+    case HasExtend:
+        return stateNode.isValid() && stateNode.hasProperty("extend");
+
+    case ExtendString: {
+        if (stateNode.isValid() && stateNode.hasVariantProperty("extend"))
+            return stateNode.variantProperty("extend").value();
+        else
+            return QString();
+    }
+    }
+
+    return QVariant();
+}
+
+QHash<int, QByteArray> StatesEditorModel::roleNames() const
+{
+    static QHash<int, QByteArray> roleNames{{StateNameRole, "stateName"},
+                                            {StateImageSourceRole, "stateImageSource"},
+                                            {InternalNodeId, "internalNodeId"},
+                                            {HasWhenCondition, "hasWhenCondition"},
+                                            {WhenConditionString, "whenConditionString"},
+                                            {IsDefault, "isDefault"},
+                                            {ModelHasDefaultState, "modelHasDefaultState"},
+                                            {HasExtend, "hasExtend"},
+                                            {ExtendString, "extendString"}};
+    return roleNames;
+}
+
+void StatesEditorModel::insertState(int stateIndex)
+{
+    if (stateIndex >= 0) {
+        const int updateIndex = stateIndex + 1;
+        beginInsertRows(QModelIndex(), updateIndex, updateIndex);
+        endInsertRows();
+
+        emit dataChanged(index(updateIndex, 0), index(updateIndex, 0));
+    }
+}
+
+void StatesEditorModel::updateState(int beginIndex, int endIndex)
+{
+    if (beginIndex >= 0 && endIndex >= 0)
+        emit dataChanged(index(beginIndex, 0), index(endIndex, 0));
+}
+
+void StatesEditorModel::removeState(int stateIndex)
+{
+    if (stateIndex >= 0) {
+        beginRemoveRows(QModelIndex(), 0, stateIndex);
+        endRemoveRows();
+
+        beginResetModel();
+        endResetModel();
+    }
+}
+
+void StatesEditorModel::renameState(int internalNodeId, const QString &newName)
+{
+    if (newName == m_statesEditorView->currentStateName())
+        return;
+
+    if (newName.isEmpty() ||! m_statesEditorView->validStateName(newName)) {
+        QTimer::singleShot(0, this, [newName] {
+            Core::AsynchronousMessageBox::warning(
+                        tr("Invalid state name"),
+                        newName.isEmpty() ?
+                            tr("The empty string as a name is reserved for the base state.") :
+                            tr("Name already used in another state"));
+        });
+        reset();
+    } else {
+        m_statesEditorView->renameState(internalNodeId, newName);
+    }
+}
+
+void StatesEditorModel::setWhenCondition(int internalNodeId, const QString &condition)
+{
+    m_statesEditorView->setWhenCondition(internalNodeId, condition);
+}
+
+void StatesEditorModel::resetWhenCondition(int internalNodeId)
+{
+    m_statesEditorView->resetWhenCondition(internalNodeId);
+}
+
+QStringList StatesEditorModel::autoComplete(const QString &text, int pos, bool explicitComplete)
+{
+    Model *model = m_statesEditorView->model();
+    if (model && model->rewriterView())
+        return model->rewriterView()->autoComplete(text, pos, explicitComplete);
+
+    return QStringList();
+}
+
+QVariant StatesEditorModel::stateModelNode(int internalNodeId)
+{
+    if (!m_statesEditorView->model())
+        return QVariant();
+
+    ModelNode node = m_statesEditorView->modelNodeForInternalId(internalNodeId);
+
+    return QVariant::fromValue(m_statesEditorView->modelNodeForInternalId(internalNodeId));
+}
+
+void StatesEditorModel::setStateAsDefault(int internalNodeId)
+{
+    m_statesEditorView->setStateAsDefault(internalNodeId);
+}
+
+void StatesEditorModel::resetDefaultState()
+{
+    m_statesEditorView->resetDefaultState();
+}
+
+bool StatesEditorModel::hasDefaultState() const
+{
+    return m_statesEditorView->hasDefaultState();
+}
+
+void StatesEditorModel::setAnnotation(int internalNodeId)
+{
+    m_statesEditorView->setAnnotation(internalNodeId);
+}
+
+void StatesEditorModel::removeAnnotation(int internalNodeId)
+{
+    m_statesEditorView->removeAnnotation(internalNodeId);
+}
+
+bool StatesEditorModel::hasAnnotation(int internalNodeId) const
+{
+    return m_statesEditorView->hasAnnotation(internalNodeId);
+}
+
+QVariantMap StatesEditorModel::get(int idx) const
+{
+    const QHash<int, QByteArray> &names = roleNames();
+    QHash<int, QByteArray>::const_iterator i = names.constBegin();
+
+    QVariantMap res;
+    QModelIndex modelIndex = index(idx);
+
+    while (i != names.constEnd()) {
+        QVariant data = modelIndex.data(i.key());
+
+        res[QString::fromUtf8(i.value())] = data;
+        ++i;
+    }
+    return res;
+}
+
+QVariantMap StatesEditorModel::baseState() const
+{
+    return get(0);
+}
+
+bool StatesEditorModel::hasExtend() const
+{
+    return m_hasExtend;
+}
+
+QStringList StatesEditorModel::extendedStates() const
+{
+    return m_extendedStates;
+}
+
+void StatesEditorModel::move(int from, int to)
+{
+    // This does not alter the code (rewriter) which means the reordering is not presistent
+
+    if (from == to)
+        return;
+
+    int specialIndex = (from < to ? to + 1 : to);
+    beginMoveRows(QModelIndex(), from, from, QModelIndex(), specialIndex);
+    endMoveRows();
+}
+
+void StatesEditorModel::drop(int from, int to)
+{
+    qDebug() << Q_FUNC_INFO << from << to;
+
+    m_statesEditorView->moveStates(from, to);
+}
+
+void StatesEditorModel::evaluateExtend()
+{
+    qDebug() << Q_FUNC_INFO;
+    bool hasExtend = m_statesEditorView->hasExtend();
+
+    if (m_hasExtend != hasExtend) {
+        m_hasExtend = hasExtend;
+        emit hasExtendChanged();
+    }
+
+    auto extendedStates = m_statesEditorView->extendedStates();
+
+    if (extendedStates.size() != m_extendedStates.size()) {
+        m_extendedStates = extendedStates;
+        emit extendedStatesChanged();
+        return;
+    }
+
+    for (int i = 0; i != m_extendedStates.size(); ++i) {
+        if (extendedStates[i] != m_extendedStates[i]) {
+            m_extendedStates = extendedStates;
+            emit extendedStatesChanged();
+            return;
+        }
+    }
+}
+
+} // namespace Experimental
+} // namespace QmlDesigner
