@@ -15,6 +15,9 @@ Editing
 
 ### C++
 
+* Prevent opening unneeded generated ui header files
+* Fixed documents getting opened in wrong clangd
+
 Projects
 --------
 
@@ -45,14 +48,24 @@ Platforms
 
 Credits for these changes go to:
 --------------------------------
+Alexander Akulich  
 Alibek Omarov  
 André Pönitz  
 Christian Kandeler  
+Christian Stenger  
 Cristian Adam  
+David Schulz  
+Dmitry Kovalev  
 Eike Ziller  
 Ivan Komissarov  
 Jaroslaw Kobus  
+Knud Dollereder  
 Mahmoud Badri  
+Marcus Tillmanns  
 Mats Honkamaa  
+Miikka Heikkinen  
+Orgad Shaneh  
 Oswald Buddenhagen  
+Samuel Ghinet  
 Thomas Hartmann  
+Vikas Pachdha  
