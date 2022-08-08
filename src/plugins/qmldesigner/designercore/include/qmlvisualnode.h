@@ -123,6 +123,7 @@ class QMLDESIGNERCORE_EXPORT QmlModelStateGroup
 {
     friend class QmlVisualNode;
     friend class StatesEditorView;
+    friend class Experimental::StatesEditorView;
 
 public:
 

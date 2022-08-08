@@ -38,9 +38,14 @@ class Annotation;
 class AnnotationEditor;
 class StatesEditorView;
 
+namespace Experimental {
+class StatesEditorView;
+}
+
 class QMLDESIGNERCORE_EXPORT QmlModelState : public QmlModelNodeFacade
 {
     friend StatesEditorView;
+    friend Experimental::StatesEditorView;
 
 public:
     QmlModelState();
