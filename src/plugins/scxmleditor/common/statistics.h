@@ -25,12 +25,15 @@
 
 #pragma once
 
-#include "ui_statistics.h"
-
 #include <QAbstractTableModel>
 #include <QFrame>
 
-QT_FORWARD_DECLARE_CLASS(QSortFilterProxyModel)
+QT_BEGIN_NAMESPACE
+class QLabel;
+class QSortFilterProxyModel;
+QT_END_NAMESPACE
+
+namespace Utils { class TreeView; }
 
 namespace ScxmlEditor {
 
@@ -75,7 +78,10 @@ public:
 private:
     StatisticsModel *m_model;
     QSortFilterProxyModel *m_proxyModel;
-    Ui::Statistics m_ui;
+    QLabel *m_fileNameLabel;
+    QLabel *m_levels;
+    QLabel *m_timeLabel;
+    Utils::TreeView *m_statisticsView;
 };
 
 } // namespace Common

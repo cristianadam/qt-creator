@@ -73,7 +73,6 @@ QtcPlugin {
             "search.ui",
             "shapestoolbox.ui",
             "stateview.ui",
-            "statistics.ui",
             "statisticsdialog.ui",
         ]
     }
