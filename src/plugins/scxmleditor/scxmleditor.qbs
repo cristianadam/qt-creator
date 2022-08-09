@@ -70,7 +70,6 @@ QtcPlugin {
             "colorsettings.ui",
             "colorthemedialog.ui",
             "navigatorslider.ui",
-            "search.ui",
             "shapestoolbox.ui",
             "statisticsdialog.ui",
         ]

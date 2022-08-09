@@ -17,7 +17,7 @@ add_qtc_plugin(ScxmlEditor
     common/navigator.cpp common/navigator.h
     common/navigatorgraphicsview.cpp common/navigatorgraphicsview.h
     common/navigatorslider.cpp common/navigatorslider.h common/navigatorslider.ui
-    common/search.cpp common/search.h common/search.ui
+    common/search.cpp common/search.h
     common/searchmodel.cpp common/searchmodel.h
     common/shapegroupwidget.cpp common/shapegroupwidget.h
     common/shapestoolbox.cpp common/shapestoolbox.h common/shapestoolbox.ui
