@@ -242,35 +242,38 @@ QString formatToolTipAddress(quint64 a)
 
 QString escapeUnprintable(const QString &str, int unprintableBase)
 {
-    if (unprintableBase == 0)
-        return str;
+    auto toUtf32 = QStringEncoder(QStringEncoder::Utf32);
+    auto toQString = QStringDecoder(QStringDecoder::Utf32);
+    QByteArray arr = toUtf32(str);
+    QByteArrayView arrayView(arr);
 
     QString encoded;
-    if (unprintableBase == -1) {
-        for (const QChar c : str) {
-            int u = c.unicode();
-            if (c.isPrint())
-                encoded += c;
-            else if (u == '\r')
-                encoded += "\\r";
-            else if (u == '\t')
-                encoded += "\\t";
-            else if (u == '\n')
-                encoded += "\\n";
-            else
-                encoded += QString("\\%1").arg(u, 3, 8, QLatin1Char('0'));
+
+    while(arrayView.size() > 0) {
+        const uint32_t c = *reinterpret_cast<const uint32_t*>(arrayView.constData());
+        if (QChar::isPrint(c))
+            encoded += toQString(arrayView.sliced(0,4));
+        else {
+            if (unprintableBase == -1) {
+                if (c == '\r') {
+                    encoded += "\\r";
+                } else if (c == '\n') {
+                    encoded += "\\n";
+                } else if (c == '\t') {
+                    encoded += "\\t";
+                } else {
+                    encoded += QString("\\%1").arg(c, 3, 8, QLatin1Char('0'));
+                }
+            } else if (unprintableBase == 8) {
+                encoded += QString("\\%1").arg(c, 3, 8, QLatin1Char('0'));
+            } else {
+                encoded += QString("\\u%1").arg(c, 4, 16, QLatin1Char('0'));
+            }
         }
-        return encoded;
+
+        arrayView = arrayView.sliced(4);
     }
 
-    for (const QChar c : str) {
-        if (c.isPrint())
-            encoded += c;
-        else if (unprintableBase == 8)
-            encoded += QString("\\%1").arg(c.unicode(), 3, 8, QLatin1Char('0'));
-        else
-            encoded += QString("\\u%1").arg(c.unicode(), 4, 16, QLatin1Char('0'));
-    }
     return encoded;
 }
 
