@@ -25,12 +25,13 @@
 
 #pragma once
 
-#include "ui_colorthemedialog.h"
 #include <QDialog>
 
 namespace ScxmlEditor {
 
 namespace Common {
+
+class ColorSettings;
 
 class ColorThemeDialog : public QDialog
 {
@@ -42,7 +43,7 @@ public:
     void save();
 
 private:
-    Ui::ColorThemeDialog m_ui;
+    ColorSettings *m_colorSettings;
 };
 
 } // namespace Common

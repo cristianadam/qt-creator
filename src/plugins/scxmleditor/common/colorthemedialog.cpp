@@ -24,20 +24,39 @@
 ****************************************************************************/
 
 #include "colorthemedialog.h"
+#include "colorsettings.h"
+
+#include <utils/layoutbuilder.h>
+
+#include <QDialogButtonBox>
 
 using namespace ScxmlEditor::Common;
 
 ColorThemeDialog::ColorThemeDialog(QWidget *parent)
     : QDialog(parent)
 {
-    m_ui.setupUi(this);
+    resize(400, 440);
 
-    connect(m_ui.m_btnOk, &QPushButton::clicked, this, &ColorThemeDialog::accept);
-    connect(m_ui.m_btnCancel, &QPushButton::clicked, this, &ColorThemeDialog::reject);
-    connect(m_ui.m_btnApply, &QPushButton::clicked, this, &ColorThemeDialog::save);
+    m_colorSettings = new ColorSettings;
+    auto buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok |
+                                          QDialogButtonBox::Cancel |
+                                          QDialogButtonBox::Apply);
+
+    using namespace Utils::Layouting;
+    Column {
+        m_colorSettings,
+        buttonBox,
+    }.attachTo(this);
+
+    connect(buttonBox, &QDialogButtonBox::accepted, this, &ColorThemeDialog::accept);
+    connect(buttonBox, &QDialogButtonBox::rejected, this, &ColorThemeDialog::reject);
+    connect(buttonBox, &QDialogButtonBox::clicked, this, [buttonBox, this](QAbstractButton *btn) {
+        if (buttonBox->standardButton(btn) == QDialogButtonBox::Apply)
+            save();
+    });
 }
 
 void ColorThemeDialog::save()
 {
-    m_ui.m_colorSettings->save();
+    m_colorSettings->save();
 }

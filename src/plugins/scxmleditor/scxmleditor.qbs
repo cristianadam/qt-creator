@@ -68,7 +68,6 @@ QtcPlugin {
             "magnifier.ui",
             "colorpicker.ui",
             "colorsettings.ui",
-            "colorthemedialog.ui",
             "navigatorslider.ui",
             "shapestoolbox.ui",
         ]

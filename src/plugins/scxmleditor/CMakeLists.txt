@@ -4,7 +4,7 @@ add_qtc_plugin(ScxmlEditor
   SOURCES
     common/colorpicker.cpp common/colorpicker.h common/colorpicker.ui
     common/colorsettings.cpp common/colorsettings.h common/colorsettings.ui
-    common/colorthemedialog.cpp common/colorthemedialog.h common/colorthemedialog.ui
+    common/colorthemedialog.cpp common/colorthemedialog.h
     common/colorthemes.cpp common/colorthemes.h
     common/colorthemeview.cpp common/colorthemeview.h
     common/colortoolbutton.cpp common/colortoolbutton.h
