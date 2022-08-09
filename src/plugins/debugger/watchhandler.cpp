@@ -663,6 +663,13 @@ static QString reformatInteger(quint64 value, int format, int size, bool isSigne
 // Format printable (char-type) characters
 static QString reformatCharacter(int code, int size, bool isSigned)
 {
+    if (code > 0xffff) {
+        QByteArray ba(reinterpret_cast<const char*>(&code), 4);
+        const QString encoded = QStringDecoder(QStringDecoder::Utf32)(ba);
+        return QString("'%1'\t%2\t0x%3").arg(encoded).arg(unsigned(code)).arg(uint(code & ((1ULL << (8*size)) - 1)),
+                2 * size, 16, QLatin1Char('0'));
+    }
+
     QChar c;
     switch (size) {
         case 1: c = QChar(uchar(code)); break;
@@ -694,7 +701,10 @@ static QString reformatCharacter(int code, int size, bool isSigned)
         else
             out += QString(2 + 2 * size, ' ');
     } else {
-        out += QString::number(unsigned(code));
+        if (size == 2)
+            out += QString::number((char16_t)code);
+        else
+            out += QString::number(unsigned(code));
     }
 
     out += '\t';
