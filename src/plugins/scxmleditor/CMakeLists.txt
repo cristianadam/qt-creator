@@ -25,7 +25,7 @@ add_qtc_plugin(ScxmlEditor
     common/stateproperties.cpp common/stateproperties.h
     common/stateview.cpp common/stateview.h
     common/statistics.cpp common/statistics.h
-    common/statisticsdialog.cpp common/statisticsdialog.h common/statisticsdialog.ui
+    common/statisticsdialog.cpp common/statisticsdialog.h
     common/structure.cpp common/structure.h
     common/structuremodel.cpp common/structuremodel.h
     common/treeview.cpp common/treeview.h

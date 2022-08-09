@@ -24,19 +24,33 @@
 ****************************************************************************/
 
 #include "scxmldocument.h"
+#include "statistics.h"
 #include "statisticsdialog.h"
+
+#include <utils/layoutbuilder.h>
+
+#include <QDialogButtonBox>
 
 using namespace ScxmlEditor::Common;
 
 StatisticsDialog::StatisticsDialog(QWidget *parent)
     : QDialog(parent)
 {
-    m_ui.setupUi(this);
     setWindowTitle(tr("Document Statistics"));
-    connect(m_ui.m_okButton, &QPushButton::clicked, this, &StatisticsDialog::accept);
+
+    m_statistics = new Statistics;
+    auto buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok);
+
+    using namespace Utils::Layouting;
+    Column {
+        m_statistics,
+        buttonBox,
+    }.attachTo(this);
+
+    connect(buttonBox, &QDialogButtonBox::accepted, this, &StatisticsDialog::accept);
 }
 
 void StatisticsDialog::setDocument(ScxmlEditor::PluginInterface::ScxmlDocument *doc)
 {
-    m_ui.m_statistics->setDocument(doc);
+    m_statistics->setDocument(doc);
 }
