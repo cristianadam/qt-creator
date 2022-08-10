@@ -107,9 +107,10 @@ static Q_LOGGING_CATEGORY(dockerDeviceLog, "qtc.docker.device", QtWarningMsg);
 class ContainerShell : public Utils::DeviceShell
 {
 public:
-    ContainerShell(DockerSettings *settings, const QString &containerId)
+    ContainerShell(DockerSettings *settings, const QString &containerId, const FilePath &devicePath)
         : m_settings(settings)
         , m_containerId(containerId)
+        , m_devicePath(devicePath)
     {
     }
 
@@ -119,9 +120,17 @@ private:
         shellProcess->setCommand({m_settings->dockerBinaryPath.filePath(), {"container", "start", "-i", "-a", m_containerId}});
     }
 
+    CommandLine createFallbackCommand(const CommandLine &cmdLine)
+    {
+        CommandLine result = cmdLine;
+        result.setExecutable(cmdLine.executable().onDevice(m_devicePath));
+        return result;
+    }
+
 private:
     DockerSettings *m_settings;
     QString m_containerId;
+    FilePath m_devicePath;
 };
 
 class DockerDevicePrivate : public QObject
@@ -140,6 +149,7 @@ public:
 
     void updateContainerAccess();
 
+    bool createContainer();
     void startContainer();
     void stopCurrentContainer();
     void fetchSystemEnviroment();
@@ -221,11 +231,12 @@ DockerProcessImpl::DockerProcessImpl(DockerDevicePrivate *device)
             QByteArray output = m_process.readAllStandardOutput();
             qsizetype idx = output.indexOf('\n');
             QByteArray firstLine = output.left(idx);
-            QByteArray rest = output.mid(idx+1);
-            qCDebug(dockerDeviceLog) << "Process first line received:" << m_process.commandLine() << firstLine;
+            QByteArray rest = output.mid(idx + 1);
+            qCDebug(dockerDeviceLog)
+                << "Process first line received:" << m_process.commandLine() << firstLine;
             if (firstLine.startsWith("__qtc")) {
                 bool ok = false;
-                m_remotePID = firstLine.mid(5, firstLine.size() -5 -5).toLongLong(&ok);
+                m_remotePID = firstLine.mid(5, firstLine.size() - 5 - 5).toLongLong(&ok);
 
                 if (ok)
                     emit started(m_remotePID);
@@ -245,10 +256,10 @@ DockerProcessImpl::DockerProcessImpl(DockerDevicePrivate *device)
     });
 
     connect(&m_process, &QtcProcess::done, this, [this] {
-        qCDebug(dockerDeviceLog) << "Process exited:" << m_process.commandLine() << "with code:" << m_process.resultData().m_exitCode;
+        qCDebug(dockerDeviceLog) << "Process exited:" << m_process.commandLine()
+                                 << "with code:" << m_process.resultData().m_exitCode;
         emit done(m_process.resultData());
     });
-
 }
 
 DockerProcessImpl::~DockerProcessImpl()
@@ -413,19 +424,23 @@ static QString getLocalIPv4Address()
     return QString();
 }
 
-void DockerDevicePrivate::startContainer()
+bool DockerDevicePrivate::createContainer()
 {
     if (!m_settings)
-        return;
+        return false;
 
     const QString display = HostOsInfo::isLinuxHost() ? QString(":0")
                                                       : QString(getLocalIPv4Address() + ":0.0");
-    CommandLine dockerCreate{m_settings->dockerBinaryPath.filePath(), {"create",
-                                        "-i",
-                                        "--rm",
-                                        "-e", QString("DISPLAY=%1").arg(display),
-                                        "-e", "XAUTHORITY=/.Xauthority",
-                                        "--net", "host"}};
+    CommandLine dockerCreate{m_settings->dockerBinaryPath.filePath(),
+                             {"create",
+                              "-i",
+                              "--rm",
+                              "-e",
+                              QString("DISPLAY=%1").arg(display),
+                              "-e",
+                              "XAUTHORITY=/.Xauthority",
+                              "--net",
+                              "host"}};
 
 #ifdef Q_OS_UNIX
     // no getuid() and getgid() on Windows.
@@ -445,7 +460,7 @@ void DockerDevicePrivate::startContainer()
 
     dockerCreate.addArgs({"--entrypoint", "/bin/sh", m_data.repoAndTag()});
 
-    LOG("RUNNING: " << dockerCreate.toUserOutput());
+    qCDebug(dockerDeviceLog) << "RUNNING: " << dockerCreate.toUserOutput();
     QtcProcess createProcess;
     createProcess.setCommand(dockerCreate);
     createProcess.runBlocking();
@@ -454,16 +469,29 @@ void DockerDevicePrivate::startContainer()
         qCWarning(dockerDeviceLog) << "Failed creating docker container:";
         qCWarning(dockerDeviceLog) << "Exit Code:" << createProcess.exitCode();
         qCWarning(dockerDeviceLog) << createProcess.allOutput();
-        return;
+        return false;
     }
 
     m_container = createProcess.cleanedStdOut().trimmed();
     if (m_container.isEmpty())
-        return;
-    LOG("Container via process: " << m_container);
+        return false;
 
-    m_shell = std::make_unique<ContainerShell>(m_settings, m_container);
-    connect(m_shell.get(), &DeviceShell::done, this, [this] (const ProcessResultData &resultData) {
+    LOG("ContainerId: " << m_container);
+    return true;
+}
+
+void DockerDevicePrivate::startContainer()
+{
+    if (!createContainer())
+        return;
+
+    m_shell = std::make_unique<ContainerShell>(m_settings,
+                                               m_container,
+                                               FilePath::fromString(
+                                                   QString("device://%1/")
+                                                       .arg(this->q->id().toString())));
+
+    connect(m_shell.get(), &DeviceShell::done, this, [this](const ProcessResultData &resultData) {
         if (resultData.m_error != QProcess::UnknownError)
             return;
 
@@ -1008,7 +1036,7 @@ void DockerDevice::aboutToBeRemoved() const
 
 void DockerDevicePrivate::fetchSystemEnviroment()
 {
-    if (m_shell) {
+    if (m_shell && m_shell->state() == DeviceShell::State::Succeeded) {
         const QByteArray output = outputForRunInShell({"env", {}});
         const QString out = QString::fromUtf8(output.data(), output.size());
         m_cachedEnviroment = Environment(out.split('\n', Qt::SkipEmptyParts), q->osType());
