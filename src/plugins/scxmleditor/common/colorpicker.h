@@ -25,10 +25,12 @@
 
 #pragma once
 
-#include "ui_colorpicker.h"
 #include <QFrame>
 
-QT_FORWARD_DECLARE_CLASS(QToolButton)
+QT_BEGIN_NAMESPACE
+class QHBoxLayout;
+class QToolButton;
+QT_END_NAMESPACE
 
 namespace ScxmlEditor {
 
@@ -53,7 +55,8 @@ private:
     QStringList m_lastUsedColorNames;
     QVector<QToolButton*> m_lastUsedColorButtons;
     QString m_key;
-    Ui::ColorPicker m_ui;
+
+    QHBoxLayout *m_lastUsedColorContainer;
 };
 
 } // namespace Common
