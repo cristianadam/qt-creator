@@ -98,9 +98,6 @@ public:
     QString path() const;
     void setPath(const QStringView path);
 
-    QStringView root() const;
-    void setRoot(const QStringView root);
-
     QString fileName() const;
     QString fileNameWithPathComponents(int pathComponents) const;
 
@@ -237,8 +234,8 @@ private:
 
     QString m_scheme;
     QString m_host; // May contain raw slashes.
-    QString m_path;
-    QString m_root;
+    QString m_path; // Includes the root bits
+    int m_rootLen = 0;
 };
 
 inline size_t qHash(const Utils::FilePath &a, uint seed = 0)
