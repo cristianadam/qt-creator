@@ -2044,6 +2044,8 @@ void tst_Dumpers::dumper()
         }
     }
 
+    qDebug() << "MSG: " << fullOutput;
+
     if (ok) {
         m_keepTemp = false;
     } else {

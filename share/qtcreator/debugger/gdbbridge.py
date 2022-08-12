@@ -423,12 +423,13 @@ class Dumper(DumperBase):
                     self.listMembers(value, nativeType)
             tdata.templateArguments = self.listTemplateParameters(nativeType)
             self.registerType(typeId, tdata)  # Fix up fields and template args
-        #    warn('CREATE TYPE: %s' % typeId)
-        #else:
-        #    warn('REUSE TYPE: %s' % typeId)
+            self.warn('CREATE TYPE: %s' % typeId)
+        else:
+            self.warn('REUSE TYPE: %s' % typeId)
         return self.Type(self, typeId)
 
     def listTemplateParameters(self, nativeType):
+        self.warn('LIST TEMPLATE: %s' % nativeType)
         targs = []
         pos = 0
         while True:
