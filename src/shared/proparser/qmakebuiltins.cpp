@@ -35,6 +35,8 @@
 # include "registry_p.h"
 #endif
 
+#include <utils/environment.h>
+
 #include <qbytearray.h>
 #include <qdir.h>
 #include <qfile.h>
@@ -455,9 +457,9 @@ QMakeEvaluator::writeFile(const QString &ctx, const QString &fn, QIODevice::Open
 }
 
 #ifndef QT_BOOTSTRAPPED
-void QMakeEvaluator::runProcess(QProcess *proc, const QString &command) const
+void QMakeEvaluator::runProcess(Utils::QtcProcess *proc, const Utils::CommandLine &command) const
 {
-    proc->setWorkingDirectory(currentDirectory());
+    proc->setWorkingDirectory(Utils::FilePath::currentWorkingPath());
     proc->setStandardInputFile(QProcess::nullDevice());
 # ifdef PROEVALUATOR_SETENV
     if (!m_option->environment.isEmpty()) {
@@ -470,7 +472,7 @@ void QMakeEvaluator::runProcess(QProcess *proc, const QString &command) const
             env.remove(dummyVar);
         else
             env.insert(dummyVar, oldValue);
-        proc->setProcessEnvironment(env);
+        proc->setEnvironment(Utils::Environment::fromProcessEnvironment(env));
     }
 # endif
 # ifdef PROEVALUATOR_THREAD_SAFE
@@ -478,10 +480,14 @@ void QMakeEvaluator::runProcess(QProcess *proc, const QString &command) const
         return;
 # endif
 # ifdef Q_OS_WIN
-    proc->setNativeArguments(QLatin1String("/v:off /s /c \"") + command + QLatin1Char('"'));
-    proc->start(m_option->getEnv(QLatin1String("COMSPEC")), QStringList());
+    Utils::CommandLine cmd(Utils::FilePath::fromString(m_option->getEnv(QLatin1String("COMSPEC"))), {"/v:off", "/s", "/c"});
+    cmd.addCommandLineAsArgs(command);
+    proc->start();
 # else
-    proc->start(QLatin1String("/bin/sh"), QStringList() << QLatin1String("-c") << command);
+    Utils::CommandLine cmd{"/bin/sh", {"-c"}};
+    cmd.addCommandLineAsArgs(command, Utils::CommandLine::Raw);
+    proc->setCommand(cmd);
+    proc->start();
 # endif
 # ifdef PROEVALUATOR_THREAD_SAFE
     while (true) {
@@ -507,10 +513,10 @@ QByteArray QMakeEvaluator::getCommandOutput(const QString &args, int *exitCode) 
 {
     QByteArray out;
 #ifndef QT_BOOTSTRAPPED
-    QProcess proc;
-    runProcess(&proc, args);
+    Utils::QtcProcess proc;
+    runProcess(&proc, Utils::CommandLine::fromUserInput(args));
     *exitCode = (proc.exitStatus() == QProcess::NormalExit) ? proc.exitCode() : -1;
-    QByteArray errout = proc.isReadable() ? proc.readAllStandardError() : QByteArray();
+    QByteArray errout = proc.readAllStandardError();
 # ifdef PROEVALUATOR_FULL
     // FIXME: Qt really should have the option to set forwarding per channel
     fputs(errout.constData(), stderr);
@@ -523,7 +529,7 @@ QByteArray QMakeEvaluator::getCommandOutput(const QString &args, int *exitCode) 
             QString::fromLocal8Bit(errout));
     }
 # endif
-    out = proc.isReadable() ? proc.readAllStandardOutput() : QByteArray();
+    out = proc.readAllStandardOutput();
 # ifdef Q_OS_WIN
     // FIXME: Qt's line end conversion on sequential files should really be fixed
     out.replace("\r\n", "\n");
@@ -1807,9 +1813,9 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
         if (m_cumulative) // Anything else would be insanity
             return ReturnFalse;
 #ifndef QT_BOOTSTRAPPED
-        QProcess proc;
+        Utils::QtcProcess proc;
         proc.setProcessChannelMode(QProcess::ForwardedChannels);
-        runProcess(&proc, args.at(0).toQString());
+        runProcess(&proc, Utils::CommandLine::fromUserInput(args.at(0).toQString()));
         return returnBool(proc.exitStatus() == QProcess::NormalExit && proc.exitCode() == 0);
 #else
         int ec = system((QLatin1String("cd ")

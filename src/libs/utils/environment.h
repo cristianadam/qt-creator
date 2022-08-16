@@ -62,6 +62,7 @@ public:
 
     QStringList toStringList() const { return m_dict.toStringList(); }
     QProcessEnvironment toProcessEnvironment() const;
+    static Environment fromProcessEnvironment(const QProcessEnvironment &env);
 
     void appendOrSet(const QString &key, const QString &value, const QString &sep = QString());
     void prependOrSet(const QString &key, const QString &value, const QString &sep = QString());

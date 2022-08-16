@@ -1,6 +1,6 @@
 add_qtc_test(tst_manual_proparser
   MANUALTEST
-  DEPENDS Qt5::Core Qt5::Core5Compat
+  DEPENDS Qt5::Core Qt5::Core5Compat Utils
   DEFINES
     "QMAKE_BUILTIN_PRFS"
     "QT_NO_CAST_TO_ASCII"

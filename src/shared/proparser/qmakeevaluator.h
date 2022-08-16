@@ -33,6 +33,8 @@
 #include "qmakevfs.h"
 #include "ioutils.h"
 
+#include <utils/qtcprocess.h>
+
 #include <qlist.h>
 #include <qmap.h>
 #include <qset.h>
@@ -237,7 +239,7 @@ public:
     VisitReturn writeFile(const QString &ctx, const QString &fn, QIODevice::OpenMode mode,
                           QMakeVfs::VfsFlags flags, const QString &contents);
 #ifndef QT_BOOTSTRAPPED
-    void runProcess(QProcess *proc, const QString &command) const;
+    void runProcess(Utils::QtcProcess *proc, const Utils::CommandLine &command) const;
 #endif
     QByteArray getCommandOutput(const QString &args, int *exitCode) const;
 

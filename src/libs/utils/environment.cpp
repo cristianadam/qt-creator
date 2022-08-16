@@ -60,6 +60,15 @@ QProcessEnvironment Environment::toProcessEnvironment() const
     return result;
 }
 
+Environment Environment::fromProcessEnvironment(const QProcessEnvironment &env)
+{
+    Environment result;
+    for (auto key : env.keys())
+        result.set(key, env.value(key));
+    return result;
+}
+
+
 void Environment::appendOrSetPath(const FilePath &value)
 {
     QTC_CHECK(value.osType() == osType());
