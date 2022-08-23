@@ -1998,14 +1998,6 @@ void ClientPrivate::initializeCallback(const InitializeRequest::Response &initRe
     qCDebug(LOGLSPCLIENT) << "language server " << m_displayName << " initialized";
     m_state = Client::Initialized;
     q->sendMessage(InitializeNotification(InitializedParams()));
-    Utils::optional<Utils::variant<bool, WorkDoneProgressOptions>> documentSymbolProvider
-        = q->capabilities().documentSymbolProvider();
-    if (documentSymbolProvider.has_value()) {
-        if (!Utils::holds_alternative<bool>(*documentSymbolProvider)
-            || Utils::get<bool>(*documentSymbolProvider)) {
-            TextEditor::IOutlineWidgetFactory::updateOutline();
-        }
-    }
 
     q->updateConfiguration(m_configuration);
 
