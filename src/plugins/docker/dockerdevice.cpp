@@ -1259,4 +1259,11 @@ void DockerDeviceFactory::shutdownExistingDevices()
     }
 }
 
+QStringList DockerDevice::missingCommands() const
+{
+    if (d && d->m_shell)
+        return d->m_shell->missingFeatures();
+    return {};
+}
+
 } // Docker::Internal

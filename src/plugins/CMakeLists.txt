@@ -9,6 +9,7 @@ add_subdirectory(imageviewer)
 add_subdirectory(marketplace)
 add_subdirectory(updateinfo)
 add_subdirectory(welcome)
+add_subdirectory(terminal)
 
 # Level 2: (only depends on Level 1 and below)
 add_subdirectory(bineditor)

@@ -56,19 +56,21 @@ DockerDeviceWidget::DockerDeviceWidget(const IDevice::Ptr &device)
     DockerDeviceData &data = dockerDevice->data();
 
     auto repoLabel = new QLabel(Tr::tr("Repository:"));
-    m_repoLineEdit = new QLineEdit;
+    m_repoLineEdit = new QLabel;
     m_repoLineEdit->setText(data.repo);
-    m_repoLineEdit->setEnabled(false);
 
     auto tagLabel = new QLabel(Tr::tr("Tag:"));
-    m_tagLineEdit = new QLineEdit;
+    m_tagLineEdit = new QLabel;
     m_tagLineEdit->setText(data.tag);
-    m_tagLineEdit->setEnabled(false);
 
     auto idLabel = new QLabel(Tr::tr("Image ID:"));
-    m_idLineEdit = new QLineEdit;
+    m_idLineEdit = new QLabel;
     m_idLineEdit->setText(data.imageId);
-    m_idLineEdit->setEnabled(false);
+
+    auto missingLabel = new QLabel(Tr::tr("Missing components:"));
+    m_missingAppsDisplay = new QLabel;
+    m_missingAppsDisplay->setWordWrap(false);
+    m_missingAppsDisplay->setText(dockerDevice->missingCommands().join(", "));
 
     auto daemonStateLabel = new QLabel(Tr::tr("Daemon state:"));
     m_daemonReset = new QToolButton;
@@ -182,6 +184,7 @@ DockerDeviceWidget::DockerDeviceWidget(const IDevice::Ptr &device)
         repoLabel, m_repoLineEdit, br,
         tagLabel, m_tagLineEdit, br,
         idLabel, m_idLineEdit, br,
+        missingLabel, m_missingAppsDisplay, br,
         daemonStateLabel, m_daemonReset, m_daemonState, br,
         m_runAsOutsideUser, br,
         Column {

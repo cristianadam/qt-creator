@@ -50,9 +50,11 @@ public:
     void updateDaemonStateTexts();
 
 private:
-    QLineEdit *m_repoLineEdit;
-    QLineEdit *m_tagLineEdit;
-    QLineEdit *m_idLineEdit;
+    QLabel *m_repoLineEdit;
+    QLabel *m_tagLineEdit;
+    QLabel *m_idLineEdit;
+    QLabel *m_missingAppsDisplay;
+
     QToolButton *m_daemonReset;
     QLabel *m_daemonState;
     QCheckBox *m_runAsOutsideUser;
