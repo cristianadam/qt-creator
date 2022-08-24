@@ -38,6 +38,7 @@
 #include <coreplugin/messagebox.h>
 #include <coreplugin/icore.h>
 
+#include <utils/environment.h>
 #include <utils/qtcassert.h>
 #include <utils/stylehelper.h>
 
@@ -61,7 +62,7 @@ namespace QmlDesigner {
 static QString propertyEditorResourcesPath()
 {
 #ifdef SHARE_QML_PATH
-    if (qEnvironmentVariableIsSet("LOAD_QML_FROM_SOURCE"))
+    if (Utils::qtcEnvironmentVariableIsSet("LOAD_QML_FROM_SOURCE"))
         return QLatin1String(SHARE_QML_PATH) + "/propertyEditorQmlSources";
 #endif
     return Core::ICore::resourcePath("qmldesigner/propertyEditorQmlSources").toString();
@@ -129,7 +130,7 @@ StatesEditorWidget::~StatesEditorWidget() = default;
 QString StatesEditorWidget::qmlSourcesPath()
 {
 #ifdef SHARE_QML_PATH
-    if (qEnvironmentVariableIsSet("LOAD_QML_FROM_SOURCE"))
+    if (Utils::qtcEnvironmentVariableIsSet("LOAD_QML_FROM_SOURCE"))
         return QLatin1String(SHARE_QML_PATH) + "/statesEditorQmlSources";
 #endif
     return Core::ICore::resourcePath("qmldesigner/statesEditorQmlSources").toString();

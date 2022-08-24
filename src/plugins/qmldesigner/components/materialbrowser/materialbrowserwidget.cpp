@@ -36,8 +36,9 @@
 #include <qmldesignerplugin.h>
 
 #include <utils/algorithm.h>
-#include <utils/stylehelper.h>
+#include <utils/environment.h>
 #include <utils/qtcassert.h>
+#include <utils/stylehelper.h>
 
 #include <QImageReader>
 #include <QMenu>
@@ -60,7 +61,7 @@ namespace QmlDesigner {
 static QString propertyEditorResourcesPath()
 {
 #ifdef SHARE_QML_PATH
-    if (qEnvironmentVariableIsSet("LOAD_QML_FROM_SOURCE"))
+    if (Utils::qtcEnvironmentVariableIsSet("LOAD_QML_FROM_SOURCE"))
         return QLatin1String(SHARE_QML_PATH) + "/propertyEditorQmlSources";
 #endif
     return Core::ICore::resourcePath("qmldesigner/propertyEditorQmlSources").toString();
@@ -214,7 +215,7 @@ void MaterialBrowserWidget::startDragMaterial(int index, const QPointF &mousePos
 QString MaterialBrowserWidget::qmlSourcesPath()
 {
 #ifdef SHARE_QML_PATH
-    if (qEnvironmentVariableIsSet("LOAD_QML_FROM_SOURCE"))
+    if (Utils::qtcEnvironmentVariableIsSet("LOAD_QML_FROM_SOURCE"))
         return QLatin1String(SHARE_QML_PATH) + "/materialBrowserQmlSource";
 #endif
     return Core::ICore::resourcePath("qmldesigner/materialBrowserQmlSource").toString();

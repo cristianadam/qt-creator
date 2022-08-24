@@ -32,6 +32,7 @@
 #include <coreplugin/messagebox.h>
 #include <coreplugin/icore.h>
 
+#include <utils/environment.h>
 #include <utils/filepath.h>
 
 #include "pluginmanager/widgetpluginmanager.h"
@@ -53,7 +54,7 @@ namespace Internal {
 static QString globalMetaInfoPath()
 {
 #ifdef SHARE_QML_PATH
-    if (qEnvironmentVariableIsSet("LOAD_QML_FROM_SOURCE"))
+    if (Utils::qtcEnvironmentVariableIsSet("LOAD_QML_FROM_SOURCE"))
         return QLatin1String(SHARE_QML_PATH) + "/globalMetaInfo";
 #endif
     return Core::ICore::resourcePath("qmldesigner/globalMetaInfo").toString();

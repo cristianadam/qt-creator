@@ -37,9 +37,10 @@
 #include <bindingproperty.h>
 
 #include <coreplugin/icore.h>
-#include <utils/qtcassert.h>
 #include <utils/algorithm.h>
+#include <utils/environment.h>
 #include <utils/fileutils.h>
+#include <utils/qtcassert.h>
 
 #include <QDir>
 #include <QFileInfo>
@@ -317,7 +318,7 @@ void MaterialEditorQmlBackend::setup(const QmlObjectNode &selectedMaterialNode, 
 QString MaterialEditorQmlBackend::propertyEditorResourcesPath()
 {
 #ifdef SHARE_QML_PATH
-    if (qEnvironmentVariableIsSet("LOAD_QML_FROM_SOURCE"))
+    if (Utils::qtcEnvironmentVariableIsSet("LOAD_QML_FROM_SOURCE"))
         return QLatin1String(SHARE_QML_PATH) + "/propertyEditorQmlSources";
 #endif
     return Core::ICore::resourcePath("qmldesigner/propertyEditorQmlSources").toString();

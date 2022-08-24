@@ -32,6 +32,7 @@
 #include "curveeditorutils.h"
 
 #include <theme.h>
+#include <utils/environment.h>
 #include <utils/fileutils.h>
 
 #include <QAction>
@@ -439,7 +440,7 @@ void GraphicsView::contextMenuEvent(QContextMenuEvent *event)
 
     QMenu menu;
 
-    if (qEnvironmentVariableIsSet("QTC_STYLE_CURVE_EDITOR")) {
+    if (Utils::qtcEnvironmentVariableIsSet("QTC_STYLE_CURVE_EDITOR")) {
         QAction *openEditorAction = menu.addAction(tr("Open Style Editor"));
         connect(openEditorAction, &QAction::triggered, openStyleEditor);
     }

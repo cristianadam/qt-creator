@@ -56,6 +56,7 @@
 #include <texteditor/textdocument.h>
 
 #include <utils/algorithm.h>
+#include <utils/environment.h>
 #include <utils/infobar.h>
 #include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
@@ -647,7 +648,7 @@ bool QmlProject::isQtDesignStudio()
 
 bool QmlProject::isQtDesignStudioStartedFromQtC()
 {
-    return qEnvironmentVariableIsSet(Constants::enviromentLaunchedQDS);
+    return qtcEnvironmentVariableIsSet(Constants::enviromentLaunchedQDS);
 }
 
 ProjectExplorer::DeploymentKnowledge QmlProject::deploymentKnowledge() const

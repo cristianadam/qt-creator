@@ -39,6 +39,7 @@
 #include <projectstorage/qmltypesparser.h>
 #include <projectstorage/sourcepathcache.h>
 #include <sqlitedatabase.h>
+#include <utils/environment.h>
 #include <qmlprojectmanager/qmlproject.h>
 #include <qtsupport/baseqtversion.h>
 #include <qtsupport/qtkitinformation.h>
@@ -54,8 +55,6 @@
 #include <imagecache/imagecachestorage.h>
 #include <imagecache/meshimagecachecollector.h>
 #include <imagecache/timestampprovider.h>
-
-#include <coreplugin/icore.h>
 
 #include <QQmlEngine>
 
@@ -372,7 +371,7 @@ QStringList qmlTypes(::ProjectExplorer::Target *target)
 
 void QmlDesignerProjectManager::projectAdded(::ProjectExplorer::Project *project)
 {
-    if (qEnvironmentVariableIsSet("QDS_ACTIVATE_PROJECT_STORAGE")) {
+    if (Utils::qtcEnvironmentVariableIsSet("QDS_ACTIVATE_PROJECT_STORAGE")) {
         m_projectData = std::make_unique<QmlDesignerProjectManagerProjectData>(m_previewImageCacheData->storage,
                                                                                project);
         m_projectData->activeTarget = project->activeTarget();

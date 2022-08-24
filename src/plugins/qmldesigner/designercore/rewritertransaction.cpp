@@ -28,6 +28,7 @@
 #include <rewritingexception.h>
 #include <rewriterview.h>
 
+#include <utils/environment.h>
 #include <utils/qtcassert.h>
 
 #ifndef QMLDESIGNER_TEST
@@ -40,7 +41,8 @@
 namespace QmlDesigner {
 
 QList<QByteArray> RewriterTransaction::m_identifierList;
-bool RewriterTransaction::m_activeIdentifier = qEnvironmentVariableIsSet("QML_DESIGNER_TRACE_REWRITER_TRANSACTION");
+bool RewriterTransaction::m_activeIdentifier = Utils::qtcEnvironmentVariableIsSet(
+    "QML_DESIGNER_TRACE_REWRITER_TRANSACTION");
 
 RewriterTransaction::RewriterTransaction() : m_valid(false)
 {
