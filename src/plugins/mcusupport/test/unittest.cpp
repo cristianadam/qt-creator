@@ -59,6 +59,7 @@
 #include <projectexplorer/toolchainmanager.h>
 
 #include <utils/algorithm.h>
+#include <utils/environment.h>
 #include <utils/filepath.h>
 
 #include <QJsonArray>
@@ -1154,7 +1155,7 @@ void McuSupportTest::test_passDirectoryVersionDetectorToRenesasBoardSdkPackage()
 void McuSupportTest::test_resolveEnvironmentVariablesInDefaultPath()
 {
     QVERIFY(qputenv(QUL_ENV_VAR, qtForMcuSdkPath));
-    QCOMPARE(qEnvironmentVariable(QUL_ENV_VAR), qtForMcuSdkPath);
+    QCOMPARE(qtcEnvironmentVariable(QUL_ENV_VAR), qtForMcuSdkPath);
 
     toochainFileDescription.defaultPath = FilePath::fromUserInput(
         QString{"$"} + QUL_ENV_VAR + "/lib/cmake/Qul/toolchain/iar.cmake");

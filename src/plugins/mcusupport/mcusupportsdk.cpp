@@ -43,6 +43,7 @@
 #include <projectexplorer/toolchain.h>
 #include <projectexplorer/toolchainmanager.h>
 #include <utils/algorithm.h>
+#include <utils/environment.h>
 #include <utils/fileutils.h>
 #include <utils/hostosinfo.h>
 
@@ -82,10 +83,10 @@ namespace Legacy {
 
 static FilePath findInProgramFiles(const QString &folder)
 {
-    for (auto envVar : {"ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"}) {
-        if (!qEnvironmentVariableIsSet(envVar))
+    for (const auto &envVar : QStringList{"ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"}) {
+        if (!qtcEnvironmentVariableIsSet(envVar))
             continue;
-        const FilePath dir = FilePath::fromUserInput(qEnvironmentVariable(envVar)) / folder;
+        const FilePath dir = FilePath::fromUserInput(qtcEnvironmentVariable(envVar)) / folder;
         if (dir.exists())
             return dir;
     }
@@ -123,9 +124,9 @@ McuPackagePtr createBoardSdkPackage(const SettingsHandler::Ptr &settingsHandler,
     const QString sdkName = generateSdkName(desc.boardSdk.envVar);
 
     const FilePath defaultPath = [&] {
-        const auto envVar = desc.boardSdk.envVar.toLatin1();
-        if (qEnvironmentVariableIsSet(envVar))
-            return FilePath::fromUserInput(qEnvironmentVariable(envVar));
+        const auto envVar = desc.boardSdk.envVar;
+        if (qtcEnvironmentVariableIsSet(envVar))
+            return FilePath::fromUserInput(qtcEnvironmentVariable(envVar));
         if (!desc.boardSdk.defaultPath.isEmpty()) {
             FilePath defaultPath = FilePath::fromUserInput(QDir::rootPath()
                                                            + desc.boardSdk.defaultPath.toString());
@@ -156,8 +157,8 @@ McuPackagePtr createFreeRTOSSourcesPackage(const SettingsHandler::Ptr &settingsH
     const QString envVarPrefix = removeRtosSuffix(envVar);
 
     FilePath defaultPath;
-    if (qEnvironmentVariableIsSet(envVar.toLatin1()))
-        defaultPath = FilePath::fromUserInput(qEnvironmentVariable(envVar.toLatin1()));
+    if (qtcEnvironmentVariableIsSet(envVar))
+        defaultPath = FilePath::fromUserInput(qtcEnvironmentVariable(envVar));
     else if (!boardSdkDir.isEmpty())
         defaultPath = boardSdkDir;
 
@@ -261,8 +262,8 @@ McuToolChainPackagePtr createArmGccToolchainPackage(const SettingsHandler::Ptr &
     const char envVar[] = "ARMGCC_DIR";
 
     FilePath defaultPath;
-    if (qEnvironmentVariableIsSet(envVar))
-        defaultPath = FilePath::fromUserInput(qEnvironmentVariable(envVar));
+    if (qtcEnvironmentVariableIsSet(envVar))
+        defaultPath = FilePath::fromUserInput(qtcEnvironmentVariable(envVar));
     if (defaultPath.isEmpty() && HostOsInfo::isWindowsHost()) {
         const FilePath installDir = findInProgramFiles("GNU Tools ARM Embedded");
         if (installDir.exists()) {
@@ -297,7 +298,7 @@ McuToolChainPackagePtr createGhsToolchainPackage(const SettingsHandler::Ptr &set
 {
     const char envVar[] = "GHS_COMPILER_DIR";
 
-    const FilePath defaultPath = FilePath::fromUserInput(qEnvironmentVariable(envVar));
+    const FilePath defaultPath = FilePath::fromUserInput(qtcEnvironmentVariable(envVar));
 
     const auto versionDetector
         = new McuPackageExecutableVersionDetector(FilePath("as850").withExecutableSuffix(),
@@ -322,7 +323,7 @@ McuToolChainPackagePtr createGhsArmToolchainPackage(const SettingsHandler::Ptr &
 {
     const char envVar[] = "GHS_ARM_COMPILER_DIR";
 
-    const FilePath defaultPath = FilePath::fromUserInput(qEnvironmentVariable(envVar));
+    const FilePath defaultPath = FilePath::fromUserInput(qtcEnvironmentVariable(envVar));
 
     const auto versionDetector
         = new McuPackageExecutableVersionDetector(FilePath("asarm").withExecutableSuffix(),
@@ -348,8 +349,8 @@ McuToolChainPackagePtr createIarToolChainPackage(const SettingsHandler::Ptr &set
     const char envVar[] = "IAR_ARM_COMPILER_DIR";
 
     FilePath defaultPath;
-    if (qEnvironmentVariableIsSet(envVar))
-        defaultPath = FilePath::fromUserInput(qEnvironmentVariable(envVar));
+    if (qtcEnvironmentVariableIsSet(envVar))
+        defaultPath = FilePath::fromUserInput(qtcEnvironmentVariable(envVar));
     else {
         const ProjectExplorer::ToolChain *tc = ProjectExplorer::ToolChainManager::toolChain(
             [](const ProjectExplorer::ToolChain *t) {
@@ -419,8 +420,8 @@ static McuPackagePtr createMcuXpressoIdePackage(const SettingsHandler::Ptr &sett
     const char envVar[] = "MCUXpressoIDE_PATH";
 
     FilePath defaultPath;
-    if (qEnvironmentVariableIsSet(envVar)) {
-        defaultPath = FilePath::fromUserInput(qEnvironmentVariable(envVar));
+    if (qtcEnvironmentVariableIsSet(envVar)) {
+        defaultPath = FilePath::fromUserInput(qtcEnvironmentVariable(envVar));
     } else if (HostOsInfo::isWindowsHost()) {
         const FilePath programPath = FilePath::fromString(QDir::rootPath()) / "nxp";
         if (programPath.exists()) {
@@ -454,8 +455,8 @@ static McuPackagePtr createCypressProgrammerPackage(const SettingsHandler::Ptr &
     const char envVar[] = "CYPRESS_AUTO_FLASH_UTILITY_DIR";
 
     FilePath defaultPath;
-    if (qEnvironmentVariableIsSet(envVar)) {
-        defaultPath = FilePath::fromUserInput(qEnvironmentVariable(envVar));
+    if (qtcEnvironmentVariableIsSet(envVar)) {
+        defaultPath = FilePath::fromUserInput(qtcEnvironmentVariable(envVar));
     } else if (HostOsInfo::isWindowsHost()) {
         const FilePath candidate = findInProgramFiles("Cypress");
         if (candidate.exists()) {
@@ -482,8 +483,8 @@ static McuPackagePtr createRenesasProgrammerPackage(const SettingsHandler::Ptr &
     const char envVar[] = "RENESAS_FLASH_PROGRAMMER_PATH";
 
     FilePath defaultPath;
-    if (qEnvironmentVariableIsSet(envVar)) {
-        defaultPath = FilePath::fromUserInput(qEnvironmentVariable(envVar));
+    if (qtcEnvironmentVariableIsSet(envVar)) {
+        defaultPath = FilePath::fromUserInput(qtcEnvironmentVariable(envVar));
     } else if (HostOsInfo::isWindowsHost()) {
         const FilePath candidate = findInProgramFiles("Renesas Electronics/Programming Tools");
         if (candidate.exists()) {
