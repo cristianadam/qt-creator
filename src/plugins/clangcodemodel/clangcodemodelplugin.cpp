@@ -55,9 +55,10 @@
 
 #include <texteditor/textmark.h>
 
-#include <utils/temporarydirectory.h>
+#include <utils/environment.h>
 #include <utils/qtcassert.h>
 #include <utils/runextensions.h>
+#include <utils/temporarydirectory.h>
 
 using namespace Utils;
 
@@ -196,7 +197,7 @@ void ClangCodeModelPlugin::createCompilationDBButton()
 void ClangCodeModelPlugin::maybeHandleBatchFileAndExit() const
 {
 #ifdef WITH_TESTS
-    const QString batchFilePath = QString::fromLocal8Bit(qgetenv("QTC_CLANG_BATCH"));
+    const QString batchFilePath = qtcEnvironmentVariable("QTC_CLANG_BATCH");
     if (!batchFilePath.isEmpty() && QTC_GUARD(QFileInfo::exists(batchFilePath))) {
         const bool runSucceeded = runClangBatchFile(batchFilePath);
         QCoreApplication::exit(!runSucceeded);

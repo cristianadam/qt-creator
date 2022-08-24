@@ -66,6 +66,7 @@
 
 #include <texteditor/textdocument.h>
 
+#include <utils/environment.h>
 #include <utils/fileutils.h>
 #include <utils/hostosinfo.h>
 #include <utils/qtcassert.h>
@@ -88,11 +89,11 @@
 #include <sstream>
 #endif
 
-static const bool DumpProjectInfo = qgetenv("QTC_DUMP_PROJECT_INFO") == "1";
-
 using namespace CPlusPlus;
 using namespace ProjectExplorer;
 using namespace Utils;
+
+static const bool DumpProjectInfo = qtcEnvironmentVariableIntValue("QTC_DUMP_PROJECT_INFO") == 1;
 
 #ifdef QTCREATOR_WITH_DUMP_AST
 
@@ -639,7 +640,7 @@ CppModelManager::CppModelManager()
             this, &CppModelManager::onSourceFilesRefreshed);
 
     d->m_findReferences = new CppFindReferences(this);
-    d->m_indexerEnabled = qgetenv("QTC_NO_CODE_INDEXER") != "1";
+    d->m_indexerEnabled = qtcEnvironmentVariableIntValue("QTC_NO_CODE_INDEXER") != 1;
 
     d->m_dirty = true;
 

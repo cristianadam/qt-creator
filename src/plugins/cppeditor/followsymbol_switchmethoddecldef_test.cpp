@@ -47,6 +47,7 @@
 #include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/idocument.h>
 
+#include <utils/environment.h>
 #include <utils/fileutils.h>
 
 #include <QDebug>
@@ -505,7 +506,7 @@ namespace CppEditor::Internal::Tests {
 
 void FollowSymbolTest::initTestCase()
 {
-    const QString clangdFromEnv = qEnvironmentVariable("QTC_CLANGD");
+    const QString clangdFromEnv = Utils::qtcEnvironmentVariable("QTC_CLANGD");
     if (clangdFromEnv.isEmpty())
         return;
     ClangdSettings::setClangdFilePath(Utils::FilePath::fromString(clangdFromEnv));

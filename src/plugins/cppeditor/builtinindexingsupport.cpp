@@ -40,6 +40,7 @@
 #include <coreplugin/progressmanager/progressmanager.h>
 
 #include <cplusplus/LookupContext.h>
+#include <utils/environment.h>
 #include <utils/qtcassert.h>
 #include <utils/runextensions.h>
 #include <utils/stringutils.h>
@@ -51,7 +52,6 @@
 
 namespace CppEditor::Internal {
 
-static const bool FindErrorsIndexing = qgetenv("QTC_FIND_ERRORS_INDEXING") == "1";
 static Q_LOGGING_CATEGORY(indexerLog, "qtc.cppeditor.indexer", QtWarningMsg)
 
 namespace {
@@ -250,7 +250,7 @@ void parse(QFutureInterface<void> &indexingFuture, const ParseParams params)
 
     indexingFuture.setProgressRange(0, files.size());
 
-    if (FindErrorsIndexing)
+    if (BuiltinIndexingSupport::isFindErrorsIndexingActive())
         indexFindErrors(indexingFuture, params);
     else
         index(indexingFuture, params);
@@ -375,7 +375,10 @@ SymbolSearcher *BuiltinIndexingSupport::createSymbolSearcher(
 
 bool BuiltinIndexingSupport::isFindErrorsIndexingActive()
 {
-    return FindErrorsIndexing;
+    static const bool findErrorsIndexing = Utils::qtcEnvironmentVariableIntValue(
+                                               "QTC_FIND_ERRORS_INDEXING")
+                                           == 1;
+    return findErrorsIndexing;
 }
 
 } // namespace CppEditor::Internal

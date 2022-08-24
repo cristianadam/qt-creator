@@ -44,6 +44,7 @@
 #include <texteditor/textdocument.h>
 #include <texteditor/texteditor.h>
 
+#include <utils/environment.h>
 #include <utils/executeondestruction.h>
 #include <utils/qtcassert.h>
 
@@ -64,7 +65,7 @@ static Q_LOGGING_CATEGORY(debug, "qtc.clangcodemodel.batch", QtWarningMsg);
 
 static int timeOutFromEnvironmentVariable()
 {
-    const QByteArray timeoutAsByteArray = qgetenv("QTC_CLANG_BATCH_TIMEOUT");
+    const QString timeoutAsByteArray = Utils::qtcEnvironmentVariable("QTC_CLANG_BATCH_TIMEOUT");
 
     bool isConversionOk = false;
     const int intervalAsInt = timeoutAsByteArray.toInt(&isConversionOk);
