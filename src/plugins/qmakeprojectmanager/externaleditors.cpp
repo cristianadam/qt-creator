@@ -36,6 +36,7 @@
 #include <designer/designerconstants.h>
 
 #include <utils/algorithm.h>
+#include <utils/environment.h>
 #include <utils/hostosinfo.h>
 #include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
@@ -175,7 +176,7 @@ bool ExternalQtEditor::getEditorLaunchData(const Utils::FilePath &filePath,
     data->binary = findFirstCommand(qtVersionsToCheck, m_commandForQtVersion);
     // fallback
     if (data->binary.isEmpty()) {
-        const QString path = qEnvironmentVariable("PATH");
+        const QString path = qtcEnvironmentVariable("PATH");
         data->binary = Utils::QtcProcess::locateBinary(path, m_commandForQtVersion(nullptr));
     }
 
