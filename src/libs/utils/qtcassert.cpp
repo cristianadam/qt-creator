@@ -53,13 +53,13 @@ void dumpBacktrace(int maxdepth)
 
 void writeAssertLocation(const char *msg)
 {
-    static bool goBoom = qEnvironmentVariableIsSet("QTC_FATAL_ASSERTS");
+    const bool goBoom = qEnvironmentVariableIsSet("QTC_FATAL_ASSERTS");
     if (goBoom)
         qFatal("SOFT ASSERT made fatal: %s", msg);
     else
         qDebug("SOFT ASSERT: %s", msg);
 
-    static int maxdepth = qEnvironmentVariableIntValue("QTC_BACKTRACE_MAXDEPTH");
+    const int maxdepth = qEnvironmentVariableIntValue("QTC_BACKTRACE_MAXDEPTH");
     if (maxdepth != 0)
         dumpBacktrace(maxdepth);
 }
