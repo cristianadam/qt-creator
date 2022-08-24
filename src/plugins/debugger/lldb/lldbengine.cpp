@@ -50,6 +50,7 @@
 #include <coreplugin/idocument.h>
 #include <coreplugin/icore.h>
 
+#include <utils/environment.h>
 #include <utils/processinterface.h>
 #include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
@@ -751,7 +752,7 @@ void LldbEngine::doUpdateLocals(const UpdateParameters &params)
     watchHandler()->appendFormatRequests(&cmd);
     watchHandler()->appendWatchersAndTooltipRequests(&cmd);
 
-    const static bool alwaysVerbose = qEnvironmentVariableIsSet("QTC_DEBUGGER_PYTHON_VERBOSE");
+    const bool alwaysVerbose = qtcEnvironmentVariableIsSet("QTC_DEBUGGER_PYTHON_VERBOSE");
     const DebuggerSettings &s = *debuggerSettings();
     cmd.arg("passexceptions", alwaysVerbose);
     cmd.arg("fancy", s.useDebuggingHelpers.value());

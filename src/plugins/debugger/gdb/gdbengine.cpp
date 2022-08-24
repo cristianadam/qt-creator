@@ -59,6 +59,7 @@
 
 #include <app/app_version.h>
 #include <utils/algorithm.h>
+#include <utils/environment.h>
 #include <utils/hostosinfo.h>
 #include <utils/processinterface.h>
 #include <utils/qtcassert.h>
@@ -2621,7 +2622,8 @@ void GdbEngine::insertBreakpoint(const Breakpoint &bp)
                 }
 
                 // for dumping of expressions
-                const static bool alwaysVerbose = qEnvironmentVariableIsSet("QTC_DEBUGGER_PYTHON_VERBOSE");
+                const bool alwaysVerbose = qtcEnvironmentVariableIsSet(
+                    "QTC_DEBUGGER_PYTHON_VERBOSE");
                 const DebuggerSettings &s = *debuggerSettings();
                 cmd.arg("passexceptions", alwaysVerbose);
                 cmd.arg("fancy", s.useDebuggingHelpers.value());
@@ -3832,7 +3834,7 @@ void GdbEngine::setupEngine()
         gdbCommand.addArg("--tty=" + m_outputCollector.serverName());
     }
 
-    const QStringList testList = QString::fromLocal8Bit(qgetenv("QTC_DEBUGGER_TESTS")).split(',');
+    const QStringList testList = qtcEnvironmentVariable("QTC_DEBUGGER_TESTS").split(',');
     for (const QString &test : testList)
         m_testCases.insert(test.toInt());
     for (int test : qAsConst(m_testCases))
@@ -5066,7 +5068,7 @@ void GdbEngine::doUpdateLocals(const UpdateParameters &params)
     watchHandler()->appendFormatRequests(&cmd);
     watchHandler()->appendWatchersAndTooltipRequests(&cmd);
 
-    const static bool alwaysVerbose = qEnvironmentVariableIsSet("QTC_DEBUGGER_PYTHON_VERBOSE");
+    const bool alwaysVerbose = qtcEnvironmentVariableIsSet("QTC_DEBUGGER_PYTHON_VERBOSE");
     const DebuggerSettings &s = *debuggerSettings();
     cmd.arg("passexceptions", alwaysVerbose);
     cmd.arg("fancy", s.useDebuggingHelpers.value());
