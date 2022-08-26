@@ -194,8 +194,9 @@ bool ClangdSettings::hardwareFulfillsRequirements()
     instance().m_data.haveCheckedHardwareReqirements = true;
     instance().saveSettings();
     const quint64 minRam = quint64(12) * 1024 * 1024 * 1024;
-    const Utils::optional<quint64> totalRam = Utils::HostOsInfo::totalMemoryInstalledInBytes();
-    return !totalRam || *totalRam >= minRam;
+    const quint64 totalRam = Utils::HostOsInfo::totalMemoryInstalledInBytes();
+    // 0 means we failed to determine it
+    return totalRam == 0 || totalRam >= minRam;
 }
 
 bool ClangdSettings::haveCheckedHardwareRequirements()

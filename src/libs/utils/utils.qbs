@@ -99,6 +99,8 @@ Project {
             "environmentdialog.h",
             "environmentmodel.cpp",
             "environmentmodel.h",
+            "environmentprovider.cpp",
+            "environmentprovider.h",
             "execmenu.cpp",
             "execmenu.h",
             "executeondestruction.h",

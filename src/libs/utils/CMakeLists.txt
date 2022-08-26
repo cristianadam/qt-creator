@@ -39,6 +39,7 @@ add_qtc_library(Utils
     environmentdialog.cpp environmentdialog.h
     environmentfwd.h
     environmentmodel.cpp environmentmodel.h
+    environmentprovider.cpp environmentprovider.h
     execmenu.cpp execmenu.h
     executeondestruction.h
     fadingindicator.cpp fadingindicator.h

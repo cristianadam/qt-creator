@@ -16,8 +16,6 @@ namespace Utils {
 Q_GLOBAL_STATIC_WITH_ARGS(Environment, staticSystemEnvironment,
                           (QProcessEnvironment::systemEnvironment().toStringList()))
 
-Q_GLOBAL_STATIC(QVector<EnvironmentProvider>, environmentProviders)
-
 NameValueItems Environment::diff(const Environment &other, bool checkAppendPrepend) const
 {
     return m_dict.diff(other.m_dict, checkAppendPrepend);
@@ -394,24 +392,6 @@ FilePath Environment::expandVariables(const FilePath &variables) const
 QStringList Environment::expandVariables(const QStringList &variables) const
 {
     return transform(variables, [this](const QString &i) { return expandVariables(i); });
-}
-
-void EnvironmentProvider::addProvider(EnvironmentProvider &&provider)
-{
-    environmentProviders->append(std::move(provider));
-}
-
-const QVector<EnvironmentProvider> EnvironmentProvider::providers()
-{
-    return *environmentProviders;
-}
-
-optional<EnvironmentProvider> EnvironmentProvider::provider(const QByteArray &id)
-{
-    const int index = indexOf(*environmentProviders, equal(&EnvironmentProvider::id, id));
-    if (index >= 0)
-        return make_optional(environmentProviders->at(index));
-    return nullopt;
 }
 
 void EnvironmentChange::addSetValue(const QString &key, const QString &value)

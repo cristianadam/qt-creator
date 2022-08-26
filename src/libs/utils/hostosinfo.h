@@ -5,7 +5,6 @@
 
 #include "utils_global.h"
 
-#include "optional.h"
 #include "osspecificaspects.h"
 
 QT_BEGIN_NAMESPACE
@@ -83,7 +82,9 @@ public:
 
     static bool canCreateOpenGLContext(QString *errorMessage);
 
-    static optional<quint64> totalMemoryInstalledInBytes();
+    // a value of 0 here means that we could not determine the value
+    // cannot use optional here until we can require macOS 10.14 for sdktool
+    static quint64 totalMemoryInstalledInBytes();
 
 private:
     static Qt::CaseSensitivity m_overrideFileNameCaseSensitivity;

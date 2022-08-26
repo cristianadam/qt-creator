@@ -8,7 +8,6 @@
 #include "environmentfwd.h"
 #include "filepath.h"
 #include "namevaluedictionary.h"
-#include "optional.h"
 
 #include <functional>
 
@@ -139,18 +138,6 @@ public:
 
 private:
     QList<Item> m_changeItems;
-};
-
-class QTCREATOR_UTILS_EXPORT EnvironmentProvider
-{
-public:
-    QByteArray id;
-    QString displayName;
-    std::function<Environment()> environment;
-
-    static void addProvider(EnvironmentProvider &&provider);
-    static const QVector<EnvironmentProvider> providers();
-    static optional<EnvironmentProvider> provider(const QByteArray &id);
 };
 
 QTCREATOR_UTILS_EXPORT QString qtcEnvironmentVariable(const QString &key);

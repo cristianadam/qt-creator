@@ -9,6 +9,7 @@
 #include <utils/algorithm.h>
 #include <utils/environment.h>
 #include <utils/environmentdialog.h>
+#include <utils/environmentprovider.h>
 #include <utils/fancylineedit.h>
 #include <utils/hostosinfo.h>
 #include <utils/macroexpander.h>

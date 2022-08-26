@@ -14,6 +14,7 @@
 #include <app/app_version.h>
 
 #include <utils/algorithm.h>
+#include <utils/environmentprovider.h>
 #include <utils/fileutils.h>
 #include <utils/macroexpander.h>
 #include <utils/qtcassert.h>

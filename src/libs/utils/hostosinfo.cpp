@@ -94,26 +94,26 @@ bool HostOsInfo::canCreateOpenGLContext(QString *errorMessage)
 #endif
 }
 
-optional<quint64> HostOsInfo::totalMemoryInstalledInBytes()
+quint64 HostOsInfo::totalMemoryInstalledInBytes()
 {
 #ifdef Q_OS_LINUX
     struct sysinfo info;
     if (sysinfo(&info) == -1)
-        return {};
+        return 0;
     return info.totalram;
 #elif defined(Q_OS_WIN)
     MEMORYSTATUSEX statex;
     statex.dwLength = sizeof statex;
     if (!GlobalMemoryStatusEx(&statex))
-        return {};
+        return 0;
     return statex.ullTotalPhys;
 #elif defined(Q_OS_MACOS)
     int mib[] = {CTL_HW, HW_MEMSIZE};
     int64_t ram;
     size_t length = sizeof(int64_t);
     if (sysctl(mib, 2, &ram, &length, nullptr, 0) == -1)
-        return {};
+        return 0;
     return ram;
 #endif
-    return {};
+    return 0;
 }
