@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "invalidmetainfoexception.h"
 #include "propertymetainfo.h"
 #include "qmldesignercorelib_global.h"
 
@@ -44,6 +43,7 @@ public:
     ~NodeMetaInfo();
 
     bool isValid() const;
+    explicit operator bool() const { return isValid(); }
     bool isFileComponent() const;
     bool hasProperty(Utils::SmallStringView propertyName) const;
     PropertyMetaInfos properties() const;
