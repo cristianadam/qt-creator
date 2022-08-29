@@ -81,12 +81,7 @@ public:
     ModelNode();
     ModelNode(const Internal::InternalNodePointer &internalNode, Model *model, const AbstractView *view);
     ModelNode(const ModelNode &modelNode, AbstractView *view);
-    ModelNode(const ModelNode &other);
-    ModelNode(ModelNode &&other);
     ~ModelNode();
-
-    ModelNode &operator=(const ModelNode &other);
-    ModelNode &operator=(ModelNode &&other);
 
     TypeName type() const;
     QString simplifiedTypeName() const;
@@ -95,6 +90,7 @@ public:
     int majorVersion() const;
 
     bool isValid() const;
+    explicit operator bool() const { return isValid(); }
     bool isInHierarchy() const;
 
 

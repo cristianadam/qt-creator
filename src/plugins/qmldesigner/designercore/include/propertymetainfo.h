@@ -23,6 +23,7 @@ class NodeMetaInfo;
 class QMLDESIGNERCORE_EXPORT PropertyMetaInfo
 {
 public:
+    PropertyMetaInfo() = default;
     PropertyMetaInfo(QSharedPointer<class NodeMetaInfoPrivate> nodeMetaInfoPrivateData,
                      const PropertyName &propertyName);
     PropertyMetaInfo(PropertyDeclarationId id,
@@ -32,6 +33,16 @@ public:
     {}
     ~PropertyMetaInfo();
 
+    explicit operator bool() const { return isValid(); }
+
+    bool isValid() const
+    {
+        if (useProjectStorage()) {
+            return bool(m_id);
+        } else {
+            return bool(m_nodeMetaInfoPrivateData);
+        }
+    }
     PropertyName name() const;
     NodeMetaInfo propertyType() const;
     bool isWritable() const;

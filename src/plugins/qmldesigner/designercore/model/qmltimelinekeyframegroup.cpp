@@ -37,7 +37,6 @@ bool QmlTimelineKeyframeGroup::isValidQmlTimelineKeyframeGroup(const ModelNode &
 
 void QmlTimelineKeyframeGroup::destroy()
 {
-    Q_ASSERT(isValid());
     modelNode().destroy();
 }
 
@@ -45,13 +44,14 @@ ModelNode QmlTimelineKeyframeGroup::target() const
 {
     if (modelNode().property("target").isBindingProperty())
         return modelNode().bindingProperty("target").resolveToModelNode();
-    else
-        return ModelNode(); //exception?
+
+    return {};
 }
 
 void QmlTimelineKeyframeGroup::setTarget(const ModelNode &target)
 {
-    QTC_ASSERT(isValid(), return );
+    if (!isValid())
+        return;
 
     ModelNode nonConstTarget = target;
 
@@ -60,14 +60,16 @@ void QmlTimelineKeyframeGroup::setTarget(const ModelNode &target)
 
 PropertyName QmlTimelineKeyframeGroup::propertyName() const
 {
-    QTC_ASSERT(isValid(), return {});
+    if (!isValid())
+        return {};
 
     return modelNode().variantProperty("property").value().toString().toUtf8();
 }
 
 void QmlTimelineKeyframeGroup::setPropertyName(const PropertyName &propertyName)
 {
-    QTC_ASSERT(isValid(), return );
+    if (!isValid())
+        return;
 
     modelNode().variantProperty("property").setValue(QString::fromUtf8(propertyName));
 }
@@ -92,7 +94,8 @@ int QmlTimelineKeyframeGroup::getSupposedTargetIndex(qreal newFrame) const
 
 int QmlTimelineKeyframeGroup::indexOfKeyframe(const ModelNode &frame) const
 {
-    QTC_ASSERT(isValid(), return -1);
+    if (!isValid())
+        return -1;
 
     return modelNode().defaultNodeListProperty().indexOf(frame);
 }
@@ -107,7 +110,8 @@ void QmlTimelineKeyframeGroup::slideKeyframe(int /*sourceIndex*/, int /*targetIn
 
 bool QmlTimelineKeyframeGroup::isRecording() const
 {
-    QTC_ASSERT(isValid(), return false);
+    if (!isValid())
+        return false;
 
     return modelNode().hasAuxiliaryData(recordProperty);
 }
@@ -126,7 +130,8 @@ void QmlTimelineKeyframeGroup::toogleRecording(bool record) const
 
 QmlTimeline QmlTimelineKeyframeGroup::timeline() const
 {
-    QTC_ASSERT(isValid(), return {});
+    if (!isValid())
+        return {};
 
     if (modelNode().hasParentProperty())
         return modelNode().parentProperty().parentModelNode();
@@ -136,7 +141,8 @@ QmlTimeline QmlTimelineKeyframeGroup::timeline() const
 
 bool QmlTimelineKeyframeGroup::isDangling() const
 {
-    QTC_ASSERT(isValid(), return false);
+    if (!isValid())
+        return false;
 
     return !target().isValid() || keyframes().isEmpty();
 }
