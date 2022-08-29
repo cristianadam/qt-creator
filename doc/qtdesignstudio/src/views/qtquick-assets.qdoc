@@ -39,7 +39,7 @@
     \l {Importing 2D Assets} and \l {Importing 3D Assets}.
 
     To add assets to your UI, drag-and-drop them from
-    \uicontrol Assets to \l Navigator, \l {Form Editor}, or \l {3D Editor}.
+    \uicontrol Assets to \l Navigator, the \l {2D} view, or the \l {3D} view.
 
     To add multiple assets to your UI simultaneously, multiselect them first by
     holding \key Ctrl and clicking the asset files you wish to select.
@@ -47,7 +47,7 @@
     \image qtquick-assets-tab.png "Assets view"
 
     When you drag-and-drop assets from \uicontrol Assets to \l Navigator
-    or \l {Form Editor}, component instances with a suitable type are
+    or the \l {2D} view, component instances with a suitable type are
     automatically created for you. For example, instances of the
     \l{Images}{Image} component will be created for graphics files.
 

@@ -43,7 +43,7 @@
         \li \l{UI Files}
 
             Some of the wizard templates create projects that contain UI files.
-            You should always edit UI files in \l{Form Editor}
+            You should always edit UI files in the \l {2D} view
             and \l Properties, to avoid breaking the code.
         \li \l{Managing Data Collection}
 
