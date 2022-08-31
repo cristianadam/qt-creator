@@ -88,9 +88,8 @@ void BindingEditor::setBackendValue(const QVariant &backendValue)
         m_backendValue = backendValue;
         const QObject *backendValueObj = backendValue.value<QObject*>();
         const PropertyEditorValue *propertyEditorValue = qobject_cast<const PropertyEditorValue *>(backendValueObj);
-        const ModelNode node = propertyEditorValue->modelNode();
 
-        if (node.isValid()) {
+        if (const ModelNode node = propertyEditorValue->modelNode()) {
             m_backendValueTypeName = node.metaInfo()
                                          .property(propertyEditorValue->name())
                                          .propertyType()

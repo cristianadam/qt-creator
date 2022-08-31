@@ -257,14 +257,12 @@ void SignalList::removeConnection(const QModelIndex &modelIndex)
                                                   SignalListModel::ConnectionsInternalIdRole).toInt();
 
     AbstractView *view = m_modelNode.view();
-    const ModelNode connectionModelNode = view->modelNodeForInternalId(connectionInternalId);
     SignalHandlerProperty targetSignal;
 
-    if (connectionModelNode.isValid())
+    if (const ModelNode connectionModelNode = view->modelNodeForInternalId(connectionInternalId))
         targetSignal = connectionModelNode.signalHandlerProperty(signalName);
 
-    ModelNode node = targetSignal.parentModelNode();
-    if (node.isValid()) {
+    if (ModelNode node = targetSignal.parentModelNode()) {
         view->executeInTransaction("ConnectionModel::removeConnection", [=, &node](){
             QList<SignalHandlerProperty> allSignals = node.signalProperties();
             if (allSignals.size() > 1) {
