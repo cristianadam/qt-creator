@@ -68,7 +68,7 @@ Qt::ItemFlags ConnectionModel::flags(const QModelIndex &modelIndex) const
     const int internalId = data(index(modelIndex.row(), TargetModelNodeRow), UserRoles::InternalIdRole).toInt();
     ModelNode modelNode = m_connectionView->modelNodeForInternalId(internalId);
 
-    if (modelNode.isValid() && ModelNode::isThisOrAncestorLocked(modelNode))
+    if (ModelNode::isThisOrAncestorLocked(modelNode))
         return Qt::ItemIsEnabled;
 
     return Qt::ItemIsSelectable | Qt::ItemIsEditable | Qt::ItemIsEnabled;
@@ -97,10 +97,7 @@ SignalHandlerProperty ConnectionModel::signalHandlerPropertyForRow(int rowNumber
     const QString targetPropertyName = data(index(rowNumber, TargetModelNodeRow), UserRoles::TargetPropertyNameRole).toString();
 
     ModelNode modelNode = connectionView()->modelNodeForInternalId(internalId);
-    if (modelNode.isValid())
-        return modelNode.signalHandlerProperty(targetPropertyName.toUtf8());
-
-    return SignalHandlerProperty();
+    return modelNode.signalHandlerProperty(targetPropertyName.toUtf8());
 }
 
 void ConnectionModel::addModelNode(const ModelNode &modelNode)
@@ -241,7 +238,7 @@ void ConnectionModel::updateTargetNode(int rowNumber)
                                                                   ? newTarget.split(".").constFirst()
                                                                   : newTarget);
 
-        if (parent.isValid() && QmlItemNode::isValidQmlItemNode(parent))
+        if (QmlItemNode::isValidQmlItemNode(parent))
             parent.nodeListProperty("data").reparentHere(connectionNode);
 
         connectionView()->executeInTransaction("ConnectionModel::updateTargetNode", [= ,&connectionNode](){
@@ -296,7 +293,6 @@ void ConnectionModel::addConnection()
     ModelNode rootModelNode = connectionView()->rootModelNode();
 
     if (rootModelNode.isValid() && rootModelNode.metaInfo().isValid()) {
-
         NodeMetaInfo nodeMetaInfo = connectionView()->model()->metaInfo("QtQuick.Connections");
 
         if (nodeMetaInfo.isValid()) {
@@ -462,32 +458,29 @@ QStringList ConnectionModel::getPossibleSignalsForConnection(const ModelNode &co
 
     if (connection.isValid()) {
         //separate check for singletons
-        if (connection.hasBindingProperty("target")) {
-            const BindingProperty bp = connection.bindingProperty("target");
+        if (const BindingProperty bp = connection.bindingProperty("target")) {
+            const QString bindExpression = bp.expression();
 
-            if (bp.isValid()) {
-                const QString bindExpression = bp.expression();
+            if (const RewriterView *const rv = connectionView()->rewriterView()) {
+                for (const QmlTypeData &data : rv->getQMLTypes()) {
+                    if (!data.typeName.isEmpty()) {
+                        if (data.typeName == bindExpression) {
+                            NodeMetaInfo metaInfo = connectionView()->model()->metaInfo(
+                                data.typeName.toUtf8());
+                            if (metaInfo.isValid()) {
+                                stringList << propertyNameListToStringList(metaInfo.signalNames());
+                                break;
+                            }
+                        } else if (bindExpression.contains(".")) {
+                            //if it doesn't fit the same name, maybe it's an alias?
+                            QStringList expression = bindExpression.split(".");
+                            if ((expression.size() > 1) && (expression.constFirst() == data.typeName)) {
+                                expression.removeFirst();
 
-                if (const RewriterView * const rv = connectionView()->rewriterView()) {
-                    for (const QmlTypeData &data : rv->getQMLTypes()) {
-                        if (!data.typeName.isEmpty()) {
-                            if (data.typeName == bindExpression) {
-                                NodeMetaInfo metaInfo = connectionView()->model()->metaInfo(data.typeName.toUtf8());
-                                if (metaInfo.isValid()) {
-                                    stringList << propertyNameListToStringList(metaInfo.signalNames());
-                                    break;
-                                }
-                            } else if (bindExpression.contains(".")) {
-                                //if it doesn't fit the same name, maybe it's an alias?
-                                QStringList expression = bindExpression.split(".");
-                                if ((expression.size() > 1) && (expression.constFirst() == data.typeName)) {
-                                    expression.removeFirst();
-
-                                    stringList << getAliasMetaSignals(
-                                                      expression.join("."),
-                                                      connectionView()->model()->metaInfo(data.typeName.toUtf8()));
-                                    break;
-                                }
+                                stringList << getAliasMetaSignals(expression.join("."),
+                                                                  connectionView()->model()->metaInfo(
+                                                                      data.typeName.toUtf8()));
+                                break;
                             }
                         }
                     }
@@ -496,27 +489,22 @@ QStringList ConnectionModel::getPossibleSignalsForConnection(const ModelNode &co
         }
 
         ModelNode targetNode = getTargetNodeForConnection(connection);
-        if (targetNode.isValid() && targetNode.metaInfo().isValid()) {
+        if (targetNode.metaInfo().isValid()) {
             stringList.append(propertyNameListToStringList(targetNode.metaInfo().signalNames()));
         } else {
             //most likely it's component's internal alias:
 
-            if (connection.hasBindingProperty("target")) {
-                const BindingProperty bp = connection.bindingProperty("target");
-
-                if (bp.isValid()) {
-                    QStringList expression = bp.expression().split(".");
-                    if (expression.size() > 1) {
-                        const QString itemId = expression.constFirst();
-                        if (connectionView()->hasId(itemId)) {
-                            ModelNode parentItem = connectionView()->modelNodeForId(itemId);
-                            if (parentItem.isValid()
-                                    && parentItem.hasMetaInfo()
-                                    && parentItem.metaInfo().isValid()) {
-                                expression.removeFirst();
-                                stringList << getAliasMetaSignals(expression.join("."),
-                                                                  parentItem.metaInfo());
-                            }
+            if (const BindingProperty bp = connection.bindingProperty("target")) {
+                QStringList expression = bp.expression().split(".");
+                if (expression.size() > 1) {
+                    const QString itemId = expression.constFirst();
+                    if (connectionView()->hasId(itemId)) {
+                        ModelNode parentItem = connectionView()->modelNodeForId(itemId);
+                        if (parentItem.isValid() && parentItem.hasMetaInfo()
+                            && parentItem.metaInfo().isValid()) {
+                            expression.removeFirst();
+                            stringList
+                                << getAliasMetaSignals(expression.join("."), parentItem.metaInfo());
                         }
                     }
                 }

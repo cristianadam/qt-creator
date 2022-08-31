@@ -95,12 +95,9 @@ BindingProperty BindingModel::bindingPropertyForRow(int rowNumber) const
     const int internalId = data(index(rowNumber, TargetModelNodeRow), Qt::UserRole + 1).toInt();
     const QString targetPropertyName = data(index(rowNumber, TargetModelNodeRow), Qt::UserRole + 2).toString();
 
-    ModelNode  modelNode = connectionView()->modelNodeForInternalId(internalId);
+    ModelNode modelNode = connectionView()->modelNodeForInternalId(internalId);
 
-    if (modelNode.isValid())
-        return modelNode.bindingProperty(targetPropertyName.toLatin1());
-
-    return BindingProperty();
+    return modelNode.bindingProperty(targetPropertyName.toUtf8());
 }
 
 QStringList BindingModel::possibleTargetProperties(const BindingProperty &bindingProperty) const
@@ -112,9 +109,7 @@ QStringList BindingModel::possibleTargetProperties(const BindingProperty &bindin
         return QStringList();
     }
 
-    NodeMetaInfo metaInfo = modelNode.metaInfo();
-
-    if (metaInfo.isValid()) {
+    if (NodeMetaInfo metaInfo = modelNode.metaInfo()) {
         const auto properties = metaInfo.properties();
         QStringList writableProperties;
         writableProperties.reserve(static_cast<int>(properties.size()));
@@ -220,8 +215,7 @@ static PropertyName unusedProperty(const ModelNode &modelNode)
 void BindingModel::addBindingForCurrentNode()
 {
     if (connectionView()->selectedModelNodes().count() == 1) {
-        const ModelNode modelNode = connectionView()->selectedModelNodes().constFirst();
-        if (modelNode.isValid()) {
+        if (const ModelNode modelNode = connectionView()->firstSelectedModelNode()) {
             try {
                 modelNode.bindingProperty(unusedProperty(modelNode)).setExpression(QLatin1String("none.none"));
             } catch (RewritingException &e) {

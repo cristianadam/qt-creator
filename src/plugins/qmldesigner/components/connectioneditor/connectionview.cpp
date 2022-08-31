@@ -175,7 +175,7 @@ void ConnectionView::auxiliaryDataChanged([[maybe_unused]] const ModelNode &node
                                                    ConnectionModel::UserRoles::InternalIdRole).toInt();
     ModelNode modelNode = modelNodeForInternalId(internalId);
 
-    if (modelNode.isValid() && ModelNode::isThisOrAncestorLocked(modelNode))
+    if (ModelNode::isThisOrAncestorLocked(modelNode))
         selectionModel->clearSelection();
 }
 
