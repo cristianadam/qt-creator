@@ -79,7 +79,7 @@ void TransitionEditorView::nodeRemoved(const ModelNode & removedNode,
         widget()->updateData(removedNode);
 
     const ModelNode parent = parentProperty.parentModelNode();
-    if (parent.isValid() && parent.metaInfo().isQtQuickTransition())
+    if (parent.metaInfo().isQtQuickTransition())
         asyncUpdate(parent);
 }
 
@@ -93,7 +93,7 @@ void TransitionEditorView::nodeReparented(const ModelNode &node,
 
     const ModelNode parent = newPropertyParent.parentModelNode();
 
-    if (parent.isValid() && parent.metaInfo().isValid() && parent.metaInfo().isQtQuickTransition()) {
+    if (parent.metaInfo().isQtQuickTransition()) {
         asyncUpdate(parent);
     }
 }
@@ -199,10 +199,10 @@ ModelNode TransitionEditorView::addNewTransition()
         for (const QmlPropertyChanges & change : state.propertyChanges()) {
             QStringList locList;
             const ModelNode target = change.target();
-            if (target.isValid() && target.hasMetaInfo()) {
+            if (auto targetMetaInfo = target.metaInfo()) {
                 const QString targetId = target.id();
                 for (const VariantProperty &property : change.modelNode().variantProperties()) {
-                    auto type = target.metaInfo().property(property.name()).propertyType();
+                    auto type = targetMetaInfo.property(property.name()).propertyType();
 
                     if (type.isInteger() || type.isColor() || type.isFloat())
                         locList.append(QString::fromUtf8(property.name()));
@@ -337,12 +337,7 @@ void TransitionEditorView::openSettingsDialog()
 
 QList<ModelNode> TransitionEditorView::allTransitions() const
 {
-    if (rootModelNode().isValid() && rootModelNode().hasProperty("transitions")) {
-        NodeAbstractProperty transitions = rootModelNode().nodeAbstractProperty("transitions");
-        if (transitions.isValid())
-            return transitions.directSubNodes();
-    }
-    return {};
+    return rootModelNode().nodeAbstractProperty("transitions").directSubNodes();
 }
 
 void TransitionEditorView::asyncUpdate(const ModelNode &transition)
