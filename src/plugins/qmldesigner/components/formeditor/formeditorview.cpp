@@ -313,8 +313,7 @@ void FormEditorView::propertiesAboutToBeRemoved(const QList<AbstractProperty>& p
 
 static inline bool hasNodeSourceOrNonItemParent(const ModelNode &node)
 {
-    if (node.hasParentProperty() && node.parentProperty().parentModelNode().isValid()) {
-        ModelNode parent = node.parentProperty().parentModelNode();
+    if (ModelNode parent = node.parentProperty().parentModelNode()) {
         if (parent.nodeSourceType() != ModelNode::NodeWithoutSource
                 || !QmlItemNode::isItemOrWindow(parent)) {
             return true;
@@ -429,7 +428,7 @@ void FormEditorView::bindingPropertiesChanged(
             }
         } else if (QmlFlowActionAreaNode::isValidQmlFlowActionAreaNode(property.parentModelNode())) {
             const QmlVisualNode target = property.resolveToModelNode();
-            if (target.modelNode().isValid() && target.isFlowTransition()) {
+            if (target.isFlowTransition()) {
                 FormEditorItem *item = m_scene->itemForQmlItemNode(target.toQmlItemNode());
                 if (item) {
                     const QmlItemNode itemNode = node.toQmlItemNode();
@@ -666,11 +665,11 @@ void FormEditorView::instancesCompleted(const QVector<ModelNode> &completedNodeL
         }
     }
 
-    const bool isFlow = rootModelNode().isValid() && QmlItemNode(rootModelNode()).isFlowView();
+    const bool isFlow = QmlItemNode(rootModelNode()).isFlowView();
     QList<FormEditorItem*> itemNodeList;
     for (const ModelNode &node : completedNodeList) {
-        const QmlItemNode qmlItemNode(node);
-        if (qmlItemNode.isValid()) {
+        ;
+        if (const QmlItemNode qmlItemNode = (node)) {
             if (FormEditorItem *item = scene()->itemForQmlItemNode(qmlItemNode)) {
                 scene()->synchronizeParent(qmlItemNode);
                 itemNodeList.append(item);
