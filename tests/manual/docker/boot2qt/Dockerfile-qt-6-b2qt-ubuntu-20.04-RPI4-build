@@ -1,0 +1,76 @@
+FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Etc/UTC
+
+RUN apt-get update && \
+    apt-get install -y \
+    gawk \
+    wget \
+    git \
+    diffstat \
+    unzip \
+    texinfo \
+    build-essential \
+    chrpath \
+    socat \
+    cpio \
+    locales \
+    python3 \
+    python3-pip \
+    python3-pexpect \
+    xz-utils \
+    debianutils \
+    python3-git \
+    python3-jinja2 \
+    pylint3 \
+    python3-subunit \
+    python \
+    git-lfs \
+    g++ \
+    gcc \
+    curl \
+    zstd \
+    liblz4-tool
+
+RUN locale-gen en_US.UTF-8
+ENV LC_ALL en_US.UTF-8
+
+RUN curl https://storage.googleapis.com/git-repo-downloads/repo > /usr/local/bin/repo && \
+    chmod a+x /usr/local/bin/repo
+
+ARG USER_ID
+RUN groupadd qt
+RUN useradd -r -u $USER_ID -g qt qt
+RUN mkdir /b2qt && mkdir /home/qt && chown qt:qt /b2qt /home/qt
+
+USER qt
+WORKDIR /b2qt
+
+# Fetch boot2qt
+RUN repo init -u git://code.qt.io/yocto/boot2qt-manifest -m v6.3.1.xml
+RUN repo sync
+
+
+ENV MACHINE=raspberrypi4-64
+
+# Pre-create the build environment once ...
+RUN /bin/bash -c "source ./setup-environment.sh"
+
+# Put helpful stuff into the history ...
+RUN echo "bitbake b2qt-embedded-qt6-image" >> ~/.bash_history
+RUN echo "bitbake meta-toolchain-b2qt-embedded-qt6-sdk" >> ~/.bash_history
+
+# Pre-create the deploy folder
+RUN mkdir -p build-${MACHINE}/tmp/deploy
+
+# Create a script that sets up the bitbake environment  ...
+RUN echo "source ./setup-environment.sh" > init.sh
+
+# Configure the download folder ...
+RUN echo "DL_DIR ?= \"/b2qt/state/downloads\"" >> /b2qt/build-${MACHINE}/conf/local.conf
+RUN echo "SSTATE_DIR ?= \"/b2qt/state/sstate-cache\"" >> /b2qt/build-${MACHINE}/conf/local.conf
+
+CMD /bin/bash --init-file init.sh
+
+
