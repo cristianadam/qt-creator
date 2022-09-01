@@ -285,3 +285,6 @@ tmp/
 # qbs builds
 /*-debug/
 /*-release/
+
+# Docker stuff
+/tests/manual/docker/boot2qt/deploy*
