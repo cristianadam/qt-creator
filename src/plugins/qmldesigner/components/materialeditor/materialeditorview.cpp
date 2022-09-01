@@ -430,7 +430,7 @@ void MaterialEditorView::handleToolBarAction(int action)
     }
 }
 
-void MaterialEditorView::handlePreviewEnvChanged(const QString &envAndValue)
+void MaterialEditorView::handlePreviewEnvChanged(const QString &)
 {
     //    if (envAndValue.isEmpty() || m_initializingPreviewData)
     //        return;
@@ -491,7 +491,7 @@ void MaterialEditorView::handlePreviewEnvChanged(const QString &envAndValue)
     //    renderPreviews(env, value);
 }
 
-void MaterialEditorView::handlePreviewModelChanged(const QString &modelStr)
+void MaterialEditorView::handlePreviewModelChanged(const QString &)
 {
     //    if (modelStr.isEmpty() || m_initializingPreviewData)
     //        return;
