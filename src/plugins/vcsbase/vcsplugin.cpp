@@ -51,10 +51,12 @@ VcsPlugin::VcsPlugin()
 
 VcsPlugin::~VcsPlugin()
 {
-    d->m_synchronizer.waitForFinished();
-    VcsOutputWindow::destroy();
-    m_instance = nullptr;
-    delete d;
+    if (d) {
+        d->m_synchronizer.waitForFinished();
+        VcsOutputWindow::destroy();
+        m_instance = nullptr;
+        delete d;
+    }
 }
 
 bool VcsPlugin::initialize(const QStringList &arguments, QString *errorMessage)

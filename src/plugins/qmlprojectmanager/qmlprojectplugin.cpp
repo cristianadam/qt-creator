@@ -100,13 +100,15 @@ public:
 
 QmlProjectPlugin::~QmlProjectPlugin()
 {
-    if (d->lastMessageBox)
-        d->lastMessageBox->deleteLater();
-    if (d->landingPage)
-        d->landingPage->deleteLater();
-    if (d->landingPageWidget)
-        d->landingPageWidget->deleteLater();
-    delete d;
+    if (d) {
+        if (d->lastMessageBox)
+            d->lastMessageBox->deleteLater();
+        if (d->landingPage)
+            d->landingPage->deleteLater();
+        if (d->landingPageWidget)
+            d->landingPageWidget->deleteLater();
+        delete d;
+    }
 }
 
 void QmlProjectPlugin::openQDS(const Utils::FilePath &fileName)

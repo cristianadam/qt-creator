@@ -788,20 +788,22 @@ ProjectExplorerPlugin::ProjectExplorerPlugin()
 
 ProjectExplorerPlugin::~ProjectExplorerPlugin()
 {
-    delete dd->m_proWindow; // Needs access to the kit manager.
-    JsonWizardFactory::destroyAllFactories();
+    if (dd) {
+        delete dd->m_proWindow; // Needs access to the kit manager.
+        JsonWizardFactory::destroyAllFactories();
 
-    // Force sequence of deletion:
-    KitManager::destroy(); // remove all the profile information
-    delete dd->m_toolChainManager;
-    ProjectPanelFactory::destroyFactories();
-    delete dd;
-    dd = nullptr;
-    m_instance = nullptr;
+        // Force sequence of deletion:
+        KitManager::destroy(); // remove all the profile information
+        delete dd->m_toolChainManager;
+        ProjectPanelFactory::destroyFactories();
+        delete dd;
+        dd = nullptr;
+        m_instance = nullptr;
 
-#ifdef WITH_TESTS
-    deleteTestToolchains();
-#endif
+    #ifdef WITH_TESTS
+        deleteTestToolchains();
+    #endif
+    }
 }
 
 ProjectExplorerPlugin *ProjectExplorerPlugin::instance()
