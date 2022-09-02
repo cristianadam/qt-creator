@@ -371,7 +371,7 @@ ClangdSettingsWidget::ClangdSettingsWidget(const ClangdSettings::Data &settingsD
             return;
         }
     };
-    connect(&d->clangdChooser, &Utils::PathChooser::filePathChanged, this, updateWarningLabel);
+    connect(&d->clangdChooser, &Utils::PathChooser::textChanged, this, updateWarningLabel);
     updateWarningLabel();
 
     connect(&d->useClangdCheckBox, &QCheckBox::toggled,
@@ -388,7 +388,7 @@ ClangdSettingsWidget::ClangdSettingsWidget(const ClangdSettings::Data &settingsD
             this, &ClangdSettingsWidget::settingsDataChanged);
     connect(&d->documentUpdateThreshold, &QSpinBox::valueChanged,
             this, &ClangdSettingsWidget::settingsDataChanged);
-    connect(&d->clangdChooser, &Utils::PathChooser::filePathChanged,
+    connect(&d->clangdChooser, &Utils::PathChooser::textChanged,
             this, &ClangdSettingsWidget::settingsDataChanged);
     connect(d->configSelectionWidget, &ClangDiagnosticConfigsSelectionWidget::changed,
             this, &ClangdSettingsWidget::settingsDataChanged);
