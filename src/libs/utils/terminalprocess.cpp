@@ -393,12 +393,21 @@ void TerminalImpl::start()
     d->m_process.setCommand({FilePath::fromString(terminal.command), allArgs});
     d->m_process.setProcessImpl(m_setup.m_processImpl);
     d->m_process.setReaperTimeout(m_setup.m_reaperTimeout);
+
+    if (d->m_process.commandLine().executable().exists()
+        && !d->m_process.commandLine().executable().isExecutableFile()) {
+        const QString msg = QtcProcess::tr(
+                                "Cannot start the terminal emulator \"%1\" as it is not executable")
+                                .arg(terminal.command);
+        cleanupAfterStartFailure(msg);
+        return;
+    }
+
     d->m_process.start();
     if (!d->m_process.waitForStarted()) {
-        const QString msg
-            = QtcProcess::tr("Cannot start the terminal emulator \"%1\", change the setting in the "
-                             "Environment options.")
-                  .arg(terminal.command);
+        const QString msg = QtcProcess::tr("Cannot start the terminal emulator \"%1\", change the "
+                                           "setting in the Environment options.")
+                                .arg(terminal.command);
         cleanupAfterStartFailure(msg);
         return;
     }
