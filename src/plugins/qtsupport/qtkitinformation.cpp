@@ -233,8 +233,8 @@ void QtKitAspect::fix(Kit *k)
         if (!bestTc) {
             bestTc = goodTcs.isEmpty() ? possibleTcs.first() : goodTcs.first();
         }
-        if (bestTc)
-            ToolChainKitAspect::setAllToolChainsToMatch(k, bestTc);
+//        if (bestTc)
+//            ToolChainKitAspect::setAllToolChainsToMatch(k, bestTc);
     }
 }
 
