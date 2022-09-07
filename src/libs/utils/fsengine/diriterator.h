@@ -38,8 +38,7 @@ public:
 
     QString currentFileName() const override
     {
-        const QString result = it->fileName();
-        return chopIfEndsWith(result, '/');
+        return it->toFSPathString();
     }
 
     QFileInfo currentFileInfo() const override

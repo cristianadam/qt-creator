@@ -191,8 +191,15 @@ QString FilePath::toString() const
 
 QString FilePath::toFSPathString() const
 {
+    if (m_scheme.isEmpty())
+        return m_path;
+
+    if (isRelativePath())
+        return specialPath(SpecialPathComponent::RootPath) + "/" + m_scheme + "/" + encodedHost() + "/./" + m_path;
+
     // TODO ...
-    return toString();
+    QStringList parts = {specialPath(SpecialPathComponent::RootPath), m_scheme, encodedHost(), m_path};
+    return QDir::cleanPath(parts.join('/'));
 }
 
 QUrl FilePath::toUrl() const
@@ -456,6 +463,9 @@ bool FilePath::isFile() const
 
 bool FilePath::isDir() const
 {
+    if (!m_scheme.isEmpty() && m_host.isEmpty())
+        return true;
+    
     if (needsDevice()) {
         QTC_ASSERT(s_deviceHooks.isDir, return false);
         return s_deviceHooks.isDir(*this);
@@ -478,12 +488,12 @@ FilePaths FilePath::dirEntries(const FileFilter &filter, QDir::SortFlags sort) c
 {
     FilePaths result;
 
-    if (needsDevice()) {
+    if (needsDevice() && !m_host.isEmpty()) {
         QTC_ASSERT(s_deviceHooks.iterateDirectory, return {});
         const auto callBack = [&result](const FilePath &path) { result.append(path); return true; };
         s_deviceHooks.iterateDirectory(*this, callBack, filter);
     } else {
-        QDirIterator dit(path(), filter.nameFilters, filter.fileFilters, filter.iteratorFlags);
+        QDirIterator dit(toFSPathString(), filter.nameFilters, filter.fileFilters, filter.iteratorFlags);
         while (dit.hasNext())
             result.append(FilePath::fromString(dit.next()));
     }

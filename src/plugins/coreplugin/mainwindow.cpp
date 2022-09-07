@@ -57,6 +57,7 @@
 #include <utils/mimeutils.h>
 #include <utils/proxyaction.h>
 #include <utils/qtcassert.h>
+#include <utils/fsengine/simplefiledialog.h>
 #include <utils/stringutils.h>
 #include <utils/stylehelper.h>
 #include <utils/theme/theme.h>
@@ -1076,7 +1077,13 @@ void MainWindow::openFileWith()
 
 void MainWindow::openFileFromDevice()
 {
-    QSettings *settings = PluginManager::settings();
+    Utils::SimpleFileDialog dialog; //this, tr("Open File from Device"));
+
+    if (dialog.exec() ) {
+        openFiles({dialog.selectedFilePath()}, ICore::SwitchMode);
+    }
+
+    /*QSettings *settings = PluginManager::settings();
     settings->beginGroup(QLatin1String(settingsGroup));
     QVariant dialogSettings = settings->value(QLatin1String(openFromDeviceDialogKey));
 
@@ -1107,6 +1114,7 @@ void MainWindow::openFileFromDevice()
 
     settings->setValue(QLatin1String(openFromDeviceDialogKey), dialog.saveState());
     settings->endGroup();
+    */
 }
 
 IContext *MainWindow::contextObject(QWidget *widget) const

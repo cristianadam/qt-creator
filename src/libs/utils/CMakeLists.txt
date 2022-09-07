@@ -264,6 +264,8 @@ extend_qtc_library(Utils
           fsengine/fixedlistfsengine.h
           fsengine/fsenginehandler.cpp
           fsengine/fsenginehandler.h
+          fsengine/simplefiledialog.cpp 
+          fsengine/simplefiledialog.h
 )
 
 if (WIN32)
