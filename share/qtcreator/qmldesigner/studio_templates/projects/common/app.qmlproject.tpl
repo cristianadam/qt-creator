@@ -64,6 +64,10 @@ Project {
         directory: "asset_imports"
     }
 
+    ImageFiles {
+        directory: "asset_imports"
+    }
+
     Environment {
        QT_QUICK_CONTROLS_CONF: "qtquickcontrols2.conf"
        QT_AUTO_SCREEN_SCALE_FACTOR: "1"
