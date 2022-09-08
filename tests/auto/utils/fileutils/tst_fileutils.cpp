@@ -342,24 +342,40 @@ void tst_fileutils::fromString_data()
     QTest::newRow("qrc-win") << ":/test.txt" << "" << "" << ":/test.txt" << ":/" << OsType::OsTypeWindows;
     QTest::newRow("qrc-no-slash-linux") << ":test.txt" << "" << "" << ":test.txt" << ":" << OsType::OsTypeLinux;
     QTest::newRow("qrc-no-slash-win") << ":test.txt" << "" << "" << ":test.txt" << ":" << OsType::OsTypeWindows;
-    QTest::newRow("unc-incomplete") << "//" << "" << "" << "" << "" << OsType::OsTypeWindows;
-    QTest::newRow("unc-incomplete-only-server") << "//server" << "" << "" << "//server/" << "//server/" << OsType::OsTypeWindows;
-    QTest::newRow("unc-incomplete-only-server-2") << "//server/" << "" << "" << "//server/" << "//server/" << OsType::OsTypeWindows;
-    QTest::newRow("unc-server-and-share") << "//server/share" << "" << "" << "//server/share" << "//server/" << OsType::OsTypeWindows;
-    QTest::newRow("unc-server-and-share-2") << "//server/share/" << "" << "" << "//server/share/" << "//server/" << OsType::OsTypeWindows;
-    QTest::newRow("unc-full") << "//server/share/test.txt" << "" << "" << "//server/share/test.txt" << "//server/" << OsType::OsTypeWindows;
 
-    QTest::newRow("unix-root") << "/" << "" << "" << "/"  << "/" << OsType::OsTypeLinux;
-    QTest::newRow("unix-folder") << "/tmp" << "" << "" << "/tmp" << "/" << OsType::OsTypeLinux;
-    QTest::newRow("unix-folder-with-trailing-slash") << "/tmp/" << "" << "" << "/tmp/" << "/" << OsType::OsTypeLinux;
+    QTest::newRow("unc-incomplete-linux") << "//" << "" << "" << "" << "" << OsType::OsTypeLinux;
+    QTest::newRow("unc-incomplete-win") << "//" << "" << "" << "" << "" << OsType::OsTypeWindows;
+    QTest::newRow("unc-incomplete-only-server-linux") << "//server" << "" << "" << "//server/" << "//server/" << OsType::OsTypeLinux;
+    QTest::newRow("unc-incomplete-only-server-win") << "//server" << "" << "" << "//server/" << "//server/" << OsType::OsTypeWindows;
+    QTest::newRow("unc-incomplete-only-server-2-linux") << "//server/" << "" << "" << "//server/" << "//server/" << OsType::OsTypeLinux;
+    QTest::newRow("unc-incomplete-only-server-2-win") << "//server/" << "" << "" << "//server/" << "//server/" << OsType::OsTypeWindows;
+    QTest::newRow("unc-server-and-share-linux") << "//server/share" << "" << "" << "//server/share" << "//server/" << OsType::OsTypeLinux;
+    QTest::newRow("unc-server-and-share-win") << "//server/share" << "" << "" << "//server/share" << "//server/" << OsType::OsTypeWindows;
+    QTest::newRow("unc-server-and-share-2-linux") << "//server/share/" << "" << "" << "//server/share/" << "//server/" << OsType::OsTypeLinux;
+    QTest::newRow("unc-server-and-share-2-win") << "//server/share/" << "" << "" << "//server/share/" << "//server/" << OsType::OsTypeWindows;
+    QTest::newRow("unc-full-linux") << "//server/share/test.txt" << "" << "" << "//server/share/test.txt" << "//server/" << OsType::OsTypeLinux;
+    QTest::newRow("unc-full-win") << "//server/share/test.txt" << "" << "" << "//server/share/test.txt" << "//server/" << OsType::OsTypeWindows;
 
-    QTest::newRow("windows-root") << "c:" << "" << "" << "c:/" << "c:/" << OsType::OsTypeWindows;
-    QTest::newRow("windows-folder") << "c:\\Windows" << "" << "" << "c:/Windows" << "c:/" << OsType::OsTypeWindows;
-    QTest::newRow("windows-folder-with-trailing-slash") << "c:\\Windows\\" << "" << "" << "c:/Windows\\" << "c:/" << OsType::OsTypeWindows;
-    QTest::newRow("windows-folder-slash") << "C:/Windows" << "" << "" << "C:/Windows" << "C:/" << OsType::OsTypeWindows;
+    QTest::newRow("unix-root-linux") << "/" << "" << "" << "/"  << "/" << OsType::OsTypeLinux;
+    QTest::newRow("unix-root-win") << "/" << "" << "" << "/"  << "/" << OsType::OsTypeWindows;
+    QTest::newRow("unix-folder-linux") << "/tmp" << "" << "" << "/tmp" << "/" << OsType::OsTypeLinux;
+    QTest::newRow("unix-folder-win") << "/tmp" << "" << "" << "/tmp" << "/" << OsType::OsTypeWindows;
+    QTest::newRow("unix-folder-with-trailing-slash-linux") << "/tmp/" << "" << "" << "/tmp/" << "/" << OsType::OsTypeLinux;
+    QTest::newRow("unix-folder-with-trailing-slash-win") << "/tmp/" << "" << "" << "/tmp/" << "/" << OsType::OsTypeWindows;
 
-    QTest::newRow("docker-root-url") << "docker://1234/" << "docker" << "1234" << "/" << "/" << OsType::OsTypeLinux;
-    QTest::newRow("docker-root-url-special") << QDir::rootPath() + "__qtc_devices__/docker/1234/" << "docker" << "1234" << "/" << "/" << OsType::OsTypeLinux;
+    QTest::newRow("windows-root-linux") << "c:" << "" << "" << "c:/" << "c:/" << OsType::OsTypeLinux;
+    QTest::newRow("windows-root-win") << "c:" << "" << "" << "c:/" << "c:/" << OsType::OsTypeWindows;
+    QTest::newRow("windows-folder-linux") << "c:\\Windows" << "" << "" << "c:/Windows" << "c:/" << OsType::OsTypeLinux;
+    QTest::newRow("windows-folder-win") << "c:\\Windows" << "" << "" << "c:/Windows" << "c:/" << OsType::OsTypeWindows;
+    QTest::newRow("windows-folder-with-trailing-slash-linux") << "c:\\Windows\\" << "" << "" << "c:/Windows\\" << "c:/" << OsType::OsTypeLinux;
+    QTest::newRow("windows-folder-with-trailing-slash-win") << "c:\\Windows\\" << "" << "" << "c:/Windows\\" << "c:/" << OsType::OsTypeWindows;
+    QTest::newRow("windows-folder-slash-linux") << "C:/Windows" << "" << "" << "C:/Windows" << "C:/" << OsType::OsTypeLinux;
+    QTest::newRow("windows-folder-slash-win") << "C:/Windows" << "" << "" << "C:/Windows" << "C:/" << OsType::OsTypeWindows;
+
+    QTest::newRow("docker-root-url-linux") << "docker://1234/" << "docker" << "1234" << "/" << "/" << OsType::OsTypeLinux;
+    QTest::newRow("docker-root-url-win") << "docker://1234/" << "docker" << "1234" << "/" << "/" << OsType::OsTypeWindows;
+    QTest::newRow("docker-root-url-special-linux") << QDir::rootPath() + "__qtc_devices__/docker/1234/" << "docker" << "1234" << "/" << "/" << OsType::OsTypeLinux;
+    QTest::newRow("docker-root-url-special-win") << QDir::rootPath() + "__qtc_devices__/docker/1234/" << "docker" << "1234" << "/" << "/" << OsType::OsTypeWindows;
 
     QTest::newRow("qtc-dev-linux") << QDir::rootPath() + "__qtc_devices__" << "" << "" << QDir::rootPath() + "__qtc_devices__" << "/" << OsType::OsTypeLinux;
     QTest::newRow("qtc-dev-win") << QDir::rootPath() + "__qtc_devices__" << "" << "" << QDir::rootPath() + "__qtc_devices__" << "/" << OsType::OsTypeWindows;
@@ -367,12 +383,17 @@ void tst_fileutils::fromString_data()
     QTest::newRow("qtc-dev-type-win") << QDir::rootPath() + "__qtc_devices__/docker" << "" << "" << QDir::rootPath() + "__qtc_devices__/docker" << "" << OsType::OsTypeWindows;
     QTest::newRow("qtc-dev-type-dev") << QDir::rootPath() + "__qtc_devices__/docker/1234" << "docker" << "1234" << "/" << "/" << OsType::OsTypeLinux;
 
-    QTest::newRow("cross-os") << QDir::rootPath() + "__qtc_devices__/docker/1234/c:/test.txt" << "docker" << "1234" << "c:/test.txt" << "c:/" << OsType::OsTypeWindows;
-    QTest::newRow("cross-os-unclean") << QDir::rootPath() + "__qtc_devices__/docker/1234/c:\\test.txt" << "docker" << "1234" << "c:/test.txt" << "c:/" << OsType::OsTypeWindows;
-    QTest::newRow("unc-full-in-docker") << QDir::rootPath() + "__qtc_devices__/docker/1234//server/share/test.txt" << "docker" << "1234" << "//server/share/test.txt" << "//server/" << OsType::OsTypeWindows;
+    QTest::newRow("cross-os-linux") << QDir::rootPath() + "__qtc_devices__/docker/1234/c:/test.txt" << "docker" << "1234" << "c:/test.txt" << "c:/" << OsType::OsTypeLinux;
+    QTest::newRow("cross-os-win") << QDir::rootPath() + "__qtc_devices__/docker/1234/c:/test.txt" << "docker" << "1234" << "c:/test.txt" << "c:/" << OsType::OsTypeWindows;
+    QTest::newRow("cross-os-unclean-linux") << QDir::rootPath() + "__qtc_devices__/docker/1234/c:\\test.txt" << "docker" << "1234" << "c:/test.txt" << "c:/" << OsType::OsTypeLinux;
+    QTest::newRow("cross-os-unclean-win") << QDir::rootPath() + "__qtc_devices__/docker/1234/c:\\test.txt" << "docker" << "1234" << "c:/test.txt" << "c:/" << OsType::OsTypeWindows;
+    QTest::newRow("unc-full-in-docker-linux") << QDir::rootPath() + "__qtc_devices__/docker/1234//server/share/test.txt" << "docker" << "1234" << "//server/share/test.txt" << "//server/" << OsType::OsTypeLinux;
+    QTest::newRow("unc-full-in-docker-win") << QDir::rootPath() + "__qtc_devices__/docker/1234//server/share/test.txt" << "docker" << "1234" << "//server/share/test.txt" << "//server/" << OsType::OsTypeWindows;
 
-    QTest::newRow("unc-dos-1") << "//?/c:" << "" << "" << "//?/c:" << "//?/" << OsType::OsTypeWindows;
-    QTest::newRow("unc-dos-com") << "//./com1" << "" << "" << "//./com1" << "//./" << OsType::OsTypeWindows;
+    QTest::newRow("unc-dos-1-linux") << "//?/c:" << "" << "" << "//?/c:" << "//?/" << OsType::OsTypeLinux;
+    QTest::newRow("unc-dos-1-win") << "//?/c:" << "" << "" << "//?/c:" << "//?/" << OsType::OsTypeWindows;
+    QTest::newRow("unc-dos-com-linux") << "//./com1" << "" << "" << "//./com1" << "//./" << OsType::OsTypeLinux;
+    QTest::newRow("unc-dos-com-win") << "//./com1" << "" << "" << "//./com1" << "//./" << OsType::OsTypeWindows;
 }
 
 void tst_fileutils::fromString()
