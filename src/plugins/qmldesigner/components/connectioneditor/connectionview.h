@@ -64,7 +64,7 @@ public:
     void nodeIdChanged(const ModelNode& node, const QString& newId, const QString& oldId) override;
     void propertiesRemoved(const QList<AbstractProperty> &propertyList) override;
     void propertiesAboutToBeRemoved(const QList<AbstractProperty>& propertyList) override;
-    void variantPropertiesChanged(const QList<VariantProperty>& propertyList, PropertyChangeFlags propertyChange) override;
+    void variantPropertiesChanged(const QList<VariantProperty>& propertyList, PropertyChangeFlags propertyChange) override;    
     void bindingPropertiesChanged(const QList<BindingProperty>& propertyList, PropertyChangeFlags propertyChange) override;
     void signalHandlerPropertiesChanged(const QVector<SignalHandlerProperty>& propertyList, PropertyChangeFlags propertyChange) override;
 
@@ -73,6 +73,8 @@ public:
     void auxiliaryDataChanged(const ModelNode &node, const PropertyName &name, const QVariant &data) override;
 
     void importsChanged(const QList<Import> &addedImports, const QList<Import> &removedImports) override;
+
+    void currentStateChanged(const ModelNode &node) override;
 
     WidgetInfo widgetInfo() override;
     bool hasWidget() const override;
