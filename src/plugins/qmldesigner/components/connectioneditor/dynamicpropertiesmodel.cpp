@@ -138,6 +138,44 @@ bool DynamicPropertiesModel::isValueType(const TypeName &type)
     return valueTypes.contains(type);
 }
 
+QVariant DynamicPropertiesModel::defaultValueForType(const TypeName &type)
+{
+    QVariant value;
+    if (type == "int")
+        value = 0;
+    else if (type == "real")
+        value = 0.0;
+    else if (type == "color")
+        value = QColor(255, 255, 255);
+    else if (type == "string")
+        value = "";
+    else if (type == "bool")
+        value = false;
+    else if (type == "url")
+        value = "";
+    else if (type == "variant")
+        value = "";
+
+    return value;
+}
+
+QString DynamicPropertiesModel::defaultExpressionForType(const TypeName &type)
+{
+    QString expression;
+    if (type == "alias")
+        expression = "null";
+    else if (type == "TextureInput")
+        expression = "null";
+    else if (type == "vector2d")
+        expression = "Qt.vector2d(0, 0)";
+    else if (type == "vector3d")
+        expression = "Qt.vector3d(0, 0, 0)";
+    else if (type == "vector4d")
+        expression = "Qt.vector4d(0, 0, 0 ,0)";
+
+    return expression;
+}
+
 DynamicPropertiesModel::DynamicPropertiesModel(bool explicitSelection, AbstractView *parent)
     : QStandardItemModel(parent)
     , m_view(parent)
@@ -333,12 +371,13 @@ void DynamicPropertiesModel::setSelectedNode(const ModelNode &node)
 AbstractProperty DynamicPropertiesModel::abstractPropertyForRow(int rowNumber) const
 {
     const int internalId = data(index(rowNumber, TargetModelNodeRow), Qt::UserRole + 1).toInt();
-    const QString targetPropertyName = data(index(rowNumber, TargetModelNodeRow), Qt::UserRole + 2).toString();
+    const QString targetPropertyName = data(index(rowNumber, TargetModelNodeRow), Qt::UserRole + 2)
+                                           .toString();
 
     if (!m_view->isAttached())
         return AbstractProperty();
 
-    ModelNode  modelNode = m_view->modelNodeForInternalId(internalId);
+    ModelNode modelNode = m_view->modelNodeForInternalId(internalId);
 
     if (modelNode.isValid())
         return modelNode.property(targetPropertyName.toUtf8());

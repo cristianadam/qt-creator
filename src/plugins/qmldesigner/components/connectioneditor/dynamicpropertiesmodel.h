@@ -76,6 +76,8 @@ public:
     QmlDesigner::PropertyName unusedProperty(const QmlDesigner::ModelNode &modelNode);
 
     static bool isValueType(const TypeName &type);
+    static QVariant defaultValueForType(const TypeName &type);
+    static QString defaultExpressionForType(const TypeName &type);
 
 protected:
     void addProperty(const QVariant &propertyValue,
