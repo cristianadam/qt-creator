@@ -181,6 +181,13 @@ void AbstractProcessStep::doRun()
         }
     }
 
+    if (!d->m_param.effectiveCommand().ensureReachable(wd)) {
+        emit addOutput(tr("Command \"%1\" cannot reach Working directory \"%2\"").arg(wd.toUserOutput()).arg(d->m_param.effectiveCommand().toUserOutput()),
+                        BuildStep::OutputFormat::ErrorMessage);
+        finish(false);
+        return;
+    }
+
     const CommandLine effectiveCommand(d->m_param.effectiveCommand(),
                                        d->m_param.effectiveArguments(),
                                        CommandLine::Raw);

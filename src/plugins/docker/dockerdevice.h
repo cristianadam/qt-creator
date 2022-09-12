@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "dockerdevicedata.h"
 #include "dockersettings.h"
 
 #include <projectexplorer/devicesupport/idevice.h>
@@ -12,22 +13,9 @@
 #include <utils/aspects.h>
 
 #include <QMutex>
+#include <QThread>
 
 namespace Docker::Internal {
-
-class DockerDeviceData
-{
-public:
-    // Used for "docker run"
-    QString repoAndTag() const;
-
-    QString imageId;
-    QString repo;
-    QString tag;
-    QString size;
-    bool useLocalUidGid = true;
-    QStringList mounts = { Core::DocumentManager::projectsDirectory().toString() };
-};
 
 class DockerDevice : public ProjectExplorer::IDevice
 {
@@ -87,10 +75,12 @@ public:
     QFileDevice::Permissions permissions(const Utils::FilePath &filePath) const override;
     bool setPermissions(const Utils::FilePath &filePath, QFileDevice::Permissions permissions) const override;
 
+    bool ensureReachable(const Utils::FilePath &other) const override;
+
     Utils::Environment systemEnvironment() const override;
 
-    const DockerDeviceData &data() const;
-    DockerDeviceData &data();
+    const DockerDeviceData data() const;
+    DockerDeviceData data();
 
     void updateContainerAccess() const;
     void setMounts(const QStringList &mounts) const;
@@ -109,21 +99,12 @@ private:
     void aboutToBeRemoved() const final;
 
     class DockerDevicePrivate *d = nullptr;
+    QThread m_privateThread;
+
     friend class DockerDeviceSetupWizard;
     friend class DockerDeviceWidget;
 };
 
-class DockerDeviceFactory final : public ProjectExplorer::IDeviceFactory
-{
-public:
-    DockerDeviceFactory(DockerSettings *settings);
-
-    void shutdownExistingDevices();
-
-private:
-    QMutex m_deviceListMutex;
-    std::vector<QWeakPointer<DockerDevice> > m_existingDevices;
-};
 
 } // Docker::Internal
 

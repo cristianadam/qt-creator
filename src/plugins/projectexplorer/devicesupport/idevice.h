@@ -260,6 +260,8 @@ public:
                                         const Utils::FilePath &filePath,
                                         const QByteArray &data) const;
 
+    virtual bool ensureReachable(const Utils::FilePath &other) const;
+
 protected:
     IDevice();
 

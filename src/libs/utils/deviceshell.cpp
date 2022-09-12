@@ -248,6 +248,9 @@ DeviceShell::RunResult DeviceShell::run(const CommandLine &cmd, const QByteArray
 
     waiter.wait(&m_commandMutex);
 
+    if (!m_shellProcess || !m_shellProcess->isRunning())
+        return errorResult;
+
     const RunResult result = *it;
     m_commandOutput.erase(it);
 
@@ -308,7 +311,7 @@ bool DeviceShell::start()
     connect(m_shellProcess, &QtcProcess::done, m_shellProcess,
             [this] { emit done(m_shellProcess->resultData()); });
     connect(m_shellProcess, &QObject::destroyed, this, [this] { m_shellProcess = nullptr; });
-    connect(&m_thread, &QThread::finished, m_shellProcess, [this] { closeShellProcess(); });
+    connect(&m_thread, &QThread::finished, m_shellProcess, [this] { closeShellProcess(); }, Qt::DirectConnection);
 
     setupShellProcess(m_shellProcess);
 
@@ -427,6 +430,13 @@ void DeviceShell::closeShellProcess()
             m_shellProcess->write("exit\nexit\n");
             if (!m_shellProcess->waitForFinished(2000))
                 m_shellProcess->terminate();
+
+            m_shellProcess = nullptr;
+
+            QMutexLocker lk(&m_commandMutex);
+
+            for (const auto &command : m_commandOutput)
+                command.waiter->wakeAll();
         }
     }
 }

@@ -813,6 +813,11 @@ QString IDevice::defaultPublicKeyFilePath()
     return defaultPrivateKeyFilePath() + QLatin1String(".pub");
 }
 
+bool IDevice::ensureReachable(const FilePath &other) const
+{
+    return false;
+}
+
 void DeviceProcessSignalOperation::setDebuggerCommand(const FilePath &cmd)
 {
     m_debuggerCommand = cmd;

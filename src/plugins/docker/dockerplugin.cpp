@@ -6,6 +6,7 @@
 #include "dockerapi.h"
 #include "dockerconstants.h"
 #include "dockerdevice.h"
+#include "dockerdevicefactory.h"
 #include "dockersettings.h"
 
 #include <projectexplorer/projectexplorerconstants.h>

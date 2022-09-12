@@ -31,7 +31,7 @@ DockerDeviceWidget::DockerDeviceWidget(const IDevice::Ptr &device)
     auto dockerDevice = device.dynamicCast<DockerDevice>();
     QTC_ASSERT(dockerDevice, return);
 
-    DockerDeviceData &data = dockerDevice->data();
+    DockerDeviceData data = dockerDevice->data();
 
     auto repoLabel = new QLabel(Tr::tr("Repository:"));
     m_repoLineEdit = new QLineEdit;
