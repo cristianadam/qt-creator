@@ -6,8 +6,10 @@
 #include "dockerconstants.h"
 #include "dockertr.h"
 
+#include <coreplugin/icore.h>
 #include <coreplugin/messagemanager.h>
 
+#include <utils/algorithm.h>
 #include <utils/commandline.h>
 #include <utils/environment.h>
 #include <utils/filepath.h>
@@ -78,12 +80,17 @@ private:
     void stopCurrentContainer();
     void fetchSystemEnviroment();
 
-    void addTemporaryMount(const Utils::FilePath &path);
+    bool addTemporaryMount(const Utils::FilePath &path, const Utils::FilePath &containerPath);
 
     DockerSettings *m_settings;
     DockerDeviceData m_data;
 
-    QStringList m_temporaryMounts;
+    struct TemporaryMountInfo {
+        Utils::FilePath path;
+        Utils::FilePath containerPath;
+    };
+
+    QList<TemporaryMountInfo> m_temporaryMounts;
 
     std::unique_ptr<ContainerShell> m_shell;
     QString m_container;
@@ -93,13 +100,17 @@ private:
     bool m_isShutdown = false;
 };
 
-void DockerDevicePrivate::addTemporaryMount(const Utils::FilePath &path)
+bool DockerDevicePrivate::addTemporaryMount(const Utils::FilePath &path, const Utils::FilePath &containerPath)
 {
-    if (!m_temporaryMounts.contains(path.toString())) {
+    if (!Utils::anyOf(m_temporaryMounts, [path, containerPath](const TemporaryMountInfo &info) {
+            return info.containerPath == containerPath;
+        })) {
         qCDebug(dockerDeviceLog) << "Adding temporary mount:" << path;
-        m_temporaryMounts.append(path.toString());
+        m_temporaryMounts.append({path, containerPath});
         stopCurrentContainer(); // Force re-start with new mounts.
+        return true;
     }
+    return false;
 }
 
 Utils::Environment DockerDevicePrivate::environment()
@@ -174,16 +185,15 @@ bool DockerDevicePrivate::createContainer()
         dockerCreate.addArgs({"-v", mount + ':' + mount});
     }
 
-    for (QString tempMount : qAsConst(m_temporaryMounts)) {
-        if (tempMount.isEmpty())
-            continue;
-        tempMount = q->mapToDevicePath(Utils::FilePath::fromUserInput(tempMount));
-        dockerCreate.addArgs({"-v", tempMount + ':' + tempMount});
-    }
-
     Utils::FilePath dumperPath = Utils::FilePath::fromString("/tmp/qtcreator/debugger");
-    dockerCreate.addArgs({"-v", q->debugDumperPath().toUserOutput() + ':' + dumperPath.path()});
+    addTemporaryMount(Core::ICore::resourcePath("debugger/"), dumperPath);
     q->setDebugDumperPath(dumperPath);
+
+    for (const auto &[path, containerPath] : qAsConst(m_temporaryMounts)) {
+        if (path.isEmpty())
+            continue;
+        dockerCreate.addArgs({"-v", path.toString() + ':' + containerPath.toString()});
+    }
 
     dockerCreate.addArgs({m_data.repoAndTag()});
 
@@ -309,13 +319,15 @@ bool DockerDevicePrivate::ensureReachable(const Utils::FilePath &other)
             return true;
     }
 
-    for (const auto &tempMount : m_temporaryMounts) {
-        const Utils::FilePath fMount = Utils::FilePath::fromString(tempMount);
-        if (other.isChildOf(fMount))
+    for (const auto &[path, containerPath] : m_temporaryMounts) {
+        if (path.path() != containerPath.path())
+            continue;
+
+        if (other.isChildOf(path))
             return true;
     }
 
-    addTemporaryMount(other);
+    addTemporaryMount(other, other);
     return true;
 }
 
