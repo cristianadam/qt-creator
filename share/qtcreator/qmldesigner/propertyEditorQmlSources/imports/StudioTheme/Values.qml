@@ -216,6 +216,10 @@ QtObject {
     property real colorEditorPopupCmoboBoxWidth: 110
     property real colorEditorPopupSpinBoxWidth: 54
 
+    // Toolbar
+    property real toolbarHeight: 35
+    property real toolbarSpacing: 16
+
     // Theme Colors
 
     property bool isLightTheme: themeControlBackground.hsvValue > themeTextColor.hsvValue
@@ -308,9 +312,14 @@ QtObject {
     property string themeTabInactiveBackground: Theme.color(Theme.DStabInactiveBackground)
     property string themeTabInactiveText: Theme.color(Theme.DStabInactiveText)
 
+    // State Editor
     property string themeStateSeparator: Theme.color(Theme.DSstateSeparatorColor)
     property string themeStateBackground: Theme.color(Theme.DSstateBackgroundColor)
     property string themeStatePreviewOutline: Theme.color(Theme.DSstatePreviewOutline)
+
+    // State Editor *new*
+    property color themeStatePanelBackground: Theme.color(Theme.DSstatePanelBackground)
+    property color themeStateHighlight: Theme.color(Theme.DSstateHighlight)
 
     property string themeUnimportedModuleColor: Theme.color(Theme.DSUnimportedModuleColor)
 
@@ -334,9 +343,13 @@ QtObject {
     property string themeListItemTextHover: Theme.color(Theme.DSnavigatorTextHover)
     property string themeListItemTextPress: Theme.color(Theme.DSnavigatorTextSelected)
 
-    //Welcome Page
+    // Welcome Page
     property string welcomeScreenBackground: Theme.color(Theme.DSwelcomeScreenBackground)
     property string themeSubPanelBackground: Theme.color(Theme.DSsubPanelBackground)
     property string themeThumbnailBackground: Theme.color(Theme.DSthumbnailBackground)
     property string themeThumbnailLabelBackground: Theme.color(Theme.DSthumbnailLabelBackground)
+
+    // Dialog
+    property color themeDialogBackground: values.themeThumbnailBackground
+    property color themeDialogOutline: values.themeInteraction
 }

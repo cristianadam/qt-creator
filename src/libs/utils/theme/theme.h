@@ -357,6 +357,8 @@ public:
         DSstateSeparatorColor,
         DSstateBackgroundColor,
         DSstatePreviewOutline,
+        DSstatePanelBackground,
+        DSstateHighlight,
         DSchangedStateText,
         DS3DAxisXColor,
         DS3DAxisYColor,
