@@ -18,7 +18,7 @@ namespace QmlDesigner {
 
 Edit3DActionTemplate::Edit3DActionTemplate(const QString &description,
                                            SelectionContextOperation action,
-                                           View3DActionCommand::Type type)
+                                           View3DActionType type)
     : DefaultAction(description),
       m_action(action),
       m_type(type)
@@ -26,18 +26,17 @@ Edit3DActionTemplate::Edit3DActionTemplate(const QString &description,
 
 void Edit3DActionTemplate::actionTriggered(bool b)
 {
-    if (m_type != View3DActionCommand::Empty && m_type != View3DActionCommand::SelectBackgroundColor
-        && m_type != View3DActionCommand::SelectGridColor) {
+    if (m_type != View3DActionType::Empty && m_type != View3DActionType::SelectBackgroundColor
+        && m_type != View3DActionType::SelectGridColor) {
         auto view = QmlDesignerPlugin::instance()->viewManager().nodeInstanceView();
-        View3DActionCommand cmd(m_type, b);
-        view->view3DAction(cmd);
+        view->emitView3DAction(m_type, b);
     }
 
     if (m_action)
         m_action(m_selectionContext);
 }
 
-Edit3DAction::Edit3DAction(const QByteArray &menuId, View3DActionCommand::Type type,
+Edit3DAction::Edit3DAction(const QByteArray &menuId, View3DActionType type,
                            const QString &description, const QKeySequence &key, bool checkable,
                            bool checked, const QIcon &iconOff, const QIcon &iconOn,
                            SelectionContextOperation selectionAction, const QString &toolTip)
@@ -81,7 +80,7 @@ bool Edit3DAction::isEnabled(const SelectionContext &selectionContext) const
     return isVisible(selectionContext);
 }
 
-Edit3DCameraAction::Edit3DCameraAction(const QByteArray &menuId, View3DActionCommand::Type type,
+Edit3DCameraAction::Edit3DCameraAction(const QByteArray &menuId, View3DActionType type,
                                        const QString &description, const QKeySequence &key,
                                        bool checkable, bool checked, const QIcon &iconOff,
                                        const QIcon &iconOn,
