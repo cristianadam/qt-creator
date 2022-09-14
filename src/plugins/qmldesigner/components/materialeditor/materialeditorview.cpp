@@ -1043,7 +1043,7 @@ void MaterialEditorView::customNotification(const AbstractView *view, const QStr
     Q_UNUSED(view)
 
     if (identifier == "selected_material_changed") {
-        if (!m_hasMaterialRoot) {
+        if (!m_hasMaterialRoot && !nodeList.isEmpty()) {
             m_selectedMaterial = nodeList.first();
             m_dynamicPropertiesModel->setSelectedNode(m_selectedMaterial);
             QTimer::singleShot(0, this, &MaterialEditorView::resetView);
