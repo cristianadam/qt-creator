@@ -259,6 +259,11 @@ bool QmlDesignerPlugin::initialize(const QStringList & /*arguments*/, QString *e
     designerActionManager().addDesignerAction(shutDownNanotraceAction);
 #endif
 
+    Exception::setWarnAboutException(!QmlDesignerPlugin::instance()
+                                          ->settings()
+                                          .value(DesignerSettingsKey::ENABLE_MODEL_EXCEPTION_OUTPUT)
+                                          .toBool());
+
     return true;
 }
 
