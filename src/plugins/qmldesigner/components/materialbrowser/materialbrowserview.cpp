@@ -20,9 +20,7 @@
 
 namespace QmlDesigner {
 
-MaterialBrowserView::MaterialBrowserView(QObject *parent)
-    : AbstractView(parent)
-{}
+MaterialBrowserView::MaterialBrowserView() {}
 
 MaterialBrowserView::~MaterialBrowserView()
 {}
