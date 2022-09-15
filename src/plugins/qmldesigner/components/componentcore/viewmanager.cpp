@@ -3,8 +3,6 @@
 
 #include "viewmanager.h"
 
-#ifndef QMLDESIGNER_TEST
-
 #include <abstractview.h>
 #include <capturingconnectionmanager.h>
 #include <componentaction.h>
@@ -429,5 +427,3 @@ void ViewManager::addView(std::unique_ptr<AbstractView> &&view)
 }
 
 } // namespace QmlDesigner
-
-#endif //QMLDESIGNER_TEST
