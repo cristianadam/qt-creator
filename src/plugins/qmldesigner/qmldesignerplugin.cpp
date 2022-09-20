@@ -753,18 +753,29 @@ const DesignerActionManager &QmlDesignerPlugin::designerActionManager() const
     return d->viewManager.designerActionManager();
 }
 
-DesignerSettings QmlDesignerPlugin::settings()
+void QmlDesignerPlugin::setSettingsValue(const QByteArray &key, const QVariant &value)
 {
-    d->settings.fromSettings(Core::ICore::settings());
-    return d->settings;
+    instance()->d->settings.insert(key, value);
+    instance()->d->settings.toSettings(Core::ICore::settings());
 }
 
-void QmlDesignerPlugin::setSettings(const DesignerSettings &s)
+QVariant QmlDesignerPlugin::settingsValue(const QByteArray &key)
 {
-    if (s != d->settings) {
-        d->settings = s;
-        d->settings.toSettings(Core::ICore::settings());
-    }
+    return instance()->d->settings.value(key);
+}
+
+DesignerSettings& QmlDesignerPlugin::settings()
+{
+    return instance()->d->settings;
+}
+
+void QmlDesignerPlugin::setSettings(const QHash<QByteArray, QVariant> &settingsHash)
+{
+    auto i = settingsHash.constBegin();
+    while (i != settingsHash.constEnd())
+        instance()->d->settings.insert(i.key(), i.value());
+
+    instance()->d->settings.toSettings(Core::ICore::settings());
 }
 
 } // namespace QmlDesigner

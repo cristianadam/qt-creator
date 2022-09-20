@@ -30,6 +30,7 @@
 #include <QHash>
 #include <QVariant>
 #include <QByteArray>
+#include <QMutex>
 
 QT_BEGIN_NAMESPACE
 class QSettings;
@@ -77,10 +78,13 @@ const char SMOOTH_RENDERING[] = "SmoothRendering";
 const char OLD_STATES_EDITOR[] = "OldStatesEditor";
 }
 
-class QMLDESIGNERCORE_EXPORT DesignerSettings : public QHash<QByteArray, QVariant>
+class QMLDESIGNERCORE_EXPORT DesignerSettings
 {
 public:
     DesignerSettings();
+
+    void insert(const QByteArray &key, const QVariant &value);
+    QVariant value(const QByteArray &key, const QVariant &defaultValue = {}) const;
 
     void fromSettings(QSettings *);
     void toSettings(QSettings *) const;
@@ -90,6 +94,9 @@ private:
     void restoreValue(QSettings *settings, const QByteArray &key,
         const QVariant &defaultValue = QVariant());
     void storeValue(QSettings *settings, const QByteArray &key, const QVariant &value) const;
+
+    QHash<QByteArray, QVariant> m_hash;
+    QMutex m_mutex;
 };
 
 } // namespace QmlDesigner

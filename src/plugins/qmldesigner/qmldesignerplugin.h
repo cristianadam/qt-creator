@@ -75,8 +75,10 @@ public:
     DesignerActionManager &designerActionManager();
     const DesignerActionManager &designerActionManager() const;
 
-    DesignerSettings settings();
-    void setSettings(const DesignerSettings &s);
+    static void setSettingsValue(const QByteArray &key, const QVariant &value);
+    static QVariant settingsValue(const QByteArray &key);
+    static DesignerSettings& settings();
+    static void setSettings(const QHash<QByteArray, QVariant> &settingsHash);
 
     DesignDocument *currentDesignDocument() const;
     Internal::DesignModeWidget *mainWidget() const;
