@@ -656,7 +656,12 @@ Item {
                         return
 
                     whenCondition.previousCondition = whenCondition.text
-                    root.whenConditionFinished()
+
+                    if (whenCondition.text !== "")
+                        root.whenConditionFinished()
+                    else
+                        statesEditorModel.resetWhenCondition(root.internalNodeId)
+
                 }
 
                 Component.onCompleted: whenCondition.previousCondition = whenCondition.text
@@ -696,6 +701,7 @@ Item {
         onExtend: root.extend()
         onRemove: root.remove()
         onToggle: root.propertyChangesVisible = !root.propertyChangesVisible
+        onResetWhenCondition: statesEditorModel.resetWhenCondition(root.internalNodeId)
         onEditAnnotation: {
             statesEditorModel.setAnnotation(root.internalNodeId)
             stateMenu.hasAnnotation = root.checkAnnotation()
