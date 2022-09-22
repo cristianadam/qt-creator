@@ -44,11 +44,8 @@
         \li Animate your design in \l {Transitions} or \l Timeline
             and \l {Curves}.
         \li Create interactions in \l States and \l {Connections}.
-        \li \l{Validating with Target Hardware}{Preview} your design in
-            real time, on the desktop or on a mobile or an embedded device.
-        \li Optionally, export your components back into the metadata format
-            that you can import back into the design tool by using \QB. You
-            can continue to iterate your design this way until it is ready.
+
+
     \endlist
 
     For more information, watch a video that shows how to perform the tasks
