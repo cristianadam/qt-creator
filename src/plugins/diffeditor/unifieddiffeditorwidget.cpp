@@ -372,7 +372,7 @@ QString UnifiedDiffData::setChunk(const DiffEditorInput &input, const ChunkData 
                     if (!line.isEmpty()) {
                         setLineNumber(LeftSide,
                                       *blockNumber + blockCount + 1,
-                                      chunkData.leftStartingLineNumber + leftLineCount + 1,
+                                      chunkData.startingLineNumber[LeftSide] + leftLineCount + 1,
                                       leftRowsBuffer.at(j));
                         blockCount += blockDelta;
                         ++leftLineCount;
@@ -414,7 +414,7 @@ QString UnifiedDiffData::setChunk(const DiffEditorInput &input, const ChunkData 
                     if (!line.isEmpty()) {
                         setLineNumber(RightSide,
                                       *blockNumber + blockCount + 1,
-                                      chunkData.rightStartingLineNumber + rightLineCount + 1,
+                                      chunkData.startingLineNumber[RightSide] + rightLineCount + 1,
                                       rightRowsBuffer.at(j));
                         blockCount += blockDelta;
                         ++rightLineCount;
@@ -435,9 +435,9 @@ QString UnifiedDiffData::setChunk(const DiffEditorInput &input, const ChunkData 
 
                 if (!line.isEmpty()) {
                     setLineNumber(LeftSide, *blockNumber + blockCount + 1,
-                                  chunkData.leftStartingLineNumber + leftLineCount + 1, i);
+                                  chunkData.startingLineNumber[LeftSide] + leftLineCount + 1, i);
                     setLineNumber(RightSide, *blockNumber + blockCount + 1,
-                                  chunkData.rightStartingLineNumber + rightLineCount + 1, i);
+                                  chunkData.startingLineNumber[RightSide] + rightLineCount + 1, i);
                     blockCount += line.count('\n');
                     ++leftLineCount;
                     ++rightLineCount;
@@ -460,11 +460,11 @@ QString UnifiedDiffData::setChunk(const DiffEditorInput &input, const ChunkData 
     }
 
     const QString chunkLine = "@@ -"
-            + QString::number(chunkData.leftStartingLineNumber + 1)
+            + QString::number(chunkData.startingLineNumber[LeftSide] + 1)
             + ','
             + QString::number(leftLineCount)
             + " +"
-            + QString::number(chunkData.rightStartingLineNumber+ 1)
+            + QString::number(chunkData.startingLineNumber[RightSide]+ 1)
             + ','
             + QString::number(rightLineCount)
             + " @@"
@@ -698,8 +698,8 @@ void UnifiedDiffEditorWidget::jumpToOriginalFile(const QTextCursor &cursor)
         if (leftFileName == rightFileName) {
             for (const ChunkData &chunkData : fileData.chunks) {
 
-                int newLeftLineNumber = chunkData.leftStartingLineNumber;
-                int newRightLineNumber = chunkData.rightStartingLineNumber;
+                int newLeftLineNumber = chunkData.startingLineNumber[LeftSide];
+                int newRightLineNumber = chunkData.startingLineNumber[RightSide];
 
                 for (const RowData &rowData : chunkData.rows) {
                     if (rowData.leftLine.textLineType == TextLineData::TextLine)
