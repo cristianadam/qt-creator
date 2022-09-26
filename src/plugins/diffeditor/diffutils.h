@@ -76,8 +76,7 @@ class DIFFEDITOR_EXPORT ChunkData {
 public:
     QList<RowData> rows;
     QString contextInfo;
-    int leftStartingLineNumber = 0;
-    int rightStartingLineNumber = 0;
+    std::array<int, SideCount> startingLineNumber = {0, 0};
     bool contextChunk = false;
 };
 
