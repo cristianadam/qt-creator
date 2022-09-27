@@ -9,7 +9,6 @@
 #include "qtcassert.h"
 #include "qtcprocess.h"
 #include "terminalcommand.h"
-#include "winutils.h"
 
 #include <QCoreApplication>
 #include <QLocalServer>
@@ -18,9 +17,12 @@
 #include <QTemporaryFile>
 #include <QTextCodec>
 #include <QTimer>
-#include <QWinEventNotifier>
 
 #ifdef Q_OS_WIN
+
+#include "winutils.h"
+
+#include <QWinEventNotifier>
 
 #  include <windows.h>
 #  include <stdlib.h>
