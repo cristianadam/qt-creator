@@ -71,7 +71,7 @@ const char DEFAULT_VALUES[] = "defaultValues";
 static QList<JsonWizardPageFactory *> s_pageFactories;
 static QList<JsonWizardGeneratorFactory *> s_generatorFactories;
 
-int JsonWizardFactory::m_verbose = 0;
+static int s_verbose = 0;
 
 
 // Return locale language attribute "de_UTF8" -> "de", empty string for "C"
@@ -373,13 +373,20 @@ JsonWizardFactory::Page JsonWizardFactory::parsePage(const QVariant &value, QStr
     return p;
 }
 
+static void logError(const QString &error)
+{
+    if (s_verbose) { // Print to output pane for Windows.
+        qWarning("%s", qPrintable(error));
+        Core::MessageManager::writeDisrupting(error);
+    }
+}
+
 //FIXME: loadDefaultValues() has an almost identical loop. Make the loop return the results instead of
 //internal processing and create a separate function for it. Then process the results in
 //loadDefaultValues() and loadDefaultValues()
 void JsonWizardFactory::createWizardFactories()
 {
     QString errorMessage;
-    QString verboseLog;
     const QString wizardFileName = QLatin1String("wizard.json");
 
     const FilePaths paths = searchPaths();
@@ -388,68 +395,65 @@ void JsonWizardFactory::createWizardFactories()
             continue;
 
         if (!path.exists()) {
-            if (verbose())
-                verboseLog.append(tr("Path \"%1\" does not exist when checking Json wizard search paths.\n")
-                                  .arg(path.toUserOutput()));
+            logError(tr("Path \"%1\" does not exist when checking Json wizard search paths.\n")
+                        .arg(path.toUserOutput()));
             continue;
         }
 
         const FileFilter filter {
             {wizardFileName}, QDir::Files|QDir::Readable|QDir::NoDotAndDotDot, QDirIterator::Subdirectories
         };
-        const QDir::SortFlags sortflags = QDir::Name|QDir::IgnoreCase;
-        const FilePaths wizardFiles = path.dirEntries(filter, sortflags);
+        const FilePaths wizardFiles = path.dirEntries(filter, QDir::Name|QDir::IgnoreCase);
 
         for (const FilePath &currentFile : wizardFiles) {
-            QJsonParseError error;
-            const QByteArray fileData = currentFile.fileContents().value_or(QByteArray());
-            const QJsonDocument json = QJsonDocument::fromJson(fileData, &error);
+            IWizardFactory::registerFactoryCreator([currentFile]() -> IWizardFactory * {
+                QJsonParseError error;
+                const QByteArray fileData = currentFile.fileContents().value_or(QByteArray());
+                const QJsonDocument json = QJsonDocument::fromJson(fileData, &error);
 
-            if (error.error != QJsonParseError::NoError) {
-                int line = 1;
-                int column = 1;
-                for (int i = 0; i < error.offset; ++i) {
-                    if (fileData.at(i) == '\n') {
-                        ++line;
-                        column = 1;
-                    } else {
-                        ++column;
+                if (error.error != QJsonParseError::NoError) {
+                    int line = 1;
+                    int column = 1;
+                    for (int i = 0; i < error.offset; ++i) {
+                        if (fileData.at(i) == '\n') {
+                            ++line;
+                            column = 1;
+                        } else {
+                            ++column;
+                        }
                     }
+                    logError(tr("* Failed to parse \"%1\":%2:%3: %4\n")
+                                      .arg(currentFile.fileName())
+                                      .arg(line).arg(column)
+                                      .arg(error.errorString()));
+                    return nullptr;
                 }
-                verboseLog.append(tr("* Failed to parse \"%1\":%2:%3: %4\n")
-                                  .arg(currentFile.fileName())
-                                  .arg(line).arg(column)
-                                  .arg(error.errorString()));
-                continue;
-            }
 
-            if (!json.isObject()) {
-                verboseLog.append(tr("* Did not find a JSON object in \"%1\".\n")
-                                  .arg(currentFile.fileName()));
-                continue;
-            }
+                if (!json.isObject()) {
+                    logError(tr("* Did not find a JSON object in \"%1\".\n")
+                                      .arg(currentFile.fileName()));
+                    return nullptr;
+                }
 
-            if (verbose())
-                verboseLog.append(tr("* Configuration found and parsed.\n"));
+                if (verbose())
+                    logError(tr("* Configuration found and parsed.\n"));
 
-            QVariantMap data = json.object().toVariantMap();
+                QVariantMap data = json.object().toVariantMap();
 
-            int version = data.value(QLatin1String(VERSION_KEY), 0).toInt();
-            if (version < 1 || version > 1) {
-                verboseLog.append(tr("* Version %1 not supported.\n").arg(version));
-                continue;
-            }
+                int version = data.value(QLatin1String(VERSION_KEY), 0).toInt();
+                if (version < 1 || version > 1) {
+                    logError(tr("* Version %1 not supported.\n").arg(version));
+                    return nullptr;
+                }
 
-            IWizardFactory::registerFactoryCreator([data, currentFile] {
                 QString errorMessage;
-                return createWizardFactory(data, currentFile.parentDir(), &errorMessage);
+                IWizardFactory *wizard = createWizardFactory(data, currentFile.parentDir(), &errorMessage);
+                if (!errorMessage.isEmpty())
+                    logError(errorMessage);
+
+                return wizard;
             });
         }
-    }
-
-    if (verbose()) { // Print to output pane for Windows.
-        qWarning("%s", qPrintable(verboseLog));
-        Core::MessageManager::writeDisrupting(verboseLog);
     }
 }
 
@@ -506,12 +510,12 @@ void JsonWizardFactory::clearWizardPaths()
 
 void JsonWizardFactory::setVerbose(int level)
 {
-    m_verbose = level;
+    s_verbose = level;
 }
 
 int JsonWizardFactory::verbose()
 {
-    return m_verbose;
+    return s_verbose;
 }
 
 void JsonWizardFactory::registerPageFactory(JsonWizardPageFactory *factory)

@@ -96,8 +96,6 @@ private:
 
     QSet<Utils::Id> m_preferredFeatures;
 
-    static int m_verbose;
-
     friend class ProjectExplorerPlugin;
     friend class ProjectExplorerPluginPrivate;
 };
