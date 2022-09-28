@@ -29,6 +29,7 @@
     \nextpage qtbridge-figma-using.html
 
     \title Setting Up \QBF
+    \note This feature is only a part of \QDS enterprise version.
 
     \QBF is delivered with \QDS as a developer plugin that you can install to
     the Desktop version of Figma. To install the plugin, open the Plugin Manager
