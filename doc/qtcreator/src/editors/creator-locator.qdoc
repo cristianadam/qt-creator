@@ -8,7 +8,9 @@
 
     \title Searching with the Locator
 
-    You can find the locator in the bottom left of the \QC window.
+    By default, you can find the locator in the bottom left of the \QC window.
+    To open it as a centered popup, click \inlineimage icons/magnifier.png
+    (\uicontrol Options) in it and select \uicontrol {Open as Centered Popup}.
 
     \image qtcreator-locator.png "List of locator filters"
 
@@ -125,7 +127,7 @@
             (\c {git}). For more information, see \l{Using Git}.
             \endif
 
-        \li Triggering menu items from the main menu (\c {t})
+        \li Triggering actions using fuzzy matching (\c {t})
 
         \li Searching for issues from the \l{https://bugreports.qt.io/}
             {Qt Project Bug Tracker} (\c bug).
