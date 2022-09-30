@@ -484,9 +484,9 @@ FilePath FileUtils::getOpenFilePath(QWidget *parent,
                                     bool fromDeviceIfShiftIsPressed)
 {
 #ifdef QT_GUI_LIB
-    if (fromDeviceIfShiftIsPressed && qApp->queryKeyboardModifiers() & Qt::ShiftModifier) {
+//    if (fromDeviceIfShiftIsPressed && qApp->queryKeyboardModifiers() & Qt::ShiftModifier) {
         return getOpenFilePathFromDevice(parent, caption, dir, filter, selectedFilter, options);
-    }
+//    }
 #endif
 
     const QString result = QFileDialog::getOpenFileName(dialogParent(parent),
@@ -533,6 +533,11 @@ FilePaths FileUtils::getOpenFilePaths(QWidget *parent,
                                       QString *selectedFilter,
                                       QFileDialog::Options options)
 {
+#ifdef QT_GUI_LIB
+//    if (fromDeviceIfShiftIsPressed && qApp->queryKeyboardModifiers() & Qt::ShiftModifier) {
+        return getOpenFilePathsFromDevice(parent, caption, dir, filter, selectedFilter, options);
+//    }
+#endif
     const QStringList result = QFileDialog::getOpenFileNames(dialogParent(parent),
                                                              caption,
                                                              dir.toString(),
@@ -578,6 +583,47 @@ FilePath FileUtils::getOpenFilePathFromDevice(QWidget *parent,
         }
 
         return filePaths.first();
+    }
+
+    return {};
+}
+
+FilePaths FileUtils::getOpenFilePathsFromDevice(QWidget *parent,
+                                                const QString &caption,
+                                                const FilePath &dir,
+                                                const QString &filter,
+                                                QString *selectedFilter,
+                                                QFileDialog::Options options)
+{
+    QFileDialog dialog(parent);
+    dialog.setOptions(options | QFileDialog::DontUseNativeDialog);
+    dialog.setWindowTitle(caption);
+    dialog.setDirectory(dir.toString());
+    dialog.setNameFilter(filter);
+
+    QList<QUrl> sideBarUrls = Utils::transform(Utils::filtered(FSEngine::registeredDeviceRoots(),
+                                                               [](const auto &filePath) {
+                                                                   return filePath.exists();
+                                                               }),
+                                               [](const auto &filePath) {
+                                                   return QUrl::fromLocalFile(
+                                                       filePath.toFSPathString());
+                                               });
+    dialog.setSidebarUrls(sideBarUrls);
+    dialog.setFileMode(QFileDialog::AnyFile);
+
+    dialog.setIconProvider(Utils::FileIconProvider::iconProvider());
+
+    if (dialog.exec()) {
+        FilePaths filePaths = Utils::transform(dialog.selectedFiles(), [](const auto &path) {
+            return FilePath::fromString(path);
+        });
+
+        if (selectedFilter) {
+            *selectedFilter = dialog.selectedNameFilter();
+        }
+
+        return filePaths;
     }
 
     return {};

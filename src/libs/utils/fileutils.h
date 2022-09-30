@@ -120,6 +120,14 @@ public:
                                               const QString &filter = {},
                                               QString *selectedFilter = nullptr,
                                               QFileDialog::Options options = {});
+
+    static FilePaths getOpenFilePathsFromDevice(QWidget *parent,
+                                                const QString &caption,
+                                                const FilePath &dir = {},
+                                                const QString &filter = {},
+                                                QString *selectedFilter = nullptr,
+                                                QFileDialog::Options options = {});
+
 #endif
 
 };
