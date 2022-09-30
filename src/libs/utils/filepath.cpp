@@ -207,7 +207,13 @@ QUrl FilePath::toUrl() const
 {
     QUrl url;
     url.setScheme(m_scheme);
-    url.setHost(m_host);
+    const int atPos = m_host.indexOf('@');
+    if (atPos == -1) {
+        url.setHost(m_host);
+    } else {
+        url.setUserName(m_host.left(atPos));
+        url.setHost(m_host.mid(atPos + 1));
+    }
     url.setPath(m_path);
     return url;
 }
