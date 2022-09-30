@@ -635,7 +635,7 @@ void FileUtils::iterateLsOutput(const FilePath &base,
                                 const FileFilter &filter,
                                 const std::function<bool (const FilePath &)> &callBack)
 {
-    QTC_CHECK(filter.iteratorFlags != QDirIterator::NoIteratorFlags); // FIXME: Not supported yet below.
+    QTC_CHECK(filter.iteratorFlags == QDirIterator::NoIteratorFlags); // FIXME: Not supported yet below.
 
     const QList<QRegularExpression> nameRegexps =
             transform(filter.nameFilters, [](const QString &filter) {
