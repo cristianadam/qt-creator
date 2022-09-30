@@ -1034,6 +1034,11 @@ DeviceEnvironmentFetcher::Ptr LinuxDevice::environmentFetcher() const
     return DeviceEnvironmentFetcher::Ptr(new LinuxDeviceEnvironmentFetcher(sharedFromThis()));
 }
 
+bool LinuxDevice::usableAsBuildDevice() const
+{
+    return true;
+}
+
 QString LinuxDevice::userAtHost() const
 {
     return sshParameters().userAtHost();
