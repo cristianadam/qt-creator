@@ -1346,6 +1346,7 @@ void TextToModelMerger::syncNode(ModelNode &modelNode,
                 }
 
                 syncSignalDeclarationProperty(modelProperty, signature, differenceHandler);
+                modelPropertyNames.remove(astName.toUtf8());
                 continue; // Done
             }
 
