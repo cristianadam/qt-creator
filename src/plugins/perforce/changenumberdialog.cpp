@@ -3,20 +3,43 @@
 
 #include "changenumberdialog.h"
 
-#include <QIntValidator>
+#include <utils/layoutbuilder.h>
 
-using namespace Perforce::Internal;
+#include <QDialogButtonBox>
+#include <QIntValidator>
+#include <QLineEdit>
+
+using namespace Utils;
+
+namespace Perforce::Internal {
 
 ChangeNumberDialog::ChangeNumberDialog(QWidget *parent) : QDialog(parent)
 {
-    m_ui.setupUi(this);
-    m_ui.numberLineEdit->setValidator(new QIntValidator(0, 1000000, this));
+    resize(319, 76);
+    setWindowTitle(tr("Change Number"));
+
+    m_numberLineEdit = new QLineEdit(this);
+    m_numberLineEdit->setValidator(new QIntValidator(0, 1000000, this));
+
+    auto buttonBox = new QDialogButtonBox(QDialogButtonBox::Cancel|QDialogButtonBox::NoButton|QDialogButtonBox::Ok);
+
+    using namespace Layouting;
+
+    Column {
+        Row { tr("Change Number:"), m_numberLineEdit },
+        buttonBox
+    }.attachTo(this);
+
+    connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
 }
 
 int ChangeNumberDialog::number() const
 {
-    if (m_ui.numberLineEdit->text().isEmpty())
+    if (m_numberLineEdit->text().isEmpty())
         return -1;
     bool ok;
-    return m_ui.numberLineEdit->text().toInt(&ok);
+    return m_numberLineEdit->text().toInt(&ok);
 }
+
+} // Perforce::Internal
