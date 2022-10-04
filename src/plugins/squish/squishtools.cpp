@@ -214,7 +214,7 @@ struct SquishToolsSettings
 // make sure to execute setup() to populate with current settings before using it
 static SquishToolsSettings toolsSettings;
 
-void SquishTools::runTestCases(const QString &suitePath,
+void SquishTools::runTestCases(const FilePath &suitePath,
                                const QStringList &testCases)
 {
     if (m_shutdownInitiated)
@@ -236,7 +236,7 @@ void SquishTools::runTestCases(const QString &suitePath,
     }
 
     m_suitePath = suitePath;
-    m_suiteConf = SuiteConf::readSuiteConf(Utils::FilePath::fromString(suitePath).pathAppended("suite.conf"));
+    m_suiteConf = SuiteConf::readSuiteConf(suitePath.pathAppended("suite.conf"));
     m_testCases = testCases;
     m_reportFiles.clear();
 
@@ -276,7 +276,7 @@ void SquishTools::queryServerSettings()
     startSquishServer(RunnerQueryRequested);
 }
 
-void SquishTools::recordTestCase(const QString &suitePath, const QString &testCaseName,
+void SquishTools::recordTestCase(const FilePath &suitePath, const QString &testCaseName,
                                  const SuiteConf &suiteConf)
 {
     if (m_shutdownInitiated)
@@ -396,7 +396,7 @@ void SquishTools::setState(SquishTools::State state)
             QString error;
             SquishXmlOutputHandler::mergeResultFiles(m_reportFiles,
                                                      m_currentResultsDirectory,
-                                                     QDir(m_suitePath).dirName(),
+                                                     m_suitePath.fileName(),
                                                      &error);
             if (!error.isEmpty())
                 QMessageBox::critical(Core::ICore::dialogParent(), Tr::tr("Error"), error);
@@ -506,7 +506,7 @@ void SquishTools::setIdle()
 {
     QTC_ASSERT(m_state == Idle, return);
     m_request = None;
-    m_suitePath = QString();
+    m_suitePath = {};
     m_testCases.clear();
     m_currentTestCasePath.clear();
     m_reportFiles.clear();
@@ -622,7 +622,7 @@ void SquishTools::setupAndStartRecorder()
     args << "--port" << QString::number(m_serverPort);
     args << "--debugLog" << "alpw"; // TODO make this configurable?
     args << "--record";
-    args << "--suitedir" << m_suitePath;
+    args << "--suitedir" << m_suitePath.toUserOutput();
 
     Utils::TemporaryFile tmp("squishsnippetfile-XXXXXX"); // quick and dirty
     tmp.open();
@@ -1292,7 +1292,7 @@ QStringList SquishTools::runnerArgumentsFromSettings()
     arguments << "--debugLog" << "alpw"; // TODO make this configurable?
 
     QTC_ASSERT(!m_testCases.isEmpty(), m_testCases.append(""));
-    m_currentTestCasePath = FilePath::fromString(m_suitePath) / m_testCases.takeFirst();
+    m_currentTestCasePath = m_suitePath / m_testCases.takeFirst();
 
     if (m_request == RecordTestRequested) {
         arguments << "--startapp"; // --record is triggered separately
@@ -1303,7 +1303,7 @@ QStringList SquishTools::runnerArgumentsFromSettings()
         QTC_ASSERT(false, qDebug("Request %d", m_request));
     }
 
-    arguments << "--suitedir" << m_suitePath;
+    arguments << "--suitedir" << m_suitePath.toUserOutput();
 
     arguments << m_additionalRunnerArguments;
 
@@ -1317,7 +1317,7 @@ QStringList SquishTools::runnerArgumentsFromSettings()
         const QString caseReportFilePath
                 = QFileInfo(QString::fromLatin1("%1/%2/%3/results.xml")
                             .arg(m_currentResultsDirectory,
-                                 QDir(m_suitePath).dirName(),
+                                 m_suitePath.fileName(),
                                  m_currentTestCasePath.baseName())).absoluteFilePath();
         m_reportFiles.append(caseReportFilePath);
         arguments << "--reportgen"
@@ -1396,7 +1396,7 @@ void SquishTools::setupAndStartSquishRunnerProcess(const QStringList &args)
         // on 2nd run this directory exists and won't emit changes, so use the current subdirectory
         if (QDir(m_currentResultsDirectory).exists())
             m_resultsFileWatcher->addPath(m_currentResultsDirectory + QDir::separator()
-                                          + QDir(m_suitePath).dirName());
+                                          + m_suitePath.fileName());
         else
             m_resultsFileWatcher->addPath(QFileInfo(m_currentResultsDirectory).absolutePath());
 

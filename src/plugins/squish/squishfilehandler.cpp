@@ -341,7 +341,7 @@ void SquishFileHandler::runTestCase(const QString &suiteName, const QString &tes
         return;
     }
 
-    SquishTools::instance()->runTestCases(suitePath.toString(), QStringList(testCaseName));
+    SquishTools::instance()->runTestCases(suitePath, QStringList(testCaseName));
 }
 
 void SquishFileHandler::runTestSuite(const QString &suiteName)
@@ -370,7 +370,7 @@ void SquishFileHandler::runTestSuite(const QString &suiteName)
                                  .arg(suiteName));
         return;
     }
-    SquishTools::instance()->runTestCases(suitePath.toString(), testCases);
+    SquishTools::instance()->runTestCases(suitePath, testCases);
 }
 
 void SquishFileHandler::recordTestCase(const QString &suiteName, const QString &testCaseName)
@@ -402,7 +402,7 @@ void SquishFileHandler::recordTestCase(const QString &suiteName, const QString &
         conf.setArguments(dialog.arguments.value());
     }
 
-    SquishTools::instance()->recordTestCase(suitePath.toString(), testCaseName, conf);
+    SquishTools::instance()->recordTestCase(suitePath, testCaseName, conf);
 }
 
 void addAllEntriesRecursively(SquishTestTreeItem *item)
