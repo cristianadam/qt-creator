@@ -522,9 +522,7 @@
 
     \image loginui1-ready.jpg "The finished UI in the 2D view"
 
-    \subtitle Learn More
-
-    \section1 Projects and Files
+    \section1 Learn More - Projects and Files
 
         \QDS creates a set of files and folders that you need to create
         a UI. The files are listed in the \l{File System} view.
@@ -571,7 +569,7 @@
         Next, you will edit the values of the properties of the component instances
         to create the main page of the UI.
 
-    \section1 Components
+    \section1 Learn More - Components
 
         \QDS provides preset \l{glossary-component}{components} for creating
         UIs, including components for creating and animating visual components,
@@ -638,7 +636,7 @@
         component, also available in \uicontrol Components >
         \uicontrol {Default Components} > \uicontrol Basic.
 
-    \section1 UI Controls
+    \section1 Learn More - UI Controls
 
         The \e {Custom Button} wizard template creates a button component
         based on the \l {Button} control in the \l {Qt Quick Controls} module. It
@@ -657,7 +655,7 @@
         Next, you will change the appearance of the EntryField component by
         modifying its properties.
 
-    \section1 Component IDs
+    \section1 Learn More - Component IDs
 
     Each component and each instance of a component has an \e ID that uniquely
     identifies it and enables other components' properties to be bound to it.
