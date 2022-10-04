@@ -5,10 +5,11 @@
 
 #include <QDialog>
 
-#include "ui_pendingchangesdialog.h"
+QT_BEGIN_NAMESPACE
+class QListWidget;
+QT_END_NAMESPACE
 
-namespace Perforce {
-namespace Internal {
+namespace Perforce::Internal {
 
 class PendingChangesDialog : public QDialog
 {
@@ -19,8 +20,7 @@ public:
     int changeNumber() const;
 
 private:
-    Ui::PendingChangesDialog m_ui;
+    QListWidget *m_listWidget;
 };
 
-} // namespace Perforce
-} // namespace Internal
+} // Perforce::Internal

@@ -3,41 +3,64 @@
 
 #include "pendingchangesdialog.h"
 
+#include <utils/layoutbuilder.h>
+
+#include <QListWidget>
+#include <QPushButton>
 #include <QRegularExpression>
 
+using namespace Utils;
 
-using namespace Perforce::Internal;
+namespace Perforce::Internal {
 
 PendingChangesDialog::PendingChangesDialog(const QString &data, QWidget *parent) : QDialog(parent)
 {
-    m_ui.setupUi(this);
+    setWindowTitle(tr("P4 Pending Changes"));
+
+    m_listWidget = new QListWidget(this);
+
+    auto submitButton = new QPushButton(tr("Submit"));
+    auto cancelButton = new QPushButton(tr("Cancel"));
+
+    using namespace Layouting;
+
+    Column {
+        m_listWidget,
+        Row { st, submitButton, cancelButton } // FIXME: Use QDialogButtonBox ?
+    }.attachTo(this);
+
     if (!data.isEmpty()) {
-        const QRegularExpression r(QLatin1String("Change\\s(\\d+?).*?\\s\\*?pending\\*?\\s(.+?)\n"));
+        static const QRegularExpression r(QLatin1String("Change\\s(\\d+?).*?\\s\\*?pending\\*?\\s(.+?)\n"));
         QListWidgetItem *item;
         QRegularExpressionMatchIterator it = r.globalMatch(data);
         while (it.hasNext()) {
             const QRegularExpressionMatch match = it.next();
             item = new QListWidgetItem(tr("Change %1: %2").arg(match.captured(1),
                                                                match.captured(2).trimmed()),
-                                       m_ui.listWidget);
+                                       m_listWidget);
             item->setData(234, match.captured(1).trimmed());
         }
     }
-    m_ui.listWidget->setSelectionMode(QListWidget::SingleSelection);
-    if (m_ui.listWidget->count()) {
-        m_ui.listWidget->setCurrentRow(0);
-        m_ui.submitButton->setEnabled(true);
+    m_listWidget->setSelectionMode(QListWidget::SingleSelection);
+    if (m_listWidget->count()) {
+        m_listWidget->setCurrentRow(0);
+        submitButton->setEnabled(true);
     } else {
-        m_ui.submitButton->setEnabled(false);
+        submitButton->setEnabled(false);
     }
+
+    connect(submitButton, &QPushButton::clicked, this, &QDialog::accept);
+    connect(cancelButton, &QPushButton::clicked, this, &QDialog::reject);
 }
 
 int PendingChangesDialog::changeNumber() const
 {
-    QListWidgetItem *item = m_ui.listWidget->item(m_ui.listWidget->currentRow());
+    QListWidgetItem *item = m_listWidget->item(m_listWidget->currentRow());
     if (!item)
         return -1;
     bool ok = true;
     int i = item->data(234).toInt(&ok);
     return ok ? i : -1;
 }
+
+} // Perforce::Internal

@@ -39,6 +39,7 @@
 #include <vcsbase/vcsoutputwindow.h>
 
 #include <QAction>
+#include <QApplication>
 #include <QDebug>
 #include <QDir>
 #include <QFileDialog>
