@@ -5,23 +5,23 @@
 
 #include <QDialog>
 
-#include "ui_changenumberdialog.h"
+QT_BEGIN_NAMESPACE
+class QLineEdit;
+QT_END_NAMESPACE
 
-namespace Perforce {
-namespace Internal {
+namespace Perforce::Internal {
 
 // Input a change number for pending changes.
 class ChangeNumberDialog : public QDialog
 {
     Q_OBJECT
+
 public:
     ChangeNumberDialog(QWidget *parent = nullptr);
     int number() const;
 
 private:
-    Ui::ChangeNumberDialog m_ui;
-
+    QLineEdit *m_numberLineEdit;
 };
 
-} // namespace Perforce
-} // namespace Internal
+} // Perforce::Internal
