@@ -5,11 +5,11 @@
 
 #include "squishtesttreemodel.h"
 
+#include <utils/filepath.h>
+
 #include <QMap>
 #include <QObject>
 #include <QString>
-
-namespace Utils { class FilePath; }
 
 namespace Squish {
 namespace Internal {
@@ -22,7 +22,7 @@ public:
     ~SquishFileHandler() override = default;
     static SquishFileHandler *instance();
     void openTestSuites();
-    void openTestSuite(const Utils::FilePath &suitePath, bool isReopen = false);
+    void openTestSuite(const Utils::FilePath &suiteConfPath, bool isReopen = false);
     void closeTestSuite(const QString &suiteName);
     void closeAllTestSuites();
     void runTestCase(const QString &suiteName, const QString &testCaseName);
@@ -35,20 +35,21 @@ public:
 
 signals:
     void testTreeItemCreated(SquishTestTreeItem *item);
-    void suiteTreeItemRemoved(const QString &filePath);
+    void suiteTreeItemRemoved(const QString &suiteName);
     void suiteTreeItemModified(SquishTestTreeItem *item, const QString &displayName);
     void suitesOpened();
 
 private:
     void closeAllInternal();
     void onSessionLoaded();
-
-    QMap<QString, QString> m_suites;
-    QStringList m_sharedFolders;
+    QStringList suitePathsAsStringList() const;
 
     void modifySuiteItem(const QString &suiteName,
-                         const QString &filePath,
+                         const Utils::FilePath &suiteConf,
                          const QStringList &cases);
+
+    QMap<QString, Utils::FilePath> m_suites;
+    QStringList m_sharedFolders;
 };
 
 } // namespace Internal
