@@ -832,7 +832,8 @@ QbsBuildStep *QbsBuildStepConfigWidget::qbsStep() const
 bool QbsBuildStepConfigWidget::validateProperties(Utils::FancyLineEdit *edit, QString *errorMessage)
 {
     ProcessArgs::SplitError err;
-    const QStringList argList = ProcessArgs::splitArgs(edit->text(), HostOsInfo::hostOs(), false, &err);
+    const QStringList argList = ProcessArgs::splitArgs(edit->text(), HostOsInfo::hostOs(), false,
+                                                       &err);
     if (err != ProcessArgs::SplitOk) {
         if (errorMessage)
             *errorMessage = QbsProjectManager::Tr::tr("Could not split properties.");
@@ -841,7 +842,7 @@ bool QbsBuildStepConfigWidget::validateProperties(Utils::FancyLineEdit *edit, QS
 
     QList<Property> properties;
     const MacroExpander * const expander = m_qbsStep->macroExpander();
-    foreach (const QString &rawArg, argList) {
+    for (const QString &rawArg : argList) {
         int pos = rawArg.indexOf(':');
         if (pos > 0) {
             const QString propertyName = rawArg.left(pos);
