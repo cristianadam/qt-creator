@@ -31,6 +31,8 @@ QT_END_NAMESPACE
 
 namespace Utils {
 
+class CommandLine;
+
 class QTCREATOR_UTILS_EXPORT FileUtils
 {
 public:
@@ -81,6 +83,11 @@ public:
                                 const QStringList &entries,
                                 const FileFilter &filter,
                                 const std::function<bool(const FilePath &)> &callBack);
+    static void iterateUnixDirectory(const FilePath &base,
+                                    const FileFilter &filter,
+                                    bool *useFind,
+                                    const std::function<QByteArray(const CommandLine &)> &runInShell,
+                                    const std::function<bool(const FilePath &)> &callBack);
 
     static qint64 bytesAvailableFromDFOutput(const QByteArray &dfOutput);
 
