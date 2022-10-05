@@ -4379,6 +4379,29 @@ void TextEditorWidgetPrivate::paintAdditionalVisualWhitespaces(PaintEventData &d
     }
 }
 
+static int indentDepthForBlock(const QTextBlock &block, const TabSettings &tabSettings)
+{
+    const QString text = block.text();
+    return text.simplified().isEmpty() ? -1 : tabSettings.indentationColumn(text);
+}
+
+static int indentDepthForEmptyBlock(const QTextBlock &block, const TabSettings &tabSettings)
+{
+    int depth = -1;
+    QTextBlock it = block.previous();
+    while (it.isValid() && depth < 0) {
+        depth = indentDepthForBlock(it, tabSettings);
+        it = it.previous();
+    }
+    it = block.next();
+    while (it.isValid()) {
+        if (const int nextDepth = indentDepthForBlock(it, tabSettings); nextDepth >= 0)
+            return depth < 0 ? nextDepth : qMin(depth, nextDepth);
+        it = it.next();
+    }
+    return depth;
+}
+
 void TextEditorWidgetPrivate::paintIndentDepth(PaintEventData &data,
                                                QPainter &painter,
                                                const PaintEventBlockData &blockData) const
@@ -4386,15 +4409,13 @@ void TextEditorWidgetPrivate::paintIndentDepth(PaintEventData &data,
     if (!m_displaySettings.m_visualizeIndent)
         return;
 
-    const QString text = data.block.text();
     const TabSettings &tabSettings = m_document->tabSettings();
-    int currentDepth = -1;
-    if (text.simplified().isEmpty())
-        currentDepth = m_document->indenter()->indentFor(data.block, tabSettings);
-    if (currentDepth < 0)
-        currentDepth = tabSettings.indentationColumn(text);
-
-    if (currentDepth == 0 || blockData.layout->lineCount() < 1)
+    int currentDepth = indentDepthForBlock(data.block, tabSettings);
+    if (currentDepth < 0) // the block was empty ask the indenter for a visual indentation
+        currentDepth = m_document->indenter()->visualIndentFor(data.block, tabSettings);
+    if (currentDepth < 0) // the indenter couldn't provide a visual indentation use a fallback
+        currentDepth = indentDepthForEmptyBlock(data.block, tabSettings);
+    if (currentDepth <= 0 || blockData.layout->lineCount() < 1)
         return;
 
     const qreal horizontalAdvance = QFontMetricsF(q->font()).horizontalAdvance(
@@ -4408,6 +4429,7 @@ void TextEditorWidgetPrivate::paintIndentDepth(PaintEventData &data,
     qreal x = textLine.cursorToX(0) + data.offset.x() + qMax(0, q->cursorWidth() - 1);
     int paintColumn = 0;
 
+    const QString text = data.block.text();
     while (paintColumn < currentDepth) {
         if (x >= 0) {
             int paintPosition = tabSettings.positionAtColumn(text, paintColumn);
