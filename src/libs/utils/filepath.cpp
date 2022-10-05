@@ -1880,7 +1880,6 @@ QStringList FileFilter::asFindArguments() const
     QTC_CHECK(filters ^ QDir::Drives);
     QTC_CHECK(filters ^ QDir::NoDot);
     QTC_CHECK(filters ^ QDir::NoDotDot);
-    QTC_CHECK(filters ^ QDir::Hidden);
     QTC_CHECK(filters ^ QDir::System);
 
     const QString nameOption = (filters & QDir::CaseSensitive) ? QString{"-name"}
