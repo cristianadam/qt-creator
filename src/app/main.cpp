@@ -213,7 +213,26 @@ static inline QStringList getPluginPaths()
     return rc;
 }
 
-static void setupInstallSettings(QString &installSettingspath)
+// Returns plugin path that is set in install settings.
+// The installer can write that to load optional plugins from outside the application bundle
+// on macOS, because installing optional plugins into the application bundle would break
+// code signing.
+static QStringList getInstallPluginPaths()
+{
+    // uses SystemScope because this really must be an "installation" setting
+    QSettings installSettings(QSettings::IniFormat,
+                              QSettings::SystemScope,
+                              QLatin1String(Core::Constants::IDE_SETTINGSVARIANT_STR),
+                              QLatin1String(Core::Constants::IDE_CASED_ID));
+    return Utils::transform(installSettings.value("Settings/InstallPluginPaths").toStringList(),
+                            [](const QString &path) -> QString {
+                                if (QDir::isRelativePath(path))
+                                    return applicationDirPath() + '/' + path;
+                                return path;
+                            });
+}
+
+static void setupInstallSettings(QString &installSettingspath, bool redirect = true)
 {
     if (!installSettingspath.isEmpty() && !QFileInfo(installSettingspath).isDir()) {
         displayError(QString("-installsettingspath \"%0\" needs to be the path where a %1/%2.ini exist.").arg(installSettingspath,
@@ -231,10 +250,10 @@ static void setupInstallSettings(QString &installSettingspath)
                               QLatin1String(Core::Constants::IDE_SETTINGSVARIANT_STR),
                               QLatin1String(Core::Constants::IDE_CASED_ID));
     if (installSettings.contains(kInstallSettingsKey)) {
-        QString installSettingsPath = installSettings.value(kInstallSettingsKey).toString();
-        if (QDir::isRelativePath(installSettingsPath))
-            installSettingsPath = applicationDirPath() + '/' + installSettingsPath;
-        QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, installSettingsPath);
+        QString newInstallSettingsPath = installSettings.value(kInstallSettingsKey).toString();
+        if (QDir::isRelativePath(newInstallSettingsPath))
+            newInstallSettingsPath = applicationDirPath() + '/' + newInstallSettingsPath;
+        QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, newInstallSettingsPath);
     }
 }
 
@@ -516,7 +535,6 @@ int main(int argc, char **argv)
     // Must be done before any QSettings class is created
     QSettings::setDefaultFormat(QSettings::IniFormat);
     setupInstallSettings(options.installSettingsPath);
-    // plugin manager takes control of this settings object
 
     setHighDpiEnvironmentVariable();
 
@@ -536,7 +554,10 @@ int main(int argc, char **argv)
 
     const QStringList pluginArguments = app.arguments();
 
-    /*Initialize global settings and resetup install settings with QApplication::applicationDirPath */
+    // Re-setup install settings with QApplication::applicationDirPath() available, but
+    // first read install plugin paths from original install settings, without redirection
+    setupInstallSettings(options.installSettingsPath, /*redirect=*/false);
+    const QStringList installPluginPaths = getInstallPluginPaths();
     setupInstallSettings(options.installSettingsPath);
     Utils::QtcSettings *settings = createUserSettings();
     Utils::QtcSettings *globalSettings
@@ -616,7 +637,8 @@ int main(int argc, char **argv)
     QNetworkProxyFactory::setUseSystemConfiguration(true);
 
     // Load
-    const QStringList pluginPaths = getPluginPaths() + options.customPluginPaths;
+    const QStringList pluginPaths = getPluginPaths() + installPluginPaths
+                                    + options.customPluginPaths;
     PluginManager::setPluginPaths(pluginPaths);
     QMap<QString, QString> foundAppOptions;
     if (pluginArguments.size() > 1) {
