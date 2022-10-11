@@ -440,12 +440,14 @@ void SearchResultWidget::finishSearch(bool canceled, const QString &reason)
     Id sizeWarningId(SIZE_WARNING_ID);
     m_infoBar.removeInfo(sizeWarningId);
     m_infoBar.unsuppressInfo(sizeWarningId);
-    m_replaceTextEdit->setEnabled(m_count > 0);
+    m_replaceTextEdit->setEnabled(true);
     m_replaceButton->setEnabled(m_count > 0);
     m_preserveCaseCheck->setEnabled(m_count > 0);
     m_cancelButton->setVisible(false);
-    if (canceled)
+    if (canceled) {
         m_messageLabel->setText(reason.isEmpty() ? tr("Search was canceled.") : reason);
+        m_replaceTextEdit->setFocus();
+    }
     m_messageWidget->setVisible(canceled);
     m_searchAgainButton->setVisible(m_searchAgainSupported);
     m_searching = false;
