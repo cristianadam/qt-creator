@@ -461,7 +461,6 @@ Core::SearchResult *SymbolSupport::createSearch(
         "",
         placeholder,
         Core::SearchResultWindow::SearchAndReplace);
-    search->setSearchAgainSupported(true);
     search->setUserData(QVariantList{oldSymbolName, preferLowerCaseFileNames});
     const auto extraWidget = new ReplaceWidget;
     search->setAdditionalReplaceWidget(extraWidget);
@@ -469,18 +468,11 @@ Core::SearchResult *SymbolSupport::createSearch(
     QObject::connect(search, &Core::SearchResult::activated, [](const Core::SearchResultItem &item) {
         Core::EditorManager::openEditorAtSearchResult(item);
     });
-    QObject::connect(search, &Core::SearchResult::replaceTextChanged, [search, extraWidget]() {
-        extraWidget->showLabel(true);
+    QObject::connect(search, &Core::SearchResult::replaceTextChanged, [this, search, positionParams]() {
         search->setUserData(search->userData().toList().first(2));
-        search->setSearchAgainEnabled(true);
         search->setReplaceEnabled(false);
+        requestRename(positionParams, search->textToReplace(), search);
     });
-    QObject::connect(search,
-                     &Core::SearchResult::searchAgainRequested,
-                     [this, positionParams, search]() {
-                         search->restart();
-                         requestRename(positionParams, search->textToReplace(), search);
-                     });
     QObject::connect(search,
                      &Core::SearchResult::replaceButtonClicked,
                      [this, positionParams, search](const QString & /*replaceText*/,
@@ -509,13 +501,14 @@ void SymbolSupport::handleRenameResponse(Core::SearchResult *search,
         errorMessage = error->toString();
     }
 
+    if (search->count())
+        search->restart();
     const std::optional<WorkspaceEdit> &edits = response.result();
     if (edits.has_value()) {
         search->addResults(generateReplaceItems(*edits, search, m_limitRenamingToProjects),
                            Core::SearchResult::AddOrdered);
         qobject_cast<ReplaceWidget *>(search->additionalReplaceWidget())->showLabel(false);
         search->setReplaceEnabled(true);
-        search->setSearchAgainEnabled(false);
         search->finishSearch(false);
     } else {
         search->finishSearch(error.has_value(), errorMessage);
