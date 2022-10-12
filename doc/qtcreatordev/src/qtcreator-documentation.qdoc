@@ -324,17 +324,14 @@
         \li Use the screen resolution of 1366x768 (available on the most
             commonly used screens, as of this writing).
 
-        \li Use the aspect ratio of 16:9.
-
-        \li Open the application in the maximum size on full screen.
-
         \li Use your favorite tool to take the screen shot.
 
         \li Include only the part of the screen that you need (you can crop the
             image also in the screen capture tool).
 
         \li To highlight parts of the screen shot, use the images of numbers
-            that are stored in \c{doc/images/numbers} in the \QC repository.
+            that are stored in \c{qtcreator/doc/qtcreator/images/numbers} in
+            the \QC repository.
 
         \li Before you submit the images to the repository, optimize them to
             save space.
@@ -354,8 +351,8 @@
     brackets.
 
     You can find a set of images that show the numbers from 1 to 10 in the
-    \c doc/images/numbers directory (or in the \c qtdoc module sources in
-    \c doc/images/numbers).
+    \c qtcreator/doc/qtcreator/images/numbers directory (or in the \c qtdoc
+    module sources in \c doc/images/numbers).
 
     To use the numbers, copy-paste the number images on the screenshot to the
     places that you want to refer to from text.
