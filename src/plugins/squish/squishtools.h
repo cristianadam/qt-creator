@@ -66,6 +66,7 @@ public:
                       const QStringList &testCases = QStringList());
     void recordTestCase(const Utils::FilePath &suitePath, const QString &testCaseName,
                         const SuiteConf &suiteConf);
+    void queryGlobalScripts();
     void queryServerSettings();
     void writeServerSettingsChanges(const QList<QStringList> &changes);
     void requestExpansion(const QString &name);
@@ -97,6 +98,8 @@ private:
         KillOldBeforeQueryRunner
     };
 
+    enum RunnerQuery { ServerInfo, GlobalScriptDirs };
+
     void setState(State state);
     void handleSetStateStartAppRunner();
     void handleSetStateQueryRunner();
@@ -106,6 +109,7 @@ private:
     void startSquishRunner();
     void setupAndStartRecorder();
     void stopRecorder();
+    void queryServer(RunnerQuery query);
     void executeRunnerQuery();
     static Utils::Environment squishEnvironment();
     void onServerFinished();
@@ -161,6 +165,7 @@ private:
     QTimer *m_requestVarsTimer = nullptr;
     qint64 m_readResultsCount;
     int m_autId = 0;
+    RunnerQuery m_query = ServerInfo;
     bool m_shutdownInitiated = false;
     bool m_closeRunnerOnEndRecord = false;
     bool m_licenseIssues = false;

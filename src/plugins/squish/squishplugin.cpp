@@ -4,7 +4,7 @@
 #include "squishplugin.h"
 
 #include "objectsmapeditor.h"
-#include "squish/squishwizardpages.h"
+#include "squishfilehandler.h"
 #include "squishnavigationwidget.h"
 #include "squishoutputpane.h"
 #include "squishresultmodel.h"
@@ -12,6 +12,7 @@
 #include "squishtesttreemodel.h"
 #include "squishtools.h"
 #include "squishtr.h"
+#include "squishwizardpages.h"
 
 #include <coreplugin/actionmanager/actioncontainer.h>
 #include <coreplugin/actionmanager/actionmanager.h>
@@ -21,6 +22,7 @@
 
 #include <projectexplorer/jsonwizard/jsonwizardfactory.h>
 
+#include <utils/algorithm.h>
 #include <utils/mimetypes/mimedatabase.h>
 #include <utils/qtcassert.h>
 
@@ -39,6 +41,8 @@ public:
     ~SquishPluginPrivate();
 
     void initializeMenuEntries();
+    bool initializeGlobalScripts();
+    void onQueryFinished(const QString &output, const QString &error);
 
     SquishSettings m_squishSettings;
     SquishSettingsPage m_settingsPage{&m_squishSettings};
@@ -102,11 +106,44 @@ void SquishPluginPrivate::initializeMenuEntries()
     toolsMenu->addMenu(menu);
 }
 
+bool SquishPluginPrivate::initializeGlobalScripts()
+{
+    QTC_ASSERT(dd->m_squishTools, return false);
+
+    const Utils::FilePath squishserver = dd->m_squishSettings.squishPath.filePath().pathAppended(
+                Utils::HostOsInfo::withExecutableSuffix("bin/squishserver"));
+    if (!squishserver.isExecutableFile())
+        return false;
+
+    connect(dd->m_squishTools, &SquishTools::queryFinished,
+            this, &SquishPluginPrivate::onQueryFinished);
+    dd->m_squishTools->queryGlobalScripts();
+    return true;
+}
+
+void SquishPluginPrivate::onQueryFinished(const QString &output, const QString &error)
+{
+    disconnect(dd->m_squishTools, &SquishTools::queryFinished,
+               this, &SquishPluginPrivate::onQueryFinished);
+
+    if (output.isEmpty() || !error.isEmpty())
+        return; // ignore (for now?)
+
+    const Utils::FilePaths globalDirs = Utils::transform(output.split('\n', Qt::SkipEmptyParts),
+                                                         &Utils::FilePath::fromString);
+    SquishFileHandler::instance()->setSharedFolders(globalDirs);
+}
+
 bool SquishPlugin::initialize(const QStringList &, QString *)
 {
     dd = new SquishPluginPrivate;
     ProjectExplorer::JsonWizardFactory::addWizardPath(":/squish/wizard/");
     return true;
+}
+
+bool SquishPlugin::delayedInitialize()
+{
+    return dd->initializeGlobalScripts();
 }
 
 ExtensionSystem::IPlugin::ShutdownFlag SquishPlugin::aboutToShutdown()
