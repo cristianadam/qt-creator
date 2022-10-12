@@ -64,7 +64,8 @@ public:
 
     static Utils::FilePaths getOpenFileNames(const QString &filters,
                                              const Utils::FilePath &path = {},
-                                             QString *selectedFilter = nullptr);
+                                             QString *selectedFilter = nullptr,
+                                             bool forceNonNativeDialog = false);
     static Utils::FilePath getSaveFileName(const QString &title,
                                            const Utils::FilePath &pathIn,
                                            const QString &filter = {},

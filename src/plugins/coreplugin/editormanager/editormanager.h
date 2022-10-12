@@ -90,7 +90,7 @@ public:
     static bool openExternalEditor(const Utils::FilePath &filePath, Utils::Id editorId);
     static void addCloseEditorListener(const std::function<bool(IEditor *)> &listener);
 
-    static Utils::FilePaths getOpenFilePaths();
+    static Utils::FilePaths getOpenFilePaths(bool forceNonNativeDialog=false);
 
     static IDocument *currentDocument();
     static IEditor *currentEditor();
