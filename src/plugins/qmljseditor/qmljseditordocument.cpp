@@ -503,7 +503,11 @@ QmlJSEditorDocumentPrivate::QmlJSEditorDocumentPrivate(QmlJSEditorDocument *pare
             this, &QmlJSEditorDocumentPrivate::updateOutlineModel);
 
     modelManager->updateSourceFiles(Utils::FilePaths({parent->filePath()}), false);
-    settingsChanged();
+    // settingsChanged expects that q->d == this which is true only after the constructor finishes
+    // so delay its call
+    QMetaObject::invokeMethod(this,
+                              &QmlJSEditorDocumentPrivate::settingsChanged,
+                              Qt::QueuedConnection);
 }
 
 QmlJSEditorDocumentPrivate::~QmlJSEditorDocumentPrivate()
