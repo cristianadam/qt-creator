@@ -5,7 +5,11 @@
 
 #include "buildconfiguration.h"
 #include "buildpropertiessettings.h"
+#include "projectexplorerconstants.h"
+#include "devicesupport/idevice.h"
+#include "kitinformation.h"
 #include "projectexplorer.h"
+#include "target.h"
 
 #include <coreplugin/fileutils.h>
 
@@ -25,6 +29,7 @@ class BuildDirectoryAspect::Private
 {
 public:
     FilePath sourceDir;
+    Target *target;
     FilePath savedShadowBuildDir;
     QString problem;
     QPointer<InfoLabel> problemLabel;
@@ -40,11 +45,23 @@ BuildDirectoryAspect::BuildDirectoryAspect(const BuildConfiguration *bc) : d(new
         const FilePath fixedDir = fixupDir(FilePath::fromUserInput(edit->text()));
         if (!fixedDir.isEmpty())
             edit->setText(fixedDir.toUserOutput());
+
+        const FilePath newPath = FilePath::fromUserInput(edit->text());
+        const auto buildDevice = DeviceKitAspect::device(d->target->kit());
+
+        if (buildDevice && buildDevice->type() != ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE
+            && !buildDevice->rootPath().ensureReachable(newPath)) {
+            *error = tr("The build directory is not reachable from the build device.");
+            return false;
+        }
+
         return pathChooser() ? pathChooser()->defaultValidationFunction()(edit, error) : true;
     });
     setOpenTerminalHandler([this, bc] {
         Core::FileUtils::openTerminal(FilePath::fromString(value()), bc->environment());
     });
+
+    d->target = bc->target();
 }
 
 BuildDirectoryAspect::~BuildDirectoryAspect()
@@ -109,6 +126,12 @@ void BuildDirectoryAspect::addToLayout(LayoutBuilder &builder)
             }
         });
     }
+
+    const auto buildDevice = DeviceKitAspect::device(d->target->kit());
+    if (buildDevice && buildDevice->type() != ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE)
+        pathChooser()->setAllowPathFromDevice(true);
+    else
+        pathChooser()->setAllowPathFromDevice(false);
 }
 
 FilePath BuildDirectoryAspect::fixupDir(const FilePath &dir)
