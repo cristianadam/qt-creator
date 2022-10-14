@@ -13050,17 +13050,17 @@ Add, modify, and remove document filters, which determine the documentation set 
     <message>
         <location line="-68"/>
         <source>Note: The above setting takes effect only if the HTML file does not use a style sheet.</source>
-        <translation type="unfinished"></translation>
+        <translation>Hinweis: Die Einstellung oben ist nur wirksam, wenn die HTML-Seite kein Stylesheet verwendet.</translation>
     </message>
     <message>
         <location line="+3"/>
         <source>Zoom:</source>
-        <translation type="unfinished">Vergrößerungsfaktor:</translation>
+        <translation>Vergrößerungsfaktor:</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>%</source>
-        <translation type="unfinished">%</translation>
+        <translation>%</translation>
     </message>
     <message>
         <location line="+181"/>
@@ -13634,7 +13634,7 @@ Add, modify, and remove document filters, which determine the documentation set 
     <message>
         <location line="+10"/>
         <source>Registration Failed</source>
-        <translation type="unfinished"></translation>
+        <translation>Registrierung fehlgeschlagen</translation>
     </message>
     <message>
         <location line="+1"/>
@@ -13649,7 +13649,7 @@ Add, modify, and remove document filters, which determine the documentation set 
     <message>
         <location filename="../../../src/plugins/help/helpviewer.cpp" line="+198"/>
         <source>Zoom: %1%</source>
-        <translation type="unfinished">Vergrößerung: %1%</translation>
+        <translation>Vergrößerung: %1%</translation>
     </message>
 </context>
 <context>
