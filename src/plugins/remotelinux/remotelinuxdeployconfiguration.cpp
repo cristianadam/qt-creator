@@ -49,8 +49,11 @@ RemoteLinuxDeployConfigurationFactory::RemoteLinuxDeployConfigurationFactory()
         return runDevice && runDevice->extraData(Constants::SupportsRSync).toBool();
     });
     addInitialStep(Constants::DirectUploadStepId, [](Target *target) {
-        auto device = DeviceKitAspect::device(target->kit());
-        return device && !device->extraData(Constants::SupportsRSync).toBool();
+        auto runDevice = DeviceKitAspect::device(target->kit());
+        auto buildDevice = BuildDeviceKitAspect::device(target->kit());
+        if (runDevice == buildDevice)
+            return true;
+        return runDevice && !runDevice->extraData(Constants::SupportsRSync).toBool();
     });
 }
 
