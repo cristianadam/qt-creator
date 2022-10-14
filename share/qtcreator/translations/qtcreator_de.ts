@@ -31099,7 +31099,7 @@ Außer: %3
         <location line="+8"/>
         <source>%1 (%2)</source>
         <comment>Package name and version</comment>
-        <translation type="unfinished">%1 (%2)</translation>
+        <translation>%1 (%2)</translation>
     </message>
     <message>
         <location line="+5"/>
@@ -31109,17 +31109,17 @@ Außer: %3
     <message>
         <location line="+14"/>
         <source>%1 is available. Check the &lt;a %2&gt;Qt blog&lt;/a&gt; for details.</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 ist verfügbar. Finde Details im &lt;a %2&gt;Qt Blog&lt;/a&gt;.</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Start Package Manager</source>
-        <translation type="unfinished"></translation>
+        <translation>Paketmanager starten</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Open Settings</source>
-        <translation type="unfinished"></translation>
+        <translation>Einstellungen öffnen</translation>
     </message>
     <message>
         <location line="+48"/>
@@ -31129,12 +31129,12 @@ Außer: %3
     <message>
         <location line="+20"/>
         <source>Could not determine location of maintenance tool. Please check your installation if you did not enable this plugin manually.</source>
-        <translation>Das Verwaltungswerkzeug konnte nicht gefunden werden. Bitte überprüfen Sie Ihre Installation, sofern Sie das Plugin nicht manuell aktiviert haben.</translation>
+        <translation>Das Maintenance Tool konnte nicht gefunden werden. Bitte überprüfen Sie Ihre Installation, sofern Sie das Plugin nicht manuell aktiviert haben.</translation>
     </message>
     <message>
         <location line="+6"/>
         <source>The maintenance tool at &quot;%1&quot; is not an executable. Check your installation.</source>
-        <translation>Das Verwaltungswerkzeug &quot;%1&quot; kann nicht ausgeführt werden. Bitte überprüfen Sie Ihre Installation.</translation>
+        <translation>Das Maintenance Tool &quot;%1&quot; kann nicht ausgeführt werden. Bitte überprüfen Sie Ihre Installation.</translation>
     </message>
     <message>
         <location line="+16"/>
@@ -67986,42 +67986,42 @@ Do you want to display them anyway?</source>
     <message>
         <location line="-150"/>
         <source>Configure Filters</source>
-        <translation type="unfinished">Filterkonfiguration</translation>
+        <translation>Filterkonfiguration</translation>
     </message>
     <message>
         <location line="+2"/>
         <source>Automatic Check for Updates</source>
-        <translation type="unfinished">Automatisch nach Aktualisierungen suchen</translation>
+        <translation>Automatisch nach Aktualisierungen suchen</translation>
     </message>
     <message>
         <location line="+4"/>
         <source>Automatically runs a scheduled check for updates on a time interval basis. The automatic check for updates will be performed at the scheduled date, or the next startup following it.</source>
-        <translation type="unfinished">Sucht in regelmäßigen Abständen automatisch nach Aktualisierungen. Dies erfolgt zum angegebenen Zeitpunkt oder beim nächsten darauf folgenden Neustart.</translation>
+        <translation>Sucht in regelmäßigen Abständen automatisch nach Aktualisierungen. Dies erfolgt zum angegebenen Zeitpunkt oder beim nächsten darauf folgenden Neustart.</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Check for new Qt versions</source>
-        <translation type="unfinished"></translation>
+        <translation>Suche nach neuen Qt Versionen</translation>
     </message>
     <message>
         <location line="+8"/>
         <source>Check interval basis:</source>
-        <translation type="unfinished">Nach Aktualisierungen suchen:</translation>
+        <translation>Nach Aktualisierungen suchen:</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Next check date:</source>
-        <translation type="unfinished">Nächste Suche am:</translation>
+        <translation>Nächste Suche am:</translation>
     </message>
     <message>
         <location line="+9"/>
         <source>Check Now</source>
-        <translation type="unfinished">Jetzt suchen</translation>
+        <translation>Jetzt suchen</translation>
     </message>
     <message>
         <location line="+7"/>
         <source>Last check date:</source>
-        <translation type="unfinished">Vorige Suche am:</translation>
+        <translation>Letzte Suche am:</translation>
     </message>
     <message>
         <location line="+139"/>
@@ -80341,12 +80341,12 @@ The new project can be opened in Qt Creator using the main CMakeLists.txt file.<
     <message>
         <location filename="../../../src/plugins/updateinfo/updateinfoplugin.cpp" line="-2"/>
         <source>Qt Maintenance Tool</source>
-        <translation type="unfinished"></translation>
+        <translation>Qt Maintenance Tool</translation>
     </message>
     <message>
         <location line="+10"/>
         <source>Start Maintenance Tool</source>
-        <translation type="unfinished"></translation>
+        <translation>Maintenance Tool starten</translation>
     </message>
 </context>
 <context>
