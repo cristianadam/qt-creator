@@ -5,6 +5,8 @@
 
 #include "buildconfiguration.h"
 #include "buildpropertiessettings.h"
+#include "devicesupport/idevice.h"
+#include "kitinformation.h"
 #include "projectexplorer.h"
 
 #include <coreplugin/fileutils.h>
@@ -25,6 +27,7 @@ class BuildDirectoryAspect::Private
 {
 public:
     FilePath sourceDir;
+    FilePath buildDeviceRoot;
     FilePath savedShadowBuildDir;
     QString problem;
     QPointer<InfoLabel> problemLabel;
@@ -45,6 +48,10 @@ BuildDirectoryAspect::BuildDirectoryAspect(const BuildConfiguration *bc) : d(new
     setOpenTerminalHandler([this, bc] {
         Core::FileUtils::openTerminal(FilePath::fromString(value()), bc->environment());
     });
+
+    auto buildDevice = DeviceKitAspect::device(bc->kit());
+    if (buildDevice)
+        d->buildDeviceRoot = buildDevice->rootPath();
 }
 
 BuildDirectoryAspect::~BuildDirectoryAspect()
@@ -109,6 +116,13 @@ void BuildDirectoryAspect::addToLayout(LayoutBuilder &builder)
             }
         });
     }
+
+    // FIXME: Make sure that the selected folder is from the same device
+    // as the build device.
+    if (d->buildDeviceRoot.needsDevice())
+        pathChooser()->setAllowPathFromDevice(true);
+    else
+        pathChooser()->setAllowPathFromDevice(false);
 }
 
 FilePath BuildDirectoryAspect::fixupDir(const FilePath &dir)
