@@ -52,7 +52,7 @@
     <message>
         <location line="+1"/>
         <source>Matches all bookmarks. Filter by file name, by the text on the line of the bookmark, or by the bookmark&apos;s note text.</source>
-        <translation type="unfinished"></translation>
+        <translation>Filtert alle Lesezeichen nach dem Text auf der Zeile der Lesezeichen oder ihrem Anmerkungstext.</translation>
     </message>
     <message>
         <source>Delete Folder</source>
@@ -159,12 +159,12 @@
     <message>
         <location line="+45"/>
         <source>Meta+Shift+M</source>
-        <translation type="unfinished"></translation>
+        <translation>Meta+Shift+M</translation>
     </message>
     <message>
         <location line="+1"/>
         <source>Ctrl+Shift+M</source>
-        <translation type="unfinished"></translation>
+        <translation>Ctrl+Shift+M</translation>
     </message>
     <message>
         <location line="+12"/>
