@@ -21,7 +21,8 @@ public:
     {
         return imageId == other.imageId && repo == other.repo && tag == other.tag
                && useLocalUidGid == other.useLocalUidGid && mounts == other.mounts
-               && keepEntryPoint == other.keepEntryPoint;
+               && keepEntryPoint == other.keepEntryPoint
+               && createPersistentVolume == other.createPersistentVolume;
     }
 
     bool operator!=(const DockerDeviceData &other) const { return !(*this == other); }
@@ -43,6 +44,7 @@ public:
     QString tag;
     QString size;
     bool useLocalUidGid = true;
+    bool createPersistentVolume = false;
     QStringList mounts = {Core::DocumentManager::projectsDirectory().toString()};
     bool keepEntryPoint = false;
 };

@@ -508,6 +508,11 @@ QString escapeMountPath(const FilePath &fp)
     return escapeMountPathUnix(fp);
 }
 
+QString escapeVolumeName(QString name)
+{
+    return name.replace(QRegularExpression("[^a-zA-Z0-9_\\.-]"), "_");
+}
+
 QStringList toMountArg(const DockerDevicePrivate::TemporaryMountInfo &mi)
 {
     QString escapedPath;
@@ -582,6 +587,17 @@ bool DockerDevicePrivate::createContainer()
     q->setDebugDumperPath(dumperPath);
 
     dockerCreate.addArgs(createMountArgs());
+
+    if (m_data.createPersistentVolume) {
+        // Persistent Scratch Volume
+        const QString volumeName = "qtc-scratch-" + q->id().toString() + "-" + q->displayName();
+        const QString persistentVolume
+            = QString(R"(type=volume,"source=qtc-scratch-%1","destination=%2")")
+                  .arg(escapeVolumeName(volumeName))
+                  .arg(escapeMountPath("/mnt/persistent"));
+
+        dockerCreate.addArgs({"--mount", persistentVolume});
+    }
 
     if (!m_data.keepEntryPoint)
         dockerCreate.addArgs({"--entrypoint", "/bin/sh"});
@@ -663,6 +679,7 @@ const char DockerDeviceDataRepoKey[] = "DockerDeviceDataRepo";
 const char DockerDeviceDataTagKey[] = "DockerDeviceDataTag";
 const char DockerDeviceDataSizeKey[] = "DockerDeviceDataSize";
 const char DockerDeviceUseOutsideUser[] = "DockerDeviceUseUidGid";
+const char DockerDeviceCreatePersistentVolume[] = "DockerDeviceCreatePersistentVolume";
 const char DockerDeviceMappedPaths[] = "DockerDeviceMappedPaths";
 const char DockerDeviceKeepEntryPoint[] = "DockerDeviceKeepEntryPoint";
 
@@ -675,7 +692,8 @@ void DockerDevice::fromMap(const QVariantMap &map)
     data.tag = map.value(DockerDeviceDataTagKey).toString();
     data.imageId = map.value(DockerDeviceDataImageIdKey).toString();
     data.size = map.value(DockerDeviceDataSizeKey).toString();
-    data.useLocalUidGid = map.value(DockerDeviceUseOutsideUser, HostOsInfo::isLinuxHost()).toBool();
+    data.useLocalUidGid = map.value(DockerDeviceUseOutsideUser, HostOsInfo::isAnyUnixHost()).toBool();
+    data.createPersistentVolume = map.value(DockerDeviceCreatePersistentVolume).toBool();
     data.mounts = map.value(DockerDeviceMappedPaths).toStringList();
     data.keepEntryPoint = map.value(DockerDeviceKeepEntryPoint).toBool();
     d->setData(data);
@@ -691,6 +709,7 @@ QVariantMap DockerDevice::toMap() const
     map.insert(DockerDeviceDataImageIdKey, data.imageId);
     map.insert(DockerDeviceDataSizeKey, data.size);
     map.insert(DockerDeviceUseOutsideUser, data.useLocalUidGid);
+    map.insert(DockerDeviceCreatePersistentVolume, data.createPersistentVolume);
     map.insert(DockerDeviceMappedPaths, data.mounts);
     map.insert(DockerDeviceKeepEntryPoint, data.keepEntryPoint);
     return map;
