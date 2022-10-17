@@ -88,6 +88,18 @@ DockerDeviceWidget::DockerDeviceWidget(const IDevice::Ptr &device)
         dockerDevice->setData(m_data);
     });
 
+    m_createPersistentVolume = new QCheckBox(Tr::tr("Create persistent volume"));
+    m_createPersistentVolume->setToolTip(
+        Tr::tr("Creates a persistent docker volume inside the container that will be mounted at "
+               "/mnt/persistent."));
+    m_createPersistentVolume->setChecked(m_data.createPersistentVolume);
+    m_createPersistentVolume->setEnabled(HostOsInfo::isAnyUnixHost());
+
+    connect(m_createPersistentVolume, &QCheckBox::toggled, this, [this, dockerDevice](bool on) {
+        m_data.createPersistentVolume = on;
+        dockerDevice->setData(m_data);
+    });
+
     auto pathListLabel = new InfoLabel(Tr::tr("Paths to mount:"));
     pathListLabel->setAdditionalToolTip(Tr::tr("Source directory list should not be empty."));
 
@@ -178,6 +190,7 @@ DockerDeviceWidget::DockerDeviceWidget(const IDevice::Ptr &device)
         idLabel, m_idLineEdit, br,
         daemonStateLabel, m_daemonReset, m_daemonState, br,
         m_runAsOutsideUser, br,
+        m_createPersistentVolume, br,
         m_keepEntryPoint, br,
         Column {
             pathListLabel,
