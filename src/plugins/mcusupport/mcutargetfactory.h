@@ -22,6 +22,7 @@ public:
     Packages createPackages(const McuTargetDescription &);
     McuToolChainPackage *createToolchain(const McuTargetDescription::Toolchain &);
     McuPackagePtr createPackage(const PackageDescription &);
+    static void expandVariables(Packages &packages);
 
 private:
     SettingsHandler::Ptr settingsHandler;
