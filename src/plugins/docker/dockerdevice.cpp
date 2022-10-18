@@ -46,6 +46,7 @@
 #include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
 #include <utils/sortfiltermodel.h>
+#include <utils/stringutils.h>
 #include <utils/temporaryfile.h>
 #include <utils/treemodel.h>
 #include <utils/utilsicons.h>
@@ -59,6 +60,9 @@
 #include <QFileSystemWatcher>
 #include <QHeaderView>
 #include <QHostAddress>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLoggingCategory>
 #include <QNetworkInterface>
 #include <QPushButton>
@@ -986,27 +990,31 @@ public:
         m_buttons->button(QDialogButtonBox::Ok)->setEnabled(false);
 
         CommandLine cmd{m_settings->dockerBinaryPath.filePath(),
-                        {"images", "--format", "{{.ID}}\\t{{.Repository}}\\t{{.Tag}}\\t{{.Size}}"}};
+                        {"images", "--format", "{{json .}},"}};
         m_log->append(Tr::tr("Running \"%1\"\n").arg(cmd.toUserOutput()));
 
         m_process = new QtcProcess(this);
         m_process->setCommand(cmd);
 
         connect(m_process, &QtcProcess::readyReadStandardOutput, [this] {
-            const QString out = QString::fromUtf8(m_process->readAllStandardOutput().trimmed());
-            m_log->append(out);
-            for (const QString &line : out.split('\n')) {
-                const QStringList parts = line.trimmed().split('\t');
-                if (parts.size() != 4) {
-                    m_log->append(Tr::tr("Unexpected result: %1").arg(line) + '\n');
-                    continue;
+            const QString out = '[' + chopIfEndsWith(QString::fromUtf8(m_process->readAllStandardOutput().trimmed()), ',') + ']';
+            QJsonDocument doc = QJsonDocument::fromJson(out.toUtf8());
+            
+            m_log->append(QString::fromLocal8Bit(doc.toJson()));
+            if (doc.isArray()) {
+                for(const auto &imageRef : doc.array()) {
+                    if (imageRef.isObject()) {
+                        const auto image = imageRef.toObject();
+                        auto item = new DockerImageItem;
+                        item->repo = image.value("Repository").toString();
+                        item->tag = image.value("Tag").toString();
+                        item->imageId = image.value("ID").toString();
+                        item->size = image.value("Size").toString();
+                        m_model.rootItem()->appendChild(item);
+                    }
                 }
-                auto item = new DockerImageItem;
-                item->imageId = parts.at(0);
-                item->repo = parts.at(1);
-                item->tag = parts.at(2);
-                item->size = parts.at(3);
-                m_model.rootItem()->appendChild(item);
+            } else {
+                m_log->append(Tr::tr("Failed to parse output."));
             }
             m_log->append(Tr::tr("Done."));
         });
