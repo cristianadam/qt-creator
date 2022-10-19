@@ -29,6 +29,9 @@ bool isDesktopToolchain(McuToolChainPackage::ToolChainType type)
 
 McuPackageVersionDetector *createVersionDetection(const VersionDetection &versionDetection)
 {
+    if (versionDetection.regex.isEmpty())
+        return nullptr;
+
     if (!versionDetection.xmlElement.isEmpty() && !versionDetection.xmlAttribute.isEmpty())
         return new McuPackageXmlVersionDetector{versionDetection.filePattern,
                                                 versionDetection.xmlElement,
