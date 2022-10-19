@@ -96,6 +96,13 @@ function(_create_ts_custom_target name)
     COMMENT "Generate .ts files"
     DEPENDS ${_sources}
     VERBATIM)
+
+  add_custom_target("${_arg_TS_TARGET_PREFIX}${name}_no_obsolete"
+    COMMAND Qt5::lupdate -locations relative -no-ui-lines -no-sort -no-obsolete "@${ts_file_list}" -ts ${ts_files}
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    COMMENT "Generate .ts files, remove obsolete and vanished translations"
+    DEPENDS ${_sources}
+    VERBATIM)
 endfunction()
 
 function(add_translation_targets file_prefix)
