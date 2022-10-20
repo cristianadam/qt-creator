@@ -306,7 +306,6 @@ bool QMakeStep::processSucceeded(int exitCode, QProcess::ExitStatus status)
     bool result = AbstractProcessStep::processSucceeded(exitCode, status);
     if (!result)
         m_needToRunQMake = true;
-    emit buildConfiguration()->buildDirectoryChanged();
     return result;
 }
 
