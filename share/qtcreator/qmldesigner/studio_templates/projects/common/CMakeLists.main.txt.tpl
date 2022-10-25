@@ -6,6 +6,8 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 COMPONENTS Gui Qml Quick)
+# qt_standard_project_setup() requires Qt 6.3 or higher. See https://doc.qt.io/qt-6/qt-standard-project-setup.html for details.
+qt_standard_project_setup()
 qt_add_executable(%{ProjectExecutableName} src/main.cpp)
 
 qt_add_resources(%{ProjectExecutableName} "configuration"
