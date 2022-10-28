@@ -15,6 +15,8 @@ template <typename T>
 class QFuture;
 QT_END_NAMESPACE
 
+namespace Utils { class FutureSynchronizer; }
+
 namespace DiffEditor {
 namespace Internal {
 
