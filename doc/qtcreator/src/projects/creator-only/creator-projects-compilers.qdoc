@@ -245,7 +245,7 @@
 
     To keep working with the third-party tool chain, create a new shell link
     that adds the required paths (as Visual Studio and Qt do). The shell link
-    must point to cmd.exe, as illustrated by the following example:
+    must point to cmd.exe:
 
     \c {C:\Windows\System32\cmd.exe /K C:\path_to\myenv.bat}
 

@@ -185,7 +185,7 @@
 
     To submit your changes to Git, select \uicontrol Commit. \QC displays a
     commit page containing a text editor where you can enter your commit
-    message and a checkable list of modified files to be included.
+    message and a checkable list of modified files to include.
 
     \image qtcreator-vcs-commit.png "Committing changes with Git"
 

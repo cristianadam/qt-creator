@@ -50,8 +50,8 @@
     \section1 Projects View Context Menu
 
     The \uicontrol Projects view contains context menus for managing projects,
-    subprojects, folders, and files. The following functions are available for
-    managing projects and subprojects:
+    subprojects, folders, and files. Use the following functions to manage
+    projects and subprojects:
 
     \list
         \li Set a project as the active project.

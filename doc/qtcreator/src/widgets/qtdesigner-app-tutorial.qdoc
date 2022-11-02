@@ -214,8 +214,7 @@
             \c{textfinder.h} file to open it for editing.
 
         \li Add a private function to the \c{private} section, after the
-            \c{Ui::TextFinder} pointer, as illustrated by the following code
-            snippet:
+            \c{Ui::TextFinder} pointer:
 
             \snippet textfinder/textfinder.h 0
 
@@ -233,8 +232,7 @@
 
         \li Add code to load a text file using QFile, read it with QTextStream,
             and then display it on \c{textEdit} with
-            \l{QTextEdit::setPlainText()}.
-            This is illustrated by the following code snippet:
+            \l{QTextEdit::setPlainText()}:
 
             \snippet textfinder/textfinder.cpp 0
 
@@ -245,14 +243,12 @@
 
         \li For the \c{on_findButton_clicked()} slot, add code to extract the
             search string and use the \l{QTextEdit::find()} function
-            to look for the search string within the text file. This is
-            illustrated by the following code snippet:
+            to look for the search string within the text file:
 
             \snippet textfinder/textfinder.cpp 2
 
         \li Once both of these functions are complete, add a line to call
-            \c{loadTextFile()} in the constructor, as illustrated by the
-            following code snippet:
+            \c{loadTextFile()} in the constructor:
 
             \snippet textfinder/textfinder.cpp 3
 

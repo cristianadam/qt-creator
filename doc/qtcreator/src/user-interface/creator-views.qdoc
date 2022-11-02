@@ -22,7 +22,7 @@
     {mode} you are working in. Only views that are relevant to a mode are
     available in it.
 
-    The following views are related to managing projects and files:
+    Manage projects and files in the following views:
 
     \list
         \li \l Projects shows a list of projects open in the current
@@ -58,8 +58,7 @@
     files in the \uicontrol Design mode, see \l{Design Views}.
     \endif
 
-    The additional options in a particular view are described in the following
-    sections.
+    The following sections describe the additional options in a particular view.
 
     In some views, right-clicking opens a context menu that contains functions
     for managing the objects listed in the view.

@@ -563,12 +563,12 @@
             settings:
 
             \list
-                \li \c skipIfEmpty will cause empty arguments to be silently
-                    removed from the command to be run if set to \c true.
+                \li \c skipIfEmpty silently removes empty arguments from the
+                    command to run if you set it to \c true.
                     Defaults to \c true.
 
                 \li \c directory with the working directory of the command to
-                    be run. This defaults to the value of \c baseDirectory.
+                    run. This defaults to the value of \c baseDirectory.
 
                 \li \c command with the command to be run.
 
