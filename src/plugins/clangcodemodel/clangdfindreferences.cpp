@@ -360,6 +360,22 @@ static Usage::Tags getUsageType(const ClangdAstPath &path, const QString &search
     if (path.last().role() == "expression" && path.last().kind() == "CXXConstruct")
         invokedConstructor = path.last().detail().value_or(QString());
     const auto isPotentialWrite = [&] { return potentialWrite && !isFunction; };
+    const auto isSomeSortOfTemplate = [&](const auto declPathIt) {
+        if (declPathIt->kind() == "Function") {
+            const auto children = declPathIt->children().value_or(QList<ClangdAstNode>());
+            for (const ClangdAstNode &child : children) {
+                if (child.role() == "template argument")
+                    return true;
+            }
+        }
+        for (auto it2 = declPathIt; it2 != path.rend(); ++it2) {
+            if (it2->kind() == "FunctionTemplate" || it2->kind() == "ClassTemplate"
+                    || it2->kind() == "ClassTemplatePartialSpecialization") {
+                return true;
+            }
+        }
+        return false;
+    };
     for (auto pathIt = path.rbegin(); pathIt != path.rend(); ++pathIt) {
         if (pathIt->arcanaContains("non_odr_use_unevaluated"))
             return {};
@@ -414,6 +430,8 @@ static Usage::Tags getUsageType(const ClangdAstPath &path, const QString &search
                         tags |= Usage::Tag::MocInvokable;
                 }
             }
+            if (isSomeSortOfTemplate(pathIt))
+                tags |= Usage::Tag::Template;
             return tags;
         }
         if (pathIt->kind() == "MemberInitializer")
