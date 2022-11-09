@@ -35,6 +35,7 @@
 #include <utils/layoutbuilder.h>
 #include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
+#include <utils/runextensions.h>
 
 #include <QCheckBox>
 #include <QFileDialog>
@@ -406,15 +407,16 @@ void AndroidDeployQtStep::slotAskForUninstall(DeployErrorCode errorCode)
     m_askForUninstall = button == QMessageBox::Yes;
 }
 
-bool AndroidDeployQtStep::runImpl()
+void AndroidDeployQtStep::runImpl(QFutureInterface<bool> &fi)
 {
     if (!m_avdName.isEmpty()) {
-        QString serialNumber = AndroidAvdManager().waitForAvd(m_avdName, cancelChecker());
+        QString serialNumber = AndroidAvdManager().waitForAvd(m_avdName, fi);
         qCDebug(deployStepLog) << "Deploying to AVD:" << m_avdName << serialNumber;
         if (serialNumber.isEmpty()) {
             reportWarningOrError(Tr::tr("The deployment AVD \"%1\" cannot be started.")
                                  .arg(m_avdName), Task::Error);
-            return false;
+            fi.reportResult(false);
+            return;
         }
         m_serialNumber = serialNumber;
         qCDebug(deployStepLog) << "Deployment device serial number changed:" << serialNumber;
@@ -450,8 +452,7 @@ bool AndroidDeployQtStep::runImpl()
             reportWarningOrError(error, Task::Error);
         }
     }
-
-    return returnValue == NoError;
+    fi.reportResult(returnValue == NoError);
 }
 
 void AndroidDeployQtStep::gatherFilesToPull()
@@ -488,7 +489,20 @@ void AndroidDeployQtStep::gatherFilesToPull()
 
 void AndroidDeployQtStep::doRun()
 {
-    m_synchronizer.addFuture(runInThread([this] { return runImpl(); }));
+    auto * const watcher = new QFutureWatcher<bool>(this);
+    connect(watcher, &QFutureWatcher<bool>::finished, this, [this, watcher] {
+        const bool success = !watcher->isCanceled() && watcher->result();
+        emit finished(success);
+        watcher->deleteLater();
+    });
+    auto future = Utils::runAsync(&AndroidDeployQtStep::runImpl, this);
+    watcher->setFuture(future);
+    m_synchronizer.addFuture(future);
+}
+
+void AndroidDeployQtStep::doCancel()
+{
+    m_synchronizer.cancelAllFutures();
 }
 
 void AndroidDeployQtStep::runCommand(const CommandLine &command)

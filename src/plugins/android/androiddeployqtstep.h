@@ -50,11 +50,12 @@ private:
 
     bool init() override;
     void doRun() override;
+    void doCancel() override;
     void gatherFilesToPull();
     DeployErrorCode runDeploy();
     void slotAskForUninstall(DeployErrorCode errorCode);
 
-    bool runImpl();
+    void runImpl(QFutureInterface<bool> &fi);
 
     QWidget *createConfigWidget() override;
 
