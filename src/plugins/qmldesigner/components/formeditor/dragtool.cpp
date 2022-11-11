@@ -230,8 +230,8 @@ void DragTool::dropEvent(const QList<QGraphicsItem *> &itemList, QGraphicsSceneD
         QString effectPath;
         const QStringList assetPaths = QString::fromUtf8(event->mimeData()
                                                          ->data(Constants::MIME_TYPE_ASSETS)).split(',');
-        for (const QString &path : assetPaths) {
-            const QString assetType = AssetsLibraryWidget::getAssetTypeAndData(path).first;
+        for (auto &path : assetPaths) {
+            auto assetType = AssetsLibraryWidget::getAssetTypeAndData(path).first;
             if (assetType == Constants::MIME_TYPE_ASSET_EFFECT) {
                 effectPath = path;
                 break;
@@ -266,7 +266,8 @@ void DragTool::dropEvent(const QList<QGraphicsItem *> &itemList, QGraphicsSceneD
                     return;
                 }
 
-                QmlItemNode::createQmlItemNodeForEffect(view(), parentQmlItemNode, effectName);
+                QmlItemNode effectNode = QmlItemNode::
+                        createQmlItemNodeForEffect(view(), parentQmlItemNode, effectName);
 
                 view()->setSelectedModelNodes({parentQmlItemNode});
                 view()->resetPuppet();

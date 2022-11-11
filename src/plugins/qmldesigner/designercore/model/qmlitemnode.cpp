@@ -5,7 +5,6 @@
 #include <metainfo.h>
 #include "nodelistproperty.h"
 #include "nodehints.h"
-#include "nodeproperty.h"
 #include "variantproperty.h"
 #include "bindingproperty.h"
 #include "qmlanchors.h"
@@ -162,9 +161,9 @@ static bool useLayerEffect()
     return settings->value(layerEffectEntry, true).toBool();
 }
 
-void QmlItemNode::createQmlItemNodeForEffect(AbstractView *view,
-                                             const QmlItemNode &parentNode,
-                                             const QString &effectName)
+QmlItemNode QmlItemNode::createQmlItemNodeForEffect(AbstractView *view,
+                                                    const QmlItemNode &parentNode,
+                                                    const QString &effectName)
 {
     QmlItemNode newQmlItemNode;
 
@@ -175,7 +174,7 @@ void QmlItemNode::createQmlItemNodeForEffect(AbstractView *view,
         if (!view->model()->hasImport(import, true, true))
             view->model()->changeImports({import}, {});
     } catch (const Exception &) {
-        QTC_ASSERT(false, return);
+        QTC_ASSERT(false, return QmlItemNode());
     }
 
     TypeName type(effectName.toUtf8());
@@ -191,6 +190,10 @@ void QmlItemNode::createQmlItemNodeForEffect(AbstractView *view,
     } else {
         parentNode.modelNode().variantProperty("layer.enabled").setValue(true);
     }
+
+    QTC_ASSERT(newQmlItemNode.isValid(), return QmlItemNode());
+
+    return  newQmlItemNode;
 }
 
 bool QmlItemNode::isValid() const
