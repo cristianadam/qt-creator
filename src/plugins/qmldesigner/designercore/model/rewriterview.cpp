@@ -1005,8 +1005,9 @@ QString RewriterView::pathForImport(const Import &import)
 
 QStringList RewriterView::importDirectories() const
 {
-    return Utils::transform(m_textToModelMerger->vContext().paths,
-                            [](const Utils::FilePath &p) { return p.toString(); });
+    const QList<QString> list(m_textToModelMerger->vContext().paths.begin(),
+                              m_textToModelMerger->vContext().paths.end());
+    return list;
 }
 
 QSet<QPair<QString, QString> > RewriterView::qrcMapping() const

@@ -21,7 +21,7 @@ struct QMLJS_EXPORT ViewerContext
     };
 
     QStringList selectors;
-    QList<Utils::FilePath> paths;
+    QSet<QString> paths; // Using QString because QML is case sensitive
     QList<Utils::FilePath> applicationDirectories;
     Dialect language = Dialect::Qml;
     Flags flags = AddAllPaths;

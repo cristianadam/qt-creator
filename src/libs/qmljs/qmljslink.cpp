@@ -123,7 +123,10 @@ Link::Link(const Snapshot &snapshot, const ViewerContext &vContext, const Librar
 {
     d->m_valueOwner = new ValueOwner;
     d->m_snapshot = snapshot;
-    d->m_importPaths = vContext.paths;
+    const QList<QString> list(vContext.paths.begin(), vContext.paths.end());
+    d->m_importPaths = Utils::transform(list, [](const QString &p) {
+        return Utils::FilePath::fromString(p);
+    });
     d->m_applicationDirectories = vContext.applicationDirectories;
     d->m_builtins = builtins;
     d->m_vContext = vContext;

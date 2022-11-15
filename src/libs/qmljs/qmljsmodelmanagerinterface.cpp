@@ -63,8 +63,8 @@ static const char *qtQuickUISuffix = "ui.qml";
 
 static void maybeAddPath(ViewerContext &context, const Utils::FilePath &path)
 {
-    if (!path.isEmpty() && !context.paths.contains(path))
-        context.paths.append(path);
+    if (!path.isEmpty() && !context.paths.contains(path.path()))
+        context.paths.insert(path.path());
 }
 
 static QList<Utils::FilePath> environmentImportPaths()
@@ -1252,8 +1252,8 @@ void ModelManagerInterface::updateImportPaths()
     }
 
     for (const ViewerContext &vContext : std::as_const(m_defaultVContexts)) {
-        for (const Utils::FilePath &path : vContext.paths)
-            allImportPaths.maybeInsert(path, vContext.language);
+        for (const QString &path : vContext.paths)
+            allImportPaths.maybeInsert(FilePath::fromString(path), vContext.language);
         allApplicationDirectories.append(vContext.applicationDirectories);
     }
 
@@ -1537,8 +1537,8 @@ ViewerContext ModelManagerInterface::getVContext(const ViewerContext &vCtx,
         Q_FALLTHROUGH();
     case ViewerContext::AddAllPaths:
     {
-        for (const Utils::FilePath &path : std::as_const(defaultVCtx.paths))
-            maybeAddPath(res, path);
+        for (const QString &path : std::as_const(defaultVCtx.paths))
+            maybeAddPath(res, FilePath::fromString(path));
         switch (res.language.dialect()) {
         case Dialect::AnyLanguage:
         case Dialect::Qml:
@@ -1590,8 +1590,8 @@ ViewerContext ModelManagerInterface::getVContext(const ViewerContext &vCtx,
         res.selectors.append(defaultVCtx.selectors);
         Q_FALLTHROUGH();
     case ViewerContext::AddDefaultPaths:
-        for (const Utils::FilePath &path : std::as_const(defaultVCtx.paths))
-            maybeAddPath(res, path);
+        for (const QString &path : std::as_const(defaultVCtx.paths))
+            maybeAddPath(res, FilePath::fromString(path));
         if (res.language == Dialect::AnyLanguage || res.language == Dialect::Qml)
             maybeAddPath(res, info.qtQmlPath);
         if (res.language == Dialect::AnyLanguage || res.language == Dialect::Qml

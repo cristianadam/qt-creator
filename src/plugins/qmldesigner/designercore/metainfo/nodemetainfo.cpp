@@ -149,7 +149,7 @@ static QString qualifiedTypeNameForContext(const ObjectValue *objectValue,
         if (!cImport.valid())
             break;
         for (const Export &e : std::as_const(cImport.possibleExports)) {
-            if (e.pathRequired.isEmpty() || vContext.paths.contains(e.pathRequired)) {
+            if (e.pathRequired.isEmpty() || vContext.paths.contains(e.pathRequired.path())) {
                 switch (e.exportName.type) {
                 case ImportType::Library:
                 {
@@ -173,10 +173,10 @@ static QString qualifiedTypeNameForContext(const ObjectValue *objectValue,
                     // remove the search path prefix.
                     // this means that the same relative path wrt. different import paths will clash
                     QString filePath = e.exportName.path();
-                    for (const Utils::FilePath &path : std::as_const(vContext.paths)) {
-                        if (filePath.startsWith(path.path()) && filePath.size() > path.path().size()
-                            && filePath.at(path.path().size()) == QLatin1Char('/')) {
-                            filePath = filePath.mid(path.path().size() + 1);
+                    for (const QString &path : std::as_const(vContext.paths)) {
+                        if (filePath.startsWith(path) && filePath.size() > path.size()
+                            && filePath.at(path.size()) == QLatin1Char('/')) {
+                            filePath = filePath.mid(path.size() + 1);
                             break;
                         }
                     }
