@@ -116,6 +116,7 @@ macro(qtc_auto_setup_conan)
         -G ${CMAKE_GENERATOR}
         -D CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
         RESULT_VARIABLE result
+        COMMAND_ERROR_IS_FATAL ANY
       )
       if (result EQUAL 0)
         file(WRITE "${conanfile_timestamp_file}" "${conanfile_timestamp}")

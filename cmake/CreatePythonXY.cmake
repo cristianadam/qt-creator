@@ -64,6 +64,7 @@ function(create_python_xy PythonExe PythonZipFilePath)
   set(ENV{PYTHONOPTIMIZE} "2")
   execute_process(
     COMMAND "${PythonExe}" -OO -m compileall "${CMAKE_CURRENT_BINARY_DIR}/python-lib" -b
+    COMMAND_ERROR_IS_FATAL ANY
   )
 
   file(GLOB_RECURSE python_lib_files "${CMAKE_CURRENT_BINARY_DIR}/python-lib/*.py")
@@ -75,5 +76,6 @@ function(create_python_xy PythonExe PythonZipFilePath)
   execute_process(
     COMMAND ${CMAKE_COMMAND} -E tar cf "${PythonZipFilePath}" . --format=zip
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/python-lib/"
+    COMMAND_ERROR_IS_FATAL ANY
   )
 endfunction()

@@ -778,14 +778,14 @@ function(add_qtc_executable name)
         set(_code "${_code}
           execute_process(COMMAND \"${CMAKE_INSTALL_NAME_TOOL}\"
             -delete_rpath \"${_rpath}\"
-            \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${_EXECUTABLE_FILE_PATH}\")"
+            \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${_EXECUTABLE_FILE_PATH}\" COMMAND_ERROR_IS_FATAL ANY)"
         )
       endforeach()
       foreach(_rpath ${install_rpath})
         set(_code "${_code}
           execute_process(COMMAND \"${CMAKE_INSTALL_NAME_TOOL}\"
             -add_rpath \"${_rpath}\"
-            \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${_EXECUTABLE_FILE_PATH}\")"
+            \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${_EXECUTABLE_FILE_PATH}\" COMMAND_ERROR_IS_FATAL ANY)"
         )
       endforeach()
       install(CODE "${_code}")

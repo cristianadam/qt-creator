@@ -365,6 +365,7 @@ function(conan_cmake_detect_unix_libcxx result)
         COMMAND ${CMAKE_COMMAND} -E echo "#include <string>"
         COMMAND ${EXPAND_CXX_COMPILER} ${SPLIT_CXX_FLAGS} -x c++ ${xcode_sysroot_option} ${compile_options} -E -dM -
         OUTPUT_VARIABLE string_defines
+        COMMAND_ERROR_IS_FATAL ANY
     )
 
     if(string_defines MATCHES "#define __GLIBCXX__")
@@ -529,11 +530,13 @@ function(old_conan_cmake_install)
                         RESULT_VARIABLE return_code
                         OUTPUT_VARIABLE conan_output
                         ERROR_VARIABLE conan_output
-                        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+                        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+                        COMMAND_ERROR_IS_FATAL ANY)
     else()
         execute_process(COMMAND ${CONAN_CMD} ${conan_args}
                         RESULT_VARIABLE return_code
-                        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+                        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+                        COMMAND_ERROR_IS_FATAL ANY)
     endif()
 
     if(NOT "${return_code}" STREQUAL "0")
@@ -642,7 +645,8 @@ function(conan_cmake_install)
                     RESULT_VARIABLE return_code
                     ${OUTPUT_OPT}
                     ${ERROR_OPT}
-                    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+                    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+                    COMMAND_ERROR_IS_FATAL ANY)
 
     if(NOT "${return_code}" STREQUAL "0")
         if (ARGS_ERROR_QUIET)
@@ -746,7 +750,8 @@ function(conan_cmake_lock_create)
                     RESULT_VARIABLE return_code
                     ${OUTPUT_OPT}
                     ${ERROR_OPT}
-                    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+                    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+                    COMMAND_ERROR_IS_FATAL ANY)
 
     if(NOT "${return_code}" STREQUAL "0")
         if (ARGS_ERROR_QUIET)
@@ -923,7 +928,8 @@ macro(conan_check)
     execute_process(COMMAND ${CONAN_CMD} --version
                     RESULT_VARIABLE return_code
                     OUTPUT_VARIABLE CONAN_VERSION_OUTPUT
-                    ERROR_VARIABLE CONAN_VERSION_OUTPUT)
+                    ERROR_VARIABLE CONAN_VERSION_OUTPUT
+                    COMMAND_ERROR_IS_FATAL ANY)
 
     if(NOT "${return_code}" STREQUAL "0")
       message(FATAL_ERROR "Conan --version failed='${return_code}'")
@@ -969,7 +975,8 @@ function(conan_add_remote)
     endif()
     message(STATUS "Conan: Adding ${CONAN_NAME} remote repository (${CONAN_URL}) verify ssl (${CONAN_VERIFY_SSL_ARG})")
     execute_process(COMMAND ${CONAN_CMD} remote add ${CONAN_NAME} ${CONAN_INDEX_ARG} -f ${CONAN_URL} ${CONAN_VERIFY_SSL_ARG}
-                    RESULT_VARIABLE return_code)
+                    RESULT_VARIABLE return_code
+                    COMMAND_ERROR_IS_FATAL ANY)
     if(NOT "${return_code}" STREQUAL "0")
       message(FATAL_ERROR "Conan remote failed='${return_code}'")
     endif()
@@ -1019,7 +1026,8 @@ macro(conan_config_install)
 
     message(STATUS "Conan: Installing config from ${CONAN_ITEM}")
 	execute_process(COMMAND ${CONAN_CMD} config install ${CONAN_ITEM} ${CONAN_CONFIG_INSTALL_ARGS}
-                  RESULT_VARIABLE return_code)
+                  RESULT_VARIABLE return_code
+                  COMMAND_ERROR_IS_FATAL ANY)
   if(NOT "${return_code}" STREQUAL "0")
     message(FATAL_ERROR "Conan config failed='${return_code}'")
   endif()
