@@ -16,5 +16,6 @@ Project {
         "treemodel/treemodel.qbs",
         "multicursor/multicursor.qbs",
         "deviceshell/deviceshell.qbs",
+        "commandline/commandline.qbs",
     ]
 }
