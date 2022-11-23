@@ -15,6 +15,7 @@
 #include "qmldesignerprojectmanager.h"
 #include "quick2propertyeditorview.h"
 #include "settingspage.h"
+#include <toolbar.h>
 
 #include <colortool/colortool.h>
 #include <connectionview.h>
@@ -258,6 +259,11 @@ bool QmlDesignerPlugin::initialize(const QStringList & /*arguments*/, QString *e
                                                 : title.toString();
         Core::AsynchronousMessageBox::warning(composedTitle, description.toString());
     });
+
+    if (QmlProjectManager::QmlProject::isQtDesignStudio()) {
+        ToolBar::create();
+        ToolBar::createStatusBar();
+    }
 
     return true;
 }

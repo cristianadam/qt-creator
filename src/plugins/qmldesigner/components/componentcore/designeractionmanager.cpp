@@ -286,6 +286,11 @@ QHash<QString, QStringList> DesignerActionManager::handleExternalAssetsDrop(cons
     return addedCategoryFiles;
 }
 
+void DesignerActionManager::addAddActionCallback(ActionAddedInterface callback)
+{
+    m_callBacks.append(callback);
+}
+
 class VisiblityModelNodeAction : public ModelNodeContextMenuAction
 {
 public:
@@ -2077,6 +2082,10 @@ void DesignerActionManager::createDefaultModelNodePreviewImageHandlers()
 void DesignerActionManager::addDesignerAction(ActionInterface *newAction)
 {
     m_designerActions.append(QSharedPointer<ActionInterface>(newAction));
+
+    for (auto callback : m_callBacks) {
+        callback(newAction);
+    }
 }
 
 void DesignerActionManager::addCreatorCommand(Core::Command *command, const QByteArray &category, int priority,

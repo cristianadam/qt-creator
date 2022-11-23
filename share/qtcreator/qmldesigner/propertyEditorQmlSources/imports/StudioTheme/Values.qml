@@ -9,6 +9,10 @@ QtObject {
     id: values
 
     property real baseHeight: 29
+
+    property real topLevelComboWidth: 210
+    property real topLevelComboHeight: 36
+    property real topLevelComboIcon: 20
     property real baseFont: 12
     property real mediumFont: 14
     property real bigFont: 16
