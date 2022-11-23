@@ -1128,9 +1128,10 @@ void CppModelManager::removeProjectInfoFilesAndIncludesFromSnapshot(const Projec
     QMutexLocker snapshotLocker(&d->m_snapshotMutex);
     for (const ProjectPart::ConstPtr &projectPart : projectInfo.projectParts()) {
         for (const ProjectFile &cxxFile : std::as_const(projectPart->files)) {
-            const QSet<QString> fileNames = d->m_snapshot.allIncludesForDocument(cxxFile.path);
-            for (const QString &fileName : fileNames)
-                d->m_snapshot.remove(fileName);
+            const QSet<FilePath> filePaths = d->m_snapshot.allIncludesForDocument(
+                        FilePath::fromString(cxxFile.path));
+            for (const FilePath &filePath : filePaths)
+                d->m_snapshot.remove(filePath);
             d->m_snapshot.remove(cxxFile.path);
         }
     }
