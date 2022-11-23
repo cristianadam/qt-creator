@@ -1310,7 +1310,7 @@ void CppModelManager::removeProjectInfoFilesAndIncludesFromSnapshot(const Projec
                         FilePath::fromString(cxxFile.path));
             for (const FilePath &filePath : filePaths)
                 d->m_snapshot.remove(filePath);
-            d->m_snapshot.remove(cxxFile.path);
+            d->m_snapshot.remove(FilePath::fromString(cxxFile.path));
         }
     }
 }
@@ -1326,7 +1326,7 @@ void CppModelManager::removeFilesFromSnapshot(const QSet<QString> &filesToRemove
 {
     QMutexLocker snapshotLocker(&d->m_snapshotMutex);
     for (const QString &file : filesToRemove)
-        d->m_snapshot.remove(file);
+        d->m_snapshot.remove(FilePath::fromString(file));
 }
 
 class ProjectInfoComparer
