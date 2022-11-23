@@ -667,7 +667,7 @@ Core::ILocatorFilter *CppModelManager::currentDocumentFilter() const
     return d->m_currentDocumentFilter.get();
 }
 
-QString CppModelManager::configurationFileName()
+const FilePath &CppModelManager::configurationFileName()
 {
     return Preprocessor::configurationFileName();
 }
