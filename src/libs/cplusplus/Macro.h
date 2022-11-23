@@ -68,14 +68,11 @@ public:
     void addFormal(const QByteArray &formal)
     { _formals.append(formal); }
 
-    const QString &fileName() const
-    { return _fileName; }
-
     Utils::FilePath filePath() const
-    { return Utils::FilePath::fromString(_fileName); }
+    { return _filePath; }
 
-    void setFileName(const QString &fileName)
-    { _fileName = fileName; }
+    void setFilePath(const Utils::FilePath &filePath)
+    { _filePath = filePath; }
 
     unsigned fileRevision() const
     { return _fileRevision; }
@@ -145,7 +142,7 @@ private:
     QByteArray _definitionText;
     QVector<PPToken> _definitionTokens;
     QVector<QByteArray> _formals;
-    QString _fileName;
+    Utils::FilePath _filePath;
     unsigned _hashcode;
     unsigned _fileRevision;
     int _line;

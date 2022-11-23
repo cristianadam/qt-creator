@@ -304,9 +304,10 @@ CppSourceProcessor *CppModelManager::createSourceProcessor()
     });
 }
 
-QString CppModelManager::editorConfigurationFileName()
+const FilePath &CppModelManager::editorConfigurationFileName()
 {
-    return QLatin1String("<per-editor-defines>");
+    static const FilePath perEditorDefines = FilePath::fromPathPart(u"<per-editor-defines>");
+    return perEditorDefines;
 }
 
 ModelManagerSupport *CppModelManager::modelManagerSupport(Backend backend) const
