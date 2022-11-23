@@ -424,8 +424,7 @@ IAssistProposal *CustomAssistProcessor::perform()
     }
     case CustomAssistMode::IncludePath: {
         HeaderPaths headerPaths;
-        const ProjectPart::ConstPtr projectPart
-                = projectPartForFile(interface()->filePath().toString());
+        const ProjectPart::ConstPtr projectPart = projectPartForFile(interface()->filePath());
         if (projectPart)
             headerPaths = projectPart->headerPaths;
         completions = completeInclude(m_endPos, m_completionOperator, interface(), headerPaths);
