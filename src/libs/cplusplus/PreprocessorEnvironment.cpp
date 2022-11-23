@@ -116,7 +116,7 @@ Macro *Environment::remove(const ByteArrayRef &name)
     Macro macro;
     macro.setName(name.toByteArray());
     macro.setHidden(true);
-    macro.setFileName(currentFile);
+    macro.setFilePath(Utils::FilePath::fromString(currentFile));
     macro.setLine(currentLine);
     return bind(macro);
 }

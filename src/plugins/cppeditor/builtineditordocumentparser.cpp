@@ -193,7 +193,7 @@ void BuiltinEditorDocumentParser::updateImpl(const QFutureInterface<void> &futur
                 sourceProcessor.run(precompiledHeader);
         }
         if (!baseState.editorDefines.isEmpty())
-            sourceProcessor.run(CppModelManager::editorConfigurationFileName());
+            sourceProcessor.run(CppModelManager::editorConfigurationFileName().toString());
         QStringList includedFiles = state.includedFiles;
         if (baseConfig.usePrecompiledHeaders)
             includedFiles << state.precompiledHeaders;
