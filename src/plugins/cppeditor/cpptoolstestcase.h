@@ -135,18 +135,16 @@ public:
     static CPlusPlus::Snapshot globalSnapshot();
     static bool garbageCollectGlobalSnapshot();
 
-    static bool waitForProcessedEditorDocument(const QString &filePath, int timeOutInMs = 5000);
+    static bool waitForProcessedEditorDocument(const Utils::FilePath &filePath, int timeOutInMs = 5000);
     static CPlusPlus::Document::Ptr waitForRehighlightedSemanticDocument(
             CppEditorWidget *editorWidget);
 
     enum { defaultTimeOutInMs = 30 * 1000 /*= 30 secs*/ };
     static bool waitUntilProjectIsFullyOpened(ProjectExplorer::Project *project,
                                               int timeOutInMs = defaultTimeOutInMs);
-    static CPlusPlus::Document::Ptr waitForFileInGlobalSnapshot(
-            const QString &filePath,
+    static CPlusPlus::Document::Ptr waitForFileInGlobalSnapshot(const Utils::FilePath &filePath,
             int timeOutInMs = defaultTimeOutInMs);
-    static QList<CPlusPlus::Document::Ptr> waitForFilesInGlobalSnapshot(
-            const QStringList &filePaths,
+    static QList<CPlusPlus::Document::Ptr> waitForFilesInGlobalSnapshot(const Utils::FilePaths &filePaths,
             int timeOutInMs = defaultTimeOutInMs);
 
     static bool writeFile(const Utils::FilePath &filePath, const QByteArray &contents);
