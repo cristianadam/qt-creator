@@ -129,7 +129,7 @@ static QList<GitLabServer> readTokensFile(const Utils::FilePath &filePath)
 {
     if (!filePath.exists())
         return {};
-    std::optional<QByteArray> contents = filePath.fileContents();
+    const auto contents = filePath.fileContents();
     if (!contents)
         return {};
     const QByteArray content = *contents;

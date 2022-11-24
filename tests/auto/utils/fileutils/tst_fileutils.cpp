@@ -1,9 +1,9 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0+ OR GPL-3.0 WITH Qt-GPL-exception-1.0
 
-#include <QtTest>
 #include <QDebug>
 #include <QRandomGenerator>
+#include <QtTest>
 
 #include <utils/fileutils.h>
 #include <utils/hostosinfo.h>
@@ -13,12 +13,12 @@
 using namespace Utils;
 
 namespace QTest {
-    template<>
-    char *toString(const FilePath &filePath)
-    {
-        return qstrdup(filePath.toString().toLocal8Bit().constData());
-    }
+template<>
+char *toString(const FilePath &filePath)
+{
+    return qstrdup(filePath.toString().toLocal8Bit().constData());
 }
+} // namespace QTest
 
 class tst_fileutils : public QObject
 {
@@ -110,10 +110,50 @@ private slots:
     void hostSpecialChars_data();
     void hostSpecialChars();
 
+    void tryExp();
+
 private:
     QTemporaryDir tempDir;
     QString rootPath;
 };
+
+expected<void, QString> testVoid()
+{
+    return unexpected<QString>("test");
+}
+
+expected<void, QString> testVoidSuccess()
+{
+    return {};
+}
+
+expected<QStringList, QString> testString()
+{
+    return QStringList() << "Hallo"
+                         << "Welt";
+}
+
+void tst_fileutils::tryExp()
+{
+    FilePath p = "idontexists.ne";
+
+    auto result = p.fileContents()
+                      .and_then([](auto) { return expected<QByteArray, QString>{}; })
+                      .or_else([](auto error) {
+                          return expected<QByteArray, QString>(
+                              unexpected<QString>("Error: " + error));
+                      })
+                      .map_error(
+                          [](auto error) -> QString { return QString("More Info: ") + error; })
+                      .QTC_ADD_ERROR("Macro Test");
+
+    QTC_TRY(result, "");
+
+    QTC_TRY(testVoid(), "");
+    QTC_TRY(testString(), "");
+
+    QVERIFY(!result);
+}
 
 static void touch(const QDir &dir, const QString &filename, bool fill)
 {
@@ -938,7 +978,7 @@ void tst_fileutils::asyncLocalCopy()
     const FilePath orig = FilePath::fromString(rootPath).pathAppended("x/y/fileToCopy.txt");
     QVERIFY(orig.exists());
     const FilePath dest = FilePath::fromString(rootPath).pathAppended("x/fileToCopyDest.txt");
-    auto afterCopy = [&orig, &dest, this] (bool result) {
+    auto afterCopy = [&orig, &dest, this] (expected<void, QString> result) {
         QVERIFY(result);
         // check existence, size and content
         QVERIFY(dest.exists());

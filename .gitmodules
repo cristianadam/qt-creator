@@ -12,3 +12,6 @@
 [submodule "src/libs/qlitehtml"]
 	path = src/libs/qlitehtml
 	url = https://code.qt.io/playground/qlitehtml.git
+[submodule "src/libs/3rdparty/tl_expected"]
+	path = src/libs/3rdparty/tl_expected
+	url = https://github.com/TartanLlama/expected.git
