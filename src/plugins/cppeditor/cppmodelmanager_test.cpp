@@ -451,12 +451,12 @@ void ModelManagerTest::testRefreshAddedAndPurgeRemoved()
 ///        while the project configuration stays the same
 void ModelManagerTest::testRefreshTimeStampModifiedIfSourcefilesChange()
 {
-    QFETCH(QString, fileToChange);
+    QFETCH(QString, fileToChange_);
     QFETCH(QStringList, initialProjectFiles);
     QFETCH(QStringList, finalProjectFiles);
 
     TemporaryCopiedDir temporaryDir(MyTestDataDir(QLatin1String("testdata_refresh2")).path());
-    fileToChange = temporaryDir.absolutePath(fileToChange.toUtf8());
+    const FilePath fileToChange = FilePath::fromString(temporaryDir.absolutePath(fileToChange_.toUtf8()));
     const FilePaths initialProjectFilePaths = toAbsolutePaths(initialProjectFiles, temporaryDir);
     const FilePaths finalProjectFilePaths = toAbsolutePaths(finalProjectFiles, temporaryDir);
 
@@ -493,7 +493,7 @@ void ModelManagerTest::testRefreshTimeStampModifiedIfSourcefilesChange()
 
     // Modify the file
     QTest::qSleep(1000); // Make sure the timestamp is different
-    FileChangerAndRestorer fileChangerAndRestorer(FilePath::fromString(fileToChange));
+    FileChangerAndRestorer fileChangerAndRestorer(fileToChange);
     QByteArray originalContents;
     QVERIFY(fileChangerAndRestorer.readContents(&originalContents));
     const QByteArray newFileContentes = originalContents + "\nint addedOtherGlobal;";
@@ -618,7 +618,8 @@ void ModelManagerTest::testExtraeditorsupportUiFiles()
 
     // Check CppSourceProcessor / includes.
     // The CppSourceProcessor is expected to find the ui_* file in the working copy.
-    const QString fileIncludingTheUiFile = temporaryDir.absolutePath("mainwindow.cpp");
+    const FilePath fileIncludingTheUiFile =
+            FilePath::fromString(temporaryDir.absolutePath("mainwindow.cpp"));
     while (!mm->snapshot().document(fileIncludingTheUiFile))
         QCoreApplication::processEvents();
 
