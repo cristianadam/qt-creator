@@ -5,16 +5,16 @@
 
 #include <QStringList>
 
-namespace Designer {
-namespace Internal {
+namespace Utils { class FilePath; }
+
+namespace Designer::Internal {
 
 // Goto slot invoked by the designer context menu. Either navigates
 // to an existing slot function or create a new one.
-bool navigateToSlot(const QString &uiFileName,
+bool navigateToSlot(const Utils::FilePath &uiFilePath,
                     const QString &objectName,
                     const QString &signalSignature,
                     const QStringList &parameterNames,
                     QString *errorMessage);
 
-} // namespace Internal
-} // namespace Designer
+} // Designer::Internnal
