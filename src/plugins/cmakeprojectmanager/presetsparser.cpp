@@ -391,7 +391,7 @@ const PresetsData &PresetsParser::presetsData() const
 
 bool PresetsParser::parse(const Utils::FilePath &jsonFile, QString &errorMessage, int &errorLine)
 {
-    const std::optional<QByteArray> jsonContents = jsonFile.fileContents();
+    const auto jsonContents = jsonFile.fileContents();
     if (!jsonContents) {
         errorMessage = Tr::tr("Failed to read %1 file").arg(jsonFile.fileName());
         return false;

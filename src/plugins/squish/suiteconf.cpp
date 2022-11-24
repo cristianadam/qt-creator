@@ -80,7 +80,7 @@ static QMap<QString, QString> readSuiteConfContent(const Utils::FilePath &file)
     if (!file.isReadableFile())
         return {};
 
-    std::optional<QByteArray> suiteConfContent = file.fileContents();
+    const auto suiteConfContent = file.fileContents();
     if (!suiteConfContent)
         return {};
 
@@ -112,7 +112,8 @@ static bool writeSuiteConfContent(const Utils::FilePath &file, const QMap<QStrin
         else
             outData.append(it.key().toUtf8()).append('=').append(it.value().toUtf8()).append('\n');
     }
-    return file.writeFileContents(outData);
+    QTC_EXPECT_OR(file.writeFileContents(outData), return false);
+    return true;
 }
 
 bool SuiteConf::read()
@@ -306,9 +307,8 @@ bool SuiteConf::ensureObjectMapExists() const
     const Utils::FilePath objectMap = scripts.pathAppended("objectmap_template" + extension);
     bool ok = destinationObjectMap.parentDir().ensureWritableDir();
     QTC_ASSERT(ok, return false);
-    ok = objectMap.copyFile(destinationObjectMap);
-    QTC_ASSERT(ok, return false);
-    return ok;
+    QTC_EXPECT_OR(objectMap.copyFile(destinationObjectMap), return false);
+    return true;
 }
 
 } // namespace Internal

@@ -136,9 +136,8 @@ bool CppToolsJsExtension::hasQObjectParent(const QString &klassName) const
     const WorkingCopy workingCopy = CppModelManager::instance()->workingCopy();
     QByteArray source = workingCopy.source(item->filePath());
     if (source.isEmpty()) {
-        std::optional<QByteArray> contents = item->filePath().fileContents();
-        if (!contents)
-            return false;
+        const auto contents = item->filePath().fileContents();
+        QTC_EXPECT_OR(contents, return false);
         source = *contents;
     }
     const auto doc = snapshot.preprocessedDocument(source, item->filePath());

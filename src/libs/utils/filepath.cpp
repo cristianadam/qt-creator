@@ -10,14 +10,15 @@
 #include "hostosinfo.h"
 #include "qtcassert.h"
 
-#include <QtGlobal>
+#include <QByteArray>
 #include <QDateTime>
 #include <QDebug>
 #include <QDirIterator>
 #include <QFileInfo>
 #include <QRegularExpression>
-#include <QUrl>
 #include <QStringView>
+#include <QUrl>
+#include <QtGlobal>
 
 #ifdef Q_OS_WIN
 #ifdef QTCREATOR_PCH_H
@@ -499,7 +500,7 @@ void FilePath::iterateDirectories(const FilePaths &dirs,
         dir.iterateDirectory(callBack, filter);
 }
 
-std::optional<QByteArray> FilePath::fileContents(qint64 maxSize, qint64 offset) const
+expected_str<QByteArray> FilePath::fileContents(qint64 maxSize, qint64 offset) const
 {
     return fileAccess()->fileContents(*this, maxSize, offset);
 }
@@ -515,15 +516,14 @@ bool FilePath::ensureReachable(const FilePath &other) const
     return false;
 }
 
-void FilePath::asyncFileContents(
-        const Continuation<const std::optional<QByteArray> &> &cont,
-        qint64 maxSize,
-        qint64 offset) const
+void FilePath::asyncFileContents(const Continuation<const expected_str<QByteArray> &> &cont,
+                                 qint64 maxSize,
+                                 qint64 offset) const
 {
     return fileAccess()->asyncFileContents(*this, cont, maxSize, offset);
 }
 
-bool FilePath::writeFileContents(const QByteArray &data, qint64 offset) const
+expected_str<qint64> FilePath::writeFileContents(const QByteArray &data, qint64 offset) const
 {
     return fileAccess()->writeFileContents(*this, data, offset);
 }
@@ -533,10 +533,9 @@ FilePathInfo FilePath::filePathInfo() const
     return fileAccess()->filePathInfo(*this);
 }
 
-void FilePath::asyncWriteFileContents(
-        const Continuation<bool> &cont,
-        const QByteArray &data,
-        qint64 offset) const
+void FilePath::asyncWriteFileContents(const Continuation<expected_str<qint64>> &cont,
+                                      const QByteArray &data,
+                                      qint64 offset) const
 {
     return fileAccess()->asyncWriteFileContents(*this, cont, data, offset);
 }
@@ -1321,33 +1320,41 @@ bool FilePath::removeRecursively(QString *error) const
     return fileAccess()->removeRecursively(*this, error);
 }
 
-bool FilePath::copyFile(const FilePath &target) const
+expected_str<void> FilePath::copyFile(const FilePath &target) const
 {
     if (host() != target.host()) {
         // FIXME: This does not scale.
-        const std::optional<QByteArray> ba = fileContents();
-        if (!ba)
-            return false;
+        const auto contents = fileContents().QTC_ADD_ERROR("Could not copy file: ");
+        RETURN_IF_FAILED(contents);
+
         const auto perms = permissions();
-        if (!target.writeFileContents(*ba))
-            return false;
+        RETURN_IF_FAILED(target.writeFileContents(*contents).QTC_ADD_ERROR("Could not copy file: "));
 
         if (!target.setPermissions(perms)) {
             target.removeFile();
-            return false;
+            return make_unexpected(
+                QString("Could not set permissions on %1").arg(target.toString()));
         }
 
-        return true;
+        return {};
     }
-    return fileAccess()->copyFile(*this, target);
+    RETURN_IF_FAILED(fileAccess()->copyFile(*this, target));
+
+    return {};
 }
 
-void FilePath::asyncCopyFile(const std::function<void(bool)> &cont, const FilePath &target) const
+void FilePath::asyncCopyFile(const std::function<void(expected_str<void>)> &cont,
+                             const FilePath &target) const
 {
     if (host() != target.host()) {
-        asyncFileContents([cont, target](const std::optional<QByteArray> &ba) {
-            if (ba)
-                target.asyncWriteFileContents(cont, *ba);
+        asyncFileContents([cont, target](const expected_str<QByteArray> &contents) {
+            if (contents)
+                target.asyncWriteFileContents([cont](auto result){
+                    if (result)
+                        cont({});
+                    else
+                        cont(make_unexpected(result.error()));
+                }, *contents);
         });
         return;
     }
