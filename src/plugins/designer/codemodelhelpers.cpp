@@ -12,7 +12,6 @@
 #include <projectexplorer/session.h>
 #include <projectexplorer/target.h>
 
-#include <QCoreApplication>
 #include <QDebug>
 
 // Debug helpers for code model. @todo: Move to some CppEditor library?
@@ -20,12 +19,14 @@
 using namespace ProjectExplorer;
 using namespace Utils;
 
+namespace Designer::Internal {
+
+const char setupUiC[] = "setupUi";
+
 using DependencyMap = QMap<QString, QStringList>;
 using DocumentPtr = CPlusPlus::Document::Ptr;
 using SymbolList = QList<CPlusPlus::Symbol *>;
 using DocumentPtrList = QList<DocumentPtr>;
-
-static const char setupUiC[] = "setupUi";
 
 // Find the generated "ui_form.h" header of the form via project.
 static FilePath generatedHeaderOf(const FilePath &uiFileName)
@@ -66,7 +67,7 @@ SearchFunction::SearchFunction(const char *name) :
 {
 }
 
-SearchFunction::FunctionList SearchFunction::operator()(const DocumentPtr &doc)
+static SearchFunction::FunctionList SearchFunction::operator()(const DocumentPtr &doc)
 {
     m_matches.clear();
     const int globalSymbolCount = doc->globalSymbolCount();
@@ -75,7 +76,7 @@ SearchFunction::FunctionList SearchFunction::operator()(const DocumentPtr &doc)
     return m_matches;
 }
 
-bool SearchFunction::visit(CPlusPlus::Function * f)
+static bool SearchFunction::visit(CPlusPlus::Function * f)
 {
     if (const CPlusPlus::Name *name = f->name())
         if (const CPlusPlus::Identifier *id = name->identifier())
@@ -85,14 +86,9 @@ bool SearchFunction::visit(CPlusPlus::Function * f)
     return true;
 }
 
-} // anonymous namespace
-
-namespace Designer {
-namespace Internal {
-
 // Goto slot invoked by the designer context menu. Either navigates
 // to an existing slot function or create a new one.
-bool navigateToSlot(const QString &uiFileName,
+bool navigateToSlot(const FilePath &uiFilePath,
                     const QString & /* objectName */,
                     const QString & /* signalSignature */,
                     const QStringList & /* parameterNames */,
@@ -100,9 +96,9 @@ bool navigateToSlot(const QString &uiFileName,
 {
 
     // Find the generated header.
-    const FilePath generatedHeaderFile = generatedHeaderOf(FilePath::fromString(uiFileName));
+    const FilePath generatedHeaderFile = generatedHeaderOf(uiFilePath);
     if (generatedHeaderFile.isEmpty()) {
-        *errorMessage = Tr::tr("The generated header of the form \"%1\" could not be found.\nRebuilding the project might help.").arg(uiFileName);
+        *errorMessage = Tr::tr("The generated header of the form \"%1\" could not be found.\nRebuilding the project might help.").arg(uiFilePath);
         return false;
     }
     const CPlusPlus::Snapshot snapshot = CppEditor::CppModelManager::instance()->snapshot();
@@ -124,5 +120,4 @@ bool navigateToSlot(const QString &uiFileName,
     return true;
 }
 
-} // namespace Internal
-} // namespace Designer
+} // Designer::Internal
