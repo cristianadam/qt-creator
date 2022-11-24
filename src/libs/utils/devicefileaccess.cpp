@@ -6,6 +6,7 @@
 #include "algorithm.h"
 #include "commandline.h"
 #include "environment.h"
+#include "expected.h"
 #include "hostosinfo.h"
 #include "qtcassert.h"
 
@@ -137,12 +138,14 @@ bool DeviceFileAccess::removeRecursively(const FilePath &filePath, QString *erro
     return false;
 }
 
-bool DeviceFileAccess::copyFile(const FilePath &filePath, const FilePath &target) const
+expected<void, QString> DeviceFileAccess::copyFile(const FilePath &filePath,
+                                                   const FilePath &target) const
 {
     Q_UNUSED(filePath)
     Q_UNUSED(target)
     QTC_CHECK(false);
-    return false;
+    return make_unexpected(
+        QString("copyFile is not implemented for \"%1\"").arg(filePath.toUserOutput()));
 }
 
 bool DeviceFileAccess::renameFile(const FilePath &filePath, const FilePath &target) const
@@ -177,28 +180,28 @@ void DeviceFileAccess::iterateDirectory(
     QTC_CHECK(false);
 }
 
-std::optional<QByteArray> DeviceFileAccess::fileContents(
-        const FilePath &filePath,
-        qint64 limit,
-        qint64 offset) const
+expected<QByteArray, QString> DeviceFileAccess::fileContents(const FilePath &filePath,
+                                                             qint64 limit,
+                                                             qint64 offset) const
 {
     Q_UNUSED(filePath)
     Q_UNUSED(limit)
     Q_UNUSED(offset)
     QTC_CHECK(false);
-    return {};
+    return make_unexpected(
+        QString("fileContents is not implemented for \"%1\"").arg(filePath.toUserOutput()));
 }
 
-bool DeviceFileAccess::writeFileContents(
-        const FilePath &filePath,
-        const QByteArray &data,
-        qint64 offset) const
+expected<qint64, QString> DeviceFileAccess::writeFileContents(const FilePath &filePath,
+                                                              const QByteArray &data,
+                                                              qint64 offset) const
 {
     Q_UNUSED(filePath)
     Q_UNUSED(data)
     Q_UNUSED(offset)
     QTC_CHECK(false);
-    return false;
+    return make_unexpected(
+        QString("writeFileContents is not implemented for \"%1\"").arg(filePath.toUserOutput()));
 }
 
 FilePathInfo DeviceFileAccess::filePathInfo(const FilePath &filePath) const
@@ -260,28 +263,25 @@ std::optional<FilePath> DeviceFileAccess::refersToExecutableFile(
     return {};
 }
 
-void DeviceFileAccess::asyncFileContents(
-        const FilePath &filePath,
-        const Continuation<std::optional<QByteArray>> &cont,
-        qint64 limit,
-        qint64 offset) const
+void DeviceFileAccess::asyncFileContents(const FilePath &filePath,
+                                         const Continuation<expected<QByteArray, QString>> &cont,
+                                         qint64 limit,
+                                         qint64 offset) const
 {
     cont(fileContents(filePath, limit, offset));
 }
 
-void DeviceFileAccess::asyncWriteFileContents(
-        const FilePath &filePath,
-        const Continuation<bool> &cont,
-        const QByteArray &data,
-        qint64 offset) const
+void DeviceFileAccess::asyncWriteFileContents(const FilePath &filePath,
+                                              const Continuation<expected<qint64, QString>> &cont,
+                                              const QByteArray &data,
+                                              qint64 offset) const
 {
     cont(writeFileContents(filePath, data, offset));
 }
 
-void DeviceFileAccess::asyncCopyFile(
-        const FilePath &filePath,
-        const Continuation<bool> &cont,
-        const FilePath &target) const
+void DeviceFileAccess::asyncCopyFile(const FilePath &filePath,
+                                     const Continuation<expected<void, QString>> &cont,
+                                     const FilePath &target) const
 {
     cont(copyFile(filePath, target));
 }
@@ -469,9 +469,14 @@ bool DesktopDeviceFileAccess::removeRecursively(const FilePath &filePath, QStrin
     return true;
 }
 
-bool DesktopDeviceFileAccess::copyFile(const FilePath &filePath, const FilePath &target) const
+expected<void, QString> DesktopDeviceFileAccess::copyFile(const FilePath &filePath,
+                                                          const FilePath &target) const
 {
-    return QFile::copy(filePath.path(), target.path());
+    if (QFile::copy(filePath.path(), target.path()))
+        return {};
+    return make_unexpected(QString("Failed to copy file \"%1\" to \"%2\".")
+                               .arg(filePath.toUserOutput())
+                               .arg(target.toUserOutput()));
 }
 
 bool DesktopDeviceFileAccess::renameFile(const FilePath &filePath, const FilePath &target) const
@@ -532,18 +537,17 @@ void DesktopDeviceFileAccess::iterateDirectory(
     }
 }
 
-std::optional<QByteArray> DesktopDeviceFileAccess::fileContents(
-        const FilePath &filePath,
-        qint64 limit,
-        qint64 offset) const
+expected<QByteArray, QString> DesktopDeviceFileAccess::fileContents(const FilePath &filePath,
+                                                                    qint64 limit,
+                                                                    qint64 offset) const
 {
     const QString path = filePath.path();
     QFile f(path);
     if (!f.exists())
-        return {};
+        return make_unexpected(QString("File \"%1\" does not exist").arg(path));
 
     if (!f.open(QFile::ReadOnly))
-        return {};
+        return make_unexpected(QString("Could not open File \"%1\"").arg(path));
 
     if (offset != 0)
         f.seek(offset);
@@ -554,17 +558,24 @@ std::optional<QByteArray> DesktopDeviceFileAccess::fileContents(
     return f.readAll();
 }
 
-bool DesktopDeviceFileAccess::writeFileContents(
-        const FilePath &filePath,
-        const QByteArray &data,
-        qint64 offset) const
+expected<qint64, QString> DesktopDeviceFileAccess::writeFileContents(const FilePath &filePath,
+                                                                     const QByteArray &data,
+                                                                     qint64 offset) const
 {
     QFile file(filePath.path());
-    QTC_ASSERT(file.open(QFile::WriteOnly | QFile::Truncate), return false);
+    QTC_ASSERT(file.open(QFile::WriteOnly | QFile::Truncate),
+               return make_unexpected(
+                   QString("Could not open file \"%1\" for writing").arg(filePath.toUserOutput())));
     if (offset != 0)
         file.seek(offset);
     qint64 res = file.write(data);
-    return res == data.size();
+    if (res != data.size())
+        return make_unexpected(
+            QString("Could not write to file \"%1\" (only %2 of %3 bytes written)")
+                .arg(filePath.toUserOutput())
+                .arg(res)
+                .arg(data.size()));
+    return res;
 }
 
 QDateTime DesktopDeviceFileAccess::lastModified(const FilePath &filePath) const
@@ -768,9 +779,18 @@ bool UnixDeviceFileAccess::removeRecursively(const FilePath &filePath, QString *
     return result.exitCode == 0;
 }
 
-bool UnixDeviceFileAccess::copyFile(const FilePath &filePath, const FilePath &target) const
+expected<void, QString> UnixDeviceFileAccess::copyFile(const FilePath &filePath,
+                                                       const FilePath &target) const
 {
-    return runInShellSuccess({"cp", {filePath.path(), target.path()}, OsType::OsTypeLinux});
+    const auto result = runInShell({"cp", {filePath.path(), target.path()}, OsType::OsTypeLinux});
+
+    if (result.exitCode != 0) {
+        return make_unexpected(QString("Failed to copy file %1 to %2: %3")
+                                   .arg(filePath.toUserOutput())
+                                   .arg(target.toUserOutput())
+                                   .arg(QString::fromUtf8(result.stdErr)));
+    }
+    return {};
 }
 
 bool UnixDeviceFileAccess::renameFile(const FilePath &filePath, const FilePath &target) const
@@ -785,10 +805,9 @@ FilePath UnixDeviceFileAccess::symLinkTarget(const FilePath &filePath) const
     return out.isEmpty() ? FilePath() : filePath.withNewPath(out);
 }
 
-std::optional<QByteArray> UnixDeviceFileAccess::fileContents(
-        const FilePath &filePath,
-        qint64 limit,
-        qint64 offset) const
+expected<QByteArray, QString> UnixDeviceFileAccess::fileContents(const FilePath &filePath,
+                                                                 qint64 limit,
+                                                                 qint64 offset) const
 {
     QStringList args = {"if=" + filePath.path(), "status=none"};
     if (limit > 0 || offset > 0) {
@@ -801,22 +820,30 @@ std::optional<QByteArray> UnixDeviceFileAccess::fileContents(
     const RunResult r = runInShell({"dd", args, OsType::OsTypeLinux});
 
     if (r.exitCode != 0)
-        return {};
+        return make_unexpected(QString("Failed reading file %1: %2")
+                                   .arg(filePath.toUserOutput())
+                                   .arg(QString::fromUtf8(r.stdErr)));
 
     return r.stdOut;
 }
 
-bool UnixDeviceFileAccess::writeFileContents(
-        const FilePath &filePath,
-        const QByteArray &data,
-        qint64 offset) const
+expected<qint64, QString> UnixDeviceFileAccess::writeFileContents(const FilePath &filePath,
+                                                                  const QByteArray &data,
+                                                                  qint64 offset) const
 {
     QStringList args = {"of=" + filePath.path()};
     if (offset != 0) {
         args.append("bs=1");
         args.append(QString("seek=%1").arg(offset));
     }
-    return runInShellSuccess({"dd", args, OsType::OsTypeLinux}, data);
+    auto result = runInShell({"dd", args, OsType::OsTypeLinux}, data);
+
+    if (result.exitCode != 0) {
+        return make_unexpected(QString("Failed writing file %1: %2")
+                                   .arg(filePath.toUserOutput())
+                                   .arg(QString::fromUtf8(result.stdErr)));
+    }
+    return data.size();
 }
 
 OsType UnixDeviceFileAccess::osType(const FilePath &filePath) const

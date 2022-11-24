@@ -4,6 +4,7 @@
 #include "fsengine_impl.h"
 
 #include "diriterator.h"
+#include "expected.h"
 #include "filepathinfocache.h"
 
 #include "../filepath.h"
@@ -61,8 +62,15 @@ bool FSEngineImpl::open(QIODevice::OpenMode openMode)
         return false;
 
     if (read || append) {
-        const std::optional<QByteArray> contents = m_filePath.fileContents();
-        QTC_ASSERT(contents && m_tempStorage->write(*contents) >= 0, return false);
+        QTC_TRY(m_filePath.fileContents().and_then(
+                    [this](const auto &contents) -> expected<QByteArray, QString> {
+                        if (m_tempStorage->write(contents) == contents.size())
+                            return expected<QByteArray, QString>({});
+
+                        delete m_tempStorage;
+                        RETURN_FAILURE("Failed to write to temporary file.");
+                    }),
+                return false);
 
         if (!append)
             m_tempStorage->seek(0);
@@ -131,7 +139,8 @@ bool FSEngineImpl::remove()
 
 bool FSEngineImpl::copy(const QString &newName)
 {
-    return m_filePath.copyFile(FilePath::fromString(newName));
+    QTC_TRY(m_filePath.copyFile(FilePath::fromString(newName)), return false);
+    return true;
 }
 
 bool FSEngineImpl::rename(const QString &newName)

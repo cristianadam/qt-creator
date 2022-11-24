@@ -144,7 +144,8 @@ bool ScriptHelper::writeScriptFile(const Utils::FilePath &outScriptFile,
     for (const QByteArray &line : functionFooter(m_language))
         data.append(line).append('\n');
 
-    return outScriptFile.writeFileContents(data);
+    QTC_TRY(outScriptFile.writeFileContents(data), return false);
+    return true;
 }
 
 } // namespace Internal
