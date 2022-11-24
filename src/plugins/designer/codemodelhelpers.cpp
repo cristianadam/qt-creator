@@ -21,12 +21,7 @@ using namespace Utils;
 
 namespace Designer::Internal {
 
-const char setupUiC[] = "setupUi";
-
-using DependencyMap = QMap<QString, QStringList>;
 using DocumentPtr = CPlusPlus::Document::Ptr;
-using SymbolList = QList<CPlusPlus::Symbol *>;
-using DocumentPtrList = QList<DocumentPtr>;
 
 // Find the generated "ui_form.h" header of the form via project.
 static FilePath generatedHeaderOf(const FilePath &uiFileName)
@@ -43,13 +38,16 @@ static FilePath generatedHeaderOf(const FilePath &uiFileName)
     return {};
 }
 
-namespace {
 // Find function symbols in a document by name.
-class SearchFunction : public CPlusPlus::SymbolVisitor {
+class SearchFunction : public CPlusPlus::SymbolVisitor
+{
 public:
     typedef QList<CPlusPlus::Function *> FunctionList;
 
-    explicit SearchFunction(const char *name);
+    explicit SearchFunction(const char *name) :
+        m_length(uint(qstrlen(name))),
+        m_name(name)
+    {}
     FunctionList operator()(const DocumentPtr &doc);
 
     bool visit(CPlusPlus::Function * f) override;
@@ -61,13 +59,7 @@ private:
     FunctionList m_matches;
 };
 
-SearchFunction::SearchFunction(const char *name) :
-    m_length(uint(qstrlen(name))),
-    m_name(name)
-{
-}
-
-static SearchFunction::FunctionList SearchFunction::operator()(const DocumentPtr &doc)
+SearchFunction::FunctionList SearchFunction::operator()(const DocumentPtr &doc)
 {
     m_matches.clear();
     const int globalSymbolCount = doc->globalSymbolCount();
@@ -76,7 +68,7 @@ static SearchFunction::FunctionList SearchFunction::operator()(const DocumentPtr
     return m_matches;
 }
 
-static bool SearchFunction::visit(CPlusPlus::Function * f)
+bool SearchFunction::visit(CPlusPlus::Function * f)
 {
     if (const CPlusPlus::Name *name = f->name())
         if (const CPlusPlus::Identifier *id = name->identifier())
@@ -98,23 +90,26 @@ bool navigateToSlot(const FilePath &uiFilePath,
     // Find the generated header.
     const FilePath generatedHeaderFile = generatedHeaderOf(uiFilePath);
     if (generatedHeaderFile.isEmpty()) {
-        *errorMessage = Tr::tr("The generated header of the form \"%1\" could not be found.\nRebuilding the project might help.").arg(uiFilePath);
+        *errorMessage = Tr::tr("The generated header of the form \"%1\" could not be found.\n"
+                               "Rebuilding the project might help.").arg(uiFilePath.displayName());
         return false;
     }
     const CPlusPlus::Snapshot snapshot = CppEditor::CppModelManager::instance()->snapshot();
     const DocumentPtr generatedHeaderDoc = snapshot.document(generatedHeaderFile);
     if (!generatedHeaderDoc) {
-        *errorMessage = Tr::tr("The generated header \"%1\" could not be found in the code model.\nRebuilding the project might help.").arg(generatedHeaderFile.toUserOutput());
+        *errorMessage = Tr::tr("The generated header \"%1\" could not be found in the code model.\n"
+                               "Rebuilding the project might help.").arg(generatedHeaderFile.displayName());
         return false;
     }
 
     // Look for setupUi
+    const char setupUiC[] = "setupUi";
     SearchFunction searchFunc(setupUiC);
     const SearchFunction::FunctionList funcs = searchFunc(generatedHeaderDoc);
     if (funcs.size() != 1) {
         *errorMessage = QString::fromLatin1(
                             "Internal error: The function \"%1\" could not be found in %2")
-                            .arg(QLatin1String(setupUiC), generatedHeaderFile.toUserOutput());
+                            .arg(QLatin1String(setupUiC), generatedHeaderFile.displayName());
         return false;
     }
     return true;
