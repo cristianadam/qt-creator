@@ -1371,7 +1371,7 @@ public:
 
         QList<Document::Ptr> documentsToCheck;
         for (const QString &file : commonSourceFiles) {
-            if (Document::Ptr document = snapshot.document(file))
+            if (Document::Ptr document = snapshot.document(FilePath::fromString(file)))
                 documentsToCheck << document;
         }
 
