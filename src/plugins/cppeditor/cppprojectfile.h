@@ -5,7 +5,7 @@
 
 #include "cppeditor_global.h"
 
-#include <QString>
+#include <utils/filepath.h>
 
 namespace CppEditor {
 
@@ -29,7 +29,7 @@ public:
     };
 
     ProjectFile() = default;
-    ProjectFile(const QString &filePath, Kind kind, bool active = true);
+    ProjectFile(const Utils::FilePath &filePath, Kind kind, bool active = true);
 
     static Kind classifyByMimeType(const QString &mt);
     static Kind classify(const QString &filePath);
@@ -55,7 +55,7 @@ public:
     friend QDebug operator<<(QDebug stream, const CppEditor::ProjectFile &projectFile);
 
 public:
-    QString path;
+    Utils::FilePath path;
     Kind kind = Unclassified;
     bool active = true;
 };
@@ -64,4 +64,4 @@ using ProjectFiles = QVector<ProjectFile>;
 
 const char *projectFileKindToText(ProjectFile::Kind kind);
 
-} // namespace CppEditor
+} // CppEditor
