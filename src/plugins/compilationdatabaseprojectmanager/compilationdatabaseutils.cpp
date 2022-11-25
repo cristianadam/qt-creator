@@ -86,7 +86,7 @@ QStringList filterFromFileName(const QStringList &flags, QString fileName)
     return result;
 }
 
-void filteredFlags(const QString &fileName,
+void filteredFlags(const FilePath &filePath,
                    const QString &workingDir,
                    QStringList &flags,
                    HeaderPaths &headerPaths,
@@ -189,7 +189,7 @@ void filteredFlags(const QString &fileName,
         if ((flag.startsWith("-std=") || flag.startsWith("/std:"))
                 && fileKind == CppEditor::ProjectFile::Unclassified) {
             const bool cpp = (flag.contains("c++") || flag.contains("gnu++"));
-            if (CppEditor::ProjectFile::isHeader(CppEditor::ProjectFile::classify(fileName)))
+            if (CppEditor::ProjectFile::isHeader(CppEditor::ProjectFile::classify(filePath)))
                 fileKind = cpp ? CppEditor::ProjectFile::CXXHeader : CppEditor::ProjectFile::CHeader;
             else
                 fileKind = cpp ? CppEditor::ProjectFile::CXXSource : CppEditor::ProjectFile::CSource;
@@ -203,7 +203,7 @@ void filteredFlags(const QString &fileName,
     }
 
     if (fileKind == CppEditor::ProjectFile::Unclassified)
-        fileKind = CppEditor::ProjectFile::classify(fileName);
+        fileKind = CppEditor::ProjectFile::classify(filePath);
 
     flags = filtered;
 }

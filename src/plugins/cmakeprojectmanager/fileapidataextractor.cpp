@@ -367,17 +367,17 @@ RawProjectParts generateRawProjectParts(const PreprocessedData &input,
             QStringList fragments = splitFragments(ci.fragments);
 
             // Get all sources from the compiler group, except generated sources
-            QStringList sources;
+            FilePaths sources;
             for (auto idx: ci.sources) {
                 SourceInfo si = t.sources.at(idx);
                 if (si.isGenerated)
                     continue;
-                sources.push_back(sourceDir.absoluteFilePath(si.path));
+                sources.append(FilePath::fromString(sourceDir.absoluteFilePath(si.path)));
             }
 
             // If we are not in a pch compiler group, add all the headers that are not generated
-            const bool hasPchSource = anyOf(sources, [buildDirectory](const QString &path) {
-                return isPchFile(buildDirectory, FilePath::fromString(path));
+            const bool hasPchSource = anyOf(sources, [buildDirectory](const FilePath &path) {
+                return isPchFile(buildDirectory, path);
             });
 
             QString headerMimeType;
@@ -392,14 +392,14 @@ RawProjectParts generateRawProjectParts(const PreprocessedData &input,
                     const auto mimeTypes = Utils::mimeTypesForFileName(si.path);
                     for (const auto &mime : mimeTypes)
                         if (mime.name() == headerMimeType)
-                            sources.push_back(sourceDir.absoluteFilePath(si.path));
+                            sources.append(FilePath::fromString(sourceDir.absoluteFilePath(si.path)));
                 }
             }
 
             // Set project files except pch files
-            rpp.setFiles(Utils::filtered(sources, [buildDirectory](const QString &path) {
-                             return !isPchFile(buildDirectory, FilePath::fromString(path));
-                         }), {}, [headerMimeType](const QString &path) {
+            rpp.setFiles(Utils::filtered(sources, [buildDirectory](const FilePath &path) {
+                             return !isPchFile(buildDirectory, path);
+                         }), {}, [headerMimeType](const FilePath &path) {
                              // Similar to ProjectFile::classify but classify headers with language
                              // of compile group instead of ambiguous header
                              if (path.endsWith(".h"))

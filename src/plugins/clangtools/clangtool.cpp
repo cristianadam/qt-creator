@@ -1095,7 +1095,7 @@ QSet<Diagnostic> ClangTool::diagnostics() const
 {
     return Utils::filtered(m_diagnosticModel->diagnostics(), [](const Diagnostic &diagnostic) {
         using CppEditor::ProjectFile;
-        return ProjectFile::isSource(ProjectFile::classify(diagnostic.location.filePath.toString()));
+        return ProjectFile::isSource(ProjectFile::classify(diagnostic.location.filePath));
     });
 }
 

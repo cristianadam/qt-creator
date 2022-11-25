@@ -403,7 +403,7 @@ void CppModelManager::showPreprocessedFile(bool inNextSplit)
     }
 
     const ToolChain * tc = nullptr;
-    const ProjectFile classifier(filePath, ProjectFile::classify(filePath.toString()));
+    const ProjectFile classifier(filePath, ProjectFile::classify(filePath));
     if (classifier.isC()) {
         tc = ToolChainKitAspect::cToolChain(project->activeTarget()->kit());
     } else if (classifier.isCxx() || classifier.isHeader()) {
@@ -1229,14 +1229,14 @@ CppLocatorData *CppModelManager::locatorData() const
     return &d->m_locatorData;
 }
 
-static QSet<QString> filteredFilesRemoved(const QSet<QString> &files, int fileSizeLimitInMb,
-                                          bool ignoreFiles,
-                                          const QString& ignorePattern)
+static QSet<FilePath> filteredFilesRemoved(const QSet<FilePath> &files, int fileSizeLimitInMb,
+                                           bool ignoreFiles,
+                                           const QString &ignorePattern)
 {
     if (fileSizeLimitInMb <= 0 && !ignoreFiles)
         return files;
 
-    QSet<QString> result;
+    QSet<FilePath> result;
     QList<QRegularExpression> regexes;
     const QStringList wildcards = ignorePattern.split('\n');
 
@@ -1244,8 +1244,7 @@ static QSet<QString> filteredFilesRemoved(const QSet<QString> &files, int fileSi
         regexes.append(QRegularExpression::fromWildcard(wildcard, Qt::CaseInsensitive,
                                                         QRegularExpression::UnanchoredWildcardConversion));
 
-    for (const QString &file : files) {
-        const FilePath filePath = FilePath::fromString(file);
+    for (const FilePath &filePath : files) {
         if (fileSizeLimitInMb > 0 && fileSizeExceedsLimit(filePath, fileSizeLimitInMb))
             continue;
         bool skip = false;
@@ -1266,7 +1265,7 @@ static QSet<QString> filteredFilesRemoved(const QSet<QString> &files, int fileSi
         }
 
         if (!skip)
-            result << filePath.toString();
+            result << filePath;
     }
 
     return result;
@@ -1278,10 +1277,10 @@ QFuture<void> CppModelManager::updateSourceFiles(const QSet<FilePath> &sourceFil
     if (sourceFiles.isEmpty() || !d->m_indexerEnabled)
         return QFuture<void>();
 
-    const QSet<QString> filteredFiles = filteredFilesRemoved(transform(sourceFiles, &FilePath::toString),
-                                                             indexerFileSizeLimitInMb(),
-                                                             codeModelSettings()->ignoreFiles(),
-                                                             codeModelSettings()->ignorePattern());
+    const QSet<FilePath> filteredFiles = filteredFilesRemoved(sourceFiles,
+                                                              indexerFileSizeLimitInMb(),
+                                                              codeModelSettings()->ignoreFiles(),
+                                                              codeModelSettings()->ignorePattern());
 
     return d->m_internalIndexingSupport->refreshSourceFiles(filteredFiles, mode);
 }
@@ -1967,9 +1966,9 @@ void CppModelManager::GC()
     emit gcFinished();
 }
 
-void CppModelManager::finishedRefreshingSourceFiles(const QSet<QString> &files)
+void CppModelManager::finishedRefreshingSourceFiles(const QSet<FilePath> &files)
 {
-    emit sourceFilesRefreshed(files);
+    emit sourceFilesRefreshed(Utils::transform(files, &FilePath::toString));
 }
 
 void CppModelManager::activateClangCodeModel(

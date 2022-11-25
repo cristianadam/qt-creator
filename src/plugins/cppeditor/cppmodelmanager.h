@@ -155,7 +155,7 @@ public:
     void findMacroUsages(const CPlusPlus::Macro &macro);
     void renameMacroUsages(const CPlusPlus::Macro &macro, const QString &replacement);
 
-    void finishedRefreshingSourceFiles(const QSet<QString> &files);
+    void finishedRefreshingSourceFiles(const QSet<Utils::FilePath> &files);
 
     void activateClangCodeModel(std::unique_ptr<ModelManagerSupport> &&modelManagerSupport);
     CppCompletionAssistProvider *completionAssistProvider() const;

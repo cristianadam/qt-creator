@@ -656,11 +656,11 @@ void ClangModelManagerSupport::claimNonProjectSources(ClangdClient *client)
 void ClangModelManagerSupport::watchForExternalChanges()
 {
     connect(Core::DocumentManager::instance(), &Core::DocumentManager::filesChangedExternally,
-            this, [this](const QSet<Utils::FilePath> &files) {
+            this, [this](const QSet<FilePath> &files) {
         if (!LanguageClientManager::hasClients<ClangdClient>())
             return;
-        for (const Utils::FilePath &file : files) {
-            const ProjectFile::Kind kind = ProjectFile::classify(file.toString());
+        for (const FilePath &file : files) {
+            const ProjectFile::Kind kind = ProjectFile::classify(file);
             if (!ProjectFile::isSource(kind) && !ProjectFile::isHeader(kind))
                 continue;
             ProjectExplorer::Project * const project
@@ -684,9 +684,9 @@ void ClangModelManagerSupport::watchForExternalChanges()
 void ClangModelManagerSupport::watchForInternalChanges()
 {
     connect(Core::DocumentManager::instance(), &Core::DocumentManager::filesChangedInternally,
-            this, [this](const Utils::FilePaths &filePaths) {
-        for (const Utils::FilePath &fp : filePaths) {
-            const ProjectFile::Kind kind = ProjectFile::classify(fp.toString());
+            this, [this](const FilePaths &filePaths) {
+        for (const FilePath &fp : filePaths) {
+            const ProjectFile::Kind kind = ProjectFile::classify(fp);
             if (!ProjectFile::isSource(kind) && !ProjectFile::isHeader(kind))
                 continue;
             ProjectExplorer::Project * const project

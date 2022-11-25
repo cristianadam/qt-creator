@@ -103,7 +103,7 @@ namespace Internal {
 
 QString inlinePrefix(const FilePath &targetFile, const std::function<bool()> &extraCondition = {})
 {
-    if (ProjectFile::isHeader(ProjectFile::classify(targetFile.path()))
+    if (ProjectFile::isHeader(ProjectFile::classify(targetFile))
             && (!extraCondition || extraCondition())) {
         return "inline ";
     }
@@ -119,7 +119,6 @@ enum DefPos {
     DefPosOutsideClass,
     DefPosImplementationFile
 };
-
 
 inline bool isQtStringLiteral(const QByteArray &id)
 {
@@ -2105,7 +2104,7 @@ void AddIncludeForUndefinedIdentifier::match(const CppQuickFixInterface &interfa
                 ProjectExplorer::FileType fileType = node && node->asFileNode()
                         ? node->asFileNode()->fileType() : ProjectExplorer::FileType::Unknown;
                 if (fileType == ProjectExplorer::FileType::Unknown
-                        && ProjectFile::isHeader(ProjectFile::classify(interface.filePath().toString()))) {
+                        && ProjectFile::isHeader(ProjectFile::classify(interface.filePath()))) {
                     fileType = ProjectExplorer::FileType::Header;
                 }
                 if (fileType == ProjectExplorer::FileType::Header) {
@@ -2881,7 +2880,7 @@ void InsertDefFromDecl::match(const CppQuickFixInterface &interface, QuickFixOpe
                             // Insert Position: Implementation File
                             DeclaratorAST *declAST = simpleDecl->declarator_list->value;
                             InsertDefOperation *op = nullptr;
-                            ProjectFile::Kind kind = ProjectFile::classify(interface.filePath().toString());
+                            ProjectFile::Kind kind = ProjectFile::classify(interface.filePath());
                             const bool isHeaderFile = ProjectFile::isHeader(kind);
                             if (isHeaderFile) {
                                 CppRefactoringChanges refactoring(interface.snapshot());
@@ -2895,7 +2894,7 @@ void InsertDefFromDecl::match(const CppQuickFixInterface &interface, QuickFixOpe
                                         continue;
 
                                     const FilePath filePath = location.filePath();
-                                    if (ProjectFile::isHeader(ProjectFile::classify(filePath.path()))) {
+                                    if (ProjectFile::isHeader(ProjectFile::classify(filePath))) {
                                         const FilePath source = correspondingHeaderOrSource(filePath);
                                         if (!source.isEmpty()) {
                                             op = new InsertDefOperation(interface, decl, declAST,
@@ -3223,7 +3222,7 @@ private:
             return;
 
         CppRefactoringChanges refactoring(snapshot());
-        const bool isHeaderFile = ProjectFile::isHeader(ProjectFile::classify(filePath().toString()));
+        const bool isHeaderFile = ProjectFile::isHeader(ProjectFile::classify(filePath()));
         FilePath cppFile; // Only set if the class is defined in a header file.
         if (isHeaderFile) {
             InsertionPointLocator locator(refactoring);
@@ -3232,7 +3231,7 @@ private:
                 if (!location.isValid())
                     continue;
                 const FilePath filePath = location.filePath();
-                if (ProjectFile::isHeader(ProjectFile::classify(filePath.path()))) {
+                if (ProjectFile::isHeader(ProjectFile::classify(filePath))) {
                     const FilePath source = correspondingHeaderOrSource(filePath);
                     if (!source.isEmpty())
                         cppFile = source;
@@ -8033,9 +8032,9 @@ private:
             }
         } else {
             for (auto i = s.begin(); i != s.end(); ++i) {
-                if (ProjectFile::classify(i.key().toString()) != ProjectFile::Unsupported) {
+                if (ProjectFile::classify(i.key()) != ProjectFile::Unsupported) {
                     handleFile(i.key(), i.value(), [](const FilePath &file) {
-                        return ProjectFile::classify(file.toString()) != ProjectFile::Unsupported;
+                        return ProjectFile::classify(file) != ProjectFile::Unsupported;
                     });
                 }
             }
@@ -8168,7 +8167,7 @@ void RemoveUsingNamespace::match(const CppQuickFixInterface &interface, QuickFix
     UsingDirectiveAST *usingDirective = path.at(n)->asUsingDirective();
     if (usingDirective && usingDirective->name->name->asNameId()) {
         result << new RemoveUsingNamespaceOperation(interface, usingDirective, false);
-        const bool isHeader = ProjectFile::isHeader(ProjectFile::classify(interface.filePath().toString()));
+        const bool isHeader = ProjectFile::isHeader(ProjectFile::classify(interface.filePath()));
         if (isHeader && path.at(n - 1)->asTranslationUnit()) // using namespace at global scope
             result << new RemoveUsingNamespaceOperation(interface, usingDirective, true);
     }

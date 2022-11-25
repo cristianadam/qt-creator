@@ -152,7 +152,7 @@ void AutotoolsBuildSystem::updateCppCodeModel()
 
     rpp.setIncludePaths(filterIncludes(absSrc, absBuild, m_makefileParserThread->includePaths()));
     rpp.setMacros(m_makefileParserThread->macros());
-    rpp.setFiles(m_files);
+    rpp.setFiles(Utils::transform(m_files, &FilePath::fromString));
 
     m_cppCodeModelUpdater->update({project(), kitInfo, activeParseEnvironment(), {rpp}});
 }

@@ -14,8 +14,7 @@ class HeaderPath;
 class Macro;
 }
 
-namespace CompilationDatabaseProjectManager {
-namespace Internal {
+namespace CompilationDatabaseProjectManager::Internal {
 
 class DbEntry {
 public:
@@ -35,7 +34,7 @@ using MimeBinaryCache = QHash<QString, bool>;
 
 QStringList filterFromFileName(const QStringList &flags, QString baseName);
 
-void filteredFlags(const QString &fileName,
+void filteredFlags(const Utils::FilePath &filePath,
                    const QString &workingDir,
                    QStringList &flags,
                    QVector<ProjectExplorer::HeaderPath> &headerPaths,
@@ -45,5 +44,4 @@ void filteredFlags(const QString &fileName,
 
 QStringList splitCommandLine(QString commandLine, QSet<QString> &flagsCache);
 
-} // namespace Internal
-} // namespace CompilationDatabaseProjectManager
+} // CompilationDatabaseProjectManager::Internal

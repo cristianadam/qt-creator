@@ -10,9 +10,11 @@
 
 #include <QDebug>
 
+using namespace Utils;
+
 namespace CppEditor {
 
-ProjectFile::ProjectFile(const Utils::FilePath &filePath, Kind kind, bool active)
+ProjectFile::ProjectFile(const FilePath &filePath, Kind kind, bool active)
     : path(filePath)
     , kind(kind)
     , active(active)
@@ -51,7 +53,7 @@ ProjectFile::Kind ProjectFile::classifyByMimeType(const QString &mt)
     return Unsupported;
 }
 
-ProjectFile::Kind ProjectFile::classify(const QString &filePath)
+ProjectFile::Kind ProjectFile::classify(const FilePath &filePath)
 {
     if (isAmbiguousHeader(filePath))
         return AmbiguousHeader;
@@ -60,12 +62,12 @@ ProjectFile::Kind ProjectFile::classify(const QString &filePath)
     return classifyByMimeType(mimeType.name());
 }
 
-bool ProjectFile::isAmbiguousHeader(const QString &filePath)
+bool ProjectFile::isAmbiguousHeader(const FilePath &filePath)
 {
     return filePath.endsWith(".h");
 }
 
-bool ProjectFile::isObjC(const QString &filePath)
+bool ProjectFile::isObjC(const FilePath &filePath)
 {
     return isObjC(classify(filePath));
 }

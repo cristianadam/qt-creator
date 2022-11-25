@@ -103,7 +103,7 @@ public:
         rpp.setQtVersion(Utils::QtMajorVersion::Qt5);
         const ProjectFiles rppFiles = Utils::transform<ProjectFiles>(projectFiles,
                 [](const FilePath &file) {
-            return ProjectFile(file, ProjectFile::classify(file.toString()));
+            return ProjectFile(file, ProjectFile::classify(file));
         });
         const auto project = modelManagerTestHelper->createProject(
                     name, Utils::FilePath::fromString(dir).pathAppended(name + ".pro"));
@@ -1007,12 +1007,12 @@ void ModelManagerTest::testRenameIncludes()
     // Copy test files to a temporary directory
     QSet<FilePath> sourceFiles;
     for (const QString &fileName : std::as_const(fileNames)) {
-        const QString &file = workingDir.filePath(fileName);
-        QVERIFY(QFile::copy(testDir.file(fileName), file));
+        const FilePath file = FilePath::fromString(workingDir.filePath(fileName));
+        QVERIFY(QFile::copy(testDir.file(fileName), file.toString()));
         // Saving source file names for the model manager update,
         // so we can update just the relevant files.
         if (ProjectFile::classify(file) == ProjectFile::CXXSource)
-            sourceFiles.insert(FilePath::fromString(file));
+            sourceFiles.insert(file);
     }
 
     // Update the c++ model manager and check for the old includes
@@ -1067,12 +1067,12 @@ void ModelManagerTest::testRenameIncludesInEditor()
     // Copy test files to a temporary directory
     QSet<FilePath> sourceFiles;
     for (const QString &fileName : fileNames) {
-        const QString &file = workingDir.filePath(fileName);
-        QVERIFY(QFile::copy(testDir.file(fileName), file));
+        const FilePath file = FilePath::fromString(workingDir.filePath(fileName));
+        QVERIFY(QFile::copy(testDir.file(fileName), file.toString()));
         // Saving source file names for the model manager update,
         // so we can update just the relevant files.
         if (ProjectFile::classify(file) == ProjectFile::CXXSource)
-            sourceFiles.insert(FilePath::fromString(file));
+            sourceFiles.insert(file);
     }
 
     // Update the c++ model manager and check for the old includes

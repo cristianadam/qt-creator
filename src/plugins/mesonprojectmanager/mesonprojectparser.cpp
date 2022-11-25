@@ -253,7 +253,7 @@ ProjectExplorer::RawProjectPart MesonProjectParser::buildRawPart(
     ProjectExplorer::RawProjectPart part;
     part.setDisplayName(target.name);
     part.setBuildSystemTarget(Target::fullName(m_srcDir, target));
-    part.setFiles(sources.sources + sources.generatedSources);
+    part.setFiles(Utils::transform(sources.sources + sources.generatedSources, &FilePath::fromString));
     auto flags = splitArgs(sources.parameters);
     part.setMacros(flags.macros);
     part.setIncludePaths(toAbsolutePath(m_buildDir, flags.includePaths));

@@ -384,17 +384,18 @@ void QmakeBuildSystem::updateCppCodeModel()
         rpp.setHeaderPaths(headerPaths);
 
         // Files and generators
-        const QStringList cumulativeSourceFiles = pro->variableValue(Variable::CumulativeSource);
-        QStringList fileList = pro->variableValue(Variable::ExactSource) + cumulativeSourceFiles;
+        const FilePaths cumulativeSourceFiles =
+            Utils::transform(pro->variableValue(Variable::CumulativeSource), &FilePath::fromString);
+        FilePaths fileList =
+            Utils::transform(pro->variableValue(Variable::ExactSource), &FilePath::fromString)
+                + cumulativeSourceFiles;
         const QList<ProjectExplorer::ExtraCompiler *> proGenerators = pro->extraCompilers();
-        for (ProjectExplorer::ExtraCompiler *ec : proGenerators) {
-            ec->forEachTarget([&](const FilePath &generatedFile) {
-                fileList += generatedFile.toString();
-            });
-        }
+        for (ProjectExplorer::ExtraCompiler *ec : proGenerators)
+            ec->forEachTarget([&](const FilePath &generatedFile) { fileList += generatedFile; });
+
         generators.append(proGenerators);
-        fileList.prepend(CppEditor::CppModelManager::configurationFileName().toString());
-        rpp.setFiles(fileList, [cumulativeSourceFiles](const QString &filePath) {
+        fileList.prepend(CppEditor::CppModelManager::configurationFileName());
+        rpp.setFiles(fileList, [cumulativeSourceFiles](const FilePath &filePath) {
             // Keep this lambda thread-safe!
             return !cumulativeSourceFiles.contains(filePath);
         });
