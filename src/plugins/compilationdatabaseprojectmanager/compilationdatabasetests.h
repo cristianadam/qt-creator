@@ -6,10 +6,9 @@
 #include <QObject>
 #include <memory>
 
-namespace CppEditor { namespace Tests { class TemporaryCopiedDir; } }
+namespace CppEditor::Tests { class TemporaryCopiedDir; }
 
-namespace CompilationDatabaseProjectManager {
-namespace Internal {
+namespace CompilationDatabaseProjectManager::Internal {
 
 class CompilationDatabaseTests : public QObject
 {
@@ -34,10 +33,7 @@ private slots:
     void testSkipOutputFiles();
 
 private:
-    void addTestRow(const QByteArray &relativeFilePath);
-
     std::unique_ptr<CppEditor::Tests::TemporaryCopiedDir> m_tmpDir;
 };
 
-} // namespace Internal
-} // namespace CompilationDatabaseProjectManager
+} // CompilationDatabaseProjectManager::Internal

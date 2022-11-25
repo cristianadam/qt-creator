@@ -80,7 +80,7 @@ FilePaths toAbsolutePaths(const QStringList &relativePathList,
 {
     FilePaths result;
     for (const QString &file : relativePathList)
-        result << FilePath::fromString(temporaryDir.absolutePath(file.toUtf8()));
+        result << temporaryDir.absolutePath(file);
     return result;
 }
 
@@ -459,7 +459,7 @@ void ModelManagerTest::testRefreshTimeStampModifiedIfSourcefilesChange()
     const FilePaths finalProjectFiles = transform(finalProjectFiles_, &FilePath::fromString);
 
     TemporaryCopiedDir temporaryDir(MyTestDataDir(QLatin1String("testdata_refresh2")).path());
-    const FilePath fileToChange = FilePath::fromString(temporaryDir.absolutePath(fileToChange_.toUtf8()));
+    const FilePath fileToChange = temporaryDir.absolutePath(fileToChange_);
     const FilePaths initialProjectFilePaths = toAbsolutePaths(initialProjectFiles_, temporaryDir);
     const FilePaths finalProjectFilePaths = toAbsolutePaths(finalProjectFiles_, temporaryDir);
 
@@ -597,7 +597,7 @@ void ModelManagerTest::testExtraeditorsupportUiFiles()
 
     TemporaryCopiedDir temporaryDir(MyTestDataDir(QLatin1String("testdata_guiproject1")).path());
     QVERIFY(temporaryDir.isValid());
-    const QString projectFile = temporaryDir.absolutePath("testdata_guiproject1.pro");
+    const FilePath projectFile = temporaryDir.absolutePath("testdata_guiproject1.pro");
 
     ProjectOpenerAndCloser projects;
     QVERIFY(projects.open(projectFile, /*configureAsExampleProject=*/ true));
@@ -621,8 +621,7 @@ void ModelManagerTest::testExtraeditorsupportUiFiles()
 
     // Check CppSourceProcessor / includes.
     // The CppSourceProcessor is expected to find the ui_* file in the working copy.
-    const FilePath fileIncludingTheUiFile =
-            FilePath::fromString(temporaryDir.absolutePath("mainwindow.cpp"));
+    const FilePath fileIncludingTheUiFile = temporaryDir.absolutePath("mainwindow.cpp");
     while (!mm->snapshot().document(fileIncludingTheUiFile))
         QCoreApplication::processEvents();
 

@@ -44,6 +44,7 @@ using namespace CppEditor::Tests;
 using namespace LanguageClient;
 using namespace ProjectExplorer;
 using namespace TextEditor;
+using namespace Utils;
 
 namespace ClangCodeModel {
 namespace Internal {
@@ -77,9 +78,9 @@ ClangdTest::~ClangdTest()
     delete m_projectDir;
 }
 
-Utils::FilePath ClangdTest::filePath(const QString &fileName) const
+FilePath ClangdTest::filePath(const QString &fileName) const
 {
-    return Utils::FilePath::fromString(m_projectDir->absolutePath(fileName.toLocal8Bit()));
+    return m_projectDir->absolutePath(fileName);
 }
 
 void ClangdTest::waitForNewClient(bool withIndex)
@@ -137,7 +138,7 @@ void ClangdTest::initTestCase()
                                                   .baseName().toLocal8Bit()));
     QVERIFY(m_projectDir->isValid());
     const auto openProjectResult = ProjectExplorerPlugin::openProject(
-            Utils::FilePath::fromString(m_projectDir->absolutePath(m_projectFileName.toUtf8())));
+            m_projectDir->absolutePath(m_projectFileName));
     QVERIFY2(openProjectResult, qPrintable(openProjectResult.errorMessage()));
     m_project = openProjectResult.project();
     m_project->configureAsExampleProject(m_kit);
@@ -147,8 +148,7 @@ void ClangdTest::initTestCase()
 
     // Open cpp documents.
     for (const QString &sourceFileName : std::as_const(m_sourceFileNames)) {
-        const auto sourceFilePath = Utils::FilePath::fromString(
-                    m_projectDir->absolutePath(sourceFileName.toLocal8Bit()));
+        const FilePath sourceFilePath = m_projectDir->absolutePath(sourceFileName);
         QVERIFY2(sourceFilePath.exists(), qPrintable(sourceFilePath.toUserOutput()));
         IEditor * const editor = EditorManager::openEditor(sourceFilePath);
         QVERIFY(editor);

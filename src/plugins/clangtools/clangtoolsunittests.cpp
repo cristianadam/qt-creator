@@ -96,7 +96,7 @@ void ClangToolsUnitTests::testProject()
 
     // Open project
     Tests::ProjectOpenerAndCloser projectManager;
-    QVERIFY(projectManager.open(projectFilePath, true, m_kit));
+    QVERIFY(projectManager.open(FilePath::fromString(projectFilePath), true, m_kit));
 
     // Run tool
     ClangTool *tool = ClangTool::instance();
@@ -154,12 +154,12 @@ void ClangToolsUnitTests::testProject_data()
                configFor("misc-unconventional-assign-operator", "qgetenv"));
 }
 
-void ClangToolsUnitTests::addTestRow(const QByteArray &relativeFilePath,
+void ClangToolsUnitTests::addTestRow(const QString &relativeFilePath,
                                      int expectedDiagCount,
                                      const ClangDiagnosticConfig &diagnosticConfig)
 {
-    const QString absoluteFilePath = m_tmpDir->absolutePath(relativeFilePath);
-    const QString fileName = QFileInfo(absoluteFilePath).fileName();
+    const FilePath absoluteFilePath = m_tmpDir->absolutePath(relativeFilePath);
+    const QString fileName = absoluteFilePath.fileName();
 
     QTest::newRow(fileName.toUtf8().constData())
         << absoluteFilePath << expectedDiagCount << diagnosticConfig;

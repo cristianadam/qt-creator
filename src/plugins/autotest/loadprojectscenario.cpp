@@ -72,7 +72,7 @@ bool LoadProjectScenario::loadProject()
 
     CppEditor::Tests::ProjectOpenerAndCloser projectManager;
     // This code must trigger a call to PluginManager::finishScenario() at some later point.
-    const CppEditor::ProjectInfo::ConstPtr projectInfo = projectManager.open(projectFilePath.path(),
+    const CppEditor::ProjectInfo::ConstPtr projectInfo = projectManager.open(projectFilePath,
                                                                             true, m_kit);
     return projectInfo.get();
 }

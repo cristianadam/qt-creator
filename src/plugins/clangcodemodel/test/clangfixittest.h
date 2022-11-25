@@ -30,7 +30,7 @@ private slots:
 private:
     Utils::FilePath semicolonFilePath() const;
     Utils::FilePath compareFilePath() const;
-    QString fileContent(const QByteArray &relFilePath) const;
+    QString fileContent(const QString &relFilePath) const;
 
     ClangFixIt semicolonFixIt() const;
 
@@ -38,5 +38,5 @@ private:
     QScopedPointer<CppEditor::Tests::TemporaryCopiedDir> m_dataDir;
 };
 
-} //namespace Tests
-} // namespace ClangCodeModel::Internal
+} // Tests
+} // ClangCodeModel::Internal

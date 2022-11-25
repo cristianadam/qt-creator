@@ -25,8 +25,7 @@ using namespace CppEditor;
 using namespace ProjectExplorer;
 using namespace Utils;
 
-namespace CompilationDatabaseProjectManager {
-namespace Internal {
+namespace CompilationDatabaseProjectManager::Internal {
 
 CompilationDatabaseTests::CompilationDatabaseTests(QObject *parent)
     : QObject(parent)
@@ -57,7 +56,7 @@ void CompilationDatabaseTests::cleanupTestCase()
 
 void CompilationDatabaseTests::testProject()
 {
-    QFETCH(QString, projectFilePath);
+    QFETCH(FilePath, projectFilePath);
 
     CppEditor::Tests::ProjectOpenerAndCloser projectManager;
     const CppEditor::ProjectInfo::ConstPtr projectInfo = projectManager.open(projectFilePath, true);
@@ -75,13 +74,13 @@ void CompilationDatabaseTests::testProject()
 
 void CompilationDatabaseTests::testProject_data()
 {
-    QTest::addColumn<QString>("projectFilePath");
+    QTest::addColumn<FilePath>("projectFilePath");
 
-    addTestRow("qtc/compile_commands.json");
-    addTestRow("llvm/compile_commands.json");
+    const QStringList rows = {"qtc/compile_commands.json", "llvm/compile_commands.json" };
+    for (const QString &row : rows)
+        QTest::newRow(qPrintable(row)) <<  m_tmpDir->absolutePath(row);
 }
 
-namespace {
 class CompilationDatabaseUtilsTestData
 {
 public:
@@ -107,7 +106,6 @@ public:
     QString workingDir;
     FilePath sysRoot;
 };
-}
 
 void CompilationDatabaseTests::testFilterEmptyFlags()
 {
@@ -265,12 +263,4 @@ void CompilationDatabaseTests::testSkipOutputFiles()
     QVERIFY(testData.getFilteredFlags().isEmpty());
 }
 
-void CompilationDatabaseTests::addTestRow(const QByteArray &relativeFilePath)
-{
-    const QString absoluteFilePath = m_tmpDir->absolutePath(relativeFilePath);
-
-    QTest::newRow(relativeFilePath.constData()) << absoluteFilePath;
-}
-
-} // namespace Internal
-} // namespace CompilationDatabaseProjectManager
+} // CompilationDatabaseProjectManager::Intenal

@@ -11,6 +11,8 @@
 #include <QtTest>
 #include <QVector>
 
+using namespace Utils;
+
 namespace ClangCodeModel::Internal::Tests {
 
 static QString qrcPath(const QString &relativeFilePath)
@@ -27,23 +29,25 @@ void ClangFixItTest::testDescription()
              QLatin1String("Apply Fix: expected ';' at end of declaration"));
 }
 
-Utils::FilePath ClangFixItTest::semicolonFilePath() const
+FilePath ClangFixItTest::semicolonFilePath() const
 {
-    return Utils::FilePath::fromString(m_dataDir->absolutePath("diagnostic_semicolon_fixit.cpp"));
+    return m_dataDir->absolutePath("diagnostic_semicolon_fixit.cpp");
 }
 
-Utils::FilePath ClangFixItTest::compareFilePath() const
+FilePath ClangFixItTest::compareFilePath() const
 {
-    return Utils::FilePath::fromString(m_dataDir->absolutePath("diagnostic_comparison_fixit.cpp"));
+    return m_dataDir->absolutePath("diagnostic_comparison_fixit.cpp");
 }
 
-QString ClangFixItTest::fileContent(const QByteArray &relFilePath) const
+QString ClangFixItTest::fileContent(const QString &relFilePath) const
 {
-    QFile file(m_dataDir->absolutePath(relFilePath));
-    const bool isOpen = file.open(QFile::ReadOnly | QFile::Text);
-    if (!isOpen)
+    const FilePath file = m_dataDir->absolutePath(relFilePath);
+    const std::optional<QByteArray> result = file.fileContents();
+    if (!result) {
         qDebug() << "File with the unsaved content cannot be opened!";
-    return QString::fromUtf8(file.readAll());
+        return {};
+    }
+    return QString::fromUtf8(*result);
 }
 
 ClangFixIt ClangFixItTest::semicolonFixIt() const

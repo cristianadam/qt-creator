@@ -29,7 +29,7 @@ private slots:
     void testProject_data();
 
 private:
-    void addTestRow(const QByteArray &relativeFilePath,
+    void addTestRow(const QString &relativeFilePath,
                     int expectedDiagCount,
                     const CppEditor::ClangDiagnosticConfig &diagnosticConfig);
 
