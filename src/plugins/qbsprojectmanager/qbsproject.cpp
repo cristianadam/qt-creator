@@ -987,8 +987,8 @@ static RawProjectParts generateProjectParts(
             rpp.setPreCompiledHeaders(Utils::transform<QList>(pchFiles, &FilePath::fromString));
             rpp.setIncludedFiles(Utils::transform(
                  arrayToStringList(props.value("cpp.prefixHeaders")), &FilePath::fromString));
-            rpp.setFiles(filePathToSourceArtifact.keys(), {},
-                         [filePathToSourceArtifact](const FilePath &filePath) {
+            rpp.setFiles(filePathToSourceArtifact.keys());
+            rpp.setMimeTypeGetter([filePathToSourceArtifact](const FilePath &filePath) {
                 // Keep this lambda thread-safe!
                 return getMimeType(filePathToSourceArtifact.value(filePath));
             });
