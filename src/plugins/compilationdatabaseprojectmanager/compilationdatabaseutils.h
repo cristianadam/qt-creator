@@ -4,10 +4,8 @@
 #pragma once
 
 #include <cppeditor/cppprojectfile.h>
-#include <utils/filepath.h>
 
 #include <QHash>
-#include <QStringList>
 
 namespace ProjectExplorer {
 class HeaderPath;
@@ -20,7 +18,7 @@ class DbEntry {
 public:
     QStringList flags;
     Utils::FilePath fileName;
-    QString workingDir;
+    Utils::FilePath workingDir;
 };
 
 class DbContents {
@@ -35,7 +33,7 @@ using MimeBinaryCache = QHash<QString, bool>;
 QStringList filterFromFileName(const QStringList &flags, QString baseName);
 
 void filteredFlags(const Utils::FilePath &filePath,
-                   const QString &workingDir,
+                   const Utils::FilePath &workingDir,
                    QStringList &flags,
                    QVector<ProjectExplorer::HeaderPath> &headerPaths,
                    QVector<ProjectExplorer::Macro> &macros,

@@ -22,13 +22,9 @@ using namespace Utils;
 namespace CompilationDatabaseProjectManager {
 namespace Internal {
 
-static QString updatedPathFlag(const QString &pathStr, const QString &workingDir)
+static FilePath updatedPathFlag(const QString &pathStr, const FilePath &workingDir)
 {
-    QString result = pathStr;
-    if (QDir(pathStr).isRelative())
-        result = workingDir + "/" + pathStr;
-
-    return result;
+    return workingDir.resolvePath(pathStr);
 }
 
 static CppEditor::ProjectFile::Kind fileKindFromString(QString flag)
@@ -87,12 +83,12 @@ QStringList filterFromFileName(const QStringList &flags, QString fileName)
 }
 
 void filteredFlags(const FilePath &filePath,
-                   const QString &workingDir,
+                   const FilePath &workingDir,
                    QStringList &flags,
                    HeaderPaths &headerPaths,
                    Macros &macros,
                    CppEditor::ProjectFile::Kind &fileKind,
-                   Utils::FilePath &sysRoot)
+                   FilePath &sysRoot)
 {
     if (flags.empty())
         return;
@@ -113,7 +109,7 @@ void filteredFlags(const FilePath &filePath,
         }
 
         if (includePathType) {
-            const QString pathStr = updatedPathFlag(flag, workingDir);
+            const QString pathStr = workingDir.resolvePath(flag).toString();
             headerPaths.append({pathStr, includePathType.value()});
             includePathType.reset();
             continue;
@@ -152,7 +148,7 @@ void filteredFlags(const FilePath &filePath,
             return flag.startsWith(opt) && flag != opt;
         });
         if (!includeOpt.isEmpty()) {
-            const QString pathStr = updatedPathFlag(flag.mid(includeOpt.length()), workingDir);
+            const QString pathStr = workingDir.resolvePath(flag.mid(includeOpt.length())).toString();
             headerPaths.append({pathStr, userIncludeFlags.contains(includeOpt)
                                 ? HeaderPathType::User : HeaderPathType::System});
             continue;
@@ -182,7 +178,7 @@ void filteredFlags(const FilePath &filePath,
 
         if (flag.startsWith("--sysroot=")) {
             if (sysRoot.isEmpty())
-                sysRoot = FilePath::fromString(updatedPathFlag(flag.mid(10), workingDir));
+                sysRoot = workingDir.resolvePath(flag.mid(10));
             continue;
         }
 

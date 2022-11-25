@@ -19,7 +19,7 @@ namespace ProjectExplorer {
 
 RawProjectPartFlags::RawProjectPartFlags(const ToolChain *toolChain,
                                          const QStringList &commandLineFlags,
-                                         const QString &includeFileBaseDir)
+                                         const FilePath &includeFileBaseDir)
 {
     // Keep the following cheap/non-blocking for the ui thread. Expensive
     // operations are encapsulated in ToolChainInfo as "runners".
@@ -27,9 +27,7 @@ RawProjectPartFlags::RawProjectPartFlags(const ToolChain *toolChain,
     if (toolChain) {
         warningFlags = toolChain->warningFlags(commandLineFlags);
         languageExtensions = toolChain->languageExtensions(commandLineFlags);
-        includedFiles =
-                Utils::transform(toolChain->includedFiles(commandLineFlags, includeFileBaseDir),
-                                 &FilePath::fromString);
+        includedFiles = toolChain->includedFiles(commandLineFlags, includeFileBaseDir);
     }
 }
 
