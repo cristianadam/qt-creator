@@ -13,6 +13,8 @@
 #include <ios/iosconstants.h>
 #include <utils/algorithm.h>
 
+using namespace Utils;
+
 namespace ProjectExplorer {
 
 RawProjectPartFlags::RawProjectPartFlags(const ToolChain *toolChain,
@@ -25,7 +27,9 @@ RawProjectPartFlags::RawProjectPartFlags(const ToolChain *toolChain,
     if (toolChain) {
         warningFlags = toolChain->warningFlags(commandLineFlags);
         languageExtensions = toolChain->languageExtensions(commandLineFlags);
-        includedFiles = toolChain->includedFiles(commandLineFlags, includeFileBaseDir);
+        includedFiles =
+                Utils::transform(toolChain->includedFiles(commandLineFlags, includeFileBaseDir),
+                                 &FilePath::fromString);
     }
 }
 
@@ -97,19 +101,19 @@ void RawProjectPart::setHeaderPaths(const HeaderPaths &headerPaths)
     this->headerPaths = headerPaths;
 }
 
-void RawProjectPart::setIncludePaths(const QStringList &includePaths)
+void RawProjectPart::setIncludePaths(const FilePaths &includePaths)
 {
-    this->headerPaths = Utils::transform<QVector>(includePaths, [](const QString &path) {
+    this->headerPaths = Utils::transform(includePaths, [](const FilePath &path) {
         return RawProjectPart::frameworkDetectionHeuristic(HeaderPath::makeUser(path));
     });
 }
 
-void RawProjectPart::setPreCompiledHeaders(const QStringList &preCompiledHeaders)
+void RawProjectPart::setPreCompiledHeaders(const FilePaths &preCompiledHeaders)
 {
     this->precompiledHeaders = preCompiledHeaders;
 }
 
-void RawProjectPart::setIncludedFiles(const QStringList &files)
+void RawProjectPart::setIncludedFiles(const FilePaths &files)
 {
      includedFiles = files;
 }

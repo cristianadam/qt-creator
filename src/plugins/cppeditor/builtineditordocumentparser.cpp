@@ -83,9 +83,9 @@ void BuiltinEditorDocumentParser::updateImpl(const QFutureInterface<void> &futur
             configFile += ProjectPart::readProjectConfigFile(part->projectConfigFile);
         headerPaths = part->headerPaths;
         projectConfigFile = part->projectConfigFile;
-        includedFiles = Utils::transform(part->includedFiles, &FilePath::fromString);
+        includedFiles = part->includedFiles;
         if (baseConfig.usePrecompiledHeaders)
-            precompiledHeaders = Utils::transform(part->precompiledHeaders, &FilePath::fromString);
+            precompiledHeaders = part->precompiledHeaders;
         features = part->languageFeatures;
     }
 

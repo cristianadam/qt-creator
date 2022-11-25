@@ -982,8 +982,9 @@ static RawProjectParts generateProjectParts(
                                     << groupName << "in product" << productName;
                 qCWarning(qbsPmLog) << "Expect problems with code model";
             }
-            rpp.setPreCompiledHeaders(Utils::toList(pchFiles));
-            rpp.setIncludedFiles(arrayToStringList(props.value("cpp.prefixHeaders")));
+            rpp.setPreCompiledHeaders(Utils::transform<QList>(pchFiles, &FilePath::fromString));
+            rpp.setIncludedFiles(Utils::transform(
+                 arrayToStringList(props.value("cpp.prefixHeaders")), &FilePath::fromString));
             rpp.setFiles(filePathToSourceArtifact.keys(), {},
                          [filePathToSourceArtifact](const QString &filePath) {
                 // Keep this lambda thread-safe!

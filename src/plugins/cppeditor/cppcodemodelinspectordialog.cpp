@@ -1775,7 +1775,7 @@ void CppCodeModelInspectorDialog::updateProjectPartData(const ProjectPart::Const
 
     const QString precompiledHeaders = part->precompiledHeaders.isEmpty()
             ? QString::fromLatin1("<None>")
-            : part->precompiledHeaders.join(',');
+            : Utils::transform(part->precompiledHeaders, &FilePath::toString).join(',');
 
     KeyValueModel::Table table = {
         {QString::fromLatin1("Project Part Name"), part->displayName},

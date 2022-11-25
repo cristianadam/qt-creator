@@ -20,8 +20,9 @@
 
 #include <optional>
 
-namespace MesonProjectManager {
-namespace Internal {
+using namespace Utils;
+
+namespace MesonProjectManager::Internal {
 
 struct CompilerArgs
 {
@@ -74,18 +75,14 @@ CompilerArgs splitArgs(const QStringList &args)
     return splited;
 }
 
-QStringList toAbsolutePath(const Utils::FilePath &refPath, QStringList &pathList)
+FilePaths toAbsolutePath(const FilePath &refPath, QStringList &pathList)
 {
-    QStringList allAbs;
-    std::transform(std::cbegin(pathList),
-                   std::cend(pathList),
-                   std::back_inserter(allAbs),
+    return Utils::transform(pathList,
                    [refPath](const QString &path) {
-                       if (Utils::FileUtils::isAbsolutePath(path))
-                           return path;
-                       return refPath.pathAppended(path).toString();
+                       if (FileUtils::isAbsolutePath(path))
+                           return FilePath::fromString(path);
+                       return refPath.pathAppended(path);
                    });
-    return allAbs;
 }
 
 MesonProjectParser::MesonProjectParser(const Utils::Id &meson,
@@ -329,5 +326,5 @@ bool MesonProjectParser::usesSameMesonVersion(const Utils::FilePath &buildPath)
     auto meson = MesonTools::mesonWrapper(m_meson);
     return info && meson && info->mesonVersion == meson->version();
 }
-} // namespace Internal
-} // namespace MesonProjectManager
+
+} // MesonProjectManager::Internal
