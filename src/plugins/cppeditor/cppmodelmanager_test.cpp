@@ -997,18 +997,18 @@ void ModelManagerTest::testRenameIncludes()
     TemporaryDir tmpDir;
     QVERIFY(tmpDir.isValid());
 
-    const QDir workingDir(tmpDir.path());
+    const FilePath workingDir = tmpDir.filePath();
     const QStringList fileNames = {"foo.h", "foo.cpp", "main.cpp"};
-    const FilePath oldHeader = FilePath::fromString(workingDir.filePath("foo.h"));
-    const FilePath newHeader = FilePath::fromString(workingDir.filePath("bar.h"));
+    const FilePath oldHeader = workingDir / "foo.h";
+    const FilePath newHeader = workingDir / "bar.h";
     CppModelManager *modelManager = CppModelManager::instance();
     const MyTestDataDir testDir(_("testdata_project1"));
 
     // Copy test files to a temporary directory
     QSet<FilePath> sourceFiles;
-    for (const QString &fileName : std::as_const(fileNames)) {
-        const FilePath file = FilePath::fromString(workingDir.filePath(fileName));
-        QVERIFY(QFile::copy(testDir.file(fileName), file.toString()));
+    for (const QString &fileName : fileNames) {
+        const FilePath file = workingDir / fileName;
+        QVERIFY(testDir.filePath(fileName).copyFile(file));
         // Saving source file names for the model manager update,
         // so we can update just the relevant files.
         if (ProjectFile::classify(file) == ProjectFile::CXXSource)
@@ -1047,17 +1047,17 @@ void ModelManagerTest::testRenameIncludesInEditor()
     TemporaryDir tmpDir;
     QVERIFY(tmpDir.isValid());
 
-    const QDir workingDir(tmpDir.path());
+    const FilePath workingDir = tmpDir.filePath();
     const QStringList fileNames = {"baz.h", "baz2.h", "baz3.h", "foo.h", "foo.cpp", "main.cpp"};
-    const FilePath headerWithPragmaOnce = FilePath::fromString(workingDir.filePath("foo.h"));
-    const FilePath renamedHeaderWithPragmaOnce = FilePath::fromString(workingDir.filePath("bar.h"));
-    const QString headerWithNormalGuard(workingDir.filePath(_("baz.h")));
-    const QString renamedHeaderWithNormalGuard(workingDir.filePath(_("foobar2000.h")));
-    const QString headerWithUnderscoredGuard(workingDir.filePath(_("baz2.h")));
-    const QString renamedHeaderWithUnderscoredGuard(workingDir.filePath(_("foobar4000.h")));
-    const QString headerWithMalformedGuard(workingDir.filePath(_("baz3.h")));
-    const QString renamedHeaderWithMalformedGuard(workingDir.filePath(_("foobar5000.h")));
-    const FilePath mainFile = FilePath::fromString(workingDir.filePath("main.cpp"));
+    const FilePath headerWithPragmaOnce = workingDir / "foo.h";
+    const FilePath renamedHeaderWithPragmaOnce = workingDir / "bar.h";
+    const FilePath headerWithNormalGuard = workingDir / "baz.h";
+    const FilePath renamedHeaderWithNormalGuard = workingDir / "foobar2000.h";
+    const FilePath headerWithUnderscoredGuard = workingDir / "baz2.h";
+    const FilePath renamedHeaderWithUnderscoredGuard = workingDir / "foobar4000.h";
+    const FilePath headerWithMalformedGuard = workingDir / "baz3.h";
+    const FilePath renamedHeaderWithMalformedGuard = workingDir / "foobar5000.h";
+    const FilePath mainFile = workingDir / "main.cpp";
     CppModelManager *modelManager = CppModelManager::instance();
     const MyTestDataDir testDir(_("testdata_project1"));
 
@@ -1067,8 +1067,8 @@ void ModelManagerTest::testRenameIncludesInEditor()
     // Copy test files to a temporary directory
     QSet<FilePath> sourceFiles;
     for (const QString &fileName : fileNames) {
-        const FilePath file = FilePath::fromString(workingDir.filePath(fileName));
-        QVERIFY(QFile::copy(testDir.file(fileName), file.toString()));
+        const FilePath file = workingDir / fileName;
+        QVERIFY(testDir.filePath(fileName).copyFile(file));
         // Saving source file names for the model manager update,
         // so we can update just the relevant files.
         if (ProjectFile::classify(file) == ProjectFile::CXXSource)
@@ -1103,8 +1103,8 @@ void ModelManagerTest::testRenameIncludesInEditor()
 
     // Test the renaming the header with include guard:
     // The contents should match the foobar2000.h in the testdata_project2 project
-    QVERIFY(Core::FileUtils::renameFile(Utils::FilePath::fromString(headerWithNormalGuard),
-                                        Utils::FilePath::fromString(renamedHeaderWithNormalGuard),
+    QVERIFY(Core::FileUtils::renameFile(headerWithNormalGuard,
+                                        renamedHeaderWithNormalGuard,
                                         Core::HandleIncludeGuards::Yes));
 
     const MyTestDataDir testDir2(_("testdata_project2"));
@@ -1113,7 +1113,7 @@ void ModelManagerTest::testRenameIncludesInEditor()
     const auto foobar2000HeaderContents = foobar2000Header.readAll();
     foobar2000Header.close();
 
-    QFile renamedHeader(renamedHeaderWithNormalGuard);
+    QFile renamedHeader(renamedHeaderWithNormalGuard.path());
     QVERIFY(renamedHeader.open(QFile::ReadOnly | QFile::Text));
     auto renamedHeaderContents = renamedHeader.readAll();
     renamedHeader.close();
@@ -1122,8 +1122,8 @@ void ModelManagerTest::testRenameIncludesInEditor()
     // Test the renaming the header with underscore pre/suffixed include guard:
     // The contents should match the foobar2000.h in the testdata_project2 project
     QVERIFY(
-        Core::FileUtils::renameFile(Utils::FilePath::fromString(headerWithUnderscoredGuard),
-                                    Utils::FilePath::fromString(renamedHeaderWithUnderscoredGuard),
+        Core::FileUtils::renameFile(headerWithUnderscoredGuard,
+                                    renamedHeaderWithUnderscoredGuard,
                                     Core::HandleIncludeGuards::Yes));
 
     QFile foobar4000Header(testDir2.file("foobar4000.h"));
@@ -1131,7 +1131,7 @@ void ModelManagerTest::testRenameIncludesInEditor()
     const auto foobar4000HeaderContents = foobar4000Header.readAll();
     foobar4000Header.close();
 
-    renamedHeader.setFileName(renamedHeaderWithUnderscoredGuard);
+    renamedHeader.setFileName(renamedHeaderWithUnderscoredGuard.path());
     QVERIFY(renamedHeader.open(QFile::ReadOnly | QFile::Text));
     renamedHeaderContents = renamedHeader.readAll();
     renamedHeader.close();
@@ -1139,16 +1139,16 @@ void ModelManagerTest::testRenameIncludesInEditor()
 
     // test the renaming of a header with a malformed guard to verify we do not make
     // accidental refactors
-    renamedHeader.setFileName(headerWithMalformedGuard);
+    renamedHeader.setFileName(headerWithMalformedGuard.path());
     QVERIFY(renamedHeader.open(QFile::ReadOnly | QFile::Text));
     auto originalMalformedGuardContents = renamedHeader.readAll();
     renamedHeader.close();
 
-    QVERIFY(Core::FileUtils::renameFile(Utils::FilePath::fromString(headerWithMalformedGuard),
-                                        Utils::FilePath::fromString(renamedHeaderWithMalformedGuard),
+    QVERIFY(Core::FileUtils::renameFile(headerWithMalformedGuard,
+                                        renamedHeaderWithMalformedGuard,
                                         Core::HandleIncludeGuards::Yes));
 
-    renamedHeader.setFileName(renamedHeaderWithMalformedGuard);
+    renamedHeader.setFileName(renamedHeaderWithMalformedGuard.path());
     QVERIFY(renamedHeader.open(QFile::ReadOnly | QFile::Text));
     renamedHeaderContents = renamedHeader.readAll();
     renamedHeader.close();

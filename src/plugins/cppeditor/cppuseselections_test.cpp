@@ -70,7 +70,7 @@ UseSelectionsTestCase::UseSelectionsTestCase(CppTestDocument &testFile,
 
     CppEditor::Tests::TemporaryDir temporaryDir;
     QVERIFY(temporaryDir.isValid());
-    testFile.setBaseDirectory(temporaryDir.path());
+    testFile.setBaseDirectory(temporaryDir.filePath());
     testFile.writeToDisk();
 
     QVERIFY(openCppEditor(testFile.filePath(), &testFile.m_editor, &m_editorWidget));

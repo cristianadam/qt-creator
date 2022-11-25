@@ -87,12 +87,9 @@ TestDocumentPtr CppTestDocument::create(const QByteArray &fileName, const QByteA
 FilePath CppTestDocument::filePath() const
 {
     if (!m_baseDirectory.isEmpty())
-        return FilePath::fromString(QDir::cleanPath(m_baseDirectory + '/' + m_fileName));
+        return m_baseDirectory /  m_fileName;
 
-    if (!QFileInfo(m_fileName).isAbsolute())
-        return FilePath::fromString(TemporaryDirectory::masterDirectoryPath() + '/' + m_fileName);
-
-    return FilePath::fromString(m_fileName);
+    return TemporaryDirectory::masterDirectoryFilePath().resolvePath(m_fileName);
 }
 
 bool CppTestDocument::writeToDisk() const
@@ -297,9 +294,9 @@ bool TestCase::parseFiles(const QSet<FilePath> &filePaths)
     return true;
 }
 
-bool TestCase::parseFiles(const QString &filePath)
+bool TestCase::parseFiles(const FilePath &filePath)
 {
-    return parseFiles({FilePath::fromString(filePath)});
+    return parseFiles({filePath});
 }
 
 void TestCase::closeEditorAtEndOfTestCase(Core::IEditor *editor)
@@ -470,7 +467,7 @@ TemporaryCopiedDir::TemporaryCopiedDir(const QString &sourceDirPath)
     }
 
     QString errorMessage;
-    if (!copyRecursively(sourceDirPath, path(), &errorMessage)) {
+    if (!copyRecursively(sourceDirPath, filePath().path(), &errorMessage)) {
         qWarning() << qPrintable(errorMessage);
         m_isValid = false;
     }

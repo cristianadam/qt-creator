@@ -86,7 +86,7 @@ public:
         // Write files
         QSet<FilePath> filePaths;
         for (auto &document : documents_) {
-            document.setBaseDirectory(temporaryDir.path());
+            document.setBaseDirectory(temporaryDir.filePath());
             QVERIFY(document.writeToDisk());
             filePaths << document.filePath();
         }

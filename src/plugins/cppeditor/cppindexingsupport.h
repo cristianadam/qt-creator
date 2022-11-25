@@ -61,7 +61,7 @@ public:
                                              CppModelManager::ProgressNotificationMode mode)
         = 0;
     virtual SymbolSearcher *createSymbolSearcher(const SymbolSearcher::Parameters &parameters,
-                                                 const QSet<QString> &fileNames) = 0;
+                                                 const QSet<Utils::FilePath> &filePath) = 0;
 };
 
 } // namespace CppEditor

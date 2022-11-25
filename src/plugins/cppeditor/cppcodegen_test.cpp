@@ -384,7 +384,7 @@ void CodegenTest::testDefinitionFirstMember()
             "\n"
             "}\n"
             "\n"
-            "int y;\n").arg(temporaryDir.path()).toLatin1();
+            "int y;\n").arg(temporaryDir.filePath().path()).toLatin1();
     Document::Ptr sourceDocument = createDocumentAndFile(&temporaryDir, "file.cpp", sourceText, 3);
     QVERIFY(sourceDocument);
     sourceDocument->addIncludeFile(Document::Include(QLatin1String("file.h"),
@@ -442,7 +442,7 @@ void CodegenTest::testDefinitionLastMember()
             "\n"
             "}\n" // line 7
             "\n"
-            "int y;\n").arg(temporaryDir.path()).toLatin1();
+            "int y;\n").arg(temporaryDir.filePath().path()).toLatin1();
 
     Document::Ptr sourceDocument = createDocumentAndFile(&temporaryDir, "file.cpp", sourceText, 3);
     QVERIFY(sourceDocument);
@@ -569,7 +569,7 @@ void CodegenTest::testDefinitionMiddleMemberSurroundedByUndefined()
             "\n"
             "}\n"
             "\n"
-            "int y;\n").arg(temporaryDir.path()).toLatin1();
+            "int y;\n").arg(temporaryDir.filePath().path()).toLatin1();
     Document::Ptr sourceDocument = createDocumentAndFile(&temporaryDir, "file.cpp", sourceText, 3);
     QVERIFY(sourceDocument);
     sourceDocument->addIncludeFile(Document::Include(QLatin1String("file.h"),
@@ -632,7 +632,7 @@ void CodegenTest::testDefinitionMemberSpecificFile()
             "\n"
             "}\n" // line 7
             "\n"
-            "int y;\n").arg(temporaryDir.path()).toLatin1();
+            "int y;\n").arg(temporaryDir.filePath().path()).toLatin1();
     Document::Ptr sourceDocument = createDocumentAndFile(&temporaryDir, "file.cpp", sourceText, 3);
     QVERIFY(sourceDocument);
     sourceDocument->addIncludeFile(Document::Include(QLatin1String("file.h"),

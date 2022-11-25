@@ -253,12 +253,11 @@ F2TestCase::F2TestCase(CppEditorAction action,
     CppEditor::Tests::TemporaryDir temporaryDir;
     QVERIFY(temporaryDir.isValid());
     QString projectFileContent = "CppApplication { files: [";
-   for (TestDocumentPtr testFile : testFiles) {
+    for (TestDocumentPtr testFile : testFiles) {
         QVERIFY(testFile->baseDirectory().isEmpty());
-        testFile->setBaseDirectory(temporaryDir.path());
+        testFile->setBaseDirectory(temporaryDir.filePath());
         QVERIFY(testFile->writeToDisk());
-        projectFileContent += QString::fromLatin1("\"%1\",")
-                .arg(testFile->filePath().toString());
+        projectFileContent += QString("\"%1\",").arg(testFile->filePath().path());
     }
     projectFileContent += "]}\n";
 
@@ -272,7 +271,7 @@ F2TestCase::F2TestCase(CppEditorAction action,
 
     if (useClangd) {
         CppTestDocument projectFile("project.qbs", projectFileContent.toUtf8());
-        projectFile.setBaseDirectory(temporaryDir.path());
+        projectFile.setBaseDirectory(temporaryDir.filePath());
         QVERIFY(projectFile.writeToDisk());
         const auto openProjectResult = ProjectExplorerPlugin::openProject(projectFile.filePath());
         QVERIFY2(openProjectResult && openProjectResult.project(),

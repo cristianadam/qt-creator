@@ -52,11 +52,11 @@ class WriteTaskFileForDiagnostics
 public:
     WriteTaskFileForDiagnostics()
     {
-        const QString fileName = Utils::TemporaryDirectory::masterDirectoryPath()
-                + "/qtc_findErrorsIndexing.diagnostics."
-                + QDateTime::currentDateTime().toString("yyMMdd_HHmm") + ".tasks";
+        const FilePath fileName = Utils::TemporaryDirectory::masterDirectoryFilePath()
+                .pathAppended("qtc_findErrorsIndexing.diagnostics."
+                + QDateTime::currentDateTime().toString("yyMMdd_HHmm") + ".tasks");
 
-        m_file.setFileName(fileName);
+        m_file.setFileName(fileName.path());
         Q_ASSERT(m_file.open(QIODevice::WriteOnly | QIODevice::Text));
         m_out.setDevice(&m_file);
 
@@ -244,10 +244,10 @@ class BuiltinSymbolSearcher: public SymbolSearcher
 {
 public:
     BuiltinSymbolSearcher(const CPlusPlus::Snapshot &snapshot,
-                          const Parameters &parameters, const QSet<QString> &fileNames)
+                          const Parameters &parameters, const QSet<FilePath> &filePaths)
         : m_snapshot(snapshot)
         , m_parameters(parameters)
-        , m_fileNames(fileNames)
+        , m_filePaths(filePaths)
     {}
 
     ~BuiltinSymbolSearcher() override = default;
@@ -275,7 +275,7 @@ public:
                 future.waitForResume();
             if (future.isCanceled())
                 break;
-            if (m_fileNames.isEmpty() || m_fileNames.contains(it.value()->filePath().path())) {
+            if (m_filePaths.isEmpty() || m_filePaths.contains(it.value()->filePath())) {
                 QVector<Core::SearchResultItem> resultItems;
                 auto filter = [&](const IndexItem::Ptr &info) -> IndexItem::VisitorResult {
                     if (matcher.match(info->symbolName()).hasMatch()) {
@@ -314,7 +314,7 @@ public:
 private:
     const CPlusPlus::Snapshot m_snapshot;
     const Parameters m_parameters;
-    const QSet<QString> m_fileNames;
+    const QSet<FilePath> m_filePaths;
 };
 
 } // anonymous namespace
@@ -349,10 +349,10 @@ QFuture<void> BuiltinIndexingSupport::refreshSourceFiles(
     return result;
 }
 
-SymbolSearcher *BuiltinIndexingSupport::createSymbolSearcher(
-        const SymbolSearcher::Parameters &parameters, const QSet<QString> &fileNames)
+SymbolSearcher *BuiltinIndexingSupport::createSymbolSearcher(const SymbolSearcher::Parameters &parameters,
+                                                             const QSet<FilePath> &filePaths)
 {
-    return new BuiltinSymbolSearcher(CppModelManager::instance()->snapshot(), parameters, fileNames);
+    return new BuiltinSymbolSearcher(CppModelManager::instance()->snapshot(), parameters, filePaths);
 }
 
 bool BuiltinIndexingSupport::isFindErrorsIndexingActive()
@@ -360,4 +360,4 @@ bool BuiltinIndexingSupport::isFindErrorsIndexingActive()
     return Utils::qtcEnvironmentVariable("QTC_FIND_ERRORS_INDEXING") == "1";
 }
 
-} // namespace CppEditor::Internal
+} // CppEditor::Internal

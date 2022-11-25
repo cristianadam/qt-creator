@@ -10,7 +10,8 @@
 
 namespace CppEditor::Internal {
 
-class BuiltinIndexingSupport: public CppIndexingSupport {
+class BuiltinIndexingSupport: public CppIndexingSupport
+{
 public:
     BuiltinIndexingSupport();
     ~BuiltinIndexingSupport() override;
@@ -18,7 +19,7 @@ public:
     QFuture<void> refreshSourceFiles(const QSet<Utils::FilePath> &sourceFiles,
                                      CppModelManager::ProgressNotificationMode mode) override;
     SymbolSearcher *createSymbolSearcher(const SymbolSearcher::Parameters &parameters,
-                                         const QSet<QString> &fileNames) override;
+                                         const QSet<Utils::FilePath> &filePaths) override;
 
 public:
     static bool isFindErrorsIndexingActive();
@@ -27,4 +28,4 @@ private:
     Utils::FutureSynchronizer m_synchronizer;
 };
 
-} // namespace CppEditor::Internal
+} // CppEditor::Internal

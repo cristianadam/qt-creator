@@ -37,14 +37,14 @@ class CppLocatorFilterTestCase
 {
 public:
     CppLocatorFilterTestCase(ILocatorFilter *filter,
-                             const QString &fileName,
+                             const FilePath &filePath,
                              const QString &searchText,
                              const ResultDataList &expectedResults)
         : BasicLocatorFilterTest(filter)
-        , m_fileName(fileName)
+        , m_filePath(filePath)
     {
         QVERIFY(succeededSoFar());
-        QVERIFY(!m_fileName.isEmpty());
+        QVERIFY(!m_filePath.isEmpty());
         QVERIFY(garbageCollectGlobalSnapshot());
 
         ResultDataList results = ResultData::fromFilterEntryList(matchesFor(searchText));
@@ -57,11 +57,11 @@ public:
     }
 
 private:
-    void doBeforeLocatorRun() override { QVERIFY(parseFiles(m_fileName)); }
+    void doBeforeLocatorRun() override { QVERIFY(parseFiles(m_filePath)); }
     void doAfterLocatorRun() override { QVERIFY(garbageCollectGlobalSnapshot()); }
 
 private:
-    const QString m_fileName;
+    const FilePath m_filePath;
 };
 
 class CppCurrentDocumentFilterTestCase
@@ -123,7 +123,7 @@ void LocatorFilterTest::testLocatorFilter()
 
     Tests::VerifyCleanCppModelManager verify;
 
-    CppLocatorFilterTestCase(filter, testFile, searchText, expectedResults);
+    CppLocatorFilterTestCase(filter, FilePath::fromString(testFile), searchText, expectedResults);
 }
 
 void LocatorFilterTest::testLocatorFilter_data()
@@ -379,8 +379,8 @@ void LocatorFilterTest::testCurrentDocumentHighlighting()
 void LocatorFilterTest::testFunctionsFilterHighlighting()
 {
     MyTestDataDir testDirectory("testdata_basic");
-    const QString testFile = testDirectory.file("file1.cpp");
-    const QString testFileShort = FilePath::fromString(testFile).shortNativePath();
+    const FilePath testFile = testDirectory.filePath("file1.cpp");
+    const QString testFileShort = testFile.shortNativePath();
 
     const QString searchText = "pos";
     const ResultDataList expectedResults{
@@ -402,4 +402,4 @@ void LocatorFilterTest::testFunctionsFilterHighlighting()
     CppLocatorFilterTestCase(filter, testFile, searchText, expectedResults);
 }
 
-} // namespace CppEditor::Internal
+} // CppEditor::Internal

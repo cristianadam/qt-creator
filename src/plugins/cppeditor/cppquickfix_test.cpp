@@ -81,7 +81,7 @@ BaseQuickFixTestCase::BaseQuickFixTestCase(const QList<TestDocumentPtr> &testDoc
     QVERIFY(m_temporaryDirectory->isValid());
     for (const TestDocumentPtr &document : std::as_const(m_testDocuments)) {
         if (QFileInfo(document->m_fileName).isRelative())
-            document->setBaseDirectory(m_temporaryDirectory->path());
+            document->setBaseDirectory(m_temporaryDirectory->filePath());
         document->writeToDisk();
     }
 
@@ -5956,7 +5956,7 @@ void QuickfixTest::testAddIncludeForUndefinedIdentifier()
     TemporaryDir temporaryDir;
     QVERIFY(temporaryDir.isValid());
     for (const TestDocumentPtr &testDocument : std::as_const(testDocuments))
-        testDocument->setBaseDirectory(temporaryDir.path());
+        testDocument->setBaseDirectory(temporaryDir.filePath());
 
     QScopedPointer<CppQuickFixFactory> factory;
     if (includeForTestFactory.isEmpty())
@@ -5977,7 +5977,7 @@ void QuickfixTest::testAddIncludeForUndefinedIdentifierNoDoubleQtHeaderInclude()
     QByteArray original;
     QByteArray expected;
 
-    const QByteArray base = temporaryDir.path().toUtf8();
+    const QByteArray base = temporaryDir.filePath().path().toUtf8();
 
     // This file makes the QDir definition available so that locator finds it.
     original = expected = "#include <QDir>\n"
@@ -6151,7 +6151,7 @@ void QuickfixTest::testAddForwardDeclForUndefinedIdentifier()
 
     TemporaryDir temporaryDir;
     QVERIFY(temporaryDir.isValid());
-    testDocuments.first()->setBaseDirectory(temporaryDir.path());
+    testDocuments.first()->setBaseDirectory(temporaryDir.filePath());
 
     QScopedPointer<CppQuickFixFactory> factory(
                 new AddForwardDeclForUndefinedIdentifierTestFactory(symbol, symbolPos));

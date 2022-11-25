@@ -14,6 +14,8 @@
 
 #include <QtTest>
 
+using namespace Utils;
+
 namespace {
 
 QTC_DECLARE_MYTESTDATADIR("../../../tests/cppsymbolsearcher/")
@@ -80,7 +82,7 @@ namespace  {
 class SymbolSearcherTestCase : public CppEditor::Tests::TestCase
 {
 public:
-    SymbolSearcherTestCase(const QString &testFile,
+    SymbolSearcherTestCase(const FilePath &testFile,
                            const SymbolSearcher::Parameters &searchParameters,
                            const ResultDataList &expectedResults)
     {
@@ -89,7 +91,7 @@ public:
 
         CppIndexingSupport *indexingSupport = m_modelManager->indexingSupport();
         const QScopedPointer<SymbolSearcher> symbolSearcher(
-            indexingSupport->createSymbolSearcher(searchParameters, QSet<QString>{testFile}));
+            indexingSupport->createSymbolSearcher(searchParameters, {testFile}));
         QFuture<Core::SearchResultItem> search
             = Utils::runAsync(&SymbolSearcher::runSearch, symbolSearcher.data());
         search.waitForFinished();
@@ -105,7 +107,7 @@ void SymbolSearcherTest::test()
     QFETCH(SymbolSearcher::Parameters, searchParameters);
     QFETCH(ResultDataList, expectedResults);
 
-    SymbolSearcherTestCase(testFile, searchParameters, expectedResults);
+    SymbolSearcherTestCase(FilePath::fromString(testFile), searchParameters, expectedResults);
 }
 
 void SymbolSearcherTest::test_data()

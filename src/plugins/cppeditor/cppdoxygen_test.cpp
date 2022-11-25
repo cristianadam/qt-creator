@@ -419,15 +419,15 @@ void DoxygenTest::runTest(const QByteArray &original,
     CppTestDocument testDocument("file.cpp", original, '|');
     QVERIFY(testDocument.hasCursorMarker());
     testDocument.m_source.remove(testDocument.m_cursorPosition, 1);
-    testDocument.setBaseDirectory(temporaryDir.path());
+    testDocument.setBaseDirectory(temporaryDir.filePath());
     QVERIFY(testDocument.writeToDisk());
     for (CppTestDocument testDocument : includedHeaderDocuments) {
-        testDocument.setBaseDirectory(temporaryDir.path());
+        testDocument.setBaseDirectory(temporaryDir.filePath());
         QVERIFY(testDocument.writeToDisk());
     }
 
     // Update Code Model
-    QVERIFY(TestCase::parseFiles(testDocument.filePath().toString()));
+    QVERIFY(TestCase::parseFiles(testDocument.filePath()));
 
     // Open Editor
     QVERIFY(TestCase::openCppEditor(testDocument.filePath(), &testDocument.m_editor,

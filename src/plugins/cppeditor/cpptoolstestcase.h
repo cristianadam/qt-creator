@@ -57,8 +57,8 @@ public:
     static TestDocumentPtr create(const QByteArray &fileName, const QByteArray &source,
                                   const QByteArray &expectedSource);
 
-    QString baseDirectory() const { return m_baseDirectory; }
-    void setBaseDirectory(const QString &baseDirectory) { m_baseDirectory = baseDirectory; }
+    Utils::FilePath baseDirectory() const { return m_baseDirectory; }
+    void setBaseDirectory(const Utils::FilePath &baseDirectory) { m_baseDirectory = baseDirectory; }
 
     Utils::FilePath filePath() const;
     bool writeToDisk() const;
@@ -69,7 +69,7 @@ public:
 
     void removeMarkers();
 
-    QString m_baseDirectory;
+    Utils::FilePath m_baseDirectory;
     QString m_fileName;
     QString m_source;
     char m_cursorMarker;
@@ -129,7 +129,7 @@ public:
 
     static bool closeEditorWithoutGarbageCollectorInvocation(Core::IEditor *editor);
 
-    static bool parseFiles(const QString &filePath);
+    static bool parseFiles(const Utils::FilePath &filePath);
     static bool parseFiles(const QSet<Utils::FilePath> &filePaths);
 
     static CPlusPlus::Snapshot globalSnapshot();
@@ -181,7 +181,6 @@ public:
     TemporaryDir();
 
     bool isValid() const { return m_isValid; }
-    QString path() const { return m_temporaryDir.path().path(); }
     Utils::FilePath filePath() const { return m_temporaryDir.path(); }
 
     Utils::FilePath createFile(const QByteArray &relativePath, const QByteArray &contents);
