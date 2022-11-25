@@ -28,10 +28,10 @@ class TestHelper
 public:
     const ProjectPart &finalize()
     {
-        QFile pchFile(pchFileNativePath());
+        QFile pchFile(pchFilePath().path());
         pchFile.open(QIODevice::WriteOnly);
         RawProjectPart rpp;
-        rpp.setPreCompiledHeaders({FilePath::fromString(pchFileNativePath())});
+        rpp.setPreCompiledHeaders({pchFilePath()});
         rpp.setMacros({Macro{"projectFoo", "projectBar"}});
         rpp.setQtVersion(Utils::QtMajorVersion::Qt5);
         rpp.setHeaderPaths(headerPaths);
@@ -64,10 +64,9 @@ public:
         return QDir::toNativeSeparators(toNative);
     }
 
-    QString pchFileNativePath() const
+    FilePath pchFilePath() const
     {
-        return toNative(Utils::TemporaryDirectory::masterDirectoryPath()
-                        + "/compileroptionsbuilder.pch");
+        return TemporaryDirectory::masterDirectoryFilePath() / "compileroptionsbuilder.pch";
     }
 
     QStringList flags;
@@ -363,7 +362,7 @@ void CompilerOptionsBuilderTest::testUsePrecompiledHeader()
     t.finalize();
     t.compilerOptionsBuilder->addPrecompiledHeaderOptions(UsePrecompiledHeaders::Yes);
 
-    QCOMPARE(t.compilerOptionsBuilder->options(), (QStringList{"-include", t.pchFileNativePath()}));
+    QCOMPARE(t.compilerOptionsBuilder->options(), (QStringList{"-include", t.pchFilePath().nativePath()}));
 }
 
 void CompilerOptionsBuilderTest::testUsePrecompiledHeaderMsvc()
@@ -374,7 +373,7 @@ void CompilerOptionsBuilderTest::testUsePrecompiledHeaderMsvc()
     compilerOptionsBuilder.evaluateCompilerFlags();
     compilerOptionsBuilder.addPrecompiledHeaderOptions(UsePrecompiledHeaders::Yes);
 
-    QCOMPARE(compilerOptionsBuilder.options(), (QStringList{"/FI", t.pchFileNativePath()}));
+    QCOMPARE(compilerOptionsBuilder.options(), (QStringList{"/FI", t.pchFilePath().nativePath()}));
 }
 
 void CompilerOptionsBuilderTest::testAddMacros()
