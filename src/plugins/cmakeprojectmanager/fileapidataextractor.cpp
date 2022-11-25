@@ -398,14 +398,15 @@ RawProjectParts generateRawProjectParts(const PreprocessedData &input,
 
             // Set project files except pch files
             rpp.setFiles(Utils::filtered(sources, [buildDirectory](const FilePath &path) {
-                             return !isPchFile(buildDirectory, path);
-                         }), {}, [headerMimeType](const FilePath &path) {
-                             // Similar to ProjectFile::classify but classify headers with language
-                             // of compile group instead of ambiguous header
-                             if (path.endsWith(".h"))
-                                 return headerMimeType;
-                             return Utils::mimeTypeForFile(path).name();
-                         });
+                 return !isPchFile(buildDirectory, path);
+             }));
+            rpp.setMimeTypeGetter([headerMimeType](const FilePath &path) {
+                 // Similar to ProjectFile::classify but classify headers with language
+                 // of compile group instead of ambiguous header
+                 if (path.endsWith(".h"))
+                     return headerMimeType;
+                 return Utils::mimeTypeForFile(path).name();
+             });
 
             FilePath precompiled_header
                 = FilePath::fromString(findOrDefault(t.sources, [&ending](const SourceInfo &si) {
