@@ -359,8 +359,8 @@ std::optional<bool> QtTestParser::fillTestCaseData(
     if (data.testFunctions.isEmpty() && testCaseName == "QObject" && isQObject(declaringDoc))
         return true; // we did not handle it, but we do not expect any test defined there either
 
-    const QSet<Utils::FilePath> &files = filesWithDataFunctionDefinitions(data.testFunctions);
-    for (const Utils::FilePath &file : files)
+    const QSet<FilePath> &files = filesWithDataFunctionDefinitions(data.testFunctions);
+    for (const FilePath &file : files)
         Utils::addToHash(&(data.dataTags), checkForDataTags(file));
 
     data.fileName = declaringDoc->filePath();
@@ -369,7 +369,7 @@ std::optional<bool> QtTestParser::fillTestCaseData(
 }
 
 QtTestParseResult *QtTestParser::createParseResult(
-        const QString &testCaseName, const TestCaseData &data, const QString &projectFile) const
+        const QString &testCaseName, const TestCaseData &data, const FilePath &projectFile) const
 {
     QtTestParseResult *parseResult = new QtTestParseResult(framework());
     parseResult->itemType = TestTreeItem::TestCase;
@@ -378,7 +378,7 @@ QtTestParseResult *QtTestParser::createParseResult(
     parseResult->displayName = testCaseName;
     parseResult->line = data.line;
     parseResult->column = data.column;
-    parseResult->proFile = Utils::FilePath::fromString(projectFile);
+    parseResult->proFile = projectFile;
     parseResult->setRunsMultipleTestcases(data.multipleTestCases);
     QMap<QString, QtTestCodeLocationAndType>::ConstIterator it = data.testFunctions.begin();
     const QMap<QString, QtTestCodeLocationAndType>::ConstIterator end = data.testFunctions.end();

@@ -134,7 +134,7 @@ void AutotoolsBuildSystem::updateCppCodeModel()
 
     RawProjectPart rpp;
     rpp.setDisplayName(project()->displayName());
-    rpp.setProjectFileLocation(projectFilePath().toString());
+    rpp.setProjectFileLocation(projectFilePath());
     rpp.setQtVersion(kitInfo.projectPartQtVersion);
     const QStringList cflags = m_makefileParserThread->cflags();
     QStringList cxxflags = m_makefileParserThread->cxxflags();

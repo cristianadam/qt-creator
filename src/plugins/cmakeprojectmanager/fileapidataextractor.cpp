@@ -357,7 +357,7 @@ RawProjectParts generateRawProjectParts(const PreprocessedData &input,
 
             ++counter;
             RawProjectPart rpp;
-            rpp.setProjectFileLocation(t.sourceDir.pathAppended("CMakeLists.txt").toString());
+            rpp.setProjectFileLocation(t.sourceDir / "CMakeLists.txt");
             rpp.setBuildSystemTarget(t.name);
             const QString postfix = needPostfix ? "_cg" + QString::number(count) : QString();
             rpp.setDisplayName(t.id + postfix);

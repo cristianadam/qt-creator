@@ -20,8 +20,9 @@
 
 #include <QRegularExpression>
 
-namespace Autotest {
-namespace Internal {
+using namespace Utils;
+
+namespace Autotest::Internal {
 
 static QString matchingString()
 {
@@ -504,12 +505,12 @@ QSet<QString> internalTargets(const TestTreeItem &item)
     const auto projectInfo = cppMM->projectInfo(ProjectExplorer::SessionManager::startupProject());
     if (!projectInfo)
         return {};
-    const Utils::FilePath filePath = item.filePath();
+    const FilePath filePath = item.filePath();
     const QVector<CppEditor::ProjectPart::ConstPtr> projectParts = projectInfo->projectParts();
     if (projectParts.isEmpty())
         return cppMM->dependingInternalTargets(item.filePath());
     for (const CppEditor::ProjectPart::ConstPtr &projectPart : projectParts) {
-        if (Utils::FilePath::fromString(projectPart->projectFile) == item.proFile()
+        if (projectPart->projectFile == item.proFile()
                 && Utils::anyOf(projectPart->files, [&filePath] (const CppEditor::ProjectFile &pf) {
                                 return pf.path == filePath;
         })) {
@@ -588,5 +589,4 @@ bool GTestTreeItem::shouldBeAddedAfterFiltering() const
     return type() == TestTreeItem::TestCase || childCount();
 }
 
-} // namespace Internal
-} // namespace Autotest
+} // Autotest::Internal

@@ -57,7 +57,7 @@ private:
                                            const CPlusPlus::Document::Ptr &doc,
                                            TestCaseData &data) const;
     QtTestParseResult *createParseResult(const QString &testCaseName, const TestCaseData &data,
-                                         const QString &projectFile) const;
+                                         const Utils::FilePath &projectFile) const;
     QHash<Utils::FilePath, TestCases> m_testCases;
     QMultiHash<Utils::FilePath, Utils::FilePath> m_alternativeFiles;
 };

@@ -117,9 +117,9 @@ bool CatchTestParser::processDocument(QFutureInterface<TestParseResultPtr> &futu
     const QList<CppEditor::ProjectPart::ConstPtr> projectParts = modelManager->projectPart(fileName);
     if (projectParts.isEmpty()) // happens if shutting down while parsing
         return false;
-    Utils::FilePath proFile;
+    FilePath proFile;
     const CppEditor::ProjectPart::ConstPtr projectPart = projectParts.first();
-    proFile = Utils::FilePath::fromString(projectPart->projectFile);
+    proFile = projectPart->projectFile;
 
     CatchCodeParser codeParser(fileContent, projectPart->languageFeatures);
     const CatchTestCodeLocationList foundTests = codeParser.findTests();

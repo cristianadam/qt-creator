@@ -93,10 +93,10 @@ bool GTestParser::processDocument(QFutureInterface<TestParseResultPtr> &futureIn
     visitor.accept(ast);
 
     const QMap<GTestCaseSpec, GTestCodeLocationList> result = visitor.gtestFunctions();
-    Utils::FilePath proFile;
+    FilePath proFile;
     const QList<CppEditor::ProjectPart::ConstPtr> &ppList = modelManager->projectPart(filePath);
     if (!ppList.isEmpty())
-        proFile = Utils::FilePath::fromString(ppList.first()->projectFile);
+        proFile = ppList.first()->projectFile;
     else
         return false; // happens if shutting down while parsing
 
