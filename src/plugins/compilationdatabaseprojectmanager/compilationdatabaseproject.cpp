@@ -148,7 +148,7 @@ void addDriverModeFlagIfNeeded(const ToolChain *toolchain,
 RawProjectPart makeRawProjectPart(const FilePath &projectFile,
                                   Kit *kit,
                                   ProjectExplorer::KitInfo &kitInfo,
-                                  const QString &workingDir,
+                                  const FilePath &workingDir,
                                   const FilePath &filePath,
                                   QStringList flags)
 {
@@ -167,7 +167,7 @@ RawProjectPart makeRawProjectPart(const FilePath &projectFile,
 
     RawProjectPart rpp;
     rpp.setProjectFileLocation(projectFile);
-    rpp.setBuildSystemTarget(workingDir);
+    rpp.setBuildSystemTarget(workingDir.path());
     rpp.setDisplayName(filePath.fileName());
     rpp.setFiles({filePath});
     rpp.setHeaderPaths(headerPaths);
