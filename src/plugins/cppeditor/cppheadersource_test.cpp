@@ -8,31 +8,27 @@
 #include "cpptoolstestcase.h"
 #include "cppfilesettingspage.h"
 
-#include <utils/fileutils.h>
+#include <utils/filepath.h>
 #include <utils/temporarydirectory.h>
 
-#include <QDir>
 #include <QtTest>
 
 using namespace Utils;
+
+namespace CppEditor::Internal {
 
 static inline QString _(const QByteArray &ba) { return QString::fromLatin1(ba, ba.size()); }
 
 static void createTempFile(const FilePath &filePath)
 {
-    QString fileName = filePath.toString();
-    QFile file(fileName);
-    QDir(QFileInfo(fileName).absolutePath()).mkpath(_("."));
-    file.open(QFile::WriteOnly);
-    file.close();
+    filePath.parentDir().ensureWritableDir();
+    filePath.writeFileContents({});
 }
 
-static QString baseTestDir()
+static FilePath baseTestDir()
 {
-    return Utils::TemporaryDirectory::masterDirectoryPath() + "/qtc_cppheadersource/";
+    return TemporaryDirectory::masterDirectoryFilePath() / "qtc_cppheadersource";
 }
-
-namespace CppEditor::Internal {
 
 void HeaderSourceTest::test()
 {
@@ -42,9 +38,9 @@ void HeaderSourceTest::test()
     CppEditor::Tests::TemporaryDir temporaryDir;
     QVERIFY(temporaryDir.isValid());
 
-    const QDir path = QDir(temporaryDir.path() + QLatin1Char('/') + _(QTest::currentDataTag()));
-    const FilePath sourcePath = FilePath::fromString(path.absoluteFilePath(sourceFileName));
-    const FilePath headerPath = FilePath::fromString(path.absoluteFilePath(headerFileName));
+    const FilePath path = temporaryDir.filePath() / _(QTest::currentDataTag());
+    const FilePath sourcePath = path / sourceFileName;
+    const FilePath headerPath = path / headerFileName;
     createTempFile(sourcePath);
     createTempFile(headerPath);
 
@@ -70,7 +66,7 @@ void HeaderSourceTest::test_data()
 
 void HeaderSourceTest::initTestCase()
 {
-    QDir(baseTestDir()).mkpath(_("."));
+    baseTestDir().ensureWritableDir();
     CppFileSettings *fs = CppEditorPlugin::fileSettings();
     fs->headerSearchPaths.append(QLatin1String("include"));
     fs->headerSearchPaths.append(QLatin1String("../include"));
@@ -82,7 +78,7 @@ void HeaderSourceTest::initTestCase()
 
 void HeaderSourceTest::cleanupTestCase()
 {
-    Utils::FilePath::fromString(baseTestDir()).removeRecursively();
+    baseTestDir().removeRecursively();
     CppFileSettings *fs = CppEditorPlugin::fileSettings();
     fs->headerSearchPaths.removeLast();
     fs->headerSearchPaths.removeLast();
@@ -92,4 +88,4 @@ void HeaderSourceTest::cleanupTestCase()
     fs->sourcePrefixes.removeLast();
 }
 
-} // namespace CppEditor::Internal
+} // CppEditor::Internal

@@ -19,4 +19,4 @@ private slots:
     void test();
 };
 
-} // namespace CppEditor::Internal
+} // CppEditor::Internal
