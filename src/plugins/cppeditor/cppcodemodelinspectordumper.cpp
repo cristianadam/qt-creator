@@ -404,11 +404,11 @@ QString Utils::unresolvedFileNameWithDelimiters(const CPlusPlus::Document::Inclu
     return QLatin1Char('<') + unresolvedFileName + QLatin1Char('>');
 }
 
-QString Utils::pathListToString(const QStringList &pathList)
+QString Utils::pathListToString(const ::Utils::FilePaths &pathList)
 {
     QStringList result;
-    for (const QString &path : pathList)
-        result << QDir::toNativeSeparators(path);
+    for (const ::Utils::FilePath &path : pathList)
+        result << path.toUserOutput();
     return result.join(QLatin1Char('\n'));
 }
 
@@ -555,8 +555,8 @@ void Dumper::dumpProjectInfos(const QList<ProjectInfo::ConstPtr> &projectInfos)
 
             if (!part->precompiledHeaders.isEmpty()) {
                 m_out << i3 << "Precompiled Headers:{{{4\n";
-                for (const QString &precompiledHeader : std::as_const(part->precompiledHeaders))
-                    m_out << i4 << precompiledHeader << "\n";
+                for (const ::Utils::FilePath &precompiledHeader : std::as_const(part->precompiledHeaders))
+                    m_out << i4 << precompiledHeader.toString() << "\n";
             }
         } // for part
     } // for project Info

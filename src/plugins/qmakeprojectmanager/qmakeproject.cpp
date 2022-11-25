@@ -360,7 +360,8 @@ void QmakeBuildSystem::updateCppCodeModel()
         rpp.setFlagsForCxx({kitInfo.cxxToolChain, cxxArgs, includeFileBaseDir});
         rpp.setFlagsForC({kitInfo.cToolChain, cArgs, includeFileBaseDir});
         rpp.setMacros(ProjectExplorer::Macro::toMacros(pro->cxxDefines()));
-        rpp.setPreCompiledHeaders(pro->variableValue(Variable::PrecompiledHeader));
+        rpp.setPreCompiledHeaders(
+            Utils::transform(pro->variableValue(Variable::PrecompiledHeader), &FilePath::fromString));
         rpp.setSelectedForBuilding(pro->includedInExactParse());
 
         // Qt Version

@@ -44,7 +44,7 @@ public:
     // The following are deduced from commandLineFlags.
     Utils::WarningFlags warningFlags = Utils::WarningFlags::Default;
     Utils::LanguageExtensions languageExtensions = Utils::LanguageExtension::None;
-    QStringList includedFiles;
+    Utils::FilePaths includedFiles;
 };
 
 class PROJECTEXPLORER_EXPORT RawProjectPart
@@ -64,9 +64,9 @@ public:
                   const GetMimeType &getMimeType = {});
     static HeaderPath frameworkDetectionHeuristic(const HeaderPath &header);
     void setHeaderPaths(const HeaderPaths &headerPaths);
-    void setIncludePaths(const QStringList &includePaths);
-    void setPreCompiledHeaders(const QStringList &preCompiledHeaders);
-    void setIncludedFiles(const QStringList &files);
+    void setIncludePaths(const Utils::FilePaths &includePaths);
+    void setPreCompiledHeaders(const Utils::FilePaths &preCompiledHeaders);
+    void setIncludedFiles(const Utils::FilePaths &files);
 
     void setBuildSystemTarget(const QString &target);
     void setBuildTargetType(BuildTargetType type);
@@ -90,8 +90,8 @@ public:
     QStringList files;
     FileIsActive fileIsActive;
     GetMimeType getMimeType;
-    QStringList precompiledHeaders;
-    QStringList includedFiles;
+    Utils::FilePaths precompiledHeaders;
+    Utils::FilePaths includedFiles;
     HeaderPaths headerPaths;
     QString projectConfigFile; // Generic Project Manager only
 

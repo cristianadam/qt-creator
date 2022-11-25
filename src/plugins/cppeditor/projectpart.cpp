@@ -12,6 +12,7 @@
 #include <QTextStream>
 
 using namespace ProjectExplorer;
+using namespace Utils;
 
 namespace CppEditor {
 
@@ -110,7 +111,7 @@ static ToolChain::MacroInspectionReport getToolchainMacros(
     return report;
 }
 
-static QStringList getIncludedFiles(const RawProjectPart &rpp, const RawProjectPartFlags &flags)
+static FilePaths getIncludedFiles(const RawProjectPart &rpp, const RawProjectPartFlags &flags)
 {
     return !rpp.includedFiles.isEmpty() ? rpp.includedFiles : flags.includedFiles;
 }

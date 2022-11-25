@@ -18,6 +18,7 @@
 #include <memory>
 
 using namespace ProjectExplorer;
+using namespace Utils;
 
 namespace CppEditor::Internal {
 
@@ -30,7 +31,7 @@ public:
         QFile pchFile(pchFileNativePath());
         pchFile.open(QIODevice::WriteOnly);
         RawProjectPart rpp;
-        rpp.setPreCompiledHeaders({pchFileNativePath()});
+        rpp.setPreCompiledHeaders({FilePath::fromString(pchFileNativePath())});
         rpp.setMacros({Macro{"projectFoo", "projectBar"}});
         rpp.setQtVersion(Utils::QtMajorVersion::Qt5);
         rpp.setHeaderPaths(headerPaths);

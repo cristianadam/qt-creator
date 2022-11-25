@@ -14,6 +14,7 @@
 #include <utils/qtcassert.h>
 
 using namespace ProjectExplorer;
+using namespace Utils;
 
 namespace AutotoolsProjectManager::Internal {
 
@@ -108,10 +109,10 @@ void AutotoolsBuildSystem::makefileParsingFinished()
     emitBuildSystemUpdated();
 }
 
-static QStringList filterIncludes(const QString &absSrc, const QString &absBuild,
-                                  const QStringList &in)
+static FilePaths filterIncludes(const QString &absSrc, const QString &absBuild,
+                                const QStringList &in)
 {
-    QStringList result;
+    FilePaths result;
     for (const QString &i : in) {
         QString out = i;
         out.replace(QLatin1String("$(top_srcdir)"), absSrc);
@@ -120,7 +121,7 @@ static QStringList filterIncludes(const QString &absSrc, const QString &absBuild
         out.replace(QLatin1String("$(top_builddir)"), absBuild);
         out.replace(QLatin1String("$(abs_top_builddir)"), absBuild);
 
-        result << out;
+        result << FilePath::fromString(out);
     }
 
     return result;

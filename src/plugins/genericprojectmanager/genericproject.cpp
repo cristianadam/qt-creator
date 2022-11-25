@@ -574,14 +574,16 @@ void GenericBuildSystem::refreshCppCodeModel()
     rpp.setFlagsForCxx({nullptr, m_cxxflags, projectDirectory().toString()});
     rpp.setFlagsForC({nullptr, m_cflags, projectDirectory().toString()});
 
-    static const auto sourceFilesToStringList = [](const SourceFiles &sourceFiles) {
-        return Utils::transform(sourceFiles, [](const SourceFile &f) {
-            return f.first.toString();
-        });
-    };
-    rpp.setFiles(sourceFilesToStringList(m_files));
-    rpp.setPreCompiledHeaders(sourceFilesToStringList(
-        Utils::filtered(m_files, [](const SourceFile &f) { return f.second.contains("pch"); })));
+    rpp.setFiles(Utils::transform(m_files, [](const SourceFile &f) {
+        return f.first.toString();
+    }));
+
+    SourceFiles pchFiles = Utils::filtered(m_files, [](const SourceFile &f) {
+        return f.second.contains("pch");
+    });
+    rpp.setPreCompiledHeaders(Utils::transform(pchFiles, [](const SourceFile &f) {
+        return f.first;
+    }));
 
     m_cppCodeModelUpdater->update({project(), kitInfo, activeParseEnvironment(), {rpp}});
 }

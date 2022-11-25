@@ -40,7 +40,7 @@ public:
     void addWordWidth();
     void addHeaderPathOptions();
     void addPrecompiledHeaderOptions(UsePrecompiledHeaders usePrecompiledHeaders);
-    void addIncludedFiles(const QStringList &files);
+    void addIncludedFiles(const Utils::FilePaths &files);
     void addMacros(const ProjectExplorer::Macros &macros);
 
     void addTargetTriple();
@@ -85,9 +85,8 @@ private:
     QStringList wrappedQtHeadersIncludePath() const;
     QStringList wrappedMingwHeadersIncludePath() const;
     QByteArray msvcVersion() const;
-    void addIncludeFile(const QString &file);
+    void addIncludeFile(const Utils::FilePath &file);
 
-private:
     const ProjectPart &m_projectPart;
 
     const UseSystemHeader m_useSystemHeader;
