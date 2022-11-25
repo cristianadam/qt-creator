@@ -70,7 +70,7 @@ public:
 
     const QString name() const { return m_name; }
     void setName(const QString &name) { m_name = name; }
-    const Utils::FilePath filePath() const { return m_filePath; }
+    const Utils::FilePath &filePath() const { return m_filePath; }
     void setFilePath(const Utils::FilePath &filePath) { m_filePath = filePath; }
     Type type() const { return m_type; }
     int line() const { return m_line; }

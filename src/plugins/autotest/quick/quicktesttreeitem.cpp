@@ -12,8 +12,9 @@
 #include <projectexplorer/session.h>
 #include <utils/qtcassert.h>
 
-namespace Autotest {
-namespace Internal {
+using namespace Utils;
+
+namespace Autotest::Internal {
 
 static QSet<QString> internalTargets(const Utils::FilePath &proFile);
 
@@ -373,13 +374,13 @@ QSet<QString> internalTargets(const Utils::FilePath &proFile)
     for (const CppEditor::ProjectPart::ConstPtr &projectPart : projectInfo->projectParts()) {
         if (projectPart->buildTargetType != ProjectExplorer::BuildTargetType::Executable)
             continue;
-        if (projectPart->projectFile == proFile.toString())
+        if (projectPart->projectFile == proFile)
             result.insert(projectPart->buildSystemTarget);
     }
     return result;
 }
 
-void QuickTestTreeItem::markForRemovalRecursively(const Utils::FilePath &filePath)
+void QuickTestTreeItem::markForRemovalRecursively(const FilePath &filePath)
 {
     TestTreeItem::markForRemovalRecursively(filePath);
     auto parser = static_cast<QuickTestParser *>(framework()->testParser());
@@ -420,5 +421,4 @@ TestTreeItem *QuickTestTreeItem::unnamedQuickTests() const
     return findFirstLevelChildItem([](TestTreeItem *child) { return child->name().isEmpty(); });
 }
 
-} // namespace Internal
-} // namespace Autotest
+} // Autotest::Internal

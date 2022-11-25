@@ -97,14 +97,14 @@ int ParseContextModel::rowCount(const QModelIndex &parent) const
 
 QVariant ParseContextModel::data(const QModelIndex &index, int role) const
 {
-    if (!index.isValid() || index.row() < 0 || index.row() >= m_projectParts.size())
+    const int row = index.row();
+    if (!index.isValid() || row < 0 || row >= m_projectParts.size())
         return QVariant();
 
-    const int row = index.row();
     if (role == Qt::DisplayRole)
         return m_projectParts[row]->displayName;
-    else if (role == Qt::ToolTipRole)
-        return QDir::toNativeSeparators(m_projectParts[row]->projectFile);
+    if (role == Qt::ToolTipRole)
+        return m_projectParts[row]->projectFile.displayName();
 
     return QVariant();
 }

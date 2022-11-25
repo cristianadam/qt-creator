@@ -166,7 +166,7 @@ RawProjectPart makeRawProjectPart(const FilePath &projectFile,
                   kitInfo.sysRootPath);
 
     RawProjectPart rpp;
-    rpp.setProjectFileLocation(projectFile.toString());
+    rpp.setProjectFileLocation(projectFile);
     rpp.setBuildSystemTarget(workingDir);
     rpp.setDisplayName(filePath.fileName());
     rpp.setFiles({filePath});

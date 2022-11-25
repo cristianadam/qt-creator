@@ -258,7 +258,7 @@ bool QuickTestParser::handleQtQuickTest(QFutureInterface<TestParseResultPtr> &fu
     if (ppList.isEmpty()) // happens if shutting down while parsing
         return false;
     const FilePath cppFileName = document->filePath();
-    const FilePath proFile = Utils::FilePath::fromString(ppList.at(0)->projectFile);
+    const FilePath proFile = ppList.at(0)->projectFile;
     m_mainCppFiles.insert(cppFileName, proFile);
     const Utils::FilePath srcDir = Utils::FilePath::fromString(
         quickTestSrcDir(modelManager, cppFileName));
