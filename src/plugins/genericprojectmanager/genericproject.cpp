@@ -575,7 +575,7 @@ void GenericBuildSystem::refreshCppCodeModel()
     rpp.setFlagsForC({nullptr, m_cflags, projectDirectory().toString()});
 
     rpp.setFiles(Utils::transform(m_files, [](const SourceFile &f) {
-        return f.first.toString();
+        return f.first;
     }));
 
     SourceFiles pchFiles = Utils::filtered(m_files, [](const SourceFile &f) {

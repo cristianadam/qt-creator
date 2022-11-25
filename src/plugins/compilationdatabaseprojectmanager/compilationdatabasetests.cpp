@@ -93,7 +93,8 @@ public:
 
     QStringList getFilteredFlags()
     {
-        filteredFlags(fileName, workingDir, flags, headerPaths, macros, fileKind, sysRoot);
+        filteredFlags(FilePath::fromString(fileName),
+                      workingDir, flags, headerPaths, macros, fileKind, sysRoot);
         return flags;
     }
 

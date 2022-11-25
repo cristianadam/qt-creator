@@ -791,12 +791,11 @@ void ClangdClient::updateParserConfig(const Utils::FilePath &filePath,
     cachedConfig.value() = fullConfig;
 
     QJsonObject cdbChanges;
-    const Utils::FilePath includeDir = CppEditor::ClangdSettings(d->settings).clangdIncludePath();
+    const FilePath includeDir = CppEditor::ClangdSettings(d->settings).clangdIncludePath();
     CppEditor::CompilerOptionsBuilder optionsBuilder = clangOptionsBuilder(
                 *projectPart, warningsConfigForProject(project()), includeDir,
                 ProjectExplorer::Macro::toMacros(config.editorDefines));
-    const CppEditor::ProjectFile file(filePath,
-                                      CppEditor::ProjectFile::classify(filePath.toString()));
+    const CppEditor::ProjectFile file(filePath, CppEditor::ProjectFile::classify(filePath));
     const QJsonArray projectPartOptions = fullProjectPartOptions(
                 optionsBuilder, globalClangOptions());
     addToCompilationDb(cdbChanges, *projectPart, CppEditor::getPchUsage(), projectPartOptions,

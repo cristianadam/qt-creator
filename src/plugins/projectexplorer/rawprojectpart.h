@@ -57,9 +57,9 @@ public:
     void setCallGroupId(const QString &id);
 
     // FileIsActive and GetMimeType must be thread-safe.
-    using FileIsActive = std::function<bool(const QString &filePath)>;
-    using GetMimeType = std::function<QString(const QString &filePath)>;
-    void setFiles(const QStringList &files,
+    using FileIsActive = std::function<bool(const Utils::FilePath &filePath)>;
+    using GetMimeType = std::function<QString(const Utils::FilePath &filePath)>;
+    void setFiles(const Utils::FilePaths &files,
                   const FileIsActive &fileIsActive = {},
                   const GetMimeType &getMimeType = {});
     static HeaderPath frameworkDetectionHeuristic(const HeaderPath &header);
@@ -87,7 +87,7 @@ public:
     QString callGroupId;
 
     // Files
-    QStringList files;
+    Utils::FilePaths files;
     FileIsActive fileIsActive;
     GetMimeType getMimeType;
     Utils::FilePaths precompiledHeaders;

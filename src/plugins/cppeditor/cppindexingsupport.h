@@ -57,7 +57,7 @@ class CPPEDITOR_EXPORT CppIndexingSupport
 public:
     virtual ~CppIndexingSupport() = 0;
 
-    virtual QFuture<void> refreshSourceFiles(const QSet<QString> &sourceFiles,
+    virtual QFuture<void> refreshSourceFiles(const QSet<Utils::FilePath> &sourceFiles,
                                              CppModelManager::ProgressNotificationMode mode)
         = 0;
     virtual SymbolSearcher *createSymbolSearcher(const SymbolSearcher::Parameters &parameters,

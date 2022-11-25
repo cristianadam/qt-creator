@@ -811,7 +811,7 @@ FilePath correspondingHeaderOrSource(const FilePath &filePath, bool *wasHeader, 
 {
     const QString fileName = filePath.toString();
     const QFileInfo fi(fileName);
-    ProjectFile::Kind kind = ProjectFile::classify(fileName);
+    ProjectFile::Kind kind = ProjectFile::classify(filePath);
     const bool isHeader = ProjectFile::isHeader(kind);
     if (wasHeader)
         *wasHeader = isHeader;

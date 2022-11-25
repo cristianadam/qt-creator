@@ -159,13 +159,12 @@ void CppSourceProcessor::addFrameworkPath(const ProjectExplorer::HeaderPath &fra
     }
 }
 
-void CppSourceProcessor::setTodo(const QSet<QString> &files)
+void CppSourceProcessor::setTodo(const QSet<FilePath> &files)
 {
     m_todo = files;
 }
 
-void CppSourceProcessor::run(const FilePath &filePath,
-                             const FilePaths &initialIncludes)
+void CppSourceProcessor::run(const FilePath &filePath, const FilePaths &initialIncludes)
 {
     sourceNeeded(0, filePath, IncludeGlobal, initialIncludes);
 }
@@ -461,7 +460,7 @@ void CppSourceProcessor::sourceNeeded(int line, const FilePath &filePath, Includ
         switchCurrentDocument(previousDocument);
         mergeEnvironment(globalDocument);
         m_snapshot.insert(globalDocument);
-        m_todo.remove(absoluteFilePath.toString());
+        m_todo.remove(absoluteFilePath);
         return;
     }
 
@@ -475,7 +474,7 @@ void CppSourceProcessor::sourceNeeded(int line, const FilePath &filePath, Includ
     m_documentFinished(document);
 
     m_snapshot.insert(document);
-    m_todo.remove(absoluteFilePath.toString());
+    m_todo.remove(absoluteFilePath);
     switchCurrentDocument(previousDocument);
 }
 

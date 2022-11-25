@@ -708,7 +708,8 @@ static QString getMimeType(const QJsonObject &sourceArtifact)
 {
     const auto tags = sourceArtifact.value("file-tags").toArray();
     if (tags.contains("hpp")) {
-        if (CppEditor::ProjectFile::isAmbiguousHeader(sourceArtifact.value("file-path").toString()))
+        if (CppEditor::ProjectFile::isAmbiguousHeader(
+                    FilePath::fromString(sourceArtifact.value("file-path").toString())))
             return QString(CppEditor::Constants::AMBIGUOUS_HEADER_MIMETYPE);
         return QString(CppEditor::Constants::CPP_HEADER_MIMETYPE);
     }
@@ -938,13 +939,13 @@ static RawProjectParts generateProjectParts(
             }
             rpp.setSelectedForBuilding(grp.value("is-enabled").toBool());
 
-            QHash<QString, QJsonObject> filePathToSourceArtifact;
+            QHash<FilePath, QJsonObject> filePathToSourceArtifact;
             bool hasCFiles = false;
             bool hasCxxFiles = false;
             bool hasObjcFiles = false;
             bool hasObjcxxFiles = false;
             const auto artifactWorker = [&](const QJsonObject &source) {
-                const QString filePath = source.value("file-path").toString();
+                const FilePath filePath = FilePath::fromString(source.value("file-path").toString());
                 filePathToSourceArtifact.insert(filePath, source);
                 for (const QJsonValue &tag : source.value("file-tags").toArray()) {
                     if (tag == "c")
@@ -986,7 +987,7 @@ static RawProjectParts generateProjectParts(
             rpp.setIncludedFiles(Utils::transform(
                  arrayToStringList(props.value("cpp.prefixHeaders")), &FilePath::fromString));
             rpp.setFiles(filePathToSourceArtifact.keys(), {},
-                         [filePathToSourceArtifact](const QString &filePath) {
+                         [filePathToSourceArtifact](const FilePath &filePath) {
                 // Keep this lambda thread-safe!
                 return getMimeType(filePathToSourceArtifact.value(filePath));
             });

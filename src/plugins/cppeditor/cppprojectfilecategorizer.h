@@ -18,9 +18,8 @@ public:
     using FileIsActive = ProjectExplorer::RawProjectPart::FileIsActive;
     using GetMimeType = ProjectExplorer::RawProjectPart::GetMimeType;
 
-public:
     ProjectFileCategorizer(const QString &projectPartName,
-                           const QStringList &filePaths,
+                           const Utils::FilePaths &filePaths,
                            const FileIsActive &fileIsActive = {},
                            const GetMimeType &getMimeType = {});
 
@@ -40,12 +39,11 @@ public:
     QString partName(const QString &languageName) const;
 
 private:
-    ProjectFiles classifyFiles(const QStringList &filePaths,
+    ProjectFiles classifyFiles(const Utils::FilePaths &filePaths,
                                const FileIsActive &fileIsActive,
                                const GetMimeType &getMimeType);
     void expandSourcesWithAmbiguousHeaders(const ProjectFiles &ambiguousHeaders);
 
-private:
     QString m_partName;
     ProjectFiles m_cSources;
     ProjectFiles m_cxxSources;
@@ -54,4 +52,4 @@ private:
     int m_partCount;
 };
 
-} // namespace CppEditor
+} // CppEditor

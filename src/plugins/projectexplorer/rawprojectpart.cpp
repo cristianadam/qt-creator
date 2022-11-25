@@ -38,7 +38,7 @@ void RawProjectPart::setDisplayName(const QString &displayName)
     this->displayName = displayName;
 }
 
-void RawProjectPart::setFiles(const QStringList &files,
+void RawProjectPart::setFiles(const FilePaths &files,
                               const FileIsActive &fileIsActive,
                               const GetMimeType &getMimeType)
 {
@@ -47,7 +47,8 @@ void RawProjectPart::setFiles(const QStringList &files,
     this->getMimeType = getMimeType;
 }
 
-static QString trimTrailingSlashes(const QString &path) {
+static QString trimTrailingSlashes(const QString &path)
+{
     QString p = path;
     while (p.endsWith('/') && p.count() > 1) {
         p.chop(1);

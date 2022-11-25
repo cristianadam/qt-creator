@@ -145,11 +145,11 @@ void addDriverModeFlagIfNeeded(const ToolChain *toolchain,
     }
 }
 
-RawProjectPart makeRawProjectPart(const Utils::FilePath &projectFile,
+RawProjectPart makeRawProjectPart(const FilePath &projectFile,
                                   Kit *kit,
                                   ProjectExplorer::KitInfo &kitInfo,
                                   const QString &workingDir,
-                                  const Utils::FilePath &fileName,
+                                  const FilePath &filePath,
                                   QStringList flags)
 {
     HeaderPaths headerPaths;
@@ -157,7 +157,7 @@ RawProjectPart makeRawProjectPart(const Utils::FilePath &projectFile,
     CppEditor::ProjectFile::Kind fileKind = CppEditor::ProjectFile::Unclassified;
 
     const QStringList originalFlags = flags;
-    filteredFlags(fileName.fileName(),
+    filteredFlags(filePath,
                   workingDir,
                   flags,
                   headerPaths,
@@ -168,8 +168,8 @@ RawProjectPart makeRawProjectPart(const Utils::FilePath &projectFile,
     RawProjectPart rpp;
     rpp.setProjectFileLocation(projectFile.toString());
     rpp.setBuildSystemTarget(workingDir);
-    rpp.setDisplayName(fileName.fileName());
-    rpp.setFiles({fileName.toString()});
+    rpp.setDisplayName(filePath.fileName());
+    rpp.setFiles({filePath});
     rpp.setHeaderPaths(headerPaths);
     rpp.setMacros(macros);
 
@@ -242,21 +242,19 @@ FolderNode *createFoldersIfNeeded(FolderNode *root, const Utils::FilePath &folde
     return parent;
 }
 
-FileType fileTypeForName(const QString &fileName)
+FileType fileTypeForName(const FilePath &filePath)
 {
-    CppEditor::ProjectFile::Kind fileKind = CppEditor::ProjectFile::classify(fileName);
+    CppEditor::ProjectFile::Kind fileKind = CppEditor::ProjectFile::classify(filePath);
     if (CppEditor::ProjectFile::isHeader(fileKind))
         return FileType::Header;
     return FileType::Source;
 }
 
-void addChild(FolderNode *root, const Utils::FilePath &fileName)
+void addChild(FolderNode *root, const FilePath &filePath)
 {
-    FolderNode *parentNode = createFoldersIfNeeded(root, fileName.parentDir());
-    if (!parentNode->fileNode(fileName)) {
-        parentNode->addNode(
-            std::make_unique<FileNode>(fileName, fileTypeForName(fileName.fileName())));
-    }
+    FolderNode *parentNode = createFoldersIfNeeded(root, filePath.parentDir());
+    if (!parentNode->fileNode(filePath))
+        parentNode->addNode(std::make_unique<FileNode>(filePath, fileTypeForName(filePath)));
 }
 
 void createTree(std::unique_ptr<ProjectNode> &root,
@@ -268,17 +266,16 @@ void createTree(std::unique_ptr<ProjectNode> &root,
     std::unique_ptr<FolderNode> secondRoot;
 
     for (const RawProjectPart &rpp : rpps) {
-        for (const QString &filePath : rpp.files) {
-            Utils::FilePath fileName = Utils::FilePath::fromString(filePath);
-            if (!fileName.isChildOf(rootPath)) {
-                if (fileName.isChildOf(Utils::FilePath::fromString(rpp.buildSystemTarget))) {
+        for (const FilePath &filePath : rpp.files) {
+            if (!filePath.isChildOf(rootPath)) {
+                if (filePath.isChildOf(FilePath::fromString(rpp.buildSystemTarget))) {
                     if (!secondRoot)
                         secondRoot = std::make_unique<ProjectNode>(
-                            Utils::FilePath::fromString(rpp.buildSystemTarget));
-                    addChild(secondRoot.get(), fileName);
+                            FilePath::fromString(rpp.buildSystemTarget));
+                    addChild(secondRoot.get(), filePath);
                 }
             } else {
-                addChild(root.get(), fileName);
+                addChild(root.get(), filePath);
             }
         }
     }
@@ -358,7 +355,7 @@ void CompilationDatabaseBuildSystem::buildTreeAndProjectParts()
     const DbEntry *prevEntry = nullptr;
     for (const DbEntry &entry : dbContents.entries) {
         if (prevEntry && prevEntry->flags == entry.flags) {
-            rpps.back().files.append(entry.fileName.toString());
+            rpps.back().files.append(entry.fileName);
             continue;
         }
 
@@ -377,9 +374,9 @@ void CompilationDatabaseBuildSystem::buildTreeAndProjectParts()
     if (!dbContents.extras.empty()) {
         const Utils::FilePath baseDir = projectFilePath().parentDir();
 
-        QStringList extraFiles;
+        FilePaths extraFiles;
         for (const QString &extra : dbContents.extras)
-            extraFiles.append(baseDir.pathAppended(extra).toString());
+            extraFiles.append(baseDir.pathAppended(extra));
 
         RawProjectPart rppExtra;
         rppExtra.setFiles(extraFiles);

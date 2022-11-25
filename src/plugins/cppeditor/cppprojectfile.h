@@ -32,7 +32,7 @@ public:
     ProjectFile(const Utils::FilePath &filePath, Kind kind, bool active = true);
 
     static Kind classifyByMimeType(const QString &mt);
-    static Kind classify(const QString &filePath);
+    static Kind classify(const Utils::FilePath &filePath);
 
     static Kind sourceForHeaderKind(Kind kind);
     static Kind sourceKind(Kind kind);
@@ -41,8 +41,8 @@ public:
     static bool isHeader(Kind kind);
     static bool isC(Kind kind);
     static bool isCxx(Kind kind);
-    static bool isAmbiguousHeader(const QString &filePath);
-    static bool isObjC(const QString &filePath);
+    static bool isAmbiguousHeader(const Utils::FilePath &filePath);
+    static bool isObjC(const Utils::FilePath &filePath);
 
     bool isHeader() const;
     bool isSource() const;

@@ -313,7 +313,8 @@ void ComponentViewController::doCreateComponentModel(const QString &filePath, qm
         QString componentName = qmt::NameController::convertFileNameToElementName(file);
         qmt::MComponent *component = nullptr;
         bool isSource = false;
-        CppEditor::ProjectFile::Kind kind = CppEditor::ProjectFile::classify(file);
+        CppEditor::ProjectFile::Kind kind =
+                CppEditor::ProjectFile::classify(FilePath::fromString(file));
         switch (kind) {
         case CppEditor::ProjectFile::CSource:
         case CppEditor::ProjectFile::CXXSource:
