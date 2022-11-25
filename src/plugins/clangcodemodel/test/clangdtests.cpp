@@ -46,28 +46,18 @@ using namespace ProjectExplorer;
 using namespace TextEditor;
 using namespace Utils;
 
-namespace ClangCodeModel {
-namespace Internal {
-namespace Tests {
-
-using Range = std::tuple<int, int, int>;
-
-} // namespace Tests
-} // namespace Internal
-} // namespace ClangCodeModel
+namespace ClangCodeModel::Internal::Tests {  using Range = std::tuple<int, int, int>;  }
 
 Q_DECLARE_METATYPE(ClangCodeModel::Internal::Tests::Range)
 Q_DECLARE_METATYPE(IAssistProposal *)
 
-namespace ClangCodeModel {
-namespace Internal {
-namespace Tests {
+namespace ClangCodeModel::Internal::Tests {
 
 const Usage::Tags Initialization{Usage::Tag::Declaration, Usage::Tag::Write};
 
-static QString qrcPath(const QByteArray &relativeFilePath)
+static QString qrcPath(const QString &relativeFilePath)
 {
-    return QLatin1String(":/unittests/ClangCodeModel/") + QString::fromUtf8(relativeFilePath);
+    return QLatin1String(":/unittests/ClangCodeModel/") + relativeFilePath;
 }
 
 ClangdTest::~ClangdTest()
@@ -134,8 +124,7 @@ void ClangdTest::initTestCase()
         QSKIP("The test requires at least one valid kit with a valid Qt");
 
     // Copy project out of qrc file, open it, and set up target.
-    m_projectDir = new TemporaryCopiedDir(qrcPath(QFileInfo(m_projectFileName)
-                                                  .baseName().toLocal8Bit()));
+    m_projectDir = new TemporaryCopiedDir(qrcPath(QFileInfo(m_projectFileName).baseName()));
     QVERIFY(m_projectDir->isValid());
     const auto openProjectResult = ProjectExplorerPlugin::openProject(
             m_projectDir->absolutePath(m_projectFileName));
@@ -2059,6 +2048,4 @@ void ClangdTestExternalChanges::test()
         QVERIFY(waitForSignalOrTimeout(newClient, &ClangdClient::textMarkCreated, timeOutInMs()));
 }
 
-} // namespace Tests
-} // namespace Internal
-} // namespace ClangCodeModel
+} // ClangCodeModel::Internal::Test

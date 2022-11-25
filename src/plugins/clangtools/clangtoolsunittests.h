@@ -5,15 +5,11 @@
 
 #include <QObject>
 
-namespace CppEditor {
-class ClangDiagnosticConfig;
-namespace Tests { class TemporaryCopiedDir; }
-} // namespace CppEditor
+namespace CppEditor::Tests { class TemporaryCopiedDir; }
 
 namespace ProjectExplorer { class Kit; }
 
-namespace ClangTools {
-namespace Internal {
+namespace ClangTools::Internal {
 
 class ClangToolsUnitTests : public QObject
 {
@@ -29,17 +25,8 @@ private slots:
     void testProject_data();
 
 private:
-    void addTestRow(const QString &relativeFilePath,
-                    int expectedDiagCount,
-                    const CppEditor::ClangDiagnosticConfig &diagnosticConfig);
-
-private:
-    static int getTimeout();
-
     CppEditor::Tests::TemporaryCopiedDir *m_tmpDir = nullptr;
     ProjectExplorer::Kit *m_kit = nullptr;
-    int m_timeout = getTimeout();
 };
 
-} // namespace Internal
-} // namespace ClangTools
+} // ClangTools::Internal

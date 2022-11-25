@@ -37,8 +37,7 @@ using namespace Utils;
 
 Q_DECLARE_METATYPE(CppEditor::ClangDiagnosticConfig)
 
-namespace ClangTools {
-namespace Internal {
+namespace ClangTools::Internal {
 
 void ClangToolsUnitTests::initTestCase()
 {
@@ -98,13 +97,18 @@ void ClangToolsUnitTests::testProject()
     Tests::ProjectOpenerAndCloser projectManager;
     QVERIFY(projectManager.open(FilePath::fromString(projectFilePath), true, m_kit));
 
+    static const int timeOut = [] {
+        const int t = qtcEnvironmentVariableIntValue("QTC_CLANGTOOLS_TEST_TIMEOUT");
+        return t > 0 ? t : 480000;
+    }();
+
     // Run tool
     ClangTool *tool = ClangTool::instance();
     tool->startTool(ClangTool::FileSelectionType::AllFiles,
                     ClangToolsSettings::instance()->runSettings(),
                     diagnosticConfig);
     QSignalSpy waitForFinishedTool(tool, &ClangTool::finished);
-    QVERIFY(waitForFinishedTool.wait(m_timeout));
+    QVERIFY(waitForFinishedTool.wait(timeOut));
 
     // Check for errors
     const QString errorText = waitForFinishedTool.takeFirst().constFirst().toString();
@@ -123,6 +127,18 @@ void ClangToolsUnitTests::testProject_data()
 
     // Test simple C++ project.
     ClangDiagnosticConfig config = configFor("modernize-use-nullptr", QString());
+
+    const auto addTestRow = [this](const QString &relativeFilePath,
+            int expectedDiagCount,
+            const ClangDiagnosticConfig &diagnosticConfig)
+    {
+        const FilePath absoluteFilePath = m_tmpDir->absolutePath(relativeFilePath);
+        const QString fileName = absoluteFilePath.fileName();
+
+        QTest::newRow(fileName.toUtf8().constData())
+            << absoluteFilePath << expectedDiagCount << diagnosticConfig;
+    };
+
     addTestRow("simple/simple.qbs", 1, config);
     addTestRow("simple/simple.pro", 1, config);
 
@@ -154,22 +170,4 @@ void ClangToolsUnitTests::testProject_data()
                configFor("misc-unconventional-assign-operator", "qgetenv"));
 }
 
-void ClangToolsUnitTests::addTestRow(const QString &relativeFilePath,
-                                     int expectedDiagCount,
-                                     const ClangDiagnosticConfig &diagnosticConfig)
-{
-    const FilePath absoluteFilePath = m_tmpDir->absolutePath(relativeFilePath);
-    const QString fileName = absoluteFilePath.fileName();
-
-    QTest::newRow(fileName.toUtf8().constData())
-        << absoluteFilePath << expectedDiagCount << diagnosticConfig;
-}
-
-int ClangToolsUnitTests::getTimeout()
-{
-    const int t = qtcEnvironmentVariableIntValue("QTC_CLANGTOOLS_TEST_TIMEOUT");
-    return t > 0 ? t : 480000;
-}
-
-} // namespace Internal
-} // namespace ClangTools
+} // ClangTools::Internal
