@@ -8,9 +8,7 @@
 #include <QStringList>
 #include <QVector>
 
-QT_BEGIN_NAMESPACE
-class QByteArray;
-QT_END_NAMESPACE
+namespace Utils { class FilePath; }
 
 namespace CPlusPlus {
 
@@ -85,8 +83,8 @@ public:
   virtual void startSkippingBlocks(int utf16charsOffset) = 0;
   virtual void stopSkippingBlocks(int utf16charsOffset) = 0;
 
-  virtual void sourceNeeded(int line, const QString &fileName, IncludeType mode,
-                            const QStringList &initialIncludes = QStringList()) = 0;
+  virtual void sourceNeeded(int line, const Utils::FilePath &filePath, IncludeType mode,
+                            const QStringList &initialIncludes = {}) = 0;
 
   static inline bool isInjectedFile(const QString &fileName)
   {
@@ -94,4 +92,4 @@ public:
   }
 };
 
-} // namespace CPlusPlus
+} // CPlusPlus

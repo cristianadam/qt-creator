@@ -39,9 +39,7 @@ namespace CppEditor::Internal {
 
 static Q_LOGGING_CATEGORY(log, "qtc.cppeditor.sourceprocessor", QtWarningMsg)
 
-namespace {
-
-inline QByteArray generateFingerPrint(const QList<CPlusPlus::Macro> &definedMacros,
+static QByteArray generateFingerPrint(const QList<CPlusPlus::Macro> &definedMacros,
                                       const QByteArray &code)
 {
     QCryptographicHash hash(QCryptographicHash::Sha1);
@@ -63,30 +61,28 @@ inline QByteArray generateFingerPrint(const QList<CPlusPlus::Macro> &definedMacr
     return hash.result();
 }
 
-inline Message messageNoSuchFile(Document::Ptr &document, const QString &fileName, unsigned line)
+static Message messageNoSuchFile(Document::Ptr &document, const FilePath &filePath, unsigned line)
 {
     const QString text = QCoreApplication::translate(
-        "CppSourceProcessor", "%1: No such file or directory").arg(fileName);
+        "CppSourceProcessor", "%1: No such file or directory").arg(filePath.toUserOutput());
     return Message(Message::Warning, document->filePath(), line, /*column =*/ 0, text);
 }
 
-inline Message messageNoFileContents(Document::Ptr &document, const QString &fileName,
+static Message messageNoFileContents(Document::Ptr &document, const FilePath &filePath,
                                      unsigned line)
 {
     const QString text = QCoreApplication::translate(
-        "CppSourceProcessor", "%1: Could not get file contents").arg(fileName);
+        "CppSourceProcessor", "%1: Could not get file contents").arg(filePath.toUserOutput());
     return Message(Message::Warning, document->filePath(), line, /*column =*/ 0, text);
 }
 
-inline const CPlusPlus::Macro revision(const WorkingCopy &workingCopy,
+static const CPlusPlus::Macro revision(const WorkingCopy &workingCopy,
                                        const CPlusPlus::Macro &macro)
 {
     CPlusPlus::Macro newMacro(macro);
     newMacro.setFileRevision(workingCopy.get(macro.filePath()).second);
     return newMacro;
 }
-
-} // anonymous namespace
 
 CppSourceProcessor::CppSourceProcessor(const Snapshot &snapshot, DocumentCallback documentFinished)
     : m_snapshot(snapshot),
@@ -167,7 +163,7 @@ void CppSourceProcessor::setTodo(const QSet<QString> &files)
 void CppSourceProcessor::run(const QString &fileName,
                              const QStringList &initialIncludes)
 {
-    sourceNeeded(0, fileName, IncludeGlobal, initialIncludes);
+    sourceNeeded(0, FilePath::fromString(fileName), IncludeGlobal, initialIncludes);
 }
 
 void CppSourceProcessor::removeFromCache(const FilePath &filePath)
@@ -406,19 +402,19 @@ void CppSourceProcessor::stopSkippingBlocks(int utf16charsOffset)
         m_currentDoc->stopSkippingBlocks(utf16charsOffset);
 }
 
-void CppSourceProcessor::sourceNeeded(int line, const QString &fileName, IncludeType type,
+void CppSourceProcessor::sourceNeeded(int line, const FilePath &filePath, IncludeType type,
                                       const QStringList &initialIncludes)
 {
-    if (fileName.isEmpty())
+    if (filePath.isEmpty())
         return;
 
-    const QString absoluteFileName = QDir::cleanPath(resolveFile(fileName, type));
+    const QString absoluteFileName = QDir::cleanPath(resolveFile(filePath.toString(), type));
     const FilePath absoluteFilePath = FilePath::fromString(absoluteFileName);
 
     if (m_currentDoc) {
-        m_currentDoc->addIncludeFile(Document::Include(fileName, absoluteFilePath, line, type));
+        m_currentDoc->addIncludeFile(Document::Include(filePath.toString(), absoluteFilePath, line, type));
         if (absoluteFileName.isEmpty()) {
-            m_currentDoc->addDiagnosticMessage(messageNoSuchFile(m_currentDoc, fileName, line));
+            m_currentDoc->addDiagnosticMessage(messageNoSuchFile(m_currentDoc, filePath, line));
             return;
         }
     }
@@ -442,7 +438,7 @@ void CppSourceProcessor::sourceNeeded(int line, const QString &fileName, Include
     QByteArray contents;
     const bool gotFileContents = getFileContents(absoluteFilePath, &contents, &editorRevision);
     if (m_currentDoc && !gotFileContents) {
-        m_currentDoc->addDiagnosticMessage(messageNoFileContents(m_currentDoc, fileName, line));
+        m_currentDoc->addDiagnosticMessage(messageNoFileContents(m_currentDoc, filePath, line));
         return;
     }
 

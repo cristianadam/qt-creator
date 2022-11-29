@@ -15,8 +15,6 @@
 #include <QSet>
 #include <QString>
 
-using namespace Utils;
-
 namespace CPlusPlus {
 
 class CPLUSPLUS_EXPORT FastPreprocessor: public Client
@@ -24,7 +22,7 @@ class CPLUSPLUS_EXPORT FastPreprocessor: public Client
     Environment _env;
     Snapshot _snapshot;
     Preprocessor _preproc;
-    QSet<FilePath> _merged;
+    QSet<Utils::FilePath> _merged;
     Document::Ptr _currentDoc;
     bool _addIncludesToCurrentDoc;
 
@@ -38,8 +36,8 @@ public:
                    bool mergeDefinedMacrosOfDocument = false);
 
     // CPlusPlus::Client
-    virtual void sourceNeeded(int line, const QString &fileName, IncludeType mode,
-                              const QStringList &initialIncludes = QStringList());
+    virtual void sourceNeeded(int line, const Utils::FilePath &filePath, IncludeType mode,
+                              const QStringList &initialIncludes = {});
 
     virtual void macroAdded(const Macro &);
 
@@ -60,4 +58,4 @@ public:
     virtual void stopSkippingBlocks(int) {}
 };
 
-} // namespace CPlusPlus
+} // CPlusPlus
