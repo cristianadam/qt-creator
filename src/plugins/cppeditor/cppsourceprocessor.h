@@ -83,7 +83,7 @@ private:
     void markAsIncludeGuard(const QByteArray &macroName) override;
     void startSkippingBlocks(int utf16charsOffset) override;
     void stopSkippingBlocks(int utf16charsOffset) override;
-    void sourceNeeded(int line, const QString &fileName, IncludeType type,
+    void sourceNeeded(int line, const Utils::FilePath &filePath, IncludeType type,
                       const QStringList &initialIncludes) override;
 
 private:
