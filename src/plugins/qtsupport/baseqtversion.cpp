@@ -1122,9 +1122,7 @@ void QtVersion::ensureMkSpecParsed() const
     ProFileCacheManager::instance()->incRefCount();
     QMakeParser parser(ProFileCacheManager::instance()->cache(), &vfs, &msgHandler);
     ProFileEvaluator evaluator(&option, &parser, &vfs, &msgHandler);
-    // FIXME: toString() would be better, but the pro parser Q_ASSERTs on anything
-    // non-local.
-    evaluator.loadNamedSpec(mkspecPath().path(), false);
+    evaluator.loadNamedSpec(mkspecPath().toFSPathString(), false);
 
     parseMkSpec(&evaluator);
 
@@ -1160,7 +1158,7 @@ void QtVersion::setId(int id)
 QString QtVersion::mkspec() const
 {
     d->updateMkspec();
-    return d->m_mkspec.toString();
+    return d->m_mkspec.toFSPathString();
 }
 
 QString QtVersion::mkspecFor(ToolChain *tc) const

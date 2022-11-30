@@ -1462,6 +1462,41 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::visitProFile(
     return vr;
 }
 
+static QString guessRoot(const QString &p)
+{
+    static const QString specialRoot = QDir::rootPath() + "__qtc_devices__/";
+    if (!p.startsWith(specialRoot))
+        return {};
+    int pos = p.indexOf('/', specialRoot.size());
+    if (pos == -1)
+        return {};
+    pos = p.indexOf('/', pos + 1);
+    if (pos == -1)
+        return {};
+    return p.left(pos + 1);
+}
+
+QString QMakeEvaluator::deviceRoot() const
+{
+    QString result = guessRoot(m_option->qmake_abslocation);
+    if (!result.isEmpty())
+        return result;
+
+    result = guessRoot(m_option->build_root);
+    if (!result.isEmpty())
+        return result;
+
+    result = guessRoot(m_option->qmakespec);
+    if (!result.isEmpty())
+        return result;
+
+    result = guessRoot(m_qmakespec);
+    if (!result.isEmpty())
+        return result;
+
+    return result;
+}
+
 
 void QMakeEvaluator::updateMkspecPaths()
 {
@@ -1480,7 +1515,7 @@ void QMakeEvaluator::updateMkspecPaths()
     if (!m_sourceRoot.isEmpty())
         ret << m_sourceRoot + concat;
 
-    const QString root = m_option->deviceRoot();
+    const QString root = deviceRoot();
     ret << root + m_option->propertyValue(ProKey("QT_HOST_DATA/get")) + concat;
     ret << root + m_option->propertyValue(ProKey("QT_HOST_DATA/src")) + concat;
 
