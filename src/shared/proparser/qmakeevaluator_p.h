@@ -5,8 +5,10 @@
 
 #include "proitems.h"
 
-#define debugMsg if (!m_debugLevel) {} else debugMsgInternal
-#define traceMsg if (!m_debugLevel) {} else traceMsgInternal
+//#define debugMsg if (!m_debugLevel) {} else debugMsgInternal
+//#define traceMsg if (!m_debugLevel) {} else traceMsgInternal
+#define debugMsg debugMsgInternal
+#define traceMsg traceMsgInternal
 #ifdef PROEVALUATOR_DEBUG
 #  define dbgBool(b) (b ? "true" : "false")
 #  define dbgReturn(r) \

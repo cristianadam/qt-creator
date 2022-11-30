@@ -1657,6 +1657,7 @@ QString FilePath::shortNativePath() const
 bool FilePath::isRelativePath() const
 {
     const QStringView p = pathView();
+    QTC_CHECK(!p.isEmpty()); // needs to be determined on the caller side.
     if (p.startsWith('/'))
         return false;
     if (startsWithWindowsDriveLetterAndSlash(p))
