@@ -259,7 +259,9 @@ bool AbstractProcessStep::setupProcessParameters(ProcessParameters *params) cons
 
     const FilePath executable = params->effectiveCommand();
 
-    QTC_ASSERT(executable.ensureReachable(workingDirectory), return false);
+    // E.g. the QMakeStep doesn't have set up anything when this is called
+    // as it doesn't set a command line provider.
+    QTC_ASSERT(executable.isEmpty() || executable.ensureReachable(workingDirectory), return false);
     params->setWorkingDirectory(workingDirectory.onDevice(executable));
 
     return true;
