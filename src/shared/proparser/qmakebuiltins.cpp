@@ -432,6 +432,66 @@ QMakeEvaluator::writeFile(const QString &ctx, const QString &fn, QIODevice::Open
     return ReturnTrue;
 }
 
+// This is the global callback
+
+QMAKE_EXPORT std::function<void(ProcessData *data)> &theProcessRunner()
+{
+    static std::function<void(ProcessData *)> runner;
+    return runner;
+}
+
+void QMakeEvaluator::runProcessHelper(ProcessData *data) const
+{
+    const QString root = deviceRoot();
+    if (root.isEmpty()) {
+
+        // The "normal" setup.
+        QProcess proc;
+
+        proc.setProcessChannelMode(data->processChannelMode);
+
+        runProcess(&proc, data->command);
+
+        data->exitCode = proc.exitCode();
+        data->exitStatus = proc.exitStatus();
+        data->stdOut = proc.readAllStandardOutput();
+        data->stdErr = proc.readAllStandardError();
+
+    } else {
+
+        // "Remote"
+        const std::function<void(ProcessData *data)> &runner = theProcessRunner();
+        if (!runner) {
+            qWarning("Missing qmake process callback");
+            data->exitCode = -1;
+            data->exitStatus = QProcess::CrashExit;
+            return;
+        }
+
+        data->workingDirectory = currentDirectory();
+# ifdef PROEVALUATOR_SETENV
+        if (!m_option->environment.isEmpty()) {
+            QProcessEnvironment env = m_option->environment;
+            static const QString dummyVar = "__qtc_dummy";
+            static const QString notSetValue = "not set";
+            const QString oldValue = env.value(dummyVar, notSetValue); // Just in case.
+            env.insert(dummyVar, "QTCREATORBUG-23504"); // Force detach.
+            if (oldValue == notSetValue)
+                env.remove(dummyVar);
+            else
+                env.insert(dummyVar, oldValue);
+            data->environment = env;
+        }
+# endif
+
+        data->deviceRoot = root;
+
+        runner(data);
+
+    }
+}
+
+
 #ifndef QT_BOOTSTRAPPED
 void QMakeEvaluator::runProcess(QProcess *proc, const QString &command) const
 {
@@ -485,10 +545,20 @@ QByteArray QMakeEvaluator::getCommandOutput(const QString &args, int *exitCode) 
 {
     QByteArray out;
 #ifndef QT_BOOTSTRAPPED
-    QProcess proc;
-    runProcess(&proc, args);
-    *exitCode = (proc.exitStatus() == QProcess::NormalExit) ? proc.exitCode() : -1;
-    QByteArray errout = proc.isReadable() ? proc.readAllStandardError() : QByteArray();
+    //QProcess proc;
+    //runProcess(&proc, args);
+    //*exitCode = (proc.exitStatus() == QProcess::NormalExit) ? proc.exitCode() : -1;
+    //QByteArray errout = proc.isReadable() ? proc.readAllStandardError() : QByteArray();
+
+    ProcessData data;
+    data.command = args;
+
+    runProcessHelper(&data);
+
+    *exitCode = data.exitStatus == QProcess::NormalExit ? data.exitCode : -1;
+    QByteArray errout = data.stdErr;
+
+
 # ifdef PROEVALUATOR_FULL
     // FIXME: Qt really should have the option to set forwarding per channel
     fputs(errout.constData(), stderr);
@@ -501,7 +571,8 @@ QByteArray QMakeEvaluator::getCommandOutput(const QString &args, int *exitCode) 
             QString::fromLocal8Bit(errout));
     }
 # endif
-    out = proc.isReadable() ? proc.readAllStandardOutput() : QByteArray();
+    //out = proc.isReadable() ? proc.readAllStandardOutput() : QByteArray();
+    out = data.stdOut;
 # ifdef Q_OS_WIN
     // FIXME: Qt's line end conversion on sequential files should really be fixed
     out.replace("\r\n", "\n");
@@ -1785,10 +1856,15 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
         if (m_cumulative) // Anything else would be insanity
             return ReturnFalse;
 #ifndef QT_BOOTSTRAPPED
-        QProcess proc;
-        proc.setProcessChannelMode(QProcess::ForwardedChannels);
-        runProcess(&proc, args.at(0).toQString());
-        return returnBool(proc.exitStatus() == QProcess::NormalExit && proc.exitCode() == 0);
+        //QProcess proc;
+        //proc.setProcessChannelMode(QProcess::ForwardedChannels);
+        //runProcess(&proc, args.at(0).toQString());
+        //return returnBool(proc.exitStatus() == QProcess::NormalExit && proc.exitCode() == 0);
+        ProcessData data;
+        data.command = args.at(0).toQString();
+        data.processChannelMode = QProcess::ForwardedChannels;
+        runProcessHelper(&data);
+        return returnBool(data.exitStatus == QProcess::NormalExit && data.exitCode == 0);
 #else
         int ec = system((QLatin1String("cd ")
                          + IoUtils::shellQuote(QDir::toNativeSeparators(currentDirectory()))
