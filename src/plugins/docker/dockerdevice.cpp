@@ -118,8 +118,7 @@ public:
         : m_dev(dev)
     {}
 
-    RunResult runInShell(const CommandLine &cmdLine,
-                         const QByteArray &stdInData) const override;
+    RunResult runInShell(const CommandLine &cmdLine, const QByteArray &stdInData) const override;
     QString mapToDevicePath(const QString &hostPath) const override;
     OsType osType(const FilePath &filePath) const override;
 
@@ -143,6 +142,7 @@ public:
     void changeMounts(QStringList newMounts);
     bool ensureReachable(const FilePath &other);
     void shutdown();
+    expected<FilePath> localSource(const FilePath &other) const;
 
     QString containerId() { return m_container; }
     DockerDeviceData data() { return m_data; }
@@ -773,13 +773,13 @@ FilePath DockerDevice::mapToGlobalPath(const FilePath &pathOnDevice) const
                                d->repoAndTag(),
                                pathOnDevice.path());
 
-// The following would work, but gives no hint on repo and tag
-//   result.setScheme("docker");
-//    result.setHost(d->m_data.imageId);
+    // The following would work, but gives no hint on repo and tag
+    //   result.setScheme("docker");
+    //    result.setHost(d->m_data.imageId);
 
-// The following would work, but gives no hint on repo, tag and imageid
-//    result.setScheme("device");
-//    result.setHost(id().toString());
+    // The following would work, but gives no hint on repo, tag and imageid
+    //    result.setScheme("device");
+    //    result.setHost(id().toString());
 }
 
 Utils::FilePath DockerDevice::rootPath() const
@@ -814,6 +814,11 @@ bool DockerDevice::ensureReachable(const FilePath &other) const
     if (other.isDir())
         return d->ensureReachable(other);
     return d->ensureReachable(other.parentDir());
+}
+
+expected<FilePath> DockerDevice::localSource(const Utils::FilePath &other) const
+{
+    return d->localSource(other);
 }
 
 Environment DockerDevice::systemEnvironment() const
@@ -1111,6 +1116,27 @@ void DockerDevicePrivate::changeMounts(QStringList newMounts)
         m_data.mounts = newMounts;
         stopCurrentContainer(); // Force re-start with new mounts.
     }
+}
+
+expected<FilePath> DockerDevicePrivate::localSource(const FilePath &other) const
+{
+    const auto devicePath = FilePath::fromString(other.path());
+    for (const TemporaryMountInfo &info : m_temporaryMounts) {
+        if (devicePath.isChildOf(info.containerPath)) {
+            const FilePath relativePath = devicePath.relativeChildPath(info.containerPath);
+            return info.path.pathAppended(relativePath.path());
+        }
+    }
+
+    for (const QString &mount : m_data.mounts) {
+        const FilePath mountPoint = FilePath::fromString(mount);
+        if (devicePath.isChildOf(mountPoint)) {
+            const FilePath relativePath = devicePath.relativeChildPath(mountPoint);
+            return mountPoint.pathAppended(relativePath.path());
+        }
+    }
+
+    RETURN_FAILURE(QString("No mount point found for %1").arg(other.toString()));
 }
 
 bool DockerDevicePrivate::ensureReachable(const FilePath &other)

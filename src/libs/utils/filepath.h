@@ -33,14 +33,15 @@ class DeviceFileAccess;
 class Environment;
 class EnvironmentChange;
 
-template <class ...Args> using Continuation = std::function<void(Args...)>;
+template<class... Args>
+using Continuation = std::function<void(Args...)>;
 
 class QTCREATOR_UTILS_EXPORT FileFilter
 {
 public:
     FileFilter(const QStringList &nameFilters,
-                   const QDir::Filters fileFilters = QDir::NoFilter,
-                   const QDirIterator::IteratorFlags flags = QDirIterator::NoIteratorFlags);
+               const QDir::Filters fileFilters = QDir::NoFilter,
+               const QDirIterator::IteratorFlags flags = QDirIterator::NoIteratorFlags);
 
     QStringList asFindArguments(const QString &path) const;
 
@@ -56,15 +57,22 @@ class QTCREATOR_UTILS_EXPORT FilePath
 public:
     FilePath();
 
-    template <size_t N> FilePath(const char (&literal)[N]) { setFromString(literal); }
+    template<size_t N>
+    FilePath(const char (&literal)[N])
+    {
+        setFromString(literal);
+    }
 
     [[nodiscard]] static FilePath fromString(const QString &filepath);
-    [[nodiscard]] static FilePath fromStringWithExtension(const QString &filepath, const QString &defaultExtension);
+    [[nodiscard]] static FilePath fromStringWithExtension(const QString &filepath,
+                                                          const QString &defaultExtension);
     [[nodiscard]] static FilePath fromUserInput(const QString &filepath);
     [[nodiscard]] static FilePath fromUtf8(const char *filepath, int filepathSize = -1);
     [[nodiscard]] static FilePath fromVariant(const QVariant &variant);
     [[nodiscard]] static FilePath fromUrl(const QUrl &url);
-    [[nodiscard]] static FilePath fromParts(const QStringView scheme, const QStringView host, const QStringView path);
+    [[nodiscard]] static FilePath fromParts(const QStringView scheme,
+                                            const QStringView host,
+                                            const QStringView path);
     [[nodiscard]] static FilePath fromPathPart(const QStringView path);
 
     [[nodiscard]] static FilePath currentWorkingPath();
@@ -164,26 +172,26 @@ public:
     [[nodiscard]] FilePath withNewPath(const QString &newPath) const;
 
     using IterateDirCallback
-        = std::variant<
-            std::function<bool(const FilePath &item)>,
-            std::function<bool(const FilePath &item, const FilePathInfo &info)>
-          >;
+        = std::variant<std::function<bool(const FilePath &item)>,
+                       std::function<bool(const FilePath &item, const FilePathInfo &info)>>;
 
-    void iterateDirectory(
-            const IterateDirCallback &callBack,
-            const FileFilter &filter) const;
+    void iterateDirectory(const IterateDirCallback &callBack, const FileFilter &filter) const;
 
-    static void iterateDirectories(
-            const FilePaths &dirs,
-            const IterateDirCallback &callBack,
-            const FileFilter &filter);
+    static void iterateDirectories(const FilePaths &dirs,
+                                   const IterateDirCallback &callBack,
+                                   const FileFilter &filter);
 
     enum PathAmending { AppendToPath, PrependToPath };
     [[nodiscard]] FilePath searchInPath(const FilePaths &additionalDirs = {},
                                         PathAmending = AppendToPath) const;
 
-    enum MatchScope { ExactMatchOnly, WithExeSuffix, WithBatSuffix,
-                      WithExeOrBatSuffix, WithAnySuffix };
+    enum MatchScope {
+        ExactMatchOnly,
+        WithExeSuffix,
+        WithBatSuffix,
+        WithExeOrBatSuffix,
+        WithAnySuffix
+    };
     std::optional<FilePath> refersToExecutableFile(MatchScope considerScript) const;
 
     // makes sure that capitalization of directories is canonical
@@ -236,6 +244,8 @@ public:
     [[nodiscard]] static int schemeAndHostLength(const QStringView path);
 
     static QString calcRelativePath(const QString &absolutePath, const QString &absoluteAnchorPath);
+    //! Returns a filepath the represents the same file on a local drive
+    expected<FilePath> localSource() const;
 
 private:
     friend class ::tst_fileutils;
@@ -266,6 +276,7 @@ public:
     std::function<bool(const FilePath &, const FilePath &)> ensureReachable;
     std::function<Environment(const FilePath &)> environment;
     std::function<bool(const FilePath &left, const FilePath &right)> isSameDevice;
+    std::function<expected<FilePath>(const FilePath &)> localSource;
 };
 
 } // namespace Utils
