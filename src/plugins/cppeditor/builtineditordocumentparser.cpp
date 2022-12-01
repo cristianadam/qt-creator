@@ -198,7 +198,7 @@ void BuiltinEditorDocumentParser::updateImpl(const QFutureInterface<void> &futur
         if (baseConfig.usePrecompiledHeaders)
             includedFiles << state.precompiledHeaders;
         includedFiles.removeDuplicates();
-        sourceProcessor.run(filePath().toString(), includedFiles);
+        sourceProcessor.run(filePath().toFSPathString(), includedFiles);
         state.snapshot = sourceProcessor.snapshot();
         Snapshot newSnapshot = state.snapshot.simplified(state.snapshot.document(filePath()));
         for (Snapshot::const_iterator i = state.snapshot.begin(), ei = state.snapshot.end(); i != ei; ++i) {
