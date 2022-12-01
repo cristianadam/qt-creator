@@ -1569,7 +1569,7 @@ FilePath FilePath::resolvePath(const QString &tail) const
    return resolvePath(FilePath::fromString(tail));
 }
 
-expected<FilePath> FilePath::localSource() const
+expected_str<FilePath> FilePath::localSource() const
 {
     if (!needsDevice())
         return *this;

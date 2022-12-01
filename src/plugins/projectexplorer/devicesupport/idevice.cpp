@@ -645,7 +645,7 @@ bool IDevice::ensureReachable(const FilePath &other) const
     return handlesFile(other); // Some first approximation.
 }
 
-expected<FilePath> IDevice::localSource(const Utils::FilePath &other) const
+expected_str<FilePath> IDevice::localSource(const Utils::FilePath &other) const
 {
     Q_UNUSED(other);
     RETURN_FAILURE("localSource() not implemented for this device type.");

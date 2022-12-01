@@ -245,7 +245,7 @@ public:
 
     static QString calcRelativePath(const QString &absolutePath, const QString &absoluteAnchorPath);
     //! Returns a filepath the represents the same file on a local drive
-    expected<FilePath> localSource() const;
+    expected_str<FilePath> localSource() const;
 
 private:
     friend class ::tst_fileutils;
@@ -276,7 +276,7 @@ public:
     std::function<bool(const FilePath &, const FilePath &)> ensureReachable;
     std::function<Environment(const FilePath &)> environment;
     std::function<bool(const FilePath &left, const FilePath &right)> isSameDevice;
-    std::function<expected<FilePath>(const FilePath &)> localSource;
+    std::function<expected_str<FilePath>(const FilePath &)> localSource;
 };
 
 } // namespace Utils

@@ -415,7 +415,7 @@ DeviceManager::DeviceManager(bool isInstance) : d(std::make_unique<DeviceManager
         return leftDevice == rightDevice;
     };
 
-    deviceHooks.localSource = [](const FilePath &file) -> expected<FilePath> {
+    deviceHooks.localSource = [](const FilePath &file) -> expected_str<FilePath> {
         auto device = DeviceManager::deviceForPath(file);
         if (!device)
             RETURN_FAILURE(QString("No device for path \"%1\"").arg(file.toUserOutput()));

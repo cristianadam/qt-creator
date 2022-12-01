@@ -234,7 +234,7 @@ public:
     virtual void aboutToBeRemoved() const {}
 
     virtual bool ensureReachable(const Utils::FilePath &other) const;
-    virtual Utils::expected<Utils::FilePath> localSource(const Utils::FilePath &other) const;
+    virtual Utils::expected_str<Utils::FilePath> localSource(const Utils::FilePath &other) const;
 
     virtual bool prepareForBuild(const Target *target);
 

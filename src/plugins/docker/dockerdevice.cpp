@@ -34,6 +34,7 @@
 #include <utils/devicefileaccess.h>
 #include <utils/deviceshell.h>
 #include <utils/environment.h>
+#include <utils/expected.h>
 #include <utils/fileutils.h>
 #include <utils/hostosinfo.h>
 #include <utils/infolabel.h>
@@ -142,7 +143,7 @@ public:
     void changeMounts(QStringList newMounts);
     bool ensureReachable(const FilePath &other);
     void shutdown();
-    expected<FilePath> localSource(const FilePath &other) const;
+    expected_str<FilePath> localSource(const FilePath &other) const;
 
     QString containerId() { return m_container; }
     DockerDeviceData data() { return m_data; }
@@ -532,23 +533,27 @@ QStringList toMountArg(const DockerDevicePrivate::TemporaryMountInfo &mi)
     return QStringList{"--mount", mountArg};
 }
 
-bool isValidMountInfo(const DockerDevicePrivate::TemporaryMountInfo &mi)
+expected_str<void> isValidMountInfo(const DockerDevicePrivate::TemporaryMountInfo &mi)
 {
     if (mi.path.needsDevice())
-        return false;
+        RETURN_FAILURE(Tr::tr("Path \"%1\" is not local").arg(mi.path.toUserOutput()));
 
     if (mi.path.isEmpty() || mi.containerPath.isEmpty())
-        return false;
+        RETURN_FAILURE(Tr::tr("Path \"%1\" or \"%2\" is empty")
+                           .arg(mi.path.toUserOutput())
+                           .arg(mi.containerPath.toUserOutput()));
     if (!mi.path.isAbsolutePath() || !mi.containerPath.isAbsolutePath())
-        return false;
+        RETURN_FAILURE(Tr::tr("Path \"%1\" or \"%2\" is not absolute")
+                           .arg(mi.path.toUserOutput())
+                           .arg(mi.containerPath.toUserOutput()));
 
     if (mi.containerPath.isRootPath())
-        return false;
+        RETURN_FAILURE(Tr::tr("Path \"%1\" is root").arg(mi.containerPath.toUserOutput()));
 
     if (!mi.path.exists())
-        return false;
+        RETURN_FAILURE(Tr::tr("Path \"%1\" does not exist").arg(mi.path.toUserOutput()));
 
-    return true;
+    return {};
 }
 
 QStringList DockerDevicePrivate::createMountArgs() const
@@ -816,7 +821,7 @@ bool DockerDevice::ensureReachable(const FilePath &other) const
     return d->ensureReachable(other.parentDir());
 }
 
-expected<FilePath> DockerDevice::localSource(const Utils::FilePath &other) const
+expected_str<FilePath> DockerDevice::localSource(const Utils::FilePath &other) const
 {
     return d->localSource(other);
 }
@@ -1085,7 +1090,7 @@ bool DockerDevicePrivate::addTemporaryMount(const FilePath &path, const FilePath
 
     const TemporaryMountInfo newMount{path, containerPath};
 
-    QTC_ASSERT(isValidMountInfo(newMount), return false);
+    QTC_EXPECT_OR(isValidMountInfo(newMount), return false);
 
     qCDebug(dockerDeviceLog) << "Adding temporary mount:" << path;
     m_temporaryMounts.append(newMount);
@@ -1118,7 +1123,7 @@ void DockerDevicePrivate::changeMounts(QStringList newMounts)
     }
 }
 
-expected<FilePath> DockerDevicePrivate::localSource(const FilePath &other) const
+expected_str<FilePath> DockerDevicePrivate::localSource(const FilePath &other) const
 {
     const auto devicePath = FilePath::fromString(other.path());
     for (const TemporaryMountInfo &info : m_temporaryMounts) {
