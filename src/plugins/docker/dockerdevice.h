@@ -84,6 +84,7 @@ public:
 
     bool handlesFile(const Utils::FilePath &filePath) const override;
     bool ensureReachable(const Utils::FilePath &other) const override;
+    Utils::expected<Utils::FilePath, QString> localSource(const Utils::FilePath &other) const override;
 
     Utils::Environment systemEnvironment() const override;
 

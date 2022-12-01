@@ -143,6 +143,7 @@ public:
     void changeMounts(QStringList newMounts);
     bool ensureReachable(const FilePath &other);
     void shutdown();
+    expected<FilePath, QString> localSource(const FilePath &other) const;
 
     QString containerId() { return m_container; }
     DockerDeviceData data() { return m_data; }
@@ -816,6 +817,11 @@ bool DockerDevice::ensureReachable(const FilePath &other) const
     return d->ensureReachable(other.parentDir());
 }
 
+expected<FilePath, QString> DockerDevice::localSource(const Utils::FilePath &other) const
+{
+    return d->localSource(other);
+}
+
 Environment DockerDevice::systemEnvironment() const
 {
     return d->environment();
@@ -1111,6 +1117,27 @@ void DockerDevicePrivate::changeMounts(QStringList newMounts)
         m_data.mounts = newMounts;
         stopCurrentContainer(); // Force re-start with new mounts.
     }
+}
+
+expected<FilePath, QString> DockerDevicePrivate::localSource(const FilePath &other) const
+{
+    const auto devicePath = FilePath::fromString(other.path());
+    for (const TemporaryMountInfo &info : m_temporaryMounts) {
+        if (devicePath.isChildOf(info.containerPath)) {
+            const FilePath relativePath = devicePath.relativeChildPath(info.containerPath);
+            return info.path.pathAppended(relativePath.path());
+        }
+    }
+
+    for (const QString &mount : m_data.mounts) {
+        const FilePath mountPoint = FilePath::fromString(mount);
+        if (devicePath.isChildOf(mountPoint)) {
+            const FilePath relativePath = devicePath.relativeChildPath(mountPoint);
+            return mountPoint.pathAppended(relativePath.path());
+        }
+    }
+
+    RETURN_FAILURE(QString("No mount point found for %1").arg(other.toString()));
 }
 
 bool DockerDevicePrivate::ensureReachable(const FilePath &other)

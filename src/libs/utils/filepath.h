@@ -236,6 +236,9 @@ public:
     [[nodiscard]] static int rootLength(const QStringView path); // Assumes no scheme and host
     [[nodiscard]] static int schemeAndHostLength(const QStringView path);
 
+    //! Returns a filepath the represents the same file on a local drive
+    expected<FilePath, QString> localSource() const;
+
 private:
     friend class ::tst_fileutils;
     static QString calcRelativePath(const QString &absolutePath, const QString &absoluteAnchorPath);
@@ -266,6 +269,7 @@ public:
     std::function<bool(const FilePath &, const FilePath &)> ensureReachable;
     std::function<Environment(const FilePath &)> environment;
     std::function<bool(const FilePath &left, const FilePath &right)> isSameDevice;
+    std::function<expected<FilePath, QString>(const FilePath &)> localSource;
 };
 
 } // namespace Utils
