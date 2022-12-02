@@ -2079,10 +2079,16 @@ bool Client::fileBelongsToProject(const Utils::FilePath &filePath) const
     return project() && project()->isKnownFile(filePath);
 }
 
+FilePath toHostPath(const FilePath clientDeviceTemplate, const FilePath localClientPath)
+{
+    const FilePath onDevice = clientDeviceTemplate.withNewPath(localClientPath.path());
+    return onDevice.localSource().value_or(onDevice);
+}
+
 DocumentUri::PathMapper Client::hostPathMapper() const
 {
     return [serverDeviceTemplate = d->m_serverDeviceTemplate](const Utils::FilePath &serverPath) {
-        return serverDeviceTemplate.withNewPath(serverPath.path());
+        return toHostPath(serverDeviceTemplate, serverPath);
     };
 }
 
@@ -2093,8 +2099,8 @@ FilePath Client::serverUriToHostPath(const LanguageServerProtocol::DocumentUri &
 
 DocumentUri Client::hostPathToServerUri(const Utils::FilePath &path) const
 {
-    return DocumentUri::fromFilePath(path, [&](const Utils::FilePath &clientPath){
-        return clientPath.onDevice(d->m_serverDeviceTemplate);
+    return DocumentUri::fromFilePath(path, [&](const Utils::FilePath &clientPath) {
+        return toHostPath(d->m_serverDeviceTemplate, clientPath);
     });
 }
 
