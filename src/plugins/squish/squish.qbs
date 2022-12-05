@@ -46,6 +46,8 @@ QtcPlugin {
         "squishplugin_global.h",
         "squishprocessbase.cpp",
         "squishprocessbase.h",
+        "squishqueryrunner.cpp",
+        "squishqueryrunner.h",
         "squishresultmodel.cpp",
         "squishresultmodel.h",
         "squishserverprocess.cpp",

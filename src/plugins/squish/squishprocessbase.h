@@ -11,12 +11,18 @@
 
 namespace Squish::Internal {
 
+class SquishServerProcess;
+
 class SquishProcessBase : public QObject
 {
     Q_OBJECT
 public:
     explicit SquishProcessBase(QObject *parent = nullptr);
     ~SquishProcessBase() = default;
+
+    void setExecutable(const Utils::FilePath &executable);
+    void setEnvironment(const Utils::Environment &environment);
+
     SquishProcessState processState() const { return m_state; }
 
     inline bool isRunning() const { return m_process.isRunning(); }
@@ -36,6 +42,22 @@ protected:
 
     Utils::QtcProcess m_process;
     SquishProcessState m_state = Idle;
+};
+
+class SquishRunnerProcessBase : public SquishProcessBase
+{
+    Q_OBJECT
+public:
+    explicit SquishRunnerProcessBase(QObject *parent = nullptr);
+
+    void setServer(SquishServerProcess *server);
+
+protected:
+    inline SquishServerProcess *server() const { return m_server; }
+    virtual void onServerStateChanged(SquishProcessState toServerState) {}
+
+private:
+    SquishServerProcess *m_server = nullptr; // not owned
 };
 
 } // namespace Squish::Internal

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "squishperspective.h"
+#include "squishqueryrunner.h"
 #include "squishserverprocess.h"
 #include "suiteconf.h"
 
@@ -48,15 +49,13 @@ public:
         RunnerStopped
     };
 
-    using QueryCallback = std::function<void(const QString &, const QString &)>;
-
     State state() const { return m_state; }
     void runTestCases(const Utils::FilePath &suitePath,
                       const QStringList &testCases = QStringList());
     void recordTestCase(const Utils::FilePath &suitePath, const QString &testCaseName,
                         const SuiteConf &suiteConf);
-    void queryGlobalScripts(QueryCallback callback);
-    void queryServerSettings(QueryCallback callback);
+    void queryGlobalScripts(SquishQueryRunner::QueryCallback callback);
+    void queryServerSettings(SquishQueryRunner::QueryCallback callback);
     void requestSetSharedFolders(const Utils::FilePaths &sharedFolders);
     void writeServerSettingsChanges(const QList<QStringList> &changes);
     void requestExpansion(const QString &name);
@@ -87,20 +86,16 @@ private:
         KillOldBeforeQueryRunner
     };
 
-    enum RunnerQuery { ServerInfo, GetGlobalScriptDirs, SetGlobalScriptDirs };
-
     void onServerStateChanged(SquishProcessState state);
     void setState(State state);
     void handleSetStateStartAppRunner();
-    void handleSetStateQueryRunner();
     void setIdle();
     void startSquishServer(Request request);
     void stopSquishServer();
     void startSquishRunner();
     void setupAndStartRecorder();
     void stopRecorder();
-    void queryServer(RunnerQuery query);
-    void executeRunnerQuery();
+    void queryServer(SquishQueryRunner::RunnerQuery query);
     static Utils::Environment squishEnvironment();
     void onRunnerFinished();
     void onRecorderFinished();
@@ -130,6 +125,7 @@ private:
     SquishServerProcess m_serverProcess;
     Utils::QtcProcess m_runnerProcess;
     Utils::QtcProcess m_recorderProcess;
+    SquishQueryRunner m_queryRunner;
     QString m_serverHost;
     Request m_request = None;
     State m_state = Idle;
@@ -139,8 +135,6 @@ private:
     SuiteConf m_suiteConf; // holds information of current test suite e.g. while recording
     Utils::FilePaths m_reportFiles;
     Utils::FilePath m_currentResultsDirectory;
-    QString m_fullRunnerOutput; // used when querying the server
-    QString m_queryParameter;
     Utils::FilePath m_currentTestCasePath;
     Utils::FilePath m_currentRecorderSnippetFile;
     QFile *m_currentResultsXML = nullptr;
@@ -152,8 +146,6 @@ private:
     QTimer *m_requestVarsTimer = nullptr;
     qint64 m_readResultsCount;
     int m_autId = 0;
-    QueryCallback m_queryCallback;
-    RunnerQuery m_query = ServerInfo;
     bool m_shutdownInitiated = false;
     bool m_closeRunnerOnEndRecord = false;
     bool m_licenseIssues = false;
