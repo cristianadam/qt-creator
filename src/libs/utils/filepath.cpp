@@ -880,9 +880,9 @@ DeviceFileAccess *FilePath::fileAccess() const
     }
 
     static DeviceFileAccess dummy;
-    DeviceFileAccess *access = s_deviceHooks.fileAccess(*this);
-    QTC_ASSERT(access, return &dummy);
-    return access;
+    const expected_str<DeviceFileAccess *> access = s_deviceHooks.fileAccess(*this);
+    QTC_EXPECT_OR(access, return &dummy);
+    return *access ? *access : &dummy;
 }
 
 /// Constructs a FilePath from \a filePath. The \a defaultExtension is appended

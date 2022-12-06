@@ -422,11 +422,12 @@ DeviceManager::DeviceManager(bool isInstance) : d(std::make_unique<DeviceManager
         return device->localSource(file);
     };
 
-    deviceHooks.fileAccess = [](const FilePath &filePath) -> DeviceFileAccess * {
+    deviceHooks.fileAccess = [](const FilePath &filePath) -> expected_str<DeviceFileAccess *> {
         if (!filePath.needsDevice())
             return DesktopDeviceFileAccess::instance();
         auto device = DeviceManager::deviceForPath(filePath);
-        QTC_ASSERT(device, return nullptr);
+        if (!device)
+            RETURN_FAILURE(QString("No device found for path \"%1\"").arg(filePath.toUserOutput()));
         return device->fileAccess();
     };
 
