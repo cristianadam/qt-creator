@@ -372,46 +372,37 @@ static QString pluginListString(const QSet<PluginSpec *> &plugins)
     return names.join(QLatin1Char('\n'));
 }
 
-bool PluginView::setPluginsEnabled(const QSet<PluginSpec *> &plugins, bool enable)
+static QSet<PluginSpec *> dependentPlugins(const QSet<PluginSpec *> &plugins, bool enable)
 {
-    QSet<PluginSpec *> additionalPlugins;
-    if (enable) {
-        for (PluginSpec *spec : plugins) {
-            for (PluginSpec *other : PluginManager::pluginsRequiredByPlugin(spec)) {
-                if (!other->isEnabledBySettings())
-                    additionalPlugins.insert(other);
-            }
-        }
-        additionalPlugins.subtract(plugins);
-        if (!additionalPlugins.isEmpty()) {
-            if (QMessageBox::question(this, tr("Enabling Plugins"),
-                             tr("Enabling\n%1\nwill also enable the following plugins:\n\n%2")
-                             .arg(pluginListString(plugins), pluginListString(additionalPlugins)),
-                             QMessageBox::Ok | QMessageBox::Cancel,
-                             QMessageBox::Ok) != QMessageBox::Ok) {
-                return false;
-            }
-        }
-    } else {
-        for (PluginSpec *spec : plugins) {
-            for (PluginSpec *other : PluginManager::pluginsRequiringPlugin(spec)) {
-                if (other->isEnabledBySettings())
-                    additionalPlugins.insert(other);
-            }
-        }
-        additionalPlugins.subtract(plugins);
-        if (!additionalPlugins.isEmpty()) {
-            if (QMessageBox::question(this, tr("Disabling Plugins"),
-                             tr("Disabling\n%1\nwill also disable the following plugins:\n\n%2")
-                             .arg(pluginListString(plugins), pluginListString(additionalPlugins)),
-                             QMessageBox::Ok | QMessageBox::Cancel,
-                             QMessageBox::Ok) != QMessageBox::Ok) {
-                return false;
-            }
+    std::function<QSet<PluginSpec *>(PluginSpec *)> dependencyFunction = enable
+                                                  ? &PluginManager::pluginsRequiredByPlugin
+                                                  : &PluginManager::pluginsRequiringPlugin;
+    QSet<PluginSpec *> affectedPlugins = plugins;
+    for (PluginSpec *spec : plugins) {
+        const QSet<PluginSpec *> others = dependencyFunction(spec);
+        for (PluginSpec *other : others) {
+            if (other->isEnabledBySettings() != enable)
+                affectedPlugins.insert(other);
         }
     }
+    return affectedPlugins;
+}
 
-    const QSet<PluginSpec *> affectedPlugins = plugins + additionalPlugins;
+bool PluginView::setPluginsEnabled(const QSet<PluginSpec *> &plugins, bool enable)
+{
+    const QSet<PluginSpec *> affectedPlugins = dependentPlugins(plugins, enable);
+    const QSet<PluginSpec *> additionalPlugins = affectedPlugins - plugins;
+    if (additionalPlugins.isEmpty())
+        return true;
+    const QString title = enable ? tr("Enabling Plugins") : tr("Disabling Plugins");
+    const QString text = enable
+                       ? tr("Enabling\n%1\nwill also enable the following plugins:\n\n%2")
+                       : tr("Disabling\n%1\nwill also disable the following plugins:\n\n%2");
+    if (QMessageBox::question(this, title,
+                     text.arg(pluginListString(plugins), pluginListString(additionalPlugins)),
+                     QMessageBox::Ok | QMessageBox::Cancel, QMessageBox::Ok) != QMessageBox::Ok) {
+        return false;
+    }
     for (PluginSpec *spec : affectedPlugins) {
         PluginItem *item = m_model->findItemAtLevel<2>([spec](PluginItem *item) {
                 return item->m_spec == spec;
