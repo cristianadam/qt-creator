@@ -5,6 +5,7 @@
 
 #include "squishperspective.h"
 #include "squishqueryrunner.h"
+#include "squishrecorderprocess.h"
 #include "squishserverprocess.h"
 #include "suiteconf.h"
 
@@ -124,7 +125,7 @@ private:
     std::unique_ptr<SquishXmlOutputHandler> m_xmlOutputHandler;
     SquishServerProcess m_serverProcess;
     Utils::QtcProcess m_runnerProcess;
-    Utils::QtcProcess m_recorderProcess;
+    SquishRecorderProcess m_recorderProcess;
     SquishQueryRunner m_queryRunner;
     QString m_serverHost;
     Request m_request = None;

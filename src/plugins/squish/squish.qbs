@@ -48,6 +48,8 @@ QtcPlugin {
         "squishprocessbase.h",
         "squishqueryrunner.cpp",
         "squishqueryrunner.h",
+        "squishrecorderprocess.cpp",
+        "squishrecorderprocess.h",
         "squishresultmodel.cpp",
         "squishresultmodel.h",
         "squishserverprocess.cpp",

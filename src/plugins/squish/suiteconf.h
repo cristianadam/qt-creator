@@ -24,6 +24,7 @@ public:
     bool write();
 
     QString suiteName() const;
+    Utils::FilePath suitePath() const;
     QString aut() const { return m_aut; }
     void setAut(const QString &aut) { m_aut = aut; }
     QString arguments() const { return m_arguments; }

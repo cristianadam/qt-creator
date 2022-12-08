@@ -113,14 +113,10 @@ SquishTools::SquishTools(QObject *parent)
             outputPane, &SquishOutputPane::onTestRunFinished);
 
     m_runnerProcess.setProcessMode(ProcessMode::Writer);
-    m_recorderProcess.setProcessMode(ProcessMode::Writer);
 
     m_runnerProcess.setStdOutLineCallback([this](const QString &line) {
         onRunnerStdOutput(line);
     });
-
-    connect(&m_recorderProcess, &QtcProcess::done,
-            this, &SquishTools::onRecorderFinished);
 
     connect(&m_runnerProcess, &QtcProcess::readyReadStandardError,
             this, &SquishTools::onRunnerErrorOutput);
@@ -133,6 +129,8 @@ SquishTools::SquishTools(QObject *parent)
             this, &SquishTools::logOutputReceived);
     connect(&m_queryRunner, &SquishQueryRunner::logOutputReceived,
             this, &SquishTools::logOutputReceived);
+//    connect(&m_recorderProcess, &SquishRecorderProcess::stateChanged,
+//            this, &SquishTools::)
 
     s_instance = this;
     m_perspective.initPerspective();
@@ -615,42 +613,43 @@ void SquishTools::setupAndStartRecorder()
     QTC_ASSERT(m_autId != 0, return);
     QTC_ASSERT(!m_recorderProcess.isRunning(), return);
 
-    QStringList args;
-    if (!toolsSettings.isLocalServer)
-        args << "--host" << toolsSettings.serverHost;
-    args << "--port" << QString::number(m_serverProcess.port());
-    args << "--debugLog" << "alpw"; // TODO make this configurable?
-    args << "--record";
-    args << "--suitedir" << m_suitePath.toUserOutput();
+//    QStringList args;
+//    if (!toolsSettings.isLocalServer)
+//        args << "--host" << toolsSettings.serverHost;
+//    args << "--port" << QString::number(m_serverProcess.port());
+//    args << "--debugLog" << "alpw"; // TODO make this configurable?
+//    args << "--record";
+//    args << "--suitedir" << m_suitePath.toUserOutput();
 
-    Utils::TemporaryFile tmp("squishsnippetfile-XXXXXX"); // quick and dirty
-    tmp.open();
-    m_currentRecorderSnippetFile = Utils::FilePath::fromUserInput(tmp.fileName());
-    args << "--outfile" << m_currentRecorderSnippetFile.toUserOutput();
-    tmp.close();
-    args << "--lang" << m_suiteConf.langParameter();
-    args << "--useWaitFor" << "--recordStart";
-    if (m_suiteConf.objectMapStyle() == "script")
-        args << "--useScriptedObjectMap";
-    args << "--autid" << QString::number(m_autId);
+//    Utils::TemporaryFile tmp("squishsnippetfile-XXXXXX"); // quick and dirty
+//    tmp.open();
+//    m_currentRecorderSnippetFile = Utils::FilePath::fromUserInput(tmp.fileName());
+//    args << "--outfile" << m_currentRecorderSnippetFile.toUserOutput();
+//    tmp.close();
+//    args << "--lang" << m_suiteConf.langParameter();
+//    args << "--useWaitFor" << "--recordStart";
+//    if (m_suiteConf.objectMapStyle() == "script")
+//        args << "--useScriptedObjectMap";
+//    args << "--autid" << QString::number(m_autId);
 
-    m_recorderProcess.setCommand({toolsSettings.runnerPath, args});
-    qCDebug(LOG) << "Recorder starting:" << m_recorderProcess.commandLine().toUserOutput();
+//    m_recorderProcess.setCommand({toolsSettings.runnerPath, args});
+//    qCDebug(LOG) << "Recorder starting:" << m_recorderProcess.commandLine().toUserOutput();
     if (m_suiteConf.objectMapPath().isReadableFile())
         Core::DocumentManager::expectFileChange(m_suiteConf.objectMapPath());
-    m_recorderProcess.start();
+
+    if (!toolsSettings.isLocalServer)
+        m_recorderProcess.setServerHost(toolsSettings.serverHost);
+    m_recorderProcess.setServerPort(m_serverProcess.port());
+    m_recorderProcess.setSuiteConf(m_suiteConf);
+    m_recorderProcess.setAut(m_autId);
+    m_recorderProcess.setTestCaseName(m_currentTestCasePath.fileName());
+
+    m_recorderProcess.start(toolsSettings.runnerPath, squishEnvironment());
 }
 
 void SquishTools::stopRecorder()
 {
-    QTC_ASSERT(m_recorderProcess.isRunning(), return);
-    if (m_squishRunnerState == RunnerState::CancelRequested) {
-        qCDebug(LOG) << "Stopping recorder (exit)";
-        m_recorderProcess.write("exit\n");
-    } else {
-        qCDebug(LOG) << "Stopping recorder (endrecord)";
-        m_recorderProcess.write("endrecord\n");
-    }
+    m_recorderProcess.stopRecorder(m_squishRunnerState == RunnerState::CancelRequested);
 }
 
 Environment SquishTools::squishEnvironment()
@@ -693,7 +692,6 @@ void SquishTools::onRunnerFinished()
 
 void SquishTools::onRecorderFinished()
 {
-    qCDebug(LOG) << "Recorder finished:" << m_recorderProcess.exitCode();
     if (m_runnerProcess.isRunning()) {
         if (m_closeRunnerOnEndRecord) {
             //terminateRunner();
@@ -704,25 +702,6 @@ void SquishTools::onRecorderFinished()
         qCInfo(LOG) << "Stop Server from recorder";
         stopSquishServer();
     }
-
-    if (!m_currentRecorderSnippetFile.exists()) {
-        qCInfo(LOG) << m_currentRecorderSnippetFile.toUserOutput() << "does not exist";
-        return;
-    }
-    qCInfo(LOG).noquote() << "\nSnippetFile content:\n--------------------\n"
-                          << m_currentRecorderSnippetFile.fileContents().value_or(QByteArray())
-                          << "--------------------";
-
-    const ScriptHelper helper(m_suiteConf.language());
-    const Utils::FilePath testFile = m_currentTestCasePath.pathAppended(
-                "test" + m_suiteConf.scriptExtension());
-    Core::DocumentManager::expectFileChange(testFile);
-    bool result = helper.writeScriptFile(testFile, m_currentRecorderSnippetFile,
-                                         m_suiteConf.aut(),
-                                         m_suiteConf.arguments());
-    qCInfo(LOG) << "Wrote recorded test case" << testFile.toUserOutput() << " " << result;
-    m_currentRecorderSnippetFile.removeFile();
-    m_currentRecorderSnippetFile.clear();
 }
 
 static char firstNonWhitespace(const QByteArray &text)

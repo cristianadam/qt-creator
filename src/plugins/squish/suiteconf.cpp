@@ -171,6 +171,13 @@ bool SuiteConf::write()
     return writeSuiteConfContent(m_filePath, suiteConf);
 }
 
+Utils::FilePath SuiteConf::suitePath() const
+{
+    if (!m_filePath.exists())
+        return {};
+    return m_filePath.parentDir();
+}
+
 QString SuiteConf::suiteName() const
 {
     if (!m_filePath.exists())
