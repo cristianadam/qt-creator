@@ -445,6 +445,7 @@ Tasking::Group ShowController::reloadRecipe()
 
         QString m_header;
         QString m_body;
+        QString m_branches;
         QString m_precedes;
         QStringList m_follows;
 
@@ -453,6 +454,8 @@ Tasking::Group ShowController::reloadRecipe()
 
     const auto updateDescription = [this](const ReloadStorage &storage) {
         QString desc = storage.m_header;
+        if (!storage.m_branches.isEmpty())
+            desc.append("Branches: " + storage.m_branches + '\n');
         if (!storage.m_precedes.isEmpty())
             desc.append("Precedes: " + storage.m_precedes + '\n');
         QStringList follows;
@@ -485,10 +488,12 @@ Tasking::Group ShowController::reloadRecipe()
         }
         const int lastHeaderLine = output.indexOf("\n\n") + 1;
         data->m_commit = output.mid(7, 12);
-        data->m_header = output.left(lastHeaderLine) + Constants::EXPAND_BRANCHES + '\n';
+        data->m_header = output.left(lastHeaderLine);
         data->m_body = output.mid(lastHeaderLine + 1);
-        data->m_precedes = Tr::tr("<resolving>");
-        data->m_follows.append(data->m_precedes);
+        const QString busyMessage = Tr::tr("<resolving>");
+        data->m_branches = busyMessage;
+        data->m_precedes = busyMessage;
+        data->m_follows.append(busyMessage);
         updateDescription(*data);
     };
 
@@ -496,6 +501,54 @@ Tasking::Group ShowController::reloadRecipe()
         if (!storage->m_postProcessDescription)
             return GroupConfig{GroupAction::StopWithDone};
         return GroupConfig();
+    };
+
+    const auto setupBranches = [this, storage](QtcProcess &process) {
+        setupCommand(process, {"branch", noColorOption, "-a", "--contains", storage->m_commit});
+        VcsOutputWindow::appendCommand(process.workingDirectory(), process.commandLine());
+    };
+    const auto onBranchesDone = [storage, updateDescription](const QtcProcess &process) {
+        ReloadStorage *data = storage.activeStorage();
+        data->m_branches.clear();
+        const QString remotePrefix = "remotes/";
+        const QString localPrefix = "<Local>";
+        const int prefixLength = remotePrefix.length();
+        QStringList branches;
+        QString previousRemote = localPrefix;
+        bool first = true;
+        const QStringList branchList = process.cleanedStdOut().split('\n');
+        for (const QString &branch : branchList) {
+            const QString b = branch.mid(2).trimmed();
+            if (b.isEmpty())
+                continue;
+            if (b.startsWith(remotePrefix)) {
+                const int nextSlash = b.indexOf('/', prefixLength);
+                if (nextSlash < 0)
+                    continue;
+                const QString remote = b.mid(prefixLength, nextSlash - prefixLength);
+                if (remote != previousRemote) {
+                    data->m_branches += branchesDisplay(previousRemote, &branches, &first) + '\n';
+                    branches.clear();
+                    previousRemote = remote;
+                }
+                branches << b.mid(nextSlash + 1);
+            } else {
+                branches << b;
+            }
+        }
+        if (branches.isEmpty()) {
+            if (previousRemote == localPrefix)
+                data->m_branches += Tr::tr("<None>");
+        } else {
+            data->m_branches += branchesDisplay(previousRemote, &branches, &first);
+        }
+        data->m_branches = data->m_branches.trimmed();
+        updateDescription(*data);
+    };
+    const auto onBranchesError = [storage, updateDescription](const QtcProcess &) {
+        ReloadStorage *data = storage.activeStorage();
+        data->m_branches.clear();
+        updateDescription(*data);
     };
 
     const auto setupPrecedes = [this, storage](QtcProcess &process) {
@@ -578,6 +631,7 @@ Tasking::Group ShowController::reloadRecipe()
                 parallel,
                 optional,
                 DynamicSetup(desciptionDetailSetup),
+                Process(setupBranches, onBranchesDone, onBranchesError),
                 Process(setupPrecedes, onPrecedesDone, onPrecedesError),
                 Tree(setupFollows)
             }
