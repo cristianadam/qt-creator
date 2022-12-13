@@ -145,13 +145,9 @@ QString QmlProjectRunConfiguration::disabledReason() const
         return tr("No script file to execute.");
 
     const FilePath viewer = qmlRuntimeFilePath();
-    if (DeviceTypeKitAspect::deviceTypeId(kit())
-            == ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE
-            && !viewer.exists()) {
+    if (!viewer.exists())
         return tr("No QML utility found.");
-    }
-    if (viewer.isEmpty())
-        return tr("No QML utility specified for target device.");
+
     return RunConfiguration::disabledReason();
 }
 
@@ -167,20 +163,22 @@ FilePath QmlProjectRunConfiguration::qmlRuntimeFilePath() const
     if (!version) // No Qt version in Kit. Don't try to run QML runtime.
         return {};
 
-    const Id deviceType = DeviceTypeKitAspect::deviceTypeId(kit);
-    if (deviceType == ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE) {
-        // If not given explicitly by Qt Version, try to pick it from $PATH.
-        const bool isDesktop = version->type() == QtSupport::Constants::DESKTOPQT;
-        return isDesktop ? version->qmlRuntimeFilePath() : "qmlscene";
+    // Qt version should know best.
+    const FilePath qmlRuntime = version->qmlRuntimeFilePath();
+    if (!qmlRuntime.isEmpty())
+        return qmlRuntime;
+
+    // Otherwise, maybe the device knows.
+    IDevice::ConstPtr dev = DeviceKitAspect::device(kit);
+    if (!dev.isNull()) {
+        const FilePath qmlRuntime = dev->qmlRunCommand();
+        if (!qmlRuntime.isEmpty())
+            return qmlRuntime;
     }
 
-    IDevice::ConstPtr dev = DeviceKitAspect::device(kit);
-    if (dev.isNull()) // No device set. We don't know where a QML utility is.
-        return {};
-
-    const FilePath qmlRuntime = dev->qmlRunCommand();
-    // If not given explicitly by device, try to pick it from $PATH.
-    return qmlRuntime.isEmpty() ? "qmlscene" : qmlRuntime;
+    // No device set. We don't know where a QML utility is.
+    // Try to pick it from $PATH.
+    return "qmlscene";
 }
 
 QString QmlProjectRunConfiguration::commandLineArguments() const
