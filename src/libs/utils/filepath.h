@@ -139,6 +139,8 @@ public:
     [[nodiscard]] FilePath operator/(const QString &str) const;
 
     Qt::CaseSensitivity caseSensitivity() const;
+    QChar pathSeparator() const;
+    QChar pathListSeparator() const;
 
     void clear();
     bool isEmpty() const;
