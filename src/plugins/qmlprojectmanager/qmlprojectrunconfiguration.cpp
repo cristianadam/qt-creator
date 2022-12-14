@@ -216,7 +216,10 @@ FilePath QmlProjectRunConfiguration::qmlRuntimeFilePath() const
 
     const FilePath qmlRuntime = dev->qmlRunCommand();
     // If not given explicitly by device, try to pick it from $PATH.
-    return qmlRuntime.isEmpty() ? "qmlscene" : qmlRuntime;
+    if (!qmlRuntime.isEmpty())
+        return qmlRuntime;
+
+    return dev->filePath("/usr/bin/qml");
 }
 
 void QmlProjectRunConfiguration::createQtVersionAspect()
