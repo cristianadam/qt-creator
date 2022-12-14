@@ -977,7 +977,7 @@ LinuxDevice::LinuxDevice()
             d->m_terminals.removeOne(proc);
         });
 
-        proc->setCommand({filePath({}), {}});
+        proc->setCommand({filePath("/bin/sh"), {}});
         proc->setTerminalMode(TerminalMode::On);
         proc->setEnvironment(env);
         proc->setWorkingDirectory(workingDir);
