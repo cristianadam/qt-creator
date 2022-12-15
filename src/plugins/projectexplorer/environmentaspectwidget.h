@@ -19,8 +19,6 @@ class QComboBox;
 class QHBoxLayout;
 QT_END_NAMESPACE
 
-namespace Utils { class DetailsWidget; }
-
 namespace ProjectExplorer {
 
 class EnvironmentWidget;
@@ -32,9 +30,10 @@ class PROJECTEXPLORER_EXPORT EnvironmentAspectWidget : public QWidget
 public:
     explicit EnvironmentAspectWidget(EnvironmentAspect *aspect);
 
+    EnvironmentWidget *envWidget() const { return m_environmentWidget; }
+
 protected:
     EnvironmentAspect *aspect() const { return m_aspect; }
-    EnvironmentWidget *envWidget() const { return m_environmentWidget; }
     void addWidget(QWidget *widget);
 
 private:

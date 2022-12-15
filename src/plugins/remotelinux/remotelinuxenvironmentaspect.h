@@ -16,16 +16,9 @@ class REMOTELINUX_EXPORT RemoteLinuxEnvironmentAspect : public ProjectExplorer::
 public:
     RemoteLinuxEnvironmentAspect(ProjectExplorer::Target *target);
 
-    void setRemoteEnvironment(const Utils::Environment &env);
-
-    QString userEnvironmentChangesAsString() const;
-
 protected:
     void fromMap(const QVariantMap &map) override;
     void toMap(QVariantMap &map) const override;
-
-private:
-    Utils::Environment m_remoteEnvironment;
 };
 
-} // namespace RemoteLinux
+} // RemoteLinux
