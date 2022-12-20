@@ -15,6 +15,19 @@
     of Figma and press the plus button to create a new plugin. Then choose the
     \e Manifest.json file that comes with \QDS.
 
-    You can launch the Figma plugin from \uicontrol Plugins >
-    \uicontrol Development > \uicontrol {\QBF} in Figma.
+    You need both Figma and Qt accounts to use \QBF in \QDS.
+    To use \QBF in \QDS you need to:
+    \list
+        \li Visit \l {https://www.figma.com/community/plugin/1167809465162924409/Qt-Bridge-for-Figma}
+        {\QBF plugin page}.
+        \li Select \uicontrol {Try it out}.
+        \li Select your logged in Figma account.
+        \li After plugin loads, select \uicontrol Run.
+        \li Select \uicontrol Export, to get the \e {.qtbridge} file in your
+        local drive.
+        \li Drag and drop this exported file into an open project in \QDS
+        to have this attached to your project.
+    \endlist
+
+    You can launch the installed Figma plugin from \uicontrol Plugins > \uicontrol {\QBF} in Figma.
 */
