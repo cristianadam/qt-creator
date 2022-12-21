@@ -76,6 +76,17 @@ static int idealThreadCount()
 #endif
 }
 
+QMAKE_EXPORT QString removeHostAndScheme(const QString &remotePath)
+{
+    if (remotePath.startsWith("/__qtc_devices__/")) {
+        int pos = remotePath.indexOf('/', sizeof("/__qtc_devices__/") + 1);
+        if (pos > -1) // end of scheme
+            pos = remotePath.indexOf('/', pos + 1);
+        if (pos > -1) // end of host
+            return remotePath.mid(pos);
+    }
+    return remotePath;
+}
 
 QMakeBaseKey::QMakeBaseKey(const QString &_root, const QString &_stash, bool _hostBuild)
     : root(_root), stash(_stash), hostBuild(_hostBuild)
@@ -1280,9 +1291,9 @@ void QMakeEvaluator::setupProject()
     ProValueMap &vars = m_valuemapStack.top();
     int proFile = currentFileId();
     vars[ProKey("TARGET")] << ProString(QFileInfo(currentFileName()).baseName()).setSource(proFile);
-    vars[ProKey("_PRO_FILE_")] << ProString(currentFileName()).setSource(proFile);
-    vars[ProKey("_PRO_FILE_PWD_")] << ProString(currentDirectory()).setSource(proFile);
-    vars[ProKey("OUT_PWD")] << ProString(m_outputDir).setSource(proFile);
+    vars[ProKey("_PRO_FILE_")] << ProString(removeHostAndScheme(currentFileName())).setSource(proFile);
+    vars[ProKey("_PRO_FILE_PWD_")] << ProString(removeHostAndScheme(currentDirectory())).setSource(proFile);
+    vars[ProKey("OUT_PWD")] << ProString(removeHostAndScheme(m_outputDir)).setSource(proFile);
 }
 
 void QMakeEvaluator::evaluateCommand(const QString &cmds, const QString &where)
@@ -1405,7 +1416,7 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::visitProFile(
 
     m_handler->aboutToEval(currentProFile(), pro, type);
     m_profileStack.push(pro);
-    valuesRef(ProKey("PWD")) = ProStringList(ProString(currentDirectory()));
+    valuesRef(ProKey("PWD")) = ProStringList(ProString(removeHostAndScheme(currentDirectory())));
     if (flags & LoadPreFiles) {
         setupProject();
 
@@ -1456,7 +1467,7 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::visitProFile(
     vr = ReturnTrue;
   failed:
     m_profileStack.pop();
-    valuesRef(ProKey("PWD")) = ProStringList(ProString(currentDirectory()));
+    valuesRef(ProKey("PWD")) = ProStringList(ProString(removeHostAndScheme(currentDirectory())));
     m_handler->doneWithEval(currentProFile());
 
     return vr;
@@ -1694,6 +1705,7 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::expandVariableReferences(
         }
     }
 }
+
 
 QMakeEvaluator::VisitReturn QMakeEvaluator::prepareFunctionArgs(
         const ushort *&tokPtr, QList<ProStringList> *ret)

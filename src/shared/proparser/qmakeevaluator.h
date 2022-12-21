@@ -46,6 +46,8 @@ public:
 };
 
 QMAKE_EXPORT std::function<void(ProcessData *data)> &theProcessRunner();
+QMAKE_EXPORT QString removeHostAndScheme(const QString &remotePath);
+
 
 QT_BEGIN_NAMESPACE
 
