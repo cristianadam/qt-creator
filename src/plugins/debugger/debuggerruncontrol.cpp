@@ -69,6 +69,7 @@ DebuggerEngine *createPdbEngine();
 DebuggerEngine *createQmlEngine();
 DebuggerEngine *createLldbEngine();
 DebuggerEngine *createUvscEngine();
+DebuggerEngine *createDapEngine();
 
 static QString noEngineMessage()
 {
@@ -507,6 +508,9 @@ void DebuggerRunTool::start()
                 break;
             case UvscEngineType:
                 m_engine = createUvscEngine();
+                break;
+            case DapEngineType:
+                m_engine = createDapEngine();
                 break;
             default:
                 if (!m_runParameters.isQmlDebugging) {
