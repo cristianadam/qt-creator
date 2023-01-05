@@ -926,7 +926,7 @@ void CMakeBuildSystem::runCTest()
         process.start();
         if (!process.waitForFinished() || process.result() != ProcessResult::FinishedWithSuccess)
             return;
-        futureInterface.reportResult(process.readAllStandardOutput());
+        futureInterface.reportResult(process.readAllRawStandardOutput());
     });
 
     Utils::onFinished(future, this, [this](const QFuture<QByteArray> &future) {
