@@ -7,6 +7,8 @@
 
 #include "futureprogress.h"
 
+#include "futureprogress.h"
+
 #include <QObject>
 
 namespace Utils { class QtcProcess; }
