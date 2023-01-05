@@ -286,22 +286,6 @@ void QMakeStep::doRun()
 
     using namespace Tasking;
 
-    const auto setupQMake = [this](QtcProcess &process) {
-        m_outputFormatter->setLineParsers({new QMakeParser});
-        ProcessParameters *pp = processParameters();
-        pp->setCommandLine(m_qmakeCommand);
-        setupProcess(&process);
-    };
-
-    const auto setupMakeQMake = [this](QtcProcess &process) {
-        auto *parser = new GnuMakeParser;
-        parser->addSearchDir(processParameters()->workingDirectory());
-        m_outputFormatter->setLineParsers({parser});
-        ProcessParameters *pp = processParameters();
-        pp->setCommandLine(m_makeCommand);
-        setupProcess(&process);
-    };
-
     const auto onDone = [this](const QtcProcess &) {
         const QString command = displayedParameters()->effectiveCommand().toUserOutput();
         emit addOutput(Tr::tr("The process \"%1\" exited normally.").arg(command),
@@ -328,13 +312,38 @@ void QMakeStep::doRun()
         m_needToRunQMake = true;
     };
 
+    Process qmake {
+        [this](QtcProcess &process) {
+            m_outputFormatter->setLineParsers({new QMakeParser});
+            ProcessParameters *pp = processParameters();
+            pp->setCommandLine(m_qmakeCommand);
+            setupProcess(&process);
+        },
+        onDone,
+        onError
+    };
+
+    Process make {
+        [this](QtcProcess &process) {
+            auto *parser = new GnuMakeParser;
+            parser->addSearchDir(processParameters()->workingDirectory());
+            m_outputFormatter->setLineParsers({parser});
+            ProcessParameters *pp = processParameters();
+            pp->setCommandLine(m_makeCommand);
+            setupProcess(&process);
+        },
+        onDone,
+        onError
+    };
+
+
     const auto onGroupDone = [this] {
         emit buildConfiguration()->buildDirectoryInitialized();
     };
 
-    QList<TaskItem> processList = {Process(setupQMake, onDone, onError)};
+    QList<TaskItem> processList = {qmake};
     if (m_runMakeQmake)
-        processList << Process(setupMakeQMake, onDone, onError);
+        processList << make;
     processList << OnGroupDone(onGroupDone);
 
     runTaskTree(Group(processList));
