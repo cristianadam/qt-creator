@@ -40,33 +40,40 @@ using namespace Utils;
 
 namespace Android::Internal {
 
-#define APP_ID "io.qt.qtdesignviewer"
-
-class ApkInfo
+static const QStringList &apkAbis()
 {
-public:
-    ApkInfo();
-    const QStringList abis;
-    const QString appId;
-    const QString uploadDir;
-    const QString activityId;
-    const QString name;
-};
-
-ApkInfo::ApkInfo() :
-    abis({ProjectExplorer::Constants::ANDROID_ABI_X86,
-            ProjectExplorer::Constants::ANDROID_ABI_X86_64,
-            ProjectExplorer::Constants::ANDROID_ABI_ARM64_V8A,
-            ProjectExplorer::Constants::ANDROID_ABI_ARMEABI_V7A}),
-    appId(APP_ID),
-    uploadDir("/data/local/tmp/" APP_ID "/"),
-    // TODO Add possibility to run Qt5 built version of Qt Design Viewer
-    activityId(APP_ID "/org.qtproject.qt.android.bindings.QtActivity"),
-    name("Qt Design Viewer")
-{
+    static const QStringList abis = {
+        ProjectExplorer::Constants::ANDROID_ABI_X86,
+        ProjectExplorer::Constants::ANDROID_ABI_X86_64,
+        ProjectExplorer::Constants::ANDROID_ABI_ARM64_V8A,
+        ProjectExplorer::Constants::ANDROID_ABI_ARMEABI_V7A
+    };
+    return abis;
 }
 
-Q_GLOBAL_STATIC(ApkInfo, apkInfo)
+static const QString &appId()
+{
+    static const QString id = "io.qt.qtdesignviewer";
+    return id;
+}
+
+static const QString &apkUploadDir()
+{
+    static const QString dir =  "/data/local/tmp/" + appId() + "/";
+    return dir;
+}
+
+static const QString &apkActivityId()
+{
+    static const QString id = appId() + "/org.qtproject.qt.android.bindings.QtActivity";
+    return id;
+}
+
+static const QString &apkName()
+{
+    static const QString name = "Qt Design Viewer";
+    return name;
+}
 
 class UploadInfo
 {
@@ -127,7 +134,7 @@ FilePath AndroidQmlPreviewWorker::designViewerApkPath(const QString &abi) const
     if (abi.isEmpty())
         return {};
 
-    if (apkInfo()->abis.contains(abi)) {
+    if (apkAbis().contains(abi)) {
         return Core::ICore::resourcePath(QString("android/qtdesignviewer/qtdesignviewer_%1.apk")
                                          .arg(abi));
     }
@@ -150,7 +157,7 @@ SdkToolResult AndroidQmlPreviewWorker::runAdbShellCommand(const QStringList &arg
 
 int AndroidQmlPreviewWorker::pidofPreview() const
 {
-    const QStringList command{"pidof", apkInfo()->appId};
+    const QStringList command{"pidof", appId()};
     const SdkToolResult res = runAdbShellCommand(command);
     return res.success() ? res.stdOut().toInt() : -1;
 }
@@ -203,7 +210,7 @@ void AndroidQmlPreviewWorker::startLogcat()
 void AndroidQmlPreviewWorker::filterLogcatAndAppendMessage(const QString &stdOut)
 {
     for (const QString &line : stdOut.split('\n')) {
-        QStringList splittedLine = line.split(QLatin1String("%1: ").arg(apkInfo()->name));
+        QStringList splittedLine = line.split(QLatin1String("%1: ").arg(apkName()));
         if (splittedLine.count() == 1)
             continue;
 
@@ -257,7 +264,7 @@ void AndroidQmlPreviewWorker::start()
 void AndroidQmlPreviewWorker::stop()
 {
     if (!isPreviewRunning(m_viewerPid) || stopPreviewApp())
-        appendMessage(Tr::tr("%1 has been stopped.").arg(apkInfo()->name), NormalMessageFormat);
+        appendMessage(Tr::tr("%1 has been stopped.").arg(apkName()), NormalMessageFormat);
     m_viewerPid = -1;
     reportStopped();
 }
@@ -305,8 +312,8 @@ bool AndroidQmlPreviewWorker::ensureAvdIsRunning()
 
 bool AndroidQmlPreviewWorker::checkAndInstallPreviewApp()
 {
-    const QStringList command {"pm", "list", "packages", apkInfo()->appId};
-    appendMessage(Tr::tr("Checking if %1 app is installed.").arg(apkInfo()->name), NormalMessageFormat);
+    const QStringList command {"pm", "list", "packages", appId()};
+    appendMessage(Tr::tr("Checking if %1 app is installed.").arg(apkName()), NormalMessageFormat);
     const SdkToolResult res = runAdbShellCommand(command);
     if (!res.success()) {
         appendMessage(res.stdErr(), ErrorMessageFormat);
@@ -323,11 +330,11 @@ bool AndroidQmlPreviewWorker::checkAndInstallPreviewApp()
         if (!apkPath.exists()) {
             appendMessage(Tr::tr("Cannot install %1 app for %2 architecture. "
                                  "The appropriate APK was not found in resources folders.").
-                          arg(apkInfo()->name, m_avdAbis.first()), ErrorMessageFormat);
+                          arg(apkName(), m_avdAbis.first()), ErrorMessageFormat);
             return false;
         }
 
-        appendMessage(Tr::tr("Installing %1 APK.").arg(apkInfo()->name), NormalMessageFormat);
+        appendMessage(Tr::tr("Installing %1 APK.").arg(apkName()), NormalMessageFormat);
 
         const SdkToolResult res = runAdbCommand({"install", apkPath.toString()});
         if (!res.success())
@@ -390,7 +397,7 @@ FilePath AndroidQmlPreviewWorker::createQmlrcFile(const FilePath &workFolder,
         rccProcess.start();
         if (!rccProcess.waitForStarted()) {
             appendMessage(Tr::tr("Could not create file for %1 \"%2\"").
-                          arg(apkInfo()->name, rccProcess.commandLine().toUserOutput()),
+                          arg(apkName(), rccProcess.commandLine().toUserOutput()),
                           StdErrFormat);
             qrcPath.removeFile();
             return {};
@@ -413,14 +420,14 @@ FilePath AndroidQmlPreviewWorker::createQmlrcFile(const FilePath &workFolder,
 
         if (rccProcess.exitStatus() != QProcess::NormalExit) {
             appendMessage(Tr::tr("Crash while creating file for %1 \"%2\"").
-                          arg(apkInfo()->name, rccProcess.commandLine().toUserOutput()),
+                          arg(apkName(), rccProcess.commandLine().toUserOutput()),
                           StdErrFormat);
             qrcPath.removeFile();
             return {};
         }
         if (rccProcess.exitCode() != 0) {
             appendMessage(Tr::tr("Creating file for %1 failed. \"%2\" (exit code %3).").
-                          arg(apkInfo()->name).
+                          arg(apkName()).
                           arg(rccProcess.commandLine().toUserOutput()).
                           arg(rccProcess.exitCode()),
 
@@ -440,9 +447,9 @@ bool AndroidQmlPreviewWorker::uploadPreviewArtefacts()
     if (!qresPath.exists())
         return false;
 
-    runAdbShellCommand({"mkdir", "-p", apkInfo()->uploadDir});
+    runAdbShellCommand({"mkdir", "-p", apkUploadDir()});
     const SdkToolResult res = runAdbCommand({"push", qresPath.resolvePath(QString()).toString(),
-                                             apkInfo()->uploadDir});
+                                             apkUploadDir()});
     if (!res.success()) {
         appendMessage(res.stdOut(), ErrorMessageFormat);
         if (res.stdOut().contains("Permission denied")) {
@@ -457,21 +464,21 @@ bool AndroidQmlPreviewWorker::uploadPreviewArtefacts()
 bool AndroidQmlPreviewWorker::startPreviewApp()
 {
     stopPreviewApp();
-    appendMessage(Tr::tr("Starting %1.").arg(apkInfo()->name), NormalMessageFormat);
-    const QDir destDir(apkInfo()->uploadDir);
+    appendMessage(Tr::tr("Starting %1.").arg(apkName()), NormalMessageFormat);
+    const QDir destDir(apkUploadDir());
     const QString qmlrcPath = destDir.filePath(m_uploadInfo.uploadPackage.baseName()
                                                + packageSuffix);
     const QStringList envVars = m_rc->aspect<EnvironmentAspect>()->environment.toStringList();
 
     const QStringList command {
         "am", "start",
-        "-n", apkInfo()->activityId,
+        "-n", apkActivityId(),
         "-e", "extraappparams", QLatin1String(qmlrcPath.toUtf8().toBase64()),
         "-e", "extraenvvars", QLatin1String(envVars.join('\t').toUtf8().toBase64())
     };
     const SdkToolResult result = runAdbShellCommand(command);
     if (result.success())
-        appendMessage(Tr::tr("%1 is running.").arg(apkInfo()->name), NormalMessageFormat);
+        appendMessage(Tr::tr("%1 is running.").arg(apkName()), NormalMessageFormat);
     else
         appendMessage(result.stdErr(), ErrorMessageFormat);
 
@@ -480,7 +487,7 @@ bool AndroidQmlPreviewWorker::startPreviewApp()
 
 bool AndroidQmlPreviewWorker::stopPreviewApp()
 {
-    const QStringList command{"am", "force-stop", apkInfo()->appId};
+    const QStringList command{"am", "force-stop", appId()};
     const SdkToolResult res = runAdbShellCommand(command);
     if (!res.success())
         appendMessage(res.stdErr(), ErrorMessageFormat);
