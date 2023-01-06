@@ -55,7 +55,7 @@ public:
 
 NimRunConfigurationFactory::NimRunConfigurationFactory() : FixedRunConfigurationFactory(QString())
 {
-    registerRunConfiguration<NimRunConfiguration>("Nim.NimRunConfiguration");
+    registerRunConfiguration<NimRunConfiguration>(Constants::C_NIMRUNCONFIGURATION_ID);
     addSupportedProjectType(Constants::C_NIMPROJECT_ID);
 }
 
