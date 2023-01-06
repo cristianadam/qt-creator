@@ -14,6 +14,9 @@ const char MENU_ID[] = "BareMetal.Menu";
 
 const char DEBUG_SERVER_PROVIDERS_SETTINGS_ID[] = "EE.BareMetal.DebugServerProvidersOptions";
 
+const char BAREMETAL_CUSTOMRUNCONFIG_ID[] = "BareMetalCustom";
+const char BAREMETAL_RUNCONFIG_ID[] = "BareMetal";
+
 // GDB Debugger Server Provider Ids.
 const char GDBSERVER_OPENOCD_PROVIDER_ID[] = "BareMetal.GdbServerProvider.OpenOcd";
 const char GDBSERVER_JLINK_PROVIDER_ID[] = "BareMetal.GdbServerProvider.JLink";
