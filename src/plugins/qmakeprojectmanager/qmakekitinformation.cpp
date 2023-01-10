@@ -15,10 +15,12 @@
 #include <utils/algorithm.h>
 #include <utils/guard.h>
 #include <utils/layoutbuilder.h>
+#include <utils/progressindicator.h>
 #include <utils/qtcassert.h>
+#include <utils/runextensions.h>
 
+#include <QComboBox>
 #include <QDir>
-#include <QLineEdit>
 
 using namespace ProjectExplorer;
 using namespace Utils;
@@ -30,38 +32,88 @@ class QmakeKitAspectWidget final : public KitAspectWidget
 {
 public:
     QmakeKitAspectWidget(Kit *k, const KitAspect *ki)
-        : KitAspectWidget(k, ki), m_lineEdit(createSubWidget<QLineEdit>())
+        : KitAspectWidget(k, ki)
+        , m_combo(createSubWidget<QComboBox>())
+        , m_progressIndicator(createSubWidget<ProgressIndicator>(ProgressIndicatorSize::Small))
     {
+        connect(&m_mkspecFuture, &QFutureWatcher<QStringList>::finished, this, [this]() {
+            const QString current = m_combo->currentText();
+            m_combo->clear();
+            m_combo->addItems(m_mkspecFuture.result());
+            m_combo->setCurrentText(current);
+            m_progressIndicator->hide();
+        });
+
+        m_combo->setEditable(true);
+        m_combo->setToolTip(ki->description());
+        m_progressIndicator->setToolTip(Tr::tr("Updating mkspec list..."));
+        m_progressIndicator->hide();
+
         refresh(); // set up everything according to kit
-        m_lineEdit->setToolTip(ki->description());
-        connect(m_lineEdit, &QLineEdit::textEdited, this, &QmakeKitAspectWidget::mkspecWasChanged);
+        connect(m_combo,
+                &QComboBox::currentTextChanged,
+                this,
+                &QmakeKitAspectWidget::mkspecWasChanged);
     }
 
-    ~QmakeKitAspectWidget() override { delete m_lineEdit; }
+    ~QmakeKitAspectWidget() override { delete m_combo; }
 
 private:
     void addToLayout(LayoutBuilder &builder) override
     {
-        addMutableAction(m_lineEdit);
-        builder.addItem(m_lineEdit);
+        addMutableAction(m_combo);
+
+        builder.addItem(m_combo);
+        builder.addItem(m_progressIndicator);
     }
 
-    void makeReadOnly() override { m_lineEdit->setEnabled(false); }
+    void makeReadOnly() override { m_combo->setEnabled(false); }
 
     void refresh() override
     {
+        const QString x = QDir::toNativeSeparators(QmakeKitAspect::mkspec(m_kit));
+        const QtSupport::QtVersion *version = QtSupport::QtKitAspect::qtVersion(m_kit);
+        if (version) {
+            m_progressIndicator->show();
+            const Utils::FilePath mkspecsDir = version->mkspecsPath();
+            const QFuture<QList<QString>> f = Utils::runAsync([mkspecsDir]() {
+                // Find folders in mkspec dir ...
+                Utils::FilePaths mkspecDirs = mkspecsDir.dirEntries(QDir::Dirs
+                                                                    | QDir::NoDotAndDotDot);
+
+                // ... that contain a qmake.conf file
+                mkspecDirs = Utils::filtered(mkspecDirs, [](const FilePath &path) {
+                    return (path / "qmake.conf").exists();
+                });
+
+                // ... get their names
+                QStringList mkspecs = Utils::transform(mkspecDirs, [](const FilePath &path) {
+                    return path.fileName();
+                });
+
+                // ... and sort them
+                mkspecs.sort();
+                mkspecs.prepend("");
+
+                return mkspecs;
+            });
+
+            m_mkspecFuture.setFuture(f);
+        }
         if (!m_ignoreChanges.isLocked())
-            m_lineEdit->setText(QDir::toNativeSeparators(QmakeKitAspect::mkspec(m_kit)));
+            m_combo->setCurrentText(x);
     }
 
-    void mkspecWasChanged(const QString &text)
+    void mkspecWasChanged()
     {
         const GuardLocker locker(m_ignoreChanges);
-        QmakeKitAspect::setMkspec(m_kit, text, QmakeKitAspect::MkspecSource::User);
+        QmakeKitAspect::setMkspec(m_kit, m_combo->currentText(), QmakeKitAspect::MkspecSource::User);
     }
 
-    QLineEdit *m_lineEdit = nullptr;
+    QComboBox *m_combo = nullptr;
+    ProgressIndicator *m_progressIndicator = nullptr;
     Guard m_ignoreChanges;
+    QFutureWatcher<QStringList> m_mkspecFuture;
 };
 
 
