@@ -774,9 +774,9 @@ namespace ADS
             return false;
 
         // Remove corresponding workspace file
-        QFile fi(workspaceNameToFilePath(workspace).toString());
-        if (fi.exists()) {
-            if (fi.remove()) {
+        const Utils::FilePath file = workspaceNameToFilePath(workspace);
+        if (file.exists()) {
+            if (file.removeFile()) {
                 d->m_workspaces.removeOne(workspace);
                 emit workspacesRemoved();
                 emit workspaceListChanged();
@@ -798,12 +798,13 @@ namespace ADS
         if (!d->m_workspaces.contains(original))
             return false;
 
-        QFile fi(workspaceNameToFilePath(original).toString());
+        const Utils::FilePath originalPath = workspaceNameToFilePath(original);
+        const Utils::FilePath clonePath = workspaceNameToFilePath(clone);
+
         // If the file does not exist, we can still clone
-        if (!fi.exists() || fi.copy(workspaceNameToFilePath(clone).toString())) {
+        if (!originalPath.exists() || originalPath.copyFile(clonePath)) {
             d->m_workspaces.insert(1, clone);
-            d->m_workspaceDateTimes
-                .insert(clone, workspaceNameToFilePath(clone).lastModified());
+            d->m_workspaceDateTimes.insert(clone, clonePath.lastModified());
             emit workspaceListChanged();
             return true;
         }
@@ -828,12 +829,12 @@ namespace ADS
 
         Utils::FilePath fileName = workspaceNameToFilePath(workspace);
 
-        if (!QFile::remove(fileName.toString()))
+        if (!fileName.removeFile())
             return false;
 
         QDir presetsDir(d->m_workspacePresetsPath);
         bool result = QFile::copy(presetsDir.filePath(workspaceNameToFileName(workspace)),
-                                  fileName.toString());
+                                  fileName.toFSPathString());
         if (result)
             d->m_workspaceDateTimes.insert(workspace, QDateTime::currentDateTime());
 
@@ -914,15 +915,18 @@ namespace ADS
         // Check if the workspace exists
         Utils::FilePath workspaceFilePath = workspaceNameToFilePath(workspace);
         if (!workspaceFilePath.exists()) {
-           qCInfo(adsLog) << QString("Workspace doesn't exist '%1'").arg(workspaceFilePath.toString());
-           return;
+            qCInfo(adsLog) << QString("Workspace doesn't exist '%1'")
+                                  .arg(workspaceFilePath.toUserOutput());
+            return;
         }
 
         // Finally copy the workspace to the target
-        QFile workspaceFile(workspaceFilePath.toString());
+        QFile workspaceFile(workspaceFilePath.toFSPathString());
         if (!workspaceFile.copy(targetFileInfo.absoluteFilePath())) {
-            qCInfo(adsLog) << QString("Could not copy '%1' to '%2' error: %3").arg(
-                workspace, workspaceFilePath.toString(), workspaceFile.errorString());
+            qCInfo(adsLog) << QString("Could not copy '%1' to '%2' error: %3")
+                                  .arg(workspace,
+                                       workspaceFilePath.toUserOutput(),
+                                       workspaceFile.errorString());
         }
     }
 
@@ -957,21 +961,25 @@ namespace ADS
 
     QByteArray DockManager::loadWorkspace(const QString &workspace) const
     {
-        QByteArray data;
         Utils::FilePath fileName = workspaceNameToFilePath(workspace);
         if (fileName.exists()) {
-            QFile file(fileName.toString());
-            if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            const Utils::expected_str<QByteArray> data = fileName.fileContents();
+
+            if (!data) {
                 QMessageBox::warning(parentWidget(),
                                      tr("Cannot Restore Workspace"),
                                      tr("Could not restore workspace %1")
                                          .arg(fileName.toUserOutput()));
-                return data;
+
+                qCWarning(adsLog) << QString("Could not restore workspace %1: %2")
+                                         .arg(fileName.toUserOutput())
+                                         .arg(data.error());
+
+                return {};
             }
-            data = file.readAll();
-            file.close();
+            return data.value();
         }
-        return data;
+        return {};
     }
 
     void DockManager::syncWorkspacePresets()
