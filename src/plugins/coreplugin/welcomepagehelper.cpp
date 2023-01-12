@@ -148,8 +148,8 @@ QVariant ListModel::data(const QModelIndex &index, int role) const
         QPixmap pixmap;
         if (QPixmapCache::find(item->imageUrl, &pixmap))
             return pixmap;
-        if (pixmap.isNull())
-            pixmap = fetchPixmapAndUpdatePixmapCache(item->imageUrl);
+        if (pixmap.isNull() && m_fetchPixmapAndUpdatePixmapCache)
+            pixmap = m_fetchPixmapAndUpdatePixmapCache(item->imageUrl);
         return pixmap;
     }
     case ItemTagsRole:
@@ -157,6 +157,11 @@ QVariant ListModel::data(const QModelIndex &index, int role) const
     default:
         return QVariant();
     }
+}
+
+void ListModel::setPixmapFunction(const PixmapFunction &fetchPixmapAndUpdatePixmapCache)
+{
+    m_fetchPixmapAndUpdatePixmapCache = fetchPixmapAndUpdatePixmapCache;
 }
 
 ListModelFilter::ListModelFilter(ListModel *sourceModel, QObject *parent) :
