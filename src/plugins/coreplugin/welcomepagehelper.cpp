@@ -142,9 +142,7 @@ ListModel::ListModel(QObject *parent)
 
 ListModel::~ListModel()
 {
-    if (m_ownsItems)
-        qDeleteAll(m_items);
-    m_items.clear();
+    clear();
 }
 
 void ListModel::appendItems(const QList<ListItem *> &items)
@@ -157,6 +155,15 @@ void ListModel::appendItems(const QList<ListItem *> &items)
 const QList<ListItem *> ListModel::items() const
 {
     return m_items;
+}
+
+void ListModel::clear()
+{
+    beginResetModel();
+    if (m_ownsItems)
+        qDeleteAll(m_items);
+    m_items.clear();
+    endResetModel();
 }
 
 int ListModel::rowCount(const QModelIndex &) const
@@ -693,6 +700,7 @@ ListModel *SectionedGridView::addSection(const Section &section, const QList<Lis
     const auto it = m_gridViews.insert(section, gridView);
 
     auto sectionLabel = new QLabel(section.name);
+    m_sectionLabels.append(sectionLabel);
     sectionLabel->setContentsMargins(0, Core::WelcomePageHelpers::ItemGap, 0, 0);
     sectionLabel->setFont(Core::WelcomePageHelpers::brandFont());
     auto scrollArea = qobject_cast<QScrollArea *>(widget(0));
@@ -709,6 +717,18 @@ ListModel *SectionedGridView::addSection(const Section &section, const QList<Lis
     allProducts->appendItems(items);
 
     return model;
+}
+
+void SectionedGridView::clear()
+{
+    auto allProducts = static_cast<ListModel *>(m_filteredAllItemsModel->sourceModel());
+    allProducts->clear();
+    qDeleteAll(m_sectionModels);
+    qDeleteAll(m_sectionLabels);
+    qDeleteAll(m_gridViews);
+    m_sectionModels.clear();
+    m_sectionLabels.clear();
+    m_gridViews.clear();
 }
 
 } // namespace Core
