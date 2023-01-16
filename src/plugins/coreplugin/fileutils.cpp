@@ -4,6 +4,7 @@
 #include "fileutils.h"
 
 #include "coreconstants.h"
+#include "coreplugintr.h"
 #include "documentmanager.h"
 #include "editormanager/editormanager.h"
 #include "foldernavigationwidget.h"
@@ -47,14 +48,11 @@ namespace Core {
 // Show error with option to open settings.
 static void showGraphicalShellError(QWidget *parent, const QString &app, const QString &error)
 {
-    const QString title = QApplication::translate("Core::Internal",
-                                                  "Launching a file browser failed");
-    const QString msg = QApplication::translate("Core::Internal",
-                                                "Unable to start the file manager:\n\n%1\n\n").arg(app);
+    const QString title = Tr::tr("Launching a file browser failed");
+    const QString msg = Tr::tr("Unable to start the file manager:\n\n%1\n\n").arg(app);
     QMessageBox mbox(QMessageBox::Warning, title, msg, QMessageBox::Close, parent);
     if (!error.isEmpty())
-        mbox.setDetailedText(QApplication::translate("Core::Internal",
-                                                     "\"%1\" returned the following error:\n\n%2").arg(app, error));
+        mbox.setDetailedText(Tr::tr("\"%1\" returned the following error:\n\n%2").arg(app, error));
     QAbstractButton *settingsButton = mbox.addButton(Core::ICore::msgShowOptionsDialog(),
                                                      QMessageBox::ActionRole);
     mbox.exec();
@@ -70,10 +68,8 @@ void FileUtils::showInGraphicalShell(QWidget *parent, const FilePath &pathIn)
         const FilePath explorer = Environment::systemEnvironment().searchInPath(QLatin1String("explorer.exe"));
         if (explorer.isEmpty()) {
             QMessageBox::warning(parent,
-                                 QApplication::translate("Core::Internal",
-                                                         "Launching Windows Explorer Failed"),
-                                 QApplication::translate("Core::Internal",
-                                                         "Could not find explorer.exe in path to launch Windows Explorer."));
+                                 Tr::tr("Launching Windows Explorer Failed"),
+                                 Tr::tr("Could not find explorer.exe in path to launch Windows Explorer."));
             return;
         }
         QStringList param;
@@ -184,37 +180,37 @@ void FileUtils::openTerminal(const FilePath &path, const Environment &env)
 
 QString FileUtils::msgFindInDirectory()
 {
-    return QApplication::translate("Core::Internal", "Find in This Directory...");
+    return Tr::tr("Find in This Directory...");
 }
 
 QString FileUtils::msgFileSystemAction()
 {
-    return QApplication::translate("Core::Internal", "Show in File System View");
+    return Tr::tr("Show in File System View");
 }
 
 QString FileUtils::msgGraphicalShellAction()
 {
     if (HostOsInfo::isWindowsHost())
-        return QApplication::translate("Core::Internal", "Show in Explorer");
+        return Tr::tr("Show in Explorer");
     if (HostOsInfo::isMacHost())
-        return QApplication::translate("Core::Internal", "Show in Finder");
-    return QApplication::translate("Core::Internal", "Show Containing Folder");
+        return Tr::tr("Show in Finder");
+    return Tr::tr("Show Containing Folder");
 }
 
 QString FileUtils::msgTerminalHereAction()
 {
     if (HostOsInfo::isWindowsHost())
-        return QApplication::translate("Core::Internal", "Open Command Prompt Here");
-    return QApplication::translate("Core::Internal", "Open Terminal Here");
+        return Tr::tr("Open Command Prompt Here");
+    return Tr::tr("Open Terminal Here");
 }
 
 QString FileUtils::msgTerminalWithAction()
 {
     if (HostOsInfo::isWindowsHost())
-        return QApplication::translate("Core::Internal", "Open Command Prompt With",
-                        "Opens a submenu for choosing an environment, such as \"Run Environment\"");
-    return QApplication::translate("Core::Internal", "Open Terminal With",
-                        "Opens a submenu for choosing an environment, such as \"Run Environment\"");
+        return Tr::tr("Open Command Prompt With",
+                      "Opens a submenu for choosing an environment, such as \"Run Environment\"");
+    return Tr::tr("Open Terminal With",
+                  "Opens a submenu for choosing an environment, such as \"Run Environment\"");
 }
 
 void FileUtils::removeFiles(const FilePaths &filePaths, bool deleteFromFS)
@@ -232,8 +228,7 @@ void FileUtils::removeFiles(const FilePaths &filePaths, bool deleteFromFS)
             continue;
         if (!file.remove()) {
             MessageManager::writeDisrupting(
-                QCoreApplication::translate("Core::Internal", "Failed to remove file \"%1\".")
-                    .arg(fp.toUserOutput()));
+                Tr::tr("Failed to remove file \"%1\".").arg(fp.toUserOutput()));
         }
     }
 }
@@ -270,8 +265,7 @@ void FileUtils::updateHeaderFileGuardIfApplicable(const Utils::FilePath &oldFile
     if (headerUpdateSuccess)
         return;
     MessageManager::writeDisrupting(
-                QCoreApplication::translate("Core::FileUtils",
-                                            "Failed to rename the include guard in file \"%1\".")
+                Tr::tr("Failed to rename the include guard in file \"%1\".")
                 .arg(newFilePath.toUserOutput()));
 }
 
