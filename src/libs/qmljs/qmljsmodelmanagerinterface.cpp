@@ -454,8 +454,7 @@ static QSet<Utils::FilePath> generatedQrc(
 {
     QSet<Utils::FilePath> res;
     for (const auto &pInfo : projectInfos) {
-        for (const auto &generatedQrcFile: pInfo.generatedQrcFiles)
-            res.insert(generatedQrcFile);
+        res.unite({pInfo.generatedQrcFiles.begin(), pInfo.generatedQrcFiles.end()});
     }
     return res;
 }
@@ -475,24 +474,20 @@ void ModelManagerInterface::iterateQrcFiles(
             Utils::sort(pInfos, &pInfoLessThanAll);
     }
 
-    QSet<Utils::FilePath> pathsChecked;
+    QSet<Utils::FilePath> allQrcs = generatedQrc(pInfos);
+
     for (const ModelManagerInterface::ProjectInfo &pInfo : std::as_const(pInfos)) {
-        QList<Utils::FilePath> qrcFilePaths;
         if (resources == ActiveQrcResources)
-            qrcFilePaths = pInfo.activeResourceFiles;
+            allQrcs.unite({pInfo.activeResourceFiles.begin(), pInfo.activeResourceFiles.end()});
         else
-            qrcFilePaths = pInfo.allResourceFiles;
-        for (const Utils::FilePath &p : generatedQrc({pInfo}))
-            qrcFilePaths.append(p);
-        for (const Utils::FilePath &qrcFilePath : std::as_const(qrcFilePaths)) {
-            if (pathsChecked.contains(qrcFilePath))
-                continue;
-            pathsChecked.insert(qrcFilePath);
-            QrcParser::ConstPtr qrcFile = m_qrcCache.parsedPath(qrcFilePath.toString());
-            if (qrcFile.isNull())
-                continue;
-            callback(qrcFile);
-        }
+            allQrcs.unite({pInfo.allResourceFiles.begin(), pInfo.allResourceFiles.end()});
+    }
+
+    for (const Utils::FilePath &qrcFilePath : std::as_const(allQrcs)) {
+        QrcParser::ConstPtr qrcFile = m_qrcCache.parsedPath(qrcFilePath.toFSPathString());
+        if (qrcFile.isNull())
+            continue;
+        callback(qrcFile);
     }
 }
 
