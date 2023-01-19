@@ -285,12 +285,15 @@ void TestResultsPane::addOutputLine(const QByteArray &outputLine, OutputChannel 
             : m_stdErrHandler.parseText(formattedText);
 
     QTextCursor cursor = m_textOutput->textCursor();
+    const int oldPosition = cursor.position();
     cursor.beginEditBlock();
+    cursor.movePosition(QTextCursor::End);
     for (auto formattedText : formatted) {
         checkAndFineTuneColors(&formattedText.format);
         cursor.insertText(formattedText.text, formattedText.format);
     }
     cursor.insertText("\n");
+    cursor.setPosition(oldPosition);
     cursor.endEditBlock();
 }
 
