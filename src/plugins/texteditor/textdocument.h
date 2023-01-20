@@ -41,6 +41,15 @@ class TypingSettings;
 
 using TextMarks = QList<TextMark *>;
 
+struct TemporaryBlock
+{
+    TemporaryBlock(const TemporaryBlock &other) = default;
+    QString content;
+    QPoint insertLocation;
+    int selectionStart = 0;
+    int selectionEnd = 0;
+};
+
 class TEXTEDITOR_EXPORT TextDocument : public Core::BaseTextDocument
 {
     Q_OBJECT
@@ -143,6 +152,10 @@ public:
 
     static QAction *createDiffAgainstCurrentFileAction(QObject *parent,
         const std::function<Utils::FilePath()> &filePath);
+
+    QTextCursor setTemporaryBlock(TemporaryBlock block);
+    void removeTemporaryBlock();
+    std::optional<TemporaryBlock> temporaryBlock() const;
 
 #ifdef WITH_TESTS
     void setSilentReload();

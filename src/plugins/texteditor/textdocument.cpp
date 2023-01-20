@@ -84,6 +84,8 @@ public:
     bool m_silentReload = false;
 
     TextMarks m_marksCache; // Marks not owned
+    std::optional<TemporaryBlock> m_temporaryBlock;
+
     Utils::Guard m_modificationChangedGuard;
 };
 
@@ -371,6 +373,52 @@ QAction *TextDocument::createDiffAgainstCurrentFileAction(
     auto diffAction = new QAction(Tr::tr("Diff Against Current File"), parent);
     QObject::connect(diffAction, &QAction::triggered, parent, diffAgainstCurrentFile);
     return diffAction;
+}
+
+QTextCursor TextDocument::setTemporaryBlock(TemporaryBlock block)
+{
+    QTextCursor insertionCursor(this->document());
+
+    QTextBlock b = d->m_document.findBlockByNumber(block.insertLocation.y());
+    const auto bp = b.position();
+    insertionCursor.setPosition(bp + block.insertLocation.x());
+    insertionCursor.insertText(block.content);
+    insertionCursor.setPosition(bp + block.insertLocation.x());
+    insertionCursor.movePosition(QTextCursor::NextCharacter,
+                                 QTextCursor::KeepAnchor,
+                                 block.content.size());
+
+    block.selectionStart = insertionCursor.selectionStart();
+    block.selectionEnd = insertionCursor.selectionEnd();
+
+    // Set this at the end to avoid the block being removed.
+    d->m_temporaryBlock = block;
+    return insertionCursor;
+}
+
+void TextDocument::removeTemporaryBlock()
+{
+    /*
+    if (!d->m_temporaryBlock)
+        return;
+    QTextCursor insertionCursor(this->document());
+
+    const auto block = d->m_temporaryBlock.value();
+
+    QTextBlock b = d->m_document.findBlockByNumber(block.insertLocation.y());
+    const auto bp = b.position();
+    insertionCursor.setPosition(bp + block.insertLocation.x());
+    insertionCursor.movePosition(QTextCursor::NextCharacter,
+                                 QTextCursor::KeepAnchor,
+                                 block.content.size() - 1);
+    insertionCursor.insertText("");
+*/
+    d->m_temporaryBlock.reset();
+}
+
+std::optional<TemporaryBlock> TextDocument::temporaryBlock() const
+{
+    return d->m_temporaryBlock;
 }
 
 #ifdef WITH_TESTS
