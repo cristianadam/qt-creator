@@ -5,8 +5,10 @@ ButtonGroup 1.0 ButtonGroup.qml
 ButtonRow 1.0 ButtonRow.qml
 CheckBox 1.0 CheckBox.qml
 CheckIndicator 1.0 CheckIndicator.qml
+CheckIndicatorLarge 1.0 CheckIndicatorLarge.qml
 ComboBox 1.0 ComboBox.qml
 ComboBoxInput 1.0 ComboBoxInput.qml
+ComboBoxInputLarge 1.0 ComboBoxInputLarge.qml
 ContextMenu 1.0 ContextMenu.qml
 Dialog 1.0 Dialog.qml
 DialogButton 1.0 DialogButton.qml
@@ -49,3 +51,5 @@ TextField 1.0 TextField.qml
 ToolTip 1.0 ToolTip.qml
 TranslationIndicator 1.0 TranslationIndicator.qml
 VerticalScrollBar 1.0 VerticalScrollBar.qml
+TopLevelComboBox 1.0 TopLevelComboBox.qml
+TopLevelComboBoxLarge 1.0 TopLevelComboBoxLarge.qml
