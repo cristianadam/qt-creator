@@ -344,7 +344,7 @@ static QList<int> availableNdkPlatformsLegacy(const FilePath &ndkLocation)
                     filePath.toString()
                         .mid(filePath.path().lastIndexOf('-') + 1)
                         .toInt());
-                return true;
+                return FilePath::ContinueIteration;
             },
             {{"android-*"}, QDir::Dirs});
 

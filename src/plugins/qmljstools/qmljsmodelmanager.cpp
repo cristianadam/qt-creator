@@ -86,7 +86,7 @@ static void findAllQrcFiles(const FilePath &filePath, FilePaths &out)
     filePath.iterateDirectory(
         [&out](const FilePath &path) {
             out.append(path.canonicalPath());
-            return true;
+            return FilePath::ContinueIteration;
         },
         {{"*.qrc"}, QDir::Files});
 }

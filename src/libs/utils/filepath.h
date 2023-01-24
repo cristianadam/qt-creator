@@ -158,10 +158,11 @@ public:
     [[nodiscard]] FilePath onDevice(const FilePath &deviceTemplate) const;
     [[nodiscard]] FilePath withNewPath(const QString &newPath) const;
 
+    enum ContinuationPolicy { StopIteration, ContinueIteration };
     using IterateDirCallback
         = std::variant<
-            std::function<bool(const FilePath &item)>,
-            std::function<bool(const FilePath &item, const FilePathInfo &info)>
+            std::function<ContinuationPolicy(const FilePath &item)>,
+            std::function<ContinuationPolicy(const FilePath &item, const FilePathInfo &info)>
           >;
 
     void iterateDirectory(

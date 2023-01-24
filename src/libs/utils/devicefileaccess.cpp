@@ -528,12 +528,12 @@ void DesktopDeviceFileAccess::iterateDirectory(const FilePath &filePath,
     QDirIterator it(filePath.path(), filter.nameFilters, filter.fileFilters, filter.iteratorFlags);
     while (it.hasNext()) {
         const FilePath path = FilePath::fromString(it.next());
-        bool res = false;
+        FilePath::ContinuationPolicy res;
         if (callBack.index() == 0)
             res = std::get<0>(callBack)(path);
         else
             res = std::get<1>(callBack)(path, path.filePathInfo());
-        if (!res)
+        if (res == FilePath::StopIteration)
             return;
     }
 }
