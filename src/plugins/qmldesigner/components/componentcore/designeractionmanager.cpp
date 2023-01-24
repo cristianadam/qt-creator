@@ -1670,12 +1670,12 @@ void DesignerActionManager::createDefaultDesignerActions()
         &selectFlowEffect,
         &isFlowTransitionItemWithEffect));
 
-    addDesignerAction(new ActionGroup(
-                          stackedContainerCategoryDisplayName,
-                          stackedContainerCategory,
-                          {},
-                          Priorities::StackedContainerCategory,
-                          &isStackedContainer));
+    addDesignerAction(new ActionGroup(stackedContainerCategoryDisplayName,
+                                      stackedContainerCategory,
+                                      {},
+                                      Priorities::StackedContainerCategory,
+                                      &isStackedContainer,
+                                      &isStackedContainer));
 
     addDesignerAction(new ModelNodeContextMenuAction(
                           removePositionerCommandId,
