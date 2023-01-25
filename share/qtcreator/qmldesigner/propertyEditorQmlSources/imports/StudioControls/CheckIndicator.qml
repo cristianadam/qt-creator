@@ -23,6 +23,8 @@ Rectangle {
     color: control.style.background.idle
     border.width: 0
 
+    signal released
+
     Connections {
         target: control.__parentPopup
         function onClosed() { control.checked = false }
@@ -33,16 +35,25 @@ Rectangle {
         id: mouseArea
         anchors.fill: parent
         hoverEnabled: true
+
+        property bool isOpenedOnPressed: false
+
+        onPressed: mouseArea.isOpenedOnPressed = control.__parentPopup.opened
+        onReleased: control.released()
         onClicked: {
             if (control.__parentControl.activeFocus)
                 control.__parentControl.focus = false
 
-            if (control.__parentPopup.opened) {
+            if (control.__parentPopup.opened && mouseArea.isOpenedOnPressed) {
                 control.__parentPopup.close()
             } else {
-                control.__parentPopup.open()
-                control.__parentPopup.forceActiveFocus()
+                if (!mouseArea.isOpenedOnPressed) {
+                    control.__parentPopup.open()
+                    control.__parentPopup.forceActiveFocus()
+                }
             }
+
+            mouseArea.isOpenedOnPressed = false
         }
     }
 
