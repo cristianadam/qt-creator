@@ -49,6 +49,7 @@ Rectangle {
             anchors.left: parent.left
             anchors.leftMargin: 10
             buttonIcon: StudioTheme.Constants.topToolbar_home
+            tooltip: qsTr("Switch to Welcome Mode")
 
             onClicked: backend.triggerModeChange()
         }
@@ -66,6 +67,7 @@ Rectangle {
             }
 
             onClicked: backend.runProject()
+            tooltip: qsTr("Run Project")
         }
 
         ToolbarButton {
