@@ -47,6 +47,13 @@ T.ComboBox {
         y: control.style.borderWidth
         width: control.style.squareControlSize.width - control.style.borderWidth
         height: control.style.squareControlSize.height - control.style.borderWidth * 2
+
+        property bool shouldClose: false
+
+        onReleased: {
+            if (popupIndicator.shouldClose)
+                comboBoxPopup.close()
+        }
     }
 
     contentItem: ComboBoxInput {
@@ -87,10 +94,12 @@ T.ComboBox {
             control.menuDelegate.focus = true
         }
 
+        onOpened: popupIndicator.shouldClose = false
+
         onAboutToHide: window.hide()
     }
 
-    // Close popup when application goes to background
+    // Close popup when application becomes inactive
     Connections {
         target: Qt.application
         function onStateChanged() {
@@ -110,8 +119,14 @@ T.ComboBox {
         color: "transparent"
 
         onActiveChanged: {
-            if (!window.active)
+            if (!window.active) {
+                if (popupIndicator.pressed) {
+                    popupIndicator.shouldClose = true
+                    return
+                }
+
                 comboBoxPopup.close()
+            }
         }
     }
 
@@ -120,6 +135,17 @@ T.ComboBox {
         y: 0
         width: control.width
         overlap: 0
+
+        onActiveFocusChanged: {
+            if (!textEditMenu.activeFocus) {
+                if (popupIndicator.pressed) {
+                    popupIndicator.shouldClose = true
+                    return
+                }
+
+                comboBoxPopup.close()
+            }
+        }
 
         Repeater {
             model: control.model
