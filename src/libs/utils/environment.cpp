@@ -19,13 +19,46 @@ Q_GLOBAL_STATIC_WITH_ARGS(Environment, staticSystemEnvironment,
                           (QProcessEnvironment::systemEnvironment().toStringList()))
 Q_GLOBAL_STATIC(QVector<EnvironmentProvider>, environmentProviders)
 
+Environment::Environment(OsType osType)
+    : m_dict(osType)
+{}
+
+Environment::Environment(const QStringList &env, OsType osType)
+    : m_dict(osType)
+{
+    m_changeItems.append(NameValueDictionary(env, osType));
+}
+
+Environment::Environment(const NameValuePairs &nameValues)
+{
+    m_changeItems.append(NameValueDictionary(nameValues));
+}
+
+Environment::Environment(const NameValueDictionary &dict)
+{
+    m_changeItems.append(dict);
+}
+
 NameValueItems Environment::diff(const Environment &other, bool checkAppendPrepend) const
 {
+    resolve();
+    other.resolve();
     return m_dict.diff(other.m_dict, checkAppendPrepend);
+}
+
+void Environment::setCombineWithDeviceEnvironment(bool combine)
+{
+    m_combineWithDeviceEnvironment = combine;
+}
+
+bool Environment::combineWithDeviceEnvironment() const
+{
+    return m_combineWithDeviceEnvironment;
 }
 
 Environment::FindResult Environment::find(const QString &name) const
 {
+    resolve();
     const auto it = m_dict.constFind(name);
     if (it == m_dict.constEnd())
         return {};
@@ -38,13 +71,58 @@ void Environment::forEachEntry(const std::function<void(const QString &, const Q
         callBack(it.key().name, it.value().first, it.value().second);
 }
 
+bool Environment::operator==(const Environment &second) const
+{
+    resolve();
+    second.resolve();
+    return m_dict == second.m_dict;
+}
+
+bool Environment::operator!=(const Environment &second) const
+{
+    resolve();
+    second.resolve();
+    return m_dict != second.m_dict;
+}
+
+QString Environment::value(const QString &key) const
+{
+    resolve();
+    return m_dict.value(key);
+}
+
+QString Environment::value_or(const QString &key, const QString &defaultValue) const
+{
+    resolve();
+    return m_dict.hasKey(key) ? m_dict.value(key) : defaultValue;
+}
+
+bool Environment::hasKey(const QString &key) const
+{
+    resolve();
+    return m_dict.hasKey(key);
+}
+
 bool Environment::hasChanges() const
 {
+    resolve();
     return m_dict.size() != 0;
+}
+
+OsType Environment::osType() const
+{
+    return m_dict.m_osType;
+}
+
+QStringList Environment::toStringList() const
+{
+    resolve();
+    return m_dict.toStringList();
 }
 
 QProcessEnvironment Environment::toProcessEnvironment() const
 {
+    resolve();
     QProcessEnvironment result;
     for (auto it = m_dict.m_values.constBegin(); it != m_dict.m_values.constEnd(); ++it) {
         if (it.value().second)
@@ -55,48 +133,30 @@ QProcessEnvironment Environment::toProcessEnvironment() const
 
 void Environment::appendOrSetPath(const FilePath &value)
 {
-    QTC_CHECK(value.osType() == osType());
+    QTC_CHECK(value.osType() == m_dict.m_osType);
     if (value.isEmpty())
         return;
-    appendOrSet("PATH", value.nativePath(),
-                QString(OsSpecificAspects::pathListSeparator(osType())));
+    appendOrSet("PATH", value.nativePath(), OsSpecificAspects::pathListSeparator(osType()));
 }
 
 void Environment::prependOrSetPath(const FilePath &value)
 {
-    QTC_CHECK(value.osType() == osType());
+    QTC_CHECK(value.osType() == m_dict.m_osType);
     if (value.isEmpty())
         return;
-    prependOrSet("PATH", value.nativePath(),
-                 QString(OsSpecificAspects::pathListSeparator(osType())));
+    prependOrSet("PATH", value.nativePath(), OsSpecificAspects::pathListSeparator(osType()));
 }
 
 void Environment::appendOrSet(const QString &key, const QString &value, const QString &sep)
 {
-    QTC_ASSERT(!key.contains('='), return );
-    const auto it = m_dict.findKey(key);
-    if (it == m_dict.m_values.end()) {
-        m_dict.m_values.insert(DictKey(key, m_dict.nameCaseSensitivity()), {value, true});
-    } else {
-        // Append unless it is already there
-        const QString toAppend = sep + value;
-        if (!it.value().first.endsWith(toAppend))
-            it.value().first.append(toAppend);
-    }
+    m_dict.clear();
+    m_changeItems.append(Item{std::in_place_index_t<AppendOrSet>(), key, value, sep});
 }
 
 void Environment::prependOrSet(const QString &key, const QString &value, const QString &sep)
 {
-    QTC_ASSERT(!key.contains('='), return );
-    const auto it = m_dict.findKey(key);
-    if (it == m_dict.m_values.end()) {
-        m_dict.m_values.insert(DictKey(key, m_dict.nameCaseSensitivity()), {value, true});
-    } else {
-        // Prepend unless it is already there
-        const QString toPrepend = value + sep;
-        if (!it.value().first.startsWith(toPrepend))
-            it.value().first.prepend(toPrepend);
-    }
+    m_dict.clear();
+    m_changeItems.append(Item{std::in_place_index_t<PrependOrSet>(), key, value, sep});
 }
 
 void Environment::prependOrSetLibrarySearchPath(const FilePath &value)
@@ -105,11 +165,11 @@ void Environment::prependOrSetLibrarySearchPath(const FilePath &value)
     switch (osType()) {
     case OsTypeWindows: {
         const QChar sep = ';';
-        prependOrSet("PATH", value.nativePath(), QString(sep));
+        prependOrSet("PATH", value.nativePath(), sep);
         break;
     }
     case OsTypeMac: {
-        const QString sep =  ":";
+        const QChar sep =  ':';
         const QString nativeValue = value.nativePath();
         prependOrSet("DYLD_LIBRARY_PATH", nativeValue, sep);
         prependOrSet("DYLD_FRAMEWORK_PATH", nativeValue, sep);
@@ -118,7 +178,7 @@ void Environment::prependOrSetLibrarySearchPath(const FilePath &value)
     case OsTypeLinux:
     case OsTypeOtherUnix: {
         const QChar sep = ':';
-        prependOrSet("LD_LIBRARY_PATH", value.nativePath(), QString(sep));
+        prependOrSet("LD_LIBRARY_PATH", value.nativePath(), sep);
         break;
     }
     default:
@@ -190,6 +250,7 @@ static FilePaths appendExeExtensions(const Environment &env, const FilePath &exe
 
 QString Environment::expandedValueForKey(const QString &key) const
 {
+    resolve();
     return expandVariables(m_dict.value(key));
 }
 
@@ -324,6 +385,8 @@ void Environment::setSystemEnvironment(const Environment &environment)
  */
 QString Environment::expandVariables(const QString &input) const
 {
+    resolve();
+
     QString result = input;
 
     if (osType() == OsTypeWindows) {
@@ -403,6 +466,12 @@ QStringList Environment::expandVariables(const QStringList &variables) const
     return transform(variables, [this](const QString &i) { return expandVariables(i); });
 }
 
+NameValueDictionary Environment::toDictionary() const
+{
+    resolve();
+    return m_dict;
+}
+
 void EnvironmentProvider::addProvider(EnvironmentProvider &&provider)
 {
     environmentProviders->append(std::move(provider));
@@ -421,63 +490,123 @@ std::optional<EnvironmentProvider> EnvironmentProvider::provider(const QByteArra
     return std::nullopt;
 }
 
-void EnvironmentChange::addSetValue(const QString &key, const QString &value)
+void Environment::set(const QString &key, const QString &value, bool enabled)
 {
-    m_changeItems.append(Item{std::in_place_index_t<SetValue>(), QPair<QString, QString>{key, value}});
+    m_dict.clear();
+    m_changeItems.append(Item{std::in_place_index_t<SetValue>(),
+                              std::tuple<QString, QString, bool>{key, value, enabled}});
 }
 
-void EnvironmentChange::addUnsetValue(const QString &key)
+void Environment::unset(const QString &key)
 {
+    m_dict.clear();
     m_changeItems.append(Item{std::in_place_index_t<UnsetValue>(), key});
 }
 
-void EnvironmentChange::addPrependToPath(const FilePaths &values)
+void Environment::modify(const NameValueItems &items)
 {
+    m_dict.clear();
+    m_changeItems.append(Item{std::in_place_index_t<Modify>(), items});
+}
+
+void Environment::prependToPath(const FilePaths &values)
+{
+    m_dict.clear();
     for (int i = values.size(); --i >= 0; ) {
         const FilePath value = values.at(i);
-        m_changeItems.append(Item{std::in_place_index_t<PrependToPath>(), value});
+        m_changeItems.append(Item{
+            std::in_place_index_t<PrependOrSet>(),
+            QString("PATH"),
+            value.nativePath(),
+            value.pathListSeparator()
+        });
     }
 }
 
-void EnvironmentChange::addAppendToPath(const FilePaths &values)
+void Environment::appendToPath(const FilePaths &values)
 {
-    for (const FilePath &value : values)
-        m_changeItems.append(Item{std::in_place_index_t<AppendToPath>(), value});
+    m_dict.clear();
+    for (const FilePath &value : values) {
+        m_changeItems.append(Item{
+            std::in_place_index_t<AppendOrSet>(),
+            QString("PATH"),
+            value.nativePath(),
+            value.pathListSeparator()
+        });
+    }
 }
 
-EnvironmentChange EnvironmentChange::fromDictionary(const NameValueDictionary &dict)
+void Environment::resolve() const
 {
-    EnvironmentChange change;
+    if (m_dict.size() != 0)
+        return;
+
+    for (const Item &item : m_changeItems) {
+        switch (item.index()) {
+        case SetSystemEnvironment:
+            m_dict = Environment::systemEnvironment().toDictionary();
+            break;
+        case SetFixedDictionary:
+            m_dict = std::get<SetFixedDictionary>(item);
+            break;
+        case SetValue: {
+            auto [key, value, enabled] = std::get<SetValue>(item);
+            m_dict.set(key, value, enabled);
+            break;
+        }
+        case UnsetValue:
+            m_dict.unset(std::get<UnsetValue>(item));
+            break;
+        case PrependOrSet: {
+            auto [key, value, sep] = std::get<PrependOrSet>(item);
+            QTC_ASSERT(!key.contains('='), return );
+            const auto it = m_dict.findKey(key);
+            if (it == m_dict.m_values.end()) {
+                m_dict.m_values.insert(DictKey(key, m_dict.nameCaseSensitivity()), {value, true});
+            } else {
+                // Prepend unless it is already there
+                const QString toPrepend = value + sep;
+                if (!it.value().first.startsWith(toPrepend))
+                    it.value().first.prepend(toPrepend);
+            }
+            break;
+        }
+        case AppendOrSet: {
+            auto [key, value, sep] = std::get<AppendOrSet>(item);
+            QTC_ASSERT(!key.contains('='), return );
+            const auto it = m_dict.findKey(key);
+            if (it == m_dict.m_values.end()) {
+                m_dict.m_values.insert(DictKey(key, m_dict.nameCaseSensitivity()), {value, true});
+            } else {
+                // Prepend unless it is already there
+                const QString toAppend = value + sep;
+                if (!it.value().first.endsWith(toAppend))
+                    it.value().first.append(toAppend);
+            }
+            break;
+        }
+        case Modify: {
+            NameValueItems items = std::get<Modify>(item);
+            m_dict.modify(items);
+            break;
+        }
+        }
+    }
+}
+
+Environment Environment::fromDictionary(const NameValueDictionary &dict)
+{
+    Environment change;
     change.m_changeItems.append(Item{std::in_place_index_t<SetFixedDictionary>(), dict});
     return change;
 }
 
-void EnvironmentChange::applyToEnvironment(Environment &env) const
+Environment Environment::appliedToEnvironment(const Environment &base) const
 {
-    for (const Item &item : m_changeItems) {
-        switch (item.index()) {
-        case SetSystemEnvironment:
-            env = Environment::systemEnvironment();
-            break;
-        case SetFixedDictionary:
-            env = Environment(std::get<SetFixedDictionary>(item));
-            break;
-        case SetValue: {
-            const QPair<QString, QString> data = std::get<SetValue>(item);
-            env.set(data.first, data.second);
-            break;
-        }
-        case UnsetValue:
-            env.unset(std::get<UnsetValue>(item));
-            break;
-        case PrependToPath:
-            env.prependOrSetPath(std::get<PrependToPath>(item));
-            break;
-        case AppendToPath:
-            env.appendOrSetPath(std::get<AppendToPath>(item));
-            break;
-        }
-    }
+    Environment res = base;
+    res.m_dict.clear();
+    res.m_changeItems.append(m_changeItems);
+    return res;
 }
 
 /*!
