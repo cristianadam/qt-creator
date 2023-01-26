@@ -81,8 +81,8 @@ QtObject {
     component BackgroundColors: QtObject {
         property color idle: Values.themeControlBackground
         property color interaction: Values.themeControlBackgroundInteraction
-        property color globalHover: Values.themeControlBackgroundGlobalHover
-        property color hover: Values.themeControlBackgroundHover
+        property color globalHover: Values.themeControlBackground_toolbarHover
+        property color hover: Values.themeControlBackground_toolbarHover
         property color disabled: Values.themeControlBackgroundDisabled
     }
 

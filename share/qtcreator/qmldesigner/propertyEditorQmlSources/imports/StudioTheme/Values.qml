@@ -14,6 +14,10 @@ QtObject {
     property real topLevelComboHeight: 36
     property real topLevelComboIcon: 20
 
+    property real viewBarComboWidth: 210
+    property real viewBarComboHeight: 29
+    property real viewBarComboIcon: 16
+
     property real smallFont: 8
     property real baseFont: 12
     property real mediumFont: 14
@@ -212,7 +216,7 @@ QtObject {
     property real colorEditorPopupSpinBoxWidth: 54
 
     // Toolbar
-    property real toolbarHeight: 35
+    property real toolbarHeight: 41
     property real toolbarSpacing: 8
 
     // Dialog
@@ -223,6 +227,21 @@ QtObject {
     // Theme Colors
 
     property bool isLightTheme: values.themeControlBackground.hsvValue > values.themeTextColor.hsvValue
+
+    //NEW
+
+    property color themeControlBackground_toolbarIdle: Theme.color(Theme.DScontrolBackground_toolbarIdle)
+    property color themeControlBackground_toolbarHover: Theme.color(Theme.DScontrolBackground_toolbarHover)
+    property color themeToolbarIcon_blocked: Theme.color(Theme.DStoolbarIcon_blocked)
+
+    property color themeToolbarBackground: Theme.color(Theme.DStoolbarBackground)
+
+    property color themeThumbnailBackground_baseState: Theme.color(Theme.DSthumbnailBackground_baseState)
+
+    property color themeIdleGreen: Theme.color(Theme.DSidleGreen)
+    property color themeRunningGreen: Theme.color(Theme.DSrunningGreen)
+
+    //END NEW
 
     property color themePanelBackground: Theme.color(Theme.DSpanelBackground)
 
@@ -355,6 +374,7 @@ QtObject {
 
     property ControlStyle controlStyle: DefaultStyle {}
     property ControlStyle toolbarStyle: ToolbarStyle {}
+
     property ControlStyle primaryToolbarStyle: ToolbarStyle {
         baseIconFontSize: values.baseFontSize
         radius: 4
@@ -366,6 +386,9 @@ QtObject {
 
         background: ControlStyle.BackgroundColors {
             idle: values.themeInteraction
+            hover: values.themeInteraction
+            interaction: values.themeInteraction
+            disabled: values.themeInteraction
         }
 
         border: ControlStyle.BorderColors {
@@ -375,4 +398,93 @@ QtObject {
             disabled: "#636363"
         }
     }
+
+    property ControlStyle toolbarButtonStyle: ToolbarStyle {
+
+        radius: 4
+
+        icon: ControlStyle.IconColors {
+            idle: values.themeTextColor
+            hover: values.themeTextColor
+            interaction: values.themeTextSelectedTextColor
+            disabled: "#636363"
+        }
+
+        background: ControlStyle.BackgroundColors {
+            idle: values.themeControlBackground_toolbarIdle
+            hover: values.themeControlBackground_toolbarHover
+            interaction: values.themeInteraction
+            disabled: values.themeControlBackground_toolbarIdle
+        }
+
+        border: ControlStyle.BorderColors {
+            idle: values.themeControlBackground_toolbarIdle
+            hover: values.themeControlBackground_toolbarHover
+            interaction: values.themeInteraction
+            disabled: values.themeControlBackground_toolbarIdle
+        }
+    }
+
+    property ControlStyle viewBarButtonStyle: ToolbarStyle {
+
+        baseIconFontSize: 16
+        controlSize: Qt.size(Values.viewBarComboWidth, Values.viewBarComboHeight)
+        smallIconFontSize: viewBarComboIcon
+
+        radius: 4
+
+        icon: ControlStyle.IconColors {
+            idle: values.themeTextColor
+            hover: values.themeTextColor
+            interaction: values.themeTextSelectedTextColor
+            disabled: "#636363"
+        }
+
+        background: ControlStyle.BackgroundColors {
+            idle: values.themeControlBackground_toolbarIdle
+            hover: values.themeControlBackground_toolbarHover
+            interaction: values.themeInteraction
+            disabled: values.themeControlBackground_toolbarIdle
+        }
+
+        border: ControlStyle.BorderColors {
+            idle: values.themeControlBackground_toolbarIdle
+            hover: values.themeControlBackground_toolbarHover
+            interaction: values.themeInteraction
+            disabled: values.themeControlBackground_toolbarIdle
+        }
+    }
+
+    property ControlStyle viewBarControlStyle: ToolbarStyle {
+
+        baseIconFontSize: 12
+        controlSize: Qt.size(Values.viewBarComboWidth, Values.viewBarComboHeight)
+        smallIconFontSize: viewBarComboIcon
+        background.idle: Values.themeControlBackground_toolbarIdle
+
+        radius: 4
+
+//        icon: ControlStyle.IconColors {
+//            idle: values.themeTextColor
+//            hover: values.themeTextColor
+//            interaction: values.themeTextSelectedTextColor
+//            disabled: "#636363"
+//        }
+
+//        background: ControlStyle.BackgroundColors {
+//            idle: values.themeControlBackground_toolbarIdle
+//            hover: values.themeControlBackground_toolbarHover
+//            interaction: values.themeInteraction
+//            disabled: values.themeControlBackground_toolbarIdle
+//        }
+
+//        border: ControlStyle.BorderColors {
+//            idle: values.themeControlBackground_toolbarIdle
+//            hover: values.themeControlBackground_toolbarHover
+//            interaction: values.themeInteraction
+//            disabled: values.themeControlBackground_toolbarIdle
+//        }
+    }
+
+
 }

@@ -23,9 +23,60 @@ textColorLink=ff007af4
 textColorLinkVisited=ffa57aff
 backgroundColorDisabled=ff444444
 
+;DS Theme Palette START
+
+;greyscale
+
+fullWhite=ffffffff
+lightWhite=ffdfdfdf
+offWhite=ffdcdada
+slateGrey=ff8d8d8d
+smokeGrey=ff8b8b8b
+shadowGrey=ff636363
+duskGrey=ff606060
+raincloudGrey=ff4d4d4d
+graniteGrey=ff434343
+midnightGrey=ff333333
+dawnGrey=ff2a2a2a
+offBlack=ff202020
+nearBlack=ff1b1b1b
+fullBlack=ff000000
+
+;special colors
+
+idleGreen=ff649a5d
+runningGreen=ff2eff68
+successGreen=ff2bcf32
+idleRed=ff6a4242
+recordingRed=ffcc3c34
+errorRed=ffaf2b2b
+warningOrange=ffca8113
+splitterBlue=ff64daff
+rgbBlue=ff64daff
+highlightBlue=ff57b9fc
+
+;DS Theme Palette END
+
+
 [Colors]
-;DS controls theme START
-DSpanelBackground=ff2E2F30
+;DS controls theme
+
+;NEW
+DScontrolBackground_toolbarIdle=midnightGrey
+DScontrolBackground_toolbarHover=graniteGrey
+DStoolbarBackground=midnightGrey
+DStoolbarIcon_blocked=shadowGrey
+DSthumbnailBackground_baseState=nearBlack
+DStextColor=lightWhite
+
+DSidleGreen=idleGreen
+DSrunningGreen=runningGreen
+
+
+
+;DSpanelBackground=ff2E2F30
+DSpanelBackground=dawnGrey
+
 
 DSwelcomeScreenBackground=ff242424
 DSsubPanelBackground=ff1c1c1c
@@ -36,24 +87,31 @@ DSgreenLight=ff5cdc68
 DSamberLight=ffffbf00
 DSredLight=ffff0401
 
-DSinteraction=ff2aafd3
+;DSinteraction=ff2aafd3
+DSinteraction=highlightBlue
 DSerrorColor=ffdf3a3a
 DSwarningColor=warning
 DSdisabledColor=ff707070
 
 DSinteractionHover=ff74cbfc
 
-DScontrolBackground=ff2e2f30
+;DScontrolBackground=ff2e2f30
+DScontrolBackground=dawnGrey
+
 DScontrolBackgroundInteraction=ff3d3d3d
 DScontrolBackgroundDisabled=ff2e2f30
 DScontrolBackgroundGlobalHover=ff333333
 DScontrolBackgroundHover=ff333333
 
-DScontrolOutline=ff1f1f1f
-DScontrolOutlineInteraction=ff2aafd3
+;DScontrolOutline=ff1f1f1f
+DScontrolOutline=nearBlack
+
+;DScontrolOutlineInteraction=ff2aafd3
+DScontrolOutlineInteraction=highlightBlue
+
 DScontrolOutlineDisabled=ff707070
 
-DStextColor=ffffffff
+
 DStextColorDisabled=ff707070
 DStextSelectionColor=ff2aafd3
 DStextSelectedTextColor=ff000000
@@ -86,14 +144,15 @@ DSsliderHandleHover=ff606060
 DSsliderHandleFocus=ff0492c9
 DSsliderHandleInteraction=ff2aafd3
 
-DSscrollBarTrack=ff3E3E3E
-DSscrollBarHandle=ff4C4C4C
+DSscrollBarTrack=dawnGrey
+DSscrollBarHandle=dawnGrey
 
-DSsectionHeadBackground=ff1f1f1f
+;DSsectionHeadBackground=ff1f1f1f
+DSsectionHeadBackground=offBlack
 
 DSstateDefaultHighlight=ffffe400
 DSstateSeparatorColor=ff7c7b7b
-DSstateBackgroundColor=ff383838
+DSstateBackgroundColor=fffff000
 DSstatePreviewOutline=ffaaaaaa
 
 DSstatePanelBackground=ff252525
@@ -118,8 +177,8 @@ DSdockContainerSplitter=ff323232
 DSdockAreaBackground=ff262728
 
 DSdockWidgetBackground=ff00ff00
-DSdockWidgetSplitter=ff595959
-DSdockWidgetTitleBar=ff1f1f1f
+DSdockWidgetSplitter=fullBlack
+DSdockWidgetTitleBar=dawnGrey
 
 DStitleBarText=ffdadada
 DStitleBarIcon=ffffffff
@@ -135,24 +194,25 @@ DStabInactiveIcon=ffffffff
 DStabInactiveButtonHover=ff1f1f1f
 DStabInactiveButtonPress=ff1f1f1f
 
-DStabActiveBackground=ffdadada
-DStabActiveText=ff111111
-DStabActiveIcon=ff000000
+DStabActiveBackground=raincloudGrey
+DStabActiveText=offWhite
+DStabActiveIcon=offWhite
 DStabActiveButtonHover=ffdadada
 DStabActiveButtonPress=ffdadada
 
-DStabFocusBackground=ff2aafd3
+DStabFocusBackground=highlightBlue
 DStabFocusText=ff111111
 DStabFocusIcon=ff000000
-DStabFocusButtonHover=ff2aafd3
-DStabFocusButtonPress=ff2aafd3
+DStabFocusButtonHover=highlightBlue
+DStabFocusButtonPress=highlightBlue
 
 DSnavigatorBranch=ff7c7b7b
 DSnavigatorBranchIndicator=ff7c7b7b
-DSnavigatorItemBackground=ff2E2F30
-DSnavigatorItemBackgroundHover=ff333333
-DSnavigatorItemBackgroundSelected=ff3D3D3D
-DSnavigatorText=ffffffff
+;DSnavigatorItemBackground=ff2E2F30
+DSnavigatorItemBackground=dawnGrey
+DSnavigatorItemBackgroundHover=graniteGrey
+DSnavigatorItemBackgroundSelected=midnightGrey
+DSnavigatorText=lightWhite
 DSnavigatorTextHover=ffffffff
 DSnavigatorTextSelected=ff2aafd3
 DSnavigatorIcon=ffffffff
@@ -379,7 +439,8 @@ QmlDesigner_FormEditorForegroundColor=ffdadada
 
 ;background color for main form view, library, navigator, properties, connections
 ;QmlDesigner_BackgroundColorDarkAlternate=ff4c4e50
-QmlDesigner_BackgroundColorDarkAlternate=ff2e2f30
+;QmlDesigner_BackgroundColorDarkAlternate=ff2e2f30
+QmlDesigner_BackgroundColorDarkAlternate=dawnGrey
 
 ;filter outlines, override W/H outlines, properties spinbox background, timeline separators.
 ;QmlDesigner_BackgroundColorDarker=ff262728

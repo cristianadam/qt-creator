@@ -305,6 +305,16 @@ public:
         DStextSelectionColor,
         DStextSelectedTextColor,
 
+        /*NEW*/
+        DScontrolBackground_toolbarIdle,
+        DScontrolBackground_toolbarHover,
+        DStoolbarBackground,
+        DStoolbarIcon_blocked,
+        DSthumbnailBackground_baseState,
+        DSidleGreen,
+        DSrunningGreen,
+
+
         DSplaceholderTextColor,
         DSplaceholderTextColorInteraction,
 
