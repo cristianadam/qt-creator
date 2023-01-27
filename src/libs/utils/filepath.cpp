@@ -984,7 +984,7 @@ FilePath FilePath::relativeChildPath(const FilePath &parent) const
 ///
 /// \code
 ///     FilePath filePath("/foo/b/ar/file.txt");
-///     FilePath relativePath = filePath.relativePath("/foo/c");
+///     FilePath relativePath = filePath.relativePathFrom("/foo/c");
 ///     qDebug() << relativePath
 /// \endcode
 ///
