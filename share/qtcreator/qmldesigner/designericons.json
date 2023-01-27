@@ -1,6 +1,6 @@
 {
     "ContextMenuArea": {
-        "size": "28x28",
+        "size": "11x11",
         "Off": {
             "Disabled": { "color": "DStextColorDisabled" },
             "Hovered": { "color": "DSpanelBackground"  },
@@ -15,63 +15,63 @@
         }
     },
     "AddMouseAreaIcon": {
-        "iconName": "s_mouseArea"
+        "iconName": "mouseArea_small"
     },
     "AnchorsIcon": {
-        "iconName": "s_anchors"
+        "iconName": "anchors_small"
     },
     "AnnotationIcon": {
-        "iconName": "s_annotations"
+        "iconName": "annotations_small"
     },
     "ArrangeIcon": {
-        "iconName": "s_arrange"
+        "iconName": "arrange_small"
     },
     "ConnectionsIcon": {
-        "iconName": "s_connections"
+        "iconName": "connection_small"
     },
     "EditIcon": {
-        "iconName": "s_edit"
+        "iconName": "edit_small"
     },
     "EnterComponentIcon": {
-        "iconName": "s_enterComponent"
+        "iconName": "editComponent_small"
     },
     "EventListIcon": {
-        "iconName": "s_eventList"
+        "iconName": "events_small"
     },
     "GroupSelectionIcon": {
-        "iconName": "s_group"
+        "iconName": "group_small"
     },
     "LayoutsIcon": {
-        "iconName": "s_layouts"
+        "iconName": "layouts_small"
     },
     "MakeComponentIcon": {
-        "iconName": "s_component"
+        "iconName": "createComponent_small"
     },
     "MergeWithTemplateIcon": {
-        "iconName": "s_merging"
+        "iconName": "merge_small"
     },
     "MinimalDownArrowIcon" : {
         "iconName": "upDownSquare2"
     },
     "PositionsersIcon": {
-        "iconName": "s_positioners"
+        "iconName": "positioners_small"
     },
     "ResetViewIcon": {
-        "iconName": "rotationOutline"
+        "iconName": "resetView_small"
     },
     "SelecionIcon": {
-        "iconName": "s_selection"
+        "iconName": "selection_small"
     },
     "ShowBoundsIcon": {
         "Off": {
-            "iconName": "visibilityOff"
+            "iconName": "bounds_small"
         },
         "On": {
-            "iconName": "visibilityOn"
+            "iconName": "bounds_small"
         }
     },
     "SnappingIcon": {
-        "iconName": "s_snapping"
+        "iconName": "snapping_small"
     },
     "SimpleCheckIcon": {
         "Off": {
@@ -82,14 +82,14 @@
         }
     },
     "TimelineIcon": {
-        "iconName": "s_timeline"
+        "iconName": "timeline_small"
     },
     "VisibilityIcon": {
         "Off": {
-            "iconName": "visibilityOff"
+            "iconName": "visible_small"
         },
         "On": {
-            "iconName": "visibilityOn"
+            "iconName": "visible_small"
         }
     }
 }

@@ -7,4 +7,9 @@ ControlStyle {
     controlSize: Qt.size(Values.topLevelComboWidth, Values.topLevelComboHeight)
     baseIconFontSize: Values.topLevelComboIcon
     smallIconFontSize: 10
+    background.idle: Values.themeControlBackground_toolbarIdle
+    background.hover: Values.themeControlBackground_topToolbarHover
+    background.globalHover: Values.themeControlBackground_topToolbarHover
+    border.idle: Values.controlOutline_toolbarIdle
+    text.hover: Values.themeTextColor
 }
