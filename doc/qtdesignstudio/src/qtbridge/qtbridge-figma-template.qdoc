@@ -1,0 +1,76 @@
+// Copyright (C) 2023 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \previouspage qtbridge-figma-using.html
+    \page qtbridge-figma-template.html
+    \nextpage exporting-3d-assets.html
+
+    \title Using Figma Quick Control Template in \QDS
+
+    \QBF now allows you to have template created in Figma for the
+    components to be imported to \QDS. You can use these imported
+    components as local \QDS components. So, the option for editing
+    the component style or states is available both from the \QDS
+    or Figma end.
+
+    \note You need to have a \l{https://www.qt.io/pricing}{\QDS Enterprise license}.
+    to use \QBF to import the designs created with Quick Control Template's components.
+
+    \section1 Making A Figma Template With Quick Controls
+
+    You should have these prerequisits available:
+    \list
+        \li A Figma account.
+        \li A \QDS account.
+        \li \QDS 3.9 or above.
+    \endlist
+
+    \section2 Working With Figma Template and Importing it to \QDS
+
+    \list 1
+        \li Log in to Figma with your Figma credentials.
+        \li Access the Template provided by \QDS team
+            \l{https://www.figma.com/community/file/1185200043286168239}{here}.
+        \li Select \b {Get a copy} and then your account to have a copy
+            on your Figma workspace.
+        \li From the \b {Layers} tab you can find pages of contents. Here,
+            select \b {Introduction} to access all the knowledge about the
+            templates workflow and key concepts.
+        \li There are templates for individual components in seperate pages.
+            You can select any of these pages and update the template to your
+            preference.
+        \li Select the templete page you want to work on and copy all of its contents.
+        \li Create a new Figma design file (\uicontrol Menu (in Figma)
+            > \uicontrol File > \uicontrol New design file).
+        \li You should put the copied contents in this file and save.
+            Here, do all the modification you need using Figma tools.
+        \li Next, publish this templete assets. Select \uicontrol Menu (in Figma)
+            > \uicontrol Libraries. Then select \uicontrol Publish. You don't need to
+            publish the template itself, just publish the components. You can deslect the
+            \b Template from the \b Changes section to have it removed from publishing assets.
+        \li Create another new project, where you would use this published components.
+            Or, you can use this component in one of your existing projects in Figma.
+
+            \note Select \uicontrol Menu (in Figma) > \uicontrol Libraries to find the
+            published components. You can find these components under \b {Your teams}.
+            Toggle them active to use in a project.
+
+        \li Import the design with newly published assets with \QFB. Select
+            \uicontrol Menu (in Figma) > \uicontrol Plugins > \uicontrol {Qt Bridge for Figma}
+        \li Save the file to your local system.
+        \li Open a new project in \QDS.
+        \li Drag the imported \QBF file to the \QDS open project. Press \uicontrol Import, and
+            wait until the process is finished.
+        \li You can find the imported design as local qml files in \QDS. Figma
+            assets are also imported as local components in \QDS. You can manipulate
+            \uicontrol states or \uicontrol properties natively.
+
+        \note You can also edit the design from Figma and bring it again to \QDS using \QBF.
+            However, you need to name this imported file exactly same as before. Then drag it
+            to the opened project in \QDS to have it caliberated. \QDS lets you have the
+            updates you have made locally on top of the imported component updates.
+    \endlist
+
+
+*/
