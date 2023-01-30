@@ -467,7 +467,8 @@ public:
         FlatMenuBar,
         ToolBarIconShadow,
         WindowColorAsBase,
-        DarkUserInterface
+        DarkUserInterface,
+        QDSTheme
     };
 
     Q_ENUM(Color)
