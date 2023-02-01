@@ -36800,9 +36800,6 @@ Put dens navn på en linje for sig selv, for at rydde en variabel.</translation>
         <source>Calls</source>
         <translation>Kald</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Previous command has not yet finished.</source>
         <translation>Forrige kommando er endnu ikke færdig.</translation>
@@ -36835,9 +36832,6 @@ Put dens navn på en linje for sig selv, for at rydde en variabel.</translation>
         <source>Callgrind unpaused.</source>
         <translation>Callgrind fjernet fra pause.</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Function:</source>
         <translation>Funktion:</translation>
@@ -36909,9 +36903,6 @@ Put dens navn på en linje for sig selv, for at rydde en variabel.</translation>
         <source>Incl. Cost: %1</source>
         <translation>Inkl. pris: %1</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>%1 in %2</source>
         <translation>%1 i %2</translation>
@@ -36920,9 +36911,6 @@ Put dens navn på en linje for sig selv, for at rydde en variabel.</translation>
         <source>%1:%2 in %3</source>
         <translation>%1:%2 i %3</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Last-level</source>
         <translation>Sidste-niveau</translation>
@@ -36979,9 +36967,6 @@ Put dens navn på en linje for sig selv, for at rydde en variabel.</translation>
         <source>Position:</source>
         <translation>Position:</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>%1%2</source>
         <translation>%1%2</translation>
@@ -36990,9 +36975,6 @@ Put dens navn på en linje for sig selv, for at rydde en variabel.</translation>
         <source>in %1</source>
         <translation>i %1</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Valgrind Function Profiler uses the Callgrind tool to record function calls when a program runs.</source>
         <translation>Valgrind funktion-profilering bruger Callgrind-værktøjet til at optage funktionskald når et program kører.</translation>
@@ -37157,9 +37139,6 @@ Put dens navn på en linje for sig selv, for at rydde en variabel.</translation>
         <source>Parsing Profile Data...</source>
         <translation>Parser profildata...</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Profiling</source>
         <translation>Profilerer</translation>
@@ -37168,16 +37147,10 @@ Put dens navn på en linje for sig selv, for at rydde en variabel.</translation>
         <source>Profiling %1</source>
         <translation>Profilerer %1</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Suppress Error</source>
         <translation>Undertryk fejl</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>External Errors</source>
         <translation>Eksterne fejl</translation>
@@ -37334,16 +37307,10 @@ Når et problem detekteres, afbrydes programmet og kan fejlrettes.</translation>
             <numerusform>Logfil behandlet. %n problemstillinger blev fundet.</numerusform>
         </translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Analyzing Memory</source>
         <translation>Analyserer hukommelse</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Save Suppression</source>
         <translation>Gem undertrykkelse</translation>
@@ -37360,9 +37327,6 @@ Når et problem detekteres, afbrydes programmet og kan fejlrettes.</translation>
         <source>Select Suppression File</source>
         <translation>Vælg undertrykkelsesfil</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Generic Settings</source>
         <translation>Generiske indstillinger</translation>
@@ -37531,23 +37495,14 @@ Med mellemlager-simulation aktiveres begivenhedstællere:
         <source>Valgrind Suppression File (*.supp);;All Files (*)</source>
         <translation>Valgrind-undertrykkelsesfil (*.supp);;Alle filer (*)</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Valgrind</source>
         <translation>Valgrind</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Valgrind Settings</source>
         <translation>Valgrind-indstillinger</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Valgrind options: %1</source>
         <translation>Valgrind-valgmuligheder: %1</translation>
@@ -37582,16 +37537,10 @@ Med mellemlager-simulation aktiveres begivenhedstællere:
         <translation>Proces afsluttede med returværdi %1
 </translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>All functions with an inclusive cost ratio higher than %1 (%2 are hidden)</source>
         <translation>Alle funktioner med en inkluderende &quot;cost ratio&quot; højere end %1 (%2 er skjult)</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>XmlServer on %1:</source>
         <translation>XmlServer på %1:</translation>
@@ -37600,9 +37549,6 @@ Med mellemlager-simulation aktiveres begivenhedstællere:
         <source>LogServer on %1:</source>
         <translation>LogServer på %1:</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Location:</source>
         <translation>Placering:</translation>
@@ -37611,9 +37557,6 @@ Med mellemlager-simulation aktiveres begivenhedstællere:
         <source>Instruction pointer:</source>
         <translation>Instruktionspeger:</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Issue</source>
         <translation>Problemstilling</translation>
@@ -37622,9 +37565,6 @@ Med mellemlager-simulation aktiveres begivenhedstællere:
         <source>%1 in function %2</source>
         <translation>%1 i funktionen %2</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Could not parse hex number from &quot;%1&quot; (%2)</source>
         <translation>Kunne ikke parse heks-tal fra &quot;%1&quot; (%2)</translation>
@@ -37677,9 +37617,6 @@ Med mellemlager-simulation aktiveres begivenhedstællere:
         <source>Unexpected exception caught during parsing.</source>
         <translation>Fangede uventet undtagelse under parsing.</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Description</source>
         <translation>Beskrivelse</translation>
@@ -40272,7 +40209,7 @@ Gemning mislykkedes.</translation>
     </message>
 </context>
 <context>
-    <name>HeobDialog</name>
+    <name>::Valgrind</name>
     <message>
         <source>XML output file:</source>
         <translation>XML-output-fil:</translation>
@@ -40381,13 +40318,6 @@ Gemning mislykkedes.</translation>
         <source>OK</source>
         <translation>OK</translation>
     </message>
-    <message>
-        <source>Heob</source>
-        <translation>Heob</translation>
-    </message>
-</context>
-<context>
-    <name>HeobData</name>
     <message>
         <source>Process %1</source>
         <translation>Proces %1</translation>

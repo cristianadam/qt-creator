@@ -21879,7 +21879,7 @@ Add, modify, and remove document filters, which determine the documentation set 
     </message>
 </context>
 <context>
-    <name>HeobData</name>
+    <name>::Valgrind</name>
     <message>
         <source>Process %1</source>
         <translation>Процесс %1</translation>
@@ -21940,9 +21940,6 @@ Add, modify, and remove document filters, which determine the documentation set 
         <source>Heob: Failure in process attach handshake (%1).</source>
         <translation>Heob: не удалось выполнить рукопожатие при подключении к процессу (%1).</translation>
     </message>
-</context>
-<context>
-    <name>HeobDialog</name>
     <message>
         <source>New</source>
         <translation>Создать</translation>
@@ -46426,9 +46423,6 @@ To disable a variable, prefix the line with &quot;#&quot;.</source>
         <source>Calls</source>
         <translation>Вызовы</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Previous command has not yet finished.</source>
         <translation>Предыдущая команда ещё не завершена.</translation>
@@ -46461,9 +46455,6 @@ To disable a variable, prefix the line with &quot;#&quot;.</source>
         <source>Callgrind unpaused.</source>
         <translation>Callgrind продолжает работу.</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Function:</source>
         <translation>Функция:</translation>
@@ -46536,9 +46527,6 @@ To disable a variable, prefix the line with &quot;#&quot;.</source>
         <source>Incl. Cost: %1</source>
         <translation>Полная цена: %1</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>%1 in %2</source>
         <translation>%1 в %2</translation>
@@ -46547,9 +46535,6 @@ To disable a variable, prefix the line with &quot;#&quot;.</source>
         <source>%1:%2 in %3</source>
         <translation>%1: %2 в %3</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Last-level</source>
         <translation>Последний уровень</translation>
@@ -46606,9 +46591,6 @@ To disable a variable, prefix the line with &quot;#&quot;.</source>
         <source>Position:</source>
         <translation>Положение:</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>%1%2</source>
         <translation>%1%2</translation>
@@ -46617,9 +46599,6 @@ To disable a variable, prefix the line with &quot;#&quot;.</source>
         <source>in %1</source>
         <translation>в %1</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Valgrind Function Profiler uses the Callgrind tool to record function calls when a program runs.</source>
         <translation>Профайлер функций Valgrind использует утилиту Callgrind для записи вызовов функций при работе программы.</translation>
@@ -46788,9 +46767,6 @@ To disable a variable, prefix the line with &quot;#&quot;.</source>
         <source>Parsing Profile Data...</source>
         <translation>Обработка данных профилирования...</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Profiling</source>
         <translation>Профилирование</translation>
@@ -46799,16 +46775,10 @@ To disable a variable, prefix the line with &quot;#&quot;.</source>
         <source>Profiling %1</source>
         <translation>Профилирование %1</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Suppress Error</source>
         <translation>Игнорировать ошибку</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>External Errors</source>
         <translation>Внешние ошибки</translation>
@@ -46862,10 +46832,6 @@ To disable a variable, prefix the line with &quot;#&quot;.</source>
 When a problem is detected, the application is interrupted and can be debugged.</source>
         <translation>Анализатор памяти Valgrind с GDB использует утилиту Memcheck для поиска утечек памяти.
 При обнаружении проблем программа останавливается для отладки.</translation>
-    </message>
-    <message>
-        <source>Heob</source>
-        <translation>Heob</translation>
     </message>
     <message>
         <source>Ctrl+Alt+H</source>
@@ -46971,9 +46937,6 @@ When a problem is detected, the application is interrupted and can be debugged.<
         <source>XML Files (*.xml);;All Files (*)</source>
         <translation>Файлы XML (*.xml);;Все файлы (*)</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Suppression File:</source>
         <translation>Список исключений:</translation>
@@ -46990,9 +46953,6 @@ When a problem is detected, the application is interrupted and can be debugged.<
         <source>Save Suppression</source>
         <translation>Сохранить исключения</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Generic Settings</source>
         <translation>Общие настройки</translation>
@@ -47170,16 +47130,10 @@ With cache simulation, further event counters are enabled:
         <source>KCachegrind executable:</source>
         <translation>Программа KCachegrind:</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Valgrind Settings</source>
         <translation>Настройки Valgrind</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Valgrind options: %1</source>
         <translation>Параметры Valgrind: %1</translation>
@@ -47214,16 +47168,10 @@ With cache simulation, further event counters are enabled:
         <translation>Процесс завершился с кодом %1
 </translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>All functions with an inclusive cost ratio higher than %1 (%2 are hidden)</source>
         <translation>Все функции с полной ценой более %1 (%2 скрыто)</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>XmlServer on %1:</source>
         <translation>XmlServer на %1:</translation>
@@ -47232,9 +47180,6 @@ With cache simulation, further event counters are enabled:
         <source>LogServer on %1:</source>
         <translation>LogServer на %1:</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Location:</source>
         <translation>Размещение:</translation>
@@ -47243,9 +47188,6 @@ With cache simulation, further event counters are enabled:
         <source>Instruction pointer:</source>
         <translation>Указатель инструкций:</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Issue</source>
         <translation>Проблема</translation>
@@ -47254,9 +47196,6 @@ With cache simulation, further event counters are enabled:
         <source>%1 in function %2</source>
         <translation>%1 в функции %2</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Could not parse hex number from &quot;%1&quot; (%2)</source>
         <translation>Не удалось разобрать шестнадцатеричное число из «%1» (%2)</translation>
@@ -47309,9 +47248,6 @@ With cache simulation, further event counters are enabled:
         <source>Unexpected exception caught during parsing.</source>
         <translation>Возникло неожиданное исключение при разборе.</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Description</source>
         <translation>Описание</translation>

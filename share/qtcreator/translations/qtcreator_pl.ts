@@ -13780,9 +13780,6 @@ Local pulls are not applied to the master branch.</source>
         <source>%1 in function %2</source>
         <translation>%1 w funkcji %2</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Location:</source>
         <translation>Położenie:</translation>
@@ -13791,9 +13788,6 @@ Local pulls are not applied to the master branch.</source>
         <source>Instruction pointer:</source>
         <translation>Wskaźnik do instrukcji:</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Could not parse hex number from &quot;%1&quot; (%2)</source>
         <translation>Błąd parsowania liczby szesnastkowej z &quot;%1&quot; (%2)</translation>
@@ -13846,9 +13840,6 @@ Local pulls are not applied to the master branch.</source>
         <source>Unexpected exception caught during parsing.</source>
         <translation>Złapano nieoczekiwany wyjątek podczas parsowania.</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Description</source>
         <translation>Opis</translation>
@@ -15602,9 +15593,6 @@ if (a &amp;&amp;
         <source>Save Suppression</source>
         <translation>Zachowaj tłumienie</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Generic Settings</source>
         <translation>Ustawienia ogólne</translation>
@@ -16203,9 +16191,6 @@ With cache simulation, further event counters are enabled:
         <source>Calls</source>
         <translation>Wywołania</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Previous command has not yet finished.</source>
         <translation>Poprzednia komenda jeszcze się nie zakończyła.</translation>
@@ -16238,9 +16223,6 @@ With cache simulation, further event counters are enabled:
         <source>Callgrind unpaused.</source>
         <translation>Callgrind wznowił pracę.</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Function:</source>
         <translation>Funkcja:</translation>
@@ -16309,9 +16291,6 @@ With cache simulation, further event counters are enabled:
         <source>Incl. Cost: %1</source>
         <translation>Łączny koszt: %1</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>%1 in %2</source>
         <translation>%1 w %2</translation>
@@ -16320,9 +16299,6 @@ With cache simulation, further event counters are enabled:
         <source>%1:%2 in %3</source>
         <translation>%1: %2 w %3</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Last-level</source>
         <translation>Ostatni poziom</translation>
@@ -16874,9 +16850,6 @@ Do you want to save the data first?</source>
         <source>All functions with an inclusive cost ratio higher than %1 (%2 are hidden)</source>
         <translation>Wszystkie funkcje ze współczynnikiem łącznego kosztu wyższym niż %1 (ilość ukrytych: %2)</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>%1%2</source>
         <translation>%1%2</translation>
@@ -16885,16 +16858,10 @@ Do you want to save the data first?</source>
         <source>in %1</source>
         <translation>w %1</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Suppress Error</source>
         <translation>Wytłum błąd</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>External Errors</source>
         <translation>Błędy zewnętrzne</translation>
@@ -26427,9 +26394,6 @@ Proszę zamknąć wszystkie instancje tej aplikacji przed uruchomieniem budowani
         <source>Valgrind</source>
         <translation>Valgrind</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Valgrind Settings</source>
         <translation>Ustawienia Valgrinda</translation>
@@ -39913,16 +39877,10 @@ Błąd: %5</translation>
         <source>Profiling %1</source>
         <translation>Profilowanie %1</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Analyzing Memory</source>
         <translation>Analiza pamięci</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Valgrind options: %1</source>
         <translation>Opcje valgrinda: %1</translation>
@@ -39951,9 +39909,6 @@ Błąd: %5</translation>
         <source>Process terminated.</source>
         <translation>Zakończono proces.</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>XmlServer on %1:</source>
         <translation>XmlServer na %1:</translation>

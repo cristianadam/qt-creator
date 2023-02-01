@@ -30054,9 +30054,6 @@ Will not be applied to whitespace in comments and strings.</source>
         <source>Calls</source>
         <translation>呼出回数</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Previous command has not yet finished.</source>
         <translation>前のコマンドが完了していません。</translation>
@@ -30093,9 +30090,6 @@ Will not be applied to whitespace in comments and strings.</source>
         <source>Downloading remote profile data...</source>
         <translation>リモートプロファイルデータをダウンロード中...</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Function:</source>
         <translation>関数:</translation>
@@ -30166,9 +30160,6 @@ Will not be applied to whitespace in comments and strings.</source>
         <source>Incl. Cost: %1</source>
         <translation>全体コスト: %1</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>%1 in %2</source>
         <translation>%2 の %1</translation>
@@ -30177,9 +30168,6 @@ Will not be applied to whitespace in comments and strings.</source>
         <source>%1:%2 in %3</source>
         <translation>%3 の %1:%2</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Last-level</source>
         <translation>最終レベル</translation>
@@ -30236,16 +30224,10 @@ Will not be applied to whitespace in comments and strings.</source>
         <source>Position:</source>
         <translation>位置:</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>All functions with an inclusive cost ratio higher than %1 (%2 are hidden)</source>
         <translation>全体のコスト率が %1 より高いすべての関数 (%2 個の関数が非表示)</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>XmlServer on %1:</source>
         <translation>%1 の XmlServer:</translation>
@@ -30254,16 +30236,10 @@ Will not be applied to whitespace in comments and strings.</source>
         <source>LogServer on %1:</source>
         <translation>%1 の LogServer:</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Analyzing memory of %1</source>
         <translation>%1 のメモリ解析中</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>in %1</source>
         <translation>%1</translation>
@@ -30272,16 +30248,10 @@ Will not be applied to whitespace in comments and strings.</source>
         <source>%1%2</source>
         <translation>%1%2</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Suppress Error</source>
         <translation>エラーを抑制</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>External Errors</source>
         <translation>外部エラー</translation>
@@ -30404,9 +30374,6 @@ When a problem is detected, the application is interrupted and can be debugged.<
             <numerusform>ログファイルを解析しました。%n 個の問題が見つかりました。</numerusform>
         </translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Save Suppression</source>
         <translation>抑制ファイルの保存</translation>
@@ -30423,9 +30390,6 @@ When a problem is detected, the application is interrupted and can be debugged.<
         <source>Select Suppression File</source>
         <translation>抑制ファイルを選択</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Valgrind options: %1</source>
         <translation>Valgrind オプション: %1</translation>
@@ -30464,16 +30428,10 @@ When a problem is detected, the application is interrupted and can be debugged.<
         <source>Could not determine remote PID.</source>
         <translation>リモートの PID が取得できませんでした。</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Valgrind Settings</source>
         <translation>Valgrind の設定</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Issue</source>
         <translation>問題</translation>
@@ -30482,9 +30440,6 @@ When a problem is detected, the application is interrupted and can be debugged.<
         <source>%1 in function %2</source>
         <translation>関数 %2 の %1</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Location:</source>
         <translation>パス:</translation>
@@ -30493,9 +30448,6 @@ When a problem is detected, the application is interrupted and can be debugged.<
         <source>Instruction pointer:</source>
         <translation>命令ポインタ:</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Could not parse hex number from &quot;%1&quot; (%2)</source>
         <translation>&quot;%1&quot; (%2) からの16進数を解析できません</translation>
@@ -30548,9 +30500,6 @@ When a problem is detected, the application is interrupted and can be debugged.<
         <source>Unexpected exception caught during parsing.</source>
         <translation>解析中に予期せぬ例外を catch しました。</translation>
     </message>
-</context>
-<context>
-    <name>::Valgrind</name>
     <message>
         <source>Description</source>
         <translation>説明</translation>
@@ -47596,9 +47545,6 @@ Row: %4, Column: %5
         <source>Profiling %1</source>
         <translation>%1 のプロファイル中</translation>
     </message>
-</context>
-<context>
-    <name>HeobDialog</name>
     <message>
         <source>New</source>
         <translation>新規作成</translation>
@@ -47619,9 +47565,6 @@ Row: %4, Column: %5
         <source>%1 (copy)</source>
         <translation>%1 (コピー)</translation>
     </message>
-</context>
-<context>
-    <name>HeobData</name>
     <message>
         <source>Process %1</source>
         <translation>プロセス %1</translation>
@@ -47631,18 +47574,6 @@ Row: %4, Column: %5
     <message>
         <source>Analyzing finished.</source>
         <translation>解析が終了しました。</translation>
-    </message>
-    <message>
-        <source>Error: &quot;%1&quot; could not be started: %2</source>
-        <translation>エラー: &quot;%1&quot; を開始できませんでした: %2</translation>
-    </message>
-    <message>
-        <source>Error: no Valgrind executable set.</source>
-        <translation>エラー: Valgrind の実行ファイルが指定されていません。</translation>
-    </message>
-    <message>
-        <source>Process terminated.</source>
-        <translation>プロセスが終了しました。</translation>
     </message>
 </context>
 <context>
