@@ -28775,9 +28775,6 @@ In addition, device connectivity will be tested.</source>
         <source>Could not copy the file to %1.</source>
         <translation>ファイル %1 をコピーできませんでした。</translation>
     </message>
-</context>
-<context>
-    <name>::ResourceEditor</name>
     <message>
         <source>The file name is empty.</source>
         <translation>ファイル名が未入力です。</translation>
@@ -28790,16 +28787,10 @@ In addition, device connectivity will be tested.</source>
         <source>The &lt;RCC&gt; root element is missing.</source>
         <translation>&lt;RCC&gt; にルート要素がありません。</translation>
     </message>
-</context>
-<context>
-    <name>::ResourceEditor</name>
     <message>
         <source>All files (*)</source>
         <translation>すべてのファイル (*)</translation>
     </message>
-</context>
-<context>
-    <name>::ResourceEditor</name>
     <message>
         <source>&amp;Undo</source>
         <translation>元に戻す(&amp;U)</translation>
@@ -28868,9 +28859,6 @@ In addition, device connectivity will be tested.</source>
         <source>Rename Prefix</source>
         <translation>プレフィックス名の変更</translation>
     </message>
-</context>
-<context>
-    <name>::ResourceEditor</name>
     <message>
         <source>Open File</source>
         <translation>ファイルを開く</translation>
@@ -40427,9 +40415,6 @@ Android パッケージソースディレクトリのファイルはビルドデ
         <source>Language:</source>
         <translation>言語:</translation>
     </message>
-</context>
-<context>
-    <name>ResourceTopLevelNode</name>
     <message>
         <source>%1 Prefix: %2</source>
         <translation>%1 プレフィックス: %2</translation>

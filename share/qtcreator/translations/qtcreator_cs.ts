@@ -12302,9 +12302,6 @@ Další podrobnosti hledejte v /etc/sysctl.d/10-ptrace.conf
         <source>Recheck existence of referenced files</source>
         <translation>Znovu ověřit existenci odkazovaných souborů</translation>
     </message>
-</context>
-<context>
-    <name>::ResourceEditor</name>
     <message>
         <source>Open File</source>
         <translation>Otevřít soubor</translation>
@@ -12338,54 +12335,14 @@ Další podrobnosti hledejte v /etc/sysctl.d/10-ptrace.conf
     </message>
 </context>
 <context>
-    <name>SharedTools::QrcEditor</name>
-    <message>
-        <source>Add Files</source>
-        <translation type="obsolete">Přidat soubory</translation>
-    </message>
-    <message>
-        <source>Add Prefix</source>
-        <translation type="obsolete">Přidat předponu</translation>
-    </message>
-    <message>
-        <source>Choose Copy Location</source>
-        <translation type="obsolete">Vyberte umístění cíle pro kopírování</translation>
-    </message>
-    <message>
-        <source>Overwriting Failed</source>
-        <translation type="obsolete">Chyba při přepsání</translation>
-    </message>
-    <message>
-        <source>Copying Failed</source>
-        <translation type="obsolete">Kopírování se nezdařilo</translation>
-    </message>
+    <name>::ResourceEditor</name>
     <message>
         <source>Invalid file</source>
         <translation type="obsolete">Neplatný soubor</translation>
     </message>
     <message>
-        <source>Copy</source>
-        <translation type="obsolete">Kopírovat</translation>
-    </message>
-    <message>
-        <source>Skip</source>
-        <translation type="obsolete">Přeskočit</translation>
-    </message>
-    <message>
-        <source>Abort</source>
-        <translation type="obsolete">Zrušit</translation>
-    </message>
-    <message>
         <source>The file %1 is not in a subdirectory of the resource file. Continuing will result in an invalid resource file.</source>
         <translation type="obsolete">Soubor %1 se nenachází v podadresáři zdrojového souboru. Přidáním by vznikl nepkatný zdrojový soubor.</translation>
-    </message>
-    <message>
-        <source>Invalid file location</source>
-        <translation type="obsolete">Neplatné umístění souboru</translation>
-    </message>
-    <message>
-        <source>The file %1 is not in a subdirectory of the resource file. You now have the option to copy this file to a valid location.</source>
-        <translation type="obsolete">Soubor %1 se nenachází v podadresáři souboru s prostředky. Nyní máte možnost zkopírovat tento soubor do platného umístění.</translation>
     </message>
     <message>
         <source>Choose copy location</source>
@@ -12396,20 +12353,9 @@ Další podrobnosti hledejte v /etc/sysctl.d/10-ptrace.conf
         <translation type="obsolete">Chyba při přepsání</translation>
     </message>
     <message>
-        <source>Could not overwrite file %1.</source>
-        <translation type="obsolete">Soubor %1 se nepodařilo přepsat.</translation>
-    </message>
-    <message>
         <source>Copying failed</source>
         <translation type="obsolete">Kopírování se nezdařilo</translation>
     </message>
-    <message>
-        <source>Could not copy the file to %1.</source>
-        <translation type="obsolete">Soubor se nepodařilo zkopírovat do %1.</translation>
-    </message>
-</context>
-<context>
-    <name>SharedTools::ResourceView</name>
     <message>
         <source>Add Files...</source>
         <translation type="obsolete">Přidat soubory...</translation>
@@ -12417,14 +12363,6 @@ Další podrobnosti hledejte v /etc/sysctl.d/10-ptrace.conf
     <message>
         <source>Change Alias...</source>
         <translation type="obsolete">Změnit přezdívku...</translation>
-    </message>
-    <message>
-        <source>Add Prefix...</source>
-        <translation type="obsolete">Přidat předponu...</translation>
-    </message>
-    <message>
-        <source>Change Prefix...</source>
-        <translation type="obsolete">Změnit předponu...</translation>
     </message>
     <message>
         <source>Change Language...</source>
@@ -12443,10 +12381,6 @@ Další podrobnosti hledejte v /etc/sysctl.d/10-ptrace.conf
         <translation type="obsolete">Otevřít soubor</translation>
     </message>
     <message>
-        <source>All files (*)</source>
-        <translation type="obsolete">Všechny soubory (*)</translation>
-    </message>
-    <message>
         <source>Change Prefix</source>
         <translation type="obsolete">Změnit předponu</translation>
     </message>
@@ -12457,10 +12391,6 @@ Další podrobnosti hledejte v /etc/sysctl.d/10-ptrace.conf
     <message>
         <source>Change Language</source>
         <translation type="obsolete">Změnit jazyk</translation>
-    </message>
-    <message>
-        <source>Language:</source>
-        <translation type="obsolete">Jazyk:</translation>
     </message>
     <message>
         <source>Change File Alias</source>
@@ -47194,9 +47124,6 @@ nelze najít v cestě.</translation>
         <source>Could not copy the file to %1.</source>
         <translation>Soubor se nepodařilo zkopírovat do %1.</translation>
     </message>
-</context>
-<context>
-    <name>::ResourceEditor</name>
     <message>
         <source>The file name is empty.</source>
         <translation>Název souboru je prázdný.</translation>
@@ -47213,9 +47140,6 @@ nelze najít v cestě.</translation>
         <source>Cannot write file. Disk full?</source>
         <translation>Soubor se nepodařilo zapsat. Možná že už na pevném disku není místo pro ukládání?</translation>
     </message>
-</context>
-<context>
-    <name>::ResourceEditor</name>
     <message>
         <source>All files (*)</source>
         <translation>Všechny soubory (*)</translation>
@@ -54970,7 +54894,7 @@ Tento průvodce vás provede základními kroky, které jsou nutné pro nasazen�
     </message>
 </context>
 <context>
-    <name>PrefixLangDialog</name>
+    <name>::ResourceEditor</name>
     <message>
         <source>Prefix:</source>
         <translation>Předpona:</translation>
@@ -54979,9 +54903,6 @@ Tento průvodce vás provede základními kroky, které jsou nutné pro nasazen�
         <source>Language:</source>
         <translation>Jazyk:</translation>
     </message>
-</context>
-<context>
-    <name>::ResourceEditor</name>
     <message>
         <source>%1 Prefix: %2</source>
         <translation>%1 Předpona: %2</translation>

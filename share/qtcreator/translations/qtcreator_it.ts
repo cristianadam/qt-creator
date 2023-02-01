@@ -8722,9 +8722,6 @@ Per eseguire la ricerca, scrivi questo prefisso, uno spazio e poi il termine da 
         <source>&amp;Redo</source>
         <translation>&amp;Ripeti</translation>
     </message>
-</context>
-<context>
-    <name>::ResourceEditor</name>
     <message>
         <source>untitled</source>
         <translation>senza titolo</translation>
@@ -8760,7 +8757,7 @@ Per eseguire la ricerca, scrivi questo prefisso, uno spazio e poi il termine da 
     </message>
 </context>
 <context>
-    <name>SharedTools::QrcEditor</name>
+    <name>::ResourceEditor</name>
     <message>
         <source>Add Files</source>
         <translation>Aggiungi File</translation>
@@ -8809,9 +8806,6 @@ Per eseguire la ricerca, scrivi questo prefisso, uno spazio e poi il termine da 
         <source>Could not copy the file to %1.</source>
         <translation>Impossibile copiare il file su %1.</translation>
     </message>
-</context>
-<context>
-    <name>SharedTools::ResourceView</name>
     <message>
         <source>Add Files...</source>
         <translation>Aggiungi File...</translation>

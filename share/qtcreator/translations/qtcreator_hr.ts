@@ -32118,9 +32118,6 @@ Saving failed.</source>
         <source>Could not copy the file to %1.</source>
         <translation type="unfinished"></translation>
     </message>
-</context>
-<context>
-    <name>::ResourceEditor</name>
     <message>
         <source>The file name is empty.</source>
         <translation type="unfinished"></translation>
@@ -32133,9 +32130,6 @@ Saving failed.</source>
         <source>The &lt;RCC&gt; root element is missing.</source>
         <translation type="unfinished"></translation>
     </message>
-</context>
-<context>
-    <name>::ResourceEditor</name>
     <message>
         <source>Open File</source>
         <translation>Otvori datoteku</translation>
@@ -32144,9 +32138,6 @@ Saving failed.</source>
         <source>All files (*)</source>
         <translation>Sve datoteke (*)</translation>
     </message>
-</context>
-<context>
-    <name>::ResourceEditor</name>
     <message>
         <source>Prefix:</source>
         <translation>Prefiks:</translation>
@@ -32155,9 +32146,6 @@ Saving failed.</source>
         <source>Language:</source>
         <translation>Jezik:</translation>
     </message>
-</context>
-<context>
-    <name>::ResourceEditor</name>
     <message>
         <source>&amp;Undo</source>
         <translation>&amp;Poništi</translation>
@@ -32238,9 +32226,6 @@ Saving failed.</source>
         <source>Rename Prefix</source>
         <translation type="unfinished"></translation>
     </message>
-</context>
-<context>
-    <name>::ResourceEditor</name>
     <message>
         <source>Open With</source>
         <translation type="unfinished"></translation>
@@ -32253,9 +32238,6 @@ Saving failed.</source>
         <source>Copy Resource Path to Clipboard</source>
         <translation type="unfinished"></translation>
     </message>
-</context>
-<context>
-    <name>ResourceTopLevelNode</name>
     <message>
         <source>%1 Prefix: %2</source>
         <translation type="unfinished"></translation>

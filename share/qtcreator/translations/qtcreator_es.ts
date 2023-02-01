@@ -8880,9 +8880,6 @@ Para hacerlo, introduzca el atajo y un espacio en el campo Localización, y lueg
         <source>&amp;Redo</source>
         <translation>&amp;Rehacer</translation>
     </message>
-</context>
-<context>
-    <name>::ResourceEditor</name>
     <message>
         <source>untitled</source>
         <translation>sin título</translation>
@@ -8918,7 +8915,7 @@ Para hacerlo, introduzca el atajo y un espacio en el campo Localización, y lueg
     </message>
 </context>
 <context>
-    <name>SharedTools::QrcEditor</name>
+    <name>::ResourceEditor</name>
     <message>
         <source>Add Files</source>
         <translation>Agregar archivos</translation>
@@ -8967,9 +8964,6 @@ Para hacerlo, introduzca el atajo y un espacio en el campo Localización, y lueg
         <source>Could not copy the file to %1.</source>
         <translation>No se pudo copiar el archivo a %1.</translation>
     </message>
-</context>
-<context>
-    <name>SharedTools::ResourceView</name>
     <message>
         <source>Add Files...</source>
         <translation>Agregar archivos...</translation>

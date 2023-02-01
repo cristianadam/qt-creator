@@ -31649,9 +31649,6 @@ Derudover testes enhedens forbindelse.</translation>
         <source>Language:</source>
         <translation>Sprog:</translation>
     </message>
-</context>
-<context>
-    <name>::ResourceEditor</name>
     <message>
         <source>Add Files</source>
         <translation>Tilføj filer</translation>
@@ -31700,9 +31697,6 @@ Derudover testes enhedens forbindelse.</translation>
         <source>Could not copy the file to %1.</source>
         <translation>Kunne ikke kopiere filen til %1.</translation>
     </message>
-</context>
-<context>
-    <name>::ResourceEditor</name>
     <message>
         <source>&amp;Undo</source>
         <translation>&amp;Fortryd</translation>
@@ -31783,9 +31777,6 @@ Derudover testes enhedens forbindelse.</translation>
         <source>Rename Prefix</source>
         <translation>Omdøb præfiks</translation>
     </message>
-</context>
-<context>
-    <name>::ResourceEditor</name>
     <message>
         <source>Open File</source>
         <translation>Åbn fil</translation>
@@ -31798,16 +31789,10 @@ Derudover testes enhedens forbindelse.</translation>
         <source>Copy Resource Path to Clipboard</source>
         <translation>Kopiér ressourcesti til udklipsholder</translation>
     </message>
-</context>
-<context>
-    <name>::ResourceEditor</name>
     <message>
         <source>All files (*)</source>
         <translation>Alle filer (*)</translation>
     </message>
-</context>
-<context>
-    <name>::ResourceEditor</name>
     <message>
         <source>The file name is empty.</source>
         <translation>Filnavnet er tomt.</translation>
@@ -31820,9 +31805,6 @@ Derudover testes enhedens forbindelse.</translation>
         <source>The &lt;RCC&gt; root element is missing.</source>
         <translation>Rodelementet &lt;RCC&gt; mangler.</translation>
     </message>
-</context>
-<context>
-    <name>ResourceTopLevelNode</name>
     <message>
         <source>%1 Prefix: %2</source>
         <translation>%1 præfiks: %2</translation>
