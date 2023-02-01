@@ -39065,7 +39065,7 @@ Błąd: %2</translation>
     </message>
 </context>
 <context>
-    <name>DevelopmentTeam</name>
+    <name>::Ios</name>
     <message>
         <source>%1 - Free Provisioning Team : %2</source>
         <translation type="unfinished"></translation>
