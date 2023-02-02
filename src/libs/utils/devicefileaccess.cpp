@@ -937,7 +937,18 @@ expected_str<QByteArray> UnixDeviceFileAccess::fileContents(const FilePath &file
         args += QString("count=%1").arg(limit / gcd);
         args += QString("seek=%1").arg(offset / gcd);
     }
+#ifndef UTILS_STATIC_LIBRARY
+    const FilePath dd = FilePath::fromString("dd").onDevice(filePath).searchInPath();
 
+    QtcProcess p;
+    p.setCommand({dd, args, OsType::OsTypeLinux});
+    p.runBlocking();
+    if (p.exitCode() != 0) {
+        return make_unexpected(Tr::tr("Failed reading file \"%1\": %2")
+                                   .arg(filePath.toUserOutput(), p.readAllStandardError()));
+    }
+    return p.readAllRawStandardOutput();
+#else
     const RunResult r = runInShell({"dd", args, OsType::OsTypeLinux});
 
     if (r.exitCode != 0)
@@ -945,6 +956,7 @@ expected_str<QByteArray> UnixDeviceFileAccess::fileContents(const FilePath &file
                                    .arg(filePath.toUserOutput(), QString::fromUtf8(r.stdErr)));
 
     return r.stdOut;
+#endif
 }
 
 expected_str<qint64> UnixDeviceFileAccess::writeFileContents(const FilePath &filePath,
