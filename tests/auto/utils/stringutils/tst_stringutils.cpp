@@ -69,10 +69,12 @@ private slots:
     void testWithTildeHomePath();
     void testMacroExpander_data();
     void testMacroExpander();
-    void testStripAccelerator();
     void testStripAccelerator_data();
-    void testParseUsedPortFromNetstatOutput();
+    void testStripAccelerator();
     void testParseUsedPortFromNetstatOutput_data();
+    void testParseUsedPortFromNetstatOutput();
+    void testJoinStrings_data();
+    void testJoinStrings();
 
 private:
     TestMacroExpander mx;
@@ -169,13 +171,6 @@ void tst_StringUtils::testMacroExpander()
     QCOMPARE(in, out);
 }
 
-void tst_StringUtils::testStripAccelerator()
-{
-    QFETCH(QString, expected);
-
-    QCOMPARE(Utils::stripAccelerator(QString::fromUtf8(QTest::currentDataTag())), expected);
-}
-
 void tst_StringUtils::testStripAccelerator_data()
 {
     QTest::addColumn<QString>("expected");
@@ -193,12 +188,11 @@ void tst_StringUtils::testStripAccelerator_data()
     QTest::newRow("Test&") << "Test";
 }
 
-void tst_StringUtils::testParseUsedPortFromNetstatOutput()
+void tst_StringUtils::testStripAccelerator()
 {
-    QFETCH(QString, line);
-    QFETCH(int, port);
+    QFETCH(QString, expected);
 
-    QCOMPARE(Utils::parseUsedPortFromNetstatOutput(line.toUtf8()), port);
+    QCOMPARE(Utils::stripAccelerator(QString::fromUtf8(QTest::currentDataTag())), expected);
 }
 
 void tst_StringUtils::testParseUsedPortFromNetstatOutput_data()
@@ -244,6 +238,55 @@ void tst_StringUtils::testParseUsedPortFromNetstatOutput_data()
     QTest::newRow("Qnx8") << "Active Internet6 connections (including servers)"                                 <<    -1;
     QTest::newRow("Qnx9") << "Proto Recv-Q Send-Q  Local Address          Foreign Address        (state)    "   <<    -1;
     QTest::newRow("QnxA") << "tcp6       0      0  *.22                   *.*                    LISTEN   "     <<    22;
+}
+
+void tst_StringUtils::testParseUsedPortFromNetstatOutput()
+{
+    QFETCH(QString, line);
+    QFETCH(int, port);
+
+    QCOMPARE(Utils::parseUsedPortFromNetstatOutput(line.toUtf8()), port);
+}
+
+
+void tst_StringUtils::testJoinStrings_data()
+{
+    QTest::addColumn<QChar>("separator");
+    QTest::addColumn<QStringList>("input");
+    QTest::addColumn<QString>("output");
+
+
+    QTest::newRow("NoStrings") << QChar('\n') << QStringList{} << QString();
+    QTest::newRow("OneStrings") << QChar('\n') << QStringList{"one"} << QString("one");
+    QTest::newRow("TwoStrings") << QChar('\n') << QStringList{"first", "second"}
+                                << QString("first\nsecond");
+    QTest::newRow("ThreeStrings") << QChar('\n') << QStringList{"first", "second", "third"}
+                                  << QString("first\nsecond\nthird");
+    QTest::newRow("TwoStringsFirstNull") << QChar('\n') << QStringList{QString(), "second"}
+                                          << QString("second");
+    QTest::newRow("TwoStringsSecondNull") << QChar('\n') << QStringList{"first", QString()}
+                                           << QString("first");
+    QTest::newRow("TwoStringsFirstEmpty") << QChar('\n') << QStringList{"", "second"}
+                                          << QString("second");
+    QTest::newRow("TwoStringsSecondEmpty") << QChar('\n') << QStringList{"first", ""}
+                                           << QString("first");
+    QTest::newRow("ThreeStringsFirstEmpty") << QChar('\n') << QStringList{"", "second", "third"}
+                                            << QString("second\nthird");
+    QTest::newRow("ThreeStringsSecondEmpty") << QChar('\n') << QStringList{"first", "", "third"}
+                                             << QString("first\nthird");
+    QTest::newRow("ThreeStringsThirdEmpty") << QChar('\n') << QStringList{"first", "second", ""}
+                                            << QString("first\nsecond");
+    QTest::newRow("DotSeparator") << QChar('.') << QStringList{"first", "second"}
+                                  << QString("first.second");
+}
+
+void tst_StringUtils::testJoinStrings()
+{
+    QFETCH(QChar, separator);
+    QFETCH(QStringList, input);
+    QFETCH(QString, output);
+
+    QCOMPARE(Utils::joinStrings(input, separator), output);
 }
 
 QTEST_GUILESS_MAIN(tst_StringUtils)
