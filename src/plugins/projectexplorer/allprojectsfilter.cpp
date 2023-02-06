@@ -9,6 +9,7 @@
 #include "project.h"
 
 #include <utils/algorithm.h>
+#include <utils/tasktree.h>
 
 using namespace Core;
 
@@ -46,10 +47,11 @@ void AllProjectsFilter::prepareSearch(const QString &entry)
     BaseFileFilter::prepareSearch(entry);
 }
 
-void AllProjectsFilter::refresh(QFutureInterface<void> &future)
+using namespace Utils::Tasking;
+
+std::optional<TaskItem> AllProjectsFilter::refreshRecipe()
 {
-    Q_UNUSED(future)
-    QMetaObject::invokeMethod(this, &AllProjectsFilter::markFilesAsOutOfDate, Qt::QueuedConnection);
+    return Sync([this] { markFilesAsOutOfDate(); return true; });
 }
 
 } // ProjectExplorer::Internal

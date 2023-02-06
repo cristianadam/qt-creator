@@ -9,6 +9,7 @@
 #include <utils/filepath.h>
 #include <utils/link.h>
 #include <utils/linecolumn.h>
+#include <utils/tasktree.h>
 
 #include <QAbstractItemModel>
 #include <QMutexLocker>
@@ -91,12 +92,6 @@ QList<OpenDocumentsFilter::Entry> OpenDocumentsFilter::editors() const
     return m_editors;
 }
 
-void OpenDocumentsFilter::refresh(QFutureInterface<void> &future)
-{
-    Q_UNUSED(future)
-    QMetaObject::invokeMethod(this, &OpenDocumentsFilter::refreshInternally, Qt::QueuedConnection);
-}
-
 void OpenDocumentsFilter::accept(const LocatorFilterEntry &selection,
                                  QString *newText, int *selectionStart, int *selectionLength) const
 {
@@ -104,6 +99,13 @@ void OpenDocumentsFilter::accept(const LocatorFilterEntry &selection,
     Q_UNUSED(selectionStart)
     Q_UNUSED(selectionLength)
     BaseFileFilter::openEditorAt(selection);
+}
+
+using namespace Utils::Tasking;
+
+std::optional<TaskItem> OpenDocumentsFilter::refreshRecipe()
+{
+    return Sync([this] { refreshInternally(); return true; });
 }
 
 } // Core::Internal

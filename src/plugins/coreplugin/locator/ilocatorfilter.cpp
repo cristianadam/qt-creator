@@ -6,6 +6,7 @@
 #include "../coreplugintr.h"
 
 #include <utils/fuzzymatcher.h>
+#include <utils/tasktree.h>
 
 #include <QBoxLayout>
 #include <QCheckBox>
@@ -96,6 +97,11 @@ QString ILocatorFilter::shortcutString() const
 void ILocatorFilter::prepareSearch(const QString &entry)
 {
     Q_UNUSED(entry)
+}
+
+std::optional<Tasking::TaskItem> ILocatorFilter::refreshRecipe()
+{
+    return {};
 }
 
 /*!

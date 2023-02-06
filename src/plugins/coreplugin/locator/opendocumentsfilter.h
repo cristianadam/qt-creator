@@ -7,10 +7,7 @@
 
 #include <coreplugin/editormanager/documentmodel.h>
 
-#include <QFutureInterface>
-#include <QList>
 #include <QMutex>
-#include <QString>
 
 namespace Core {
 namespace Internal {
@@ -25,10 +22,6 @@ public:
                                          const QString &entry) override;
     void accept(const LocatorFilterEntry &selection,
                 QString *newText, int *selectionStart, int *selectionLength) const override;
-    void refresh(QFutureInterface<void> &future) override;
-
-public slots:
-    void refreshInternally();
 
 private:
     class Entry
@@ -39,6 +32,8 @@ private:
     };
 
     QList<Entry> editors() const;
+    void refreshInternally();
+    std::optional<Utils::Tasking::TaskItem> refreshRecipe() override;
 
     mutable QMutex m_mutex;
     QList<Entry> m_editors;

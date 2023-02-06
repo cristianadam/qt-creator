@@ -12,6 +12,7 @@
 #include <projectexplorer/project.h>
 #include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/session.h>
+#include <utils/tasktree.h>
 
 using namespace Core;
 using namespace ProjectExplorer;
@@ -144,16 +145,17 @@ void CppIncludesFilter::prepareSearch(const QString &entry)
     BaseFileFilter::prepareSearch(entry);
 }
 
-void CppIncludesFilter::refresh(QFutureInterface<void> &future)
-{
-    Q_UNUSED(future)
-    QMetaObject::invokeMethod(this, &CppIncludesFilter::markOutdated, Qt::QueuedConnection);
-}
-
 void CppIncludesFilter::markOutdated()
 {
     m_needsUpdate = true;
     setFileIterator(nullptr); // clean up
+}
+
+using namespace Utils::Tasking;
+
+std::optional<TaskItem> CppIncludesFilter::refreshRecipe()
+{
+    return Sync([this] { markOutdated(); return true; });
 }
 
 } // namespace CppEditor::Internal

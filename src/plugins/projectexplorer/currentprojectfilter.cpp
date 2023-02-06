@@ -8,6 +8,7 @@
 #include "projecttree.h"
 
 #include <utils/algorithm.h>
+#include <utils/tasktree.h>
 
 using namespace Core;
 using namespace ProjectExplorer;
@@ -62,9 +63,9 @@ void CurrentProjectFilter::currentProjectChanged()
     markFilesAsOutOfDate();
 }
 
-void CurrentProjectFilter::refresh(QFutureInterface<void> &future)
+using namespace Utils::Tasking;
+
+std::optional<TaskItem> CurrentProjectFilter::refreshRecipe()
 {
-    Q_UNUSED(future)
-    QMetaObject::invokeMethod(this, &CurrentProjectFilter::markFilesAsOutOfDate,
-                              Qt::QueuedConnection);
+    return Sync([this] { markFilesAsOutOfDate(); return true; });
 }
