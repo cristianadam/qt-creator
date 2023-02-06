@@ -244,6 +244,13 @@ public:
     OnGroupError(const GroupEndHandler &handler) : TaskItem({{}, {}, handler}) {}
 };
 
+class QTCREATOR_UTILS_EXPORT Sync : public TaskItem
+{
+public:
+    using SynchronousMethod = std::function<bool()>;
+    Sync(const SynchronousMethod &sync);
+};
+
 QTCREATOR_UTILS_EXPORT extern ParallelLimit sequential;
 QTCREATOR_UTILS_EXPORT extern ParallelLimit parallel;
 QTCREATOR_UTILS_EXPORT extern Workflow stopOnError;

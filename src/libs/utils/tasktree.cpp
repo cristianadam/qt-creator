@@ -133,6 +133,18 @@ void TaskItem::addChildren(const QList<TaskItem> &children)
     }
 }
 
+class SyncAdapter : public TaskInterface
+{
+public:
+    SyncAdapter() = default;
+    void start() override { QTC_CHECK(false); }
+};
+
+Sync::Sync(const SynchronousMethod &sync)
+    : TaskItem({[] { return new SyncAdapter; },
+                [sync](TaskInterface &) { return sync() ? TaskAction::StopWithDone
+                                                        : TaskAction::StopWithError; }, {}, {}}) {}
+
 } // namespace Tasking
 
 using namespace Tasking;
