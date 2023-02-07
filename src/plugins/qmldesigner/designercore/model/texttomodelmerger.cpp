@@ -36,11 +36,12 @@
 #include <utils/qrcparser.h>
 #include <utils/qtcassert.h>
 
-#include <QSet>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QLoggingCategory>
 #include <QRegularExpression>
-#include <QElapsedTimer>
+#include <QScopeGuard>
+#include <QSet>
 
 #include <memory>
 
@@ -428,72 +429,19 @@ public:
     void leaveScope()
     { m_scopeBuilder.pop(); }
 
-    void lookup(AST::UiQualifiedId *astTypeNode, QString &typeName, int &majorVersion,
-                int &minorVersion, QString &defaultPropertyName)
+    NodeMetaInfo lookup(AST::UiQualifiedId *astTypeNode)
     {
-        const ObjectValue *value = m_context->lookupType(m_doc.data(), astTypeNode);
-        defaultPropertyName = m_context->defaultPropertyName(value);
+        TypeName fullTypeName;
+        for (AST::UiQualifiedId *iter = astTypeNode; iter; iter = iter->next)
+            if (!iter->name.isEmpty())
+                fullTypeName += iter->name.toUtf8() + '.';
 
-        const CppComponentValue *qmlValue = value_cast<CppComponentValue>(value);
-        if (qmlValue) {
-            typeName = qmlValue->moduleName() + QStringLiteral(".") + qmlValue->className();
+        if (fullTypeName.endsWith('.'))
+            fullTypeName.chop(1);
 
-            majorVersion = qmlValue->componentVersion().majorVersion();
-            minorVersion = qmlValue->componentVersion().minorVersion();
-        } else {
-            for (AST::UiQualifiedId *iter = astTypeNode; iter; iter = iter->next)
-                if (!iter->next && !iter->name.isEmpty())
-                    typeName = iter->name.toString();
-
-            QString fullTypeName;
-            for (AST::UiQualifiedId *iter = astTypeNode; iter; iter = iter->next)
-                if (!iter->name.isEmpty())
-                    fullTypeName += iter->name.toString() + QLatin1Char('.');
-
-            if (fullTypeName.endsWith(QLatin1Char('.')))
-                fullTypeName.chop(1);
-
-            majorVersion = ComponentVersion::NoVersion;
-            minorVersion = ComponentVersion::NoVersion;
-
-            const Imports *imports = m_context->imports(m_doc.data());
-            ImportInfo importInfo = imports->info(fullTypeName, m_context.data());
-            if (importInfo.isValid() && importInfo.type() == ImportType::Library) {
-                QString name = importInfo.name();
-                majorVersion = importInfo.version().majorVersion();
-                minorVersion = importInfo.version().minorVersion();
-                typeName.prepend(name + QLatin1Char('.'));
-            } else if (importInfo.isValid() && importInfo.type() == ImportType::Directory) {
-                const Utils::FilePath path = Utils::FilePath::fromString(importInfo.path());
-                const Utils::FilePath dir = m_doc->path();
-                // should probably try to make it relative to some import path, not to the document path
-                const Utils::FilePath relativePath = path.relativeChildPath(dir);
-                QString name = relativePath.path().replace(QLatin1Char('/'), QLatin1Char('.'));
-                if (!name.isEmpty() && name != QLatin1String("."))
-                    typeName.prepend(name + QLatin1Char('.'));
-            } else if (importInfo.isValid() && importInfo.type() == ImportType::QrcDirectory) {
-                QString path = Utils::QrcParser::normalizedQrcDirectoryPath(importInfo.path());
-                path = path.mid(1, path.size() - ((path.size() > 1) ? 2 : 1));
-                const QString name = path.replace(QLatin1Char('/'), QLatin1Char('.'));
-                if (!name.isEmpty())
-                    typeName.prepend(name + QLatin1Char('.'));
-            }
-        }
-
-        {
-            TypeName fullTypeName;
-            for (AST::UiQualifiedId *iter = astTypeNode; iter; iter = iter->next)
-                if (!iter->name.isEmpty())
-                    fullTypeName += iter->name.toUtf8() + '.';
-
-            if (fullTypeName.endsWith('.'))
-                fullTypeName.chop(1);
-
-            NodeMetaInfo metaInfo = m_model->metaInfo(fullTypeName);
-
-            bool ok = metaInfo.typeName() == typeName.toUtf8()
-                && metaInfo.majorVersion() == majorVersion
-                && metaInfo.minorVersion() == minorVersion;
+        NodeMetaInfo metaInfo = m_model->metaInfo(fullTypeName);
+        return metaInfo;
+    }
 
     bool lookupProperty(const QString &propertyPrefix,
                         const ModelNode &node,
@@ -1618,20 +1566,16 @@ void TextToModelMerger::syncNodeProperty(AbstractProperty &modelProperty,
                                          const TypeName &dynamicPropertyType,
                                          DifferenceHandler &differenceHandler)
 {
+    NodeMetaInfo info = context->lookup(binding->qualifiedTypeNameId);
 
-    QString typeNameString;
-    QString dummy;
-    int majorVersion;
-    int minorVersion;
-    context->lookup(binding->qualifiedTypeNameId, typeNameString, majorVersion, minorVersion, dummy);
-
-    TypeName typeName = typeNameString.toUtf8();
-
-
-    if (typeName.isEmpty()) {
-        qWarning() << "Skipping node with unknown type" << toString(binding->qualifiedTypeNameId);
+    if (!info.isValid()) {
+        qWarning() << "SNP"
+                   << "Skipping node with unknown type" << toString(binding->qualifiedTypeNameId);
         return;
     }
+    TypeName typeName = info.typeName();
+    int majorVersion = info.majorVersion();
+    int minorVersion = info.minorVersion();
 
     if (modelProperty.isNodeProperty() && dynamicPropertyType == modelProperty.dynamicTypeName()) {
         ModelNode nodePropertyNode = modelProperty.toNodeProperty().modelNode();
@@ -2149,18 +2093,14 @@ ModelNode ModelAmender::listPropertyMissingModelNode(NodeListProperty &modelProp
     if (!astObjectType || !astInitializer)
         return ModelNode();
 
-    QString typeNameString;
-    QString dummy;
-    int majorVersion;
-    int minorVersion;
-    context->lookup(astObjectType, typeNameString, majorVersion, minorVersion, dummy);
-
-    TypeName typeName = typeNameString.toUtf8();
-
-    if (typeName.isEmpty()) {
+    NodeMetaInfo info = context->lookup(astObjectType);
+    if (!info.isValid()) {
         qWarning() << "Skipping node with unknown type" << toString(astObjectType);
-        return ModelNode();
+        return {};
     }
+    TypeName typeName = info.typeName();
+    int majorVersion = info.majorVersion();
+    int minorVersion = info.minorVersion();
 
     const bool propertyTakesComponent = propertyIsComponentType(modelProperty, typeName, m_merger->view()->model());
 
