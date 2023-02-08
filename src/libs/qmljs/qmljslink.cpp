@@ -521,7 +521,8 @@ bool LinkPrivate::importLibrary(const Document::Ptr &doc,
         bool subImportFound = importLibrary(doc, subImport.libraryPath, &subImport, targetObject, importPath, true);
 
         if (!subImportFound && errorLoc.isValid()) {
-            import->valid = false;
+            if (!subImport.info.name().startsWith("QtQuick.Controls"))
+                import->valid = false;
             if (!(optional || (toImport.flags & QmlDirParser::Import::Optional))) {
                 error(doc,
                       errorLoc,
