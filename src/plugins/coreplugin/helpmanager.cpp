@@ -22,13 +22,19 @@ static Implementation *m_instance = nullptr;
 
 static bool checkInstance()
 {
+    static bool hasInstance = false;
+    if (hasInstance)
+        return true;
+
     auto plugin = Internal::CorePlugin::instance();
     // HelpManager API can only be used after the actual implementation has been created by the
     // Help plugin, so check that the plugins have all been created. That is the case
     // when the Core plugin is initialized.
-    QTC_CHECK(plugin && plugin->pluginSpec()
-              && plugin->pluginSpec()->state() >= ExtensionSystem::PluginSpec::Initialized);
-    return m_instance != nullptr;
+    // FIXME: This surely can be simplified.
+    ExtensionSystem::PluginSpec *pluginSpec = ExtensionSystem::PluginSpec::specForPlugin(plugin);
+    QTC_CHECK(plugin && pluginSpec && pluginSpec->state() >= ExtensionSystem::PluginSpec::Initialized);
+    hasInstance = m_instance != nullptr;
+    return hasInstance;
 }
 
 Signals *Signals::instance()

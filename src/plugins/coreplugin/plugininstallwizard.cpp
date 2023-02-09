@@ -251,7 +251,7 @@ public:
     {
         QTC_ASSERT(m_tempDir.get(), return );
 
-        PluginSpec *coreplugin = CorePlugin::instance()->pluginSpec();
+        PluginSpec *coreplugin = PluginSpec::specForPlugin(CorePlugin::instance());
 
         // look for plugin
         QDirIterator it(m_tempDir->path().path(),

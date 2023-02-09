@@ -5,7 +5,6 @@
 
 #include "extensionsystemtr.h"
 #include "iplugin.h"
-#include "iplugin_p.h"
 #include "pluginmanager.h"
 #include "pluginspec_p.h"
 
@@ -556,6 +555,11 @@ PluginSpec *PluginSpec::read(const QStaticPlugin &plugin)
     return spec;
 }
 
+PluginSpec *PluginSpec::specForPlugin(IPlugin *plugin)
+{
+    return PluginManager::specForPlugin(plugin);
+}
+
 //==========PluginSpecPrivate==================
 
 namespace {
@@ -1090,7 +1094,6 @@ bool PluginSpecPrivate::loadLibrary()
     }
     state = PluginSpec::Loaded;
     plugin = pluginObject;
-    plugin->d->pluginSpec = q;
     return true;
 }
 

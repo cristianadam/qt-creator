@@ -115,6 +115,8 @@ public:
     static PluginSpec *read(const QString &filePath);
     static PluginSpec *read(const QStaticPlugin &plugin);
 
+    static PluginSpec *specForPlugin(IPlugin *plugin);
+
 private:
     PluginSpec();
 

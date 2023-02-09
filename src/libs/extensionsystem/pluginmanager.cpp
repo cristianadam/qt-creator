@@ -1557,6 +1557,19 @@ void PluginManager::checkForProblematicPlugins()
 }
 
 /*!
+    Returns the PluginSpec corresponding to \a plugin.
+*/
+
+PluginSpec *PluginManager::specForPlugin(IPlugin *plugin)
+{
+    for (PluginSpec *spec: std::as_const(d->pluginSpecs)) {
+        if (spec->plugin() == plugin)
+            return spec;
+    }
+    return nullptr;
+}
+
+/*!
     \internal
 */
 void PluginManagerPrivate::loadPlugin(PluginSpec *spec, PluginSpec::State destState)
