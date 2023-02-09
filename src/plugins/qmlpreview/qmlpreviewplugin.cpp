@@ -201,6 +201,11 @@ QmlPreviewPlugin::~QmlPreviewPlugin()
 void QmlPreviewPlugin::initialize()
 {
     d = new QmlPreviewPluginPrivate(this);
+
+#ifdef WITH_TESTS
+    addTest<QmlPreviewClientTest>();
+    addTest<QmlPreviewPluginTest>();
+#endif
 }
 
 ExtensionSystem::IPlugin::ShutdownFlag QmlPreviewPlugin::aboutToShutdown()
@@ -208,16 +213,6 @@ ExtensionSystem::IPlugin::ShutdownFlag QmlPreviewPlugin::aboutToShutdown()
     d->m_parseThread.quit();
     d->m_parseThread.wait();
     return SynchronousShutdown;
-}
-
-QVector<QObject *> QmlPreviewPlugin::createTestObjects() const
-{
-    QVector<QObject *> tests;
-#ifdef WITH_TESTS
-    tests.append(new QmlPreviewClientTest);
-    tests.append(new QmlPreviewPluginTest);
-#endif
-    return tests;
 }
 
 QString QmlPreviewPlugin::previewedFile() const
