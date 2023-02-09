@@ -74,6 +74,21 @@ TreeViewDelegate {
                 return StudioTheme.Values.themeInteraction
 
             if (!root.__isDirectory && root.assetsView.selectedAssets[root.__itemPath])
+                return StudioTheme.Values.themeSectionHeadBackground
+
+            if (mouseArea.containsMouse)
+                return StudioTheme.Values.themeSectionHeadBackground
+
+            return root.__isDirectory
+                    ? StudioTheme.Values.themeSectionHeadBackground
+                    : "transparent"
+        }
+
+        border.color: {
+            if (root.__isDirectory && (root.isHighlighted || root.hasChildWithDropHover))
+                return StudioTheme.Values.themeInteraction
+
+            if (!root.__isDirectory && root.assetsView.selectedAssets[root.__itemPath])
                 return StudioTheme.Values.themeInteraction
 
             if (mouseArea.containsMouse)
@@ -83,6 +98,8 @@ TreeViewDelegate {
                     ? StudioTheme.Values.themeSectionHeadBackground
                     : "transparent"
         }
+
+
 
         // this rectangle exists so as to have some visual indentation for the directories
         // We prepend a default pane-colored rectangle so that the nested directory will

@@ -53,8 +53,8 @@ Item {
         height: parent.height - y
 
         onEntered: (drag)=> {
-            root.updateDropExtFiles(drag)
-        }
+                       root.updateDropExtFiles(drag)
+                   }
 
         onDropped: {
             rootView.handleExtFilesDrop(root.dropSimpleExtFiles, root.dropComplexExtFiles,
@@ -108,140 +108,158 @@ Item {
 
     Column {
         anchors.fill: parent
-        anchors.topMargin: 5
         spacing: 5
 
-        Row {
-            id: searchRow
-
+        Column {
+            id: col
             width: parent.width
-
-            StudioControls.SearchBox {
-                id: searchBox
-
-                width: parent.width - addAssetButton.width - 5
-
-                onSearchChanged: (searchText) => {
-                    updateSearchFilterTimer.restart()
-                }
-            }
-
-            Timer {
-                id: updateSearchFilterTimer
-                interval: 200
-                repeat: false
-
-                onTriggered: {
-                    assetsView.resetVerticalScrollPosition()
-                    rootView.handleSearchFilterChanged(searchBox.text)
-                    assetsView.expandAll()
-
-                    if (root.__searchBoxEmpty && searchBox.text)
-                        root.__searchBoxEmpty = false
-                    else if (!root.__searchBoxEmpty && !searchBox.text)
-                        root.__searchBoxEmpty = true
-                }
-            }
-
-            HelperWidgets.IconButton {
-                id: addAssetButton
-                anchors.verticalCenter: parent.verticalCenter
-                tooltip: qsTr("Add a new asset to the project.")
-                icon: StudioTheme.Constants.plus
-                buttonSize: parent.height
-
-                onClicked: rootView.handleAddAsset()
-            }
-        }
-
-        Text {
-            text: qsTr("No match found.")
-            leftPadding: 10
-            color: StudioTheme.Values.themeTextColor
-            font.pixelSize: 12
-            visible: !assetsModel.haveFiles && !root.__searchBoxEmpty
-        }
-
-        Item { // placeholder when the assets library is empty
-            width: parent.width
-            height: parent.height - searchRow.height
-            visible: !assetsModel.haveFiles && root.__searchBoxEmpty
-            clip: true
-
-            MouseArea { // right clicking the empty area of the view
-                anchors.fill: parent
-                acceptedButtons: Qt.RightButton
-                onClicked: {
-                    contextMenu.openContextMenuForEmpty(assetsModel.rootPath())
-                }
-            }
-
-            DropArea { // handles external drop (goes into default folder based on suffix)
-                anchors.fill: parent
-
-                onEntered: (drag)=> {
-                    root.updateDropExtFiles(drag)
-                }
-
-                onDropped: {
-                    rootView.emitExtFilesDrop(root.dropSimpleExtFiles, root.dropComplexExtFiles)
-                }
+            height: parent.height
+            spacing: 5
+            Rectangle {
+                width: parent.width
+                height: StudioTheme.Values.doubleToolbarHeight
+                color: StudioTheme.Values.themeToolbarBackground
 
                 Column {
-                    id: colNoAssets
+                    anchors.fill: parent
+                    padding: 6
+                    spacing: 12
 
-                    spacing: 20
-                    x: 20
-                    width: root.width - 2 * x
-                    anchors.verticalCenter: parent.verticalCenter
-
-                    Text {
-                        text: qsTr("Looks like you don't have any assets yet.")
-                        color: StudioTheme.Values.themeTextColor
-                        font.pixelSize: 18
-                        width: colNoAssets.width
-                        horizontalAlignment: Text.AlignHCenter
-                        wrapMode: Text.WordWrap
+                    StudioControls.SearchBox {
+                        id: searchBox
+                        width: parent.width - (parent.padding * 2)
+                        style: StudioTheme.Values.searchControlStyle
+                        onSearchChanged: (searchText) => {
+                                             updateSearchFilterTimer.restart()
+                                         }
                     }
 
-                    Image {
-                        source: "image://qmldesigner_assets/browse"
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        scale: maBrowse.containsMouse ? 1.2 : 1
-                        Behavior on scale {
-                            NumberAnimation {
-                                duration: 300
-                                easing.type: Easing.OutQuad
+                    Row {
+                        id: searchRow
+                        width: parent.width - (parent.padding * 2)
+                        height: StudioTheme.Values.toolbarHeight
+                        leftPadding: 6
+                        rightPadding: 6
+                        spacing: 6
+
+                        HelperWidgets.AbstractButton {
+                            id: addModuleButton
+                            style: StudioTheme.Values.viewBarButtonStyle
+                            buttonIcon: StudioTheme.Constants.add_medium
+                            tooltip: qsTr("Add a new asset to the project.")
+                            onClicked: rootView.handleAddAsset()
+                        }
+                    }
+                }
+
+
+                Timer {
+                    id: updateSearchFilterTimer
+                    interval: 200
+                    repeat: false
+
+                    onTriggered: {
+                        assetsView.resetVerticalScrollPosition()
+                        rootView.handleSearchFilterChanged(searchBox.text)
+                        assetsView.expandAll()
+
+                        if (root.__searchBoxEmpty && searchBox.text)
+                            root.__searchBoxEmpty = false
+                        else if (!root.__searchBoxEmpty && !searchBox.text)
+                            root.__searchBoxEmpty = true
+                    }
+                }
+
+
+                Text {
+                    text: qsTr("No match found.")
+                    leftPadding: 10
+                    color: StudioTheme.Values.themeTextColor
+                    font.pixelSize: 12
+                    visible: !assetsModel.haveFiles && !root.__searchBoxEmpty
+                }
+
+                Item { // placeholder when the assets library is empty
+                    width: parent.width
+                    height: parent.height - searchRow.height
+                    visible: !assetsModel.haveFiles && root.__searchBoxEmpty
+                    clip: true
+
+                    MouseArea { // right clicking the empty area of the view
+                        anchors.fill: parent
+                        acceptedButtons: Qt.RightButton
+                        onClicked: {
+                            contextMenu.openContextMenuForEmpty(assetsModel.rootPath())
+                        }
+                    }
+
+                    DropArea { // handles external drop (goes into default folder based on suffix)
+                        anchors.fill: parent
+
+                        onEntered: (drag)=> {
+                                       root.updateDropExtFiles(drag)
+                                   }
+
+                        onDropped: {
+                            rootView.emitExtFilesDrop(root.dropSimpleExtFiles, root.dropComplexExtFiles)
+                        }
+
+                        Column {
+                            id: colNoAssets
+
+                            spacing: 20
+                            x: 20
+                            width: root.width - 2 * x
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            Text {
+                                text: qsTr("Looks like you don't have any assets yet.")
+                                color: StudioTheme.Values.themeTextColor
+                                font.pixelSize: 18
+                                width: colNoAssets.width
+                                horizontalAlignment: Text.AlignHCenter
+                                wrapMode: Text.WordWrap
+                            }
+
+                            Image {
+                                source: "image://qmldesigner_assets/browse"
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                scale: maBrowse.containsMouse ? 1.2 : 1
+                                Behavior on scale {
+                                    NumberAnimation {
+                                        duration: 300
+                                        easing.type: Easing.OutQuad
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: maBrowse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onClicked: rootView.handleAddAsset();
+                                }
+                            }
+
+                            Text {
+                                text: qsTr("Drag-and-drop your assets here or click the '+' button to browse assets from the file system.")
+                                color: StudioTheme.Values.themeTextColor
+                                font.pixelSize: 18
+                                width: colNoAssets.width
+                                horizontalAlignment: Text.AlignHCenter
+                                wrapMode: Text.WordWrap
                             }
                         }
-
-                        MouseArea {
-                            id: maBrowse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: rootView.handleAddAsset();
-                        }
-                    }
-
-                    Text {
-                        text: qsTr("Drag-and-drop your assets here or click the '+' button to browse assets from the file system.")
-                        color: StudioTheme.Values.themeTextColor
-                        font.pixelSize: 18
-                        width: colNoAssets.width
-                        horizontalAlignment: Text.AlignHCenter
-                        wrapMode: Text.WordWrap
                     }
                 }
             }
-        }
+            AssetsView {
+                id: assetsView
+                assetsRoot: root
+                contextMenu: contextMenu
 
-        AssetsView {
-            id: assetsView
-            assetsRoot: root
-            contextMenu: contextMenu
-
-            width: parent.width
-            height: parent.height - y
-        }
-    } // Column
+                width: parent.width
+                height: parent.height - y
+            }
+        } // column
+    }
 }
