@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "iplugin.h"
-#include "iplugin_p.h"
+
 #include "pluginspec.h"
 
 #include <utils/algorithm.h>
@@ -160,7 +160,17 @@
     \sa aboutToShutdown()
 */
 
-using namespace ExtensionSystem;
+namespace ExtensionSystem {
+namespace Internal {
+
+class IPluginPrivate
+{
+public:
+    PluginSpec *pluginSpec;
+    QList<std::function<QObject *()>> testCreators;
+};
+
+} // Internal
 
 /*!
     \internal
@@ -226,3 +236,5 @@ PluginSpec *IPlugin::pluginSpec() const
 {
     return d->pluginSpec;
 }
+
+} // ExtensionSystem
