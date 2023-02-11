@@ -15,11 +15,12 @@ using namespace Utils;
 
 namespace VcsBase {
 
-static void readPatch(QFutureInterface<QList<FileData>> &futureInterface, const QString &patch)
+static void readPatch(QPromise<QList<FileData>> &promise, const QString &patch)
 {
     bool ok;
-    const QList<FileData> &fileDataList = DiffUtils::readPatch(patch, &ok, &futureInterface);
-    futureInterface.reportResult(fileDataList);
+    QPromise<void> &voidPromise = reinterpret_cast<QPromise<void> &>(promise);
+    const QList<FileData> &fileDataList = DiffUtils::readPatch(patch, &ok, &voidPromise);
+    promise.addResult(fileDataList);
 }
 
 /////////////////////
@@ -61,7 +62,7 @@ Tasking::TaskItem VcsBaseDiffEditorController::postProcessTask()
         QTC_ASSERT(storage, qWarning("Using postProcessTask() requires putting inputStorage() "
                                      "into task tree's root group."));
         const QString inputData = storage ? *storage : QString();
-        async.setAsyncCallData(readPatch, inputData);
+        async.setConcurrentCallData(readPatch, inputData);
         async.setFutureSynchronizer(Internal::VcsPlugin::futureSynchronizer());
     };
     const auto onDiffProcessorDone = [this](const AsyncTask<QList<FileData>> &async) {

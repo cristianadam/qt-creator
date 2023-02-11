@@ -8,23 +8,20 @@
 #include "diffeditorplugin.h"
 #include "diffeditortr.h"
 
-#include <QMenu>
-#include <QPainter>
-#include <QScrollBar>
-#include <QTextBlock>
-
 #include <coreplugin/icore.h>
 #include <coreplugin/progressmanager/progressmanager.h>
 
 #include <texteditor/fontsettings.h>
 #include <texteditor/textdocument.h>
-#include <texteditor/textdocumentlayout.h>
 #include <texteditor/texteditorsettings.h>
 
 #include <utils/asynctask.h>
 #include <utils/mathutils.h>
 #include <utils/qtcassert.h>
-#include <utils/tooltip/tooltip.h>
+
+#include <QMenu>
+#include <QScrollBar>
+#include <QTextBlock>
 
 using namespace Core;
 using namespace TextEditor;
@@ -48,10 +45,10 @@ UnifiedDiffEditorWidget::UnifiedDiffEditorWidget(QWidget *parent)
     connect(this, &QPlainTextEdit::cursorPositionChanged,
             this, &UnifiedDiffEditorWidget::slotCursorPositionChangedInEditor);
 
-    auto context = new Core::IContext(this);
+    auto context = new IContext(this);
     context->setWidget(this);
-    context->setContext(Core::Context(Constants::UNIFIED_VIEW_ID));
-    Core::ICore::addContextObject(context);
+    context->setContext(Context(Constants::UNIFIED_VIEW_ID));
+    ICore::addContextObject(context);
 }
 
 UnifiedDiffEditorWidget::~UnifiedDiffEditorWidget() = default;
@@ -391,7 +388,7 @@ QString UnifiedDiffData::setChunk(const DiffEditorInput &input, const ChunkData 
     return diffText;
 }
 
-UnifiedDiffOutput UnifiedDiffData::diffOutput(QFutureInterface<void> &fi, int progressMin,
+UnifiedDiffOutput UnifiedDiffData::diffOutput(QPromise<void> &promise, int progressMin,
                                               int progressMax, const DiffEditorInput &input)
 {
     UnifiedDiffOutput output;
@@ -437,8 +434,8 @@ UnifiedDiffOutput UnifiedDiffData::diffOutput(QFutureInterface<void> &fi, int pr
                     output.diffData.m_chunkInfo.setChunkIndex(oldBlock, blockNumber - oldBlock, j);
             }
         }
-        fi.setProgressValue(MathUtils::interpolateLinear(++i, 0, count, progressMin, progressMax));
-        if (fi.isCanceled())
+        promise.setProgressValue(MathUtils::interpolateLinear(++i, 0, count, progressMin, progressMax));
+        if (promise.isCanceled())
             return {};
     }
 
@@ -481,18 +478,19 @@ void UnifiedDiffEditorWidget::showDiff()
 
     const DiffEditorInput input(&m_controller);
 
-    auto getDocument = [input](QFutureInterface<ShowResult> &futureInterface) {
-        auto cleanup = qScopeGuard([&futureInterface] {
-            if (futureInterface.isCanceled())
-                futureInterface.reportCanceled();
-        });
+    auto getDocument = [input](QPromise<ShowResult> &promise) {
+//        auto cleanup = qScopeGuard([&futureInterface] {
+//            if (futureInterface.isCanceled())
+//                futureInterface.reportCanceled();
+//        });
         const int progressMax = 100;
         const int firstPartMax = 20; // diffOutput is about 4 times quicker than filling document
-        futureInterface.setProgressRange(0, progressMax);
-        futureInterface.setProgressValue(0);
-        QFutureInterface<void> fi = futureInterface;
-        const UnifiedDiffOutput output = UnifiedDiffData::diffOutput(fi, 0, firstPartMax, input);
-        if (futureInterface.isCanceled())
+        promise.setProgressRange(0, progressMax);
+        promise.setProgressValue(0);
+        QPromise<void> &voidPromise = reinterpret_cast<QPromise<void> &>(promise);
+        const UnifiedDiffOutput output = UnifiedDiffData::diffOutput(voidPromise, 0, firstPartMax,
+                                                                     input);
+        if (promise.isCanceled())
             return;
 
         const ShowResult result = {TextDocumentPtr(new TextDocument("DiffEditor.UnifiedDiffEditor")),
@@ -512,8 +510,9 @@ void UnifiedDiffEditorWidget::showDiff()
             const QString package = output.diffText.mid(currentPos, packageSize);
             cursor.insertText(package);
             currentPos += package.size();
-            fi.setProgressValue(MathUtils::interpolateLinear(currentPos, 0, diffSize, firstPartMax, progressMax));
-            if (futureInterface.isCanceled())
+            promise.setProgressValue(MathUtils::interpolateLinear(currentPos, 0, diffSize,
+                                                                  firstPartMax, progressMax));
+            if (promise.isCanceled())
                 return;
         }
 
@@ -525,10 +524,10 @@ void UnifiedDiffEditorWidget::showDiff()
         // to caller's thread. We push it to no thread (make object to have no thread affinity),
         // and later, in the caller's thread, we pull it back to the caller's thread.
         result.textDocument->moveToThread(nullptr);
-        futureInterface.reportResult(result);
+        promise.addResult(result);
     };
 
-    m_asyncTask->setAsyncCallData(getDocument);
+    m_asyncTask->setConcurrentCallData(getDocument);
     m_asyncTask->start();
     ProgressManager::addTask(m_asyncTask->future(), Tr::tr("Rendering diff"), "DiffEditor");
 }

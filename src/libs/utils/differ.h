@@ -10,7 +10,8 @@
 QT_BEGIN_NAMESPACE
 template <class K, class T>
 class QMap;
-class QFutureInterfaceBase;
+template <class T>
+class QPromise;
 QT_END_NAMESPACE
 
 namespace Utils {
@@ -42,7 +43,7 @@ public:
         WordMode,
         LineMode
     };
-    Differ(QFutureInterfaceBase *jobController = nullptr);
+    Differ(QPromise<void> *promise = nullptr);
     QList<Diff> diff(const QString &text1, const QString &text2);
     QList<Diff> unifiedDiff(const QString &text1, const QString &text2);
     void setDiffMode(DiffMode mode);
@@ -90,7 +91,7 @@ private:
                        int subTextStart);
     DiffMode m_diffMode = Differ::LineMode;
     DiffMode m_currentDiffMode = Differ::LineMode;
-    QFutureInterfaceBase *m_jobController = nullptr;
+    QPromise<void> *m_promise = nullptr;
 };
 
 } // namespace Utils

@@ -7,7 +7,6 @@
 #include "diffeditorwidgetcontroller.h"
 #include "selectabletexteditorwidget.h" // TODO: we need DiffSelections here only
 
-#include <QFutureInterface>
 #include <QWidget>
 
 namespace Core { class IContext; }
@@ -24,6 +23,8 @@ class AsyncTask;
 
 QT_BEGIN_NAMESPACE
 class QMenu;
+template <class T>
+class QPromise;
 class QSplitter;
 QT_END_NAMESPACE
 
@@ -40,7 +41,7 @@ class SideBySideDiffOutput;
 class SideDiffData
 {
 public:
-    static SideBySideDiffOutput diffOutput(QFutureInterface<void> &fi, int progressMin,
+    static SideBySideDiffOutput diffOutput(QPromise<void> &promise, int progressMin,
                                            int progressMax, const DiffEditorInput &input);
 
     DiffChunkInfo m_chunkInfo;

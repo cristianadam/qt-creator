@@ -47,13 +47,14 @@ public:
           m_ignoreWhitespace(ignoreWhitespace)
     {}
 
-    void operator()(QFutureInterface<FileData> &futureInterface,
+    void operator()(QPromise<FileData> &promise,
                     const ReloadInput &reloadInput) const
     {
         if (reloadInput.text[LeftSide] == reloadInput.text[RightSide])
             return; // We show "No difference" in this case, regardless if it's binary or not
 
-        Differ differ(&futureInterface);
+        QPromise<void> &voidPromise = reinterpret_cast<QPromise<void> &>(promise);
+        Differ differ(&voidPromise);
 
         FileData fileData;
         if (!reloadInput.binaryFiles) {
@@ -85,7 +86,7 @@ public:
         fileData.fileInfo = reloadInput.fileInfo;
         fileData.fileOperation = reloadInput.fileOperation;
         fileData.binaryFiles = reloadInput.binaryFiles;
-        futureInterface.reportResult(fileData);
+        promise.addResult(fileData);
     }
 
 private:
@@ -115,7 +116,7 @@ DiffFilesController::DiffFilesController(IDocument *document)
         QList<std::optional<FileData>> *outputList = storage.activeStorage();
 
         const auto setupDiff = [this](AsyncTask<FileData> &async, const ReloadInput &reloadInput) {
-            async.setAsyncCallData(DiffFile(ignoreWhitespace(), contextLineCount()), reloadInput);
+            async.setConcurrentCallData(DiffFile(ignoreWhitespace(), contextLineCount()), reloadInput);
             async.setFutureSynchronizer(Internal::DiffEditorPlugin::futureSynchronizer());
         };
         const auto onDiffDone = [outputList](const AsyncTask<FileData> &async, int i) {

@@ -6,8 +6,6 @@
 #include "diffeditorwidgetcontroller.h"
 #include "selectabletexteditorwidget.h"
 
-#include <QFutureInterface>
-
 namespace Core { class IContext; }
 
 namespace TextEditor { class FontSettings; }
@@ -16,6 +14,11 @@ namespace Utils {
 template <typename R>
 class AsyncTask;
 }
+
+QT_BEGIN_NAMESPACE
+template <class T>
+class QPromise;
+QT_END_NAMESPACE
 
 namespace DiffEditor {
 
@@ -31,7 +34,7 @@ class UnifiedDiffOutput;
 class UnifiedDiffData
 {
 public:
-    static UnifiedDiffOutput diffOutput(QFutureInterface<void> &fi, int progressMin, int progressMax,
+    static UnifiedDiffOutput diffOutput(QPromise<void> &promise, int progressMin, int progressMax,
                                         const DiffEditorInput &input);
 
     DiffChunkInfo m_chunkInfo;
