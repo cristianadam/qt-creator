@@ -11,6 +11,7 @@
 #include "tasktree.h"
 
 #include <QFutureWatcher>
+#include <QtConcurrent>
 
 namespace Utils {
 
@@ -38,7 +39,11 @@ public:
             m_watcher.waitForFinished();
     }
 
-    using StartHandler = std::function<QFuture<ResultType>()>;
+    template <typename Function, typename ...Args>
+    void setConcurrentCallData(Function &&function, Args &&...args)
+    {
+        return wrapConcurrent(std::forward<Function>(function), std::forward<Args>(args)...);
+    }
 
     template <typename Function, typename ...Args>
     void setAsyncCallData(const Function &function, const Args &...args)
@@ -69,9 +74,44 @@ public:
     bool isResultAvailable() const { return future().resultCount(); }
 
 private:
+    template <typename Function, typename ...Args>
+    void wrapConcurrent(Function &&function, Args &&...args)
+    {
+        m_startHandler = [=] {
+            return callConcurrent(function, args...);
+        };
+    }
+
+    template <typename Function, typename ...Args>
+    void wrapConcurrent(std::reference_wrapper<const Function> &&wrapper, Args &&...args)
+    {
+        m_startHandler = [=] {
+            return callConcurrent(std::forward<const Function>(wrapper.get()), args...);
+        };
+    }
+
+    template <typename Function, typename ...Args>
+    auto callConcurrent(Function &&function, Args &&...args)
+    {
+        // Notice: we can't just call:
+        //
+        // return QtConcurrent::run(function, args...);
+        //
+        // since there is no way of passing m_priority there.
+        // There is an overload with thread pool, however, there is no overload with priority.
+        //
+        // Below implementation copied from QtConcurrent::run():
+        QtConcurrent::DecayedTuple<Function, Args...>
+            tuple{std::forward<Function>(function), std::forward<Args>(args)...};
+        return QtConcurrent::TaskResolver<std::decay_t<Function>, std::decay_t<Args>...>::run(
+            std::move(tuple), QtConcurrent::TaskStartParameters{m_threadPool, m_priority});
+        // TODO: ensure the above std::move() is safe when start called multiple times?
+    }
+
+    using StartHandler = std::function<QFuture<ResultType>()>;
     StartHandler m_startHandler;
     FutureSynchronizer *m_synchronizer = nullptr;
-    QThreadPool *m_threadPool = nullptr;
+    QThreadPool *m_threadPool = QThreadPool::globalInstance();
     QThread::Priority m_priority = QThread::InheritPriority;
     QFutureWatcher<ResultType> m_watcher;
 };
