@@ -17,7 +17,6 @@
 #include <utils/qtcprocess.h>
 
 #include <QDateTime>
-#include <QFutureInterface>
 #include <QLoggingCategory>
 #include <QThreadPool>
 #include <QTimer>
@@ -335,8 +334,8 @@ Tasking::TaskItem ProcessExtraCompiler::taskItemImpl(const ContentProvider &prov
 {
     const auto setupTask = [=](AsyncTask<FileNameToContentsHash> &async) {
         async.setThreadPool(extraCompilerThreadPool());
-        async.setAsyncCallData(&ProcessExtraCompiler::runInThread, this, command(),
-                               workingDirectory(), arguments(), provider, buildEnvironment());
+        async.setConcurrentCallData(&ProcessExtraCompiler::runInThread, this, command(),
+                                    workingDirectory(), arguments(), provider, buildEnvironment());
         async.setFutureSynchronizer(futureSynchronizer());
     };
     const auto taskDone = [=](const AsyncTask<FileNameToContentsHash> &async) {
@@ -374,7 +373,7 @@ Tasks ProcessExtraCompiler::parseIssues(const QByteArray &stdErr)
     return {};
 }
 
-void ProcessExtraCompiler::runInThread(QFutureInterface<FileNameToContentsHash> &futureInterface,
+void ProcessExtraCompiler::runInThread(QPromise<FileNameToContentsHash> &futureInterface,
                                        const FilePath &cmd, const FilePath &workDir,
                                        const QStringList &args, const ContentProvider &provider,
                                        const Environment &env)
@@ -405,7 +404,7 @@ void ProcessExtraCompiler::runInThread(QFutureInterface<FileNameToContentsHash> 
     if (futureInterface.isCanceled())
         return;
 
-    futureInterface.reportResult(handleProcessFinished(&process));
+    futureInterface.addResult(handleProcessFinished(&process));
 }
 
 } // namespace ProjectExplorer
