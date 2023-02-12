@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "QtCore/qjsonobject.h"
 #include "filefilteritems.h"
 
 #include <utils/environment.h>
@@ -10,17 +11,28 @@
 #include <QObject>
 #include <QSet>
 #include <QStringList>
+#include <QSharedPointer>
 
 #include <memory>
 #include <vector>
 
-namespace QmlProjectManager {
+#define DEVDEBUG qDebug() << "DEBUG::DEVELOPMENT::" << __FUNCTION__ << "::"
 
+namespace QmlJS {
+class SimpleReaderNode;
+}
+
+namespace QmlProjectManager {
 class QmlProjectItem : public QObject
 {
     Q_OBJECT
-
 public:
+    explicit QmlProjectItem(const Utils::FilePath &filePath);
+
+    bool parseProjectFileQml();
+    bool parseProjectFileJson();
+    QString lastParseError();
+
     QString sourceDirectory() const { return m_sourceDirectory; }
     void setSourceDirectory(const QString &directoryPath);
     QString targetDirectory() const { return m_targetDirectory; }
@@ -53,11 +65,13 @@ public:
     bool forceFreeType() const { return m_forceFreeType; };
     void setForceFreeType(bool);
 
+    void setMainFile(const QString &mainFile) { m_mainFile = mainFile; }
     QString mainFile() const { return m_mainFile; }
-    void setMainFile(const QString &mainFilePath) { m_mainFile = mainFilePath; }
+    QString mainFilePath() const { return m_mainFile; }
 
+    void setMainUiFile(const QString &mainUiFile) { m_mainUiFile = mainUiFile; }
     QString mainUiFile() const { return m_mainUiFile; }
-    void setMainUiFile(const QString &mainUiFilePath) { m_mainUiFile = mainUiFilePath; }
+    Utils::FilePath mainUiFilePath() const { return Utils::FilePath::fromString(m_mainUiFile); }
 
     bool widgetApp() const { return m_widgetApp; }
     void setWidgetApp(bool widgetApp) { m_widgetApp = widgetApp; }
@@ -76,27 +90,61 @@ public:
     Utils::EnvironmentItems environment() const;
     void addToEnviroment(const QString &key, const QString &value);
 
+    QJsonObject jsonDump();
+    QString qmlProjectDump();
+
+    QSharedPointer<QmlJS::SimpleReaderNode> rootNodeQmlObject() const;
+    void setRootNodeQmlObject(QSharedPointer<QmlJS::SimpleReaderNode> newRootNodeQmlObject);
+
+    QSharedPointer<QJsonObject> rootNodeJson() const;
+    void setRootNodeJson(QSharedPointer<QJsonObject> newRootNodeJson);
+
 signals:
     void qmlFilesChanged(const QSet<QString> &, const QSet<QString> &);
 
 protected:
+    // design studio project files
+    Utils::FilePath m_projectFileQml;
+    Utils::FilePath m_projectFileJson;
+
+    // paths
+    QString m_projectPath;
     QString m_sourceDirectory;
     QString m_targetDirectory;
     QStringList m_importPaths;
-    QStringList m_fileSelectors;
-    bool m_multilanguageSupport;
-    QStringList m_supportedLanguages;
-    QString m_primaryLanguage;
-    QString m_mainFile;
-    QString m_mainUiFile;
-    Utils::EnvironmentItems m_environment;
-    std::vector<std::unique_ptr<FileFilterBaseItem>> m_content; // content property
+
+    // project props
     bool m_forceFreeType = false;
     bool m_qtForMCUs = false;
     bool m_qt6Project = false;
     bool m_widgetApp = false;
-    QStringList m_shaderToolArgs;
+    bool m_multilanguageSupport;
+    Utils::EnvironmentItems m_environment;
+
+    // language props
+    QStringList m_supportedLanguages;
+    QString m_primaryLanguage;
+
+    // files & props
     QStringList m_shaderToolFiles;
+    QStringList m_shaderToolArgs;
+    QString m_mainFile;
+    QString m_mainUiFile;
+    QStringList m_fileSelectors;
+    std::vector<std::unique_ptr<FileFilterBaseItem>> m_content; // content property
+
+    // runtime variables
+    QString m_lastParseError;
+
+private:
+    typedef QSharedPointer<QmlProjectItem> ShrdPtrQPI;
+    typedef std::unique_ptr<FileFilterBaseItem> UnqPtrFFBI;
+    typedef std::unique_ptr<FileFilterItem> UnqPtrFFI;
+
+    QJsonObject m_rootObj;
+
+    UnqPtrFFBI setupFileFilterItem(UnqPtrFFBI fileFilterItem,
+                                   const QSharedPointer<QmlJS::SimpleReaderNode> &node);
 };
 
 } // namespace QmlProjectManager
