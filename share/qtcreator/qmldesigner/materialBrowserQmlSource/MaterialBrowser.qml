@@ -293,7 +293,23 @@ Item {
                     width: parent.width
                     style: StudioTheme.Values.searchControlStyle
 
+                    property string previousSearchText: ""
+                    property bool nonSearchMaterialsExpanded: true
+                    property bool nonSearchTexturesExpanded: true
+
                     onSearchChanged: (searchText) => {
+                        if (searchText !== "") {
+                            if (previousSearchText === "") {
+                                nonSearchMaterialsExpanded = materialsSection.expanded
+                                nonSearchTexturesExpanded = texturesSection.expanded
+                            }
+                            materialsSection.expanded = true
+                            texturesSection.expanded = true
+                        } else if (previousSearchText !== "") {
+                            materialsSection.expanded = nonSearchMaterialsExpanded
+                            texturesSection.expanded = nonSearchTexturesExpanded
+                        }
+                        previousSearchText = searchText
                         rootView.handleSearchFilterChanged(searchText)
                     }
                 }
