@@ -140,8 +140,8 @@ Item {
                             if (newTargetIdx >= 0)
                                 targetIdx = newTargetIdx
                         }
-                        rootView.materialSectionFocused = true
                         materialBrowserModel.selectMaterial(targetIdx)
+                        rootView.focusMaterialSection(true)
                     }
                 }
             }
@@ -170,8 +170,8 @@ Item {
                             if (newTargetIdx >= 0)
                                 targetIdx = newTargetIdx
                         }
-                        rootView.materialSectionFocused = false
                         materialBrowserTexturesModel.selectTexture(targetIdx)
+                        rootView.focusMaterialSection(false)
                     }
                 }
             } else if (texSecFocused) {
@@ -251,15 +251,65 @@ Item {
         }
     }
 
+    function ensureVisible(yPos, itemHeight)
+    {
+        if (yPos < 0) {
+            let adjustedY = scrollView.contentY + yPos
+            if (adjustedY < itemHeight)
+                scrollView.contentY = 0
+            else
+                scrollView.contentY = adjustedY
+        } else if (yPos + itemHeight > scrollView.height) {
+            let adjustedY = scrollView.contentY + yPos + itemHeight - scrollView.height + 8
+            if (scrollView.contentHeight - adjustedY - scrollView.height < itemHeight)
+                scrollView.contentY = scrollView.contentHeight - scrollView.height
+            else
+                scrollView.contentY = adjustedY
+        }
+    }
+
     Connections {
         target: materialBrowserModel
 
-        function onSelectedIndexChanged() {
+        function onSelectedIndexChanged()
+        {
             // commit rename upon changing selection
             if (root.currMaterialItem)
                 root.currMaterialItem.commitRename();
 
             root.currMaterialItem = materialRepeater.itemAt(materialBrowserModel.selectedIndex);
+
+            if (materialsSection.expanded) {
+                ensureVisible(root.currMaterialItem.mapToItem(scrollView, 0, 0).y,
+                              root.currMaterialItem.height)
+            }
+        }
+    }
+
+    Connections {
+        target: materialBrowserTexturesModel
+
+        function onSelectedIndexChanged()
+        {
+            if (texturesSection.expanded) {
+                let currItem = texturesRepeater.itemAt(materialBrowserTexturesModel.selectedIndex)
+                ensureVisible(currItem.mapToItem(scrollView, 0, 0).y, currItem.height)
+            }
+        }
+    }
+
+    Connections {
+        target: rootView
+
+        function onMaterialSectionFocusedChanged()
+        {
+            if (rootView.materialSectionFocused && materialsSection.expanded) {
+                ensureVisible(root.currMaterialItem.mapToItem(scrollView, 0, 0).y,
+                              root.currMaterialItem.height)
+            } else if (!rootView.materialSectionFocused && texturesSection.expanded) {
+                let currItem = texturesRepeater.itemAt(materialBrowserTexturesModel.selectedIndex)
+                ensureVisible(currItem.mapToItem(scrollView, 0, 0).y, currItem.height)
+            }
         }
     }
 
@@ -276,6 +326,7 @@ Item {
         spacing: 5
 
         Rectangle {
+            id: topContent
             width: parent.width
             height: StudioTheme.Values.doubleToolbarHeight
             color: StudioTheme.Values.themeToolbarBackground
@@ -364,7 +415,7 @@ Item {
             id: scrollView
 
             width: root.width
-            height: root.height - searchBox.height
+            height: root.height - topContent.height
             clip: true
             visible: root.enableUiElements
             interactive: !ctxMenu.opened && !ctxMenuTextures.opened && !rootView.isDragging
