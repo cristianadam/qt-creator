@@ -403,9 +403,9 @@ TaskWindow::TaskWindow() : d(std::make_unique<TaskWindowPrivate>())
         emit setBadgeNumber(d->m_visibleIssuesCount);
     });
 
-    SessionManager *session = SessionManager::instance();
-    connect(session, &SessionManager::aboutToSaveSession, this, &TaskWindow::saveSettings);
-    connect(session, &SessionManager::sessionLoaded, this, &TaskWindow::loadSettings);
+    SessionBase *session = SessionBase::instance();
+    connect(session, &SessionBase::aboutToSaveSession, this, &TaskWindow::saveSettings);
+    connect(session, &SessionBase::sessionLoaded, this, &TaskWindow::loadSettings);
 }
 
 TaskWindow::~TaskWindow()
@@ -490,18 +490,18 @@ void TaskWindow::setCategoryVisibility(Id categoryId, bool visible)
 void TaskWindow::saveSettings()
 {
     QStringList categories = Utils::transform(d->m_filter->filteredCategories(), &Id::toString);
-    SessionManager::setValue(QLatin1String(SESSION_FILTER_CATEGORIES), categories);
-    SessionManager::setValue(QLatin1String(SESSION_FILTER_WARNINGS), d->m_filter->filterIncludesWarnings());
+    SessionBase::setValue(QLatin1String(SESSION_FILTER_CATEGORIES), categories);
+    SessionBase::setValue(QLatin1String(SESSION_FILTER_WARNINGS), d->m_filter->filterIncludesWarnings());
 }
 
 void TaskWindow::loadSettings()
 {
-    QVariant value = SessionManager::value(QLatin1String(SESSION_FILTER_CATEGORIES));
+    QVariant value = SessionBase::value(QLatin1String(SESSION_FILTER_CATEGORIES));
     if (value.isValid()) {
         QList<Id> categories = Utils::transform(value.toStringList(), &Id::fromString);
         d->m_filter->setFilteredCategories(categories);
     }
-    value = SessionManager::value(QLatin1String(SESSION_FILTER_WARNINGS));
+    value = SessionBase::value(QLatin1String(SESSION_FILTER_WARNINGS));
     if (value.isValid()) {
         bool includeWarnings = value.toBool();
         d->m_filter->setFilterIncludesWarnings(includeWarnings);

@@ -667,6 +667,7 @@ public:
     RemoveTaskHandler m_removeTaskHandler;
     ConfigTaskHandler m_configTaskHandler{Task::compilerMissingTask(), Constants::KITS_SETTINGS_PAGE_ID};
 
+    SessionBase m_sessionBase;
     SessionManager m_sessionManager;
     AppOutputPane m_outputPane;
 
@@ -849,11 +850,11 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
             dd, &ProjectExplorerPluginPrivate::projectDisplayNameChanged);
     connect(sessionManager, &SessionManager::dependencyChanged,
             dd, &ProjectExplorerPluginPrivate::updateActions);
-    connect(sessionManager, &SessionManager::sessionLoaded,
+    connect(SessionBase::instance(), &SessionBase::sessionLoaded,
             dd, &ProjectExplorerPluginPrivate::updateActions);
-    connect(sessionManager, &SessionManager::sessionLoaded,
+    connect(SessionBase::instance(), &SessionBase::sessionLoaded,
             dd, &ProjectExplorerPluginPrivate::updateWelcomePage);
-    connect(sessionManager, &SessionManager::sessionLoaded,
+    connect(SessionBase::instance(), &SessionBase::sessionLoaded,
             dd, &ProjectExplorerPluginPrivate::loadSesssionTasks);
 
     connect(sessionManager, &SessionManager::projectAdded, dd, [](ProjectExplorer::Project *project) {
@@ -1658,7 +1659,7 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
     connect(ICore::instance(), &ICore::saveSettingsRequested,
             dd, &ProjectExplorerPluginPrivate::savePersistentSettings);
     connect(EditorManager::instance(), &EditorManager::autoSaved, this, [] {
-        if (!dd->m_shuttingDown && !SessionManager::loadingSession())
+        if (!dd->m_shuttingDown && !SessionBase::loadingSession())
             SessionManager::save();
     });
     connect(qApp, &QApplication::applicationStateChanged, this, [](Qt::ApplicationState state) {
@@ -1982,12 +1983,12 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
          }});
 
     const auto fileHandler = [] {
-        return SessionManager::sessionNameToFileName(SessionManager::activeSession());
+        return SessionBase::sessionNameToFileName(SessionBase::activeSession());
     };
     expander->registerFileVariables("Session", Tr::tr("File where current session is saved."),
                                     fileHandler);
     expander->registerVariable("Session:Name", Tr::tr("Name of current session."), [] {
-        return SessionManager::activeSession();
+        return SessionBase::activeSession();
     });
 
     DeviceManager::instance()->addDevice(IDevice::Ptr(new DesktopDevice));
@@ -2272,7 +2273,7 @@ void ProjectExplorerPluginPrivate::savePersistentSettings()
     if (dd->m_shuttingDown)
         return;
 
-    if (!SessionManager::loadingSession())  {
+    if (!SessionBase::loadingSession())  {
         for (Project *pro : SessionManager::projects())
             pro->saveSettings();
 
@@ -2280,11 +2281,11 @@ void ProjectExplorerPluginPrivate::savePersistentSettings()
     }
 
     QtcSettings *s = ICore::settings();
-    if (SessionManager::isDefaultVirgin()) {
+    if (SessionBase::isDefaultVirgin()) {
         s->remove(Constants::STARTUPSESSION_KEY);
     } else {
-        s->setValue(Constants::STARTUPSESSION_KEY, SessionManager::activeSession());
-        s->setValue(Constants::LASTSESSION_KEY, SessionManager::activeSession());
+        s->setValue(Constants::STARTUPSESSION_KEY, SessionBase::activeSession());
+        s->setValue(Constants::LASTSESSION_KEY, SessionBase::activeSession());
     }
     s->remove(QLatin1String("ProjectExplorer/RecentProjects/Files"));
 
@@ -2481,7 +2482,7 @@ void ProjectExplorerPluginPrivate::updateWelcomePage()
 void ProjectExplorerPluginPrivate::loadSesssionTasks()
 {
     const FilePath filePath = FilePath::fromSettings(
-        SessionManager::value(Constants::SESSION_TASKFILE_KEY));
+        SessionBase::value(Constants::SESSION_TASKFILE_KEY));
     if (!filePath.isEmpty())
         TaskFile::openTasks(filePath);
 }
@@ -2503,10 +2504,10 @@ void ProjectExplorerPluginPrivate::determineSessionToRestoreAtStartup()
     // Process command line arguments first:
     const bool lastSessionArg =
         ExtensionSystem::PluginManager::specForPlugin(m_instance)->arguments().contains("-lastsession");
-    m_sessionToRestoreAtStartup = lastSessionArg ? SessionManager::startupSession() : QString();
+    m_sessionToRestoreAtStartup = lastSessionArg ? SessionBase::startupSession() : QString();
     const QStringList arguments = ExtensionSystem::PluginManager::arguments();
     if (!lastSessionArg) {
-        QStringList sessions = SessionManager::sessions();
+        QStringList sessions = SessionBase::sessions();
         // We have command line arguments, try to find a session in them
         // Default to no session loading
         for (const QString &arg : arguments) {
@@ -2519,7 +2520,7 @@ void ProjectExplorerPluginPrivate::determineSessionToRestoreAtStartup()
     }
     // Handle settings only after command line arguments:
     if (m_sessionToRestoreAtStartup.isEmpty() && m_projectExplorerSettings.autorestoreLastSession)
-        m_sessionToRestoreAtStartup = SessionManager::startupSession();
+        m_sessionToRestoreAtStartup = SessionBase::startupSession();
 
     if (!m_sessionToRestoreAtStartup.isEmpty())
         ModeManager::activateMode(Core::Constants::MODE_EDIT);
@@ -2572,7 +2573,7 @@ void ProjectExplorerPluginPrivate::restoreSession()
     // In addition, convert "filename" "+45" or "filename" ":23" into
     //   "filename+45"   and "filename:23".
     if (!arguments.isEmpty()) {
-        const QStringList sessions = SessionManager::sessions();
+        const QStringList sessions = SessionBase::sessions();
         for (int a = 0; a < arguments.size(); ) {
             const QString &arg = arguments.at(a);
             const QFileInfo fi(arg);
@@ -4066,12 +4067,12 @@ void ProjectExplorerPluginPrivate::updateSessionMenu()
     dd->m_sessionMenu->addSeparator();
     auto *ag = new QActionGroup(m_sessionMenu);
     connect(ag, &QActionGroup::triggered, this, &ProjectExplorerPluginPrivate::setSession);
-    const QString activeSession = SessionManager::activeSession();
-    const bool isDefaultVirgin = SessionManager::isDefaultVirgin();
+    const QString activeSession = SessionBase::activeSession();
+    const bool isDefaultVirgin = SessionBase::isDefaultVirgin();
 
-    QStringList sessions = SessionManager::sessions();
+    QStringList sessions = SessionBase::sessions();
     std::sort(std::next(sessions.begin()), sessions.end(), [](const QString &s1, const QString &s2) {
-        return SessionManager::lastActiveTime(s1) > SessionManager::lastActiveTime(s2);
+        return SessionBase::lastActiveTime(s1) > SessionBase::lastActiveTime(s2);
     });
     for (int i = 0; i < sessions.size(); ++i) {
         const QString &session = sessions[i];

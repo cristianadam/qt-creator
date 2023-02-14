@@ -300,7 +300,7 @@ public:
 
         const bool isLastSession = idx.data(SessionModel::LastSessionRole).toBool();
         const bool isActiveSession = idx.data(SessionModel::ActiveSessionRole).toBool();
-        const bool isDefaultVirgin = SessionManager::isDefaultVirgin();
+        const bool isDefaultVirgin = SessionBase::isDefaultVirgin();
 
         QString fullSessionName = sessionName;
         if (isLastSession && isDefaultVirgin)

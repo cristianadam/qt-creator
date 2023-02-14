@@ -372,7 +372,7 @@ ClangdSettingsWidget::ClangdSettingsWidget(const ClangdSettings::Data &settingsD
 
         connect(addButton, &QPushButton::clicked, this, [this, sessionsView] {
             QInputDialog dlg(sessionsView);
-            QStringList sessions = ProjectExplorer::SessionManager::sessions();
+            QStringList sessions = ProjectExplorer::SessionBase::sessions();
             QStringList currentSessions = d->sessionsModel.stringList();
             for (const QString &s : std::as_const(currentSessions))
                 sessions.removeOne(s);

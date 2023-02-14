@@ -66,7 +66,7 @@ SessionNameInputDialog::SessionNameInputDialog(QWidget *parent)
     : QDialog(parent)
 {
     m_newSessionLineEdit = new QLineEdit(this);
-    m_newSessionLineEdit->setValidator(new SessionValidator(this, SessionManager::sessions()));
+    m_newSessionLineEdit->setValidator(new SessionValidator(this, SessionBase::sessions()));
 
     auto buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, Qt::Horizontal, this);
     m_okButton = buttons->button(QDialogButtonBox::Ok);
@@ -212,7 +212,7 @@ void SessionDialog::updateActions(const QStringList &sessions)
     }
     const bool defaultIsSelected = sessions.contains("default");
     const bool activeIsSelected = Utils::anyOf(sessions, [](const QString &session) {
-        return session == SessionManager::activeSession();
+        return session == SessionBase::activeSession();
     });
     m_openButton->setEnabled(sessions.size() == 1);
     m_renameButton->setEnabled(sessions.size() == 1 && !defaultIsSelected);

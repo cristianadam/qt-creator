@@ -237,10 +237,10 @@ ClangdSettings &ClangdSettings::instance()
 ClangdSettings::ClangdSettings()
 {
     loadSettings();
-    const auto sessionMgr = ProjectExplorer::SessionManager::instance();
-    connect(sessionMgr, &ProjectExplorer::SessionManager::sessionRemoved,
+    const auto sessionMgr = ProjectExplorer::SessionBase::instance();
+    connect(sessionMgr, &ProjectExplorer::SessionBase::sessionRemoved,
             this, [this](const QString &name) { m_data.sessionsWithOneClangd.removeOne(name); });
-    connect(sessionMgr, &ProjectExplorer::SessionManager::sessionRenamed,
+    connect(sessionMgr, &ProjectExplorer::SessionBase::sessionRenamed,
             this, [this](const QString &oldName, const QString &newName) {
         const auto index = m_data.sessionsWithOneClangd.indexOf(oldName);
         if (index != -1)
@@ -319,7 +319,7 @@ ClangDiagnosticConfig ClangdSettings::diagnosticConfig() const
 
 ClangdSettings::Granularity ClangdSettings::granularity() const
 {
-    if (m_data.sessionsWithOneClangd.contains(ProjectExplorer::SessionManager::activeSession()))
+    if (m_data.sessionsWithOneClangd.contains(ProjectExplorer::SessionBase::activeSession()))
         return Granularity::Session;
     return Granularity::Project;
 }

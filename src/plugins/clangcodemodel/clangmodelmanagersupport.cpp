@@ -53,6 +53,7 @@
 
 using namespace CppEditor;
 using namespace LanguageClient;
+using namespace ProjectExplorer;
 using namespace Utils;
 
 namespace ClangCodeModel::Internal {
@@ -234,8 +235,7 @@ ClangModelManagerSupport::ClangModelManagerSupport()
         if (!sessionModeEnabled())
             claimNonProjectSources(clientForProject(fallbackProject()));
     });
-    connect(sessionManager, &ProjectExplorer::SessionManager::sessionLoaded,
-            this, [this] {
+    connect(SessionBase::instance(), &SessionBase::sessionLoaded, this, [this] {
         if (sessionModeEnabled())
             onClangdSettingsChanged();
     });
@@ -419,7 +419,7 @@ static FilePath getJsonDbDir(const ProjectExplorer::Project *project)
     static const QString dirName(".qtc_clangd");
     if (!project) {
         const QString sessionDirName = FileUtils::fileSystemFriendlyName(
-                    ProjectExplorer::SessionManager::activeSession());
+                    ProjectExplorer::SessionBase::activeSession());
         return Core::ICore::userResourcePath() / dirName / sessionDirName; // TODO: Make configurable?
     }
     if (const ProjectExplorer::Target * const target = project->activeTarget()) {

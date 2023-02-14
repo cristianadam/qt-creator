@@ -25,8 +25,8 @@ namespace Internal {
 SessionModel::SessionModel(QObject *parent)
     : QAbstractTableModel(parent)
 {
-    m_sortedSessions = SessionManager::sessions();
-    connect(SessionManager::instance(), &SessionManager::sessionLoaded,
+    m_sortedSessions = SessionBase::sessions();
+    connect(SessionBase::instance(), &SessionBase::sessionLoaded,
             this, &SessionModel::resetSessions);
 }
 
@@ -96,30 +96,30 @@ QVariant SessionModel::data(const QModelIndex &index, int role) const
             switch (index.column()) {
             case 0: result = sessionName;
                 break;
-            case 1: result = SessionManager::sessionDateTime(sessionName);
+            case 1: result = SessionBase::sessionDateTime(sessionName);
                 break;
             } // switch (section)
             break;
         case Qt::FontRole: {
             QFont font;
-            if (SessionManager::isDefaultSession(sessionName))
+            if (SessionBase::isDefaultSession(sessionName))
                 font.setItalic(true);
             else
                 font.setItalic(false);
-            if (SessionManager::activeSession() == sessionName && !SessionManager::isDefaultVirgin())
+            if (SessionBase::activeSession() == sessionName && !SessionBase::isDefaultVirgin())
                 font.setBold(true);
             else
                 font.setBold(false);
             result = font;
         } break;
         case DefaultSessionRole:
-            result = SessionManager::isDefaultSession(sessionName);
+            result = SessionBase::isDefaultSession(sessionName);
             break;
         case LastSessionRole:
-            result = SessionManager::lastSession() == sessionName;
+            result = SessionBase::lastSession() == sessionName;
             break;
         case ActiveSessionRole:
-            result = SessionManager::activeSession() == sessionName;
+            result = SessionBase::activeSession() == sessionName;
             break;
         case ProjectsPathRole:
             result = pathsWithTildeHomePath(SessionManager::projectsForSessionName(sessionName));
@@ -164,8 +164,8 @@ void SessionModel::sort(int column, Qt::SortOrder order)
             isLess = s1 < s2;
         }
         else {
-            const auto s1time = SessionManager::sessionDateTime(s1);
-            const auto s2time = SessionManager::sessionDateTime(s2);
+            const auto s1time = SessionBase::sessionDateTime(s1);
+            const auto s2time = SessionBase::sessionDateTime(s2);
             if (s1time == s2time)
                 return false;
             isLess = s1time < s2time;
@@ -182,13 +182,13 @@ void SessionModel::sort(int column, Qt::SortOrder order)
 
 bool SessionModel::isDefaultVirgin() const
 {
-    return SessionManager::isDefaultVirgin();
+    return SessionBase::isDefaultVirgin();
 }
 
 void SessionModel::resetSessions()
 {
     beginResetModel();
-    m_sortedSessions = SessionManager::sessions();
+    m_sortedSessions = SessionBase::sessions();
     endResetModel();
 }
 
@@ -199,7 +199,7 @@ void SessionModel::newSession(QWidget *parent)
     sessionInputDialog.setActionText(Tr::tr("&Create"), Tr::tr("Create and &Open"));
 
     runSessionNameInputDialog(&sessionInputDialog, [](const QString &newName) {
-        SessionManager::createSession(newName);
+        SessionBase::createSession(newName);
     });
 }
 
@@ -211,17 +211,17 @@ void SessionModel::cloneSession(QWidget *parent, const QString &session)
     sessionInputDialog.setValue(session + " (2)");
 
     runSessionNameInputDialog(&sessionInputDialog, [session](const QString &newName) {
-        SessionManager::cloneSession(session, newName);
+        SessionBase::cloneSession(session, newName);
     });
 }
 
 void SessionModel::deleteSessions(const QStringList &sessions)
 {
-    if (!SessionManager::confirmSessionDelete(sessions))
+    if (!SessionBase::confirmSessionDelete(sessions))
         return;
     beginResetModel();
-    SessionManager::deleteSessions(sessions);
-    m_sortedSessions = SessionManager::sessions();
+    SessionBase::deleteSessions(sessions);
+    m_sortedSessions = SessionBase::sessions();
     sort(m_currentSortColumn, m_currentSortOrder);
     endResetModel();
 }
@@ -234,7 +234,7 @@ void SessionModel::renameSession(QWidget *parent, const QString &session)
     sessionInputDialog.setValue(session);
 
     runSessionNameInputDialog(&sessionInputDialog, [session](const QString &newName) {
-        SessionManager::renameSession(session, newName);
+        SessionBase::renameSession(session, newName);
     });
 }
 
@@ -248,11 +248,11 @@ void SessionModel::runSessionNameInputDialog(SessionNameInputDialog *sessionInpu
 {
     if (sessionInputDialog->exec() == QDialog::Accepted) {
         QString newSession = sessionInputDialog->value();
-        if (newSession.isEmpty() || SessionManager::sessions().contains(newSession))
+        if (newSession.isEmpty() || SessionBase::sessions().contains(newSession))
             return;
         beginResetModel();
         createSession(newSession);
-        m_sortedSessions = SessionManager::sessions();
+        m_sortedSessions = SessionBase::sessions();
         endResetModel();
         sort(m_currentSortColumn, m_currentSortOrder);
 

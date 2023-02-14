@@ -61,16 +61,41 @@ const char LAST_ACTIVE_TIMES_KEY[] = "LastActiveTimes";
      This could be improved.
 */
 
-class SessionManagerPrivate
+class SessionBasePrivate
 {
 public:
     void restoreValues(const PersistentSettingsReader &reader);
+    void restoreEditors(const PersistentSettingsReader &reader);
+    void sessionLoadingProgress();
+
+    bool recursiveDependencyCheck(const FilePath &newDep, const FilePath &checkDep) const;
+    FilePaths dependencies(const FilePath &proName) const;
+    FilePaths dependenciesOrder() const;
+    void dependencies(const FilePath &proName, FilePaths &result) const;
+
+    static QString windowTitleAddition(const FilePath &filePath);
+    static QString sessionTitle(const FilePath &filePath);
+
+    QString m_sessionName = QLatin1String(DEFAULT_SESSION);
+    bool m_virginSession = true;
+    bool m_loadingSession = false;
+
+    mutable QStringList m_sessions;
+    mutable QHash<QString, QDateTime> m_sessionDateTimes;
+    QHash<QString, QDateTime> m_lastActiveTimes;
+
+    QMap<QString, QVariant> m_values;
+    QFutureInterface<void> m_future;
+    PersistentSettingsWriter *m_writer = nullptr;
+};
+
+class SessionManagerPrivate
+{
+public:
     void restoreDependencies(const PersistentSettingsReader &reader);
     void restoreStartupProject(const PersistentSettingsReader &reader);
-    void restoreEditors(const PersistentSettingsReader &reader);
     void restoreProjects(const FilePaths &fileList);
     void askUserAboutFailedProjects();
-    void sessionLoadingProgress();
 
     bool recursiveDependencyCheck(const FilePath &newDep, const FilePath &checkDep) const;
     FilePaths dependencies(const FilePath &proName) const;
@@ -82,22 +107,12 @@ public:
 
     bool hasProjects() const { return !m_projects.isEmpty(); }
 
-    QString m_sessionName = QLatin1String(DEFAULT_SESSION);
-    bool m_virginSession = true;
-    bool m_loadingSession = false;
     bool m_casadeSetActive = false;
-
-    mutable QStringList m_sessions;
-    mutable QHash<QString, QDateTime> m_sessionDateTimes;
-    QHash<QString, QDateTime> m_lastActiveTimes;
 
     Project *m_startupProject = nullptr;
     QList<Project *> m_projects;
     FilePaths m_failedProjects;
     QMap<FilePath, FilePaths> m_depMap;
-    QMap<QString, QVariant> m_values;
-    QFutureInterface<void> m_future;
-    PersistentSettingsWriter *m_writer = nullptr;
 
 private:
     static QString locationInProject(const FilePath &filePath);
@@ -106,6 +121,9 @@ private:
 static SessionManager *m_instance = nullptr;
 static SessionManagerPrivate *d = nullptr;
 
+static SessionBase *sb_instance = nullptr;
+static SessionBasePrivate *sb_d = nullptr;
+
 static QString projectFolderId(Project *pro)
 {
     return pro->projectFilePath().toString();
@@ -113,20 +131,39 @@ static QString projectFolderId(Project *pro)
 
 const int PROJECT_SORT_VALUE = 100;
 
-SessionManager::SessionManager(QObject *parent) : QObject(parent)
+SessionBase::SessionBase()
 {
-    m_instance = this;
-    d = new SessionManagerPrivate;
+    sb_instance = this;
+    sb_d = new SessionBasePrivate;
 
     connect(ModeManager::instance(), &ModeManager::currentModeChanged,
-            this, &SessionManager::saveActiveMode);
+            this, &SessionBase::saveActiveMode);
 
     connect(ICore::instance(), &ICore::saveSettingsRequested, this, [] {
         QVariantMap times;
-        for (auto it = d->m_lastActiveTimes.cbegin(); it != d->m_lastActiveTimes.cend(); ++it)
+        for (auto it = sb_d->m_lastActiveTimes.cbegin(); it != sb_d->m_lastActiveTimes.cend(); ++it)
             times.insert(it.key(), it.value());
         ICore::settings()->setValue(LAST_ACTIVE_TIMES_KEY, times);
     });
+
+    connect(EditorManager::instance(), &EditorManager::editorOpened,
+            this, &SessionBase::markSessionFileDirty);
+    connect(EditorManager::instance(), &EditorManager::editorsClosed,
+            this, &SessionBase::markSessionFileDirty);
+}
+
+SessionBase::~SessionBase()
+{
+    emit sb_instance->aboutToUnloadSession(sb_d->m_sessionName);
+    delete sb_d->m_writer;
+    delete sb_d;
+    sb_d = nullptr;
+}
+
+SessionManager::SessionManager()
+{
+    m_instance = this;
+    d = new SessionManagerPrivate;
 
     connect(EditorManager::instance(), &EditorManager::editorCreated,
             this, &SessionManager::configureEditor);
@@ -136,10 +173,6 @@ SessionManager::SessionManager(QObject *parent) : QObject(parent)
             EditorManager::instance(), &EditorManager::updateWindowTitles);
     connect(this, &SessionManager::projectDisplayNameChanged,
             EditorManager::instance(), &EditorManager::updateWindowTitles);
-    connect(EditorManager::instance(), &EditorManager::editorOpened,
-            this, &SessionManager::markSessionFileDirty);
-    connect(EditorManager::instance(), &EditorManager::editorsClosed,
-            this, &SessionManager::markSessionFileDirty);
 
     EditorManager::setWindowTitleAdditionHandler(&SessionManagerPrivate::windowTitleAddition);
     EditorManager::setSessionTitleHandler(&SessionManagerPrivate::sessionTitle);
@@ -149,10 +182,13 @@ SessionManager::~SessionManager()
 {
     EditorManager::setWindowTitleAdditionHandler({});
     EditorManager::setSessionTitleHandler({});
-    emit m_instance->aboutToUnloadSession(d->m_sessionName);
-    delete d->m_writer;
     delete d;
     d = nullptr;
+}
+
+SessionBase *SessionBase::instance()
+{
+   return sb_instance;
 }
 
 SessionManager *SessionManager::instance()
@@ -160,17 +196,17 @@ SessionManager *SessionManager::instance()
    return m_instance;
 }
 
-bool SessionManager::isDefaultVirgin()
+bool SessionBase::isDefaultVirgin()
 {
-    return isDefaultSession(d->m_sessionName) && d->m_virginSession;
+    return isDefaultSession(sb_d->m_sessionName) && sb_d->m_virginSession;
 }
 
-bool SessionManager::isDefaultSession(const QString &session)
+bool SessionBase::isDefaultSession(const QString &session)
 {
     return session == QLatin1String(DEFAULT_SESSION);
 }
 
-void SessionManager::saveActiveMode(Id mode)
+void SessionBase::saveActiveMode(Id mode)
 {
     if (mode != Core::Constants::MODE_WELCOME)
         setValue(QLatin1String("ActiveMode"), mode.toString());
@@ -273,98 +309,7 @@ bool SessionManager::isProjectConfigurationCascading()
 void SessionManager::setProjectConfigurationCascading(bool b)
 {
     d->m_casadeSetActive = b;
-    markSessionFileDirty();
-}
-
-void SessionManager::setActiveTarget(Project *project, Target *target, SetActive cascade)
-{
-    QTC_ASSERT(project, return);
-
-    if (project->isShuttingDown())
-        return;
-
-    project->setActiveTarget(target);
-
-    if (!target) // never cascade setting no target
-        return;
-
-    if (cascade != SetActive::Cascade || !d->m_casadeSetActive)
-        return;
-
-    Utils::Id kitId = target->kit()->id();
-    for (Project *otherProject : SessionManager::projects()) {
-        if (otherProject == project)
-            continue;
-        if (Target *otherTarget = Utils::findOrDefault(otherProject->targets(),
-                                                       [kitId](Target *t) { return t->kit()->id() == kitId; }))
-            otherProject->setActiveTarget(otherTarget);
-    }
-}
-
-void SessionManager::setActiveBuildConfiguration(Target *target, BuildConfiguration *bc, SetActive cascade)
-{
-    QTC_ASSERT(target, return);
-    QTC_ASSERT(target->project(), return);
-
-    if (target->project()->isShuttingDown() || target->isShuttingDown())
-        return;
-
-    target->setActiveBuildConfiguration(bc);
-
-    if (!bc)
-        return;
-    if (cascade != SetActive::Cascade || !d->m_casadeSetActive)
-        return;
-
-    Utils::Id kitId = target->kit()->id();
-    QString name = bc->displayName(); // We match on displayname
-    for (Project *otherProject : SessionManager::projects()) {
-        if (otherProject == target->project())
-            continue;
-        Target *otherTarget = otherProject->activeTarget();
-        if (!otherTarget || otherTarget->kit()->id() != kitId)
-            continue;
-
-        for (BuildConfiguration *otherBc : otherTarget->buildConfigurations()) {
-            if (otherBc->displayName() == name) {
-                otherTarget->setActiveBuildConfiguration(otherBc);
-                break;
-            }
-        }
-    }
-}
-
-void SessionManager::setActiveDeployConfiguration(Target *target, DeployConfiguration *dc, SetActive cascade)
-{
-    QTC_ASSERT(target, return);
-    QTC_ASSERT(target->project(), return);
-
-    if (target->project()->isShuttingDown() || target->isShuttingDown())
-        return;
-
-    target->setActiveDeployConfiguration(dc);
-
-    if (!dc)
-        return;
-    if (cascade != SetActive::Cascade || !d->m_casadeSetActive)
-        return;
-
-    Utils::Id kitId = target->kit()->id();
-    QString name = dc->displayName(); // We match on displayname
-    for (Project *otherProject : SessionManager::projects()) {
-        if (otherProject == target->project())
-            continue;
-        Target *otherTarget = otherProject->activeTarget();
-        if (!otherTarget || otherTarget->kit()->id() != kitId)
-            continue;
-
-        for (DeployConfiguration *otherDc : otherTarget->deployConfigurations()) {
-            if (otherDc->displayName() == name) {
-                otherTarget->setActiveDeployConfiguration(otherDc);
-                break;
-            }
-        }
-    }
+    SessionBase::markSessionFileDirty();
 }
 
 void SessionManager::setStartupProject(Project *startupProject)
@@ -419,7 +364,7 @@ void SessionManager::addProject(Project *pro)
     QTC_CHECK(!pro->displayName().isEmpty());
     QTC_CHECK(pro->id().isValid());
 
-    d->m_virginSession = false;
+    sb_d->m_virginSession = false;
     QTC_ASSERT(!d->m_projects.contains(pro), return);
 
     d->m_projects.append(pro);
@@ -453,25 +398,25 @@ void SessionManager::addProject(Project *pro)
 
 void SessionManager::removeProject(Project *project)
 {
-    d->m_virginSession = false;
+    sb_d->m_virginSession = false;
     QTC_ASSERT(project, return);
     removeProjects({project});
 }
 
-bool SessionManager::loadingSession()
+bool SessionBase::loadingSession()
 {
-    return d->m_loadingSession;
+    return sb_d->m_loadingSession;
 }
 
 bool SessionManager::save()
 {
-    emit m_instance->aboutToSaveSession();
+    emit sb_instance->aboutToSaveSession();
 
-    const FilePath filePath = sessionNameToFileName(d->m_sessionName);
+    const FilePath filePath = SessionBase::sessionNameToFileName(sb_d->m_sessionName);
     QVariantMap data;
 
     // See the explanation at loadSession() for how we handle the implicit default session.
-    if (isDefaultVirgin()) {
+    if (SessionBase::isDefaultVirgin()) {
         if (filePath.exists()) {
             PersistentSettingsReader reader;
             if (!reader.load(filePath)) {
@@ -522,25 +467,25 @@ bool SessionManager::save()
         data.insert(QLatin1String("EditorSettings"), EditorManager::saveState().toBase64());
     }
 
-    const auto end = d->m_values.constEnd();
+    const auto end = sb_d->m_values.constEnd();
     QStringList keys;
-    for (auto it = d->m_values.constBegin(); it != end; ++it) {
+    for (auto it = sb_d->m_values.constBegin(); it != end; ++it) {
         data.insert(QLatin1String("value-") + it.key(), it.value());
         keys << it.key();
     }
     data.insert(QLatin1String("valueKeys"), keys);
 
-    if (!d->m_writer || d->m_writer->fileName() != filePath) {
-        delete d->m_writer;
-        d->m_writer = new PersistentSettingsWriter(filePath, "QtCreatorSession");
+    if (!sb_d->m_writer || sb_d->m_writer->fileName() != filePath) {
+        delete sb_d->m_writer;
+        sb_d->m_writer = new PersistentSettingsWriter(filePath, "QtCreatorSession");
     }
-    const bool result = d->m_writer->save(data, ICore::dialogParent());
+    const bool result = sb_d->m_writer->save(data, ICore::dialogParent());
     if (result) {
-        if (!isDefaultVirgin())
-            d->m_sessionDateTimes.insert(activeSession(), QDateTime::currentDateTime());
+        if (!SessionBase::isDefaultVirgin())
+            sb_d->m_sessionDateTimes.insert(SessionBase::activeSession(), QDateTime::currentDateTime());
     } else {
         QMessageBox::warning(ICore::dialogParent(), Tr::tr("Error while saving session"),
-            Tr::tr("Could not save session to file %1").arg(d->m_writer->fileName().toUserOutput()));
+            Tr::tr("Could not save session to file %1").arg(sb_d->m_writer->fileName().toUserOutput()));
     }
 
     return result;
@@ -589,7 +534,7 @@ void SessionManagerPrivate::dependencies(const FilePath &proName, FilePaths &res
 
 QString SessionManagerPrivate::sessionTitle(const FilePath &filePath)
 {
-    if (SessionManager::isDefaultSession(d->m_sessionName)) {
+    if (SessionBase::isDefaultSession(sb_d->m_sessionName)) {
         if (filePath.isEmpty()) {
             // use single project's name if there is only one loaded.
             const QList<Project *> projects = SessionManager::projects();
@@ -597,7 +542,7 @@ QString SessionManagerPrivate::sessionTitle(const FilePath &filePath)
                 return projects.first()->displayName();
         }
     } else {
-        QString sessionName = d->m_sessionName;
+        QString sessionName = sb_d->m_sessionName;
         if (sessionName.isEmpty())
             sessionName = Tr::tr("Untitled");
         return sessionName;
@@ -773,57 +718,57 @@ void SessionManager::removeProjects(const QList<Project *> &remove)
     Lets other plugins store persistent values within the session file.
 */
 
-void SessionManager::setValue(const QString &name, const QVariant &value)
+void SessionBase::setValue(const QString &name, const QVariant &value)
 {
-    if (d->m_values.value(name) == value)
+    if (sb_d->m_values.value(name) == value)
         return;
-    d->m_values.insert(name, value);
+    sb_d->m_values.insert(name, value);
 }
 
-QVariant SessionManager::value(const QString &name)
+QVariant SessionBase::value(const QString &name)
 {
-    auto it = d->m_values.constFind(name);
-    return (it == d->m_values.constEnd()) ? QVariant() : *it;
+    auto it = sb_d->m_values.constFind(name);
+    return (it == sb_d->m_values.constEnd()) ? QVariant() : *it;
 }
 
-QString SessionManager::activeSession()
+QString SessionBase::activeSession()
 {
-    return d->m_sessionName;
+    return sb_d->m_sessionName;
 }
 
-QStringList SessionManager::sessions()
+QStringList SessionBase::sessions()
 {
-    if (d->m_sessions.isEmpty()) {
+    if (sb_d->m_sessions.isEmpty()) {
         // We are not initialized yet, so do that now
         const FilePaths sessionFiles =
                 ICore::userResourcePath().dirEntries({{"*qws"}}, QDir::Time | QDir::Reversed);
         const QVariantMap lastActiveTimes = ICore::settings()->value(LAST_ACTIVE_TIMES_KEY).toMap();
         for (const FilePath &file : sessionFiles) {
             const QString &name = file.completeBaseName();
-            d->m_sessionDateTimes.insert(name, file.lastModified());
+            sb_d->m_sessionDateTimes.insert(name, file.lastModified());
             const auto lastActiveTime = lastActiveTimes.find(name);
-            d->m_lastActiveTimes.insert(name, lastActiveTime != lastActiveTimes.end()
+            sb_d->m_lastActiveTimes.insert(name, lastActiveTime != lastActiveTimes.end()
                     ? lastActiveTime->toDateTime()
                     : file.lastModified());
             if (name != QLatin1String(DEFAULT_SESSION))
-                d->m_sessions << name;
+                sb_d->m_sessions << name;
         }
-        d->m_sessions.prepend(QLatin1String(DEFAULT_SESSION));
+        sb_d->m_sessions.prepend(QLatin1String(DEFAULT_SESSION));
     }
-    return d->m_sessions;
+    return sb_d->m_sessions;
 }
 
-QDateTime SessionManager::sessionDateTime(const QString &session)
+QDateTime SessionBase::sessionDateTime(const QString &session)
 {
-    return d->m_sessionDateTimes.value(session);
+    return sb_d->m_sessionDateTimes.value(session);
 }
 
-QDateTime SessionManager::lastActiveTime(const QString &session)
+QDateTime SessionBase::lastActiveTime(const QString &session)
 {
-    return d->m_lastActiveTimes.value(session);
+    return sb_d->m_lastActiveTimes.value(session);
 }
 
-FilePath SessionManager::sessionNameToFileName(const QString &session)
+FilePath SessionBase::sessionNameToFileName(const QString &session)
 {
     return ICore::userResourcePath(session + ".qws");
 }
@@ -832,22 +777,22 @@ FilePath SessionManager::sessionNameToFileName(const QString &session)
     Creates \a session, but does not actually create the file.
 */
 
-bool SessionManager::createSession(const QString &session)
+bool SessionBase::createSession(const QString &session)
 {
     if (sessions().contains(session))
         return false;
-    Q_ASSERT(d->m_sessions.size() > 0);
-    d->m_sessions.insert(1, session);
-    d->m_lastActiveTimes.insert(session, QDateTime::currentDateTime());
+    Q_ASSERT(sb_d->m_sessions.size() > 0);
+    sb_d->m_sessions.insert(1, session);
+    sb_d->m_lastActiveTimes.insert(session, QDateTime::currentDateTime());
     return true;
 }
 
-bool SessionManager::renameSession(const QString &original, const QString &newName)
+bool SessionBase::renameSession(const QString &original, const QString &newName)
 {
     if (!cloneSession(original, newName))
         return false;
     if (original == activeSession())
-        loadSession(newName);
+        SessionManager::loadSession(newName);
     emit instance()->sessionRenamed(original, newName);
     return deleteSession(original);
 }
@@ -856,7 +801,7 @@ bool SessionManager::renameSession(const QString &original, const QString &newNa
 /*!
     \brief Shows a dialog asking the user to confirm deleting the session \p session
 */
-bool SessionManager::confirmSessionDelete(const QStringList &sessions)
+bool SessionBase::confirmSessionDelete(const QStringList &sessions)
 {
     const QString title = sessions.size() == 1 ? Tr::tr("Delete Session") : Tr::tr("Delete Sessions");
     const QString question = sessions.size() == 1
@@ -871,12 +816,12 @@ bool SessionManager::confirmSessionDelete(const QStringList &sessions)
 /*!
      Deletes \a session name from session list and the file from disk.
 */
-bool SessionManager::deleteSession(const QString &session)
+bool SessionBase::deleteSession(const QString &session)
 {
-    if (!d->m_sessions.contains(session))
+    if (!sb_d->m_sessions.contains(session))
         return false;
-    d->m_sessions.removeOne(session);
-    d->m_lastActiveTimes.remove(session);
+    sb_d->m_sessions.removeOne(session);
+    sb_d->m_lastActiveTimes.remove(session);
     emit instance()->sessionRemoved(session);
     FilePath sessionFile = sessionNameToFileName(session);
     if (sessionFile.exists())
@@ -884,28 +829,28 @@ bool SessionManager::deleteSession(const QString &session)
     return false;
 }
 
-void SessionManager::deleteSessions(const QStringList &sessions)
+void SessionBase::deleteSessions(const QStringList &sessions)
 {
     for (const QString &session : sessions)
         deleteSession(session);
 }
 
-bool SessionManager::cloneSession(const QString &original, const QString &clone)
+bool SessionBase::cloneSession(const QString &original, const QString &clone)
 {
-    if (!d->m_sessions.contains(original))
+    if (!sb_d->m_sessions.contains(original))
         return false;
 
     FilePath sessionFile = sessionNameToFileName(original);
     // If the file does not exist, we can still clone
     if (!sessionFile.exists() || sessionFile.copyFile(sessionNameToFileName(clone))) {
-        d->m_sessions.insert(1, clone);
-        d->m_sessionDateTimes.insert(clone, sessionNameToFileName(clone).lastModified());
+        sb_d->m_sessions.insert(1, clone);
+        sb_d->m_sessionDateTimes.insert(clone, sessionNameToFileName(clone).lastModified());
         return true;
     }
     return false;
 }
 
-void SessionManagerPrivate::restoreValues(const PersistentSettingsReader &reader)
+void SessionBasePrivate::restoreValues(const PersistentSettingsReader &reader)
 {
     const QStringList keys = reader.restoreValue(QLatin1String("valueKeys")).toStringList();
     for (const QString &key : keys) {
@@ -969,7 +914,7 @@ void SessionManagerPrivate::restoreStartupProject(const PersistentSettingsReader
     }
 }
 
-void SessionManagerPrivate::restoreEditors(const PersistentSettingsReader &reader)
+void SessionBasePrivate::restoreEditors(const PersistentSettingsReader &reader)
 {
     const QVariant editorsettings = reader.restoreValue(QLatin1String("EditorSettings"));
     if (editorsettings.isValid()) {
@@ -1025,20 +970,20 @@ bool SessionManager::loadSession(const QString &session, bool initial)
 {
     const bool loadImplicitDefault = session.isEmpty();
     const bool switchFromImplicitToExplicitDefault = session == DEFAULT_SESSION
-            && d->m_sessionName == DEFAULT_SESSION && !initial;
+            && sb_d->m_sessionName == DEFAULT_SESSION && !initial;
 
     // Do nothing if we have that session already loaded,
     // exception if the session is the default virgin session
     // we still want to be able to load the default session
-    if (session == d->m_sessionName && !isDefaultVirgin())
+    if (session == sb_d->m_sessionName && !SessionBase::isDefaultVirgin())
         return true;
 
-    if (!loadImplicitDefault && !sessions().contains(session))
+    if (!loadImplicitDefault && !SessionBase::sessions().contains(session))
         return false;
 
     FilePaths fileList;
     // Try loading the file
-    FilePath fileName = sessionNameToFileName(loadImplicitDefault ? DEFAULT_SESSION : session);
+    FilePath fileName = SessionBase::sessionNameToFileName(loadImplicitDefault ? DEFAULT_SESSION : session);
     PersistentSettingsReader reader;
     if (fileName.exists()) {
         if (!reader.load(fileName)) {
@@ -1049,8 +994,8 @@ bool SessionManager::loadSession(const QString &session, bool initial)
         }
 
         if (loadImplicitDefault) {
-            d->restoreValues(reader);
-            emit m_instance->sessionLoaded(DEFAULT_SESSION);
+            sb_d->restoreValues(reader);
+            emit sb_instance->sessionLoaded(DEFAULT_SESSION);
             return true;
         }
 
@@ -1059,19 +1004,19 @@ bool SessionManager::loadSession(const QString &session, bool initial)
         return true;
     }
 
-    d->m_loadingSession = true;
+    sb_d->m_loadingSession = true;
 
     // Allow everyone to set something in the session and before saving
-    emit m_instance->aboutToUnloadSession(d->m_sessionName);
+    emit sb_instance->aboutToUnloadSession(sb_d->m_sessionName);
 
     if (!save()) {
-        d->m_loadingSession = false;
+        sb_d->m_loadingSession = false;
         return false;
     }
 
     // Clean up
     if (!EditorManager::closeAllEditors()) {
-        d->m_loadingSession = false;
+        sb_d->m_loadingSession = false;
         return false;
     }
 
@@ -1088,29 +1033,29 @@ bool SessionManager::loadSession(const QString &session, bool initial)
     d->m_failedProjects.clear();
     d->m_depMap.clear();
     if (!switchFromImplicitToExplicitDefault)
-        d->m_values.clear();
+        sb_d->m_values.clear();
     d->m_casadeSetActive = false;
 
-    d->m_sessionName = session;
-    delete d->m_writer;
-    d->m_writer = nullptr;
+    sb_d->m_sessionName = session;
+    delete sb_d->m_writer;
+    sb_d->m_writer = nullptr;
     EditorManager::updateWindowTitles();
 
     if (fileName.exists()) {
-        d->m_virginSession = false;
+        sb_d->m_virginSession = false;
 
-        ProgressManager::addTask(d->m_future.future(), Tr::tr("Loading Session"),
+        ProgressManager::addTask(sb_d->m_future.future(), Tr::tr("Loading Session"),
            "ProjectExplorer.SessionFile.Load");
 
-        d->m_future.setProgressRange(0, 1);
-        d->m_future.setProgressValue(0);
+        sb_d->m_future.setProgressRange(0, 1);
+        sb_d->m_future.setProgressValue(0);
 
         if (!switchFromImplicitToExplicitDefault)
-            d->restoreValues(reader);
-        emit m_instance->aboutToLoadSession(session);
+            sb_d->restoreValues(reader);
+        emit sb_instance->aboutToLoadSession(session);
 
         // retrieve all values before the following code could change them again
-        Id modeId = Id::fromSetting(value(QLatin1String("ActiveMode")));
+        Id modeId = Id::fromSetting(SessionBase::value(QLatin1String("ActiveMode")));
         if (!modeId.isValid())
             modeId = Id(Core::Constants::MODE_EDIT);
 
@@ -1118,21 +1063,21 @@ bool SessionManager::loadSession(const QString &session, bool initial)
         if (c.isValid())
             StyleHelper::setBaseColor(c);
 
-        d->m_future.setProgressRange(0, projectPathsToLoad.count() + 1/*initialization above*/ + 1/*editors*/);
-        d->m_future.setProgressValue(1);
+        sb_d->m_future.setProgressRange(0, projectPathsToLoad.count() + 1/*initialization above*/ + 1/*editors*/);
+        sb_d->m_future.setProgressValue(1);
         QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
 
         d->restoreProjects(projectPathsToLoad);
-        d->sessionLoadingProgress();
+        sb_d->sessionLoadingProgress();
         d->restoreDependencies(reader);
         d->restoreStartupProject(reader);
 
         removeProjects(projectsToRemove); // only remove old projects now that the startup project is set!
 
-        d->restoreEditors(reader);
+        sb_d->restoreEditors(reader);
 
-        d->m_future.reportFinished();
-        d->m_future = QFutureInterface<void>();
+        sb_d->m_future.reportFinished();
+        sb_d->m_future = QFutureInterface<void>();
 
         // Fall back to Project mode if the startup project is unconfigured and
         // use the mode saved in the session otherwise
@@ -1148,20 +1093,20 @@ bool SessionManager::loadSession(const QString &session, bool initial)
     }
 
     d->m_casadeSetActive = reader.restoreValue(QLatin1String("CascadeSetActive"), false).toBool();
-    d->m_lastActiveTimes.insert(session, QDateTime::currentDateTime());
+    sb_d->m_lastActiveTimes.insert(session, QDateTime::currentDateTime());
 
-    emit m_instance->sessionLoaded(session);
+    emit sb_instance->sessionLoaded(session);
 
     // Starts a event loop, better do that at the very end
     d->askUserAboutFailedProjects();
-    d->m_loadingSession = false;
+    sb_d->m_loadingSession = false;
     return true;
 }
 
 /*!
     Returns the last session that was opened by the user.
 */
-QString SessionManager::lastSession()
+QString SessionBase::lastSession()
 {
     return ICore::settings()->value(Constants::LASTSESSION_KEY).toString();
 }
@@ -1169,22 +1114,22 @@ QString SessionManager::lastSession()
 /*!
     Returns the session that was active when Qt Creator was last closed, if any.
 */
-QString SessionManager::startupSession()
+QString SessionBase::startupSession()
 {
     return ICore::settings()->value(Constants::STARTUPSESSION_KEY).toString();
 }
 
 void SessionManager::reportProjectLoadingProgress()
 {
-    d->sessionLoadingProgress();
+    sb_d->sessionLoadingProgress();
 }
 
-void SessionManager::markSessionFileDirty()
+void SessionBase::markSessionFileDirty()
 {
-    d->m_virginSession = false;
+    sb_d->m_virginSession = false;
 }
 
-void SessionManagerPrivate::sessionLoadingProgress()
+void SessionBasePrivate::sessionLoadingProgress()
 {
     m_future.setProgressValue(m_future.progressValue() + 1);
     QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
@@ -1192,7 +1137,7 @@ void SessionManagerPrivate::sessionLoadingProgress()
 
 FilePaths SessionManager::projectsForSessionName(const QString &session)
 {
-    const FilePath fileName = sessionNameToFileName(session);
+    const FilePath fileName = SessionBase::sessionNameToFileName(session);
     PersistentSettingsReader reader;
     if (fileName.exists()) {
         if (!reader.load(fileName)) {
@@ -1208,8 +1153,8 @@ FilePaths SessionManager::projectsForSessionName(const QString &session)
 
 void ProjectExplorerPlugin::testSessionSwitch()
 {
-    QVERIFY(SessionManager::createSession("session1"));
-    QVERIFY(SessionManager::createSession("session2"));
+    QVERIFY(SessionBase::createSession("session1"));
+    QVERIFY(SessionBase::createSession("session2"));
     QTemporaryFile cppFile("main.cpp");
     QVERIFY(cppFile.open());
     cppFile.close();
@@ -1243,18 +1188,18 @@ void ProjectExplorerPlugin::testSessionSwitch()
     }
     for (int i = 0; i < 30; ++i) {
         QVERIFY(SessionManager::loadSession("session1"));
-        QCOMPARE(SessionManager::activeSession(), "session1");
+        QCOMPARE(SessionBase::activeSession(), "session1");
         QCOMPARE(SessionManager::projects().count(), 1);
         QVERIFY(SessionManager::loadSession("session2"));
-        QCOMPARE(SessionManager::activeSession(), "session2");
+        QCOMPARE(SessionBase::activeSession(), "session2");
         QCOMPARE(SessionManager::projects().count(), 1);
     }
     QVERIFY(SessionManager::loadSession("session1"));
     SessionManager::closeAllProjects();
     QVERIFY(SessionManager::loadSession("session2"));
     SessionManager::closeAllProjects();
-    QVERIFY(SessionManager::deleteSession("session1"));
-    QVERIFY(SessionManager::deleteSession("session2"));
+    QVERIFY(SessionBase::deleteSession("session1"));
+    QVERIFY(SessionBase::deleteSession("session2"));
 }
 
 #endif // WITH_TESTS

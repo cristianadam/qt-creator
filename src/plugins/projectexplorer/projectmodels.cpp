@@ -175,9 +175,10 @@ FlatModel::FlatModel(QObject *parent)
     connect(tree, &ProjectTree::subtreeChanged, this, &FlatModel::updateSubtree);
 
     SessionManager *sm = SessionManager::instance();
+    SessionBase *sb = SessionBase::instance();
     connect(sm, &SessionManager::projectRemoved, this, &FlatModel::handleProjectRemoved);
-    connect(sm, &SessionManager::aboutToLoadSession, this, &FlatModel::loadExpandData);
-    connect(sm, &SessionManager::aboutToSaveSession, this, &FlatModel::saveExpandData);
+    connect(sb, &SessionBase::aboutToLoadSession, this, &FlatModel::loadExpandData);
+    connect(sb, &SessionBase::aboutToSaveSession, this, &FlatModel::saveExpandData);
     connect(sm, &SessionManager::projectAdded, this, &FlatModel::handleProjectAdded);
     connect(sm, &SessionManager::startupProjectChanged, this, [this] { emit layoutChanged(); });
 
@@ -465,7 +466,7 @@ WrapperNode *FlatModel::nodeForProject(const Project *project) const
 
 void FlatModel::loadExpandData()
 {
-    const QList<QVariant> data = SessionManager::value("ProjectTree.ExpandData").value<QList<QVariant>>();
+    const QList<QVariant> data = SessionBase::value("ProjectTree.ExpandData").value<QList<QVariant>>();
     m_toExpand = Utils::transform<QSet>(data, &ExpandData::fromSettings);
     m_toExpand.remove(ExpandData());
 }
@@ -474,7 +475,7 @@ void FlatModel::saveExpandData()
 {
     // TODO if there are multiple ProjectTreeWidgets, the last one saves the data
     QList<QVariant> data = Utils::transform<QList>(m_toExpand, &ExpandData::toSettings);
-    SessionManager::setValue(QLatin1String("ProjectTree.ExpandData"), data);
+    SessionBase::setValue(QLatin1String("ProjectTree.ExpandData"), data);
 }
 
 void FlatModel::addFolderNode(WrapperNode *parent, FolderNode *folderNode, QSet<Node *> *seen)

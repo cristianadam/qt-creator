@@ -37,7 +37,7 @@ DependenciesModel::DependenciesModel(Project *project, QObject *parent)
             this, &DependenciesModel::resetModel);
     connect(sessionManager, &SessionManager::projectAdded,
             this, &DependenciesModel::resetModel);
-    connect(sessionManager, &SessionManager::sessionLoaded,
+    connect(SessionBase::instance(), &SessionBase::sessionLoaded,
             this, &DependenciesModel::resetModel);
 }
 

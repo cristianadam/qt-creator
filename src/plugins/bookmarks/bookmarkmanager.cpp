@@ -287,7 +287,7 @@ BookmarkManager::BookmarkManager() :
     connect(ICore::instance(), &ICore::contextChanged,
             this, &BookmarkManager::updateActionStatus);
 
-    connect(SessionManager::instance(), &SessionManager::sessionLoaded,
+    connect(SessionBase::instance(), &SessionBase::sessionLoaded,
             this, &BookmarkManager::loadBookmarks);
 
     updateActionStatus();
@@ -751,14 +751,14 @@ void BookmarkManager::saveBookmarks()
     for (const Bookmark *bookmark : std::as_const(m_bookmarksList))
         list << bookmarkToString(bookmark);
 
-    SessionManager::setValue(QLatin1String("Bookmarks"), list);
+    SessionBase::setValue(QLatin1String("Bookmarks"), list);
 }
 
 /* Loads the bookmarks from the session settings. */
 void BookmarkManager::loadBookmarks()
 {
     removeAllBookmarks();
-    const QStringList &list = SessionManager::value(QLatin1String("Bookmarks")).toStringList();
+    const QStringList &list = SessionBase::value(QLatin1String("Bookmarks")).toStringList();
     for (const QString &bookmarkString : list)
         addBookmark(bookmarkString);
 

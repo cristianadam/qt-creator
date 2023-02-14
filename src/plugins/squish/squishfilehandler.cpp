@@ -93,8 +93,7 @@ SquishFileHandler::SquishFileHandler(QObject *parent)
     : QObject(parent)
 {
     m_instance = this;
-    auto sessionManager = ProjectExplorer::SessionManager::instance();
-    connect(sessionManager, &ProjectExplorer::SessionManager::sessionLoaded,
+    connect(ProjectExplorer::SessionBase::instance(), &ProjectExplorer::SessionBase::sessionLoaded,
             this, &SquishFileHandler::onSessionLoaded);
 }
 
@@ -258,7 +257,7 @@ void SquishFileHandler::openTestSuites()
         }
     }
     emit suitesOpened();
-    ProjectExplorer::SessionManager::setValue(SK_OpenSuites, suitePathsAsStringList());
+    ProjectExplorer::SessionBase::setValue(SK_OpenSuites, suitePathsAsStringList());
 }
 
 void SquishFileHandler::openTestSuite(const Utils::FilePath &suiteConfPath, bool isReopen)
@@ -288,7 +287,7 @@ void SquishFileHandler::openTestSuite(const Utils::FilePath &suiteConfPath, bool
         m_suites.insert(suiteName, suiteConfPath);
         emit testTreeItemCreated(item);
     }
-    ProjectExplorer::SessionManager::setValue(SK_OpenSuites, suitePathsAsStringList());
+    ProjectExplorer::SessionBase::setValue(SK_OpenSuites, suitePathsAsStringList());
 }
 
 static void closeOpenedEditorsFor(const Utils::FilePath &filePath, bool askAboutModifiedEditors)
@@ -310,13 +309,13 @@ void SquishFileHandler::closeTestSuite(const QString &suiteName)
     // TODO remove file watcher
     m_suites.remove(suiteName);
     emit suiteTreeItemRemoved(suiteName);
-    ProjectExplorer::SessionManager::setValue(SK_OpenSuites, suitePathsAsStringList());
+    ProjectExplorer::SessionBase::setValue(SK_OpenSuites, suitePathsAsStringList());
 }
 
 void SquishFileHandler::closeAllTestSuites()
 {
     closeAllInternal();
-    ProjectExplorer::SessionManager::setValue(SK_OpenSuites, suitePathsAsStringList());
+    ProjectExplorer::SessionBase::setValue(SK_OpenSuites, suitePathsAsStringList());
 }
 
 void SquishFileHandler::deleteTestCase(const QString &suiteName, const QString &testCaseName)
@@ -538,7 +537,7 @@ void SquishFileHandler::onSessionLoaded()
     // remove currently opened "silently" (without storing into session)
     closeAllInternal();
 
-    const QVariant variant = ProjectExplorer::SessionManager::value(SK_OpenSuites);
+    const QVariant variant = ProjectExplorer::SessionBase::value(SK_OpenSuites);
     const Utils::FilePaths suitePaths = Utils::transform(variant.toStringList(),
                                                          &Utils::FilePath::fromString);
 

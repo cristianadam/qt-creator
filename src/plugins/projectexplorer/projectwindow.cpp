@@ -774,8 +774,8 @@ public:
             }
         }
         if (lastTarget && lastBc) {
-            SessionManager::setActiveBuildConfiguration(lastTarget, lastBc, SetActive::Cascade);
-            SessionManager::setActiveTarget(project, lastTarget, SetActive::Cascade);
+            lastTarget->setActiveBuildConfiguration(lastBc, SetActive::Cascade);
+            project->setActiveTarget(lastTarget, SetActive::Cascade);
         }
     }
 

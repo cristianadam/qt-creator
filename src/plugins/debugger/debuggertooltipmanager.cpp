@@ -1048,7 +1048,7 @@ void DebuggerToolTipManagerPrivate::sessionAboutToChange()
 void DebuggerToolTipManagerPrivate::loadSessionData()
 {
     closeAllToolTips();
-    const QString data = SessionManager::value(sessionSettingsKeyC).toString();
+    const QString data = SessionBase::value(sessionSettingsKeyC).toString();
     QXmlStreamReader r(data);
     if (r.readNextStartElement() && r.name() == QLatin1String(sessionDocumentC)) {
         while (!r.atEnd()) {
@@ -1144,11 +1144,11 @@ DebuggerToolTipManagerPrivate::DebuggerToolTipManagerPrivate(DebuggerEngine *eng
 {
     connect(ModeManager::instance(), &ModeManager::currentModeChanged,
             this, &DebuggerToolTipManagerPrivate::onModeChanged);
-    connect(SessionManager::instance(), &SessionManager::sessionLoaded,
+    connect(SessionBase::instance(), &SessionBase::sessionLoaded,
             this, &DebuggerToolTipManagerPrivate::loadSessionData);
-    connect(SessionManager::instance(), &SessionManager::aboutToSaveSession,
+    connect(SessionBase::instance(), &SessionBase::aboutToSaveSession,
             this, &DebuggerToolTipManagerPrivate::saveSessionData);
-    connect(SessionManager::instance(), &SessionManager::aboutToUnloadSession,
+    connect(SessionBase::instance(), &SessionBase::aboutToUnloadSession,
             this, &DebuggerToolTipManagerPrivate::sessionAboutToChange);
     debugModeEntered();
 }

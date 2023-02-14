@@ -211,7 +211,7 @@ AppOutputPane::AppOutputPane() :
     connect(m_tabWidget, &TabWidget::contextMenuRequested,
             this, &AppOutputPane::contextMenuRequested);
 
-    connect(SessionManager::instance(), &SessionManager::aboutToUnloadSession,
+    connect(SessionBase::instance(), &SessionBase::aboutToUnloadSession,
             this, &AppOutputPane::aboutToUnloadSession);
 
     setupFilterUi("AppOutputPane.Filter");

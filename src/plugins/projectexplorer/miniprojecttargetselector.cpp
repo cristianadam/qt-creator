@@ -720,17 +720,17 @@ MiniProjectTargetSelector::MiniProjectTargetSelector(QAction *targetSelectorActi
 
     connect(m_listWidgets[TARGET], &GenericListWidget::changeActiveProjectConfiguration,
             this, [this](QObject *pc) {
-                SessionManager::setActiveTarget(m_project, static_cast<Target *>(pc), SetActive::Cascade);
+                m_project->setActiveTarget(static_cast<Target *>(pc), SetActive::Cascade);
             });
     connect(m_listWidgets[BUILD], &GenericListWidget::changeActiveProjectConfiguration,
             this, [this](QObject *pc) {
-                 SessionManager::setActiveBuildConfiguration(m_project->activeTarget(),
-                                                             static_cast<BuildConfiguration *>(pc), SetActive::Cascade);
+                 m_project->activeTarget()->setActiveBuildConfiguration(
+                    static_cast<BuildConfiguration *>(pc), SetActive::Cascade);
             });
     connect(m_listWidgets[DEPLOY], &GenericListWidget::changeActiveProjectConfiguration,
             this, [this](QObject *pc) {
-                 SessionManager::setActiveDeployConfiguration(m_project->activeTarget(),
-                                                              static_cast<DeployConfiguration *>(pc), SetActive::Cascade);
+                 m_project->activeTarget()->setActiveDeployConfiguration(
+                    static_cast<DeployConfiguration *>(pc), SetActive::Cascade);
             });
     connect(m_listWidgets[RUN], &GenericListWidget::changeActiveProjectConfiguration,
             this, [this](QObject *pc) {

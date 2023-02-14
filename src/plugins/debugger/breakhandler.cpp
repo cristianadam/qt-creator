@@ -2407,9 +2407,9 @@ BreakpointManager::BreakpointManager()
     theBreakpointManager = this;
     setHeader({Tr::tr("Debuggee"), Tr::tr("Function"), Tr::tr("File"), Tr::tr("Line"), Tr::tr("Address"),
                Tr::tr("Condition"), Tr::tr("Ignore"), Tr::tr("Threads")});
-    connect(SessionManager::instance(), &SessionManager::sessionLoaded,
+    connect(SessionBase::instance(), &SessionBase::sessionLoaded,
             this, &BreakpointManager::loadSessionData);
-    connect(SessionManager::instance(), &SessionManager::aboutToSaveSession,
+    connect(SessionBase::instance(), &SessionBase::aboutToSaveSession,
             this, &BreakpointManager::saveSessionData);
 }
 
@@ -2799,14 +2799,14 @@ void BreakpointManager::saveSessionData()
             map.insert("message", params.message);
         list.append(map);
     });
-    SessionManager::setValue("Breakpoints", list);
+    SessionBase::setValue("Breakpoints", list);
 }
 
 void BreakpointManager::loadSessionData()
 {
     clear();
 
-    const QVariant value = SessionManager::value("Breakpoints");
+    const QVariant value = SessionBase::value("Breakpoints");
     const QList<QVariant> list = value.toList();
     for (const QVariant &var : list) {
         const QMap<QString, QVariant> map = var.toMap();

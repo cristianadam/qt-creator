@@ -18,22 +18,18 @@ namespace ProjectExplorer {
 
 class Project;
 class Target;
-class BuildConfiguration;
 class BuildSystem;
-class DeployConfiguration;
 class RunConfiguration;
 
-enum class SetActive { Cascade, NoCascade };
-
-class PROJECTEXPLORER_EXPORT SessionManager : public QObject
+class PROJECTEXPLORER_EXPORT SessionBase : public QObject
 {
     Q_OBJECT
 
 public:
-    explicit SessionManager(QObject *parent = nullptr);
-    ~SessionManager() override;
+    SessionBase();
+    ~SessionBase() override;
 
-    static SessionManager *instance();
+    static SessionBase *instance();
 
     // higher level session management
     static QString activeSession();
@@ -52,7 +48,40 @@ public:
     static bool cloneSession(const QString &original, const QString &clone);
     static bool renameSession(const QString &original, const QString &newName);
 
-    static bool loadSession(const QString &session, bool initial = false);
+    static Utils::FilePath sessionNameToFileName(const QString &session);
+
+    static bool isDefaultVirgin();
+    static bool isDefaultSession(const QString &session);
+
+    // Let other plugins store persistent values within the session file
+    static void setValue(const QString &name, const QVariant &value);
+    static QVariant value(const QString &name);
+
+    static bool loadingSession();
+    static void markSessionFileDirty();
+
+signals:
+    void aboutToUnloadSession(QString sessionName);
+    void aboutToLoadSession(QString sessionName);
+    void sessionLoaded(QString sessionName);
+    void aboutToSaveSession();
+
+    void sessionRenamed(const QString &oldName, const QString &newName);
+    void sessionRemoved(const QString &name);
+
+private:
+    static void saveActiveMode(Utils::Id mode);
+};
+
+class PROJECTEXPLORER_EXPORT SessionManager : public QObject
+{
+    Q_OBJECT
+
+public:
+    SessionManager();
+    ~SessionManager() override;
+
+    static SessionManager *instance();
 
     static bool save();
     static void closeAllProjects();
@@ -72,11 +101,6 @@ public:
     static bool isProjectConfigurationCascading();
     static void setProjectConfigurationCascading(bool b);
 
-    static void setActiveTarget(Project *p, Target *t, SetActive cascade);
-    static void setActiveBuildConfiguration(Target *t, BuildConfiguration *bc, SetActive cascade);
-    static void setActiveDeployConfiguration(Target *t, DeployConfiguration *dc, SetActive cascade);
-
-    static Utils::FilePath sessionNameToFileName(const QString &session);
     static Project *startupProject();
     static Target *startupTarget();
     static BuildSystem *startupBuildSystem();
@@ -85,13 +109,6 @@ public:
     static const QList<Project *> projects();
     static bool hasProjects();
     static bool hasProject(Project *p);
-
-    static bool isDefaultVirgin();
-    static bool isDefaultSession(const QString &session);
-
-    // Let other plugins store persistent values within the session file
-    static void setValue(const QString &name, const QVariant &value);
-    static QVariant value(const QString &name);
 
     // NBS rewrite projectOrder (dependency management)
     static QList<Project *> projectOrder(const Project *project = nullptr);
@@ -102,7 +119,8 @@ public:
     static Utils::FilePaths projectsForSessionName(const QString &session);
 
     static void reportProjectLoadingProgress();
-    static bool loadingSession();
+
+    static bool loadSession(const QString &session, bool initial = false);
 
 signals:
     void targetAdded(ProjectExplorer::Target *target);
@@ -114,22 +132,13 @@ signals:
 
     void startupProjectChanged(ProjectExplorer::Project *project);
 
-    void aboutToUnloadSession(QString sessionName);
-    void aboutToLoadSession(QString sessionName);
-    void sessionLoaded(QString sessionName);
-    void aboutToSaveSession();
     void dependencyChanged(ProjectExplorer::Project *a, ProjectExplorer::Project *b);
-
-    void sessionRenamed(const QString &oldName, const QString &newName);
-    void sessionRemoved(const QString &name);
 
     // for tests only
     void projectFinishedParsing(ProjectExplorer::Project *project);
 
 private:
-    static void saveActiveMode(Utils::Id mode);
     static void configureEditor(Core::IEditor *editor, const QString &fileName);
-    static void markSessionFileDirty();
     static void configureEditors(Project *project);
 };
 

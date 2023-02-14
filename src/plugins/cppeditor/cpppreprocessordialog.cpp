@@ -27,7 +27,7 @@ CppPreProcessorDialog::CppPreProcessorDialog(const FilePath &filePath, QWidget *
     setWindowTitle(Tr::tr("Additional C++ Preprocessor Directives"));
 
     const QString key = Constants::EXTRA_PREPROCESSOR_DIRECTIVES + m_filePath.toString();
-    const QString directives = ProjectExplorer::SessionManager::value(key).toString();
+    const QString directives = ProjectExplorer::SessionBase::value(key).toString();
 
     m_editWidget = new TextEditor::SnippetEditorWidget;
     m_editWidget->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
@@ -56,7 +56,7 @@ int CppPreProcessorDialog::exec()
         return Rejected;
 
     const QString key = Constants::EXTRA_PREPROCESSOR_DIRECTIVES + m_filePath.toString();
-    ProjectExplorer::SessionManager::setValue(key, extraPreprocessorDirectives());
+    ProjectExplorer::SessionBase::setValue(key, extraPreprocessorDirectives());
 
     return Accepted;
 }

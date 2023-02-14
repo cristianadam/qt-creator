@@ -160,7 +160,7 @@ static void clearTasks()
 
 void TaskFile::stopMonitoring()
 {
-    SessionManager::setValue(Constants::SESSION_TASKFILE_KEY, {});
+    SessionBase::setValue(Constants::SESSION_TASKFILE_KEY, {});
 
     for (TaskFile *document : std::as_const(openFiles))
         document->deleteLater();
@@ -174,8 +174,8 @@ bool TaskFile::load(QString *errorString, const FilePath &fileName)
 
     bool result = parseTaskFile(errorString, fileName);
     if (result) {
-        if (!SessionManager::isDefaultSession(SessionManager::activeSession()))
-            SessionManager::setValue(Constants::SESSION_TASKFILE_KEY, fileName.toSettings());
+        if (!SessionBase::isDefaultSession(SessionBase::activeSession()))
+            SessionBase::setValue(Constants::SESSION_TASKFILE_KEY, fileName.toSettings());
     } else {
         stopMonitoring();
     }

@@ -111,7 +111,7 @@ SessionModel *SessionView::sessionModel()
 
 void SessionView::selectActiveSession()
 {
-    selectSession(SessionManager::activeSession());
+    selectSession(SessionBase::activeSession());
 }
 
 void SessionView::selectSession(const QString &sessionName)
@@ -136,7 +136,7 @@ void SessionView::keyPressEvent(QKeyEvent *event)
     }
     const QStringList sessions = selectedSessions();
     if (!sessions.contains("default") && !Utils::anyOf(sessions,
-            [](const QString &session) { return session == SessionManager::activeSession(); })) {
+            [](const QString &session) { return session == SessionBase::activeSession(); })) {
         deleteSessions(sessions);
     }
 }

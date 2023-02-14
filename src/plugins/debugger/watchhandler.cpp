@@ -199,18 +199,18 @@ static QString stripForFormat(const QString &ba)
 
 static void saveWatchers()
 {
-    SessionManager::setValue("Watchers", WatchHandler::watchedExpressions());
+    SessionBase::setValue("Watchers", WatchHandler::watchedExpressions());
 }
 
 static void loadFormats()
 {
-    QMap<QString, QVariant> value = SessionManager::value("DefaultFormats").toMap();
+    QMap<QString, QVariant> value = SessionBase::value("DefaultFormats").toMap();
     for (auto it = value.cbegin(), end = value.cend(); it != end; ++it) {
         if (!it.key().isEmpty())
             theTypeFormats.insert(it.key(), it.value().toInt());
     }
 
-    value = SessionManager::value("IndividualFormats").toMap();
+    value = SessionBase::value("IndividualFormats").toMap();
     for (auto it = value.cbegin(), end = value.cend(); it != end; ++it) {
         if (!it.key().isEmpty())
             theIndividualFormats.insert(it.key(), it.value().toInt());
@@ -228,7 +228,7 @@ static void saveFormats()
                 formats.insert(key, format);
         }
     }
-    SessionManager::setValue("DefaultFormats", formats);
+    SessionBase::setValue("DefaultFormats", formats);
 
     formats.clear();
     for (auto it = theIndividualFormats.cbegin(), end = theIndividualFormats.cend(); it != end; ++it) {
@@ -237,7 +237,7 @@ static void saveFormats()
         if (!key.isEmpty())
             formats.insert(key, format);
     }
-    SessionManager::setValue("IndividualFormats", formats);
+    SessionBase::setValue("IndividualFormats", formats);
 }
 
 static void saveSessionData()
@@ -271,7 +271,7 @@ public:
         setWindowFlags(windowFlags() | Qt::Window);
         setWindowTitle(Tr::tr("Debugger - %1").arg(Core::Constants::IDE_DISPLAY_NAME));
 
-        QVariant geometry = SessionManager::value("DebuggerSeparateWidgetGeometry");
+        QVariant geometry = SessionBase::value("DebuggerSeparateWidgetGeometry");
         if (geometry.isValid()) {
             QRect rc = geometry.toRect();
             if (rc.width() < 400)
@@ -284,7 +284,7 @@ public:
 
     void saveGeometry()
     {
-        SessionManager::setValue("DebuggerSeparateWidgetGeometry", QVariant(geometry()));
+        SessionBase::setValue("DebuggerSeparateWidgetGeometry", QVariant(geometry()));
     }
 
     ~SeparatedView() override
@@ -530,9 +530,9 @@ WatchModel::WatchModel(WatchHandler *handler, DebuggerEngine *engine)
     connect(m_separatedView, &SeparatedView::tabBarContextMenuRequestedSignal,
             this, &WatchModel::separatedViewTabBarContextMenuRequested);
 
-    connect(SessionManager::instance(), &SessionManager::sessionLoaded,
+    connect(SessionBase::instance(), &SessionBase::sessionLoaded,
             this, &loadSessionData);
-    connect(SessionManager::instance(), &SessionManager::aboutToSaveSession,
+    connect(SessionBase::instance(), &SessionBase::aboutToSaveSession,
             this, &saveSessionData);
 }
 
@@ -2247,7 +2247,7 @@ void WatchHandler::resetWatchers()
     loadFormats();
     theWatcherNames.clear();
     theWatcherCount = 0;
-    const QStringList watchers = SessionManager::value("Watchers").toStringList();
+    const QStringList watchers = SessionBase::value("Watchers").toStringList();
     m_model->m_watchRoot->removeChildren();
     for (const QString &exp : watchers)
         watchExpression(exp.trimmed());
@@ -2574,7 +2574,7 @@ void WatchHandler::loadSessionDataForEngine()
     loadFormats();
     theWatcherNames.clear();
     theWatcherCount = 0;
-    QVariant value = SessionManager::value("Watchers");
+    QVariant value = SessionBase::value("Watchers");
     m_model->m_watchRoot->removeChildren();
     const QStringList valueList = value.toStringList();
     for (const QString &exp : valueList)

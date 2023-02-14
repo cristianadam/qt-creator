@@ -5,7 +5,6 @@
 
 #include "clangtool.h"
 #include "clangtoolsdiagnostic.h"
-#include "clangtoolsutils.h"
 
 #include <coreplugin/icore.h>
 #include <cppeditor/compileroptionsbuilder.h>
@@ -80,10 +79,10 @@ namespace Internal {
 void PreconfiguredSessionTests::initTestCase()
 {
     const QString preconfiguredSessionName = QLatin1String("ClangToolsTest");
-    if (!SessionManager::sessions().contains(preconfiguredSessionName))
+    if (!SessionBase::sessions().contains(preconfiguredSessionName))
         QSKIP("Manually preconfigured session 'ClangToolsTest' needed.");
 
-    if (SessionManager::activeSession() == preconfiguredSessionName)
+    if (SessionBase::activeSession() == preconfiguredSessionName)
         QSKIP("Session must not be already active.");
 
     // Load session
@@ -199,7 +198,7 @@ bool PreconfiguredSessionTests::switchToProjectAndTarget(Project *project,
     if (target != project->activeTarget()) {
         QSignalSpy spyFinishedParsing(ProjectExplorer::SessionManager::instance(),
                                       &ProjectExplorer::SessionManager::projectFinishedParsing);
-        SessionManager::setActiveTarget(project, target, ProjectExplorer::SetActive::NoCascade);
+        project->setActiveTarget(target, ProjectExplorer::SetActive::NoCascade);
         QTC_ASSERT(spyFinishedParsing.wait(30000), return false);
 
         const QVariant projectArgument = spyFinishedParsing.takeFirst().constFirst();

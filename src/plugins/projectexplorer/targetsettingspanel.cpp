@@ -334,7 +334,7 @@ public:
                 // Go to Run page, when on Run previously etc.
                 TargetItem *previousItem = parent()->currentTargetItem();
                 m_currentChild = previousItem ? previousItem->m_currentChild : DefaultPage;
-                SessionManager::setActiveTarget(m_project, target(), SetActive::Cascade);
+                m_project->setActiveTarget(target(), SetActive::Cascade);
                 parent()->setData(column, QVariant::fromValue(static_cast<TreeItem *>(this)),
                                   ItemActivatedFromBelowRole);
             }
@@ -346,7 +346,7 @@ public:
             int child = indexOf(data.value<TreeItem *>());
             QTC_ASSERT(child != -1, return false);
             m_currentChild = child; // Triggered from sub-item.
-            SessionManager::setActiveTarget(m_project, target(), SetActive::Cascade);
+            m_project->setActiveTarget(target(), SetActive::Cascade);
             // Propagate Build/Run selection up.
             parent()->setData(column, QVariant::fromValue(static_cast<TreeItem *>(this)),
                               ItemActivatedFromBelowRole);
@@ -355,7 +355,7 @@ public:
 
         if (role == ItemActivatedFromAboveRole) {
             // Usually programmatic activation, e.g. after opening the Project mode.
-            SessionManager::setActiveTarget(m_project, target(), SetActive::Cascade);
+            m_project->setActiveTarget(target(), SetActive::Cascade);
             return true;
         }
         return false;

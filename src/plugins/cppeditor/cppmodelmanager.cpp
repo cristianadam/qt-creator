@@ -940,14 +940,14 @@ CppModelManager::CppModelManager()
     d->m_delayedGcTimer.setSingleShot(true);
     connect(&d->m_delayedGcTimer, &QTimer::timeout, this, &CppModelManager::GC);
 
-    auto sessionManager = ProjectExplorer::SessionManager::instance();
-    connect(sessionManager, &ProjectExplorer::SessionManager::projectAdded,
+    auto sessionManager = SessionManager::instance();
+    connect(sessionManager, &SessionManager::projectAdded,
             this, &CppModelManager::onProjectAdded);
-    connect(sessionManager, &ProjectExplorer::SessionManager::aboutToRemoveProject,
+    connect(sessionManager, &SessionManager::aboutToRemoveProject,
             this, &CppModelManager::onAboutToRemoveProject);
-    connect(sessionManager, &ProjectExplorer::SessionManager::aboutToLoadSession,
+    connect(SessionBase::instance(), &SessionBase::aboutToLoadSession,
             this, &CppModelManager::onAboutToLoadSession);
-    connect(sessionManager, &ProjectExplorer::SessionManager::startupProjectChanged,
+    connect(sessionManager, &SessionManager::startupProjectChanged,
             this, &CppModelManager::onActiveProjectChanged);
 
     connect(Core::EditorManager::instance(), &Core::EditorManager::currentEditorChanged,
