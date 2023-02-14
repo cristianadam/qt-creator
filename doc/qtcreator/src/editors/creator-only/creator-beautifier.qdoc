@@ -51,6 +51,11 @@
         \li Select \uicontrol Help > \uicontrol {About Plugins} > \uicontrol {C++} >
             \uicontrol Beautifier to enable the plugin.
 
+            \note Since \QC 10.0.0, the \l{Automatic Formatting and Indentation}
+            {Clang Format plugin} is enabled by default. \l{Specifying Code Style}
+            {Switch off Clang Format} if you enable Beautifier because combining
+            them can lead to unexpected results.
+
         \li Select \uicontrol {Restart Now} to restart \QC and load the plugin.
 
         \li Select \uicontrol Edit > \uicontrol Preferences >
