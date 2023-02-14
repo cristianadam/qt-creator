@@ -2427,7 +2427,7 @@ ProjectExplorerPlugin::OpenProjectResult ProjectExplorerPlugin::openProjects(con
                                               Utils::equal(&Project::projectFilePath, filePath));
         if (found) {
             alreadyOpen.append(found);
-            SessionManager::reportProjectLoadingProgress();
+            SessionBase::reportLoadingProgress();
             continue;
         }
 
@@ -2456,7 +2456,7 @@ ProjectExplorerPlugin::OpenProjectResult ProjectExplorerPlugin::openProjects(con
                         .arg(mt.name()));
         }
         if (filePaths.size() > 1)
-            SessionManager::reportProjectLoadingProgress();
+            SessionBase::reportLoadingProgress();
     }
     dd->updateActions();
 

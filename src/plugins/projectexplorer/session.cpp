@@ -1119,7 +1119,7 @@ QString SessionBase::startupSession()
     return ICore::settings()->value(Constants::STARTUPSESSION_KEY).toString();
 }
 
-void SessionManager::reportProjectLoadingProgress()
+void SessionBase::reportLoadingProgress()
 {
     sb_d->sessionLoadingProgress();
 }

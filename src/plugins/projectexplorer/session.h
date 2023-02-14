@@ -60,6 +60,8 @@ public:
     static bool loadingSession();
     static void markSessionFileDirty();
 
+    static void reportLoadingProgress();
+
 signals:
     void aboutToUnloadSession(QString sessionName);
     void aboutToLoadSession(QString sessionName);
@@ -117,8 +119,6 @@ public:
     static Project *projectWithProjectFilePath(const Utils::FilePath &filePath);
 
     static Utils::FilePaths projectsForSessionName(const QString &session);
-
-    static void reportProjectLoadingProgress();
 
     static bool loadSession(const QString &session, bool initial = false);
 
