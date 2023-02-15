@@ -9,6 +9,8 @@
 
 #include <QColor>
 
+#include <optional>
+
 namespace Autotest {
 
 class ITestTreeItem;
@@ -76,14 +78,15 @@ class TestResult
 {
 public:
     TestResult() = default;
-    TestResult(const QString &id, const QString &name, const ResultHooks &hooks = {});
+    TestResult(const std::optional<QString> &id, const QString &name,
+               const ResultHooks &hooks = {});
     virtual ~TestResult() {}
 
     bool isValid() const;
     const QString outputString(bool selected) const;
     const ITestTreeItem *findTestTreeItem() const;
 
-    QString id() const { return m_id; }
+    QString id() const { return m_id.value_or(QString{}); }
     QString name() const { return m_name; }
     ResultType result() const { return m_result; }
     QString description() const { return m_description; }
@@ -106,7 +109,7 @@ public:
     TestResult intermediateResult() const;
 
 private:
-    QString m_id;
+    std::optional<QString> m_id;
     QString m_name;
     ResultType m_result = ResultType::Invalid;  // the real result..
     QString m_description;

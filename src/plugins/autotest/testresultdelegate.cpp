@@ -52,8 +52,6 @@ void TestResultDelegate::paint(QPainter *painter, const QStyleOptionViewItem &op
 
     const LayoutPositions positions(opt, resultFilterModel);
     const TestResult testResult = resultFilterModel->testResult(index);
-    QTC_ASSERT(testResult.isValid(), painter->restore(); return);
-
     const QWidget *widget = dynamic_cast<const QWidget*>(painter->device());
     QWindow *window = widget ? widget->window()->windowHandle() : nullptr;
 
@@ -130,7 +128,6 @@ QSize TestResultDelegate::sizeHint(const QStyleOptionViewItem &option, const QMo
 
     if (selected) {
         const TestResult testResult = resultFilterModel->testResult(index);
-        QTC_ASSERT(testResult.isValid(), return {});
         QString output = testResult.outputString(selected);
         limitTextOutput(output);
         output.replace('\n', QChar::LineSeparator);

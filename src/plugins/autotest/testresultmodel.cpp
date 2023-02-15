@@ -91,7 +91,6 @@ QVariant TestResultItem::data(int column, int role) const
 
 void TestResultItem::updateDescription(const QString &description)
 {
-    QTC_ASSERT(m_testResult.isValid(), return);
     m_testResult.setDescription(description);
 }
 
@@ -241,7 +240,7 @@ void TestResultModel::addTestResult(const TestResult &testResult, bool autoExpan
         if (lastRow >= 0) {
             TestResultItem *current = rootItem()->childAt(lastRow);
             const TestResult result = current->testResult();
-            if (result.isValid() && result.result() == ResultType::MessageCurrentTest) {
+            if (!result.isValid() && result.result() == ResultType::MessageCurrentTest) {
                 current->updateDescription(testResult.description());
                 emit dataChanged(current->index(), current->index());
                 return;
@@ -290,7 +289,7 @@ void TestResultModel::addTestResult(const TestResult &testResult, bool autoExpan
         if (lastRow >= 0) {
             TestResultItem *current = rootItem()->childAt(lastRow);
             const TestResult result = current->testResult();
-            if (result.isValid() && result.result() == ResultType::MessageCurrentTest) {
+            if (!result.isValid() && result.result() == ResultType::MessageCurrentTest) {
                 rootItem()->insertChild(current->index().row(), newItem);
                 return;
             }

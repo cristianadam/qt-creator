@@ -215,7 +215,8 @@ static ResultHooks::CreateResultHook createResultHook(const FilePath &projectFil
     };
 }
 
-QtTestResult::QtTestResult(const QString &id, const QString &name, const FilePath &projectFile,
+QtTestResult::QtTestResult(const std::optional<QString> &id,
+                           const QString &name, const FilePath &projectFile,
                            TestType type, const QString &functionName, const QString &dataTag)
     : TestResult(id, name, {QVariant::fromValue(QtTestData{projectFile, type, functionName, dataTag}),
                             outputStringHook(functionName, dataTag),

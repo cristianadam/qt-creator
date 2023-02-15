@@ -15,7 +15,8 @@ namespace Internal {
 class QtTestResult : public TestResult
 {
 public:
-    QtTestResult(const QString &id, const QString &name, const Utils::FilePath &projectFile,
+    QtTestResult(const std::optional<QString> &id, const QString &name,
+                 const Utils::FilePath &projectFile,
                  TestType type, const QString &functionName = {}, const QString &dataTag = {});
 };
 

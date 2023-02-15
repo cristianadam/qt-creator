@@ -14,7 +14,8 @@ namespace Internal {
 class GTestResult : public TestResult
 {
 public:
-    GTestResult(const QString &id, const QString &name, const Utils::FilePath &projectFile,
+    GTestResult(const std::optional<QString> &id, const QString &name,
+                const Utils::FilePath &projectFile,
                 const QString &testCaseName = {}, int iteration = 1);
 };
 

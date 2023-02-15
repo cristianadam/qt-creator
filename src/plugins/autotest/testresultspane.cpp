@@ -633,14 +633,11 @@ TestResult TestResultsPane::getTestResult(const QModelIndex &idx)
 {
     if (!idx.isValid())
         return {};
-    const TestResult result = m_filterModel->testResult(idx);
-    QTC_CHECK(result.isValid());
-    return result;
+    return m_filterModel->testResult(idx);
 }
 
 void TestResultsPane::onCopyItemTriggered(const TestResult &result)
 {
-    QTC_ASSERT(result.isValid(), return);
     setClipboardAndSelection(result.outputString(true));
 }
 
@@ -689,7 +686,8 @@ QString TestResultsPane::getWholeOutput(const QModelIndex &parent)
     for (int row = 0, count = m_model->rowCount(parent); row < count; ++row) {
         QModelIndex current = m_model->index(row, 0, parent);
         const TestResult result = m_model->testResult(current);
-        QTC_ASSERT(result.isValid(), continue);
+        if (!result.isValid())
+            continue;
         if (auto item = m_model->itemForIndex(current))
             output.append(item->resultString()).append('\t');
         output.append(result.outputString(true)).append('\n');
@@ -706,7 +704,6 @@ void TestResultsPane::createMarks(const QModelIndex &parent)
     for (int row = 0, count = m_model->rowCount(parent); row < count; ++row) {
         const QModelIndex index = m_model->index(row, 0, parent);
         const TestResult result = m_model->testResult(index);
-        QTC_ASSERT(result.isValid(), continue);
 
         if (m_model->hasChildren(index))
             createMarks(index);

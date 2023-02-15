@@ -123,7 +123,8 @@ static ResultHooks::DirectParentHook directParentHook(const QString &testCaseNam
     };
 }
 
-GTestResult::GTestResult(const QString &id, const QString &name, const FilePath &projectFile,
+GTestResult::GTestResult(const std::optional<QString> &id, const QString &name,
+                         const FilePath &projectFile,
                          const QString &testCaseName, int iteration)
     : TestResult(id, name, {QVariant::fromValue(GTestData{testCaseName, iteration}),
                             outputStringHook(testCaseName),
