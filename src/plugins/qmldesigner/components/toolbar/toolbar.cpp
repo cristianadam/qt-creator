@@ -4,6 +4,8 @@
 #include "toolbar.h"
 #include "toolbarbackend.h"
 
+#include <studioquickwidget.h>
+
 #include <theme.h>
 #include <qmldesignerconstants.h>
 
@@ -17,8 +19,6 @@
 #include <QToolBar>
 
 namespace QmlDesigner {
-
-QmlDesigner::ToolBar::ToolBar() {}
 
 static Utils::FilePath propertyEditorResourcesPath()
 {
@@ -56,6 +56,8 @@ void ToolBar::create()
 
     auto window = Core::ICore::mainWindow();
 
+    //restoreState(settings.value("windowState").toByteArray());
+
     //Core::ICore::statusBar()->hide();
 
     auto toolBar = new QToolBar;
@@ -66,7 +68,7 @@ void ToolBar::create()
     toolBar->setFloatable(false);
     toolBar->setMovable(false);
 
-    auto quickWidget = new QQuickWidget;
+    auto quickWidget = new StudioQuickWidget;
 
     quickWidget->setFixedHeight(48);
     quickWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -95,7 +97,7 @@ void ToolBar::createStatusBar()
 
     ToolBarBackend::registerDeclarativeType();
 
-    auto quickWidget = new QQuickWidget;
+    auto quickWidget = new StudioQuickWidget;
 
     quickWidget->setFixedHeight(Theme::toolbarSize());
     quickWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -123,6 +125,8 @@ void ToolBar::createStatusBar()
 
 bool ToolBar::isVisible()
 {
+    return true;
+
     QSettings *settings = Core::ICore::settings();
     const QString qdsToolbarEntry = "QML/Designer/TopToolBar";
 
