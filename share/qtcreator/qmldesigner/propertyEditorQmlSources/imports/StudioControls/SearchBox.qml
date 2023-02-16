@@ -55,6 +55,11 @@ T.TextField {
                  && (!control.activeFocus || control.horizontalAlignment !== Qt.AlignHCenter)
         elide: Text.ElideRight
         renderType: control.renderType
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.NoButton
+            cursorShape: !control.activeFocus ? Qt.PointingHandCursor : Qt.IBeamCursor
+        }
     }
 
     background: Rectangle {
