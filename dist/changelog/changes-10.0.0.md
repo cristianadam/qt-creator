@@ -166,11 +166,6 @@ Platforms
 
 * Removed service management from the manifest editor (QTCREATORBUG-28024)
 
-### Remote Linux
-
-* Fixed that opening a file dialog unnecessarily asks for passwords for
-  remote devices
-
 ### Docker
 
 * Added support for the remote code model via a remote Clangd
