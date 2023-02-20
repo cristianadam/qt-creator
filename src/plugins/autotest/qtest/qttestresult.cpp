@@ -155,7 +155,8 @@ struct QtTestData
     bool isDataTag() const { return !m_function.isEmpty() && !m_dataTag.isEmpty(); };
 };
 
-static ResultHooks::DirectParentHook directParentHook(const QString &functionName,
+static ResultHooks::DirectParentHook directParentHook(const QString &name,
+                                                      const QString &functionName,
                                                       const QString &dataTag)
 {
     return [=](const TestResult &result, const TestResult &other, bool *needsIntermediate) -> bool {
@@ -177,6 +178,8 @@ static ResultHooks::DirectParentHook directParentHook(const QString &functionNam
                 return (functionName.isEmpty() && dataTag.isEmpty())
                         || (functionName == otherData.m_function
                             && other.result() != ResultType::TestStart);
+            } else if (other.result() == ResultType::MessageInternal) {
+                return other.name() == name;
             }
         }
         return false;
@@ -221,7 +224,7 @@ QtTestResult::QtTestResult(const std::optional<QString> &id,
     : TestResult(id, name, {QVariant::fromValue(QtTestData{projectFile, type, functionName, dataTag}),
                             outputStringHook(functionName, dataTag),
                             findTestItemHook(projectFile, type, functionName, dataTag),
-                            directParentHook(functionName, dataTag),
+                            directParentHook(name, functionName, dataTag),
                             intermediateHook(projectFile, functionName, dataTag),
                             createResultHook(projectFile, type, functionName, dataTag)})
 {}
