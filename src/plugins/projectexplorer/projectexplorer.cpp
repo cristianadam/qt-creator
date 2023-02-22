@@ -8,6 +8,7 @@
 #include "buildsystem.h"
 #include "compileoutputwindow.h"
 #include "configtaskhandler.h"
+#include "copystep.h"
 #include "customexecutablerunconfiguration.h"
 #include "customparserssettingspage.h"
 #include "customwizard/customwizard.h"
@@ -678,6 +679,8 @@ public:
     RunRunConfigurationLocatorFilter m_runConfigurationLocatorFilter;
     SwitchToRunConfigurationLocatorFilter m_switchRunConfigurationLocatorFilter;
 
+    CopyFileStepFactory m_copyFileStepFactory;
+    CopyDirectoryStepFactory m_copyDirectoryFactory;
     ProcessStepFactory m_processStepFactory;
 
     AllProjectsFind m_allProjectsFind;
