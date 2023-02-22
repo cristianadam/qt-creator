@@ -106,9 +106,11 @@ private:
     QSharedPointer<QmlProjectItem> m_projectItem;
     bool m_blockFilesUpdate = false;
 
+    void initProjectItem();
     void parseProjectFiles();
-    void registerMenuButtons();
     void generateProjectTree();
+
+    void registerMenuButtons();
     void updateDeploymentData();
 };
 

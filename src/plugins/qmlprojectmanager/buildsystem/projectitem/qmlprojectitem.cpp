@@ -4,6 +4,8 @@
 #include "qmlprojectitem.h"
 
 #include <utils/algorithm.h>
+#include <utils/qtcassert.h>
+
 #include <QDir>
 
 #include <qmljs/qmljssimplereader.h>
@@ -36,7 +38,12 @@ QmlProjectItem::QmlProjectItem(const Utils::FilePath &filePath)
     setTargetDirectory(m_projectFileQml.parentDir().toString());
 
     // FIXME: hancerli: how to assert here?
-    //    QTC_ASSERT(m_projectFileQml.exists(), return);
+
+//    assert(m_projectFileJson.exists());
+//    QTC_ASSERT(m_projectFileJson.exists(), throw);
+    if(!m_projectFileJson.exists())
+        throw std::runtime_error("Cannot open QmlProject");
+
     if (!m_projectFileQml.exists()) {
         // FIXME: hancerli: this needs to be decided
         // is that necessary to take a too aggressive action?
@@ -48,6 +55,14 @@ QmlProjectItem::QmlProjectItem(const Utils::FilePath &filePath)
     parseProjectFileQml();
 
     if (!m_projectFileQml.exists()) {
+    }
+
+    for (auto &fileFilter : m_content) {
+        fileFilter->setDefaultDirectory(m_projectPath);
+        connect(fileFilter.get(),
+                &FileFilterBaseItem::filesChanged,
+                this,
+                &QmlProjectItem::qmlFilesChanged);
     }
 }
 

@@ -168,31 +168,32 @@ void QmlBuildSystem::parseProject(const RefreshOptions &options)
         DEVDEBUG << "Parsing Everything";
     case ProjectFile:
         DEVDEBUG << "Parsing ProjectFile";
-        m_projectItem.reset(new QmlProjectItem{projectFilePath()});
-        connect(m_projectItem.get(),
-                &QmlProjectItem::qmlFilesChanged,
-                this,
-                &QmlBuildSystem::refreshFiles);
+        initProjectItem();
     case Files:
         DEVDEBUG << "Parsing Files";
         parseProjectFiles();
-        break;
     case Configuration:
         DEVDEBUG << "Parsing Configuration";
         DEVDEBUG << "Not implemented";
-        break;
     }
+}
+
+void QmlBuildSystem::initProjectItem(){
+    m_projectItem.reset(new QmlProjectItem{projectFilePath()});
+    connect(m_projectItem.get(),
+            &QmlProjectItem::qmlFilesChanged,
+            this,
+            &QmlBuildSystem::refreshFiles);
 }
 
 void QmlBuildSystem::parseProjectFiles()
 {
-
     if (auto modelManager = QmlJS::ModelManagerInterface::instance()) {
         QStringList files = m_projectItem->files();
         modelManager->updateSourceFiles(Utils::transform(files,
                                                          [](const QString &p) {
-            return Utils::FilePath::fromString(p);
-        }),
+                                                             return Utils::FilePath::fromString(p);
+                                                         }),
                                         true);
     }
 

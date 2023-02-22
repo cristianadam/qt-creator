@@ -15,6 +15,9 @@ class Q_DECL_EXPORT QmlProject : public ProjectExplorer::Project
     Q_OBJECT
 public:
     explicit QmlProject(const Utils::FilePath &filename);
+    ~QmlProject(){
+        qDebug() << "Closing the project";
+    };
 
     static bool isQtDesignStudio();
     static bool isQtDesignStudioStartedFromQtC();

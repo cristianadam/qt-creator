@@ -32,7 +32,16 @@ QmlProject::QmlProject(const Utils::FilePath &fileName)
     setDisplayName(fileName.completeBaseName());
 
     setNeedsBuildConfigurations(false);
-    setBuildSystemCreator([](Target *t) { return new QmlBuildSystem(t); });
+    setBuildSystemCreator([](Target *t) {
+        QmlBuildSystem *buildSystem = nullptr;
+        try {
+            buildSystem = new QmlBuildSystem(t);
+        } catch (...) {
+            Core::EditorManager::closeAllDocuments();
+            SessionManager::closeAllProjects();
+        }
+        return buildSystem;
+    });
 
     // FIXME: hancerli: why checking this?
     // this should not even be the case. if that's possible, then what?
