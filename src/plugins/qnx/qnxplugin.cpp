@@ -90,7 +90,7 @@ public:
     QAction *m_debugSeparator = nullptr;
     QAction m_attachToQnxApplication{Tr::tr("Attach to remote QNX application..."), nullptr};
 
-    QnxConfigurationManager configurationFactory;
+    QnxConfigurationManager configurationManager;
     QnxQtVersionFactory qtVersionFactory;
     QnxDeviceFactory deviceFactory;
     QnxDeployConfigurationFactory deployConfigFactory;
@@ -122,6 +122,8 @@ private:
 
 void QnxPlugin::extensionsInitialized()
 {
+    d->configurationManager.restoreConfigurations(); // Needed for CI devices.
+
     // Attach support
     connect(&d->m_attachToQnxApplication, &QAction::triggered, this, &showAttachToProcessDialog);
 
