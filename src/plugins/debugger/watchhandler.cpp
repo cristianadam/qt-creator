@@ -447,6 +447,8 @@ public:
     void grabWidget();
     void ungrabWidget();
     void timerEvent(QTimerEvent *event) override;
+    void recreateItemCache();
+
 private:
     QMenu *createFormatMenuForManySelected(const WatchItemSet &item, QWidget *parent);
     void setItemsFormat(const WatchItemSet &items, const DisplayFormat &format);
@@ -475,6 +477,8 @@ public:
     QHash<QString, QString> m_valueCache;
 
     Location m_location;
+
+    QHash<QString, WatchItem *> m_inameToItemCache;
 
 private:
     void separatedViewTabBarContextMenuRequested(const QPoint &point, const QString &iname);
@@ -544,10 +548,40 @@ void WatchModel::reinitialize(bool includeInspectData)
     m_tooltipRoot->removeChildren();
     if (includeInspectData)
         m_inspectorRoot->removeChildren();
+
+    recreateItemCache();
+}
+
+void WatchModel::recreateItemCache()
+{
+    m_inameToItemCache.clear();
+
+    const auto insert = [this](WatchItem *item) { m_inameToItemCache.insert(item->iname, item); };
+
+    m_localsRoot->forAllChildren(insert);
+    m_watchRoot->forAllChildren(insert);
+    m_returnRoot->forAllChildren(insert);
+    m_tooltipRoot->forAllChildren(insert);
+    m_inspectorRoot->forAllChildren(insert);
 }
 
 WatchItem *WatchModel::findItem(const QString &iname) const
 {
+    if (WatchItem *item = m_inameToItemCache[iname])
+        return item;
+
+    if (iname == u"local")
+        return m_localsRoot;
+    if (iname == u"watch")
+        return m_watchRoot;
+    if (iname == u"return")
+        return m_returnRoot;
+    if (iname == u"tooltip")
+        return m_tooltipRoot;
+    if (iname == u"inspect")
+        return m_inspectorRoot;
+
+    QTC_CHECK(false);
     return findNonRootItem([iname](WatchItem *item) { return item->iname == iname; });
 }
 
@@ -2197,8 +2231,10 @@ bool WatchHandler::insertItem(WatchItem *item)
             break;
         }
     }
-    if (!found)
+    if (!found) {
+        m_model->m_inameToItemCache[item->iname] = item;
         parent->appendChild(item);
+    }
 
     item->update();
 
@@ -2210,6 +2246,7 @@ bool WatchHandler::insertItem(WatchItem *item)
 
 void WatchModel::reexpandItems()
 {
+    recreateItemCache();
     for (const QString &iname : std::as_const(m_expandedINames)) {
         if (WatchItem *item = findItem(iname)) {
             emit itemIsExpanded(indexForItem(item));
@@ -2288,8 +2325,10 @@ void WatchHandler::notifyUpdateFinished()
         return true;
     });
 
-    for (WatchItem *item : std::as_const(toRemove))
+    for (WatchItem *item : std::as_const(toRemove)) {
         m_model->destroyItem(item);
+        m_model->m_inameToItemCache.remove(item->iname);
+    }
 
     m_model->forAllItems([this](WatchItem *item) {
         if (item->wantsChildren && isExpandedIName(item->iname)) {
