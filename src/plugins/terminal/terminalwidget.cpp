@@ -14,11 +14,11 @@
 #include <utils/hostosinfo.h>
 #include <utils/stringutils.h>
 
-#include <ptyqt.h>
 #include <vterm.h>
 
 #include <QApplication>
 #include <QClipboard>
+#include <QElapsedTimer>
 #include <QGlyphRun>
 #include <QLoggingCategory>
 #include <QPaintEvent>
@@ -89,7 +89,7 @@ TerminalWidget::TerminalWidget(QWidget *parent, const OpenTerminalParameters &op
 
 void TerminalWidget::setupPty()
 {
-    m_ptyProcess.reset(PtyQt::createPtyProcess(IPtyProcess::PtyType::AutoPty));
+    m_process = std::make_unique<QtcProcess>();
 
     Environment env = m_openParameters.environment.value_or(Environment::systemEnvironment());
 
@@ -98,29 +98,17 @@ void TerminalWidget::setupPty()
 
     // For git bash on Windows
     env.prependOrSetPath(shellCommand.executable().parentDir());
+    if (env.hasKey("CLINK_NOAUTORUN"))
+        env.unset("CLINK_NOAUTORUN");
 
-    QStringList envList = filtered(env.toStringList(), [](const QString &envPair) {
-        return envPair != "CLINK_NOAUTORUN=1";
-    });
+    m_process->setProcessMode(ProcessMode::Writer);
+    m_process->setProcessImpl(ProcessImpl::Pty);
+    m_process->setCommand(shellCommand);
+    m_process->setWorkingDirectory(
+        m_openParameters.workingDirectory.value_or(FilePath::fromString(QDir::homePath())));
+    m_process->setEnvironment(env);
 
-    m_ptyProcess->startProcess(shellCommand.executable().nativePath(),
-                               shellCommand.splitArguments(),
-                               m_openParameters.workingDirectory
-                                   .value_or(FilePath::fromString(QDir::homePath()))
-                                   .nativePath(),
-                               envList,
-                               m_vtermSize.width(),
-                               m_vtermSize.height());
-
-    emit started(m_ptyProcess->pid());
-
-    if (!m_ptyProcess->lastError().isEmpty()) {
-        qCWarning(terminalLog) << m_ptyProcess->lastError();
-        m_ptyProcess.reset();
-        return;
-    }
-
-    connect(m_ptyProcess->notifier(), &QIODevice::readyRead, this, [this]() {
+    connect(m_process.get(), &QtcProcess::readyReadStandardOutput, this, [this]() {
         if (m_readDelayTimer.isActive())
             m_readDelayRestarts++;
 
@@ -130,14 +118,15 @@ void TerminalWidget::setupPty()
         m_readDelayTimer.start();
     });
 
-    connect(m_ptyProcess->notifier(), &QIODevice::aboutToClose, this, [this]() {
+    connect(m_process.get(), &QtcProcess::done, this, [this]() {
         m_cursor.visible = false;
-        if (m_ptyProcess) {
+        if (m_process) {
             onReadyRead();
 
-            if (m_ptyProcess->exitCode() != 0) {
-                QByteArray msg = QString("\r\n\033[31mProcess exited with code: %1")
-                                     .arg(m_ptyProcess->exitCode())
+            if (m_process->exitCode() != 0) {
+                QByteArray msg = QString("\r\n\033[31mProcess exited with code: %1 (%2)")
+                                     .arg(m_process->exitCode())
+                                     .arg(m_process->errorString())
                                      .toUtf8();
 
                 vterm_input_write(m_vterm.get(), msg.constData(), msg.size());
@@ -151,7 +140,7 @@ void TerminalWidget::setupPty()
             QMetaObject::invokeMethod(
                 this,
                 [this]() {
-                    m_ptyProcess.reset();
+                    m_process.reset();
                     setupPty();
                 },
                 Qt::QueuedConnection);
@@ -162,13 +151,19 @@ void TerminalWidget::setupPty()
 
         if (m_openParameters.m_exitBehavior == ExitBehavior::Keep) {
             QByteArray msg = QString("\r\nProcess exited with code: %1")
-                                 .arg(m_ptyProcess ? m_ptyProcess->exitCode() : -1)
+                                 .arg(m_process ? m_process->exitCode() : -1)
                                  .toUtf8();
 
             vterm_input_write(m_vterm.get(), msg.constData(), msg.size());
             vterm_screen_flush_damage(m_vtermScreen);
         }
     });
+
+    connect(m_process.get(), &QtcProcess::started, this, [this]() {
+        emit started(m_process->processId());
+    });
+
+    m_process->start();
 }
 
 void TerminalWidget::setupFont()
@@ -228,8 +223,8 @@ void TerminalWidget::setupColors()
 
 void TerminalWidget::writeToPty(const QByteArray &data)
 {
-    if (m_ptyProcess)
-        m_ptyProcess->write(data);
+    if (m_process)
+        m_process->writeRaw(data);
 }
 
 void TerminalWidget::setupVTerm()
@@ -304,7 +299,7 @@ void TerminalWidget::setFont(const QFont &font)
 
     QAbstractScrollArea::setFont(m_font);
 
-    if (m_ptyProcess) {
+    if (m_process) {
         applySizeChange();
     }
 }
@@ -424,7 +419,7 @@ void TerminalWidget::clearContents()
 
 void TerminalWidget::onReadyRead()
 {
-    QByteArray data = m_ptyProcess->readAll();
+    QByteArray data = m_process->readAllRawStandardOutput();
     vterm_input_write(m_vterm.get(), data.constData(), data.size());
     vterm_screen_flush_damage(m_vtermScreen);
 }
@@ -708,8 +703,8 @@ void TerminalWidget::applySizeChange()
     if (m_vtermSize.width() <= 0)
         m_vtermSize.setWidth(1);
 
-    if (m_ptyProcess)
-        m_ptyProcess->resize(m_vtermSize.width(), m_vtermSize.height());
+    if (m_process)
+        m_process->resizePty(m_vtermSize.width(), m_vtermSize.height());
 
     vterm_set_size(m_vterm.get(), m_vtermSize.height(), m_vtermSize.width());
     vterm_screen_flush_damage(m_vtermScreen);
@@ -868,7 +863,7 @@ void TerminalWidget::showEvent(QShowEvent *event)
 {
     Q_UNUSED(event);
 
-    if (!m_ptyProcess)
+    if (!m_process)
         setupPty();
 
     QAbstractScrollArea::showEvent(event);

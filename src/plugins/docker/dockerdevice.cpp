@@ -216,6 +216,7 @@ private:
     void start() override;
     qint64 write(const QByteArray &data) override;
     void sendControlSignal(ControlSignal controlSignal) final;
+    void resizePty(int columns, int rows) final { m_process.resizePty(columns, rows); };
 
 private:
     DockerDevicePrivate *m_devicePrivate = nullptr;
@@ -241,7 +242,7 @@ DockerProcessImpl::DockerProcessImpl(IDevice::ConstPtr device, DockerDevicePriva
         if (!m_hasReceivedFirstOutput) {
             QByteArray output = m_process.readAllRawStandardOutput();
             qsizetype idx = output.indexOf('\n');
-            QByteArray firstLine = output.left(idx);
+            QByteArray firstLine = output.left(idx).trimmed();
             QByteArray rest = output.mid(idx + 1);
             qCDebug(dockerDeviceLog)
                 << "Process first line received:" << m_process.commandLine() << firstLine;
@@ -300,7 +301,9 @@ void DockerProcessImpl::start()
         = m_devicePrivate->withDockerExecCmd(m_setup.m_commandLine,
                                              m_setup.m_environment,
                                              m_setup.m_workingDirectory,
-                                             interactive);
+                                             interactive,
+                                             true,
+                                             m_setup.m_processImpl == ProcessImpl::Pty);
 
     m_process.setCommand(fullCommandLine);
     m_process.start();

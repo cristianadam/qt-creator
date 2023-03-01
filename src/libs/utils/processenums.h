@@ -18,6 +18,7 @@ enum class ProcessMode {
 enum class ProcessImpl {
     QProcess,
     ProcessLauncher,
+    Pty,
     Default // Defaults to ProcessLauncherImpl, if QTC_USE_QPROCESS env var is set
             // it equals to QProcessImpl.
 };

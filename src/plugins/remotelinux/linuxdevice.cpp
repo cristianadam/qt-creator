@@ -567,6 +567,11 @@ void SshProcessInterface::sendControlSignal(ControlSignal controlSignal)
     handleSendControlSignal(controlSignal);
 }
 
+void SshProcessInterface::resizePty(int columns, int lines)
+{
+    d->m_process.resizePty(columns, lines);
+}
+
 LinuxProcessInterface::LinuxProcessInterface(const LinuxDevice *linuxDevice)
     : SshProcessInterface(linuxDevice)
 {
@@ -656,9 +661,15 @@ void LinuxProcessInterface::handleReadyReadStandardOutput(const QByteArray &outp
     m_output.append(outputData);
 
     static const QByteArray endMarker = s_pidMarker + '\n';
-    const int endMarkerOffset = m_output.indexOf(endMarker);
-    if (endMarkerOffset == -1)
-        return;
+    int endMarkerLength = endMarker.length();
+    int endMarkerOffset = m_output.indexOf(endMarker);
+    if (endMarkerOffset == -1) {
+        static const QByteArray endMarker = s_pidMarker + "\r\n";
+        endMarkerOffset = m_output.indexOf(endMarker);
+        endMarkerLength = endMarker.length();
+        if (endMarkerOffset == -1)
+            return;
+    }
     const int startMarkerOffset = m_output.indexOf(s_pidMarker);
     if (startMarkerOffset == endMarkerOffset) // Only theoretically possible.
         return;
@@ -668,7 +679,7 @@ void LinuxProcessInterface::handleReadyReadStandardOutput(const QByteArray &outp
     const qint64 processId = pidString.toLongLong();
 
     // We don't want to show output from e.g. /etc/profile.
-    m_output = m_output.mid(endMarkerOffset + endMarker.length());
+    m_output = m_output.mid(endMarkerOffset + endMarkerLength);
 
     emitStarted(processId);
 
@@ -806,7 +817,8 @@ CommandLine SshProcessInterfacePrivate::fullLocalCommandLine() const
 
     if (!m_sshParameters.x11DisplayName.isEmpty())
         cmd.addArg("-X");
-    if (q->m_setup.m_terminalMode != TerminalMode::Off)
+    if (q->m_setup.m_terminalMode != TerminalMode::Off
+        || q->m_setup.m_processImpl == ProcessImpl::Pty)
         cmd.addArg("-tt");
 
     cmd.addArg("-q");

@@ -123,6 +123,7 @@ bool ConPtyProcess::startProcess(const QString &executable,
     }
 
     m_shellPath = executable;
+    m_shellPath.replace('/', '\\');
     m_size = QPair<qint16, qint16>(cols, rows);
 
     //env
@@ -264,11 +265,13 @@ bool ConPtyProcess::kill()
         if (INVALID_HANDLE_VALUE != m_hPipeIn)
             CloseHandle(m_hPipeIn);
 
-        m_readThread->requestInterruption();
-        if (!m_readThread->wait(1000))
-            m_readThread->terminate();
-        m_readThread->deleteLater();
-        m_readThread = nullptr;
+        if (m_readThread) {
+            m_readThread->requestInterruption();
+            if (!m_readThread->wait(1000))
+                m_readThread->terminate();
+            m_readThread->deleteLater();
+            m_readThread = nullptr;
+        }
 
         delete m_shellCloseWaitNotifier;
         m_shellCloseWaitNotifier = nullptr;

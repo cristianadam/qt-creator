@@ -110,6 +110,14 @@ private:
     // It's being called in Starting or Running state.
     virtual void sendControlSignal(ControlSignal controlSignal) = 0;
 
+    // Called from QtcProcess::resizePty
+    virtual void resizePty(int columns, int rows)
+    {
+        Q_UNUSED(columns);
+        Q_UNUSED(rows);
+        QTC_CHECK(false);
+    };
+
     virtual ProcessBlockingInterface *processBlockingInterface() const { return nullptr; }
 
     friend class QtcProcess;

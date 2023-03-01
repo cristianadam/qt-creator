@@ -38,6 +38,7 @@ private:
     void start() final;
     qint64 write(const QByteArray &data) final;
     void sendControlSignal(Utils::ControlSignal controlSignal) final;
+    void resizePty(int columns, int rows) final;
 
     friend class SshProcessInterfacePrivate;
     SshProcessInterfacePrivate *d = nullptr;

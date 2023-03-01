@@ -56,6 +56,8 @@ public:
     qint64 write(const QString &input);
     qint64 writeRaw(const QByteArray &input);
 
+    void resizePty(int columns, int rows);
+
     qint64 processId() const;
     qint64 applicationMainThreadId() const;
 

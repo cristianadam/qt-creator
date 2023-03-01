@@ -17,6 +17,9 @@
 #include "threadutils.h"
 #include "utilstr.h"
 
+#include <iptyprocess.h>
+#include <ptyqt.h>
+
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
@@ -303,6 +306,101 @@ private:
     }
 
     QProcess *m_process = nullptr;
+};
+
+class PtyProcessImpl final : public DefaultImpl
+{
+public:
+    PtyProcessImpl() {}
+
+    qint64 write(const QByteArray &data) final
+    {
+        if (m_ptyProcess)
+            return m_ptyProcess->write(data);
+        return -1;
+    }
+
+    void sendControlSignal(ControlSignal controlSignal) final
+    {
+        if (!m_ptyProcess)
+            return;
+
+        switch (controlSignal) {
+        case ControlSignal::Terminate:
+            m_ptyProcess.reset();
+            break;
+        case ControlSignal::Kill:
+            m_ptyProcess->kill();
+            break;
+        default:
+            QTC_CHECK(false);
+        }
+    }
+
+    void doDefaultStart(const QString &program, const QStringList &arguments) final
+    {
+        m_ptyProcess.reset(PtyQt::createPtyProcess(IPtyProcess::AutoPty));
+        if (!m_ptyProcess) {
+            const ProcessResultData result = {-1,
+                                              QProcess::CrashExit,
+                                              QProcess::FailedToStart,
+                                              "Failed to create pty process"};
+            emit done(result);
+            return;
+        }
+
+        bool startResult
+            = m_ptyProcess->startProcess(program,
+                                         arguments,
+                                         m_setup.m_workingDirectory.path(),
+                                         m_setup.m_environment.toProcessEnvironment().toStringList(),
+                                         80,
+                                         60);
+
+        if (!startResult) {
+            const ProcessResultData result = {-1,
+                                              QProcess::CrashExit,
+                                              QProcess::FailedToStart,
+                                              "Failed to start pty process: "
+                                                  + m_ptyProcess->lastError()};
+            emit done(result);
+            return;
+        }
+
+        if (!m_ptyProcess->lastError().isEmpty()) {
+            const ProcessResultData result
+                = {-1, QProcess::CrashExit, QProcess::FailedToStart, m_ptyProcess->lastError()};
+            emit done(result);
+            return;
+        }
+
+        connect(m_ptyProcess->notifier(), &QIODevice::readyRead, this, [this] {
+            emit readyRead(m_ptyProcess->readAll(), {});
+        });
+
+        connect(m_ptyProcess->notifier(), &QIODevice::aboutToClose, this, [this]() {
+            if (m_ptyProcess) {
+                const ProcessResultData result
+                    = {m_ptyProcess->exitCode(), QProcess::NormalExit, QProcess::UnknownError, {}};
+                emit done(result);
+                return;
+            }
+
+            const ProcessResultData result = {0, QProcess::NormalExit, QProcess::UnknownError, {}};
+            emit done(result);
+        });
+
+        emit started(m_ptyProcess->pid());
+    }
+
+    void resizePty(int columns, int rows) final
+    {
+        if (m_ptyProcess)
+            m_ptyProcess->resize(columns, rows);
+    }
+
+private:
+    std::unique_ptr<IPtyProcess> m_ptyProcess;
 };
 
 class QProcessImpl final : public DefaultImpl
@@ -637,6 +735,8 @@ public:
                                ? defaultProcessImpl() : m_setup.m_processImpl;
         if (impl == ProcessImpl::QProcess)
             return new QProcessImpl();
+        else if (impl == ProcessImpl::Pty)
+            return new PtyProcessImpl();
         return new ProcessLauncherImpl();
     }
 
@@ -1443,6 +1543,14 @@ qint64 QtcProcess::writeRaw(const QByteArray &input)
         d->m_process->write(input);
     }, d->connectionType(), &result);
     return result;
+}
+
+void QtcProcess::resizePty(int columns, int rows)
+{
+    QMetaObject::invokeMethod(
+        d->m_process.get(),
+        [this, columns, rows] { d->m_process->resizePty(columns, rows); },
+        d->connectionType());
 }
 
 void QtcProcess::close()
