@@ -89,9 +89,11 @@ public:
     void setCombineWithDeviceEnvironment(bool combine) { m_combineWithDeviceEnvironment = combine; }
     bool combineWithDeviceEnvironment() const { return m_combineWithDeviceEnvironment; }
 
-    const_iterator constBegin() const { return m_dict.constBegin(); } // FIXME: avoid
+//    const_iterator constBegin() const { return m_dict.constBegin(); } // FIXME: avoid
     const_iterator constEnd() const { return m_dict.constEnd(); } // FIXME: avoid
     const_iterator constFind(const QString &name) const { return m_dict.constFind(name); } // FIXME: avoid
+
+    void forEachEntry(std::function<void(const DictKey &key, const QString &val, bool enabled)> &callBack) const;
 
     friend bool operator!=(const Environment &first, const Environment &second)
     {

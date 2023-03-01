@@ -24,6 +24,12 @@ NameValueItems Environment::diff(const Environment &other, bool checkAppendPrepe
     return m_dict.diff(other.m_dict, checkAppendPrepend);
 }
 
+void Environment::forEachEntry(std::function<void(const DictKey &, const QString &, bool)> &callBack) const
+{
+    for (auto it = m_dict.m_values.constBegin(); it != m_dict.m_values.constEnd(); ++it)
+        callBack(it.key(), it.value().first, it.value().second);
+}
+
 bool Environment::hasChanges() const
 {
     return m_dict.size() != 0;
