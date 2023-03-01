@@ -536,6 +536,7 @@ QString escapeMountPathWin(const FilePath &fp)
     QString result = fp.nativePath().replace('\"', "\"\"").replace('\\', '/');
     if (result.size() >= 2 && result[1] == ':')
         result = "/" + result[0] + "/" + result.mid(3);
+
     return result;
 }
 
