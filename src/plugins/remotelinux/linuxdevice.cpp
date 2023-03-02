@@ -599,6 +599,9 @@ QString LinuxProcessInterface::fullCommandLine(const CommandLine &commandLine) c
 {
     CommandLine cmd;
 
+    if (m_setup.m_terminalMode == TerminalMode::Off)
+        cmd.addArgs(QString("echo ") + s_pidMarker + "$$" + s_pidMarker + " && ", CommandLine::Raw);
+
     if (!commandLine.isEmpty()) {
         const QStringList rcFilesToSource = {"/etc/profile", "$HOME/.profile"};
         for (const QString &filePath : rcFilesToSource) {
@@ -613,9 +616,6 @@ QString LinuxProcessInterface::fullCommandLine(const CommandLine &commandLine) c
         cmd.addArgs({"cd", m_setup.m_workingDirectory.path()});
         cmd.addArgs("&&", CommandLine::Raw);
     }
-
-    if (m_setup.m_terminalMode == TerminalMode::Off)
-        cmd.addArgs(QString("echo ") + s_pidMarker + "$$" + s_pidMarker + " && ", CommandLine::Raw);
 
     const Environment &env = m_setup.m_environment;
     for (auto it = env.constBegin(); it != env.constEnd(); ++it)
@@ -651,6 +651,35 @@ void LinuxProcessInterface::handleDone(const ProcessResultData &resultData)
     emit done(finalData);
 }
 
+static std::optional<int> parsePid(QByteArray &outputData)
+{
+    static const QByteArray endMarker = s_pidMarker + '\n';
+    int endMarkerLength = endMarker.length();
+    int endMarkerOffset = outputData.indexOf(endMarker);
+    if (endMarkerOffset == -1) {
+        static const QByteArray endMarker = s_pidMarker + "\r\n";
+        endMarkerOffset = outputData.indexOf(endMarker);
+        endMarkerLength = endMarker.length();
+        if (endMarkerOffset == -1) {
+            return std::nullopt;
+        }
+    }
+    const int startMarkerOffset = outputData.indexOf(s_pidMarker);
+    if (startMarkerOffset == endMarkerOffset) // Only theoretically possible.
+        return std::nullopt;
+    const int pidStart = startMarkerOffset + s_pidMarker.length();
+    const QByteArray pidString = outputData.mid(pidStart, endMarkerOffset - pidStart);
+    bool ok = false;
+    const qint64 processId = pidString.toLongLong(&ok);
+
+    if (!ok)
+        return std::nullopt;
+
+    outputData = outputData.mid(endMarkerOffset + endMarkerLength);
+
+    return processId;
+}
+
 void LinuxProcessInterface::handleReadyReadStandardOutput(const QByteArray &outputData)
 {
     if (m_pidParsed) {
@@ -660,28 +689,14 @@ void LinuxProcessInterface::handleReadyReadStandardOutput(const QByteArray &outp
 
     m_output.append(outputData);
 
-    static const QByteArray endMarker = s_pidMarker + '\n';
-    int endMarkerLength = endMarker.length();
-    int endMarkerOffset = m_output.indexOf(endMarker);
-    if (endMarkerOffset == -1) {
-        static const QByteArray endMarker = s_pidMarker + "\r\n";
-        endMarkerOffset = m_output.indexOf(endMarker);
-        endMarkerLength = endMarker.length();
-        if (endMarkerOffset == -1)
-            return;
-    }
-    const int startMarkerOffset = m_output.indexOf(s_pidMarker);
-    if (startMarkerOffset == endMarkerOffset) // Only theoretically possible.
+    const auto newPid = parsePid(m_output);
+    if (!newPid) {
+        emit readyRead(outputData, {});
         return;
-    const int pidStart = startMarkerOffset + s_pidMarker.length();
-    const QByteArray pidString = m_output.mid(pidStart, endMarkerOffset - pidStart);
+    }
     m_pidParsed = true;
-    const qint64 processId = pidString.toLongLong();
 
-    // We don't want to show output from e.g. /etc/profile.
-    m_output = m_output.mid(endMarkerOffset + endMarkerLength);
-
-    emitStarted(processId);
+    emitStarted(*newPid);
 
     if (!m_output.isEmpty() || !m_error.isEmpty())
         emit readyRead(m_output, m_error);
