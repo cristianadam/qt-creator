@@ -6,6 +6,7 @@ import QtQuick.Layouts 1.15
 import QtQuickDesignerTheme 1.0
 import HelperWidgets 2.0
 import StudioTheme 1.0 as StudioTheme
+import MaterialBrowserBackend
 
 Rectangle {
     id: root
@@ -32,12 +33,12 @@ Rectangle {
         if (matName.readOnly)
             return;
 
-        materialBrowserModel.renameMaterial(index, matName.text);
+        MaterialBrowserBackend.materialBrowserModel.renameMaterial(index, matName.text);
         mouseArea.forceActiveFocus()
     }
 
-    border.width: materialBrowserModel.selectedIndex === index ? rootView.materialSectionFocused ? 3 : 1 : 0
-    border.color: materialBrowserModel.selectedIndex === index
+    border.width: MaterialBrowserBackend.materialBrowserModel.selectedIndex === index ? MaterialBrowserBackend.rootView.materialSectionFocused ? 3 : 1 : 0
+    border.color: MaterialBrowserBackend.materialBrowserModel.selectedIndex === index
                         ? StudioTheme.Values.themeControlOutlineInteraction
                         : "transparent"
     color: "transparent"
@@ -52,7 +53,7 @@ Rectangle {
 
         onDropped: (drag) => {
             drag.accept()
-            rootView.acceptTextureDropOnMaterial(index, drag.getDataAsString(drag.keys[0]))
+            MaterialBrowserBackend.rootView.acceptTextureDropOnMaterial(index, drag.getDataAsString(drag.keys[0]))
         }
     }
 
@@ -63,16 +64,16 @@ Rectangle {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
 
         onPressed: (mouse) => {
-            materialBrowserModel.selectMaterial(index)
-            rootView.focusMaterialSection(true)
+            MaterialBrowserBackend.materialBrowserModel.selectMaterial(index)
+            MaterialBrowserBackend.rootView.focusMaterialSection(true)
 
             if (mouse.button === Qt.LeftButton)
-                rootView.startDragMaterial(index, mapToGlobal(mouse.x, mouse.y))
+                MaterialBrowserBackend.rootView.startDragMaterial(index, mapToGlobal(mouse.x, mouse.y))
             else if (mouse.button === Qt.RightButton)
                 root.showContextMenu()
         }
 
-        onDoubleClicked: materialBrowserModel.openMaterialEditor();
+        onDoubleClicked: MaterialBrowserBackend.materialBrowserModel.openMaterialEditor();
     }
 
     Column {
@@ -136,8 +137,8 @@ Rectangle {
                 anchors.fill: parent
 
                 onClicked: {
-                    materialBrowserModel.selectMaterial(index)
-                    rootView.focusMaterialSection(true)
+                    MaterialBrowserBackend.materialBrowserModel.selectMaterial(index)
+                    MaterialBrowserBackend.rootView.focusMaterialSection(true)
                 }
                 onDoubleClicked: root.startRename()
             }

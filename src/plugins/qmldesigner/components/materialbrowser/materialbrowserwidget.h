@@ -5,6 +5,8 @@
 
 #include "modelnode.h"
 
+#include <studioquickwidget.h>
+
 #include <coreplugin/icontext.h>
 #include <utils/dropsupport.h>
 #include <utils/fancylineedit.h>
@@ -16,7 +18,6 @@
 #include <memory>
 
 QT_BEGIN_NAMESPACE
-class QQuickWidget;
 class QPointF;
 class QShortcut;
 class QToolButton;
@@ -63,7 +64,7 @@ public:
     Q_INVOKABLE void acceptTextureDropOnMaterial(int matIndex, const QString &texId);
     Q_INVOKABLE void focusMaterialSection(bool focusMatSec);
 
-    QQuickWidget *quickWidget() const;
+    StudioQuickWidget *quickWidget() const;
 
     void clearPreviewCache();
 
@@ -83,7 +84,7 @@ private:
     QPointer<MaterialBrowserView>  m_materialBrowserView;
     QPointer<MaterialBrowserModel> m_materialBrowserModel;
     QPointer<MaterialBrowserTexturesModel> m_materialBrowserTexturesModel;
-    QScopedPointer<QQuickWidget> m_quickWidget;
+    QScopedPointer<StudioQuickWidget> m_quickWidget;
 
     QShortcut *m_qmlSourceUpdateShortcut = nullptr;
     PreviewImageProvider *m_previewImageProvider = nullptr;

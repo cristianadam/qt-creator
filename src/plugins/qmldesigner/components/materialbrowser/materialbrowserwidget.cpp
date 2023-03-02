@@ -32,7 +32,6 @@
 #include <QQmlEngine>
 #include <QQuickImageProvider>
 #include <QQuickItem>
-#include <QQuickWidget>
 #include <QShortcut>
 #include <QStackedWidget>
 #include <QTabBar>
@@ -151,7 +150,7 @@ MaterialBrowserWidget::MaterialBrowserWidget(AsynchronousImageCache &imageCache,
     : m_materialBrowserView(view)
     , m_materialBrowserModel(new MaterialBrowserModel(this))
     , m_materialBrowserTexturesModel(new MaterialBrowserTexturesModel(this))
-    , m_quickWidget(new QQuickWidget(this))
+    , m_quickWidget(new StudioQuickWidget(this))
     , m_previewImageProvider(new PreviewImageProvider())
 {
     QImage defaultImage;
@@ -171,17 +170,11 @@ MaterialBrowserWidget::MaterialBrowserWidget(AsynchronousImageCache &imageCache,
     m_quickWidget->engine()->addImportPath(propertyEditorResourcesPath() + "/imports");
     m_quickWidget->setClearColor(Theme::getColor(Theme::Color::DSpanelBackground));
 
-    m_quickWidget->rootContext()->setContextProperties({
-        {"rootView", QVariant::fromValue(this)},
-        {"materialBrowserModel", QVariant::fromValue(m_materialBrowserModel.data())},
-        {"materialBrowserTexturesModel", QVariant::fromValue(m_materialBrowserTexturesModel.data())},
-    });
-
     m_quickWidget->engine()->addImageProvider("materialBrowser", m_previewImageProvider);
     m_quickWidget->engine()->addImageProvider("materialBrowserTex", m_textureImageProvider);
 
     Theme::setupTheme(m_quickWidget->engine());
-    m_quickWidget->installEventFilter(this);
+    m_quickWidget->quickWidget()->installEventFilter(this);
 
     auto layout = new QVBoxLayout(this);
     layout->setContentsMargins({});
@@ -207,6 +200,14 @@ MaterialBrowserWidget::MaterialBrowserWidget(AsynchronousImageCache &imageCache,
     });
 
     QmlDesignerPlugin::trackWidgetFocusTime(this, Constants::EVENT_MATERIALBROWSER_TIME);
+
+    auto map = m_quickWidget->registerPropertyMap("MaterialBrowserBackend");
+
+    map->setProperties({
+        {"rootView", QVariant::fromValue(this)},
+        {"materialBrowserModel", QVariant::fromValue(m_materialBrowserModel.data())},
+        {"materialBrowserTexturesModel", QVariant::fromValue(m_materialBrowserTexturesModel.data())},
+    });
 
     reloadQmlSource();
 
@@ -325,7 +326,6 @@ void MaterialBrowserWidget::reloadQmlSource()
 
     QTC_ASSERT(QFileInfo::exists(materialBrowserQmlPath), return);
 
-    m_quickWidget->engine()->clearComponentCache();
     m_quickWidget->setSource(QUrl::fromLocalFile(materialBrowserQmlPath));
 }
 
@@ -344,7 +344,7 @@ void MaterialBrowserWidget::setIsDragging(bool val)
     }
 }
 
-QQuickWidget *MaterialBrowserWidget::quickWidget() const
+StudioQuickWidget *MaterialBrowserWidget::quickWidget() const
 {
     return m_quickWidget.data();
 }
