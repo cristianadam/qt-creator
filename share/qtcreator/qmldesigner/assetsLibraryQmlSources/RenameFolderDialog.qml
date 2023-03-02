@@ -6,6 +6,7 @@ import QtQuick.Controls
 import HelperWidgets as HelperWidgets
 import StudioControls as StudioControls
 import StudioTheme as StudioTheme
+import AssetLibraryBackend
 
 Dialog {
     id: root
@@ -84,7 +85,7 @@ Dialog {
                 text: qsTr("Rename")
                 enabled: folderRename.text !== ""
                 onClicked: {
-                    var success = assetsModel.renameFolder(root.dirPath, folderRename.text)
+                    var success = AssetLibraryBackend.assetsModel.renameFolder(root.dirPath, folderRename.text)
                     if (success) {
                         root.renamedDirPath = root.dirPath.replace(/(.*\/)[^/]+$/, "$1" + folderRename.text)
                         root.accept()

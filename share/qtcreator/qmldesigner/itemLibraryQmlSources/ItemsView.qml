@@ -44,7 +44,8 @@ itemLibraryModel [
     ... more imports
 ]
 */
-Item {
+Item {  
+
     id: itemsView
     property string importToRemove
     property string importToAdd

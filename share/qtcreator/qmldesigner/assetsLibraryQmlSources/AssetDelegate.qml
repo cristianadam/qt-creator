@@ -4,12 +4,17 @@
 import QtQuick
 import QtQuick.Controls
 import StudioTheme as StudioTheme
+import AssetLibraryBackend
 
 TreeViewDelegate {
     id: root
 
     required property Item assetsView
     required property Item assetsRoot
+
+    property var assetsModel: AssetLibraryBackend.assetsModel
+    property var rootView: AssetLibraryBackend.rootView
+    //property var tooltipBackend: AssetLibraryBackend.tooltipBackend
 
     property bool hasChildWithDropHover: false
     property bool isHighlighted: false
@@ -36,6 +41,8 @@ TreeViewDelegate {
     leftMargin: root.__isDirectory ? 0 : thumbnailImage.width
 
     Component.onCompleted: {
+        print("complete")
+        print(AssetLibraryBackend.tooltipBackend)
         // the depth of the root path will become available before we get to the actual
         // items we display, so it's safe to set assetsView.rootPathDepth here. All other
         // tree items (below the root) will have the indentation (basically, depth) adjusted.
@@ -46,6 +53,9 @@ TreeViewDelegate {
             root.depth -= root.assetsView.rootPathDepth
             root.initialDepth = root.depth
         }
+
+        print("complete")
+        print(AssetLibraryBackend.tooltipBackend)
     }
 
     // workaround for a bug -- might be fixed by https://codereview.qt-project.org/c/qt/qtdeclarative/+/442721
@@ -127,23 +137,26 @@ TreeViewDelegate {
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.RightButton
 
-        onExited: tooltipBackend.hideTooltip()
+        onExited: AssetLibraryBackend.tooltipBackend.hideTooltip()
         onEntered: mouseArea.allowTooltip = true
 
         onCanceled: {
-            tooltipBackend.hideTooltip()
+            AssetLibraryBackend.tooltipBackend.hideTooltip()
             mouseArea.allowTooltip = true
         }
 
         onPositionChanged: tooltipBackend.reposition()
 
         onPressed: (mouse) => {
+                       print("pressed")
             mouseArea.forceActiveFocus()
             mouseArea.allowTooltip = false
-            tooltipBackend.hideTooltip()
+            AssetLibraryBackend.tooltipBackend.hideTooltip()
 
             if (root.__isDirectory)
                 return
+                       print("hmm " + root.assetsView)
+                       print("here " + root.assetsView.isAssetSelected)
 
             var ctrlDown = mouse.modifiers & Qt.ControlModifier
             if (mouse.button === Qt.LeftButton) {
@@ -154,7 +167,7 @@ TreeViewDelegate {
 
                if (root.currFileSelected) {
                    let selectedPaths = root.assetsView.selectedPathsAsList()
-                   rootView.startDragAsset(selectedPaths, mapToGlobal(mouse.x, mouse.y))
+                   AssetLibraryBackend.rootView.startDragAsset(selectedPaths, mapToGlobal(mouse.x, mouse.y))
                }
             } else {
                if (!root.assetsView.isAssetSelected(root.__itemPath) && !ctrlDown)
@@ -178,9 +191,9 @@ TreeViewDelegate {
         onDoubleClicked: (mouse) => {
             mouseArea.forceActiveFocus()
             mouseArea.allowTooltip = false
-            tooltipBackend.hideTooltip()
+            AssetLibraryBackend.tooltipBackend.hideTooltip()
             if (mouse.button === Qt.LeftButton && root.isEffect)
-                rootView.openEffectMaker(filePath)
+                AssetLibraryBackend.rootView.openEffectMaker(filePath)
         }
 
         ToolTip {
@@ -222,9 +235,9 @@ TreeViewDelegate {
             running: mouseArea.containsMouse && mouseArea.allowTooltip
             onTriggered: {
                 if (root.isFont) {
-                    tooltipBackend.name = model.fileName
-                    tooltipBackend.path = model.filePath
-                    tooltipBackend.showTooltip()
+                    AssetLibraryBackend.tooltipBackend.name = model.fileName
+                    AssetLibraryBackend.tooltipBackend.path = model.filePath
+                    AssetLibraryBackend.tooltipBackend.showTooltip()
                 }
             }
         }

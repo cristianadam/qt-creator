@@ -8,6 +8,8 @@
 #include "assetslibrarymodel.h"
 #include "createtexture.h"
 
+#include <studioquickwidget.h>
+
 #include <QFileIconProvider>
 #include <QFrame>
 #include <QPointF>
@@ -127,7 +129,7 @@ private:
     AssetsLibraryIconProvider *m_assetsIconProvider = nullptr;
     AssetsLibraryModel *m_assetsModel = nullptr;
 
-    QScopedPointer<QQuickWidget> m_assetsWidget;
+    QScopedPointer<StudioQuickWidget> m_assetsWidget;
     std::unique_ptr<PreviewTooltipBackend> m_fontPreviewTooltipBackend;
 
     QShortcut *m_qmlSourceUpdateShortcut = nullptr;

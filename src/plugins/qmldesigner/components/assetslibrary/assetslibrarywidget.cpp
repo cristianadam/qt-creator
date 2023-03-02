@@ -99,12 +99,12 @@ AssetsLibraryWidget::AssetsLibraryWidget(AsynchronousImageCache &asynchronousFon
     , m_fontImageCache{synchronousFontImageCache}
     , m_assetsIconProvider{new AssetsLibraryIconProvider(synchronousFontImageCache)}
     , m_assetsModel{new AssetsLibraryModel(this)}
-    , m_assetsWidget{new QQuickWidget(this)}
+    , m_assetsWidget{new StudioQuickWidget(this)}
 {
     setWindowTitle(tr("Assets Library", "Title of assets library widget"));
     setMinimumWidth(250);
 
-    m_assetsWidget->installEventFilter(this);
+    m_assetsWidget->quickWidget()->installEventFilter(this);
 
     m_fontPreviewTooltipBackend = std::make_unique<PreviewTooltipBackend>(asynchronousFontImageCache);
     // We want font images to have custom size, so don't scale them in the tooltip
@@ -125,11 +125,6 @@ AssetsLibraryWidget::AssetsLibraryWidget(AsynchronousImageCache &asynchronousFon
     m_assetsWidget->engine()->addImportPath(propertyEditorResourcesPath() + "/imports");
     m_assetsWidget->setClearColor(Theme::getColor(Theme::Color::QmlDesigner_BackgroundColorDarkAlternate));
     m_assetsWidget->engine()->addImageProvider("qmldesigner_assets", m_assetsIconProvider);
-    m_assetsWidget->rootContext()->setContextProperties(QVector<QQmlContext::PropertyPair>{
-        {{"assetsModel"}, QVariant::fromValue(m_assetsModel)},
-        {{"rootView"}, QVariant::fromValue(this)},
-        {{"tooltipBackend"}, QVariant::fromValue(m_fontPreviewTooltipBackend.get())}
-    });
 
     connect(m_assetsModel, &AssetsLibraryModel::fileChanged, [](const QString &changeFilePath) {
         QmlDesignerPlugin::instance()->emitAssetChanged(changeFilePath);
@@ -147,9 +142,19 @@ AssetsLibraryWidget::AssetsLibraryWidget(AsynchronousImageCache &asynchronousFon
 
     m_qmlSourceUpdateShortcut = new QShortcut(QKeySequence(Qt::CTRL + Qt::Key_F6), this);
     connect(m_qmlSourceUpdateShortcut, &QShortcut::activated, this, &AssetsLibraryWidget::reloadQmlSource);
-    connect(this, &AssetsLibraryWidget::extFilesDrop, this, &AssetsLibraryWidget::handleExtFilesDrop, Qt::QueuedConnection);
+    connect(this,
+            &AssetsLibraryWidget::extFilesDrop,
+            this,
+            &AssetsLibraryWidget::handleExtFilesDrop,
+            Qt::QueuedConnection);
 
-     QmlDesignerPlugin::trackWidgetFocusTime(this, Constants::EVENT_ASSETSLIBRARY_TIME);
+    QmlDesignerPlugin::trackWidgetFocusTime(this, Constants::EVENT_ASSETSLIBRARY_TIME);
+
+    auto map = m_assetsWidget->registerPropertyMap("AssetLibraryBackend");
+
+    map->setProperties({{"assetsModel", QVariant::fromValue(m_assetsModel)},
+                        {"rootView", QVariant::fromValue(this)},
+                        {"tooltipBackend", QVariant::fromValue(m_fontPreviewTooltipBackend.get())}});
 
     // init the first load of the QML UI elements
     reloadQmlSource();
@@ -351,9 +356,9 @@ QString AssetsLibraryWidget::qmlSourcesPath()
 {
 #ifdef SHARE_QML_PATH
     if (Utils::qtcEnvironmentVariableIsSet("LOAD_QML_FROM_SOURCE"))
-        return QLatin1String(SHARE_QML_PATH) + "/itemLibraryQmlSources";
+        return QLatin1String(SHARE_QML_PATH) + "/assetsLibraryQmlSources";
 #endif
-    return Core::ICore::resourcePath("qmldesigner/itemLibraryQmlSources").toString();
+    return Core::ICore::resourcePath("qmldesigner/assetsLibraryQmlSources").toString();
 }
 
 void AssetsLibraryWidget::clearSearchFilter()
@@ -365,7 +370,6 @@ void AssetsLibraryWidget::reloadQmlSource()
 {
     const QString assetsQmlPath = qmlSourcesPath() + "/Assets.qml";
     QTC_ASSERT(QFileInfo::exists(assetsQmlPath), return);
-    m_assetsWidget->engine()->clearComponentCache();
     m_assetsWidget->setSource(QUrl::fromLocalFile(assetsQmlPath));
 }
 

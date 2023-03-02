@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import HelperWidgets as HelperWidgets
 import StudioTheme as StudioTheme
+import AssetLibraryBackend
 
 Dialog {
     id: root
@@ -53,7 +54,7 @@ Dialog {
                 text: qsTr("Delete")
 
                 onClicked: {
-                    assetsModel.deleteFolderRecursively(root.dirIndex)
+                    AssetLibraryBackend.assetsModel.deleteFolderRecursively(root.dirIndex)
                     root.accept()
                 }
             }
