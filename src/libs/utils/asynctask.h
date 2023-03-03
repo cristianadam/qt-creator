@@ -17,6 +17,99 @@ namespace Utils {
 
 QTCREATOR_UTILS_EXPORT QThreadPool *asyncThreadPool();
 
+template <typename...>
+struct FutureArgType;
+
+template <typename Arg>
+struct FutureArgType<QFuture<Arg>>
+{
+    using Type = Arg;
+};
+
+template <typename...>
+struct ConcurrentResultType;
+
+template<typename Function, typename ...Args>
+struct ConcurrentResultType<Function, Args...>
+{
+    using Type = typename FutureArgType<decltype(QtConcurrent::run(
+        std::declval<Function>(), std::declval<Args>()...))>::Type;
+};
+
+template <typename Function, typename ...Args>
+auto asyncWrapper(QThread::Priority priority, Function &&function, Args &&...args)
+{
+    bool constexpr isMember = std::is_member_function_pointer<std::decay_t<Function>>::value;
+    bool constexpr isPromise = QtPrivate::ArgResolver<std::decay_t<Function>>::IsPromise::value;
+    using ResultType = typename ConcurrentResultType<Function, Args...>::Type;
+
+    const auto priorityModifier = [](QThread::Priority priority) {
+        auto cleanup = qScopeGuard([oldPriority = QThread::currentThread()->priority()] {
+            if (oldPriority != QThread::InheritPriority)
+                QThread::currentThread()->setPriority(oldPriority);
+        });
+        if (priority != QThread::InheritPriority)
+            QThread::currentThread()->setPriority(priority);
+        return cleanup;
+    };
+
+    if constexpr (!isPromise) {
+        std::decay_t<Function> fun = std::forward<Function>(function);
+        std::tuple<std::decay_t<Args>...> tuple{std::forward<Args>(args)...};
+        return [=] {
+            auto cleanup = priorityModifier(priority);
+            return std::apply(fun, tuple);
+        };
+    } else if constexpr (!isMember) {
+        std::decay_t<Function> fun = std::forward<Function>(function);
+        std::tuple<std::decay_t<Args>...> tuple{std::forward<Args>(args)...};
+        return [=](QPromise<ResultType> &promise) {
+            auto cleanup = priorityModifier(priority);
+            return std::apply(fun, std::tuple_cat(std::tuple(std::ref(promise)), tuple));
+        };
+    } else {
+        std::decay_t<Function> fun = std::forward<Function>(function);
+        std::tuple<std::decay_t<Args>...> tuple{std::forward<Args>(args)...};
+        return [=](QPromise<ResultType> &promise) {
+            auto cleanup = priorityModifier(priority);
+            auto [head, tail] = std::apply([](auto h, auto ...t) {
+                return std::pair{std::tuple{h}, std::tuple{t...}};
+            }, tuple);
+            return std::apply(fun, std::tuple_cat(head, std::tuple(std::ref(promise)), tail));
+        };
+    }
+}
+
+template <typename Function, typename ...Args>
+auto asyncRun(QThreadPool *threadPool, QThread::Priority priority,
+              Function &&function, Args &&...args)
+{
+    QThreadPool *pool = threadPool ? threadPool : asyncThreadPool();
+    return QtConcurrent::run(pool, asyncWrapper(priority, std::forward<Function>(function),
+                                                std::forward<Args>(args)...));
+}
+
+template <typename Function, typename ...Args>
+auto asyncRun(QThread::Priority priority, Function &&function, Args &&...args)
+{
+    return asyncRun(nullptr, priority, std::forward<Function>(function),
+                    std::forward<Args>(args)...);
+}
+
+template <typename Function, typename ...Args>
+auto asyncRun(QThreadPool *threadPool, Function &&function, Args &&...args)
+{
+    return asyncRun(threadPool, QThread::InheritPriority, std::forward<Function>(function),
+                    std::forward<Args>(args)...);
+}
+
+template <typename Function, typename ...Args>
+auto asyncRun(Function &&function, Args &&...args)
+{
+    return asyncRun(nullptr, QThread::InheritPriority, std::forward<Function>(function),
+                    std::forward<Args>(args)...);
+}
+
 class QTCREATOR_UTILS_EXPORT AsyncTaskBase : public QObject
 {
     Q_OBJECT
@@ -86,7 +179,7 @@ private:
     void wrapConcurrent(Function &&function, Args &&...args)
     {
         m_startHandler = [=] {
-            return callConcurrent(function, args...);
+            return asyncRun(m_threadPool, m_priority, function, args...);
         };
     }
 
@@ -94,26 +187,9 @@ private:
     void wrapConcurrent(std::reference_wrapper<const Function> &&wrapper, Args &&...args)
     {
         m_startHandler = [=] {
-            return callConcurrent(std::forward<const Function>(wrapper.get()), args...);
+            return asyncRun(m_threadPool, m_priority, std::forward<const Function>(wrapper.get()),
+                            args...);
         };
-    }
-
-    template <typename Function, typename ...Args>
-    auto callConcurrent(Function &&function, Args &&...args)
-    {
-        // Notice: we can't just call:
-        //
-        // return QtConcurrent::run(function, args...);
-        //
-        // since there is no way of passing m_priority there.
-        // There is an overload with thread pool, however, there is no overload with priority.
-        //
-        // Below implementation copied from QtConcurrent::run():
-        QThreadPool *threadPool = m_threadPool ? m_threadPool : asyncThreadPool();
-        QtConcurrent::DecayedTuple<Function, Args...>
-            tuple{std::forward<Function>(function), std::forward<Args>(args)...};
-        return QtConcurrent::TaskResolver<std::decay_t<Function>, std::decay_t<Args>...>
-            ::run(std::move(tuple), QtConcurrent::TaskStartParameters{threadPool, m_priority});
     }
 
     using StartHandler = std::function<QFuture<ResultType>()>;

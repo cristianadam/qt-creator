@@ -102,27 +102,8 @@ public:
     }
 };
 
-template<typename...>
-struct FutureArgType;
-
-template<typename Arg>
-struct FutureArgType<QFuture<Arg>>
-{
-    using Type = Arg;
-};
-
-template<typename...>
-struct ConcurrentResultType;
-
-template<typename Function, typename ...Args>
-struct ConcurrentResultType<Function, Args...>
-{
-    using Type = typename FutureArgType<decltype(QtConcurrent::run(
-        std::declval<Function>(), std::declval<Args>()...))>::Type;
-};
-
 template <typename Function, typename ...Args,
-         typename ResultType = typename ConcurrentResultType<Function, Args...>::Type>
+          typename ResultType = typename ConcurrentResultType<Function, Args...>::Type>
 std::shared_ptr<AsyncTask<ResultType>> createAsyncTask(Function &&function, Args &&...args)
 {
     auto asyncTask = std::make_shared<AsyncTask<ResultType>>();
