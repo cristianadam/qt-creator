@@ -76,6 +76,7 @@ extend_qtc_library(sdktoolLib
     devicefileaccess.cpp devicefileaccess.h
     environment.cpp environment.h
     filepath.cpp filepath.h
+    filestreamermanager.h
     fileutils.cpp fileutils.h
     hostosinfo.cpp hostosinfo.h
     macroexpander.cpp macroexpander.h

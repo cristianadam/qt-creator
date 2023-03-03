@@ -396,13 +396,6 @@ void DeviceFileAccess::asyncWriteFileContents(const FilePath &filePath,
     cont(writeFileContents(filePath, data, offset));
 }
 
-void DeviceFileAccess::asyncCopyFile(const FilePath &filePath,
-                                     const Continuation<expected_str<void>> &cont,
-                                     const FilePath &target) const
-{
-    cont(copyFile(filePath, target));
-}
-
 expected_str<FilePath> DeviceFileAccess::createTempFile(const FilePath &filePath)
 {
     Q_UNUSED(filePath)

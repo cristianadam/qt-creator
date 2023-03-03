@@ -1308,7 +1308,7 @@ void tst_filepath::asyncLocalCopy()
         QCOMPARE(dest.fileContents(), orig.fileContents());
         wasCalled = true;
     };
-    orig.asyncCopyFile(afterCopy, dest);
+    orig.asyncCopy(dest, afterCopy);
     QCOMPARE(wasCalled, true);
 }
 
