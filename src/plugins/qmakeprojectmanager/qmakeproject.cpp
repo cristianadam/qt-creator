@@ -21,6 +21,8 @@
 #include <cppeditor/generatedcodemodelsupport.h>
 #include <cppeditor/projectinfo.h>
 
+#include <qmljs/qmljsmodelmanagerinterface.h>
+
 #include <projectexplorer/buildinfo.h>
 #include <projectexplorer/buildmanager.h>
 #include <projectexplorer/buildsteplist.h>
@@ -46,9 +48,9 @@
 #include <qtsupport/qtversionmanager.h>
 
 #include <utils/algorithm.h>
+#include <utils/asynctask.h>
 #include <utils/qtcprocess.h>
 #include <utils/runextensions.h>
-#include <qmljs/qmljsmodelmanagerinterface.h>
 
 #include <QDebug>
 #include <QDir>
@@ -923,8 +925,8 @@ const FilePath &QmakeBuildSystem::qmakeSysroot() const
 void QmakeBuildSystem::destroyProFileReader(QtSupport::ProFileReader *reader)
 {
     // The ProFileReader destructor is super expensive (but thread-safe).
-    const auto deleteFuture = runAsync(ProjectExplorerPlugin::sharedThreadPool(), QThread::LowestPriority,
-                    [reader] { delete reader; });
+    const auto deleteFuture = Utils::asyncRun(ProjectExplorerPlugin::sharedThreadPool(),
+                                              [reader] { delete reader; });
     onFinished(deleteFuture, this, [this](const QFuture<void> &) {
         if (!--m_qmakeGlobalsRefCnt) {
             deregisterFromCacheManager();
