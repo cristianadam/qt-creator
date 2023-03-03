@@ -92,22 +92,22 @@ auto asyncRun(QThreadPool *threadPool, QThread::Priority priority,
 template <typename Function, typename ...Args>
 auto asyncRun(QThread::Priority priority, Function &&function, Args &&...args)
 {
-    return asyncRun(nullptr, priority, std::forward<Function>(function),
-                    std::forward<Args>(args)...);
+    return asyncRun<Function, Args...>(nullptr, priority,
+                    std::forward<Function>(function), std::forward<Args>(args)...);
 }
 
 template <typename Function, typename ...Args>
 auto asyncRun(QThreadPool *threadPool, Function &&function, Args &&...args)
 {
-    return asyncRun(threadPool, QThread::InheritPriority, std::forward<Function>(function),
-                    std::forward<Args>(args)...);
+    return asyncRun<Function, Args...>(threadPool, QThread::InheritPriority,
+                    std::forward<Function>(function), std::forward<Args>(args)...);
 }
 
 template <typename Function, typename ...Args>
 auto asyncRun(Function &&function, Args &&...args)
 {
-    return asyncRun(nullptr, QThread::InheritPriority, std::forward<Function>(function),
-                    std::forward<Args>(args)...);
+    return asyncRun<Function, Args...>(nullptr, QThread::InheritPriority,
+                    std::forward<Function>(function), std::forward<Args>(args)...);
 }
 
 class QTCREATOR_UTILS_EXPORT AsyncTaskBase : public QObject
