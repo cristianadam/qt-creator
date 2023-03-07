@@ -27,7 +27,6 @@ enum class TerminalMode {
     Pty,
     Run,
     Debug,
-    Suspend,
     On = Run // Default mode for terminal set to on
 };
 

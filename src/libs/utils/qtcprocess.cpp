@@ -354,8 +354,10 @@ public:
 
         bool startResult
             = m_ptyProcess->startProcess(program,
-                                         arguments,
-                                         m_setup.m_workingDirectory.path(),
+                                         HostOsInfo::isWindowsHost()
+                                             ? QStringList{m_setup.m_nativeArguments} << arguments
+                                             : arguments,
+                                         m_setup.m_workingDirectory.nativePath(),
                                          m_setup.m_environment.toProcessEnvironment().toStringList(),
                                          m_setup.m_ptyData.size().width(),
                                          m_setup.m_ptyData.size().height());
@@ -1038,7 +1040,10 @@ bool QtcProcessPrivate::waitForSignal(ProcessSignalType newSignal, int msecs)
     if (!result && needsSplit) {
         m_killTimer.stop();
         sendControlSignal(ControlSignal::Kill);
-        result = m_blockingInterface->waitForSignal(newSignal, timeout.remainingTime());
+        if (m_state != QProcess::NotRunning)
+            result = m_blockingInterface->waitForSignal(newSignal, timeout.remainingTime());
+        else
+            return true;
     }
     return result;
 }
