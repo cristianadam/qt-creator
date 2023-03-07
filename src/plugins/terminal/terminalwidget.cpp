@@ -148,6 +148,7 @@ void TerminalWidget::setupPty()
                 this,
                 [this] {
                     m_process.reset();
+                    setupSurface();
                     setupPty();
                 },
                 Qt::QueuedConnection);
@@ -166,7 +167,8 @@ void TerminalWidget::setupPty()
     });
 
     connect(m_process.get(), &QtcProcess::started, this, [this] {
-        m_shellName = m_process->commandLine().executable().fileName();
+        if (m_shellName.isEmpty())
+            m_shellName = m_process->commandLine().executable().fileName();
         if (HostOsInfo::isWindowsHost() && m_shellName.endsWith(QTC_WIN_EXE_SUFFIX))
             m_shellName.chop(QStringLiteral(QTC_WIN_EXE_SUFFIX).size());
 
@@ -238,7 +240,7 @@ void TerminalWidget::setupActions()
 
 void TerminalWidget::writeToPty(const QByteArray &data)
 {
-    if (m_process)
+    if (m_process && m_process->isRunning())
         m_process->writeRaw(data);
 }
 
@@ -451,9 +453,37 @@ bool TerminalWidget::setSelection(const std::optional<Selection> &selection)
     return true;
 }
 
+void TerminalWidget::setShellName(const QString &shellName)
+{
+    m_shellName = shellName;
+}
+
 QString TerminalWidget::shellName() const
 {
     return m_shellName;
+}
+
+std::optional<Utils::Id> TerminalWidget::identifier() const
+{
+    return m_openParameters.identifier;
+}
+
+QProcess::ProcessState TerminalWidget::processState() const
+{
+    if (m_process)
+        return m_process->state();
+
+    return QProcess::NotRunning;
+}
+
+void TerminalWidget::restart(const Utils::Terminal::OpenTerminalParameters &openParameters)
+{
+    QTC_ASSERT(!m_process || !m_process->isRunning(), return);
+    m_openParameters = openParameters;
+
+    m_process.reset();
+    setupSurface();
+    setupPty();
 }
 
 QPoint TerminalWidget::viewportToGlobal(QPoint p) const
@@ -713,6 +743,9 @@ int TerminalWidget::paintCell(QPainter &p,
 
 void TerminalWidget::paintCursor(QPainter &p) const
 {
+    if (!m_process || !m_process->isRunning())
+        return;
+
     auto cursor = m_surface->cursor();
 
     const bool blinkState = !cursor.blink || m_cursorBlinkState

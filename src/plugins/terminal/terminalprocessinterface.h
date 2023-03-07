@@ -7,7 +7,11 @@
 
 #include <utils/processinterface.h>
 
+#include <QTemporaryDir>
+
 namespace Terminal {
+
+class TerminalProcessPrivate;
 
 class TerminalProcessInterface : public Utils::ProcessInterface
 {
@@ -15,35 +19,40 @@ class TerminalProcessInterface : public Utils::ProcessInterface
 
 public:
     TerminalProcessInterface(TerminalPane *terminalPane);
-
-    /*
-    // This should be emitted when being in Starting state only.
-    // After emitting this signal the process enters Running state.
-    void started(qint64 processId, qint64 applicationMainThreadId = 0);
-
-    // This should be emitted when being in Running state only.
-    void readyRead(const QByteArray &outputData, const QByteArray &errorData);
-
-    // This should be emitted when being in Starting or Running state.
-    // When being in Starting state, the resultData should set error to FailedToStart.
-    // After emitting this signal the process enters NotRunning state.
-    void done(const Utils::ProcessResultData &resultData);
-*/
-private:
-    // It's being called only in Starting state. Just before this method is being called,
-    // the process transitions from NotRunning into Starting state.
-    void start() override;
-
-    // It's being called only in Running state.
-    qint64 write(const QByteArray &data) override;
-
-    // It's being called in Starting or Running state.
-    void sendControlSignal(Utils::ControlSignal controlSignal) override;
-
-    //Utils::ProcessBlockingInterface *processBlockingInterface() const { return nullptr; }
+    ~TerminalProcessInterface() override;
 
 private:
+    void start() final;
+    qint64 write(const QByteArray &) final
+    {
+        QTC_CHECK(false);
+        return -1;
+    }
+    void sendControlSignal(Utils::ControlSignal controlSignal) final;
+
+    // OK, however, impl looks a bit different (!= NotRunning vs == Running).
+    // Most probably changing it into (== Running) should be OK.
+    bool isRunning() const;
+
+    void stopProcess();
+    void stubConnectionAvailable();
+    void readStubOutput();
+    void stubExited();
+    void cleanupAfterStartFailure(const QString &errorMessage);
+    void killProcess();
+    void killStub();
+    void emitError(QProcess::ProcessError error, const QString &errorString);
+    void emitFinished(int exitCode, QProcess::ExitStatus exitStatus);
+    QString stubServerListen();
+    void stubServerShutdown();
+    void cleanupStub();
+    void cleanupInferior();
+    void sendCommand(char c);
+
+private:
+    TerminalProcessPrivate *d;
     TerminalPane *m_terminalPane;
+    QTemporaryDir m_tempDir;
 };
 
 } // namespace Terminal

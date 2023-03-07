@@ -48,10 +48,10 @@ void TerminalPlugin::extensionsInitialized()
             m_terminalPane->openTerminal(p);
         });
 
-    /*Utils::Terminal::Hooks::instance().createTerminalProcessInterfaceHook().set(
+    Utils::Terminal::Hooks::instance().createTerminalProcessInterfaceHook().set(
         [this]() -> Utils::ProcessInterface * {
             return new TerminalProcessInterface(m_terminalPane);
-        });*/
+        });
 }
 
 } // namespace Internal

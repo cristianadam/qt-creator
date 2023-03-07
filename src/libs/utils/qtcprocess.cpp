@@ -354,8 +354,10 @@ public:
 
         bool startResult
             = m_ptyProcess->startProcess(program,
-                                         arguments,
-                                         m_setup.m_workingDirectory.path(),
+                                         HostOsInfo::isWindowsHost()
+                                             ? QStringList{m_setup.m_nativeArguments} << arguments
+                                             : arguments,
+                                         m_setup.m_workingDirectory.nativePath(),
                                          m_setup.m_environment.toProcessEnvironment().toStringList(),
                                          m_setup.m_ptyData.size().width(),
                                          m_setup.m_ptyData.size().height());

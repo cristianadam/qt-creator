@@ -50,8 +50,6 @@ static QString modeOption(TerminalMode m)
         return "run";
     case TerminalMode::Debug:
         return "debug";
-    case TerminalMode::Suspend:
-        return "suspend";
     case TerminalMode::Off:
         QTC_CHECK(false);
         break;
