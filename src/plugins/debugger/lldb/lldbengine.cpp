@@ -279,10 +279,9 @@ void LldbEngine::handleLldbStarted()
                 ? QString::fromLatin1("Attaching to %1 (%2)").arg(attachedPID).arg(attachedMainThreadID)
                 : QString::fromLatin1("Attaching to %1").arg(attachedPID);
         showMessage(msg, LogMisc);
+        cmd2.arg("startmode", DebuggerStartMode::AttachToLocalProcess);
         cmd2.arg("attachpid", attachedPID);
-
     } else {
-
         cmd2.arg("startmode", rp.startMode);
         // it is better not to check the start mode on the python sid (as we would have to duplicate the
         // enum values), and thus we assume that if the rp.attachPID is valid we really have to attach
