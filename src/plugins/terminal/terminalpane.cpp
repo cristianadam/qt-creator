@@ -143,6 +143,19 @@ void TerminalPane::addTerminal(TerminalWidget *terminal, const QString &title)
     emit navigateStateUpdate();
 }
 
+TerminalWidget *TerminalPane::stoppedTerminalWithId(const Utils::Id &identifier) const
+{
+    QTC_ASSERT(m_tabWidget, return nullptr);
+
+    for (int i = 0; i < m_tabWidget->count(); ++i) {
+        auto terminal = qobject_cast<TerminalWidget *>(m_tabWidget->widget(i));
+        if (terminal->processState() == QProcess::NotRunning && terminal->identifier() == identifier)
+            return terminal;
+    }
+
+    return nullptr;
+}
+
 QWidget *TerminalPane::outputWidget(QWidget *parent)
 {
     if (!m_tabWidget) {

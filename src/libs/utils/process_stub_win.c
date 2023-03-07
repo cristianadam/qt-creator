@@ -15,7 +15,7 @@
 static FILE *qtcFd;
 static wchar_t *sleepMsg;
 
-enum RunMode { Run, Debug, Suspend };
+enum RunMode { Run, Debug };
 
 /* Print some "press enter" message, wait for that, exit. */
 static void doExit(int code)
@@ -89,9 +89,7 @@ int main()
     wchar_t *env = 0;
     STARTUPINFOW si;
     PROCESS_INFORMATION pi;
-    DEBUG_EVENT dbev;
     enum RunMode mode = Run;
-    HANDLE image = NULL;
 
     argv = CommandLineToArgvW(GetCommandLine(), &argc);
 
@@ -140,51 +138,20 @@ int main()
     creationFlags = CREATE_UNICODE_ENVIRONMENT;
     if (!wcscmp(argv[ArgAction], L"debug")) {
         mode = Debug;
-    } else if (!wcscmp(argv[ArgAction], L"suspend")) {
-        mode = Suspend;
     }
 
     switch (mode) {
     case Debug:
-        creationFlags |= DEBUG_ONLY_THIS_PROCESS;
-        break;
-    case Suspend:
         creationFlags |= CREATE_SUSPENDED;
         break;
     default:
         break;
     }
+
     if (!CreateProcessW(0, argv[ArgCmdLine], 0, 0, FALSE, creationFlags, env, 0, &si, &pi)) {
         /* Only expected error: no such file or direcotry, i.e. executable not found */
         sendMsg("err:exec %d\n", GetLastError());
         doExit(1);
-    }
-
-    /* This is somewhat convoluted. What we actually want is creating a
-       suspended process and letting gdb attach to it. Unfortunately,
-       the Windows kernel runs amok when we attempt this.
-       So instead we start a debugged process, eat all the initial
-       debug events, suspend the process and detach from it. If gdb
-       tries to attach *now*, everything goes smoothly. Yay. */
-    if (mode == Debug) {
-        do {
-            if (!WaitForDebugEvent (&dbev, INFINITE))
-                systemError("Cannot fetch debug event, error %d\n");
-            if (dbev.dwDebugEventCode == CREATE_PROCESS_DEBUG_EVENT)
-                image = dbev.u.CreateProcessInfo.hFile;
-            if (dbev.dwDebugEventCode == EXCEPTION_DEBUG_EVENT) {
-                /* The first exception to be delivered is a trap
-                   which indicates completion of startup. */
-                if (SuspendThread(pi.hThread) == (DWORD)-1)
-                    systemError("Cannot suspend debugee, error %d\n");
-            }
-            if (!ContinueDebugEvent(dbev.dwProcessId, dbev.dwThreadId, DBG_CONTINUE))
-                systemError("Cannot continue debug event, error %d\n");
-        } while (dbev.dwDebugEventCode != EXCEPTION_DEBUG_EVENT);
-        if (!DebugActiveProcessStop(dbev.dwProcessId))
-            systemError("Cannot detach from debugee, error %d\n");
-        if (image)
-            CloseHandle(image);
     }
 
     SetConsoleCtrlHandler(ctrlHandler, TRUE);

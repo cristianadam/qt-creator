@@ -1,35 +1,36 @@
 #include "conptyprocess.h"
+#include <sstream>
+#include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
-#include <QThread>
-#include <sstream>
-#include <QTimer>
 #include <QMutexLocker>
-#include <QCoreApplication>
+#include <QThread>
+#include <QTimer>
 #include <QWinEventNotifier>
 
 #include <qt_windows.h>
 
 #define READ_INTERVAL_MSEC 500
 
-HRESULT ConPtyProcess::createPseudoConsoleAndPipes(HPCON* phPC, HANDLE* phPipeIn, HANDLE* phPipeOut, qint16 cols, qint16 rows)
+HRESULT ConPtyProcess::createPseudoConsoleAndPipes(
+    HPCON *phPC, HANDLE *phPipeIn, HANDLE *phPipeOut, qint16 cols, qint16 rows)
 {
-    HRESULT hr{ E_UNEXPECTED };
-    HANDLE hPipePTYIn{ INVALID_HANDLE_VALUE };
-    HANDLE hPipePTYOut{ INVALID_HANDLE_VALUE };
+    HRESULT hr{E_UNEXPECTED};
+    HANDLE hPipePTYIn{INVALID_HANDLE_VALUE};
+    HANDLE hPipePTYOut{INVALID_HANDLE_VALUE};
 
     // Create the pipes to which the ConPTY will connect
-    if (CreatePipe(&hPipePTYIn, phPipeOut, NULL, 0) &&
-            CreatePipe(phPipeIn, &hPipePTYOut, NULL, 0))
-    {
+    if (CreatePipe(&hPipePTYIn, phPipeOut, NULL, 0) && CreatePipe(phPipeIn, &hPipePTYOut, NULL, 0)) {
         // Create the Pseudo Console of the required size, attached to the PTY-end of the pipes
         hr = m_winContext.createPseudoConsole({cols, rows}, hPipePTYIn, hPipePTYOut, 0, phPC);
 
         // Note: We can close the handles to the PTY-end of the pipes here
         // because the handles are dup'ed into the ConHost and will be released
         // when the ConPTY is destroyed.
-        if (INVALID_HANDLE_VALUE != hPipePTYOut) CloseHandle(hPipePTYOut);
-        if (INVALID_HANDLE_VALUE != hPipePTYIn) CloseHandle(hPipePTYIn);
+        if (INVALID_HANDLE_VALUE != hPipePTYOut)
+            CloseHandle(hPipePTYOut);
+        if (INVALID_HANDLE_VALUE != hPipePTYIn)
+            CloseHandle(hPipePTYIn);
     }
 
     return hr;
@@ -37,12 +38,12 @@ HRESULT ConPtyProcess::createPseudoConsoleAndPipes(HPCON* phPC, HANDLE* phPipeIn
 
 // Initializes the specified startup info struct with the required properties and
 // updates its thread attribute list with the specified ConPTY handle
-HRESULT ConPtyProcess::initializeStartupInfoAttachedToPseudoConsole(STARTUPINFOEX* pStartupInfo, HPCON hPC)
+HRESULT ConPtyProcess::initializeStartupInfoAttachedToPseudoConsole(STARTUPINFOEX *pStartupInfo,
+                                                                    HPCON hPC)
 {
-    HRESULT hr{ E_UNEXPECTED };
+    HRESULT hr{E_UNEXPECTED};
 
-    if (pStartupInfo)
-    {
+    if (pStartupInfo) {
         SIZE_T attrListSize{};
 
         pStartupInfo->StartupInfo.hStdInput = m_hPipeIn;
@@ -61,22 +62,21 @@ HRESULT ConPtyProcess::initializeStartupInfoAttachedToPseudoConsole(STARTUPINFOE
 
         // Initialize thread attribute list
         if (pStartupInfo->lpAttributeList
-                && InitializeProcThreadAttributeList(pStartupInfo->lpAttributeList, 1, 0, &attrListSize))
-        {
+            && InitializeProcThreadAttributeList(pStartupInfo->lpAttributeList,
+                                                 1,
+                                                 0,
+                                                 &attrListSize)) {
             // Set Pseudo Console attribute
-            hr = UpdateProcThreadAttribute(
-                        pStartupInfo->lpAttributeList,
-                        0,
-                        PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
-                        hPC,
-                        sizeof(HPCON),
-                        NULL,
-                        NULL)
-                    ? S_OK
-                    : HRESULT_FROM_WIN32(GetLastError());
-        }
-        else
-        {
+            hr = UpdateProcThreadAttribute(pStartupInfo->lpAttributeList,
+                                           0,
+                                           PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
+                                           hPC,
+                                           sizeof(HPCON),
+                                           NULL,
+                                           NULL)
+                     ? S_OK
+                     : HRESULT_FROM_WIN32(GetLastError());
+        } else {
             hr = HRESULT_FROM_WIN32(GetLastError());
         }
     }
@@ -85,13 +85,11 @@ HRESULT ConPtyProcess::initializeStartupInfoAttachedToPseudoConsole(STARTUPINFOE
 
 ConPtyProcess::ConPtyProcess()
     : IPtyProcess()
-    , m_ptyHandler { INVALID_HANDLE_VALUE }
-    , m_hPipeIn { INVALID_HANDLE_VALUE }
-    , m_hPipeOut { INVALID_HANDLE_VALUE }
+    , m_ptyHandler{INVALID_HANDLE_VALUE}
+    , m_hPipeIn{INVALID_HANDLE_VALUE}
+    , m_hPipeOut{INVALID_HANDLE_VALUE}
     , m_readThread(nullptr)
-{
-
-}
+{}
 
 ConPtyProcess::~ConPtyProcess()
 {
@@ -221,15 +219,13 @@ bool ConPtyProcess::startProcess(const QString &executable,
 
 bool ConPtyProcess::resize(qint16 cols, qint16 rows)
 {
-    if (m_ptyHandler == nullptr)
-    {
+    if (m_ptyHandler == nullptr) {
         return false;
     }
 
     bool res = SUCCEEDED(m_winContext.resizePseudoConsole(m_ptyHandler, {cols, rows}));
 
-    if (res)
-    {
+    if (res) {
         m_size = QPair<qint16, qint16>(cols, rows);
     }
 
@@ -294,8 +290,10 @@ QString ConPtyProcess::dumpDebugInfo()
 {
 #ifdef PTYQT_DEBUG
     return QString("PID: %1, Type: %2, Cols: %3, Rows: %4")
-            .arg(m_pid).arg(type())
-            .arg(m_size.first).arg(m_size.second);
+        .arg(m_pid)
+        .arg(type())
+        .arg(m_size.first)
+        .arg(m_size.second);
 #else
     return QString("Nothing...");
 #endif
