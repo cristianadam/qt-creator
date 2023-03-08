@@ -28,5 +28,7 @@ const char IDE_REVISION_URL[] = "${IDE_REVISION_URL}";
 // changes the path where the settings are saved to
 const char IDE_SETTINGSVARIANT_STR[] = "${IDE_SETTINGSVARIANT}";
 
+const char GIT_SHA[] = "${GIT_SHA}";
+
 } // Constants
 } // Core
