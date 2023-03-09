@@ -1040,7 +1040,7 @@ void TerminalWidget::mousePressEvent(QMouseEvent *event)
             m_selection->start = m_surface->gridToPos(
                 {0, m_surface->posToGrid(m_selection->start).y()});
             m_selection->end = m_surface->gridToPos(
-                {viewport()->width(), m_surface->posToGrid(m_selection->end).y()});
+                {m_surface->liveSize().width(), m_surface->posToGrid(m_selection->end).y()});
         } else {
             m_selectLineMode = false;
             int pos = m_surface->gridToPos(globalToGrid(viewportToGlobal(event->pos())));
@@ -1070,8 +1070,14 @@ void TerminalWidget::mouseMoveEvent(QMouseEvent *event)
             std::swap(start, newEnd);
         }
 
-        m_selection->start = start;
-        m_selection->end = newEnd;
+        if (m_selectLineMode) {
+            m_selection->start = m_surface->gridToPos({0, m_surface->posToGrid(start).y()});
+            m_selection->end = m_surface->gridToPos(
+                {m_surface->liveSize().width(), m_surface->posToGrid(newEnd).y()});
+        } else {
+            m_selection->start = start;
+            m_selection->end = newEnd;
+        }
 
         if (old != *m_selection || selectionLog().isDebugEnabled())
             updateViewport();
