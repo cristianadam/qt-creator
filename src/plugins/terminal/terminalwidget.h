@@ -95,8 +95,6 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override;
     void mouseDoubleClickEvent(QMouseEvent *event) override;
 
-    void scrollContentsBy(int dx, int dy) override;
-
     void showEvent(QShowEvent *event) override;
 
     bool event(QEvent *event) override;
@@ -195,6 +193,9 @@ private:
     QAction m_zoomOutAction;
 
     QTimer m_flushDelayTimer;
+
+    QTimer m_scrollTimer;
+    int m_scrollDirection;
 
     std::array<QColor, 18> m_currentColors;
 
