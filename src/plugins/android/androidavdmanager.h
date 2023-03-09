@@ -4,9 +4,6 @@
 
 #include "androidconfigurations.h"
 
-#include <functional>
-#include <memory>
-
 namespace Android::Internal {
 
 class AndroidAvdManager
@@ -22,14 +19,14 @@ public:
     QString startAvd(const QString &name) const;
     bool startAvdAsync(const QString &avdName) const;
     QString findAvd(const QString &avdName) const;
-    QString waitForAvd(const QString &avdName, const QFutureInterfaceBase &fi = {}) const;
+    QString waitForAvd(const QString &avdName, const QFuture<void> &future = {}) const;
     bool isAvdBooted(const QString &device) const;
     static bool avdManagerCommand(const AndroidConfig &config,
                                   const QStringList &args,
                                   QString *output);
 
 private:
-    bool waitForBooted(const QString &serialNumber, const QFutureInterfaceBase &fi = {}) const;
+    bool waitForBooted(const QString &serialNumber, const QFuture<void> &future = {}) const;
 
 private:
     const AndroidConfig &m_config;
