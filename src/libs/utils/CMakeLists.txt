@@ -28,6 +28,7 @@ add_qtc_library(Utils
     completingtextedit.cpp completingtextedit.h
     cpplanguage_details.h
     crumblepath.cpp crumblepath.h
+    debughelperinterface.cpp debughelperinterface.h
     delegates.cpp delegates.h
     detailsbutton.cpp detailsbutton.h
     detailswidget.cpp detailswidget.h
@@ -271,21 +272,3 @@ extend_qtc_library(Utils
           fsengine/fsenginehandler.h
           fsengine/filepathinfocache.h
 )
-
-if (WIN32)
-  add_qtc_executable(qtcreator_process_stub
-    SOURCES process_stub_win.c
-    DEPENDS shell32
-    DEFINES _UNICODE UNICODE _CRT_SECURE_NO_WARNINGS
-  )
-
-  add_qtc_executable(qtcreator_ctrlc_stub
-    DEPENDS user32 shell32
-    DEFINES _UNICODE UNICODE _CRT_SECURE_NO_WARNINGS
-    SOURCES
-      process_ctrlc_stub.cpp
-  )
-else()
-  add_qtc_executable(qtcreator_process_stub SOURCES process_stub_unix.c)
-endif()
-
