@@ -6,6 +6,5 @@ QtcTool {
 
     Depends { name: "Qt"; submodules: ["core", "network"]; }
 
-
     files: [ "debughelper.cpp" ]
 }

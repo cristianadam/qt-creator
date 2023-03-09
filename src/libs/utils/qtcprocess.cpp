@@ -1040,7 +1040,10 @@ bool QtcProcessPrivate::waitForSignal(ProcessSignalType newSignal, int msecs)
     if (!result && needsSplit) {
         m_killTimer.stop();
         sendControlSignal(ControlSignal::Kill);
-        result = m_blockingInterface->waitForSignal(newSignal, timeout.remainingTime());
+        if (m_state != QProcess::NotRunning)
+            result = m_blockingInterface->waitForSignal(newSignal, timeout.remainingTime());
+        else
+            return true;
     }
     return result;
 }

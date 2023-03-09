@@ -158,9 +158,9 @@ void sendErrChDir()
 
 void doExit(int exitCode)
 {
-    if (controlSocket.bytesToWrite())
+    if (controlSocket.state() == QLocalSocket::ConnectedState && controlSocket.bytesToWrite())
         controlSocket.waitForBytesWritten(1000);
-    qApp->exit(exitCode);
+    exit(exitCode);
 }
 
 void onInferiorFinished(int exitCode, QProcess::ExitStatus status)
@@ -179,6 +179,7 @@ void onInferiorFinished(int exitCode, QProcess::ExitStatus status)
 void onInferiorErrorOccurered(QProcess::ProcessError error)
 {
     qCInfo(log) << "Inferior error: " << error;
+    sendCrash(inferiorProcess.exitCode());
     doExit(1);
 }
 
@@ -249,7 +250,8 @@ void startProcess(const QString &executable, const QStringList &arguments, const
     QObject::connect(&inferiorProcess, &QProcess::started, &onInferiorStarted);
 
     inferiorProcess.setProcessChannelMode(QProcess::ForwardedChannels);
-    inferiorProcess.setInputChannelMode(QProcess::ForwardedInputChannel);
+    if (!testMode)
+        inferiorProcess.setInputChannelMode(QProcess::ForwardedInputChannel);
     inferiorProcess.setWorkingDirectory(workingDir);
     inferiorProcess.setProgram(executable);
     inferiorProcess.setArguments(arguments);
@@ -361,8 +363,7 @@ std::optional<int> tryParseCommandLine(QCoreApplication &app)
     debugMode = commandLineParser.isSet("debug");
     testMode = commandLineParser.isSet("test");
 
-    if (!(commandLineParser.isSet("socket") || testMode) || !commandLineParser.isSet("workingDir")
-        || inferiorCmdAndArguments.isEmpty()) {
+    if (!(commandLineParser.isSet("socket") || testMode) || inferiorCmdAndArguments.isEmpty()) {
         commandLineParser.showHelp(1);
         return 1;
     }
@@ -375,11 +376,13 @@ std::optional<int> tryParseCommandLine(QCoreApplication &app)
 
 std::optional<int> trySetWorkingDir()
 {
-    if (!QDir::setCurrent(commandLineParser.value("workingDir"))) {
-        qCWarning(log) << "Failed to change working directory to: "
-                       << commandLineParser.value("workingDir");
-        sendErrChDir();
-        return 1;
+    if (commandLineParser.isSet("workingDir")) {
+        if (!QDir::setCurrent(commandLineParser.value("workingDir"))) {
+            qCWarning(log) << "Failed to change working directory to: "
+                           << commandLineParser.value("workingDir");
+            sendErrChDir();
+            return 1;
+        }
     }
 
     return std::nullopt;
@@ -478,8 +481,8 @@ void onStdInReadyRead()
     } else {
         resumeInferior();
     }
-    stdInNotifier->disconnect();
-    stdInNotifier->deleteLater();
+    //stdInNotifier->disconnect();
+    //stdInNotifier->deleteLater();
 }
 
 void readKey()
