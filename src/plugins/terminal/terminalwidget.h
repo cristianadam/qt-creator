@@ -73,6 +73,8 @@ public:
     void setShellName(const QString &shellName);
     QString shellName() const;
 
+    Utils::FilePath cwd() const;
+
     std::optional<Utils::Id> identifier() const;
     QProcess::ProcessState processState() const;
 
@@ -80,6 +82,7 @@ public:
 
 signals:
     void started(qint64 pid);
+    void cwdChanged(const Utils::FilePath &cwd);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -208,6 +211,8 @@ private:
     Internal::Cursor m_cursor;
     QTimer m_cursorBlinkTimer;
     bool m_cursorBlinkState{true};
+
+    Utils::FilePath m_cwd;
 };
 
 } // namespace Terminal

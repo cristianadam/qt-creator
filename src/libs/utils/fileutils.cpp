@@ -7,6 +7,7 @@
 #include "algorithm.h"
 #include "hostosinfo.h"
 #include "qtcassert.h"
+#include "qtcprocess.h"
 #include "utilstr.h"
 
 #include "fsengine/fileiconprovider.h"
@@ -829,6 +830,42 @@ qint64 FileUtils::bytesAvailableFromDFOutput(const QByteArray &dfOutput)
     if (ok)
         return result;
     return -1;
+}
+
+expected_str<FilePath> FileUtils::workingDirectoryOfProcess(qint64 pid)
+{
+    if (HostOsInfo::isMacHost()) {
+        // Expected output:
+        // p<PID>
+        // fcwd
+        // n<work dir>
+
+        QtcProcess process;
+        process.setCommand({"lsof", {"-a", "-d", "cwd", "-Fn", "-p", QString::number(pid)}});
+        process.runBlocking();
+        const QByteArray output = process.readAllRawStandardOutput();
+        const auto lines = QString::fromUtf8(output).split('\n', Qt::SkipEmptyParts);
+        if (lines.size() != 3) {
+            return make_unexpected(
+                QString("Unexpected output from lsof: %1").arg(QString::fromUtf8(output)));
+        }
+        if (lines.at(0) != "p" + QString::number(pid)) {
+            return make_unexpected(
+                QString("Unexpected output from lsof: %1").arg(QString::fromUtf8(output)));
+        }
+        if (lines.at(1) != "fcwd") {
+            return make_unexpected(
+                QString("Unexpected output from lsof: %1").arg(QString::fromUtf8(output)));
+        }
+        if (!lines.at(2).startsWith('n')) {
+            return make_unexpected(
+                QString("Unexpected output from lsof: %1").arg(QString::fromUtf8(output)));
+        }
+
+        return FilePath::fromUserInput(lines.at(2).mid(1));
+    }
+
+    return make_unexpected(QString("Not implemented yet"));
 }
 
 } // namespace Utils
