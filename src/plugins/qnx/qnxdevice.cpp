@@ -5,9 +5,8 @@
 
 #include "qnxconstants.h"
 #include "qnxdeployqtlibrariesdialog.h"
-#include "qnxdevicetester.h"
-#include "qnxdeviceprocesslist.h"
 #include "qnxdeviceprocesssignaloperation.h"
+#include "qnxdevicetester.h"
 #include "qnxdevicewizard.h"
 #include "qnxtr.h"
 
@@ -146,11 +145,6 @@ PortsGatheringMethod QnxDevice::portsGatheringMethod() const
 
         &Port::parseFromNetstatOutput
     };
-}
-
-DeviceProcessList *QnxDevice::createProcessListModel(QObject *parent) const
-{
-    return new QnxDeviceProcessList(sharedFromThis(), parent);
 }
 
 DeviceTester *QnxDevice::createDeviceTester() const
