@@ -1682,11 +1682,11 @@ RunControl *DebuggerPluginPrivate::attachToRunningProcess(Kit *kit,
         return nullptr;
     }
 
-    if (device->type() != PE::DESKTOP_DEVICE_TYPE) {
-        AsynchronousMessageBox::warning(Tr::tr("Not a Desktop Device Type"),
-                             Tr::tr("It is only possible to attach to a locally running process."));
-        return nullptr;
-    }
+    //if (device->type() != PE::DESKTOP_DEVICE_TYPE) {
+    //    AsynchronousMessageBox::warning(Tr::tr("Not a Desktop Device Type"),
+    //                         Tr::tr("It is only possible to attach to a locally running process."));
+    //    return nullptr;
+    //}
 
     auto runControl = new RunControl(ProjectExplorer::Constants::DEBUG_RUN_MODE);
     runControl->setKit(kit);

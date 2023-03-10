@@ -298,15 +298,16 @@ void DockerProcessImpl::start()
         m_process.setLowPriority();
 
     const bool interactive = m_setup.m_processMode == ProcessMode::Writer
-                             || !m_setup.m_writeData.isEmpty();
+                             || !m_setup.m_writeData.isEmpty()
+                             || m_setup.m_terminalMode != TerminalMode::Off;
 
     const CommandLine fullCommandLine
         = m_devicePrivate->withDockerExecCmd(m_setup.m_commandLine,
                                              m_setup.m_environment,
                                              m_setup.m_workingDirectory,
                                              interactive,
-                                             true,
-                                             m_setup.m_terminalMode == TerminalMode::Pty);
+                                             m_setup.m_terminalMode != TerminalMode::On,
+                                             m_setup.m_terminalMode != TerminalMode::Off);
 
     m_process.setCommand(fullCommandLine);
     m_process.start();
@@ -468,6 +469,8 @@ CommandLine DockerDevicePrivate::withDockerExecCmd(const CommandLine &cmd,
 
     if (interactive)
         dockerCmd.addArg("-i");
+
+    dockerCmd.addArgs({"-u", "0"});
 
     if (withPty)
         dockerCmd.addArg("-t");
