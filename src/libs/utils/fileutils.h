@@ -122,6 +122,7 @@ public:
                                       QFileDialog::Options options = {});
 #endif
 
+    static expected_str<FilePath> workingDirectoryOfProcess(qint64 pid);
 };
 
 // for actually finding out if e.g. directories are writable on Windows
