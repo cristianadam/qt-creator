@@ -12,6 +12,7 @@
 
 #include <utils/algorithm.h>
 #include <utils/environment.h>
+#include <utils/fileutils.h>
 #include <utils/hostosinfo.h>
 #include <utils/processinterface.h>
 #include <utils/stringutils.h>
@@ -35,6 +36,8 @@
 #include <QTextItem>
 #include <QTextLayout>
 #include <QToolTip>
+
+#include <future>
 
 Q_LOGGING_CATEGORY(terminalLog, "qtc.terminal", QtWarningMsg)
 Q_LOGGING_CATEGORY(selectionLog, "qtc.terminal.selection", QtWarningMsg)
@@ -477,6 +480,11 @@ QString TerminalWidget::shellName() const
     return m_shellName;
 }
 
+FilePath TerminalWidget::cwd() const
+{
+    return m_cwd;
+}
+
 std::optional<Utils::Id> TerminalWidget::identifier() const
 {
     return m_openParameters.identifier;
@@ -855,6 +863,15 @@ void TerminalWidget::paintEvent(QPaintEvent *event)
 {
     QElapsedTimer t;
     t.start();
+
+    const bool isLocal = !m_openParameters.shellCommand->executable().needsDevice();
+    std::future<expected_str<FilePath>> cwd;
+    if (isLocal) {
+        cwd = std::async(std::launch::async, [this] {
+            return FileUtils::workingDirectoryOfProcess(m_process->processId());
+        });
+    }
+
     event->accept();
     QPainter p(viewport());
 
@@ -887,6 +904,14 @@ void TerminalWidget::paintEvent(QPaintEvent *event)
             paintDebugSelection(p, *m_selection);
         if (m_linkSelection)
             paintDebugSelection(p, *m_linkSelection);
+    }
+
+    if (isLocal) {
+        const expected_str<FilePath> cwdResult = cwd.get();
+        if (cwdResult && *cwdResult != m_cwd) {
+            m_cwd = *cwdResult;
+            emit cwdChanged(*cwdResult);
+        }
     }
 
     if (paintLog().isDebugEnabled()) {
