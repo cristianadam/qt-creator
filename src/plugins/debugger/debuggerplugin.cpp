@@ -1629,16 +1629,16 @@ void DebuggerPluginPrivate::attachToRunningApplication()
 
     const ProcessInfo processInfo = dlg->currentProcess();
 
-    if (device->type() == PE::DESKTOP_DEVICE_TYPE) {
-        attachToRunningProcess(kit, processInfo, false);
-    } else {
+    //if (device->type() == PE::DESKTOP_DEVICE_TYPE) {
+    attachToRunningProcess(kit, processInfo, false);
+    /*} else {
         auto runControl = new RunControl(ProjectExplorer::Constants::DEBUG_RUN_MODE);
         runControl->setKit(kit);
         //: %1: PID
         runControl->setDisplayName(Tr::tr("Process %1").arg(processInfo.processId));
         auto debugger = new RemoteAttachRunner(runControl, ProcessHandle(processInfo.processId));
         debugger->startRunControl();
-    }
+    }*/
 }
 
 void DebuggerPluginPrivate::attachToUnstartedApplicationDialog()
@@ -1682,11 +1682,11 @@ RunControl *DebuggerPluginPrivate::attachToRunningProcess(Kit *kit,
         return nullptr;
     }
 
-    if (device->type() != PE::DESKTOP_DEVICE_TYPE) {
-        AsynchronousMessageBox::warning(Tr::tr("Not a Desktop Device Type"),
-                             Tr::tr("It is only possible to attach to a locally running process."));
-        return nullptr;
-    }
+    //if (device->type() != PE::DESKTOP_DEVICE_TYPE) {
+    //    AsynchronousMessageBox::warning(Tr::tr("Not a Desktop Device Type"),
+    //                         Tr::tr("It is only possible to attach to a locally running process."));
+    //    return nullptr;
+    //}
 
     auto runControl = new RunControl(ProjectExplorer::Constants::DEBUG_RUN_MODE);
     runControl->setKit(kit);
