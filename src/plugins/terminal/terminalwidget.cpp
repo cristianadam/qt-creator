@@ -64,6 +64,9 @@ TerminalWidget::TerminalWidget(QWidget *parent, const OpenTerminalParameters &op
     , m_lastFlush(std::chrono::system_clock::now())
     , m_lastDoubleClick(std::chrono::system_clock::now())
 {
+    m_shellCommand = m_openParameters.shellCommand.value_or(
+        CommandLine{TerminalSettings::instance().shell.filePath(), {}});
+
     setupSurface();
     setupFont();
     setupColors();
@@ -120,8 +123,7 @@ void TerminalWidget::setupPty()
 
     Environment env = m_openParameters.environment.value_or(Environment::systemEnvironment());
 
-    CommandLine shellCommand = m_openParameters.shellCommand.value_or(
-        CommandLine{TerminalSettings::instance().shell.filePath(), {}});
+    CommandLine shellCommand = m_shellCommand;
 
     // For git bash on Windows
     env.prependOrSetPath(shellCommand.executable().parentDir());
@@ -134,6 +136,10 @@ void TerminalWidget::setupPty()
     if (m_openParameters.workingDirectory.has_value())
         m_process->setWorkingDirectory(*m_openParameters.workingDirectory);
     m_process->setEnvironment(env);
+
+    if (m_surface->shellIntegration()) {
+        m_surface->shellIntegration()->prepareProcess(*m_process.get());
+    }
 
     connect(m_process.get(), &QtcProcess::readyReadStandardOutput, this, [this]() {
         onReadyRead(false);
@@ -258,7 +264,8 @@ void TerminalWidget::writeToPty(const QByteArray &data)
 
 void TerminalWidget::setupSurface()
 {
-    m_surface = std::make_unique<Internal::TerminalSurface>(QSize{80, 60});
+    m_shellIntegration.reset(new ShellIntegration());
+    m_surface = std::make_unique<Internal::TerminalSurface>(QSize{80, 60}, m_shellIntegration.get());
 
     connect(m_surface.get(),
             &Internal::TerminalSurface::writeToPty,
@@ -304,6 +311,22 @@ void TerminalWidget::setupSurface()
     connect(m_surface.get(), &Internal::TerminalSurface::unscroll, this, [this] {
         verticalScrollBar()->setValue(verticalScrollBar()->maximum());
     });
+    if (m_shellIntegration) {
+        connect(m_shellIntegration.get(),
+                &ShellIntegration::commandChanged,
+                this,
+                [this](const CommandLine &command) {
+                    m_currentCommand = command;
+                    emit commandChanged(m_currentCommand);
+                });
+        connect(m_shellIntegration.get(),
+                &ShellIntegration::currentDirChanged,
+                this,
+                [this](const QString &currentDir) {
+                    m_cwd = FilePath::fromUserInput(currentDir);
+                    emit cwdChanged(m_cwd);
+                });
+    }
 }
 
 void TerminalWidget::configBlinkTimer()
@@ -483,6 +506,11 @@ QString TerminalWidget::shellName() const
 FilePath TerminalWidget::cwd() const
 {
     return m_cwd;
+}
+
+CommandLine TerminalWidget::currentCommand() const
+{
+    return m_currentCommand;
 }
 
 std::optional<Utils::Id> TerminalWidget::identifier() const
@@ -864,14 +892,6 @@ void TerminalWidget::paintEvent(QPaintEvent *event)
     QElapsedTimer t;
     t.start();
 
-    const bool isLocal = !m_openParameters.shellCommand->executable().needsDevice();
-    std::future<expected_str<FilePath>> cwd;
-    if (isLocal) {
-        cwd = std::async(std::launch::async, [this] {
-            return FileUtils::workingDirectoryOfProcess(m_process->processId());
-        });
-    }
-
     event->accept();
     QPainter p(viewport());
 
@@ -904,14 +924,6 @@ void TerminalWidget::paintEvent(QPaintEvent *event)
             paintDebugSelection(p, *m_selection);
         if (m_linkSelection)
             paintDebugSelection(p, *m_linkSelection);
-    }
-
-    if (isLocal) {
-        const expected_str<FilePath> cwdResult = cwd.get();
-        if (cwdResult && *cwdResult != m_cwd) {
-            m_cwd = *cwdResult;
-            emit cwdChanged(*cwdResult);
-        }
     }
 
     if (paintLog().isDebugEnabled()) {

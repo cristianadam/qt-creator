@@ -202,10 +202,14 @@ void TerminalPane::setupTerminalWidget(TerminalWidget *terminal)
     auto setTabText = [this](TerminalWidget * terminal) {
         auto index = m_tabWidget->indexOf(terminal);
         const FilePath cwd = terminal->cwd();
+
+        const QString exe = terminal->currentCommand().isEmpty() ? terminal->shellName()
+                                                                 : terminal->currentCommand().executable().fileName();
+
         if (cwd.isEmpty())
-            m_tabWidget->setTabText(index, terminal->shellName());
+            m_tabWidget->setTabText(index, exe);
         else
-            m_tabWidget->setTabText(index, terminal->shellName() + " - " + cwd.toUserOutput());
+            m_tabWidget->setTabText(index, exe + " - " + cwd.toUserOutput());
     };
 
     connect(terminal, &TerminalWidget::started, [setTabText, terminal](qint64 /*pid*/) {
@@ -213,6 +217,10 @@ void TerminalPane::setupTerminalWidget(TerminalWidget *terminal)
     });
 
     connect(terminal, &TerminalWidget::cwdChanged, [setTabText, terminal]() {
+        setTabText(terminal);
+    });
+
+    connect(terminal, &TerminalWidget::commandChanged, [setTabText, terminal]() {
         setTabText(terminal);
     });
 

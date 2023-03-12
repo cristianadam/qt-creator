@@ -74,6 +74,7 @@ public:
     QString shellName() const;
 
     Utils::FilePath cwd() const;
+    Utils::CommandLine currentCommand() const;
 
     std::optional<Utils::Id> identifier() const;
     QProcess::ProcessState processState() const;
@@ -83,6 +84,7 @@ public:
 signals:
     void started(qint64 pid);
     void cwdChanged(const Utils::FilePath &cwd);
+    void commandChanged(const Utils::CommandLine &cmd);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -167,6 +169,7 @@ protected:
 private:
     std::unique_ptr<Utils::QtcProcess> m_process;
     std::unique_ptr<Internal::TerminalSurface> m_surface;
+    std::unique_ptr<ShellIntegration> m_shellIntegration;
 
     QString m_shellName;
     Utils::Id m_identifier;
@@ -213,6 +216,9 @@ private:
     bool m_cursorBlinkState{true};
 
     Utils::FilePath m_cwd;
+    Utils::CommandLine m_currentCommand;
+
+    Utils::CommandLine m_shellCommand;
 };
 
 } // namespace Terminal
