@@ -929,6 +929,8 @@ LinuxDevice::LinuxDevice()
     setDisplayType(Tr::tr("Remote Linux"));
     setDefaultDisplayName(Tr::tr("Remote Linux Device"));
     setOsType(OsTypeLinux);
+    // These are used when running the debugger as a whole on the device.
+    setDebugDumperPath("/tmp/qtcreator/debugger");
 
     addDeviceAction({Tr::tr("Deploy Public Key..."), [](const IDevice::Ptr &device, QWidget *parent) {
         if (auto d = PublicKeyDeploymentDialog::createDialog(device, parent)) {
