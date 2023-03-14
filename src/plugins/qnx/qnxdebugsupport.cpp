@@ -48,7 +48,7 @@ using namespace Utils;
 
 namespace Qnx::Internal {
 
-const char QNX_DEBUG_EXECUTABLE[] = "pdebug";
+const char QNX_DEBUG_EXECUTABLE[] = "/system/xbin/pdebug";
 
 static QStringList searchPaths(Kit *kit)
 {
@@ -82,20 +82,20 @@ public:
         setId("QnxDebuggeeRunner");
 
         setStartModifier([this, portsGatherer] {
-            CommandLine cmd = commandLine();
-            QStringList arguments;
+            CommandLine cmd;
             if (portsGatherer->useGdbServer()) {
-                int pdebugPort = portsGatherer->gdbServer().port();
                 cmd.setExecutable(device()->filePath(QNX_DEBUG_EXECUTABLE));
-                arguments.append(QString::number(pdebugPort));
+                int pdebugPort = portsGatherer->gdbServer().port();
+                cmd.addArg(QString::number(pdebugPort));
+            } else {
+                cmd.setExecutable(commandLine().executable());
             }
-            if (portsGatherer->useQmlServer()) {
-                arguments.append(QmlDebug::qmlDebugTcpArguments(QmlDebug::QmlDebuggerServices,
-                                                                portsGatherer->qmlServer()));
-            }
-            cmd.setArguments(ProcessArgs::joinArgs(arguments));
-            setCommandLine(cmd);
 
+            if (portsGatherer->useQmlServer()) {
+                cmd.addArg(QmlDebug::qmlDebugTcpArguments(QmlDebug::QmlDebuggerServices,
+                                                          portsGatherer->qmlServer()));
+            }
+            setCommandLine(cmd);
         });
     }
 };
@@ -181,9 +181,10 @@ public:
         setId("PDebugRunner");
         addStartDependency(portsGatherer);
 
-        setStartModifier([this, portsGatherer] {
+        setStartModifier([this, runControl, portsGatherer] {
             const int pdebugPort = portsGatherer->gdbServer().port();
-            setCommandLine({QNX_DEBUG_EXECUTABLE, {QString::number(pdebugPort)}});
+            const FilePath pdebug = runControl->device()->filePath(QNX_DEBUG_EXECUTABLE);
+            setCommandLine({pdebug, {QString::number(pdebugPort)}});
         });
     }
 };
