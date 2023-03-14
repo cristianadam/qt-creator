@@ -34,15 +34,17 @@ void Slog2InfoRunner::start()
     using namespace Utils::Tasking;
     QTC_CHECK(!m_taskTree);
 
-    const auto testStartHandler = [this](QtcProcess &process) {
-        process.setCommand({device()->filePath("slog2info"), {}});
-    };
-    const auto testDoneHandler = [this](const QtcProcess &) {
-        m_found = true;
-    };
-    const auto testErrorHandler = [this](const QtcProcess &) {
-        appendMessage(Tr::tr("Warning: \"slog2info\" is not found on the device, "
-                             "debug output not available."), ErrorMessageFormat);
+    Process testProcess {
+        [this](QtcProcess &process) {
+            process.setCommand({device()->filePath("slog2info"), {}});
+        },
+        [this](const QtcProcess &) {
+            m_found = true;
+        },
+        [this](const QtcProcess &) {
+           appendMessage(Tr::tr("Warning: \"slog2info\" is not found on the device, "
+                                "debug output not available."), ErrorMessageFormat);
+
     };
 
     const auto launchTimeStartHandler = [this](QtcProcess &process) {
@@ -69,7 +71,7 @@ void Slog2InfoRunner::start()
     };
 
     const Tasking::Group root {
-        Process(testStartHandler, testDoneHandler, testErrorHandler),
+        testProcess,
         Process(launchTimeStartHandler, launchTimeDoneHandler),
         Process(logStartHandler, {}, logErrorHandler)
     };
