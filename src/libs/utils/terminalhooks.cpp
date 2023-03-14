@@ -14,10 +14,9 @@ namespace Utils::Terminal {
 
 FilePath defaultShellForDevice(const FilePath &deviceRoot)
 {
-    if (!deviceRoot.needsDevice())
-        return {};
+    if (deviceRoot.osType() == OsTypeWindows)
+        return deviceRoot.withNewPath("cmd.exe").searchInPath();
 
-    // TODO: Windows ?
     const Environment env = deviceRoot.deviceEnvironment();
     FilePath shell = FilePath::fromUserInput(env.value_or("SHELL", "/bin/sh"));
 
@@ -46,14 +45,19 @@ class ExternalTerminalProcessImpl final : public TerminalInterface
                 QObject::connect(&m_terminalProcess, &QtcProcess::done, this, [this] {
                     m_interface->onStubExited();
                 });
+                m_terminalProcess.setCreateConsoleOnWindows(true);
+                m_terminalProcess.setProcessMode(ProcessMode::Writer);
                 m_terminalProcess.start();
             } else {
-                if (HostOsInfo::isMacHost()) {
+                const TerminalCommand terminal = TerminalCommand::terminalEmulator();
+
+                if (HostOsInfo::isMacHost() && (terminal.command == "Terminal.app")) {
                     QTemporaryFile f;
                     f.setAutoRemove(false);
                     f.open();
                     f.setPermissions(QFile::ExeUser | QFile::ReadUser | QFile::WriteUser);
                     f.write("#!/bin/sh\n");
+                    f.write("clear\n");
                     f.write(QString("exec '%1' %2\n")
                                 .arg(cmd.executable().nativePath())
                                 .arg(cmd.arguments())
@@ -65,11 +69,10 @@ class ExternalTerminalProcessImpl final : public TerminalInterface
                         = QString("tell app \"Terminal\" to do script \"'%1'; rm -f '%1'; exit\"")
                               .arg(path);
 
-                    m_terminalProcess.setCommand({"osascript", {"-e", exe}});
+                    m_terminalProcess.setCommand(
+                        {"osascript", {"-e", "tell app \"Terminal\" to activate", "-e", exe}});
                     m_terminalProcess.runBlocking();
                 } else {
-                    const TerminalCommand terminal = TerminalCommand::terminalEmulator();
-
                     CommandLine cmdLine = {terminal.command, {terminal.executeArgs}};
                     cmdLine.addCommandLineAsArgs(cmd, CommandLine::Raw);
 

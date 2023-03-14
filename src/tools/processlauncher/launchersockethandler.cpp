@@ -11,6 +11,10 @@
 #include <QLocalSocket>
 #include <QProcess>
 
+#ifdef Q_OS_WIN
+#include <qt_windows.h>
+#endif
+
 namespace Utils {
 namespace Internal {
 
@@ -172,6 +176,7 @@ void LauncherSocketHandler::handleStartPacket()
     const auto packet = LauncherPacket::extractPacket<StartProcessPacket>(
                 m_packetParser.token(),
                 m_packetParser.packetData());
+
     process->setEnvironment(packet.env);
     process->setWorkingDirectory(packet.workingDir);
     // Forwarding is handled by the LauncherInterface
@@ -179,10 +184,10 @@ void LauncherSocketHandler::handleStartPacket()
                                    ? QProcess::MergedChannels : QProcess::SeparateChannels);
     process->setStandardInputFile(packet.standardInputFile);
     ProcessStartHandler *handler = process->processStartHandler();
+    handler->setWindowsSpecificStartupFlags(packet.belowNormalPriority,
+                                            packet.createConsoleOnWindows);
     handler->setProcessMode(packet.processMode);
     handler->setWriteData(packet.writeData);
-    if (packet.belowNormalPriority)
-        handler->setBelowNormalPriority();
     handler->setNativeArguments(packet.nativeArguments);
     if (packet.lowPriority)
         process->setLowPriority();
