@@ -392,45 +392,67 @@
     \title Evaluating Expressions
 
     To compute values of arithmetic expressions or function calls, use
-    expression evaluators in the \uicontrol Expressions view. To insert a new
-    expression evaluator, either double-click on an empty part of the
-    \uicontrol {Expressions} or \uicontrol {Locals} view, or select
-    \uicontrol {Add New Expression Evaluator} from the context menu, or drag and
-    drop an expression from the code editor.
+    expression evaluators in the \uicontrol Expressions view. You can
+    examine static variables that the debuggers don't pick up as
+    \e {local variables}. For example, if you define \c {static int x = 42;}
+    in a source file and then insert \c x as an evaluated expression, \e 42
+    should be shown when the debugger stops in the source file.
 
-    \image qtcreator-debugger-expressions.png {Expressions view}
+    \image qtcreator-debugger-expressions.webp {Expressions view}
+
+    To insert new expression evaluators, drag an expression from the code editor
+    to the \uicontrol Expressions view.
+
+    You can also:
+
+    \list
+        \li Double-click in the \uicontrol {Expressions} or
+            \l {Local Variables and Function Parameters}{Locals} view.
+        \li Select \uicontrol {Add New Expression Evaluator} from the context
+            menu.
+    \endlist
+
+    Enter the expression in the \uicontrol {New Evaluated Expression} dialog:
+
+    \image qtcreator-debugger-new-evaluated-expression.webp {New Evaluated Expression dialog}
+
+    The set of evaluated expressions is saved in your session.
 
     \note Expression evaluators are powerful, but slow down debugger operation
-    significantly. It is advisable to not use them excessively, and to remove
-    unneeded expression evaluators as soon as possible.
+    significantly. Use them sparingly and remove them when you no longer need
+    them.
 
     Expression evaluators are re-evaluated whenever the current frame changes.
-    Note that functions used in the expressions are called each time, even if
+    The functions used in the expressions are called each time, even if
     they have side-effects.
+
+    \section1 JavaScript Expressions
 
     The QML debugger can evaluate JavaScript expressions.
 
     \if defined(qtcreator)
+
+    \section1 C and C++ Expressions
+
     GDB, LLDB and CDB support the evaluation of simple C and C++ expressions.
     Functions can be called only if they are actually compiled into the debugged
-    executable or a library used by the executable. Most notably, inlined
+    executable or a library used by the executable. Inlined
     functions such as most \c{operator[]} implementations of standard containers
     are typically \e{not} available.
 
-    When using GDB or LLDB as backend, a special ranged syntax can be used to
+    When using GDB or LLDB as backend, you can use a special ranged syntax to
     display multiple values with one expression. A sub-expression of form
     \c{foo[a..b]} is split into a sequence of individually evaluated expressions
     \c{foo[a], ..., foo[b]}.
 
-    Compound variables of struct or class type are displayed as expandable in
-    the view. Expand entries to show all members. Together with the display of
-    value and type, you can examine and traverse the low-level layout of object
-    data.
+    You can expand compound variables of struct or class type to show their
+    members. As you also see the variable value and type, you can examine and
+    traverse the low-level layout of object data.
 
     GDB and LLDB, and therefore \QC's debugger, also work for optimized
     builds on Linux and \macos. Optimization can lead to re-ordering
     of instructions or removal of some local variables, causing the
-    \uicontrol {Locals} and \uicontrol {Expressions} view to show
+    \uicontrol {Locals} and \uicontrol {Expressions} views to show
     unexpected data.
 
     The debug information from GCC does not include enough
@@ -440,8 +462,6 @@
     appears uninitialized, its value is reported as
     \uicontrol {not in scope}. Not all uninitialized objects,
     however, can be recognized as such.
-
-    \note The set of evaluated expressions is saved in your session.
 
     \section1 Inspecting Basic Qt Objects
 
@@ -479,5 +499,6 @@
 
     You can enable tooltips in the main editor displaying this information.
     For more information, see \l{See the value of variables in tooltips while debugging}.
+
     \endif
 */
