@@ -1096,6 +1096,8 @@ void TerminalWidget::mousePressEvent(QMouseEvent *event)
         } else {
             pasteFromClipboard();
         }
+    } else if (event->button() == Qt::MiddleButton) {
+        pasteFromClipboard();
     }
 }
 void TerminalWidget::mouseMoveEvent(QMouseEvent *event)
