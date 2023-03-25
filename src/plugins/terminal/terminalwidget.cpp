@@ -143,6 +143,9 @@ void TerminalWidget::setupPty()
     CommandLine shellCommand = m_openParameters.shellCommand.value_or(
         CommandLine{TerminalSettings::instance().shell.filePath(), {}});
 
+    if (!HostOsInfo::isWindowsHost() && shellCommand.arguments().isEmpty())
+        shellCommand.addArg("-l");
+
     // For git bash on Windows
     env.prependOrSetPath(shellCommand.executable().parentDir());
     if (env.hasKey("CLINK_NOAUTORUN"))

@@ -83,7 +83,11 @@ ShellModel::ShellModel(QObject *parent)
         ShellModelItem item;
         item.icon = iconProvider.icon(shell.toFileInfo());
         item.name = shell.toUserOutput();
-        item.openParameters.shellCommand = {shell, {}};
+        if (!HostOsInfo::isWindowsHost()) {
+            item.openParameters.shellCommand = {shell, {"-l"}};
+        } else {
+            item.openParameters.shellCommand = {shell, {}};
+        }
         d->localShells << item;
     }
 }
