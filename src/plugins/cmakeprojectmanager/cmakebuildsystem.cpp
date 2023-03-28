@@ -1290,23 +1290,18 @@ MakeInstallCommand CMakeBuildSystem::makeInstallCommand(const FilePath &installR
     if (CMakeTool *tool = CMakeKitAspect::cmakeTool(target()->kit()))
         cmd.command.setExecutable(tool->cmakeExecutable());
 
-    QString installTarget = "install";
-    if (usesAllCapsTargets())
-        installTarget = "INSTALL";
-
     FilePath buildDirectory = ".";
     if (auto bc = buildConfiguration())
         buildDirectory = bc->buildDirectory();
 
-    cmd.command.addArg("--build");
-    cmd.command.addArg(buildDirectory.onDevice(cmd.command.executable()).path());
-    cmd.command.addArg("--target");
-    cmd.command.addArg(installTarget);
+    cmd.command.addArgs({"--install", buildDirectory.nativePath()});
 
     if (isMultiConfigReader())
         cmd.command.addArgs({"--config", cmakeBuildType()});
 
-    cmd.environment.set("DESTDIR", installRoot.nativePath());
+    if (!installRoot.isEmpty())
+        cmd.command.addArgs({"--prefix", installRoot.nativePath()});
+
     return cmd;
 }
 
