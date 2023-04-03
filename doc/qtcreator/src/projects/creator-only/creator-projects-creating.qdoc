@@ -82,7 +82,7 @@
             \li Application (Qt for MCU)
             \li MCU Support Application
             \li Creates an application that uses a subset of Qt QML and
-                Qt Quick Controls types (as supported by Qt for MCUs) that
+                Qt Quick Controls types (as supported by \QMCU) that
                 you can deploy, run, and debug on MCU boards. For more
                 information, see \l {Connecting MCUs}.
         \row
