@@ -663,7 +663,7 @@ void AndroidDeployQtStep::reportWarningOrError(const QString &message, Task::Tas
 
 AndroidDeployQtStepFactory::AndroidDeployQtStepFactory()
 {
-    registerStep<AndroidDeployQtStep>(Constants::ANDROID_DEPLOY_QT_ID);
+    setProduct<AndroidDeployQtStep>(Constants::ANDROID_DEPLOY_QT_ID);
     setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_DEPLOY);
     setSupportedDeviceType(Constants::ANDROID_DEVICE_TYPE);
     setRepeatable(false);

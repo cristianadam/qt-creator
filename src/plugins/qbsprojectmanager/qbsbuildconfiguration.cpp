@@ -321,7 +321,7 @@ TriState QbsBuildConfiguration::separateDebugInfoSetting() const
 
 QbsBuildConfigurationFactory::QbsBuildConfigurationFactory()
 {
-    registerBuildConfiguration<QbsBuildConfiguration>(Constants::QBS_BC_ID);
+    setProduct<QbsBuildConfiguration>(Constants::QBS_BC_ID);
     setSupportedProjectType(Constants::PROJECT_ID);
     setSupportedProjectMimeTypeName(Constants::MIME_TYPE);
     setIssueReporter([](Kit *k, const FilePath &projectPath, const FilePath &buildDir) -> Tasks {

@@ -75,7 +75,7 @@ FilePath NimBuildConfiguration::outFilePath() const
 
 NimBuildConfigurationFactory::NimBuildConfigurationFactory()
 {
-    registerBuildConfiguration<NimBuildConfiguration>(Constants::C_NIMBUILDCONFIGURATION_ID);
+    setProduct<NimBuildConfiguration>(Constants::C_NIMBUILDCONFIGURATION_ID);
     setSupportedProjectType(Constants::C_NIMPROJECT_ID);
     setSupportedProjectMimeTypeName(Constants::C_NIM_PROJECT_MIMETYPE);
 

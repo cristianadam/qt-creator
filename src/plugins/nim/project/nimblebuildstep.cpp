@@ -75,7 +75,7 @@ QString NimbleBuildStep::defaultArguments() const
 
 NimbleBuildStepFactory::NimbleBuildStepFactory()
 {
-    registerStep<NimbleBuildStep>(Constants::C_NIMBLEBUILDSTEP_ID);
+    setProduct<NimbleBuildStep>(Constants::C_NIMBLEBUILDSTEP_ID);
     setDisplayName(Tr::tr("Nimble Build"));
     setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);
     setSupportedConfiguration(Constants::C_NIMBLEBUILDCONFIGURATION_ID);

@@ -62,7 +62,7 @@ Group KillAppStep::deployRecipe()
 
 KillAppStepFactory::KillAppStepFactory()
 {
-    registerStep<KillAppStep>(Constants::KillAppStepId);
+    setProduct<KillAppStep>(Constants::KillAppStepId);
     setDisplayName(Tr::tr("Kill current application instance"));
     setSupportedConfiguration(RemoteLinux::Constants::DeployToGenericLinux);
     setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_DEPLOY);

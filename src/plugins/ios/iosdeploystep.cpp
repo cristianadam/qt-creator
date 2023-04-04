@@ -285,7 +285,7 @@ IosSimulator::ConstPtr IosDeployStep::iossimulator() const
 
 IosDeployStepFactory::IosDeployStepFactory()
 {
-    registerStep<IosDeployStep>(Constants::IOS_DEPLOY_STEP_ID);
+    setProduct<IosDeployStep>(Constants::IOS_DEPLOY_STEP_ID);
     setDisplayName(Tr::tr("Deploy to iOS device"));
     setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_DEPLOY);
     setSupportedDeviceTypes({Constants::IOS_DEVICE_TYPE, Constants::IOS_SIMULATOR_TYPE});

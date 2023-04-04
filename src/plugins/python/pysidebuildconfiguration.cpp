@@ -25,7 +25,7 @@ const char pySideBuildStep[] = "Python.PysideBuildStep";
 
 PySideBuildConfigurationFactory::PySideBuildConfigurationFactory()
 {
-    registerBuildConfiguration<PySideBuildConfiguration>("Python.PySideBuildConfiguration");
+    setProduct<PySideBuildConfiguration>("Python.PySideBuildConfiguration");
     setSupportedProjectType(PythonProjectId);
     setSupportedProjectMimeTypeName(Constants::C_PY_MIMETYPE);
     setBuildGenerator([](const Kit *, const FilePath &projectPath, bool) {
@@ -39,7 +39,7 @@ PySideBuildConfigurationFactory::PySideBuildConfigurationFactory()
 
 PySideBuildStepFactory::PySideBuildStepFactory()
 {
-    registerStep<PySideBuildStep>(pySideBuildStep);
+    setProduct<PySideBuildStep>(pySideBuildStep);
     setSupportedProjectType(PythonProjectId);
     setDisplayName(Tr::tr("Run PySide6 project tool"));
     setFlags(BuildStep::UniqueStep);

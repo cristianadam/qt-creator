@@ -97,7 +97,7 @@ void AutoreconfStep::doRun()
 
 AutoreconfStepFactory::AutoreconfStepFactory()
 {
-    registerStep<AutoreconfStep>(Constants::AUTORECONF_STEP_ID);
+    setProduct<AutoreconfStep>(Constants::AUTORECONF_STEP_ID);
     setDisplayName(Tr::tr("Autoreconf", "Display name for AutotoolsProjectManager::AutoreconfStep id."));
     setSupportedProjectType(Constants::AUTOTOOLS_PROJECT_ID);
     setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);

@@ -49,8 +49,7 @@ public:
 
 AutotoolsBuildConfigurationFactory::AutotoolsBuildConfigurationFactory()
 {
-    registerBuildConfiguration<AutotoolsBuildConfiguration>
-            ("AutotoolsProjectManager.AutotoolsBuildConfiguration");
+    setProduct<AutotoolsBuildConfiguration>("AutotoolsProjectManager.AutotoolsBuildConfiguration");
 
     setSupportedProjectType(Constants::AUTOTOOLS_PROJECT_ID);
     setSupportedProjectMimeTypeName(Constants::MAKEFILE_MIMETYPE);

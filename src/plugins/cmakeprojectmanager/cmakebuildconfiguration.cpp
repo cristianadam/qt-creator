@@ -1928,7 +1928,7 @@ void CMakeBuildConfiguration::setBuildPresetToBuildSteps(const ProjectExplorer::
 
 CMakeBuildConfigurationFactory::CMakeBuildConfigurationFactory()
 {
-    registerBuildConfiguration<CMakeBuildConfiguration>(Constants::CMAKE_BUILDCONFIGURATION_ID);
+    setProduct<CMakeBuildConfiguration>(Constants::CMAKE_BUILDCONFIGURATION_ID);
 
     setSupportedProjectType(CMakeProjectManager::Constants::CMAKE_PROJECT_ID);
     setSupportedProjectMimeTypeName(Constants::CMAKE_PROJECT_MIMETYPE);

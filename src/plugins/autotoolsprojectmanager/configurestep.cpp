@@ -114,7 +114,7 @@ void ConfigureStep::doRun()
 
 ConfigureStepFactory::ConfigureStepFactory()
 {
-    registerStep<ConfigureStep>(Constants::CONFIGURE_STEP_ID);
+    setProduct<ConfigureStep>(Constants::CONFIGURE_STEP_ID);
     setDisplayName(Tr::tr("Configure", "Display name for AutotoolsProjectManager::ConfigureStep id."));
     setSupportedProjectType(Constants::AUTOTOOLS_PROJECT_ID);
     setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);

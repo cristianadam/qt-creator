@@ -128,7 +128,7 @@ QWidget *CMakeInstallStep::createConfigWidget()
 
 CMakeInstallStepFactory::CMakeInstallStepFactory()
 {
-    registerStep<CMakeInstallStep>(Constants::CMAKE_INSTALL_STEP_ID);
+    setProduct<CMakeInstallStep>(Constants::CMAKE_INSTALL_STEP_ID);
     setDisplayName(
         Tr::tr("CMake Install", "Display name for CMakeProjectManager::CMakeInstallStep id."));
     setSupportedProjectType(Constants::CMAKE_PROJECT_ID);

@@ -177,7 +177,7 @@ void AndroidPackageInstallationStep::reportWarningOrError(const QString &message
 
 AndroidPackageInstallationFactory::AndroidPackageInstallationFactory()
 {
-    registerStep<AndroidPackageInstallationStep>(Constants::ANDROID_PACKAGE_INSTALL_STEP_ID);
+    setProduct<AndroidPackageInstallationStep>(Constants::ANDROID_PACKAGE_INSTALL_STEP_ID);
     setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);
     setSupportedDeviceType(Android::Constants::ANDROID_DEVICE_TYPE);
     setRepeatable(false);

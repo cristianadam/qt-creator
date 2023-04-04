@@ -185,7 +185,7 @@ void NinjaBuildStep::setupOutputFormatter(Utils::OutputFormatter *formatter)
 
 MesonBuildStepFactory::MesonBuildStepFactory()
 {
-    registerStep<NinjaBuildStep>(Constants::MESON_BUILD_STEP_ID);
+    setProduct<NinjaBuildStep>(Constants::MESON_BUILD_STEP_ID);
     setSupportedProjectType(Constants::Project::ID);
     setDisplayName(Tr::tr("Meson Build"));
 }

@@ -114,7 +114,7 @@ void ConanInstallStep::setupOutputFormatter(OutputFormatter *formatter)
 
 ConanInstallStepFactory::ConanInstallStepFactory()
 {
-    registerStep<ConanInstallStep>(Constants::INSTALL_STEP);
+    setProduct<ConanInstallStep>(Constants::INSTALL_STEP);
     setDisplayName(Tr::tr("Run conan install"));
 }
 

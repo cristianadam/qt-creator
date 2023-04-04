@@ -227,7 +227,7 @@ bool NimbleTaskStep::validate()
 
 NimbleTaskStepFactory::NimbleTaskStepFactory()
 {
-    registerStep<NimbleTaskStep>(Constants::C_NIMBLETASKSTEP_ID);
+    setProduct<NimbleTaskStep>(Constants::C_NIMBLETASKSTEP_ID);
     setDisplayName(Tr::tr("Nimble Task"));
     setSupportedStepLists({ProjectExplorer::Constants::BUILDSTEPS_BUILD,
                            ProjectExplorer::Constants::BUILDSTEPS_CLEAN,

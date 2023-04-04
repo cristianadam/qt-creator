@@ -211,7 +211,7 @@ void NimCompilerBuildStep::updateTargetNimFile()
 
 NimCompilerBuildStepFactory::NimCompilerBuildStepFactory()
 {
-    registerStep<NimCompilerBuildStep>(Constants::C_NIMCOMPILERBUILDSTEP_ID);
+    setProduct<NimCompilerBuildStep>(Constants::C_NIMCOMPILERBUILDSTEP_ID);
     setDisplayName(Tr::tr("Nim Compiler Build Step"));
     setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);
     setSupportedConfiguration(Constants::C_NIMBUILDCONFIGURATION_ID);

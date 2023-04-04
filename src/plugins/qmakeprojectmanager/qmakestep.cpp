@@ -739,7 +739,7 @@ void QMakeStep::recompileMessageBoxFinished(int button)
 
 QMakeStepFactory::QMakeStepFactory()
 {
-    registerStep<QMakeStep>(Constants::QMAKE_BS_ID);
+    setProduct<QMakeStep>(Constants::QMAKE_BS_ID);
     setSupportedConfiguration(Constants::QMAKE_BC_ID);
     setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);
     //: QMakeStep default display name

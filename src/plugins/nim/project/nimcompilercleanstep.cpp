@@ -109,7 +109,7 @@ bool NimCompilerCleanStep::removeOutFilePath()
 
 NimCompilerCleanStepFactory::NimCompilerCleanStepFactory()
 {
-    registerStep<NimCompilerCleanStep>(Constants::C_NIMCOMPILERCLEANSTEP_ID);
+    setProduct<NimCompilerCleanStep>(Constants::C_NIMCOMPILERCLEANSTEP_ID);
     setFlags(BuildStep::Unclonable);
     setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_CLEAN);
     setSupportedConfiguration(Constants::C_NIMBUILDCONFIGURATION_ID);

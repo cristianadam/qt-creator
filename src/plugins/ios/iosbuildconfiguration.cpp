@@ -463,7 +463,7 @@ void IosQmakeBuildConfiguration::updateQmakeCommand()
 
 IosQmakeBuildConfigurationFactory::IosQmakeBuildConfigurationFactory()
 {
-    registerBuildConfiguration<IosQmakeBuildConfiguration>(
+    setProduct<IosQmakeBuildConfiguration>(
         QmakeProjectManager::Constants::QMAKE_BC_ID);
     addSupportedTargetDeviceType(Constants::IOS_DEVICE_TYPE);
     addSupportedTargetDeviceType(Constants::IOS_SIMULATOR_TYPE);
@@ -534,7 +534,7 @@ CMakeConfig IosCMakeBuildConfiguration::signingFlags() const
 
 IosCMakeBuildConfigurationFactory::IosCMakeBuildConfigurationFactory()
 {
-    registerBuildConfiguration<IosCMakeBuildConfiguration>(
+    setProduct<IosCMakeBuildConfiguration>(
         CMakeProjectManager::Constants::CMAKE_BUILDCONFIGURATION_ID);
     addSupportedTargetDeviceType(Constants::IOS_DEVICE_TYPE);
     addSupportedTargetDeviceType(Constants::IOS_SIMULATOR_TYPE);

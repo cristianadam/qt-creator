@@ -30,7 +30,7 @@ namespace Internal {
 
 HaskellBuildConfigurationFactory::HaskellBuildConfigurationFactory()
 {
-    registerBuildConfiguration<HaskellBuildConfiguration>(C_HASKELL_BUILDCONFIGURATION_ID);
+    setProduct<HaskellBuildConfiguration>(C_HASKELL_BUILDCONFIGURATION_ID);
     setSupportedProjectType(Constants::C_HASKELL_PROJECT_ID);
     setSupportedProjectMimeTypeName(Constants::C_HASKELL_PROJECT_MIMETYPE);
 

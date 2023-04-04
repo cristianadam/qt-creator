@@ -326,7 +326,7 @@ GenericDirectUploadStep::~GenericDirectUploadStep()
 
 GenericDirectUploadStepFactory::GenericDirectUploadStepFactory()
 {
-    registerStep<GenericDirectUploadStep>(Constants::DirectUploadStepId);
+    setProduct<GenericDirectUploadStep>(Constants::DirectUploadStepId);
     setDisplayName(Tr::tr("Upload files via SFTP"));
 }
 

@@ -745,7 +745,7 @@ static BuildInfo createBuildInfo(const Kit *k, const FilePath &projectPath,
 
 QmakeBuildConfigurationFactory::QmakeBuildConfigurationFactory()
 {
-    registerBuildConfiguration<QmakeBuildConfiguration>(Constants::QMAKE_BC_ID);
+    setProduct<QmakeBuildConfiguration>(Constants::QMAKE_BC_ID);
     setSupportedProjectType(Constants::QMAKEPROJECT_ID);
     setSupportedProjectMimeTypeName(Constants::PROFILE_MIMETYPE);
     setIssueReporter([](Kit *k, const FilePath &projectPath, const FilePath &buildDir) {

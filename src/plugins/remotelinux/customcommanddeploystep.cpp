@@ -89,7 +89,7 @@ Group CustomCommandDeployStep::deployRecipe()
 
 CustomCommandDeployStepFactory::CustomCommandDeployStepFactory()
 {
-    registerStep<CustomCommandDeployStep>(Constants::CustomCommandDeployStepId);
+    setProduct<CustomCommandDeployStep>(Constants::CustomCommandDeployStepId);
     setDisplayName(Tr::tr("Run custom remote command"));
     setSupportedConfiguration(RemoteLinux::Constants::DeployToGenericLinux);
     setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_DEPLOY);

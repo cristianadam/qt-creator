@@ -31,7 +31,7 @@ public:
 
 MakeStepFactory::MakeStepFactory()
 {
-    registerStep<MakeStep>(Constants::MAKE_STEP_ID);
+    setProduct<MakeStep>(Constants::MAKE_STEP_ID);
     setDisplayName(ProjectExplorer::MakeStep::defaultDisplayName());
     setSupportedProjectType(Constants::AUTOTOOLS_PROJECT_ID);
 }

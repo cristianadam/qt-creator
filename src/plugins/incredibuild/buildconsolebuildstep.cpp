@@ -302,7 +302,7 @@ void BuildConsoleBuildStep::setupOutputFormatter(OutputFormatter *formatter)
 
 BuildConsoleStepFactory::BuildConsoleStepFactory()
 {
-    registerStep<BuildConsoleBuildStep>(IncrediBuild::Constants::BUILDCONSOLE_BUILDSTEP_ID);
+    setProduct<BuildConsoleBuildStep>(IncrediBuild::Constants::BUILDCONSOLE_BUILDSTEP_ID);
     setDisplayName(Tr::tr("IncrediBuild for Windows"));
     setSupportedStepLists({ProjectExplorer::Constants::BUILDSTEPS_BUILD,
                            ProjectExplorer::Constants::BUILDSTEPS_CLEAN});

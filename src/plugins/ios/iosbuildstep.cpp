@@ -251,7 +251,7 @@ QStringList IosBuildStep::baseArguments() const
 
 IosBuildStepFactory::IosBuildStepFactory()
 {
-    registerStep<IosBuildStep>(IOS_BUILD_STEP_ID);
+    setProduct<IosBuildStep>(IOS_BUILD_STEP_ID);
     setSupportedDeviceTypes({Constants::IOS_DEVICE_TYPE,
                              Constants::IOS_SIMULATOR_TYPE});
     setSupportedStepLists({ProjectExplorer::Constants::BUILDSTEPS_CLEAN,

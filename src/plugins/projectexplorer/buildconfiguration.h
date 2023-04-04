@@ -176,7 +176,7 @@ protected:
     using BuildConfigurationCreator = std::function<BuildConfiguration *(Target *)>;
 
     template <class BuildConfig>
-    void registerBuildConfiguration(Utils::Id buildConfigId)
+    void setProduct(Utils::Id buildConfigId)
     {
         m_creator = [buildConfigId](Target *t) { return new BuildConfig(t, buildConfigId); };
         m_buildConfigId = buildConfigId;

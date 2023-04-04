@@ -48,7 +48,7 @@ GenericBuildConfiguration::GenericBuildConfiguration(Target *parent, Utils::Id i
 
 GenericBuildConfigurationFactory::GenericBuildConfigurationFactory()
 {
-    registerBuildConfiguration<GenericBuildConfiguration>
+    setProduct<GenericBuildConfiguration>
         ("GenericProjectManager.GenericBuildConfiguration");
 
     setSupportedProjectType(Constants::GENERICPROJECT_ID);

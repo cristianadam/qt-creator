@@ -165,7 +165,7 @@ protected:
     using BuildStepCreator = std::function<BuildStep *(BuildStepList *)>;
 
     template <class BuildStepType>
-    void registerStep(Utils::Id id)
+    void setProduct(Utils::Id id)
     {
         QTC_CHECK(!m_creator);
         m_stepId = id;

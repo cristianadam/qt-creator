@@ -150,7 +150,7 @@ void QbsCleanStep::createTaskAndOutput(ProjectExplorer::Task::TaskType type, con
 
 QbsCleanStepFactory::QbsCleanStepFactory()
 {
-    registerStep<QbsCleanStep>(Constants::QBS_CLEANSTEP_ID);
+    setProduct<QbsCleanStep>(Constants::QBS_CLEANSTEP_ID);
     setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_CLEAN);
     setSupportedConfiguration(Constants::QBS_BC_ID);
     setDisplayName(Tr::tr("Qbs Clean"));

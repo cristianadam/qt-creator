@@ -210,7 +210,7 @@ QWidget *QbsInstallStep::createConfigWidget()
 
 QbsInstallStepFactory::QbsInstallStepFactory()
 {
-    registerStep<QbsInstallStep>(Constants::QBS_INSTALLSTEP_ID);
+    setProduct<QbsInstallStep>(Constants::QBS_INSTALLSTEP_ID);
     setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_DEPLOY);
     setSupportedDeviceType(ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE);
     setSupportedProjectType(Constants::PROJECT_ID);

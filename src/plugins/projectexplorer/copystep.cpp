@@ -100,14 +100,14 @@ public:
 
 CopyFileStepFactory::CopyFileStepFactory()
 {
-    registerStep<CopyFileStep>(Constants::COPY_FILE_STEP);
+    setProduct<CopyFileStep>(Constants::COPY_FILE_STEP);
     //: Default CopyStep display name
     setDisplayName(Tr::tr("Copy file"));
 }
 
 CopyDirectoryStepFactory::CopyDirectoryStepFactory()
 {
-    registerStep<CopyDirectoryStep>(Constants::COPY_DIRECTORY_STEP);
+    setProduct<CopyDirectoryStep>(Constants::COPY_DIRECTORY_STEP);
     //: Default CopyStep display name
     setDisplayName(Tr::tr("Copy directory recursively"));
 }

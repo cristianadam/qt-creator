@@ -104,7 +104,7 @@ void AutogenStep::doRun()
 
 AutogenStepFactory::AutogenStepFactory()
 {
-    registerStep<AutogenStep>(Constants::AUTOGEN_STEP_ID);
+    setProduct<AutogenStep>(Constants::AUTOGEN_STEP_ID);
     setDisplayName(Tr::tr("Autogen", "Display name for AutotoolsProjectManager::AutogenStep id."));
     setSupportedProjectType(Constants::AUTOTOOLS_PROJECT_ID);
     setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);

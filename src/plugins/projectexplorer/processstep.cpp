@@ -86,7 +86,7 @@ void ProcessStep::setupOutputFormatter(OutputFormatter *formatter)
 
 ProcessStepFactory::ProcessStepFactory()
 {
-    registerStep<ProcessStep>("ProjectExplorer.ProcessStep");
+    setProduct<ProcessStep>("ProjectExplorer.ProcessStep");
     //: Default ProcessStep display name
     setDisplayName(Tr::tr("Custom Process Step"));
 }

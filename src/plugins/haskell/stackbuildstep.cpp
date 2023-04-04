@@ -47,7 +47,7 @@ bool StackBuildStep::init()
 
 StackBuildStepFactory::StackBuildStepFactory()
 {
-    registerStep<StackBuildStep>(Constants::C_STACK_BUILD_STEP_ID);
+    setProduct<StackBuildStep>(Constants::C_STACK_BUILD_STEP_ID);
     setDisplayName(StackBuildStep::StackBuildStep::trDisplayName());
     setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);
 }

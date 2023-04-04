@@ -32,7 +32,7 @@ GenericMakeStep::GenericMakeStep(BuildStepList *parent, Utils::Id id)
 
 GenericMakeStepFactory::GenericMakeStepFactory()
 {
-    registerStep<GenericMakeStep>(Constants::GENERIC_MS_ID);
+    setProduct<GenericMakeStep>(Constants::GENERIC_MS_ID);
     setDisplayName(MakeStep::defaultDisplayName());
     setSupportedProjectType(Constants::GENERICPROJECT_ID);
 }

@@ -272,7 +272,7 @@ bool MakeInstallStep::fromMap(const QVariantMap &map)
 
 MakeInstallStepFactory::MakeInstallStepFactory()
 {
-    registerStep<MakeInstallStep>(Constants::MakeInstallStepId);
+    setProduct<MakeInstallStep>(Constants::MakeInstallStepId);
     setDisplayName(Tr::tr("Install into temporary host directory"));
 }
 

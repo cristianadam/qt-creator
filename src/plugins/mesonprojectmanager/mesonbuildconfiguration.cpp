@@ -140,7 +140,7 @@ ProjectExplorer::BuildInfo createBuildInfo(MesonBuildType type)
 
 MesonBuildConfigurationFactory::MesonBuildConfigurationFactory()
 {
-    registerBuildConfiguration<MesonBuildConfiguration>(Constants::MESON_BUILD_CONFIG_ID);
+    setProduct<MesonBuildConfiguration>(Constants::MESON_BUILD_CONFIG_ID);
     setSupportedProjectType(Constants::Project::ID);
     setSupportedProjectMimeTypeName(Constants::Project::MIMETYPE);
     setBuildGenerator(

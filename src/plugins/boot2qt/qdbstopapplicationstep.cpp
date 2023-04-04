@@ -78,7 +78,7 @@ Group QdbStopApplicationStep::deployRecipe()
 
 QdbStopApplicationStepFactory::QdbStopApplicationStepFactory()
 {
-    registerStep<QdbStopApplicationStep>(Constants::QdbStopApplicationStepId);
+    setProduct<QdbStopApplicationStep>(Constants::QdbStopApplicationStepId);
     setDisplayName(Tr::tr("Stop already running application"));
     setSupportedDeviceType(Constants::QdbLinuxOsType);
     setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_DEPLOY);

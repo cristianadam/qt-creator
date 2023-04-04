@@ -508,7 +508,7 @@ public:
 
 CompilationDatabaseBuildConfigurationFactory::CompilationDatabaseBuildConfigurationFactory()
 {
-    registerBuildConfiguration<CompilationDatabaseBuildConfiguration>(
+    setProduct<CompilationDatabaseBuildConfiguration>(
         "CompilationDatabase.CompilationDatabaseBuildConfiguration");
 
     setSupportedProjectType(Constants::COMPILATIONDATABASEPROJECT_ID);

@@ -1117,7 +1117,7 @@ QString PasswordInputDialog::getPassword(Context context, std::function<bool (co
 
 AndroidBuildApkStepFactory::AndroidBuildApkStepFactory()
 {
-    registerStep<AndroidBuildApkStep>(Constants::ANDROID_BUILD_APK_ID);
+    setProduct<AndroidBuildApkStep>(Constants::ANDROID_BUILD_APK_ID);
     setSupportedDeviceType(Constants::ANDROID_DEVICE_TYPE);
     setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);
     setDisplayName(Tr::tr("Build Android APK"));

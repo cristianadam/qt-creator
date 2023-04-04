@@ -66,7 +66,7 @@ public:
 
 DeviceCheckBuildStepFactory::DeviceCheckBuildStepFactory()
 {
-    registerStep<DeviceCheckBuildStep>(Constants::DEVICE_CHECK_STEP);
+    setProduct<DeviceCheckBuildStep>(Constants::DEVICE_CHECK_STEP);
     setDisplayName(Tr::tr("Check for a configured device"));
 }
 

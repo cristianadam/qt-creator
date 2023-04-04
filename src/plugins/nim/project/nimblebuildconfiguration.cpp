@@ -60,7 +60,7 @@ void NimbleBuildConfiguration::setBuildType(BuildConfiguration::BuildType buildT
 
 NimbleBuildConfigurationFactory::NimbleBuildConfigurationFactory()
 {
-    registerBuildConfiguration<NimbleBuildConfiguration>(Constants::C_NIMBLEBUILDCONFIGURATION_ID);
+    setProduct<NimbleBuildConfiguration>(Constants::C_NIMBLEBUILDCONFIGURATION_ID);
     setSupportedProjectType(Constants::C_NIMBLEPROJECT_ID);
     setSupportedProjectMimeTypeName(Constants::C_NIMBLE_MIMETYPE);
 

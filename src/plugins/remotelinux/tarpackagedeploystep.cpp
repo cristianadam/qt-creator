@@ -125,7 +125,7 @@ Group TarPackageDeployStep::deployRecipe()
 
 TarPackageDeployStepFactory::TarPackageDeployStepFactory()
 {
-    registerStep<TarPackageDeployStep>(Constants::TarPackageDeployStepId);
+    setProduct<TarPackageDeployStep>(Constants::TarPackageDeployStepId);
     setDisplayName(Tr::tr("Deploy tarball via SFTP upload"));
     setSupportedConfiguration(RemoteLinux::Constants::DeployToGenericLinux);
     setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_DEPLOY);

@@ -98,7 +98,7 @@ void IBConsoleBuildStep::setupOutputFormatter(OutputFormatter *formatter)
 
 IBConsoleStepFactory::IBConsoleStepFactory()
 {
-    registerStep<IBConsoleBuildStep>(IncrediBuild::Constants::IBCONSOLE_BUILDSTEP_ID);
+    setProduct<IBConsoleBuildStep>(IncrediBuild::Constants::IBCONSOLE_BUILDSTEP_ID);
     setDisplayName(Tr::tr("IncrediBuild for Linux"));
     setSupportedStepLists({ProjectExplorer::Constants::BUILDSTEPS_BUILD,
                            ProjectExplorer::Constants::BUILDSTEPS_CLEAN});

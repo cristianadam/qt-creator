@@ -244,7 +244,7 @@ QStringList QmakeMakeStep::displayArguments() const
 
 QmakeMakeStepFactory::QmakeMakeStepFactory()
 {
-    registerStep<QmakeMakeStep>(Constants::MAKESTEP_BS_ID);
+    setProduct<QmakeMakeStep>(Constants::MAKESTEP_BS_ID);
     setSupportedProjectType(Constants::QMAKEPROJECT_ID);
     setDisplayName(MakeStep::defaultDisplayName());
 }

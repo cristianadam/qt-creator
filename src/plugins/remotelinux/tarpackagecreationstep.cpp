@@ -459,7 +459,7 @@ bool TarPackageCreationStep::appendFile(QPromise<bool> &promise,
 
 TarPackageCreationStepFactory::TarPackageCreationStepFactory()
 {
-    registerStep<TarPackageCreationStep>(Constants::TarPackageCreationStepId);
+    setProduct<TarPackageCreationStep>(Constants::TarPackageCreationStepId);
     setDisplayName(Tr::tr("Create tarball"));
 
     setSupportedConfiguration(RemoteLinux::Constants::DeployToGenericLinux);

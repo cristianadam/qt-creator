@@ -162,7 +162,7 @@ QString RsyncDeployStep::displayName()
 
 RsyncDeployStepFactory::RsyncDeployStepFactory()
 {
-    registerStep<RsyncDeployStep>(Constants::RsyncDeployStepId);
+    setProduct<RsyncDeployStep>(Constants::RsyncDeployStepId);
     setDisplayName(Tr::tr("Deploy files via rsync"));
 }
 

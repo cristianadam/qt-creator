@@ -279,7 +279,7 @@ QWidget *IosDsymBuildStep::createConfigWidget()
 
 IosDsymBuildStepFactory::IosDsymBuildStepFactory()
 {
-    registerStep<IosDsymBuildStep>(Constants::IOS_DSYM_BUILD_STEP_ID);
+    setProduct<IosDsymBuildStep>(Constants::IOS_DSYM_BUILD_STEP_ID);
     setSupportedDeviceTypes({Constants::IOS_DEVICE_TYPE,
                              Constants::IOS_SIMULATOR_TYPE});
     setDisplayName("dsymutil");
