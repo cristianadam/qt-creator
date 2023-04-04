@@ -32,6 +32,7 @@
 
 #include <QMessageBox>
 
+using namespace ProjectExplorer;
 using namespace Utils;
 
 namespace QmlDesigner {
@@ -412,9 +413,11 @@ void DocumentManager::findPathToIsoProFile(bool *iconResourceFileAlreadyExists, 
 
         if (node->isVirtualFolderType() && node->displayName() == "Resources") {
             ProjectExplorer::FolderNode *virtualFolderNode = node->asFolderNode();
+            QList<FolderNode *> folderNodes;
+            virtualFolderNode->forEachFolderNode([&](FolderNode *fn) { folderNodes.append(fn); });
             if (QTC_GUARD(virtualFolderNode)) {
-                for (int subFolderIndex = 0; subFolderIndex < virtualFolderNode->folderNodes().size() && !iconQrcFileNode; ++subFolderIndex) {
-                    ProjectExplorer::FolderNode *subFolderNode = virtualFolderNode->folderNodes().at(subFolderIndex);
+                for (int subFolderIndex = 0; subFolderIndex < folderNodes.size() && !iconQrcFileNode; ++subFolderIndex) {
+                    ProjectExplorer::FolderNode *subFolderNode = folderNodes.at(subFolderIndex);
 
                     qCDebug(documentManagerLog) << "Checking if" << subFolderNode->displayName() << "("
                         << subFolderNode << ") is" << isoIconsQrcFile;
