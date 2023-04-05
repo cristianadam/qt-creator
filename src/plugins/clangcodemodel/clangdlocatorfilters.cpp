@@ -32,17 +32,6 @@ namespace Internal {
 
 const int MaxResultCount = 10000;
 
-static QList<Client *> clientsForOpenProjects()
-{
-    QSet<Client *> clients;
-    const QList<Project *> projects = ProjectManager::projects();
-    for (Project *project : projects) {
-        if (Client *client = ClangModelManagerSupport::clientForProject(project))
-            clients << client;
-    }
-    return clients.values();
-}
-
 class CppLocatorFilter : public CppEditor::CppLocatorFilter
 {
 public:
@@ -70,7 +59,7 @@ public:
     }
     void prepareSearch(const QString &entry) override
     {
-        prepareSearchForClients(entry, clientsForOpenProjects());
+        prepareSearchForClients(entry, ClangModelManagerSupport::clientsForOpenProjects());
     }
 };
 
@@ -101,7 +90,7 @@ public:
     }
     void prepareSearch(const QString &entry) override
     {
-        prepareSearchForClients(entry, clientsForOpenProjects());
+        prepareSearchForClients(entry, ClangModelManagerSupport::clientsForOpenProjects());
     }
 };
 
@@ -132,7 +121,7 @@ public:
     }
     void prepareSearch(const QString &entry) override
     {
-        prepareSearchForClients(entry, clientsForOpenProjects());
+        prepareSearchForClients(entry, ClangModelManagerSupport::clientsForOpenProjects());
     }
 };
 
