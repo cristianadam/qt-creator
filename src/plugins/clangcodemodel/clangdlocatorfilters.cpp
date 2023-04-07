@@ -181,7 +181,6 @@ class LspCurrentDocumentFilter : public DocumentLocatorFilter
 {
 public:
     LspCurrentDocumentFilter()
-        : DocumentLocatorFilter(LanguageClientManager::instance())
     {
         setId({});
         setDisplayName({});
