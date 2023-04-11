@@ -93,7 +93,7 @@ LocatorMatcherTask locatorMatcher(Client *client, int maxResultCount,
     return {root, storage};
 }
 
-LocatorMatcherTask workspaceLocatorMatcher(Client *client, int maxResultCount)
+LocatorMatcherTask workspaceAllSymbolsMatcher(Client *client, int maxResultCount)
 {
     return locatorMatcher(client, maxResultCount, {});
 }
