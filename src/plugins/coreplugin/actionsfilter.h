@@ -34,15 +34,13 @@ class ActionsFilter : public ILocatorFilter
 public:
     ActionsFilter();
 
+    void prepareSearch(const QString &entry) override;
     QList<LocatorFilterEntry> matchesFor(QFutureInterface<LocatorFilterEntry> &future,
                                          const QString &entry) override;
-    void accept(const LocatorFilterEntry &selection, QString *newText,
-                int *selectionStart, int *selectionLength) const override;
-    void prepareSearch(const QString &entry) override;
-
 private:
     void saveState(QJsonObject &object) const override;
     void restoreState(const QJsonObject &object) override;
+    LocatorFilterEntry::Acceptor acceptor(const ActionFilterEntryData &data) const;
     void collectEntriesForAction(QAction *action,
                                  const QStringList &path,
                                  QList<const QMenu *> &processedMenus);
