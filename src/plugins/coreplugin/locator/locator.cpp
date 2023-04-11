@@ -104,9 +104,7 @@ void Locator::initialize()
     QAction *action = new QAction(Utils::Icons::ZOOM.icon(), Tr::tr("Locate..."), this);
     Command *cmd = ActionManager::registerAction(action, Constants::LOCATE);
     cmd->setDefaultKeySequence(QKeySequence(Tr::tr("Ctrl+K")));
-    connect(action, &QAction::triggered, this, [] {
-        LocatorManager::show(QString());
-    });
+    connect(action, &QAction::triggered, this, [] { LocatorManager::show({}); });
 
     ActionContainer *mtools = ActionManager::actionContainer(Constants::M_TOOLS);
     mtools->addAction(cmd);
@@ -425,9 +423,8 @@ void Locator::showFilter(ILocatorFilter *filter, LocatorWidget *widget)
             }
         }
     }
-    widget->showText(filter->shortcutString() + ' ' + *searchText,
-                     filter->shortcutString().length() + 1,
-                     searchText->length());
+    widget->showText({filter->shortcutString() + ' ' + *searchText,
+                      int(filter->shortcutString().size() + 1), int(searchText->size())});
 }
 
 } // namespace Internal

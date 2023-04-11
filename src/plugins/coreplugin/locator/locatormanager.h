@@ -9,6 +9,7 @@
 
 namespace Core {
 
+class AcceptResult;
 class ILocatorFilter;
 
 class CORE_EXPORT LocatorManager : public QObject
@@ -19,7 +20,7 @@ public:
     LocatorManager();
 
     static void showFilter(ILocatorFilter *filter);
-    static void show(const QString &text, int selectionStart = -1, int selectionLength = 0);
+    static void show(const Core::AcceptResult &result);
 
     static QWidget *createLocatorInputWidget(QWidget *window);
 

@@ -28,8 +28,7 @@ namespace Internal {
 class LocatorModel;
 class CompletionList;
 
-class LocatorWidget
-  : public QWidget
+class LocatorWidget : public QWidget
 {
     Q_OBJECT
 
@@ -37,7 +36,7 @@ public:
     explicit LocatorWidget(Locator *locator);
     ~LocatorWidget() override;
 
-    void showText(const QString &text, int selectionStart = -1, int selectionLength = 0);
+    void showText(const AcceptResult &result);
     QString currentText() const;
     QAbstractItemModel *model() const;
 

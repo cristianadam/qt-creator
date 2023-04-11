@@ -38,8 +38,6 @@ void filterResults(QPromise<LocatorMatcherTask::OutputData> &promise, Client *cl
         : Utils::filtered(results, doFilter);
     const auto generateEntry = [client](const SymbolInformation &info) {
         LocatorFilterEntry entry;
-        // TODO: Passing nullptr for filter -> accept won't work now. Replace with accept function.
-        entry.filter = nullptr;
         entry.displayName = info.name();
         if (std::optional<QString> container = info.containerName())
             entry.extraInfo = container.value_or(QString());

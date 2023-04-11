@@ -10,6 +10,7 @@
 #include "locatorsearchutils.h"
 #include "../actionmanager/actionmanager.h"
 #include "../coreplugintr.h"
+#include "../editormanager/editormanager.h"
 #include "../icore.h"
 #include "../modemanager.h"
 
@@ -1003,33 +1004,37 @@ void LocatorWidget::acceptEntry(int row)
     if (!index.isValid())
         return;
     const LocatorFilterEntry entry = m_locatorModel->data(index, LocatorEntryRole).value<LocatorFilterEntry>();
-    Q_ASSERT(entry.filter != nullptr);
-    QString newText;
-    int selectionStart = -1;
-    int selectionLength = 0;
     QWidget *focusBeforeAccept = QApplication::focusWidget();
-    entry.filter->accept(entry, &newText, &selectionStart, &selectionLength);
-    if (newText.isEmpty()) {
+    AcceptResult result;
+    if (entry.acceptor) {
+        result = entry.acceptor();
+    } else if (entry.filter) {
+        entry.filter->accept(entry, &result.newText, &result.selectionStart,
+                             &result.selectionLength);
+    } else {
+        EditorManager::openEditor(entry);
+    }
+    if (result.newText.isEmpty()) {
         emit hidePopup();
         if (QApplication::focusWidget() == focusBeforeAccept)
             resetFocus(m_previousFocusWidget, isInMainWindow());
     } else {
-        showText(newText, selectionStart, selectionLength);
+        showText(result);
     }
 }
 
-void LocatorWidget::showText(const QString &text, int selectionStart, int selectionLength)
+void LocatorWidget::showText(const AcceptResult &result)
 {
-    if (!text.isEmpty())
-        m_fileLineEdit->setText(text);
+    if (!result.newText.isEmpty())
+        m_fileLineEdit->setText(result.newText);
     m_fileLineEdit->setFocus();
     showPopupNow();
     ICore::raiseWindow(window());
 
-    if (selectionStart >= 0) {
-        m_fileLineEdit->setSelection(selectionStart, selectionLength);
-        if (selectionLength == 0) // make sure the cursor is at the right position (Mac-vs.-rest difference)
-            m_fileLineEdit->setCursorPosition(selectionStart);
+    if (result.selectionStart >= 0) {
+        m_fileLineEdit->setSelection(result.selectionStart, result.selectionLength);
+        if (result.selectionLength == 0) // make sure the cursor is at the right position (Mac-vs.-rest difference)
+            m_fileLineEdit->setCursorPosition(result.selectionStart);
     } else {
         m_fileLineEdit->selectAll();
     }

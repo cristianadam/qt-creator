@@ -54,10 +54,9 @@ void LocatorManager::showFilter(ILocatorFilter *filter)
     Locator::showFilter(filter, locatorWidget());
 }
 
-void LocatorManager::show(const QString &text,
-                          int selectionStart, int selectionLength)
+void LocatorManager::show(const AcceptResult &result)
 {
-    locatorWidget()->showText(text, selectionStart, selectionLength);
+    locatorWidget()->showText(result);
 }
 
 QWidget *LocatorManager::createLocatorInputWidget(QWidget *window)
