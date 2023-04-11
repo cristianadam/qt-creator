@@ -135,7 +135,8 @@ class LocatorMatcherPrivate;
 enum class MatcherType {
     AllSymbols,
     Classes,
-    Functions
+    Functions,
+    CurrentDocumentSymbols
 };
 
 class CORE_EXPORT LocatorMatcher final : public QObject
