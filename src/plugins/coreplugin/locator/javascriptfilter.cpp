@@ -52,51 +52,42 @@ QList<LocatorFilterEntry> JavaScriptFilter::matchesFor(
 
     QList<LocatorFilterEntry> entries;
     if (entry.trimmed().isEmpty()) {
-        LocatorFilterEntry entry{this, Tr::tr("Reset Engine")};
-        entry.internalData = QVariant::fromValue(EngineAction::Reset);
+        LocatorFilterEntry entry;
+        entry.displayName = Tr::tr("Reset Engine");
+        entry.acceptor = [this] {
+            m_engine.reset();
+            return AcceptResult();
+        };
         entries.append(entry);
     } else {
-        const QString result = m_engine->evaluate(entry).toString();
         if (m_aborted) {
             const QString message = entry + " = " + Tr::tr("Engine aborted after timeout.");
-            LocatorFilterEntry entry(this, message);
-            entry.internalData = QVariant::fromValue(EngineAction::Abort);
+            LocatorFilterEntry entry;
+            entry.displayName = message;
+            entry.acceptor = [] { return AcceptResult(); };
             entries.append(entry);
         } else {
+            const auto acceptor = [](const QString &clipboardContents) {
+                return [clipboardContents] {
+                    QGuiApplication::clipboard()->setText(clipboardContents);
+                    return AcceptResult();
+                };
+            };
+            const QString result = m_engine->evaluate(entry).toString();
             const QString expression = entry + " = " + result;
             entries.append({this, expression});
-            LocatorFilterEntry resultEntry(this, Tr::tr("Copy to clipboard: %1").arg(result));
-            resultEntry.internalData = result;
+            LocatorFilterEntry resultEntry;
+            resultEntry.displayName = Tr::tr("Copy to clipboard: %1").arg(result);
+            resultEntry.acceptor = acceptor(result);
             entries.append(resultEntry);
-            LocatorFilterEntry expressionEntry(this, Tr::tr("Copy to clipboard: %1").arg(expression));
-            resultEntry.internalData = expression;
+
+            LocatorFilterEntry expressionEntry;
+            expressionEntry.displayName = Tr::tr("Copy to clipboard: %1").arg(expression);
+            expressionEntry.acceptor = acceptor(expression);
             entries.append(expressionEntry);
         }
     }
-
     return entries;
-}
-
-void JavaScriptFilter::accept(const LocatorFilterEntry &selection, QString *newText,
-                              int *selectionStart, int *selectionLength) const
-{
-    Q_UNUSED(newText)
-    Q_UNUSED(selectionStart)
-    Q_UNUSED(selectionLength)
-
-    if (selection.internalData.isNull())
-        return;
-
-    const EngineAction action = selection.internalData.value<EngineAction>();
-    if (action == EngineAction::Reset) {
-        m_engine.reset();
-        return;
-    }
-    if (action == EngineAction::Abort)
-        return;
-
-    QClipboard *clipboard = QGuiApplication::clipboard();
-    clipboard->setText(selection.internalData.toString());
 }
 
 void JavaScriptFilter::setupEngine()
