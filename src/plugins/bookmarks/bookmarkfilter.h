@@ -17,6 +17,8 @@ public:
     QList<Core::LocatorFilterEntry> matchesFor(QFutureInterface<Core::LocatorFilterEntry> &future,
                                                const QString &entry) override;
 private:
+    Core::LocatorMatcherTasks matchers() final;
+
     BookmarkManager *m_manager = nullptr; // not owned
     QList<Core::LocatorFilterEntry> m_results;
 };
