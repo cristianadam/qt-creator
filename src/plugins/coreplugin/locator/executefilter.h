@@ -32,6 +32,7 @@ public:
     QList<LocatorFilterEntry> matchesFor(QFutureInterface<LocatorFilterEntry> &future,
                                          const QString &entry) override;
 private:
+    LocatorMatcherTasks matchers() final;
     LocatorFilterEntry::Acceptor acceptor(const QString &cmd);
     void done();
     void readStandardOutput();
