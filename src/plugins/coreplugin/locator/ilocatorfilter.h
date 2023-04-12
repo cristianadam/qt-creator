@@ -22,7 +22,10 @@ namespace Utils::Tasking { class TaskItem; }
 
 namespace Core {
 
-namespace Internal { class Locator; }
+namespace Internal {
+class Locator;
+class LocatorWidget;
+}
 
 class ILocatorFilter;
 
@@ -258,6 +261,9 @@ protected:
     virtual void saveState(QJsonObject &object) const;
     virtual void restoreState(const QJsonObject &object);
 
+    // TODO: Make pure virtual when all subclasses implement it.
+    virtual LocatorMatcherTasks matchers() { return {}; }
+
     void setRefreshRecipe(const std::optional<Utils::Tasking::TaskItem> &recipe);
     std::optional<Utils::Tasking::TaskItem> refreshRecipe() const;
 
@@ -265,6 +271,7 @@ protected:
 
 private:
     friend class Internal::Locator;
+    friend class Internal::LocatorWidget;
     static const QList<ILocatorFilter *> allLocatorFilters();
 
     Utils::Id m_id;
