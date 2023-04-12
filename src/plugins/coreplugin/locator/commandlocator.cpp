@@ -48,6 +48,51 @@ void CommandLocator::appendCommand(Command *cmd)
     d->commands.push_back(cmd);
 }
 
+LocatorMatcherTasks CommandLocator::matchers()
+{
+    using namespace Tasking;
+
+    TreeStorage<LocatorMatcherTask::Storage> storage;
+
+    const auto onSetup = [=] {
+        const QString input = storage->input;
+        const Qt::CaseSensitivity inputCaseSensitivity = caseSensitivity(input);
+        LocatorFilterEntries goodEntries;
+        LocatorFilterEntries betterEntries;
+        for (Command *command : d->commands) {
+            if (!command->isActive())
+                continue;
+
+            QAction *action = command->action();
+            if (!action || !action->isEnabled())
+                continue;
+
+            const QString text = Utils::stripAccelerator(action->text());
+            const int index = text.indexOf(input, 0, inputCaseSensitivity);
+            if (index >= 0) {
+                LocatorFilterEntry entry;
+                entry.displayName = text;
+                entry.acceptor = [action] {
+                    // avoid nested stack trace and blocking locator by delayed triggering
+                    QMetaObject::invokeMethod(action, [action] {
+                        if (action->isEnabled())
+                            action->trigger();
+                    }, Qt::QueuedConnection);
+                    return AcceptResult();
+                };
+                entry.highlightInfo = {index, int(input.length())};
+                if (index == 0)
+                    betterEntries.append(entry);
+                else
+                    goodEntries.append(entry);
+            }
+        }
+        storage->output = betterEntries + goodEntries;
+        return true;
+    };
+    return {{Sync(onSetup), storage}};
+}
+
 void CommandLocator::prepareSearch(const QString &entry)
 {
     Q_UNUSED(entry)
