@@ -25,6 +25,7 @@ public:
     QList<Core::LocatorFilterEntry> matchesFor(QFutureInterface<Core::LocatorFilterEntry> &future,
                                                const QString &entry) override;
 private:
+    Core::LocatorMatcherTasks matchers() final;
     bool m_hasCurrentEditor = false;
 };
 

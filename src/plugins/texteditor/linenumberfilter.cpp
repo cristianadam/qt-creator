@@ -11,6 +11,7 @@
 #include <coreplugin/modemanager.h>
 
 #include <utils/linecolumn.h>
+#include <utils/tasktree.h>
 
 #include <QMetaType>
 #include <QPair>
@@ -31,6 +32,51 @@ LineNumberFilter::LineNumberFilter(QObject *parent)
     setPriority(High);
     setDefaultShortcutString("l");
     setDefaultIncludedByDefault(true);
+}
+
+LocatorMatcherTasks LineNumberFilter::matchers()
+{
+    using namespace Tasking;
+
+    TreeStorage<LocatorMatcherTask::Storage> storage;
+
+    const auto onSetup = [=] {
+        const QStringList lineAndColumn = storage->input.split(':');
+        int sectionCount = lineAndColumn.size();
+        int line = 0;
+        int column = 0;
+        bool ok = false;
+        if (sectionCount > 0)
+            line = lineAndColumn.at(0).toInt(&ok);
+        if (ok && sectionCount > 1)
+            column = lineAndColumn.at(1).toInt(&ok);
+        if (!ok)
+            return true;
+        if (EditorManager::currentEditor() && (line > 0 || column > 0)) {
+            QString text;
+            if (line > 0 && column > 0)
+                text = Tr::tr("Line %1, Column %2").arg(line).arg(column);
+            else if (line > 0)
+                text = Tr::tr("Line %1").arg(line);
+            else
+                text = Tr::tr("Column %1").arg(column);
+            LocatorFilterEntry entry;
+            entry.displayName = text;
+            entry.acceptor = [data = LineColumn(line, column - 1)] {
+                IEditor *editor = EditorManager::currentEditor();
+                if (!editor)
+                    return AcceptResult();
+                EditorManager::addCurrentPositionToNavigationHistory();
+                const int line = data.line < 1 ? editor->currentLine() : data.line;
+                editor->gotoLine(line, data.column);
+                EditorManager::activateEditor(editor);
+                return AcceptResult();
+            };
+            storage->output.append(entry);
+        }
+        return true;
+    };
+    return {{Sync(onSetup), storage}};
 }
 
 void LineNumberFilter::prepareSearch(const QString &entry)
