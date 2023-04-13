@@ -32,6 +32,7 @@ namespace Internal {
 
 const int MaxResultCount = 10000;
 
+// TODO: Remove this class, it's used only internally by ClangGlobalSymbolFilter
 class CppLocatorFilter : public CppEditor::CppLocatorFilter
 {
 public:
@@ -63,7 +64,7 @@ public:
     }
 };
 
-
+// TODO: Remove this class, it's used only internally by ClangClassesFilter
 class CppClassesFilter : public CppEditor::CppClassesFilter
 {
 public:
@@ -94,6 +95,7 @@ public:
     }
 };
 
+// TODO: Remove this class, it's used only internally by ClangFunctionsFilter
 class CppFunctionsFilter : public CppEditor::CppFunctionsFilter
 {
 public:
