@@ -44,7 +44,7 @@ CppCurrentDocumentFilter::CppCurrentDocumentFilter()
 
 LocatorMatcherTasks CppCurrentDocumentFilter::matchers()
 {
-    return {cppCurrentDocumentMatcher()};
+    return CppEditor::cppMatchers(MatcherType::CurrentDocumentSymbols);
 }
 
 void CppCurrentDocumentFilter::makeAuxiliary()

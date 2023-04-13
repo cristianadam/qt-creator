@@ -116,7 +116,7 @@ LocatorMatcherTask locatorMatcher(IndexItem::ItemType type, const EntryFromIndex
     return {Async<LocatorFilterEntries>(onSetup, onDone, onDone), storage};
 }
 
-LocatorMatcherTask cppAllSymbolsMatcher()
+LocatorMatcherTask allSymbolsMatcher()
 {
     const auto converter = [](const IndexItem::Ptr &info) {
         LocatorFilterEntry filterEntry;
@@ -132,7 +132,7 @@ LocatorMatcherTask cppAllSymbolsMatcher()
     return locatorMatcher(IndexItem::All, converter);
 }
 
-LocatorMatcherTask cppClassMatcher()
+LocatorMatcherTask classMatcher()
 {
     const auto converter = [](const IndexItem::Ptr &info) {
         LocatorFilterEntry filterEntry;
@@ -148,7 +148,7 @@ LocatorMatcherTask cppClassMatcher()
     return locatorMatcher(IndexItem::Class, converter);
 }
 
-LocatorMatcherTask cppFunctionMatcher()
+LocatorMatcherTask functionMatcher()
 {
     const auto converter = [](const IndexItem::Ptr &info) {
         QString name = info->symbolName();
@@ -298,7 +298,7 @@ FilePath currentFileName()
     return currentEditor ? currentEditor->document()->filePath() : FilePath();
 }
 
-LocatorMatcherTask cppCurrentDocumentMatcher()
+LocatorMatcherTask currentDocumentMatcher()
 {
     using namespace Tasking;
 
@@ -315,6 +315,27 @@ LocatorMatcherTask cppCurrentDocumentMatcher()
     return {Async<LocatorFilterEntries>(onSetup, onDone, onDone), storage};
 }
 
+using MatcherCreator = std::function<Core::LocatorMatcherTask()>;
+
+static MatcherCreator creatorForType(MatcherType type)
+{
+    switch (type) {
+    case MatcherType::AllSymbols: return &allSymbolsMatcher;
+    case MatcherType::Classes: return &classMatcher;
+    case MatcherType::Functions: return &functionMatcher;
+    case MatcherType::CurrentDocumentSymbols: return &currentDocumentMatcher;
+    }
+    return {};
+}
+
+LocatorMatcherTasks cppMatchers(MatcherType type)
+{
+    const MatcherCreator creator = creatorForType(type);
+    if (!creator)
+        return {};
+    return {creator()};
+}
+
 CppLocatorFilter::CppLocatorFilter()
 {
     setId(Constants::LOCATOR_FILTER_ID);
@@ -325,7 +346,7 @@ CppLocatorFilter::CppLocatorFilter()
 
 LocatorMatcherTasks CppLocatorFilter::matchers()
 {
-    return {cppAllSymbolsMatcher()};
+    return {allSymbolsMatcher()};
 }
 
 LocatorFilterEntry CppLocatorFilter::filterEntryFromIndexItem(IndexItem::Ptr info)
@@ -427,7 +448,7 @@ CppClassesFilter::CppClassesFilter()
 
 LocatorMatcherTasks CppClassesFilter::matchers()
 {
-    return {cppClassMatcher()};
+    return {classMatcher()};
 }
 
 LocatorFilterEntry CppClassesFilter::filterEntryFromIndexItem(IndexItem::Ptr info)
@@ -453,7 +474,7 @@ CppFunctionsFilter::CppFunctionsFilter()
 
 LocatorMatcherTasks CppFunctionsFilter::matchers()
 {
-    return {cppFunctionMatcher()};
+    return {functionMatcher()};
 }
 
 LocatorFilterEntry CppFunctionsFilter::filterEntryFromIndexItem(IndexItem::Ptr info)
