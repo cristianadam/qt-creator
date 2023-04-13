@@ -26,6 +26,8 @@ QtcPlugin {
         "client.h",
         "clientrequesttask.cpp",
         "clientrequesttask.h",
+        "currentsymbolsrequesttask.cpp",
+        "currentsymbolsrequesttask.h",
         "diagnosticmanager.cpp",
         "diagnosticmanager.h",
         "documentsymbolcache.cpp",
