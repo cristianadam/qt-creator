@@ -29,7 +29,7 @@ LocatorMatcherTasks BookmarkFilter::matchers()
 {
     using namespace Tasking;
 
-    TreeStorage<LocatorMatcherTask::Storage> storage;
+    TreeStorage<LocatorStorage> storage;
 
     const auto onSetup = [=] {
         if (m_manager->rowCount() == 0)
@@ -40,7 +40,7 @@ LocatorMatcherTasks BookmarkFilter::matchers()
                                     Qt::MatchContains | Qt::MatchWrap);
         };
 
-        const QString input = storage->input;
+        const QString input = storage->input();
         const int colonIndex = input.lastIndexOf(':');
         QModelIndexList fileNameLineNumberMatches;
         if (colonIndex >= 0) {
@@ -107,7 +107,7 @@ LocatorMatcherTasks BookmarkFilter::matchers()
             entry.displayIcon = bookmark->icon();
             entries.append(entry);
         }
-        storage->output = entries;
+        storage->reportOutput(entries);
         return true;
     };
     return {{Sync(onSetup), storage}};

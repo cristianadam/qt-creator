@@ -43,10 +43,10 @@ LocatorMatcherTasks ExecuteFilter::matchers()
 {
     using namespace Tasking;
 
-    TreeStorage<LocatorMatcherTask::Storage> storage;
+    TreeStorage<LocatorStorage> storage;
 
     const auto onSetup = [=] {
-        const QString input = storage->input;
+        const QString input = storage->input();
         LocatorFilterEntries entries;
         if (!input.isEmpty()) { // avoid empty entry
             LocatorFilterEntry entry;
@@ -70,7 +70,7 @@ LocatorMatcherTasks ExecuteFilter::matchers()
                 others.append(entry);
             }
         }
-        storage->output = entries + others;
+        storage->reportOutput(entries + others);
         return true;
     };
     return {{Sync(onSetup), storage}};

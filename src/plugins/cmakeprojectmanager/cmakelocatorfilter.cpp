@@ -29,10 +29,10 @@ static LocatorMatcherTasks cmakeMatchers(const CMakeTargetLocatorFilter::BuildAc
 {
     using namespace Tasking;
 
-    TreeStorage<LocatorMatcherTask::Storage> storage;
+    TreeStorage<LocatorStorage> storage;
 
     const auto onSetup = [storage, acceptor] {
-        const QString input = storage->input;
+        const QString input = storage->input();
         const QList<Project *> projects = ProjectManager::projects();
         LocatorFilterEntries entries;
         for (Project *project : projects) {
@@ -72,7 +72,7 @@ static LocatorMatcherTasks cmakeMatchers(const CMakeTargetLocatorFilter::BuildAc
                 }
             }
         }
-        storage->output = entries;
+        storage->reportOutput(entries);
         return true;
     };
     return {{Sync(onSetup), storage}};

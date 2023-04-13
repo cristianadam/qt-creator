@@ -52,10 +52,10 @@ LocatorMatcherTasks CommandLocator::matchers()
 {
     using namespace Tasking;
 
-    TreeStorage<LocatorMatcherTask::Storage> storage;
+    TreeStorage<LocatorStorage> storage;
 
     const auto onSetup = [=] {
-        const QString input = storage->input;
+        const QString input = storage->input();
         const Qt::CaseSensitivity inputCaseSensitivity = caseSensitivity(input);
         LocatorFilterEntries goodEntries;
         LocatorFilterEntries betterEntries;
@@ -87,7 +87,7 @@ LocatorMatcherTasks CommandLocator::matchers()
                     goodEntries.append(entry);
             }
         }
-        storage->output = betterEntries + goodEntries;
+        storage->reportOutput(betterEntries + goodEntries);
         return true;
     };
     return {{Sync(onSetup), storage}};

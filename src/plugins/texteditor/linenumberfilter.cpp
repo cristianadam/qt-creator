@@ -38,10 +38,10 @@ LocatorMatcherTasks LineNumberFilter::matchers()
 {
     using namespace Tasking;
 
-    TreeStorage<LocatorMatcherTask::Storage> storage;
+    TreeStorage<LocatorStorage> storage;
 
     const auto onSetup = [=] {
-        const QStringList lineAndColumn = storage->input.split(':');
+        const QStringList lineAndColumn = storage->input().split(':');
         int sectionCount = lineAndColumn.size();
         int line = 0;
         int column = 0;
@@ -72,7 +72,7 @@ LocatorMatcherTasks LineNumberFilter::matchers()
                 EditorManager::activateEditor(editor);
                 return AcceptResult();
             };
-            storage->output.append(entry);
+            storage->reportOutput({entry});
         }
         return true;
     };

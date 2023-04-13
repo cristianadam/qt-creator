@@ -4416,10 +4416,10 @@ static LocatorMatcherTasks runConfigurationMatchers(
 {
     using namespace Tasking;
 
-    TreeStorage<LocatorMatcherTask::Storage> storage;
+    TreeStorage<LocatorStorage> storage;
 
     const auto onSetup = [storage, acceptor] {
-        const QString input = storage->input;
+        const QString input = storage->input();
         const Target *target = ProjectManager::startupTarget();
         if (!target)
             return true;
@@ -4439,7 +4439,7 @@ static LocatorMatcherTasks runConfigurationMatchers(
                 entries.append(entry);
             }
         }
-        storage->output = entries;
+        storage->reportOutput(entries);
         return true;
     };
     return {{Sync(onSetup), storage}};

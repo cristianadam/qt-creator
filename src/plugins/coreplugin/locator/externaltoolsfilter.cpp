@@ -29,10 +29,10 @@ LocatorMatcherTasks ExternalToolsFilter::matchers()
 {
     using namespace Utils::Tasking;
 
-    TreeStorage<LocatorMatcherTask::Storage> storage;
+    TreeStorage<LocatorStorage> storage;
 
     const auto onSetup = [=] {
-        const QString input = storage->input;
+        const QString input = storage->input();
 
         LocatorFilterEntries bestEntries;
         LocatorFilterEntries betterEntries;
@@ -78,7 +78,7 @@ LocatorMatcherTasks ExternalToolsFilter::matchers()
         };
         goodEntries.append(configEntry); // Keep me last
 
-        storage->output = bestEntries + betterEntries + goodEntries;
+        storage->reportOutput(bestEntries + betterEntries + goodEntries);
         return true;
     };
     return {{Sync(onSetup), storage}};

@@ -31,10 +31,10 @@ LocatorMatcherTasks LocatorFiltersFilter::matchers()
 {
     using namespace Tasking;
 
-    TreeStorage<LocatorMatcherTask::Storage> storage;
+    TreeStorage<LocatorStorage> storage;
 
     const auto onSetup = [=] {
-        if (!storage->input.isEmpty())
+        if (!storage->input().isEmpty())
             return true;
 
         QMap<QString, ILocatorFilter *> uniqueFilters;
@@ -63,7 +63,7 @@ LocatorMatcherTasks LocatorFiltersFilter::matchers()
                 entries.append(entry);
             }
         }
-        storage->output = entries;
+        storage->reportOutput(entries);
         return true;
     };
     return {{Sync(onSetup), storage}};
