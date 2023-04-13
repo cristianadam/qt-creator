@@ -46,6 +46,7 @@ public:
     }
 };
 
+// TODO: Remove this class, it's used only internally by ClangGlobalSymbolFilter
 class LspWorkspaceFilter : public WorkspaceLocatorFilter
 {
 public:
@@ -78,6 +79,7 @@ public:
     }
 };
 
+// TODO: Remove this class, it's used only internally by ClangClassesFilter
 class LspClassesFilter : public WorkspaceClassLocatorFilter
 {
 public:
@@ -109,6 +111,7 @@ public:
     }
 };
 
+// TODO: Remove this class, it's used only internally by ClangFunctionsFilter
 class LspFunctionsFilter : public WorkspaceMethodLocatorFilter
 {
 public:
@@ -149,6 +152,13 @@ ClangGlobalSymbolFilter::~ClangGlobalSymbolFilter()
     delete m_lspFilter;
 }
 
+LocatorMatcherTasks ClangGlobalSymbolFilter::matchers()
+{
+    return CppEditor::cppMatchers(MatcherType::AllSymbols)
+           + LanguageClient::workspaceMatchers(ClangModelManagerSupport::clientsForOpenProjects(),
+                                               MatcherType::AllSymbols, MaxResultCount);
+}
+
 void ClangGlobalSymbolFilter::prepareSearch(const QString &entry)
 {
     m_cppFilter->prepareSearch(entry);
@@ -170,6 +180,13 @@ ClangClassesFilter::ClangClassesFilter()
     setDefaultIncludedByDefault(false);
 }
 
+LocatorMatcherTasks ClangClassesFilter::matchers()
+{
+    return CppEditor::cppMatchers(MatcherType::Classes)
+           + LanguageClient::workspaceMatchers(ClangModelManagerSupport::clientsForOpenProjects(),
+                                               MatcherType::Classes, MaxResultCount);
+}
+
 ClangFunctionsFilter::ClangFunctionsFilter()
     : ClangGlobalSymbolFilter(new CppFunctionsFilter, new LspFunctionsFilter)
 {
@@ -177,6 +194,13 @@ ClangFunctionsFilter::ClangFunctionsFilter()
     setDisplayName(::CppEditor::Tr::tr(CppEditor::Constants::FUNCTIONS_FILTER_DISPLAY_NAME));
     setDefaultShortcutString("m");
     setDefaultIncludedByDefault(false);
+}
+
+LocatorMatcherTasks ClangFunctionsFilter::matchers()
+{
+    return CppEditor::cppMatchers(MatcherType::Functions)
+           + LanguageClient::workspaceMatchers(ClangModelManagerSupport::clientsForOpenProjects(),
+                                               MatcherType::Functions, MaxResultCount);
 }
 
 class LspCurrentDocumentFilter : public DocumentLocatorFilter
