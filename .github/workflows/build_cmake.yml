@@ -7,7 +7,11 @@ on:
       - 'doc/**'
 
 env:
+<<<<<<< HEAD   (017c57 QmlDesigner: Disable unsupported QmlPrivate versions)
   QT_VERSION: 6.4.3
+=======
+  QT_VERSION: 6.5.0
+>>>>>>> CHANGE (811244 COIN/GitHub: Bump to Qt 6.5.0)
   MACOS_DEPLOYMENT_TARGET: 10.15
   CLANG_VERSION: 16.0.0
   ELFUTILS_VERSION: 0.175
