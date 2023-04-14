@@ -162,6 +162,7 @@ private slots:
     void quitBlockingProcess_data();
     void quitBlockingProcess();
     void tarPipe();
+    void stdinToShell();
 
     void cleanupTestCase();
 
@@ -1519,6 +1520,21 @@ void tst_QtcProcess::tarPipe()
     QVERIFY(destinationArchive.exists());
     QVERIFY(destinationFile.exists());
     QCOMPARE(sourceFile.fileSize(), destinationFile.fileSize());
+}
+
+void tst_QtcProcess::stdinToShell()
+{
+    QtcProcess proc;
+    if (HostOsInfo::isWindowsHost())
+        proc.setCommand({"cmd.exe", {}});
+    else
+        proc.setCommand({"sh", {}});
+
+    proc.setWriteData("echo hallo");
+    proc.runBlocking();
+
+    QString result = proc.readAllStandardOutput().trimmed();
+    QCOMPARE(result, "hallo");
 }
 
 QTEST_GUILESS_MAIN(tst_QtcProcess)
