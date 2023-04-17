@@ -5,6 +5,8 @@
 
 #include <extensionsystem/iplugin.h>
 
+namespace Utils { class FutureSynchronizer; }
+
 namespace QmlJSTools {
 namespace Internal {
 
@@ -15,6 +17,7 @@ class QmlJSToolsPlugin final : public ExtensionSystem::IPlugin
 
 public:
     ~QmlJSToolsPlugin() final;
+    static Utils::FutureSynchronizer *futureSynchronizer();
 
 private:
     void initialize() final;

@@ -18,19 +18,25 @@
 #include <coreplugin/actionmanager/actioncontainer.h>
 #include <coreplugin/progressmanager/progressmanager.h>
 
+#include <utils/futuresynchronizer.h>
+
 #include <QMenu>
 
 using namespace Core;
+using namespace Utils;
 
 namespace QmlJSTools {
 namespace Internal {
 
 enum { debug = 0 };
 
+QmlJSToolsPluginPrivate *s_instance = nullptr;
+
 class QmlJSToolsPluginPrivate : public QObject
 {
 public:
     QmlJSToolsPluginPrivate();
+    ~QmlJSToolsPluginPrivate() { s_instance = nullptr; }
 
     QmlJSToolsSettings settings;
     ModelManager modelManager;
@@ -41,11 +47,18 @@ public:
     FunctionFilter functionFilter{&locatorData};
     QmlJSCodeStyleSettingsPage codeStyleSettingsPage;
     BasicBundleProvider basicBundleProvider;
+    FutureSynchronizer m_futureSynchronizer;
 };
 
 QmlJSToolsPlugin::~QmlJSToolsPlugin()
 {
     delete d;
+}
+
+FutureSynchronizer *QmlJSToolsPlugin::futureSynchronizer()
+{
+    QTC_ASSERT(s_instance, return nullptr);
+    return &s_instance->m_futureSynchronizer;
 }
 
 void QmlJSToolsPlugin::initialize()
@@ -55,6 +68,7 @@ void QmlJSToolsPlugin::initialize()
 
 QmlJSToolsPluginPrivate::QmlJSToolsPluginPrivate()
 {
+    s_instance = this;
 //    Core::VcsManager *vcsManager = Core::VcsManager::instance();
 //    Core::DocumentManager *documentManager = Core::DocumentManager::instance();
 //    connect(vcsManager, &Core::VcsManager::repositoryChanged,
@@ -78,17 +92,15 @@ QmlJSToolsPluginPrivate::QmlJSToolsPluginPrivate()
     mqmljstools->addAction(cmd);
 
     // Watch task progress
-    connect(ProgressManager::instance(), &ProgressManager::taskStarted, this,
-            [this](Utils::Id type) {
-                  if (type == QmlJS::Constants::TASK_INDEX)
-                      resetCodeModelAction.setEnabled(false);
-            });
+    connect(ProgressManager::instance(), &ProgressManager::taskStarted, this, [this](Id type) {
+        if (type == QmlJS::Constants::TASK_INDEX)
+            resetCodeModelAction.setEnabled(false);
+    });
 
-    connect(ProgressManager::instance(), &ProgressManager::allTasksFinished,
-            [this](Utils::Id type) {
-                  if (type == QmlJS::Constants::TASK_INDEX)
-                      resetCodeModelAction.setEnabled(true);
-            });
+    connect(ProgressManager::instance(), &ProgressManager::allTasksFinished, [this](Id type) {
+        if (type == QmlJS::Constants::TASK_INDEX)
+            resetCodeModelAction.setEnabled(true);
+    });
 }
 
 void QmlJSToolsPlugin::extensionsInitialized()
