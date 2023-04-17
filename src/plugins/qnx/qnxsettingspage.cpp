@@ -226,7 +226,7 @@ Toolchains QnxConfiguration::createToolChains(const QnxTarget &target)
     for (const Id language : {ProjectExplorer::Constants::C_LANGUAGE_ID,
                               ProjectExplorer::Constants::CXX_LANGUAGE_ID}) {
         auto toolChain = new QnxToolChain;
-        toolChain->setDetection(ToolChain::AutoDetection);
+        toolChain->setDetection(ToolChain::ManualDetection);
         toolChain->setLanguage(language);
         toolChain->setTargetAbi(target.m_abi);
         toolChain->setDisplayName(Tr::tr("QCC for %1 (%2)")
@@ -722,13 +722,18 @@ void QnxSettingsWidget::apply()
 
 // QnxSettingsPage
 
-QList<ToolChain *> QnxSettingsPage::autoDetect(const QList<ToolChain *> &alreadyKnown)
+QList<ToolChain *> QnxSettingsPage::autoDetect(const ToolchainDetector &detector)
 {
+    // FIXME: This is still weird as it only validated existing toolchains and doesn't
+    // actually detect new ones.
     QList<ToolChain *> result;
     for (const QnxConfiguration &config : std::as_const(dd->m_configurations)) {
+        // Don't check entries that are unrelated to the examined device.
+        if (!detector.device->handlesFile(config.m_envFile))
+            continue;
         config.ensureContents();
         for (const QnxTarget &target : std::as_const(config.m_targets)) {
-            result +=  Utils::filtered(alreadyKnown, [config, target](ToolChain *tc) {
+            result +=  Utils::filtered(detector.alreadyKnown, [config, target](ToolChain *tc) {
                 return tc->typeId() == Constants::QNX_TOOLCHAIN_ID
                        && tc->targetAbi() == target.m_abi
                        && tc->compilerCommand() == config.m_qccCompiler;
