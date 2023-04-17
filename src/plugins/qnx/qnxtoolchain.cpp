@@ -217,12 +217,7 @@ QnxToolChainFactory::QnxToolChainFactory()
 
 Toolchains QnxToolChainFactory::autoDetect(const ToolchainDetector &detector) const
 {
-    // FIXME: Support detecting toolchains on remote devices
-    if (detector.device)
-        return {};
-
-    Toolchains tcs = QnxSettingsPage::autoDetect(detector.alreadyKnown);
-    return tcs;
+    return QnxSettingsPage::autoDetect(detector);
 }
 
 //---------------------------------------------------------------------------------

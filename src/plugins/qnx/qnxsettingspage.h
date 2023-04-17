@@ -5,7 +5,10 @@
 
 #include <coreplugin/dialogs/ioptionspage.h>
 
-namespace ProjectExplorer { class ToolChain; }
+namespace ProjectExplorer {
+class ToolChain;
+class ToolchainDetector;
+} // ProjectExplorer
 
 namespace Qnx::Internal {
 
@@ -16,7 +19,7 @@ public:
     ~QnxSettingsPage();
 
     static QList<ProjectExplorer::ToolChain *> autoDetect(
-        const QList<ProjectExplorer::ToolChain *> &alreadyKnown);
+        const ProjectExplorer::ToolchainDetector &detector);
 };
 
 } // Qnx::Internal
