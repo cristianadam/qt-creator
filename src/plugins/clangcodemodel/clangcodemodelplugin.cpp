@@ -70,8 +70,16 @@ void ClangCodeModelPlugin::generateCompilationDB()
     m_generatorWatcher.setFuture(task);
 }
 
+static ClangCodeModelPlugin *s_instance = nullptr;
+
+ClangCodeModelPlugin::ClangCodeModelPlugin()
+{
+    s_instance = this;
+}
+
 ClangCodeModelPlugin::~ClangCodeModelPlugin()
 {
+    s_instance = nullptr;
     m_generatorWatcher.waitForFinished();
 }
 
@@ -93,6 +101,12 @@ void ClangCodeModelPlugin::initialize()
     addTest<Tests::ClangdTestTooltips>();
     addTest<Tests::ClangFixItTest>();
 #endif
+}
+
+FutureSynchronizer *ClangCodeModelPlugin::futureSynchronizer()
+{
+    QTC_ASSERT(s_instance, return nullptr);
+    return &s_instance->m_futureSynchronizer;
 }
 
 void ClangCodeModelPlugin::createCompilationDBAction()

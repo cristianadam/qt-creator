@@ -7,6 +7,7 @@
 
 #include <extensionsystem/iplugin.h>
 
+#include <utils/futuresynchronizer.h>
 #include <utils/parameteraction.h>
 
 #include <QFutureWatcher>
@@ -19,8 +20,11 @@ class ClangCodeModelPlugin final: public ExtensionSystem::IPlugin
     Q_PLUGIN_METADATA(IID "org.qt-project.Qt.QtCreatorPlugin" FILE "ClangCodeModel.json")
 
 public:
+    ClangCodeModelPlugin();
     ~ClangCodeModelPlugin() override;
     void initialize() override;
+
+    static Utils::FutureSynchronizer *futureSynchronizer();
 
 private:
     void generateCompilationDB();
@@ -28,6 +32,7 @@ private:
 
     Utils::ParameterAction *m_generateCompilationDBAction = nullptr;
     QFutureWatcher<GenerateCompilationDbResult> m_generatorWatcher;
+    Utils::FutureSynchronizer m_futureSynchronizer;
 };
 
 } // ClangCodeModel::Internal
