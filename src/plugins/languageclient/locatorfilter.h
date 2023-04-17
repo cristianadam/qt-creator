@@ -24,9 +24,11 @@ class CurrentSymbolsData;
 using DocSymbolModifier = std::function<void(Core::LocatorFilterEntry &,
     const LanguageServerProtocol::DocumentSymbol &, const Core::LocatorFilterEntry &)>;
 
-Core::LocatorMatcherTasks LANGUAGECLIENT_EXPORT workspaceMatchers(const QList<Client *> &clients,
-                                                                  Core::MatcherType type,
-                                                                  int maxResultCount = 0);
+Core::LocatorFilterEntries LANGUAGECLIENT_EXPORT currentSymbols(const QString &input,
+    const CurrentSymbolsData &currentSymbolsData, const DocSymbolModifier &docSymbolModifier);
+
+Core::LocatorMatcherTasks LANGUAGECLIENT_EXPORT workspaceMatchers(Core::MatcherType type,
+    const QList<Client *> &clients = {}, int maxResultCount = 0);
 
 class LanguageClientManager;
 
@@ -53,6 +55,7 @@ protected:
         const DocSymbolModifier &docSymbolGenerator);
 
 private:
+    Core::LocatorMatcherTasks matchers() final;
     void updateCurrentClient();
     void updateSymbols(const LanguageServerProtocol::DocumentUri &uri,
                        const LanguageServerProtocol::DocumentSymbolsResult &symbols);

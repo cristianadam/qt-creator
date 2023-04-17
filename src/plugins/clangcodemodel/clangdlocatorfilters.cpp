@@ -155,8 +155,9 @@ ClangGlobalSymbolFilter::~ClangGlobalSymbolFilter()
 LocatorMatcherTasks ClangGlobalSymbolFilter::matchers()
 {
     return CppEditor::cppMatchers(MatcherType::AllSymbols)
-           + LanguageClient::workspaceMatchers(ClangModelManagerSupport::clientsForOpenProjects(),
-                                               MatcherType::AllSymbols, MaxResultCount);
+           + LanguageClient::workspaceMatchers(MatcherType::AllSymbols,
+                                               ClangModelManagerSupport::clientsForOpenProjects(),
+                                               MaxResultCount);
 }
 
 void ClangGlobalSymbolFilter::prepareSearch(const QString &entry)
@@ -183,8 +184,9 @@ ClangClassesFilter::ClangClassesFilter()
 LocatorMatcherTasks ClangClassesFilter::matchers()
 {
     return CppEditor::cppMatchers(MatcherType::Classes)
-           + LanguageClient::workspaceMatchers(ClangModelManagerSupport::clientsForOpenProjects(),
-                                               MatcherType::Classes, MaxResultCount);
+           + LanguageClient::workspaceMatchers(MatcherType::Classes,
+                                               ClangModelManagerSupport::clientsForOpenProjects(),
+                                               MaxResultCount);
 }
 
 ClangFunctionsFilter::ClangFunctionsFilter()
@@ -199,8 +201,9 @@ ClangFunctionsFilter::ClangFunctionsFilter()
 LocatorMatcherTasks ClangFunctionsFilter::matchers()
 {
     return CppEditor::cppMatchers(MatcherType::Functions)
-           + LanguageClient::workspaceMatchers(ClangModelManagerSupport::clientsForOpenProjects(),
-                                               MatcherType::Functions, MaxResultCount);
+           + LanguageClient::workspaceMatchers(MatcherType::Functions,
+                                               ClangModelManagerSupport::clientsForOpenProjects(),
+                                               MaxResultCount);
 }
 
 class LspCurrentDocumentFilter : public DocumentLocatorFilter
