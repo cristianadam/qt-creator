@@ -78,6 +78,25 @@ QList<Core::LocatorFilterEntry> entriesForDocSymbols(const QList<DocumentSymbol>
     return entries;
 }
 
+Core::LocatorFilterEntries currentSymbols(const QString &input,
+                                          const CurrentSymbolsData &currentSymbolsData,
+                                          const DocSymbolModifier &docSymbolModifier)
+{
+    const FuzzyMatcher::CaseSensitivity caseSensitivity
+        = ILocatorFilter::caseSensitivity(input) == Qt::CaseSensitive
+              ? FuzzyMatcher::CaseSensitivity::CaseSensitive
+              : FuzzyMatcher::CaseSensitivity::CaseInsensitive;
+    const QRegularExpression regExp = FuzzyMatcher::createRegExp(input, caseSensitivity);
+    if (!regExp.isValid())
+        return {};
+
+    if (auto list = std::get_if<QList<DocumentSymbol>>(&currentSymbolsData.m_symbols))
+        return entriesForDocSymbols(*list, regExp, currentSymbolsData.m_filePath, docSymbolModifier);
+    else if (auto list = std::get_if<QList<SymbolInformation>>(&currentSymbolsData.m_symbols))
+        return entriesForSymbolsInfo(*list, regExp, currentSymbolsData.m_pathMapper);
+    return {};
+}
+
 void filterResults(QPromise<void> &promise, const LocatorStorage &storage, Client *client,
                    const QList<SymbolInformation> &results, const QList<SymbolKind> &filter)
 {
@@ -156,6 +175,50 @@ LocatorMatcherTask functionMatcher(Client *client, int maxResultCount)
                           {SymbolKind::Method, SymbolKind::Function, SymbolKind::Constructor});
 }
 
+static void filterCurrentResults(QPromise<void> &promise, const LocatorStorage &storage,
+                                 const CurrentSymbolsData &currentSymbolsData)
+{
+    Q_UNUSED(promise)
+    const auto docSymbolModifier = [](LocatorFilterEntry &entry, const DocumentSymbol &info,
+                                      const LocatorFilterEntry &parent) {
+        Q_UNUSED(parent)
+        entry.displayName = info.name();
+        if (std::optional<QString> detail = info.detail())
+            entry.extraInfo = detail.value_or(QString());
+        return entry;
+    };
+    // TODO: Pass promise into currentSymbols
+    storage.reportOutput(LanguageClient::currentSymbols(storage.input(), currentSymbolsData,
+                                                        docSymbolModifier));
+}
+
+LocatorMatcherTask currentDocumentMatcher()
+{
+    using namespace Tasking;
+
+    TreeStorage<LocatorStorage> storage;
+    TreeStorage<CurrentSymbolsData> resultStorage;
+
+    const auto onQuerySetup = [=](CurrentSymbolsRequestTask &request) {
+        Q_UNUSED(request)
+    };
+    const auto onQueryDone = [resultStorage](const CurrentSymbolsRequestTask &request) {
+        *resultStorage = request.currentSymbolsData();
+    };
+
+    const auto onFilterSetup = [=](AsyncTask<void> &async) {
+        async.setFutureSynchronizer(LanguageClientPlugin::futureSynchronizer());
+        async.setConcurrentCallData(filterCurrentResults, *storage, *resultStorage);
+    };
+
+    const Group root {
+        Storage(resultStorage),
+        CurrentSymbolsRequest(onQuerySetup, onQueryDone),
+        Async<void>(onFilterSetup)
+    };
+    return {root, storage};
+}
+
 using MatcherCreator = std::function<Core::LocatorMatcherTask(Client *, int)>;
 
 static MatcherCreator creatorForType(MatcherType type)
@@ -164,14 +227,16 @@ static MatcherCreator creatorForType(MatcherType type)
     case MatcherType::AllSymbols: return &allSymbolsMatcher;
     case MatcherType::Classes: return &classMatcher;
     case MatcherType::Functions: return &functionMatcher;
-    case MatcherType::CurrentDocumentSymbols: return {}; // TODO: implement me
+    case MatcherType::CurrentDocumentSymbols: QTC_CHECK(false); return {};
     }
     return {};
 }
 
-LocatorMatcherTasks workspaceMatchers(const QList<Client *> &clients, MatcherType type,
+LocatorMatcherTasks workspaceMatchers(MatcherType type, const QList<Client *> &clients,
                                       int maxResultCount)
 {
+    if (type == MatcherType::CurrentDocumentSymbols)
+        return {currentDocumentMatcher()};
     const MatcherCreator creator = creatorForType(type);
     if (!creator)
         return {};
@@ -193,6 +258,11 @@ DocumentLocatorFilter::DocumentLocatorFilter()
             this, &DocumentLocatorFilter::updateCurrentClient);
     connect(LanguageClientManager::instance(), &LanguageClientManager::clientInitialized,
             this, &DocumentLocatorFilter::updateCurrentClient);
+}
+
+LocatorMatcherTasks DocumentLocatorFilter::matchers()
+{
+    return workspaceMatchers(MatcherType::CurrentDocumentSymbols);
 }
 
 void DocumentLocatorFilter::updateCurrentClient()
@@ -313,8 +383,8 @@ WorkspaceLocatorFilter::WorkspaceLocatorFilter()
 
 LocatorMatcherTasks WorkspaceLocatorFilter::matchers()
 {
-    return workspaceMatchers(Utils::filtered(LanguageClientManager::clients(),
-                                             &Client::locatorsEnabled), MatcherType::AllSymbols);
+    return workspaceMatchers(MatcherType::AllSymbols,
+        Utils::filtered(LanguageClientManager::clients(), &Client::locatorsEnabled));
 }
 
 WorkspaceLocatorFilter::WorkspaceLocatorFilter(const QVector<SymbolKind> &filter)
@@ -425,8 +495,8 @@ WorkspaceClassLocatorFilter::WorkspaceClassLocatorFilter()
 
 LocatorMatcherTasks WorkspaceClassLocatorFilter::matchers()
 {
-    return workspaceMatchers(Utils::filtered(LanguageClientManager::clients(),
-                                             &Client::locatorsEnabled), MatcherType::Classes);
+    return workspaceMatchers(MatcherType::Classes,
+        Utils::filtered(LanguageClientManager::clients(), &Client::locatorsEnabled));
 }
 
 WorkspaceMethodLocatorFilter::WorkspaceMethodLocatorFilter()
@@ -440,8 +510,8 @@ WorkspaceMethodLocatorFilter::WorkspaceMethodLocatorFilter()
 
 LocatorMatcherTasks WorkspaceMethodLocatorFilter::matchers()
 {
-    return workspaceMatchers(Utils::filtered(LanguageClientManager::clients(),
-                                             &Client::locatorsEnabled), MatcherType::Functions);
+    return workspaceMatchers(MatcherType::Functions,
+        Utils::filtered(LanguageClientManager::clients(), &Client::locatorsEnabled));
 }
 
 } // namespace LanguageClient
