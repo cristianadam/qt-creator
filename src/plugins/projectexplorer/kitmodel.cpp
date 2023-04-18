@@ -162,19 +162,19 @@ KitManagerConfigWidget *KitModel::widget(const QModelIndex &index)
 
 void KitModel::validateKitNames()
 {
-    QHash<QString, int> nameHash;
-    forItemsAtLevel<2>([&nameHash](KitNode *n) {
-        const QString displayName = n->widget()->displayName();
-        if (nameHash.contains(displayName))
-            ++nameHash[displayName];
-        else
-            nameHash.insert(displayName, 1);
-    });
+//    QHash<QString, int> nameHash;
+//    forItemsAtLevel<2>([&nameHash](KitNode *n) {
+//        const QString displayName = n->widget()->displayName();
+//        if (nameHash.contains(displayName))
+//            ++nameHash[displayName];
+//        else
+//            nameHash.insert(displayName, 1);
+//    });
 
-    forItemsAtLevel<2>([&nameHash](KitNode *n) {
-        const QString displayName = n->widget()->displayName();
-        n->widget()->setHasUniqueName(nameHash.value(displayName) == 1);
-    });
+//    forItemsAtLevel<2>([&nameHash](KitNode *n) {
+//        const QString displayName = n->widget()->displayName();
+//        n->widget()->setHasUniqueName(nameHash.value(displayName) == 1);
+//    });
 }
 
 void KitModel::apply()
@@ -285,8 +285,8 @@ void KitModel::addKit(Kit *k)
 {
     for (TreeItem *n : *m_manualRoot) {
         // Was added by us
-        if (static_cast<KitNode *>(n)->widget()->isRegistering())
-            return;
+//        if (static_cast<KitNode *>(n)->widget()->isRegistering())
+//            return;
     }
 
     TreeItem *parent = k->isAutoDetected() ? m_autoRoot : m_manualRoot;
