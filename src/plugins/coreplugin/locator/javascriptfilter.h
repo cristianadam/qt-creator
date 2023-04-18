@@ -28,6 +28,7 @@ public:
     QList<Core::LocatorFilterEntry> matchesFor(QFutureInterface<Core::LocatorFilterEntry> &future,
                                                const QString &entry) override;
 private:
+    LocatorMatcherTasks matchers() final;
     void setupEngine();
 
     mutable std::unique_ptr<QJSEngine> m_engine;
