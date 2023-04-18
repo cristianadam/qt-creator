@@ -8,7 +8,6 @@
 #include "kitinformation.h"
 #include "kitmanager.h"
 #include "projectexplorertr.h"
-#include "task.h"
 
 #include <utils/algorithm.h>
 #include <utils/detailswidget.h>
@@ -29,21 +28,18 @@
 #include <QToolButton>
 #include <QSizePolicy>
 
-static const char WORKING_COPY_KIT_ID[] = "modified kit";
-
 using namespace Utils;
 
 namespace ProjectExplorer {
 namespace Internal {
 
-KitManagerConfigWidget::KitManagerConfigWidget(Kit *k, bool &isDefaultKit, bool &hasUniqueName, Kit *workingCopy) :
+KitManagerConfigWidget::KitManagerConfigWidget(Kit *k, bool &isDefaultKit, Kit *workingCopy) :
     m_iconButton(new QToolButton),
     m_nameEdit(new QLineEdit),
     m_fileSystemFriendlyNameLineEdit(new QLineEdit),
     m_kit(k),
     m_modifiedKit(workingCopy),
-    m_isDefaultKit(isDefaultKit),
-    m_hasUniqueName(hasUniqueName)
+    m_isDefaultKit(isDefaultKit)
 {
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 
