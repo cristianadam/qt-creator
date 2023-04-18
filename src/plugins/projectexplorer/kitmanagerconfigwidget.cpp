@@ -36,12 +36,12 @@ using namespace Utils;
 namespace ProjectExplorer {
 namespace Internal {
 
-KitManagerConfigWidget::KitManagerConfigWidget(Kit *k, bool &isDefaultKit, bool &hasUniqueName) :
+KitManagerConfigWidget::KitManagerConfigWidget(Kit *k, bool &isDefaultKit, bool &hasUniqueName, Kit *workingCopy) :
     m_iconButton(new QToolButton),
     m_nameEdit(new QLineEdit),
     m_fileSystemFriendlyNameLineEdit(new QLineEdit),
     m_kit(k),
-    m_modifiedKit(std::make_unique<Kit>(Utils::Id(WORKING_COPY_KIT_ID))),
+    m_modifiedKit(workingCopy),
     m_isDefaultKit(isDefaultKit),
     m_hasUniqueName(hasUniqueName)
 {
@@ -91,8 +91,6 @@ KitManagerConfigWidget::KitManagerConfigWidget(Kit *k, bool &isDefaultKit, bool 
     KitManager *km = KitManager::instance();
     connect(km, &KitManager::unmanagedKitUpdated,
             this, &KitManagerConfigWidget::workingCopyWasUpdated);
-    connect(km, &KitManager::kitUpdated,
-            this, &KitManagerConfigWidget::kitWasUpdated);
 
     auto chooser = new VariableChooser(this);
     chooser->addSupportedWidget(m_nameEdit);
@@ -112,10 +110,6 @@ KitManagerConfigWidget::~KitManagerConfigWidget()
 {
     qDeleteAll(m_widgets);
     m_widgets.clear();
-
-    // Make sure our workingCopy did not get registered somehow:
-    QTC_CHECK(!Utils::contains(KitManager::kits(),
-                               Utils::equal(&Kit::id, Utils::Id(WORKING_COPY_KIT_ID))));
 }
 
 QString KitManagerConfigWidget::displayName() const
@@ -123,37 +117,6 @@ QString KitManagerConfigWidget::displayName() const
     if (m_cachedDisplayName.isEmpty())
         m_cachedDisplayName = m_modifiedKit->displayName();
     return m_cachedDisplayName;
-}
-
-QIcon KitManagerConfigWidget::displayIcon() const
-{
-    // Special case: Extra warning if there are no errors but name is not unique.
-    if (m_modifiedKit->isValid() && !m_hasUniqueName) {
-        static const QIcon warningIcon(Utils::Icons::WARNING.icon());
-        return warningIcon;
-    }
-
-    return m_modifiedKit->displayIcon();
-}
-
-void KitManagerConfigWidget::apply()
-{
-    // TODO: Rework the mechanism so this won't be necessary.
-    const bool wasDefaultKit = m_isDefaultKit;
-
-    const auto copyIntoKit = [this](Kit *k) { k->copyFrom(m_modifiedKit.get()); };
-    if (m_kit) {
-        copyIntoKit(m_kit);
-        KitManager::notifyAboutUpdate(m_kit);
-    } else {
-        m_isRegistering = true;
-        m_kit = KitManager::registerKit(copyIntoKit);
-        m_isRegistering = false;
-    }
-    m_isDefaultKit = wasDefaultKit;
-    if (m_isDefaultKit)
-        KitManager::setDefaultKit(m_kit);
-    emit dirty();
 }
 
 void KitManagerConfigWidget::discard()
@@ -171,22 +134,6 @@ void KitManagerConfigWidget::discard()
     m_cachedDisplayName.clear();
     m_fileSystemFriendlyNameLineEdit->setText(m_modifiedKit->customFileSystemFriendlyName());
     emit dirty();
-}
-
-bool KitManagerConfigWidget::isDirty() const
-{
-    return !m_kit
-            || !m_kit->isEqual(m_modifiedKit.get())
-            || m_isDefaultKit != (KitManager::defaultKit() == m_kit);
-}
-
-QString KitManagerConfigWidget::validityMessage() const
-{
-    Tasks tmp;
-    if (!m_hasUniqueName)
-        tmp.append(CompileTask(Task::Warning, Tr::tr("Display name is not unique.")));
-
-    return m_modifiedKit->toHtml(tmp);
 }
 
 void KitManagerConfigWidget::addAspectToWorkingCopy(KitAspect *aspect)
@@ -209,7 +156,7 @@ void KitManagerConfigWidget::updateVisibility()
     for (int i = 0; i < count; ++i) {
         KitAspectWidget *widget = m_widgets.at(i);
         const KitAspect *ki = widget->kitInformation();
-        const bool visibleInKit = ki->isApplicableToKit(m_modifiedKit.get());
+        const bool visibleInKit = ki->isApplicableToKit(m_modifiedKit);
         const bool irrelevant = m_modifiedKit->irrelevantAspects().contains(ki->id());
         widget->setVisible(visibleInKit && !irrelevant);
     }
@@ -225,17 +172,12 @@ void KitManagerConfigWidget::makeStickySubWidgetsReadOnly()
 
 Kit *KitManagerConfigWidget::workingCopy() const
 {
-    return m_modifiedKit.get();
-}
-
-bool KitManagerConfigWidget::isDefaultKit() const
-{
-    return m_isDefaultKit;
+    return m_modifiedKit;
 }
 
 void KitManagerConfigWidget::setIcon()
 {
-    const Utils::Id deviceType = DeviceTypeKitAspect::deviceTypeId(m_modifiedKit.get());
+    const Utils::Id deviceType = DeviceTypeKitAspect::deviceTypeId(m_modifiedKit);
     QList<IDeviceFactory *> allDeviceFactories = IDeviceFactory::allDeviceFactories();
     if (deviceType.isValid()) {
         const auto less = [deviceType](const IDeviceFactory *f1, const IDeviceFactory *f2) {
@@ -301,7 +243,7 @@ void KitManagerConfigWidget::setFileSystemFriendlyName()
 
 void KitManagerConfigWidget::workingCopyWasUpdated(Kit *k)
 {
-    if (k != m_modifiedKit.get() || m_fixingKit)
+    if (k != m_modifiedKit || m_fixingKit)
         return;
 
     m_fixingKit = true;
@@ -320,17 +262,6 @@ void KitManagerConfigWidget::workingCopyWasUpdated(Kit *k)
     m_iconButton->setIcon(k->icon());
     updateVisibility();
     emit dirty();
-}
-
-void KitManagerConfigWidget::kitWasUpdated(Kit *k)
-{
-    if (m_kit == k) {
-        bool emitSignal = m_kit->isAutoDetected() != m_modifiedKit->isAutoDetected();
-        discard();
-        if (emitSignal)
-            emit isAutoDetectedChanged();
-    }
-    updateVisibility();
 }
 
 void KitManagerConfigWidget::showEvent(QShowEvent *event)

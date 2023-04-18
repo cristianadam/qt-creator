@@ -25,27 +25,21 @@ class KitManagerConfigWidget : public QWidget
     Q_OBJECT
 
 public:
-    explicit KitManagerConfigWidget(Kit *k, bool &isDefaultKit, bool &hasUniqueName);
+    explicit KitManagerConfigWidget(Kit *k, bool &isDefaultKit, bool &hasUniqueName, Kit *workingCopy);
     ~KitManagerConfigWidget() override;
 
     QString displayName() const;
-    QIcon displayIcon() const;
 
-    void apply();
     void discard();
-    bool isDirty() const;
     QString validityMessage() const;
     void addAspectToWorkingCopy(KitAspect *aspect);
     void makeStickySubWidgetsReadOnly();
 
     Kit *workingCopy() const;
-    bool isRegistering() const { return m_isRegistering; }
-    bool isDefaultKit() const;
     void updateVisibility();
 
 signals:
     void dirty();
-    void isAutoDetectedChanged();
 
 private:
     void setIcon();
@@ -68,11 +62,10 @@ private:
     QLineEdit *m_fileSystemFriendlyNameLineEdit;
     QList<KitAspectWidget *> m_widgets;
     Kit *m_kit;
-    std::unique_ptr<Kit> m_modifiedKit;
+    Kit *m_modifiedKit;
     bool &m_isDefaultKit;
     bool m_fixingKit = false;
     bool &m_hasUniqueName;
-    bool m_isRegistering = false;
     mutable QString m_cachedDisplayName;
 };
 

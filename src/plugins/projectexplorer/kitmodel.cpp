@@ -53,23 +53,37 @@ public:
         if (role == Qt::DecorationRole)
             return displayIcon();
 
-        if (role == Qt::ToolTipRole)
-            return widget()->validityMessage();
+        if (role == Qt::ToolTipRole) {
+            Tasks tmp;
+            if (!m_hasUniqueName)
+                tmp.append(CompileTask(Task::Warning, Tr::tr("Display name is not unique.")));
+            return m_workingCopy.toHtml(tmp);
+        }
 
         return {};
     }
 
     bool isDirty() const
     {
-        if (m_widget)
-            return m_widget->isDirty();
+        if (m_widget) {
+            return !m_kit
+                    || !m_kit->isEqual(&m_workingCopy)
+                    || m_isDefaultKit != (KitManager::defaultKit() == m_kit);
+        }
+
         return false;
     }
 
     QIcon displayIcon() const
     {
-        if (m_widget)
-            return m_widget->displayIcon();
+        if (m_widget) {
+            // Special case: Extra warning if there are no errors but name is not unique.
+            if (m_workingCopy.isValid() && !m_hasUniqueName) {
+                static const QIcon warningIcon(Utils::Icons::WARNING.icon());
+                return warningIcon;
+            }
+            return m_workingCopy.displayIcon();
+        }
         return m_kit->displayIcon();
     }
 
@@ -87,9 +101,7 @@ public:
 
     bool isRegistering() const
     {
-        if (m_widget)
-            return m_widget->isRegistering();
-        return false;
+        return m_isRegistering;
     }
 
     void setIsDefaultKit(bool on)
@@ -97,8 +109,13 @@ public:
         if (m_isDefaultKit == on)
             return;
         m_isDefaultKit = on;
+        update();
+    }
+
+    void updateVisibility() const
+    {
         if (m_widget)
-            emit m_widget->dirty();
+            m_widget->updateVisibility();
     }
 
     KitManagerConfigWidget *widget() const
@@ -112,25 +129,66 @@ public:
         m_hasUniqueName = on;
     }
 
+    Kit *workingCopy() const
+    {
+        return const_cast<Kit *>(&m_workingCopy);
+    }
+
+    void apply()
+    {
+        // TODO: Rework the mechanism so this won't be necessary.
+        const bool wasDefaultKit = m_isDefaultKit;
+
+        const auto copyIntoKit = [this](Kit *k) { k->copyFrom(&m_workingCopy); };
+        if (m_kit) {
+            copyIntoKit(m_kit);
+            KitManager::notifyAboutUpdate(m_kit);
+        } else {
+            m_isRegistering = true;
+            m_kit = KitManager::registerKit(copyIntoKit);
+            m_isRegistering = false;
+        }
+        m_isDefaultKit = wasDefaultKit;
+        if (m_isDefaultKit)
+            KitManager::setDefaultKit(m_kit);
+
+        update();
+    }
+
+    void kitWasUpdated(Kit *k)
+    {
+        if (m_kit == k) {
+            if (m_widget) {
+                bool emitSignal = m_kit->isAutoDetected() != m_workingCopy.isAutoDetected();
+                m_widget->discard();
+                if (emitSignal) {
+                    TreeItem *oldParent = parent();
+                    TreeItem *newParent =
+                        m_model->rootItem()->childAt(m_workingCopy.isAutoDetected() ? 0 : 1);
+                    if (oldParent && oldParent != newParent) {
+                        m_model->takeItem(this);
+                        newParent->appendChild(this);
+                    }
+                }
+                updateVisibility();
+             }
+        }
+    }
+
 private:
     void ensureWidget()
     {
         if (m_widget)
             return;
 
-        m_widget = new KitManagerConfigWidget(m_kit, m_isDefaultKit, m_hasUniqueName);
+        m_widget = new KitManagerConfigWidget(m_kit, m_isDefaultKit, m_hasUniqueName, &m_workingCopy);
+
+        QObject::connect(KitManager::instance(), &KitManager::kitUpdated, m_model, [this](Kit *k)  {
+            kitWasUpdated(k);
+        });
 
         QObject::connect(m_widget, &KitManagerConfigWidget::dirty, m_model, [this] { update(); });
 
-        QObject::connect(m_widget, &KitManagerConfigWidget::isAutoDetectedChanged, m_model, [this] {
-            TreeItem *oldParent = parent();
-            TreeItem *newParent =
-                m_model->rootItem()->childAt(m_widget->workingCopy()->isAutoDetected() ? 0 : 1);
-            if (oldParent && oldParent != newParent) {
-                m_model->takeItem(this);
-                newParent->appendChild(this);
-            }
-        });
         m_parentLayout->addWidget(m_widget);
     }
 
@@ -140,6 +198,8 @@ private:
     QBoxLayout *m_parentLayout = nullptr;
     bool m_isDefaultKit = false;
     bool m_hasUniqueName = true;
+    Kit m_workingCopy{"modified kit"};
+    bool m_isRegistering = false;
 };
 
 // --------------------------------------------------------------------------
@@ -178,7 +238,7 @@ KitModel::KitModel(QBoxLayout *parentLayout, QObject *parent)
 Kit *KitModel::kit(const QModelIndex &index)
 {
     KitNode *n = kitNode(index);
-    return n ? n->widget()->workingCopy() : nullptr;
+    return n ? n->workingCopy() : nullptr;
 }
 
 KitNode *KitModel::kitNode(const QModelIndex &index)
@@ -201,7 +261,7 @@ void KitModel::setDefaultKit(const QModelIndex &index)
 
 bool KitModel::isDefaultKit(Kit *k) const
 {
-    return m_defaultNode && m_defaultNode->widget()->workingCopy() == k;
+    return m_defaultNode && m_defaultNode->workingCopy() == k;
 }
 
 KitManagerConfigWidget *KitModel::widget(const QModelIndex &index)
@@ -232,7 +292,7 @@ void KitModel::apply()
     // Add/update dirty nodes before removing kits. This ensures the right kit ends up as default.
     forItemsAtLevel<2>([](KitNode *n) {
         if (n->isDirty()) {
-            n->widget()->apply();
+            n->apply();
             n->update();
         }
     });
@@ -274,7 +334,7 @@ Kit *KitModel::markForAddition(Kit *baseKit)
     const QString newName = newKitName(baseKit ? baseKit->unexpandedDisplayName() : QString());
     KitNode *node = createNode(nullptr);
     m_manualRoot->appendChild(node);
-    Kit *k = node->widget()->workingCopy();
+    Kit *k = node->workingCopy();
     KitGuard g(k);
     if (baseKit) {
         k->copyFrom(baseKit);
@@ -294,7 +354,7 @@ Kit *KitModel::markForAddition(Kit *baseKit)
 void KitModel::updateVisibility()
 {
     forItemsAtLevel<2>([](const TreeItem *ti) {
-        static_cast<const KitNode *>(ti)->widget()->updateVisibility();
+        static_cast<const KitNode *>(ti)->updateVisibility();
     });
 }
 
@@ -302,14 +362,14 @@ QString KitModel::newKitName(const QString &sourceName) const
 {
     QList<Kit *> allKits;
     forItemsAtLevel<2>([&allKits](const TreeItem *ti) {
-        allKits << static_cast<const KitNode *>(ti)->widget()->workingCopy();
+        allKits << static_cast<const KitNode *>(ti)->workingCopy();
     });
     return Kit::newKitName(sourceName, allKits);
 }
 
 KitNode *KitModel::findWorkingCopy(Kit *k) const
 {
-    return findItemAtLevel<2>([k](KitNode *n) { return n->widget()->workingCopy() == k; });
+    return findItemAtLevel<2>([k](KitNode *n) { return n->workingCopy() == k; });
 }
 
 KitNode *KitModel::createNode(Kit *k)
