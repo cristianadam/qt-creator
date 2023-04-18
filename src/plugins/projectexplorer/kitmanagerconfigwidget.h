@@ -25,7 +25,7 @@ class KitManagerConfigWidget : public QWidget
     Q_OBJECT
 
 public:
-    explicit KitManagerConfigWidget(Kit *k, bool &isDefaultKit, bool &hasUniqueName, Kit *workingCopy);
+    explicit KitManagerConfigWidget(Kit *k, bool &isDefaultKit, Kit *workingCopy);
     ~KitManagerConfigWidget() override;
 
     QString displayName() const;
@@ -65,7 +65,6 @@ private:
     Kit *m_modifiedKit;
     bool &m_isDefaultKit;
     bool m_fixingKit = false;
-    bool &m_hasUniqueName;
     mutable QString m_cachedDisplayName;
 };
 

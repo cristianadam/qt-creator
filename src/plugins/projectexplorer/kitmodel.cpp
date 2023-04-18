@@ -155,36 +155,31 @@ public:
         update();
     }
 
-    void kitWasUpdated(Kit *k)
-    {
-        if (m_kit == k) {
-            if (m_widget) {
-                bool emitSignal = m_kit->isAutoDetected() != m_workingCopy.isAutoDetected();
-                m_widget->discard();
-                if (emitSignal) {
-                    TreeItem *oldParent = parent();
-                    TreeItem *newParent =
-                        m_model->rootItem()->childAt(m_workingCopy.isAutoDetected() ? 0 : 1);
-                    if (oldParent && oldParent != newParent) {
-                        m_model->takeItem(this);
-                        newParent->appendChild(this);
-                    }
-                }
-                updateVisibility();
-             }
-        }
-    }
-
 private:
     void ensureWidget()
     {
         if (m_widget)
             return;
 
-        m_widget = new KitManagerConfigWidget(m_kit, m_isDefaultKit, m_hasUniqueName, &m_workingCopy);
+        m_widget = new KitManagerConfigWidget(m_kit, m_isDefaultKit, &m_workingCopy);
 
         QObject::connect(KitManager::instance(), &KitManager::kitUpdated, m_model, [this](Kit *k)  {
-            kitWasUpdated(k);
+            if (m_kit != k)
+                return;
+            if (!m_widget)
+                return;
+            m_widget->discard();
+            if (m_kit->isAutoDetected() != m_workingCopy.isAutoDetected()) {
+                if (TreeItem *oldParent = parent()) {
+                    TreeItem *newParent =
+                        m_model->rootItem()->childAt(m_workingCopy.isAutoDetected() ? 0 : 1);
+                    if (oldParent != newParent) {
+                        m_model->takeItem(this);
+                        newParent->appendChild(this);
+                    }
+                }
+            }
+            m_widget->updateVisibility();
         });
 
         QObject::connect(m_widget, &KitManagerConfigWidget::dirty, m_model, [this] { update(); });
