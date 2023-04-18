@@ -60,56 +60,46 @@ EnvironmentItems QnxUtils::qnxEnvironmentFromEnvFile(const FilePath &filePath)
     if (!filePath.exists())
         return items;
 
-    const bool isWindows = filePath.osType() == Utils::OsTypeWindows;
-
-    // locking creating sdp-env file wrapper script
-    const expected_str<FilePath> tmpPath = filePath.tmpDir();
-    if (!tmpPath)
-        return {}; // make_unexpected(tmpPath.error());
-
-    const QString tmpName = "sdp-env-eval-XXXXXX" + QLatin1String(isWindows ? ".bat" : "");
-    const FilePath pattern = *tmpPath / tmpName;
-
-    const expected_str<FilePath> tmpFile = pattern.createTempFile();
-    if (!tmpFile)
-        return {}; // make_unexpected(tmpFile.error());
-
-    QStringList fileContent;
-
-    // writing content to wrapper script.
-    // this has to use bash as qnxsdp-env.sh requires this
-    if (isWindows)
-        fileContent << "@echo off" << "call " + filePath.path();
-    else
-        fileContent << "#!/bin/bash" << ". " + filePath.path();
-
-    QLatin1String linePattern(isWindows ? "echo %1=%%1%" : "echo %1=$%1");
-
-    static const char *envVars[] = {
+    static const QByteArray envVars[] = {
         "QNX_TARGET", "QNX_HOST", "QNX_CONFIGURATION", "QNX_CONFIGURATION_EXCLUSIVE",
         "MAKEFLAGS", "LD_LIBRARY_PATH", "PATH", "QDE", "CPUVARDIR", "PYTHONPATH"
     };
 
-    for (const char *envVar : envVars)
-        fileContent << linePattern.arg(QLatin1String(envVar));
-
-    QString content = fileContent.join(QLatin1String(isWindows ? "\r\n" : "\n"));
-
-    tmpFile->writeFileContents(content.toUtf8());
-
-    // running wrapper script
     QtcProcess process;
-    if (isWindows)
+
+    const bool isWindows = filePath.osType() == Utils::OsTypeWindows;
+    if (isWindows) {
+        // locking creating sdp-env file wrapper script
+        const expected_str<FilePath> tmpPath = filePath.tmpDir();
+        if (!tmpPath)
+            return {}; // make_unexpected(tmpPath.error());
+
+        const FilePath pattern = *tmpPath / "sdp-env-eval-XXXXXX.bat";
+
+        const expected_str<FilePath> tmpFile = pattern.createTempFile();
+        if (!tmpFile)
+            return {}; // make_unexpected(tmpFile.error());
+
+        // write content to wrapper script.
+        QByteArray content = "@echo off\r\ncall " + filePath.path().toUtf8() + "\r\n";
+        for (const QByteArray &envVar : envVars)
+            content += "echo " + envVar + "=%" + envVar + "%\r\n";
+
+        tmpFile->writeFileContents(content);
+
         process.setCommand({filePath.withNewPath("cmd.exe"), {"/C", tmpFile->path()}});
-    else
-        process.setCommand({filePath.withNewPath("/bin/bash"), {tmpFile->path()}});
+    } else {
+        // this has to use bash as qnxsdp-env.sh requires this
+        QByteArray content  = "source " + filePath.path().toUtf8() + "\n";
+        for (const QByteArray &envVar : envVars)
+            content += "echo " + envVar + "=$" + envVar + "\n";
+        process.setCommand({filePath.withNewPath("/bin/bash"), {}});
+        process.setWriteData(content);
+    }
+
     process.start();
 
-    // waiting for finish
-    QApplication::setOverrideCursor(Qt::BusyCursor);
-    bool waitResult = process.waitForFinished(10000);
-    QApplication::restoreOverrideCursor();
-    if (!waitResult)
+    if (!process.waitForFinished(10000))
         return items;
 
     if (process.result() != ProcessResult::FinishedWithSuccess)
