@@ -208,4 +208,85 @@
     To specify the maximum distance for the shadow map, set the
     \uicontrol {Shadow map far} property value. Using smaller values
     may improve the precision and effects of the map.
+
+    \section1 Baking Lightmaps
+
+    \note Lightmaps baking is releases as technical preview in \QDS 4.1.
+
+    \section2 Baking Lightmaps for a 3D Model
+    Baked lightmap components are not visible in the \uicontrol Navigator view by default. You must
+    select \inlineimage icons/visibilityon.png
+    in the \uicontrol Navigator view, to make it visible.
+
+    To bake lightmaps for a 3D model:
+    \list 1
+      \li From \uicontrol Components, drag a \uicontrol {Baked Lightmap} component to
+      the 3D model in the \uicontrol Navigator view.
+      \image baked-lightmaps-navigator.png
+      \li In the \uicontrol Navigator view, select \e bakedLightmap and in the \uicontrol Properties
+      view:
+        \list
+          \li Select \uicontrol Enabled.
+          \li In \uicontrol Key, set the filename base for the generated light maps.
+          \li In \uicontrol {Load Prefix}, set the relative path to the folder where the generated
+          light map files are saved.
+        \endlist
+      \li In the \uicontrol Navigator view, select the 3D model and in the \uicontrol Properties
+      view, select \uicontrol {Used in Baked Lighting}.
+      \li Right-click anywhere in the \uicontrol 3D view and select \uicontrol {Bake Lights}.
+    \endlist
+
+    \section2 Baking Lightmaps for a 3D Model Inside a Sub Component
+
+    To bake lightmaps for a 3D model inside a sub component, you must first expose the model
+    with a local cusomt property:
+
+    \list 1
+      \li In the \uicontrol Navigator view, right-click the sub component and select
+      \uicontrol {Edit Component}.
+      \image baked-lightmaps-edit-component.png
+      \li In the \uicontrol Navigator view, select the root component.
+      \li In the \uicontrol Properties view, select \inlineimage icons/plus.png
+      in the \uicontrol {Local Custom Properties} section.
+      \li Add a new property with Alias type.
+      \image baked-lightmaps-add-property.png
+      \li For the property, set the value to the ID of the 3D model that you want
+      to bake lightmaps for.
+      \image baked-lightmaps-property-value.png
+      \li In the \uicontrol Navigator view, select the 3D model and in the \uicontrol Properties
+      view, select \uicontrol {Used in Baked Lighting}.
+      \li Now, you can return to the main project file. To do this, select the bread crumb in the
+      top toolbar.
+      \image baked-lightmaps-exit-component.png
+      \li From the \uicontrol Components view, drag a \uicontrol {Baked Lightmap} component to the
+      sub component in the \uicontrol Navigator view.
+      \image baked-lightmaps-navigator-blm.png
+      \li In the \uicontrol Navigator view, select the sub component and go to the
+      \uicontrol Code view.
+      \li In the \uicontrol Code view, you need to set the properties for the model inside the sub
+      component by using the exposed property.
+
+      Add the following code inside the sub component.
+      \code
+          lmSphere.bakedLightmap: bakedLightmap
+          lmSphere.usedInBakedLighting: true
+          lmSphere.lightmapBaseResolution: 128
+      \endcode
+
+      It should look something like this:
+      \code
+          MyGroup {
+            id: group
+            lmSphere.bakedLightmap: bakedLightmap
+            lmSphere.usedInBakedLighting: true
+            lmSphere.lightmapBaseResolution: 128
+            BakedLightmap {
+              id: bakedLightmap
+              loadPrefix: "lightmaps"
+              }
+            }
+      \endcode
+      \li Right-click anywhere in the \uicontrol 3D view and select \uicontrol {Bake Lights}.
+    \endlist
+
 */
