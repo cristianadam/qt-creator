@@ -343,7 +343,7 @@ private:
     void showEvent(QShowEvent *event) final
     {
         if (!widget()) {
-            QWidget *inner = m_page->widget();
+            QWidget *inner = m_page->createWidget();
             setWidget(inner);
             inner->setAutoFillBackground(false);
         }
