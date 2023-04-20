@@ -90,13 +90,6 @@ class ShortcutSettings final : public IOptionsPage
 {
 public:
     ShortcutSettings();
-
-    QWidget *widget() override;
-    void apply() override;
-    void finish() override;
-
-private:
-    QPointer<ShortcutSettingsWidget> m_widget;
 };
 
 } // namespace Internal
