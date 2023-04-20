@@ -10,6 +10,7 @@
 #include "simplecodestylepreferences.h"
 #include "storagesettings.h"
 #include "tabsettings.h"
+#include "tabsettingswidget.h"
 #include "texteditorconstants.h"
 #include "texteditorsettings.h"
 #include "texteditortr.h"
@@ -35,8 +36,9 @@
 
 namespace TextEditor {
 
-struct BehaviorSettingsPage::BehaviorSettingsPagePrivate : public QObject
+class BehaviorSettingsPagePrivate : public QObject
 {
+public:
     BehaviorSettingsPagePrivate();
 
     const QString m_settingsPrefix{"text"};
@@ -52,7 +54,7 @@ struct BehaviorSettingsPage::BehaviorSettingsPagePrivate : public QObject
     ExtraEncodingSettings m_extraEncodingSettings;
 };
 
-BehaviorSettingsPage::BehaviorSettingsPagePrivate::BehaviorSettingsPagePrivate()
+BehaviorSettingsPagePrivate::BehaviorSettingsPagePrivate()
 {
     // global tab preferences for all other languages
     m_codeStyle = new SimpleCodeStylePreferences(this);
@@ -71,26 +73,11 @@ BehaviorSettingsPage::BehaviorSettingsPagePrivate::BehaviorSettingsPagePrivate()
     m_extraEncodingSettings.fromSettings(m_settingsPrefix, s);
 }
 
-BehaviorSettingsPage::BehaviorSettingsPage()
-  : d(new BehaviorSettingsPagePrivate)
+class BehaviorSettingsWidgetImpl : public Core::IOptionsPageWidget
 {
-    // Add the GUI used to configure the tab, storage and interaction settings
-    setId(Constants::TEXT_EDITOR_BEHAVIOR_SETTINGS);
-    setDisplayName(Tr::tr("Behavior"));
-
-    setCategory(TextEditor::Constants::TEXT_EDITOR_SETTINGS_CATEGORY);
-    setDisplayCategory(Tr::tr("Text Editor"));
-    setCategoryIconPath(TextEditor::Constants::TEXT_EDITOR_SETTINGS_CATEGORY_ICON_PATH);
-}
-
-BehaviorSettingsPage::~BehaviorSettingsPage()
-{
-    delete d;
-}
-
-QWidget *BehaviorSettingsPage::widget()
-{
-    if (!d->m_widget) {
+public:
+    BehaviorSettingsWidgetImpl(BehaviorSettingsPagePrivate *d) : d(d)
+    {
         d->m_widget = new QWidget;
         d->m_behaviorWidget = new BehaviorSettingsWidget(d->m_widget);
 
@@ -111,14 +98,49 @@ QWidget *BehaviorSettingsPage::widget()
         TabSettingsWidget *tabSettingsWidget = d->m_behaviorWidget->tabSettingsWidget();
         tabSettingsWidget->setCodingStyleWarningVisible(true);
         connect(tabSettingsWidget, &TabSettingsWidget::codingStyleLinkClicked,
-                this, &BehaviorSettingsPage::openCodingStylePreferences);
+                this, [] (TabSettingsWidget::CodingStyleLink link) {
+            switch (link) {
+            case TabSettingsWidget::CppLink:
+                Core::ICore::showOptionsDialog(CppEditor::Constants::CPP_CODE_STYLE_SETTINGS_ID);
+                break;
+            case TabSettingsWidget::QtQuickLink:
+                Core::ICore::showOptionsDialog(QmlJSTools::Constants::QML_JS_CODE_STYLE_SETTINGS_ID);
+                break;
+            }
+        });
 
-        settingsToUI();
+        d->m_behaviorWidget->setAssignedTypingSettings(d->m_typingSettings);
+        d->m_behaviorWidget->setAssignedStorageSettings(d->m_storageSettings);
+        d->m_behaviorWidget->setAssignedBehaviorSettings(d->m_behaviorSettings);
+        d->m_behaviorWidget->setAssignedExtraEncodingSettings(d->m_extraEncodingSettings);
+        d->m_behaviorWidget->setAssignedCodec(Core::EditorManager::defaultTextCodec());
+        d->m_behaviorWidget->setAssignedLineEnding(Core::EditorManager::defaultLineEnding());
     }
-    return d->m_widget;
+
+    void apply() final;
+
+    BehaviorSettingsPagePrivate *d;
+};
+
+BehaviorSettingsPage::BehaviorSettingsPage()
+  : d(new BehaviorSettingsPagePrivate)
+{
+    // Add the GUI used to configure the tab, storage and interaction settings
+    setId(Constants::TEXT_EDITOR_BEHAVIOR_SETTINGS);
+    setDisplayName(Tr::tr("Behavior"));
+
+    setCategory(TextEditor::Constants::TEXT_EDITOR_SETTINGS_CATEGORY);
+    setDisplayCategory(Tr::tr("Text Editor"));
+    setCategoryIconPath(TextEditor::Constants::TEXT_EDITOR_SETTINGS_CATEGORY_ICON_PATH);
+    setWidgetCreator([this] { return new BehaviorSettingsWidgetImpl(d); });
 }
 
-void BehaviorSettingsPage::apply()
+BehaviorSettingsPage::~BehaviorSettingsPage()
+{
+    delete d;
+}
+
+void BehaviorSettingsWidgetImpl::apply()
 {
     if (!d->m_behaviorWidget) // page was never shown
         return;
@@ -128,8 +150,10 @@ void BehaviorSettingsPage::apply()
     BehaviorSettings newBehaviorSettings;
     ExtraEncodingSettings newExtraEncodingSettings;
 
-    settingsFromUI(&newTypingSettings, &newStorageSettings,
-                   &newBehaviorSettings, &newExtraEncodingSettings);
+    d->m_behaviorWidget->assignedTypingSettings(&newTypingSettings);
+    d->m_behaviorWidget->assignedStorageSettings(&newStorageSettings);
+    d->m_behaviorWidget->assignedBehaviorSettings(&newBehaviorSettings);
+    d->m_behaviorWidget->assignedExtraEncodingSettings(&newExtraEncodingSettings);
 
     QSettings *s = Core::ICore::settings();
     QTC_ASSERT(s, return);
@@ -178,32 +202,6 @@ void BehaviorSettingsPage::apply()
                 d->m_behaviorWidget->assignedLineEnding());
 }
 
-void BehaviorSettingsPage::settingsFromUI(TypingSettings *typingSettings,
-                                          StorageSettings *storageSettings,
-                                          BehaviorSettings *behaviorSettings,
-                                          ExtraEncodingSettings *extraEncodingSettings) const
-{
-    d->m_behaviorWidget->assignedTypingSettings(typingSettings);
-    d->m_behaviorWidget->assignedStorageSettings(storageSettings);
-    d->m_behaviorWidget->assignedBehaviorSettings(behaviorSettings);
-    d->m_behaviorWidget->assignedExtraEncodingSettings(extraEncodingSettings);
-}
-
-void BehaviorSettingsPage::settingsToUI()
-{
-    d->m_behaviorWidget->setAssignedTypingSettings(d->m_typingSettings);
-    d->m_behaviorWidget->setAssignedStorageSettings(d->m_storageSettings);
-    d->m_behaviorWidget->setAssignedBehaviorSettings(d->m_behaviorSettings);
-    d->m_behaviorWidget->setAssignedExtraEncodingSettings(d->m_extraEncodingSettings);
-    d->m_behaviorWidget->setAssignedCodec(Core::EditorManager::defaultTextCodec());
-    d->m_behaviorWidget->setAssignedLineEnding(Core::EditorManager::defaultLineEnding());
-}
-
-void BehaviorSettingsPage::finish()
-{
-    delete d->m_widget;
-}
-
 ICodeStylePreferences *BehaviorSettingsPage::codeStyle() const
 {
     return d->m_codeStyle;
@@ -234,17 +232,5 @@ const ExtraEncodingSettings &BehaviorSettingsPage::extraEncodingSettings() const
     return d->m_extraEncodingSettings;
 }
 
-
-void BehaviorSettingsPage::openCodingStylePreferences(TabSettingsWidget::CodingStyleLink link)
-{
-    switch (link) {
-    case TabSettingsWidget::CppLink:
-        Core::ICore::showOptionsDialog(CppEditor::Constants::CPP_CODE_STYLE_SETTINGS_ID);
-        break;
-    case TabSettingsWidget::QtQuickLink:
-        Core::ICore::showOptionsDialog(QmlJSTools::Constants::QML_JS_CODE_STYLE_SETTINGS_ID);
-        break;
-    }
-}
 
 } // namespace TextEditor
