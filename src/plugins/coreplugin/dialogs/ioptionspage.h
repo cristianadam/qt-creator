@@ -49,9 +49,10 @@ public:
     QStringList keywords() const;
 
     virtual bool matches(const QRegularExpression &regexp) const;
-    virtual QWidget *widget();
     virtual void apply();
     virtual void finish();
+
+    QWidget *createWidget();
 
 protected:
     void setId(Utils::Id id) { m_id = id; }

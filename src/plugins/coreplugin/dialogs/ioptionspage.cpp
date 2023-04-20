@@ -101,18 +101,18 @@ QStringList IOptionsPage::keywords() const
 {
     if (!m_keywordsInitialized) {
         auto that = const_cast<IOptionsPage *>(this);
-        QWidget *widget = that->widget();
-        if (!widget)
-            return {};
+//        QWidget *widget = that->widget();
+//        if (!widget)
+//            return {};
         // find common subwidgets
-        for (const QLabel *label : widget->findChildren<QLabel *>())
-            m_keywords << Utils::stripAccelerator(label->text());
-        for (const QCheckBox *checkbox : widget->findChildren<QCheckBox *>())
-            m_keywords << Utils::stripAccelerator(checkbox->text());
-        for (const QPushButton *pushButton : widget->findChildren<QPushButton *>())
-            m_keywords << Utils::stripAccelerator(pushButton->text());
-        for (const QGroupBox *groupBox : widget->findChildren<QGroupBox *>())
-            m_keywords << Utils::stripAccelerator(groupBox->title());
+//        for (const QLabel *label : widget->findChildren<QLabel *>())
+//            m_keywords << Utils::stripAccelerator(label->text());
+//        for (const QCheckBox *checkbox : widget->findChildren<QCheckBox *>())
+//            m_keywords << Utils::stripAccelerator(checkbox->text());
+//        for (const QPushButton *pushButton : widget->findChildren<QPushButton *>())
+//            m_keywords << Utils::stripAccelerator(pushButton->text());
+//        for (const QGroupBox *groupBox : widget->findChildren<QGroupBox *>())
+//            m_keywords << Utils::stripAccelerator(groupBox->title());
 
         m_keywordsInitialized = true;
     }
@@ -130,7 +130,7 @@ QStringList IOptionsPage::keywords() const
     Either override this function in a derived class, or set a widget creator.
 */
 
-QWidget *IOptionsPage::widget()
+QWidget *IOptionsPage::createWidget()
 {
     if (!m_widget) {
         if (m_widgetCreator) {
