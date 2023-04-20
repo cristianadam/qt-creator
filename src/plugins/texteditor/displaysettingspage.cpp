@@ -324,17 +324,17 @@ void DisplaySettingsWidget::setDisplaySettings(const DisplaySettings &newDisplay
 
  QSpinBox *DisplaySettingsWidget::fontSettingsPageLineSpacingLink()
  {
-     for (const auto &page : Core::IOptionsPage::allOptionsPages()) {
-         QWidget *widget = page->widget();
+//     for (const auto &page : Core::IOptionsPage::allOptionsPages()) {
+//         QWidget *widget = page->widget();
 
-         if (!widget)
-             continue;
+//         if (!widget)
+//             continue;
 
-         for (QSpinBox *spinBox : widget->findChildren<QSpinBox *>()) {
-             if (spinBox->objectName() == QLatin1String("FontSettingsPage.LineSpacingSpinBox"))
-                return spinBox;
-         }
-     }
+//         for (QSpinBox *spinBox : widget->findChildren<QSpinBox *>()) {
+//             if (spinBox->objectName() == QLatin1String("FontSettingsPage.LineSpacingSpinBox"))
+//                return spinBox;
+//         }
+//     }
 
      return nullptr;
  }
