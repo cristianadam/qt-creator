@@ -14,18 +14,16 @@
 #include <array>
 
 QT_BEGIN_NAMESPACE
-class QGroupBox;
 class QLabel;
 QT_END_NAMESPACE
+
+namespace Utils { class FancyLineEdit; }
 
 namespace Core {
 
 class Command;
 
 namespace Internal {
-
-class ActionManagerPrivate;
-class ShortcutSettingsWidget;
 
 struct ShortcutItem
 {

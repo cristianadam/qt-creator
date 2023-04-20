@@ -232,7 +232,11 @@ public:
     ShortcutSettingsWidget();
     ~ShortcutSettingsWidget() final;
 
-    void apply();
+    void apply()
+    {
+        for (const ShortcutItem *item : std::as_const(m_scitems))
+            item->m_cmd->setKeySequences(item->m_keys);
+    }
 
 private:
     void importAction() final;
@@ -283,20 +287,6 @@ ShortcutSettingsWidget::ShortcutSettingsWidget()
 ShortcutSettingsWidget::~ShortcutSettingsWidget()
 {
     qDeleteAll(m_scitems);
-}
-
-ShortcutSettings::ShortcutSettings()
-{
-    setId(Constants::SETTINGS_ID_SHORTCUTS);
-    setDisplayName(Tr::tr("Keyboard"));
-    setCategory(Constants::SETTINGS_CATEGORY_CORE);
-    setWidgetCreator([] { return new ShortcutSettingsWidget; });
-}
-
-void ShortcutSettingsWidget::apply()
-{
-    for (const ShortcutItem *item : std::as_const(m_scitems))
-        item->m_cmd->setKeySequences(item->m_keys);
 }
 
 ShortcutItem *shortcutItem(QTreeWidgetItem *treeItem)
@@ -685,6 +675,33 @@ QKeySequence ShortcutInput::keySequence() const
 void ShortcutInput::setConflictChecker(const ShortcutInput::ConflictChecker &fun)
 {
     m_conflictChecker = fun;
+}
+
+// ShortcutSettingsPageWidget
+
+class ShortcutSettingsPageWidget : public IOptionsPageWidget
+{
+public:
+    ShortcutSettingsPageWidget()
+        : m_widget(new ShortcutSettingsWidget)
+    {
+        auto vbox = new QVBoxLayout(this);
+        vbox->addWidget(m_widget);
+    }
+
+    void apply() final { m_widget->apply(); }
+
+    ShortcutSettingsWidget *m_widget;
+};
+
+// ShortcutSettings
+
+ShortcutSettings::ShortcutSettings()
+{
+    setId(Constants::SETTINGS_ID_SHORTCUTS);
+    setDisplayName(Tr::tr("Keyboard"));
+    setCategory(Constants::SETTINGS_CATEGORY_CORE);
+    setWidgetCreator([] { return new ShortcutSettingsPageWidget; });
 }
 
 } // namespace Internal
