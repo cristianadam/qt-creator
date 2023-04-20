@@ -256,8 +256,6 @@ public:
     void apply();
     void finish();
 
-    QPointer<QWidget> m_widget;
-
 private:
     void loadSnippetGroup(int index);
     void markSnippetsCollection();
@@ -547,6 +545,19 @@ void SnippetsSettingsPagePrivate::decorateEditors(const TextEditor::FontSettings
     }
 }
 
+// SnippetsSettingsWidget
+
+class SnippetsSettingsWidget : public Core::IOptionsPageWidget
+{
+public:
+    SnippetsSettingsWidget(SnippetsSettingsPagePrivate *d) : d(d)
+    {
+        d->configureUi(this);
+    }
+
+    SnippetsSettingsPagePrivate *d;
+};
+
 // SnippetsSettingsPage
 
 SnippetsSettingsPage::SnippetsSettingsPage()
@@ -562,26 +573,6 @@ SnippetsSettingsPage::SnippetsSettingsPage()
 SnippetsSettingsPage::~SnippetsSettingsPage()
 {
     delete d;
-}
-
-QWidget *SnippetsSettingsPage::widget()
-{
-    if (!d->m_widget) {
-        d->m_widget = new QWidget;
-        d->configureUi(d->m_widget);
-    }
-    return d->m_widget;
-}
-
-void SnippetsSettingsPage::apply()
-{
-    d->apply();
-}
-
-void SnippetsSettingsPage::finish()
-{
-    d->finish();
-    delete d->m_widget;
 }
 
 } // Internal
