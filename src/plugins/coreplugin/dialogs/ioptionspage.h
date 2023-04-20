@@ -23,8 +23,14 @@ class CORE_EXPORT IOptionsPageWidget : public QWidget
 {
     Q_OBJECT
 public:
-    virtual void apply() = 0;
+    virtual void apply() { if (m_onApply) m_onApply(); }
     virtual void finish() {}
+
+protected:
+    void setOnApply(const std::function<void()> &onApply) { m_onApply = onApply; }
+
+private:
+    std::function<void()> m_onApply;
 };
 
 class CORE_EXPORT IOptionsPage : public QObject
