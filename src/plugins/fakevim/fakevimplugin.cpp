@@ -568,12 +568,12 @@ public:
 
 enum { CommandRole = Qt::UserRole };
 
-class FakeVimExCommandsWidget : public CommandMappings
+class FakeVimExCommandsMappings : public CommandMappings
 {
 public:
-    FakeVimExCommandsWidget();
+    FakeVimExCommandsMappings();
 
-    void apply() final;
+    void apply();
 
 protected:
     void commandChanged();
@@ -593,14 +593,14 @@ private:
     friend class FakeVimExCommandsPage; // allow the page accessing the ExCommandMaps
 };
 
-FakeVimExCommandsWidget::FakeVimExCommandsWidget()
+FakeVimExCommandsMappings::FakeVimExCommandsMappings()
 {
     setPageTitle(Tr::tr("Ex Command Mapping"));
     setTargetHeader(Tr::tr("Ex Trigger Expression"));
     setImportExportEnabled(false);
 
-    connect(this, &FakeVimExCommandsWidget::currentCommandChanged,
-            this, &FakeVimExCommandsWidget::handleCurrentCommandChanged);
+    connect(this, &FakeVimExCommandsMappings::currentCommandChanged,
+            this, &FakeVimExCommandsMappings::handleCurrentCommandChanged);
 
     m_commandBox = new QGroupBox(Tr::tr("Ex Command"), this);
     m_commandBox->setEnabled(false);
@@ -609,11 +609,11 @@ FakeVimExCommandsWidget::FakeVimExCommandsWidget()
     m_commandEdit->setFiltering(true);
     m_commandEdit->setPlaceholderText(QString());
     connect(m_commandEdit, &FancyLineEdit::textChanged,
-            this, &FakeVimExCommandsWidget::commandChanged);
+            this, &FakeVimExCommandsMappings::commandChanged);
     auto resetButton = new QPushButton(Tr::tr("Reset"), m_commandBox);
     resetButton->setToolTip(Tr::tr("Reset to default."));
     connect(resetButton, &QPushButton::clicked,
-            this, &FakeVimExCommandsWidget::resetToDefault);
+            this, &FakeVimExCommandsMappings::resetToDefault);
     boxLayout->addWidget(new QLabel(Tr::tr("Regular expression:")));
     boxLayout->addWidget(m_commandEdit);
     boxLayout->addWidget(resetButton);
@@ -623,26 +623,13 @@ FakeVimExCommandsWidget::FakeVimExCommandsWidget()
     initialize();
 }
 
-class FakeVimExCommandsPage : public IOptionsPage
-{
-public:
-    FakeVimExCommandsPage()
-    {
-        setId(SETTINGS_EX_CMDS_ID);
-        setDisplayName(Tr::tr("Ex Command Mapping"));
-        setCategory(SETTINGS_CATEGORY);
-        setWidgetCreator([] { return new FakeVimExCommandsWidget; });
-    }
-};
-
-
 const char exCommandMapGroup[] = "FakeVimExCommand";
 const char userCommandMapGroup[] = "FakeVimUserCommand";
 const char reKey[] = "RegEx";
 const char cmdKey[] = "Cmd";
 const char idKey[] = "Command";
 
-void FakeVimExCommandsWidget::apply()
+void FakeVimExCommandsMappings::apply()
 {
     // now save the mappings if necessary
     const ExCommandMap &newMapping = exCommandMapFromWidget();
@@ -674,7 +661,7 @@ void FakeVimExCommandsWidget::apply()
     }
 }
 
-void FakeVimExCommandsWidget::initialize()
+void FakeVimExCommandsMappings::initialize()
 {
     QMap<QString, QTreeWidgetItem *> sections;
 
@@ -715,7 +702,7 @@ void FakeVimExCommandsWidget::initialize()
     handleCurrentCommandChanged(nullptr);
 }
 
-void FakeVimExCommandsWidget::handleCurrentCommandChanged(QTreeWidgetItem *current)
+void FakeVimExCommandsMappings::handleCurrentCommandChanged(QTreeWidgetItem *current)
 {
     if (current) {
         m_commandEdit->setText(current->text(2));
@@ -726,7 +713,7 @@ void FakeVimExCommandsWidget::handleCurrentCommandChanged(QTreeWidgetItem *curre
     }
 }
 
-void FakeVimExCommandsWidget::commandChanged()
+void FakeVimExCommandsMappings::commandChanged()
 {
     QTreeWidgetItem *current = commandList()->currentItem();
     if (!current)
@@ -741,7 +728,7 @@ void FakeVimExCommandsWidget::commandChanged()
     setModified(current, regex != dd->m_defaultExCommandMap[name].pattern());
 }
 
-void FakeVimExCommandsWidget::resetToDefault()
+void FakeVimExCommandsMappings::resetToDefault()
 {
     QTreeWidgetItem *current = commandList()->currentItem();
     if (!current)
@@ -753,7 +740,7 @@ void FakeVimExCommandsWidget::resetToDefault()
     m_commandEdit->setText(regex);
 }
 
-void FakeVimExCommandsWidget::defaultAction()
+void FakeVimExCommandsMappings::defaultAction()
 {
     int n = commandList()->topLevelItemCount();
     for (int i = 0; i != n; ++i) {
@@ -772,6 +759,35 @@ void FakeVimExCommandsWidget::defaultAction()
         }
     }
 }
+
+class FakeVimExCommandsWidget : public IOptionsPageWidget
+{
+public:
+    FakeVimExCommandsWidget()
+    {
+        m_widget = new FakeVimExCommandsMappings;
+        auto vbox = new QVBoxLayout(this);
+        vbox->addWidget(m_widget);
+    }
+
+    void apply() final { m_widget->apply(); }
+
+    FakeVimExCommandsMappings *m_widget;
+};
+
+
+class FakeVimExCommandsPage : public IOptionsPage
+{
+public:
+    FakeVimExCommandsPage()
+    {
+        setId(SETTINGS_EX_CMDS_ID);
+        setDisplayName(Tr::tr("Ex Command Mapping"));
+        setCategory(SETTINGS_CATEGORY);
+        setWidgetCreator([] { return new FakeVimExCommandsWidget; });
+    }
+};
+
 
 ///////////////////////////////////////////////////////////////////////
 //
@@ -2072,7 +2088,7 @@ void FakeVimPluginPrivate::switchToFile(int n)
     EditorManager::activateEditorForEntry(DocumentModel::entries().at(n));
 }
 
-ExCommandMap FakeVimExCommandsWidget::exCommandMapFromWidget()
+ExCommandMap FakeVimExCommandsMappings::exCommandMapFromWidget()
 {
     ExCommandMap map;
     int n = commandList()->topLevelItemCount();
