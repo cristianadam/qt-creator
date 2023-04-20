@@ -5,8 +5,7 @@
 
 #include <coreplugin/dialogs/ioptionspage.h>
 
-namespace TextEditor {
-namespace Internal {
+namespace TextEditor::Internal {
 
 class SnippetsSettingsPagePrivate;
 
@@ -16,13 +15,8 @@ public:
     SnippetsSettingsPage();
     ~SnippetsSettingsPage() override;
 
-    QWidget *widget() override;
-    void apply() override;
-    void finish() override;
-
 private:
     SnippetsSettingsPagePrivate *d;
 };
 
-} // Internal
-} // TextEditor
+} // TextEditor::Internal
