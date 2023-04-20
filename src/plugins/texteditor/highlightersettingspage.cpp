@@ -24,9 +24,29 @@
 using namespace Utils;
 
 namespace TextEditor {
-namespace Internal {
 
-class HighlighterSettingsPageWidget : public QWidget
+class HighlighterSettingsPageWidget;
+class HighlighterSettingsPagePrivate
+{
+public:
+    HighlighterSettingsPagePrivate() = default;
+
+    void ensureInitialized();
+    void migrateGenericHighlighterFiles();
+
+    void settingsFromUI();
+    void settingsToUI();
+    bool settingsChanged();
+
+    bool m_initialized = false;
+    const QString m_settingsPrefix{"Text"};
+
+    HighlighterSettings m_settings;
+
+    QPointer<HighlighterSettingsPageWidget> m_widget;
+};
+
+class HighlighterSettingsPageWidget : public Core::IOptionsPageWidget
 {
 public:
     QLabel *definitionsInfolabel;
@@ -36,9 +56,12 @@ public:
     QPushButton *reloadDefinitions;
     QPushButton *resetCache;
     QLineEdit *ignoreEdit;
+    HighlighterSettingsPagePrivate *d;
 
-    HighlighterSettingsPageWidget()
+    HighlighterSettingsPageWidget(HighlighterSettingsPagePrivate *d) : d(d)
     {
+        d->settingsToUI();
+
         resize(521, 332);
 
         definitionsInfolabel = new QLabel(this);
@@ -102,30 +125,12 @@ public:
             Highlighter::clearDefinitionForDocumentCache();
         });
     }
-};
 
-} // Internal
-
-using namespace Internal;
-
-class HighlighterSettingsPagePrivate
-{
-public:
-    HighlighterSettingsPagePrivate() = default;
-
-    void ensureInitialized();
-    void migrateGenericHighlighterFiles();
-
-    void settingsFromUI();
-    void settingsToUI();
-    bool settingsChanged();
-
-    bool m_initialized = false;
-    const QString m_settingsPrefix{"Text"};
-
-    HighlighterSettings m_settings;
-
-    QPointer<HighlighterSettingsPageWidget> m_widget;
+    void apply()
+    {
+        if (d->settingsChanged())
+            d->settingsFromUI();
+    }
 };
 
 void HighlighterSettingsPagePrivate::migrateGenericHighlighterFiles()
@@ -158,34 +163,12 @@ HighlighterSettingsPage::HighlighterSettingsPage()
     setCategory(TextEditor::Constants::TEXT_EDITOR_SETTINGS_CATEGORY);
     setDisplayCategory(Tr::tr("Text Editor"));
     setCategoryIconPath(TextEditor::Constants::TEXT_EDITOR_SETTINGS_CATEGORY_ICON_PATH);
+    setWidgetCreator([this] { return new HighlighterSettingsPageWidget(d); });
 }
 
 HighlighterSettingsPage::~HighlighterSettingsPage()
 {
     delete d;
-}
-
-QWidget *HighlighterSettingsPage::widget()
-{
-    if (!d->m_widget) {
-        d->m_widget = new HighlighterSettingsPageWidget;
-        d->settingsToUI();
-    }
-    return d->m_widget;
-}
-
-void HighlighterSettingsPage::apply()
-{
-    if (!d->m_widget) // page was not shown
-        return;
-    if (d->settingsChanged())
-        d->settingsFromUI();
-}
-
-void HighlighterSettingsPage::finish()
-{
-    delete d->m_widget;
-    d->m_widget = nullptr;
 }
 
 const HighlighterSettings &HighlighterSettingsPage::highlighterSettings() const
