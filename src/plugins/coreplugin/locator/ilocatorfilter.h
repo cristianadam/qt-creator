@@ -12,13 +12,14 @@
 
 #include <QFutureInterface>
 #include <QIcon>
-#include <QMetaType>
-#include <QVariant>
 #include <QKeySequence>
 
 #include <optional>
 
-namespace Utils::Tasking { class TaskItem; }
+QT_BEGIN_NAMESPACE
+template <typename T>
+class QPromise;
+QT_END_NAMESPACE
 
 namespace Core {
 
@@ -29,6 +30,8 @@ class LocatorWidget;
 
 class ILocatorFilter;
 class LocatorStoragePrivate;
+class LocatorFileCache;
+class LocatorFileCachePrivate;
 
 class AcceptResult
 {
@@ -299,6 +302,40 @@ private:
     bool m_hidden = false;
     bool m_enabled = true;
     bool m_isConfigurable = true;
+};
+
+// Always called from non-main thread.
+// Pass additional data to the function by lambda capture.
+// Make sure that the passed data is reentrant.
+// Make sure that the lambda body is thread safe.
+using LocatorFilePathsGenerator = std::function<Utils::FilePaths(const QFuture<void> &)>;
+
+// Always called from main thread.
+using LocatorFilePathsGeneratorProvider = std::function<LocatorFilePathsGenerator()>;
+
+class CORE_EXPORT LocatorFileCache final
+{
+    Q_DISABLE_COPY_MOVE(LocatorFileCache)
+
+public:
+    LocatorFileCache();
+
+    void invalidate();
+    void setGeneratorProvider(const LocatorFilePathsGeneratorProvider &provider);
+    void setGenerator(const LocatorFilePathsGenerator &generator);
+    void setFilePaths(const Utils::FilePaths &filePaths);
+    static LocatorFilePathsGenerator filePathsGenerator(const Utils::FilePaths &filePaths);
+    LocatorMatcherTask matcher() const;
+
+    using MatchedEntries = std::array<LocatorFilterEntries, int(ILocatorFilter::MatchLevel::Count)>;
+    static Utils::FilePaths processFilePaths(const QFuture<void> &future,
+                                             const Utils::FilePaths &filePaths,
+                                             bool hasPathSeparator,
+                                             const QRegularExpression &regExp,
+                                             const Utils::Link &inputLink,
+                                             LocatorFileCache::MatchedEntries *entries);
+private:
+    std::shared_ptr<LocatorFileCachePrivate> d;
 };
 
 } // namespace Core
