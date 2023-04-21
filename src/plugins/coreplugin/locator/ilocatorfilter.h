@@ -12,13 +12,16 @@
 
 #include <QFutureInterface>
 #include <QIcon>
-#include <QMetaType>
-#include <QVariant>
 #include <QKeySequence>
 
 #include <optional>
 
-namespace Utils::Tasking { class TaskItem; }
+QT_BEGIN_NAMESPACE
+template <typename T>
+class QPromise;
+QT_END_NAMESPACE
+
+namespace Utils { class FutureSynchronizer; }
 
 namespace Core {
 
@@ -29,6 +32,7 @@ class LocatorWidget;
 
 class ILocatorFilter;
 class LocatorStoragePrivate;
+class LocatorFileCache;
 
 class AcceptResult
 {
@@ -299,6 +303,71 @@ private:
     bool m_hidden = false;
     bool m_enabled = true;
     bool m_isConfigurable = true;
+};
+
+class CORE_EXPORT LocatorFileCache final
+{
+public:
+    using LocatorFilePathsGenerator = std::function<Utils::FilePaths(const QFuture<void> &)>;
+    using LocatorFileCacheValidator = std::function<void(LocatorFileCache &)>;
+
+    LocatorFileCache();
+    LocatorFileCache(const LocatorFileCache &other);
+    LocatorFileCache(LocatorFileCache &&other);
+    LocatorFileCache &operator=(const LocatorFileCache &other);
+    LocatorFileCache &operator=(LocatorFileCache &&other);
+    ~LocatorFileCache();
+
+    bool isValid() const;
+    void invalidate();
+    void setFilePathsGenerator(const LocatorFilePathsGenerator &generator);
+    void setFilePaths(const Utils::FilePaths &filePaths);
+
+    LocatorMatcherTask matcher(Utils::FutureSynchronizer *futureSynchronizer,
+                               const LocatorFileCacheValidator &validator = {}) const;
+
+    using MatchedEntries = std::array<LocatorFilterEntries, int(ILocatorFilter::MatchLevel::Count)>;
+    static Utils::FilePaths processFilePaths(const QFuture<void> &future,
+                                             const Utils::FilePaths &filePaths,
+                                             bool hasPathSeparator,
+                                             const QRegularExpression &regExp,
+                                             const Utils::Link &inputLink,
+                                             LocatorFileCache::MatchedEntries &entries);
+private:
+    friend void filter(QPromise<LocatorFileCache> &promise, const LocatorStorage &storage,
+                       const LocatorFileCache &cache);
+    LocatorFilterEntries generate(const QFuture<void> &future, const QString &input) const;
+    void updateThisWith(const LocatorFileCache &newCache);
+
+    struct {
+        int m_validatorId = 0;
+        LocatorFilePathsGenerator m_generator;
+
+        mutable std::optional<Utils::FilePaths> m_filePaths;
+
+        mutable QString m_lastInput;
+        mutable std::optional<Utils::FilePaths> m_cache;
+    } d;
+
+    // ThisHolder struct is shared with the task handlers created by *this's matcher() function.
+    // It works similar to QPointer<>, however, LocatorFileCache isn't QObject based, so we
+    // can't use it here. The shared struct m_thisHolder keeps a pointer to *this object and when
+    // *this object is deleted the destructor of LocatorFileCache updates the shared struct data
+    // and clears the pointer to *this. In this way, when LocatorMatcherTask is keeping a copy of
+    // shared ThisHolder struct, it may detect that the target LocatorFileCache was already deleted
+    // in any later point in time. In order to implement it properly, so that all operators
+    // keeps the right pointer to *this inside shared ThisHolder struct, the custom copy and the
+    // move constructors and the custom copy and the move assignment operators needs to be defined
+    // for LocatorFileCache class.
+    struct ThisHolder {
+        Q_DISABLE_COPY_MOVE(ThisHolder)
+        ThisHolder(LocatorFileCache *that) { m_this = that; };
+        LocatorFileCache *get() { return m_this; }
+        void reset() { m_this = nullptr; }
+    private:
+        LocatorFileCache *m_this = nullptr;
+    };
+    std::shared_ptr<ThisHolder> m_thisHolder;
 };
 
 } // namespace Core
