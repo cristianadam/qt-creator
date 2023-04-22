@@ -4,6 +4,7 @@
 #include "directoryfilter.h"
 
 #include "locator.h"
+#include "../coreplugin.h"
 #include "../coreplugintr.h"
 
 #include <utils/algorithm.h>
@@ -22,6 +23,7 @@
 #include <QListWidget>
 #include <QPushButton>
 
+using namespace Core::Internal;
 using namespace Utils;
 
 namespace Core {
@@ -100,6 +102,11 @@ DirectoryFilter::DirectoryFilter(Id id)
         Async<FilePaths>(asyncSetup, asyncDone)
     };
     setRefreshRecipe(root);
+}
+
+LocatorMatcherTasks DirectoryFilter::matchers()
+{
+    return {m_cache.matcher(CorePlugin::futureSynchronizer())};
 }
 
 void DirectoryFilter::saveState(QJsonObject &object) const
@@ -383,6 +390,7 @@ void DirectoryFilter::updateOptionButtons()
 
 void DirectoryFilter::updateFileIterator()
 {
+    m_cache.setFilePaths(m_files);
     setFileIterator(new BaseFileFilter::ListIterator(m_files));
 }
 
@@ -396,7 +404,7 @@ void DirectoryFilter::setDirectories(const FilePaths &directories)
     if (directories == m_directories)
         return;
     m_directories = directories;
-    Internal::Locator::instance()->refresh({this});
+    Locator::instance()->refresh({this});
 }
 
 void DirectoryFilter::addDirectory(const FilePath &directory)
