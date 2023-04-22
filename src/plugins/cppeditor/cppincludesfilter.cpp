@@ -126,6 +126,59 @@ CppIncludesFilter::CppIncludesFilter()
             this, &CppIncludesFilter::invalidateCache);
 }
 
+static FilePaths generateFilePaths(const QFuture<void> &future,
+                                   const CPlusPlus::Snapshot &snapshot,
+                                   const std::unordered_set<FilePath> &inputFilePaths)
+{
+    FilePaths results;
+    std::unordered_set<FilePath> resultsCache;
+    std::unordered_set<FilePath> queuedPaths = inputFilePaths;
+
+    while (!queuedPaths.empty()) {
+        if (future.isCanceled())
+            return {};
+
+        const auto iterator = queuedPaths.cbegin();
+        const FilePath filePath = *iterator;
+        queuedPaths.erase(iterator);
+        const CPlusPlus::Document::Ptr doc = snapshot.document(filePath);
+        if (!doc)
+            continue;
+        const FilePaths includedFiles = doc->includedFiles();
+        for (const FilePath &includedFile : includedFiles) {
+            if (resultsCache.emplace(includedFile).second) {
+                queuedPaths.emplace(includedFile);
+                results.append(includedFile);
+            }
+        }
+    }
+
+    return results;
+}
+
+LocatorMatcherTasks CppIncludesFilter::matchers()
+{
+    const auto validator = [](LocatorFileCache &cache) {
+        std::unordered_set<FilePath> inputFilePaths;
+        for (Project *project : ProjectManager::projects()) {
+            const FilePaths allFiles = project->files(Project::SourceFiles);
+            for (const FilePath &filePath : allFiles)
+                inputFilePaths.insert(filePath);
+        }
+        const QList<DocumentModel::Entry *> entries = DocumentModel::entries();
+        for (DocumentModel::Entry *entry : entries) {
+            if (entry)
+                inputFilePaths.insert(entry->filePath());
+        }
+        const CPlusPlus::Snapshot snapshot = CppModelManager::instance()->snapshot();
+        cache.setFilePathsGenerator([snapshot, inputFilePaths](const QFuture<void> &future) {
+            return generateFilePaths(future, snapshot, inputFilePaths);
+        });
+    };
+
+    return {m_cache.matcher(ProjectExplorerPlugin::futureSynchronizer(), validator)};
+}
+
 void CppIncludesFilter::prepareSearch(const QString &entry)
 {
     Q_UNUSED(entry)
@@ -150,6 +203,7 @@ void CppIncludesFilter::prepareSearch(const QString &entry)
 
 void CppIncludesFilter::invalidateCache()
 {
+    m_cache.invalidate();
     m_needsUpdate = true;
     setFileIterator(nullptr); // clean up
 }

@@ -12,13 +12,14 @@ class CppIncludesFilter : public Core::BaseFileFilter
 public:
     CppIncludesFilter();
 
-    // ILocatorFilter interface
 public:
     void prepareSearch(const QString &entry) override;
 
 private:
+    Core::LocatorMatcherTasks matchers() final;
     void invalidateCache();
 
+    Core::LocatorFileCache m_cache;
     bool m_needsUpdate = true;
 };
 
