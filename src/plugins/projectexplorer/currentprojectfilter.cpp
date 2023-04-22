@@ -4,6 +4,7 @@
 #include "currentprojectfilter.h"
 
 #include "project.h"
+#include "projectexplorer.h"
 #include "projectexplorertr.h"
 #include "projecttree.h"
 
@@ -29,6 +30,18 @@ CurrentProjectFilter::CurrentProjectFilter()
 
     connect(ProjectTree::instance(), &ProjectTree::currentProjectChanged,
             this, &CurrentProjectFilter::currentProjectChanged);
+}
+
+LocatorMatcherTasks CurrentProjectFilter::matchers()
+{
+    const auto validator = [this](LocatorFileCache &cache) {
+        const FilePaths paths = m_project ? m_project->files(Project::SourceFiles) : FilePaths();
+        // TODO: Should we sort the paths like it's done in AllProjectsFilter?
+//        Utils::sort(paths);
+        cache.setFilePaths(paths);
+    };
+
+    return {m_cache.matcher(ProjectExplorerPlugin::futureSynchronizer(), validator)};
 }
 
 void CurrentProjectFilter::prepareSearch(const QString &entry)
@@ -60,5 +73,6 @@ void CurrentProjectFilter::currentProjectChanged()
 
 void CurrentProjectFilter::invalidateCache()
 {
+    m_cache.invalidate();
     setFileIterator(nullptr);
 }
