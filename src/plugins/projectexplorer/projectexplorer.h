@@ -23,6 +23,7 @@ class OutputWindow;
 
 namespace Utils {
 class CommandLine;
+class FutureSynchronizer;
 class ProcessHandle;
 } // Utils
 
@@ -171,6 +172,8 @@ public:
     static void updateRunActions();
 
     static Core::OutputWindow *buildSystemOutput();
+
+    static Utils::FutureSynchronizer *futureSynchronizer();
 
 signals:
     void finishedInitialization();

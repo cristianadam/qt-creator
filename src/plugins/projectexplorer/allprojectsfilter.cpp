@@ -9,7 +9,7 @@
 #include "projectmanager.h"
 
 #include <utils/algorithm.h>
-#include <utils/tasktree.h>
+#include <utils/asynctask.h>
 
 using namespace Core;
 using namespace Utils;
@@ -31,6 +31,19 @@ AllProjectsFilter::AllProjectsFilter()
             this, &AllProjectsFilter::invalidateCache);
 }
 
+LocatorMatcherTasks AllProjectsFilter::matchers()
+{
+    const auto validator = [](LocatorFileCache &cache) {
+        FilePaths paths;
+        for (Project *project : ProjectManager::projects())
+            paths.append(project->files(Project::SourceFiles));
+        Utils::sort(paths);
+        cache.setFilePaths(paths);
+    };
+
+    return {m_cache.matcher(ProjectExplorerPlugin::futureSynchronizer(), validator)};
+}
+
 void AllProjectsFilter::prepareSearch(const QString &entry)
 {
     Q_UNUSED(entry)
@@ -46,6 +59,7 @@ void AllProjectsFilter::prepareSearch(const QString &entry)
 
 void AllProjectsFilter::invalidateCache()
 {
+    m_cache.invalidate();
     setFileIterator(nullptr);
 }
 

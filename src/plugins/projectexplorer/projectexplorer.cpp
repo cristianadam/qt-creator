@@ -121,6 +121,7 @@
 
 #include <utils/algorithm.h>
 #include <utils/fileutils.h>
+#include <utils/futuresynchronizer.h>
 #include <utils/macroexpander.h>
 #include <utils/mimeutils.h>
 #include <utils/parameteraction.h>
@@ -732,6 +733,7 @@ public:
 
     DeviceCheckBuildStepFactory deviceCheckBuildStepFactory;
     SanitizerOutputFormatterFactory sanitizerFormatterFactory;
+    FutureSynchronizer m_futureSynchronizer;
 };
 
 static ProjectExplorerPlugin *m_instance = nullptr;
@@ -1994,6 +1996,8 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
 
     if (auto sanitizerTester = SanitizerParser::testCreator())
         addTestCreator(sanitizerTester.value());
+
+    dd->m_futureSynchronizer.setCancelOnWait(true);
 
     return true;
 }
@@ -4273,6 +4277,12 @@ void ProjectExplorerPlugin::updateRunActions()
 OutputWindow *ProjectExplorerPlugin::buildSystemOutput()
 {
     return dd->m_proWindow->buildSystemOutput();
+}
+
+FutureSynchronizer *ProjectExplorerPlugin::futureSynchronizer()
+{
+    QTC_ASSERT(dd, return nullptr);
+    return &dd->m_futureSynchronizer;
 }
 
 RecentProjectsEntries ProjectExplorerPlugin::recentProjects()
