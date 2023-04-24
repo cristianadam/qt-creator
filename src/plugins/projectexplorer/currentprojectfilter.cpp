@@ -7,16 +7,12 @@
 #include "projectexplorertr.h"
 #include "projecttree.h"
 
-#include <utils/algorithm.h>
-#include <utils/tasktree.h>
-
 using namespace Core;
 using namespace ProjectExplorer;
 using namespace ProjectExplorer::Internal;
 using namespace Utils;
 
 CurrentProjectFilter::CurrentProjectFilter()
-    : BaseFileFilter()
 {
     setId("Files in current project");
     setDisplayName(Tr::tr("Files in Current Project"));
@@ -36,16 +32,6 @@ CurrentProjectFilter::CurrentProjectFilter()
     });
 }
 
-void CurrentProjectFilter::prepareSearch(const QString &entry)
-{
-    Q_UNUSED(entry)
-    if (!fileIterator()) {
-        const FilePaths paths = m_project ? m_project->files(Project::SourceFiles) : FilePaths();
-        setFileIterator(new BaseFileFilter::ListIterator(paths));
-    }
-    BaseFileFilter::prepareSearch(entry);
-}
-
 void CurrentProjectFilter::currentProjectChanged()
 {
     Project *project = ProjectTree::currentProject();
@@ -61,10 +47,4 @@ void CurrentProjectFilter::currentProjectChanged()
 
     m_project = project;
     invalidateCache();
-}
-
-void CurrentProjectFilter::invalidateCache()
-{
-    m_cache.invalidate();
-    setFileIterator(nullptr);
 }
