@@ -443,7 +443,7 @@ LocatorPopup::LocatorPopup(LocatorWidget *locatorWidget, QWidget *parent)
     connect(m_tree, &QAbstractItemView::activated, locatorWidget,
             [this, locatorWidget](const QModelIndex &index) {
                 if (isVisible())
-                    locatorWidget->scheduleAcceptEntry(index);
+                    locatorWidget->acceptEntry(index);
             });
 }
 
@@ -457,29 +457,28 @@ LocatorWidget *LocatorPopup::inputWidget() const
     return m_inputWidget;
 }
 
-void LocatorPopup::focusOutEvent(QFocusEvent *event) {
+void LocatorPopup::focusOutEvent(QFocusEvent *event)
+{
     if (event->reason() == Qt::ActiveWindowFocusReason)
         hide();
     QWidget::focusOutEvent(event);
 }
 
-void CompletionList::next() {
+void CompletionList::next()
+{
     int index = currentIndex().row();
     ++index;
-    if (index >= model()->rowCount(QModelIndex())) {
-        // wrap
-        index = 0;
-    }
+    if (index >= model()->rowCount(QModelIndex()))
+        index = 0; // wrap
     setCurrentIndex(model()->index(index, 0));
 }
 
-void CompletionList::previous() {
+void CompletionList::previous()
+{
     int index = currentIndex().row();
     --index;
-    if (index < 0) {
-        // wrap
-        index = model()->rowCount(QModelIndex()) - 1;
-    }
+    if (index < 0)
+        index = model()->rowCount(QModelIndex()) - 1; // wrap
     setCurrentIndex(model()->index(index, 0));
 }
 
@@ -616,8 +615,7 @@ LocatorWidget::LocatorWidget(Locator *locator)
         locator->refresh(Locator::filters());
     });
     connect(m_configureAction, &QAction::triggered, this, &LocatorWidget::showConfigureDialog);
-    connect(m_fileLineEdit, &QLineEdit::textChanged,
-        this, &LocatorWidget::showPopupDelayed);
+    connect(m_fileLineEdit, &QLineEdit::textChanged, this, [this] { m_showPopupTimer.start(); });
 
     m_showPopupTimer.setInterval(100);
     m_showPopupTimer.setSingleShot(true);
@@ -634,7 +632,7 @@ LocatorWidget::LocatorWidget(Locator *locator)
 
     Command *locateCmd = ActionManager::command(Constants::LOCATE);
     if (QTC_GUARD(locateCmd)) {
-        connect(locateCmd, &Command::keySequenceChanged, this, [this,locateCmd] {
+        connect(locateCmd, &Command::keySequenceChanged, this, [this, locateCmd] {
             updatePlaceholderText(locateCmd);
         });
         updatePlaceholderText(locateCmd);
@@ -846,12 +844,6 @@ bool LocatorWidget::eventFilter(QObject *obj, QEvent *event)
     return QWidget::eventFilter(obj, event);
 }
 
-void LocatorWidget::showPopupDelayed()
-{
-    m_updateRequested = true;
-    m_showPopupTimer.start();
-}
-
 void LocatorWidget::showPopupNow()
 {
     m_showPopupTimer.stop();
@@ -914,71 +906,40 @@ void LocatorWidget::runMatcher(const QString &text)
     m_locatorMatcher->setTasks(tasks);
     m_locatorMatcher->setInputData(searchText);
 
-    connect(m_locatorMatcher.get(), &LocatorMatcher::done, this, [this] {
+    std::shared_ptr<std::atomic_bool> needsClearResult = std::make_shared<std::atomic_bool>(true);
+    connect(m_locatorMatcher.get(), &LocatorMatcher::done, this, [this, needsClearResult] {
         m_showProgressTimer.stop();
         setProgressIndicatorVisible(false);
-        m_updateRequested = false;
         m_locatorMatcher.release()->deleteLater();
-        if (m_rowRequestedForAccept) {
-            acceptEntry(m_rowRequestedForAccept.value());
-            m_rowRequestedForAccept.reset();
-            return;
-        }
-        if (m_needsClearResult) {
+        if (needsClearResult->exchange(false))
             m_locatorModel->clear();
-            m_needsClearResult = false;
-        }
     });
     connect(m_locatorMatcher.get(), &LocatorMatcher::serialOutputDataReady,
-            this, [this](const LocatorFilterEntries &serialOutputData) {
-        if (m_needsClearResult) {
+            this, [this, needsClearResult](const LocatorFilterEntries &serialOutputData) {
+        if (needsClearResult->exchange(false))
             m_locatorModel->clear();
-            m_needsClearResult = false;
-        }
         const bool selectFirst = m_locatorModel->rowCount() == 0;
         m_locatorModel->addEntries(serialOutputData);
-        if (selectFirst) {
+        if (selectFirst)
             emit selectRow(0);
-            if (m_rowRequestedForAccept)
-                m_rowRequestedForAccept = 0;
-        }
     });
 
     m_showProgressTimer.start();
-    m_needsClearResult = true;
-    m_updateRequested = true;
     m_locatorMatcher->start();
 }
 
-void LocatorWidget::scheduleAcceptEntry(const QModelIndex &index)
+void LocatorWidget::acceptEntry(const QModelIndex &index)
 {
-    if (m_updateRequested) {
-        // don't just accept the selected entry, since the list is not up to date
-        // accept will be called after the update finished
-        m_rowRequestedForAccept = index.row();
-        // do not wait for the rest of the search to finish
-        m_locatorMatcher.reset();
-    } else {
-        acceptEntry(index.row());
-    }
-}
-
-void LocatorWidget::acceptEntry(int row)
-{
-    if (row < 0 || row >= m_locatorModel->rowCount())
-        return;
-    const QModelIndex index = m_locatorModel->index(row, 0);
     if (!index.isValid())
         return;
+    m_locatorMatcher.reset();
     const LocatorFilterEntry entry
         = m_locatorModel->data(index, LocatorEntryRole).value<LocatorFilterEntry>();
     if (!entry.acceptor) {
         // Opening editors can open dialogs (e.g. the ssh prompt, or showing erros), so delay until
         // we have hidden the popup with emit hidePopup below and Qt actually processed that
-        QMetaObject::invokeMethod(
-            EditorManager::instance(),
-            [entry] { EditorManager::openEditor(entry); },
-            Qt::QueuedConnection);
+        QMetaObject::invokeMethod(EditorManager::instance(),
+            [entry] { EditorManager::openEditor(entry); }, Qt::QueuedConnection);
     }
     QWidget *focusBeforeAccept = QApplication::focusWidget();
     const AcceptResult result = entry.acceptor ? entry.acceptor() : AcceptResult();
