@@ -329,8 +329,6 @@ Project {
             name: "Locator"
             prefix: "locator/"
             files: [
-                "basefilefilter.cpp",
-                "basefilefilter.h",
                 "commandlocator.cpp",
                 "commandlocator.h",
                 "directoryfilter.cpp",
