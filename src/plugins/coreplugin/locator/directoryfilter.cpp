@@ -35,7 +35,6 @@ namespace Core {
 const char kDisplayNameKey[] = "displayName";
 const char kDirectoriesKey[] = "directories";
 const char kFiltersKey[] = "filters";
-const char kFilesKey[] = "files";
 const char kExclusionFiltersKey[] = "exclusionFilters";
 
 const QStringList kFiltersDefault = {"*.h", "*.cpp", "*.ui", "*.qrc"};
@@ -83,8 +82,7 @@ DirectoryFilter::DirectoryFilter(Id id)
     const auto groupSetup = [this] {
         if (!m_directories.isEmpty())
             return TaskAction::Continue; // Async task will run
-        m_files.clear();
-        updateFileIterator();
+        m_cache.setFilePaths({});
         return TaskAction::StopWithDone; // Group stops, skips async task
     };
     const auto asyncSetup = [this](Async<FilePaths> &async) {
@@ -92,8 +90,7 @@ DirectoryFilter::DirectoryFilter(Id id)
                                     displayName());
     };
     const auto asyncDone = [this](const Async<FilePaths> &async) {
-        m_files = async.isResultAvailable() ? async.result() : FilePaths();
-        updateFileIterator();
+        m_cache.setFilePaths(async.isResultAvailable() ? async.result() : FilePaths());
     };
     const Group root {
         OnGroupSetup(groupSetup),
@@ -113,10 +110,6 @@ void DirectoryFilter::saveState(QJsonObject &object) const
     }
     if (m_filters != kFiltersDefault)
         object.insert(kFiltersKey, QJsonArray::fromStringList(m_filters));
-    if (!m_files.isEmpty())
-        object.insert(kFilesKey,
-                      QJsonArray::fromStringList(
-                          Utils::transform(m_files, &Utils::FilePath::toString)));
     if (m_exclusionFilters != kExclusionFiltersDefault)
         object.insert(kExclusionFiltersKey, QJsonArray::fromStringList(m_exclusionFilters));
 }
@@ -138,10 +131,10 @@ void DirectoryFilter::restoreState(const QJsonObject &object)
     m_directories = toFilePaths(object.value(kDirectoriesKey).toArray());
     m_filters = toStringList(
         object.value(kFiltersKey).toArray(QJsonArray::fromStringList(kFiltersDefault)));
-    m_files = FileUtils::toFilePathList(toStringList(object.value(kFilesKey).toArray()));
     m_exclusionFilters = toStringList(
         object.value(kExclusionFiltersKey)
             .toArray(QJsonArray::fromStringList(kExclusionFiltersDefault)));
+    Internal::Locator::instance()->refresh({this});
 }
 
 void DirectoryFilter::restoreState(const QByteArray &state)
@@ -161,7 +154,7 @@ void DirectoryFilter::restoreState(const QByteArray &state)
         in >> shortcut;
         in >> defaultFilter;
         in >> files;
-        m_files = FileUtils::toFilePathList(files);
+        m_cache.setFilePaths(FileUtils::toFilePathList(files));
         if (!in.atEnd()) // Qt Creator 4.3 and later
             in >> m_exclusionFilters;
         else
@@ -178,7 +171,6 @@ void DirectoryFilter::restoreState(const QByteArray &state)
     } else {
         ILocatorFilter::restoreState(state);
     }
-    updateFileIterator();
 }
 
 class DirectoryFilterOptions : public QDialog
@@ -379,12 +371,6 @@ void DirectoryFilter::updateOptionButtons()
     bool haveSelectedItem = !m_dialog->directoryList->selectedItems().isEmpty();
     m_dialog->editButton->setEnabled(haveSelectedItem);
     m_dialog->removeButton->setEnabled(haveSelectedItem);
-}
-
-void DirectoryFilter::updateFileIterator()
-{
-    m_cache.setFilePaths(m_files);
-    setFileIterator(new BaseFileFilter::ListIterator(m_files));
 }
 
 void DirectoryFilter::setIsCustomFilter(bool value)
