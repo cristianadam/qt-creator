@@ -54,7 +54,7 @@ const int LocatorEntryRole = int(HighlightingItemRole::User);
 namespace Core {
 namespace Internal {
 
-static bool isUsingLocatorMatcher() { return qtcEnvironmentVariableIsSet("QTC_USE_MATCHER"); }
+static bool isUsingLocatorMatcher() { return true; }
 
 bool LocatorWidget::m_shuttingDown = false;
 QFuture<void> LocatorWidget::m_sharedFuture;
