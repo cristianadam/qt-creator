@@ -145,15 +145,6 @@ bool Locator::delayedInitialize()
     return true;
 }
 
-ExtensionSystem::IPlugin::ShutdownFlag Locator::aboutToShutdown(
-    const std::function<void()> &emitAsynchronousShutdownFinished)
-{
-    m_shuttingDown = true;
-    m_refreshTimer.stop();
-    m_taskTree.reset();
-    return LocatorWidget::aboutToShutdown(emitAsynchronousShutdownFinished);
-}
-
 void Locator::loadSettings()
 {
     SettingsDatabase *settings = ICore::settingsDatabase();
@@ -375,9 +366,6 @@ void Locator::setUseCenteredPopupForShortcut(bool center)
 
 void Locator::refresh(const QList<ILocatorFilter *> &filters)
 {
-    if (m_shuttingDown)
-        return;
-
     m_taskTree.reset(); // Superfluous, just for clarity. The next reset() below is enough.
     m_refreshingFilters = Utils::filteredUnique(m_refreshingFilters + filters);
 

@@ -30,8 +30,6 @@ public:
     ~Locator() override;
 
     static Locator *instance();
-    ExtensionSystem::IPlugin::ShutdownFlag aboutToShutdown(
-        const std::function<void()> &emitAsynchronousShutdownFinished);
 
     void initialize();
     void extensionsInitialized();
@@ -68,7 +66,6 @@ private:
         bool useCenteredPopup = false;
     };
 
-    bool m_shuttingDown = false;
     bool m_settingsInitialized = false;
     Settings m_settings;
     QList<ILocatorFilter *> m_filters;
