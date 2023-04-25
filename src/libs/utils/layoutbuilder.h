@@ -70,12 +70,6 @@ public:
     HorizontalRule() {}
 };
 
-class QTCREATOR_LAYOUTING_EXPORT Checker
-{
-public:
-    bool intitualValue;
-
-};
 
 // LayoutItem
 
