@@ -227,11 +227,6 @@ public:
     std::optional<QString> defaultSearchText() const;
     void setDefaultSearchText(const QString &defaultSearchText);
 
-    virtual void prepareSearch(const QString &entry);
-
-    virtual QList<LocatorFilterEntry> matchesFor(QFutureInterface<LocatorFilterEntry> &,
-                                                 const QString &) { return {}; };
-
     virtual QByteArray saveState() const;
     virtual void restoreState(const QByteArray &state);
 
@@ -281,8 +276,7 @@ protected:
     static bool isOldSetting(const QByteArray &state);
 
 private:
-    // TODO: Make pure virtual when all subclasses implement it.
-    virtual LocatorMatcherTasks matchers() { return {}; }
+    virtual LocatorMatcherTasks matchers() = 0;
 
     friend class Internal::Locator;
     friend class Internal::LocatorWidget;
