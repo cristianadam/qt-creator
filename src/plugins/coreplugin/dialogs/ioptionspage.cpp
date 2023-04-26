@@ -237,14 +237,12 @@ void IOptionsPage::setLayouter(const std::function<void(QWidget *w)> &layouter)
 static QList<IOptionsPage *> g_optionsPages;
 
 /*!
-    Constructs an options page with the given \a parent and registers it
-    at the global options page pool if \a registerGlobally is \c true.
+    Constructs an options page with the given \a parent.
 */
-IOptionsPage::IOptionsPage(QObject *parent, bool registerGlobally)
+IOptionsPage::IOptionsPage(QObject *parent)
     : QObject(parent)
 {
-    if (registerGlobally)
-        g_optionsPages.append(this);
+    g_optionsPages.append(this);
 }
 
 /*!

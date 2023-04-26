@@ -32,8 +32,7 @@ public:
 };
 
 
-SettingsPage::SettingsPage(QDesignerOptionsPageInterface *designerPage) :
-    Core::IOptionsPage(nullptr, false)
+SettingsPage::SettingsPage(QDesignerOptionsPageInterface *designerPage)
 {
     setId(Utils::Id::fromString(designerPage->name()));
     setDisplayName(designerPage->name());
