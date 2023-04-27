@@ -14,6 +14,7 @@
 #include <QStyle>
 #include <QTabWidget>
 #include <QTextEdit>
+#include <QApplication>
 
 namespace Layouting {
 
@@ -461,8 +462,19 @@ TextEdit::TextEdit(std::initializer_list<LayoutItem> items)
 Splitter::Splitter(std::initializer_list<LayoutItem> items)
 {
     applyItems(this, new QSplitter(Qt::Vertical), items);
- }
+}
 
+Application::Application(std::initializer_list<LayoutItem> items)
+    : m_items(items)
+{
+}
+
+int Application::exec(int &argc, char *argv[])
+{
+    QApplication app(argc, argv);
+    m_items.emerge()->show();
+    return app.exec();
+}
 
 TabWidget::TabWidget(std::initializer_list<LayoutItem> items)
  {
@@ -525,6 +537,17 @@ LayoutItem tooltip(const QString &toolTip)
     });
 }
 
+LayoutItem resize(int w, int h)
+{
+    return setter([w, h](QObject *target) {
+        if (auto widget = qobject_cast<QWidget *>(target)) {
+            widget->resize(w, h);
+        } else {
+            QTC_CHECK(false);
+        }
+    });
+}
+
 LayoutItem bindTo(QSplitter **out)
 {
     return setter([out](QObject *target) {
@@ -552,5 +575,6 @@ Break br;
 Stretch st;
 Space empty(0);
 HorizontalRule hr;
+
 
 } // Layouting

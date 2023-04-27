@@ -194,6 +194,8 @@ QTCREATOR_UTILS_EXPORT LayoutItem bindTo(QSplitter **);
 QTCREATOR_UTILS_EXPORT LayoutItem title(const QString &title);
 QTCREATOR_UTILS_EXPORT LayoutItem text(const QString &text);
 QTCREATOR_UTILS_EXPORT LayoutItem tooltip(const QString &toolTip);
+QTCREATOR_UTILS_EXPORT LayoutItem resize(int, int);
+QTCREATOR_UTILS_EXPORT LayoutItem windowTitle(const QString &windowTitle);
 QTCREATOR_UTILS_EXPORT LayoutItem onClicked(const std::function<void()> &func,
                                                     QObject *guard = nullptr);
 
@@ -297,6 +299,15 @@ class QTCREATOR_UTILS_EXPORT Stack : public LayoutBuilder
 public:
     Stack() : LayoutBuilder(StackLayout) {}
     Stack(std::initializer_list<LayoutItem> items) : LayoutBuilder(StackLayout, items) {}
+};
+
+class QTCREATOR_UTILS_EXPORT Application
+{
+public:
+    Application(std::initializer_list<LayoutItem> items);
+
+    int exec(int &argc, char *argv[]);
+    Grid m_items;
 };
 
 } // Layouting
