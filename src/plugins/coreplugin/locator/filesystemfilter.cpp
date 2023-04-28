@@ -60,21 +60,21 @@ static ILocatorFilter::MatchLevel matchLevelFor(const QRegularExpressionMatch &m
 static bool askForCreating(const QString &title, const FilePath &filePath)
 {
     if (CheckableMessageBox::shouldAskAgain(ICore::settings(), kAlwaysCreate)) {
-        CheckableMessageBox messageBox(ICore::dialogParent());
+        QMessageBox messageBox(ICore::dialogParent());
         messageBox.setWindowTitle(title);
         messageBox.setIcon(QMessageBox::Question);
         messageBox.setText(Tr::tr("Create \"%1\"?").arg(filePath.shortNativePath()));
-        messageBox.setCheckBoxVisible(true);
-        messageBox.setCheckBoxText(Tr::tr("Always create"));
-        messageBox.setChecked(false);
-        messageBox.setStandardButtons(QDialogButtonBox::Cancel);
-        QPushButton *createButton = messageBox.addButton(Tr::tr("Create"),
-                                                         QDialogButtonBox::AcceptRole);
-        messageBox.setDefaultButton(QDialogButtonBox::Cancel);
+        messageBox.setCheckBox(new QCheckBox);
+        messageBox.checkBox()->setText(Tr::tr("Always create"));
+        messageBox.checkBox()->setChecked(false);
+        messageBox.setStandardButtons(QMessageBox::Cancel);
+        QPushButton *createButton = messageBox.addButton(Tr::tr("Create"), QMessageBox::AcceptRole);
+        messageBox.setDefaultButton(QMessageBox::Cancel);
         messageBox.exec();
         if (messageBox.clickedButton() != createButton)
             return false;
-        if (messageBox.isChecked())
+
+        if (messageBox.checkBox()->isChecked())
             CheckableMessageBox::doNotAskAgain(ICore::settings(), kAlwaysCreate);
     }
     return true;

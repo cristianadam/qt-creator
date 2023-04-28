@@ -286,17 +286,18 @@ CheckableMessageBox::question(QWidget *parent,
                               QDialogButtonBox::StandardButtons buttons,
                               QDialogButtonBox::StandardButton defaultButton)
 {
-    CheckableMessageBox mb(parent);
-    mb.setWindowTitle(title);
-    mb.setIcon(QMessageBox::Question);
-    mb.setText(question);
-    mb.setCheckBoxText(checkBoxText);
-    mb.setChecked(*checkBoxSetting);
-    mb.setStandardButtons(buttons);
-    mb.setDefaultButton(defaultButton);
-    mb.exec();
-    *checkBoxSetting = mb.isChecked();
-    return mb.clickedStandardButton();
+    QMessageBox msgBox(parent);
+    msgBox.setWindowTitle(title);
+    msgBox.setIcon(QMessageBox::Question);
+    msgBox.setText(question);
+    msgBox.setCheckBox(new QCheckBox);
+    msgBox.checkBox()->setText(checkBoxText);
+    msgBox.checkBox()->setChecked(*checkBoxSetting);
+    msgBox.setStandardButtons((QMessageBox::StandardButtons) buttons.toInt());
+    msgBox.setDefaultButton((QMessageBox::StandardButton) defaultButton);
+    msgBox.exec();
+    *checkBoxSetting = msgBox.checkBox()->isChecked();
+    return (QDialogButtonBox::StandardButton) msgBox.standardButton(msgBox.clickedButton());
 }
 
 QDialogButtonBox::StandardButton
@@ -308,17 +309,18 @@ CheckableMessageBox::information(QWidget *parent,
                               QDialogButtonBox::StandardButtons buttons,
                               QDialogButtonBox::StandardButton defaultButton)
 {
-    CheckableMessageBox mb(parent);
-    mb.setWindowTitle(title);
-    mb.setIcon(QMessageBox::Information);
-    mb.setText(text);
-    mb.setCheckBoxText(checkBoxText);
-    mb.setChecked(*checkBoxSetting);
-    mb.setStandardButtons(buttons);
-    mb.setDefaultButton(defaultButton);
-    mb.exec();
-    *checkBoxSetting = mb.isChecked();
-    return mb.clickedStandardButton();
+    QMessageBox msgBox(parent);
+    msgBox.setWindowTitle(title);
+    msgBox.setIcon(QMessageBox::Information);
+    msgBox.setText(text);
+    msgBox.setCheckBox(new QCheckBox);
+    msgBox.checkBox()->setText(checkBoxText);
+    msgBox.checkBox()->setChecked(*checkBoxSetting);
+    msgBox.setStandardButtons((QMessageBox::StandardButtons) buttons.toInt());
+    msgBox.setDefaultButton((QMessageBox::StandardButton) defaultButton);
+    msgBox.exec();
+    *checkBoxSetting = msgBox.checkBox()->isChecked();
+    return (QDialogButtonBox::StandardButton) msgBox.standardButton(msgBox.clickedButton());
 }
 
 QMessageBox::StandardButton CheckableMessageBox::dialogButtonBoxToMessageBoxButton(QDialogButtonBox::StandardButton db)
@@ -340,20 +342,22 @@ bool CheckableMessageBox::shouldAskAgain(QSettings *settings, const QString &set
 
 enum DoNotAskAgainType{Question, Information};
 
-void initDoNotAskAgainMessageBox(CheckableMessageBox &messageBox, const QString &title,
-                                 const QString &text, QDialogButtonBox::StandardButtons buttons,
+void initDoNotAskAgainMessageBox(QMessageBox &messageBox,
+                                 const QString &title,
+                                 const QString &text,
+                                 QDialogButtonBox::StandardButtons buttons,
                                  QDialogButtonBox::StandardButton defaultButton,
                                  DoNotAskAgainType type)
 {
     messageBox.setWindowTitle(title);
     messageBox.setIcon(type == Information ? QMessageBox::Information : QMessageBox::Question);
     messageBox.setText(text);
-    messageBox.setCheckBoxVisible(true);
-    messageBox.setCheckBoxText(type == Information ? CheckableMessageBox::msgDoNotShowAgain()
-                                                   : CheckableMessageBox::msgDoNotAskAgain());
-    messageBox.setChecked(false);
-    messageBox.setStandardButtons(buttons);
-    messageBox.setDefaultButton(defaultButton);
+    messageBox.setCheckBox(new QCheckBox);
+    messageBox.checkBox()->setText(type == Information ? CheckableMessageBox::msgDoNotShowAgain()
+                                                       : CheckableMessageBox::msgDoNotAskAgain());
+    messageBox.checkBox()->setChecked(false);
+    messageBox.setStandardButtons((QMessageBox::StandardButtons) buttons.toInt());
+    messageBox.setDefaultButton((QMessageBox::StandardButton) defaultButton);
 }
 
 void CheckableMessageBox::doNotAskAgain(QSettings *settings, const QString &settingsSubKey)
@@ -375,25 +379,31 @@ void CheckableMessageBox::doNotAskAgain(QSettings *settings, const QString &sett
     Returns the clicked button, or QDialogButtonBox::NoButton if the user rejects the dialog
     with the escape key, or \a acceptButton if the dialog is suppressed.
 */
-QDialogButtonBox::StandardButton
-CheckableMessageBox::doNotAskAgainQuestion(QWidget *parent, const QString &title,
-                                           const QString &text, QSettings *settings,
-                                           const QString &settingsSubKey,
-                                           QDialogButtonBox::StandardButtons buttons,
-                                           QDialogButtonBox::StandardButton defaultButton,
-                                           QDialogButtonBox::StandardButton acceptButton)
-
+QDialogButtonBox::StandardButton CheckableMessageBox::doNotAskAgainQuestion(
+    QWidget *parent,
+    const QString &title,
+    const QString &text,
+    QSettings *settings,
+    const QString &settingsSubKey,
+    QDialogButtonBox::StandardButtons buttons,
+    QDialogButtonBox::StandardButton defaultButton,
+    QDialogButtonBox::StandardButton acceptButton,
+    const QString &checkBoxText)
 {
     if (!shouldAskAgain(settings, settingsSubKey))
         return acceptButton;
 
-    CheckableMessageBox messageBox(parent);
+    QMessageBox messageBox(parent);
     initDoNotAskAgainMessageBox(messageBox, title, text, buttons, defaultButton, Question);
+    messageBox.checkBox()->setText(checkBoxText);
     messageBox.exec();
-    if (messageBox.isChecked() && (messageBox.clickedStandardButton() == acceptButton))
+    if (messageBox.checkBox()->isChecked()
+        && (messageBox.standardButton(messageBox.clickedButton())
+            == (QMessageBox::StandardButton) acceptButton)) {
         doNotAskAgain(settings, settingsSubKey);
+    }
 
-    return messageBox.clickedStandardButton();
+    return (QDialogButtonBox::StandardButton) messageBox.standardButton(messageBox.clickedButton());
 }
 
 /*!
@@ -415,13 +425,13 @@ CheckableMessageBox::doNotShowAgainInformation(QWidget *parent, const QString &t
     if (!shouldAskAgain(settings, settingsSubKey))
             return defaultButton;
 
-    CheckableMessageBox messageBox(parent);
+    QMessageBox messageBox(parent);
     initDoNotAskAgainMessageBox(messageBox, title, text, buttons, defaultButton, Information);
     messageBox.exec();
-    if (messageBox.isChecked())
-        doNotAskAgain(settings, settingsSubKey);
+    if (messageBox.checkBox()->isChecked())
+            doNotAskAgain(settings, settingsSubKey);
 
-    return messageBox.clickedStandardButton();
+    return (QDialogButtonBox::StandardButton) messageBox.standardButton(messageBox.clickedButton());
 }
 
 /*!

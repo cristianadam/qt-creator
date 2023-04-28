@@ -48,15 +48,16 @@ public:
                  QDialogButtonBox::StandardButtons buttons = QDialogButtonBox::Ok,
                  QDialogButtonBox::StandardButton defaultButton = QDialogButtonBox::NoButton);
 
-    static QDialogButtonBox::StandardButton
-        doNotAskAgainQuestion(QWidget *parent,
-                              const QString &title,
-                              const QString &text,
-                              QSettings *settings,
-                              const QString &settingsSubKey,
-                              QDialogButtonBox::StandardButtons buttons = QDialogButtonBox::Yes|QDialogButtonBox::No,
-                              QDialogButtonBox::StandardButton defaultButton = QDialogButtonBox::No,
-                              QDialogButtonBox::StandardButton acceptButton = QDialogButtonBox::Yes);
+    static QDialogButtonBox::StandardButton doNotAskAgainQuestion(
+        QWidget *parent,
+        const QString &title,
+        const QString &text,
+        QSettings *settings,
+        const QString &settingsSubKey,
+        QDialogButtonBox::StandardButtons buttons = QDialogButtonBox::Yes | QDialogButtonBox::No,
+        QDialogButtonBox::StandardButton defaultButton = QDialogButtonBox::No,
+        QDialogButtonBox::StandardButton acceptButton = QDialogButtonBox::Yes,
+        const QString &checkBoxText = CheckableMessageBox::msgDoNotAskAgain());
 
     static QDialogButtonBox::StandardButton
         doNotShowAgainInformation(QWidget *parent,
