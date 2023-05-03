@@ -352,15 +352,6 @@ void LayoutBuilder::addRow(const LayoutItems &items)
 }
 
 /*!
-    Instructs a layout builder to finish the current row.
-    This is implicitly called by LayoutBuilder's destructor.
- */
-void LayoutItem::finishRow()
-{
-    addItem(br);
-}
-
-/*!
     This starts a new row containing \a items. The row can be further extended by
     other items using \c addItem() or \c addItems().
 
@@ -368,7 +359,7 @@ void LayoutItem::finishRow()
  */
 void LayoutItem::addRow(const LayoutItems &items)
 {
-    finishRow();
+    addItem(br);
     addItems(items);
 }
 
