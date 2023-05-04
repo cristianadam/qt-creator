@@ -78,7 +78,7 @@ private:
 CppEditorDocument::CppEditorDocument()
 {
     setId(CppEditor::Constants::CPPEDITOR_ID);
-    setSyntaxHighlighter(new CppHighlighter);
+    setSyntaxHighlighterCreator([] { return new CppHighlighter(); });
 
     ICodeStylePreferencesFactory *factory
         = TextEditorSettings::codeStyleFactory(Constants::CPP_SETTINGS_ID);

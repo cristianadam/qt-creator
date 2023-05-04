@@ -860,6 +860,7 @@ QTextCharFormat SyntaxHighlighter::formatForCategory(int category) const
     return d->formats.at(category);
 }
 
+// ToDO:
 QTextCharFormat SyntaxHighlighter::whitespacified(const QTextCharFormat &fmt)
 {
     Q_D(SyntaxHighlighter);

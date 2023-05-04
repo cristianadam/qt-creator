@@ -3677,15 +3677,18 @@ void TextEditorWidgetPrivate::removeSyntaxInfoBar()
 void TextEditorWidgetPrivate::configureGenericHighlighter(
     const KSyntaxHighlighting::Definition &definition)
 {
-    auto highlighter = new Highlighter();
-    m_document->setSyntaxHighlighter(highlighter);
-
     if (definition.isValid()) {
-        highlighter->setDefinition(definition);
         setupFromDefinition(definition);
     } else {
         q->setCodeFoldingSupported(false);
     }
+
+    m_document->setSyntaxHighlighterCreator([definition] {
+        auto highlighter = new Highlighter();
+        if (definition.isValid())
+            highlighter->setDefinition(definition);
+        return highlighter;
+    });
 
     m_document->setFontSettings(TextEditorSettings::fontSettings());
 }
@@ -6209,8 +6212,7 @@ void TextEditorWidget::mouseReleaseEvent(QMouseEvent *e)
             if (self && self->openLink(symbolLink, inNextSplit))
                 self->d->clearLink();
         }, true, inNextSplit);
-    } else if (button == Qt::MiddleButton
-               && !isReadOnly()
+    } else if (button == Qt::MiddleButton && !isReadOnly()
                && QGuiApplication::clipboard()->supportsSelection()) {
         if (!(e->modifiers() & Qt::AltModifier))
             doSetTextCursor(cursorForPosition(e->pos()));
@@ -6289,12 +6291,10 @@ void TextEditorWidget::keyReleaseEvent(QKeyEvent *e)
 {
     if (e->key() == Qt::Key_Control) {
         d->clearLink();
-    } else if (e->key() == Qt::Key_Shift
-             && d->m_behaviorSettings.m_constrainHoverTooltips
-             && ToolTip::isVisible()) {
+    } else if (e->key() == Qt::Key_Shift && d->m_behaviorSettings.m_constrainHoverTooltips
+               && ToolTip::isVisible()) {
         ToolTip::hide();
-    } else if (e->key() == Qt::Key_Alt
-               && d->m_maybeFakeTooltipEvent) {
+    } else if (e->key() == Qt::Key_Alt && d->m_maybeFakeTooltipEvent) {
         d->m_maybeFakeTooltipEvent = false;
         d->processTooltipRequest(textCursor());
     }
@@ -6890,7 +6890,9 @@ void TextEditorWidget::findTypeAt(const QTextCursor &cursor,
 bool TextEditorWidget::openLink(const Utils::Link &link, bool inNextSplit)
 {
 #ifdef WITH_TESTS
-    struct Signaller { ~Signaller() { emit EditorManager::instance()->linkOpened(); } } s;
+    struct Signaller {
+        ~Signaller() { emit EditorManager::instance()->linkOpened(); }
+    } s;
 #endif
 
     if (!link.hasValidTarget())
@@ -9420,7 +9422,7 @@ void TextEditorFactory::setEditorCreator(const EditorCreator &creator)
             doc->setIndenter(d->m_indenterCreator(doc->document()));
 
         if (d->m_syntaxHighlighterCreator)
-            doc->setSyntaxHighlighter(d->m_syntaxHighlighterCreator());
+            doc->setSyntaxHighlighterCreator(d->m_syntaxHighlighterCreator);
 
         doc->setCompletionAssistProvider(d->m_completionAssistProvider ? d->m_completionAssistProvider
                                                                        : &basicSnippetProvider);

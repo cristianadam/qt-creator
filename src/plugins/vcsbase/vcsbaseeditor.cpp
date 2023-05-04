@@ -740,9 +740,12 @@ void VcsBaseEditorWidget::init()
         break;
     }
     if (hasDiff()) {
-        auto dh = new DiffAndLogHighlighter(d->m_diffFilePattern, d->m_logEntryPattern);
+//        auto dh = new DiffAndLogHighlighter(d->m_diffFilePattern, d->m_logEntryPattern);
         setCodeFoldingSupported(true);
-        textDocument()->setSyntaxHighlighter(dh);
+        textDocument()->setSyntaxHighlighterCreator(
+            [diffFilePattern = d->m_diffFilePattern, logEntryPattern = d->m_logEntryPattern] {
+                return new DiffAndLogHighlighter(diffFilePattern, logEntryPattern);
+            });
     }
     // override revisions display (green or red bar on the left, marking changes):
     setRevisionsVisible(false);
@@ -1082,7 +1085,8 @@ void VcsBaseEditorWidget::slotActivateAnnotation()
         ah->setChangeNumbers(changes);
         ah->rehighlight();
     } else {
-        textDocument()->setSyntaxHighlighter(createAnnotationHighlighter(changes));
+        BaseAnnotationHighlighter *highlighter = createAnnotationHighlighter(changes);
+        textDocument()->setSyntaxHighlighterCreator([highlighter] { return highlighter; });
     }
 }
 
