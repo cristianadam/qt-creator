@@ -302,9 +302,7 @@ void TerminalInterface::start()
         expected_str<qint64> result;
         QMetaObject::invokeMethod(
             d->stubCreator,
-            [this, &result] {
-                result = d->stubCreator->startStubProcess(m_setup.m_commandLine, m_setup);
-            },
+            [this, &result] { result = d->stubCreator->startStubProcess(m_setup); },
             d->stubCreator->thread() == QThread::currentThread() ? Qt::DirectConnection
                                                                  : Qt::BlockingQueuedConnection);
 
@@ -384,9 +382,12 @@ void TerminalInterface::start()
 
     QTC_ASSERT(d->stubCreator, return);
 
+    ProcessSetupData stubSetupData = m_setup;
+    stubSetupData.m_commandLine = cmd;
+
     QMetaObject::invokeMethod(
         d->stubCreator,
-        [cmd, this] { d->stubCreator->startStubProcess(cmd, m_setup); },
+        [stubSetupData, this] { d->stubCreator->startStubProcess(stubSetupData); },
         d->stubCreator->thread() == QThread::currentThread() ? Qt::DirectConnection
                                                              : Qt::BlockingQueuedConnection);
 
