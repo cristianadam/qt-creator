@@ -248,9 +248,7 @@ public:
         if (!type.moduleId)
             type.moduleId = m_projectStorage.moduleId(moduleName);
 
-        type.typeId = m_projectStorage.typeId(type.moduleId,
-                                              typeName,
-                                              QmlDesigner::Storage::Synchronization::Version{});
+        type.typeId = m_projectStorage.typeId(type.moduleId, typeName, QmlDesigner::Storage::Version{});
 
         return type.typeId;
     }
