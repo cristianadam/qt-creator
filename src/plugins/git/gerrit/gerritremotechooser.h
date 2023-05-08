@@ -26,7 +26,6 @@ class GerritRemoteChooser : public QWidget
 public:
     GerritRemoteChooser(QWidget *parent = nullptr);
     void setRepository(const Utils::FilePath &repository);
-    void setParameters(QSharedPointer<GerritParameters> parameters);
     void setFallbackEnabled(bool value);
     void setAllowDups(bool value);
     bool setCurrentRemote(const QString &remoteName);

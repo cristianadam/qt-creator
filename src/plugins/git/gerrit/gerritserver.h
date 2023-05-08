@@ -8,8 +8,6 @@
 namespace Gerrit {
 namespace Internal {
 
-class GerritParameters;
-
 class GerritUser
 {
 public:
@@ -52,7 +50,7 @@ public:
     static QString defaultHost();
     QString hostArgument() const;
     QString url(UrlType urlType = DefaultUrl) const;
-    bool fillFromRemote(const QString &remote, const GerritParameters &parameters, bool forceReload);
+    bool fillFromRemote(const QString &remote, bool forceReload);
     int testConnection();
     QStringList curlArguments() const;
 
@@ -72,7 +70,7 @@ private:
     bool setupAuthentication();
     bool ascendPath();
     bool resolveRoot();
-    bool resolveVersion(const GerritParameters &p, bool forceReload);
+    bool resolveVersion(bool forceReload);
 };
 
 } // namespace Internal

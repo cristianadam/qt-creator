@@ -9,8 +9,7 @@
 
 QT_FORWARD_DECLARE_CLASS(QSettings)
 
-namespace Gerrit {
-namespace Internal {
+namespace Gerrit::Internal {
 
 class GerritParameters
 {
@@ -37,5 +36,19 @@ public:
     QString portFlag;
 };
 
-} // namespace Internal
-} // namespace Gerrit
+class GerritSettings : public QObject, public GerritParameters
+{
+    Q_OBJECT
+
+public:
+    GerritSettings();
+
+    static GerritSettings *instance();
+
+    void updateParameters(const GerritParameters &params, QSettings *);
+
+signals:
+    void changed();
+};
+
+} // Gerrit::Internal

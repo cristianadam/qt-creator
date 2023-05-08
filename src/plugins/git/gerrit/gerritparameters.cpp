@@ -9,7 +9,6 @@
 #include <utils/hostosinfo.h>
 #include <utils/pathchooser.h>
 
-#include <QDir>
 #include <QSettings>
 #include <QStandardPaths>
 
@@ -127,6 +126,38 @@ void GerritParameters::fromSettings(const QSettings *s)
 bool GerritParameters::isValid() const
 {
     return !server.host.isEmpty() && !server.user.userName.isEmpty() && !ssh.isEmpty();
+}
+
+// GerrritSettings
+
+static GerritSettings *m_instance;
+
+GerritSettings::GerritSettings()
+{
+    m_instance = this;
+}
+
+GerritSettings *GerritSettings::instance()
+{
+    return m_instance;
+}
+
+void GerritSettings::updateParameters(const GerritParameters &params, QSettings *s)
+{
+    if (*this == params)
+       return;
+
+    GerritParameters p = params;
+
+    if (ssh == p.ssh)
+        p.portFlag = portFlag;
+    else
+        p.setPortFlagBySshType();
+
+    GerritParameters::operator=(params);
+
+    toSettings(s);
+    emit changed();
 }
 
 } // namespace Internal

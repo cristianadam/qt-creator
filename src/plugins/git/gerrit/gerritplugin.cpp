@@ -153,16 +153,10 @@ void FetchContext::checkout()
 }
 
 GerritPlugin::GerritPlugin()
-    : m_parameters(new GerritParameters)
-    , m_server(new GerritServer)
+    : m_server(new GerritServer)
 {
-    m_parameters->fromSettings(ICore::settings());
-
-    m_gerritOptionsPage = new GerritOptionsPage(m_parameters,
-        [this] {
-        if (m_dialog)
-            m_dialog->scheduleUpdateRemotes();
-    });
+    m_settings.fromSettings(ICore::settings());
+    m_gerritOptionsPage = new GerritOptionsPage;
 }
 
 GerritPlugin::~GerritPlugin()
@@ -206,7 +200,7 @@ void GerritPlugin::addToLocator(CommandLocator *locator)
 void GerritPlugin::push(const FilePath &topLevel)
 {
     // QScopedPointer is required to delete the dialog when leaving the function
-    GerritPushDialog dialog(topLevel, m_reviewers, m_parameters, ICore::dialogParent());
+    GerritPushDialog dialog(topLevel, m_reviewers, ICore::dialogParent());
 
     const QString initErrorMessage = dialog.initErrorMessage();
     if (!initErrorMessage.isEmpty()) {
@@ -231,13 +225,13 @@ static FilePath currentRepository()
 void GerritPlugin::openView()
 {
     if (m_dialog.isNull()) {
-        while (!m_parameters->isValid()) {
+        while (!m_settings.isValid()) {
             QMessageBox::warning(Core::ICore::dialogParent(), Git::Tr::tr("Error"),
                                  Git::Tr::tr("Invalid Gerrit configuration. Host, user and ssh binary are mandatory."));
             if (!ICore::showOptionsDialog("Gerrit"))
                 return;
         }
-        GerritDialog *gd = new GerritDialog(m_parameters, m_server, currentRepository(), ICore::dialogParent());
+        GerritDialog *gd = new GerritDialog(m_server, currentRepository(), ICore::dialogParent());
         gd->setModal(false);
         ICore::registerWindow(gd, Context("Git.Gerrit"));
         connect(gd, &GerritDialog::fetchDisplay, this,
@@ -287,7 +281,7 @@ void GerritPlugin::fetch(const QSharedPointer<GerritChange> &change, int mode)
 
     FilePath repository;
     bool verifiedRepository = false;
-    if (!m_dialog.isNull() && !m_parameters.isNull() && m_dialog->repositoryPath().exists())
+    if (!m_dialog.isNull() && m_dialog->repositoryPath().exists())
         repository = m_dialog->repositoryPath();
 
     if (!repository.isEmpty()) {

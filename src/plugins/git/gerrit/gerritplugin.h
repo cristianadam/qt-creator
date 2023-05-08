@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "gerritparameters.h"
+
 #include <utils/filepath.h>
 
 #include <QObject>
@@ -23,7 +25,6 @@ namespace Internal {
 
 class GerritChange;
 class GerritDialog;
-class GerritParameters;
 class GerritServer;
 class GerritOptionsPage;
 
@@ -55,7 +56,7 @@ private:
     Utils::FilePath findLocalRepository(const QString &project, const QString &branch) const;
     void fetch(const QSharedPointer<GerritChange> &change, int mode);
 
-    QSharedPointer<GerritParameters> m_parameters;
+    GerritParameters m_settings;
     QSharedPointer<GerritServer> m_server;
     QPointer<GerritDialog> m_dialog;
     Core::Command *m_gerritCommand = nullptr;

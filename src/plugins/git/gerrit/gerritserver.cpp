@@ -115,10 +115,9 @@ QString GerritServer::url(UrlType urlType) const
     return res;
 }
 
-bool GerritServer::fillFromRemote(const QString &remote,
-                                  const GerritParameters &parameters,
-                                  bool forceReload)
+bool GerritServer::fillFromRemote(const QString &remote, bool forceReload)
 {
+    const GerritParameters &s = *GerritSettings::instance();
     const GitRemote r(remote);
     if (!r.isValid)
         return false;
@@ -134,13 +133,14 @@ bool GerritServer::fillFromRemote(const QString &remote,
 
     if (r.host.contains("github.com")) // Clearly not gerrit
         return false;
+
     host = r.host;
     port = r.port;
-    user.userName = r.userName.isEmpty() ? parameters.server.user.userName : r.userName;
-    if (type == GerritServer::Ssh) {
-        return resolveVersion(parameters, forceReload);
-    }
-    curlBinary = parameters.curl;
+    user.userName = r.userName.isEmpty() ? s.server.user.userName : r.userName;
+    if (type == GerritServer::Ssh)
+        return resolveVersion(forceReload);
+
+    curlBinary = s.curl;
     if (curlBinary.isEmpty() || !curlBinary.exists())
         return false;
     const StoredHostValidity validity = forceReload ? Invalid : loadSettings();
@@ -152,7 +152,7 @@ bool GerritServer::fillFromRemote(const QString &remote,
         // (can be http://example.net/review)
         ascendPath();
         if (resolveRoot()) {
-            if (!resolveVersion(parameters, forceReload))
+            if (!resolveVersion(forceReload))
                 return false;
             saveSettings(Valid);
             return true;
@@ -161,7 +161,7 @@ bool GerritServer::fillFromRemote(const QString &remote,
     case NotGerrit:
         return false;
     case Valid:
-        return resolveVersion(parameters, false);
+        return resolveVersion(false);
     }
     return true;
 }
@@ -308,7 +308,7 @@ bool GerritServer::resolveRoot()
     return false;
 }
 
-bool GerritServer::resolveVersion(const GerritParameters &p, bool forceReload)
+bool GerritServer::resolveVersion(bool forceReload)
 {
     static GitClient *const client = GitClient::instance();
     QSettings *settings = Core::ICore::settings();
@@ -317,11 +317,12 @@ bool GerritServer::resolveVersion(const GerritParameters &p, bool forceReload)
     if (!version.isEmpty() && !forceReload)
         return true;
     if (type == Ssh) {
+        const GerritSettings &s = *GerritSettings::instance();
         QStringList arguments;
         if (port)
-            arguments << p.portFlag << QString::number(port);
+            arguments << s.portFlag << QString::number(port);
         arguments << hostArgument() << "gerrit" << "version";
-        const CommandResult result = client->vcsSynchronousExec({}, {p.ssh, arguments},
+        const CommandResult result = client->vcsSynchronousExec({}, {s.ssh, arguments},
                                                                 RunFlags::NoOutput);
         QString stdOut = result.cleanedStdOut().trimmed();
         stdOut.remove("gerrit version ");

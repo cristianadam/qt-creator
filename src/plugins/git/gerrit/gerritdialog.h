@@ -40,8 +40,7 @@ class GerritDialog : public QDialog
 {
     Q_OBJECT
 public:
-    explicit GerritDialog(const QSharedPointer<GerritParameters> &p,
-                          const QSharedPointer<GerritServer> &s,
+    explicit GerritDialog(const QSharedPointer<GerritServer> &s,
                           const Utils::FilePath &repository,
                           QWidget *parent = nullptr);
     ~GerritDialog() override;
@@ -76,7 +75,6 @@ private:
     QPushButton *addActionButton(const QString &text, const std::function<void ()> &buttonSlot);
     void updateButtons();
 
-    const QSharedPointer<GerritParameters> m_parameters;
     const QSharedPointer<GerritServer> m_server;
     QSortFilterProxyModel *m_filterModel;
     GerritModel *m_model;

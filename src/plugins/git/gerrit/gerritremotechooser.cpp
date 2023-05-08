@@ -51,11 +51,6 @@ void GerritRemoteChooser::setRepository(const FilePath &repository)
     m_repository = repository;
 }
 
-void GerritRemoteChooser::setParameters(QSharedPointer<GerritParameters> parameters)
-{
-    m_parameters = parameters;
-}
-
 void GerritRemoteChooser::setFallbackEnabled(bool value)
 {
     m_enableFallback = value;
@@ -79,7 +74,8 @@ bool GerritRemoteChooser::setCurrentRemote(const QString &remoteName)
 
 bool GerritRemoteChooser::updateRemotes(bool forceReload)
 {
-    QTC_ASSERT(!m_repository.isEmpty() || !m_parameters, return false);
+    GerritSettings *p = GerritSettings::instance();
+    QTC_ASSERT(!m_repository.isEmpty() || !p, return false);
     m_updatingRemotes = true;
     m_remoteComboBox->clear();
     m_remotes.clear();
@@ -88,12 +84,12 @@ bool GerritRemoteChooser::updateRemotes(bool forceReload)
             Git::Internal::GitClient::instance()->synchronousRemotesList(m_repository, &errorMessage);
     for (auto mapIt = remotesList.cbegin(), end = remotesList.cend(); mapIt != end; ++mapIt) {
         GerritServer server;
-        if (!server.fillFromRemote(mapIt.value(), *m_parameters, forceReload))
+        if (!server.fillFromRemote(mapIt.value(), forceReload))
             continue;
         addRemote(server, mapIt.key());
     }
     if (m_enableFallback)
-        addRemote(m_parameters->server, Git::Tr::tr("Fallback"));
+        addRemote(p->server, Git::Tr::tr("Fallback"));
     m_remoteComboBox->setEnabled(m_remoteComboBox->count() > 1);
     m_updatingRemotes = false;
     handleRemoteChanged();

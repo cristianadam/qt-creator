@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "gerritparameters.h"
 #include "gerritserver.h"
 
 #include <QStandardItemModel>
@@ -14,7 +13,8 @@ namespace Gerrit {
 namespace Internal {
 class QueryContext;
 
-class GerritApproval {
+class GerritApproval
+{
 public:
     QString type; // Review type
     QString description; // Type description, possibly empty
@@ -22,7 +22,8 @@ public:
     int approval = -1;
 };
 
-class GerritPatchSet {
+class GerritPatchSet
+{
 public:
     QString approvalsToHtml() const;
     QString approvalsColumn() const;
@@ -79,7 +80,7 @@ public:
         GerritChangeRole = Qt::UserRole + 2,
         SortRole = Qt::UserRole + 3
     };
-    GerritModel(const QSharedPointer<GerritParameters> &, QObject *parent = nullptr);
+    explicit GerritModel(QObject *parent = nullptr);
     ~GerritModel() override;
 
     QVariant data(const QModelIndex &index, int role) const override;
@@ -111,7 +112,6 @@ private:
                            const QString &serverPrefix) const;
     QList<QStandardItem *> changeToRow(const GerritChangePtr &c) const;
 
-    const QSharedPointer<GerritParameters> m_parameters;
     QSharedPointer<GerritServer> m_server;
     QueryContext *m_query = nullptr;
     QueryState m_state = Idle;

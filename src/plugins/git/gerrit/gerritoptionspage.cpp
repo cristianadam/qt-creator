@@ -23,31 +23,31 @@ namespace Gerrit::Internal {
 class GerritOptionsWidget : public Core::IOptionsPageWidget
 {
 public:
-    GerritOptionsWidget(const QSharedPointer<GerritParameters> &p,
-                        const std::function<void()> &onChanged)
-        : m_parameters(p)
+    GerritOptionsWidget()
     {
-        auto hostLineEdit = new QLineEdit(p->server.host);
+        const GerritSettings &s = *GerritSettings::instance();
 
-        auto userLineEdit = new QLineEdit(p->server.user.userName);
+        auto hostLineEdit = new QLineEdit(s.server.host);
+
+        auto userLineEdit = new QLineEdit(s.server.user.userName);
 
         auto sshChooser = new Utils::PathChooser;
-        sshChooser->setFilePath(p->ssh);
+        sshChooser->setFilePath(s.ssh);
         sshChooser->setExpectedKind(Utils::PathChooser::ExistingCommand);
         sshChooser->setCommandVersionArguments({"-V"});
         sshChooser->setHistoryCompleter("Git.SshCommand.History");
 
         auto curlChooser = new Utils::PathChooser;
-        curlChooser->setFilePath(p->curl);
+        curlChooser->setFilePath(s.curl);
         curlChooser->setExpectedKind(Utils::PathChooser::ExistingCommand);
         curlChooser->setCommandVersionArguments({"-V"});
 
         auto portSpinBox = new QSpinBox(this);
-        portSpinBox->setValue(p->server.port);
+        portSpinBox->setValue(s.server.port);
         portSpinBox->setRange(1, 65535);
 
         auto httpsCheckBox = new QCheckBox(Git::Tr::tr("HTTPS"));
-        httpsCheckBox->setChecked(p->https);
+        httpsCheckBox->setChecked(s.https);
         httpsCheckBox->setToolTip(Git::Tr::tr(
             "Determines the protocol used to form a URL in case\n"
             "\"canonicalWebUrl\" is not configured in the file\n"
@@ -63,8 +63,8 @@ public:
             Git::Tr::tr("P&rotocol:"), httpsCheckBox
         }.attachTo(this);
 
-        setOnApply([this, hostLineEdit, userLineEdit, sshChooser,
-                    curlChooser, portSpinBox, httpsCheckBox, onChanged] {
+        setOnApply([hostLineEdit, userLineEdit, sshChooser,
+                    curlChooser, portSpinBox, httpsCheckBox] {
             GerritParameters newParameters;
             newParameters.server = GerritServer(hostLineEdit->text().trimmed(),
                                          static_cast<unsigned short>(portSpinBox->value()),
@@ -74,31 +74,19 @@ public:
             newParameters.curl = curlChooser->filePath();
             newParameters.https = httpsCheckBox->isChecked();
 
-            if (newParameters != *m_parameters) {
-                if (m_parameters->ssh == newParameters.ssh)
-                    newParameters.portFlag = m_parameters->portFlag;
-                else
-                    newParameters.setPortFlagBySshType();
-                *m_parameters = newParameters;
-                m_parameters->toSettings(Core::ICore::settings());
-                emit onChanged();
-            }
+            GerritSettings::instance()->updateParameters(newParameters, Core::ICore::settings());
         });
     }
-
-private:
-    const QSharedPointer<GerritParameters> &m_parameters;
 };
 
 // GerritOptionsPage
 
-GerritOptionsPage::GerritOptionsPage(const QSharedPointer<GerritParameters> &p,
-                                     const std::function<void()> &onChanged)
+GerritOptionsPage::GerritOptionsPage()
 {
     setId("Gerrit");
     setDisplayName(Git::Tr::tr("Gerrit"));
     setCategory(VcsBase::Constants::VCS_SETTINGS_CATEGORY);
-    setWidgetCreator([p, onChanged] { return new GerritOptionsWidget(p, onChanged); });
+    setWidgetCreator([] { return new GerritOptionsWidget; });
 }
 
 } // Gerrit::Internal

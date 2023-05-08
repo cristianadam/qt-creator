@@ -107,7 +107,7 @@ void GerritPushDialog::initRemoteBranches()
 }
 
 GerritPushDialog::GerritPushDialog(const Utils::FilePath &workingDir, const QString &reviewerList,
-                                   QSharedPointer<GerritParameters> parameters, QWidget *parent)
+                                   QWidget *parent)
     : QDialog(parent)
     , m_localBranchComboBox(new BranchComboBox)
     , m_remoteComboBox(new GerritRemoteChooser)
@@ -152,7 +152,6 @@ GerritPushDialog::GerritPushDialog(const Utils::FilePath &workingDir, const QStr
     }.attachTo(this);
 
     m_remoteComboBox->setRepository(workingDir);
-    m_remoteComboBox->setParameters(parameters);
     m_remoteComboBox->setAllowDups(true);
 
     auto delegate = new PushItemDelegate(m_commitView);
