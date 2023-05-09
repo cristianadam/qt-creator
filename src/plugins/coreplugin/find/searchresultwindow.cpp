@@ -41,13 +41,13 @@ namespace Core {
 */
 
 /*!
-    \class Core::Search::TextPosition
+    \class Core::Text::Position
     \inmodule QtCreator
     \internal
 */
 
 /*!
-    \class Core::Search::TextRange
+    \class Core::Text::Range
     \inmodule QtCreator
     \internal
 */
