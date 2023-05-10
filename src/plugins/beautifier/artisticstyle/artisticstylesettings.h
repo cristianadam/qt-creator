@@ -12,7 +12,6 @@ class ArtisticStyleSettings : public AbstractSettings
 public:
     ArtisticStyleSettings();
 
-    QString documentationFilePath() const override;
     void createDocumentationFile() const override;
 
     Utils::BoolAspect useOtherFiles;

@@ -40,7 +40,6 @@ public:
     void read();
     void save();
 
-    virtual QString documentationFilePath() const = 0;
     virtual void createDocumentationFile() const;
     virtual QStringList completerWords();
 
@@ -69,6 +68,8 @@ signals:
 
 protected:
     void setVersionRegExp(const QRegularExpression &versionRegExp);
+    void setDocumentationFilePath(const Utils::FilePath &path);
+    Utils::FilePath documentationFilePath() const { return m_documentationFilePath; }
 
     QMap<QString, QString> m_styles;
     QString m_ending;
@@ -86,6 +87,7 @@ private:
     QHash<QString, int> m_options;
     QStringList m_docu;
     QStringList m_supportedMimeTypes;
+    Utils::FilePath m_documentationFilePath;
 };
 
 } // Beautifier::Internal

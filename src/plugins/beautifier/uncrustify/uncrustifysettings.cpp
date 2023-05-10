@@ -26,6 +26,11 @@ UncrustifySettings::UncrustifySettings() :
     setVersionRegExp(QRegularExpression("([0-9]{1})\\.([0-9]{2})"));
     setCommand("uncrustify");
 
+    setDocumentationFilePath(Core::ICore::userResourcePath(Beautifier::Constants::SETTINGS_DIRNAME)
+        .pathAppended(Beautifier::Constants::DOCUMENTATION_DIRNAME)
+        .pathAppended(SETTINGS_NAME)
+        .stringAppended(".xml"));
+
     registerAspect(&useOtherFiles);
     useOtherFiles.setSettingsKey("useOtherFiles");
     useOtherFiles.setDefaultValue(true);
@@ -52,14 +57,6 @@ UncrustifySettings::UncrustifySettings() :
     read();
 }
 
-QString UncrustifySettings::documentationFilePath() const
-{
-    return (Core::ICore::userResourcePath() / Beautifier::Constants::SETTINGS_DIRNAME
-                / Beautifier::Constants::DOCUMENTATION_DIRNAME / SETTINGS_NAME)
-            .stringAppended(".xml")
-        .toString();
-}
-
 void UncrustifySettings::createDocumentationFile() const
 {
     Process process;
@@ -69,7 +66,7 @@ void UncrustifySettings::createDocumentationFile() const
     if (process.result() != ProcessResult::FinishedWithSuccess)
         return;
 
-    QFile file(documentationFilePath());
+    QFile file(documentationFilePath().toFSPathString());
     const QFileInfo fi(file);
     if (!fi.exists())
         fi.dir().mkpath(fi.absolutePath());

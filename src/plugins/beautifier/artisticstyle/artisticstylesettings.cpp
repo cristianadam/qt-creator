@@ -30,6 +30,11 @@ ArtisticStyleSettings::ArtisticStyleSettings() :
     setVersionRegExp(QRegularExpression("([2-9]{1})\\.([0-9]{1,2})(\\.[1-9]{1})?$"));
     setCommand("astyle");
 
+    setDocumentationFilePath(Core::ICore::userResourcePath(Beautifier::Constants::SETTINGS_DIRNAME)
+        .pathAppended(Beautifier::Constants::DOCUMENTATION_DIRNAME)
+        .pathAppended(SETTINGS_NAME)
+        .stringAppended(".xml"));
+
     registerAspect(&useOtherFiles);
     useOtherFiles.setSettingsKey("useOtherFiles");
     useOtherFiles.setDefaultValue(true);
@@ -52,15 +57,6 @@ ArtisticStyleSettings::ArtisticStyleSettings() :
     read();
 }
 
-
-QString ArtisticStyleSettings::documentationFilePath() const
-{
-    return (Core::ICore::userResourcePath(Beautifier::Constants::SETTINGS_DIRNAME)
-                / Beautifier::Constants::DOCUMENTATION_DIRNAME / SETTINGS_NAME)
-            .stringAppended(".xml")
-        .toString();
-}
-
 void ArtisticStyleSettings::createDocumentationFile() const
 {
     Process process;
@@ -70,7 +66,7 @@ void ArtisticStyleSettings::createDocumentationFile() const
     if (process.result() != ProcessResult::FinishedWithSuccess)
         return;
 
-    QFile file(documentationFilePath());
+    QFile file(documentationFilePath().toFSPathString());
     const QFileInfo fi(file);
     if (!fi.exists())
         fi.dir().mkpath(fi.absolutePath());

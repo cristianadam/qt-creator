@@ -12,7 +12,6 @@ class ClangFormatSettings : public AbstractSettings
 public:
     explicit ClangFormatSettings();
 
-    QString documentationFilePath() const override;
     void createDocumentationFile() const override;
     QStringList completerWords() override;
 
