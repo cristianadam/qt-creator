@@ -71,7 +71,6 @@ protected:
     void setVersionRegExp(const QRegularExpression &versionRegExp);
 
     QMap<QString, QString> m_styles;
-    QMap<QString, QVariant> m_settings;
     QString m_ending;
     QDir m_styleDir;
 

@@ -107,17 +107,17 @@ void Uncrustify::formatSelectedText()
             tc.movePosition(QTextCursor::EndOfLine);
         const int endPos = tc.position();
         formatCurrentFile(command(cfgFileName, true), startPos, endPos);
-    } else if (m_settings.formatEntireFileFallback()) {
+    } else if (m_settings.formatEntireFileFallback.value()) {
         formatFile();
     }
 }
 
 QString Uncrustify::configurationFile() const
 {
-    if (m_settings.useCustomStyle())
-        return m_settings.styleFileName(m_settings.customStyle());
+    if (m_settings.useCustomStyle.value())
+        return m_settings.styleFileName(m_settings.customStyle.value());
 
-    if (m_settings.useOtherFiles()) {
+    if (m_settings.useOtherFiles.value()) {
         if (const ProjectExplorer::Project *project
                 = ProjectExplorer::ProjectTree::currentProject()) {
             const Utils::FilePaths files = project->files(
@@ -130,13 +130,13 @@ QString Uncrustify::configurationFile() const
         }
     }
 
-    if (m_settings.useSpecificConfigFile()) {
-        const Utils::FilePath file = m_settings.specificConfigFile();
+    if (m_settings.useSpecificConfigFile.value()) {
+        const Utils::FilePath file = m_settings.specificConfigFile.filePath();
         if (file.exists())
             return file.toString();
     }
 
-    if (m_settings.useHomeFile()) {
+    if (m_settings.useHomeFile.value()) {
         const QString file = QDir::home().filePath("uncrustify.cfg");
         if (QFile::exists(file))
             return file;

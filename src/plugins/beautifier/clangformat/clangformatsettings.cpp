@@ -13,20 +13,28 @@
 
 namespace Beautifier::Internal {
 
-const char USE_PREDEFINED_STYLE[]        = "usePredefinedStyle";
-const char PREDEFINED_STYLE[]            = "predefinedStyle";
-const char FALLBACK_STYLE[]              = "fallbackStyle";
-const char CUSTOM_STYLE[]                = "customStyle";
 const char SETTINGS_NAME[]               = "clangformat";
 
 ClangFormatSettings::ClangFormatSettings() :
     AbstractSettings(SETTINGS_NAME, ".clang-format")
 {
     setCommand("clang-format");
-    m_settings.insert(USE_PREDEFINED_STYLE, QVariant(true));
-    m_settings.insert(PREDEFINED_STYLE, "LLVM");
-    m_settings.insert(FALLBACK_STYLE, "Default");
-    m_settings.insert(CUSTOM_STYLE, QVariant());
+
+    registerAspect(&usePredefinedStyle);
+    usePredefinedStyle.setSettingsKey("usePredefinedStyle");
+    usePredefinedStyle.setDefaultValue(true);
+
+    registerAspect(&predefinedStyle);
+    predefinedStyle.setSettingsKey("predefinedStyle");
+    predefinedStyle.setDefaultValue("LLVM");
+
+    registerAspect(&fallbackStyle);
+    fallbackStyle.setSettingsKey("fallbackStyle");
+    fallbackStyle.setDefaultValue("Default");
+
+    registerAspect(&customStyle);
+    customStyle.setSettingsKey("customStyle");
+
     read();
 }
 
@@ -144,49 +152,19 @@ QStringList ClangFormatSettings::completerWords()
     };
 }
 
-bool ClangFormatSettings::usePredefinedStyle() const
-{
-    return m_settings.value(USE_PREDEFINED_STYLE).toBool();
-}
+//void ClangFormatSettings::setPredefinedStyle(const QString &predefinedStyle)
+//{
+//    const QStringList test = predefinedStyles();
+//    if (test.contains(predefinedStyle))
+//        m_settings.insert(PREDEFINED_STYLE, QVariant(predefinedStyle));
+//}
 
-void ClangFormatSettings::setUsePredefinedStyle(bool usePredefinedStyle)
-{
-    m_settings.insert(USE_PREDEFINED_STYLE, QVariant(usePredefinedStyle));
-}
-
-QString ClangFormatSettings::predefinedStyle() const
-{
-    return m_settings.value(PREDEFINED_STYLE).toString();
-}
-
-void ClangFormatSettings::setPredefinedStyle(const QString &predefinedStyle)
-{
-    const QStringList test = predefinedStyles();
-    if (test.contains(predefinedStyle))
-        m_settings.insert(PREDEFINED_STYLE, QVariant(predefinedStyle));
-}
-
-QString ClangFormatSettings::fallbackStyle() const
-{
-    return m_settings.value(FALLBACK_STYLE).toString();
-}
-
-void ClangFormatSettings::setFallbackStyle(const QString &fallbackStyle)
-{
-    const QStringList test = fallbackStyles();
-    if (test.contains(fallbackStyle))
-        m_settings.insert(FALLBACK_STYLE, QVariant(fallbackStyle));
-}
-
-QString ClangFormatSettings::customStyle() const
-{
-    return m_settings.value(CUSTOM_STYLE).toString();
-}
-
-void ClangFormatSettings::setCustomStyle(const QString &customStyle)
-{
-    m_settings.insert(CUSTOM_STYLE, QVariant(customStyle));
-}
+//void ClangFormatSettings::setFallbackStyle(const QString &fallbackStyle)
+//{
+//    const QStringList test = fallbackStyles();
+//    if (test.contains(fallbackStyle))
+//        m_settings.insert(FALLBACK_STYLE, QVariant(fallbackStyle));
+//}
 
 QStringList ClangFormatSettings::predefinedStyles() const
 {

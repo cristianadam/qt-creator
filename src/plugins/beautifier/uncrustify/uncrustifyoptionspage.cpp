@@ -50,31 +50,31 @@ UncrustifyOptionsPageWidget::UncrustifyOptionsPageWidget(UncrustifySettings *set
     m_mime = new QLineEdit(m_settings->supportedMimeTypesAsString());
 
     m_useOtherFiles = new QCheckBox(Tr::tr("Use file uncrustify.cfg defined in project files"));
-    m_useOtherFiles->setChecked(m_settings->useOtherFiles());
+    m_useOtherFiles->setChecked(m_settings->useOtherFiles.value());
 
     m_useSpecificFile = new QCheckBox(Tr::tr("Use file specific uncrustify.cfg"));
-    m_useSpecificFile->setChecked(m_settings->useSpecificConfigFile());
+    m_useSpecificFile->setChecked(m_settings->useSpecificConfigFile.value());
 
     m_uncrusifyFilePath = new Utils::PathChooser;
     m_uncrusifyFilePath->setExpectedKind(Utils::PathChooser::File);
     m_uncrusifyFilePath->setPromptDialogFilter(Tr::tr("Uncrustify file (*.cfg)"));
-    m_uncrusifyFilePath->setFilePath(m_settings->specificConfigFile());
+    m_uncrusifyFilePath->setFilePath(m_settings->specificConfigFile.filePath());
 
     m_useHomeFile = new QCheckBox(Tr::tr("Use file uncrustify.cfg in HOME")
         .replace( "HOME", QDir::toNativeSeparators(QDir::home().absolutePath())));
-    m_useHomeFile->setChecked(m_settings->useHomeFile());
+    m_useHomeFile->setChecked(m_settings->useHomeFile.value());
 
     m_useCustomStyle = new QCheckBox(Tr::tr("Use customized style:"));
-    m_useCustomStyle->setChecked(m_settings->useCustomStyle());
+    m_useCustomStyle->setChecked(m_settings->useCustomStyle.value());
 
     m_configurations = new ConfigurationPanel;
     m_configurations->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     m_configurations->setSettings(m_settings);
-    m_configurations->setCurrentConfiguration(m_settings->customStyle());
+    m_configurations->setCurrentConfiguration(m_settings->customStyle.value());
 
     m_formatEntireFileFallback = new QCheckBox(Tr::tr("Format entire file if no text was selected"));
     m_formatEntireFileFallback->setToolTip(Tr::tr("For action Format Selected Text"));
-    m_formatEntireFileFallback->setChecked(m_settings->formatEntireFileFallback());
+    m_formatEntireFileFallback->setChecked(m_settings->formatEntireFileFallback.value());
 
     m_command->setExpectedKind(Utils::PathChooser::ExistingCommand);
     m_command->setCommandVersionArguments({"--version"});
@@ -113,13 +113,13 @@ void UncrustifyOptionsPageWidget::apply()
 {
     m_settings->setCommand(m_command->filePath());
     m_settings->setSupportedMimeTypes(m_mime->text());
-    m_settings->setUseOtherFiles(m_useOtherFiles->isChecked());
-    m_settings->setUseHomeFile(m_useHomeFile->isChecked());
-    m_settings->setUseSpecificConfigFile(m_useSpecificFile->isChecked());
-    m_settings->setSpecificConfigFile(m_uncrusifyFilePath->filePath());
-    m_settings->setUseCustomStyle(m_useCustomStyle->isChecked());
-    m_settings->setCustomStyle(m_configurations->currentConfiguration());
-    m_settings->setFormatEntireFileFallback(m_formatEntireFileFallback->isChecked());
+    m_settings->useOtherFiles.setValue(m_useOtherFiles->isChecked());
+    m_settings->useHomeFile.setValue(m_useHomeFile->isChecked());
+    m_settings->useSpecificConfigFile.setValue(m_useSpecificFile->isChecked());
+    m_settings->specificConfigFile.setFilePath(m_uncrusifyFilePath->filePath());
+    m_settings->useCustomStyle.setValue(m_useCustomStyle->isChecked());
+    m_settings->customStyle.setValue(m_configurations->currentConfiguration());
+    m_settings->formatEntireFileFallback.setValue(m_formatEntireFileFallback->isChecked());
     m_settings->save();
 
     // update since not all MIME types are accepted (invalids or duplicates)

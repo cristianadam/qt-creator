@@ -190,11 +190,11 @@ Command ClangFormat::command() const
     command.setExecutable(m_settings.command());
     command.setProcessing(Command::PipeProcessing);
 
-    if (m_settings.usePredefinedStyle()) {
-        const QString predefinedStyle = m_settings.predefinedStyle();
+    if (m_settings.usePredefinedStyle.value()) {
+        const QString predefinedStyle = m_settings.predefinedStyle.value();
         command.addOption("-style=" + predefinedStyle);
         if (predefinedStyle == "File") {
-            const QString fallbackStyle = m_settings.fallbackStyle();
+            const QString fallbackStyle = m_settings.fallbackStyle.value();
             if (fallbackStyle != "Default")
                 command.addOption("-fallback-style=" + fallbackStyle);
         }
@@ -203,7 +203,7 @@ Command ClangFormat::command() const
     } else {
         command.addOption("-style=file");
         const QString path =
-                QFileInfo(m_settings.styleFileName(m_settings.customStyle())).absolutePath();
+                QFileInfo(m_settings.styleFileName(m_settings.customStyle.value())).absolutePath();
         command.addOption("-assume-filename=" + path + QDir::separator() + "%filename");
     }
 

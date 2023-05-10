@@ -5,8 +5,7 @@
 
 #include "../abstractsettings.h"
 
-namespace Beautifier {
-namespace Internal {
+namespace Beautifier::Internal {
 
 class UncrustifySettings : public AbstractSettings
 {
@@ -14,32 +13,17 @@ class UncrustifySettings : public AbstractSettings
 
 public:
     UncrustifySettings();
-    ~UncrustifySettings() override;
 
-    bool useOtherFiles() const;
-    void setUseOtherFiles(bool useOtherFiles);
-
-    bool useHomeFile() const;
-    void setUseHomeFile(bool useHomeFile);
-
-    bool useCustomStyle() const;
-    void setUseCustomStyle(bool useCustomStyle);
-
-    QString customStyle() const;
-    void setCustomStyle(const QString &customStyle);
-
-    bool formatEntireFileFallback() const;
-    void setFormatEntireFileFallback(bool formatEntireFileFallback);
+    Utils::BoolAspect useOtherFiles;
+    Utils::BoolAspect useHomeFile;
+    Utils::BoolAspect useCustomStyle;
+    Utils::StringAspect customStyle;
+    Utils::BoolAspect formatEntireFileFallback;
+    Utils::StringAspect specificConfigFile;
+    Utils::BoolAspect useSpecificConfigFile;
 
     QString documentationFilePath() const override;
     void createDocumentationFile() const override;
-
-    Utils::FilePath specificConfigFile() const;
-    void setSpecificConfigFile(const Utils::FilePath &filePath);
-
-    bool useSpecificConfigFile() const;
-    void setUseSpecificConfigFile(bool useConfigFile);
 };
 
-} // namespace Internal
-} // namespace Beautifier
+} // Beautifier::Internal

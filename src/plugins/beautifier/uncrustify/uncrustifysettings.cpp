@@ -18,13 +18,6 @@ using namespace Utils;
 
 namespace Beautifier::Internal {
 
-const char USE_OTHER_FILES[]               = "useOtherFiles";
-const char USE_HOME_FILE[]                 = "useHomeFile";
-const char USE_SPECIFIC_CONFIG_FILE_PATH[] = "useSpecificConfigFile";
-const char SPECIFIC_CONFIG_FILE_PATH[]     = "specificConfigFile";
-const char USE_CUSTOM_STYLE[]              = "useCustomStyle";
-const char CUSTOM_STYLE[]                  = "customStyle";
-const char FORMAT_ENTIRE_FILE_FALLBACK[]   = "formatEntireFileFallback";
 const char SETTINGS_NAME[]                 = "uncrustify";
 
 UncrustifySettings::UncrustifySettings() :
@@ -32,86 +25,31 @@ UncrustifySettings::UncrustifySettings() :
 {
     setVersionRegExp(QRegularExpression("([0-9]{1})\\.([0-9]{2})"));
     setCommand("uncrustify");
-    m_settings.insert(USE_OTHER_FILES, QVariant(true));
-    m_settings.insert(USE_HOME_FILE, QVariant(false));
-    m_settings.insert(USE_CUSTOM_STYLE, QVariant(false));
-    m_settings.insert(USE_SPECIFIC_CONFIG_FILE_PATH, QVariant(false));
-    m_settings.insert(CUSTOM_STYLE, QVariant());
-    m_settings.insert(FORMAT_ENTIRE_FILE_FALLBACK, QVariant(true));
-    m_settings.insert(SPECIFIC_CONFIG_FILE_PATH, QVariant());
+
+    registerAspect(&useOtherFiles);
+    useOtherFiles.setSettingsKey("useOtherFiles");
+    useOtherFiles.setDefaultValue(true);
+
+    registerAspect(&useHomeFile);
+    useHomeFile.setSettingsKey("useHomeFile");
+
+    registerAspect(&useCustomStyle);
+    useCustomStyle.setSettingsKey("useCustomStyle");
+
+    registerAspect(&customStyle);
+    customStyle.setSettingsKey("customStyle");
+
+    registerAspect(&formatEntireFileFallback);
+    formatEntireFileFallback.setSettingsKey("formatEntireFileFallback");
+    formatEntireFileFallback.setDefaultValue(true);
+
+    registerAspect(&specificConfigFile);
+    specificConfigFile.setSettingsKey("specificConfigFile");
+
+    registerAspect(&useSpecificConfigFile);
+    useSpecificConfigFile.setSettingsKey("useSpecificConfigFile");
+
     read();
-}
-
-UncrustifySettings::~UncrustifySettings() = default;
-
-bool UncrustifySettings::useOtherFiles() const
-{
-    return m_settings.value(USE_OTHER_FILES).toBool();
-}
-
-void UncrustifySettings::setUseOtherFiles(bool useOtherFiles)
-{
-    m_settings.insert(USE_OTHER_FILES, QVariant(useOtherFiles));
-}
-
-bool UncrustifySettings::useHomeFile() const
-{
-    return m_settings.value(USE_HOME_FILE).toBool();
-}
-
-void UncrustifySettings::setUseHomeFile(bool useHomeFile)
-{
-    m_settings.insert(USE_HOME_FILE, QVariant(useHomeFile));
-}
-
-FilePath UncrustifySettings::specificConfigFile() const
-{
-    return FilePath::fromString(m_settings.value(SPECIFIC_CONFIG_FILE_PATH).toString());
-}
-
-void UncrustifySettings::setSpecificConfigFile(const FilePath &filePath)
-{
-    m_settings.insert(SPECIFIC_CONFIG_FILE_PATH, QVariant(filePath.toString()));
-}
-
-bool UncrustifySettings::useSpecificConfigFile() const
-{
-    return m_settings.value(USE_SPECIFIC_CONFIG_FILE_PATH).toBool();
-}
-
-void UncrustifySettings::setUseSpecificConfigFile(bool useConfigFile)
-{
-    m_settings.insert(USE_SPECIFIC_CONFIG_FILE_PATH, QVariant(useConfigFile));
-}
-
-bool UncrustifySettings::useCustomStyle() const
-{
-    return m_settings.value(USE_CUSTOM_STYLE).toBool();
-}
-
-void UncrustifySettings::setUseCustomStyle(bool useCustomStyle)
-{
-    m_settings.insert(USE_CUSTOM_STYLE, QVariant(useCustomStyle));
-}
-
-QString UncrustifySettings::customStyle() const
-{
-    return m_settings.value(CUSTOM_STYLE).toString();
-}
-
-void UncrustifySettings::setCustomStyle(const QString &customStyle)
-{
-    m_settings.insert(CUSTOM_STYLE, QVariant(customStyle));
-}
-
-bool UncrustifySettings::formatEntireFileFallback() const
-{
-    return m_settings.value(FORMAT_ENTIRE_FILE_FALLBACK).toBool();
-}
-
-void UncrustifySettings::setFormatEntireFileFallback(bool formatEntireFileFallback)
-{
-    m_settings.insert(FORMAT_ENTIRE_FILE_FALLBACK, QVariant(formatEntireFileFallback));
 }
 
 QString UncrustifySettings::documentationFilePath() const
