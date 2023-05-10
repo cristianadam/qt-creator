@@ -52,29 +52,29 @@ ArtisticStyleOptionsPageWidget::ArtisticStyleOptionsPageWidget(ArtisticStyleSett
     auto options = new QGroupBox(Tr::tr("Options"));
 
     m_useOtherFiles = new QCheckBox(Tr::tr("Use file *.astylerc defined in project files"));
-    m_useOtherFiles->setChecked(m_settings->useOtherFiles());
+    m_useOtherFiles->setChecked(m_settings->useOtherFiles.value());
 
     m_useSpecificConfigFile = new QCheckBox(Tr::tr("Use specific config file:"));
-    m_useSpecificConfigFile->setChecked(m_settings->useSpecificConfigFile());
+    m_useSpecificConfigFile->setChecked(m_settings->useSpecificConfigFile.value());
 
     m_specificConfigFile = new Utils::PathChooser;
     m_specificConfigFile->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     m_specificConfigFile->setExpectedKind(Utils::PathChooser::File);
     m_specificConfigFile->setPromptDialogFilter(Tr::tr("AStyle (*.astylerc)"));
-    m_specificConfigFile->setFilePath(m_settings->specificConfigFile());
+    m_specificConfigFile->setFilePath(m_settings->specificConfigFile.filePath());
 
     m_useHomeFile = new QCheckBox(
         Tr::tr("Use file .astylerc or astylerc in HOME").
                replace("HOME", QDir::toNativeSeparators(QDir::home().absolutePath())));
-    m_useHomeFile->setChecked(m_settings->useHomeFile());
+    m_useHomeFile->setChecked(m_settings->useHomeFile.value());
 
     m_useCustomStyle = new QCheckBox(Tr::tr("Use customized style:"));
-    m_useCustomStyle->setChecked(m_settings->useCustomStyle());
+    m_useCustomStyle->setChecked(m_settings->useCustomStyle.value());
 
     m_configurations = new ConfigurationPanel(options);
     m_configurations->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     m_configurations->setSettings(m_settings);
-    m_configurations->setCurrentConfiguration(m_settings->customStyle());
+    m_configurations->setCurrentConfiguration(m_settings->customStyle.value());
 
     m_command->setExpectedKind(Utils::PathChooser::ExistingCommand);
     m_command->setCommandVersionArguments({"--version"});
@@ -111,12 +111,12 @@ void ArtisticStyleOptionsPageWidget::apply()
 {
     m_settings->setCommand(m_command->filePath());
     m_settings->setSupportedMimeTypes(m_mime->text());
-    m_settings->setUseOtherFiles(m_useOtherFiles->isChecked());
-    m_settings->setUseSpecificConfigFile(m_useSpecificConfigFile->isChecked());
-    m_settings->setSpecificConfigFile(m_specificConfigFile->filePath());
-    m_settings->setUseHomeFile(m_useHomeFile->isChecked());
-    m_settings->setUseCustomStyle(m_useCustomStyle->isChecked());
-    m_settings->setCustomStyle(m_configurations->currentConfiguration());
+    m_settings->useOtherFiles.setValue(m_useOtherFiles->isChecked());
+    m_settings->useSpecificConfigFile.setValue(m_useSpecificConfigFile->isChecked());
+    m_settings->specificConfigFile.setFilePath(m_specificConfigFile->filePath());
+    m_settings->useHomeFile.setValue(m_useHomeFile->isChecked());
+    m_settings->useCustomStyle.setValue(m_useCustomStyle->isChecked());
+    m_settings->customStyle.setValue(m_configurations->currentConfiguration());
     m_settings->save();
 
     // update since not all MIME types are accepted (invalids or duplicates)

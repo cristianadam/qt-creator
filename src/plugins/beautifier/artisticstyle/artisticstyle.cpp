@@ -75,10 +75,10 @@ void ArtisticStyle::formatFile()
 
 QString ArtisticStyle::configurationFile() const
 {
-    if (m_settings.useCustomStyle())
-        return m_settings.styleFileName(m_settings.customStyle());
+    if (m_settings.useCustomStyle.value())
+        return m_settings.styleFileName(m_settings.customStyle.value());
 
-    if (m_settings.useOtherFiles()) {
+    if (m_settings.useOtherFiles.value()) {
         if (const ProjectExplorer::Project *project
                 = ProjectExplorer::ProjectTree::currentProject()) {
             const Utils::FilePaths astyleRcfiles = project->files(
@@ -91,13 +91,13 @@ QString ArtisticStyle::configurationFile() const
         }
     }
 
-    if (m_settings.useSpecificConfigFile()) {
-        const Utils::FilePath file = m_settings.specificConfigFile();
+    if (m_settings.useSpecificConfigFile.value()) {
+        const Utils::FilePath file = m_settings.specificConfigFile.filePath();
         if (file.exists())
             return file.toUserOutput();
     }
 
-    if (m_settings.useHomeFile()) {
+    if (m_settings.useHomeFile.value()) {
         const QDir homeDirectory = QDir::home();
         QString file = homeDirectory.filePath(".astylerc");
         if (QFile::exists(file))

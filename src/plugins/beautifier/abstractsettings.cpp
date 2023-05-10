@@ -242,15 +242,12 @@ void AbstractSettings::save()
     QSettings *s = Core::ICore::settings();
     s->beginGroup(Utils::Constants::BEAUTIFIER_SETTINGS_GROUP);
     s->beginGroup(m_name);
-    QMap<QString, QVariant>::const_iterator iSettings = m_settings.constBegin();
-    while (iSettings != m_settings.constEnd()) {
-        s->setValue(iSettings.key(), iSettings.value());
-        ++iSettings;
-    }
     s->setValue(COMMAND, m_command.toSettings());
     s->setValue(SUPPORTED_MIME, supportedMimeTypesAsString());
     s->endGroup();
     s->endGroup();
+
+    writeSettings(s);
 
     // Save styles
     if (m_stylesToRemove.isEmpty() && m_styles.isEmpty())
@@ -320,13 +317,11 @@ void AbstractSettings::read()
             setCommand(FilePath::fromSettings(s->value(key)));
         else if (key == SUPPORTED_MIME)
             setSupportedMimeTypes(s->value(key).toString());
-        else if (m_settings.contains(key))
-            m_settings[key] = s->value(key);
-        else
-            s->remove(key);
     }
     s->endGroup();
     s->endGroup();
+
+    readSettings(s); // The aspects.
 
     m_styles.clear();
     m_changedStyles.clear();

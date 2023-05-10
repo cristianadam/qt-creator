@@ -53,7 +53,7 @@ ClangFormatOptionsPageWidget::ClangFormatOptionsPageWidget(ClangFormatSettings *
 
     m_configurations = new ConfigurationPanel;
     m_configurations->setSettings(m_settings);
-    m_configurations->setCurrentConfiguration(m_settings->customStyle());
+    m_configurations->setCurrentConfiguration(m_settings->customStyle.value());
 
     m_usePredefinedStyle = new QRadioButton(Tr::tr("Use predefined style:"));
 
@@ -62,14 +62,14 @@ ClangFormatOptionsPageWidget::ClangFormatOptionsPageWidget(ClangFormatSettings *
 
     m_predefinedStyle = new QComboBox;
     m_predefinedStyle->addItems(m_settings->predefinedStyles());
-    const int predefinedStyleIndex = m_predefinedStyle->findText(m_settings->predefinedStyle());
+    const int predefinedStyleIndex = m_predefinedStyle->findText(m_settings->predefinedStyle.value());
     if (predefinedStyleIndex != -1)
         m_predefinedStyle->setCurrentIndex(predefinedStyleIndex);
 
     m_fallbackStyle = new QComboBox;
     m_fallbackStyle->addItems(m_settings->fallbackStyles());
     m_fallbackStyle->setEnabled(false);
-    const int fallbackStyleIndex = m_fallbackStyle->findText(m_settings->fallbackStyle());
+    const int fallbackStyleIndex = m_fallbackStyle->findText(m_settings->fallbackStyle.value());
     if (fallbackStyleIndex != -1)
         m_fallbackStyle->setCurrentIndex(fallbackStyleIndex);
 
@@ -81,7 +81,7 @@ ClangFormatOptionsPageWidget::ClangFormatOptionsPageWidget(ClangFormatSettings *
     m_command->setPromptDialogTitle(
                 BeautifierPlugin::msgCommandPromptDialogTitle("Clang Format"));
 
-    if (m_settings->usePredefinedStyle())
+    if (m_settings->usePredefinedStyle.value())
         m_usePredefinedStyle->setChecked(true);
     else
         useCustomizedStyle->setChecked(true);
@@ -123,10 +123,10 @@ void ClangFormatOptionsPageWidget::apply()
 {
     m_settings->setCommand(m_command->filePath());
     m_settings->setSupportedMimeTypes(m_mime->text());
-    m_settings->setUsePredefinedStyle(m_usePredefinedStyle->isChecked());
-    m_settings->setPredefinedStyle(m_predefinedStyle->currentText());
-    m_settings->setFallbackStyle(m_fallbackStyle->currentText());
-    m_settings->setCustomStyle(m_configurations->currentConfiguration());
+    m_settings->usePredefinedStyle.setValue(m_usePredefinedStyle->isChecked());
+    m_settings->predefinedStyle.setValue(m_predefinedStyle->currentText());
+    m_settings->fallbackStyle.setValue(m_fallbackStyle->currentText());
+    m_settings->customStyle.setValue(m_configurations->currentConfiguration());
     m_settings->save();
 
     // update since not all MIME types are accepted (invalids or duplicates)

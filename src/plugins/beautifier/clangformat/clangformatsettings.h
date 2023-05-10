@@ -16,17 +16,10 @@ public:
     void createDocumentationFile() const override;
     QStringList completerWords() override;
 
-    bool usePredefinedStyle() const;
-    void setUsePredefinedStyle(bool usePredefinedStyle);
-
-    QString predefinedStyle() const;
-    void setPredefinedStyle(const QString &predefinedStyle);
-
-    QString fallbackStyle() const;
-    void setFallbackStyle(const QString &fallbackStyle);
-
-    QString customStyle() const;
-    void setCustomStyle(const QString &customStyle);
+    Utils::BoolAspect usePredefinedStyle;
+    Utils::StringAspect predefinedStyle;
+    Utils::StringAspect fallbackStyle;
+    Utils::StringAspect customStyle;
 
     QStringList predefinedStyles() const;
     QStringList fallbackStyles() const;
