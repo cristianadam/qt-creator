@@ -85,12 +85,6 @@ QTCREATOR_UTILS_EXPORT QTextCursor wordStartCursor(const QTextCursor &cursor);
 QTCREATOR_UTILS_EXPORT QString wordUnderCursor(const QTextCursor &cursor);
 
 QTCREATOR_UTILS_EXPORT bool utf8AdvanceCodePoint(const char *&current);
-QTCREATOR_UTILS_EXPORT int utf8NthLineOffset(const QTextDocument *textDocument,
-                                             const QByteArray &buffer,
-                                             int line);
-
-QTCREATOR_UTILS_EXPORT QString utf16LineTextInUtf8Buffer(const QByteArray &utf8Buffer,
-                                                         int currentUtf8Offset);
 
 } // Text
 } // Utils

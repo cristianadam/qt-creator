@@ -182,34 +182,6 @@ QString wordUnderCursor(const QTextCursor &cursor)
     return tc.selectedText();
 }
 
-int utf8NthLineOffset(const QTextDocument *textDocument, const QByteArray &buffer, int line)
-{
-    if (textDocument->blockCount() < line)
-        return -1;
-
-    if (textDocument->characterCount() == buffer.size() + 1)
-        return textDocument->findBlockByNumber(line - 1).position();
-
-    int utf8Offset = 0;
-    for (int count = 0; count < line - 1; ++count) {
-        utf8Offset = buffer.indexOf('\n', utf8Offset);
-        if (utf8Offset == -1)
-            return -1; // The line does not exist.
-        ++utf8Offset;
-    }
-    return utf8Offset;
-}
-
-QString utf16LineTextInUtf8Buffer(const QByteArray &utf8Buffer, int currentUtf8Offset)
-{
-    const int lineStartUtf8Offset = currentUtf8Offset
-                                        ? (utf8Buffer.lastIndexOf('\n', currentUtf8Offset - 1) + 1)
-                                        : 0;
-    const int lineEndUtf8Offset = utf8Buffer.indexOf('\n', currentUtf8Offset);
-    return QString::fromUtf8(
-        utf8Buffer.mid(lineStartUtf8Offset, lineEndUtf8Offset - lineStartUtf8Offset));
-}
-
 static bool isByteOfMultiByteCodePoint(unsigned char byte)
 {
     return byte & 0x80; // Check if most significant bit is set
