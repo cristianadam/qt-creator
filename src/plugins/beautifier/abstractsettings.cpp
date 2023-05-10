@@ -181,6 +181,11 @@ void AbstractSettings::setVersionRegExp(const QRegularExpression &versionRegExp)
     m_versionUpdater->setVersionRegExp(versionRegExp);
 }
 
+void AbstractSettings::setDocumentationFilePath(const Utils::FilePath &path)
+{
+    m_documentationFilePath = path;
+}
+
 QString AbstractSettings::supportedMimeTypesAsString() const
 {
     return m_supportedMimeTypes.join("; ");
@@ -331,7 +336,7 @@ void AbstractSettings::read()
 
 void AbstractSettings::readDocumentation()
 {
-    const QString filename = documentationFilePath();
+    const QString filename = documentationFilePath().toFSPathString();
     if (filename.isEmpty()) {
         BeautifierPlugin::showError(Tr::tr("No documentation file specified."));
         return;

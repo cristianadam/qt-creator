@@ -22,7 +22,6 @@ public:
     Utils::StringAspect specificConfigFile;
     Utils::BoolAspect useSpecificConfigFile;
 
-    QString documentationFilePath() const override;
     void createDocumentationFile() const override;
 };
 

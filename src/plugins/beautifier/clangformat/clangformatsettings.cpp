@@ -20,6 +20,11 @@ ClangFormatSettings::ClangFormatSettings() :
 {
     setCommand("clang-format");
 
+    setDocumentationFilePath(Core::ICore::userResourcePath(Beautifier::Constants::SETTINGS_DIRNAME)
+        .pathAppended(Beautifier::Constants::DOCUMENTATION_DIRNAME)
+        .pathAppended(SETTINGS_NAME)
+        .stringAppended(".xml"));
+
     registerAspect(&usePredefinedStyle);
     usePredefinedStyle.setSettingsKey("usePredefinedStyle");
     usePredefinedStyle.setDefaultValue(true);
@@ -38,17 +43,9 @@ ClangFormatSettings::ClangFormatSettings() :
     read();
 }
 
-QString ClangFormatSettings::documentationFilePath() const
-{
-    return (Core::ICore::userResourcePath() / Beautifier::Constants::SETTINGS_DIRNAME
-                / Beautifier::Constants::DOCUMENTATION_DIRNAME / SETTINGS_NAME)
-            .stringAppended(".xml")
-        .toString();
-}
-
 void ClangFormatSettings::createDocumentationFile() const
 {
-    QFile file(documentationFilePath());
+    QFile file(documentationFilePath().toFSPathString());
     const QFileInfo fi(file);
     if (!fi.exists())
         fi.dir().mkpath(fi.absolutePath());
