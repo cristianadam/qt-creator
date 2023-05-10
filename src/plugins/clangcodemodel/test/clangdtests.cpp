@@ -1319,7 +1319,7 @@ void ClangdTestHighlighting::test()
     const int endPos = Text::positionInText(doc->document(), lastLine, endColumn);
 
     const auto lessThan = [=](const TextEditor::HighlightingResult &r, int) {
-        return Text::positionInText(doc->document(), r.line, r.column) < startPos;
+        return Text::positionInText(doc->document(), r.line, r.column + 1) < startPos;
     };
     const auto findResults = [=] {
         TextEditor::HighlightingResults results;
@@ -1328,7 +1328,7 @@ void ClangdTestHighlighting::test()
             return results;
         while (it != m_results.cend()) {
             const int resultEndPos = Text::positionInText(doc->document(), it->line,
-                                                                 it->column) + it->length;
+                                                                 it->column + 1) + it->length;
             if (resultEndPos > endPos)
                 break;
             results << *it++;

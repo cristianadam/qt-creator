@@ -28,7 +28,7 @@ namespace {
 
 CursorInfo::Range toRange(const SemanticInfo::Use &use)
 {
-    return {use.line, use.column, use.length};
+    return {use.line, use.column + 1, use.length};
 }
 
 CursorInfo::Range toRange(int tokenIndex, TranslationUnit *translationUnit)
@@ -188,8 +188,8 @@ private:
 
             bool good = false;
             for (const SemanticInfo::Use &use : uses) {
-                if (m_line == use.line && m_column >= use.column
-                        && m_column <= static_cast<int>(use.column + use.length)) {
+                if (m_line == use.line && m_column >= use.column + 1
+                        && m_column <= static_cast<int>(use.column + 1 + use.length)) {
                     good = true;
                     break;
                 }

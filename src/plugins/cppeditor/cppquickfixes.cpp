@@ -5411,7 +5411,7 @@ void ExtractFunction::match(const CppQuickFixInterface &interface, QuickFixOpera
             if (use.isInvalid())
                 continue;
 
-            const int position = file->position(use.line, use.column);
+            const int position = file->position(use.line, use.column + 1);
             if (position < analyser.m_extractionStart)
                 usedBeforeExtraction = true;
             else if (position >= analyser.m_extractionEnd)
@@ -5887,7 +5887,7 @@ private:
         ASTPath astPath(m_document);
         const QList<SemanticInfo::Use> uses = semanticInfo().localUses.value(m_symbol);
         for (const SemanticInfo::Use &use : uses) {
-            const QList<AST *> path = astPath(use.line, use.column);
+            const QList<AST *> path = astPath(use.line, use.column + 1);
             AST *idAST = path.last();
             bool declarationFound = false;
             bool starFound = false;
@@ -6010,7 +6010,7 @@ private:
         ASTPath astPath(m_document);
         const QList<SemanticInfo::Use> uses = semanticInfo().localUses.value(m_symbol);
         for (const SemanticInfo::Use &use : uses) {
-            const QList<AST *> path = astPath(use.line, use.column);
+            const QList<AST *> path = astPath(use.line, use.column + 1);
             AST *idAST = path.last();
             bool insertStar = true;
             for (int i = path.count() - 2; i >= 0; --i) {

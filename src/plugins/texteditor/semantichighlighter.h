@@ -26,7 +26,7 @@ class TEXTEDITOR_EXPORT HighlightingResult
 {
 public:
     int line = 0; // 1-based
-    int column = 0; // 1-based
+    int column = -1; // 0-based
     int length = 0;
     TextStyles textStyles;
     int kind = 0; /// The various highlighters can define their own kind of results.

@@ -861,7 +861,7 @@ ChangeSet FunctionDeclDefLink::changes(const Snapshot &snapshot, int targetOffse
                 for (const SemanticInfo::Use &use : uses) {
                     if (use.isInvalid())
                         continue;
-                    const int useStart = targetFile->position(use.line, use.column);
+                    const int useStart = targetFile->position(use.line, use.column + 1);
                     if (useStart <= endOfArguments)
                         continue;
                     changes.replace(useStart, useStart + use.length, it.value());
