@@ -106,7 +106,7 @@ void SemanticHighlighter::onHighlighterResultAvailable(int from, int to)
                 && result.kind != TernaryIf && result.kind != TernaryElse) {
             const QTextBlock firstBlockForResult =
                     m_baseTextDocument->document()->findBlockByNumber(result.line - 1);
-            const int startRange = firstBlockForResult.position() + result.column - 1;
+            const int startRange = firstBlockForResult.position() + result.column;
             const int endRange = startRange + result.length;
             const QTextBlock lastBlockForResult = m_baseTextDocument->document()
                     ->findBlock(endRange);
@@ -145,18 +145,18 @@ void SemanticHighlighter::onHighlighterResultAvailable(int from, int to)
         }
         Parenthesis paren;
         if (result.kind == AngleBracketOpen) {
-            paren = {Parenthesis::Opened, '<', result.column - 1};
+            paren = {Parenthesis::Opened, '<', result.column};
         } else if (result.kind == AngleBracketClose) {
-            paren = {Parenthesis::Closed, '>', result.column - 1};
+            paren = {Parenthesis::Closed, '>', result.column};
         } else if (result.kind == DoubleAngleBracketClose) {
-            Parenthesis extraParen = {Parenthesis::Closed, '>', result.column - 1};
+            Parenthesis extraParen = {Parenthesis::Closed, '>', result.column};
             extraParen.source = parenSource();
             insertSorted(parentheses.second, extraParen);
             paren = {Parenthesis::Closed, '>', result.column};
         } else if (result.kind == TernaryIf) {
-            paren = {Parenthesis::Opened, '?', result.column - 1};
+            paren = {Parenthesis::Opened, '?', result.column};
         } else if (result.kind == TernaryElse) {
-            paren = {Parenthesis::Closed, ':', result.column - 1};
+            paren = {Parenthesis::Closed, ':', result.column};
         }
         QTC_ASSERT(paren.pos != -1, continue);
         paren.source = parenSource();
@@ -196,7 +196,7 @@ void SemanticHighlighter::onHighlighterFinished()
         const QTextBlock lastResultStartBlock
                 = m_baseTextDocument->document()->findBlockByNumber(lastResult.line - 1);
         lastResultBlock = m_baseTextDocument->document()->findBlock(
-                    lastResultStartBlock.position() + lastResult.column - 1 + lastResult.length);
+                    lastResultStartBlock.position() + lastResult.column + lastResult.length);
     }
 
     for (QTextBlock currentBlock = m_baseTextDocument->document()->firstBlock();

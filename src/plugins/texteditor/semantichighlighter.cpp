@@ -41,14 +41,14 @@ const Ranges rangesForResult(const HighlightingResult &result, const QTextBlock 
         Range range;
         range.block = curBlock;
         range.formatRange.format = format;
-        range.formatRange.start = curResult.column - 1;
+        range.formatRange.start = curResult.column;
         range.formatRange.length = std::min(curResult.length,
                                             curBlock.length() - range.formatRange.start);
         ranges << range;
         if (range.formatRange.length == curResult.length)
             break;
         curBlock = curBlock.next();
-        curResult.column = 1;
+        curResult.column = 0;
         curResult.length -= range.formatRange.length;
     }
 
@@ -152,7 +152,7 @@ void SemanticHighlighter::clearExtraAdditionalFormatsUntilEnd(
         if (result.line) {
             const QTextBlock blockForLine = doc->findBlockByNumber(result.line - 1);
             const QTextBlock lastBlockWithResults = doc->findBlock(
-                        blockForLine.position() + result.column - 1 + result.length);
+                        blockForLine.position() + result.column + result.length);
             firstBlockToClear = lastBlockWithResults.next();
             break;
         }
