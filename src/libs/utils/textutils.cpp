@@ -89,6 +89,11 @@ bool Range::operator==(const Range &other) const
     return begin == other.begin && end == other.end;
 }
 
+bool Selection::operator==(const Selection &other) const
+{
+    return pos == other.pos && length == other.length;
+}
+
 bool convertPosition(const QTextDocument *document, int pos, int *line, int *column)
 {
     QTextBlock block = document->findBlock(pos);

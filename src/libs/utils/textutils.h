@@ -48,6 +48,17 @@ public:
     bool operator!=(const Range &other) const { return !(operator==(other)); }
 };
 
+class QTCREATOR_UTILS_EXPORT Selection
+{
+public:
+    Position pos;
+    int length;
+
+    bool operator==(const Selection &other) const;
+
+    bool operator!=(const Selection &other) const { return !(operator==(other)); }
+};
+
 struct Replacement
 {
     Replacement() = default;
