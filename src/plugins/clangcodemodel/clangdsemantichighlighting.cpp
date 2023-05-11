@@ -24,6 +24,7 @@
 using namespace LanguageClient;
 using namespace LanguageServerProtocol;
 using namespace TextEditor;
+using namespace Utils;
 
 namespace ClangCodeModel::Internal {
 Q_LOGGING_CATEGORY(clangdLogHighlight, "qtc.clangcodemodel.clangd.highlight", QtWarningMsg);
@@ -56,7 +57,7 @@ static QList<BlockRange> cleanupDisabledCode(HighlightingResults &results, const
         // Does the current line contain a potential "ifdefed-out switcher"?
         // If not, no state change is possible and we continue with the next line.
         const auto isPreprocessorControlStatement = [&] {
-            const int pos = Utils::Text::positionInText(doc, it->line, it->column + 1);
+            const int pos = Text::positionInText(doc, it->line, it->column + 1);
             const QStringView content = subViewLen(docContent, pos, it->length).trimmed();
             if (content.isEmpty() || content.first() != '#')
                 return false;
@@ -114,7 +115,7 @@ class ExtraHighlightingResultsCollector
 public:
     ExtraHighlightingResultsCollector(QPromise<HighlightingResult> &promise,
                                       HighlightingResults &results,
-                                      const Utils::FilePath &filePath, const ClangdAstNode &ast,
+                                      const FilePath &filePath, const ClangdAstNode &ast,
                                       const QTextDocument *doc, const QString &docContent,
                                       const QVersionNumber &clangdVersion);
 
@@ -133,7 +134,7 @@ private:
 
     QPromise<HighlightingResult> &m_promise;
     HighlightingResults &m_results;
-    const Utils::FilePath m_filePath;
+    const FilePath m_filePath;
     const ClangdAstNode &m_ast;
     const QTextDocument * const m_doc;
     const QString &m_docContent;
@@ -143,7 +144,7 @@ private:
 
 void doSemanticHighlighting(
         QPromise<HighlightingResult> &promise,
-        const Utils::FilePath &filePath,
+        const FilePath &filePath,
         const QList<ExpandedSemanticToken> &tokens,
         const QString &docContents,
         const ClangdAstNode &ast,
@@ -336,7 +337,7 @@ void doSemanticHighlighting(
             styles.mainStyle = token.modifiers.contains(QLatin1String("readonly"))
                     ? C_PARAMETER : C_TYPE;
         } else if (token.type == "operator") {
-            const int pos = Utils::Text::positionInText(&doc, token.line, token.column);
+            const int pos = Text::positionInText(&doc, token.line, token.column);
             QTC_ASSERT(pos >= 0 || pos < docContents.size(), return HighlightingResult());
             const QChar firstChar = docContents.at(pos);
             if (firstChar.isLetter())
@@ -361,7 +362,7 @@ void doSemanticHighlighting(
         } else if (token.type == "bracket") {
             styles.mainStyle = C_PUNCTUATION;
             HighlightingResult result(token.line, token.column, token.length, styles);
-            const int pos = Utils::Text::positionInText(&doc, token.line, token.column);
+            const int pos = Text::positionInText(&doc, token.line, token.column);
             QTC_ASSERT(pos >= 0 || pos < docContents.size(), return HighlightingResult());
             const char symbol = docContents.at(pos).toLatin1();
             QTC_ASSERT(symbol == '<' || symbol == '>', return HighlightingResult());
@@ -428,7 +429,7 @@ void doSemanticHighlighting(
 
 ExtraHighlightingResultsCollector::ExtraHighlightingResultsCollector(
         QPromise<HighlightingResult> &promise, HighlightingResults &results,
-        const Utils::FilePath &filePath, const ClangdAstNode &ast, const QTextDocument *doc,
+        const FilePath &filePath, const ClangdAstNode &ast, const QTextDocument *doc,
         const QString &docContent, const QVersionNumber &clangdVersion)
     : m_promise(promise), m_results(results), m_filePath(filePath), m_ast(ast), m_doc(doc),
       m_docContent(docContent), m_clangdVersion(clangdVersion.majorVersion())
@@ -441,13 +442,13 @@ void ExtraHighlightingResultsCollector::collect()
         const HighlightingResult res = m_results.at(i);
         if (res.textStyles.mainStyle != TextEditor::C_MACRO || res.length != 10)
             continue;
-        const int pos = Utils::Text::positionInText(m_doc, res.line, res.column + 1);
+        const int pos = Text::positionInText(m_doc, res.line, res.column + 1);
         if (subViewLen(m_docContent, pos, 10) != QLatin1String("Q_PROPERTY"))
             continue;
         int endPos;
         if (i < m_results.length() - 1) {
             const HighlightingResult nextRes = m_results.at(i + 1);
-            endPos = Utils::Text::positionInText(m_doc, nextRes.line, nextRes.column + 1);
+            endPos = Text::positionInText(m_doc, nextRes.line, nextRes.column + 1);
         } else {
             endPos = m_docContent.length();
         }
@@ -488,14 +489,16 @@ int ExtraHighlightingResultsCollector::onlyIndexOf(const QStringView &text,
 // In corner cases, this might get sabotaged by e.g. comments, in which case we give up.
 int ExtraHighlightingResultsCollector::posForNodeStart(const ClangdAstNode &node) const
 {
-    return Utils::Text::positionInText(m_doc, node.range().start().line() + 1,
-                                       node.range().start().character() + 1);
+    return Text::positionInText(m_doc,
+                                node.range().start().line() + 1,
+                                node.range().start().character() + 1);
 }
 
 int ExtraHighlightingResultsCollector::posForNodeEnd(const ClangdAstNode &node) const
 {
-    return Utils::Text::positionInText(m_doc, node.range().end().line() + 1,
-                                       node.range().end().character() + 1);
+    return Text::positionInText(m_doc,
+                                node.range().end().line() + 1,
+                                node.range().end().character() + 1);
 }
 
 void ExtraHighlightingResultsCollector::insertResult(const HighlightingResult &result)
@@ -518,8 +521,8 @@ void ExtraHighlightingResultsCollector::insertResult(const HighlightingResult &r
 
         // Bogus ranges; e.g. QTCREATORBUG-27601
         if (it != m_results.end()) {
-            const int nextStartPos = Utils::Text::positionInText(m_doc, it->line, it->column + 1);
-            const int resultEndPos = Utils::Text::positionInText(m_doc, result.line, result.column + 1)
+            const int nextStartPos = Text::positionInText(m_doc, it->line, it->column + 1);
+            const int resultEndPos = Text::positionInText(m_doc, result.line, result.column + 1)
                     + result.length;
             if (resultEndPos > nextStartPos)
                 return;
@@ -570,11 +573,11 @@ void ExtraHighlightingResultsCollector::insertAngleBracketInfo(int searchStart1,
     HighlightingResult result;
     result.useTextSyles = true;
     result.textStyles.mainStyle = C_PUNCTUATION;
-    Utils::Text::convertPosition(m_doc, absOpeningAngleBracketPos, &result.line, &result.column);
+    Text::convertPosition(m_doc, absOpeningAngleBracketPos, &result.line, &result.column);
     result.length = 1;
     result.kind = CppEditor::SemanticHighlighter::AngleBracketOpen;
     insertResult(result);
-    Utils::Text::convertPosition(m_doc, absClosingAngleBracketPos, &result.line, &result.column);
+    Text::convertPosition(m_doc, absClosingAngleBracketPos, &result.line, &result.column);
     result.kind = CppEditor::SemanticHighlighter::AngleBracketClose;
     insertResult(result);
 }
@@ -645,11 +648,11 @@ void ExtraHighlightingResultsCollector::collectFromNode(const ClangdAstNode &nod
         result.useTextSyles = true;
         result.textStyles.mainStyle = C_PUNCTUATION;
         result.textStyles.mixinStyles.push_back(C_OPERATOR);
-        Utils::Text::convertPosition(m_doc, absQuestionMarkPos, &result.line, &result.column);
+        Text::convertPosition(m_doc, absQuestionMarkPos, &result.line, &result.column);
         result.length = 1;
         result.kind = CppEditor::SemanticHighlighter::TernaryIf;
         insertResult(result);
-        Utils::Text::convertPosition(m_doc, absColonPos, &result.line, &result.column);
+        Text::convertPosition(m_doc, absColonPos, &result.line, &result.column);
         result.kind = CppEditor::SemanticHighlighter::TernaryElse;
         insertResult(result);
         return;
@@ -834,13 +837,15 @@ void ExtraHighlightingResultsCollector::collectFromNode(const ClangdAstNode &nod
 
             result.textStyles.mainStyle = C_PUNCTUATION;
             result.length = 1;
-            Utils::Text::convertPosition(m_doc,
-                                         nodeStartPos + openingBracketOffset,
-                                         &result.line, &result.column);
+            Text::convertPosition(m_doc,
+                                  nodeStartPos + openingBracketOffset,
+                                  &result.line,
+                                  &result.column);
             insertResult(result);
-            Utils::Text::convertPosition(m_doc,
-                                         nodeStartPos + closingBracketOffset,
-                                         &result.line, &result.column);
+            Text::convertPosition(m_doc,
+                                  nodeStartPos + closingBracketOffset,
+                                  &result.line,
+                                  &result.column);
             insertResult(result);
         }
         return;
@@ -884,7 +889,7 @@ void ExtraHighlightingResultsCollector::collectFromNode(const ClangdAstNode &nod
 
     const int opStringOffsetInDoc = nodeStartPos + opStringOffset
             + detail.length() - opStringLen;
-    Utils::Text::convertPosition(m_doc, opStringOffsetInDoc, &result.line, &result.column);
+    Text::convertPosition(m_doc, opStringOffsetInDoc, &result.line, &result.column);
     result.length = opStringLen;
     if (isArray || isCall)
         result.length = 1;
@@ -904,11 +909,9 @@ void ExtraHighlightingResultsCollector::collectFromNode(const ClangdAstNode &nod
     const int closingParenOffset = nodeText.indexOf(isCall ? ')' : ']', openingParenOffset + 1);
     if (closingParenOffset == -1 || closingParenOffset < openingParenOffset)
         return;
-    Utils::Text::convertPosition(m_doc, nodeStartPos + openingParenOffset,
-                                 &result.line, &result.column);
+    Text::convertPosition(m_doc, nodeStartPos + openingParenOffset, &result.line, &result.column);
     insertResult(result);
-    Utils::Text::convertPosition(m_doc, nodeStartPos + closingParenOffset,
-                                 &result.line, &result.column);
+    Text::convertPosition(m_doc, nodeStartPos + closingParenOffset, &result.line, &result.column);
     insertResult(result);
 }
 
