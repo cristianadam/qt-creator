@@ -5,7 +5,6 @@
 
 #include "../beautifierabstracttool.h"
 
-#include "artisticstyleoptionspage.h"
 #include "artisticstylesettings.h"
 
 namespace Beautifier::Internal {
@@ -27,7 +26,6 @@ private:
 
     QAction *m_formatFile = nullptr;
     ArtisticStyleSettings m_settings;
-    ArtisticStyleOptionsPage m_page{&m_settings};
 };
 
 } // Beautifier::Internal

@@ -20,6 +20,10 @@ public:
     Utils::BoolAspect useHomeFile;
     Utils::BoolAspect useCustomStyle;
     Utils::StringAspect customStyle;
+
+private:
+    QWidget *m_optionsPanelStore = nullptr;
+    class ConfigurationPanel *m_configurations = nullptr;
 };
 
 } // Beautifier::Internal

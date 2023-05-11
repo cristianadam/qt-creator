@@ -187,14 +187,14 @@ void ClangFormat::disableFormattingSelectedText()
 Command ClangFormat::command() const
 {
     Command command;
-    command.setExecutable(m_settings.command());
+    command.setExecutable(m_settings.command.filePath());
     command.setProcessing(Command::PipeProcessing);
 
     if (m_settings.usePredefinedStyle.value()) {
-        const QString predefinedStyle = m_settings.predefinedStyle.value();
+        const QString predefinedStyle = m_settings.predefinedStyle.stringValue();
         command.addOption("-style=" + predefinedStyle);
         if (predefinedStyle == "File") {
-            const QString fallbackStyle = m_settings.fallbackStyle.value();
+            const QString fallbackStyle = m_settings.fallbackStyle.stringValue();
             if (fallbackStyle != "Default")
                 command.addOption("-fallback-style=" + fallbackStyle);
         }

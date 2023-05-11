@@ -4,12 +4,26 @@
 #include "clangformatsettings.h"
 
 #include "../beautifierconstants.h"
+#include "../beautifierplugin.h"
 #include "../beautifiertr.h"
+#include "../configurationpanel.h"
 
+#include <utils/layoutbuilder.h>
+#include <utils/pathchooser.h>
+
+#include <QButtonGroup>
+#include <QComboBox>
 #include <QDateTime>
+#include <QGroupBox>
+#include <QLabel>
+#include <QLineEdit>
+#include <QRadioButton>
+#include <QSpacerItem>
 #include <QXmlStreamWriter>
 
 #include <coreplugin/icore.h>
+
+using namespace Utils;
 
 namespace Beautifier::Internal {
 
@@ -18,16 +32,27 @@ const char SETTINGS_NAME[]               = "clangformat";
 ClangFormatSettings::ClangFormatSettings() :
     AbstractSettings(SETTINGS_NAME, ".clang-format")
 {
-    setCommand("clang-format");
+    setId("ClangFormat");
+    setDisplayName(Tr::tr("Clang Format"));
+    setCategory(Constants::OPTION_CATEGORY);
 
     setDocumentationFilePath(Core::ICore::userResourcePath(Beautifier::Constants::SETTINGS_DIRNAME)
         .pathAppended(Beautifier::Constants::DOCUMENTATION_DIRNAME)
         .pathAppended(SETTINGS_NAME)
         .stringAppended(".xml"));
 
+    // Registered in base
+    command.setValue("clang-format");
+    command.setLabelText(Tr::tr("Clang Format command:"));
+    command.setExpectedKind(PathChooser::ExistingCommand);
+    command.setCommandVersionArguments({"--version"});
+    command.setPromptDialogTitle(
+                BeautifierPlugin::msgCommandPromptDialogTitle("Clang Format"));
+
     registerAspect(&usePredefinedStyle);
     usePredefinedStyle.setSettingsKey("usePredefinedStyle");
     usePredefinedStyle.setDefaultValue(true);
+    usePredefinedStyle.setLabelText(Tr::tr("Use predefined style:"));
 
     registerAspect(&predefinedStyle);
     predefinedStyle.setSettingsKey("predefinedStyle");
@@ -40,7 +65,75 @@ ClangFormatSettings::ClangFormatSettings() :
     registerAspect(&customStyle);
     customStyle.setSettingsKey("customStyle");
 
+    // intentionall unregistered
+    useCustomizedStyle.setLabelText(Tr::tr("Use customized style:"));
+
     read();
+
+
+    auto styleButtonGroup = new QButtonGroup(this);
+
+//    styleButtonGroup->addButton(useCustomizedStyle);
+
+    m_configurations = new ConfigurationPanel;
+    m_configurations->setSettings(this);
+    m_configurations->setCurrentConfiguration(customStyle.value());
+
+//    m_usePredefinedStyle->setChecked(true);
+//    styleButtonGroup->addButton(m_usePredefinedStyle);
+
+//    m_predefinedStyle = new QComboBox;
+//    m_predefinedStyle->addItems(m_settings->predefinedStyles());
+//    const int predefinedStyleIndex = m_predefinedStyle->findText(m_settings->predefinedStyle.value());
+//    if (predefinedStyleIndex != -1)
+//        m_predefinedStyle->setCurrentIndex(predefinedStyleIndex);
+
+//    m_fallbackStyle = new QComboBox;
+//    m_fallbackStyle->addItems(m_settings->fallbackStyles());
+//    m_fallbackStyle->setEnabled(false);
+//    const int fallbackStyleIndex = m_fallbackStyle->findText(->fallbackStyle.value());
+//    if (fallbackStyleIndex != -1)
+//        m_fallbackStyle->setCurrentIndex(fallbackStyleIndex);
+
+//    if (usePredefinedStyle.value())
+//        usePredefinedStyle->setChecked(true);
+//    else
+//        useCustomizedStyle->setChecked(true);
+
+    setLayouter([this](QWidget *widget) {
+        using namespace Layouting;
+
+        Column {
+            Group {
+                title(Tr::tr("Configuration")),
+                Form {
+                    command, br,
+                    supportedMimeTypes
+                }
+            },
+            Form {
+                usePredefinedStyle, predefinedStyle, br,
+                empty, Row { Tr::tr("Fallback style:"), fallbackStyle }, br,
+                useCustomizedStyle, m_configurations, br,
+            },
+            st
+        }.attachTo(widget);
+     });
+
+    connect(&predefinedStyle, &BaseAspect::changed, this, [this] {
+//        m_fallbackStyle->setEnabled(item == "File");
+    });
+    connect(&usePredefinedStyle, &BoolAspect::changed, this, [this](bool checked) {
+//        m_fallbackStyle->setEnabled(checked && m_predefinedStyle->currentText() == "File");
+//        m_predefinedStyle->setEnabled(checked);
+    });
+
+
+// Appliyer
+//    predefinedStyle.setValue(m_predefinedStyle->currentText());
+//    fallbackStyle.setValue(m_fallbackStyle->currentText());
+//    customStyle.setValue(m_configurations->currentConfiguration());
+//    save();
 }
 
 void ClangFormatSettings::createDocumentationFile() const
@@ -153,14 +246,14 @@ QStringList ClangFormatSettings::completerWords()
 //{
 //    const QStringList test = predefinedStyles();
 //    if (test.contains(predefinedStyle))
-//        m_settings.insert(PREDEFINED_STYLE, QVariant(predefinedStyle));
+//        nsert(PREDEFINED_STYLE, QVariant(predefinedStyle));
 //}
 
 //void ClangFormatSettings::setFallbackStyle(const QString &fallbackStyle)
 //{
 //    const QStringList test = fallbackStyles();
 //    if (test.contains(fallbackStyle))
-//        m_settings.insert(FALLBACK_STYLE, QVariant(fallbackStyle));
+//        nsert(FALLBACK_STYLE, QVariant(fallbackStyle));
 //}
 
 QStringList ClangFormatSettings::predefinedStyles() const

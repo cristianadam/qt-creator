@@ -89,6 +89,16 @@ AbstractSettings::AbstractSettings(const QString &name, const QString &ending)
     , m_name(name)
     , m_versionUpdater(new VersionUpdater)
 {
+    setSettingsGroups(Utils::Constants::BEAUTIFIER_SETTINGS_GROUP, m_name);
+
+    registerAspect(&command);
+
+    registerAspect(&supportedMimeTypes);
+    supportedMimeTypes.setLabelText(Tr::tr("Restrict to MIME types:"));
+
+    connect(&command, &BaseAspect::changed, this, [this] {
+        m_versionUpdater->update(command.filePath());
+    });
 }
 
 AbstractSettings::~AbstractSettings() = default;
@@ -157,20 +167,6 @@ QString AbstractSettings::styleFileName(const QString &key) const
     return m_styleDir.absoluteFilePath(key + m_ending);
 }
 
-FilePath AbstractSettings::command() const
-{
-    return m_command;
-}
-
-void AbstractSettings::setCommand(const FilePath &cmd)
-{
-    if (cmd == m_command)
-        return;
-
-    m_command = cmd;
-    m_versionUpdater->update(command());
-}
-
 QVersionNumber AbstractSettings::version() const
 {
     return m_versionUpdater->version();
@@ -186,14 +182,9 @@ void AbstractSettings::setDocumentationFilePath(const Utils::FilePath &path)
     m_documentationFilePath = path;
 }
 
-QString AbstractSettings::supportedMimeTypesAsString() const
+QStringList AbstractSettings::supportedMimeTypeList() const
 {
-    return m_supportedMimeTypes.join("; ");
-}
-
-void AbstractSettings::setSupportedMimeTypes(const QString &mimes)
-{
-    const QStringList stringTypes = mimes.split(';');
+    const QStringList stringTypes = supportedMimeTypes.value().split(';');
     QStringList types;
     for (const QString &type : stringTypes) {
         const MimeType mime = mimeTypeForName(type.trimmed());
@@ -203,11 +194,7 @@ void AbstractSettings::setSupportedMimeTypes(const QString &mimes)
         if (!types.contains(canonicalName))
             types << canonicalName;
     }
-
-    if (m_supportedMimeTypes != types) {
-        m_supportedMimeTypes = types;
-        emit supportedMimeTypesChanged();
-    }
+    return types;
 }
 
 bool AbstractSettings::isApplicable(const Core::IDocument *document) const
@@ -215,11 +202,11 @@ bool AbstractSettings::isApplicable(const Core::IDocument *document) const
     if (!document)
         return false;
 
-    if (m_supportedMimeTypes.isEmpty())
+    if (supportedMimeTypes.value().isEmpty())
         return true;
 
     const MimeType documentMimeType = mimeTypeForName(document->mimeType());
-    return anyOf(m_supportedMimeTypes, [&documentMimeType](const QString &mime) {
+    return anyOf(supportedMimeTypeList(), [&documentMimeType](const QString &mime) {
         return documentMimeType.inherits(mime);
     });
 }
@@ -245,13 +232,6 @@ void AbstractSettings::save()
 {
     // Save settings, except styles
     QSettings *s = Core::ICore::settings();
-    s->beginGroup(Utils::Constants::BEAUTIFIER_SETTINGS_GROUP);
-    s->beginGroup(m_name);
-    s->setValue(COMMAND, m_command.toSettings());
-    s->setValue(SUPPORTED_MIME, supportedMimeTypesAsString());
-    s->endGroup();
-    s->endGroup();
-
     writeSettings(s);
 
     // Save styles
@@ -309,24 +289,12 @@ void AbstractSettings::createDocumentationFile() const
 void AbstractSettings::read()
 {
     // Set default values
-    setSupportedMimeTypes("text/x-c++src;text/x-c++hdr;text/x-csrc;text/x-chdr;text/x-objcsrc;"
+    supportedMimeTypes.setValue("text/x-c++src;text/x-c++hdr;text/x-csrc;text/x-chdr;text/x-objcsrc;"
                           "text/x-objc++src");
 
     // Read settings, except styles
     QSettings *s = Core::ICore::settings();
-    s->beginGroup(Utils::Constants::BEAUTIFIER_SETTINGS_GROUP);
-    s->beginGroup(m_name);
-    const QStringList keys = s->allKeys();
-    for (const QString &key : keys) {
-        if (key == COMMAND)
-            setCommand(FilePath::fromSettings(s->value(key)));
-        else if (key == SUPPORTED_MIME)
-            setSupportedMimeTypes(s->value(key).toString());
-    }
-    s->endGroup();
-    s->endGroup();
-
-    readSettings(s); // The aspects.
+    readSettings(s);
 
     m_styles.clear();
     m_changedStyles.clear();

@@ -3,14 +3,22 @@
 
 #include "artisticstylesettings.h"
 
+#include "artisticstyleconstants.h"
+
 #include "../beautifierconstants.h"
+#include "../beautifierplugin.h"
+#include "../beautifiertr.h"
+#include "../configurationpanel.h"
 
 #include <coreplugin/icore.h>
 
 #include <utils/genericconstants.h>
 #include <utils/process.h>
 #include <utils/stringutils.h>
+#include <utils/layoutbuilder.h>
+#include <utils/pathchooser.h>
 
+#include <QApplication>
 #include <QDateTime>
 #include <QFile>
 #include <QFileInfo>
@@ -23,45 +31,96 @@ namespace Beautifier::Internal {
 
 const char SETTINGS_NAME[]            = "artisticstyle";
 
-ArtisticStyleSettings::ArtisticStyleSettings() :
-    AbstractSettings(SETTINGS_NAME, ".astyle")
+ArtisticStyleSettings::ArtisticStyleSettings()
+    : AbstractSettings(SETTINGS_NAME, ".astyle")
 {
     setSettingsGroups(Utils::Constants::BEAUTIFIER_SETTINGS_GROUP, SETTINGS_NAME);
     setVersionRegExp(QRegularExpression("([2-9]{1})\\.([0-9]{1,2})(\\.[1-9]{1})?$"));
-    setCommand("astyle");
+
+    setId("ArtisticStyle");
+    setDisplayName(Tr::tr("Artistic Style"));
+    setCategory(Constants::OPTION_CATEGORY);
 
     setDocumentationFilePath(Core::ICore::userResourcePath(Beautifier::Constants::SETTINGS_DIRNAME)
         .pathAppended(Beautifier::Constants::DOCUMENTATION_DIRNAME)
         .pathAppended(SETTINGS_NAME)
         .stringAppended(".xml"));
 
+    command.setValue("astyle");
+    command.setExpectedKind(PathChooser::ExistingCommand);
+    command.setCommandVersionArguments({"--version"});
+    command.setPromptDialogTitle(BeautifierPlugin::msgCommandPromptDialogTitle(
+                                          Tr::tr(Constants::ARTISTICSTYLE_DISPLAY_NAME)));
+
     registerAspect(&useOtherFiles);
     useOtherFiles.setSettingsKey("useOtherFiles");
     useOtherFiles.setDefaultValue(true);
+    useOtherFiles.setLabelText(Tr::tr("Use file *.astylerc defined in project files"));
 
     registerAspect(&useSpecificConfigFile);
     useSpecificConfigFile.setSettingsKey("useSpecificConfigFile");
+    useSpecificConfigFile.setLabelText(Tr::tr("Use specific config file:"));
 
     registerAspect(&specificConfigFile);
     specificConfigFile.setSettingsKey("specificConfigFile");
+    specificConfigFile.setExpectedKind(Utils::PathChooser::File);
+    specificConfigFile.setPromptDialogFilter(Tr::tr("AStyle (*.astylerc)"));
 
     registerAspect(&useHomeFile);
     useHomeFile.setSettingsKey("useHomeFile");
+    useHomeFile.setLabelText(Tr::tr("Use file .astylerc or astylerc in HOME")
+        .replace("HOME", QDir::toNativeSeparators(QDir::home().absolutePath())));
 
     registerAspect(&useCustomStyle);
     useCustomStyle.setSettingsKey("useCustomStyle");
+    useCustomStyle.setLabelText(Tr::tr("Use customized style:"));
 
     registerAspect(&customStyle);
     customStyle.setSettingsKey("customStyle");
 
+    m_configurations = new ConfigurationPanel;
+    m_configurations->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    m_configurations->setCurrentConfiguration(customStyle.value());
+
+    setLayouter([this](QWidget *widget) {
+        using namespace Layouting;
+        Column {
+            Group {
+                title(Tr::tr("Configuration")),
+                Form {
+                    Tr::tr("Artistic Style command:"), command, br,
+                    Tr::tr("Restrict to MIME types:"),  supportedMimeTypes
+                }
+            },
+            Group {
+                title(Tr::tr("Options")),
+                bindTo(&m_optionsPanelStore),
+                Column {
+                    useOtherFiles,
+                    Row { useSpecificConfigFile, specificConfigFile },
+                    useHomeFile,
+                    Row { useCustomStyle, m_configurations },
+                    noMargin,
+                },
+            },
+            st
+        }.attachTo(widget);
+    });
+
+    connect(&command, &BaseAspect::changed, this, [this] {
+        if (m_optionsPanelStore)
+            m_optionsPanelStore->setEnabled(command.filePath().isExecutableFile());
+    });
+
     read();
+    customStyle.setValue(m_configurations->currentConfiguration());
 }
 
 void ArtisticStyleSettings::createDocumentationFile() const
 {
     Process process;
     process.setTimeoutS(2);
-    process.setCommand({command(), {"-h"}});
+    process.setCommand({command.filePath(), {"-h"}});
     process.runBlocking();
     if (process.result() != ProcessResult::FinishedWithSuccess)
         return;

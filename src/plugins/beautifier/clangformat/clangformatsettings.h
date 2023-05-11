@@ -16,9 +16,12 @@ public:
     QStringList completerWords() override;
 
     Utils::BoolAspect usePredefinedStyle;
-    Utils::StringAspect predefinedStyle;
-    Utils::StringAspect fallbackStyle;
+    Utils::SelectionAspect predefinedStyle;
+    Utils::SelectionAspect fallbackStyle;
     Utils::StringAspect customStyle;
+
+    // Not saved
+    Utils::BoolAspect useCustomizedStyle; // Inverse of usePredefinedStyle
 
     QStringList predefinedStyles() const;
     QStringList fallbackStyles() const;
@@ -27,6 +30,9 @@ public:
 
 private:
     void readStyles() override;
+
+    QWidget *m_optionsPanelStore = nullptr;
+    class ConfigurationPanel *m_configurations = nullptr;
 };
 
 } // Beautifier::Internal

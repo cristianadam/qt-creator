@@ -5,7 +5,6 @@
 
 #include "../beautifierabstracttool.h"
 
-#include "clangformatoptionspage.h"
 #include "clangformatsettings.h"
 
 namespace Beautifier::Internal {
@@ -33,7 +32,6 @@ private:
     QAction *m_formatRange = nullptr;
     QAction *m_disableFormattingSelectedText = nullptr;
     ClangFormatSettings m_settings;
-    ClangFormatOptionsPage m_page{&m_settings};
 };
 
 } // Beautifier::Internal

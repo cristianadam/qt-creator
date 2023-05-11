@@ -18,6 +18,8 @@
 
 #include <memory>
 
+#include <coreplugin/dialogs/ioptionspage.h>
+
 QT_BEGIN_NAMESPACE
 class QRegularExpression;
 class QVersionNumber;
@@ -29,7 +31,7 @@ namespace Beautifier::Internal {
 
 class VersionUpdater;
 
-class AbstractSettings : public Utils::AspectContainer
+class AbstractSettings : public Core::PagedSettings
 {
     Q_OBJECT
 
@@ -52,16 +54,17 @@ public:
     void replaceStyle(const QString &oldKey, const QString &newKey, const QString &value);
     virtual QString styleFileName(const QString &key) const;
 
-    Utils::FilePath command() const;
-    void setCommand(const Utils::FilePath &cmd);
     QVersionNumber version() const;
 
-    QString supportedMimeTypesAsString() const;
-    void setSupportedMimeTypes(const QString &mimes);
+    QStringList supportedMimeTypeList() const;
+
     bool isApplicable(const Core::IDocument *document) const;
 
     QStringList options();
     QString documentation(const QString &option) const;
+
+    Utils::StringAspect command;
+    Utils::StringAspect supportedMimeTypes;
 
 signals:
     void supportedMimeTypesChanged();
@@ -83,10 +86,8 @@ private:
     std::unique_ptr<VersionUpdater> m_versionUpdater;
     QStringList m_stylesToRemove;
     QSet<QString> m_changedStyles;
-    Utils::FilePath m_command;
     QHash<QString, int> m_options;
     QStringList m_docu;
-    QStringList m_supportedMimeTypes;
     Utils::FilePath m_documentationFilePath;
 };
 

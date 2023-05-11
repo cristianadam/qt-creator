@@ -124,7 +124,7 @@ bool ArtisticStyle::isApplicable(const Core::IDocument *document) const
 Command ArtisticStyle::command(const QString &cfgFile) const
 {
     Command command;
-    command.setExecutable(m_settings.command());
+    command.setExecutable(m_settings.command.filePath());
     command.addOption("-q");
     command.addOption("--options=" + cfgFile);
 

@@ -4,7 +4,6 @@
 #pragma once
 
 #include <extensionsystem/iplugin.h>
-#include <texteditor/command.h>
 
 namespace Beautifier::Internal {
 

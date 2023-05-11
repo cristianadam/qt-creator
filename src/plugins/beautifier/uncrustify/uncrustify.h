@@ -5,7 +5,6 @@
 
 #include "../beautifierabstracttool.h"
 
-#include "uncrustifyoptionspage.h"
 #include "uncrustifysettings.h"
 
 namespace Beautifier::Internal {
@@ -29,7 +28,6 @@ private:
     QAction *m_formatFile = nullptr;
     QAction *m_formatRange = nullptr;
     UncrustifySettings m_settings;
-    UncrustifyOptionsPage m_page{&m_settings};
 };
 
 } // Beautifier::Internal
