@@ -5,6 +5,7 @@
 
 #include "utils_global.h"
 
+#include <QMetaType>
 #include <QString>
 
 QT_BEGIN_NAMESPACE
@@ -36,7 +37,6 @@ public:
 class QTCREATOR_UTILS_EXPORT Range
 {
 public:
-    QString mid(const QString &text) const { return text.mid(begin.column, length(text)); }
     int length(const QString &text) const;
 
     Position begin;
@@ -90,3 +90,4 @@ QTCREATOR_UTILS_EXPORT bool utf8AdvanceCodePoint(const char *&current);
 } // Utils
 
 Q_DECLARE_METATYPE(Utils::Text::Position)
+Q_DECLARE_METATYPE(Utils::Text::Range)
