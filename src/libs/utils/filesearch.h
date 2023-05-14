@@ -14,6 +14,7 @@
 #include <QTextDocument>
 
 #include <functional>
+#include <unordered_map>
 
 QT_BEGIN_NAMESPACE
 template <typename T>
@@ -130,7 +131,6 @@ public:
                        const QStringList &filters,
                        const QStringList &exclusionFilters,
                        QTextCodec *encoding = nullptr);
-    ~SubDirFileIterator() override;
 
     int maxProgress() const override;
     int currentProgress() const override;
@@ -148,8 +148,8 @@ private:
     QStack<qreal> m_progressValues;
     QStack<bool> m_processedValues;
     qreal m_progress;
-    // Use heap allocated objects directly because we want references to stay valid even after resize
-    QList<Item *> m_items;
+    // Note: std::unordered_map doesn't invalidate references on grow
+    std::unordered_map<int, Item> m_items;
 };
 
 QTCREATOR_UTILS_EXPORT QFuture<SearchResultItems> findInFiles(const QString &searchTerm,

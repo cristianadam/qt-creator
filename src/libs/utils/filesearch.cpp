@@ -670,13 +670,9 @@ SubDirFileIterator::SubDirFileIterator(const FilePaths &directories,
     }
 }
 
-SubDirFileIterator::~SubDirFileIterator()
+void SubDirFileIterator::update(int requestedIndex)
 {
-    qDeleteAll(m_items);
-}
-
-void SubDirFileIterator::update(int index)
-{
+    const size_t index = requestedIndex; // Avoid warnings about comparing int with size_t.
     if (index < m_items.size())
         return;
     // collect files from the directories until we have enough for the given index
@@ -701,7 +697,7 @@ void SubDirFileIterator::update(int index)
                 const FilePaths filePaths = m_filterFiles(allFilePaths);
                 m_items.reserve(m_items.size() + filePaths.size());
                 Utils::reverseForeach(filePaths, [this](const FilePath &file) {
-                    m_items.append(new Item(file, m_encoding));
+                    m_items.emplace(m_items.size(), Item(file, m_encoding));
                 });
                 m_progress += dirProgressMax;
             } else {
@@ -732,7 +728,7 @@ int SubDirFileIterator::currentFileCount() const
 
 const FileIterator::Item &SubDirFileIterator::itemAt(int index) const
 {
-    return *m_items.at(index);
+    return m_items.at(index);
 }
 
 int SubDirFileIterator::maxProgress() const
