@@ -28,6 +28,8 @@
 #include <utils/qtcassert.h>
 #include <utils/utilsicons.h>
 
+using namespace Utils;
+
 namespace Cppcheck::Internal {
 
 class CppcheckPluginPrivate final : public QObject
@@ -36,11 +38,12 @@ public:
     explicit CppcheckPluginPrivate();
 
     CppcheckTextMarkManager marks;
-    CppcheckTool tool{marks, Constants::CHECK_PROGRESS_ID};
+    CppcheckOptions options;
+    CppcheckTool tool{options, marks, Constants::CHECK_PROGRESS_ID};
     CppcheckTrigger trigger{marks, tool};
-    CppcheckOptionsPage options{tool, trigger};
     DiagnosticsModel manualRunModel;
-    CppcheckTool manualRunTool{manualRunModel, Constants::MANUAL_CHECK_PROGRESS_ID};
+    CppcheckOptions manualOptions;
+    CppcheckTool manualRunTool{manualOptions, manualRunModel, Constants::MANUAL_CHECK_PROGRESS_ID};
     Utils::Perspective perspective{Constants::PERSPECTIVE_ID, ::Cppcheck::Tr::tr("Cppcheck")};
 
     QAction *manualRunAction;
@@ -51,7 +54,11 @@ public:
 
 CppcheckPluginPrivate::CppcheckPluginPrivate()
 {
-    manualRunTool.updateOptions(tool.options());
+    tool.updateOptions();
+    connect(&options, &AspectContainer::changed, [this] {
+        tool.updateOptions();
+        trigger.recheck();
+    });
 
     auto manualRunView = new DiagnosticView;
     manualRunView->setModel(&manualRunModel);
@@ -103,7 +110,14 @@ void CppcheckPluginPrivate::startManualRun()
     if (!project)
         return;
 
-    ManualRunDialog dialog(manualRunTool.options(), project);
+    manualOptions.copyFrom(options);
+
+    manualRunTool.updateOptions();
+
+    auto optionsWidget = new QWidget;
+    manualOptions.layouter()(optionsWidget);
+
+    ManualRunDialog dialog(optionsWidget, project);
     if (dialog.exec() == ManualRunDialog::Rejected)
         return;
 
@@ -114,7 +128,7 @@ void CppcheckPluginPrivate::startManualRun()
         return;
 
     manualRunTool.setProject(project);
-    manualRunTool.updateOptions(dialog.options());
+    manualRunTool.updateOptions();
     manualRunTool.check(files);
     perspective.select();
 }
