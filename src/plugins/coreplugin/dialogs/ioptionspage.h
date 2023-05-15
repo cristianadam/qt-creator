@@ -132,6 +132,8 @@ class CORE_EXPORT PagedSettings : public Utils::AspectContainer, public IOptions
 {
 public:
     PagedSettings();
+
+    void readSettings(); // Intentionally hides AspectContainer::readSettings()
 };
 
 } // namespace Core

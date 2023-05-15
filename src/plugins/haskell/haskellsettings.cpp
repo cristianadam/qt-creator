@@ -6,8 +6,6 @@
 #include "haskellconstants.h"
 #include "haskelltr.h"
 
-#include <coreplugin/icore.h>
-
 #include <utils/pathchooser.h>
 #include <utils/layoutbuilder.h>
 
@@ -51,7 +49,7 @@ HaskellSettings::HaskellSettings()
         }.attachTo(widget);
     });
 
-    readSettings(Core::ICore::settings());
+    readSettings();
 }
 
 } // Haskell::Internal
