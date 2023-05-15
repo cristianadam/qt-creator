@@ -3,7 +3,10 @@
 
 #include "tasktree.h"
 
+#include <QEventLoop>
+#include <QFutureWatcher>
 #include <QSet>
+#include <QTimer>
 
 namespace Tasking {
 
@@ -1442,6 +1445,54 @@ void TaskTree::stop()
 bool TaskTree::isRunning() const
 {
     return d->m_root && d->m_root->isRunning();
+}
+
+bool TaskTree::runBlocking(const QFuture<void> &future, int timeoutMs)
+{
+    if (isRunning())
+        return false;
+
+    bool ok = false;
+    QEventLoop loop;
+
+    const auto finalize = [&loop, &ok](bool success) {
+        ok = success;
+        // Otherwise, the tasks from inside the running tree that were deleteLater()
+        // will be leaked. Refer to the QObject::deleteLater() docs.
+        QMetaObject::invokeMethod(&loop, [&loop] { loop.quit(); }, Qt::QueuedConnection);
+    };
+
+    QFutureWatcher<void> watcher;
+    connect(&watcher, &QFutureWatcherBase::canceled, this, &TaskTree::stop);
+    watcher.setFuture(future);
+    if (future.isCanceled())
+        return false;
+
+    connect(this, &TaskTree::done, &loop, [finalize] { finalize(true); });
+    connect(this, &TaskTree::errorOccurred, &loop, [finalize] { finalize(false); });
+    start();
+    if (!isRunning())
+        return ok;
+
+    QTimer timer;
+    if (timeoutMs) {
+        timer.setSingleShot(true);
+        timer.setInterval(timeoutMs);
+        connect(&timer, &QTimer::timeout, this, &TaskTree::stop);
+        timer.start();
+    }
+
+    loop.exec(QEventLoop::ExcludeUserInputEvents);
+    if (!ok)
+        const_cast<QFuture<void> &>(future).cancel();
+    return ok;
+}
+
+bool TaskTree::runBlocking(int timeoutMs)
+{
+    QPromise<void> dummy;
+    dummy.start();
+    return runBlocking(dummy.future(), timeoutMs);
 }
 
 int TaskTree::taskCount() const
