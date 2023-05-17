@@ -17,16 +17,24 @@ using namespace Utils;
 
 namespace WebAssembly::Internal::WebAssemblyEmSdk {
 
-using EmSdkEnvCache = QCache<QString, QString>;
-Q_GLOBAL_STATIC_WITH_ARGS(EmSdkEnvCache, emSdkEnvCache, (10))
-using EmSdkVersionCache = QCache<QString, QVersionNumber>;
-Q_GLOBAL_STATIC_WITH_ARGS(EmSdkVersionCache, emSdkVersionCache, (10))
+using EmSdkEnvCache = QCache<FilePath, QString>;
+static EmSdkEnvCache *emSdkEnvCache()
+{
+    static EmSdkEnvCache cache(10);
+    return &cache;
+}
+
+using EmSdkVersionCache = QCache<FilePath, QVersionNumber>;
+static EmSdkVersionCache *emSdkVersionCache()
+{
+    static EmSdkVersionCache cache(10);
+    return &cache;
+}
 
 static QString emSdkEnvOutput(const FilePath &sdkRoot)
 {
-    const QString cacheKey = sdkRoot.toString();
     const bool isWindows = sdkRoot.osType() == OsTypeWindows;
-    if (!emSdkEnvCache()->contains(cacheKey)) {
+    if (!emSdkEnvCache()->contains(sdkRoot)) {
         const FilePath scriptFile = sdkRoot.pathAppended(QLatin1String("emsdk_env") +
                                         (isWindows ? ".bat" : ".sh"));
         Process emSdkEnv;
@@ -38,9 +46,9 @@ static QString emSdkEnvOutput(const FilePath &sdkRoot)
         }
         emSdkEnv.runBlocking();
         const QString output = emSdkEnv.allOutput();
-        emSdkEnvCache()->insert(cacheKey, new QString(output));
+        emSdkEnvCache()->insert(sdkRoot, new QString(output));
     }
-    return *emSdkEnvCache()->object(cacheKey);
+    return *emSdkEnvCache()->object(sdkRoot);
 }
 
 void parseEmSdkEnvOutputAndAddToEnv(const QString &output, Environment &env)
@@ -81,8 +89,7 @@ QVersionNumber version(const FilePath &sdkRoot)
 {
     if (!sdkRoot.exists())
         return {};
-    const QString cacheKey = sdkRoot.toString();
-    if (!emSdkVersionCache()->contains(cacheKey)) {
+    if (!emSdkVersionCache()->contains(sdkRoot)) {
         Environment env = sdkRoot.deviceEnvironment();
         addToEnvironment(sdkRoot, env);
         QLatin1String scriptFile{sdkRoot.osType() == OsType::OsTypeWindows ? "emcc.bat" : "emcc"};
@@ -93,10 +100,10 @@ QVersionNumber version(const FilePath &sdkRoot)
         emcc.setEnvironment(env);
         emcc.runBlocking();
         const QString version = emcc.cleanedStdOut();
-        emSdkVersionCache()->insert(cacheKey,
+        emSdkVersionCache()->insert(sdkRoot,
                                     new QVersionNumber(QVersionNumber::fromString(version)));
     }
-    return *emSdkVersionCache()->object(cacheKey);
+    return *emSdkVersionCache()->object(sdkRoot);
 }
 
 void registerEmSdk(const FilePath &sdkRoot)
