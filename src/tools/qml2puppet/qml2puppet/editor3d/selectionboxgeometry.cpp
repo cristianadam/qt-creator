@@ -308,6 +308,7 @@ void SelectionBoxGeometry::getBounds(
     for (const auto &newBounds : std::as_const(maxBoundsVec))
         combineMaxBounds(localMaxBounds, newBounds);
 
+#if 0
     if (qobject_cast<QQuick3DModel *>(node)) {
         if (auto renderModel = static_cast<QSSGRenderModel *>(renderNode)) {
             QWindow *window = static_cast<QWindow *>(m_view3D->window());
@@ -344,6 +345,7 @@ void SelectionBoxGeometry::getBounds(
         localMinBounds = {};
         localMaxBounds = {};
     }
+#endif
 
     // Transform local space bounding box to parent space
     transformCorners(localTransform, minBounds, maxBounds, localMinBounds, localMaxBounds);
