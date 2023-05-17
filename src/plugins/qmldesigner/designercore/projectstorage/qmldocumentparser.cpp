@@ -292,16 +292,16 @@ Storage::Synchronization::Type QmlDocumentParser::parse(const QString &sourceCon
 
     QString filePath{m_pathCache.sourcePath(sourceId)};
 
-    environment.loadFile(
-        filePath,
-        filePath,
-        sourceContent,
-        QDateTime{},
-        [&](QmlDom::Path, const QmlDom::DomItem &, const QmlDom::DomItem &newItems) {
-            items = newItems;
-        },
-        QmlDom::LoadOption::DefaultLoad,
-        QmlDom::DomType::QmlFile);
+//    environment.loadFile(
+//        filePath,
+//        filePath,
+//        sourceContent,
+//        QDateTime{},
+//        [&](QmlDom::Path, const QmlDom::DomItem &, const QmlDom::DomItem &newItems) {
+//            items = newItems;
+//        },
+//        QmlDom::LoadOption::DefaultLoad,
+//        QmlDom::DomType::QmlFile);
 
     environment.loadPendingDependencies();
 

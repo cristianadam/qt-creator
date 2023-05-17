@@ -210,6 +210,7 @@ QVector4D GeneralHelper::focusNodesToCamera(QQuick3DCamera *camera, float defaul
         auto model = qobject_cast<QQuick3DModel *>(node);
         qreal maxExtent = defaultExtent;
         QVector3D center = node->scenePosition();
+#if 0
         if (model) {
             auto targetPriv = QQuick3DObjectPrivate::get(model);
             if (auto renderModel = static_cast<QSSGRenderModel *>(targetPriv->spatialNode)) {
@@ -248,6 +249,7 @@ QVector4D GeneralHelper::focusNodesToCamera(QQuick3DCamera *camera, float defaul
                 }
             }
         }
+#endif
         float halfExtent = float(maxExtent / 2.);
         const QVector3D halfExtents {halfExtent, halfExtent, halfExtent};
 
@@ -885,6 +887,7 @@ bool GeneralHelper::getBounds(QQuick3DViewport *view3D, QQuick3DNode *node, QVec
     for (const auto &newBounds : std::as_const(maxBoundsVec))
         combineMaxBounds(localMaxBounds, newBounds);
 
+#if 0
     if (qobject_cast<QQuick3DModel *>(node)) {
         if (auto renderModel = static_cast<QSSGRenderModel *>(renderNode)) {
             QWindow *window = static_cast<QWindow *>(view3D->window());
@@ -893,7 +896,7 @@ bool GeneralHelper::getBounds(QQuick3DViewport *view3D, QQuick3DNode *node, QVec
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
                 context = QSSGRenderContextInterface::getRenderContextInterface(quintptr(window));
 #else
-                context = QQuick3DObjectPrivate::get(node)->sceneManager->rci;
+//                context = QQuick3DObjectPrivate::get(node)->sceneManager->rci;
 #endif
                 if (!context.isNull()) {
                     auto bufferManager = context->bufferManager();
@@ -918,6 +921,7 @@ bool GeneralHelper::getBounds(QQuick3DViewport *view3D, QQuick3DNode *node, QVec
         combineMinBounds(localMinBounds, {});
         combineMaxBounds(localMaxBounds, {});
     }
+#endif
 
     if (localMaxBounds == minVec) {
         localMinBounds = {};
