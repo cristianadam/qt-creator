@@ -53,7 +53,10 @@ QString PerforceEditorWidget::changeUnderCursor(const QTextCursor &c) const
 
 VcsBase::BaseAnnotationHighlighterCreator PerforceEditorWidget::annotationHighlighterCreator() const
 {
-    return [](const QSet<QString> &changes) { return new PerforceAnnotationHighlighter(changes); };
+    return [](const QRegularExpression &annotationSeparatorPattern,
+              const QRegularExpression &annotationEntryPattern) {
+        return new PerforceAnnotationHighlighter(annotationSeparatorPattern, annotationEntryPattern);
+    };
 }
 
 QString PerforceEditorWidget::findDiffFile(const QString &f) const

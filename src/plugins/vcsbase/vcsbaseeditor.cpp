@@ -1082,11 +1082,15 @@ void VcsBaseEditorWidget::slotActivateAnnotation()
     disconnect(this, &QPlainTextEdit::textChanged, this, &VcsBaseEditorWidget::slotActivateAnnotation);
 
     if (auto ah = qobject_cast<BaseAnnotationHighlighter *>(textDocument()->syntaxHighlighter())) {
-        ah->setChangeNumbers(changes);
         ah->rehighlight();
     } else {
         BaseAnnotationHighlighterCreator creator = annotationHighlighterCreator();
-        textDocument()->setSyntaxHighlighterCreator([creator, changes] { return creator(changes); });
+        textDocument()->setSyntaxHighlighterCreator(
+            [creator,
+             annotationSeparatorPattern = d->m_annotationSeparatorPattern,
+             annotationEntryPattern = d->m_annotationEntryPattern] {
+                return creator(annotationSeparatorPattern, annotationEntryPattern);
+            });
     }
 }
 

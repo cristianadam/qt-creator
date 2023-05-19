@@ -5,9 +5,13 @@
 
 namespace Perforce::Internal {
 
-PerforceAnnotationHighlighter::PerforceAnnotationHighlighter(const ChangeNumbers &changeNumbers,
-                                                             QTextDocument *document) :
-    VcsBase::BaseAnnotationHighlighter(changeNumbers, document)
+PerforceAnnotationHighlighter::PerforceAnnotationHighlighter(
+    const QRegularExpression &annotationSeparatorPattern,
+    const QRegularExpression &annotationEntryPattern,
+    QTextDocument *document)
+    : VcsBase::BaseAnnotationHighlighter(annotationSeparatorPattern,
+                                         annotationEntryPattern,
+                                         document)
 { }
 
 QString PerforceAnnotationHighlighter::changeNumber(const QString &block) const

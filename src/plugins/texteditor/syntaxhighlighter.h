@@ -54,7 +54,7 @@ public:
     void setNoAutomaticHighlighting(bool noAutomatic);
 
 public slots:
-    void rehighlight();
+    virtual void rehighlight();
     void rehighlightBlock(const QTextBlock &block);
 
 protected:

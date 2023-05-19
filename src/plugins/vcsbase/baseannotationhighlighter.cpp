@@ -37,8 +37,11 @@ public:
     BaseAnnotationHighlighterPrivate(BaseAnnotationHighlighter *q_) : q(q_) { }
 
     void updateOtherFormats();
+    QSet<QString> annotationChanges() const;
 
     ChangeNumberFormatMap m_changeNumberMap;
+    QRegularExpression m_annotationSeparatorPattern;
+    QRegularExpression m_annotationEntryPattern;
     QColor m_background;
     BaseAnnotationHighlighter *const q;
 };
@@ -52,15 +55,42 @@ void BaseAnnotationHighlighterPrivate::updateOtherFormats()
     q->setChangeNumbers(Utils::toSet(m_changeNumberMap.keys()));
 }
 
-BaseAnnotationHighlighter::BaseAnnotationHighlighter(const ChangeNumbers &changeNumbers,
-                                                     QTextDocument *document) :
-    TextEditor::SyntaxHighlighter(document),
-    d(new BaseAnnotationHighlighterPrivate(this))
+
+QSet<QString> BaseAnnotationHighlighterPrivate::annotationChanges() const
+{
+    QSet<QString> changes;
+    const QString text = q->document()->toPlainText();
+    QStringView txt = QStringView(text);
+    if (txt.isEmpty())
+        return changes;
+    if (!m_annotationSeparatorPattern.pattern().isEmpty()) {
+        const QRegularExpressionMatch match = m_annotationSeparatorPattern.match(txt);
+        if (match.hasMatch())
+            txt.truncate(match.capturedStart());
+    }
+    QRegularExpressionMatchIterator i = m_annotationEntryPattern.globalMatch(txt);
+    while (i.hasNext()) {
+        const QRegularExpressionMatch match = i.next();
+        changes.insert(match.captured(1));
+    }
+    return changes;
+}
+
+
+BaseAnnotationHighlighter::BaseAnnotationHighlighter(
+    const QRegularExpression &annotationSeparatorPattern,
+    const QRegularExpression &annotationEntryPattern,
+    QTextDocument *document)
+    : TextEditor::SyntaxHighlighter(document)
+    , d(new BaseAnnotationHighlighterPrivate(this))
 {
     setDefaultTextFormatCategories();
+
+    d->m_annotationSeparatorPattern = annotationSeparatorPattern;
+    d->m_annotationEntryPattern = annotationEntryPattern;
     d->updateOtherFormats();
 
-    setChangeNumbers(changeNumbers);
+    setChangeNumbers(d->annotationChanges());
 }
 
 BaseAnnotationHighlighter::~BaseAnnotationHighlighter()
@@ -103,6 +133,16 @@ void BaseAnnotationHighlighter::setFontSettings(const TextEditor::FontSettings &
 {
     SyntaxHighlighter::setFontSettings(fontSettings);
     d->updateOtherFormats();
+}
+
+void BaseAnnotationHighlighter::rehighlight()
+{
+    const QSet<QString> changes = d->annotationChanges();
+    if (changes.isEmpty())
+        return;
+
+    setChangeNumbers(changes);
+    TextEditor::SyntaxHighlighter::rehighlight();
 }
 
 } // namespace VcsBase

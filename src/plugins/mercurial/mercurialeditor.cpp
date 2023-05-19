@@ -50,7 +50,11 @@ QString MercurialEditorWidget::changeUnderCursor(const QTextCursor &cursorIn) co
 
 VcsBase::BaseAnnotationHighlighterCreator MercurialEditorWidget::annotationHighlighterCreator() const
 {
-    return [](const QSet<QString> &changes) { return new MercurialAnnotationHighlighter(changes); };
+    return [](const QRegularExpression &annotationSeparatorPattern,
+              const QRegularExpression &annotationEntryPattern) {
+        return new MercurialAnnotationHighlighter(annotationSeparatorPattern,
+                                                  annotationEntryPattern);
+    };
 }
 
 QString MercurialEditorWidget::decorateVersion(const QString &revision) const

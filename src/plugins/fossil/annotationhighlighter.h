@@ -12,7 +12,8 @@ namespace Internal {
 class FossilAnnotationHighlighter : public VcsBase::BaseAnnotationHighlighter
 {
 public:
-    explicit FossilAnnotationHighlighter(const ChangeNumbers &changeNumbers,
+    explicit FossilAnnotationHighlighter(const QRegularExpression &annotationSeparatorPattern,
+                                         const QRegularExpression &annotationEntryPattern,
                                          QTextDocument *document = nullptr);
 
 private:

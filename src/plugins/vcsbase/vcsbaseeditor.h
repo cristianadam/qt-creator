@@ -110,7 +110,8 @@ public:
 };
 
 using BaseAnnotationHighlighterCreator
-    = std::function<BaseAnnotationHighlighter *(const QSet<QString> &)>;
+    = std::function<BaseAnnotationHighlighter *(const QRegularExpression &annotationSeparatorPattern,
+                                                const QRegularExpression &annotationEntryPattern)>;
 
 class VCSBASE_EXPORT VcsBaseEditorWidget : public TextEditor::TextEditorWidget
 {

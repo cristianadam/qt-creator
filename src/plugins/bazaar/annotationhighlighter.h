@@ -12,7 +12,8 @@ namespace Bazaar::Internal {
 class BazaarAnnotationHighlighter : public VcsBase::BaseAnnotationHighlighter
 {
 public:
-    explicit BazaarAnnotationHighlighter(const ChangeNumbers &changeNumbers,
+    explicit BazaarAnnotationHighlighter(const QRegularExpression &annotationSeparatorPattern,
+                                         const QRegularExpression &annotationEntryPattern,
                                          QTextDocument *document = nullptr);
 
 private:

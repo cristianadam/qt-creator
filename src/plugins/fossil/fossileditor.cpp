@@ -95,7 +95,10 @@ QStringList FossilEditorWidget::annotationPreviousVersions(const QString &revisi
 
 VcsBase::BaseAnnotationHighlighterCreator FossilEditorWidget::annotationHighlighterCreator() const
 {
-    return [](const QSet<QString> &changes) { return new FossilAnnotationHighlighter(changes); };
+    return [](const QRegularExpression &annotationSeparatorPattern,
+              const QRegularExpression &annotationEntryPattern) {
+        return new FossilAnnotationHighlighter(annotationSeparatorPattern, annotationEntryPattern);
+    };
 }
 
 } // namespace Internal
