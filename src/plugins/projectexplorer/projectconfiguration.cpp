@@ -3,10 +3,8 @@
 
 #include "projectconfiguration.h"
 
-#include "kitinformation.h"
 #include "target.h"
 
-#include <projectexplorer/devicesupport/idevice.h>
 #include <utils/algorithm.h>
 #include <utils/qtcassert.h>
 
@@ -108,13 +106,6 @@ bool ProjectConfiguration::fromMap(const QVariantMap &map)
     m_displayName.fromMap(map, DISPLAY_NAME_KEY);
     AspectContainer::fromMap(map);
     return true;
-}
-
-FilePath ProjectConfiguration::mapFromBuildDeviceToGlobalPath(const FilePath &path) const
-{
-    IDevice::ConstPtr dev = BuildDeviceKitAspect::device(kit());
-    QTC_ASSERT(dev, return path);
-    return dev->filePath(path.path());
 }
 
 Id ProjectExplorer::idFromMap(const QVariantMap &map)
