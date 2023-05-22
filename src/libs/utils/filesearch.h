@@ -18,6 +18,8 @@
 QT_BEGIN_NAMESPACE
 template <typename T>
 class QFuture;
+template <typename T>
+class QPromise;
 class QTextCodec;
 QT_END_NAMESPACE
 
@@ -34,6 +36,10 @@ Q_DECLARE_FLAGS(FindFlags, FindFlag)
 
 QTCREATOR_UTILS_EXPORT
 QTextDocument::FindFlags textDocumentFlagsForFindFlags(FindFlags flags);
+
+QTCREATOR_UTILS_EXPORT
+void searchInContents(QPromise<SearchResultItems> &promise, const QString &searchTerm,
+                      FindFlags flags, const FilePath &filePath, const QString &contents);
 
 QTCREATOR_UTILS_EXPORT
 std::function<bool(const FilePath &)> filterFileFunction(const QStringList &filterRegs,
