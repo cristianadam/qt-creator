@@ -23,9 +23,6 @@
 #include <utils/utilsicons.h>
 #include <utils/variablechooser.h>
 
-#include <QCheckBox>
-#include <QLabel>
-#include <QLineEdit>
 #include <QThread>
 
 #include <optional>
