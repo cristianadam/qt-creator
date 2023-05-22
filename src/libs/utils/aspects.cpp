@@ -1120,10 +1120,8 @@ void StringAspect::addToLayout(LayoutItem &parent)
         d->m_pathChooserDisplay->setPromptDialogFilter(d->m_prompDialogFilter);
         d->m_pathChooserDisplay->setPromptDialogTitle(d->m_prompDialogTitle);
         d->m_pathChooserDisplay->setCommandVersionArguments(d->m_commandVersionArguments);
-        if (defaultValue() == value())
-            d->m_pathChooserDisplay->setDefaultValue(defaultValue());
-        else
-            d->m_pathChooserDisplay->setFilePath(FilePath::fromUserInput(displayedString));
+        d->m_pathChooserDisplay->setDefaultValue(defaultValue());
+        d->m_pathChooserDisplay->setFilePath(FilePath::fromUserInput(displayedString));
         // do not override default value with placeholder, but use placeholder if default is empty
         if (d->m_pathChooserDisplay->lineEdit()->placeholderText().isEmpty())
             d->m_pathChooserDisplay->lineEdit()->setPlaceholderText(d->m_placeHolderText);
