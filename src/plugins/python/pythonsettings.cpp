@@ -685,9 +685,9 @@ static void addPythonsFromPath(QList<Interpreter> &pythons)
 
 static QString idForPythonFromPath(const QList<Interpreter> &pythons)
 {
-    FilePath pythonFromPath = Environment::systemEnvironment().searchInPath("python3");
+    FilePath pythonFromPath = FilePath("python3").searchInPath();
     if (pythonFromPath.isEmpty())
-        pythonFromPath = Environment::systemEnvironment().searchInPath("python");
+        pythonFromPath = FilePath("python").searchInPath();
     if (pythonFromPath.isEmpty())
         return {};
     const Interpreter &defaultInterpreter
