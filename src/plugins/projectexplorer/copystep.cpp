@@ -56,10 +56,10 @@ protected:
         });
     }
 
-private:
     FilePathAspect m_sourceAspect{this};
     FilePathAspect m_targetAspect{this};
 
+private:
     FilePath m_source;
     FilePath m_target;
 };
