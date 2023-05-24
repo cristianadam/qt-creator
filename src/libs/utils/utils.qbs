@@ -39,7 +39,6 @@ Project {
         Depends { name: "ptyqt" }
 
         files: [
-            "QtConcurrentTools",
             "algorithm.h",
             "ansiescapecodehandler.cpp",
             "ansiescapecodehandler.h",
@@ -146,7 +145,6 @@ Project {
             "fixedsizeclicklabel.h",
             "flowlayout.cpp",
             "flowlayout.h",
-            "functiontraits.h",
             "futuresynchronizer.cpp",
             "futuresynchronizer.h",
             "fuzzymatcher.cpp",
@@ -192,7 +190,6 @@ Project {
             "listutils.h",
             "macroexpander.cpp",
             "macroexpander.h",
-            "mapreduce.h",
             "mathutils.cpp",
             "mathutils.h",
             "mimeutils.h",
@@ -269,8 +266,6 @@ Project {
             "reloadpromptutils.h",
             "removefiledialog.cpp",
             "removefiledialog.h",
-            "runextensions.cpp",
-            "runextensions.h",
             "savefile.cpp",
             "savefile.h",
             "scopedswap.h",
