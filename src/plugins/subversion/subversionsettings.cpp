@@ -77,10 +77,10 @@ SubversionSettings::SubversionSettings()
         password.setEnabled(useAuthentication());
     });
 
-    setLayouter([this](QWidget *widget) {
+    setLayouter([this] {
         using namespace Layouting;
 
-        Column {
+        return Column {
             Group {
                 title(Tr::tr("Configuration")),
                 Column { binaryPath }
@@ -104,7 +104,7 @@ SubversionSettings::SubversionSettings()
             },
 
             st
-        }.attachTo(widget);
+        };
     });
 }
 

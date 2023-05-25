@@ -15,7 +15,7 @@ class CppcheckOptions final : public Core::PagedSettings
 public:
     CppcheckOptions();
 
-    std::function<void(QWidget *widget)> layouter();
+    std::function<Layouting::LayoutItem()> layouter();
 
     Utils::FilePathAspect binary;
     Utils::BoolAspect warning;

@@ -224,7 +224,7 @@ PerforceSettingsPage::PerforceSettingsPage(PerforceSettings *settings)
     setCategory(VcsBase::Constants::VCS_SETTINGS_CATEGORY);
     setSettings(settings);
 
-    setLayouter([settings](QWidget *widget) {
+    setLayouter([settings] {
         PerforceSettings &s = *settings;
         using namespace Layouting;
 
@@ -232,7 +232,7 @@ PerforceSettingsPage::PerforceSettingsPage(PerforceSettings *settings)
         errorLabel->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Preferred);
         errorLabel->setFilled(true);
         auto testButton = new QPushButton(Tr::tr("Test"));
-        QObject::connect(testButton, &QPushButton::clicked, widget, [settings, errorLabel, testButton] {
+        QObject::connect(testButton, &QPushButton::clicked, [settings, errorLabel, testButton] {
             testButton->setEnabled(false);
             auto checker = new PerforceChecker(errorLabel);
             checker->setUseOverideCursor(true);
@@ -279,13 +279,13 @@ PerforceSettingsPage::PerforceSettingsPage(PerforceSettings *settings)
             }
         };
 
-        Column {
+        return Column {
             config,
             environment,
             misc,
             Row { errorLabel, st, testButton },
             st
-        }.attachTo(widget);
+        };
     });
 }
 

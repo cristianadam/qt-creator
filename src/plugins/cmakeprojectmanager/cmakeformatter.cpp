@@ -69,9 +69,9 @@ public:
         autoFormatMime.setDefaultValue("text/x-cmake");
         autoFormatMime.setLabelText(Tr::tr("Restrict to MIME types:"));
 
-        setLayouter([this](QWidget *widget) {
+        setLayouter([this] {
             using namespace Layouting;
-            Column {
+            return Column {
                 Row { Tr::tr("CMakeFormat command:"), command },
                 Space(10),
                 Group {
@@ -83,7 +83,7 @@ public:
                     }
                 },
                 st
-            }.attachTo(widget);
+            };
         });
 
         ActionContainer *menu = ActionManager::createMenu(Constants::CMAKEFORMATTER_MENU_ID);

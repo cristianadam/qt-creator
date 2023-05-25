@@ -43,15 +43,15 @@ GeneralSettingsPage::GeneralSettingsPage()
     setCategoryIconPath(Constants::Icons::MESON_BW);
     setSettings(Settings::instance());
 
-    setLayouter([](QWidget *widget) {
+    setLayouter([] {
         Settings &s = *Settings::instance();
         using namespace Layouting;
 
-        Column {
+        return Column {
             s.autorunMeson,
             s.verboseNinja,
             st,
-        }.attachTo(widget);
+        };
     });
 }
 

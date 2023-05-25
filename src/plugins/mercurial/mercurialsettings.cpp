@@ -56,10 +56,10 @@ MercurialSettings::MercurialSettings()
     registerAspect(&diffIgnoreBlankLines);
     diffIgnoreBlankLines.setSettingsKey("diffIgnoreBlankLines");
 
-    setLayouter([this](QWidget *widget) {
+    setLayouter([this] {
         using namespace Layouting;
 
-        Column {
+        return Column {
             Group {
                 title(Tr::tr("Configuration")),
                 Row { binaryPath }
@@ -79,7 +79,7 @@ MercurialSettings::MercurialSettings()
             },
 
             st
-        }.attachTo(widget);
+        };
     });
 }
 
