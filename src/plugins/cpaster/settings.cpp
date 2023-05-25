@@ -61,11 +61,11 @@ SettingsPage::SettingsPage(Settings *settings)
     setCategoryIconPath(":/cpaster/images/settingscategory_cpaster.png");
     setSettings(settings);
 
-    setLayouter([settings](QWidget *widget) {
+    setLayouter([settings] {
         Settings &s = *settings;
         using namespace Layouting;
 
-        Column {
+        return Column {
             Form {
                 s.protocols, br,
                 s.username, br,
@@ -74,7 +74,7 @@ SettingsPage::SettingsPage(Settings *settings)
             s.copyToClipboard,
             s.displayOutput,
             st
-        }.attachTo(widget);
+        };
     });
 }
 

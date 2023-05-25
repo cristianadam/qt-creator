@@ -34,29 +34,30 @@ VcpkgSettings::VcpkgSettings()
     setDisplayName("Vcpkg");
     setCategory(CMakeProjectManager::Constants::Settings::CATEGORY);
 
-    setLayouter([this](QWidget *widget) {
+    setLayouter([this] {
         using namespace Layouting;
         auto websiteButton = new QToolButton;
         websiteButton->setIcon(Utils::Icons::ONLINE.icon());
         websiteButton->setToolTip(Constants::WEBSITE_URL);
 
+        connect(websiteButton, &QAbstractButton::clicked, [] {
+            QDesktopServices::openUrl(QUrl::fromUserInput(Constants::WEBSITE_URL));
+        });
+
         // clang-format off
         using namespace Layouting;
-        Column {
+        return Column {
             Group {
                 title(tr("Vcpkg installation")),
                 Form {
                     Utils::PathChooser::label(),
-                    Span{ 2, Row{ vcpkgRoot, websiteButton} },
+                    Span { 2, Row { vcpkgRoot, websiteButton } },
                 },
             },
             st,
-        }.attachTo(widget);
+        };
         // clang-format on
 
-        connect(websiteButton, &QAbstractButton::clicked, [] {
-            QDesktopServices::openUrl(QUrl::fromUserInput(Constants::WEBSITE_URL));
-        });
     });
 
     registerAspect(&vcpkgRoot);

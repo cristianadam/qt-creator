@@ -340,7 +340,7 @@ private:
 using ExCommandMap = QMap<QString, QRegularExpression>;
 using UserCommandMap = QMap<int, QString>;
 
-static void layoutPage(QWidget *widget)
+Layouting::LayoutItem layoutPage()
 {
     using namespace Layouting;
     FakeVimSettings &s = *fakeVimSettings();
@@ -372,13 +372,15 @@ static void layoutPage(QWidget *widget)
 
     Row ints { s.shiftWidth, s.tabStop, s.scrollOff, st };
 
+    s.vimRcPath.setEnabler(&s.readVimRc);
+
     Column strings {
         s.backspace,
         s.isKeyword,
         Row {s.readVimRc, s.vimRcPath}
     };
 
-    Column {
+    return Column {
         s.useFakeVim,
 
         Group {
@@ -449,9 +451,7 @@ static void layoutPage(QWidget *widget)
         },
         st
 
-    }.attachTo(widget);
-
-    s.vimRcPath.setEnabler(&s.readVimRc);
+    };
 }
 
 class FakeVimOptionPage : public IOptionsPage
@@ -464,7 +464,7 @@ public:
         setCategory(SETTINGS_CATEGORY);
         setDisplayCategory(Tr::tr("FakeVim"));
         setCategoryIconPath(":/fakevim/images/settingscategory_fakevim.png");
-        setLayouter(&layoutPage);
+        setLayouter(layoutPage);
         setSettings(fakeVimSettings());
     }
 };

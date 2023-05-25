@@ -112,17 +112,17 @@ SquishSettingsPage::SquishSettingsPage(SquishSettings *settings)
 
     setSettings(settings);
 
-    setLayouter([settings](QWidget *widget) {
+    setLayouter([settings] {
         SquishSettings &s = *settings;
         using namespace Layouting;
 
-        Form {
+        return Form {
             s.squishPath, br,
             s.licensePath, br,
             s.local, s.serverHost, s.serverPort, br,
             s.verbose, br,
             s.minimizeIDE, br,
-        }.attachTo(widget);
+        };
     });
 }
 

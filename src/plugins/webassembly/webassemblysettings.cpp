@@ -66,7 +66,7 @@ WebAssemblySettings::WebAssemblySettings()
 
     connect(this, &Utils::AspectContainer::applied, &WebAssemblyToolChain::registerToolChains);
 
-    setLayouter([this](QWidget *widget) {
+    setLayouter([this] {
         auto instruction = new QLabel(
             Tr::tr("Select the root directory of an installed %1. "
                    "Ensure that the activated SDK version is compatible with the %2 "
@@ -94,9 +94,13 @@ WebAssemblySettings::WebAssemblySettings()
         m_qtVersionDisplay->setElideMode(Qt::ElideNone);
         m_qtVersionDisplay->setWordWrap(true);
 
+        updateStatus();
+        connect(emSdk.pathChooser(), &Utils::PathChooser::textChanged,
+                this, &WebAssemblySettings::updateStatus);
+
         // _clang-format off
         using namespace Layouting;
-        Column {
+        return Column {
             Group {
                 title(Tr::tr("Emscripten SDK path:")),
                 Column {
@@ -113,12 +117,8 @@ WebAssemblySettings::WebAssemblySettings()
                 },
             },
             m_qtVersionDisplay,
-        }.attachTo(widget);
+        };
         // _clang-format on
-
-        updateStatus();
-        connect(emSdk.pathChooser(), &Utils::PathChooser::textChanged,
-                this, &WebAssemblySettings::updateStatus);
     });
 
     readSettings();
