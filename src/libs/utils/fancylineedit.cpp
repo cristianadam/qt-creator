@@ -499,8 +499,11 @@ void FancyLineEdit::validate()
         QPalette p = palette();
         p.setColor(QPalette::Active, QPalette::Text,
             newState == Invalid ? d->m_errorTextColor : d->m_okTextColor);
+
+        const bool placeHolderError = !validates && isDisplayingPlaceholderText
+                && placeholderText() == t;
         p.setColor(QPalette::Active, QPalette::PlaceholderText,
-            validates ? d->m_placeholderTextColor : d->m_errorTextColor);
+            placeHolderError ? d->m_errorTextColor : d->m_placeholderTextColor);
         setPalette(p);
 
         if (validHasChanged)
