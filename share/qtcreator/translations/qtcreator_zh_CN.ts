@@ -36699,7 +36699,7 @@ For more information, see the &quot;Checking Code Syntax&quot; documentation.</s
         <translation>旧的 Creator</translation>
     </message>
     <message>
-        <source>Qml JS Code Style</source>
+        <source>QML JS Code Style</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

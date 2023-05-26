@@ -42877,7 +42877,7 @@ Sie können eine Annotation &quot;// @uri My.Module.Uri&quot; hinzufügen, um de
         <translation>Codemodell zurücksetzen</translation>
     </message>
     <message>
-        <source>Qml JS Code Style</source>
+        <source>QML JS Code Style</source>
         <translation>QML JS Coding Style</translation>
     </message>
     <message>
