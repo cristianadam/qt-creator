@@ -1,0 +1,124 @@
+// Copyright (C) 2023 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \previouspage studio-compatibility-with-mcu-sdks.html
+    \page studio-features-on-mcu-projects.html
+    \nextpage studio-help.html
+
+    \title \QDS Features on MCU Projects
+
+    The table below provides a summary of how the key \QDS features are supported
+    for developing MCU projects.
+
+    \table
+    \header
+        \li Feature
+        \li Fully supported
+        \li Partially supported
+        \li Not supported
+        \li Comments
+    \row
+        \li \l {2D} {2D Editor}
+        \li \b X
+        \li \b -
+        \li \b -
+        \li Enables opening MCU component files, placing instances of 2D components
+        and assets into them, and previewing the components using a specified
+        width/height.
+    \row
+        \li \l {3D} {3D Editor}
+        \li \b -
+        \li \b -
+        \li \b X
+        \li Not supported for MCU projects currently.
+    \row
+        \li \l {Material Editor and Browser}
+        \li \b -
+        \li \b -
+        \li \b X
+        \li Not supported for MCU projects currently.
+    \row
+        \li \l {Components}
+        \li \b X
+        \li \b -
+        \li \b -
+        \li Shows only the components available for MCU projects.
+    \row
+        \li \l {Assets}
+        \li \b X
+        \li \b -
+        \li \b -
+        \li Shows all the listed assets in the \c QmlProject file.
+    \row
+        \li \l {Navigator}
+        \li \b X
+        \li \b -
+        \li \b -
+        \li Displays the components in the current component file and their
+        relationships.
+    \row
+        \li \l {Properties}
+        \li \b X
+        \li \b -
+        \li \b -
+        \li Shows only the properties available for MCU projects.
+    \row
+        \li \l {Connections}
+        \li \b X
+        \li \b -
+        \li \b -
+        \li Displays only signals used for responding to application events.
+    \row
+        \li \l {States}
+        \li \b X
+        \li \b -
+        \li \b -
+        \li The feature is fully supported as such, but there are some
+        limitations listed in \l {\QMCU Known Issues or Limitations}.
+    \row
+        \li \l {Transitions}
+        \li \b X
+        \li \b -
+        \li \b -
+        \li \b -
+    \row
+        \li \l {Translations}
+        \li \b -
+        \li \b -
+        \li \b X
+        \li Not supported for MCU projects currently.
+    \row
+        \li \l {Timeline}
+        \li \b X
+        \li \b -
+        \li \b -
+        \li \b -
+    \row
+        \li \l {Curves}
+        \li \b -
+        \li \b X
+        \li \b -
+        \li Linear interpolation works, but \QMCU does does not support the
+        \c easing.bezierCurve property of a keyframe.
+    \row
+        \li \l {Code} {Code Editor}
+        \li \b X
+        \li \b -
+        \li \b -
+        \li \b -
+    \row
+        \li \l {Content Library}
+        \li \b -
+        \li \b -
+        \li \b X
+        \li Not supported for MCU projects currently.
+    \row
+        \li \l {Texture Editor}
+        \li \b -
+        \li \b -
+        \li \b X
+        \li Not supported for MCU projects currently.
+    \endtable
+
+*/
