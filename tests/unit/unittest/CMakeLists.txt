@@ -68,6 +68,7 @@ add_qtc_test(unittest GTEST
     mocksyntaxhighligher.h
     mocktimer.cpp mocktimer.h
     nodelistproperty-test.cpp
+    nodemetainfo-test.cpp
     processevents-utilities.cpp processevents-utilities.h
     projectstoragemock.cpp projectstoragemock.h
     sizedarray-test.cpp
