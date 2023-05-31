@@ -620,11 +620,12 @@ void SubmitEditorWidget::verifyDescription()
     d->descriptionHint->setText(hints.join("<br>"));
     if (!d->descriptionHint->text().isEmpty()) {
         d->descriptionHint->setToolTip(
+            //: The number of characters is always plural
             Tr::tr("<p>Writing good commit messages</p>"
                    "<ul>"
                    "<li>Avoid very short commit messages.</li>"
                    "<li>Consider the first line as subject (like in email) "
-                   "and keep it shorter than %n characters.</li>"
+                   "and keep it shorter than %1 characters.</li>"
                    "<li>After an empty second line, a longer description can be added.</li>"
                    "<li>Describe why the change was done, not how it was done.</li>"
                    "</ul>", nullptr, MaxSubjectLength));
