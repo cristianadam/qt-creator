@@ -594,6 +594,50 @@ public:
         return false;
     }
 
+    QVariant convertToVariant(const ModelNode &node,
+                              const QString &astValue,
+                              const QString &propertyPrefix,
+                              AST::UiQualifiedId *propertyId)
+    {
+        const QString propertyName = propertyPrefix.isEmpty() ? propertyId->name.toString()
+                                                              : propertyPrefix;
+
+        const PropertyMetaInfo pInfo = node.metaInfo().property(propertyName.toUtf8());
+        const bool hasQuotes = astValue.trimmed().left(1) == QStringLiteral("\"")
+                               && astValue.trimmed().right(1) == QStringLiteral("\"");
+        const QString cleanedValue = fixEscapedUnicodeChar(deEscape(stripQuotes(astValue.trimmed())));
+        if (!pInfo.isValid()) {
+            qCInfo(texttomodelMergerDebug)
+                << Q_FUNC_INFO << "Unknown property"
+                << propertyPrefix + QLatin1Char('.') + toString(propertyId) << "on line"
+                << propertyId->identifierToken.startLine << "column"
+                << propertyId->identifierToken.startColumn;
+            return hasQuotes ? QVariant(cleanedValue) : cleverConvert(cleanedValue);
+        }
+
+        const NodeMetaInfo &metaInfo = pInfo.propertyType();
+
+        if (metaInfo.isColor())
+            return PropertyParser::read(QVariant::Color, cleanedValue);
+        else if (metaInfo.isUrl())
+            return PropertyParser::read(QVariant::Url, cleanedValue);
+
+        QVariant value(cleanedValue);
+        if (metaInfo.isBool()) {
+            value.convert(QVariant::Bool);
+            return value;
+        } else if (metaInfo.isFloat()) {
+            value.convert(QVariant::Double);
+            return value;
+        } else if (metaInfo.isString()) {
+            // nothing to do
+        } else { //property alias et al
+            if (!hasQuotes)
+                return cleverConvert(cleanedValue);
+        }
+        return value;
+    }
+
     QVariant convertToVariant(const QString &astValue, const QString &propertyPrefix, AST::UiQualifiedId *propertyId)
     {
         const bool hasQuotes = astValue.trimmed().left(1) == QStringLiteral("\"") && astValue.trimmed().right(1) == QStringLiteral("\"");
@@ -1447,7 +1491,10 @@ QmlDesigner::PropertyName TextToModelMerger::syncScriptBinding(ModelNode &modelN
             syncVariantProperty(modelProperty, variantValue, TypeName(), differenceHandler);
             return astPropertyName.toUtf8();
         } else {
-            const QVariant variantValue = context->convertToVariant(astValue, prefix, script->qualifiedId);
+            const QVariant variantValue = context->convertToVariant(modelNode,
+                                                                    astValue,
+                                                                    prefix,
+                                                                    script->qualifiedId);
             if (variantValue.isValid()) {
                 AbstractProperty modelProperty = modelNode.property(astPropertyName.toUtf8());
                 syncVariantProperty(modelProperty, variantValue, TypeName(), differenceHandler);
