@@ -8,6 +8,7 @@
 #include "kitinformation.h"
 #include "processparameters.h"
 #include "projectexplorer.h"
+#include "projectexplorer/devicesupport/idevice.h"
 #include "projectexplorerconstants.h"
 #include "projectexplorertr.h"
 #include "target.h"
@@ -151,8 +152,11 @@ FilePath MakeStep::defaultMakeCommand() const
     const Environment env = makeEnvironment();
     for (const ToolChain *tc : preferredToolChains(kit())) {
         FilePath make = tc->makeCommand(env);
-        if (!make.isEmpty())
-            return mapFromBuildDeviceToGlobalPath(make);
+        if (!make.isEmpty()) {
+            IDevice::ConstPtr dev = BuildDeviceKitAspect::device(kit());
+            QTC_ASSERT(dev, return {});
+            return dev->filePath(make.path());
+         }
     }
     return {};
 }
