@@ -115,6 +115,7 @@ QmlProjectRunConfiguration::QmlProjectRunConfiguration(Target *target, Id id)
         }
 
         const FilePath main = bs->targetFile(mainScript());
+
         if (!main.isEmpty())
             cmd.addArg(main.nativePath());
 
