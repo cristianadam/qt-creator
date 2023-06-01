@@ -70,4 +70,39 @@ macro.see                       = "\\sa"
 macro.function                  = "\\fn"
 
 navigation.landingpage = "$IDE_DISPLAY_NAME Manual"
+
+# Auto-generate navigation linking based on the \list structures on the following:
+navigation.toctitles = \
+    "User Interface" \
+        "Browsing Project Contents" \
+    "Tutorials" \
+    "Managing Projects" \
+        "Creating Projects" \
+        "Using Version Control Systems" \
+        "Configuring Projects" \
+            "Specifying Build Settings" \
+    "Designing User Interfaces" \
+        "Developing Qt Quick Applications" \
+        "Developing Widget Based Applications" \
+    "Coding" \
+        "Writing Code" \
+        "Finding" \
+        "Configuring the Editor" \
+    "Building and Running" \
+        "Validating with Target Hardware" \
+        "Deploying to Devices" \
+        "Connecting Devices" \
+    "Testing" \
+        "Debugging" \
+            "Debug Mode Views" \
+        "Analyzing Code" \
+            "Using Valgrind Code Analysis Tools" \
+    "Advanced Use" \
+        "Supported Platforms" \
+        "Build Systems" \
+        "Managing Data Collection" \
+    "Getting Help"
+
+navigation.toctitles.inclusive = true
+
 buildversion = "$IDE_DISPLAY_NAME Manual $QTC_VERSION"
