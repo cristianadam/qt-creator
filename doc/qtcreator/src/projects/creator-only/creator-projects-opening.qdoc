@@ -99,4 +99,7 @@
 
     \image qtcreator-toggle-progress-bar.webp {Toggle Progress Details button}
 
+    You can drag the progress bar to another position. Select the
+    \inlineimage icons/pin.png
+    (\uicontrol Pin) button to pin it there.
 */
