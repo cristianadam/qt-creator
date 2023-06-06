@@ -121,44 +121,28 @@ static QJsonObject readObjJson(const FilePath &projectFile, QString *errorMessag
 
 static QStringList readLines(const FilePath &projectFile)
 {
-    const QString projectFileName = projectFile.fileName();
-    QSet<QString> visited = { projectFileName };
-    QStringList lines = { projectFileName };
+    QSet<QString> files{projectFile.fileName()};
 
-    QFile file(projectFile.toString());
-    if (file.open(QFile::ReadOnly)) {
-        QTextStream stream(&file);
+    const expected_str<QByteArray> contents = projectFile.fileContents();
 
-        while (true) {
-            const QString line = stream.readLine();
-            if (line.isNull())
-                break;
-            if (visited.contains(line))
-                continue;
-            lines.append(line);
-            visited.insert(line);
-        }
+    if (contents) {
+        const QList<QByteArray> lines = contents->split('\n');
+        for (const QByteArray &line : lines)
+            files.insert(QString::fromUtf8(line).trimmed());
     }
 
-    return lines;
+    return Utils::toList(files);
 }
 
 static QStringList readLinesJson(const FilePath &projectFile, QString *errorMessage)
 {
-    QStringList lines = { projectFile.fileName() };
+    QSet<QString> files{projectFile.fileName()};
 
     const QJsonObject obj = readObjJson(projectFile, errorMessage);
-    if (obj.contains("files")) {
-        const QJsonValue files = obj.value("files");
-        const QJsonArray files_array = files.toArray();
-        QSet<QString> visited;
-        for (const auto &file : files_array)
-            visited.insert(file.toString());
+    for (const QJsonValue &file : obj.value("files").toArray())
+        files.insert(file.toString());
 
-        lines.append(Utils::toList(visited));
-    }
-
-    return lines;
+    return Utils::toList(files);
 }
 
 static QStringList readImportPathsJson(const FilePath &projectFile, QString *errorMessage)
