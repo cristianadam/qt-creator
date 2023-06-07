@@ -63,6 +63,8 @@ using OSSocketNotifier = QWinEventNotifier;
 // Helper to read a single character from stdin in testMode
 OSSocketNotifier *stdInNotifier;
 
+bool waitingForExitKeyPress = false;
+
 QThread processThread;
 
 // Helper to create the shared memory mapped segment
@@ -169,15 +171,25 @@ void sendErrChDir()
 
 void doExit(int exitCode)
 {
+    if (waitingForExitKeyPress)
+        exit(exitCode);
+
     if (controlSocket.state() == QLocalSocket::ConnectedState && controlSocket.bytesToWrite())
         controlSocket.waitForBytesWritten(1000);
 
     if (!commandLineParser.value("wait").isEmpty()) {
-        std::cout << commandLineParser.value("wait").toStdString();
-        std::cin.get();
-    }
-
-    exit(exitCode);
+        std::cout << commandLineParser.value("wait").toStdString() << std::endl;
+        waitingForExitKeyPress = true;
+#ifdef Q_OS_WIN
+        stdInNotifier = new QWinEventNotifier(GetStdHandle(STD_INPUT_HANDLE));
+#else
+        stdInNotifier = new QSocketNotifier(fileno(stdin), QSocketNotifier::Read);
+#endif
+        QObject::connect(stdInNotifier, &OSSocketNotifier::activated, [exitCode] {
+            exit(exitCode);
+        });
+    } else
+        exit(exitCode);
 }
 
 void onInferiorFinished(int exitCode, QProcess::ExitStatus status)
