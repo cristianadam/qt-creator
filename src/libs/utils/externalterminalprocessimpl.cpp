@@ -24,26 +24,22 @@ expected_str<qint64> ProcessStubCreator::startStubProcess(const ProcessSetupData
     const TerminalCommand terminal = TerminalCommand::terminalEmulator();
 
     if (HostOsInfo::isMacHost() && terminal.command == "Terminal.app") {
-        QTemporaryFile f;
-        f.setAutoRemove(false);
-        f.open();
-        f.setPermissions(QFile::ExeUser | QFile::ReadUser | QFile::WriteUser);
-        f.write("#!/bin/sh\n");
-        f.write(QString("cd %1\n").arg(setupData.m_workingDirectory.nativePath()).toUtf8());
-        f.write("clear\n");
-        f.write(QString("exec '%1' %2\n")
-                    .arg(setupData.m_commandLine.executable().nativePath())
-                    .arg(setupData.m_commandLine.arguments())
-                    .toUtf8());
-        f.close();
-
-        const QString path = f.fileName();
-        const QString exe
-            = QString("tell app \"Terminal\" to do script \"'%1'; rm -f '%1'; exit\"").arg(path);
+        const QString script = QString(R"(
+            tell application "Terminal"
+                activate
+                set newTab to do script "cd '%1'"
+                set win to (the id of window 1 where its tab 1 = newTab) as text
+                do script "clear;\"%2\" %3;osascript -e 'tell app \"Terminal\" to close window id " & win & "' &;exit" in newTab
+            end tell
+        )")
+                                   .arg(setupData.m_workingDirectory.nativePath())
+                                   .arg(setupData.m_commandLine.executable().nativePath())
+                                   .arg(setupData.m_commandLine.arguments().replace('"', "\\\""));
 
         Process process;
 
-        process.setCommand({"osascript", {"-e", "tell app \"Terminal\" to activate", "-e", exe}});
+        process.setCommand({"osascript", {"-"}});
+        process.setWriteData(script.toUtf8());
         process.runBlocking();
 
         if (process.exitCode() != 0) {
