@@ -71,7 +71,7 @@ signals:
 
 private:
     Utils::FilePath m_targetPath;
-    QString m_targetFolder; // The same as m_targetPath, but with the archive name also.
+    Utils::FilePath m_targetFolder; // The same as m_targetPath, but with the archive name also.
     Utils::FilePath m_sourceFile;
     QString m_detailedText;
     bool m_finished = false;
