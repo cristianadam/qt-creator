@@ -19,35 +19,58 @@ ProcessStubCreator::ProcessStubCreator(TerminalInterface *interface)
     : m_interface(interface)
 {}
 
+static const QLatin1String TerminalAppScript{R"(
+    tell application "Terminal"
+        activate
+        set newTab to do script "cd '%1'"
+        set win to (the id of window 1 where its tab 1 = newTab) as text
+        do script "clear;\"%2\" %3;osascript -e 'tell app \"Terminal\" to close window id " & win & "' &;exit" in newTab
+    end tell
+)"};
+
+static const QLatin1String iTermAppScript{R"(
+    tell application "iTerm"
+        activate
+        set newWindow to (create window with default profile)
+        tell current session of newWindow
+            write text "cd %1"
+            write text "clear;\"%2\" %3;exit;"
+        end tell
+    end tell
+)"};
+
 expected_str<qint64> ProcessStubCreator::startStubProcess(const ProcessSetupData &setupData)
 {
     const TerminalCommand terminal = TerminalCommand::terminalEmulator();
 
-    if (HostOsInfo::isMacHost() && terminal.command == "Terminal.app") {
-        const QString script = QString(R"(
-            tell application "Terminal"
-                activate
-                set newTab to do script "cd '%1'"
-                set win to (the id of window 1 where its tab 1 = newTab) as text
-                do script "clear;\"%2\" %3;osascript -e 'tell app \"Terminal\" to close window id " & win & "' &;exit" in newTab
-            end tell
-        )")
-                                   .arg(setupData.m_workingDirectory.nativePath())
-                                   .arg(setupData.m_commandLine.executable().nativePath())
-                                   .arg(setupData.m_commandLine.arguments().replace('"', "\\\""));
+    if (HostOsInfo::isMacHost()) {
+        static const QMap<QString, QString> terminalMap = {
+            {"Terminal.app", TerminalAppScript},
+            {"iTerm.app", iTermAppScript},
+        };
 
-        Process process;
+        if (terminalMap.contains(terminal.command.toString())) {
+            const QString script = terminalMap.value(terminal.command.toString())
+                                       .arg(setupData.m_workingDirectory.nativePath())
+                                       .arg(setupData.m_commandLine.executable().nativePath())
+                                       .arg(setupData.m_commandLine.arguments().replace('"',
+                                                                                        "\\\""));
 
-        process.setCommand({"osascript", {"-"}});
-        process.setWriteData(script.toUtf8());
-        process.runBlocking();
+            qDebug().noquote() << "Starting:\n\n" << script << "\n\n";
 
-        if (process.exitCode() != 0) {
-            return make_unexpected(
-                Tr::tr("Failed to start terminal process: \"%1\"").arg(process.errorString()));
+            Process process;
+
+            process.setCommand({"osascript", {"-"}});
+            process.setWriteData(script.toUtf8());
+            process.runBlocking();
+
+            if (process.exitCode() != 0) {
+                return make_unexpected(
+                    Tr::tr("Failed to start terminal process: \"%1\"").arg(process.errorString()));
+            }
+
+            return 0;
         }
-
-        return 0;
     }
 
     bool detached = setupData.m_terminalMode == TerminalMode::Detached;

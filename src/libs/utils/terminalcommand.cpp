@@ -6,6 +6,7 @@
 #include "algorithm.h"
 #include "environment.h"
 #include "hostosinfo.h"
+#include "process.h"
 
 #include <QCoreApplication>
 #include <QFileInfo>
@@ -98,6 +99,17 @@ QVector<TerminalCommand> TerminalCommand::availableTerminalEmulators()
         result.removeAll(defaultTerm);
         sort(result);
         result.prepend(defaultTerm);
+    }
+
+    if (HostOsInfo::isMacHost()) {
+        Process process;
+        const QString predicate = "kMDItemKind == 'Application'"
+                                  "&& kMDItemCFBundleIdentifier == com.googlecode.iterm2";
+        process.setCommand({"mdfind", {predicate}});
+        process.runBlocking();
+
+        if (!process.readAllStandardOutput().trimmed().isEmpty())
+            result.push_back({"iTerm.app", "", ""});
     }
 
     return result;
