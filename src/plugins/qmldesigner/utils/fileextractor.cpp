@@ -23,7 +23,7 @@ FileExtractor::FileExtractor(QObject *parent)
 
     QObject::connect(this, &FileExtractor::targetFolderExistsChanged, this, [this]() {
         if (targetFolderExists())
-            m_birthTime = QFileInfo(m_targetPath.toString() + "/" + m_archiveName).birthTime();
+            m_birthTime = m_targetPath.pathAppended(m_archiveName).toFileInfo().birthTime();
         else
             m_birthTime = QDateTime();
 
@@ -33,7 +33,7 @@ FileExtractor::FileExtractor(QObject *parent)
     QObject::connect(
         &m_timer, &QTimer::timeout, this, [this]() {
             static QHash<QString, int> hash;
-            QDirIterator it(m_targetFolder, {"*.*"}, QDir::Files, QDirIterator::Subdirectories);
+            QDirIterator it(m_targetFolder.toFSPathString(), {"*.*"}, QDir::Files, QDirIterator::Subdirectories);
 
             int count = 0;
             while (it.hasNext()) {
@@ -173,7 +173,7 @@ QString FileExtractor::count() const
 
 bool FileExtractor::targetFolderExists() const
 {
-    return QFileInfo::exists(m_targetPath.toString() + "/" + m_archiveName);
+    return m_targetPath.pathAppended(m_archiveName).exists();
 }
 
 int FileExtractor::progress() const
@@ -198,16 +198,15 @@ QString FileExtractor::sourceFile() const
 
 void FileExtractor::extract()
 {
-    m_targetFolder = m_targetPath.toString() + "/" + m_archiveName;
+    m_targetFolder = m_targetPath.pathAppended(m_archiveName);
 
     // If the target directory already exists, remove it and its content
-    QDir targetDir(m_targetFolder);
-    if (targetDir.exists() && m_clearTargetPathContents)
-        targetDir.removeRecursively();
+    if (m_targetFolder.isReadableDir() && m_clearTargetPathContents)
+        m_targetFolder.removeRecursively();
 
     if (m_alwaysCreateDir) {
         // Create a new directory to generate a proper creation date
-        targetDir.mkdir(m_targetFolder);
+        m_targetFolder.ensureWritableDir();
     }
 
     Utils::Archive *archive = new Utils::Archive(m_sourceFile, m_targetPath);
