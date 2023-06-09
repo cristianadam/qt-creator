@@ -3,9 +3,10 @@
 
 #pragma once
 
+#include "propertymetainfo.h"
+#include "qmldesignercorelib_global.h"
 #include <QPointer>
 #include <QSharedPointer>
-#include "qmldesignercorelib_global.h"
 
 #include <memory>
 
@@ -55,6 +56,8 @@ public:
     AbstractProperty(const AbstractProperty &property, AbstractView *view);
 
     PropertyName name() const;
+
+    PropertyMetaInfo metaInfo() const;
 
     bool isValid() const;
     explicit operator bool() const { return isValid(); }

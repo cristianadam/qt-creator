@@ -76,7 +76,12 @@ PropertyName AbstractProperty::name() const
     return m_propertyName;
 }
 
- /*!
+PropertyMetaInfo AbstractProperty::metaInfo() const
+{
+    return parentModelNode().metaInfo().property(name());
+}
+
+/*!
  Checks if the property is valid.
 
  A property is valid if the belonging model node
