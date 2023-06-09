@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "externalterminalprocessimpl.h"
+
+#include "algorithm.h"
 #include "process.h"
 #include "terminalcommand.h"
 #include "utilstr.h"
@@ -24,6 +26,7 @@ static const QLatin1String TerminalAppScript{R"(
         activate
         set newTab to do script "cd '%1'"
         set win to (the id of window 1 where its tab 1 = newTab) as text
+        do script "%4" in newTab
         do script "clear;\"%2\" %3;osascript -e 'tell app \"Terminal\" to close window id " & win & "' &;exit" in newTab
     end tell
 )"};
@@ -34,6 +37,7 @@ static const QLatin1String iTermAppScript{R"(
         set newWindow to (create window with default profile)
         tell current session of newWindow
             write text "cd %1"
+            write text "%4"
             write text "clear;\"%2\" %3;exit;"
         end tell
     end tell
@@ -50,11 +54,16 @@ expected_str<qint64> ProcessStubCreator::startStubProcess(const ProcessSetupData
         };
 
         if (terminalMap.contains(terminal.command.toString())) {
+            const QString env
+                = Utils::transform(setupData.m_environment.toStringList(), [](const QString &env) {
+                      return QString("export '%1'").arg(env);
+                  }).join(';');
+
             const QString script = terminalMap.value(terminal.command.toString())
                                        .arg(setupData.m_workingDirectory.nativePath())
                                        .arg(setupData.m_commandLine.executable().nativePath())
-                                       .arg(setupData.m_commandLine.arguments().replace('"',
-                                                                                        "\\\""));
+                                       .arg(setupData.m_commandLine.arguments().replace('"', "\\\""))
+                                       .arg(env);
 
             qDebug().noquote() << "Starting:\n\n" << script << "\n\n";
 
@@ -95,6 +104,8 @@ expected_str<qint64> ProcessStubCreator::startStubProcess(const ProcessSetupData
         cmdLine.addCommandLineAsArgs(setupData.m_commandLine, CommandLine::Raw);
         process->setCommand(cmdLine);
     }
+
+    process->setEnvironment(setupData.m_environment);
 
     process->start();
     process->waitForStarted();

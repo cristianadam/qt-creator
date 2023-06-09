@@ -42,7 +42,7 @@ public:
 
         const OpenTerminalParameters openParameters{setup.m_commandLine,
                                                     std::nullopt,
-                                                    std::nullopt,
+                                                    setup.m_environment,
                                                     ExitBehavior::Keep,
                                                     id};
 
