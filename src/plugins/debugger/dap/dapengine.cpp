@@ -25,8 +25,10 @@
 #include <utils/process.h>
 #include <utils/qtcassert.h>
 
-#include <coreplugin/idocument.h>
+#include <coreplugin/editormanager/editormanager.h>
+#include <coreplugin/editormanager/ieditor.h>
 #include <coreplugin/icore.h>
+#include <coreplugin/idocument.h>
 #include <coreplugin/messagebox.h>
 
 #include <QDateTime>
@@ -194,32 +196,71 @@ void DapEngine::interruptInferior()
                        {"type", "request"}});
 }
 
+void DapEngine::dabStackTrace()
+{
+    if (m_currentThreadId == -1)
+        return;
+
+    postDirectCommand({
+        {"command", "stackTrace"},
+        {"type", "request"},
+        {"arguments", QJsonObject{
+            {"threadId", m_currentThreadId},
+            {"startFrame", 0},
+            {"levels", 1}
+        }}
+    });
+}
+
 void DapEngine::executeStepIn(bool)
 {
+    if (m_currentThreadId == -1)
+        return;
+
     notifyInferiorRunRequested();
 
-//    postDirectCommand({{"command", "stepIn"},
-//                       {"type", "request"},
-//                       {"arguments",
-//                        QJsonObject{
-//                            {"threadId", 1}, // The ID of the client using this adapter.
-//                        }}});
+    postDirectCommand({{"command", "stepIn"},
+                       {"type", "request"},
+                       {"arguments",
+                        QJsonObject{
+                            {"threadId", m_currentThreadId},
+                        }}});
 
     notifyInferiorRunOk();
 }
 
 void DapEngine::executeStepOut()
 {
+    if (m_currentThreadId == -1)
+        return;
+
     notifyInferiorRunRequested();
+
+    postDirectCommand({{"command", "stepOut"},
+                       {"type", "request"},
+                       {"arguments",
+                        QJsonObject{
+                            {"threadId", m_currentThreadId},
+                        }}});
+
     notifyInferiorRunOk();
-//    postDirectCommand("return");
 }
 
 void DapEngine::executeStepOver(bool)
 {
+    if (m_currentThreadId == -1)
+        return;
+
     notifyInferiorRunRequested();
+
+    postDirectCommand({{"command", "next"},
+                       {"type", "request"},
+                       {"arguments",
+                        QJsonObject{
+                            {"threadId", m_currentThreadId},
+                        }}});
+
     notifyInferiorRunOk();
-//    postDirectCommand("next");
 }
 
 void DapEngine::continueInferior()
@@ -584,11 +625,31 @@ void DapEngine::handleOutput(const QJsonDocument &data)
             return;
         }
 
+        if (command == "stackTrace") {
+            QJsonArray stackFrames = ob.value("body").toObject().value("stackFrames").toArray();
+            if (stackFrames.isEmpty())
+                return;
+
+            QJsonObject stackFrame = stackFrames[0].toObject();
+            const FilePath file = FilePath::fromString(
+                stackFrame.value("source").toObject().value("path").toString());
+            const int line = stackFrame.value("line").toInt();
+            qDebug() << "stackTrace success" << file << line;
+            gotoLocation(Location(file, line));
+            return;
+        }
     }
 
     if (type == "event") {
         const QString event = ob.value("event").toString();
         const QJsonObject body = ob.value("body").toObject();
+
+        if (event == "exited") {
+            notifyInferiorExited();
+            m_proc.kill();
+            showMessage("exited", LogDebug);
+            return;
+        }
 
         if (event == "output") {
             const QString category = body.value("category").toString();
@@ -617,12 +678,17 @@ void DapEngine::handleOutput(const QJsonDocument &data)
         }
 
         if (event == "stopped") {
+            m_currentThreadId = body.value("threadId").toInt();
             showMessage(event, LogDebug);
             if (body.value("reason").toString() == "breakpoint") {
                 QString id = QString::number(body.value("hitBreakpointIds").toArray().first().toInteger());
                 const BreakpointParameters &params
                     = breakHandler()->findBreakpointByResponseId(id)->requestedParameters();
                 gotoLocation(Location(params.fileName, params.textPosition));
+            }
+
+            if (body.value("reason").toString() == "pause" || body.value("reason").toString() == "step") {
+                dabStackTrace();
             }
 
             if (state() == InferiorStopRequested)
