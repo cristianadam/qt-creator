@@ -46,8 +46,7 @@ public:
     inline const TargetsList &targets() const { return m_parser.targets(); }
 
     bool configure();
-    bool setup();
-    bool wipe();
+    bool setup(bool forceWipe);
 
     MesonBuildConfiguration *mesonBuildConfiguration();
 

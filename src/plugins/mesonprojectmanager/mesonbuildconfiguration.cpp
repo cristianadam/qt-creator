@@ -286,7 +286,7 @@ public:
             optionsTreeView->setEnabled(false);
             configureButton->setEnabled(false);
             m_showProgressTimer.start();
-            bs->wipe();
+            bs->setup(true);
         });
         connect(parametersLineEdit, &QLineEdit::editingFinished, this, [ buildCfg, parametersLineEdit] {
             buildCfg->setParameters(parametersLineEdit->text());

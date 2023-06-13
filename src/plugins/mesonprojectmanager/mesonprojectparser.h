@@ -39,13 +39,10 @@ public:
     bool configure(const Utils::FilePath &sourcePath,
                    const Utils::FilePath &buildPath,
                    const QStringList &args);
-    bool wipe(const Utils::FilePath &sourcePath,
-              const Utils::FilePath &buildPath,
-              const QStringList &args);
     bool setup(const Utils::FilePath &sourcePath,
                const Utils::FilePath &buildPath,
                const QStringList &args,
-               bool forceWipe = false);
+               bool forceWipe);
     bool parse(const Utils::FilePath &sourcePath, const Utils::FilePath &buildPath);
     bool parse(const Utils::FilePath &sourcePath);
 

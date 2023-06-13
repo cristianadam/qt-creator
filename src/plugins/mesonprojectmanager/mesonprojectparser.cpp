@@ -129,13 +129,6 @@ bool MesonProjectParser::configure(const Utils::FilePath &sourcePath,
     return m_process.run(cmd, m_env, m_projectName);
 }
 
-bool MesonProjectParser::wipe(const Utils::FilePath &sourcePath,
-                              const Utils::FilePath &buildPath,
-                              const QStringList &args)
-{
-    return setup(sourcePath, buildPath, args, true);
-}
-
 bool MesonProjectParser::setup(const Utils::FilePath &sourcePath,
                                const Utils::FilePath &buildPath,
                                const QStringList &args,

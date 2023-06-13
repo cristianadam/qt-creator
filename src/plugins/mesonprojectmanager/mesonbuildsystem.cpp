@@ -189,7 +189,7 @@ MesonBuildSystem::MesonBuildSystem(MesonBuildConfiguration *bc)
     });
     connect(bc, &MesonBuildConfiguration::parametersChanged, this, [this] {
         updateKit(kit());
-        wipe();
+        setup(true);
     });
     connect(bc, &MesonBuildConfiguration::environmentChanged, this, [this] {
         m_parser.setEnvironment(buildConfiguration()->environment());
@@ -282,7 +282,7 @@ bool MesonBuildSystem::configure()
     LEAVE_IF_BUSY();
     qCDebug(mesonBuildSystemLog) << "Configure";
     if (needsSetup())
-        return setup();
+        return setup(false);
     LOCK();
     if (m_parser.configure(projectDirectory(),
                            buildConfiguration()->buildDirectory(),
@@ -293,23 +293,12 @@ bool MesonBuildSystem::configure()
     return false;
 }
 
-bool MesonBuildSystem::setup()
+bool MesonBuildSystem::setup(bool forceWipe)
 {
     LEAVE_IF_BUSY();
     LOCK();
-    qCDebug(mesonBuildSystemLog) << "Setup";
-    if (m_parser.setup(projectDirectory(), buildConfiguration()->buildDirectory(), configArgs(true)))
-        return true;
-    UNLOCK(false);
-    return false;
-}
-
-bool MesonBuildSystem::wipe()
-{
-    LEAVE_IF_BUSY();
-    LOCK();
-    qCDebug(mesonBuildSystemLog) << "Wipe";
-    if (m_parser.wipe(projectDirectory(), buildConfiguration()->buildDirectory(), configArgs(true)))
+    qCDebug(mesonBuildSystemLog) << "Setup, wipe: " << forceWipe;
+    if (m_parser.setup(projectDirectory(), buildConfiguration()->buildDirectory(), configArgs(true), forceWipe))
         return true;
     UNLOCK(false);
     return false;
