@@ -435,10 +435,10 @@ TextEditor::TabSettings CppEditorDocument::tabSettings() const
     return indenter()->tabSettings().value_or(TextEditor::TextDocument::tabSettings());
 }
 
-bool CppEditorDocument::save(QString *errorString, const FilePath &filePath, bool autoSave)
+bool CppEditorDocument::saveImpl(QString *errorString, const FilePath &filePath, bool autoSave)
 {
     if (!indenter()->formatOnSave() || autoSave)
-        return TextEditor::TextDocument::save(errorString, filePath, autoSave);
+        return TextEditor::TextDocument::saveImpl(errorString, filePath, autoSave);
 
     auto *layout = qobject_cast<TextEditor::TextDocumentLayout *>(document()->documentLayout());
     const int documentRevision = layout->lastSaveRevision;

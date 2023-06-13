@@ -68,7 +68,7 @@ public:
 
     virtual OpenResult open(QString *errorString, const Utils::FilePath &filePath, const Utils::FilePath &realFilePath);
 
-    virtual bool save(QString *errorString, const Utils::FilePath &filePath = Utils::FilePath(), bool autoSave = false);
+    bool save(QString *errorString, const Utils::FilePath &filePath = Utils::FilePath(), bool autoSave = false);
 
     virtual QByteArray contents() const;
     virtual bool setContents(const QByteArray &contents);
@@ -124,8 +124,14 @@ signals:
 
     void aboutToReload();
     void reloadFinished(bool success);
+    void saved();
 
     void filePathChanged(const Utils::FilePath &oldName, const Utils::FilePath &newName);
+
+protected:
+    virtual bool saveImpl(QString *errorString,
+                          const Utils::FilePath &filePath = Utils::FilePath(),
+                          bool autoSave = false);
 
 private:
     Internal::IDocumentPrivate *d;

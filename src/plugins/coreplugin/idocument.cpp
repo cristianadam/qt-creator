@@ -315,11 +315,22 @@ IDocument::OpenResult IDocument::open(QString *errorString, const Utils::FilePat
 
     Returns whether saving was successful.
 
+    If saving was successful saved is emitted.
+
     The default implementation does nothing and returns \c false.
 
     \sa shouldAutoSave()
+    \sa saved()
 */
 bool IDocument::save(QString *errorString, const Utils::FilePath &filePath, bool autoSave)
+{
+    const bool success = saveImpl(errorString, filePath, autoSave);
+    if (success)
+        emit saved();
+    return success;
+}
+
+bool IDocument::saveImpl(QString *errorString, const Utils::FilePath &filePath, bool autoSave)
 {
     Q_UNUSED(errorString)
     Q_UNUSED(filePath)
