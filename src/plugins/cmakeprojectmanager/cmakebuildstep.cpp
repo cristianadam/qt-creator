@@ -194,7 +194,7 @@ CMakeBuildStep::CMakeBuildStep(BuildStepList *bsl, Id id) :
 
     m_useStaging = addAspect<BoolAspect>();
     m_useStaging->setSettingsKey(USE_STAGING_KEY);
-    m_useStaging->setLabelPlacement(BoolAspect::LabelPlacement::AtCheckBox);
+    m_useStaging->setLabel(tr("Stage for installation"), BoolAspect::LabelPlacement::AtCheckBox);
     m_useStaging->setDefaultValue(!buildAndRunOnSameDevice(kit()));
 
     m_stagingDir = addAspect<FilePathAspect>();
@@ -504,8 +504,10 @@ QWidget *CMakeBuildStep::createConfigWidget()
 
         m_stagingDir->setEnabled(m_useStaging->value());
         if (m_useStaging->value()) {
-            summaryText.append("    " + Tr::tr("and stage at %2 for %3")
-                .arg(currentStagingDir(), currentInstallPrefix()));
+            //: Stage (for installation) at <staging_dir> for <installation_dir>
+            summaryText.append(
+                "; "
+                + Tr::tr("Stage at %2 for %3").arg(currentStagingDir(), currentInstallPrefix()));
         }
 
         if (!m_buildPreset.isEmpty()) {
@@ -568,7 +570,8 @@ QWidget *CMakeBuildStep::createConfigWidget()
     Layouting::Form builder;
     builder.addRow({m_cmakeArguments});
     builder.addRow({m_toolArguments});
-    builder.addRow({Tr::tr("Stage for installation:"), Layouting::Row{m_useStaging, m_stagingDir}});
+    builder.addRow({m_useStaging});
+    builder.addRow({m_stagingDir});
 
     if (m_useiOSAutomaticProvisioningUpdates)
         builder.addRow({m_useiOSAutomaticProvisioningUpdates});
