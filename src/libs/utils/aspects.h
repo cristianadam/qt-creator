@@ -169,7 +169,7 @@ signals:
 protected:
     QLabel *label() const;
     void setupLabel();
-    void addLabeledItem(Layouting::LayoutItem &parent, QWidget *widget);
+    void addLabeledItem(Layouting::LayoutItem &parent, QWidget *widget, bool invert = false);
 
     void setDataCreatorHelper(const DataCreator &creator) const;
     void setDataClonerHelper(const DataCloner &cloner) const;

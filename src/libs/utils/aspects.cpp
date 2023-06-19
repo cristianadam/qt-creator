@@ -215,13 +215,18 @@ void BaseAspect::setupLabel()
     registerSubWidget(d->m_label);
 }
 
-void BaseAspect::addLabeledItem(LayoutItem &parent, QWidget *widget)
+void BaseAspect::addLabeledItem(LayoutItem &parent, QWidget *widget, bool invert)
 {
     setupLabel();
     if (QLabel *l = label()) {
         l->setBuddy(widget);
-        parent.addItem(l);
-        parent.addItem(Span(std::max(d->m_spanX - 1, 1), LayoutItem(widget)));
+        if (invert) {
+            parent.addItem(l);
+            parent.addItem(Span(std::max(d->m_spanX - 1, 1), LayoutItem(widget)));
+        } else {
+            parent.addItem(Span(std::max(d->m_spanX - 1, 1), LayoutItem(widget)));
+            parent.addItem(l);
+        }
     } else {
         parent.addItem(LayoutItem(widget));
     }
@@ -1473,15 +1478,15 @@ void BoolAspect::addToLayout(Layouting::LayoutItem &parent)
         QTC_CHECK(!d->m_button);
         d->m_button = createSubWidget<QCheckBox>();
     }
-    switch (d->m_labelPlacement) {
-    case LabelPlacement::AtCheckBox:
-        d->m_button->setText(labelText());
-        parent.addItem(d->m_button.data());
-        break;
-    case LabelPlacement::InExtraLabel:
-        addLabeledItem(parent, d->m_button);
-        break;
-    }
+//    switch (d->m_labelPlacement) {
+//    case LabelPlacement::AtCheckBox:
+//        d->m_button->setText(labelText());
+//        parent.addItem(d->m_button.data());
+//        break;
+//    case LabelPlacement::InExtraLabel:
+        addLabeledItem(parent, d->m_button, d->m_labelPlacement == LabelPlacement::AtCheckBox);
+//        break;
+//    }
     d->m_button->setChecked(value());
     if (isAutoApply()) {
         connect(d->m_button.data(), &QAbstractButton::clicked,
