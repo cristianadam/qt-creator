@@ -82,6 +82,7 @@ public:
     bool isEnabledIndirectly() const;
     bool isForceEnabled() const;
     bool isForceDisabled() const;
+    bool isSoftLoadable() const;
     QVector<PluginDependency> dependencies() const;
     QJsonObject metaData() const;
 
