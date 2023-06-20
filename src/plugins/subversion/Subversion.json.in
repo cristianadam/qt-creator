@@ -15,6 +15,7 @@
     \"Category\" : \"Version Control\",
     \"Description\" : \"Subversion integration.\",
     \"Url\" : \"http://www.qt.io\",
+    \"SoftLoadable\" : true,
     $$dependencyList,
 
     \"Mimetypes\" : [
