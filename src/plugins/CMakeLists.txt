@@ -1,5 +1,6 @@
 # Level 0:
 add_subdirectory(coreplugin)
+add_subdirectory(qtcapi)
 
 # Level 1: (only depends of Level 0)
 add_subdirectory(texteditor)
