@@ -350,6 +350,8 @@ public:
         return {};
     }
 
+    QStringList keywords() const final { return {}; }
+
 private:
     InterpreterOptionsWidget *m_widget = nullptr;
 };
