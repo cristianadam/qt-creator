@@ -11,6 +11,7 @@
 #include <utils/aspects.h>
 #include <utils/layoutbuilder.h>
 #include <utils/qtcassert.h>
+#include <utils/scopedtimer.h>
 #include <utils/stringutils.h>
 
 #include <QCheckBox>
@@ -135,6 +136,7 @@ QWidget *IOptionsPage::widget()
 {
     if (!m_widget) {
         if (m_widgetCreator) {
+            QTC_SCOPED_TIMER(m_displayName);
             m_widget = m_widgetCreator();
         } else if (m_settings) {
             m_widget = new IOptionsPageWidget;
