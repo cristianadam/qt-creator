@@ -775,6 +775,17 @@ MimeTypeSettings::~MimeTypeSettings()
     delete d;
 }
 
+QStringList MimeTypeSettings::keywords() const
+{
+    return {
+        Tr::tr("Reset MIME Types"),
+        Tr::tr("Reset Handlers"),
+        Tr::tr("Registered MIME Types"),
+        Tr::tr("Details:"),
+        Tr::tr("Patterns:")
+    };
+}
+
 void MimeTypeSettings::restoreSettings()
 {
     MimeTypeSettingsPrivate::UserMimeTypeHash mimetypes
