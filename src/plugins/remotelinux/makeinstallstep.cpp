@@ -65,7 +65,7 @@ MakeInstallStep::MakeInstallStep(BuildStepList *parent, Id id) : MakeStep(parent
                                                         ExecutableAspect::BuildDevice);
     makeAspect->setId(MakeAspectId);
     makeAspect->setSettingsKey(MakeAspectId);
-    makeAspect->setDisplayStyle(StringAspect::PathChooserDisplay);
+    makeAspect->setReadOnly(true);
     makeAspect->setLabelText(Tr::tr("Command:"));
     connect(makeAspect, &ExecutableAspect::changed,
             this, &MakeInstallStep::updateCommandFromAspect);
