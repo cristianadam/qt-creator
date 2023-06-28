@@ -327,6 +327,8 @@ void BaseAspect::setReadOnly(bool readOnly)
             lineEdit->setReadOnly(readOnly);
         else if (auto textEdit = qobject_cast<QTextEdit *>(w))
             textEdit->setReadOnly(readOnly);
+        else if (auto pathChooser = qobject_cast<PathChooser *>(w))
+            pathChooser->setReadOnly(readOnly);
     }
 }
 
@@ -1122,6 +1124,7 @@ void StringAspect::addToLayout(LayoutItem &parent)
         d->m_pathChooserDisplay->setPromptDialogTitle(d->m_prompDialogTitle);
         d->m_pathChooserDisplay->setCommandVersionArguments(d->m_commandVersionArguments);
         d->m_pathChooserDisplay->setAllowPathFromDevice(d->m_allowPathFromDevice);
+        d->m_pathChooserDisplay->setReadOnly(isReadOnly());
         d->m_pathChooserDisplay->lineEdit()->setValidatePlaceHolder(d->m_validatePlaceHolder);
         if (defaultValue() == value())
             d->m_pathChooserDisplay->setDefaultValue(defaultValue());
