@@ -875,11 +875,6 @@ void StringAspect::setFilePath(const FilePath &value)
     setValue(value.toUserOutput());
 }
 
-void StringAspect::setDefaultFilePath(const FilePath &value)
-{
-    setDefaultValue(value.toUserOutput());
-}
-
 PathChooser *StringAspect::pathChooser() const
 {
     return d->m_pathChooserDisplay.data();
@@ -1338,6 +1333,11 @@ FilePathAspect::FilePathAspect(AspectContainer *container)
 void FilePathAspect::setValue(const FilePath &filePath)
 {
     StringAspect::setValue(filePath.toUserOutput());
+}
+
+void FilePathAspect::setDefaultValue(const FilePath &filePath)
+{
+    StringAspect::setDefaultValue(filePath.toUserOutput());
 }
 
 /*!
