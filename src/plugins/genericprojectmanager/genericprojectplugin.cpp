@@ -13,8 +13,6 @@
 
 #include <coreplugin/icore.h>
 #include <coreplugin/actionmanager/actionmanager.h>
-#include <coreplugin/actionmanager/actioncontainer.h>
-#include <coreplugin/actionmanager/command.h>
 
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/projectmanager.h>
@@ -23,10 +21,7 @@
 #include <projectexplorer/selectablefilesmodel.h>
 
 #include <utils/algorithm.h>
-#include <utils/fileutils.h>
 #include <utils/qtcassert.h>
-
-#include <QAction>
 
 using namespace Core;
 using namespace ProjectExplorer;
@@ -36,6 +31,45 @@ namespace PEC = ProjectExplorer::Constants;
 namespace GenericProjectManager {
 namespace Internal {
 
+class EditAction : public Action
+{
+public:
+    EditAction()
+    {
+        setId("GenericProjectManager.EditFiles");
+        setContext(Constants::GENERICPROJECT_ID);
+        setText(Tr::tr("Edit Files..."));
+        setCommandAttribute(Command::CA_Hide);
+        setContainer(PEC::M_PROJECTCONTEXT, PEC::G_PROJECT_FILES);
+        setOnTriggered([] {
+            if (auto genericProject = qobject_cast<GenericProject *>(ProjectTree::currentProject()))
+                genericProject->editFilesTriggered();
+        });
+    }
+};
+
+class RemoveDirAction : public Action
+{
+public:
+    RemoveDirAction()
+    {
+        setId("GenericProject.RemoveDir");
+        setContext(PEC::C_PROJECT_TREE);
+        setText(Tr::tr("Remove Directory"));
+        setContainer(PEC::M_FOLDERCONTEXT, PEC::G_FOLDER_OTHER);
+        setOnTriggered([] {
+            const auto folderNode = ProjectTree::currentNode()->asFolderNode();
+            QTC_ASSERT(folderNode, return);
+            const auto project = qobject_cast<GenericProject *>(folderNode->getProject());
+            QTC_ASSERT(project, return);
+            const FilePaths filesToRemove = transform(
+                folderNode->findNodes([](const Node *node) { return node->asFileNode(); }),
+                [](const Node *node) { return node->filePath();});
+            project->removeFilesTriggered(filesToRemove);
+        });
+    }
+};
+
 class GenericProjectPluginPrivate : public QObject
 {
 public:
@@ -44,8 +78,8 @@ public:
     ProjectFilesFactory projectFilesFactory;
     GenericMakeStepFactory makeStepFactory;
     GenericBuildConfigurationFactory buildConfigFactory;
-
-    QAction editFilesAction{Tr::tr("Edit Files..."), nullptr};
+    EditAction editAction;
+    RemoveDirAction removeDirAction;
 };
 
 GenericProjectPlugin::~GenericProjectPlugin()
@@ -64,32 +98,6 @@ GenericProjectPluginPrivate::GenericProjectPluginPrivate()
 
     IWizardFactory::registerFactoryCreator([] { return new GenericProjectWizard; });
 
-    ActionContainer *mproject = ActionManager::actionContainer(PEC::M_PROJECTCONTEXT);
-
-    Command *command = ActionManager::registerAction(&editFilesAction,
-        "GenericProjectManager.EditFiles", Context(Constants::GENERICPROJECT_ID));
-    command->setAttribute(Command::CA_Hide);
-    mproject->addAction(command, PEC::G_PROJECT_FILES);
-
-    connect(&editFilesAction, &QAction::triggered, this, [] {
-        if (auto genericProject = qobject_cast<GenericProject *>(ProjectTree::currentProject()))
-            genericProject->editFilesTriggered();
-    });
-
-    const auto removeDirAction = new QAction(Tr::tr("Remove Directory"), this);
-    Command * const cmd = ActionManager::registerAction(removeDirAction, "GenericProject.RemoveDir",
-                                                        Context(PEC::C_PROJECT_TREE));
-    ActionManager::actionContainer(PEC::M_FOLDERCONTEXT)->addAction(cmd, PEC::G_FOLDER_OTHER);
-    connect(removeDirAction, &QAction::triggered, this, [] {
-        const auto folderNode = ProjectTree::currentNode()->asFolderNode();
-        QTC_ASSERT(folderNode, return);
-        const auto project = qobject_cast<GenericProject *>(folderNode->getProject());
-        QTC_ASSERT(project, return);
-        const FilePaths filesToRemove = transform(
-                    folderNode->findNodes([](const Node *node) { return node->asFileNode(); }),
-                    [](const Node *node) { return node->filePath();});
-        project->removeFilesTriggered(filesToRemove);
-    });
 }
 
 } // namespace Internal
