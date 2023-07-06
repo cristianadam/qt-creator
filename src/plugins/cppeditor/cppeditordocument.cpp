@@ -39,7 +39,6 @@ using namespace TextEditor;
 using namespace Utils;
 
 namespace CppEditor {
-namespace Internal {
 
 static CppEditor::CppModelManager *mm()
 {
@@ -74,7 +73,7 @@ public:
     { m_cppEditorDocument->resetProcessor(); }
 
 private:
-    CppEditor::Internal::CppEditorDocument * const m_cppEditorDocument;
+    CppEditor::CppEditorDocument *const m_cppEditorDocument;
     // The file path of the editor document can change (e.g. by "Save As..."), so make sure
     // that un-registration happens with the path the document was registered.
     const QString m_registrationFilePath;
@@ -104,8 +103,10 @@ CppEditorDocument::CppEditorDocument()
     connect(mm(), &CppModelManager::diagnosticsChanged,
             this, &CppEditorDocument::onDiagnosticsChanged);
 
-    connect(&m_parseContextModel, &ParseContextModel::preferredParseContextChanged,
-            this, &CppEditorDocument::reparseWithPreferredParseContext);
+    connect(&m_parseContextModel,
+            &Internal::ParseContextModel::preferredParseContextChanged,
+            this,
+            &CppEditorDocument::reparseWithPreferredParseContext);
 
     minimizableInfoBars()->setSettingsGroup(Constants::CPPEDITOR_SETTINGSGROUP);
     minimizableInfoBars()->setPossibleInfoBarEntries(
@@ -137,7 +138,7 @@ TextEditor::IAssistProvider *CppEditorDocument::quickFixAssistProvider() const
 {
     if (const auto baseProvider = TextDocument::quickFixAssistProvider())
         return baseProvider;
-    return CppEditorPlugin::instance()->quickFixProvider();
+    return Internal::CppEditorPlugin::instance()->quickFixProvider();
 }
 
 void CppEditorDocument::recalculateSemanticInfoDetached()
@@ -366,12 +367,12 @@ void CppEditorDocument::initializeTimer()
             Qt::UniqueConnection);
 }
 
-ParseContextModel &CppEditorDocument::parseContextModel()
+Internal::ParseContextModel &CppEditorDocument::parseContextModel()
 {
     return m_parseContextModel;
 }
 
-OutlineModel &CppEditorDocument::outlineModel()
+Internal::OutlineModel &CppEditorDocument::outlineModel()
 {
     return m_overviewModel;
 }
@@ -532,5 +533,4 @@ void CppEditorDocument::onDiagnosticsChanged(const QString &fileName, const QStr
     }
 }
 
-} // namespace Internal
 } // namespace CppEditor

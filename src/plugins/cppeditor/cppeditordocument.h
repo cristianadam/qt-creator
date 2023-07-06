@@ -16,9 +16,8 @@
 #include <QTimer>
 
 namespace CppEditor {
-namespace Internal {
 
-class CppEditorDocument : public TextEditor::TextDocument
+class CPPEDITOR_EXPORT CppEditorDocument : public TextEditor::TextDocument
 {
     Q_OBJECT
 
@@ -40,8 +39,8 @@ public:
 
     void scheduleProcessDocument();
 
-    ParseContextModel &parseContextModel();
-    OutlineModel &outlineModel();
+    Internal::ParseContextModel &parseContextModel();
+    Internal::OutlineModel &outlineModel();
     void updateOutline();
 
     QFuture<CursorInfo> cursorInfo(const CursorInfoParams &params);
@@ -114,9 +113,8 @@ private:
     // (Un)Registration in CppModelManager
     QScopedPointer<CppEditorDocumentHandle> m_editorDocumentHandle;
 
-    ParseContextModel m_parseContextModel;
-    OutlineModel m_overviewModel;
+    Internal::ParseContextModel m_parseContextModel;
+    Internal::OutlineModel m_overviewModel;
 };
 
-} // namespace Internal
 } // namespace CppEditor

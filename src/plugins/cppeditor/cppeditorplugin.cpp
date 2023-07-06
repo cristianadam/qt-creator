@@ -490,7 +490,7 @@ void CppEditorPlugin::initialize()
     addTest<SourceProcessorTest>();
     addTest<SymbolSearcherTest>();
     addTest<TypeHierarchyBuilderTest>();
-    addTest<Tests::AutoCompleterTest>();
+    addTest<CppEditor::Tests::AutoCompleterTest>();
     addTest<Tests::DoxygenTest>();
     addTest<Tests::FileAndTokenActionsTest>();
     addTest<Tests::FollowSymbolTest>();

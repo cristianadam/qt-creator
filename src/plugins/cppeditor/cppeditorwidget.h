@@ -20,9 +20,9 @@ class IAssistProvider;
 namespace CppEditor {
 class SemanticInfo;
 class ProjectPart;
+class CppEditorDocument;
 
 namespace Internal {
-class CppEditorDocument;
 class CppEditorOutline;
 class CppEditorWidgetPrivate;
 class FunctionDeclDefLink;
@@ -36,7 +36,7 @@ public:
     CppEditorWidget();
     ~CppEditorWidget() override;
 
-    Internal::CppEditorDocument *cppEditorDocument() const;
+    CppEditorDocument *cppEditorDocument() const;
 
     bool isSemanticInfoValidExceptLocalUses() const;
     bool isSemanticInfoValid() const;

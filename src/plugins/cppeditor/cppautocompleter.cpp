@@ -26,7 +26,7 @@
 
 #endif // WITH_TESTS
 
-namespace CppEditor::Internal {
+namespace CppEditor {
 
 bool CppAutoCompleter::contextAllowsAutoBrackets(const QTextCursor &cursor,
                                                  const QString &textToInsert) const
@@ -415,4 +415,4 @@ void AutoCompleterTest::testInsertParagraph()
 } // namespace Tests
 #endif // WITH_TESTS
 
-} // namespace CppEditor::Internal
+} // namespace CppEditor

@@ -3,14 +3,15 @@
 
 #pragma once
 
+#include "cppeditor_global.h"
+
 #include <texteditor/autocompleter.h>
 
 #include <QObject>
 
 namespace CppEditor {
-namespace Internal {
 
-class CppAutoCompleter : public TextEditor::AutoCompleter
+class CPPEDITOR_EXPORT CppAutoCompleter : public TextEditor::AutoCompleter
 {
 public:
     bool contextAllowsAutoBrackets(const QTextCursor &cursor,
@@ -52,5 +53,4 @@ private slots:
 } // namespace Tests
 #endif // WITH_TESTS
 
-} // Internal
-} // CppEditor
+} // namespace CppEditor
