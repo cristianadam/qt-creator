@@ -8,9 +8,7 @@
 #include "debuggerinternalconstants.h"
 #include "debuggertr.h"
 
-#ifdef Q_OS_WIN
 #include "registerpostmortemaction.h"
-#endif
 
 #include <coreplugin/coreconstants.h>
 
@@ -313,18 +311,11 @@ DebuggerSettings::DebuggerSettings()
                                                "view during debugging."));
     useToolTipsInStackView.setDefaultValue(true);
 
-#ifdef Q_OS_WIN
-    registerForPostMortem = new RegisterPostMortemAction;
-    registerForPostMortem->setSettingsKey(debugModeGroup, "RegisterForPostMortem");
-    registerForPostMortem->setToolTip(Tr::tr("Registers %1 for debugging crashed applications.")
+    registerForPostMortem.setSettingsKey(debugModeGroup, "RegisterForPostMortem");
+    registerForPostMortem.setToolTip(Tr::tr("Registers %1 for debugging crashed applications.")
                                           .arg(QGuiApplication::applicationDisplayName()));
-    registerForPostMortem->setLabelText(
+    registerForPostMortem.setLabelText(
         Tr::tr("Use %1 for post-mortem debugging").arg(QGuiApplication::applicationDisplayName()));
-#else
-    // Some dummy.
-    registerForPostMortem = new BoolAspect;
-    registerForPostMortem->setVisible(false);
-#endif
 
     allPluginBreakpoints.setSettingsKey(debugModeGroup, "AllPluginBreakpoints");
     allPluginBreakpoints.setDefaultValue(true);
@@ -433,8 +424,7 @@ DebuggerSettings::DebuggerSettings()
     page5.registerAspect(&firstChanceExceptionTaskEntry);
     page5.registerAspect(&secondChanceExceptionTaskEntry);
     page5.registerAspect(&ignoreFirstChanceAccessViolation);
-    if (HostOsInfo::isWindowsHost())
-        page5.registerAspect(registerForPostMortem);
+    page5.registerAspect(&registerForPostMortem);
 
     // Page 6
     page6.registerAspect(&cdbSymbolPaths);
@@ -463,10 +453,7 @@ DebuggerSettings::DebuggerSettings()
     });
 }
 
-DebuggerSettings::~DebuggerSettings()
-{
-    delete registerForPostMortem;
-}
+DebuggerSettings::~DebuggerSettings() = default;
 
 void DebuggerSettings::readSettings()
 {

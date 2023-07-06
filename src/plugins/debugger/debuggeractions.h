@@ -4,6 +4,7 @@
 #pragma once
 
 #include "gdb/gdbsettings.h"
+#include "registerpostmortemaction.h"
 
 #include <QCoreApplication>
 #include <QHash>
@@ -97,7 +98,7 @@ public:
     Utils::BoolAspect secondChanceExceptionTaskEntry;
     Utils::BoolAspect ignoreFirstChanceAccessViolation;
 
-    Utils::BoolAspect *registerForPostMortem = nullptr;
+    RegisterPostMortemAction registerForPostMortem;
 
     // Page 6: CDB Paths
     Utils::StringListAspect cdbSymbolPaths;

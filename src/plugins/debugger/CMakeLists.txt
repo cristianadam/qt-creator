@@ -71,6 +71,7 @@ add_qtc_plugin(Debugger
     qml/qmlinspectoragent.cpp qml/qmlinspectoragent.h
     qml/qmlv8debuggerclientconstants.h
     registerhandler.cpp registerhandler.h
+    registerpostmortemaction.cpp registerpostmortemaction.h
     shared/cdbsymbolpathlisteditor.cpp shared/cdbsymbolpathlisteditor.h
     shared/hostutils.cpp shared/hostutils.h
     shared/peutils.cpp shared/peutils.h
@@ -96,12 +97,6 @@ add_qtc_plugin(Debugger
     watchhandler.cpp watchhandler.h
     watchutils.cpp watchutils.h
     watchwindow.cpp watchwindow.h
-)
-
-extend_qtc_plugin(Debugger
-  CONDITION WIN32
-  SOURCES registerpostmortemaction.cpp registerpostmortemaction.h
-  DEFINES UNICODE _UNICODE
 )
 
 extend_qtc_plugin(Debugger

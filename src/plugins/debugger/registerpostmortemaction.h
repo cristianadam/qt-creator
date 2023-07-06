@@ -5,19 +5,15 @@
 
 #include <utils/aspects.h>
 
-namespace Debugger {
-namespace Internal {
+namespace Debugger::Internal {
 
 class RegisterPostMortemAction : public Utils::BoolAspect
 {
 public:
-    RegisterPostMortemAction();
+    explicit RegisterPostMortemAction(Utils::AspectContainer *container = nullptr);
+
     void readSettings() override;
     void writeSettings() const override {}
-
-private:
-    void registerNow(bool value);
 };
 
-} // namespace Internal
-} // namespace Debugger
+} // Debugger::Internal

@@ -68,6 +68,7 @@ Project {
                 "peripheralregisterhandler.cpp", "peripheralregisterhandler.h",
                 "procinterrupt.cpp", "procinterrupt.h",
                 "registerhandler.cpp", "registerhandler.h",
+                "registerpostmortemaction.cpp", "registerpostmortemaction.h",
                 "sourceagent.cpp", "sourceagent.h",
                 "sourcefileshandler.cpp", "sourcefileshandler.h",
                 "sourceutils.cpp", "sourceutils.h",
@@ -202,15 +203,6 @@ Project {
             files: [
                 "registryaccess.cpp",
                 "registryaccess.h",
-            ]
-        }
-
-        Group {
-            name: "RegisterPostMortem"
-            condition: qbs.targetOS.contains("windows")
-            files: [
-                "registerpostmortemaction.cpp",
-                "registerpostmortemaction.h",
             ]
         }
 

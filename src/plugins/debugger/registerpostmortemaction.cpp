@@ -3,12 +3,17 @@
 
 #include "registerpostmortemaction.h"
 
+#ifdef Q_OS_WIN
 #include <registryaccess.h>
+#endif
 
 #include <QCoreApplication>
 #include <QDir>
 #include <QString>
 
+#include <utils/hostosinfo.h>
+
+#ifdef Q_OS_WIN
 #ifdef QTCREATOR_PCH_H
 #define CALLBACK WINAPI
 #endif
@@ -18,11 +23,14 @@
 
 using namespace RegistryAccess;
 
-namespace Debugger {
-namespace Internal {
+#endif
 
-void RegisterPostMortemAction::registerNow(bool value)
+namespace Debugger::Internal {
+
+static void registerNow(bool value)
 {
+    Q_UNUSED(value)
+#ifdef Q_OS_WIN
     const QString debuggerExe = QDir::toNativeSeparators(QCoreApplication::applicationDirPath() + '/'
                                 + QLatin1String(debuggerApplicationFileC) + ".exe");
     const ushort *debuggerWString = debuggerExe.utf16();
@@ -42,17 +50,20 @@ void RegisterPostMortemAction::registerNow(bool value)
         WaitForSingleObject(shExecInfo.hProcess, INFINITE);
     CoUninitialize();
     readSettings();
+#endif
 }
 
-RegisterPostMortemAction::RegisterPostMortemAction()
+RegisterPostMortemAction::RegisterPostMortemAction(Utils::AspectContainer *container)
+    : BoolAspect(container)
 {
+    setVisible(Utils::HostOsInfo::isWindowsHost());
     connect(this, &BaseAspect::changed, this, [this] { registerNow(value()); });
 }
 
 void RegisterPostMortemAction::readSettings()
 {
+#ifdef Q_OS_WIN
     Q_UNUSED(debuggerRegistryValueNameC) // avoid warning from MinGW
-
     bool registered = false;
     HKEY handle = NULL;
     QString errorMessage;
@@ -61,7 +72,7 @@ void RegisterPostMortemAction::readSettings()
     if (handle)
         RegCloseKey(handle);
     setValueQuietly(registered);
+#endif
 }
 
-} // namespace Internal
-} // namespace Debugger
+} // Debugger::Internal
