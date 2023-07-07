@@ -70,17 +70,11 @@ public:
     ArtisticStyle artisticStyleBeautifier;
     ClangFormat clangFormatBeautifier;
     Uncrustify uncrustifyBeautifier;
-
-    BeautifierTool *m_tools[3] {
-        &artisticStyleBeautifier,
-        &uncrustifyBeautifier,
-        &clangFormatBeautifier
-    };
 };
 
 BeautifierPluginPrivate::BeautifierPluginPrivate()
 {
-    for (BeautifierTool *tool : m_tools)
+    for (BeautifierTool *tool : BeautifierTool::allTools())
         generalSettings.autoFormatTools.addOption(tool->id());
 
     updateActions();
@@ -94,7 +88,7 @@ BeautifierPluginPrivate::BeautifierPluginPrivate()
 
 void BeautifierPluginPrivate::updateActions(Core::IEditor *editor)
 {
-    for (BeautifierTool *tool : m_tools)
+    for (BeautifierTool *tool : BeautifierTool::allTools())
         tool->updateActions(editor);
 }
 
@@ -121,9 +115,10 @@ void BeautifierPluginPrivate::autoFormatOnSave(Core::IDocument *document)
 
     // Find tool to use by id and format file!
     const QString id = generalSettings.autoFormatTools.stringValue();
-    auto tool = std::find_if(std::begin(m_tools), std::end(m_tools),
+    const QList<BeautifierTool *> &tools = BeautifierTool::allTools();
+    auto tool = std::find_if(std::begin(tools), std::end(tools),
                              [&id](const BeautifierTool *t){return t->id() == id;});
-    if (tool != std::end(m_tools)) {
+    if (tool != std::end(tools)) {
         if (!(*tool)->isApplicable(document))
             return;
         const TextEditor::Command command = (*tool)->command();
