@@ -1,8 +1,6 @@
 // Copyright (C) 2016 Lorenz Haas
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
-#include "beautifierplugin.h"
-
 #include "beautifierconstants.h"
 #include "beautifiertr.h"
 #include "generalsettings.h"
@@ -18,12 +16,14 @@
 #include <coreplugin/editormanager/documentmodel.h>
 #include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/editormanager/ieditor.h>
-#include <coreplugin/messagemanager.h>
+
+#include <extensionsystem/iplugin.h>
 
 #include <projectexplorer/project.h>
 #include <projectexplorer/projectnodes.h>
 #include <projectexplorer/projecttree.h>
 
+#include <texteditor/command.h>
 #include <texteditor/formattexteditor.h>
 #include <texteditor/textdocument.h>
 #include <texteditor/textdocumentlayout.h>
@@ -31,17 +31,11 @@
 #include <texteditor/texteditorconstants.h>
 
 #include <utils/algorithm.h>
-#include <utils/fileutils.h>
 #include <utils/mimeutils.h>
-#include <utils/process.h>
 #include <utils/qtcassert.h>
 #include <utils/temporarydirectory.h>
-#include <utils/textutils.h>
 
 #include <QMenu>
-#include <QPlainTextEdit>
-#include <QScrollBar>
-#include <QTextBlock>
 
 using namespace TextEditor;
 
@@ -84,28 +78,6 @@ public:
     };
 };
 
-static BeautifierPluginPrivate *dd = nullptr;
-
-void BeautifierPlugin::initialize()
-{
-    Core::ActionContainer *menu = Core::ActionManager::createMenu(Constants::MENU_ID);
-    menu->menu()->setTitle(Tr::tr("Bea&utifier"));
-    menu->setOnAllDisabledBehavior(Core::ActionContainer::Show);
-    Core::ActionManager::actionContainer(Core::Constants::M_TOOLS)->addMenu(menu);
-}
-
-void BeautifierPlugin::extensionsInitialized()
-{
-    dd = new BeautifierPluginPrivate;
-}
-
-ExtensionSystem::IPlugin::ShutdownFlag BeautifierPlugin::aboutToShutdown()
-{
-    delete dd;
-    dd = nullptr;
-    return SynchronousShutdown;
-}
-
 BeautifierPluginPrivate::BeautifierPluginPrivate()
 {
     for (BeautifierTool *tool : m_tools)
@@ -128,14 +100,14 @@ void BeautifierPluginPrivate::updateActions(Core::IEditor *editor)
 
 void BeautifierPluginPrivate::autoFormatOnSave(Core::IDocument *document)
 {
-    if (!generalSettings.autoFormatOnSave.value())
+    if (!generalSettings.autoFormatOnSave())
         return;
 
     if (!isAutoFormatApplicable(document, generalSettings.allowedMimeTypes()))
         return;
 
     // Check if file is contained in the current project (if wished)
-    if (generalSettings.autoFormatOnlyCurrentProject.value()) {
+    if (generalSettings.autoFormatOnlyCurrentProject()) {
         const ProjectExplorer::Project *pro = ProjectExplorer::ProjectTree::currentProject();
         if (!pro
             || pro->files([document](const ProjectExplorer::Node *n) {
@@ -165,4 +137,33 @@ void BeautifierPluginPrivate::autoFormatOnSave(Core::IDocument *document)
     }
 }
 
+class BeautifierPlugin final : public ExtensionSystem::IPlugin
+{
+    Q_OBJECT
+    Q_PLUGIN_METADATA(IID "org.qt-project.Qt.QtCreatorPlugin" FILE "Beautifier.json")
+
+    void initialize() final
+    {
+        Core::ActionContainer *menu = Core::ActionManager::createMenu(Constants::MENU_ID);
+        menu->menu()->setTitle(Tr::tr("Bea&utifier"));
+        menu->setOnAllDisabledBehavior(Core::ActionContainer::Show);
+        Core::ActionManager::actionContainer(Core::Constants::M_TOOLS)->addMenu(menu);
+    }
+
+    void extensionsInitialized() final
+    {
+        d = new BeautifierPluginPrivate;
+    }
+
+    ShutdownFlag aboutToShutdown() final
+    {
+        delete d;
+        return SynchronousShutdown;
+    }
+
+    BeautifierPluginPrivate *d = nullptr;
+};
+
 } // Beautifier::Internal
+
+#include "beautifierplugin.moc"
