@@ -14,6 +14,12 @@ using namespace Utils;
 
 namespace Beautifier::Internal {
 
+GeneralSettings &generalSettings()
+{
+    static GeneralSettings settings;
+    return settings;
+}
+
 GeneralSettings::GeneralSettings()
 {
     setId(Constants::OPTION_GENERAL_ID);

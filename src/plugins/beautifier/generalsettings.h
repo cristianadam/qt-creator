@@ -22,4 +22,6 @@ public:
     Utils::StringAspect autoFormatMime{this};
 };
 
+GeneralSettings &generalSettings();
+
 } // Beautifier::Internal
