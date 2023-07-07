@@ -3,6 +3,7 @@
 
 #include "vcpkg_test.h"
 
+#include "vcpkgmanifesteditor.h"
 #include "vcpkgsearch.h"
 
 #include <QTest>
@@ -112,6 +113,72 @@ void VcpkgSearchTest::testVcpkgJsonParser()
     QCOMPARE(mf.description, description);
     QCOMPARE(mf.homepage, homepage);
     QCOMPARE(ok, success);
+}
+
+void VcpkgSearchTest::testAddDependency_data()
+{
+    QTest::addColumn<QString>("originalVcpkgManifestJsonData");
+    QTest::addColumn<QString>("addedPackage");
+    QTest::addColumn<QString>("modifiedVcpkgManifestJsonData");
+
+    QTest::newRow("Existing dependencies")
+        << R"({
+                "name": "cimg",
+                "version": "2.9.9",
+                "description": "The CImg Library is a small, open-source, and modern C++ toolkit for image processing",
+                "homepage": "https://github.com/dtschump/CImg",
+                "dependencies": [
+                  "fmt",
+                  {
+                    "name": "vcpkg-cmake",
+                    "host": true
+                  }
+                ]
+                   })"
+        << "7zip"
+        << R"({
+                "name": "cimg",
+                "version": "2.9.9",
+                "description": "The CImg Library is a small, open-source, and modern C++ toolkit for image processing",
+                "homepage": "https://github.com/dtschump/CImg",
+                "dependencies": [
+                  "fmt",
+                  {
+                    "name": "vcpkg-cmake",
+                    "host": true
+                  },
+                  "7zip"
+                ]
+              })";
+
+    QTest::newRow("Without dependencies")
+        << R"({
+                "name": "cimg",
+                "version": "2.9.9",
+                "description": "The CImg Library is a small, open-source, and modern C++ toolkit for image processing"
+              })"
+        << "7zip"
+        << R"({
+                "name": "cimg",
+                "version": "2.9.9",
+                "description": "The CImg Library is a small, open-source, and modern C++ toolkit for image processing",
+                "homepage": "https://github.com/dtschump/CImg",
+                "dependencies": [
+                  "7zip"
+                ]
+              })";
+}
+
+void VcpkgSearchTest::testAddDependency()
+{
+    QFETCH(QString, originalVcpkgManifestJsonData);
+    QFETCH(QString, addedPackage);
+    QFETCH(QString, modifiedVcpkgManifestJsonData);
+
+    const QByteArray result = addDependencyToManifest(originalVcpkgManifestJsonData.toUtf8(),
+                                                      addedPackage);
+
+    QCOMPARE(QString::fromUtf8(result), modifiedVcpkgManifestJsonData);
 }
 
 } // namespace Vcpkg::Internal

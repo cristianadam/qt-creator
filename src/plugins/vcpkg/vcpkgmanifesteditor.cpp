@@ -152,4 +152,9 @@ VcpkgManifestEditorFactory::VcpkgManifestEditorFactory()
     setUseGenericHighlighter(true);
 }
 
+QByteArray addDependencyToManifest(const QByteArray &manifest, const QString &package)
+{
+    return manifest;
+}
+
 } // namespace Vcpkg::Internal
