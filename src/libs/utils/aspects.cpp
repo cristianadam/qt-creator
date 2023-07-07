@@ -1487,6 +1487,7 @@ QAction *BoolAspect::action()
         m_external = newValue;
         externalToInternal();
         internalToGui();
+        emit changed();
     });
     return act;
 }
