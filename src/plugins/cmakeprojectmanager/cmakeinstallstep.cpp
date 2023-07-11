@@ -36,8 +36,6 @@ public:
 private:
     CommandLine cmakeCommand() const;
 
-    void finish(ProcessResult result) override;
-
     void setupOutputFormatter(OutputFormatter *formatter) override;
     QWidget *createConfigWidget() override;
 
@@ -53,6 +51,7 @@ CMakeInstallStep::CMakeInstallStep(BuildStepList *bsl, Id id)
     m_cmakeArguments->setDisplayStyle(StringAspect::LineEditDisplay);
 
     setCommandLineProvider([this] { return cmakeCommand(); });
+    setDoneHook([this](bool) { emit progress(100, {}); });
 }
 
 void CMakeInstallStep::setupOutputFormatter(OutputFormatter *formatter)
@@ -86,12 +85,6 @@ CommandLine CMakeInstallStep::cmakeCommand() const
         cmd.addArgs(m_cmakeArguments->value(), CommandLine::Raw);
 
     return cmd;
-}
-
-void CMakeInstallStep::finish(ProcessResult result)
-{
-    emit progress(100, {});
-    AbstractProcessStep::finish(result);
 }
 
 QWidget *CMakeInstallStep::createConfigWidget()

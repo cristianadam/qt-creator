@@ -47,7 +47,6 @@ private:
     bool fromMap(const QVariantMap &map) override;
     QWidget *createConfigWidget() override;
     bool init() override;
-    void finish(ProcessResult result) override;
     bool isJobCountSupported() const override { return false; }
 
     FilePath installRoot() const;
@@ -147,6 +146,35 @@ MakeInstallStep::MakeInstallStep(BuildStepList *parent, Id id) : MakeStep(parent
         if (format == OutputFormat::Stderr && string.contains("target 'install'"))
             m_noInstallTarget = true;
     });
+
+    setDoneHook([this](bool success) {
+        if (success) {
+            const FilePath rootDir = makeCommand().withNewPath(installRoot().path()); // FIXME: Needed?
+
+            m_deploymentData = DeploymentData();
+            m_deploymentData.setLocalInstallRoot(rootDir);
+
+            const int startPos = rootDir.path().length();
+
+            const auto appFileNames = transform<QSet<QString>>(buildSystem()->applicationTargets(),
+                [](const BuildTargetInfo &appTarget) { return appTarget.targetFilePath.fileName(); });
+
+            auto handleFile = [this, &appFileNames, startPos](const FilePath &filePath) {
+                const DeployableFile::Type type = appFileNames.contains(filePath.fileName())
+                    ? DeployableFile::TypeExecutable : DeployableFile::TypeNormal;
+                const QString targetDir = filePath.parentDir().path().mid(startPos);
+                m_deploymentData.addFile(filePath, targetDir, type);
+                return IterationPolicy::Continue;
+            };
+            rootDir.iterateDirectory(
+                handleFile, {{}, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories});
+
+            buildSystem()->setDeploymentData(m_deploymentData);
+        } else if (m_noInstallTarget && m_isCmakeProject) {
+            emit addTask(DeploymentTask(Task::Warning, Tr::tr("You need to add an install statement "
+                "to your CMakeLists.txt file for deployment to work.")));
+        }
+    });
 }
 
 QWidget *MakeInstallStep::createConfigWidget()
@@ -201,38 +229,6 @@ bool MakeInstallStep::init()
             .contains("cmake");
 
     return true;
-}
-
-void MakeInstallStep::finish(ProcessResult result)
-{
-    if (isSuccess(result)) {
-        const FilePath rootDir = makeCommand().withNewPath(installRoot().path()); // FIXME: Needed?
-
-        m_deploymentData = DeploymentData();
-        m_deploymentData.setLocalInstallRoot(rootDir);
-
-        const int startPos = rootDir.path().length();
-
-        const auto appFileNames = transform<QSet<QString>>(buildSystem()->applicationTargets(),
-            [](const BuildTargetInfo &appTarget) { return appTarget.targetFilePath.fileName(); });
-
-        auto handleFile = [this, &appFileNames, startPos](const FilePath &filePath) {
-            const DeployableFile::Type type = appFileNames.contains(filePath.fileName())
-                ? DeployableFile::TypeExecutable
-                : DeployableFile::TypeNormal;
-            const QString targetDir = filePath.parentDir().path().mid(startPos);
-            m_deploymentData.addFile(filePath, targetDir, type);
-            return IterationPolicy::Continue;
-        };
-        rootDir.iterateDirectory(handleFile,
-                                 {{}, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories});
-
-        buildSystem()->setDeploymentData(m_deploymentData);
-    } else if (m_noInstallTarget && m_isCmakeProject) {
-        emit addTask(DeploymentTask(Task::Warning, Tr::tr("You need to add an install statement "
-                   "to your CMakeLists.txt file for deployment to work.")));
-    }
-    MakeStep::finish(result);
 }
 
 FilePath MakeInstallStep::installRoot() const
