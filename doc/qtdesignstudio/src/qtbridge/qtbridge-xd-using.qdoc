@@ -123,6 +123,18 @@
             antialiasing : true
             width: parent.width / 2
             \endcode
+
+        \li In the \uicontrol {Snippet} field, specify component to be added as child under this
+            compponent. 
+            Following example adds a Connection component:
+            \code
+            Connections {
+                target: myItem
+                onVisibleChanged: console.log(original_Text.visible)
+            }
+            \endcode
+            \note The code must have a root Component(for e.g. Item, MouseArea, Connections etc.)
+            with a valid syntax.
             
         \li Select the \uicontrol Clip check box to enable clipping in the
             component generated from the layer. The generated component will clip
