@@ -1,0 +1,173 @@
+// Copyright (C) 2023 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \previouspage studio-features-on-mcu-projects.html
+    \page studio-app-for-mcus.html
+    \nextpage studio-help.html
+
+    \title Creating an Application for MCUs
+
+    Use the \QMCU preset in the \QDS wizard to set up a new \QMCU project. When
+    you create a project with the wizard, all the necessary files are created,
+    you can adjust the project settings, and save custom presets.
+
+    \image studio-preset-for-mcus.png
+
+    Using the \QMCU preset creates an application that uses a subset of the
+    default components that you can deploy, run, and debug on MCU boards.
+
+    \note For more information on the default components available for MCU
+    projects, see \l {Qt Design Studio Features on MCU Projects}.
+
+    \section1 Creating an MCU Project
+
+    To create an MCU project:
+
+    \list 1
+        \li Select \uicontrol {File} > \uicontrol {New Project}.
+        \li In the \uicontrol {Presets} tab, select the \uicontrol {\QMCU} preset.
+        \list
+        \li In the \uicontrol {Details} tab:
+        \li Select the path for the project files. You can move the project
+        folders later.
+        \li Set the screen resolution and orientation for previewing the UI on
+        the desktop or on a device. This determines the screen size. You can
+        change the screen size later in \l {Properties}.
+        \endlist
+        \li Select \uicontrol {Create} to create the project.
+    \endlist
+
+        \QDS creates the following files and folders:
+
+    \list
+        \li .qmlproject project file defines that all component, JavaScript, and
+            image files in the project folder belong to the project. Therefore,
+            you do not need to individually list all the files in the project.
+        \li .qml file defines the functionality and appearance of a component.
+        \li \e Screen01.ui.qml defines a custom component that you can edit in
+            the \l {2D} view. For more information, see \l {UI Files}.
+
+            By default, this is the main file in the project, but you can
+            change that in the .qmlproject file. While the custom component
+            is a good starting point for new users, you don't have to use it.
+            Specifically, if you export and import designs using \QB, your main
+            file is most likely called something else. For more information,
+            see \l {Exporting from Design Tools}.
+
+            \note For MCU projects you can only import 2D assets.
+        \li \e CMakeLists.txt project configuration file allowing you to
+            share your project as a fully working C++ application with
+            developers.
+        \li qtquickcontrols2.conf file specifies the preferred style and some
+            style-specific arguments.
+        \li \e fonts folder contains font files that you have added in
+            \uicontrol Assets.
+        \li \e imports folder contains a \e {Constants.qml} file that specifies
+            a font loader for the Arial font and the screen resolution. The size
+            of the default Screen.ui.qml \l{basic-rectangle}{Rectangle} should
+            be set as \c {width: Constants.width & height: Constants.height} so
+            that it inherits the global resolution saved here.
+        \li \e MCUDefaultStyle folder contains the default UI images and
+            components available for MCU projects.
+    \endlist
+
+    To use JavaScript and image files in the UI, select
+    \uicontrol Assets > \inlineimage icons/plus.png
+    .
+
+    \section1 Using Custom Presets
+
+    You can save project settings as custom presets. All saved custom presets
+    are available on the \uicontrol Custom tab in the
+    \uicontrol {Create Project} wizard. You cannot modify custom presets once
+    you have created them.
+
+    To create a custom preset:
+    \list 1
+        \li In the \uicontrol {Create Project} wizard, set the details
+        you want to use.
+        \li Select \uicontrol {Save Custom Preset} and give a name for the custom
+        preset.
+    \endlist
+
+    \section1 Adding Files to Projects
+
+    You can use wizard templates to add individual files to projects.
+
+    The wizard templates in the \uicontrol {Qt Quick Controls} category create
+    stylable versions of the components in the \uicontrol {Qt Quick Controls}
+    module. For more information, see \l{Creating Custom Controls}.
+
+    You can create the following types of files:
+
+    \table
+    \header
+        \li Category
+        \li Wizard Template
+        \li Purpose
+    \row
+        \li {1,5} Qt Quick Files
+        \li Flow Item and Flow View
+        \li Generate components that you can use to design the
+            \l{Designing Application Flows}{application flow}.
+    \row
+        \li Qt Quick File
+        \li Generates a component with one of the following default components
+            or \l{Using Positioners}{positioners} as the root component:
+            \l {basic-item}{Item}, \l {basic-rectangle}{Rectangle}, \l {Images}
+            {Image}, \l {Border Image}, \l Flickable, Row, Column, Flow, or
+            Grid.
+    \row
+        \li Qt Quick UI File
+        \li Generates a UI file with one of the above components as the root
+            component.
+    \row
+        \li Qt Quick Views
+        \li Generates a Grid View or a List View. For more information, see
+            \l{List and Grid Views}.
+    \row
+        \li Qt Quick UI Form
+        \li Creates a UI file along with a matching QML file for
+            implementation purposes.
+    \row
+        \li {1,9} Qt Quick Controls
+        \li Custom Button
+        \li Creates a \l {Button}{push button} with a text label.
+    \row
+        \li Custom \CheckBox
+        \li Creates a \l {Check Box}{check box}.
+    \row
+        \li Custom Dial
+        \li Creates a \l {Slider and Dial}{dial}.
+    \row
+        \li Custom Slider
+        \li Creates a \l {Slider and Dial}{slider}.
+    \row
+        \li Custom \SpinBox
+        \li Creates a \l {Spin Box}{spin box}.
+    \row
+        \li Custom Switch
+        \li Creates a \l {Switch}{switch} with on and off states.
+    \row
+        \li \l Pane
+        \li Provides a background that matches the UI style and theme.
+    \row
+        \li Stacked Layout
+        \li Provides a stack-based navigation model.
+    \row
+        \li SwipeView
+        \li Enables users to navigate pages by swiping sideways.
+    \row
+        \li QML Files
+        \li ListModel
+        \li Adds a \l{Editing List Models}{list model} to the project.
+    \row
+        \li JavaScript
+        \li JavaScript File
+        \li Generates files that you can use to write the application logic.
+            This is useful for testing the application before the developers
+            implement the application logic in C++, for example. For more
+            information, see \l {Simulating Application Logic}.
+    \endtable
+*/
