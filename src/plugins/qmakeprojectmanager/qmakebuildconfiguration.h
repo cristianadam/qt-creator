@@ -5,8 +5,10 @@
 
 #include "qmakeprojectmanager_global.h"
 
+#include <projectexplorer/buildaspects.h>
 #include <projectexplorer/buildconfiguration.h>
 #include <qtsupport/baseqtversion.h>
+#include <qtsupport/qtbuildaspects.h>
 
 #include <utils/aspects.h>
 
@@ -76,14 +78,14 @@ public:
                                          const Utils::FilePath &buildDir);
     bool isBuildDirAtSafeLocation() const;
 
-    Utils::TriState separateDebugInfo() const;
     void forceSeparateDebugInfo(bool sepDebugInfo);
-
-    Utils::TriState qmlDebugging() const;
     void forceQmlDebugging(bool enable);
-
-    Utils::TriState useQtQuickCompiler() const;
     void forceQtQuickCompiler(bool enable);
+
+    ProjectExplorer::SeparateDebugInfoAspect separateDebugInfo{this};
+    QtSupport::QmlDebuggingAspect qmlDebugging{this};
+    QtSupport::QtQuickCompilerAspect useQtQuickCompiler{this};
+    Utils::SelectionAspect runSystemFuctions{this};
 
     bool runSystemFunction() const;
 
