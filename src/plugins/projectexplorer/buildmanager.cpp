@@ -854,7 +854,7 @@ bool BuildManager::buildLists(const QList<BuildStepList *> bsls, const QStringLi
         return false;
     }
 
-    if (CompileOutputSettings::instance().popUp())
+    if (compileOutputSettings().popUp())
         d->m_outputWindow->popup(IOutputPane::NoModeSwitch);
     startBuildQueue();
     return true;
@@ -867,7 +867,7 @@ void BuildManager::appendStep(BuildStep *step, const QString &name)
         d->m_outputWindow->popup(IOutputPane::NoModeSwitch);
         return;
     }
-    if (CompileOutputSettings::instance().popUp())
+    if (compileOutputSettings().popUp())
         d->m_outputWindow->popup(IOutputPane::NoModeSwitch);
     startBuildQueue();
 }
