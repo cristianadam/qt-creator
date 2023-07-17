@@ -36,5 +36,4 @@ public:
 
 CppcheckSettings &settings();
 
-
 } // Cppcheck::Internal
