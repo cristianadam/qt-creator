@@ -4,7 +4,6 @@
 #pragma once
 
 #include "celliterator.h"
-#include "shellintegration.h"
 
 #include <QKeyEvent>
 #include <QSize>
@@ -12,9 +11,10 @@
 
 #include <memory>
 
-namespace Terminal::Internal {
+namespace TerminalSolution {
 
 class Scrollback;
+class SurfaceIntegration;
 
 struct TerminalSurfacePrivate;
 
@@ -50,7 +50,7 @@ class TerminalSurface : public QObject
     Q_OBJECT;
 
 public:
-    TerminalSurface(QSize initialGridSize, ShellIntegration *shellIntegration);
+    TerminalSurface(QSize initialGridSize);
     ~TerminalSurface();
 
 public:
@@ -93,7 +93,8 @@ public:
 
     Cursor cursor() const;
 
-    ShellIntegration *shellIntegration() const;
+    SurfaceIntegration *surfaceIntegration() const;
+    void setSurfaceIntegration(SurfaceIntegration *surfaceIntegration);
 
 signals:
     void writeToPty(const QByteArray &data);
@@ -102,11 +103,9 @@ signals:
     void cursorChanged(Cursor oldCursor, Cursor newCursor);
     void altscreenChanged(bool altScreen);
     void unscroll();
-    void bell();
-    void titleChanged(const QString &title);
 
 private:
     std::unique_ptr<TerminalSurfacePrivate> d;
 };
 
-} // namespace Terminal::Internal
+} // namespace TerminalSolution

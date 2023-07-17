@@ -71,6 +71,11 @@ void setupColor(TerminalSettings *settings,
     color.setDefaultValue(defaultColor);
     color.setToolTip(Tr::tr("The color used for %1.").arg(label));
 
+    QObject::connect(&color, &ColorAspect::changed, [] {
+        //
+        qDebug() << "Color changed";
+    });
+
     settings->registerAspect(&color);
 }
 

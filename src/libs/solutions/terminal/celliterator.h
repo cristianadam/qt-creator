@@ -7,7 +7,7 @@
 
 #include <QPoint>
 
-namespace Terminal::Internal {
+namespace TerminalSolution {
 
 class TerminalSurface;
 
@@ -94,4 +94,4 @@ private:
     mutable std::u32string::value_type m_char;
 };
 
-} // namespace Terminal::Internal
+} // namespace TerminalSolution

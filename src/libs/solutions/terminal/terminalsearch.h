@@ -3,37 +3,32 @@
 
 #pragma once
 
-#include <terminal/terminalsurface.h>
-
-#include <solutions/terminal/terminalview.h>
-
-#include <coreplugin/find/ifindsupport.h>
-#include <coreplugin/find/textfindconstants.h>
+#include "terminalsurface.h"
 
 #include <QTimer>
 
 namespace Terminal {
 
-struct SearchHitWithText : TerminalSolution::SearchHit
+struct SearchHitWithText : SearchHit
 {
     QString text;
 };
 
-class TerminalSearch : public Core::IFindSupport
+class TerminalSearch
 {
     Q_OBJECT
 public:
-    TerminalSearch(TerminalSolution::TerminalSurface *surface);
+    TerminalSearch(Internal::TerminalSurface *surface);
 
     void setCurrentSelection(std::optional<SearchHitWithText> selection);
     void setSearchString(const QString &searchString, Utils::FindFlags findFlags);
     void nextHit();
     void previousHit();
 
-    const QList<TerminalSolution::SearchHit> &hits() const { return m_hits; }
-    TerminalSolution::SearchHit currentHit() const
+    const QList<SearchHit> &hits() const { return m_hits; }
+    SearchHit currentHit() const
     {
-        return m_currentHit >= 0 ? m_hits.at(m_currentHit) : TerminalSolution::SearchHit{};
+        return m_currentHit >= 0 ? m_hits.at(m_currentHit) : SearchHit{};
     }
 
 public:
@@ -55,17 +50,17 @@ signals:
 protected:
     void updateHits();
     void debouncedUpdateHits();
-    QList<TerminalSolution::SearchHit> search();
-    QList<TerminalSolution::SearchHit> searchRegex();
+    QList<SearchHit> search();
+    QList<SearchHit> searchRegex();
 
 private:
     std::optional<SearchHitWithText> m_currentSelection;
     QString m_currentSearchString;
     Utils::FindFlags m_findFlags;
-    TerminalSolution::TerminalSurface *m_surface;
+    Internal::TerminalSurface *m_surface;
 
     int m_currentHit{-1};
-    QList<TerminalSolution::SearchHit> m_hits;
+    QList<SearchHit> m_hits;
     QTimer m_debounceTimer;
 };
 
