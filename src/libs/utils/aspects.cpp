@@ -1328,17 +1328,12 @@ FilePath FilePathAspect::operator()() const
     return FilePath::fromUserInput(StringAspect::value());
 }
 
-FilePath FilePathAspect::value() const
-{
-    return FilePath::fromUserInput(StringAspect::value());
-}
-
 FilePath FilePathAspect::expandedValue() const
 {
     return FilePath::fromUserInput(StringAspect::value());
 }
 
-QString FilePathAspect::stringValue() const
+QString FilePathAspect::value() const
 {
     return StringAspect::value();
 }
