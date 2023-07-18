@@ -121,6 +121,7 @@ public:
     QList<ModelNode> allModelNodes() const;
     QList<ModelNode> allModelNodesUnordered() const;
     QList<ModelNode> allModelNodesOfType(const NodeMetaInfo &typeName) const;
+    QList<ModelNode> allModelNodesWithId() const;
 
     void emitDocumentMessage(const QList<DocumentMessage> &errors, const QList<DocumentMessage> &warnings = {});
     void emitDocumentMessage(const QString &error);

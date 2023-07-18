@@ -639,6 +639,11 @@ QList<ModelNode> AbstractView::allModelNodesOfType(const NodeMetaInfo &type) con
                            [&](const ModelNode &node) { return node.metaInfo().isBasedOn(type); });
 }
 
+QList<ModelNode> AbstractView::allModelNodesWithId() const
+{
+    return Utils::filtered(allModelNodes(), [&](const ModelNode &node) { return node.hasId(); });
+}
+
 void AbstractView::emitDocumentMessage(const QString &error)
 {
     emitDocumentMessage({DocumentMessage(error)});
