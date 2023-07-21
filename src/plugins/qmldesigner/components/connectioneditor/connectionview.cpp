@@ -8,6 +8,7 @@
 #include "bindingmodel.h"
 #include "connectionmodel.h"
 #include "dynamicpropertiesmodel.h"
+#include "propertytreemodel.h"
 #include "theme.h"
 
 #include <bindingproperty.h>
@@ -24,9 +25,11 @@
 
 #include <utils/qtcassert.h>
 
+#include <QListView>
 #include <QQmlEngine>
 #include <QShortcut>
 #include <QTableView>
+#include <QTreeView>
 
 namespace QmlDesigner {
 
@@ -125,7 +128,8 @@ ConnectionView::ConnectionView(ExternalDependenciesInterface &externalDependenci
     : AbstractView{externalDependencies}, m_connectionViewWidget(new ConnectionViewWidget()),
       m_connectionModel(new ConnectionModel(this)), m_bindingModel(new BindingModel(this)),
       m_dynamicPropertiesModel(new DynamicPropertiesModel(false, this)),
-      m_backendModel(new BackendModel(this)),
+      m_backendModel(new BackendModel(this)), m_propertyTreeModel(new PropertyTreeModel(this)),
+      m_propertyListProxyModel(new PropertyListProxyModel(m_propertyTreeModel)),
       m_connectionViewQuickWidget(new ConnectionViewQuickWidget(this))
 {
     connectionViewWidget()->setBindingModel(m_bindingModel);
@@ -137,8 +141,9 @@ ConnectionView::ConnectionView(ExternalDependenciesInterface &externalDependenci
 ConnectionView::~ConnectionView()
 {
     // Ensure that QML is deleted first to avoid calling back to C++.
-    delete m_connectionViewQuickWidget.data();
+    //delete m_connectionViewQuickWidget.data();
 }
+
 void ConnectionView::modelAttached(Model *model)
 {
     AbstractView::modelAttached(model);
@@ -147,6 +152,16 @@ void ConnectionView::modelAttached(Model *model)
     connectionModel()->resetModel();
     connectionViewWidget()->resetItemViews();
     backendModel()->resetModel();
+    m_propertyTreeModel->resetModel();
+    //m_propertyListProxyModel->setRowandInternalId(0, -1);
+    m_propertyListProxyModel->setRowandInternalId(0, 0);
+    qDebug() << Q_FUNC_INFO << m_propertyListProxyModel->rowCount();
+    qDebug() << "fi 1"
+             << m_propertyListProxyModel->data(m_propertyListProxyModel->index(0, 0),
+                                               Qt::DisplayRole);
+    qDebug() << "fi 2"
+             << m_propertyListProxyModel->data(m_propertyListProxyModel->index(1, 0),
+                                               Qt::DisplayRole);
 }
 
 void ConnectionView::modelAboutToBeDetached(Model *model)
@@ -297,11 +312,23 @@ void ConnectionView::currentStateChanged(const ModelNode &)
 WidgetInfo ConnectionView::widgetInfo()
 {
     /* Enable new connection editor here */
-    const bool newEditor = false;
+    const bool newEditor = true;
 
     QWidget *widget = m_connectionViewWidget.data();
     if (newEditor)
         widget = m_connectionViewQuickWidget.data();
+
+    auto tree = new QTreeView;
+    auto list = new QListView;
+
+    tree->setModel(m_propertyTreeModel);
+    list->setModel(m_propertyListProxyModel);
+    tree->setModel(m_propertyListProxyModel);
+
+    tree->expand(tree->rootIndex());
+
+    widget = tree;
+    widget = list;
 
     return createWidgetInfo(widget,
                             QLatin1String("ConnectionView"),
