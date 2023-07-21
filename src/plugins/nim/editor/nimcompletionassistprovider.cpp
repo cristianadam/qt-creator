@@ -130,7 +130,7 @@ private:
 
     static Suggest::NimSuggest *nimSuggestInstance(const AssistInterface *interface)
     {
-        return Nim::Suggest::NimSuggestCache::instance().get(interface->filePath());
+        return Nim::Suggest::getFromCache(interface->filePath());
     }
 
     static std::shared_ptr<Suggest::NimSuggestClientRequest> sendRequest(const AssistInterface *interface,
