@@ -24,12 +24,17 @@ public:
 
     void resetToDefault();
 
+    QWidget *createPerfConfigWidget();
+
     Utils::IntegerAspect period{this};
     Utils::IntegerAspect stackSize{this};
     Utils::SelectionAspect sampleMode{this};
     Utils::SelectionAspect callgraphMode{this};
     Utils::StringListAspect events{this};
     Utils::StringAspect extraArguments{this};
+
+private:
+    ProjectExplorer::Target *m_target = nullptr;
 };
 
 PerfSettings &globalSettings();
