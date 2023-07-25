@@ -108,7 +108,7 @@ ConfigurationDialog::ConfigurationDialog(QWidget *parent)
 
 ConfigurationDialog::~ConfigurationDialog() = default;
 
-void ConfigurationDialog::setSettings(AbstractSettings *settings)
+void ConfigurationDialog::setSettings(BeautifierTool *settings)
 {
     m_settings = settings;
     m_editor->setSettings(m_settings);

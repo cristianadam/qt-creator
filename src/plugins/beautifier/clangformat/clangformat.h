@@ -19,7 +19,19 @@ public:
     QString id() const override;
     void updateActions(Core::IEditor *editor) override;
     TextEditor::Command textCommand() const override;
-    bool isApplicable(const Core::IDocument *document) const override;
+
+    void createDocumentationFile() const override;
+
+    QStringList completerWords() override;
+
+    Utils::BoolAspect usePredefinedStyle{this};
+    Utils::SelectionAspect predefinedStyle{this};
+    Utils::SelectionAspect fallbackStyle{this};
+    Utils::StringAspect customStyle{this};
+
+    Utils::FilePath styleFileName(const QString &key) const override;
+
+    void readStyles() override;
 
 private:
     void formatFile();

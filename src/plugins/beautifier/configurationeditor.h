@@ -18,7 +18,7 @@ QT_END_NAMESPACE
 
 namespace Beautifier::Internal {
 
-class AbstractSettings;
+class BeautifierTool;
 
 class ConfigurationSyntaxHighlighter : public QSyntaxHighlighter
 {
@@ -43,7 +43,7 @@ class ConfigurationEditor : public QPlainTextEdit
 
 public:
     explicit ConfigurationEditor(QWidget *parent = nullptr);
-    void setSettings(AbstractSettings *settings);
+    void setSettings(BeautifierTool *settings);
     void setCommentExpression(const QRegularExpression &rx);
 
 protected:
@@ -58,7 +58,7 @@ private:
     void updateDocumentation();
     QTextCursor cursorForTextUnderCursor(QTextCursor tc = QTextCursor()) const;
 
-    AbstractSettings *m_settings = nullptr;
+    BeautifierTool *m_settings = nullptr;
     QCompleter *m_completer;
     QStringListModel *m_model;
     ConfigurationSyntaxHighlighter *m_highlighter;

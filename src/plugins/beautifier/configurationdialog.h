@@ -14,7 +14,7 @@ QT_END_NAMESPACE
 
 namespace Beautifier::Internal {
 
-class AbstractSettings;
+class BeautifierTool;
 class ConfigurationEditor;
 
 class ConfigurationDialog : public QDialog
@@ -22,7 +22,7 @@ class ConfigurationDialog : public QDialog
 public:
     explicit ConfigurationDialog(QWidget *parent = nullptr);
     ~ConfigurationDialog() override;
-    void setSettings(AbstractSettings *settings);
+    void setSettings(BeautifierTool *settings);
 
     void clear();
     QString key() const;
@@ -33,7 +33,7 @@ private:
     void updateOkButton();
     void updateDocumentation(const QString &word = QString(), const QString &docu = QString());
 
-    AbstractSettings *m_settings = nullptr;
+    BeautifierTool *m_settings = nullptr;
     QString m_currentKey;
 
     QLineEdit *m_name;

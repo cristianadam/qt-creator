@@ -12,7 +12,7 @@ QT_END_NAMESPACE
 
 namespace Beautifier::Internal {
 
-class AbstractSettings;
+class BeautifierTool;
 
 class ConfigurationPanel : public QWidget
 {
@@ -22,7 +22,7 @@ public:
     explicit ConfigurationPanel(QWidget *parent = nullptr);
     ~ConfigurationPanel() override;
 
-    void setSettings(AbstractSettings *settings);
+    void setSettings(BeautifierTool *settings);
     void setCurrentConfiguration(const QString &text);
     QString currentConfiguration() const;
 
@@ -33,7 +33,7 @@ private:
     void updateButtons();
     void populateConfigurations(const QString &key = QString());
 
-    AbstractSettings *m_settings = nullptr;
+    BeautifierTool *m_settings = nullptr;
 
     QComboBox *m_configurations;
     QPushButton *m_edit;
