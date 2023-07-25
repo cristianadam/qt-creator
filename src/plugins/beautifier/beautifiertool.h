@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include <coreplugin/dialogs/ioptionspage.h>
-
 #include <texteditor/command.h>
 
 #include <utils/aspects.h>
@@ -79,9 +77,10 @@ public:
     QStringList options();
     QString documentation(const QString &option) const;
 
+    bool isApplicable(const Core::IDocument *document) const;
+
 protected:
     void setVersionRegExp(const QRegularExpression &versionRegExp);
-    bool isApplicable(const Core::IDocument *document) const;
 
     QMap<QString, QString> m_styles;
     QString m_ending;

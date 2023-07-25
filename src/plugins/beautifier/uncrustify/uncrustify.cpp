@@ -14,6 +14,7 @@
 #include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/actionmanager/command.h>
 #include <coreplugin/coreconstants.h>
+#include <coreplugin/dialogs/ioptionspage.h>
 #include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/editormanager/ieditor.h>
 #include <coreplugin/icore.h>
@@ -232,21 +233,6 @@ public:
     }
 };
 
-class UncrustifyOptionsPage final : public Core::IOptionsPage
-{
-public:
-    UncrustifyOptionsPage()
-    {
-        setId("Uncrustify");
-        setDisplayName(uDisplayName());
-        setCategory(Constants::OPTION_CATEGORY);
-        setWidgetCreator([] { return new UncrustifyOptionsPageWidget; });
-    }
-};
-
-const UncrustifyOptionsPage settingsPage;
-
-
 QString Uncrustify::id() const
 {
     return "Uncrustify";
@@ -356,5 +342,23 @@ Command Uncrustify::textCommand(const FilePath &cfgFile, bool fragment) const
     cmd.addOption(cfgFile.path());
     return cmd;
 }
+
+
+// UncrustifySettingsPage
+
+class UncrustifySettingsPage final : public Core::IOptionsPage
+{
+public:
+    UncrustifySettingsPage()
+    {
+        setId("Uncrustify");
+        setDisplayName(uDisplayName());
+        setCategory(Constants::OPTION_CATEGORY);
+        setWidgetCreator([] { return new UncrustifyOptionsPageWidget; });
+    }
+};
+
+const UncrustifySettingsPage settingsPage;
+
 
 } // Beautifier::Internal

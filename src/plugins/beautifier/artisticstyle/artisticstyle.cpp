@@ -14,6 +14,7 @@
 #include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/actionmanager/command.h>
 #include <coreplugin/coreconstants.h>
+#include <coreplugin/dialogs/ioptionspage.h>
 #include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/editormanager/ieditor.h>
 #include <coreplugin/icore.h>
@@ -231,21 +232,6 @@ public:
     }
 };
 
-class ArtisticStyleOptionsPage final : public Core::IOptionsPage
-{
-public:
-    ArtisticStyleOptionsPage()
-    {
-        setId("ArtisticStyle");
-        setDisplayName(asDisplayName());
-        setCategory(Constants::OPTION_CATEGORY);
-        setWidgetCreator([] { return new ArtisticStyleOptionsPageWidget; });
-    }
-};
-
-const ArtisticStyleOptionsPage settingsPage;
-
-
 // Style
 
 QString ArtisticStyle::id() const
@@ -329,5 +315,21 @@ Command ArtisticStyle::textCommand(const QString &cfgFile) const
 
     return cmd;
 }
+
+// ArtisticStyleSettingsPage
+
+class ArtisticStyleSettingsPage final : public Core::IOptionsPage
+{
+public:
+    ArtisticStyleSettingsPage()
+    {
+        setId("ArtisticStyle");
+        setDisplayName(asDisplayName());
+        setCategory(Constants::OPTION_CATEGORY);
+        setWidgetCreator([] { return new ArtisticStyleOptionsPageWidget; });
+    }
+};
+
+const ArtisticStyleSettingsPage settingsPage;
 
 } // Beautifier::Internal
