@@ -81,7 +81,7 @@ ConfigurationEditor::ConfigurationEditor(QWidget *parent) :
             this, &ConfigurationEditor::updateDocumentation);
 }
 
-void ConfigurationEditor::setSettings(AbstractSettings *settings)
+void ConfigurationEditor::setSettings(BeautifierTool *settings)
 {
     QTC_ASSERT(settings, return);
     m_settings = settings;

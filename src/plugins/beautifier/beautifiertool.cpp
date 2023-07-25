@@ -139,11 +139,12 @@ private:
     QVersionNumber m_versionNumber;
 };
 
-AbstractSettings::AbstractSettings(const QString &name, const QString &ending)
-    : m_ending(ending)
-    , m_styleDir(Core::ICore::userResourcePath(Beautifier::Constants::SETTINGS_DIRNAME)
-                     .pathAppended(name))
+void BeautifierTool::setupAbstractSettings(const QString &name, const QString &ending)
 {
+    m_ending = ending;
+    m_styleDir = Core::ICore::userResourcePath(Beautifier::Constants::SETTINGS_DIRNAME)
+                     .pathAppended(name);
+
     setSettingsGroups(Utils::Constants::BEAUTIFIER_SETTINGS_GROUP, name);
     setAutoApply(false);
 
@@ -176,31 +177,29 @@ AbstractSettings::AbstractSettings(const QString &name, const QString &ending)
     connect(&command, &BaseAspect::changed, this, [this] { m_version = {}; version(); });
 }
 
-AbstractSettings::~AbstractSettings() = default;
-
-QStringList AbstractSettings::completerWords()
+QStringList BeautifierTool::completerWords()
 {
     return QStringList();
 }
 
-QStringList AbstractSettings::styles() const
+QStringList BeautifierTool::styles() const
 {
     QStringList list = m_styles.keys();
     list.sort(Qt::CaseInsensitive);
     return list;
 }
 
-QString AbstractSettings::style(const QString &key) const
+QString BeautifierTool::style(const QString &key) const
 {
     return m_styles.value(key);
 }
 
-bool AbstractSettings::styleExists(const QString &key) const
+bool BeautifierTool::styleExists(const QString &key) const
 {
     return m_styles.contains(key);
 }
 
-bool AbstractSettings::styleIsReadOnly(const QString &key)
+bool BeautifierTool::styleIsReadOnly(const QString &key)
 {
     const FilePath filePath = m_styleDir.pathAppended(key + m_ending);
     if (!filePath.exists()) {
@@ -213,19 +212,19 @@ bool AbstractSettings::styleIsReadOnly(const QString &key)
     return !filePath.isWritableFile();
 }
 
-void AbstractSettings::setStyle(const QString &key, const QString &value)
+void BeautifierTool::setStyle(const QString &key, const QString &value)
 {
     m_styles.insert(key, value);
     m_changedStyles.insert(key);
 }
 
-void AbstractSettings::removeStyle(const QString &key)
+void BeautifierTool::removeStyle(const QString &key)
 {
     m_styles.remove(key);
     m_stylesToRemove << key;
 }
 
-void AbstractSettings::replaceStyle(const QString &oldKey, const QString &newKey,
+void BeautifierTool::replaceStyle(const QString &oldKey, const QString &newKey,
                                     const QString &value)
 {
     // Set value regardles if keys are equal
@@ -237,12 +236,12 @@ void AbstractSettings::replaceStyle(const QString &oldKey, const QString &newKey
     m_changedStyles.insert(newKey);
 }
 
-FilePath AbstractSettings::styleFileName(const QString &key) const
+FilePath BeautifierTool::styleFileName(const QString &key) const
 {
     return m_styleDir.pathAppended(key + m_ending);
 }
 
-QVersionNumber AbstractSettings::version() const
+QVersionNumber BeautifierTool::version() const
 {
     if (m_version.isNull()) {
         VersionUpdater updater;
@@ -253,12 +252,12 @@ QVersionNumber AbstractSettings::version() const
     return m_version;
 }
 
-void AbstractSettings::setVersionRegExp(const QRegularExpression &versionRegExp)
+void BeautifierTool::setVersionRegExp(const QRegularExpression &versionRegExp)
 {
     m_versionRegExp = versionRegExp;
 }
 
-bool AbstractSettings::isApplicable(const Core::IDocument *document) const
+bool BeautifierTool::isApplicable(const Core::IDocument *document) const
 {
     if (!document)
         return false;
@@ -272,7 +271,7 @@ bool AbstractSettings::isApplicable(const Core::IDocument *document) const
     });
 }
 
-QStringList AbstractSettings::options()
+QStringList BeautifierTool::options()
 {
     if (m_options.isEmpty())
         readDocumentation();
@@ -280,7 +279,7 @@ QStringList AbstractSettings::options()
     return m_options.keys();
 }
 
-QString AbstractSettings::documentation(const QString &option) const
+QString BeautifierTool::documentation(const QString &option) const
 {
     const int index = m_options.value(option, -1);
     if (index != -1)
@@ -289,7 +288,7 @@ QString AbstractSettings::documentation(const QString &option) const
         return QString();
 }
 
-void AbstractSettings::save()
+void BeautifierTool::save()
 {
     // Save settings, except styles
     AspectContainer::writeSettings();
@@ -345,12 +344,12 @@ void AbstractSettings::save()
     m_changedStyles.clear();
 }
 
-void AbstractSettings::createDocumentationFile() const
+void BeautifierTool::createDocumentationFile() const
 {
     // Could be reimplemented to create a documentation file.
 }
 
-void AbstractSettings::read()
+void BeautifierTool::read()
 {
     // Read settings, except styles
     AspectContainer::readSettings();
@@ -361,7 +360,7 @@ void AbstractSettings::read()
     readStyles();
 }
 
-void AbstractSettings::readDocumentation()
+void BeautifierTool::readDocumentation()
 {
     const FilePath filename = documentationFilePath;
     if (filename.isEmpty()) {
@@ -419,7 +418,7 @@ void AbstractSettings::readDocumentation()
     }
 }
 
-void AbstractSettings::readStyles()
+void BeautifierTool::readStyles()
 {
     if (!m_styleDir.exists())
         return;

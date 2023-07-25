@@ -47,69 +47,89 @@ namespace Beautifier::Internal {
 
 const char SETTINGS_NAME[]               = "clangformat";
 
-class ClangFormatSettings : public AbstractSettings
+// ClangFormat
+
+static ClangFormat *s_clangFormat = nullptr;
+
+ClangFormat::ClangFormat()
 {
-public:
-    ClangFormatSettings()
-        : AbstractSettings(SETTINGS_NAME, ".clang-format")
-    {
-        command.setDefaultValue("clang-format");
-        command.setPromptDialogTitle(BeautifierTool::msgCommandPromptDialogTitle("Clang Format"));
-        command.setLabelText(Tr::tr("Clang Format command:"));
+    s_clangFormat = this;
 
-        usePredefinedStyle.setSettingsKey("usePredefinedStyle");
-        usePredefinedStyle.setLabelText(Tr::tr("Use predefined style:"));
-        usePredefinedStyle.setDefaultValue(true);
+    Core::ActionContainer *menu = Core::ActionManager::createMenu("ClangFormat.Menu");
+    menu->menu()->setTitle(Tr::tr("&ClangFormat"));
 
-        predefinedStyle.setSettingsKey("predefinedStyle");
-        predefinedStyle.setDisplayStyle(SelectionAspect::DisplayStyle::ComboBox);
-        predefinedStyle.addOption("LLVM");
-        predefinedStyle.addOption("Google");
-        predefinedStyle.addOption("Chromium");
-        predefinedStyle.addOption("Mozilla");
-        predefinedStyle.addOption("WebKit");
-        predefinedStyle.addOption("File");
-        predefinedStyle.setDefaultValue("LLVM");
+    m_formatFile = new QAction(msgFormatCurrentFile(), this);
+    Core::Command *cmd
+            = Core::ActionManager::registerAction(m_formatFile, "ClangFormat.FormatFile");
+    menu->addAction(cmd);
+    connect(m_formatFile, &QAction::triggered, this, &ClangFormat::formatFile);
 
-        fallbackStyle.setSettingsKey("fallbackStyle");
-        fallbackStyle.setDisplayStyle(SelectionAspect::DisplayStyle::ComboBox);
-        fallbackStyle.addOption("Default");
-        fallbackStyle.addOption("None");
-        fallbackStyle.addOption("LLVM");
-        fallbackStyle.addOption("Google");
-        fallbackStyle.addOption("Chromium");
-        fallbackStyle.addOption("Mozilla");
-        fallbackStyle.addOption("WebKit");
-        fallbackStyle.setDefaultValue("Default");
+    m_formatLines = new QAction(msgFormatLines(), this);
+    cmd = Core::ActionManager::registerAction(m_formatLines, "ClangFormat.FormatLines");
+    menu->addAction(cmd);
+    connect(m_formatLines, &QAction::triggered, this, &ClangFormat::formatLines);
 
-        predefinedStyle.setSettingsKey("predefinedStyle");
-        predefinedStyle.setDefaultValue("LLVM");
+    m_formatRange = new QAction(msgFormatAtCursor(), this);
+    cmd = Core::ActionManager::registerAction(m_formatRange, "ClangFormat.FormatAtCursor");
+    menu->addAction(cmd);
+    connect(m_formatRange, &QAction::triggered, this, &ClangFormat::formatAtCursor);
 
-        customStyle.setSettingsKey("customStyle");
+    m_disableFormattingSelectedText = new QAction(msgDisableFormattingSelectedText(), this);
+    cmd = Core::ActionManager::registerAction(
+        m_disableFormattingSelectedText, "ClangFormat.DisableFormattingSelectedText");
+    menu->addAction(cmd);
+    connect(m_disableFormattingSelectedText, &QAction::triggered,
+            this, &ClangFormat::disableFormattingSelectedText);
 
-        documentationFilePath = Core::ICore::userResourcePath(Constants::SETTINGS_DIRNAME)
-                                    .pathAppended(Constants::DOCUMENTATION_DIRNAME)
-                                    .pathAppended(SETTINGS_NAME).stringAppended(".xml");
+    Core::ActionManager::actionContainer(Constants::MENU_ID)->addMenu(menu);
 
-        read();
-    }
+    connect(&supportedMimeTypes, &BaseAspect::changed,
+            this, [this] { updateActions(Core::EditorManager::currentEditor()); });
 
-    void createDocumentationFile() const override;
+    setupAbstractSettings(SETTINGS_NAME, ".clang-format");
 
-    QStringList completerWords() override;
+    command.setDefaultValue("clang-format");
+    command.setPromptDialogTitle(BeautifierTool::msgCommandPromptDialogTitle("Clang Format"));
+    command.setLabelText(Tr::tr("Clang Format command:"));
 
-    BoolAspect usePredefinedStyle{this};
-    SelectionAspect predefinedStyle{this};
-    SelectionAspect fallbackStyle{this};
-    StringAspect customStyle{this};
+    usePredefinedStyle.setSettingsKey("usePredefinedStyle");
+    usePredefinedStyle.setLabelText(Tr::tr("Use predefined style:"));
+    usePredefinedStyle.setDefaultValue(true);
 
-    Utils::FilePath styleFileName(const QString &key) const override;
+    predefinedStyle.setSettingsKey("predefinedStyle");
+    predefinedStyle.setDisplayStyle(SelectionAspect::DisplayStyle::ComboBox);
+    predefinedStyle.addOption("LLVM");
+    predefinedStyle.addOption("Google");
+    predefinedStyle.addOption("Chromium");
+    predefinedStyle.addOption("Mozilla");
+    predefinedStyle.addOption("WebKit");
+    predefinedStyle.addOption("File");
+    predefinedStyle.setDefaultValue("LLVM");
 
-private:
-    void readStyles() override;
-};
+    fallbackStyle.setSettingsKey("fallbackStyle");
+    fallbackStyle.setDisplayStyle(SelectionAspect::DisplayStyle::ComboBox);
+    fallbackStyle.addOption("Default");
+    fallbackStyle.addOption("None");
+    fallbackStyle.addOption("LLVM");
+    fallbackStyle.addOption("Google");
+    fallbackStyle.addOption("Chromium");
+    fallbackStyle.addOption("Mozilla");
+    fallbackStyle.addOption("WebKit");
+    fallbackStyle.setDefaultValue("Default");
 
-void ClangFormatSettings::createDocumentationFile() const
+    predefinedStyle.setSettingsKey("predefinedStyle");
+    predefinedStyle.setDefaultValue("LLVM");
+
+    customStyle.setSettingsKey("customStyle");
+
+    documentationFilePath = Core::ICore::userResourcePath(Constants::SETTINGS_DIRNAME)
+                                .pathAppended(Constants::DOCUMENTATION_DIRNAME)
+                                .pathAppended(SETTINGS_NAME).stringAppended(".xml");
+
+    read();
+}
+
+void ClangFormat::createDocumentationFile() const
 {
     QFile file(documentationFilePath.toFSPathString());
     const QFileInfo fi(file);
@@ -191,7 +211,7 @@ void ClangFormatSettings::createDocumentationFile() const
     stream.writeEndDocument();
 }
 
-QStringList ClangFormatSettings::completerWords()
+QStringList ClangFormat::completerWords()
 {
     return {
         "LLVM",
@@ -215,12 +235,12 @@ QStringList ClangFormatSettings::completerWords()
     };
 }
 
-FilePath ClangFormatSettings::styleFileName(const QString &key) const
+FilePath ClangFormat::styleFileName(const QString &key) const
 {
     return m_styleDir / key / m_ending;
 }
 
-void ClangFormatSettings::readStyles()
+void ClangFormat::readStyles()
 {
     const FilePaths dirs = m_styleDir.dirEntries(QDir::AllDirs | QDir::NoDotAndDotDot);
     for (const FilePath &dir : dirs) {
@@ -229,18 +249,12 @@ void ClangFormatSettings::readStyles()
     }
 }
 
-static ClangFormatSettings &settings()
-{
-    static ClangFormatSettings theSettings;
-    return theSettings;
-}
-
 class ClangFormatOptionsPageWidget : public Core::IOptionsPageWidget
 {
 public:
     explicit ClangFormatOptionsPageWidget()
     {
-        ClangFormatSettings &s = settings();
+        ClangFormat &s = *s_clangFormat;
         QGroupBox *options = nullptr;
 
         auto predefinedStyleButton = new QRadioButton;
@@ -298,8 +312,8 @@ public:
         connect(&s.predefinedStyle, &SelectionAspect::volatileValueChanged, this, updateEnabled);
 
         setOnApply([configurations] {
-            settings().customStyle.setValue(configurations->currentConfiguration());
-            settings().save();
+            s_clangFormat->customStyle.setValue(configurations->currentConfiguration());
+            s_clangFormat->save();
         });
 
         s.read();
@@ -324,41 +338,6 @@ public:
 const ClangFormatOptionsPage settingsPage;
 
 
-// ClangFormat
-
-ClangFormat::ClangFormat()
-{
-    Core::ActionContainer *menu = Core::ActionManager::createMenu("ClangFormat.Menu");
-    menu->menu()->setTitle(Tr::tr("&ClangFormat"));
-
-    m_formatFile = new QAction(msgFormatCurrentFile(), this);
-    Core::Command *cmd
-            = Core::ActionManager::registerAction(m_formatFile, "ClangFormat.FormatFile");
-    menu->addAction(cmd);
-    connect(m_formatFile, &QAction::triggered, this, &ClangFormat::formatFile);
-
-    m_formatLines = new QAction(msgFormatLines(), this);
-    cmd = Core::ActionManager::registerAction(m_formatLines, "ClangFormat.FormatLines");
-    menu->addAction(cmd);
-    connect(m_formatLines, &QAction::triggered, this, &ClangFormat::formatLines);
-
-    m_formatRange = new QAction(msgFormatAtCursor(), this);
-    cmd = Core::ActionManager::registerAction(m_formatRange, "ClangFormat.FormatAtCursor");
-    menu->addAction(cmd);
-    connect(m_formatRange, &QAction::triggered, this, &ClangFormat::formatAtCursor);
-
-    m_disableFormattingSelectedText = new QAction(msgDisableFormattingSelectedText(), this);
-    cmd = Core::ActionManager::registerAction(
-        m_disableFormattingSelectedText, "ClangFormat.DisableFormattingSelectedText");
-    menu->addAction(cmd);
-    connect(m_disableFormattingSelectedText, &QAction::triggered,
-            this, &ClangFormat::disableFormattingSelectedText);
-
-    Core::ActionManager::actionContainer(Constants::MENU_ID)->addMenu(menu);
-
-    connect(&settings().supportedMimeTypes, &BaseAspect::changed,
-            this, [this] { updateActions(Core::EditorManager::currentEditor()); });
-}
 
 QString ClangFormat::id() const
 {
@@ -367,7 +346,7 @@ QString ClangFormat::id() const
 
 void ClangFormat::updateActions(Core::IEditor *editor)
 {
-    const bool enabled = editor && settings().isApplicable(editor->document());
+    const bool enabled = editor && isApplicable(editor->document());
     m_formatFile->setEnabled(enabled);
     m_formatRange->setEnabled(enabled);
 }
@@ -479,14 +458,14 @@ void ClangFormat::disableFormattingSelectedText()
 Command ClangFormat::textCommand() const
 {
     Command cmd;
-    cmd.setExecutable(settings().command());
+    cmd.setExecutable(command());
     cmd.setProcessing(Command::PipeProcessing);
 
-    if (settings().usePredefinedStyle()) {
-        const QString predefinedStyle = settings().predefinedStyle.stringValue();
+    if (usePredefinedStyle()) {
+        const QString predefinedStyle = this->predefinedStyle.stringValue();
         cmd.addOption("-style=" + predefinedStyle);
         if (predefinedStyle == "File") {
-            const QString fallbackStyle = settings().fallbackStyle.stringValue();
+            const QString fallbackStyle = this->fallbackStyle.stringValue();
             if (fallbackStyle != "Default")
                 cmd.addOption("-fallback-style=" + fallbackStyle);
         }
@@ -494,17 +473,12 @@ Command ClangFormat::textCommand() const
         cmd.addOption("-assume-filename=%file");
     } else {
         cmd.addOption("-style=file");
-        const FilePath path = settings().styleFileName(settings().customStyle())
+        const FilePath path = styleFileName(customStyle())
             .absolutePath().pathAppended("%filename");
         cmd.addOption("-assume-filename=" + path.nativePath());
     }
 
     return cmd;
-}
-
-bool ClangFormat::isApplicable(const Core::IDocument *document) const
-{
-    return settings().isApplicable(document);
 }
 
 Command ClangFormat::textCommand(int offset, int length) const

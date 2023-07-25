@@ -19,7 +19,18 @@ public:
     QString id() const override;
     void updateActions(Core::IEditor *editor) override;
     TextEditor::Command textCommand() const override;
-    bool isApplicable(const Core::IDocument *document) const override;
+
+    void createDocumentationFile() const;
+
+    Utils::BoolAspect useOtherFiles{this};
+    Utils::BoolAspect useHomeFile{this};
+    Utils::BoolAspect useCustomStyle{this};
+
+    Utils::StringAspect customStyle{this};
+    Utils::BoolAspect formatEntireFileFallback{this};
+
+    Utils::FilePathAspect specificConfigFile{this};
+    Utils::BoolAspect useSpecificConfigFile{this};
 
 private:
     void formatFile();

@@ -26,7 +26,7 @@ class IEditor;
 
 namespace Beautifier::Internal  {
 
-class BeautifierTool : public QObject
+class BeautifierTool : public Utils::AspectContainer
 {
 public:
     BeautifierTool();
@@ -43,8 +43,6 @@ public:
      */
     virtual TextEditor::Command textCommand() const = 0;
 
-    virtual bool isApplicable(const Core::IDocument *document) const = 0;
-
     static QString msgCannotGetConfigurationFile(const QString &command);
     static QString msgFormatCurrentFile();
     static QString msgFormatSelectedText();
@@ -53,13 +51,8 @@ public:
     static QString msgDisableFormattingSelectedText();
     static QString msgCommandPromptDialogTitle(const QString &command);
     static void showError(const QString &error);
-};
 
-class AbstractSettings : public Utils::AspectContainer
-{
-public:
-    explicit AbstractSettings(const QString &name, const QString &ending);
-    ~AbstractSettings() override;
+    void setupAbstractSettings(const QString &name, const QString &ending);
 
     void read();
     void save();
@@ -83,13 +76,12 @@ public:
 
     QVersionNumber version() const;
 
-    bool isApplicable(const Core::IDocument *document) const;
-
     QStringList options();
     QString documentation(const QString &option) const;
 
 protected:
     void setVersionRegExp(const QRegularExpression &versionRegExp);
+    bool isApplicable(const Core::IDocument *document) const;
 
     QMap<QString, QString> m_styles;
     QString m_ending;

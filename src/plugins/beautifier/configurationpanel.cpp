@@ -43,7 +43,7 @@ ConfigurationPanel::ConfigurationPanel(QWidget *parent)
 
 ConfigurationPanel::~ConfigurationPanel() = default;
 
-void ConfigurationPanel::setSettings(AbstractSettings *settings)
+void ConfigurationPanel::setSettings(BeautifierTool *settings)
 {
     m_settings = settings;
     populateConfigurations();

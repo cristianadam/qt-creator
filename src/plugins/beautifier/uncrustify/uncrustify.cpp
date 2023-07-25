@@ -53,128 +53,133 @@ const char SETTINGS_NAME[] = "uncrustify";
 
 static QString uDisplayName()  { return Tr::tr("Uncrustify"); }
 
-class UncrustifySettings : public AbstractSettings
+static Uncrustify *s_uncrustify = nullptr;
+
+Uncrustify::Uncrustify()
 {
-public:
-    UncrustifySettings()
-        : AbstractSettings(SETTINGS_NAME, ".cfg")
-    {
-        setVersionRegExp(QRegularExpression("([0-9]{1})\\.([0-9]{2})"));
+    s_uncrustify = this;
 
-        command.setDefaultValue("uncrustify");
-        command.setLabelText(Tr::tr("Uncrustify command:"));
-        command.setPromptDialogTitle(BeautifierTool::msgCommandPromptDialogTitle(uDisplayName()));
+    Core::ActionContainer *menu = Core::ActionManager::createMenu("Uncrustify.Menu");
+    menu->menu()->setTitle(Tr::tr("&Uncrustify"));
 
-        useOtherFiles.setSettingsKey("useOtherFiles");
-        useOtherFiles.setDefaultValue(true);
-        useOtherFiles.setLabelText(Tr::tr("Use file uncrustify.cfg defined in project files"));
+    m_formatFile = new QAction(msgFormatCurrentFile(), this);
+    Core::Command *cmd
+            = Core::ActionManager::registerAction(m_formatFile, "Uncrustify.FormatFile");
+    menu->addAction(cmd);
+    connect(m_formatFile, &QAction::triggered, this, &Uncrustify::formatFile);
 
-        useHomeFile.setSettingsKey("useHomeFile");
-        useHomeFile.setLabelText(Tr::tr("Use file uncrustify.cfg in HOME")
-                                     .replace( "HOME", QDir::toNativeSeparators(QDir::home().absolutePath())));
+    m_formatRange = new QAction(msgFormatSelectedText(), this);
+    cmd = Core::ActionManager::registerAction(m_formatRange, "Uncrustify.FormatSelectedText");
+    menu->addAction(cmd);
+    connect(m_formatRange, &QAction::triggered, this, &Uncrustify::formatSelectedText);
 
-        useCustomStyle.setSettingsKey("useCustomStyle");
-        useCustomStyle.setLabelText(Tr::tr("Use customized style:"));
+    Core::ActionManager::actionContainer(Constants::MENU_ID)->addMenu(menu);
 
-        useSpecificConfigFile.setSettingsKey("useSpecificConfigFile");
-        useSpecificConfigFile.setLabelText(Tr::tr("Use file specific uncrustify.cfg"));
+    connect(&supportedMimeTypes, &Utils::BaseAspect::changed,
+            this, [this] { updateActions(Core::EditorManager::currentEditor()); });
 
-        customStyle.setSettingsKey("customStyle");
 
-        formatEntireFileFallback.setSettingsKey("formatEntireFileFallback");
-        formatEntireFileFallback.setDefaultValue(true);
-        formatEntireFileFallback.setLabelText(Tr::tr("Format entire file if no text was selected"));
-        formatEntireFileFallback.setToolTip(Tr::tr("For action Format Selected Text"));
+    setupAbstractSettings(SETTINGS_NAME, ".cfg");
 
-        specificConfigFile.setSettingsKey("specificConfigFile");
-        specificConfigFile.setExpectedKind(Utils::PathChooser::File);
-        specificConfigFile.setPromptDialogFilter(Tr::tr("Uncrustify file (*.cfg)"));
+    setVersionRegExp(QRegularExpression("([0-9]{1})\\.([0-9]{2})"));
 
-        documentationFilePath = Core::ICore::userResourcePath(Constants::SETTINGS_DIRNAME)
-                                    .pathAppended(Constants::DOCUMENTATION_DIRNAME)
-                                    .pathAppended(SETTINGS_NAME).stringAppended(".xml");
+    command.setDefaultValue("uncrustify");
+    command.setLabelText(Tr::tr("Uncrustify command:"));
+    command.setPromptDialogTitle(BeautifierTool::msgCommandPromptDialogTitle(uDisplayName()));
 
-        read();
-    }
+    useOtherFiles.setSettingsKey("useOtherFiles");
+    useOtherFiles.setDefaultValue(true);
+    useOtherFiles.setLabelText(Tr::tr("Use file uncrustify.cfg defined in project files"));
 
-    void createDocumentationFile() const override
-    {
-        Process process;
-        process.setTimeoutS(2);
-        process.setCommand({command(), {"--show-config"}});
-        process.runBlocking();
-        if (process.result() != ProcessResult::FinishedWithSuccess)
-            return;
+    useHomeFile.setSettingsKey("useHomeFile");
+    useHomeFile.setLabelText(Tr::tr("Use file uncrustify.cfg in HOME")
+                                 .replace( "HOME", QDir::toNativeSeparators(QDir::home().absolutePath())));
 
-        QFile file(documentationFilePath.toFSPathString());
-        const QFileInfo fi(file);
-        if (!fi.exists())
-            fi.dir().mkpath(fi.absolutePath());
-        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
-            return;
+    useCustomStyle.setSettingsKey("useCustomStyle");
+    useCustomStyle.setLabelText(Tr::tr("Use customized style:"));
 
-        bool contextWritten = false;
-        QXmlStreamWriter stream(&file);
-        stream.setAutoFormatting(true);
-        stream.writeStartDocument("1.0", true);
-        stream.writeComment("Created " + QDateTime::currentDateTime().toString(Qt::ISODate));
-        stream.writeStartElement(Constants::DOCUMENTATION_XMLROOT);
+    useSpecificConfigFile.setSettingsKey("useSpecificConfigFile");
+    useSpecificConfigFile.setLabelText(Tr::tr("Use file specific uncrustify.cfg"));
 
-        const QStringList lines = process.allOutput().split(QLatin1Char('\n'));
-        const int totalLines = lines.count();
-        for (int i = 0; i < totalLines; ++i) {
-            const QString &line = lines.at(i);
-            if (line.startsWith('#') || line.trimmed().isEmpty())
-                continue;
+    customStyle.setSettingsKey("customStyle");
 
-            const int firstSpace = line.indexOf(' ');
-            const QString keyword = line.left(firstSpace);
-            const QString options = line.right(line.size() - firstSpace).trimmed();
-            QStringList docu;
-            while (++i < totalLines) {
-                const QString &subline = lines.at(i);
-                if (line.startsWith('#') || subline.trimmed().isEmpty()) {
-                    const QString text = "<p><span class=\"option\">" + keyword
-                                         + "</span> <span class=\"param\">" + options
-                                         + "</span></p><p>" + docu.join(' ').toHtmlEscaped() + "</p>";
-                    stream.writeStartElement(Constants::DOCUMENTATION_XMLENTRY);
-                    stream.writeTextElement(Constants::DOCUMENTATION_XMLKEY, keyword);
-                    stream.writeTextElement(Constants::DOCUMENTATION_XMLDOC, text);
-                    stream.writeEndElement();
-                    contextWritten = true;
-                    break;
-                } else {
-                    docu << subline;
-                }
+    formatEntireFileFallback.setSettingsKey("formatEntireFileFallback");
+    formatEntireFileFallback.setDefaultValue(true);
+    formatEntireFileFallback.setLabelText(Tr::tr("Format entire file if no text was selected"));
+    formatEntireFileFallback.setToolTip(Tr::tr("For action Format Selected Text"));
+
+    specificConfigFile.setSettingsKey("specificConfigFile");
+    specificConfigFile.setExpectedKind(Utils::PathChooser::File);
+    specificConfigFile.setPromptDialogFilter(Tr::tr("Uncrustify file (*.cfg)"));
+
+    documentationFilePath = Core::ICore::userResourcePath(Constants::SETTINGS_DIRNAME)
+                                .pathAppended(Constants::DOCUMENTATION_DIRNAME)
+                                .pathAppended(SETTINGS_NAME).stringAppended(".xml");
+
+    read();
+}
+
+void Uncrustify::createDocumentationFile() const
+{
+    Process process;
+    process.setTimeoutS(2);
+    process.setCommand({command(), {"--show-config"}});
+    process.runBlocking();
+    if (process.result() != ProcessResult::FinishedWithSuccess)
+        return;
+
+    QFile file(documentationFilePath.toFSPathString());
+    const QFileInfo fi(file);
+    if (!fi.exists())
+        fi.dir().mkpath(fi.absolutePath());
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+        return;
+
+    bool contextWritten = false;
+    QXmlStreamWriter stream(&file);
+    stream.setAutoFormatting(true);
+    stream.writeStartDocument("1.0", true);
+    stream.writeComment("Created " + QDateTime::currentDateTime().toString(Qt::ISODate));
+    stream.writeStartElement(Constants::DOCUMENTATION_XMLROOT);
+
+    const QStringList lines = process.allOutput().split(QLatin1Char('\n'));
+    const int totalLines = lines.count();
+    for (int i = 0; i < totalLines; ++i) {
+        const QString &line = lines.at(i);
+        if (line.startsWith('#') || line.trimmed().isEmpty())
+            continue;
+
+        const int firstSpace = line.indexOf(' ');
+        const QString keyword = line.left(firstSpace);
+        const QString options = line.right(line.size() - firstSpace).trimmed();
+        QStringList docu;
+        while (++i < totalLines) {
+            const QString &subline = lines.at(i);
+            if (line.startsWith('#') || subline.trimmed().isEmpty()) {
+                const QString text = "<p><span class=\"option\">" + keyword
+                                     + "</span> <span class=\"param\">" + options
+                                     + "</span></p><p>" + docu.join(' ').toHtmlEscaped() + "</p>";
+                stream.writeStartElement(Constants::DOCUMENTATION_XMLENTRY);
+                stream.writeTextElement(Constants::DOCUMENTATION_XMLKEY, keyword);
+                stream.writeTextElement(Constants::DOCUMENTATION_XMLDOC, text);
+                stream.writeEndElement();
+                contextWritten = true;
+                break;
+            } else {
+                docu << subline;
             }
         }
-
-        stream.writeEndElement();
-        stream.writeEndDocument();
-
-        // An empty file causes error messages and a contextless file preventing this function to run
-        // again in order to generate the documentation successfully. Thus delete the file.
-        if (!contextWritten) {
-            file.close();
-            file.remove();
-        }
     }
 
-    BoolAspect useOtherFiles{this};
-    BoolAspect useHomeFile{this};
-    BoolAspect useCustomStyle{this};
+    stream.writeEndElement();
+    stream.writeEndDocument();
 
-    StringAspect customStyle{this};
-    BoolAspect formatEntireFileFallback{this};
-
-    FilePathAspect specificConfigFile{this};
-    BoolAspect useSpecificConfigFile{this};
-};
-
-static UncrustifySettings &settings()
-{
-    static UncrustifySettings theSettings;
-    return theSettings;
+    // An empty file causes error messages and a contextless file preventing this function to run
+    // again in order to generate the documentation successfully. Thus delete the file.
+    if (!contextWritten) {
+        file.close();
+        file.remove();
+    }
 }
 
 class UncrustifyOptionsPageWidget : public Core::IOptionsPageWidget
@@ -182,12 +187,12 @@ class UncrustifyOptionsPageWidget : public Core::IOptionsPageWidget
 public:
     explicit UncrustifyOptionsPageWidget()
     {
-        UncrustifySettings &s = settings();
+        Uncrustify &s = *s_uncrustify;
 
         auto configurations = new ConfigurationPanel(this);
         configurations->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-        configurations->setSettings(&settings());
-        configurations->setCurrentConfiguration(settings().customStyle());
+        configurations->setSettings(s_uncrustify);
+        configurations->setCurrentConfiguration(s.customStyle());
 
         QGroupBox *options = nullptr;
 
@@ -242,30 +247,6 @@ public:
 const UncrustifyOptionsPage settingsPage;
 
 
-// Uncrustify
-
-Uncrustify::Uncrustify()
-{
-    Core::ActionContainer *menu = Core::ActionManager::createMenu("Uncrustify.Menu");
-    menu->menu()->setTitle(Tr::tr("&Uncrustify"));
-
-    m_formatFile = new QAction(msgFormatCurrentFile(), this);
-    Core::Command *cmd
-            = Core::ActionManager::registerAction(m_formatFile, "Uncrustify.FormatFile");
-    menu->addAction(cmd);
-    connect(m_formatFile, &QAction::triggered, this, &Uncrustify::formatFile);
-
-    m_formatRange = new QAction(msgFormatSelectedText(), this);
-    cmd = Core::ActionManager::registerAction(m_formatRange, "Uncrustify.FormatSelectedText");
-    menu->addAction(cmd);
-    connect(m_formatRange, &QAction::triggered, this, &Uncrustify::formatSelectedText);
-
-    Core::ActionManager::actionContainer(Constants::MENU_ID)->addMenu(menu);
-
-    connect(&settings().supportedMimeTypes, &Utils::BaseAspect::changed,
-            this, [this] { updateActions(Core::EditorManager::currentEditor()); });
-}
-
 QString Uncrustify::id() const
 {
     return "Uncrustify";
@@ -273,7 +254,7 @@ QString Uncrustify::id() const
 
 void Uncrustify::updateActions(Core::IEditor *editor)
 {
-    const bool enabled = editor && settings().isApplicable(editor->document());
+    const bool enabled = editor && isApplicable(editor->document());
     m_formatFile->setEnabled(enabled);
     m_formatRange->setEnabled(enabled);
 }
@@ -312,17 +293,17 @@ void Uncrustify::formatSelectedText()
             tc.movePosition(QTextCursor::EndOfLine);
         const int endPos = tc.position();
         formatCurrentFile(textCommand(cfgFileName, true), startPos, endPos);
-    } else if (settings().formatEntireFileFallback()) {
+    } else if (formatEntireFileFallback()) {
         formatFile();
     }
 }
 
 FilePath Uncrustify::configurationFile() const
 {
-    if (settings().useCustomStyle())
-        return settings().styleFileName(settings().customStyle());
+    if (useCustomStyle())
+        return styleFileName(customStyle());
 
-    if (settings().useOtherFiles()) {
+    if (useOtherFiles()) {
         using namespace ProjectExplorer;
         if (const Project *project = ProjectTree::currentProject()) {
             const FilePaths files = project->files([](const Node *n) {
@@ -334,13 +315,13 @@ FilePath Uncrustify::configurationFile() const
         }
     }
 
-    if (settings().useSpecificConfigFile()) {
-        const FilePath file = settings().specificConfigFile();
+    if (useSpecificConfigFile()) {
+        const FilePath file = specificConfigFile();
         if (file.exists())
             return file;
     }
 
-    if (settings().useHomeFile()) {
+    if (useHomeFile()) {
         const FilePath file = FileUtils::homePath() / "uncrustify.cfg";
         if (file.exists())
             return file;
@@ -355,17 +336,12 @@ Command Uncrustify::textCommand() const
     return cfgFile.isEmpty() ? Command() : textCommand(cfgFile, false);
 }
 
-bool Uncrustify::isApplicable(const Core::IDocument *document) const
-{
-    return settings().isApplicable(document);
-}
-
 Command Uncrustify::textCommand(const FilePath &cfgFile, bool fragment) const
 {
     Command cmd;
-    cmd.setExecutable(settings().command());
+    cmd.setExecutable(command());
     cmd.setProcessing(Command::PipeProcessing);
-    if (settings().version() >= QVersionNumber(0, 62)) {
+    if (version() >= QVersionNumber(0, 62)) {
         cmd.addOption("--assume");
         cmd.addOption("%file");
     } else {
