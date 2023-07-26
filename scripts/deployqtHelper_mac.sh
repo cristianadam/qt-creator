@@ -16,27 +16,6 @@ quick2_src="$5"
 
 echo "Deploying Qt"
 
-# collect designer plugins
-designerDestDir="$app_path/Contents/PlugIns/designer"
-if [ ! -d "$designerDestDir" ]; then
-    echo "- Copying designer plugins"
-    mkdir -p "$designerDestDir"
-    for plugin in "$plugin_src"/designer/*.dylib; do
-        cp "$plugin" "$designerDestDir"/ || exit 1
-    done
-fi
-
-# collect 3d assetimporter plugins
-assetimporterDestDir="$app_path/Contents/PlugIns/assetimporters"
-assetimporterSrcDir="$plugin_src/assetimporters"
-if [ -d "$assetimporterSrcDir" ]; then
-    if [ ! -d "$assetimporterDestDir" ]; then
-        echo "- Copying 3d assetimporter plugins"
-        mkdir -p "$assetimporterDestDir"
-        find "$assetimporterSrcDir" -iname "*.dylib" -maxdepth 1 -exec cp {} "$assetimporterDestDir"/ \;
-    fi
-fi
-
 # copy Qt Quick 2 imports
 imports2Dir="$app_path/Contents/Imports/qtquick2"
 if [ -d "$quick2_src" ]; then
