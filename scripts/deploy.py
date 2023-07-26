@@ -146,14 +146,6 @@ def copy_qt_libs(target_qt_prefix_path, qt_bin_dir, qt_libs_dir, qt_qml_dir):
         else:
             shutil.copy(library, lib_dest)
 
-    if (os.path.exists(qt_qml_dir)):
-        print("Copying qt quick 2 imports")
-        target = os.path.join(target_qt_prefix_path, 'qml')
-        if (os.path.exists(target)):
-            shutil.rmtree(target)
-        print('{0} -> {1}'.format(qt_qml_dir, target))
-        common.copytree(qt_qml_dir, target, ignore=ignored_qt_lib_files, symlinks=True)
-
 
 def deploy_qtdiag(qtc_binary_path, qt_install):
     print("Copying qtdiag")
@@ -192,6 +184,17 @@ def deploy_plugins(qtc_binary_path, qt_install):
         if (os.path.exists(pluginPath)):
             print('{0} -> {1}'.format(pluginPath, target))
             common.copytree(pluginPath, target, ignore=ignored_qt_lib_files, symlinks=True)
+
+
+def deploy_imports(qtc_binary_path, qt_install):
+    print("Copying qt quick 2 imports")
+    destdir = (os.path.join(qtc_binary_path, 'qml') if common.is_windows_platform()
+               else os.path.join(qtc_binary_path, 'Contents', 'Imports', 'qtquick2') if common.is_mac_platform()
+               else os.path.join(qtc_binary_path, '..', 'lib', 'Qt', 'qml'))
+    if (os.path.exists(destdir)):
+        shutil.rmtree(destdir)
+    print('{0} -> {1}'.format(qt_install.qml, destdir))
+    common.copytree(qt_install.qml, destdir, ignore=ignored_qt_lib_files, symlinks=True)
 
 
 def add_qt_conf(target_path, qt_prefix_path):
@@ -378,6 +381,7 @@ def main():
 
     deploy_qtdiag(qtcreator_binary_path, qt_install)
     deploy_plugins(qtcreator_binary_path, qt_install)
+    deploy_imports(qtcreator_binary_path, qt_install)
 
     if common.is_mac_platform():
         deploy_mac(args)

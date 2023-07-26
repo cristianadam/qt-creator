@@ -16,17 +16,6 @@ quick2_src="$5"
 
 echo "Deploying Qt"
 
-# copy Qt Quick 2 imports
-imports2Dir="$app_path/Contents/Imports/qtquick2"
-if [ -d "$quick2_src" ]; then
-    if [ ! -d "$imports2Dir" ]; then
-        echo "- Copying Qt Quick 2 imports"
-        mkdir -p "$imports2Dir"
-        cp -R "$quick2_src"/ "$imports2Dir"/
-        find "$imports2Dir" -path "*.dylib.dSYM*" -delete
-    fi
-fi
-
 # copy qt creator qt.conf
 if [ ! -f "$resource_path/qt.conf" ]; then
     echo "- Copying qt.conf"
