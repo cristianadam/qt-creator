@@ -18,6 +18,7 @@
 
 using namespace ProjectExplorer;
 using namespace Utils;
+using namespace Valgrind::XmlProtocol;
 
 namespace Valgrind {
 
@@ -58,7 +59,7 @@ public:
     QHostAddress m_localServerAddress;
 
     QTcpServer m_xmlServer;
-    XmlProtocol::ThreadedParser m_parser;
+    ThreadedParser m_parser;
     QTcpServer m_logServer;
 };
 
@@ -159,6 +160,11 @@ bool ValgrindRunner::Private::run()
 ValgrindRunner::ValgrindRunner(QObject *parent)
     : QObject(parent), d(new Private(this))
 {
+    connect(&d->m_parser, &ThreadedParser::status, this, &ValgrindRunner::status);
+    connect(&d->m_parser, &ThreadedParser::error, this, &ValgrindRunner::error);
+    connect(&d->m_parser, &ThreadedParser::internalError, this, &ValgrindRunner::internalError);
+    connect(&d->m_parser, &ThreadedParser::errorCount, this, &ValgrindRunner::errorCount);
+    connect(&d->m_parser, &ThreadedParser::suppressionCount, this, &ValgrindRunner::suppressionCount);
 }
 
 ValgrindRunner::~ValgrindRunner()
@@ -223,11 +229,6 @@ bool ValgrindRunner::start()
 void ValgrindRunner::stop()
 {
     d->m_process.stop();
-}
-
-XmlProtocol::ThreadedParser *ValgrindRunner::parser() const
-{
-    return &d->m_parser;
 }
 
 } // namespace Valgrind
