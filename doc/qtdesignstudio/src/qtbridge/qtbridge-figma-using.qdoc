@@ -181,6 +181,12 @@
             antialiasing : true
             width: parent.width / 2
             \endcode
+            - property will remove a property from the generated code.
+            For example:
+            \code
+            - width
+            \endcode
+            will remove the property \e width from the generated code.
     \row
         \li \uicontrol {Snippet}
         \li Specify component to be added as child under this component.
