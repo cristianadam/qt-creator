@@ -1,55 +1,35 @@
 // Copyright (C) 2016 BogDan Vatra <bog_dan_ro@yahoo.com>
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
+#include "androidmanager.h"
+
 #include "androidavdmanager.h"
 #include "androidbuildapkstep.h"
-#include "androidconfigurations.h"
 #include "androidconstants.h"
-#include "androiddeployqtstep.h"
 #include "androiddevice.h"
-#include "androidglobal.h"
-#include "androidmanager.h"
 #include "androidqtversion.h"
-#include "androidrunconfiguration.h"
-#include "androidsdkmanager.h"
-#include "androidtoolchain.h"
 #include "androidtr.h"
-
-#include <coreplugin/documentmanager.h>
-#include <coreplugin/messagemanager.h>
-#include <coreplugin/icore.h>
-
-#include <projectexplorer/buildconfiguration.h>
-#include <projectexplorer/project.h>
-#include <projectexplorer/projectnodes.h>
-#include <projectexplorer/projectexplorer.h>
-#include <projectexplorer/projectexplorerconstants.h>
-#include <projectexplorer/projectmanager.h>
-#include <projectexplorer/target.h>
-#include <projectexplorer/buildsystem.h>
-
-#include <qtsupport/qtkitinformation.h>
-#include <qtsupport/qtsupportconstants.h>
-#include <qtsupport/baseqtversion.h>
 
 #include <cmakeprojectmanager/cmakeprojectconstants.h>
 
+#include <coreplugin/messagemanager.h>
+
+#include <projectexplorer/buildsteplist.h>
+#include <projectexplorer/buildsystem.h>
+#include <projectexplorer/projectexplorerconstants.h>
+#include <projectexplorer/target.h>
+
+#include <qtsupport/qtkitinformation.h>
+
 #include <utils/algorithm.h>
-#include <utils/fileutils.h>
 #include <utils/process.h>
 #include <utils/qtcassert.h>
-#include <utils/stringutils.h>
 
-#include <QApplication>
 #include <QDomDocument>
-#include <QFileSystemWatcher>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QList>
 #include <QLoggingCategory>
 #include <QMessageBox>
-#include <QProcess>
-#include <QRegularExpression>
 #include <QVersionNumber>
 
 using namespace ProjectExplorer;
@@ -264,7 +244,7 @@ FilePath AndroidManager::buildDirectory(const Target *target)
         if (isQt5CmakeProject(target)) {
             // Return the main build dir and not the android libs dir
             const QString libsDir = QString(Constants::ANDROID_BUILD_DIRECTORY) + "/libs";
-            Utils::FilePath parentDuildDir = buildDir.parentDir();
+            FilePath parentDuildDir = buildDir.parentDir();
             if (parentDuildDir.endsWith(libsDir) || libsDir.endsWith(libsDir + "/"))
                 return parentDuildDir.parentDir().parentDir();
         }
@@ -612,9 +592,10 @@ void AndroidManager::installQASIPackage(Target *target, const FilePath &packageP
     QStringList arguments = AndroidDeviceInfo::adbSelector(deviceSerialNumber);
     arguments << "install" << "-r " << packagePath.path();
     QString error;
-    QProcess *process = startAdbProcess(arguments, &error);
+    Process *process = startAdbProcess(arguments, &error);
     if (process) {
-        QObject::connect(process, &QProcess::finished, process, &QObject::deleteLater);
+        // TODO: Keep a process and delete it when still running on Creator shutdown.
+        QObject::connect(process, &Process::done, process, &QObject::deleteLater);
     } else {
         Core::MessageManager::writeDisrupting(
             Tr::tr("Android package installation failed.\n%1").arg(error));
@@ -670,20 +651,20 @@ bool AndroidManager::checkCertificateExists(const FilePath &keystorePath,
     return proc.result() == ProcessResult::FinishedWithSuccess;
 }
 
-QProcess *AndroidManager::startAdbProcess(const QStringList &args, QString *err)
+Process *AndroidManager::startAdbProcess(const QStringList &args, QString *err)
 {
-    std::unique_ptr<QProcess> p(new QProcess);
+    std::unique_ptr<Process> process(new Process);
     const FilePath adb = AndroidConfigurations::currentConfig().adbToolPath();
-    qCDebug(androidManagerLog).noquote() << "Running command (async):"
-                                         << CommandLine(adb, args).toUserOutput();
-    p->start(adb.toString(), args);
-    if (p->waitForStarted(500) && p->state() == QProcess::Running)
-        return p.release();
+    const CommandLine command{adb, args};
+    qCDebug(androidManagerLog).noquote() << "Running command (async):" << command.toUserOutput();
+    process->setCommand(command);
+    process->start();
+    if (process->waitForStarted(500) && process->state() == QProcess::Running)
+        return process.release();
 
-    QString errorStr = QString::fromUtf8(p->readAllStandardError());
+    const QString errorStr = process->readAllStandardError();
     qCDebug(androidManagerLog).noquote() << "Running command (async) failed:"
-                                         << CommandLine(adb, args).toUserOutput()
-                                         << "Output:" << errorStr;
+                                         << command.toUserOutput() << "Output:" << errorStr;
     if (err)
         *err = errorStr;
     return nullptr;
