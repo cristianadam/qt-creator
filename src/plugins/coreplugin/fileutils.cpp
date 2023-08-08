@@ -72,26 +72,9 @@ void FileUtils::showInGraphicalShell(QWidget *parent, const FilePath &pathIn)
     } else if (HostOsInfo::isMacHost()) {
         Process::startDetached({"/usr/bin/open", {"-R", fileInfo.canonicalFilePath()}});
     } else {
-        // we cannot select a file here, because no file browser really supports it...
-        const QString folder = fileInfo.isDir() ? fileInfo.absoluteFilePath() : fileInfo.filePath();
         const QString app = UnixUtils::fileBrowser(ICore::settings());
-        QStringList browserArgs = ProcessArgs::splitArgs(
-                    UnixUtils::substituteFileBrowserParameters(app, folder),
-                    HostOsInfo::hostOs());
-        QString error;
-        if (browserArgs.isEmpty()) {
-            error = Tr::tr("The command for file browser is not set.");
-        } else {
-            QProcess browserProc;
-            browserProc.setProgram(browserArgs.takeFirst());
-            browserProc.setArguments(browserArgs);
-            const bool success = browserProc.startDetached();
-            error = QString::fromLocal8Bit(browserProc.readAllStandardError());
-            if (!success && error.isEmpty())
-                error = Tr::tr("Error while starting file browser.");
-        }
-        if (!error.isEmpty())
-            showGraphicalShellError(parent, app, error);
+        if (!Process::startDetached({FilePath::fromString(app), {pathIn.toString()}}))
+            showGraphicalShellError(parent, app, Tr::tr("Error while starting file browser."));
     }
 }
 
