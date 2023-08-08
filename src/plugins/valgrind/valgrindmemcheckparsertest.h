@@ -3,12 +3,12 @@
 
 #pragma once
 
-#include <QObject>
+#include <utils/process.h>
+
 #include <QStringList>
 #include <QTcpSocket>
 
 QT_BEGIN_NAMESPACE
-class QProcess;
 class QTcpServer;
 QT_END_NAMESPACE
 
@@ -16,8 +16,6 @@ namespace Valgrind::Test {
 
 class ValgrindMemcheckParserTest : public QObject
 {
-    Q_OBJECT
-
 private slots:
     void initTestCase();
     void cleanup();
@@ -40,7 +38,7 @@ private:
     void initTest(const QString &testfile, const QStringList &otherArgs = {});
 
     QTcpServer *m_server = nullptr;
-    QProcess *m_process = nullptr;
+    std::unique_ptr<Utils::Process> m_process;
     std::unique_ptr<QTcpSocket> m_socket;
 };
 
