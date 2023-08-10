@@ -468,9 +468,7 @@ QString getSpecificQmlData(const NodeMetaInfo &commonAncestor,
                            const NodeMetaInfo &diffClassMetaInfo)
 {
     if (commonAncestor.isValid() && diffClassMetaInfo != selectedNode.metaInfo())
-        return PropertyEditorQmlBackend::templateGeneration(commonAncestor,
-                                                            diffClassMetaInfo,
-                                                            selectedNode);
+        return PropertyEditorQmlBackend::templateGeneration(commonAncestor, selectedNode);
 
     return {};
 }

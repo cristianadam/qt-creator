@@ -426,8 +426,6 @@ void TextureEditorView::setupQmlBackend()
 
             if (diffClassName != m_selectedTexture.type()) {
                 specificQmlData = PropertyEditorQmlBackend::templateGeneration(metaInfo,
-                                                                               model()->metaInfo(
-                                                                                   diffClassName),
                                                                                m_selectedTexture);
             }
         }

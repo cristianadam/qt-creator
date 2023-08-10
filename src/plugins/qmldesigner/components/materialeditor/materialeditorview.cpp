@@ -558,8 +558,6 @@ void MaterialEditorView::setupQmlBackend()
 
             if (diffClassName != m_selectedMaterial.type()) {
                 specificQmlData = PropertyEditorQmlBackend::templateGeneration(metaInfo,
-                                                                               model()->metaInfo(
-                                                                                   diffClassName),
                                                                                m_selectedMaterial);
             }
         }

@@ -48,7 +48,7 @@ public:
     PropertyEditorValue *propertyValueForName(const QString &propertyName);
 
     static QString propertyEditorResourcesPath();
-    static QString templateGeneration(const NodeMetaInfo &type, const NodeMetaInfo &superType, const QmlObjectNode &node);
+    static QString templateGeneration(const NodeMetaInfo &type, const QmlObjectNode &node);
 
     static QUrl getQmlFileUrl(const TypeName &relativeTypeName, const NodeMetaInfo &info);
     static std::tuple<QUrl, NodeMetaInfo> getQmlUrlForMetaInfo(const NodeMetaInfo &modelNode);

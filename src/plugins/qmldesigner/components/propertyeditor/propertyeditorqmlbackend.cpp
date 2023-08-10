@@ -622,7 +622,6 @@ inline bool dotPropertyHeuristic(const QmlObjectNode &node, const NodeMetaInfo &
 }
 
 QString PropertyEditorQmlBackend::templateGeneration(const NodeMetaInfo &metaType,
-                                                     const NodeMetaInfo &superType,
                                                      const QmlObjectNode &node)
 {
     if (!templateConfiguration() || !templateConfiguration()->isValid())
@@ -651,13 +650,12 @@ QString PropertyEditorQmlBackend::templateGeneration(const NodeMetaInfo &metaTyp
     PropertyMetaInfos separateSectionProperties;
 
     // Iterate over all properties and isolate the properties which have their own template
-    for (const auto &property : metaType.properties()) {
+    for (const auto &property : metaType.localProperties()) {
         const auto &propertyName = property.name();
         if (propertyName.startsWith("__"))
             continue; // private API
 
-        if (!superType.hasProperty(propertyName) // TODO add property.isLocalProperty()
-            && property.isWritable() && dotPropertyHeuristic(node, metaType, propertyName)) {
+        if (property.isWritable() && dotPropertyHeuristic(node, metaType, propertyName)) {
             QString typeName = QString::fromUtf8(property.propertyType().simplifiedTypeName());
 
             if (typeName == "alias" && node.isValid())
