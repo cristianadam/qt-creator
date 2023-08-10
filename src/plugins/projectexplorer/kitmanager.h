@@ -44,7 +44,7 @@ class KitManagerConfigWidget;
  *
  * They auto-register with the \a KitManager for their life time
  */
-class PROJECTEXPLORER_EXPORT KitAspect : public QObject
+class PROJECTEXPLORER_EXPORT KitAspect : public Utils::BaseAspect
 {
     Q_OBJECT
 
@@ -106,7 +106,7 @@ private:
     bool m_essential = false;
 };
 
-class PROJECTEXPLORER_EXPORT KitAspectWidget : public Utils::BaseAspect
+class PROJECTEXPLORER_EXPORT KitAspectWidget : public QObject
 {
     Q_OBJECT
 
@@ -117,6 +117,8 @@ public:
     virtual void makeReadOnly() = 0;
     virtual void refresh() = 0;
 
+    virtual void addToLayout(Layouting::LayoutItem &builder) = 0;
+
     void addToLayoutWithLabel(Layouting::LayoutItem &parentItem, QWidget *parent);
 
     static QString msgManage();
@@ -126,6 +128,9 @@ public:
     QAction *mutableAction() const { return m_mutableAction; }
     void addMutableAction(QWidget *child);
     QWidget *createManageButton(Utils::Id pageId);
+
+signals:
+    void labelLinkActivated(const QString &);
 
 protected:
     Kit *m_kit;
