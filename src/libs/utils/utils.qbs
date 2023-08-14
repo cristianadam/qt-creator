@@ -222,6 +222,8 @@ Project {
             "overridecursor.h",
             "parameteraction.cpp",
             "parameteraction.h",
+            "passworddialog.cpp",
+            "passworddialog.h",
             "pathchooser.cpp",
             "pathchooser.h",
             "pathlisteditor.cpp",
