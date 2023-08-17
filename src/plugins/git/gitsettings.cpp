@@ -124,6 +124,7 @@ GitSettings::GitSettings()
             Group {
                 title(Tr::tr("Configuration")),
                 Column {
+                    binaryPath,
                     Row { path },
                     winSetHomeEnvironment,
                 }
