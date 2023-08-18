@@ -80,9 +80,10 @@ QComboBox *findComboBox(Wizard *wizard, const QString &objectName)
     return wizard->findChild<QComboBox *>(objectName + "ComboBox");
 };
 
-struct FactoryDeleter { void operator()(JsonWizardFactory *f) { f->deleteLater(); } };
+//struct FactoryDeleter { void operator()(JsonWizardFactory *f) { f->deleteLater(); } };
 
-using FactoryPtr = std::unique_ptr<JsonWizardFactory, FactoryDeleter>;
+//using FactoryPtr = std::unique_ptr<JsonWizardFactory, FactoryDeleter>;
+using FactoryPtr = std::unique_ptr<JsonWizardFactory>;
 
 void ProjectExplorerPlugin::testJsonWizardsEmptyWizard()
 {

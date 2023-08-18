@@ -10,8 +10,6 @@ namespace Internal {
 
 class SimpleProjectWizard : public Core::BaseFileWizardFactory
 {
-    Q_OBJECT
-
 public:
     SimpleProjectWizard();
 

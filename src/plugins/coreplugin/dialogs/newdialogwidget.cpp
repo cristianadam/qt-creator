@@ -28,6 +28,7 @@
 #include <QStandardItem>
 #include <QTextBrowser>
 #include <QTreeView>
+#include <QTimer>
 
 Q_DECLARE_METATYPE(Core::IWizardFactory*)
 
@@ -472,21 +473,16 @@ void NewDialogWidget::saveState()
     ICore::settings()->setValueWithDefault(LAST_PLATFORM_KEY, m_comboBox->currentData().toString());
 }
 
-static void runWizard(IWizardFactory *wizard, const FilePath &defaultLocation, Id platform,
-                      const QVariantMap &variables)
-{
-    const FilePath path = wizard->runPath(defaultLocation);
-    wizard->runWizard(path, ICore::dialogParent(), platform, variables);
-}
-
 void NewDialogWidget::accept()
 {
     saveState();
     if (m_templatesView->currentIndex().isValid()) {
         IWizardFactory *wizard = currentWizardFactory();
         if (QTC_GUARD(wizard)) {
-            QMetaObject::invokeMethod(wizard, std::bind(&runWizard, wizard, m_defaultLocation,
-                                      selectedPlatform(), m_extraVariables), Qt::QueuedConnection);
+            QTimer::singleShot(0, [wizard, platform=selectedPlatform(), loc=m_defaultLocation, vars=m_extraVariables] {
+                const FilePath path = wizard->runPath(loc);
+                wizard->runWizard(path, ICore::dialogParent(), platform, vars);
+            });
         }
     }
     QDialog::accept();

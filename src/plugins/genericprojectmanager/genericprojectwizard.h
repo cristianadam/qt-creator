@@ -17,8 +17,6 @@ class FilesSelectionWizardPage;
 
 class GenericProjectWizardDialog : public Core::BaseFileWizard
 {
-    Q_OBJECT
-
 public:
     explicit GenericProjectWizardDialog(const Core::BaseFileWizardFactory *factory, QWidget *parent = nullptr);
 
@@ -35,8 +33,6 @@ public:
 
 class GenericProjectWizard : public Core::BaseFileWizardFactory
 {
-    Q_OBJECT
-
 public:
     GenericProjectWizard();
 
