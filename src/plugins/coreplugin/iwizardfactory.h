@@ -6,14 +6,11 @@
 #include <coreplugin/core_global.h>
 #include <coreplugin/featureprovider.h>
 
+#include <QAction>
 #include <QIcon>
-#include <QObject>
-#include <QString>
 #include <QUrl>
 
 #include <functional>
-
-QT_FORWARD_DECLARE_CLASS(QAction)
 
 namespace Utils {
 class FilePath;
@@ -25,10 +22,10 @@ namespace Core {
 namespace Internal { class CorePlugin; }
 
 class CORE_EXPORT IWizardFactory
-    : public QObject
 {
-    Q_OBJECT
 public:
+    virtual ~IWizardFactory() {}
+
     enum WizardKind {
         FileWizard = 0x01,
         ProjectWizard = 0x02
@@ -51,6 +48,7 @@ public:
     QSet<Utils::Id> requiredFeatures() const { return m_requiredFeatures; }
     WizardFlags flags() const { return m_flags; }
     QUrl detailsPageQmlPath() const { return m_detailsPageQmlPath; }
+    bool isJsonWizard() const { return m_isJsonWizard; }
 
     QSet<Utils::Id> supportedProjectTypes() const { return m_supportedProjectTypes; }
 
@@ -67,6 +65,7 @@ public:
     void addRequiredFeature(const Utils::Id &feature) { m_requiredFeatures |= feature; }
     void setFlags(WizardFlags flags) { m_flags = flags; }
     void setDetailsPageQmlPath(const QString &filePath);
+    void setIsJsonWizard(bool isJsonWizard) { m_isJsonWizard = isJsonWizard; }
 
     Utils::FilePath runPath(const Utils::FilePath &defaultPath) const;
 
@@ -113,7 +112,7 @@ private:
 
     static void clearWizardFactories();
 
-    QAction *m_action = nullptr;
+    QAction m_action;
     QIcon m_icon;
     QString m_fontIconName;
     QString m_description;
@@ -126,6 +125,7 @@ private:
     QSet<Utils::Id> m_supportedProjectTypes;
     WizardFlags m_flags;
     Utils::Id m_id;
+    bool m_isJsonWizard = false;
 
     friend class Internal::CorePlugin;
 };

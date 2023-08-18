@@ -495,8 +495,11 @@ void CustomProjectWizard::initProjectWizardDialog(BaseProjectWizardDialog *w,
     w->setFilePath(defaultPath);
     w->setProjectName(BaseProjectWizardDialog::uniqueProjectName(defaultPath));
 
-    connect(w, &BaseProjectWizardDialog::projectParametersChanged,
-            this, &CustomProjectWizard::handleProjectParametersChanged);
+    QObject::connect(w, &BaseProjectWizardDialog::projectParametersChanged,
+            [this](const QString &name, const Utils::FilePath &) {
+        // Make '%ProjectName%' available in base replacements.
+        context()->baseReplacements.insert(QLatin1String("ProjectName"), name);
+    });
 
     if (CustomWizardPrivate::verbose)
         qDebug() << "initProjectWizardDialog" << w << w->pageIds();
@@ -546,15 +549,6 @@ bool CustomProjectWizard::postGenerateFiles(const QWizard *, const GeneratedFile
     if (CustomWizardPrivate::verbose)
         qDebug() << "CustomProjectWizard::postGenerateFiles()";
     return CustomProjectWizard::postGenerateOpen(l, errorMessage);
-}
-
-void CustomProjectWizard::handleProjectParametersChanged(const QString &name,
-                                                         const Utils::FilePath &path)
-{
-    // Make '%ProjectName%' available in base replacements.
-    context()->baseReplacements.insert(QLatin1String("ProjectName"), name);
-
-    emit projectLocationChanged(path / name);
 }
 
 } // namespace ProjectExplorer
