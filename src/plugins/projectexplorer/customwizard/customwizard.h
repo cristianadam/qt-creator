@@ -55,8 +55,6 @@ public:
 // Documentation inside.
 class PROJECTEXPLORER_EXPORT CustomWizard : public Core::BaseFileWizardFactory
 {
-    Q_OBJECT
-
 public:
     using FieldReplacementMap = QMap<QString, QString>;
 
@@ -100,15 +98,10 @@ private:
 // Documentation inside.
 class PROJECTEXPLORER_EXPORT CustomProjectWizard : public CustomWizard
 {
-    Q_OBJECT
-
 public:
     CustomProjectWizard();
 
     static bool postGenerateOpen(const Core::GeneratedFiles &l, QString *errorMessage = nullptr);
-
-signals:
-    void projectLocationChanged(const Utils::FilePath &path);
 
 protected:
     Core::BaseFileWizard *create(QWidget *parent, const Core::WizardDialogParameters &parameters) const override;

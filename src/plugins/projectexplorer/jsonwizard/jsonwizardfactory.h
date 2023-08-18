@@ -21,9 +21,9 @@ class ProjectExplorerPluginPrivate;
 // Documentation inside.
 class PROJECTEXPLORER_EXPORT JsonWizardFactory : public Core::IWizardFactory
 {
-    Q_OBJECT
-
 public:
+    JsonWizardFactory() { setIsJsonWizard(true); }
+
     // Add search paths for wizard.json files. All subdirs are going to be checked.
     static void addWizardPath(const Utils::FilePath &path);
     static void clearWizardPaths();

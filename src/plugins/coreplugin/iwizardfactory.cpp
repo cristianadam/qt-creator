@@ -200,11 +200,10 @@ QList<IWizardFactory*> IWizardFactory::allWizardFactories()
                 continue;
             }
 
-            QTC_ASSERT(!newFactory->m_action, continue);
-            newFactory->m_action = new QAction(newFactory->displayName(), newFactory);
-            ActionManager::registerAction(newFactory->m_action, actionId(newFactory));
+            newFactory->m_action.setText(newFactory->displayName());
+            ActionManager::registerAction(&newFactory->m_action, actionId(newFactory));
 
-            connect(newFactory->m_action, &QAction::triggered, newFactory, [newFactory] {
+            QObject::connect(&newFactory->m_action, &QAction::triggered, [newFactory] {
                 if (!ICore::isNewItemDialogRunning()) {
                     FilePath path = newFactory->runPath({});
                     newFactory->runWizard(path, ICore::dialogParent(), Id(), QVariantMap());
@@ -267,16 +266,15 @@ Wizard *IWizardFactory::runWizard(const FilePath &path, QWidget *parent, Id plat
     if (wizard) {
         s_currentWizard = wizard;
         // Connect while wizard exists:
-        if (m_action)
-            connect(m_action, &QAction::triggered, wizard, [wizard] { ICore::raiseWindow(wizard); });
-        connect(s_inspectWizardAction, &QAction::triggered,
-                wizard, [wizard] { wizard->showVariables(); });
-        connect(wizard, &Utils::Wizard::finished, this, [wizard](int result) {
+        QObject::connect(&m_action, &QAction::triggered, wizard, [wizard] { ICore::raiseWindow(wizard); });
+        QObject::connect(s_inspectWizardAction, &QAction::triggered,
+                         wizard, [wizard] { wizard->showVariables(); });
+        QObject::connect(wizard, &Utils::Wizard::finished, [wizard](int result) {
             if (result != QDialog::Accepted)
                 s_reopenData.clear();
             wizard->deleteLater();
         });
-        connect(wizard, &QObject::destroyed, this, [] {
+        QObject::connect(wizard, &QObject::destroyed, [] {
             s_isWizardRunning = false;
             s_currentWizard = nullptr;
             s_inspectWizardAction->setEnabled(false);
@@ -379,7 +377,7 @@ void IWizardFactory::destroyFeatureProvider()
 void IWizardFactory::clearWizardFactories()
 {
     for (IWizardFactory *factory : std::as_const(s_allFactories))
-        ActionManager::unregisterAction(factory->m_action, actionId(factory));
+        ActionManager::unregisterAction(&factory->m_action, actionId(factory));
 
     qDeleteAll(s_allFactories);
     s_allFactories.clear();
@@ -413,14 +411,14 @@ QSet<Id> IWizardFactory::availableFeatures(Id platformId)
 
 void IWizardFactory::initialize()
 {
-    connect(ICore::instance(), &ICore::coreAboutToClose, &IWizardFactory::clearWizardFactories);
+    QObject::connect(ICore::instance(), &ICore::coreAboutToClose, &IWizardFactory::clearWizardFactories);
 
     auto resetAction = new QAction(Tr::tr("Reload All Wizards"), ActionManager::instance());
     ActionManager::registerAction(resetAction, "Wizard.Factory.Reset");
 
-    connect(resetAction, &QAction::triggered, &IWizardFactory::clearWizardFactories);
-    connect(ICore::instance(), &ICore::newItemDialogStateChanged, resetAction,
-            [resetAction] { resetAction->setEnabled(!ICore::isNewItemDialogRunning()); });
+    QObject::connect(resetAction, &QAction::triggered, &IWizardFactory::clearWizardFactories);
+    QObject::connect(ICore::instance(), &ICore::newItemDialogStateChanged, resetAction,
+                     [resetAction] { resetAction->setEnabled(!ICore::isNewItemDialogRunning()); });
 
     s_inspectWizardAction = new QAction(Tr::tr("Inspect Wizard State"), ActionManager::instance());
     ActionManager::registerAction(s_inspectWizardAction, "Wizard.Inspect");

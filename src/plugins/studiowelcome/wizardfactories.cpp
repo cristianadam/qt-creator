@@ -21,7 +21,7 @@ WizardFactories::WizardFactories(const QList<Core::IWizardFactory *> &factories,
     , m_platform{platform}
 {
     m_factories = Utils::filtered(Utils::transform(factories, [](Core::IWizardFactory *f) {
-        return qobject_cast<JsonWizardFactory *>(f);
+        return f->isJsonWizard() ? static_cast<JsonWizardFactory *>(f) : nullptr;
     }));
 
     sortByCategoryAndId();

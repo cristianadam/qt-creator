@@ -122,7 +122,7 @@ Core::GeneratedFiles GenericProjectWizard::generateFiles(const QWizard *w,
 {
     Q_UNUSED(errorMessage)
 
-    auto wizard = qobject_cast<const GenericProjectWizardDialog *>(w);
+    auto wizard = static_cast<const GenericProjectWizardDialog *>(w);
     const FilePath projectPath = wizard->filePath();
     const QString projectName = wizard->projectName();
     const FilePath creatorFileName = projectPath.pathAppended(projectName + ".creator");
