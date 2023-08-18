@@ -28,8 +28,6 @@ namespace Internal {
 
 class QtWizard : public Core::BaseFileWizardFactory
 {
-    Q_OBJECT
-
 protected:
     QtWizard();
 
@@ -54,8 +52,6 @@ private:
 // A custom wizard with an additional Qt 4 target page
 class CustomQmakeProjectWizard : public ProjectExplorer::CustomProjectWizard
 {
-    Q_OBJECT
-
 public:
     CustomQmakeProjectWizard();
 

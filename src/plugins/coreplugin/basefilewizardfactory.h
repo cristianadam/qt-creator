@@ -60,8 +60,6 @@ private:
 
 class CORE_EXPORT BaseFileWizardFactory : public IWizardFactory
 {
-    Q_OBJECT
-
     friend class BaseFileWizard;
 
 public:
