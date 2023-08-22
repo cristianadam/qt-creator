@@ -86,6 +86,7 @@ public:
     {
         setWindowTitle(Tr::tr("Choose Project File"));
         const auto model = new ProjectFilesModel(candidates, this);
+        m_view->setUniformRowHeights(false); // Needed?
         m_view->setSelectionMode(TreeView::ExtendedSelection);
         m_view->setSelectionBehavior(TreeView::SelectRows);
         m_view->setModel(model);

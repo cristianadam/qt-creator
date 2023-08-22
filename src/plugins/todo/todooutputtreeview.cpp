@@ -17,6 +17,7 @@ namespace Internal {
 TodoOutputTreeView::TodoOutputTreeView(QWidget *parent) :
     Utils::TreeView(parent)
 {
+    setUniformRowHeights(false);
     setRootIsDecorated(false);
     setFrameStyle(QFrame::NoFrame);
     setSortingEnabled(true);

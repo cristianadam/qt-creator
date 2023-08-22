@@ -298,6 +298,7 @@ SnippetsSettingsWidget::SnippetsSettingsWidget()
     }
 
     m_snippetsTable = new Utils::TreeView;
+    m_snippetsTable->setUniformRowHeights(false);
     m_snippetsTable->setRootIsDecorated(false);
     m_snippetsTable->setModel(&m_model);
 

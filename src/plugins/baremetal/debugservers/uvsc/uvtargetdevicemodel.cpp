@@ -367,6 +367,7 @@ void DeviceSelectionModel::parseDeviceVariant(QXmlStreamReader &in, DeviceSelect
 DeviceSelectionView::DeviceSelectionView(QWidget *parent)
     : TreeView(parent)
 {
+    setUniformRowHeights(false); // Check
     setRootIsDecorated(true);
     setSelectionMode(QAbstractItemView::SingleSelection);
 }

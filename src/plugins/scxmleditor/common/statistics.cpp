@@ -131,6 +131,7 @@ Statistics::Statistics(QWidget *parent)
     m_proxyModel->setSourceModel(m_model);
 
     m_statisticsView = new Utils::TreeView;
+    m_statisticsView->setUniformRowHeights(false);
     m_statisticsView->setModel(m_proxyModel);
     m_statisticsView->setAlternatingRowColors(true);
     m_statisticsView->setSortingEnabled(true);

@@ -152,6 +152,7 @@ NickNameDialog::NickNameDialog(QStandardItemModel *model, QWidget *parent) :
     auto filterLineEdit = new FancyLineEdit;
 
     m_filterTreeView = new TreeView;
+    m_filterTreeView->setUniformRowHeights(false); // Needed?
 
     m_buttonBox = new QDialogButtonBox(QDialogButtonBox::Cancel|QDialogButtonBox::Ok);
 

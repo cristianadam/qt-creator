@@ -27,6 +27,7 @@ ResourceView::ResourceView(RelativeResourceModel *model, QUndoStack *history, QW
     m_history(history),
     m_mergeId(-1)
 {
+    setUniformRowHeights(false); // Needed?
     advanceMergeId();
     setModel(m_qrcModel);
     setContextMenuPolicy(Qt::CustomContextMenu);

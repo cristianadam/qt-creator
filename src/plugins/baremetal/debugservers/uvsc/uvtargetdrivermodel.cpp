@@ -143,6 +143,7 @@ void DriverSelectionModel::fillDrivers(const FilePath &toolsIniFile,
 DriverSelectionView::DriverSelectionView(QWidget *parent)
     : TreeView(parent)
 {
+    setUniformRowHeights(false); // Check
     setRootIsDecorated(true);
     setSelectionMode(QAbstractItemView::SingleSelection);
 }
