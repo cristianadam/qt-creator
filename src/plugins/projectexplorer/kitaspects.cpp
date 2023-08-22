@@ -231,13 +231,12 @@ public:
 
         refresh();
 
-        m_manageButton = createManageButton(Constants::TOOLCHAIN_SETTINGS_PAGE_ID);
+        setManagingPage(Constants::TOOLCHAIN_SETTINGS_PAGE_ID);
     }
 
     ~ToolChainKitAspectImpl() override
     {
         delete m_mainWidget;
-        delete m_manageButton;
     }
 
 private:
@@ -245,7 +244,6 @@ private:
     {
         addMutableAction(m_mainWidget);
         builder.addItem(m_mainWidget);
-        builder.addItem(m_manageButton);
     }
 
     void refresh() override
@@ -317,7 +315,6 @@ private:
     }
 
     QWidget *m_mainWidget = nullptr;
-    QWidget *m_manageButton = nullptr;
     QHash<Id, QComboBox *> m_languageComboboxMap;
     Guard m_ignoreChanges;
     bool m_isReadOnly = false;
@@ -935,11 +932,11 @@ public:
         m_comboBox(createSubWidget<QComboBox>()),
         m_model(new DeviceManagerModel(DeviceManager::instance()))
     {
+        setManagingPage(Constants::DEVICE_SETTINGS_PAGE_ID);
         m_comboBox->setSizePolicy(QSizePolicy::Preferred,
                                   m_comboBox->sizePolicy().verticalPolicy());
         m_comboBox->setModel(m_model);
         m_comboBox->setMinimumContentsLength(16); // Don't stretch too much for Kit Page
-        m_manageButton = createManageButton(Constants::DEVICE_SETTINGS_PAGE_ID);
         refresh();
         m_comboBox->setToolTip(factory->description());
 
@@ -955,7 +952,6 @@ public:
     {
         delete m_comboBox;
         delete m_model;
-        delete m_manageButton;
     }
 
 private:
@@ -963,7 +959,6 @@ private:
     {
         addMutableAction(m_comboBox);
         builder.addItem(m_comboBox);
-        builder.addItem(m_manageButton);
     }
 
     void makeReadOnly() override { m_comboBox->setEnabled(false); }
@@ -995,7 +990,6 @@ private:
 
     Guard m_ignoreChanges;
     QComboBox *m_comboBox;
-    QWidget *m_manageButton;
     DeviceManagerModel *m_model;
     Id m_selectedId;
 };
@@ -1219,9 +1213,9 @@ public:
         m_comboBox(createSubWidget<QComboBox>()),
         m_model(new DeviceManagerModel(DeviceManager::instance()))
     {
+        setManagingPage(Constants::DEVICE_SETTINGS_PAGE_ID);
         m_comboBox->setSizePolicy(QSizePolicy::Ignored, m_comboBox->sizePolicy().verticalPolicy());
         m_comboBox->setModel(m_model);
-        m_manageButton = createManageButton(Constants::DEVICE_SETTINGS_PAGE_ID);
         refresh();
         m_comboBox->setToolTip(factory->description());
 
@@ -1237,7 +1231,6 @@ public:
     {
         delete m_comboBox;
         delete m_model;
-        delete m_manageButton;
     }
 
 private:
@@ -1245,7 +1238,6 @@ private:
     {
         addMutableAction(m_comboBox);
         builder.addItem(m_comboBox);
-        builder.addItem(m_manageButton);
     }
 
     void makeReadOnly() override { m_comboBox->setEnabled(false); }
@@ -1285,7 +1277,6 @@ private:
 
     Guard m_ignoreChanges;
     QComboBox *m_comboBox;
-    QWidget *m_manageButton;
     DeviceManagerModel *m_model;
     Id m_selectedId;
 };
