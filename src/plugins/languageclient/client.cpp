@@ -1948,8 +1948,13 @@ void ClientPrivate::handleMethod(const QString &method, const MessageId &id, con
             response.setId(id);
         ConfigurationRequest configurationRequest(message.toJsonObject());
         if (auto params = configurationRequest.params()) {
-            for (int i = 0, end = params->items().count(); i < end; ++i)
-                result.append({});
+            const QList<ConfigurationParams::ConfigurationItem> items = params->items();
+            for (const ConfigurationParams::ConfigurationItem &item : items) {
+                QJsonValue val;
+                if (const std::optional<QString> section = item.section())
+                    val = m_configuration.toObject().value(*section);
+                result.append(val);
+            }
         }
         response.setResult(result);
         sendResponse(response);
