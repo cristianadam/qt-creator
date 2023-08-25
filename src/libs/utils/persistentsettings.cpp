@@ -357,6 +357,12 @@ FilePath PersistentSettingsReader::filePath()
     \sa Utils::PersistentSettingsReader
 */
 
+#if QT_VERSION < QT_VERSION_CHECK(6, 5, 0)
+static QString xmlAttrFromKey(const Key &key) { return stringFromKey(key); }
+#else
+static  Key xmlAttrFromKey(const Key &key) { return key; }
+#endif
+
 static void writeVariantValue(QXmlStreamWriter &w, const Context &ctx,
                               const QVariant &variant, const Key &key = {})
 {
@@ -366,7 +372,7 @@ static void writeVariantValue(QXmlStreamWriter &w, const Context &ctx,
         w.writeStartElement(ctx.valueListElement);
         w.writeAttribute(ctx.typeAttribute, QLatin1String(QVariant::typeToName(QVariant::List)));
         if (!key.isEmpty())
-            w.writeAttribute(ctx.keyAttribute, key);
+            w.writeAttribute(ctx.keyAttribute, xmlAttrFromKey(key));
         const QList<QVariant> list = variant.toList();
         for (const QVariant &var : list)
             writeVariantValue(w, ctx, var);
@@ -377,7 +383,7 @@ static void writeVariantValue(QXmlStreamWriter &w, const Context &ctx,
         w.writeStartElement(ctx.valueMapElement);
         w.writeAttribute(ctx.typeAttribute, QLatin1String(QVariant::typeToName(QVariant::Map)));
         if (!key.isEmpty())
-            w.writeAttribute(ctx.keyAttribute, key);
+            w.writeAttribute(ctx.keyAttribute, xmlAttrFromKey(key));
         const Store varMap = variant.value<Store>();
         const Store::const_iterator cend = varMap.constEnd();
         for (Store::const_iterator i = varMap.constBegin(); i != cend; ++i)
@@ -392,7 +398,7 @@ static void writeVariantValue(QXmlStreamWriter &w, const Context &ctx,
         w.writeStartElement(ctx.valueElement);
         w.writeAttribute(ctx.typeAttribute, QLatin1String(variant.typeName()));
         if (!key.isEmpty())
-            w.writeAttribute(ctx.keyAttribute, key);
+            w.writeAttribute(ctx.keyAttribute, xmlAttrFromKey(key));
         switch (variant.type()) {
         case QVariant::Rect:
             w.writeCharacters(rectangleToString(variant.toRect()));
