@@ -17,4 +17,10 @@ QStringList stringsFromKeys(const KeyList &list)
     return transform(list, &stringFromKey);
 }
 
+bool isStore(const QVariant &variant)
+{
+    const int typeId = variant.typeId();
+    return typeId != QMetaType::QVariantMap && typeId != qMetaTypeId<Store>();
+}
+
 } // Utils

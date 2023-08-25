@@ -366,8 +366,6 @@ static  Key xmlAttrFromKey(const Key &key) { return key; }
 static void writeVariantValue(QXmlStreamWriter &w, const Context &ctx,
                               const QVariant &variant, const Key &key = {})
 {
-    static const int storeId = qMetaTypeId<Store>();
-
     const int variantType = variant.typeId();
     if (variantType == QMetaType::QStringList || variantType == QMetaType::QVariantList) {
         w.writeStartElement(ctx.valueListElement);
@@ -378,7 +376,18 @@ static void writeVariantValue(QXmlStreamWriter &w, const Context &ctx,
         for (const QVariant &var : list)
             writeVariantValue(w, ctx, var);
         w.writeEndElement();
-    } else if (variantType == storeId || variantType == QMetaType::QVariantMap) {
+    } else if (variantType == QMetaType::QVariantMap) {
+        w.writeStartElement(ctx.valueMapElement);
+        w.writeAttribute(ctx.typeAttribute, "QVariantMap");
+        if (!key.isEmpty())
+            w.writeAttribute(ctx.keyAttribute, xmlAttrFromKey(key));
+        const QVariantMap varMap = variant.value<QVariantMap>();
+        const QVariantMap::const_iterator cend = varMap.constEnd();
+        for (QVariantMap::const_iterator i = varMap.constBegin(); i != cend; ++i)
+            writeVariantValue(w, ctx, i.value(), keyFromString(i.key()));
+        w.writeEndElement();
+    } else if (isStore(variant)) {
+        // The true QVariantMap is handled above
         w.writeStartElement(ctx.valueMapElement);
         w.writeAttribute(ctx.typeAttribute, "QVariantMap");
         if (!key.isEmpty())

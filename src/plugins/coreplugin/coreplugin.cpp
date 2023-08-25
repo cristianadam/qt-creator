@@ -79,8 +79,6 @@ CorePlugin::CorePlugin()
     qRegisterMetaType<Utils::FilePath>();
     qRegisterMetaType<Utils::Environment>();
     qRegisterMetaType<Utils::Store>();
-    qRegisterMetaType<Utils::Key>();
-    qRegisterMetaType<Utils::KeyList>();
     m_instance = this;
     setupSystemEnvironment();
 }

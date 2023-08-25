@@ -837,7 +837,7 @@ void CMakeGeneratorKitAspectFactory::upgrade(Kit *k)
     QTC_ASSERT(k, return);
 
     const QVariant value = k->value(GENERATOR_ID);
-    if (value.type() != QVariant::Map) {
+    if (isStore(value)) {
         GeneratorInfo info;
         const QString fullName = value.toString();
         const int pos = fullName.indexOf(" - ");

@@ -6,6 +6,7 @@
 #include "algorithm.h"
 #include "hostosinfo.h"
 #include "qtcassert.h"
+#include "store.h"
 #include "theme/theme.h"
 #include "utilstr.h"
 #include "wizardpage.h"
@@ -372,17 +373,9 @@ QHash<QString, QVariant> Wizard::variables() const
     return result;
 }
 
-QString typeOf(const QVariant &v)
+static QString typeOf(const QVariant &v)
 {
-    QString result;
-    switch (v.type()) {
-    case QVariant::Map:
-        result = QLatin1String("Object");
-        break;
-    default:
-        result = QLatin1String(v.typeName());
-    }
-    return result;
+    return isStore(v) ? QLatin1String("Object") : QLatin1String(v.typeName());
 }
 
 void Wizard::showVariables()

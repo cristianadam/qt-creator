@@ -21,8 +21,8 @@ using Store = QVariantMap;
 QTCREATOR_UTILS_EXPORT KeyList keysFromStrings(const QStringList &list);
 QTCREATOR_UTILS_EXPORT QStringList stringsFromKeys(const KeyList &list);
 
+QTCREATOR_UTILS_EXPORT bool isStore(const QVariant &variant);
+
 } // Utils
 
-Q_DECLARE_METATYPE(Utils::Key)
-Q_DECLARE_METATYPE(Utils::KeyList)
 Q_DECLARE_METATYPE(Utils::Store)
