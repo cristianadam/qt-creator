@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 import QtQuick
+import QtQuick.Controls.Basic as Basic
 import HelperWidgets as HelperWidgets
 import StudioControls as StudioControls
 import StudioTheme as StudioTheme
@@ -258,13 +259,38 @@ Item {
             }
         }
 
-        AssetsView {
-            id: assetsView
-            assetsRoot: root
-            contextMenu: contextMenu
+        Basic.ScrollView {
+            id: scrollView
+
+            property bool adsFocus: false
+            // objectName is used by the dock widget to find this particular ScrollView
+            // and set the ads focus on it.
+            objectName: "__mainSrollView"
+
             width: parent.width
             height: parent.height - assetsView.y
-            focus: true
+
+            Basic.ScrollBar.vertical: HelperWidgets.ScrollBar {
+                id: verticalScrollBar
+                parent: scrollView
+                x: scrollView.mirrored ? 0 : scrollView.width - width
+                y: scrollView.topPadding
+                height: scrollView.availableHeight
+                orientation: Qt.Vertical
+
+                show: (scrollView.hovered || scrollView.focus || scrollView.adsFocus)
+                      && verticalScrollBar.isNeeded
+            }
+
+            AssetsView {
+                id: assetsView
+
+                property alias verticalScrollBar: verticalScrollBar
+
+                assetsRoot: root
+                contextMenu: contextMenu
+                focus: true
+            }
         }
     }
 }

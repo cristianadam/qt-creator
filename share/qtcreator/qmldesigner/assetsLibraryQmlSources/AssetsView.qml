@@ -21,7 +21,6 @@ TreeView {
 
     required property Item assetsRoot
     required property StudioControls.Menu contextMenu
-    property alias verticalScrollBar: verticalScrollBar
 
     property var selectedAssets: ({})
     // the latest file that was clicked, or changed to via Up or Down keys
@@ -44,11 +43,6 @@ TreeView {
             return 0
 
         return -1
-    }
-
-    ScrollBar.vertical: HelperWidgets.VerticalScrollBar {
-        id: verticalScrollBar
-        scrollBarVisible: root.contentHeight > root.height
     }
 
     model: assetsModel
