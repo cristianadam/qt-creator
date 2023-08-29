@@ -46,8 +46,6 @@ namespace Internal {
 class QtSupportPluginPrivate
 {
 public:
-    QtVersionManager qtVersionManager;
-
     DesktopQtVersionFactory desktopQtVersionFactory;
     EmbeddedLinuxQtVersionFactory embeddedLinuxQtVersionFactory;
 
@@ -133,8 +131,6 @@ void QtSupportPlugin::initialize()
     BuildPropertiesSettings::showQtSettings();
 
     d = new QtSupportPluginPrivate;
-
-    QtVersionManager::initialized();
 }
 
 const char kLinkWithQtInstallationSetting[] = "LinkWithQtInstallation";
