@@ -213,6 +213,7 @@
                             \li \l {Set high DPI scaling}
                             \li \l {Set the number of recent files shown}
                             \li \l {Show and hide sidebars}
+                            \li \l {Show task list files in Issues}
                             \li \l {Switch between modes}
                             \li \l {Switch UI themes}
                             \li \l {View output}
@@ -236,6 +237,7 @@
                     \li Design UIs
                          \list
                             \li \l {Export SVG images}
+                            \li \l {Run QML files}
                             \li \l {View images}
                         \endlist
                     \li Manage Projects
