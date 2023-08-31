@@ -1162,6 +1162,8 @@ void ConnectionModelStatementDelegate::handleRhsAssignmentChanged()
     assignmentStatement.rhs.nodeId = m_rhsAssignmentDelegate.id();
     assignmentStatement.rhs.propertyName = m_rhsAssignmentDelegate.name();
 
+    setupPropertyType();
+
     emit statementChanged();
 }
 
@@ -1299,6 +1301,7 @@ void ConnectionModelStatementDelegate::setupAssignment()
     const auto assignment = std::get<ConnectionEditorStatements::Assignment>(m_statement);
     m_lhsDelegate.setup(assignment.lhs.nodeId, assignment.lhs.propertyName);
     m_rhsAssignmentDelegate.setup(assignment.rhs.nodeId, assignment.rhs.propertyName);
+    setupPropertyType();
 }
 
 void ConnectionModelStatementDelegate::setupSetProperty()
@@ -1412,6 +1415,26 @@ void ConnectionModelStatementDelegate::setupPrintMessage()
 
     const auto consoleLog = std::get<ConnectionEditorStatements::ConsoleLog>(m_statement);
     m_stringArgument.setText(ConnectionEditorStatements::toString(consoleLog.argument));
+}
+
+void ConnectionModelStatementDelegate::setupPropertyType()
+{
+    PropertyTreeModel::PropertyTypes type = PropertyTreeModel::AllTypes;
+
+    const NodeMetaInfo metaInfo = m_rhsAssignmentDelegate.propertyMetaInfo();
+
+    if (metaInfo.isBool())
+        type = PropertyTreeModel::BoolType;
+    else if (metaInfo.isNumber())
+        type = PropertyTreeModel::NumberType;
+    else if (metaInfo.isColor())
+        type = PropertyTreeModel::ColorType;
+    else if (metaInfo.isString())
+        type = PropertyTreeModel::StringType;
+    else if (metaInfo.isUrl())
+        type = PropertyTreeModel::UrlType;
+
+    m_lhsDelegate.setPropertyType(type);
 }
 
 QString ConnectionModelStatementDelegate::baseStateName() const
