@@ -323,7 +323,7 @@ void IosConfigurations::kitsRestored()
     disconnect(KitManager::instance(), &KitManager::kitsLoaded,
                this, &IosConfigurations::kitsRestored);
     IosConfigurations::updateAutomaticKitList();
-    connect(QtVersionManager::instance(), &QtVersionManager::qtVersionsChanged,
+    connect(QtVersionManagerSignals::instance(), &QtVersionManagerSignals::qtVersionsChanged,
             IosConfigurations::instance(), &IosConfigurations::updateAutomaticKitList);
 }
 

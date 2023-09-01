@@ -48,8 +48,8 @@ public:
                 currentWasChanged(m_combo->currentIndex());
         });
 
-        connect(QtVersionManager::instance(),
-                &QtVersionManager::qtVersionsChanged,
+        connect(QtVersionManagerSignals::instance(),
+                &QtVersionManagerSignals::qtVersionsChanged,
                 this,
                 &QtKitAspectImpl::refresh);
     }
@@ -434,7 +434,7 @@ void QtKitAspectFactory::onKitsLoaded()
     for (Kit *k : KitManager::kits())
         fix(k);
 
-    connect(QtVersionManager::instance(), &QtVersionManager::qtVersionsChanged,
+    connect(QtVersionManagerSignals::instance(), &QtVersionManagerSignals::qtVersionsChanged,
             this, &QtKitAspectFactory::qtVersionsChanged);
 }
 

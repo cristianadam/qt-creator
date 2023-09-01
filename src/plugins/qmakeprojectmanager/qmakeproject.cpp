@@ -241,7 +241,7 @@ QmakeBuildSystem::QmakeBuildSystem(QmakeBuildConfiguration *bc)
             scheduleUpdateAllNowOrLater();
     });
 
-    connect(QtVersionManager::instance(), &QtVersionManager::qtVersionsChanged,
+    connect(QtVersionManagerSignals::instance(), &QtVersionManagerSignals::qtVersionsChanged,
             this, [this](const QList<int> &,const QList<int> &, const QList<int> &changed) {
         if (changed.contains(QtKitAspect::qtVersionId(kit())))
             scheduleUpdateAllNowOrLater();

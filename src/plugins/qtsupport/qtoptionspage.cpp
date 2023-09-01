@@ -365,7 +365,7 @@ QtOptionsPageWidget::QtOptionsPageWidget()
     userChangedCurrentVersion();
     updateCleanUpButton();
 
-    connect(QtVersionManager::instance(), &QtVersionManager::qtVersionsChanged,
+    connect(QtVersionManagerSignals::instance(), &QtVersionManagerSignals::qtVersionsChanged,
             this, &QtOptionsPageWidget::updateQtVersions);
 
     connect(ProjectExplorer::ToolChainManager::instance(), &ToolChainManager::toolChainsChanged,
@@ -888,8 +888,8 @@ void QtOptionsPageWidget::updateCurrentQtName()
 
 void QtOptionsPageWidget::apply()
 {
-    disconnect(QtVersionManager::instance(),
-               &QtVersionManager::qtVersionsChanged,
+    disconnect(QtVersionManagerSignals::instance(),
+               &QtVersionManagerSignals::qtVersionsChanged,
                this,
                &QtOptionsPageWidget::updateQtVersions);
 
@@ -903,8 +903,8 @@ void QtOptionsPageWidget::apply()
     });
     QtVersionManager::setNewQtVersions(versions);
 
-    connect(QtVersionManager::instance(),
-            &QtVersionManager::qtVersionsChanged,
+    connect(QtVersionManagerSignals::instance(),
+            &QtVersionManagerSignals::qtVersionsChanged,
             this,
             &QtOptionsPageWidget::updateQtVersions);
 }

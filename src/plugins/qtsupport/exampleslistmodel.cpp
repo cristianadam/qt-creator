@@ -103,7 +103,7 @@ ExampleSetModel::ExampleSetModel()
     }
     m_extraExampleSets += pluginRegisteredExampleSets();
 
-    connect(QtVersionManager::instance(), &QtVersionManager::qtVersionsLoaded,
+    connect(QtVersionManagerSignals::instance(), &QtVersionManagerSignals::qtVersionsLoaded,
             this, &ExampleSetModel::qtVersionManagerLoaded);
 
     connect(Core::HelpManager::Signals::instance(),
@@ -575,7 +575,7 @@ void ExampleSetModel::tryToInitialize()
 
     m_initalized = true;
 
-    connect(QtVersionManager::instance(), &QtVersionManager::qtVersionsChanged,
+    connect(QtVersionManagerSignals::instance(), &QtVersionManagerSignals::qtVersionsChanged,
             this, &ExampleSetModel::updateQtVersionList);
     connect(ProjectExplorer::KitManager::instance(), &ProjectExplorer::KitManager::defaultkitChanged,
             this, &ExampleSetModel::updateQtVersionList);
