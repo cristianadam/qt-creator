@@ -15,8 +15,16 @@ namespace Utils {
 
 MimeType mimeTypeForName(const QString &nameOrAlias)
 {
-    MimeDatabase mdb;
-    return mdb.mimeTypeForName(nameOrAlias);
+    static QHash<QString, MimeType> cache;
+    static int a, b;
+    if (!cache.contains(nameOrAlias)) {
+        ++a;
+        MimeDatabase mdb;
+        cache.insert(nameOrAlias, mdb.mimeTypeForName(nameOrAlias));
+    } else {
+        ++b;
+    }
+    return cache.value(nameOrAlias);
 }
 
 MimeType mimeTypeForFile(const QString &fileName, MimeMatchMode mode)
