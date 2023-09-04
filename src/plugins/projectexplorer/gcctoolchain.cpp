@@ -1644,15 +1644,6 @@ void GccToolChain::syncAutodetectedWithParentToolchains()
           });
 }
 
-ClangToolChain::ClangToolChain() :
-    ClangToolChain(Constants::CLANG_TOOLCHAIN_TYPEID)
-{}
-
-ClangToolChain::ClangToolChain(Utils::Id typeId) :
-    GccToolChain(typeId, GccToolChain::Clang)
-{
-}
-
 bool GccToolChain::matchesCompilerCommand(const FilePath &command) const
 {
     if (m_subType == Clang) {
@@ -1695,7 +1686,9 @@ ClangToolChainFactory::ClangToolChainFactory()
     setDisplayName(Tr::tr("Clang"));
     setSupportedToolChainType(Constants::CLANG_TOOLCHAIN_TYPEID);
     setSupportedLanguages({Constants::CXX_LANGUAGE_ID, Constants::C_LANGUAGE_ID});
-    setToolchainConstructor([] { return new ClangToolChain; });
+    setToolchainConstructor([] {
+        return new GccToolChain(Constants::CLANG_TOOLCHAIN_TYPEID, GccToolChain::Clang);
+    });
 }
 
 Toolchains ClangToolChainFactory::autoDetect(const ToolchainDetector &detector) const
@@ -1781,7 +1774,7 @@ ClangToolChainConfigWidget::ClangToolChainConfigWidget(GccToolChain *tc) :
 
 void ClangToolChainConfigWidget::updateParentToolChainComboBox()
 {
-    auto *tc = static_cast<ClangToolChain *>(toolChain());
+    auto *tc = static_cast<GccToolChain *>(toolChain());
     QByteArray parentId = m_parentToolchainCombo->currentData().toByteArray();
     if (tc->isAutoDetected() || m_parentToolchainCombo->count() == 0)
         parentId = tc->m_parentToolChainId;
@@ -1818,7 +1811,7 @@ void ClangToolChainConfigWidget::applyImpl()
     if (!m_parentToolchainCombo)
         return;
 
-    auto *tc = static_cast<ClangToolChain *>(toolChain());
+    auto *tc = static_cast<GccToolChain *>(toolChain());
     tc->m_parentToolChainId.clear();
 
     const QByteArray parentId = m_parentToolchainCombo->currentData().toByteArray();
@@ -1842,7 +1835,7 @@ bool ClangToolChainConfigWidget::isDirtyImpl() const
     if (!m_parentToolchainCombo)
         return false;
 
-    auto tc = static_cast<ClangToolChain *>(toolChain());
+    auto tc = static_cast<GccToolChain *>(toolChain());
     Q_ASSERT(tc);
     const MingwToolChain *parentTC = mingwToolChainFromId(tc->m_parentToolChainId);
     const QByteArray parentId = parentTC ? parentTC->id() : QByteArray();
