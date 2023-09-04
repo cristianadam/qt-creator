@@ -46,7 +46,10 @@ inline const QStringList gccPredefinedMacrosOptions(Utils::Id languageId)
 class PROJECTEXPLORER_EXPORT GccToolChain : public ToolChain
 {
 public:
-    GccToolChain(Utils::Id typeId);
+    enum SubType { RealGcc, Clang };
+
+    GccToolChain(Utils::Id typeId, SubType subType = RealGcc);
+    ~GccToolChain() override;
 
     QString originalTargetTriple() const override;
     Utils::FilePath installDir() const override;
@@ -95,6 +98,10 @@ public:
     };
     GccToolChain *asGccToolChain() final { return this; }
 
+    bool matchesCompilerCommand(const Utils::FilePath &command) const;
+
+    void setPriority(int priority) { m_priority = priority; }
+
 protected:
     using CacheItem = QPair<QStringList, Macros>;
     using GccCache = QVector<CacheItem>;
@@ -135,6 +142,8 @@ protected:
                                       const QStringList &args,
                                       const Utils::Environment &env);
 
+    int priority() const override { return m_priority; }
+
     class WarningFlagAdder
     {
     public:
@@ -148,6 +157,8 @@ protected:
         bool m_doesEnable = false;
         bool m_triggered = false;
     };
+
+    QString sysRoot() const override;
 
 private:
     void updateSupportedAbis() const;
@@ -174,6 +185,22 @@ private:
     friend class Internal::GccToolChainConfigWidget;
     friend class Internal::GccToolChainFactory;
     friend class ToolChainFactory;
+
+    friend class Internal::ClangToolChainFactory;
+    friend class Internal::ClangToolChainConfigWidget;
+
+    // Clang-only
+
+    void syncAutodetectedWithParentToolchains();
+
+    // "resolved" on macOS from /usr/bin/clang(++) etc to <DeveloperDir>/usr/bin/clang(++)
+    // which is used for comparison with atchesCompileCommand
+    mutable std::optional<Utils::FilePath> m_resolvedCompilerCommand;
+    SubType m_subType = RealGcc;
+    QByteArray m_parentToolChainId;
+    int m_priority = PriorityNormal;
+    QMetaObject::Connection m_mingwToolchainAddedConnection;
+    QMetaObject::Connection m_thisToolchainRemovedConnection;
 };
 
 // --------------------------------------------------------------------------
@@ -185,50 +212,6 @@ class PROJECTEXPLORER_EXPORT ClangToolChain : public GccToolChain
 public:
     ClangToolChain();
     explicit ClangToolChain(Utils::Id typeId);
-    ~ClangToolChain() override;
-
-    bool matchesCompilerCommand(const Utils::FilePath &command) const override;
-
-    Utils::FilePath makeCommand(const Utils::Environment &environment) const override;
-
-    Utils::LanguageExtensions languageExtensions(const QStringList &cxxflags) const override;
-    Utils::WarningFlags warningFlags(const QStringList &cflags) const override;
-
-    QList<Utils::OutputLineParser *> createOutputParsers() const override;
-
-    QStringList suggestedMkspecList() const override;
-    void addToEnvironment(Utils::Environment &env) const override;
-
-    QString originalTargetTriple() const override;
-    QString sysRoot() const override;
-
-    BuiltInHeaderPathsRunner createBuiltInHeaderPathsRunner(
-            const Utils::Environment &env) const override;
-
-    std::unique_ptr<ToolChainConfigWidget> createConfigurationWidget() override;
-
-    void toMap(Utils::Store &data) const override;
-    void fromMap(const Utils::Store &data) override;
-
-    void setPriority(int priority) { m_priority = priority; }
-    int priority() const override { return m_priority; }
-
-protected:
-    Utils::LanguageExtensions defaultLanguageExtensions() const override;
-    void syncAutodetectedWithParentToolchains();
-
-private:
-    // "resolved" on macOS from /usr/bin/clang(++) etc to <DeveloperDir>/usr/bin/clang(++)
-    // which is used for comparison with matchesCompileCommand
-    mutable std::optional<Utils::FilePath> m_resolvedCompilerCommand;
-    QByteArray m_parentToolChainId;
-    int m_priority = PriorityNormal;
-    QMetaObject::Connection m_mingwToolchainAddedConnection;
-    QMetaObject::Connection m_thisToolchainRemovedConnection;
-
-    friend class Internal::ClangToolChainFactory;
-    friend class Internal::ClangToolChainConfigWidget;
-    friend class ToolChainFactory;
 };
 
 // --------------------------------------------------------------------------
