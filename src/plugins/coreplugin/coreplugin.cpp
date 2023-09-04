@@ -83,6 +83,12 @@ CorePlugin::CorePlugin()
     qRegisterMetaType<Utils::KeyList>();
     m_instance = this;
     setupSystemEnvironment();
+
+
+    const QStringList iconSearchPaths = QIcon::themeSearchPaths();
+    QIcon::setThemeSearchPaths({":/"});
+    QIcon::setThemeName("qtc");
+    QStringList cachedPaths;
 }
 
 CorePlugin::~CorePlugin()
