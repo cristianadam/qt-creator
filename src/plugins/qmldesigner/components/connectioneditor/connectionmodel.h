@@ -98,7 +98,7 @@ class ConditionListModel : public QAbstractListModel
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
 
 public:
-    enum ConditionType { Invalid, Operator, Literal, Variable };
+    enum ConditionType { Intermediate, Invalid, Operator, Literal, Variable, Shadow };
     Q_ENUM(ConditionType)
 
     struct ConditionToken
@@ -128,6 +128,10 @@ public:
     Q_INVOKABLE void updateToken(int index, const QString &value);
     Q_INVOKABLE void appendToken(const QString &value);
     Q_INVOKABLE void removeToken(int index);
+
+    Q_INVOKABLE void insertIntermediateToken(int index, const QString &value);
+    Q_INVOKABLE void insertShadowToken(int index, const QString &value);
+    Q_INVOKABLE void setShadowToken(int index, const QString &value);
 
     bool valid() const;
     bool empty() const;
@@ -245,6 +249,9 @@ class ConnectionModelBackendDelegate : public QObject
     Q_PROPERTY(bool hasElse READ hasElse NOTIFY hasElseChanged)
     Q_PROPERTY(QString source READ source NOTIFY sourceChanged)
 
+    Q_PROPERTY(PropertyTreeModel *propertyTreeModel READ propertyTreeModel CONSTANT)
+    Q_PROPERTY(PropertyListProxyModel *propertyListProxyModel READ propertyListProxyModel CONSTANT)
+
 public:
     explicit ConnectionModelBackendDelegate(ConnectionModel *parent = nullptr);
 
@@ -282,6 +289,10 @@ private:
     ConditionListModel *conditionListModel();
     QString source() const;
     void setSource(const QString &source);
+
+    PropertyTreeModel *propertyTreeModel();
+    PropertyListProxyModel *propertyListProxyModel();
+
     void setupCondition();
     void setupHandlerAndStatements();
 
@@ -303,6 +314,8 @@ private:
     bool m_hasCondition = false;
     bool m_hasElse = false;
     QString m_source;
+    PropertyTreeModel m_propertyTreeModel;
+    PropertyListProxyModel m_propertyListProxyModel;
 };
 
 } // namespace QmlDesigner

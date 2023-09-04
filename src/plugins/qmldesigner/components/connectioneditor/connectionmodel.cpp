@@ -559,8 +559,13 @@ QHash<int, QByteArray> ConnectionModel::roleNames() const
 }
 
 ConnectionModelBackendDelegate::ConnectionModelBackendDelegate(ConnectionModel *parent)
-    : QObject(parent), m_signalDelegate(parent->connectionView()), m_okStatementDelegate(parent),
-      m_koStatementDelegate(parent), m_conditionListModel(parent)
+    : QObject(parent)
+    , m_signalDelegate(parent->connectionView())
+    , m_okStatementDelegate(parent)
+    , m_koStatementDelegate(parent)
+    , m_conditionListModel(parent)
+    , m_propertyTreeModel(parent->connectionView())
+    , m_propertyListProxyModel(&m_propertyTreeModel)
 {
     connect(&m_signalDelegate, &PropertyTreeModelDelegate::commitData, this, [this]() {
         handleTargetChanged();
@@ -753,6 +758,9 @@ void ConnectionModelBackendDelegate::setCurrentRow(int i)
 
     m_currentRow = i;
 
+    m_propertyTreeModel.resetModel();
+    m_propertyListProxyModel.setRowAndInternalId(0, -1);
+
     //setup
 
     ConnectionModel *model = qobject_cast<ConnectionModel *>(parent());
@@ -868,6 +876,16 @@ void ConnectionModelBackendDelegate::setSource(const QString &source)
 
     m_source = source;
     emit sourceChanged();
+}
+
+PropertyTreeModel *ConnectionModelBackendDelegate::propertyTreeModel()
+{
+    return &m_propertyTreeModel;
+}
+
+PropertyListProxyModel *ConnectionModelBackendDelegate::propertyListProxyModel()
+{
+    return &m_propertyListProxyModel;
 }
 
 void ConnectionModelBackendDelegate::setupCondition()
@@ -1601,6 +1619,34 @@ void ConditionListModel::removeToken(int index)
     resetModel();
 }
 
+void ConditionListModel::insertIntermediateToken(int index, const QString &value)
+{
+    ConditionToken token;
+    token.type = Intermediate;
+    token.value = value;
+
+    m_tokens.insert(index, token);
+    resetModel();
+}
+
+void ConditionListModel::insertShadowToken(int index, const QString &value)
+{
+    ConditionToken token;
+    token.type = Shadow;
+    token.value = value;
+
+    m_tokens.insert(index, token);
+    resetModel();
+}
+
+void ConditionListModel::setShadowToken(int index, const QString &value)
+{
+    m_tokens[index].type = Shadow;
+    m_tokens[index].value = value;
+
+    resetModel();
+}
+
 bool ConditionListModel::valid() const
 {
     return m_valid;
@@ -1766,11 +1812,26 @@ int ConditionListModel::checkOrder() const
         it++;
         ret++;
     }
+
+    if (wasOperator)
+        return ret;
+
     return -1;
 }
 
 void ConditionListModel::validateAndRebuildTokens()
 {
+    /// NEW
+    auto it = m_tokens.begin();
+
+    while (it != m_tokens.end()) {
+        if (it->type == Intermediate)
+            *it = valueToToken(it->value);
+
+        it++;
+    }
+    // NEW
+
     QString invalidValue;
     const bool invalidToken = Utils::contains(m_tokens,
                                               [&invalidValue](const ConditionToken &token) {
