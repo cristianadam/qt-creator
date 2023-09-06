@@ -228,6 +228,10 @@ BindingModelBackendDelegate::BindingModelBackendDelegate(BindingModel *parent)
     connect(&m_sourceNodeProperty, &StudioQmlComboBoxBackend::activated, this, [this]() {
         expressionChanged();
     });
+
+    connect(&m_property, &StudioQmlComboBoxBackend::activated, this, [this]() {
+        handleTargetNameChanged();
+    });
 }
 
 void BindingModelBackendDelegate::update(const BindingProperty &property, AbstractView *view)
@@ -281,7 +285,7 @@ StudioQmlComboBoxBackend *BindingModelBackendDelegate::sourceProperty()
     return &m_sourceNodeProperty;
 }
 
-void BindingModelBackendDelegate::expressionChanged() const
+void BindingModelBackendDelegate::expressionChanged()
 {
     BindingModel *model = qobject_cast<BindingModel *>(parent());
     QTC_ASSERT(model, return);
@@ -297,6 +301,78 @@ void BindingModelBackendDelegate::expressionChanged() const
 
     int row = model->currentIndex();
     model->commitExpression(row, expression);
+    setupSourcePropertyNames();
+}
+
+void BindingModelBackendDelegate::handleTargetNameChanged()
+{
+    BindingModel *model = qobject_cast<BindingModel *>(parent());
+
+    QTC_ASSERT(model, return );
+    QTC_ASSERT(model->connectionView(), return );
+
+    BindingProperty bindingProperty = model->propertyForRow(model->currentIndex());
+
+    const PropertyName newName = m_property.currentText().toUtf8();
+    const QString expression = bindingProperty.expression();
+    const PropertyName dynamicPropertyType = bindingProperty.dynamicTypeName();
+    ModelNode targetNode = bindingProperty.parentModelNode();
+
+    if (!newName.isEmpty()) {
+        model->connectionView()
+            ->executeInTransaction("BindingModelBackendDelegate::handleTargetNameChanged", [&]() {
+                if (bindingProperty.isDynamic()) {
+                    targetNode.bindingProperty(newName)
+                        .setDynamicTypeNameAndExpression(dynamicPropertyType, expression);
+                } else {
+                    targetNode.bindingProperty(newName).setExpression(expression);
+                }
+                targetNode.removeProperty(bindingProperty.name());
+            });
+    }
+    setupSourcePropertyNames();
+}
+
+void BindingModelBackendDelegate::setupSourcePropertyNames()
+{
+    BindingModel *model = qobject_cast<BindingModel *>(parent());
+
+    QTC_ASSERT(model, return );
+
+    auto view = model->connectionView();
+
+    BindingProperty property = model->propertyForRow(model->currentIndex());
+
+    auto [sourceNodeName, sourcePropertyName] = splitExpression(property.expression());
+
+    QString targetName = QString::fromUtf8(property.name());
+    m_targetNode = idOrTypeName(property.parentModelNode());
+
+    auto addName = [](QStringList &&list, const QString &name) {
+        if (!list.contains(name))
+            list.prepend(name);
+        return std::move(list);
+    };
+
+    auto sourceproperties = addName(availableSourceProperties(property, view), sourcePropertyName);
+    m_sourceNodeProperty.setModel(sourceproperties);
+    m_sourceNodeProperty.setCurrentText(sourcePropertyName);
+
+    /*
+     *
+    QString sourceNodeName;
+    QString sourcePropertyName;
+
+    model->getExpressionStrings(bindingProperty, &sourceNodeName, &sourcePropertyName);
+
+    auto properties = model->possibleSourceProperties(bindingProperty);
+
+    if (!properties.contains(sourcePropertyName))
+        properties.append(sourcePropertyName);
+
+    m_sourceNodeProperty.setModel(properties);
+    m_sourceNodeProperty.setCurrentText(sourcePropertyName);
+*/
 }
 
 } // namespace QmlDesigner

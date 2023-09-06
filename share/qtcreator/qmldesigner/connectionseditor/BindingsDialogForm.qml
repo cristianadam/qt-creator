@@ -64,10 +64,17 @@ Column {
             onCurrentTypeIndexChanged: sourceProperty.currentIndex = sourceProperty.currentTypeIndex
         }
 
-        PopupLabel {
-             width: root.columnWidth
-             text: backend.property.currentText
-        }
+        TopLevelComboBox {
+                   id: name
+                    width: root.columnWidth
+                    style: StudioTheme.Values.connectionPopupControlStyle
+
+                    model: backend.property.model ?? []
+
+                    onActivated: backend.property.activateIndex(name.currentIndex)
+                    property int currentTypeIndex: backend.property.currentIndex ?? 0
+                    onCurrentTypeIndexChanged: name.currentIndex = name.currentTypeIndex
+               }
 
     }
 }
