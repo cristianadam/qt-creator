@@ -19,11 +19,19 @@
 
     \annotatedlist creator-reference-build-systems
 
+    \section1 Output Views
+
+    \annotatedlist creator-reference-output-views
+
     \section1 Sidebar Views
 
     \annotatedlist creator-reference-sidebar-views
 
-    \section1 Output Views
+    \section1 Version Control
 
-    \annotatedlist creator-reference-output-views
+    The recommended way to set up a project is to use a version control system.
+    Store and edit only project source files and configuration files. Do not
+    store generated files.
+
+    \annotatedlist creator-reference-vcs
 */
