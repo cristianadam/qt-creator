@@ -123,9 +123,10 @@ namespace Internal {
 class IDevicePrivate
 {
 public:
-    IDevicePrivate() = default;
+    IDevicePrivate(DeviceSettings *s)
+        : settings(s ? s : new DeviceSettings())
+    {}
 
-    DisplayName displayName;
     QString displayType;
     Id type;
     IDevice::Origin origin = IDevice::AutoDetected;
@@ -148,12 +149,22 @@ public:
     QList<IDevice::DeviceAction> deviceActions;
     Store extraData;
     IDevice::OpenTerminal openTerminal;
+
+    std::unique_ptr<DeviceSettings> settings;
 };
 } // namespace Internal
 
+DeviceSettings::DeviceSettings()
+{
+    displayName.setSettingsKey(DisplayNameKey);
+    displayName.setDisplayStyle(StringAspect::DisplayStyle::LineEditDisplay);
+    displayName.setLabelText(Tr::tr("Name:"));
+}
+
 DeviceTester::DeviceTester(QObject *parent) : QObject(parent) { }
 
-IDevice::IDevice() : d(new Internal::IDevicePrivate)
+IDevice::IDevice(DeviceSettings *settings)
+    : d(new Internal::IDevicePrivate(settings))
 {
 }
 
@@ -264,17 +275,17 @@ Environment IDevice::systemEnvironment() const
 
 QString IDevice::displayName() const
 {
-    return d->displayName.value();
+    return settings()->displayName();
 }
 
 void IDevice::setDisplayName(const QString &name)
 {
-    d->displayName.setValue(name);
+    settings()->displayName.setValue(name);
 }
 
 void IDevice::setDefaultDisplayName(const QString &name)
 {
-    d->displayName.setDefaultValue(name);
+    settings()->displayName.setDefaultValue(name);
 }
 
 QString IDevice::displayType() const
@@ -439,7 +450,8 @@ Id IDevice::idFromMap(const Store &map)
 void IDevice::fromMap(const Store &map)
 {
     d->type = typeFromMap(map);
-    d->displayName.fromMap(map, DisplayNameKey);
+    settings()->fromMap(map);
+
     d->id = Id::fromSetting(map.value(IdKey));
     d->osType = osTypeFromString(map.value(ClientOsTypeKey, osTypeToString(OsTypeLinux)).toString());
     if (!d->id.isValid())
@@ -487,7 +499,8 @@ void IDevice::fromMap(const Store &map)
 Store IDevice::toMap() const
 {
     Store map;
-    d->displayName.toMap(map, DisplayNameKey);
+    settings()->toMap(map);
+
     map.insert(TypeKey, d->type.toString());
     map.insert(ClientOsTypeKey, osTypeToString(d->osType));
     map.insert(IdKey, d->id.toSetting());
@@ -526,6 +539,16 @@ IDevice::Ptr IDevice::clone() const
     device->d->osType = d->osType;
     device->fromMap(toMap());
     return device;
+}
+
+DeviceSettings *IDevice::settings()
+{
+    return d->settings.get();
+}
+
+DeviceSettings *IDevice::settings() const
+{
+    return d->settings.get();
 }
 
 QString IDevice::deviceStateToString() const
