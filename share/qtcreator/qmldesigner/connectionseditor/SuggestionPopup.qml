@@ -10,7 +10,8 @@ Controls.Popup {
     property StudioTheme.ControlStyle style: StudioTheme.Values.controlStyle
 
     property var listModel: ConnectionsEditorEditorBackend.connectionModel.delegate.propertyListProxyModel
-    property var treeModel: ConnectionsEditorEditorBackend.connectionModel.delegate.propertyTreeModel
+    property var treeModel: ConnectionsEditorEditorBackend.connectionModel.delegate.propertyTreeProxyModel
+    //property var treeModel: ConnectionsEditorEditorBackend.connectionModel.delegate.propertyTreeModel
 
     signal select(var value)
     signal entered(var value)
@@ -160,8 +161,13 @@ Controls.Popup {
                 TreeView {
                     id: treeView
                     visible: !search.empty
+                    onVisibleChanged: {
+                        console.log("test", visible)
+                    }
+
                     width: stack.width
-                    implicitHeight: Math.min(380, childrenRect.height)
+                   // implicitHeight: Math.min(380, childrenRect.height)
+                     implicitHeight: 400
                     clip: true
                     model: root.treeModel
 

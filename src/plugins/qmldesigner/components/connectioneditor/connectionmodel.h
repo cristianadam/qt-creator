@@ -251,6 +251,7 @@ class ConnectionModelBackendDelegate : public QObject
 
     Q_PROPERTY(PropertyTreeModel *propertyTreeModel READ propertyTreeModel CONSTANT)
     Q_PROPERTY(PropertyListProxyModel *propertyListProxyModel READ propertyListProxyModel CONSTANT)
+    Q_PROPERTY(PropertyTreeProxyModel *propertyTreeProxyModel READ propertyTreeProxyModel CONSTANT)
 
 public:
     explicit ConnectionModelBackendDelegate(ConnectionModel *parent = nullptr);
@@ -266,6 +267,8 @@ public:
     Q_INVOKABLE void addElse();
     Q_INVOKABLE void removeElse();
 
+    void update();
+
 signals:
     void currentRowChanged();
     void actionTypeChanged();
@@ -273,7 +276,7 @@ signals:
     void hasElseChanged();
     void sourceChanged();
 
-private:
+private:    
     int currentRow() const;
     void setCurrentRow(int i);
 
@@ -292,6 +295,7 @@ private:
 
     PropertyTreeModel *propertyTreeModel();
     PropertyListProxyModel *propertyListProxyModel();
+    PropertyTreeProxyModel *propertyTreeProxyModel();
 
     void setupCondition();
     void setupHandlerAndStatements();
@@ -316,6 +320,7 @@ private:
     QString m_source;
     PropertyTreeModel m_propertyTreeModel;
     PropertyListProxyModel m_propertyListProxyModel;
+    PropertyTreeProxyModel m_propertyTreeProxyModel;
 };
 
 } // namespace QmlDesigner

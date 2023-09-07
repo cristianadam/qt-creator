@@ -28,8 +28,8 @@ class PropertyTreeModel : public QAbstractItemModel
     Q_OBJECT
 public:
     enum UserRoles {
-        PropertyNameRole = Qt::UserRole + 1,
-        PropertyPriorityRole,
+        PropertyNameRole = Qt::DisplayRole,
+        PropertyPriorityRole = Qt::UserRole + 1,
         ExpressionRole,
         ChildCountRole,
         RowRole,
@@ -122,6 +122,8 @@ private:
     QList<ModelNode> m_nodeList;
     PropertyTypes m_type = AllTypes;
     QString m_filter;
+    mutable QHash<ModelNode, std::vector<PropertyName>> m_sortedAndFilteredPropertyNamesSignalsSlots;
+    int m_internalRootIndex = -1;
 };
 
 class PropertyListProxyModel : public QAbstractListModel
@@ -152,6 +154,42 @@ signals:
 
 private:
     ModelNode m_modelNode;
+    PropertyName m_propertyName;
+    QPersistentModelIndex m_parentIndex;
+
+    PropertyTreeModel *m_treeModel = nullptr;
+};
+
+class PropertyTreeProxyModel : public QAbstractItemModel
+{
+    Q_OBJECT
+
+    Q_PROPERTY(QString parentName READ parentName NOTIFY parentNameChanged)
+
+public:
+    PropertyTreeProxyModel(PropertyTreeModel *parent);
+
+    void resetModel();
+
+    void setRowAndInternalId(int row, int internalId);
+    int rowCount(const QModelIndex &parent = QModelIndex()) const override;
+    int columnCount(const QModelIndex &parent = QModelIndex()) const override;
+    QVariant data(const QModelIndex &index, int role) const override;
+    QModelIndex index(int row, int column, const QModelIndex &parent = QModelIndex()) const override;
+    QModelIndex parent(const QModelIndex &index) const override;
+
+    QHash<int, QByteArray> roleNames() const override;
+
+    QString parentName() const;
+
+    Q_INVOKABLE void setFilter(const QString &filter);
+
+signals:
+    void parentNameChanged();
+
+private:
+    void testModel();
+
     PropertyName m_propertyName;
     QPersistentModelIndex m_parentIndex;
 

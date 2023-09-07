@@ -81,6 +81,7 @@ void ConnectionModel::resetModel()
             addModelNode(modelNode);
     }
     endResetModel();
+    m_delegate->update();
 }
 
 SignalHandlerProperty ConnectionModel::signalHandlerPropertyForRow(int rowNumber) const
@@ -559,13 +560,10 @@ QHash<int, QByteArray> ConnectionModel::roleNames() const
 }
 
 ConnectionModelBackendDelegate::ConnectionModelBackendDelegate(ConnectionModel *parent)
-    : QObject(parent)
-    , m_signalDelegate(parent->connectionView())
-    , m_okStatementDelegate(parent)
-    , m_koStatementDelegate(parent)
-    , m_conditionListModel(parent)
-    , m_propertyTreeModel(parent->connectionView())
-    , m_propertyListProxyModel(&m_propertyTreeModel)
+    : QObject(parent), m_signalDelegate(parent->connectionView()), m_okStatementDelegate(parent),
+      m_koStatementDelegate(parent), m_conditionListModel(parent),
+      m_propertyTreeModel(parent->connectionView()), m_propertyListProxyModel(&m_propertyTreeModel),
+      m_propertyTreeProxyModel(&m_propertyTreeModel)
 {
     connect(&m_signalDelegate, &PropertyTreeModelDelegate::commitData, this, [this]() {
         handleTargetChanged();
@@ -737,6 +735,8 @@ int ConnectionModelBackendDelegate::currentRow() const
 
 QString removeOnFromSignalName(const QString &signal)
 {
+    if (signal.isEmpty())
+        return {};
     QString ret = signal;
     ret.remove(0, 2);
     ret[0] = ret.at(0).toLower();
@@ -759,13 +759,18 @@ void ConnectionModelBackendDelegate::setCurrentRow(int i)
     m_currentRow = i;
 
     m_propertyTreeModel.resetModel();
+
+    m_propertyTreeProxyModel.resetModel();
     m_propertyListProxyModel.setRowAndInternalId(0, -1);
 
     //setup
 
-    ConnectionModel *model = qobject_cast<ConnectionModel *>(parent());
+    update();
+}
 
-    qDebug() << Q_FUNC_INFO << i << model;
+void ConnectionModelBackendDelegate::update()
+{
+    ConnectionModel *model = qobject_cast<ConnectionModel *>(parent());
 
     QTC_ASSERT(model, return );
 
@@ -888,6 +893,11 @@ PropertyListProxyModel *ConnectionModelBackendDelegate::propertyListProxyModel()
     return &m_propertyListProxyModel;
 }
 
+PropertyTreeProxyModel *ConnectionModelBackendDelegate::propertyTreeProxyModel()
+{
+    return &m_propertyTreeProxyModel;
+}
+
 void ConnectionModelBackendDelegate::setupCondition()
 {
     auto &condition = ConnectionEditorStatements::matchedCondition(m_handler);
@@ -900,6 +910,9 @@ void ConnectionModelBackendDelegate::setupHandlerAndStatements()
     ConnectionModel *model = qobject_cast<ConnectionModel *>(parent());
     QTC_ASSERT(model, return );
     SignalHandlerProperty signalHandlerProperty = model->signalHandlerPropertyForRow(currentRow());
+
+    if (signalHandlerProperty.source().isEmpty())
+        return;
 
     m_handler = ConnectionEditorEvaluator::parseStatement(signalHandlerProperty.source());
 

@@ -320,7 +320,7 @@ Rectangle {
                 root.insert(newTextInput.index, "...", ConditionListModel.Shadow)
                 root.shadowPillIndex = newTextInput.index
             } else {
-                if (!rootshadowPillVisible)
+                if (!root.shadowPillVisible)
                     return
 
                 root.remove(root.shadowPillIndex)
