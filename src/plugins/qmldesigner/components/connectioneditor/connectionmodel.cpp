@@ -773,6 +773,8 @@ void ConnectionModelBackendDelegate::update()
     ConnectionModel *model = qobject_cast<ConnectionModel *>(parent());
 
     QTC_ASSERT(model, return );
+    if (!model->connectionView()->isAttached())
+        return;
 
     SignalHandlerProperty signalHandlerProperty = model->signalHandlerPropertyForRow(currentRow());
 
