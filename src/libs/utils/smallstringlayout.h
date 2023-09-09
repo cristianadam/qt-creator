@@ -223,18 +223,22 @@ struct alignas(16) StringDataLayout<MaximumShortStringDataAreaSize,
 #endif
     }
 
-#pragma pack(push)
-#pragma pack(1)
-    ControlBlock<MaximumShortStringDataAreaSize> control;
+    QT_WARNING_PUSH
+    QT_WARNING_DISABLE_CLANG("-Wgnu-anonymous-struct")
+    QT_WARNING_DISABLE_CLANG("-Wnested-anon-types")
     union {
-        char shortString[MaximumShortStringDataAreaSize];
         struct
         {
-            char dummy[sizeof(void *) - sizeof(ControlBlock<MaximumShortStringDataAreaSize>)];
+            ControlBlock<MaximumShortStringDataAreaSize> control;
+            char shortString[MaximumShortStringDataAreaSize];
+        };
+        struct
+        {
+            ControlBlock<MaximumShortStringDataAreaSize> controlReference;
             ReferenceLayout reference;
         };
     };
-#pragma pack(pop)
+    QT_WARNING_POP
 };
 
 } // namespace Internal
