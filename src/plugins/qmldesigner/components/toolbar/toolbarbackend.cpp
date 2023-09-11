@@ -548,6 +548,7 @@ void ToolBarBackend::updateDocumentModel()
         m_openDocuments.append(entry->displayName());
 
     emit openDocumentsChanged();
+    emit documentIndexChanged();
 }
 
 int ToolBarBackend::documentIndex() const
