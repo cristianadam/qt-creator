@@ -10,8 +10,10 @@ Node {
 
     property alias lines: gridGeometry.lines
     property alias step: gridGeometry.step
-    property alias subdivAlpha: subGridMaterial.opacity
-    property alias gridColor: mainGridMaterial.diffuseColor
+    property alias subdivAlpha: subGridMaterial.generalAlpha
+    property alias gridColor: mainGridMaterial.color
+    property real density: 2500 / gridGeometry.step
+    property bool orthoMode: false
 
     eulerRotation.x: 90
 
@@ -19,27 +21,23 @@ Node {
 
     Model { // Main grid lines
         readonly property bool _edit3dLocked: true // Make this non-pickable
-        castsShadows: false
-        receivesShadows: false
         geometry: GridGeometry {
             id: gridGeometry
             name: "3D Edit View Helper Grid"
         }
 
         materials: [
-            DefaultMaterial {
+            GridMaterial {
                 id: mainGridMaterial
-                diffuseColor: "#aaaaaa"
-                lighting: DefaultMaterial.NoLighting
-                cullMode: Material.NoCulling
+                color: "#cccccc"
+                density: grid.density
+                orthoMode: grid.orthoMode
             }
         ]
     }
 
     Model { // Subdivision lines
         readonly property bool _edit3dLocked: true // Make this non-pickable
-        castsShadows: false
-        receivesShadows: false
         geometry: GridGeometry {
             lines: gridGeometry.lines
             step: gridGeometry.step
@@ -48,19 +46,17 @@ Node {
         }
 
         materials: [
-            DefaultMaterial {
+            GridMaterial {
                 id: subGridMaterial
-                diffuseColor: mainGridMaterial.diffuseColor
-                lighting: DefaultMaterial.NoLighting
-                cullMode: Material.NoCulling
+                color: mainGridMaterial.color
+                density: grid.density
+                orthoMode: grid.orthoMode
             }
         ]
     }
 
     Model { // Z Axis
         readonly property bool _edit3dLocked: true // Make this non-pickable
-        castsShadows: false
-        receivesShadows: false
         geometry: GridGeometry {
             lines: gridGeometry.lines
             step: gridGeometry.step
@@ -68,18 +64,16 @@ Node {
             name: "3D Edit View Helper Grid Z Axis"
         }
         materials: [
-            DefaultMaterial {
+            GridMaterial {
                 id: vCenterLineMaterial
-                diffuseColor: "#00a1d2"
-                lighting: DefaultMaterial.NoLighting
-                cullMode: Material.NoCulling
+                color: "#00a1d2"
+                density: grid.density
+                orthoMode: grid.orthoMode
             }
         ]
     }
     Model { // X Axis
         readonly property bool _edit3dLocked: true // Make this non-pickable
-        castsShadows: false
-        receivesShadows: false
         eulerRotation.z: 90
         geometry: GridGeometry {
             lines: gridGeometry.lines
@@ -88,11 +82,11 @@ Node {
             name: "3D Edit View Helper Grid X Axis"
         }
         materials: [
-            DefaultMaterial {
+            GridMaterial {
                 id: hCenterLineMaterial
-                diffuseColor: "#cb211a"
-                lighting: DefaultMaterial.NoLighting
-                cullMode: Material.NoCulling
+                color: "#cb211a"
+                density: grid.density
+                orthoMode: grid.orthoMode
             }
         ]
     }

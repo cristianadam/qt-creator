@@ -23,7 +23,7 @@ View3D {
     property int minGridStep: 50
     readonly property int maxGridStep: 32 * minGridStep
 
-    readonly property int gridArea: minGridStep * 128
+    readonly property int gridArea: minGridStep * 512
 
     // Minimum grid spacing in radians when viewed perpendicularly and lookAt is on origin.
     // If spacing would go smaller, gridStep is doubled and line count halved.
@@ -85,14 +85,15 @@ View3D {
 
         HelperGrid {
             id: helperGrid
-            lines: gridArea / gridStep
-            step: gridStep
+            lines: sceneView.gridArea / sceneView.gridStep
+            step: sceneView.gridStep
+            orthoMode: !sceneView.usePerspective
         }
 
         PointLight {
             id: sceneLight
-            position: usePerspective ? scenePerspectiveCamera.position
-                                     : sceneOrthoCamera.position
+            position: sceneView.usePerspective ? scenePerspectiveCamera.position
+                                               : sceneOrthoCamera.position
             quadraticFade: 0
             linearFade: 0
         }
@@ -115,7 +116,7 @@ View3D {
             y: 600
             eulerRotation.x: -45
             clipFar: 100000
-            clipNear: -10000
+            clipNear: -100000
         }
     }
 }
