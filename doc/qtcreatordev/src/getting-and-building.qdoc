@@ -46,7 +46,7 @@
 
     Get prebuilt packages either from the
     \l{https://download.qt.io/official_releases/online_installers/}
-    {Qt online installer}, or a standalone \QC installer either for a
+    {\QOI}, or a standalone \QC installer either for a
     \l{https://download.qt.io/official_releases/qtcreator/}
     {released \QC version} or a \l{https://download.qt.io/snapshots/qtcreator/}
     {development snapshot}.
