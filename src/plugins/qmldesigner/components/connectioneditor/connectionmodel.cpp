@@ -1781,7 +1781,7 @@ bool ConditionListModel::operatorAllowed(int cursorPosition)
 
     int tokenIdx = cursorPosition - 1;
 
-    if (tokenIdx >= 0 && m_tokens[tokenIdx].type != Operator)
+    if (tokenIdx >= 0 && tokenIdx < m_tokens.length() && m_tokens[tokenIdx].type != Operator)
         return true;
 
     return false;
