@@ -13,6 +13,11 @@
 #include <QtQuick3DUtils/private/qssgutils_p.h>
 #include <QtCore/qmath.h>
 
+// Hack to avoid version #if's after the introduction of the namespace in ~Qt6.5.3
+// containing 'mat44' now.
+namespace QSSGUtils {}
+using namespace QSSGUtils;
+
 namespace QmlDesigner {
 namespace Internal {
 
