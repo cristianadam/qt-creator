@@ -14,6 +14,19 @@
 
 namespace Docker::Internal {
 
+class PortMapping : public Utils::AspectContainer
+{
+public:
+    PortMapping();
+
+    void addToLayout(Layouting::LayoutItem &parent) override;
+
+    Utils::StringAspect ip{this};
+    Utils::IntegerAspect hostPort{this};
+    Utils::IntegerAspect containerPort{this};
+    Utils::SelectionAspect protocol{this};
+};
+
 class DockerDeviceSettings : public ProjectExplorer::DeviceSettings
 {
 public:
@@ -32,6 +45,7 @@ public:
     Utils::BoolAspect keepEntryPoint{this};
     Utils::BoolAspect enableLldbFlags{this};
     Utils::FilePathAspect clangdExecutable{this};
+    Utils::AspectList portMappings{this};
 
     Utils::TextDisplay containerStatus{this};
 };
