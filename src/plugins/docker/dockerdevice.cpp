@@ -152,6 +152,49 @@ void DockerDeviceSettings::fromMap(const Store &map)
     }
 }
 
+PortMapping::PortMapping()
+{
+    ip.setSettingsKey("HostIp");
+    ip.setDefaultValue("0.0.0.0");
+    ip.setToolTip(Tr::tr("Host IP"));
+    ip.setLabelText(Tr::tr("Host IP:"));
+    ip.setDisplayStyle(StringAspect::LineEditDisplay);
+
+    hostPort.setSettingsKey("HostPort");
+    hostPort.setToolTip(Tr::tr("Host Port"));
+    hostPort.setRange(1, 65535);
+    hostPort.setDefaultValue(8080);
+    hostPort.setLabelText(Tr::tr("Host Port:"));
+
+    containerPort.setSettingsKey("ContainerPort");
+    containerPort.setToolTip(Tr::tr("Container Port"));
+    containerPort.setRange(1, 65535);
+    containerPort.setDefaultValue(8080);
+    containerPort.setLabelText(Tr::tr("Container Port:"));
+
+    protocol.setSettingsKey("Protocol");
+    protocol.setToolTip(Tr::tr("Protocol"));
+    protocol.addOption("tcp", "TCP");
+    protocol.addOption("udp", "UDP");
+    protocol.setDefaultValue("tcp");
+    protocol.setDisplayStyle(SelectionAspect::DisplayStyle::ComboBox);
+    protocol.setLabelText(Tr::tr("Protocol:"));
+
+    for (const auto &aspect : aspects()) {
+        connect(aspect, &BaseAspect::changed, this, &PortMapping::changed);
+    }
+}
+
+void PortMapping::addToLayout(Layouting::LayoutItem &parent)
+{
+    using namespace Layouting;
+
+    parent.addItem(ip);
+    parent.addItem(hostPort);
+    parent.addItem(containerPort);
+    parent.addItem(protocol);
+}
+
 DockerDeviceSettings::DockerDeviceSettings()
 {
     imageId.setSettingsKey(DockerDeviceDataImageIdKey);
@@ -190,6 +233,13 @@ DockerDeviceSettings::DockerDeviceSettings()
     clangdExecutable.setSettingsKey(DockerDeviceClangDExecutable);
     clangdExecutable.setLabelText(Tr::tr("Clangd Executable:"));
     clangdExecutable.setAllowPathFromDevice(true);
+
+    portMappings.setSettingsKey("Ports");
+    portMappings.setCreateItemFunction([this]() {
+        auto mapping = std::make_unique<PortMapping>();
+        connect(mapping.get(), &PortMapping::changed, this, &AspectContainer::changed);
+        return mapping;
+    });
 
     clangdExecutable.setValidationFunction(
         [](const QString &newValue) -> FancyLineEdit::AsyncValidationFuture {
@@ -279,6 +329,7 @@ public:
     bool addTemporaryMount(const FilePath &path, const FilePath &containerPath);
 
     QStringList createMountArgs() const;
+    QStringList createPortArgs() const;
 
     bool isImageAvailable() const;
 
@@ -727,6 +778,31 @@ QStringList DockerDevicePrivate::createMountArgs() const
     return cmds;
 }
 
+QStringList DockerDevicePrivate::createPortArgs() const
+{
+    QStringList cmds;
+
+    deviceSettings->portMappings.forEachItem<PortMapping>(
+        [&](const std::shared_ptr<PortMapping> &portMapping) {
+            if (portMapping->ip().isEmpty()) {
+                cmds += {"-p",
+                         QString("%1:%2/%3")
+                             .arg(portMapping->hostPort())
+                             .arg(portMapping->containerPort())
+                             .arg(portMapping->protocol.stringValue())};
+                return;
+            }
+            cmds += {"-p",
+                     QString("%1:%2:%3/%4")
+                         .arg(portMapping->ip())
+                         .arg(portMapping->hostPort())
+                         .arg(portMapping->containerPort())
+                         .arg(portMapping->protocol.stringValue())};
+        });
+
+    return cmds;
+}
+
 bool DockerDevicePrivate::isImageAvailable() const
 {
     Process proc;
@@ -757,9 +833,7 @@ expected_str<QString> DockerDevicePrivate::createContainer()
                               "-e",
                               QString("DISPLAY=%1").arg(display),
                               "-e",
-                              "XAUTHORITY=/.Xauthority",
-                              "--net",
-                              "host"}};
+                              "XAUTHORITY=/.Xauthority"}};
 
 #ifdef Q_OS_UNIX
     // no getuid() and getgid() on Windows.
@@ -768,6 +842,7 @@ expected_str<QString> DockerDevicePrivate::createContainer()
 #endif
 
     dockerCreate.addArgs(createMountArgs());
+    dockerCreate.addArgs(createPortArgs());
 
     if (!deviceSettings->keepEntryPoint())
         dockerCreate.addArgs({"--entrypoint", "/bin/sh"});

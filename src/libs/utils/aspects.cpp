@@ -3202,7 +3202,8 @@ void AspectList::addToLayout(Layouting::LayoutItem &parent)
         if (scrollArea->widget())
             delete scrollArea->takeWidget();
 
-        auto add = new QPushButton(Tr::tr("Add"));
+        auto add = new IconButton;
+        add->setIcon(Utils::Icons::PLUS.icon());
         QObject::connect(add, &QPushButton::clicked, scrollArea, [this] {
             addItem(d->createItem());
         });
@@ -3229,7 +3230,7 @@ void AspectList::addToLayout(Layouting::LayoutItem &parent)
         });
 
         ColoredRow *rowWdgt = new ColoredRow(size());
-        Row{st, add}.attachTo(rowWdgt);
+        Row{add}.attachTo(rowWdgt);
         column.addItem(rowWdgt);
 
         QWidget *contentWidget = column.emerge();
