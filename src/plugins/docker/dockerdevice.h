@@ -45,6 +45,7 @@ public:
     Utils::BoolAspect keepEntryPoint{this};
     Utils::BoolAspect enableLldbFlags{this};
     Utils::FilePathAspect clangdExecutable{this};
+    Utils::StringSelectionAspect network{this};
     Utils::AspectList portMappings{this};
 
     Utils::TextDisplay containerStatus{this};

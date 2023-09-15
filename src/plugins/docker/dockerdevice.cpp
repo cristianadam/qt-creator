@@ -69,6 +69,7 @@
 #include <QPushButton>
 #include <QRandomGenerator>
 #include <QRegularExpression>
+#include <QStandardItem>
 #include <QTextBrowser>
 #include <QThread>
 #include <QToolButton>
@@ -240,6 +241,40 @@ DockerDeviceSettings::DockerDeviceSettings()
         connect(mapping.get(), &PortMapping::changed, this, &AspectContainer::changed);
         return mapping;
     });
+
+    network.setSettingsKey("Network");
+    network.setLabelText(Tr::tr("Network:"));
+    network.setDefaultValue("bridge");
+    network.setFillCallback([this](const StringSelectionAspect::ResultCallback &cb) {
+        auto future = DockerApi::instance()->networks();
+
+        auto watcher = new QFutureWatcher<expected_str<QList<Network>>>(this);
+        watcher->setFuture(future);
+        QObject::connect(watcher,
+                         &QFutureWatcher<expected_str<QList<Network>>>::finished,
+                         this,
+                         [watcher, cb]() {
+                             expected_str<QList<Network>> result = watcher->result();
+                             if (result) {
+                                 auto items = Utils::transform(*result, [](const Network &network) {
+                                     QStandardItem *item = new QStandardItem(network.name);
+                                     item->setData(network.name);
+                                     item->setToolTip(network.toString());
+                                     return item;
+                                 });
+                                 cb(items);
+                             } else {
+                                 QStandardItem *errorItem = new QStandardItem(Tr::tr("Error!"));
+                                 errorItem->setToolTip(result.error());
+                                 cb({errorItem});
+                             }
+                         });
+    });
+
+    connect(DockerApi::instance(),
+            &DockerApi::dockerDaemonAvailableChanged,
+            &network,
+            &StringSelectionAspect::refill);
 
     clangdExecutable.setValidationFunction(
         [](const QString &newValue) -> FancyLineEdit::AsyncValidationFuture {
@@ -840,6 +875,11 @@ expected_str<QString> DockerDevicePrivate::createContainer()
     if (deviceSettings->useLocalUidGid())
         dockerCreate.addArgs({"-u", QString("%1:%2").arg(getuid()).arg(getgid())});
 #endif
+
+    if (!deviceSettings->network().isEmpty()) {
+        dockerCreate.addArg("--network");
+        dockerCreate.addArg(deviceSettings->network());
+    }
 
     dockerCreate.addArgs(createMountArgs());
     dockerCreate.addArgs(createPortArgs());
