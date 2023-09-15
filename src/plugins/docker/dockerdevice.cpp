@@ -69,6 +69,7 @@
 #include <QPushButton>
 #include <QRandomGenerator>
 #include <QRegularExpression>
+#include <QStandardItem>
 #include <QTextBrowser>
 #include <QThread>
 #include <QToolButton>
@@ -109,8 +110,8 @@ public:
 private:
     void setupShellProcess(Process *shellProcess) final
     {
-        shellProcess->setCommand({settings().dockerBinaryPath(),
-                                  {"container", "start", "-i", "-a", m_containerId}});
+        shellProcess->setCommand(
+            {settings().dockerBinaryPath(), {"container", "start", "-i", "-a", m_containerId}});
     }
 
     CommandLine createFallbackCommand(const CommandLine &cmdLine)
@@ -132,8 +133,7 @@ public:
         : m_dev(dev)
     {}
 
-    RunResult runInShell(const CommandLine &cmdLine,
-                         const QByteArray &stdInData) const override;
+    RunResult runInShell(const CommandLine &cmdLine, const QByteArray &stdInData) const override;
     QString mapToDevicePath(const QString &hostPath) const override;
 
     DockerDevicePrivate *m_dev = nullptr;
@@ -190,6 +190,40 @@ DockerDeviceSettings::DockerDeviceSettings()
     clangdExecutable.setSettingsKey(DockerDeviceClangDExecutable);
     clangdExecutable.setLabelText(Tr::tr("Clangd Executable:"));
     clangdExecutable.setAllowPathFromDevice(true);
+
+    network.setSettingsKey("Network");
+    network.setLabelText(Tr::tr("Network:"));
+    network.setDefaultValue("bridge");
+    network.setFillCallback([this](const StringSelectionAspect::ResultCallback &cb) {
+        auto future = DockerApi::instance()->networks();
+
+        auto watcher = new QFutureWatcher<expected_str<QList<Network>>>(this);
+        watcher->setFuture(future);
+        QObject::connect(watcher,
+                         &QFutureWatcher<expected_str<QList<Network>>>::finished,
+                         this,
+                         [watcher, cb]() {
+                             expected_str<QList<Network>> result = watcher->result();
+                             if (result) {
+                                 auto items = Utils::transform(*result, [](const Network &network) {
+                                     QStandardItem *item = new QStandardItem(network.name);
+                                     item->setData(network.name);
+                                     item->setToolTip(network.toString());
+                                     return item;
+                                 });
+                                 cb(items);
+                             } else {
+                                 QStandardItem *errorItem = new QStandardItem(Tr::tr("Error!"));
+                                 errorItem->setToolTip(result.error());
+                                 cb({errorItem});
+                             }
+                         });
+    });
+
+    connect(DockerApi::instance(),
+            &DockerApi::dockerDaemonAvailableChanged,
+            &network,
+            &StringSelectionAspect::refill);
 
     clangdExecutable.setValidationFunction(
         [](const QString &newValue) -> FancyLineEdit::AsyncValidationFuture {
@@ -767,6 +801,11 @@ expected_str<QString> DockerDevicePrivate::createContainer()
         dockerCreate.addArgs({"-u", QString("%1:%2").arg(getuid()).arg(getgid())});
 #endif
 
+    if (!deviceSettings->network().isEmpty()) {
+        dockerCreate.addArg("--network");
+        dockerCreate.addArg(deviceSettings->network());
+    }
+
     dockerCreate.addArgs(createMountArgs());
 
     if (!deviceSettings->keepEntryPoint())
@@ -1206,9 +1245,8 @@ bool DockerDevicePrivate::addTemporaryMount(const FilePath &path, const FilePath
     if (alreadyAdded)
         return false;
 
-    const bool alreadyManuallyAdded = anyOf(deviceSettings->mounts(), [path](const FilePath &mount) {
-        return mount == path;
-    });
+    const bool alreadyManuallyAdded = anyOf(deviceSettings->mounts(),
+                                            [path](const FilePath &mount) { return mount == path; });
 
     if (alreadyManuallyAdded)
         return false;
