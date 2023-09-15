@@ -99,7 +99,7 @@ public:
     QStringList disabledPlugins;
     QStringList forceEnabledPlugins;
     // delayed initialization
-    QTimer *delayedInitializeTimer = nullptr;
+    std::unique_ptr<QTimer> delayedInitializeTimer;
     std::queue<PluginSpec *> delayedInitializeQueue;
     // ansynchronous shutdown
     QSet<PluginSpec *> asynchronousPlugins;  // plugins that have requested async shutdown
@@ -142,8 +142,8 @@ public:
 
 private:
     PluginManager *q;
-
-    void nextDelayedInitialize();
+    
+    void startDelayedInitialize();
 
     void readPluginPaths();
     bool loadQueue(PluginSpec *spec,
