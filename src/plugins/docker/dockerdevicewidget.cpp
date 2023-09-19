@@ -176,6 +176,10 @@ DockerDeviceWidget::DockerDeviceWidget(const IDevice::Ptr &device)
             Tr::tr("Port Mappings:"),
             deviceSettings->portMappings,
         }, br,
+        Column {
+            Tr::tr("Extra Arguments:"),
+            deviceSettings->extraArgs,
+        }, br,
         If { dockerDevice->isAutoDetected(), {}, {detectionControls} },
         noMargin,
     }.attachTo(this);

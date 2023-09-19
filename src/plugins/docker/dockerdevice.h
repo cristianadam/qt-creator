@@ -47,6 +47,7 @@ public:
     Utils::FilePathAspect clangdExecutable{this};
     Utils::StringSelectionAspect network{this};
     Utils::AspectList portMappings{this};
+    Utils::StringListAspect extraArgs{this};
 
     Utils::TextDisplay containerStatus{this};
 };
