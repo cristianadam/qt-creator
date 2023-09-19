@@ -20,6 +20,7 @@
 #include "variablechooser.h"
 
 #include <QAction>
+#include <QApplication>
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QComboBox>
@@ -38,6 +39,8 @@
 #include <QSettings>
 #include <QSpinBox>
 #include <QStandardItemModel>
+#include <QStringListModel>
+#include <QStyledItemDelegate>
 #include <QTextEdit>
 #include <QUndoStack>
 
@@ -899,6 +902,7 @@ public:
 class StringListAspectPrivate
 {
 public:
+    UndoableValue<QStringList> undoable;
 };
 
 class FilePathListAspectPrivate
@@ -2392,13 +2396,54 @@ StringListAspect::StringListAspect(AspectContainer *container)
 */
 StringListAspect::~StringListAspect() = default;
 
-/*!
-    \reimp
-*/
+class StringListDelegate : public QStyledItemDelegate
+{
+public:
+    void paint(QPainter *painter,
+               const QStyleOptionViewItem &option,
+               const QModelIndex &index) const override
+    {
+        QStyleOptionViewItem opt = option;
+        initStyleOption(&opt, index);
+        if (opt.text.isEmpty()) {
+            opt.state &= ~QStyle::State_Enabled;
+            opt.state &= ~QStyle::State_Selected;
+            opt.text = Tr::tr("Double click to add new entry ...");
+        }
+
+        const QWidget *widget = opt.widget;
+        QStyle *style = widget ? widget->style() : QApplication::style();
+        style->drawControl(QStyle::CE_ItemViewItem, &opt, painter, widget);
+    }
+};
+
 void StringListAspect::addToLayout(LayoutItem &parent)
 {
-    Q_UNUSED(parent)
-    // TODO - when needed.
+    QListView *listView = new QListView();
+    listView->setMaximumHeight(100);
+    listView->setMinimumHeight(100);
+    listView->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    listView->setItemDelegate(new StringListDelegate);
+
+    registerSubWidget(listView);
+
+    QStringListModel *model = new QStringListModel(listView);
+    model->setStringList(value() << "");
+
+    connect(&d->undoable.m_signal, &UndoSignaller::changed, model, [model, this] {
+        model->setStringList(d->undoable.get() << "");
+    });
+
+    connect(model, &QStringListModel::dataChanged, [this, model] {
+        QStringList newList = model->stringList();
+        newList.removeIf([](const QString &s) { return s.isEmpty(); });
+        pushUndo(d->undoable.set(newList));
+        handleGuiChanged();
+    });
+
+    listView->setModel(model);
+
+    parent.addItem(listView);
 }
 
 void StringListAspect::appendValue(const QString &s, bool allowDuplicates)
@@ -2432,6 +2477,21 @@ void StringListAspect::removeValues(const QStringList &values)
     for (const QString &s : values)
         val.removeAll(s);
     setValue(val);
+}
+
+bool StringListAspect::guiToBuffer()
+{
+    const QStringList newValue = d->undoable.get();
+    if (newValue != m_buffer) {
+        m_buffer = newValue;
+        return true;
+    }
+    return false;
+}
+
+void StringListAspect::bufferToGui()
+{
+    d->undoable.setWithoutUndo(m_buffer);
 }
 
 /*!
