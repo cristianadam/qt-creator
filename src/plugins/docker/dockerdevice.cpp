@@ -329,6 +329,8 @@ public:
 
     ~DockerDevicePrivate() { stopCurrentContainer(); }
 
+    Utils::CommandLine createCommandLine();
+
     RunResult runInShell(const CommandLine &cmd, const QByteArray &stdInData = {});
 
     bool updateContainerAccess();
@@ -551,6 +553,11 @@ void DockerProcessImpl::sendControlSignal(ControlSignal controlSignal)
         }
         // clang-format on
     }
+}
+
+Utils::CommandLine DockerDevice::createCommandLine() const
+{
+    return d->createCommandLine();
 }
 
 IDeviceWidget *DockerDevice::createWidget()
@@ -860,11 +867,8 @@ bool DockerDevicePrivate::isImageAvailable() const
     return false;
 }
 
-expected_str<QString> DockerDevicePrivate::createContainer()
+Utils::CommandLine DockerDevicePrivate::createCommandLine()
 {
-    if (!isImageAvailable())
-        return make_unexpected(Tr::tr("Image \"%1\" is not available.").arg(repoAndTag()));
-
     const QString display = HostOsInfo::isLinuxHost() ? QString(":0")
                                                       : QString("host.docker.internal:0");
     CommandLine dockerCreate{settings().dockerBinaryPath(),
@@ -900,9 +904,19 @@ expected_str<QString> DockerDevicePrivate::createContainer()
 
     dockerCreate.addArg(deviceSettings->repoAndTag());
 
-    qCDebug(dockerDeviceLog).noquote() << "RUNNING: " << dockerCreate.toUserOutput();
+    return dockerCreate;
+}
+
+expected_str<QString> DockerDevicePrivate::createContainer()
+{
+    if (!isImageAvailable())
+        return make_unexpected(Tr::tr("Image \"%1\" is not available.").arg(repoAndTag()));
+
+    const CommandLine cmdLine = createCommandLine();
+
+    qCDebug(dockerDeviceLog).noquote() << "RUNNING: " << cmdLine.toUserOutput();
     Process createProcess;
-    createProcess.setCommand(dockerCreate);
+    createProcess.setCommand(cmdLine);
     createProcess.runBlocking();
 
     if (createProcess.result() != ProcessResult::FinishedWithSuccess) {
