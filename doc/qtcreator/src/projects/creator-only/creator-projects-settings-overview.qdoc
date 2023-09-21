@@ -14,6 +14,12 @@
 
     \title Configuring Projects
 
+    \image qtcreator-environment-settings-hierarchy.webp {Environment settings hierarchy}
+
+    When you start \QC, it detects your system environment. You can change the
+    environment globally for all projects in \uicontrol Edit >
+    \uicontrol Preferences.
+
     When you install Qt for a target platform, such as Android or QNX,
     \l{https://www.qt.io/download-qt-installer}{\QOI}
     creates \l{glossary-buildandrun-kit}{kits} for the development
@@ -28,8 +34,8 @@
 
     \image qtcreator-projects-kits.webp {Sidebar in the Projects mode}
 
-    To specify build or run settings for a kit, select \uicontrol Build or
-    \uicontrol Run below the kit.
+    To specify build, deploy, or run settings for a kit, select \uicontrol Build
+    or \uicontrol Run below the kit.
 
     \section1 Overriding Global Preferences
 
@@ -43,7 +49,7 @@
                 \li \l{Using Custom Output Parsers}{Custom Output Parsers}
                 \li \l{Specify dependencies}{Dependencies}
                 \li \l{Specify editor settings}{Editor}
-                \li \l{Specifying Environment Settings}{Environment}
+                \li \l{Set system environment for a project}{Environment}
                 \li \l{Applying Refactoring Actions}{Quick Fixes}
                 \li \l{To-Do Entries}{To-Do} (experimental)
             \endlist
@@ -67,7 +73,7 @@
     lists the kits that are compatible with your project. To activate one or more
     kits, click them.
 
-    \image qtcreator-project-kits.png
+    \image qtcreator-project-kits.png {List of kits in Projects mode sidebar}
 
     The list displays kits from \uicontrol Edit > \uicontrol Preferences >
     \uicontrol Kits. Warning and error icons indicate that the kit configuration

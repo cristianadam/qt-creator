@@ -68,8 +68,11 @@
         \li
         \list
             \li \l {Activate kits for a project}
+            \li \l {Batch edit environment settings}
             \li \l {Develop Qt for Python applications}
             \li \l {Open projects}
+            \li \l {Set system environment for a project}
+            \li \l {Specify build environment}
             \li \l {Specify dependencies}
             \li \l {Specify editor settings}
             \li \l {Specify project contents}
