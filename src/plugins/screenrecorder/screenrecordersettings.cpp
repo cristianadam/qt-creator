@@ -94,6 +94,11 @@ ScreenRecorderSettings::ScreenRecorderSettings()
     logFfmpegCommandline.setLabel(Tr::tr("Write command line of FFmpeg calls to General Messages"));
     logFfmpegCommandline.setLabelPlacement(BoolAspect::LabelPlacement::AtCheckBox);
 
+    captureCursor.setSettingsKey("CaptureCursor");
+    captureCursor.setDefaultValue(true);
+    captureCursor.setLabel(Tr::tr("Capture the mouse cursor"));
+    captureCursor.setLabelPlacement(BoolAspect::LabelPlacement::AtCheckBox);
+
     animatedImagesAsEndlessLoop.setSettingsKey("AnimatedImagesAsEndlessLoop");
     animatedImagesAsEndlessLoop.setDefaultValue(true);
     animatedImagesAsEndlessLoop.setLabel(Tr::tr("Export animated images as infinite loop"));
@@ -147,6 +152,7 @@ ScreenRecorderSettings::ScreenRecorderSettings()
                 Column {
                     Row { enableFileSizeLimit, fileSizeLimit, st },
                     Row { enableRtBuffer, rtBufferSize, st },
+                    captureCursor,
                 },
             },
             Group {

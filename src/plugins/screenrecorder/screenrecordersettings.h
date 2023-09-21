@@ -35,6 +35,7 @@ public:
     Utils::BoolAspect enableRtBuffer{this};
     Utils::IntegerAspect rtBufferSize{this}; // in MB
     Utils::BoolAspect logFfmpegCommandline{this};
+    Utils::BoolAspect captureCursor{this};
     Utils::BoolAspect animatedImagesAsEndlessLoop{this};
 
     // Used in other places
