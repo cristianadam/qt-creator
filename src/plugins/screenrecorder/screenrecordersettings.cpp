@@ -99,6 +99,12 @@ ScreenRecorderSettings::ScreenRecorderSettings()
     captureCursor.setLabel(Tr::tr("Capture the mouse cursor"));
     captureCursor.setLabelPlacement(BoolAspect::LabelPlacement::AtCheckBox);
 
+    captureMouseClicks.setSettingsKey("CaptureMouseClicks");
+    captureMouseClicks.setDefaultValue(false);
+    captureMouseClicks.setLabel(Tr::tr("Capture the screen mouse clicks"));
+    captureMouseClicks.setLabelPlacement(BoolAspect::LabelPlacement::AtCheckBox);
+    captureMouseClicks.setVisible(HostOsInfo::isMacHost()); // only avaliable with AVFoundation
+
     animatedImagesAsEndlessLoop.setSettingsKey("AnimatedImagesAsEndlessLoop");
     animatedImagesAsEndlessLoop.setDefaultValue(true);
     animatedImagesAsEndlessLoop.setLabel(Tr::tr("Export animated images as infinite loop"));
@@ -153,6 +159,7 @@ ScreenRecorderSettings::ScreenRecorderSettings()
                     Row { enableFileSizeLimit, fileSizeLimit, st },
                     Row { enableRtBuffer, rtBufferSize, st },
                     captureCursor,
+                    captureMouseClicks,
                 },
             },
             Group {
