@@ -39,7 +39,6 @@
                         \li \l{Conan Build Configuration}
                     \endlist
                 \li \l{Specifying Run Settings}
-                \li \l{Specifying Environment Settings}
                 \li \l{Using Custom Output Parsers}
                 \li \l{Sharing Project Settings}
             \endlist
@@ -210,6 +209,7 @@
                     \li \l {Add libraries to projects}
                     \li \l {Add subprojects to projects}
                     \li \l {Add wizards}
+                    \li \l {Batch edit environment settings}
                     \li \l {Create C++ classes}
                     \li \l {Create files}
                     \li \l {Create OpenGL fragment and vertex shaders}
@@ -218,6 +218,8 @@
                     \li \l {Develop Qt for Python applications}
                     \li \l {Open projects}
                     \li \l {Select the build system}
+                    \li \l {Set system environment for a project}
+                    \li \l {Specify build environment}
                     \li \l {Specify dependencies}
                     \li \l {Specify editor settings}
                     \li \l {Specify project contents}
