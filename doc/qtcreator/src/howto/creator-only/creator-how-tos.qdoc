@@ -72,6 +72,7 @@
             \li \l {Open projects}
             \li \l {Specify dependencies}
             \li \l {Specify editor settings}
+            \li \l {Specify environment settings}
             \li \l {Specify project contents}
         \endlist
     \endtable

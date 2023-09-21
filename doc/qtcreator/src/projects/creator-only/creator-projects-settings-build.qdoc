@@ -110,7 +110,7 @@
     \uicontrol Executable field is always placed first when constructing the command.
 
     You can use \l {Using Environment Variables}{environment variables} as
-    values in the fields. In addition, you can \l {Using Qt Creator Variables}
+    values in the fields. In addition, you can \l {Use Qt Creator variables}
     {use \QC variables} in arguments, executable paths, and working
     directories.
 

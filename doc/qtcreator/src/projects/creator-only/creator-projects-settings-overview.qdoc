@@ -43,7 +43,7 @@
                 \li \l{Using Custom Output Parsers}{Custom Output Parsers}
                 \li \l{Specify dependencies}{Dependencies}
                 \li \l{Specify editor settings}{Editor}
-                \li \l{Specifying Environment Settings}{Environment}
+                \li \l{Specify environment settings}{Environment}
                 \li \l{Applying Refactoring Actions}{Quick Fixes}
                 \li \l{To-Do Entries}{To-Do} (experimental)
             \endlist

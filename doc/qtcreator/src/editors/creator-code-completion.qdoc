@@ -201,7 +201,7 @@
     Also specify a text string or QML code in the snippet editor, depending on
     the snippet category.
     \endif
-    You can use \l{Using Qt Creator Variables}{predefined variables} in
+    You can use \l{Use Qt Creator variables}{predefined variables} in
     snippets.
 
     The snippet editor offers:

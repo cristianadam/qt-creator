@@ -1,9 +1,13 @@
-// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2023 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
-//! [qtcreator variables]
-    \section1 Using Qt Creator Variables
+    \page creator-how-to-use-qtc-variables.html
+    \previouspage creator-how-tos.html
+
+    \ingroup creator-how-to-projects
+
+    \title Use Qt Creator variables
 
     You can use \QC variables in arguments, executable paths, and working
     directories. The variables take care of quoting their expansions, so you do
@@ -48,5 +52,7 @@
     \badcode
     %{variable:-default}
     \endcode
-//! [qtcreator variables]
+
+    \sa {Specify environment settings}, {Specifying Build Settings},
+    {Specifying Build Settings}
 */
