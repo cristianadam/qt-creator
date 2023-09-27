@@ -71,8 +71,10 @@
         \li \b -
         \li \b -
         \li The \uicontrol Connections view displays all signal handlers in the
-        current file but it doesn't filter available signals, so you can still
-        see and select signals that are available in Qt Quick, but not in \QUL.
+        current file, but it doesn't filter available signals, so you can still
+        see and select signals available in Qt Quick, but not in \QUL.
+        The same happens when the Call Function is the Item Qt. You can see and
+        select functions on Qt that are available in Qt Quick, but not in \QUL.
     \row
         \li \l {States}
         \li \b X
@@ -89,9 +91,13 @@
     \row
         \li \l {Translations}
         \li \b -
-        \li \b -
         \li \b X
         \li \b -
+        \li he \uicontrol Translations view uses regular Qt Quick instead of \QUL,
+        so it may not be accurate in some translations. Note that the default font
+        used in QDS and \QUL are different, and the developer must confirm both fonts
+        are equal. Also the developer needs to configure the QUL project to use QDS
+        translations (.ts) files.
     \row
         \li \l {Timeline}
         \li \b X
@@ -100,11 +106,11 @@
         \li \b -
     \row
         \li \l {Curves}
-        \li \b -
         \li \b X
         \li \b -
-        \li Linear interpolation works, but \QMCU does not support the
-        \c easing.bezierCurve property of a keyframe.
+        \li \b -
+        \li Linear interpolation works, and \QMCU will support the
+        \c easing.bezierCurve property of a keyframe in Qt For MCUs 2.6.
     \row
         \li \l Code
         \li \b X
