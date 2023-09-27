@@ -23,6 +23,7 @@
 #include <utils/pathchooser.h>
 #include <utils/process.h>
 #include <utils/qtcassert.h>
+#include <utils/scopedtimer.h>
 
 #include <QBuffer>
 #include <QCheckBox>
@@ -1287,6 +1288,8 @@ static FilePaths findCompilerCandidates(const ToolchainDetector &detector,
 
 Toolchains GccToolChainFactory::autoDetect(const ToolchainDetector &detector_) const
 {
+    QTC_SCOPED_TIMER("Autodetect");
+
     QTC_ASSERT(detector_.device, return {});
 
     // Do all autodetection in th 'RealGcc' case, and none in the others.
