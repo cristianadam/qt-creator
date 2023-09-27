@@ -38,6 +38,7 @@
 #include <QStandardItemModel>
 #include <QTemporaryFile>
 #include <QTimer>
+#include <QToolBar>
 #include <QToolButton>
 #include <QUndoStack>
 
@@ -762,10 +763,35 @@ public:
     }
 
     Core::IDocument *document() const override { return m_document.data(); }
-    QWidget *toolBar() override { return nullptr; }
+    QWidget *toolBar() override
+    {
+        if (!m_toolBar) {
+            m_toolBar = new QToolBar();
+
+            QAction *newSource = new QAction(m_toolBar);
+            newSource->setIcon(Utils::Icons::PLUS_TOOLBAR.icon());
+            newSource->setToolTip(Tr::tr("Add source"));
+            m_toolBar->addAction(newSource);
+
+            connect(newSource, &QAction::triggered, this, [this] {
+                auto newSource = std::make_shared<SourceSettings>(
+                    [settings = m_document->settings()] { return settings->apiConfig(); });
+                m_document->settings()->m_sources.addItem(newSource);
+            });
+
+            QAction *openSettings = new QAction(m_toolBar);
+            openSettings->setIcon(Utils::Icons::SETTINGS_TOOLBAR.icon());
+            openSettings->setToolTip(Tr::tr("Open settings"));
+            m_toolBar->addAction(openSettings);
+        }
+
+        return m_toolBar;
+    }
 
     QSharedPointer<JsonSettingsDocument> m_document;
     QUndoStack m_undoStack;
+
+    QToolBar *m_toolBar{nullptr};
 };
 
 EditorFactory::EditorFactory()
