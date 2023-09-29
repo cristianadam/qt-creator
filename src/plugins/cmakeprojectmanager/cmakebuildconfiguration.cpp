@@ -141,6 +141,7 @@ private:
     QCheckBox *m_showAdvancedCheckBox;
     QTabBar *m_configurationStates;
     QPushButton *m_reconfigureButton;
+    QPushButton *m_debugButton;
     QTimer m_showProgressTimer;
     FancyLineEdit *m_filterEdit;
     InfoLabel *m_warningMessageLabel;
@@ -307,6 +308,8 @@ CMakeBuildSettingsWidget::CMakeBuildSettingsWidget(CMakeBuildConfiguration *bc) 
     m_reconfigureButton = new QPushButton(Tr::tr("Run CMake"));
     m_reconfigureButton->setEnabled(false);
 
+    m_debugButton = new QPushButton(Tr::tr("Debug CMake"));
+
     using namespace Layouting;
     Grid cmakeConfiguration {
         m_filterEdit, br,
@@ -345,7 +348,10 @@ CMakeBuildSettingsWidget::CMakeBuildSettingsWidget(CMakeBuildConfiguration *bc) 
                         bc->initialCMakeArguments, br,
                         bc->additionalCMakeOptions
                     },
-                    m_reconfigureButton,
+                    Row {
+                        m_reconfigureButton,
+                        m_debugButton, st
+                    },
                 }
             },
             configureEnvironmentAspectWidget
@@ -445,6 +451,11 @@ CMakeBuildSettingsWidget::CMakeBuildSettingsWidget(CMakeBuildConfiguration *bc) 
             m_reconfigureButton->setEnabled(false);
         }
     });
+    connect(m_debugButton, &QPushButton::clicked, this, [] {
+        ProjectExplorerPlugin::runStartupProject(ProjectExplorer::Constants::DAP_CMAKE_DEBUG_RUN_MODE,
+                                                 false);
+    });
+
     connect(m_setButton, &QPushButton::clicked, this, [this] { setVariableUnsetFlag(false); });
     connect(m_unsetButton, &QPushButton::clicked, this, [this] {
         setVariableUnsetFlag(true);
@@ -518,6 +529,7 @@ CMakeBuildSettingsWidget::CMakeBuildSettingsWidget(CMakeBuildConfiguration *bc) 
         m_configurationStates->setDrawBase(false);
     m_configurationStates->setExpanding(false);
     m_reconfigureButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+    m_debugButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
 
     updateSelection();
     updateConfigurationStateSelection();
