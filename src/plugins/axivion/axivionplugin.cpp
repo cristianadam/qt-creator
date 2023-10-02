@@ -63,7 +63,7 @@ public:
     void handleIssuesForFile(const IssuesList &issues);
     void fetchRuleInfo(const QString &id);
 
-    Utils::NetworkAccessManager m_networkAccessManager;
+    std::shared_ptr<QNetworkAccessManager> m_networkAccessManager = std::make_shared<Utils::NetworkAccessManager>();
     AxivionOutputPane m_axivionOutputPane;
     std::shared_ptr<const DashboardClient::ProjectInfo> m_currentProjectInfo;
     bool m_runningQuery = false;
@@ -158,7 +158,7 @@ bool AxivionPlugin::handleCertificateIssue()
 
 AxivionPluginPrivate::AxivionPluginPrivate()
 {
-    connect(&m_networkAccessManager, &QNetworkAccessManager::sslErrors,
+    connect(m_networkAccessManager.get(), &QNetworkAccessManager::sslErrors,
             this, &AxivionPluginPrivate::handleSslErrors);
 }
 

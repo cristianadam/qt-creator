@@ -11,9 +11,9 @@
 #include "dashboard/error.h"
 
 #include <utils/expected.h>
-#include <utils/networkaccessmanager.h>
 
 #include <QFuture>
+#include <QNetworkAccessManager>
 #include <QNetworkReply>
 
 namespace Axivion::Internal
@@ -35,12 +35,12 @@ public:
     using ProjectInfo = DataWithOrigin<Dto::ProjectInfoDto>;
     using RawProjectInfo = Utils::expected<ProjectInfo, Error>;
 
-    DashboardClient(Utils::NetworkAccessManager &networkAccessManager);
+    DashboardClient(std::shared_ptr<QNetworkAccessManager> networkAccessManager);
 
     QFuture<RawProjectInfo> fetchProjectInfo(const QString &projectName);
 
 private:
-    Utils::NetworkAccessManager &m_networkAccessManager;
+    std::shared_ptr<QNetworkAccessManager> m_networkAccessManager;
 };
 
 } // namespace Axivion::Internal

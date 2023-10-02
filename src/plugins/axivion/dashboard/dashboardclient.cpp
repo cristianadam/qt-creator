@@ -20,8 +20,8 @@
 namespace Axivion::Internal
 {
 
-DashboardClient::DashboardClient(Utils::NetworkAccessManager &networkAccessManager)
-    : m_networkAccessManager(networkAccessManager)
+DashboardClient::DashboardClient(std::shared_ptr<QNetworkAccessManager> networkAccessManager)
+    : m_networkAccessManager(std::move(networkAccessManager))
 {
 }
 
@@ -102,7 +102,7 @@ static Utils::expected<DataWithOrigin<T>, Error> parseResponse(ResponseData rawB
     }
 }
 
-QFuture<ResponseData> fetch(Utils::NetworkAccessManager &networkAccessManager,
+QFuture<ResponseData> fetch(std::shared_ptr<QNetworkAccessManager> networkAccessManager,
                             const std::optional<QUrl> &base,
                             const QUrl &target)
 {
@@ -118,7 +118,7 @@ QFuture<ResponseData> fetch(Utils::NetworkAccessManager &networkAccessManager,
                     + QByteArrayLiteral(u8"Plugin/")
                     + QCoreApplication::applicationVersion().toUtf8();
     request.setRawHeader(QByteArrayLiteral(u8"X-Axivion-User-Agent"), ua);
-    std::shared_ptr<QNetworkReply> reply{ networkAccessManager.get(request), deleteLater };
+    std::shared_ptr<QNetworkReply> reply{ networkAccessManager->get(request), deleteLater };
     return QtFuture::connect(reply.get(), &QNetworkReply::finished)
         .onCanceled(reply.get(), [reply] { reply->abort(); })
         .then(ResponseReader(reply, jsonContentType));
