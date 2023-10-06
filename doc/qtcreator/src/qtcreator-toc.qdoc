@@ -211,6 +211,7 @@
                     \li \l {Add subprojects to projects}
                     \li \l {Add wizards}
                     \li \l {Batch edit environment settings}
+                    \li \l {Create Compiler Explorer example setup}
                     \li \l {Create C++ classes}
                     \li \l {Create files}
                     \li \l {Create OpenGL fragment and vertex shaders}
@@ -235,6 +236,7 @@
                     \li \l {Add Nim compilers}
                     \li \l {Add Qt versions}
                     \li \l {Edit Qbs profiles}
+                    \li \l {Explore compiler code}
                 \endlist
             \li Read Qt Documentation
                 \list

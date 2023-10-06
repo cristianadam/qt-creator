@@ -17,6 +17,15 @@ What's new?
 * CMake debugging and the [Debugger Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/)
 * Screen recording
 
+### Compiler Explorer
+
+In the [Compiler Explorer](https://godbolt.org/), you can enter example code to
+explore the capabilities of your compilers and interpreters. To open it, select
+`Tools > Compiler Explorer > Open Compiler Explorer`.
+
+([Documentation](https://doc-snapshots.qt.io/qtcreator-12.0/creator-how-to-explore-compiler-code.html))
+
+
 General
 -------
 

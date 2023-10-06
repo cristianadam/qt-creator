@@ -47,6 +47,10 @@
             projects, Qt resource files, as well as QML and JavaScript files
             for Qt Quick projects.
     \row
+        \li \uicontrol {Compiler Explorer}
+        \li Example setup for using Compiler Explorer (experimental) to compile
+            C++ or Python code.
+    \row
         \li \uicontrol {GLSL}
         \li OpenGL fragment and vertex shaders.
     \row
@@ -68,8 +72,9 @@
         \li Empty Nim source and script files.
     \endtable
 
-    \sa {Create C++ classes}, {Create OpenGL fragment and vertex shaders},
-    {Create resource files}, {Use project wizards}
+    \sa {Create Compiler Explorer example setup}, {Create C++ classes},
+    {Create OpenGL fragment and vertex shaders}, {Create resource files},
+    {Use project wizards}
 */
 
 /*!
