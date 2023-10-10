@@ -13,7 +13,7 @@ the public Git repository. For example:
 What's new?
 -----------
 
-* Experimental support for Compiler Explorer
+* Support for Compiler Explorer
 * CMake debugging and the [Debugger Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/)
 * Screen recording
 
@@ -87,6 +87,22 @@ Editing
 
 * Added support for proxies
   ([QTCREATORBUG-29485](https://bugreports.qt.io/browse/QTCREATORBUG-29485))
+
+### Compiler Explorer
+
+You can now use [Compiler Explorer](https://godbolt.org) from within Qt Creator
+
+The Compiler Explorer plugin is currently not enabled by default, so you have to
+enable it from "About Plugins ..." first.
+
+To start, select "File > New File ..." and select one of the new "Compiler Explorer" templates.
+
+Alternatively you can open a new "Compiler Explorer" project via 
+"Tools > Compiler Explorer > Open Compiler Explorer" or from the locator.
+
+Every language, compiler and library that is supported at https://godbolt.org
+is also support in Qt Creator. You can save your compiler explorer session as
+a json file.
 
 ### TODO
 
