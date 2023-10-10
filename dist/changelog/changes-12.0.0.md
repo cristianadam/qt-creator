@@ -13,9 +13,9 @@ the public Git repository. For example:
 What's new?
 -----------
 
-* Experimental support for Compiler Explorer
-* CMake debugging and the [Debugger Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/)
-* Screen recording
+* Compiler Explorer support (experimental)
+* CMake debugging and the [Debug Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/)
+* Screen recording (experimental)
 
 ### Compiler Explorer
 
@@ -25,6 +25,13 @@ explore the capabilities of your compilers and interpreters. To open it, select
 
 ([Documentation](https://doc-snapshots.qt.io/qtcreator-12.0/creator-how-to-explore-compiler-code.html))
 
+### Screen Recording
+
+You can use [FFmpeg] (https://ffmpeg.org/) to record Qt Creator screens and
+export the recordings as animated images or videos. First, download and install
+FFmpeg and FFprobe. To start recording, select `Tools > Record Screen`.
+
+([Documentation](https://doc-snapshots.qt.io/qtcreator-12.0/creator-how-to-record-screens.html))
 
 General
 -------
