@@ -3,8 +3,7 @@
 
 #pragma once
 
-namespace Core {
-namespace Internal {
+namespace Core::Internal {
 
 class LoggingViewer
 {
@@ -12,5 +11,4 @@ public:
     static void showLoggingView();
 };
 
-} // Internal
-} // Core
+} // namespace Core::Internal
