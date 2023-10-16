@@ -11,5 +11,4 @@ namespace Utils {
 
 void QTCREATOR_UTILS_EXPORT attachWheelBlocker(QWidget *widget);
 
-
 } // namespace Utils

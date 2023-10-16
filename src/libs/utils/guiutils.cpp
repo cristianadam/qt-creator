@@ -14,11 +14,16 @@ class WheelEventFilter : public QObject
 {
 public:
     bool eventFilter(QObject *watched, QEvent *event) override {
-        auto widget = qobject_cast<QWidget *>(watched);
-        return event->type() == QEvent::Wheel
-               && widget
-               && widget->focusPolicy() != Qt::WheelFocus
-               && !widget->hasFocus();
+        QWidget *widget = qobject_cast<QWidget *>(watched);
+        if (widget) {
+            QObject *parent = widget->parentWidget();
+            const bool propagateToParent = parent && event->type() == QEvent::Wheel
+                                           && widget->focusPolicy() != Qt::WheelFocus
+                                           && !widget->hasFocus();
+            if (propagateToParent)
+                return parent->event(event);
+        }
+        return QObject::eventFilter(watched, event);
     }
 };
 
