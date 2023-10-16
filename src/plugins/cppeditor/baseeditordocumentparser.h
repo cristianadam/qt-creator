@@ -32,13 +32,20 @@ public:
     struct Configuration {
         bool usePrecompiledHeaders = false;
         QByteArray editorDefines;
-        QString preferredProjectPartId;
+        QString detectedProjectPartId;
+        QString userSetProjectPartId;
+
+        QString preferredProjectPartId() const
+        {
+            return !userSetProjectPartId.isEmpty() ? userSetProjectPartId : detectedProjectPartId;
+        }
 
         bool operator==(const Configuration &other)
         {
             return usePrecompiledHeaders == other.usePrecompiledHeaders
                     && editorDefines == other.editorDefines
-                    && preferredProjectPartId == other.preferredProjectPartId;
+                    && detectedProjectPartId == other.detectedProjectPartId
+                    && userSetProjectPartId == other.userSetProjectPartId;
         }
     };
 

@@ -67,7 +67,7 @@ void BuiltinEditorDocumentParser::updateImpl(const QPromise<void> &promise,
     LanguageFeatures features = LanguageFeatures::defaultFeatures();
 
     baseState.projectPartInfo = determineProjectPart(filePath().toString(),
-                                                     baseConfig.preferredProjectPartId,
+                                                     baseConfig.preferredProjectPartId(),
                                                      baseState.projectPartInfo,
                                                      updateParams.activeProject,
                                                      updateParams.languagePreference,

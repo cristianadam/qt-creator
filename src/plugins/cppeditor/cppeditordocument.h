@@ -35,7 +35,7 @@ public:
     void recalculateSemanticInfoDetached();
     SemanticInfo recalculateSemanticInfo(); // TODO: Remove me
 
-    void setPreferredParseContext(const QString &parseContextId);
+    void setUserPreferredParseContext(const QString &parseContextId);
     void setExtraPreprocessorDirectives(const QByteArray &directives);
 
     void scheduleProcessDocument();

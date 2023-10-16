@@ -207,7 +207,7 @@ void CppEditorDocument::onReloadFinished()
 void CppEditorDocument::reparseWithPreferredParseContext(const QString &parseContextId)
 {
     // Update parser
-    setPreferredParseContext(parseContextId);
+    setUserPreferredParseContext(parseContextId);
 
     // Remember the setting
     const Key key = Constants::PREFERRED_PARSE_CONTEXT + keyFromString(filePath().toString());
@@ -280,7 +280,7 @@ void CppEditorDocument::applyPreferredParseContextFromSettings()
     const Key key = Constants::PREFERRED_PARSE_CONTEXT + keyFromString(filePath().toString());
     const QString parseContextId = Core::SessionManager::value(key).toString();
 
-    setPreferredParseContext(parseContextId);
+    setUserPreferredParseContext(parseContextId);
 }
 
 void CppEditorDocument::applyExtraPreprocessorDirectivesFromSettings()
@@ -308,14 +308,14 @@ void CppEditorDocument::setExtraPreprocessorDirectives(const QByteArray &directi
     }
 }
 
-void CppEditorDocument::setPreferredParseContext(const QString &parseContextId)
+void CppEditorDocument::setUserPreferredParseContext(const QString &parseContextId)
 {
     const BaseEditorDocumentParser::Ptr parser = processor()->parser();
     QTC_ASSERT(parser, return);
 
     BaseEditorDocumentParser::Configuration config = parser->configuration();
-    if (config.preferredProjectPartId != parseContextId) {
-        config.preferredProjectPartId = parseContextId;
+    if (config.userSetProjectPartId != parseContextId) {
+        config.userSetProjectPartId = parseContextId;
         processor()->setParserConfig(config);
     }
 }

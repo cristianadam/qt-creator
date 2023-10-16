@@ -887,18 +887,18 @@ void ClangdClient::updateParserConfig(const Utils::FilePath &filePath,
     // TODO: Also handle usePrecompiledHeaders?
     // TODO: Should we write the editor defines into the json file? It seems strange
     //       that they should affect the index only while the file is open in the editor.
-    const auto projectPart = !config.preferredProjectPartId.isEmpty()
-            ? CppEditor::CppModelManager::projectPartForId(config.preferredProjectPartId)
-            : projectPartForFile(filePath);
+    const auto projectPart = !config.preferredProjectPartId().isEmpty()
+            ? CppEditor::CppModelManager::projectPartForId(config.preferredProjectPartId())
+            : projectPartForFile(filePath); // TODO: Shouldn't be necessary anymore
     if (!projectPart)
         return;
 
     CppEditor::BaseEditorDocumentParser::Configuration fullConfig = config;
-    fullConfig.preferredProjectPartId = projectPart->id();
+    fullConfig.detectedProjectPartId = projectPart->id();
     auto cachedConfig = d->parserConfigs.find(filePath);
     if (cachedConfig == d->parserConfigs.end()) {
         cachedConfig = d->parserConfigs.insert(filePath, fullConfig);
-        if (config.preferredProjectPartId.isEmpty() && config.editorDefines.isEmpty())
+        if (config.preferredProjectPartId().isEmpty() && config.editorDefines.isEmpty())
             return;
     } else if (cachedConfig.value() == fullConfig) {
         return;
