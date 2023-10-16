@@ -829,6 +829,37 @@
             \li Convert connect() to Qt 5 Style
             \li Converts a Qt 4 QObject::connect() to Qt 5 style.
             \li QObject::connect() (Qt 4 style)
+        \row
+            \li Convert Comment to C/C++ Style
+            \li Turns all lines in a C-style comment into a C++-style comment,
+                and vice versa. For converting from C++ into C, uses one
+                comment block per line. For Doxygen comments, replaces the
+                prefix with whitespace and adds the start and end comments on
+                extra lines.
+
+                Tries to do the following for your convenience:
+
+                \list
+                    \li Turn asterisks (*) into slashes (/), and vice versa.
+                    \li When converting from C into C++, remove leading asterisks.
+                    \li When converting from C into C++, remove the first and
+                        last line of a block if they have no content except the
+                        comment start and end characters.
+                    \li When converting from C++ into C, align the end comment
+                        characters.
+                \endlist
+
+                These attempts might fail, so check the results. Also, the fix
+                does not second-guess your selection. For example, if there is an
+                empty line between the tokens, the selection is merged when
+                converting from C++ to C even though it is not the same Doxygen
+                comment.
+            \li Code comment
+        \row
+            \li Move Function Documentation to Declaration/Definition
+            \li Moves the documentation comment for a function between its
+                declaration and definition.
+            \li Documentation comment for a function
     \endtable
 
     \section2 Refactoring QML Code
