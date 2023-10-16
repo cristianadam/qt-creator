@@ -13,6 +13,7 @@
 #include <utils/listmodel.h>
 #include <utils/qtcassert.h>
 #include <utils/stringutils.h>
+#include <utils/styledbar.h>
 #include <utils/theme/theme.h>
 #include <utils/utilsicons.h>
 
@@ -23,6 +24,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLineEdit>
 #include <QLoggingCategory>
 #include <QMenu>
 #include <QMessageBox>
@@ -32,7 +34,6 @@
 #include <QTableView>
 #include <QToolButton>
 #include <QVBoxLayout>
-
 namespace Core::Internal {
 
 static QColor colorForCategory(const QString &category);
@@ -662,26 +663,42 @@ LoggingViewManagerWidget::LoggingViewManagerWidget(QWidget *parent)
 
     m_categoryView->resizeColumnsToContents();
 
+    auto filterEdit = new QLineEdit;
+    filterEdit->setPlaceholderText(Tr::tr("Filter categories by name ..."));
+
+    auto clearFilter = new QToolButton;
+    clearFilter->setIcon(Utils::Icons::EDIT_CLEAR_TOOLBAR.icon());
+    connect(clearFilter, &QToolButton::clicked, filterEdit, &QLineEdit::clear);
+
     QSplitter *splitter{nullptr};
 
     using namespace Layouting;
     // clang-format off
     Column {
-        Row {
-            spacing(0),
-            save,
-            clean,
-            m_stopLog,
-            qtInternal,
-            autoScroll,
-            m_timestamps,
-            m_messageTypes,
-            st,
-        },
         Splitter {
             bindTo(&splitter),
-            m_logView,
-            m_categoryView,
+            
+            Column {
+                Row {
+                    spacing(0),
+                    save,
+                    clean,
+                    m_stopLog,
+                    autoScroll,
+                    m_timestamps,
+                    m_messageTypes,
+                    st,
+                },
+                m_logView
+            },
+            Column {
+                Row {
+                    qtInternal,
+                    filterEdit,
+                    clearFilter,
+                },
+                m_categoryView,
+            }
         }
     }.attachTo(this);
     // clang-format on
@@ -743,15 +760,17 @@ LoggingViewManagerWidget::LoggingViewManagerWidget(QWidget *parent)
         }
     });
 
+    auto updateFilter = [filterEdit, qtInternal, this]() {
+        QString filter = filterEdit->text();
+        if (filter.isEmpty() && !qtInternal->isChecked())
+            filter = "^(?!qt\\.).+";
+        m_sortFilterModel->setFilterRegularExpression(filter);
+    };
+
     m_sortFilterModel->setFilterRegularExpression("^(?!qt\\.).+");
 
-    connect(qtInternal, &QToolButton::toggled, m_sortFilterModel, [this](bool checked) {
-        if (checked) {
-            m_sortFilterModel->setFilterRegularExpression("");
-        } else {
-            m_sortFilterModel->setFilterRegularExpression("^(?!qt\\.).+");
-        }
-    });
+    connect(qtInternal, &QToolButton::toggled, m_sortFilterModel, updateFilter);
+    connect(filterEdit, &QLineEdit::textChanged, m_sortFilterModel, updateFilter);
 
     connect(m_timestamps, &QToolButton::toggled, this, [this](bool checked) {
         m_logView->setColumnHidden(0, !checked);
