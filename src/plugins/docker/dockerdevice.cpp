@@ -912,7 +912,8 @@ expected_str<void> DockerDevicePrivate::startContainer()
         MessageManager::writeFlashing(Tr::tr("Docker daemon appears to be not running. "
                                              "Verify daemon is up and running and reset the "
                                              "Docker daemon in Docker device preferences "
-                                             "or restart Qt Creator."));
+                                             "or restart %1.")
+                                          .arg(QGuiApplication::applicationDisplayName()));
     });
 
     QTC_ASSERT(m_shell,
