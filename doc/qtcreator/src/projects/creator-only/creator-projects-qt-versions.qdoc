@@ -19,7 +19,8 @@
     build your projects. For example, \l{glossary-device}{device} manufacturers
     offer special Qt versions for developing applications for their devices.
 
-    To view the installed Qt versions, select \uicontrol Edit >
+    To view the installed Qt versions, select \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) >
     \uicontrol Preferences > \uicontrol Kits \uicontrol {Qt Versions}.
 
     \image qtcreator-qt-versions.png {Qt Versions tab in Kit preferences}
@@ -42,9 +43,8 @@
     To link to a Qt installation:
 
     \list 1
-        \li Select \uicontrol Edit > \uicontrol Preferences >
-            (or \uicontrol {Qt Creator} > \uicontrol Preferences on
-            \macos) > \uicontrol Kits > \uicontrol {Qt Versions} >
+        \li Select \uicontrol Edit (or \uicontrol {\QC} on \macos) >
+            \uicontrol Preferences > \uicontrol Kits > \uicontrol {Qt Versions} >
             \uicontrol {Link with Qt}.
             \image qtcreator-link-with-qt.png {Choose Qt Installation dialog}
         \li In the \uicontrol {Qt installation path} field, enter the path to
@@ -62,7 +62,8 @@
 
     You specify the Qt version to use for each \l{glossary-buildandrun-kit}
     {kit} for building and running your projects
-    in \uicontrol Edit > \uicontrol Preferences > \uicontrol Kits.
+    in \uicontrol Edit (or \uicontrol {\QC} on \macos) > \uicontrol Preferences >
+    \uicontrol Kits.
 
     \section1 Set up new Qt versions
 
@@ -70,7 +71,8 @@
 
         \list 1
 
-            \li Select \uicontrol Edit > \uicontrol Preferences > \uicontrol Kits >
+            \li Select \uicontrol Edit (or \uicontrol {\QC} on \macos) >
+                \uicontrol Preferences > \uicontrol Kits >
                 \uicontrol {Qt Versions} > \uicontrol Add.
 
             \li Select the qmake executable for the Qt version to add.

@@ -15,7 +15,7 @@
     \title  Customizing the Build Process
 
     To configure how projects are built, deployed, and run, select
-    \uicontrol Edit > \uicontrol Preferences > \uicontrol {Build & Run}
+    \uicontrol Edit (or \uicontrol {\QC} on \macos) > \uicontrol Preferences > \uicontrol {Build & Run}
      > \uicontrol General.
 
     \image qtcreator-project-options-deploy.png "Project General preferences"

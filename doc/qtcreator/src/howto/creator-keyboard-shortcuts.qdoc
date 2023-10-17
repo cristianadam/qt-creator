@@ -24,8 +24,8 @@
 
     \QC has various keyboard shortcuts that speed up your development process.
     To view all \QC functions in and their keyboard shortcuts, select
-    \uicontrol Edit > \uicontrol Preferences > \uicontrol Environment >
-    \uicontrol Keyboard.
+    \uicontrol Edit (or \uicontrol {\QC} on \macos) > \uicontrol Preferences >
+    \uicontrol Environment > \uicontrol Keyboard.
 
     \image qtcreator-keyboard-shortcuts.png
 
@@ -47,7 +47,8 @@
 
     To override the platform default value that determines whether
     keyboard shortcuts are shown in the labels of context menu items,
-    select \uicontrol Edit > \uicontrol Preferences > \uicontrol Environment >
+    select \uicontrol Edit (or \uicontrol {\QC} on \macos) >
+    \uicontrol Preferences > \uicontrol Environment >
     \uicontrol Interface. The label of the \uicontrol {Show keyboard shortcuts
     in context menus} check box indicates whether the platform default value
     is \c on or \c off.
@@ -218,8 +219,9 @@
                  By default, \QC exits without asking for confirmation, unless
                  there are unsaved changes in open files. To always be asked,
                  select the \uicontrol {Ask for confirmation before exiting}
-                 check box in \uicontrol Edit > \uicontrol Preferences >
-                 \uicontrol Environment > \uicontrol System.
+                 check box in \uicontrol Edit (or \uicontrol {\QC} on \macos) >
+                 \uicontrol Preferences > \uicontrol Environment >
+                 \uicontrol System.
             \li  Ctrl+Q
     \endtable
 
@@ -316,9 +318,9 @@
             \li  Select the current block
 
                  The second press extends the selection to the parent block. To
-                 enable this behavior, select \uicontrol Edit >
-                 \uicontrol Preferences > \uicontrol {Text Editor} >
-                 \uicontrol Behavior >
+                 enable this behavior, select \uicontrol Edit
+                 (or \uicontrol {\QC} on \macos) > \uicontrol Preferences >
+                 \uicontrol {Text Editor} > \uicontrol Behavior >
                  \uicontrol {Enable smart selection changing}.
             \li  Ctrl+U
         \row
@@ -819,8 +821,8 @@
 
     \list 1
 
-        \li Select \uicontrol Edit > \uicontrol Preferences > \uicontrol Environment
-            > \uicontrol Keyboard.
+        \li Select \uicontrol Edit (or \uicontrol {\QC} on \macos) >
+            \uicontrol Preferences > \uicontrol Environment > \uicontrol Keyboard.
             \image qtcreator-keyboard-shortcuts.png {Keyboard preferences}
 
         \li Select a command from the list.
@@ -877,7 +879,8 @@
     To look up keyboard shortcuts:
 
     \list 1
-        \li Select uicontrol Edit > \uicontrol Preferences >
+        \li Select \uicontrol Edit (or \uicontrol {\QC} on \macos) >
+            \uicontrol Preferences >
             \uicontrol Environment > \uicontrol Keyboard.
             \image qtcreator-keyboard-shortcuts.png {Keyboard preferences}
         \li Start typing the name of a function or shortcut in the

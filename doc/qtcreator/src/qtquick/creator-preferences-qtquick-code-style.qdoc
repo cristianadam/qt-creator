@@ -19,7 +19,7 @@
     To specify QML code style globally:
 
     \list 1
-        \li Select \uicontrol Edit > \uicontrol Preferences >
+        \li Select \uicontrol Edit (or \uicontrol {\QC} on \macos) > \uicontrol Preferences >
             \uicontrol {Qt Quick}.
         \li In the \uicontrol {Current settings} field, select the settings to
             modify and click \uicontrol Copy.

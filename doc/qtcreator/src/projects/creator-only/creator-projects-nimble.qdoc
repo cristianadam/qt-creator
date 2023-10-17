@@ -32,7 +32,8 @@
     To configure \QC to build Nim executables:
 
     \list 1
-        \li Select \uicontrol Edit > \uicontrol Preferences > \uicontrol Kits
+        \li Select \uicontrol Edit (or \uicontrol {\QC} on \macos) >
+            \uicontrol Preferences > \uicontrol Kits >
             \uicontrol Compilers > \uicontrol Add > \uicontrol Nim to specify
             the path to the Nim compiler.
         \li Select \uicontrol Apply to add the compiler.

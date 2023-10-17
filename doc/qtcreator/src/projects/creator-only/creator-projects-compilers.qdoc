@@ -23,8 +23,8 @@
     particular platform.
 
     \QC automatically detects the compilers that your system or \QOI
-    registers and lists them in \uicontrol Edit > \uicontrol Preferences >
-    \uicontrol Kits > \uicontrol Compilers.
+    registers and lists them in \uicontrol Edit (or \uicontrol {\QC} on \macos) >
+    \uicontrol Preferences > \uicontrol Kits > \uicontrol Compilers.
 
     \image qtcreator-toolchains.png
 
@@ -51,8 +51,8 @@
     To add a C or C++ compiler:
 
     \list 1
-        \li Select \uicontrol Edit > \uicontrol Preferences >
-            \uicontrol Kits > \uicontrol Compilers.
+        \li Select \uicontrol Edit (or \uicontrol {\QC} on \macos) >
+            \uicontrol Preferences > \uicontrol Kits > \uicontrol Compilers.
         \li Select \uicontrol Add to add a new compiler or \uicontrol Clone to
             add another version of the selected compiler.
         \li Select a compiler in the list.
@@ -197,12 +197,12 @@
     these compilers, you also specify the path to the script that sets up the
     command prompt in the \uicontrol Initialization field.
 
-    You specify the compiler to use for each kit in \uicontrol Edit >
-    \uicontrol Preferences > \uicontrol Kits.
+    You specify the compiler to use for each kit in \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) > \uicontrol Preferences > \uicontrol Kits.
 
     To set compiler preferences according to the compiler type, select
-    \uicontrol Edit > \uicontrol Preferences > \uicontrol Kits >
-    \uicontrol Compilers:
+    \uicontrol Edit (or \uicontrol {\QC} on \macos) > \uicontrol Preferences >
+    \uicontrol Kits > \uicontrol Compilers:
 
     \list
 
@@ -265,7 +265,8 @@
 
     \title Add Nim compilers
 
-    To build an application using the Nim Compiler, select \uicontrol Edit >
+    To build an application using the Nim Compiler, select \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) >
     \uicontrol Preferences > \uicontrol Kits > \uicontrol Compilers >
     \uicontrol Add > \uicontrol Nim, and specify the path to the directory where
     the compiler is located.
@@ -281,7 +282,8 @@
 
     \title Add custom compilers
 
-    To add a compiler that is not listed \uicontrol Edit > \uicontrol Preferences
+    To add a compiler that is not listed \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) > \uicontrol Preferences
     > \uicontrol Kits > \uicontrol Compilers or to add a remote compiler, use the
     \uicontrol Custom option. Specify the paths to the directories where the
     compiler and make tool are located and set preferences for the compiler.
@@ -292,7 +294,8 @@
 
     \list 1
 
-        \li Select \uicontrol Edit > \uicontrol Preferences > \uicontrol Kits >
+        \li Select \uicontrol Edit (or \uicontrol {\QC} on \macos) >
+            \uicontrol Preferences > \uicontrol Kits >
             \uicontrol Compilers > \uicontrol Add > \uicontrol Custom >
             \uicontrol C or \uicontrol C++.
 

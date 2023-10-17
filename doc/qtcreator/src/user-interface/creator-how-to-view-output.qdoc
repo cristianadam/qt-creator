@@ -52,7 +52,8 @@
 
     If the text in the output is not displayed correctly, \QC might
     be using a different codec from the one used by the tools that generate
-    the output. To specify the codec to use, select \uicontrol Edit >
+    the output. To specify the codec to use, select \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) >
     \uicontrol Preferences > \uicontrol Environment > \uicontrol Interface, and
     then select the codec in the \uicontrol {Text codec for tools} field.
 

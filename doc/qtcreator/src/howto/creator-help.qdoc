@@ -36,7 +36,9 @@
             space, in the fullscreen \uicontrol Help mode.
 
         \li To select and configure how the documentation is displayed in the
-            \uicontrol Help mode, select \uicontrol Edit > \uicontrol Preferences > \uicontrol Help.
+            \uicontrol Help mode, select \uicontrol Edit
+            (or \uicontrol {\QC} on \macos) > \uicontrol Preferences >
+            \uicontrol Help.
     \endlist
 
     The following image displays the context sensitive help in the \uicontrol Edit
@@ -47,8 +49,8 @@
     \section1 Change the font
 
     If the help HTML file does not use a style sheet, you can change the font
-    family, style, and size in \uicontrol Edit > \uicontrol Preferences >
-    \uicontrol Help > \uicontrol General.
+    family, style, and size in \uicontrol Edit (or \uicontrol {\QC} on \macos) >
+    \uicontrol Preferences > \uicontrol Help > \uicontrol General.
 
     \image qtcreator-preferences-help-general.webp {General tab in Help preferences}
 
@@ -74,7 +76,8 @@
 
     \section1 View function tooltips
 
-    To hide function tooltips by default, select \uicontrol Edit >
+    To hide function tooltips by default, select \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) >
     \uicontrol Preferences > \uicontrol {Text Editor} > \uicontrol Behavior >
     \uicontrol {Show help tooltips using the mouse} >
     \uicontrol {On Shift+Mouseover}. You can still view the tooltips by pressing
@@ -108,8 +111,8 @@
 
     By default, \QC registers only the latest available version of the
     documentation for each installed Qt module. To register all installed
-    documentation, select \uicontrol Edit > \uicontrol Preferences >
-    \uicontrol Kits > \uicontrol {Qt Versions} >
+    documentation, select \uicontrol Edit (or \uicontrol {\QC} on \macos) >
+    \uicontrol Preferences > \uicontrol Kits > \uicontrol {Qt Versions} >
     \uicontrol {Register documentation}.
 
     \image qtcreator-qt-versions.png {Register documentation field in Qt Versions tab in Kit Preferences}
@@ -174,7 +177,8 @@
 
     \section1 Import and export bookmarks
 
-    To import and export bookmarks, select \uicontrol Edit > \uicontrol Preferences
+    To import and export bookmarks, select \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) > \uicontrol Preferences
      > \uicontrol Help > \uicontrol General > \uicontrol {Import Bookmarks} or
      \uicontrol {Export Bookmarks}.
 
@@ -260,7 +264,8 @@
             For information on how to prepare your documentation and create a
             .qch file, see \l{The Qt Help Framework}.
 
-        \li To add the .qch file to \QC, select \uicontrol Edit > \uicontrol Preferences >
+        \li To add the .qch file to \QC, select \uicontrol Edit
+            (or \uicontrol {\QC} on \macos) > \uicontrol Preferences >
             \uicontrol Help > \uicontrol Documentation > \uicontrol Add.
 
             \image qtcreator-preferences-help-documentation.webp {Documentation tab in Help Preferences}
@@ -289,7 +294,8 @@
     \image qtcreator-context-sensitive-help.png {Context-sensitive help in Edit mode}
 
     To specify that the help always opens in full-screen mode or
-    is detached to an external window, select \uicontrol Edit >
+    is detached to an external window, select \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) >
     \uicontrol Preferences > \uicontrol Help > \uicontrol General.
 
     \image qtcreator-preferences-help-general.webp {General tab in Help preferences}
@@ -317,8 +323,8 @@
     \title Select the help start page
 
     You can select the page to display when you open the \uicontrol Help mode in the
-    \uicontrol Edit > \uicontrol Preferences > \uicontrol Help > \uicontrol General
-    > \uicontrol {On help start} field.
+    \uicontrol Edit (or \uicontrol {\QC} on \macos) > \uicontrol Preferences >
+    \uicontrol Help > \uicontrol General > \uicontrol {On help start} field.
 
     \image qtcreator-preferences-help-general.webp {General tab in Help preferences}
 
@@ -367,8 +373,8 @@
 
     \list 1
 
-        \li Select \uicontrol Edit > \uicontrol Preferences > \uicontrol Help >
-            \uicontrol Filters.
+        \li Select \uicontrol Edit (or \uicontrol {\QC} on \macos) >
+            \uicontrol Preferences > \uicontrol Help > \uicontrol Filters.
 
             \image qtcreator-help-filter-attributes.png {Filters tab in Help preferences}
 

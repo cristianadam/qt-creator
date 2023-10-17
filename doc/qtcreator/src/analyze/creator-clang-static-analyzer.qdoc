@@ -111,7 +111,7 @@
 
     \list 1
 
-        \li Select \uicontrol Edit > \uicontrol Preferences > \uicontrol Analyzer >
+        \li Select \uicontrol Edit (or \uicontrol {\QC} on \macos) > \uicontrol Preferences > \uicontrol Analyzer >
             \uicontrol {Clang Tools}.
 
             \image qtcreator-clang-tools-options.png {Clang Tools preferences}

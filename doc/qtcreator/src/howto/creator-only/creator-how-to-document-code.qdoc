@@ -20,7 +20,7 @@
 
     \image qtcreator-preferences-documentation-comments.webp {Documentation Comments settings}
 
-    To set global preferences, select \uicontrol Edit > \uicontrol Preferences >
+    To set global preferences, select \uicontrol Edit (or \uicontrol {\QC} on \macos) > \uicontrol Preferences >
     \uicontrol {Text Editor} > \uicontrol {Documentation Comments}.
 
     \sa {Configuring Projects}

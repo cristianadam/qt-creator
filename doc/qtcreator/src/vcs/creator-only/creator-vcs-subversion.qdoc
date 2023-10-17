@@ -29,7 +29,8 @@
 
     \section1 Subversion Preferences
 
-    To set Subversion preferences, select \uicontrol Edit >
+    To set Subversion preferences, select \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) >
     \uicontrol Preferences > \uicontrol {Version Control} >
     \uicontrol Subversion:
 

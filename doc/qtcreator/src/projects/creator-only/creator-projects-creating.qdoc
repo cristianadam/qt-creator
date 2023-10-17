@@ -165,7 +165,8 @@
     not need to navigate to \uicontrol File > \uicontrol {New File} or
     \uicontrol {New Project}.
 
-    Set keyboard shortcuts for wizards in \uicontrol Edit >
+    Set keyboard shortcuts for wizards in \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) >
     \uicontrol Preferences > \uicontrol Environment > \uicontrol Keyboard >
     \uicontrol Wizard. All wizard actions start with \uicontrol Impl there.
 

@@ -9,7 +9,8 @@
 
     \title Edit Qbs profiles
 
-    To view the Qbs profile associated with a kit, select \uicontrol Edit >
+    To view the Qbs profile associated with a kit, select \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) >
     \uicontrol Preferences > \uicontrol Qbs > \uicontrol Profiles.
 
     \image creator-qbs-profiles.png "Qbs Profiles tab"
@@ -22,7 +23,8 @@
     To edit the Qbs profile associated with a kit:
 
     \list 1
-        \li In \uicontrol Edit > \uicontrol Preferences > \uicontrol Kits, select
+        \li In \uicontrol Edit (or \uicontrol {\QC} on \macos) >
+            \uicontrol Preferences > \uicontrol Kits, select
             the kit, and then select \uicontrol Change next to the
             \uicontrol {Additional Qbs Profile Settings} field to open the
             \uicontrol {Custom Properties} dialog.

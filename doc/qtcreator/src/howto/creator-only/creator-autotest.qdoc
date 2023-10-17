@@ -341,7 +341,8 @@
             with the build system.
 
     If a test takes more than a minute to execute, the default timeout might
-    stop the test execution. To increase the timeout, select \uicontrol Edit >
+    stop the test execution. To increase the timeout, select \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) >
     \uicontrol Preferences > \uicontrol {Testing} > \uicontrol General.
 
     \section2 Selecting Tests to Run
@@ -389,8 +390,8 @@
     \section1 Specifying Test Settings
 
     To customize the handling of tests, test frameworks, and test tools, select
-    \uicontrol Edit > \uicontrol Preferences > \uicontrol {Testing} >
-    \uicontrol General.
+    \uicontrol Edit (or \uicontrol {\QC} on \macos) > \uicontrol Preferences >
+    \uicontrol {Testing} > \uicontrol General.
 
     \image qtcreator-preferences-testing-general.webp {General tab in Testing preferences}
 
@@ -444,7 +445,8 @@
     The code inside a benchmark test is measured, and possibly also repeated
     several times in order to get an accurate measurement. This depends on the
     measurement back-end that you can select in the
-    \uicontrol {Benchmark Metrics} group in \uicontrol Edit >
+    \uicontrol {Benchmark Metrics} group in \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) >
     \uicontrol Preferences > \uicontrol {Testing} > \uicontrol {Qt Test}:
     walltime, CPU tick counter, event counter, Valgrind Callgrind, and Linux
     Perf. For more information, see \l{Creating a Benchmark}.
@@ -472,7 +474,8 @@
 
     \section2 Specifying Settings for Running Google Tests
 
-    To specify settings for running Google tests, select \uicontrol Edit >
+    To specify settings for running Google tests, select \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) >
     \uicontrol Preferences > \uicontrol {Testing} > \uicontrol {Google Test}.
 
     \image qtcreator-preferences-testing-googletest.webp {Gooble Test tab in Testing preferences}
@@ -526,7 +529,8 @@
     \section2 Specifying Settings for Running Catch2 Tests
     \list 1
         \li To specify settings for running Catch2 tests, select
-            \uicontrol Edit > \uicontrol Preferences > \uicontrol {Testing} >
+            \uicontrol Edit (or \uicontrol {\QC} on \macos) >
+            \uicontrol Preferences > \uicontrol {Testing} >
             \uicontrol {Catch Test}.
             \image qtcreator-preferences-testing-catchtest.webp {Catch Test tab in Testing preferences}
         \li Select the \uicontrol {Show success} check box to show succeeding
@@ -557,8 +561,8 @@
     \section2 Specifying Settings for Running CTest-Based Tests
     \list 1
         \li To specify settings for running CTest-based tests, select
-        \uicontrol Edit > \uicontrol Preferences > \uicontrol {Testing} >
-        \uicontrol {CTest}.
+            \uicontrol Edit (or \uicontrol {\QC} on \macos) > \uicontrol Preferences
+            > \uicontrol {Testing} > \uicontrol {CTest}.
             \image qtcreator-preferences-testing-ctest.webp {CTest tab in Testing preferences}
         \li Select the \uicontrol {Output on failure} check box to show test
             specific output if a test fails. Contrary to the CTest default
@@ -595,7 +599,8 @@
     the lost information when viewing the results as plain text.
 
     To view the
-    results of Qt and Qt Quick tests as plain text, select \uicontrol Edit >
+    results of Qt and Qt Quick tests as plain text, select \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) >
     \uicontrol Preferences > \uicontrol {Testing} > \uicontrol {Qt Test}, and
     then deselect the \uicontrol {Use XML output} check box. Then select the
     \inlineimage icons/text.png

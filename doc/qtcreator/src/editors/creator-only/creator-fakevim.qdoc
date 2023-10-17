@@ -93,7 +93,8 @@
     \section2 Plugin Emulation
 
     FakeVim also emulates some popular vim plugins. To enable plugin emulation
-    for particular plugins, select \uicontrol Edit > \uicontrol Preferences >
+    for particular plugins, select \uicontrol Edit (or \uicontrol {\QC} on \macos)
+    > \uicontrol Preferences >
     \uicontrol FakeVim > \uicontrol General > \uicontrol {Plugin Emulation}.
 
     \image qtcreator-fakevim-options-general-plugin-emulation.png "FakeVim Plugin Emulation preferences"
@@ -269,8 +270,8 @@
     \section1 Mapping FakeVim Commands
 
     To map commands entered on the \uicontrol FakeVim command line to
-    \QC functions, select \uicontrol Edit > \uicontrol Preferences >
-    \uicontrol FakeVim > \uicontrol {Ex Command Mapping}.
+    \QC functions, select \uicontrol Edit (or \uicontrol {\QC} on \macos) >
+    \uicontrol Preferences > \uicontrol FakeVim > \uicontrol {Ex Command Mapping}.
     Enter a string in the \uicontrol Filter field to search for a specific
     \QC function.
 
@@ -284,8 +285,8 @@
     To reset the trigger expressions for all functions, select
     \uicontrol {Reset All}.
 
-    To map \e {user commands} to keyboard shortcuts, select \uicontrol Edit >
-    \uicontrol Preferences > \uicontrol FakeVim >
+    To map \e {user commands} to keyboard shortcuts, select \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) > \uicontrol Preferences > \uicontrol FakeVim >
     \uicontrol {User Command Mapping}. The user command mapped to the shortcut
     is executed by FakeVim as if you were typing it (as when replaying a macro).
 
@@ -293,7 +294,8 @@
 
     \section1 Setting FakeVim Preferences
 
-    To make changes to the Vim-style settings, select \uicontrol Edit >
+    To make changes to the Vim-style settings, select \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) >
     \uicontrol Preferences > \uicontrol FakeVim > \uicontrol General.
 
     \image qtcreator-fakevim-options.png "FakeVim preferences"
@@ -304,13 +306,15 @@
     select \uicontrol {Set Plain Style}. You can then change any of the
     preselected settings.
 
-    To use a Vim-style color scheme, select \uicontrol Edit >
+    To use a Vim-style color scheme, select \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) >
     \uicontrol Preferences > \uicontrol {Text Editor} > \uicontrol {Fonts & Color}.
     In the \uicontrol {Color Scheme} list, select \uicontrol {Vim (dark)}.
 
     \section1 Quitting FakeVim Mode
 
-    To quit the FakeVim mode, deselect \uicontrol Edit > \uicontrol Preferences >
+    To quit the FakeVim mode, deselect \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) > \uicontrol Preferences >
     \uicontrol FakeVim > \uicontrol {Use FakeVim} or press \key {Alt+V,Alt+V}.
 
     You can temporarily escape FakeVim mode to access the normal \QC keyboard

@@ -19,7 +19,8 @@
     development PC.
 
     To tell \QC where it can find the tools, specify the paths to the
-    directories where the tools are installed in \uicontrol Edit >
+    directories where the tools are installed in \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) >
     \uicontrol Preferences > \uicontrol Devices > \uicontrol SSH:
 
     \image qtcreator-ssh-options.png "SSH preferences"
@@ -60,7 +61,8 @@
 
     \list 1
 
-        \li Select \uicontrol Edit > \uicontrol Preferences > \uicontrol Devices
+        \li Select \uicontrol Edit (or \uicontrol {\QC} on \macos) >
+            \uicontrol Preferences > \uicontrol Devices
             > \uicontrol Devices > \uicontrol {Create New}.
 
             \image qtcreator-ssh-key-configuration.png "SSH Key Configuration dialog"

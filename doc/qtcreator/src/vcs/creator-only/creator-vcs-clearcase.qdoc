@@ -31,7 +31,8 @@
         \li Download \l{http://gnuwin32.sourceforge.net/packages/diffutils.htm}
             {Diffutils} and extract it to a directory in your PATH.
 
-        \li Select \uicontrol Edit > \uicontrol Preferences >
+        \li Select \uicontrol Edit (or \uicontrol {\QC} on \macos) >
+            \uicontrol Preferences >
             \uicontrol {Version Control} > \uicontrol ClearCase.
 
             \image qtcreator-preferences-vcs-clearcase.webp {ClearCase preferences}
@@ -53,7 +54,8 @@
     \uicontrol ClearCase > \uicontrol {Check Out}. If you check out files in a
     Unified Change Management (UCM) view, they are added to the change set of
     a UCM activity. By default, the activities are automatically assigned names.
-    To disable this functionality, select \uicontrol Edit > \uicontrol Preferences
+    To disable this functionality, select \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) > \uicontrol Preferences
     > \uicontrol {Version Control} > \uicontrol ClearCase, and then deselect the
     \uicontrol {Auto assign activity names} check box.
 
@@ -71,12 +73,14 @@
     To create a permanent new version of the current file or all files in the
     versioned object base (VOB), select \uicontrol Tools >
     \uicontrol {ClearCase} > \uicontrol {Check In}. To confirm
-    that you want to check in the files, select \uicontrol Edit >
+    that you want to check in the files, select \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) >
     \uicontrol Preferences > \uicontrol {Version Control} > \uicontrol ClearCase,
     and then select the \uicontrol {Prompt on check-in} check box.
 
     By default, you have to enter a comment when checking files out or in.
-    To suppress this prompt, select \uicontrol Edit > \uicontrol Preferences >
+    To suppress this prompt, select \uicontrol Edit (or \uicontrol {\QC} on \macos)
+    > \uicontrol Preferences >
     \uicontrol {Version Control} > \uicontrol ClearCase, and then select the
     \uicontrol {Do not prompt for comment during checkout or check-in} check
     box.
@@ -87,7 +91,8 @@
     \uicontrol Tools > \uicontrol ClearCase > \uicontrol {Undo Hijack}.
 
     By default, the files in the VOBs are indexed for quick access to their
-    statuses. To disable indexing, select \uicontrol Edit > \uicontrol Preferences
+    statuses. To disable indexing, select \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) > \uicontrol Preferences
     > \uicontrol {Version Control} > \uicontrol ClearCase, and then select the
     \uicontrol {Disable indexer} check box. To only have some VOBs indexed,
     specify them in the \uicontrol {Index only VOBs} field.

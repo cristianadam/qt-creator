@@ -231,7 +231,8 @@
 
     \list 1
 
-        \li Select \uicontrol Edit > \uicontrol Preferences >
+        \li Select \uicontrol Edit (or \uicontrol {\QC} on \macos) >
+            \uicontrol Preferences >
             \uicontrol Environment > \uicontrol Locator >
             \uicontrol {Web Search} > \uicontrol Edit.
 
@@ -307,7 +308,8 @@
 
     \list 1
 
-        \li Select \uicontrol Edit > \uicontrol Preferences >
+        \li Select \uicontrol Edit (or \uicontrol {\QC} on \macos) >
+            \uicontrol Preferences >
             \uicontrol Environment > \uicontrol Locator.
 
         \li In \uicontrol {Refresh interval}, define new time in minutes.

@@ -48,7 +48,8 @@
 
     \section1 Mercurial Preferences
 
-    To set preferences for Mercurial, select \uicontrol Edit >
+    To set preferences for Mercurial, select \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) >
     \uicontrol Preferences > \uicontrol {Version Control} > \uicontrol Mercurial:
 
     \image qtcreator-preferences-vcs-mercurial.webp {Mercurial preferences}

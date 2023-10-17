@@ -98,7 +98,8 @@
     \section1 Building with CMake
 
     \QC automatically runs CMake when you make changes to \c {CMakeLists.txt}
-    files. To disable this feature, select \uicontrol Edit >
+    files. To disable this feature, select \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) >
     \uicontrol Preferences > \uicontrol CMake > \uicontrol General. Select the
     CMake executable to edit, and then deselect the \uicontrol {Autorun CMake}
     check box.
@@ -112,7 +113,8 @@
     To prevent failures on incremental builds, it might make sense
     to always run qmake before building, even though it means that
     building will take more time. To enable this option, select \uicontrol Edit
-    > \uicontrol Preferences > \uicontrol {Build & Run} > \uicontrol Qmake >
+    (or \uicontrol {\QC} on \macos) > \uicontrol Preferences >
+    \uicontrol {Build & Run} > \uicontrol Qmake >
     \uicontrol {Run qmake on every build}.
 
     \image qtcreator-preferences-build-run-qmake.png "qmake tab in Build & Run Preferences"

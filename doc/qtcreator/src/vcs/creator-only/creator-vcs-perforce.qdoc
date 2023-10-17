@@ -32,7 +32,8 @@
 
     \section1 Configuring Perforce
 
-    To set Perforce preferences, select \uicontrol Edit > \uicontrol Preferences
+    To set Perforce preferences, select \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) > \uicontrol Preferences
     > \uicontrol {Version Control} > \uicontrol Perforce:
 
     \image qtcreator-preferences-vcs-perforce.webp {Perforce preferences}
@@ -55,7 +56,8 @@
     \l {Use common VCS Functions}, you can select \uicontrol Tools >
     \uicontrol Perforce > \uicontrol {Edit File} to open a file for editing
     within the client workspace. By default, files are automatically opened for
-    editing. To disable this feature, select \uicontrol Edit >
+    editing. To disable this feature, select \uicontrol Edit
+    (or \uicontrol {\QC} on \macos) >
     \uicontrol Preferences > \uicontrol {Version Control} > \uicontrol Perforce,
     and then deselect the \uicontrol {Automatically open files when editing}
     check box.
