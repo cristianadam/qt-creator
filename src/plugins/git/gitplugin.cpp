@@ -247,8 +247,10 @@ public:
 
         if (settings().instantBlameIgnoreSpaceChanges()
             || settings().instantBlameIgnoreLineMoves()) {
-            result.append(Tr::tr("<p><b>Note:</b> Ignore whitespace changes or line moves"
-                                 " is enabled in the instant blame settings.</p>"));
+            result.append("<p>"
+                          + Tr::tr("<b>Note:</b> Ignore whitespace changes or line moves"
+                                   " is enabled in the instant blame settings.")
+                          + "</p>");
         }
         return result;
     }
