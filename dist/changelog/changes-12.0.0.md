@@ -208,6 +208,8 @@ Projects
   ([QTCREATORBUG-25780](https://bugreports.qt.io/browse/QTCREATORBUG-25780))
 * Extended context help for variables, properties and modules
 
+([Documentation](https://doc-snapshots.qt.io/qtcreator-12.0/creator-project-cmake.html))
+
 ### Python
 
 * Added auto-detection of PySide from the installer
