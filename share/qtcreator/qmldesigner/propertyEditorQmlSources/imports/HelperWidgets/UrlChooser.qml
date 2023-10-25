@@ -503,14 +503,19 @@ Row {
     }
 
     IconIndicator {
+        id: openFileIndicator
         icon: StudioTheme.Constants.addFile
         iconColor: root.textColor
-        onClicked: {
+        function handleOnClicked() {
             fileModel.openFileDialog()
             if (fileModel.fileName !== "") {
                 root.backendValue.value = fileModel.fileName
                 root.absoluteFilePath = fileModel.resolve(root.backendValue.value)
             }
+        }
+
+        onClicked: {
+            Qt.callLater(openFileIndicator.handleOnClicked)
         }
     }
 }
