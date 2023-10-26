@@ -72,6 +72,12 @@ static QMessageBox::StandardButton exec(
         msgBox.checkBox()->setText(msg);
     }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
+    // Workaround for QTBUG-118241
+    if (HostOsInfo::isMacHost() && !buttonTextOverrides.isEmpty())
+        msgBox.setOptions(QMessageBox::Option::DontUseNativeDialog);
+#endif
+
     msgBox.setStandardButtons(buttons);
     msgBox.setDefaultButton(defaultButton);
     for (auto it = buttonTextOverrides.constBegin(); it != buttonTextOverrides.constEnd(); ++it)
