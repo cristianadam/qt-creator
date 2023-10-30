@@ -740,6 +740,7 @@ Preprocessor::Preprocessor(Client *client, Environment *env)
     , m_expandFunctionlikeMacros(true)
     , m_keepComments(false)
 {
+    m_scratchBuffer.reserve(256);
 }
 
 QByteArray Preprocessor::run(const Utils::FilePath &filePath,
@@ -756,6 +757,7 @@ QByteArray Preprocessor::run(const QString &fileName,
                              bool markGeneratedTokens)
 {
     m_scratchBuffer.clear();
+    m_scratchBuffer.reserve(256);
 
     QByteArray preprocessed, includeGuardMacroName;
     preprocessed.reserve(source.size() * 2); // multiply by 2 because we insert #gen lines.
