@@ -108,7 +108,7 @@ private:
     bool m_started{false};
 };
 
-QLoggingCategory::CategoryFilter LogCategoryRegistry::s_oldFilter;
+QLoggingCategory::CategoryFilter LogCategoryRegistry::s_oldFilter = nullptr;
 
 struct SavedEntry
 {
