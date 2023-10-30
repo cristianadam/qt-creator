@@ -48,6 +48,9 @@
 
     \section1 iOS
 
+    \note Support for iOS 17 devices is broken in \QC 12.0. This is a known
+    issue.
+
     To be able to use \QC on \macos, you must install Xcode, and therefore
     you should already have the tool chain for building applications for
     iOS. \QC automatically detects the tool chain and creates the necessary

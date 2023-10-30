@@ -11,6 +11,9 @@
     You can connect iOS devices to your local machine with a USB cable to
     run applications built for them from \QC.
 
+    \note Support for iOS 17 devices is broken in \QC 12.0. This is a known
+    issue.
+
     To be able to use \QC on \macos, you must install Xcode, and therefore,
     you already have the tool chain for building applications for iOS. \QC
     automatically detects the tool chain and creates the necessary

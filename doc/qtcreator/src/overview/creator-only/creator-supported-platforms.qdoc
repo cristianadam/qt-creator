@@ -69,8 +69,8 @@
             \li \image ok.png
     \endtable
 
-    \note UWP support was removed from \QC 8.0.
-    To develop for UWP using Qt 5, use \QC 7.0, or earlier.
+    \note Support for iOS 17 devices is broken in \QC 12.0. This is a known
+    issue.
 
     \QC automatically runs scheduled checks for updates based on the settings
     specified in \preferences > \uicontrol Environment > \uicontrol Update.
