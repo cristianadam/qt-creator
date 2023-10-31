@@ -127,16 +127,16 @@ void tst_Tasking::validConstructs()
 
     // Fluent interface
 
-    const Group fluent {
-        parallel,
-        TestTask().onSetup(setupHandler),
-        TestTask().onSetup(setupHandler).onDone(doneHandler),
-        TestTask().onSetup(setupHandler).onDone(doneHandler).onError(errorHandler),
-        // possible to skip the empty done
-        TestTask().onSetup(setupHandler).onError(errorHandler),
-        // possible to set handlers in a different order
-        TestTask().onError(errorHandler).onDone(doneHandler).onSetup(setupHandler),
-    };
+    // const Group fluent {
+    //     parallel,
+    //     TestTask().onSetup(setupHandler),
+    //     TestTask().onSetup(setupHandler).onDone(doneHandler),
+    //     TestTask().onSetup(setupHandler).onDone(doneHandler).onError(errorHandler),
+    //     // possible to skip the empty done
+    //     TestTask().onSetup(setupHandler).onError(errorHandler),
+    //     // possible to set handlers in a different order
+    //     TestTask().onError(errorHandler).onDone(doneHandler).onSetup(setupHandler),
+    // };
 
 
     // When turning each of below blocks on, you should see the specific compiler error message.

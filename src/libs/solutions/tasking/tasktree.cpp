@@ -1002,38 +1002,38 @@ void GroupItem::addChildren(const QList<GroupItem> &children)
     }
 }
 
-void GroupItem::setTaskSetupHandler(const TaskSetupHandler &handler)
-{
-    if (!handler) {
-        qWarning("Setting empty Setup Handler is no-op, skipping...");
-        return;
-    }
-    if (m_taskHandler.m_setupHandler)
-        qWarning("Setup Handler redefinition, overriding...");
-    m_taskHandler.m_setupHandler = handler;
-}
+// void GroupItem::setTaskSetupHandler(const TaskSetupHandler &handler)
+// {
+//     if (!handler) {
+//         qWarning("Setting empty Setup Handler is no-op, skipping...");
+//         return;
+//     }
+//     if (m_taskHandler.m_setupHandler)
+//         qWarning("Setup Handler redefinition, overriding...");
+//     m_taskHandler.m_setupHandler = handler;
+// }
 
-void GroupItem::setTaskDoneHandler(const TaskEndHandler &handler)
-{
-    if (!handler) {
-        qWarning("Setting empty Done Handler is no-op, skipping...");
-        return;
-    }
-    if (m_taskHandler.m_doneHandler)
-        qWarning("Done Handler redefinition, overriding...");
-    m_taskHandler.m_doneHandler = handler;
-}
+// void GroupItem::setTaskDoneHandler(const TaskEndHandler &handler)
+// {
+//     if (!handler) {
+//         qWarning("Setting empty Done Handler is no-op, skipping...");
+//         return;
+//     }
+//     if (m_taskHandler.m_finishHandler)
+//         qWarning("Done Handler redefinition, overriding...");
+//     m_taskHandler.m_finishHandler = handler;
+// }
 
-void GroupItem::setTaskErrorHandler(const TaskEndHandler &handler)
-{
-    if (!handler) {
-        qWarning("Setting empty Error Handler is no-op, skipping...");
-        return;
-    }
-    if (m_taskHandler.m_errorHandler)
-        qWarning("Error Handler redefinition, overriding...");
-    m_taskHandler.m_errorHandler = handler;
-}
+// void GroupItem::setTaskErrorHandler(const TaskEndHandler &handler)
+// {
+//     if (!handler) {
+//         qWarning("Setting empty Error Handler is no-op, skipping...");
+//         return;
+//     }
+//     if (m_taskHandler.m_errorHandler)
+//         qWarning("Error Handler redefinition, overriding...");
+//     m_taskHandler.m_errorHandler = handler;
+// }
 
 GroupItem GroupItem::withTimeout(const GroupItem &item, milliseconds timeout,
                                  const GroupEndHandler &handler)
