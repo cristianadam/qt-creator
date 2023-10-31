@@ -111,16 +111,18 @@ void tst_Tasking::validConstructs()
     };
 
     const auto setupHandler = [](TaskObject &) {};
-    const auto doneHandler = [](const TaskObject &) {};
+    const auto finishHandler = [](const TaskObject &) {};
     const auto errorHandler = [](const TaskObject &) {};
+    const auto doneHandler = [](const TaskObject &, bool) {};
 
     // Not fluent interface
 
     const Group task2 {
         parallel,
         TestTask(setupHandler),
+        TestTask(setupHandler, finishHandler),
+        TestTask(setupHandler, finishHandler, errorHandler),
         TestTask(setupHandler, doneHandler),
-        TestTask(setupHandler, doneHandler, errorHandler),
         // need to explicitly pass empty handler for done
         TestTask(setupHandler, {}, errorHandler)
     };
@@ -236,14 +238,8 @@ void tst_Tasking::testTree_data()
     };
 
     const auto setupDone = [storage](int taskId) {
-        return [storage, taskId](const TaskObject &) {
-            storage->m_log.append({taskId, Handler::Done});
-        };
-    };
-
-    const auto setupError = [storage](int taskId) {
-        return [storage, taskId](const TaskObject &) {
-            storage->m_log.append({taskId, Handler::Error});
+        return [storage, taskId](const TaskObject &, bool success) {
+            storage->m_log.append({taskId, success ? Handler::Done : Handler::Error});
         };
     };
 
@@ -253,14 +249,13 @@ void tst_Tasking::testTree_data()
         };
     };
 
-    const auto createTask = [storage, setupTask, setupDone, setupError](
+    const auto createTask = [storage, setupTask, setupDone](
             int taskId, bool successTask, milliseconds timeout = 0ms) -> GroupItem {
         if (successTask)
-            return TestTask(setupTask(taskId, timeout), setupDone(taskId), setupError(taskId));
+            return TestTask(setupTask(taskId, timeout), setupDone(taskId));
         const Group root {
             finishAllAndError,
             TestTask(setupTask(taskId, timeout)),
-            onGroupDone([storage, taskId] { storage->m_log.append({taskId, Handler::Done}); }),
             onGroupError([storage, taskId] { storage->m_log.append({taskId, Handler::Error}); })
         };
         return root;
@@ -274,9 +269,9 @@ void tst_Tasking::testTree_data()
         return createTask(taskId, false, timeout);
     };
 
-    const auto createDynamicTask = [storage, setupDynamicTask, setupDone, setupError](
-                                       int taskId, SetupResult action) {
-        return TestTask(setupDynamicTask(taskId, action), setupDone(taskId), setupError(taskId));
+    const auto createDynamicTask = [storage, setupDynamicTask, setupDone](int taskId,
+                                                                          SetupResult action) {
+        return TestTask(setupDynamicTask(taskId, action), setupDone(taskId));
     };
 
     const auto groupSetup = [storage](int taskId) {
@@ -2137,7 +2132,7 @@ void tst_Tasking::testTree_data()
         // 2. With and without timeout handler.
         const Group root1 {
             Storage(storage),
-            TestTask(setupTask(1, 1000ms), setupDone(1), setupError(1))
+            TestTask(setupTask(1, 1000ms), setupDone(1))
                 .withTimeout(1ms)
         };
         const Log log1 {
@@ -2149,7 +2144,7 @@ void tst_Tasking::testTree_data()
 
         const Group root2 {
             Storage(storage),
-            TestTask(setupTask(1, 1000ms), setupDone(1), setupError(1))
+            TestTask(setupTask(1, 1000ms), setupDone(1))
                 .withTimeout(1ms, setupTimeout(1))
         };
         const Log log2 {
@@ -2162,7 +2157,7 @@ void tst_Tasking::testTree_data()
 
         const Group root3 {
             Storage(storage),
-            TestTask(setupTask(1, 1ms), setupDone(1), setupError(1))
+            TestTask(setupTask(1, 1ms), setupDone(1))
                 .withTimeout(1000ms)
         };
         const Log doneLog {
@@ -2174,7 +2169,7 @@ void tst_Tasking::testTree_data()
 
         const Group root4 {
             Storage(storage),
-            TestTask(setupTask(1, 1ms), setupDone(1), setupError(1))
+            TestTask(setupTask(1, 1ms), setupDone(1))
                 .withTimeout(1000ms, setupTimeout(1))
         };
         QTest::newRow("TaskDoneWithTimeoutHandler") << TestData{storage, root4, doneLog, 2,

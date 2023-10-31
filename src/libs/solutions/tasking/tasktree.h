@@ -327,6 +327,7 @@ public:
     static_assert(std::is_base_of_v<TaskAdapter<Task, Deleter>, Adapter>,
                   "The Adapter type for the CustomTask<Adapter> needs to be derived from "
                   "TaskAdapter<Task>.");
+    using DoneHandler = std::function<void(const Task &, bool)>;
     using EndHandler = std::function<void(const Task &)>;
     static Adapter *createAdapter() { return new Adapter; }
     CustomTask() : GroupItem({&createAdapter}) {}
@@ -334,6 +335,11 @@ public:
     CustomTask(SetupHandler &&setup, const EndHandler &done = {}, const EndHandler &error = {})
         : GroupItem({&createAdapter, wrapSetup(std::forward<SetupHandler>(setup)),
                      wrapEnds(done, error)}) {}
+
+    template <typename SetupHandler>
+    CustomTask(SetupHandler &&setup, const DoneHandler &done)
+        : GroupItem({&createAdapter, wrapSetup(std::forward<SetupHandler>(setup)), wrapDone(done)})
+    {}
 
     // template <typename SetupHandler>
     // CustomTask &onSetup(SetupHandler &&handler) {
@@ -381,6 +387,15 @@ private:
             const auto handler = success ? doneHandler : errorHandler;
             if (handler)
                 handler(*adapter.task());
+        };
+    };
+
+    static TaskDoneHandler wrapDone(const DoneHandler &handler) {
+        if (!handler)
+            return {};
+        return [handler](const TaskInterface &taskInterface, bool success) {
+            const Adapter &adapter = static_cast<const Adapter &>(taskInterface);
+            handler(*adapter.task(), success);
         };
     };
 };
