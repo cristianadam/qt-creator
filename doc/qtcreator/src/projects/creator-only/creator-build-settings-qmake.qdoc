@@ -97,10 +97,10 @@
     shell command.
 
     By default, \QC uses all the CPU cores available to achieve maximum build
-    parallelization. On Linux and \macos, you can specify the number of parallel
-    jobs to use for building in the \uicontrol {Parallel jobs} field. Select the
-    \uicontrol {Override MAKEFLAGS} check box to override existing MAKEFLAGS
-    variables.
+    parallelization. When developing for Android, you can specify the number of
+    parallel jobs to use for building in the \uicontrol {Parallel jobs} field.
+    Select the \uicontrol {Override MAKEFLAGS} check box to override existing
+    \c MAKEFLAGS variables.
 
     Select \uicontrol {Disable in subdirectories} to execute the build step
     only for a top-level build.
