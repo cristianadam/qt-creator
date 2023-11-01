@@ -7,6 +7,8 @@
 
 namespace Python::Internal {
 
+class PythonBuildConfigurationFactory;
+
 class PythonPlugin final : public ExtensionSystem::IPlugin
 {
     Q_OBJECT
@@ -17,6 +19,7 @@ public:
     ~PythonPlugin() final;
 
     static PythonPlugin *instance();
+    static PythonBuildConfigurationFactory *pythonBuildConfigFactory();
 
 private:
     void initialize() final;
