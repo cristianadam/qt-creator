@@ -13,14 +13,10 @@
 namespace TextEditor {
 class TextDocument;
 
-class Highlighter : public SyntaxHighlighter, public KSyntaxHighlighting::AbstractHighlighter
-{
-    Q_OBJECT
-    Q_INTERFACES(KSyntaxHighlighting::AbstractHighlighter)
+class HighlighterHelper : public QObject {
 public:
     using Definition = KSyntaxHighlighting::Definition;
     using Definitions = QList<Definition>;
-    Highlighter();
 
     static Definition definitionForName(const QString &name);
 
@@ -37,6 +33,14 @@ public:
     static void reload();
 
     static void handleShutdown();
+};
+
+class Highlighter : public SyntaxHighlighter, public KSyntaxHighlighting::AbstractHighlighter
+{
+    Q_OBJECT
+    Q_INTERFACES(KSyntaxHighlighting::AbstractHighlighter)
+public:
+    Highlighter();
 
 protected:
     void highlightBlock(const QString &text) override;

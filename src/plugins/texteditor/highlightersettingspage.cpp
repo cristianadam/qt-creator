@@ -114,17 +114,17 @@ public:
 
         connect(downloadDefinitions, &QPushButton::pressed,
                 [label = QPointer<QLabel>(updateStatus)]() {
-                    Highlighter::downloadDefinitions([label] {
+                    HighlighterHelper::downloadDefinitions([label] {
                         if (label)
                             label->setText(Tr::tr("Download finished"));
                     });
                 });
 
         connect(reloadDefinitions, &QPushButton::pressed, this, [] {
-            Highlighter::reload();
+            HighlighterHelper::reload();
         });
         connect(resetCache, &QPushButton::clicked, this, [] {
-            Highlighter::clearDefinitionForDocumentCache();
+            HighlighterHelper::clearDefinitionForDocumentCache();
         });
     }
 

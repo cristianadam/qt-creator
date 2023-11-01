@@ -708,7 +708,7 @@ public:
     void updateFileLineEndingVisible();
 
     void reconfigure();
-    void updateSyntaxInfoBar(const Highlighter::Definitions &definitions, const QString &fileName);
+    void updateSyntaxInfoBar(const HighlighterHelper::Definitions &definitions, const QString &fileName);
     void removeSyntaxInfoBar();
     void configureGenericHighlighter(const KSyntaxHighlighting::Definition &definition);
     void setupFromDefinition(const KSyntaxHighlighting::Definition &definition);
@@ -1917,7 +1917,7 @@ void TextEditorWidgetPrivate::foldLicenseHeader()
             QStringList commentMarker;
             if (auto highlighter = qobject_cast<Highlighter *>(
                     q->textDocument()->syntaxHighlighter())) {
-                const Highlighter::Definition def = highlighter->definition();
+                const HighlighterHelper::Definition def = highlighter->definition();
                 for (const QString &marker :
                      {def.singleLineCommentMarker(), def.multiLineCommentMarker().first}) {
                     if (!marker.isEmpty())
@@ -3625,7 +3625,7 @@ void TextEditorWidgetPrivate::reconfigure()
     q->configureGenericHighlighter();
 }
 
-void TextEditorWidgetPrivate::updateSyntaxInfoBar(const Highlighter::Definitions &definitions,
+void TextEditorWidgetPrivate::updateSyntaxInfoBar(const HighlighterHelper::Definitions &definitions,
                                                   const QString &fileName)
 {
     Id missing(Constants::INFO_MISSING_SYNTAX_DEFINITION);
@@ -3640,7 +3640,7 @@ void TextEditorWidgetPrivate::updateSyntaxInfoBar(const Highlighter::Definitions
                           InfoBarEntry::GlobalSuppression::Enabled);
         info.addCustomButton(Tr::tr("Download Definitions"), [missing, this]() {
             m_document->infoBar()->removeInfo(missing);
-            Highlighter::downloadDefinitions();
+            HighlighterHelper::downloadDefinitions();
         });
 
         infoBar->removeInfo(multiple);
@@ -3649,9 +3649,9 @@ void TextEditorWidgetPrivate::updateSyntaxInfoBar(const Highlighter::Definitions
         InfoBarEntry info(multiple,
                           Tr::tr("More than one highlight definition was found for this file. "
                                  "Which one should be used to highlight this file?"));
-        info.setComboInfo(Utils::transform(definitions, &Highlighter::Definition::name),
+        info.setComboInfo(Utils::transform(definitions, &HighlighterHelper::Definition::name),
                           [this](const InfoBarEntry::ComboInfo &info) {
-            this->configureGenericHighlighter(Highlighter::definitionForName(info.displayText));
+            this->configureGenericHighlighter(HighlighterHelper::definitionForName(info.displayText));
         });
 
         info.addCustomButton(Tr::tr("Remember My Choice"), [multiple, this]() {
@@ -3720,9 +3720,9 @@ KSyntaxHighlighting::Definition TextEditorWidgetPrivate::currentDefinition()
 
 void TextEditorWidgetPrivate::rememberCurrentSyntaxDefinition()
 {
-    const Highlighter::Definition &definition = currentDefinition();
+    const HighlighterHelper::Definition &definition = currentDefinition();
     if (definition.isValid())
-        Highlighter::rememberDefinitionForDocument(definition, m_document.data());
+        HighlighterHelper::rememberDefinitionForDocument(definition, m_document.data());
 }
 
 void TextEditorWidgetPrivate::openLinkUnderCursor(bool openInNextSplit)
@@ -9228,23 +9228,23 @@ QString TextEditorWidget::textAt(int from, int to) const
 
 void TextEditorWidget::configureGenericHighlighter()
 {
-    Highlighter::Definitions definitions = Highlighter::definitionsForDocument(textDocument());
-    d->configureGenericHighlighter(definitions.isEmpty() ? Highlighter::Definition()
+    HighlighterHelper::Definitions definitions = HighlighterHelper::definitionsForDocument(textDocument());
+    d->configureGenericHighlighter(definitions.isEmpty() ? HighlighterHelper::Definition()
                                                          : definitions.first());
     d->updateSyntaxInfoBar(definitions, textDocument()->filePath().fileName());
 }
 
 void TextEditorWidget::configureGenericHighlighter(const Utils::MimeType &mimeType)
 {
-    Highlighter::Definitions definitions = Highlighter::definitionsForMimeType(mimeType.name());
-    d->configureGenericHighlighter(definitions.isEmpty() ? Highlighter::Definition()
+    HighlighterHelper::Definitions definitions = HighlighterHelper::definitionsForMimeType(mimeType.name());
+    d->configureGenericHighlighter(definitions.isEmpty() ? HighlighterHelper::Definition()
                                                          : definitions.first());
     d->removeSyntaxInfoBar();
 }
 
 expected_str<void> TextEditorWidget::configureGenericHighlighter(const QString &definitionName)
 {
-    Highlighter::Definition definition = TextEditor::Highlighter::definitionForName(definitionName);
+    HighlighterHelper::Definition definition = TextEditor::HighlighterHelper::definitionForName(definitionName);
     if (!definition.isValid())
         return make_unexpected(Tr::tr("Could not find definition."));
 

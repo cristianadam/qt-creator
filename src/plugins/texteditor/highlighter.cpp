@@ -94,12 +94,12 @@ Highlighter::Highlighter()
                             &categoryForTextStyle);
 }
 
-Highlighter::Definition Highlighter::definitionForName(const QString &name)
+HighlighterHelper::Definition HighlighterHelper::definitionForName(const QString &name)
 {
     return highlightRepository()->definitionForName(name);
 }
 
-Highlighter::Definitions Highlighter::definitionsForDocument(const TextDocument *document)
+HighlighterHelper::Definitions HighlighterHelper::definitionsForDocument(const TextDocument *document)
 {
     QTC_ASSERT(document, return {});
     // First try to find definitions for the file path, only afterwards try the MIME type.
@@ -138,17 +138,17 @@ Highlighter::Definitions Highlighter::definitionsForDocument(const TextDocument 
     return definitions;
 }
 
-static Highlighter::Definition definitionForSetting(const Key &settingsKey,
+static HighlighterHelper::Definition definitionForSetting(const Key &settingsKey,
                                                     const QString &mapKey)
 {
     QtcSettings *settings = Core::ICore::settings();
     settings->beginGroup(Constants::HIGHLIGHTER_SETTINGS_CATEGORY);
     const QString &definitionName = settings->value(settingsKey).toMap().value(mapKey).toString();
     settings->endGroup();
-    return Highlighter::definitionForName(definitionName);
+    return HighlighterHelper::definitionForName(definitionName);
 }
 
-Highlighter::Definitions Highlighter::definitionsForMimeType(const QString &mimeType)
+HighlighterHelper::Definitions HighlighterHelper::definitionsForMimeType(const QString &mimeType)
 {
     Definitions definitions = highlightRepository()->definitionsForMimeType(mimeType).toList();
     if (definitions.size() > 1) {
@@ -160,7 +160,7 @@ Highlighter::Definitions Highlighter::definitionsForMimeType(const QString &mime
     return definitions;
 }
 
-Highlighter::Definitions Highlighter::definitionsForFileName(const FilePath &fileName)
+HighlighterHelper::Definitions HighlighterHelper::definitionsForFileName(const FilePath &fileName)
 {
     Definitions definitions
         = highlightRepository()->definitionsForFileName(fileName.fileName()).toList();
@@ -179,7 +179,7 @@ Highlighter::Definitions Highlighter::definitionsForFileName(const FilePath &fil
     return definitions;
 }
 
-void Highlighter::rememberDefinitionForDocument(const Highlighter::Definition &definition,
+void HighlighterHelper::rememberDefinitionForDocument(const HighlighterHelper::Definition &definition,
                                                 const TextDocument *document)
 {
     QTC_ASSERT(document, return );
@@ -212,7 +212,7 @@ void Highlighter::rememberDefinitionForDocument(const Highlighter::Definition &d
     settings->endGroup();
 }
 
-void Highlighter::clearDefinitionForDocumentCache()
+void HighlighterHelper::clearDefinitionForDocumentCache()
 {
     QtcSettings *settings = Core::ICore::settings();
     settings->beginGroup(Constants::HIGHLIGHTER_SETTINGS_CATEGORY);
@@ -222,12 +222,12 @@ void Highlighter::clearDefinitionForDocumentCache()
     settings->endGroup();
 }
 
-void Highlighter::addCustomHighlighterPath(const FilePath &path)
+void HighlighterHelper::addCustomHighlighterPath(const FilePath &path)
 {
     highlightRepository()->addCustomSearchPath(path.toString());
 }
 
-void Highlighter::downloadDefinitions(std::function<void()> callback)
+void HighlighterHelper::downloadDefinitions(std::function<void()> callback)
 {
     auto downloader =
         new KSyntaxHighlighting::DefinitionDownloader(highlightRepository());
@@ -247,7 +247,7 @@ void Highlighter::downloadDefinitions(std::function<void()> callback)
     downloader->start();
 }
 
-void Highlighter::reload()
+void HighlighterHelper::reload()
 {
     highlightRepository()->reload();
     for (auto editor : Core::DocumentModel::editorsForOpenedDocuments()) {
@@ -258,7 +258,7 @@ void Highlighter::reload()
     }
 }
 
-void Highlighter::handleShutdown()
+void HighlighterHelper::handleShutdown()
 {
     delete highlightRepository();
 }

@@ -433,7 +433,7 @@ LineNumberFilter *TextEditorPlugin::lineNumberFilter()
 
 ExtensionSystem::IPlugin::ShutdownFlag TextEditorPlugin::aboutToShutdown()
 {
-    Highlighter::handleShutdown();
+    HighlighterHelper::handleShutdown();
     return SynchronousShutdown;
 }
 
