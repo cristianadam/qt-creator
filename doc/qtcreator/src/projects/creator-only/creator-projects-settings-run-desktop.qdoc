@@ -1,10 +1,21 @@
-// Copyright (C) 2018 The Qt Company Ltd.
+// Copyright (C) 2023 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
-//! [run settings desktop]
+    \page creator-run-settings-desktop-devices.html
+    \previouspage creator-reference.html
 
-    \section1 Specifying Run Settings for Desktop Device Types
+    \ingroup creator-reference-run-configurations
+
+    \title Run Configuration for Desktop Device Types
+
+    \brief Settings for running applications on desktop device types.
+
+    Specify run settings for the selected \l{glossary-buildandrun-kit}{kit} in
+    \uicontrol Projects > \uicontrol {Build & Run} > \uicontrol Run >
+    \uicontrol {Run Settings}.
+
+    \image qtcreator-settings-run-desktop.webp {Run Settings for desktop devices}
 
     You can specify command-line arguments to be passed to the executable
     and the working directory to use. The working directory defaults to
@@ -16,8 +27,6 @@
     system or the native build tool. \QC automatically adds the value of the
     \uicontrol {Working directory} field as the installation directory in the
     \c {--install} signature.
-
-    \image qtcreator-settings-run-desktop.webp {Run Settings}
 
     For console applications, check the \uicontrol{Run in terminal} check box.
     To specify the terminal to use on Linux and \macos, select \preferences >
@@ -53,7 +62,7 @@
 
     You can also create custom executable run configurations where you
     can set the executable to run. For more information, see
-    \l{Specifying a Custom Executable to Run}.
+    \l{Specify a custom executable to run}.
 
-//! [run settings desktop]
+    \sa {Configure projects for running}
 */
