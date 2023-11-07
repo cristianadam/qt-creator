@@ -279,6 +279,24 @@ def deploy_clang(qtc_binary_path, llvm_install_dir, chrpath_bin):
         clang_targetdir = os.path.join(qtc_binary_path, 'clang')
         clangbinary_targetdir = os.path.join(clang_targetdir, 'bin')
         resourcetarget = os.path.join(clang_targetdir, 'lib', 'clang')
+
+        # lldb
+        for lldb_pattern in ['bin/lldb.exe', 'bin/lldb-vscode.exe', 'bin/liblldb.dll', 'bin/python311.zip', 'bin/python311.dll']:
+            for lldb_file in glob(os.path.join(llvm_install_dir, lldb_pattern)):
+                if os.path.exists(lldb_file):
+                    deployinfo.append((lldb_file, clangbinary_targetdir))
+        site_packages = os.path.join(llvm_install_dir, 'lib', 'site-packages')
+        site_packages_target = os.path.join(clang_targetdir, 'lib', 'site-packages')
+        if (os.path.exists(site_packages)):
+            print(site_packages, '->', site_packages_target)
+            if (os.path.exists(site_packages_target)):
+                shutil.rmtree(site_packages_target)
+            common.copytree(site_packages, site_packages_target, symlinks=True)
+            # liblldb.dll is like 77 MiB in size, no need to have the python copy of it
+            liblldb_dll_copy = os.path.join(site_packages_target, 'lldb', '_lldb.cp311-win_amd64.pyd')
+            if (os.path.exists(liblldb_dll_copy)):
+                os.remove(liblldb_dll_copy)
+
     elif common.is_linux_platform():
         clang_targetdir = os.path.join(qtc_binary_path, '..', 'libexec', 'qtcreator', 'clang')
         clangbinary_targetdir = os.path.join(clang_targetdir, 'bin')
