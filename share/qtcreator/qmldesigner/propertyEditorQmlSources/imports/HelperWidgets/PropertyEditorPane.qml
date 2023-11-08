@@ -28,10 +28,54 @@ Rectangle {
         onClicked: forceActiveFocus()
     }
 
+    Rectangle {
+        id: stateSection
+        width: itemPane.width
+        height: StudioTheme.Values.height + StudioTheme.Values.controlGap * 2
+        color: Theme.qmlDesignerBackgroundColorDarkAlternate()
+        z: isBaseState ? -1: 10
+        SectionLayout {
+            y: StudioTheme.Values.controlGap
+            x: StudioTheme.Values.controlGap
+            PropertyLabel {
+                text: qsTr("Current State")
+                tooltip: tooltipItem.tooltip
+            }
+
+            SecondColumnLayout {
+
+                Spacer { implicitWidth: StudioTheme.Values.actionIndicatorWidth }
+
+                RoundedPanel {
+                    implicitWidth: StudioTheme.Values.singleControlColumnWidth
+                    height: StudioTheme.Values.height
+
+                    HelperWidgets.Label {
+                        anchors.fill: parent
+                        anchors.leftMargin: StudioTheme.Values.inputHorizontalPadding
+                        anchors.topMargin: StudioTheme.Values.typeLabelVerticalShift
+                        text: stateName
+                        color: StudioTheme.Values.themeInteraction
+                    }
+
+                    ToolTipArea {
+                        id: tooltipItem
+                        anchors.fill: parent
+                        tooltip: qsTr("The current state of the States View.")
+                    }
+
+                }
+
+                ExpandingSpacer {}
+            }
+        }
+    }
+
     HelperWidgets.ScrollView {
         id: mainScrollView
         //clip: true
         anchors.fill: parent
+        anchors.topMargin: isBaseState ? 0 : stateSection.height
 
         interactive: !Controller.contextMenuOpened
 
