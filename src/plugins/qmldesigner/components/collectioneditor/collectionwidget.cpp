@@ -12,8 +12,9 @@
 #include "qmldesignerplugin.h"
 #include "theme.h"
 
-#include <studioquickwidget.h>
 #include <coreplugin/icore.h>
+#include <coreplugin/messagebox.h>
+#include <studioquickwidget.h>
 
 #include <QFile>
 #include <QFileInfo>
@@ -140,6 +141,17 @@ void CollectionWidget::reloadQmlSource()
     QTC_ASSERT(QFileInfo::exists(collectionViewQmlPath), return);
 
     m_quickWidget->setSource(QUrl::fromLocalFile(collectionViewQmlPath));
+
+    if (!m_quickWidget->rootObject()) {
+        QString errorString;
+        for (const QQmlError &error : m_quickWidget->errors())
+            errorString += "\n" + error.toString();
+
+        Core::AsynchronousMessageBox::warning(tr("Cannot Create QtQuick View"),
+                                              tr("StatesEditorWidget: %1 cannot be created.%2")
+                                                  .arg(collectionViewQmlPath, errorString));
+        return;
+    }
 }
 
 QSize CollectionWidget::minimumSizeHint() const
