@@ -22,6 +22,8 @@ public:
     QString displayName;
     QString typeName;
     Utils::FilePath buildDirectory;
+    bool hideBuildDirConfigWidget = false;
+    bool enabledByDefault = true;
     Utils::Id kitId;
     BuildConfiguration::BuildType buildType = BuildConfiguration::Unknown;
 
