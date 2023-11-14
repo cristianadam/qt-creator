@@ -66,11 +66,12 @@ if(MSVC)
   add_compile_options(/wd4573)
 endif()
 
-find_package(Qt6
-  ${IDE_QT_VERSION_MIN}
-  COMPONENTS Concurrent Core Gui Network PrintSupport Qml Sql Widgets Xml Core5Compat ${QT_TEST_COMPONENT}
-  REQUIRED
-)
+set(QT_COMPONENTS Concurrent Core Gui Network PrintSupport Qml Sql Widgets Xml ${QT_TEST_COMPONENT})
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS "${QT_COMPONENTS}")
+if(QT_VERSION_MAJOR EQUAL 6)
+    set(QT_COMPONENTS ${QT_COMPONENTS} Core5Compat)
+endif()
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS "${QT_COMPONENTS}")
 
 if (Qt6_VERSION VERSION_GREATER_EQUAL 6.4.3)
     option(WITH_QMLDESIGNER "Build QmlDesigner" ${ENV_QTC_WITH_QMLDESIGNER})
@@ -98,7 +99,9 @@ set(QT_QML_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/qml_modules")
 
 # This includes the code that will enable higher compiler warnings level (/W3 for MSVC, -Wall -Wextra for GCC)
 # This is controlled by QT_COMPILE_OPTIONS_DISABLE_WARNINGS target property.
-include(QtCompilerFlags)
+if(QT_VERSION_MAJOR EQUAL 6)
+  include(QtCompilerFlags)
+ENDIF()
 
 if (MSVC AND QT_FEATURE_static_runtime)
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
