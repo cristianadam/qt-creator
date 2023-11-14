@@ -335,6 +335,15 @@
         \li Resets the background and grid colors to the default colors.
     \endtable
 
+    \section1 Using Split View
+
+    \image studio-3d-split-view.webp "Split view in the 3D view"
+
+    To view the scene from different point of views in four panes, select \inlineimage icons/split-view.png . 
+
+    To select a pane, click on it. The selected pane is marked with a blue frame.
+    Toggle the world axis helper to change the point of view for each pane independently. 
+
     \section1 Particle Editor
 
     The particle editor tools help you preview your particle systems in
@@ -441,6 +450,11 @@
         \li Background Color Actions
         \li
         \li \l{Changing Colors}
+    \row
+        \li \inlineimage icons/split-view.png
+        \li Toggle Split View On/Off
+        \li \key Ctrl + \key Alt + \key Q
+        \li \l{Using Split View}
     \row
         \li \inlineimage icons/particles-seek.png
         \li Seek Particle System Time
