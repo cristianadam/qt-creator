@@ -1033,31 +1033,35 @@ bool Project::hasMakeInstallEquivalent() const
 
 void Project::setup(const QList<BuildInfo> &infoList)
 {
-    std::vector<std::unique_ptr<Target>> toRegister;
-    for (const BuildInfo &info : infoList) {
-        Kit *k = KitManager::kit(info.kitId);
-        if (!k)
-            continue;
-        Target *t = target(k);
-        if (!t)
-            t = findOrDefault(toRegister, equal(&Target::kit, k));
-        if (!t) {
-            auto newTarget = std::make_unique<Target>(this, k, Target::_constructor_tag{});
-            t = newTarget.get();
-            toRegister.emplace_back(std::move(newTarget));
-        }
+    for (const BuildInfo &info : infoList)
+        setup(info);
+}
 
-        if (!info.factory)
-            continue;
+BuildConfiguration *Project::setup(const BuildInfo &info)
+{
+    if (!info.factory)
+        return nullptr;
+    Kit *k = KitManager::kit(info.kitId);
+    if (!k)
+        return nullptr;
+    Target *t = target(k);
+    std::unique_ptr<Target> newTarget;
+    if (!t) {
+        newTarget = std::make_unique<Target>(this, k, Target::_constructor_tag{});
+        t = newTarget.get();
+    }
 
-        if (BuildConfiguration *bc = info.factory->create(t, info))
-            t->addBuildConfiguration(bc);
+    QTC_ASSERT(t, return nullptr);
+
+    BuildConfiguration *bc = info.factory->create(t, info);
+    if (bc)
+        t->addBuildConfiguration(bc);
+    if (newTarget) {
+        newTarget->updateDefaultDeployConfigurations();
+        newTarget->updateDefaultRunConfigurations();
+        addTarget(std::move(newTarget));
     }
-    for (std::unique_ptr<Target> &t : toRegister) {
-        t->updateDefaultDeployConfigurations();
-        t->updateDefaultRunConfigurations();
-        addTarget(std::move(t));
-    }
+    return bc;
 }
 
 MacroExpander *Project::macroExpander() const
