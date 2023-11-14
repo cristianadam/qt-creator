@@ -13,7 +13,9 @@
 
 #include <functional>
 
-namespace Utils { class ParameterAction; }
+namespace Utils {
+class ParameterAction;
+}
 
 namespace Core {
 
@@ -26,7 +28,7 @@ namespace Internal {
 class CorePlugin;
 class ICorePrivate;
 class MainWindow;
-} // Internal
+} // namespace Internal
 
 class CORE_EXPORT ActionBuilder
 {
@@ -44,9 +46,20 @@ public:
     void setCommandDescription(const QString &desc);
     void setContainer(Utils::Id containerId, Utils::Id groupId = {}, bool needsToExist = true);
     void setOnTriggered(const std::function<void()> &func);
-    void setOnTriggered(QObject *guard, const std::function<void()> &func);
-    void setOnTriggered(QObject *guard, const std::function<void(bool)> &func);
     void setOnToggled(QObject *guard, const std::function<void(bool)> &func);
+
+    template<class T, typename F>
+    void setOnTriggered(T *guard,
+                        F &&function,
+                        Qt::ConnectionType connectionType = Qt::AutoConnection)
+    {
+        QObject::connect(commandAction(),
+                         &QAction::triggered,
+                         guard,
+                         std::forward<F>(function),
+                         connectionType);
+    }
+
     void setDefaultKeySequence(const QKeySequence &seq);
     void setDefaultKeySequences(const QList<QKeySequence> &seqs);
     void setDefaultKeySequence(const QString &mac, const QString &nonMac);
@@ -64,7 +77,6 @@ public:
     void setParameterText(const QString &parametrizedText,
                           const QString &emptyText,
                           EnablingMode mode = EnabledWithParameter);
-
 
     Command *command() const;
     QAction *commandAction() const;
@@ -110,7 +122,8 @@ public:
                                            const QIcon &icon,
                                            const QString &text = QString());
 
-    static Command *registerAction(QAction *action, Utils::Id id,
+    static Command *registerAction(QAction *action,
+                                   Utils::Id id,
                                    const Context &context = Context(Constants::C_GLOBAL),
                                    bool scriptable = false);
 
@@ -137,8 +150,8 @@ private:
     static void saveSettings();
     static void setContext(const Context &context);
 
-    friend class Core::Internal::CorePlugin; // initialization
-    friend class Core::ICore; // saving settings and setting context
+    friend class Core::Internal::CorePlugin;   // initialization
+    friend class Core::ICore;                  // saving settings and setting context
     friend class Core::Internal::ICorePrivate; // saving settings and setting context
 };
 

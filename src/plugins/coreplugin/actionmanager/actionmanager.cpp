@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "actionmanager.h"
-#include "actionmanager_p.h"
-#include "actioncontainer_p.h"
-#include "command_p.h"
 #include "../icore.h"
+#include "actioncontainer_p.h"
+#include "actionmanager_p.h"
+#include "command_p.h"
 
 #include <utils/algorithm.h>
 #include <utils/fadingindicator.h>
@@ -21,7 +21,7 @@
 #include <QMenuBar>
 
 namespace {
-    enum { warnAboutFindFailures = 0 };
+enum { warnAboutFindFailures = 0 };
 }
 
 static const char kKeyboardSettingsKeyV2[] = "KeyboardShortcutsV2";
@@ -45,8 +45,9 @@ void PresentationModeHandler::connectCommand(Command *command)
 {
     QAction *action = command->action();
     if (action) {
-        connect(action, &QAction::triggered,
-                this, [this, action] { showShortcutPopup(action->shortcut().toString()); });
+        connect(action, &QAction::triggered, this, [this, action] {
+            showShortcutPopup(action->shortcut().toString());
+        });
     }
 }
 
@@ -66,8 +67,7 @@ void PresentationModeHandler::showShortcutPopup(const QString &shortcut)
     Utils::FadingIndicator::showText(window, shortcut);
 }
 
-} // Core::Internal
-
+} // namespace Core::Internal
 
 namespace Core {
 
@@ -97,8 +97,7 @@ public:
 
 ActionBuilder::ActionBuilder(QObject *contextActionParent, const Id actionId)
     : d(new ActionBuilderPrivate(contextActionParent, actionId))
-{
-}
+{}
 
 ActionBuilder::~ActionBuilder()
 {
@@ -141,22 +140,12 @@ void ActionBuilder::setContainer(Id containerId, Id groupId, bool needsToExist)
     QTC_CHECK(!needsToExist);
 }
 
-void ActionBuilder::setOnTriggered(const std::function<void ()> &func)
+void ActionBuilder::setOnTriggered(const std::function<void()> &func)
 {
     QObject::connect(d->action, &QAction::triggered, d->action, func);
 }
 
-void ActionBuilder::setOnTriggered(QObject *guard, const std::function<void()> &func)
-{
-    QObject::connect(d->action, &QAction::triggered, guard, func);
-}
-
-void ActionBuilder::setOnTriggered(QObject *guard, const std::function<void(bool)> &func)
-{
-    QObject::connect(d->action, &QAction::triggered, guard, func);
-}
-
-void ActionBuilder::setOnToggled(QObject *guard, const std::function<void (bool)> &func)
+void ActionBuilder::setOnToggled(QObject *guard, const std::function<void(bool)> &func)
 {
     QObject::connect(d->action, &QAction::toggled, guard, func);
 }
@@ -230,9 +219,8 @@ void ActionBuilder::setParameterText(const QString &parameterText,
 
     d->action->setEmptyText(emptyText);
     d->action->setParameterText(parameterText);
-    d->action->setEnablingMode(mode == AlwaysEnabled
-                                   ? ParameterAction::AlwaysEnabled
-                                   : ParameterAction::EnabledWithParameter);
+    d->action->setEnablingMode(mode == AlwaysEnabled ? ParameterAction::AlwaysEnabled
+                                                     : ParameterAction::EnabledWithParameter);
     d->action->setText(emptyText);
 }
 
@@ -443,8 +431,9 @@ ActionManager *ActionManager::instance()
 */
 ActionContainer *ActionManager::createMenu(Id id)
 {
-    const ActionManagerPrivate::IdContainerMap::const_iterator it = d->m_idContainerMap.constFind(id);
-    if (it !=  d->m_idContainerMap.constEnd())
+    const ActionManagerPrivate::IdContainerMap::const_iterator it = d->m_idContainerMap.constFind(
+        id);
+    if (it != d->m_idContainerMap.constEnd())
         return it.value();
 
     auto mc = new MenuActionContainer(id, d);
@@ -465,8 +454,9 @@ ActionContainer *ActionManager::createMenu(Id id)
 */
 ActionContainer *ActionManager::createMenuBar(Id id)
 {
-    const ActionManagerPrivate::IdContainerMap::const_iterator it = d->m_idContainerMap.constFind(id);
-    if (it !=  d->m_idContainerMap.constEnd())
+    const ActionManagerPrivate::IdContainerMap::const_iterator it = d->m_idContainerMap.constFind(
+        id);
+    if (it != d->m_idContainerMap.constEnd())
         return it.value();
 
     auto mb = new QMenuBar; // No parent (System menu bar on macOS)
@@ -497,7 +487,7 @@ ActionContainer *ActionManager::createMenuBar(Id id)
 ActionContainer *ActionManager::createTouchBar(Id id, const QIcon &icon, const QString &text)
 {
     QTC_CHECK(!icon.isNull() || !text.isEmpty());
-    ActionContainer * const c = d->m_idContainerMap.value(id);
+    ActionContainer *const c = d->m_idContainerMap.value(id);
     if (c)
         return c;
     auto ac = new TouchBarActionContainer(id, d, icon, text);
@@ -517,7 +507,10 @@ ActionContainer *ActionManager::createTouchBar(Id id, const QIcon &icon, const Q
     specified, the global context will be assumed. A \a scriptable action can
     be called from a script without the need for the user to interact with it.
 */
-Command *ActionManager::registerAction(QAction *action, Id id, const Context &context, bool scriptable)
+Command *ActionManager::registerAction(QAction *action,
+                                       Id id,
+                                       const Context &context,
+                                       bool scriptable)
 {
     Command *cmd = d->overridableAction(id);
     if (cmd) {
@@ -554,8 +547,7 @@ Command *ActionManager::command(Id id)
     const ActionManagerPrivate::IdCmdMap::const_iterator it = d->m_idCmdMap.constFind(id);
     if (it == d->m_idCmdMap.constEnd()) {
         if (warnAboutFindFailures)
-            qWarning() << "ActionManagerPrivate::command(): failed to find :"
-                       << id.name();
+            qWarning() << "ActionManagerPrivate::command(): failed to find :" << id.name();
         return nullptr;
     }
     return it.value();
@@ -577,11 +569,11 @@ Command *ActionManager::command(Id id)
 */
 ActionContainer *ActionManager::actionContainer(Id id)
 {
-    const ActionManagerPrivate::IdContainerMap::const_iterator it = d->m_idContainerMap.constFind(id);
+    const ActionManagerPrivate::IdContainerMap::const_iterator it = d->m_idContainerMap.constFind(
+        id);
     if (it == d->m_idContainerMap.constEnd()) {
         if (warnAboutFindFailures)
-            qWarning() << "ActionManagerPrivate::actionContainer(): failed to find :"
-                       << id.name();
+            qWarning() << "ActionManagerPrivate::actionContainer(): failed to find :" << id.name();
         return nullptr;
     }
     return it.value();
@@ -811,4 +803,4 @@ void ActionManagerPrivate::saveSettings()
     }
 }
 
-} // Core
+} // namespace Core
