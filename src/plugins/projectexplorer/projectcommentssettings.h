@@ -33,16 +33,7 @@ private:
     bool m_useGlobalSettings = true;
 };
 
-class ProjectCommentsSettingsWidget : public ProjectSettingsWidget
-{
-public:
-    ProjectCommentsSettingsWidget(ProjectExplorer::Project *project);
-    ~ProjectCommentsSettingsWidget();
-
-private:
-    class Private;
-    Private * const d;
-};
+void setupCommentsSettingsProjectPanel();
 
 } // namespace Internal
 } // namespace ProjectExplorer
