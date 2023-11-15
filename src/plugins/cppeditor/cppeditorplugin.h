@@ -12,7 +12,6 @@ namespace CppEditor::Internal {
 
 class CppEditorPluginPrivate;
 class CppFileSettings;
-class CppQuickFixAssistProvider;
 
 class CppEditorPlugin : public ExtensionSystem::IPlugin
 {
@@ -24,8 +23,6 @@ public:
     ~CppEditorPlugin() override;
 
     static CppEditorPlugin *instance();
-
-    CppQuickFixAssistProvider *quickFixProvider() const;
 
     static void clearHeaderSourceCache();
     static Utils::FilePath licenseTemplatePath(ProjectExplorer::Project *project);
