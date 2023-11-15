@@ -336,11 +336,6 @@ CppCompletionAssistProcessor *getCppCompletionAssistProcessor()
     return new Internal::InternalCppCompletionAssistProcessor();
 }
 
-CppCodeModelSettings *codeModelSettings()
-{
-    return Internal::CppEditorPlugin::instance()->codeModelSettings();
-}
-
 int indexerFileSizeLimitInMb()
 {
     const CppCodeModelSettings *settings = codeModelSettings();

@@ -181,11 +181,10 @@ public:
     CppEditorFactory m_cppEditorFactory;
 
     CppModelManager modelManager;
-    CppCodeModelSettings m_codeModelSettings;
     CppToolsSettings settings;
     CppFileSettings m_fileSettings;
     CppFileSettingsPage m_cppFileSettingsPage{&m_fileSettings};
-    CppCodeModelSettingsPage m_cppCodeModelSettingsPage{&m_codeModelSettings};
+    CppCodeModelSettingsPage m_cppCodeModelSettingsPage;
     CppCodeStyleSettingsPage m_cppCodeStyleSettingsPage;
     CppProjectUpdaterFactory m_cppProjectUpdaterFactory;
 };
@@ -219,7 +218,7 @@ CppQuickFixAssistProvider *CppEditorPlugin::quickFixProvider() const
 void CppEditorPlugin::initialize()
 {
     d = new CppEditorPluginPrivate;
-    d->m_codeModelSettings.fromSettings(ICore::settings());
+    codeModelSettings()->fromSettings(ICore::settings());
 
     CppModelManager::registerJsExtension();
 
@@ -662,11 +661,6 @@ QString CppEditorPlugin::licenseTemplate(Project *project)
 bool CppEditorPlugin::usePragmaOnce(Project *project)
 {
     return fileSettings(project).headerPragmaOnce;
-}
-
-CppCodeModelSettings *CppEditorPlugin::codeModelSettings()
-{
-    return &d->m_codeModelSettings;
 }
 
 CppFileSettings CppEditorPlugin::fileSettings(Project *project)

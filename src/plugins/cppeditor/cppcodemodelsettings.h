@@ -77,6 +77,8 @@ private:
     QString m_ignorePattern;
 };
 
+CPPEDITOR_EXPORT CppCodeModelSettings *cppCodeModelSettings();
+
 class CPPEDITOR_EXPORT ClangdSettings : public QObject
 {
     Q_OBJECT
