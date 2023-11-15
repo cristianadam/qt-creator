@@ -61,7 +61,6 @@ private:
     void addActionsForSelections();
     void addPerFileActions();
     void addGlobalActions();
-    void setupProjectPanels();
     void registerVariables();
     void registerTests();
 
