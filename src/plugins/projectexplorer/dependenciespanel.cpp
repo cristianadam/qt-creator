@@ -273,7 +273,6 @@ public:
         setPriority(50);
         setDisplayName(Tr::tr("Dependencies"));
         setCreateWidgetFunction([](Project *project) { return new DependenciesWidget(project); });
-        ProjectPanelFactory::registerFactory(this);
     }
 };
 

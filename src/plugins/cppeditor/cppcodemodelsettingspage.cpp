@@ -638,7 +638,6 @@ public:
         setCreateWidgetFunction([](Project *project) {
             return new ClangdProjectSettingsWidget(project);
         });
-        ProjectPanelFactory::registerFactory(this);
     }
 };
 
