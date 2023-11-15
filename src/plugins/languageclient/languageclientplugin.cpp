@@ -40,12 +40,7 @@ void LanguageClientPlugin::initialize()
 {
     using namespace Core;
 
-    auto panelFactory = new ProjectExplorer::ProjectPanelFactory;
-    panelFactory->setPriority(35);
-    panelFactory->setDisplayName(Tr::tr("Language Server"));
-    panelFactory->setCreateWidgetFunction(
-        [](ProjectExplorer::Project *project) { return new ProjectSettingsWidget(project); });
-    ProjectExplorer::ProjectPanelFactory::registerFactory(panelFactory);
+    setupLanguageClientProjectPanel();
 
     LanguageClientManager::init();
     LanguageClientSettings::registerClientType({Constants::LANGUAGECLIENT_STDIO_SETTINGS_ID,

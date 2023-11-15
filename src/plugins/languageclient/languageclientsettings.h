@@ -208,15 +208,8 @@ private:
     QByteArray m_json;
 };
 
-class ProjectSettingsWidget : public ProjectExplorer::ProjectSettingsWidget
-{
-public:
-    explicit ProjectSettingsWidget(ProjectExplorer::Project *project);
-
-private:
-    ProjectSettings m_settings;
-};
-
 LANGUAGECLIENT_EXPORT TextEditor::BaseTextEditor *jsonEditor();
+
+void setupLanguageClientProjectPanel();
 
 } // namespace LanguageClient
