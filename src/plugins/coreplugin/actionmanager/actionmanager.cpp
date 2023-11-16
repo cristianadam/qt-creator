@@ -210,6 +210,11 @@ void ActionBuilder::setCheckable(bool on)
     d->action->setCheckable(on);
 }
 
+void ActionBuilder::setScriptable(bool on)
+{
+//    d->action->setScriptable(on);  FIXME
+}
+
 void ActionBuilder::setMenuRole(QAction::MenuRole role)
 {
     d->action->setMenuRole(role);
