@@ -297,7 +297,10 @@ SettingsPageWidget::SettingsPageWidget(ExternalDependencies &externalDependencie
         if (checked && !m_featureDockWidgetContentMinSize->isChecked())
             m_featureDockWidgetContentMinSize->setChecked(true);
 
-        QmlDesignerPlugin::instance()->mainWidget()->setMinimumSizeHintFromContentMinimumSize(checked);
+// FIXME: This approach is wrong, the main widget should listen to changes here.
+// Ideally, this should page be baesd on an AspectContainer using aspects to start with.
+
+        // QmlDesignerPlugin::instance()->mainWidget()->setMinimumSizeHintFromContentMinimumSize(checked);
     });
 
     m_forwardPuppetOutputComboBox->addItems(puppetModes());
