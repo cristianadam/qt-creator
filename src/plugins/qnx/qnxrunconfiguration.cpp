@@ -94,4 +94,10 @@ public:
     }
 };
 
+void setupQnxRunnning()
+{
+    static QnxRunConfigurationFactory theQnxRunConfigurationFactory;
+    static SimpleTargetRunnerFactory theQnxRunWorkerFactory({Constants::QNX_RUNCONFIG_ID});
+}
+
 } // Qnx::Internal
