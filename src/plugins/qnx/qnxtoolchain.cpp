@@ -273,7 +273,7 @@ public:
         if (detector.device)
                 return {};
 
-        Toolchains tcs = QnxSettingsPage::autoDetect(detector.alreadyKnown);
+        Toolchains tcs = autoDetectHelper(detector.alreadyKnown);
         return tcs;
     }
 };
