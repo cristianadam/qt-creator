@@ -86,7 +86,6 @@ public:
     QnxDeployStepFactory directUploadDeployFactory{RemoteLinux::Constants::DirectUploadStepId,
                                                    Constants::QNX_DIRECT_UPLOAD_STEP_ID};
     QnxDeployStepFactory makeInstallStepFactory{RemoteLinux::Constants::MakeInstallStepId};
-    QnxRunConfigurationFactory runConfigFactory;
     QnxToolChainFactory toolChainFactory;
     SimpleTargetRunnerFactory runWorkerFactory{{runConfigFactory.runConfigurationId()}};
     QnxDebugWorkerFactory debugWorkerFactory;
@@ -102,7 +101,13 @@ public:
     ~QnxPlugin() final { delete d; }
 
 private:
-    void initialize() final { d = new QnxPluginPrivate; }
+    void initialize() final
+    {
+        d = new QnxPluginPrivate;
+
+        setupQnxRunConfiguration();
+    }
+
     void extensionsInitialized() final;
 
     QnxPluginPrivate *d = nullptr;
