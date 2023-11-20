@@ -1274,33 +1274,69 @@ static ToolChain *constructLinuxIccToolchain()
     return new GccToolChain(Constants::LINUXICC_TOOLCHAIN_TYPEID, GccToolChain::LinuxIcc);
 }
 
-GccToolChainFactory::GccToolChainFactory(GccToolChain::SubType subType)
-    : m_autoDetecting(subType == GccToolChain::RealGcc)
+namespace Internal {
+
+class GccToolChainFactory final : public ToolChainFactory
 {
-    switch (subType) {
-    case GccToolChain::RealGcc:
-        setDisplayName(Tr::tr("GCC"));
-        setSupportedToolChainType(Constants::GCC_TOOLCHAIN_TYPEID);
-        setToolchainConstructor(&constructRealGccToolchain);
-        break;
-    case GccToolChain::Clang:
-        setDisplayName(Tr::tr("Clang"));
-        setSupportedToolChainType(Constants::CLANG_TOOLCHAIN_TYPEID);
-        setToolchainConstructor(&constructClangToolchain);
-        break;
-    case GccToolChain::MinGW:
-        setDisplayName(Tr::tr("MinGW"));
-        setSupportedToolChainType(Constants::MINGW_TOOLCHAIN_TYPEID);
-        setToolchainConstructor(&constructMinGWToolchain);
-        break;
-    case GccToolChain::LinuxIcc:
-        setDisplayName(Tr::tr("ICC"));
-        setSupportedToolChainType(Constants::LINUXICC_TOOLCHAIN_TYPEID);
-        setToolchainConstructor(&constructLinuxIccToolchain);
-        break;
+public:
+    explicit GccToolChainFactory(GccToolChain::SubType subType)
+        : m_autoDetecting(subType == GccToolChain::RealGcc)
+    {
+        switch (subType) {
+        case GccToolChain::RealGcc:
+            setDisplayName(Tr::tr("GCC"));
+            setSupportedToolChainType(Constants::GCC_TOOLCHAIN_TYPEID);
+            setToolchainConstructor(&constructRealGccToolchain);
+            break;
+        case GccToolChain::Clang:
+            setDisplayName(Tr::tr("Clang"));
+            setSupportedToolChainType(Constants::CLANG_TOOLCHAIN_TYPEID);
+            setToolchainConstructor(&constructClangToolchain);
+            break;
+        case GccToolChain::MinGW:
+            setDisplayName(Tr::tr("MinGW"));
+            setSupportedToolChainType(Constants::MINGW_TOOLCHAIN_TYPEID);
+            setToolchainConstructor(&constructMinGWToolchain);
+            break;
+        case GccToolChain::LinuxIcc:
+            setDisplayName(Tr::tr("ICC"));
+            setSupportedToolChainType(Constants::LINUXICC_TOOLCHAIN_TYPEID);
+            setToolchainConstructor(&constructLinuxIccToolchain);
+            break;
+        }
+        setSupportedLanguages({Constants::C_LANGUAGE_ID, Constants::CXX_LANGUAGE_ID});
+        setUserCreatable(true);
     }
-    setSupportedLanguages({Constants::C_LANGUAGE_ID, Constants::CXX_LANGUAGE_ID});
-    setUserCreatable(true);
+
+    Toolchains autoDetect(const ToolchainDetector &detector) const final;
+    Toolchains detectForImport(const ToolChainDescription &tcd) const final;
+
+private:
+    static Toolchains autoDetectToolchains(const Utils::FilePaths &compilerPaths,
+                                           const Utils::Id language,
+                                           const Utils::Id requiredTypeId,
+                                           const Toolchains &known,
+                                           const GccToolChain::SubType subType);
+    static Toolchains autoDetectToolChain(const ToolChainDescription &tcd,
+                                          const GccToolChain::SubType subType);
+    static Toolchains autoDetectSdkClangToolchain(const Toolchains &known);
+
+    const bool m_autoDetecting;
+};
+
+void setupGccToolChains()
+{
+#ifndef Q_OS_WIN
+    static GccToolChainFactory theLinuxToolChainFactory{GccToolChain::LinuxIcc};
+#endif
+
+#ifndef Q_OS_MACOS
+    // Mingw offers cross-compiling to windows
+    static GccToolChainFactory theMingwToolChainFactory{GccToolChain::MinGW};
+#endif
+
+    static GccToolChainFactory theGccToolChainFactory{GccToolChain::RealGcc};
+    static GccToolChainFactory theClangToolChainFactory{GccToolChain::Clang};
 }
 
 static FilePaths findCompilerCandidates(OsType os,
@@ -1630,7 +1666,6 @@ Toolchains GccToolChainFactory::autoDetectToolChain(const ToolChainDescription &
 // GccToolChainConfigWidget
 // --------------------------------------------------------------------------
 
-namespace Internal {
 class TargetTripleWidget : public QWidget
 {
     Q_OBJECT
