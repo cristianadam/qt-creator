@@ -30,8 +30,7 @@ QT_BEGIN_NAMESPACE
 class QPlainTextEdit;
 QT_END_NAMESPACE
 
-namespace EmacsKeys {
-namespace Internal {
+namespace EmacsKeys::Internal {
 
 enum EmacsKeysAction {
     KeysAction3rdParty,
@@ -40,11 +39,12 @@ enum EmacsKeysAction {
     KeysActionOther,
 };
 
-class EmacsKeysState : public QObject
+class EmacsKeysState final : public QObject
 {
 public:
     EmacsKeysState(QPlainTextEdit *edit);
-    ~EmacsKeysState() override;
+    ~EmacsKeysState() final;
+
     void setLastAction(EmacsKeysAction action);
     void beginOwnAction() { m_ignore3rdParty = true; }
     void endOwnAction(EmacsKeysAction action) {
@@ -67,5 +67,4 @@ private:
     QPlainTextEdit *m_editorWidget;
 };
 
-} // namespace Internal
-} // namespace EmacsKeys
+} // EmacsKeys::Internal

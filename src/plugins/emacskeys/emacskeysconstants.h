@@ -24,8 +24,7 @@
 
 #pragma once
 
-namespace EmacsKeys {
-namespace Constants {
+namespace EmacsKeys::Constants {
 
 const char DELETE_CHARACTER[]         = "EmacsKeys.DeleteCharacter";
 const char KILL_WORD[]                = "EmacsKeys.KillWord";
@@ -52,5 +51,4 @@ const char YANK[]                     = "EmacsKeys.Yank";
 const char SCROLL_HALF_DOWN[]         = "EmacsKeys.ScrollHalfDown";
 const char SCROLL_HALF_UP[]           = "EmacsKeys.ScrollHalfUp";
 
-} // namespace EmacsKeys
-} // namespace Constants
+} // EmacsKeys::Constants

@@ -27,12 +27,7 @@
 #include <QTextCursor>
 #include <QPlainTextEdit>
 
-namespace EmacsKeys {
-namespace Internal {
-
-//---------------------------------------------------------------------------
-// EmacsKeysState
-//---------------------------------------------------------------------------
+namespace EmacsKeys::Internal {
 
 EmacsKeysState::EmacsKeysState(QPlainTextEdit *edit):
     m_ignore3rdParty(false),
@@ -81,5 +76,4 @@ void EmacsKeysState::selectionChanged()
         setLastAction(KeysAction3rdParty);
 }
 
-} // namespace Internal
-} // namespace EmacsKeys
+} // EmacsKeys::Internal

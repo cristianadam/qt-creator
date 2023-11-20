@@ -22,8 +22,6 @@
 **
 ****************************************************************************/
 
-#include "emacskeysplugin.h"
-
 #include "emacskeysconstants.h"
 #include "emacskeysstate.h"
 #include "emacskeystr.h"
@@ -34,16 +32,21 @@
 #include <coreplugin/icontext.h>
 #include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/coreconstants.h>
-#include <utils/qtcassert.h>
+
+#include <extensionsystem/iplugin.h>
 
 #include <texteditor/texteditor.h>
 #include <texteditor/textdocument.h>
 
+#include <utils/id.h>
+#include <utils/qtcassert.h>
+
 #include <QAction>
-#include <QPlainTextEdit>
 #include <QApplication>
 #include <QClipboard>
+#include <QPlainTextEdit>
 #include <QScrollBar>
+#include <QTextCursor>
 
 QT_BEGIN_NAMESPACE
 extern void qt_set_sequence_auto_mnemonic(bool enable);
@@ -52,24 +55,63 @@ QT_END_NAMESPACE
 using namespace Core;
 using namespace Utils;
 
-namespace {
-QString plainSelectedText(const QTextCursor &cursor)
+namespace EmacsKeys::Internal {
+
+static QString plainSelectedText(const QTextCursor &cursor)
 {
     // selectedText() returns U+2029 (PARAGRAPH SEPARATOR) instead of newline
     return cursor.selectedText().replace(QChar::ParagraphSeparator, QLatin1Char('\n'));
 }
-}
 
-namespace EmacsKeys {
-namespace Internal {
+class EmacsKeysState;
 
-//---------------------------------------------------------------------------
-// EmacsKeysPlugin
-//---------------------------------------------------------------------------
+class EmacsKeysPlugin final : public ExtensionSystem::IPlugin
+{
+    Q_OBJECT
+    Q_PLUGIN_METADATA(IID "org.qt-project.Qt.QtCreatorPlugin" FILE "EmacsKeys.json")
 
-EmacsKeysPlugin::EmacsKeysPlugin() = default;
+public:
+    void initialize() final;
 
-EmacsKeysPlugin::~EmacsKeysPlugin() = default;
+private:
+    void editorAboutToClose(Core::IEditor *editor);
+    void currentEditorChanged(Core::IEditor *editor);
+
+    void deleteCharacter();       // C-d
+    void killWord();              // M-d
+    void killLine();              // C-k
+    void insertLineAndIndent();   // C-j
+
+    void gotoFileStart();         // M-<
+    void gotoFileEnd();           // M->
+    void gotoLineStart();         // C-a
+    void gotoLineEnd();           // C-e
+    void gotoNextLine();          // C-n
+    void gotoPreviousLine();      // C-p
+    void gotoNextCharacter();     // C-f
+    void gotoPreviousCharacter(); // C-b
+    void gotoNextWord();          // M-f
+    void gotoPreviousWord();      // M-b
+
+    void mark();                  // C-SPC
+    void exchangeCursorAndMark(); // C-x C-x
+    void copy();                  // M-w
+    void cut();                   // C-w
+    void yank();                  // C-y
+
+    void scrollHalfDown();        // C-v
+    void scrollHalfUp();          // M-v
+
+    QAction *registerAction(Utils::Id id, void (EmacsKeysPlugin::*callback)(),
+                            const QString &title);
+    void genericGoto(QTextCursor::MoveOperation op, bool abortAssist = true);
+    void genericVScroll(int direction);
+
+    QHash<QPlainTextEdit*, EmacsKeysState*> m_stateMap;
+    QPlainTextEdit *m_currentEditorWidget = nullptr;
+    EmacsKeysState *m_currentState = nullptr;
+    TextEditor::TextEditorWidget *m_currentBaseTextEditorWidget = nullptr;
+};
 
 void EmacsKeysPlugin::initialize()
 {
@@ -129,10 +171,6 @@ void EmacsKeysPlugin::initialize()
         &EmacsKeysPlugin::scrollHalfDown, Tr::tr("Scroll Half Screen Down"));
     registerAction(Constants::SCROLL_HALF_UP,
         &EmacsKeysPlugin::scrollHalfUp, Tr::tr("Scroll Half Screen Up"));
-}
-
-void EmacsKeysPlugin::extensionsInitialized()
-{
 }
 
 void EmacsKeysPlugin::editorAboutToClose(IEditor *editor)
@@ -374,5 +412,6 @@ void EmacsKeysPlugin::genericVScroll(int direction)
     m_currentState->endOwnAction(KeysActionOther);
 }
 
-} // namespace Internal
-} // namespace EmacsKeys
+} // EmacsKeys::Internal
+
+#include "emacskeysplugin.moc"
