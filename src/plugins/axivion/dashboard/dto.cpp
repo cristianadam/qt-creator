@@ -57,11 +57,11 @@ namespace Axivion::Internal::Dto {
     // exceptions
 
     invalid_dto_exception::invalid_dto_exception(const std::string_view type_name, const std::exception &ex) :
-        std::runtime_error(concat({ type_name, u8": ",  ex.what() }))
+        std::runtime_error(concat(type_name, u8": ", ex.what()))
     {}
 
     invalid_dto_exception::invalid_dto_exception(const std::string_view type_name, const std::string_view message) :
-        std::runtime_error(concat({ type_name, u8": ", message }))
+        std::runtime_error(concat(type_name, u8": ", message))
     {}
 
     // throws Axivion::Internal::Dto::invalid_dto_exception
@@ -81,19 +81,19 @@ namespace Axivion::Internal::Dto {
     // throws Axivion::Internal::Dto::invalid_dto_exception
     template<typename T>
     [[noreturn]] static void throw_json_type_conversion(QJsonValue::Type type) {
-        throw_invalid_dto_exception<T>(concat({
+        throw_invalid_dto_exception<T>(concat(
             u8"Error parsing JSON: Cannot convert type ",
             to_std_string(type)
-            }));
+            ));
     }
 
     // throws Axivion::Internal::Dto::invalid_dto_exception
     template<typename T, typename V>
     [[noreturn]] static void throw_json_value_conversion(const V &raw_value) {
-        throw_invalid_dto_exception<T>(concat({
+        throw_invalid_dto_exception<T>(concat(
             u8"Error parsing JSON: Cannot convert raw value ",
             to_std_string(raw_value)
-            }));
+            ));
     }
 
     // basic json (de)serialization
@@ -142,14 +142,14 @@ namespace Axivion::Internal::Dto {
             const QJsonDocument qjd = QJsonDocument::fromJson(json, &error);
             if (error.error != QJsonParseError::ParseError::NoError)
             {
-                throw_invalid_dto_exception<T>(concat({
+                throw_invalid_dto_exception<T>(concat(
                     u8"Error parsing JSON - ",
                     to_std_string(error.error),
                     u8" at ",
                     to_std_string(error.offset),
                     u8": ",
                     to_std_string(error.errorString())
-                    }));
+                    ));
             }
             if (!qjd.isObject())
             {
@@ -182,10 +182,10 @@ namespace Axivion::Internal::Dto {
             }
             else
             {
-                throw std::domain_error(concat({
+                throw std::domain_error(concat(
                     u8"Error serializing JSON - value is not an object or array:",
                     to_std_string(qjv.type())
-                    }));
+                    ));
             }
         }
         return qjd.toJson(QJsonDocument::JsonFormat::Indented);
@@ -513,10 +513,10 @@ namespace Axivion::Internal::Dto {
             const auto it = jo.constFind(key);
             if (it == jo.constEnd())
             {
-                throw_invalid_dto_exception<T>(concat({
+                throw_invalid_dto_exception<T>(concat(
                     u8"Error parsing JSON: key not found ",
                     to_std_string(key)
-                    }));
+                    ));
             }
             return deserialize_json<T>(it.value());
         }
@@ -607,10 +607,10 @@ namespace Axivion::Internal::Dto {
             {
                 return Any(deserialize_json<bool>(json));
             }
-            throw std::domain_error(concat({
+            throw std::domain_error(concat(
                 u8"Unknown json value type: ",
                 to_std_string(json.type())
-                }));
+                ));
         }
 
         static QJsonValue serialize(const Any &value) {
@@ -839,7 +839,7 @@ namespace Axivion::Internal::Dto {
         {
             return ApiTokenType::continuousintegration;
         }
-        throw std::range_error(concat({ u8"Unknown ApiTokenType str: ", to_std_string(str) }));
+        throw std::range_error(concat(u8"Unknown ApiTokenType str: ", to_std_string(str)));
     }
 
     QLatin1String ApiTokenTypeMeta::enumToStr(ApiTokenType e)
@@ -857,10 +857,10 @@ namespace Axivion::Internal::Dto {
         case ApiTokenType::continuousintegration:
             return ApiTokenTypeMeta::continuousintegration;;
         default:
-            throw std::domain_error(concat({
+            throw std::domain_error(concat(
                 u8"Unknown ApiTokenType enum: ",
                 to_std_string(static_cast<int>(e))
-                }));
+                ));
         }
     }
 
@@ -1313,7 +1313,7 @@ namespace Axivion::Internal::Dto {
         {
             return IssueKind::sv;
         }
-        throw std::range_error(concat({ u8"Unknown IssueKind str: ", to_std_string(str) }));
+        throw std::range_error(concat(u8"Unknown IssueKind str: ", to_std_string(str)));
     }
 
     QLatin1String IssueKindMeta::enumToStr(IssueKind e)
@@ -1333,10 +1333,10 @@ namespace Axivion::Internal::Dto {
         case IssueKind::sv:
             return IssueKindMeta::sv;;
         default:
-            throw std::domain_error(concat({
+            throw std::domain_error(concat(
                 u8"Unknown IssueKind enum: ",
                 to_std_string(static_cast<int>(e))
-                }));
+                ));
         }
     }
 
@@ -1381,7 +1381,7 @@ namespace Axivion::Internal::Dto {
         {
             return IssueKindForNamedFilterCreation::universal;
         }
-        throw std::range_error(concat({ u8"Unknown IssueKindForNamedFilterCreation str: ", to_std_string(str) }));
+        throw std::range_error(concat(u8"Unknown IssueKindForNamedFilterCreation str: ", to_std_string(str)));
     }
 
     QLatin1String IssueKindForNamedFilterCreationMeta::enumToStr(IssueKindForNamedFilterCreation e)
@@ -1403,10 +1403,10 @@ namespace Axivion::Internal::Dto {
         case IssueKindForNamedFilterCreation::universal:
             return IssueKindForNamedFilterCreationMeta::universal;;
         default:
-            throw std::domain_error(concat({
+            throw std::domain_error(concat(
                 u8"Unknown IssueKindForNamedFilterCreation enum: ",
                 to_std_string(static_cast<int>(e))
-                }));
+                ));
         }
     }
 
@@ -1633,7 +1633,7 @@ namespace Axivion::Internal::Dto {
         {
             return MessageSeverity::fatal;
         }
-        throw std::range_error(concat({ u8"Unknown MessageSeverity str: ", to_std_string(str) }));
+        throw std::range_error(concat(u8"Unknown MessageSeverity str: ", to_std_string(str)));
     }
 
     QLatin1String MessageSeverityMeta::enumToStr(MessageSeverity e)
@@ -1651,10 +1651,10 @@ namespace Axivion::Internal::Dto {
         case MessageSeverity::fatal:
             return MessageSeverityMeta::fatal;;
         default:
-            throw std::domain_error(concat({
+            throw std::domain_error(concat(
                 u8"Unknown MessageSeverity enum: ",
                 to_std_string(static_cast<int>(e))
-                }));
+                ));
         }
     }
 
@@ -1812,7 +1812,7 @@ namespace Axivion::Internal::Dto {
         {
             return NamedFilterType::custom;
         }
-        throw std::range_error(concat({ u8"Unknown NamedFilterType str: ", to_std_string(str) }));
+        throw std::range_error(concat(u8"Unknown NamedFilterType str: ", to_std_string(str)));
     }
 
     QLatin1String NamedFilterTypeMeta::enumToStr(NamedFilterType e)
@@ -1826,10 +1826,10 @@ namespace Axivion::Internal::Dto {
         case NamedFilterType::custom:
             return NamedFilterTypeMeta::custom;;
         default:
-            throw std::domain_error(concat({
+            throw std::domain_error(concat(
                 u8"Unknown NamedFilterType enum: ",
                 to_std_string(static_cast<int>(e))
-                }));
+                ));
         }
     }
 
@@ -1996,7 +1996,7 @@ namespace Axivion::Internal::Dto {
         {
             return SortDirection::desc;
         }
-        throw std::range_error(concat({ u8"Unknown SortDirection str: ", to_std_string(str) }));
+        throw std::range_error(concat(u8"Unknown SortDirection str: ", to_std_string(str)));
     }
 
     QLatin1String SortDirectionMeta::enumToStr(SortDirection e)
@@ -2008,10 +2008,10 @@ namespace Axivion::Internal::Dto {
         case SortDirection::desc:
             return SortDirectionMeta::desc;;
         default:
-            throw std::domain_error(concat({
+            throw std::domain_error(concat(
                 u8"Unknown SortDirection enum: ",
                 to_std_string(static_cast<int>(e))
-                }));
+                ));
         }
     }
 
@@ -2036,7 +2036,7 @@ namespace Axivion::Internal::Dto {
         {
             return TableCellAlignment::center;
         }
-        throw std::range_error(concat({ u8"Unknown TableCellAlignment str: ", to_std_string(str) }));
+        throw std::range_error(concat(u8"Unknown TableCellAlignment str: ", to_std_string(str)));
     }
 
     QLatin1String TableCellAlignmentMeta::enumToStr(TableCellAlignment e)
@@ -2050,10 +2050,10 @@ namespace Axivion::Internal::Dto {
         case TableCellAlignment::center:
             return TableCellAlignmentMeta::center;;
         default:
-            throw std::domain_error(concat({
+            throw std::domain_error(concat(
                 u8"Unknown TableCellAlignment enum: ",
                 to_std_string(static_cast<int>(e))
-                }));
+                ));
         }
     }
 
@@ -2132,7 +2132,7 @@ namespace Axivion::Internal::Dto {
         {
             return UserRefType::unmapped_user;
         }
-        throw std::range_error(concat({ u8"Unknown UserRefType str: ", to_std_string(str) }));
+        throw std::range_error(concat(u8"Unknown UserRefType str: ", to_std_string(str)));
     }
 
     QLatin1String UserRefTypeMeta::enumToStr(UserRefType e)
@@ -2146,10 +2146,10 @@ namespace Axivion::Internal::Dto {
         case UserRefType::unmapped_user:
             return UserRefTypeMeta::unmapped_user;;
         default:
-            throw std::domain_error(concat({
+            throw std::domain_error(concat(
                 u8"Unknown UserRefType enum: ",
                 to_std_string(static_cast<int>(e))
-                }));
+                ));
         }
     }
 
