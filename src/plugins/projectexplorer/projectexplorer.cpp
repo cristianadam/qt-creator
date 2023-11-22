@@ -812,7 +812,7 @@ bool ProjectExplorerPlugin::initialize(const QStringList &arguments, QString *er
 {
     Q_UNUSED(error)
 
-    setupGccToolChains();
+    setupGccToolchains();
 
     dd = new ProjectExplorerPluginPrivate;
 

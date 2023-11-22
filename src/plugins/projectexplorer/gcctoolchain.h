@@ -17,7 +17,7 @@ namespace ProjectExplorer {
 
 namespace Internal {
 class GccToolChainConfigWidget;
-class GccToolChainFactory;
+class GccToolchainFactory;
 
 const QStringList gccPredefinedMacrosOptions(Utils::Id languageId);
 }
@@ -149,7 +149,7 @@ private:
     mutable Utils::FilePath m_installDir;
 
     friend class Internal::GccToolChainConfigWidget;
-    friend class Internal::GccToolChainFactory;
+    friend class Internal::GccToolchainFactory;
     friend class ToolChainFactory;
 
     // "resolved" on macOS from /usr/bin/clang(++) etc to <DeveloperDir>/usr/bin/clang(++)
@@ -161,6 +161,6 @@ private:
     QMetaObject::Connection m_thisToolchainRemovedConnection;
 };
 
-namespace Internal { void setupGccToolChains(); }
+namespace Internal { void setupGccToolchains(); }
 
 } // namespace ProjectExplorer
