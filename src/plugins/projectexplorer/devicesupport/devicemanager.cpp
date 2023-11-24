@@ -76,9 +76,9 @@ DeviceManager *DeviceManager::instance()
     return m_instance;
 }
 
-int DeviceManager::deviceCount() const
+int DeviceManager::deviceCount()
 {
-    return d->devices.count();
+    return m_instance->d->devices.count();
 }
 
 void DeviceManager::replaceInstance()
@@ -484,15 +484,15 @@ DeviceManager::~DeviceManager()
         m_instance = nullptr;
 }
 
-IDevice::ConstPtr DeviceManager::deviceAt(int idx) const
+IDevice::ConstPtr DeviceManager::deviceAt(int idx)
 {
     QTC_ASSERT(idx >= 0 && idx < deviceCount(), return IDevice::ConstPtr());
-    return d->devices.at(idx);
+    return m_instance->d->devices.at(idx);
 }
 
-void DeviceManager::forEachDevice(const std::function<void(const IDeviceConstPtr &)> &func) const
+void DeviceManager::forEachDevice(const std::function<void(const IDeviceConstPtr &)> &func)
 {
-    const QList<IDevice::Ptr> devices = d->deviceList();
+    const QList<IDevice::Ptr> devices = instance()->d->deviceList();
 
     for (const IDevice::Ptr &device : devices)
         func(device);
@@ -576,7 +576,7 @@ void ProjectExplorerPlugin::testDeviceManager()
 
     DeviceManager * const mgr = DeviceManager::instance();
     QVERIFY(!mgr->find(dev->id()));
-    const int oldDeviceCount = mgr->deviceCount();
+    const int oldDeviceCount = DeviceManager::deviceCount();
 
     QSignalSpy deviceAddedSpy(mgr, &DeviceManager::deviceAdded);
     QSignalSpy deviceRemovedSpy(mgr, &DeviceManager::deviceRemoved);
@@ -585,7 +585,7 @@ void ProjectExplorerPlugin::testDeviceManager()
     QSignalSpy updatedSpy(mgr, &DeviceManager::updated);
 
     mgr->addDevice(dev);
-    QCOMPARE(mgr->deviceCount(), oldDeviceCount + 1);
+    QCOMPARE(DeviceManager::deviceCount(), oldDeviceCount + 1);
     QVERIFY(mgr->find(dev->id()));
     QVERIFY(mgr->hasDevice(dev->displayName()));
     QCOMPARE(deviceAddedSpy.count(), 1);
@@ -614,7 +614,7 @@ void ProjectExplorerPlugin::testDeviceManager()
     updatedSpy.clear();
 
     mgr->addDevice(dev2);
-    QCOMPARE(mgr->deviceCount(), oldDeviceCount + 1);
+    QCOMPARE(DeviceManager::deviceCount(), oldDeviceCount + 1);
     QVERIFY(mgr->find(dev->id()));
     QCOMPARE(deviceAddedSpy.count(), 0);
     QCOMPARE(deviceRemovedSpy.count(), 0);
@@ -629,7 +629,7 @@ void ProjectExplorerPlugin::testDeviceManager()
 
     dev3->settings()->displayName.setValue(dev->displayName());
     mgr->addDevice(dev3);
-    QCOMPARE(mgr->deviceAt(mgr->deviceCount() - 1)->displayName(),
+    QCOMPARE(DeviceManager::deviceAt(DeviceManager::deviceCount() - 1)->displayName(),
              QString(dev3->displayName() + QLatin1Char('2')));
     QCOMPARE(deviceAddedSpy.count(), 1);
     QCOMPARE(deviceRemovedSpy.count(), 0);
@@ -641,7 +641,7 @@ void ProjectExplorerPlugin::testDeviceManager()
 
     mgr->removeDevice(dev->id());
     mgr->removeDevice(dev3->id());
-    QCOMPARE(mgr->deviceCount(), oldDeviceCount);
+    QCOMPARE(DeviceManager::deviceCount(), oldDeviceCount);
     QVERIFY(!mgr->find(dev->id()));
     QVERIFY(!mgr->find(dev3->id()));
     QCOMPARE(deviceAddedSpy.count(), 0);

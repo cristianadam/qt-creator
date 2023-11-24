@@ -33,10 +33,10 @@ public:
     static DeviceManager *instance();
     static DeviceManager *clonedInstance();
 
-    int deviceCount() const;
-    IDevice::ConstPtr deviceAt(int index) const;
+    static int deviceCount();
+    static IDevice::ConstPtr deviceAt(int index);
 
-    void forEachDevice(const std::function<void(const IDeviceConstPtr &)> &) const;
+    static void forEachDevice(const std::function<void(const IDeviceConstPtr &)> &);
 
     IDevice::ConstPtr find(Utils::Id id) const;
     IDevice::ConstPtr defaultDevice(Utils::Id deviceType) const;

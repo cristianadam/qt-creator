@@ -120,8 +120,8 @@ void DeviceDetector::handleTrackerError(const QString &errorMessage)
 void DeviceDetector::resetDevices()
 {
     DeviceManager * const dm = DeviceManager::instance();
-    for (int i = 0; i < dm->deviceCount(); ++i) {
-        const IDevice::ConstPtr device = dm->deviceAt(i);
+    for (int i = 0; i < DeviceManager::deviceCount(); ++i) {
+        const IDevice::ConstPtr device = DeviceManager::deviceAt(i);
         if (isAutodetectedQdbDevice(device))
             dm->setDeviceState(device->id(), IDevice::DeviceDisconnected);
     }
