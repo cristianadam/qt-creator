@@ -64,7 +64,7 @@ void WebAssemblyToolChain::addToEnvironment(Environment &env) const
 }
 
 WebAssemblyToolChain::WebAssemblyToolChain() :
-    GccToolChain(Constants::WEBASSEMBLY_TOOLCHAIN_TYPEID)
+    GccToolchain(Constants::WEBASSEMBLY_TOOLCHAIN_TYPEID)
 {
     setSupportedAbis({toolChainAbi()});
     setTargetAbi(toolChainAbi());
@@ -89,7 +89,7 @@ FilePath WebAssemblyToolChain::makeCommand(const Environment &environment) const
 
 bool WebAssemblyToolChain::isValid() const
 {
-    return GccToolChain::isValid()
+    return GccToolchain::isValid()
             && QVersionNumber::fromString(version()) >= minimumSupportedEmSdkVersion();
 }
 

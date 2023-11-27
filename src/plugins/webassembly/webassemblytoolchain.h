@@ -10,7 +10,7 @@
 namespace WebAssembly {
 namespace Internal {
 
-class WebAssemblyToolChain final : public ProjectExplorer::GccToolChain
+class WebAssemblyToolChain final : public ProjectExplorer::GccToolchain
 {
 public:
     WebAssemblyToolChain();

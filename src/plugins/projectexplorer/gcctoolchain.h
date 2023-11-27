@@ -26,13 +26,13 @@ const QStringList gccPredefinedMacrosOptions(Utils::Id languageId);
 // GccToolChain
 // --------------------------------------------------------------------------
 
-class PROJECTEXPLORER_EXPORT GccToolChain : public Toolchain
+class PROJECTEXPLORER_EXPORT GccToolchain : public Toolchain
 {
 public:
     enum SubType { RealGcc, Clang, MinGW, LinuxIcc };
 
-    GccToolChain(Utils::Id typeId, SubType subType = RealGcc);
-    ~GccToolChain() override;
+    GccToolchain(Utils::Id typeId, SubType subType = RealGcc);
+    ~GccToolchain() override;
 
     QString originalTargetTriple() const override;
     Utils::FilePath installDir() const override;
@@ -79,7 +79,7 @@ public:
         Abis supportedAbis;
         QString originalTargetTriple;
     };
-    GccToolChain *asGccToolChain() final { return this; }
+    GccToolchain *asGccToolchain() final { return this; }
 
     bool matchesCompilerCommand(const Utils::FilePath &command) const override;
 
