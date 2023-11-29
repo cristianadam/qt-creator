@@ -917,8 +917,10 @@ DebuggerRunTool::DebuggerRunTool(RunControl *runControl, AllowTerminal allowTerm
                 m_runParameters.interpreter = interpreter;
                 if (auto args = runControl->aspect<ArgumentsAspect>())
                     m_runParameters.inferior.command.addArgs(args->arguments, CommandLine::Raw);
-                if (runControl->runMode() == ProjectExplorer::Constants::DEBUG_RUN_MODE)
+                if (m_runParameters.isCppDebugging()
+                    && runControl->runMode() == ProjectExplorer::Constants::DEBUG_RUN_MODE) {
                     m_engine = createPdbEngine();
+                }
             }
         }
     }
