@@ -6927,9 +6927,6 @@ bool TextEditorWidget::openLink(const Utils::Link &link, bool inNextSplit)
     } s;
 #endif
 
-    if (!link.hasValidTarget())
-        return false;
-
     QString url = link.targetFilePath.toString();
     if (url.startsWith(u"https://"_qs) || url.startsWith(u"http://"_qs)) {
         QDesktopServices::openUrl(url);
