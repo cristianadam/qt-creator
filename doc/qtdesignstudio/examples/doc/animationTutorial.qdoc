@@ -35,7 +35,7 @@
     \image animation-tutorial.gif
 
     The \e{Timeline Animation} tutorial illustrates how to create timeline animations
-    and bind them to properties in \QDS. First you create a keyframe animation
+    and bind them to properties in \QDS. First, you create a keyframe animation
     which you control the running state of with a switch in the UI. Next, you
     create another keyframe animation where you use a slider in the UI to
     control the position of the playhead.
@@ -44,6 +44,10 @@
     you can download it from
     \l{https://git.qt.io/public-demos/qtdesign-studio/-/tree/master/tutorial%20projects/animation-tutorial/AnimationTutorial/Start}
     {here}.
+
+    Ensure that you only download the project folder.
+
+    \image download-git-project.png
 
     You can download the completed project from
     \l{https://git.qt.io/public-demos/qtdesign-studio/-/tree/master/tutorial%20projects/animation-tutorial/AnimationTutorial/Completed}
@@ -71,14 +75,14 @@
       \li On the \uicontrol {Animation Settings} tab in the
       \uicontrol {Timeline Settings} dialog:
           \list
-            \li Set \uicontrol Duration to 7500.
+            \li Set \uicontrol Duration to 7500 [1].
                 This sets the duration of the animation in milliseconds.
-            \li Select \uicontrol {Contiunous}.
-                This sets the animation to start over again when it reaches the
-                end.
+            \li Select \uicontrol {Contiunous} [2].
+                This sets the animation to start over again every time it
+                reaches the end.
           \endlist
       \image animation-tutorial-timeline-1.png
-      \li Select \uicontrol {Close}.
+      \li Select \uicontrol {Close} [3].
     \endlist
 
     You can see the timeline in the \uicontrol Timeline and
@@ -102,7 +106,7 @@
       \li In the \uicontrol Timeline view, move the playhead to the end of the
       animation (frame 1000).
       \li In the \uicontrol Properties view, set \uicontrol Rotation >
-      \uicontrol Z to 360.
+      \uicontrol Y to 360.
       This creates a second keyframe.
       \li Select the \uicontrol {Per Property Recording} button to end the per
       property recording. To preview the animation, drag the playhead along the
@@ -111,8 +115,14 @@
 
     \section2 Controlling the Running State of the Animation
 
-    There is a toggle switch in the UI of this project. To use this switch to
-    control the running state of the animation:
+    Use a binding to bind together properties of two components to dynamically change the
+    behavior of a component. In this tutorial, bind together the running state of the animation
+    with the checked property of a switch. This way, you can use the switch in the use to toggle
+    if the animation is running or paused.
+
+    For more information about bindings, see \l{Adding Bindings Between Properties}.
+
+    There is a switch in the UI of this project, to bind this switch to the timeline animation:
 
     \list 1
       \li In the \uicontrol Navigator view, select \e {timelineAnimation}.
@@ -121,11 +131,12 @@
       to create a binding.
       \li For the binding you created, set:
         \list
-          \li \uicontrol Property to \e {paused}.
-          \li \uicontrol {Source Item} to \e {switch1}.
-          \li \uicontrol {Source Property} to \e {checked}.
+          \li \uicontrol From to \e switch1 and \e {checked}.
+          \li \uicontrol To > \uicontrol timelineAnimation to \e {paused}.
         \endlist
-      \image animation-tutorial-binding.png
+        When you have set these, the animation is paused when the switch is checked and running
+        when the switch is not checked.
+      \image animation-tutorial-binding.webp
     \endlist
 
     You can preview the animation and try the toggle switch in the live preview.
@@ -148,10 +159,10 @@
       \inlineimage icons/plus.png
       to add a timeline and open the \uicontrol {Timeline Settings} dialog.
       \li Select \inlineimage icons/minus.png
-      next to the \uicontrol {Animation Settings} tab to remove the animation
+      [1] next to the \uicontrol {Animation Settings} tab to remove the animation
       in this timeline.
       You do not need an animation when you bind the timeline to a property.
-      \li Select \uicontrol {Close}.
+      \li Select \uicontrol {Close} [2].
     \endlist
 
     \image animation-tutorial-timeline-2.png
@@ -172,17 +183,17 @@
       \li In the \uicontrol Timeline view, move the playhead to the end of the
       animation (frame 1000).
       \li In the \uicontrol Properties view, set \uicontrol Translation >
-      \uicontrol Y to 0,50.
+      \uicontrol Y to 0.50.
       \li Select the \uicontrol {Per Property Recording} button to end the per
       property recording.
       \li Next, you set the keyframe values for the other parts of the ball
       bearing. For the following parts, set the \uicontrol Translation >
       \uicontrol Y value for frame 1000:
         \list
-          \li \e balls to 1,00.
-          \li \e retainer to 1,50.
-          \li \e shield_left to 1,80.
-          \li \e shield_right to -0,30.
+          \li \e balls to 1.00.
+          \li \e retainer to 1.50.
+          \li \e shield_left to 1.80.
+          \li \e shield_right to -0.30.
         \endlist
       \image animation-tutorial-ballbearing-animation.png
     \endlist
@@ -213,10 +224,11 @@
 
     \list 1
       \li In the \uicontrol {Timeline} view, select
-      \inlineimage icons/animation.png
+      \inlineimage icons/settings.png
       .
-      \li In the \uicontrol {Expression binding field}, enter
+      \li In the \uicontrol {Expression binding field} [1], enter
       \c {property0.value}.
+      \image animation-tutorial-expression-binding.png
       \li Select \uicontrol {Close}.
     \endlist
 
