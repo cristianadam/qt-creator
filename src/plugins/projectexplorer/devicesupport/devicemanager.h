@@ -21,7 +21,32 @@ class DeviceManagerPrivate;
 class DeviceSettingsWidget;
 } // namespace Internal
 
-class PROJECTEXPLORER_EXPORT DeviceManager : public QObject
+class PROJECTEXPLORER_EXPORT DeviceManagerBase : public QObject
+{
+    Q_OBJECT
+
+public:
+    ~DeviceManagerBase();
+
+    int deviceCount() const;
+    IDevice::ConstPtr deviceAt(int index) const;
+    IDevice::ConstPtr find(Utils::Id id) const;
+    IDevice::ConstPtr defaultDevice(Utils::Id deviceType) const;
+
+signals:
+    void deviceAdded(Utils::Id id);
+    void deviceRemoved(Utils::Id id);
+    void deviceUpdated(Utils::Id id);
+    void deviceListReplaced(); // For bulk changes via the settings dialog.
+    void updated(); // Emitted for all of the above.
+
+protected:
+    DeviceManagerBase();
+
+    const std::unique_ptr<Internal::DeviceManagerPrivate> d;
+};
+
+class PROJECTEXPLORER_EXPORT DeviceManager final : public DeviceManagerBase
 {
     Q_OBJECT
     friend class Internal::DeviceSettingsWidget;
@@ -33,13 +58,8 @@ public:
     static DeviceManager *instance();
     static DeviceManager *clonedInstance();
 
-    int deviceCount() const;
-    IDevice::ConstPtr deviceAt(int index) const;
-
     void forEachDevice(const std::function<void(const IDeviceConstPtr &)> &) const;
 
-    IDevice::ConstPtr find(Utils::Id id) const;
-    IDevice::ConstPtr defaultDevice(Utils::Id deviceType) const;
     bool hasDevice(const QString &name) const;
 
     void addDevice(const IDevice::ConstPtr &device);
@@ -52,12 +72,6 @@ public:
     static IDevice::ConstPtr defaultDesktopDevice();
 
 signals:
-    void deviceAdded(Utils::Id id);
-    void deviceRemoved(Utils::Id id);
-    void deviceUpdated(Utils::Id id);
-    void deviceListReplaced(); // For bulk changes via the settings dialog.
-    void updated(); // Emitted for all of the above.
-
     void devicesLoaded(); // Emitted once load() is done
 
 private:
@@ -77,10 +91,6 @@ private:
     static void removeClonedInstance();
 
     static void copy(const DeviceManager *source, DeviceManager *target, bool deep);
-
-    const std::unique_ptr<Internal::DeviceManagerPrivate> d;
-
-    static DeviceManager *m_instance;
 
     friend class Internal::DeviceManagerPrivate;
     friend class ProjectExplorerPlugin;

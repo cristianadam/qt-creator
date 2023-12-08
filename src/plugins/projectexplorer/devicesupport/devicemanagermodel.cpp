@@ -16,7 +16,7 @@ namespace Internal {
 class DeviceManagerModelPrivate
 {
 public:
-    const DeviceManager *deviceManager;
+    const DeviceManagerBase *deviceManager;
     QList<IDevice::ConstPtr> devices;
     QList<Id> filter;
     Id typeToKeep;
@@ -24,7 +24,7 @@ public:
 
 } // namespace Internal
 
-DeviceManagerModel::DeviceManagerModel(const DeviceManager *deviceManager, QObject *parent) :
+DeviceManagerModel::DeviceManagerModel(const DeviceManagerBase *deviceManager, QObject *parent) :
     QAbstractListModel(parent), d(std::make_unique<Internal::DeviceManagerModelPrivate>())
 {
     d->deviceManager = deviceManager;

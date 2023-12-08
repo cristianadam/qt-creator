@@ -56,35 +56,61 @@ public:
         return devices;
     }
 
-    static DeviceManager *clonedInstance;
-
     mutable QMutex mutex;
     QList<IDevice::Ptr> devices;
     QHash<Id, Id> defaultDevices;
     PersistentSettingsWriter *writer = nullptr;
 };
-DeviceManager *DeviceManagerPrivate::clonedInstance = nullptr;
-
 } // namespace Internal
 
 using namespace Internal;
 
-DeviceManager *DeviceManager::m_instance = nullptr;
+DeviceManager *m_instance = nullptr;
+DeviceManager *m_clonedInstance = nullptr;
+
+DeviceManagerBase::DeviceManagerBase()
+    : d(std::make_unique<DeviceManagerPrivate>())
+{}
+
+DeviceManagerBase::~DeviceManagerBase()
+{
+    delete d->writer;
+}
+
+int DeviceManagerBase::deviceCount() const
+{
+    return d->devices.count();
+}
+
+IDevice::ConstPtr DeviceManagerBase::deviceAt(int idx) const
+{
+    QTC_ASSERT(idx >= 0 && idx < deviceCount(), return IDevice::ConstPtr());
+    return d->devices.at(idx);
+}
+
+IDevice::ConstPtr DeviceManagerBase::find(Id id) const
+{
+    const int index = d->indexForId(id);
+    return index == -1 ? IDevice::ConstPtr() : deviceAt(index);
+}
+
+IDevice::ConstPtr DeviceManagerBase::defaultDevice(Id deviceType) const
+{
+    const Id id = d->defaultDevices.value(deviceType);
+    return id.isValid() ? find(id) : IDevice::ConstPtr();
+}
+
+// DeviceManager
 
 DeviceManager *DeviceManager::instance()
 {
     return m_instance;
 }
 
-int DeviceManager::deviceCount() const
-{
-    return d->devices.count();
-}
-
 void DeviceManager::replaceInstance()
 {
     const QList<Id> newIds =
-        Utils::transform(DeviceManagerPrivate::clonedInstance->d->devices, &IDevice::id);
+        Utils::transform(m_clonedInstance->d->devices, &IDevice::id);
 
     for (const IDevice::Ptr &dev : std::as_const(m_instance->d->devices)) {
         if (!newIds.contains(dev->id()))
@@ -93,7 +119,7 @@ void DeviceManager::replaceInstance()
 
     {
         QMutexLocker locker(&instance()->d->mutex);
-        copy(DeviceManagerPrivate::clonedInstance, instance(), false);
+        copy(m_clonedInstance, instance(), false);
     }
 
     emit instance()->deviceListReplaced();
@@ -102,22 +128,22 @@ void DeviceManager::replaceInstance()
 
 void DeviceManager::removeClonedInstance()
 {
-    delete DeviceManagerPrivate::clonedInstance;
-    DeviceManagerPrivate::clonedInstance = nullptr;
+    delete m_clonedInstance;
+    m_clonedInstance = nullptr;
 }
 
 DeviceManager *DeviceManager::cloneInstance()
 {
-    QTC_ASSERT(!DeviceManagerPrivate::clonedInstance, return nullptr);
+    QTC_ASSERT(!m_clonedInstance, return nullptr);
 
-    DeviceManagerPrivate::clonedInstance = new DeviceManager(false);
-    copy(instance(), DeviceManagerPrivate::clonedInstance, true);
-    return DeviceManagerPrivate::clonedInstance;
+    m_clonedInstance = new DeviceManager(false);
+    copy(instance(), m_clonedInstance, true);
+    return m_clonedInstance;
 }
 
 DeviceManager *DeviceManager::clonedInstance()
 {
-    return DeviceManagerPrivate::clonedInstance;
+    return m_clonedInstance;
 }
 
 void DeviceManager::copy(const DeviceManager *source, DeviceManager *target, bool deep)
@@ -133,7 +159,7 @@ void DeviceManager::copy(const DeviceManager *source, DeviceManager *target, boo
 
 void DeviceManager::save()
 {
-    if (d->clonedInstance == this || !d->writer)
+    if (m_clonedInstance == this || !d->writer)
         return;
     Store data;
     data.insert(DeviceManagerKey, variantFromStore(toMap()));
@@ -265,8 +291,8 @@ void DeviceManager::addDevice(const IDevice::ConstPtr &_device)
 
     if (!defaultDevice(device->type()))
         d->defaultDevices.insert(device->type(), device->id());
-    if (this == DeviceManager::instance() && d->clonedInstance)
-        d->clonedInstance->addDevice(device->clone());
+    if (this == DeviceManager::instance() && m_clonedInstance)
+        m_clonedInstance->addDevice(device->clone());
 
     if (pos >= 0) {
         {
@@ -314,8 +340,8 @@ void DeviceManager::removeDevice(Id id)
             }
         }
     }
-    if (this == instance() && d->clonedInstance)
-        d->clonedInstance->removeDevice(id);
+    if (this == instance() && m_clonedInstance)
+        m_clonedInstance->removeDevice(id);
 
     emit updated();
 }
@@ -324,8 +350,8 @@ void DeviceManager::setDeviceState(Id deviceId, IDevice::DeviceState deviceState
 {
     // To see the state change in the DeviceSettingsWidget. This has to happen before
     // the pos check below, in case the device is only present in the cloned instance.
-    if (this == instance() && d->clonedInstance)
-        d->clonedInstance->setDeviceState(deviceId, deviceState);
+    if (this == instance() && m_clonedInstance)
+        m_clonedInstance->setDeviceState(deviceId, deviceState);
 
     const int pos = d->indexForId(deviceId);
     if (pos < 0)
@@ -387,7 +413,7 @@ void DeviceManager::setDefaultDevice(Id id)
     emit updated();
 }
 
-DeviceManager::DeviceManager(bool isInstance) : d(std::make_unique<DeviceManagerPrivate>())
+DeviceManager::DeviceManager(bool isInstance)
 {
     QTC_ASSERT(isInstance == !m_instance, return);
 
@@ -478,16 +504,8 @@ DeviceManager::DeviceManager(bool isInstance) : d(std::make_unique<DeviceManager
 
 DeviceManager::~DeviceManager()
 {
-    if (d->clonedInstance != this)
-        delete d->writer;
     if (m_instance == this)
         m_instance = nullptr;
-}
-
-IDevice::ConstPtr DeviceManager::deviceAt(int idx) const
-{
-    QTC_ASSERT(idx >= 0 && idx < deviceCount(), return IDevice::ConstPtr());
-    return d->devices.at(idx);
 }
 
 void DeviceManager::forEachDevice(const std::function<void(const IDeviceConstPtr &)> &func) const
@@ -509,18 +527,6 @@ bool DeviceManager::hasDevice(const QString &name) const
     return Utils::anyOf(d->devices, [&name](const IDevice::Ptr &device) {
         return device->displayName() == name;
     });
-}
-
-IDevice::ConstPtr DeviceManager::find(Id id) const
-{
-    const int index = d->indexForId(id);
-    return index == -1 ? IDevice::ConstPtr() : deviceAt(index);
-}
-
-IDevice::ConstPtr DeviceManager::defaultDevice(Id deviceType) const
-{
-    const Id id = d->defaultDevices.value(deviceType);
-    return id.isValid() ? find(id) : IDevice::ConstPtr();
 }
 
 } // namespace ProjectExplorer

@@ -15,12 +15,12 @@ namespace Utils { class Id; }
 namespace ProjectExplorer {
 namespace Internal { class DeviceManagerModelPrivate; }
 
-class DeviceManager;
+class DeviceManagerBase;
 
 class PROJECTEXPLORER_EXPORT DeviceManagerModel : public QAbstractListModel
 {
 public:
-    explicit DeviceManagerModel(const DeviceManager *deviceManager, QObject *parent = nullptr);
+    explicit DeviceManagerModel(const DeviceManagerBase *deviceManager, QObject *parent = nullptr);
     ~DeviceManagerModel() override;
 
     void setFilter(const QList<Utils::Id> &filter);
