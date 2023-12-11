@@ -8,6 +8,7 @@
 #include <languageserverprotocol/lsptypes.h>
 #include <utils/hostosinfo.h>
 #include <utils/filepath.h>
+#include <utils/scopedtimer.h>
 
 #include <QStringView>
 
@@ -292,6 +293,7 @@ public:
 private:
     void visitNode(const ClangdAstNode &node, bool isRoot = false)
     {
+        QTC_STATIC_SCOPED_TIMER("VN");
         if (!isRoot && (!node.hasRange() || !node.range().contains(m_range)))
             return;
         m_path << node;
