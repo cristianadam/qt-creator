@@ -98,17 +98,25 @@ public:
     }
 };
 
+static void registerWebAssemblyDevice()
+{
+    DeviceManager::addDevice(createWebAssemblyDevice());
+    askUserAboutEmSdkSetup();
+    DeviceManager::setDeviceState(
+        Constants::WEBASSEMBLY_DEVICE_DEVICE_ID,
+        areToolChainsRegistered() ? IDevice::DeviceReadyToUse : IDevice::DeviceDisconnected);
+}
+
 void setupWebAssemblyDevice()
 {
     static WebAssemblyDeviceFactory theWebAssemblyDeviceFactory;
 
-    QObject::connect(KitManager::instance(), &KitManager::kitsLoaded, [] {
-        DeviceManager::addDevice(createWebAssemblyDevice());
-        askUserAboutEmSdkSetup();
-        DeviceManager::setDeviceState(
-            Constants::WEBASSEMBLY_DEVICE_DEVICE_ID,
-            areToolChainsRegistered() ? IDevice::DeviceReadyToUse : IDevice::DeviceDisconnected);
-    });
+    // When the plugin is soft-loaded at runtime, kitsLoaded() has already been emitted, so the
+    // device has to be registered right away. Otherwise wait for the kits to be loaded.
+    if (KitManager::isLoaded())
+        registerWebAssemblyDevice();
+    else
+        QObject::connect(KitManager::instance(), &KitManager::kitsLoaded, &registerWebAssemblyDevice);
 }
 
 } // WebAssembly::Internal
