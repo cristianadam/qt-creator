@@ -59,13 +59,37 @@ bool CredentialProvider::canReRequestPasswordOnAuthenticationFailure()
     return false;
 }
 
-ClientData::ClientData(Utils::NetworkAccessManager &networkAccessManager)
+DashboardInfo::DashboardInfo(QUrl source,
+                             Dto::DashboardInfoDto dashboardInfo)
+    : source(std::move(source)),
+      checkCredentialsUrl(std::move(dashboardInfo.checkCredentialsUrl))
+{
+    if (dashboardInfo.dashboardVersionNumber) {
+        QStringList parts = dashboardInfo.dashboardVersionNumber->split('.');
+        QList<int> numbers;
+        numbers.reserve(parts.size());
+        for (const QString& part : parts) {
+            numbers.append(part.toInt());
+        }
+        this->dashboardVersion = QVersionNumber(std::move(numbers));
+    }
+    if (dashboardInfo.projects) {
+        this->projects.reserve(dashboardInfo.projects->size());
+        this->projectUris.reserve(dashboardInfo.projects->size());
+        for (Dto::ProjectReferenceDto &project : *dashboardInfo.projects) {
+            this->projects.push_back(project.name);
+            this->projectUris.emplace(std::move(project.name), std::move(project.url));
+        }
+    }
+}
+
+ClientData::ClientData(QNetworkAccessManager &networkAccessManager)
     : networkAccessManager(networkAccessManager),
       credentialProvider(std::make_unique<CredentialProvider>())
 {
 }
 
-DashboardClient::DashboardClient(Utils::NetworkAccessManager &networkAccessManager)
+DashboardClient::DashboardClient(QNetworkAccessManager &networkAccessManager)
     : m_clientData(std::make_shared<ClientData>(networkAccessManager))
 {
 }
@@ -221,6 +245,27 @@ static QFuture<ResponseData> fetch(std::shared_ptr<ClientData> clientData,
           std::move(clientData),
           base ? base->resolved(target) : target);
     return future;
+}
+
+DashboardClient::RawProjectList extractDashboardInfo(Utils::expected<DataWithOrigin<Dto::DashboardInfoDto>, Error> response)
+{
+    if (!response)
+        return tl::make_unexpected(std::move(response.error()));
+    DashboardInfo info{ std::move(response.value().origin),
+                        std::move(response.value().data) };
+    return std::move(info.projects);
+}
+
+QFuture<DashboardClient::RawProjectList> DashboardClient::fetchProjectList()
+{
+    const AxivionServer &server = settings().server;
+    QString dashboard = server.dashboard;
+    if (!dashboard.endsWith(QLatin1Char('/')))
+        dashboard += QLatin1Char('/');
+    QUrl url = QUrl(dashboard);
+    return fetch(this->m_clientData, std::nullopt, url)
+        .then(QtFuture::Launch::Async, &parseResponse<Dto::DashboardInfoDto>)
+        .then(QtFuture::Launch::Async, &extractDashboardInfo);
 }
 
 QFuture<DashboardClient::RawProjectInfo> DashboardClient::fetchProjectInfo(const QString &projectName)

@@ -5,12 +5,15 @@
 
 #include "dashboard/dashboardclient.h"
 
+#include <QFuture>
+
 #include <memory>
 
 namespace ProjectExplorer { class Project; }
 
 namespace Axivion::Internal {
 
+QFuture<DashboardClient::RawProjectList> fetchProjectList();
 void fetchProjectInfo(const QString &projectName);
 std::shared_ptr<const DashboardClient::ProjectInfo> projectInfo();
 bool handleCertificateIssue();

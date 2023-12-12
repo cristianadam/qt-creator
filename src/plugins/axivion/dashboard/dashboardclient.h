@@ -15,6 +15,7 @@
 
 #include <QFuture>
 #include <QNetworkReply>
+#include <QVersionNumber>
 
 namespace Axivion::Internal
 {
@@ -52,22 +53,38 @@ public:
     bool canReRequestPasswordOnAuthenticationFailure();
 };
 
+class DashboardInfo
+{
+public:
+    QUrl source;
+    QVersionNumber dashboardVersion;
+    std::vector<QString> projects;
+    std::unordered_map<QString, QUrl> projectUris;
+    std::optional<QUrl> checkCredentialsUrl;
+
+    DashboardInfo(QUrl source,
+                  Dto::DashboardInfoDto dashboardInfo);
+};
+
 class ClientData
 {
 public:
-    Utils::NetworkAccessManager &networkAccessManager;
+    QNetworkAccessManager &networkAccessManager;
     std::unique_ptr<CredentialProvider> credentialProvider;
 
-    ClientData(Utils::NetworkAccessManager &networkAccessManager);
+    ClientData(QNetworkAccessManager &networkAccessManager);
 };
 
 class DashboardClient
 {
 public:
+    using RawProjectList = Utils::expected<std::vector<QString>, Error>;
     using ProjectInfo = DataWithOrigin<Dto::ProjectInfoDto>;
     using RawProjectInfo = Utils::expected<ProjectInfo, Error>;
 
-    DashboardClient(Utils::NetworkAccessManager &networkAccessManager);
+    DashboardClient(QNetworkAccessManager &networkAccessManager);
+
+    QFuture<RawProjectList> fetchProjectList();
 
     QFuture<RawProjectInfo> fetchProjectInfo(const QString &projectName);
 

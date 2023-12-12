@@ -41,7 +41,6 @@
 #include <QNetworkReply>
 #include <QTimer>
 
-#include <exception>
 #include <memory>
 
 constexpr char AxivionTextMarkId[] = "AxivionTextMark";
@@ -54,6 +53,7 @@ public:
     AxivionPluginPrivate();
     void handleSslErrors(QNetworkReply *reply, const QList<QSslError> &errors);
     void onStartupProjectChanged();
+    QFuture<DashboardClient::RawProjectList> fetchProjectList();
     void fetchProjectInfo(const QString &projectName);
     void handleProjectInfo(DashboardClient::RawProjectInfo rawInfo);
     void handleOpenedDocs(ProjectExplorer::Project *project);
@@ -97,6 +97,13 @@ AxivionTextMark::AxivionTextMark(const Utils::FilePath &filePath, const ShortIss
                         dd, [this]{ dd->fetchRuleInfo(m_id); });
        return QList{action};
     });
+}
+
+QFuture<DashboardClient::RawProjectList> fetchProjectList()
+{
+    QTC_ASSERT(dd, return QtFuture::makeReadyFuture<DashboardClient::RawProjectList>(
+                       Utils::make_unexpected(GeneralError(QUrl(), QStringLiteral("No AxivionPluginPrivate")))));
+    return dd->fetchProjectList();
 }
 
 void fetchProjectInfo(const QString &projectName)
@@ -170,6 +177,12 @@ void AxivionPluginPrivate::onStartupProjectChanged()
 
     const AxivionProjectSettings *projSettings = AxivionProjectSettings::projectSettings(project);
     fetchProjectInfo(projSettings->dashboardProjectName());
+}
+
+QFuture<DashboardClient::RawProjectList> AxivionPluginPrivate::fetchProjectList()
+{
+    DashboardClient client { this->m_networkAccessManager };
+    return client.fetchProjectList();
 }
 
 void AxivionPluginPrivate::fetchProjectInfo(const QString &projectName)

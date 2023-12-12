@@ -4,8 +4,6 @@
 #include "axivionprojectsettings.h"
 
 #include "axivionplugin.h"
-#include "axivionquery.h"
-#include "axivionresultparser.h"
 #include "axivionsettings.h"
 #include "axiviontr.h"
 
@@ -16,6 +14,7 @@
 #include <utils/infolabel.h>
 #include <utils/qtcassert.h>
 
+#include <QFutureWatcher>
 #include <QPushButton>
 #include <QTreeWidget>
 #include <QVBoxLayout>
@@ -96,7 +95,7 @@ public:
 
 private:
     void fetchProjects();
-    void onDashboardInfoReceived(const DashboardInfo &info);
+    void onProjectListReceived(Utils::expected<std::vector<QString>, Error> projects);
     void onSettingsChanged();
     void linkProject();
     void unlinkProject();
@@ -167,28 +166,28 @@ void AxivionProjectSettingsWidget::fetchProjects()
     m_fetchProjects->setEnabled(false);
     m_infoLabel->setVisible(false);
     // TODO perform query and populate m_dashboardProjects
-    const AxivionQuery query(AxivionQuery::DashboardInfo);
-    AxivionQueryRunner *runner = new AxivionQueryRunner(query, this);
-    connect(runner, &AxivionQueryRunner::resultRetrieved,
-            this, [this](const QByteArray &result){
-        onDashboardInfoReceived(ResultParser::parseDashboardInfo(result));
-    });
-    connect(runner, &AxivionQueryRunner::finished, this, [runner]{ runner->deleteLater(); });
-    runner->start();
+    auto response = fetchProjectList();
+    auto *watcher = new QFutureWatcher<Utils::expected<std::vector<QString>, Error>>(this);
+    QObject::connect(watcher,
+                     &QFutureWatcher<Utils::expected<std::vector<QString>, Error>>::finished,
+                     this,
+                     [this, watcher]() {
+                         onProjectListReceived(watcher->result());
+                         watcher->deleteLater();
+                     });
+    watcher->setFuture(response);
 }
 
-void AxivionProjectSettingsWidget::onDashboardInfoReceived(const DashboardInfo &info)
+void AxivionProjectSettingsWidget::onProjectListReceived(Utils::expected<std::vector<QString>, Error> projects)
 {
-    if (!info.error.isEmpty()) {
-        m_infoLabel->setText(info.error);
+    if (projects) {
+        for (QString &project : projects.value())
+            new QTreeWidgetItem(m_dashboardProjects, { std::move(project) });
+    } else {
+        m_infoLabel->setText(projects.error().message());
         m_infoLabel->setType(Utils::InfoLabel::Error);
         m_infoLabel->setVisible(true);
-        updateEnabledStates();
-        return;
     }
-
-    for (const Project &project : info.projects)
-        new QTreeWidgetItem(m_dashboardProjects, {project.name});
     updateEnabledStates();
 }
 
