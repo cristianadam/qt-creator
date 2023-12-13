@@ -62,11 +62,12 @@
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/projectmanager.h>
 #include <projectexplorer/target.h>
-#include <sqlitelibraryinitializer.h>
 #include <qmldesignerbase/qmldesignerbaseplugin.h>
 #include <qmljs/qmljsmodelmanagerinterface.h>
+#include <sqlite/sqlitelibraryinitializer.h>
 
 #include <utils/algorithm.h>
+#include <utils/guard.h>
 #include <utils/hostosinfo.h>
 #include <utils/mimeconstants.h>
 #include <utils/qtcassert.h>
@@ -82,7 +83,6 @@
 #include <QTimer>
 #include <QWindow>
 
-#include "nanotrace/nanotrace.h"
 #include <modelnodecontextmenu_helper.h>
 
 static Q_LOGGING_CATEGORY(qmldesignerLog, "qtc.qmldesigner", QtWarningMsg)
@@ -162,7 +162,7 @@ public:
     SettingsPage settingsPage{externalDependencies};
     DesignModeWidget mainWidget;
     QtQuickDesignerFactory m_qtQuickDesignerFactory;
-    bool blockEditorChange = false;
+    Utils::Guard m_ignoreChanges;
     Utils::UniqueObjectPtr<QToolBar> toolBar;
     Utils::UniqueObjectPtr<QWidget> statusBar;
     QHash<QString, TraceIdentifierData> m_traceIdentifierDataHash;
@@ -497,7 +497,7 @@ void QmlDesignerPlugin::hideDesigner()
 
 void QmlDesignerPlugin::changeEditor()
 {
-    if (d->blockEditorChange)
+    if (d->m_ignoreChanges.isLocked())
         return;
 
     clearDesigner();
@@ -688,9 +688,8 @@ void QmlDesignerPlugin::switchToTextModeDeferred()
 
 void QmlDesignerPlugin::emitCurrentTextEditorChanged(Core::IEditor *editor)
 {
-    d->blockEditorChange = true;
+    const Utils::GuardLocker locker(d->m_ignoreChanges);
     emit Core::EditorManager::instance()->currentEditorChanged(editor);
-    d->blockEditorChange = false;
 }
 
 double QmlDesignerPlugin::formEditorDevicePixelRatio()
