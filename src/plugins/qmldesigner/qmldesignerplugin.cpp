@@ -666,18 +666,12 @@ void QmlDesignerPlugin::enforceDelayedInitialize()
 
 DesignDocument *QmlDesignerPlugin::currentDesignDocument() const
 {
-    if (d)
-        return d->documentManager.currentDesignDocument();
-
-    return nullptr;
+    return d ? d->documentManager.currentDesignDocument() : nullptr;
 }
 
 Internal::DesignModeWidget *QmlDesignerPlugin::mainWidget() const
 {
-    if (d)
-        return &d->mainWidget;
-
-    return nullptr;
+    return d ? &d->mainWidget : nullptr;
 }
 
 QWidget *QmlDesignerPlugin::createProjectExplorerWidget(QWidget *parent) const
@@ -687,7 +681,7 @@ QWidget *QmlDesignerPlugin::createProjectExplorerWidget(QWidget *parent) const
 
 void QmlDesignerPlugin::switchToTextModeDeferred()
 {
-    QTimer::singleShot(0, this, [] () {
+    QTimer::singleShot(0, this, [] {
         Core::ModeManager::activateMode(Core::Constants::MODE_EDIT);
     });
 }
@@ -697,11 +691,6 @@ void QmlDesignerPlugin::emitCurrentTextEditorChanged(Core::IEditor *editor)
     d->blockEditorChange = true;
     emit Core::EditorManager::instance()->currentEditorChanged(editor);
     d->blockEditorChange = false;
-}
-
-void QmlDesignerPlugin::emitAssetChanged(const QString &assetPath)
-{
-    emit assetChanged(assetPath);
 }
 
 double QmlDesignerPlugin::formEditorDevicePixelRatio()
@@ -717,7 +706,7 @@ double QmlDesignerPlugin::formEditorDevicePixelRatio()
 
 void QmlDesignerPlugin::contextHelp(const Core::IContext::HelpCallback &callback, const QString &id)
 {
-    emitUsageStatisticsHelpRequested(id);
+    emitUsageStatistics(Constants::EVENT_HELP_REQUESTED + id);
     QmlDesignerPlugin::instance()->viewManager().qmlJSEditorContextHelp(callback);
 }
 
@@ -761,11 +750,6 @@ void QmlDesignerPlugin::emitUsageStatisticsContextAction(const QString &identifi
     emitUsageStatistics(Constants::EVENT_ACTION_EXECUTED + identifier);
 }
 
-void QmlDesignerPlugin::emitUsageStatisticsHelpRequested(const QString &identifier)
-{
-    emitUsageStatistics(Constants::EVENT_HELP_REQUESTED + identifier);
-}
-
 AsynchronousImageCache &QmlDesignerPlugin::imageCache()
 {
     return m_instance->d->projectManager.asynchronousImageCache();
@@ -775,7 +759,6 @@ void QmlDesignerPlugin::registerPreviewImageProvider(QQmlEngine *engine)
 {
     m_instance->d->projectManager.registerPreviewImageProvider(engine);
 }
-
 
 bool isParent(QWidget *parent, QWidget *widget)
 {
