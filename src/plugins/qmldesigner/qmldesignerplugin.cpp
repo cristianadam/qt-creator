@@ -87,7 +87,9 @@
 
 static Q_LOGGING_CATEGORY(qmldesignerLog, "qtc.qmldesigner", QtWarningMsg)
 
+using namespace ProjectExplorer;
 using namespace QmlDesigner::Internal;
+using namespace Utils;
 
 namespace QmlDesigner {
 
@@ -96,12 +98,12 @@ namespace Internal {
 class EnterpriseFeatureProvider : public Core::IFeatureProvider
 {
 public:
-    QSet<Utils::Id> availableFeatures(Utils::Id) const override
+    QSet<Id> availableFeatures(Id) const override
     {
         return {"QmlDesigner.Wizards.Enterprise"};
     }
-    QSet<Utils::Id> availablePlatforms() const override { return {}; }
-    QString displayNameForPlatform(Utils::Id) const override { return {}; }
+    QSet<Id> availablePlatforms() const override { return {}; }
+    QString displayNameForPlatform(Id) const override { return {}; }
 };
 
 QString normalizeIdentifier(const QString &string)
@@ -162,9 +164,9 @@ public:
     SettingsPage settingsPage{externalDependencies};
     DesignModeWidget mainWidget;
     QtQuickDesignerFactory m_qtQuickDesignerFactory;
-    Utils::Guard m_ignoreChanges;
-    Utils::UniqueObjectPtr<QToolBar> toolBar;
-    Utils::UniqueObjectPtr<QWidget> statusBar;
+    Guard m_ignoreChanges;
+    UniqueObjectPtr<QToolBar> toolBar;
+    UniqueObjectPtr<QWidget> statusBar;
     QHash<QString, TraceIdentifierData> m_traceIdentifierDataHash;
     QHash<QString, TraceIdentifierData> m_activeTraceIdentifierDataHash;
     QElapsedTimer timer;
@@ -200,12 +202,12 @@ static bool checkIfEditorIsQtQuick(Core::IEditor *editor)
     return false;
 }
 
-static bool isDesignerMode(Utils::Id mode)
+static bool isDesignerMode(Id mode)
 {
     return mode == Core::Constants::MODE_DESIGN;
 }
 
-static bool documentIsAlreadyOpen(DesignDocument *designDocument, Core::IEditor *editor, Utils::Id newMode)
+static bool documentIsAlreadyOpen(DesignDocument *designDocument, Core::IEditor *editor, Id newMode)
 {
     return designDocument
            && editor == designDocument->editor()
@@ -269,7 +271,7 @@ bool QmlDesignerPlugin::initialize(const QStringList & /*arguments*/, QString *e
         lauchFeedbackPopupInternal(QGuiApplication::applicationDisplayName());
     });
 
-    if (!Utils::HostOsInfo::canCreateOpenGLContext(errorMessage))
+    if (!HostOsInfo::canCreateOpenGLContext(errorMessage))
         return false;
     d = new QmlDesignerPluginPrivate;
     d->timer.start();
@@ -342,14 +344,14 @@ ExtensionSystem::IPlugin::ShutdownFlag QmlDesignerPlugin::aboutToShutdown()
     return SynchronousShutdown;
 }
 
-static QStringList allUiQmlFilesforCurrentProject(const Utils::FilePath &fileName)
+static QStringList allUiQmlFilesforCurrentProject(const FilePath &fileName)
 {
     QStringList list;
-    ProjectExplorer::Project *currentProject = ProjectExplorer::ProjectManager::projectForFile(fileName);
+    Project *currentProject = ProjectManager::projectForFile(fileName);
 
     if (currentProject) {
-        const QList<Utils::FilePath> fileNames = currentProject->files(ProjectExplorer::Project::SourceFiles);
-        for (const Utils::FilePath &fileName : fileNames) {
+        const QList<FilePath> fileNames = currentProject->files(Project::SourceFiles);
+        for (const FilePath &fileName : fileNames) {
             if (fileName.endsWith(".ui.qml"))
                 list.append(fileName.toString());
         }
@@ -358,10 +360,10 @@ static QStringList allUiQmlFilesforCurrentProject(const Utils::FilePath &fileNam
     return list;
 }
 
-static QString projectPath(const Utils::FilePath &fileName)
+static QString projectPath(const FilePath &fileName)
 {
     QString path;
-    ProjectExplorer::Project *currentProject = ProjectExplorer::ProjectManager::projectForFile(fileName);
+    Project *currentProject = ProjectManager::projectForFile(fileName);
 
     if (currentProject)
         path = currentProject->projectDirectory().toString();
@@ -416,7 +418,7 @@ void QmlDesignerPlugin::integrateIntoQtCreator(QWidget *modeWidget)
 
     connect(Core::ModeManager::instance(),
             &Core::ModeManager::currentModeChanged,
-            [this](Utils::Id newMode, Utils::Id oldMode) {
+            [this](Id newMode, Id oldMode) {
                 Core::IEditor *currentEditor = Core::EditorManager::currentEditor();
                 if (isDesignerMode(newMode) && checkIfEditorIsQtQuick(currentEditor)
                     && !documentIsAlreadyOpen(currentDesignDocument(), currentEditor, newMode)) {
@@ -468,7 +470,7 @@ void QmlDesignerPlugin::showDesigner()
 
     d->mainWidget.initialize();
 
-    const Utils::FilePath fileName = Core::EditorManager::currentEditor()->document()->filePath();
+    const FilePath fileName = Core::EditorManager::currentEditor()->document()->filePath();
     const QStringList allUiQmlFiles = allUiQmlFilesforCurrentProject(fileName);
     if (warningsForQmlFilesInsteadOfUiQmlEnabled() && !fileName.endsWith(".ui.qml")
         && !allUiQmlFiles.isEmpty()) {
@@ -477,8 +479,7 @@ void QmlDesignerPlugin::showDesigner()
         dialog.exec();
         if (dialog.uiFileOpened()) {
             Core::ModeManager::activateMode(Core::Constants::MODE_EDIT);
-            Core::EditorManager::openEditorAt(
-                {Utils::FilePath::fromString(dialog.uiQmlFile()), 0, 0});
+            Core::EditorManager::openEditorAt({FilePath::fromString(dialog.uiQmlFile()), 0, 0});
             return;
         }
     }
@@ -610,12 +611,10 @@ void QmlDesignerPlugin::enforceDelayedInitialize()
         return;
 
     // adding default path to item library plugins
-    const QString postfix = Utils::HostOsInfo::isMacHost() ? QString("/QmlDesigner")
+    const QString postfix = HostOsInfo::isMacHost() ? QString("/QmlDesigner")
                                                            : QString("/qmldesigner");
-    const QStringList pluginPaths = Utils::transform(ExtensionSystem::PluginManager::pluginPaths(),
-                                                     [postfix](const QString &p) {
-                                                         return QString(p + postfix);
-                                                     });
+    const QStringList pluginPaths = transform(ExtensionSystem::PluginManager::pluginPaths(),
+        [postfix](const QString &p) { return QString(p + postfix); });
 
 #ifndef QDS_USE_PROJECTSTORAGE
     MetaInfo::initializeGlobal(pluginPaths, d->externalDependencies);
@@ -688,7 +687,7 @@ void QmlDesignerPlugin::switchToTextModeDeferred()
 
 void QmlDesignerPlugin::emitCurrentTextEditorChanged(Core::IEditor *editor)
 {
-    const Utils::GuardLocker locker(d->m_ignoreChanges);
+    const GuardLocker locker(d->m_ignoreChanges);
     emit Core::EditorManager::instance()->currentEditorChanged(editor);
 }
 
@@ -827,7 +826,7 @@ void QmlDesignerPlugin::lauchFeedbackPopupInternal(const QString &identifier)
         qDebug() << m_feedbackWidget->errors().first().toString();
     }
     m_feedbackWidget->setWindowModality(Qt::ApplicationModal);
-    if (Utils::HostOsInfo::isMacHost())
+    if (HostOsInfo::isMacHost())
         m_feedbackWidget->setWindowFlags(Qt::Dialog);
     else
         m_feedbackWidget->setWindowFlags(Qt::SplashScreen);
