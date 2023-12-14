@@ -37,6 +37,16 @@
             through projects, files, classes, functions, documentation and
             file systems.
 
+        \li \l{Jump to the Code}
+
+            Accessing code for a specific connection, state, or component
+            with a single mouse-click is convenient. This feature
+            enables that capability. You can jump to the code for a specific
+            component directly from the \uicontrol {2D view} or \uicontrol
+            {Navigator view}. You can also jump to the code of a particular
+            \uicontrol {State} or \uicontrol {Connection} from their
+            corresponding views.
+
     \endlist
 
 */
