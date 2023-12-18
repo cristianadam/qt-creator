@@ -9179,6 +9179,9 @@ void TextEditorWidget::invokeAssist(AssistKind kind, IAssistProvider *provider)
     if (multiTextCursor().hasMultipleCursors())
         return;
 
+    static int n = 0;
+    qDebug() << " INVOKE ASSIST" << ++n << " " << kind;
+
     if (kind == QuickFix && d->m_snippetOverlay->isVisible())
         d->m_snippetOverlay->accept();
 

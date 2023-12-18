@@ -162,6 +162,11 @@ void CodeAssistantPrivate::requestProposal(AssistReason reason,
     if (isWaitingForProposal())
         cancelCurrentRequest();
 
+    if (kind == Completion) {
+        static int n = 0;
+        qDebug() << " REQUEST PROPOSAL" << ++n << " " << kind;
+     }
+
     if (!provider) {
         if (kind == Completion)
             provider = m_editorWidget->textDocument()->completionAssistProvider();
