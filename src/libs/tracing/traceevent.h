@@ -14,6 +14,9 @@ namespace Timeline {
 class TraceEvent : public SafeCastable<TraceEvent>
 {
 public:
+    TraceEvent(const TraceEvent &) = default;
+    TraceEvent(TraceEvent &&) = default;
+
     qint64 timestamp() const { return m_timestamp; }
     void setTimestamp(qint64 timestamp) { m_timestamp = timestamp; }
 
@@ -29,8 +32,6 @@ protected:
         : m_timestamp(timestamp), m_typeIndex(typeIndex), m_classId(classId)
     {}
 
-    TraceEvent(const TraceEvent &) = default;
-    TraceEvent(TraceEvent &&) = default;
     TraceEvent &operator=(const TraceEvent &) = default;
     TraceEvent &operator=(TraceEvent &&) = default;
 
