@@ -1,10 +1,12 @@
 find_package(Qt6 COMPONENTS Widgets REQUIRED)
 
+add_subdirectory(3rdparty/miniyaml)
+
 add_qtc_plugin(QtApplicationManagerIntegration
   PLUGIN_DEPENDS
     Core Debugger ProjectExplorer QmakeProjectManager
     QtSupport RemoteLinux
-  DEPENDS Qt::Network Qt::Widgets ExtensionSystem Utils
+  DEPENDS Qt::Network Qt::Widgets ExtensionSystem Utils miniyaml
   SOURCES
     appmanagerconstants.h
     appmanagercreatepackagestep.cpp appmanagercreatepackagestep.h
