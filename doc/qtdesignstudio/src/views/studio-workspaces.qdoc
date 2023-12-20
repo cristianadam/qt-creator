@@ -14,6 +14,9 @@
     To detach views:
 
     \list
+        \li Toggle the \uicontrol {Locked views} from \inlineimage icons/lockon.png
+        to \inlineimage icons/lockoff.png
+        at the top toolbar to make the views movable.
         \li Double-click the title bar of the view.
         \li Start dragging the view to another position.
         \li Select the \inlineimage icons/detach-group-icon.png
@@ -31,6 +34,10 @@
     To close groups of views, select the \uicontrol {Close Group} button.
 
     To open closed views, select \uicontrol View > \uicontrol Views.
+
+    \note  Toggle the \uicontrol {Locked views} from \inlineimage icons/lockoff.png
+        to \inlineimage icons/lockon.png
+        at the top toolbar to prevent any accidental movement of the views.
 
     \section1 Saving Workspaces
 
