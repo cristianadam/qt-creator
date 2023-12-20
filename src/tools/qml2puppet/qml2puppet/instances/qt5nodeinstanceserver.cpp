@@ -517,6 +517,9 @@ QImage Qt5NodeInstanceServer::grabItem([[maybe_unused]] QQuickItem *item)
                 QQuickItemPrivate *pChild = QQuickItemPrivate::get(childItem);
                 if (pChild->layer() && pChild->layer()->enabled()) {
                     layerChildren.insert(childItem);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+                    pChild->layer()->setLive(false);
+#endif
                     pChild->layer()->setEnabled(false);
                 }
                 pChild->refFromEffectItem(true);
@@ -577,8 +580,12 @@ QImage Qt5NodeInstanceServer::grabItem([[maybe_unused]] QQuickItem *item)
             if (childItem) {
                 QQuickItemPrivate *pChild = QQuickItemPrivate::get(childItem);
                 pChild->derefFromEffectItem(true);
-                if (pChild->layer() && layerChildren.contains(childItem))
+                if (pChild->layer() && layerChildren.contains(childItem)) {
                     pChild->layer()->setEnabled(true);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+                    pChild->layer()->setLive(true);
+#endif
+                }
             }
         }
     }
