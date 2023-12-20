@@ -6,7 +6,7 @@
 #include "selectionboxgeometry.h"
 
 #include <QtQuick3DRuntimeRender/private/qssgrendermodel_p.h>
-#include <QtQuick3DRuntimeRender/private/qssgrendercontextcore_p.h>
+// #include <QtQuick3DRuntimeRender/private/qssgrendercontextcore_p.h>
 #include <QtQuick3DRuntimeRender/private/qssgrenderbuffermanager_p.h>
 #include <QtQuick3D/private/qquick3dmodel_p.h>
 #include <QtQuick3D/private/qquick3dscenemanager_p.h>
