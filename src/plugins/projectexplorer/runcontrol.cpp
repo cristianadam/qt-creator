@@ -490,7 +490,7 @@ bool RunControl::createMainWorker()
     // There should be at most one top-level producer feeling responsible per combination.
     // Breaking a tie should be done by tightening the restrictions on one of them.
     QTC_CHECK(candidates.size() == 1);
-    return candidates.front()->create(this) != nullptr;
+    return candidates.back()->create(this) != nullptr;
 }
 
 bool RunControl::canRun(Id runMode, Id deviceType, Utils::Id runConfigId)
