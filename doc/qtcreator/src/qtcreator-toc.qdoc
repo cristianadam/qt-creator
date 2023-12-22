@@ -207,6 +207,8 @@
                     \li Preferences
                         \generatelist creator-reference-preferences
                         \list
+                            \li Build and Run Kits
+                                \generatelist creator-reference-preferences-kits
                             \li C++
                                 \generatelist creator-reference-preferences-cpp
                             \li Text editor

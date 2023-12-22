@@ -31,6 +31,10 @@
 
     \annotatedlist creator-reference-preferences
 
+    \section2 Build and Run Kits
+
+    \annotatedlist creator-reference-preferences-kits
+
     \section2 C++
 
     \annotatedlist creator-reference-preferences-cpp
