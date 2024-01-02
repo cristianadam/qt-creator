@@ -7,13 +7,12 @@
 #include <QEventLoop>
 #include <QFutureWatcher>
 #include <QHash>
-#include <QMutex>
 #include <QPromise>
 #include <QPointer>
 #include <QSet>
 #include <QTimer>
 
-#include <atomic>
+#include <mutex>
 
 using namespace std::chrono;
 
@@ -1246,13 +1245,13 @@ class StorageData
 {
 public:
     StorageThreadData &threadData() {
-        QMutexLocker lock(&m_threadDataMutex);
+        const std::lock_guard lock(m_threadDataMutex);
         return m_threadDataMap.try_emplace(QThread::currentThread()).first->second;
     }
 
     const StorageBase::StorageConstructor m_constructor = {};
     const StorageBase::StorageDestructor m_destructor = {};
-    QMutex m_threadDataMutex = {};
+    std::mutex m_threadDataMutex = {};
     // Use std::map on purpose, so that it doesn't invalidate references on modifications.
     // Don't optimize it by using std::unordered_map.
     std::map<QThread *, StorageThreadData> m_threadDataMap = {};
