@@ -95,7 +95,7 @@ public:
 
 private:
     void fetchProjects();
-    void onProjectListReceived(Utils::expected<std::vector<QString>, Error> projects);
+    void onProjectListReceived(DashboardClient::RawProjectList projects);
     void onSettingsChanged();
     void linkProject();
     void unlinkProject();
@@ -167,9 +167,9 @@ void AxivionProjectSettingsWidget::fetchProjects()
     m_infoLabel->setVisible(false);
     // TODO perform query and populate m_dashboardProjects
     auto response = fetchProjectList();
-    auto *watcher = new QFutureWatcher<Utils::expected<std::vector<QString>, Error>>(this);
+    auto *watcher = new QFutureWatcher<DashboardClient::RawProjectList>(this);
     QObject::connect(watcher,
-                     &QFutureWatcher<Utils::expected<std::vector<QString>, Error>>::finished,
+                     &QFutureWatcher<DashboardClient::RawProjectList>::finished,
                      this,
                      [this, watcher]() {
                          onProjectListReceived(watcher->result());
@@ -178,11 +178,11 @@ void AxivionProjectSettingsWidget::fetchProjects()
     watcher->setFuture(response);
 }
 
-void AxivionProjectSettingsWidget::onProjectListReceived(Utils::expected<std::vector<QString>, Error> projects)
+void AxivionProjectSettingsWidget::onProjectListReceived(DashboardClient::RawProjectList projects)
 {
     if (projects) {
-        for (QString &project : projects.value())
-            new QTreeWidgetItem(m_dashboardProjects, { std::move(project) });
+        for (const QString &project : **projects)
+            new QTreeWidgetItem(m_dashboardProjects, { project });
     } else {
         m_infoLabel->setText(projects.error().message());
         m_infoLabel->setType(Utils::InfoLabel::Error);

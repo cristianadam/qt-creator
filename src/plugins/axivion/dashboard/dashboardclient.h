@@ -69,8 +69,11 @@ public:
 class ClientData
 {
 public:
+    using RawDashboardInfo = std::shared_ptr<const Utils::expected<DashboardInfo, Error>>;
+
     QNetworkAccessManager &networkAccessManager;
     std::unique_ptr<CredentialProvider> credentialProvider;
+    QFuture<RawDashboardInfo> dashboardInfo;
 
     ClientData(QNetworkAccessManager &networkAccessManager);
 };
@@ -78,7 +81,7 @@ public:
 class DashboardClient
 {
 public:
-    using RawProjectList = Utils::expected<std::vector<QString>, Error>;
+    using RawProjectList = Utils::expected<std::shared_ptr<const std::vector<QString>>, Error>;
     using ProjectInfo = DataWithOrigin<Dto::ProjectInfoDto>;
     using RawProjectInfo = Utils::expected<ProjectInfo, Error>;
 
@@ -86,7 +89,7 @@ public:
 
     QFuture<RawProjectList> fetchProjectList();
 
-    QFuture<RawProjectInfo> fetchProjectInfo(const QString &projectName);
+    QFuture<RawProjectInfo> fetchProjectInfo(QString projectName);
 
 private:
     std::shared_ptr<ClientData> m_clientData;

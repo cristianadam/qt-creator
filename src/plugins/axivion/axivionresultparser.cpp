@@ -10,7 +10,6 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 
-#include <stdexcept>
 #include <utility>
 
 namespace Axivion::Internal {
@@ -56,28 +55,6 @@ static BaseResult prehandleHeader(const QByteArray &header, const QByteArray &bo
             result.error = QLatin1String("%1 (%2)").arg(QString::fromUtf8(body)).arg(statusStr);
     }
     return result;
-}
-
-static std::pair<BaseResult, QJsonDocument> prehandleHeaderAndBody(const QByteArray &header,
-                                                                   const QByteArray &body)
-{
-    BaseResult result = prehandleHeader(header, body);
-    if (!result.error.isEmpty())
-        return {result, {}};
-
-    QJsonParseError error;
-    const QJsonDocument doc = QJsonDocument::fromJson(body, &error);
-    if (error.error != QJsonParseError::NoError) {
-        result.error = error.errorString();
-        return {result, doc};
-    }
-
-    if (!doc.isObject()) {
-        result.error = "Not an object.";
-        return {result, {}};
-    }
-
-    return {result, doc};
 }
 
 namespace ResultParser {

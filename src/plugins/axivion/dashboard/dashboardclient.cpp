@@ -7,6 +7,8 @@
 
 #include "dashboardclient.h"
 
+#include "concat.h"
+
 #include "axivionsettings.h"
 
 #include <QByteArray>
@@ -18,6 +20,7 @@
 #include <QPromise>
 
 #include <memory>
+#include <utility>
 
 namespace Axivion::Internal
 {
@@ -94,7 +97,33 @@ DashboardClient::DashboardClient(QNetworkAccessManager &networkAccessManager)
 {
 }
 
+template<typename T>
+class AxPromise {
+public:
+    AxPromise() {
+        m_promise.start();
+    }
+
+    QFuture<T> future() const {
+        return m_promise.future();
+    }
+
+    void set(T&& t) {
+        m_promise.addResult(std::forward<T>(t));
+        m_promise.finish();
+    }
+
+    void cancel() {
+        m_promise.future().cancel();
+        m_promise.finish();
+    }
+
+private:
+    QPromise<T> m_promise;
+};
+
 using ResponseData = Utils::expected<DataWithOrigin<QByteArray>, Error>;
+using ProjectUrl = Utils::expected<DataWithOrigin<QUrl>, Error>;
 
 static constexpr int httpStatusCodeOk = 200;
 static const QLatin1String jsonContentType{ "application/json" };
@@ -151,9 +180,12 @@ static Utils::expected<DataWithOrigin<T>, Error> parseResponse(ResponseData rawB
     }
 }
 
-static void fetch(QPromise<ResponseData> promise, std::shared_ptr<ClientData> clientData, QUrl url);
+static void fetch(AxPromise<ResponseData> promise,
+                  std::shared_ptr<ClientData> clientData,
+                  std::optional<QUrl> base,
+                  QUrl target);
 
-static void processResponse(QPromise<ResponseData> promise,
+static void processResponse(AxPromise<ResponseData> promise,
                             std::shared_ptr<ClientData> clientData,
                             QNetworkReply *reply,
                             Credential credential)
@@ -170,7 +202,7 @@ static void processResponse(QPromise<ResponseData> promise,
                           clientData,
                           url = reply->url(),
                           watcher]() mutable {
-                             fetch(std::move(promise), std::move(clientData), std::move(url));
+                             fetch(std::move(promise), std::move(clientData), std::nullopt, std::move(url));
                              watcher->deleteLater();
                          });
         watcher->setFuture(clientData->credentialProvider->authenticationFailure(credential));
@@ -181,11 +213,10 @@ static void processResponse(QPromise<ResponseData> promise,
     } else if (response.error().isInvalidCredentialsError()) {
         clientData->credentialProvider->authenticationFailure(credential);
     }
-    promise.addResult(std::move(response));
-    promise.finish();
+    promise.set(std::move(response));
 }
 
-static void fetch(QPromise<ResponseData> promise,
+static void fetch(AxPromise<ResponseData> promise,
                   std::shared_ptr<ClientData> clientData,
                   const QUrl &url,
                   Credential credential)
@@ -216,69 +247,137 @@ static void fetch(QPromise<ResponseData> promise,
                      });
 }
 
-static void fetch(QPromise<ResponseData> promise,
+static void fetch(AxPromise<ResponseData> promise,
                   std::shared_ptr<ClientData> clientData,
-                  QUrl url)
+                  std::optional<QUrl> base,
+                  QUrl target)
 {
     QFutureWatcher<Credential> *watcher = new QFutureWatcher<Credential>(&clientData->networkAccessManager);
     QObject::connect(watcher,
                      &QFutureWatcher<Credential>::finished,
                      &clientData->networkAccessManager,
-                     [promise = std::move(promise), clientData, url = std::move(url), watcher]() mutable {
+                     [promise = std::move(promise),
+                      clientData,
+                      base = std::move(base),
+                      target = std::move(target),
+                      watcher]() mutable {
+                         auto future = watcher->future();
+                         watcher->deleteLater();
+                         if (!future.isValid()) {
+                             promise.cancel();
+                             return;
+                         }
+                         QUrl url = base ? base->resolved(target) : target;
                          fetch(std::move(promise),
                                std::move(clientData),
                                url,
-                               watcher->result());
-                         watcher->deleteLater();;
+                               future.takeResult());
                      });
     watcher->setFuture(clientData->credentialProvider->getCredential());
 }
 
 static QFuture<ResponseData> fetch(std::shared_ptr<ClientData> clientData,
-                                   const std::optional<QUrl> &base,
-                                   const QUrl &target)
+                                   std::optional<QUrl> base,
+                                   QUrl target)
 {
-    QPromise<ResponseData> promise;
-    promise.start();
+    AxPromise<ResponseData> promise;
     QFuture<ResponseData> future = promise.future();
     fetch(std::move(promise),
           std::move(clientData),
-          base ? base->resolved(target) : target);
+          std::move(base),
+          std::move(target));
     return future;
 }
 
-DashboardClient::RawProjectList extractDashboardInfo(Utils::expected<DataWithOrigin<Dto::DashboardInfoDto>, Error> response)
+static ClientData::RawDashboardInfo extractDashboardInfo(ResponseData rawBody)
 {
-    if (!response)
-        return tl::make_unexpected(std::move(response.error()));
-    DashboardInfo info{ std::move(response.value().origin),
-                        std::move(response.value().data) };
-    return std::move(info.projects);
+    auto response = parseResponse<Dto::DashboardInfoDto>(rawBody);
+    if (!response) {
+        return std::make_shared<const Utils::expected<DashboardInfo, Error>>(
+            tl::make_unexpected(std::move(response.error())));
+    }
+    return std::make_shared<const Utils::expected<DashboardInfo, Error>>(
+        DashboardInfo(std::move(response->origin),
+                      std::move(response->data)));
+}
+
+static QFuture<ClientData::RawDashboardInfo> fetchDashboardInfo(std::shared_ptr<ClientData> clientData)
+{
+    if (clientData->dashboardInfo.isCanceled()
+        || (clientData->dashboardInfo.isFinished() && !clientData->dashboardInfo.isValid()))
+    {
+        const AxivionServer &server = settings().server;
+        QString dashboard = server.dashboard;
+        if (!dashboard.endsWith(QLatin1Char('/')))
+            dashboard += QLatin1Char('/');
+        QUrl url = QUrl(dashboard);
+        clientData->dashboardInfo = fetch(clientData, std::nullopt, url)
+                                        .then(QtFuture::Launch::Async, &extractDashboardInfo);
+    }
+    return clientData->dashboardInfo;
 }
 
 QFuture<DashboardClient::RawProjectList> DashboardClient::fetchProjectList()
 {
-    const AxivionServer &server = settings().server;
-    QString dashboard = server.dashboard;
-    if (!dashboard.endsWith(QLatin1Char('/')))
-        dashboard += QLatin1Char('/');
-    QUrl url = QUrl(dashboard);
-    return fetch(this->m_clientData, std::nullopt, url)
-        .then(QtFuture::Launch::Async, &parseResponse<Dto::DashboardInfoDto>)
-        .then(QtFuture::Launch::Async, &extractDashboardInfo);
+    return fetchDashboardInfo(m_clientData)
+        .then(QtFuture::Launch::Async, [](ClientData::RawDashboardInfo dashboardInfo) -> DashboardClient::RawProjectList {
+            if (!(*dashboardInfo))
+                return Utils::make_unexpected(dashboardInfo->error());
+            return std::shared_ptr<const std::vector<QString>>(dashboardInfo, &((*dashboardInfo)->projects));
+        });
 }
 
-QFuture<DashboardClient::RawProjectInfo> DashboardClient::fetchProjectInfo(const QString &projectName)
+static QFuture<ProjectUrl> projectUrl(std::shared_ptr<ClientData> clientData, QString projectName) {
+    return fetchDashboardInfo(clientData)
+        .then(QtFuture::Launch::Async, [projectName = std::move(projectName)](ClientData::RawDashboardInfo dashboardInfo) -> Utils::expected<DataWithOrigin<QUrl>, Error> {
+            if (!(*dashboardInfo))
+                return Utils::make_unexpected(dashboardInfo->error());
+            auto &di = **dashboardInfo;
+            auto &projectUris = di.projectUris;
+            if (auto search = projectUris.find(projectName); search != projectUris.end())
+                return DataWithOrigin(di.source, search->second);
+            return Utils::make_unexpected(GeneralError(di.source,
+                                                       Dto::concat({ QStringLiteral("No such project: "), projectName })));
+        });
+}
+
+static void fetchProject(AxPromise<DashboardClient::RawProjectInfo> promise,
+                         std::shared_ptr<ClientData> clientData,
+                         ProjectUrl projectUrl) {
+    if (projectUrl) {
+        auto &pu = *projectUrl;
+        fetch(clientData, pu.origin, pu.data)
+            .then(QtFuture::Launch::Async, [promise = std::move(promise)](ResponseData rawBody) mutable {
+                promise.set(parseResponse<Dto::ProjectInfoDto>(std::move(rawBody)));
+            });
+    } else {
+        promise.set(Utils::make_unexpected(projectUrl.error()));
+    }
+}
+
+QFuture<DashboardClient::RawProjectInfo> DashboardClient::fetchProjectInfo(QString projectName)
 {
-    const AxivionServer &server = settings().server;
-    QString dashboard = server.dashboard;
-    if (!dashboard.endsWith(QLatin1Char('/')))
-        dashboard += QLatin1Char('/');
-    QUrl url = QUrl(dashboard)
-        .resolved(QUrl(QStringLiteral(u"api/projects/")))
-        .resolved(QUrl(projectName));
-    return fetch(this->m_clientData, std::nullopt, url)
-        .then(QtFuture::Launch::Async, &parseResponse<Dto::ProjectInfoDto>);
+    auto clientData = m_clientData;
+    AxPromise<DashboardClient::RawProjectInfo> promise;
+    auto projectFuture = promise.future();
+    auto urlFuture = projectUrl(clientData, std::move(projectName));
+    auto *urlFutureWatcher = new QFutureWatcher<ProjectUrl>(&clientData->networkAccessManager);
+    QObject::connect(urlFutureWatcher,
+                     &QFutureWatcher<DashboardClient::RawProjectInfo>::finished,
+                     &clientData->networkAccessManager,
+                     [promise = std::move(promise),
+                      clientData,
+                      urlFutureWatcher]() mutable {
+                         auto urlFuture = urlFutureWatcher->future();
+                         urlFutureWatcher->deleteLater();
+                         if (!urlFuture.isValid()) {
+                             promise.cancel();
+                             return;
+                         }
+                         fetchProject(std::move(promise), clientData, urlFuture.takeResult());
+                     });
+    urlFutureWatcher->setFuture(urlFuture);
+    return projectFuture;
 }
 
 } // namespace Axivion::Internal
