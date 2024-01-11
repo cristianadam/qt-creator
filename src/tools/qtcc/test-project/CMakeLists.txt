@@ -1,6 +1,7 @@
-cmake_minimum_required(VERSION 3.13)
-
-project(qtcc-test)
+cmake_minimum_required(VERSION 3.12)
 
 
-add_executable(qtcc-test main.cpp)
+project(test-qtcc)
+
+
+add_executable(test-qtcc main.cpp)

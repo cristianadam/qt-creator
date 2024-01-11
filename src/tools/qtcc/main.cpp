@@ -5,10 +5,13 @@
 
 #include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/projectmanager.h>
+#include <projectexplorer/project.h>
 #include <cmakeprojectmanager/cmakeprojectmanager.h>
 #include <extensionsystem/pluginmanager.h>
 #include <extensionsystem/pluginspec.h>
 #include <coreplugin/coreconstants.h>
+#include <coreplugin/icore.h>
+#include <coreplugin/actionmanager/actionmanager.h>
 
 #include <QCoreApplication>
 #include <QApplication>
@@ -17,6 +20,8 @@
 #include <QFutureWatcher>
 #include <QtConcurrent>
 #include <QWindow>
+#include <QMutex>
+#include <QMutexLocker>
 
 #include <ncurses.h>
 #include <stdlib.h>
@@ -36,12 +41,11 @@ const char IDE_SETTINGSVARIANT_STR[] = "QtProject";
 }
 }
 
-auto load_project() {
+void load_project() {
     using namespace ProjectExplorer;
     Utils::FilePath demoProject = "/home/yasser/qt-creator/src/tools/qtcc/test-project/CMakeLists.txt";
-    auto project = ProjectExplorer::ProjectManager::instance()->openProject(Utils::mimeTypeForFile(demoProject), demoProject);
-    assert(project);
-    return  project;
+    Core::ICore::openFiles({demoProject});
+//    auto project = ProjectExplorer::ProjectManager::instance()->openProject(Utils::mimeTypeForFile(demoProject), demoProject);
 }
 
 
@@ -56,6 +60,29 @@ void display() {
     refresh();
 }
 
+namespace QtCC {
+using namespace ProjectExplorer;
+struct State {
+    static State* instance() {
+        static State* instance = new State();
+        return instance;
+    }
+
+    void setProject(Project* project) {
+        QMutexLocker<QMutex> locker(&m_stateMutex);
+        m_open_project =  project;
+    }
+    static Project* project(){
+        return instance()->m_open_project;
+    }
+private:
+    Project*  m_open_project = nullptr;
+    QMutex m_stateMutex;
+
+};
+
+};
+
 int ncurses_main();
 
 int main (int argc, char** argv) {
@@ -64,6 +91,7 @@ int main (int argc, char** argv) {
 
     using namespace ExtensionSystem;
     using PluginSpecSet = QVector<PluginSpec *>;
+
 
     Utils::QtcSettings *settings = new Utils::QtcSettings(QSettings::IniFormat,
                                   QSettings::UserScope,
@@ -116,10 +144,13 @@ int main (int argc, char** argv) {
     PluginManager::loadPlugins();
 
     QTimer::singleShot(2000, [=]() {
-        auto project = load_project();
-        std::cout << project->displayName().toStdString() << std::endl;
+        load_project();
         for(auto window : QApplication::allWindows())
             window->close();
+        auto project = ProjectExplorer::ProjectManager::startupProject();
+        QApplication::processEvents();
+        std::cout << project->displayName().toStdString() << std::endl;
+        QtCC::State::instance()->setProject(project);
     });
 
     QFuture<int> future = QtConcurrent::run(ncurses_main);
@@ -136,8 +167,10 @@ int main (int argc, char** argv) {
     for(auto window : QApplication::allWindows())
         window->close();
 
+
     return app.exec();
 }
+
 
 
 int ncurses_main() {
@@ -145,8 +178,28 @@ int ncurses_main() {
     cbreak();
     noecho();
     keypad(stdscr, TRUE);
-    QThread::sleep(2);
+
+    refresh();
+
+    while (!QtCC::State::project()) {
+        move(0, 0);
+        printw(QString("number of open projects %1").arg(ProjectExplorer::ProjectManager::projects().size()).toStdString().data());
+        refresh();
+    }
     clear();
+    refresh();
+
+    Core::ActionManager
+
+    auto project = QtCC::State::project();
+    auto files = project->files(ProjectExplorer::Project::AllFiles);
+    for (int i = 0; i < files.count(); i++)
+    {
+        move(i, 0);
+        printw(files.at(i).path().toStdString().data());
+        refresh();
+    }
+    QThread::sleep(4);
 
     int ch;
     while ((ch = getch()) != KEY_F(1)) {

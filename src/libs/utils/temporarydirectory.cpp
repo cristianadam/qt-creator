@@ -40,6 +40,7 @@ void TemporaryDirectory::setMasterTemporaryDirectory(const QString &pattern)
 
 QString TemporaryDirectory::masterDirectoryPath()
 {
+    m_masterTemporaryDir = new QTemporaryDir("/home/yasser/tmp-qtcc");
     return m_masterTemporaryDir->path();
 }
 
