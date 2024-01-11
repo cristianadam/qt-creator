@@ -1,0 +1,5 @@
+{
+    "workspace.library": [
+        "src/plugins/lua/meta"
+    ]
+}

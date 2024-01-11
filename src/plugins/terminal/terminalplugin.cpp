@@ -15,6 +15,9 @@
 
 #include <extensionsystem/iplugin.h>
 #include <extensionsystem/pluginmanager.h>
+#include <extensionsystem/pluginspec.h>
+
+#include <utils/algorithm.h>
 
 #include <QAction>
 #include <QDebug>
