@@ -61,9 +61,14 @@
 
     \section1 Adding Language Servers
 
-    \QC adds a Python language server by default. Add a Java language server for
-    \l{Connecting Android Devices}{Android development}. For other languages, add
-    generic stdIO language servers.
+    \QC adds a Python language server by default. Also, it automatically
+    adds language servers for YAML and JSON if it can find the
+    \l{https://nodejs.org/en/learn/getting-started/an-introduction-to-the-npm-package-manager}
+    {NPM} package manager on the computer.
+
+    Add a Java language server for \l{Connecting Android Devices}
+    {Android development}. For other languages, add generic stdIO language
+    servers.
 
     To add language servers, go to \preferences > \uicontrol {Language Client}
     and select> \uicontrol Add.
