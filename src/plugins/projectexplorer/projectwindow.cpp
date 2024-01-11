@@ -172,7 +172,7 @@ QWidget *BuildSystemOutputWindow::toolBar()
                                                 {kRegExpActionId,
                                                  kCaseSensitiveActionId,
                                                  kInvertActionId});
-            popup->show();
+//            popup->show();
         });
 
         auto zoomInButton = new CommandButton(Core::Constants::ZOOM_IN);
@@ -796,7 +796,7 @@ public:
         }
         if (panel) {
             q->setCentralWidget(panel);
-            panel->show();
+//            panel->show();
             if (q->hasFocus()) // we get assigned focus from setFocusToCurrentMode, pass that on
                 panel->setFocus();
         }

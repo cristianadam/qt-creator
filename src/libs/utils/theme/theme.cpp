@@ -272,6 +272,7 @@ void Theme::setHelpMenu(QMenu *menu)
 
 QPalette Theme::initialPalette()
 {
+    return QPalette();
     static QPalette palette = copyPalette(QApplication::palette());
     return palette;
 }

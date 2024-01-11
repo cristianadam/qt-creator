@@ -645,8 +645,8 @@ void OutputPaneManager::readSettings()
         = settings->value("OutputPanePlaceHolder/Height", 0).toInt();
     const int currentIdx
         = settings->value("OutputPanePlaceHolder/CurrentIndex", 0).toInt();
-    if (QTC_GUARD(currentIdx >= 0 && currentIdx < g_outputPanes.size()))
-        setCurrentIndex(currentIdx);
+//    if (QTC_GUARD(currentIdx >= 0 && currentIdx < g_outputPanes.size()))
+//        setCurrentIndex(currentIdx);
 }
 
 void OutputPaneManager::updateActions(IOutputPane *pane)

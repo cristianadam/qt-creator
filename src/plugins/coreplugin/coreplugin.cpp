@@ -145,8 +145,8 @@ bool CorePlugin::initialize(const QStringList &arguments, QString *errorMessage)
     }
 
     if (ThemeEntry::availableThemes().isEmpty()) {
-        *errorMessage = Tr::tr("No themes found in installation.");
-        return false;
+//        *errorMessage = Tr::tr("No themes found in installation.");
+//        return false;
     }
     const CoreArguments args = parseArguments(arguments);
     Theme *themeFromArg = ThemeEntry::createTheme(args.themeId);
