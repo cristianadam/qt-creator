@@ -20,6 +20,8 @@
 #include <coreplugin/messagebox.h>
 #include <coreplugin/modemanager.h>
 
+#include <debugger/debuggerruncontrol.h>
+
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/projectmanager.h>
 #include <projectexplorer/projectnodes.h>
@@ -51,6 +53,7 @@
 #include <QPushButton>
 #include <QTimer>
 
+using namespace Debugger;
 using namespace ProjectExplorer;
 using namespace Utils;
 
@@ -93,6 +96,7 @@ class QmlProjectPluginPrivate
 public:
     QmlProjectRunConfigurationFactory runConfigFactory;
     SimpleTargetRunnerFactory runWorkerFactory{{runConfigFactory.runConfigurationId()}};
+    SimpleDebugRunnerFactory debugRunWorkerFactory{{runConfigFactory.runConfigurationId()}};
     QPointer<QMessageBox> lastMessageBox;
     QdsLandingPage *landingPage = nullptr;
     QdsLandingPageWidget *landingPageWidget = nullptr;
