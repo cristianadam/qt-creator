@@ -472,18 +472,15 @@ size_t qHash(const CMakeConfigItem &it)
     return ::qHash(it.key) ^ ::qHash(it.value) ^ ::qHash(it.isUnset) ^ ::qHash(it.isInitial);
 }
 
-#if WITH_TESTS
-
 } // namespace CMakeProjectManager
 
-#include "cmakeprojectplugin.h"
+#if WITH_TESTS
 
 #include <QTest>
 
-namespace CMakeProjectManager {
-namespace Internal {
+namespace CMakeProjectManager::Internal {
 
-void CMakeProjectPlugin::testCMakeSplitValue_data()
+void CMakeConfigTest::testCMakeSplitValue_data()
 {
     QTest::addColumn<QString>("input");
     QTest::addColumn<bool>("keepEmpty");
@@ -526,7 +523,7 @@ void CMakeProjectPlugin::testCMakeSplitValue_data()
             << "C:/something;;/second/path" << true << QStringList({"C:/something", "", "/second/path"});
 }
 
-void CMakeProjectPlugin::testCMakeSplitValue()
+void CMakeConfigTest::testCMakeSplitValue()
 {
     QFETCH(QString, input);
     QFETCH(bool, keepEmpty);
@@ -537,7 +534,6 @@ void CMakeProjectPlugin::testCMakeSplitValue()
     QCOMPARE(expectedOutput, realOutput);
 }
 
-} // namespace Internal
-#endif
+} // CMakeProjectManager::Internal
 
-} // namespace CMakeProjectManager
+#endif
