@@ -1103,14 +1103,11 @@ void CMakeProjectImporter::persistTemporaryCMake(Kit *k, const QVariantList &vl)
 
 #ifdef WITH_TESTS
 
-#include "cmakeprojectplugin.h"
-
 #include <QTest>
 
-namespace CMakeProjectManager {
-namespace Internal {
+namespace CMakeProjectManager::Internal {
 
-void CMakeProjectPlugin::testCMakeProjectImporterQt_data()
+void CMakeProjectImporterTest::testCMakeProjectImporterQt_data()
 {
     QTest::addColumn<QStringList>("cache");
     QTest::addColumn<QString>("expectedQmake");
@@ -1125,7 +1122,7 @@ void CMakeProjectPlugin::testCMakeProjectImporterQt_data()
     // Everything else will require Qt installations!
 }
 
-void CMakeProjectPlugin::testCMakeProjectImporterQt()
+void CMakeProjectImporterTest::testCMakeProjectImporterQt()
 {
     QFETCH(QStringList, cache);
     QFETCH(QString, expectedQmake);
@@ -1143,7 +1140,7 @@ void CMakeProjectPlugin::testCMakeProjectImporterQt()
                                                              Environment::systemEnvironment());
     QCOMPARE(realQmake.path(), expectedQmake);
 }
-void CMakeProjectPlugin::testCMakeProjectImporterToolchain_data()
+void CMakeProjectImporterTest::testCMakeProjectImporterToolchain_data()
 {
     QTest::addColumn<QStringList>("cache");
     QTest::addColumn<QByteArrayList>("expectedLanguages");
@@ -1180,7 +1177,7 @@ void CMakeProjectPlugin::testCMakeProjectImporterToolchain_data()
             << QStringList({"/usr/bin/g++", "/usr/bin/clang", "/tmp/strange/compiler"});
 }
 
-void CMakeProjectPlugin::testCMakeProjectImporterToolchain()
+void CMakeProjectImporterTest::testCMakeProjectImporterToolchain()
 {
     QFETCH(QStringList, cache);
     QFETCH(QByteArrayList, expectedLanguages);
@@ -1205,7 +1202,6 @@ void CMakeProjectPlugin::testCMakeProjectImporterToolchain()
     }
 }
 
-} // namespace Internal
-} // namespace CMakeProjectManager
+} // CMakeProjectManager::Internal
 
 #endif
