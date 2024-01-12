@@ -52,7 +52,7 @@ QtcPlugin {
             "designertr.h",
             "editordata.h",
             "editorwidget.cpp", "editorwidget.h",
-            "formeditorfactory.cpp", "formeditorfactory.h",
+            "formeditorfactory.cpp",
             "formeditorplugin.cpp", "formeditorplugin.h",
             "formeditorstack.cpp", "formeditorstack.h",
             "formeditor.cpp", "formeditor.h",
