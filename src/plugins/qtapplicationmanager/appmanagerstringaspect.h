@@ -5,9 +5,76 @@
 
 #pragma once
 
+#include <appmanagertr.h>
+
 #include <utils/aspects.h>
 
 namespace AppManager::Internal {
+
+class AppManagerIdAspect : public Utils::StringAspect
+{
+    Q_OBJECT
+
+public:
+    AppManagerIdAspect(Utils::AspectContainer *container = nullptr)
+        : StringAspect(container)
+    {
+        setSettingsKey("ApplicationManagerPlugin.ApplicationId");
+        setDisplayStyle(StringAspect::LineEditDisplay);
+        setLabelText(Tr::tr("Application Id:"));
+//        setReadOnly(true);
+    }
+
+    ~AppManagerIdAspect() override = default;
+};
+
+class AppManagerInstanceIdAspect : public Utils::StringAspect
+{
+    Q_OBJECT
+
+public:
+    AppManagerInstanceIdAspect(Utils::AspectContainer *container = nullptr)
+        : StringAspect(container)
+    {
+        setSettingsKey("ApplicationManagerPlugin.InstanceId");
+        setDisplayStyle(StringAspect::LineEditDisplay);
+        setLabelText(Tr::tr("AppMan Instance Id:"));
+    }
+
+    ~AppManagerInstanceIdAspect() override = default;
+};
+
+class AppManagerDocumentUrlAspect : public Utils::StringAspect
+{
+    Q_OBJECT
+
+public:
+    AppManagerDocumentUrlAspect(Utils::AspectContainer *container = nullptr)
+        : StringAspect(container)
+    {
+        setSettingsKey("ApplicationManagerPlugin.DocumentUrl");
+        setDisplayStyle(StringAspect::LineEditDisplay);
+        setLabelText(Tr::tr("Document Url:"));
+    }
+
+    ~AppManagerDocumentUrlAspect() override = default;
+};
+
+class AppManagerControllerAspect : public Utils::FilePathAspect
+{
+    Q_OBJECT
+
+public:
+    AppManagerControllerAspect(Utils::AspectContainer *container = nullptr)
+        : FilePathAspect(container)
+    {
+        setSettingsKey("ApplicationManagerPlugin.AppControllerPath");
+        setLabelText(Tr::tr("Controller:"));
+        setPlaceHolderText(Tr::tr("-"));
+    }
+
+    ~AppManagerControllerAspect() override = default;
+};
 
 class AppManagerStringAspect : public Utils::StringAspect
 {
