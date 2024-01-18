@@ -9,6 +9,7 @@
 #include <coreplugin/dialogs/ioptionspage.h>
 
 #include <utils/layoutbuilder.h>
+#include <utils/hostosinfo.h>
 
 using namespace Utils;
 
@@ -16,7 +17,10 @@ namespace ProjectExplorer {
 
 static QString defaultBuildDirectoryTemplate()
 {
-    return "../%{Asciify:build-%{Project:Name}-%{Kit:FileSystemName}-%{BuildConfig:Name}}";
+    if (Utils::HostOsInfo::isWindowsHost())
+        return "../%{Asciify:b-%{Project:Name}-%{Kit:FileSystemName}-%{BuildConfig:Name}}";
+    else
+        return "../%{Asciify:build-%{Project:Name}-%{Kit:FileSystemName}-%{BuildConfig:Name}}";
 }
 
 BuildPropertiesSettings &buildPropertiesSettings()

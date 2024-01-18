@@ -16,6 +16,7 @@
 #include <utils/displayname.h>
 #include <utils/filepath.h>
 #include <utils/icon.h>
+#include <utils/hostosinfo.h>
 #include <utils/macroexpander.h>
 #include <utils/qtcassert.h>
 #include <utils/stringutils.h>
@@ -303,19 +304,39 @@ QString Kit::customFileSystemFriendlyName() const
     return d->m_fileSystemFriendlyName;
 }
 
+static QString windowsFriendlyName(const QString &displayName)
+{
+    const QString name = FileUtils::qmakeFriendlyName(displayName);
+
+    if (!Utils::HostOsInfo::isWindowsHost())
+        return name;
+
+    // To keep file pathes short on Windows we reduce the name to just the
+    // Qt version, if possible.
+
+    static const QRegularExpression regExp("(Qt_[5-6]_[0-9]+_[0-9]+)");
+    QRegularExpressionMatch match = regExp.match(name);
+
+    if (match.hasMatch())
+        return match.captured();
+
+    return name;
+}
+
 QString Kit::fileSystemFriendlyName() const
 {
     QString name = customFileSystemFriendlyName();
     if (name.isEmpty())
-        name = FileUtils::qmakeFriendlyName(displayName());
+        name = windowsFriendlyName(displayName());
+
     const QList<Kit *> kits = KitManager::kits();
     for (Kit *i : kits) {
         if (i == this)
             continue;
-        if (name == FileUtils::qmakeFriendlyName(i->displayName())) {
+        if (name == windowsFriendlyName(i->displayName())) {
             // append part of the kit id: That should be unique enough;-)
             // Leading { will be turned into _ which should be fine.
-            name = FileUtils::qmakeFriendlyName(name + QLatin1Char('_') + (id().toString().left(7)));
+            name = windowsFriendlyName(name + QLatin1Char('_') + (id().toString().left(7)));
             break;
         }
     }

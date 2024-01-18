@@ -585,6 +585,20 @@ bool BuildConfiguration::isActive() const
     return target()->isActive() && target()->activeBuildConfiguration() == this;
 }
 
+const QString windowsFriendlyBuildSystemName(const QString &bcName, BuildConfiguration::BuildType buildType)
+{
+    if (!Utils::HostOsInfo::isWindowsHost())
+        return bcName;
+
+    switch (buildType) {
+    case BuildConfiguration::BuildType::Debug: return "D";
+    case BuildConfiguration::BuildType::Release: return "R";
+    case BuildConfiguration::BuildType::Profile: return "P";
+    }
+
+    return {};
+}
+
 FilePath BuildConfiguration::buildDirectoryFromTemplate(const FilePath &projectDir,
                                                         const FilePath &mainFilePath,
                                                         const QString &projectName,
@@ -605,7 +619,7 @@ FilePath BuildConfiguration::buildDirectoryFromTemplate(const FilePath &projectD
                          [projectName] { return projectName; });
     exp.registerVariable("BuildConfig:Name",
                          Tr::tr("Name of the project's active build configuration"),
-                         [bcName] { return bcName; });
+                         [bcName, buildType] { return windowsFriendlyBuildSystemName(bcName, buildType); });
     exp.registerVariable("BuildSystem:Name",
                          Tr::tr("Name of the project's active build system"),
                          [buildSystem] { return buildSystem; });
