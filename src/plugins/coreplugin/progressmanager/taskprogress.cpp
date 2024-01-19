@@ -44,7 +44,7 @@ public:
     QPointer<FutureProgress> m_futureProgress;
     Id m_id;
     bool m_isAutoStopOnCancel = true;
-    int m_halfLifeTimePerTask = 1000; // 1000 ms
+    std::chrono::milliseconds m_halfLifeTimePerTask{1000};
     QString m_displayName;
     FutureProgress::KeepOnFinishType m_keep = FutureProgress::HideOnFinish;
     bool m_isSubtitleVisibleInStatusBar = false;
@@ -83,7 +83,7 @@ void TaskProgressPrivate::advanceProgress(int newValue)
 
 void TaskProgressPrivate::updateProgress()
 {
-    const int halfLife = qRound(double(m_halfLifeTimePerTask) / TimerInterval);
+    const int halfLife = qRound(double(m_halfLifeTimePerTask.count()) / TimerInterval);
     const int pMin = ProgressResolution * m_currentProgress;
     const int pMax = ProgressResolution * (m_currentProgress + 1);
     const int newValue = MathUtils::interpolateExponential(m_currentTick, halfLife, pMin, pMax);
@@ -148,7 +148,7 @@ void TaskProgress::setAutoStopOnCancel(bool enable)
     d->m_isAutoStopOnCancel = enable;
 }
 
-void TaskProgress::setHalfLifeTimePerTask(int msecs)
+void TaskProgress::setHalfLifeTimePerTask(std::chrono::milliseconds msecs)
 {
     d->m_halfLifeTimePerTask = msecs;
 }
