@@ -450,9 +450,9 @@ void CppFileSettingsWidget::slotEdit()
     Core::EditorManager::openEditor(path, CppEditor::Constants::CPPEDITOR_ID);
 }
 
-// --------------- CppFileSettingsPage
+// CppFileSettingsPage
 
-CppFileSettingsPage::CppFileSettingsPage(CppFileSettings *settings)
+CppFileSettingsPage::CppFileSettingsPage()
 {
     setId(Constants::CPP_FILE_SETTINGS_ID);
     setDisplayName(Tr::tr("File Naming"));
@@ -468,7 +468,7 @@ CppFileSettingsForProject::CppFileSettingsForProject(ProjectExplorer::Project *p
 
 CppFileSettings CppFileSettingsForProject::settings() const
 {
-    return m_useGlobalSettings ? CppEditorPlugin::fileSettings(nullptr) : m_customSettings;
+    return m_useGlobalSettings ? cppFileSettings() : m_customSettings;
 }
 
 void CppFileSettingsForProject::setSettings(const CppFileSettings &settings)
@@ -603,6 +603,13 @@ public:
 void setupCppFileSettingsProjectPanel()
 {
     static CppFileSettingsProjectPanelFactory theCppFileSettingsProjectPanelFactory;
+}
+
+CppFileSettings &cppFileSettings()
+{
+    // This is the global instance. There could be more.
+    static CppFileSettings theCppFileSettings;
+    return theCppFileSettings;
 }
 
 } // namespace CppEditor::Internal
