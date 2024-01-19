@@ -1222,6 +1222,10 @@ void SubversionTest::testLogResolving()
     VcsBaseEditorWidget::testLogResolving(dd->logEditorFactory, data, "r1439551", "r1439540");
 }
 
+QObject *createSubversionTest()
+{
+    return new SubversionTest;
+}
 #endif
 
 class SubversionPlugin final : public ExtensionSystem::IPlugin
@@ -1240,7 +1244,7 @@ class SubversionPlugin final : public ExtensionSystem::IPlugin
         dd = new SubversionPluginPrivate;
 
 #ifdef WITH_TESTS
-    addTest<SubversionTest>();
+        addTestCreator(createSubversionTest);
 #endif
     }
 
