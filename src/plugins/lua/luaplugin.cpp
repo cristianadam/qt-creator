@@ -18,6 +18,10 @@
 
 namespace Lua::Internal {
 
+void registerUiBindings();
+void registerAspectBindings();
+void registerLayoutingBindings();
+
 class LuaPlugin : public ExtensionSystem::IPlugin
 {
     Q_OBJECT
@@ -33,6 +37,9 @@ public:
         LuaApiRegistry::registerFetch();
         LuaApiRegistry::registerWait();
         LuaApiRegistry::registerProcess();
+        registerUiBindings();
+        registerAspectBindings();
+        registerLayoutingBindings();
     }
 
     bool delayedInitialize() final

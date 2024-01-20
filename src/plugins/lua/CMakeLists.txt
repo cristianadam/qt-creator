@@ -7,14 +7,17 @@ add_qtc_plugin(Lua
   SOURCES
     luaapiregistry.cpp
     luaapiregistry.h
+    luaaspectbindings.cpp
     luaengine.cpp
     luaengine.h
+    lualayoutingbindings.cpp
     luaplugin.cpp
     luapluginloader.cpp
     luapluginloader.h
     luapluginspec.cpp
     luapluginspec.h
     luatr.h
+    luauibindings.cpp
     sol/config.hpp
     sol/forward.hpp
     sol/sol.hpp

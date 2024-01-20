@@ -36,8 +36,63 @@ local function installServer()
   end
 end
 
+local function layoutSettings()
+  local layout = Column {
+    Group {
+      title("Note"),
+      Column {
+        "This is a warning!", br,
+        "Please take it seriously!"
+      }
+    },
+    Form {
+      PushButton {
+        text("Hallo Welt!"),
+        onClicked(function() print("Hallo Welt!") end),
+      }, br,
+      Settings.enableCopilot, br,
+      Settings.autoComplete, br,
+    },
+  }
+
+  showLayout(layout)
+  return layout
+end
+
+local function setupAspect()
+  Settings = AspectContainer.create({
+    autoApply = false,
+    layouter = layoutSettings,
+  });
+
+  Settings.enableCopilot = BoolAspect.create({
+    settingsKey = "LuaCopilot.EnableCopilot",
+    displayName = "Enable Copilot",
+    labelText = "Enable Copilot",
+    toolTip = "Enables the Copilot integration.",
+    defaultValue = false,
+    onVolatileValueChanged = function() print("Volatile Value Changed") end,
+  })
+
+  Settings.autoComplete = BoolAspect.create({
+    settingsKey = "LuaCopilot.AutoComplete",
+    displayName = "Auto Complete",
+    labelText = "Auto Complete",
+    toolTip = "Automatically request suggestions for the current text cursor position after changes to the document.",
+    defaultValue = true,
+  })
+
+  print("Layout")
+  local l = layoutSettings()
+  print("L done", inspect(l))
+
+
+  print(Settings.enableCopilot.value, Settings.autoComplete.value)
+  print("aspect done")
+end
 local function setup(parameters)
   print("Setting up Lua Language Server ...")
+  setupAspect()
   local serverPath = FilePath.fromUserInput("lua-language-server")
   local absolute = serverPath:searchInPath()
   if absolute:exists() == true then
