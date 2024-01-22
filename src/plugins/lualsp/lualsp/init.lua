@@ -55,7 +55,17 @@ local function layoutSettings()
     },
   }
 
-  showLayout(layout)
+  --local dlg = QDialog()
+  --layout:attachTo(dlg)
+  --
+  --print("LayoutDir:", dlg.layoutDirection, dlg.autoFillBackground);
+  --local g = dlg.geometry
+  --print("Geo:", inspect(g))
+  --g.width = 400
+  --g.height = 300
+  --dlg.geometry = g
+  --print("Geo:", inspect(dlg.geometry))
+  --dlg:show()
   return layout
 end
 
@@ -82,13 +92,16 @@ local function setupAspect()
     defaultValue = true,
   })
 
-  print("Layout")
-  local l = layoutSettings()
-  print("L done", inspect(l))
+  OptionsPage = qtc.createOptionsPage({
+    id = "LanguageClient.Lua",
+    displayName = "Lua",
+    categoryId = "ZY.LanguageClient",
+    displayCategory = "Language Client",
+    categoryIconPath = ":/languageclient/images/settingscategory_languageclient.png",
+    aspectContainer = Settings,
+  })
+  layoutSettings()
 
-
-  print(Settings.enableCopilot.value, Settings.autoComplete.value)
-  print("aspect done")
 end
 local function setup(parameters)
   print("Setting up Lua Language Server ...")

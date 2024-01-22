@@ -16,10 +16,16 @@ add_qtc_plugin(Lua
     luapluginloader.h
     luapluginspec.cpp
     luapluginspec.h
+    luaqttypes.cpp
+    luaqttypes.h
+    luasettingsbindings.cpp
     luatr.h
     luauibindings.cpp
+    # generateqtbindings.cpp # Use this if you need to generate some code.
     sol/config.hpp
     sol/forward.hpp
     sol/sol.hpp
 )
 
+set_property(SOURCE luauibindings.cpp PROPERTY SKIP_AUTOMOC ON)
+set_property(SOURCE luauibindings.cpp PROPERTY SKIP_AUTOGEN ON)

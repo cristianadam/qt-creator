@@ -21,6 +21,7 @@ namespace Lua::Internal {
 void registerUiBindings();
 void registerAspectBindings();
 void registerLayoutingBindings();
+void registerSettingsBindings();
 
 class LuaPlugin : public ExtensionSystem::IPlugin
 {
@@ -37,9 +38,11 @@ public:
         LuaApiRegistry::registerFetch();
         LuaApiRegistry::registerWait();
         LuaApiRegistry::registerProcess();
+
         registerUiBindings();
         registerAspectBindings();
         registerLayoutingBindings();
+        registerSettingsBindings();
     }
 
     bool delayedInitialize() final

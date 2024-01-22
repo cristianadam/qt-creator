@@ -20,33 +20,6 @@
 #include <QNetworkReply>
 #include <QTimer>
 
-// This defines the conversion from QString to lua_string and vice versa
-bool sol_lua_check(sol::types<QString>,
-                   lua_State *L,
-                   int index,
-                   std::function<sol::check_handler_type> handler,
-                   sol::stack::record &tracking)
-{
-    // use sol's method for checking specifically for a string
-    return sol::stack::check<const char *>(L, index, handler, tracking);
-}
-
-QString sol_lua_get(sol::types<QString>, lua_State *L, int index, sol::stack::record &tracking)
-{
-    const char *str = sol::stack::get<const char *>(L, index, tracking);
-    return QString::fromLocal8Bit(str);
-}
-
-int sol_lua_push(sol::types<QString>, lua_State *L, const QString &qStr)
-{
-    // create table
-    sol::state_view lua(L);
-    // use base sol method to push the string
-    int amount = sol::stack::push(L, qStr.toLocal8Bit().data());
-    // return # of things pushed onto stack
-    return amount;
-}
-
 namespace Lua {
 
 void LuaApiRegistry::registerUtils()

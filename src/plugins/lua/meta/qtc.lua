@@ -35,6 +35,7 @@ function qtc.writeFlashing(...) end
 ---@return LanguageClient
 function qtc.createLanguageClient(options) end
 
+---@async
 ---Runs a command in a terminal, has to be called from a coroutine!
 ---@param cmd string The command to run
 ---@return number The exit code of the command
@@ -50,6 +51,7 @@ QNetworkReply = {}
 ---@return string
 function QNetworkReply:readAll() end
 
+---@async
 ---Fetches a url, has to be called from a coroutine!
 ---@param options FetchOptions
 ---@return table|QNetworkReply|string
@@ -93,6 +95,7 @@ ActionOptions = {}
 ---@param options ActionOptions
 function qtc.createAction(id, options) end
 
+---@async
 ---Suspends the current coroutine for the given amount of milliseconds
 ---@param ms number The amount of milliseconds to wait
 function qtc.waitms(ms) end

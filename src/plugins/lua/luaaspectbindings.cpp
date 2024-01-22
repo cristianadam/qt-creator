@@ -87,8 +87,7 @@ std::unique_ptr<LuaAspectContainer> aspectContainerCreate(sol::table options)
                 if (v.is<sol::function>())
                     container->setLayouter(
                         [func = v.as<sol::function>()]() -> Layouting::LayoutItem {
-                            func.call();
-                            return Layouting::Column{};
+                            return func.call<Layouting::LayoutItem>();
                         });
             } else {
                 container->m_entries[key] = v;
@@ -123,7 +122,8 @@ void baseAspectCreate(BaseAspect *aspect, const std::string &key, sol::object va
         QObject::connect(aspect, &BaseAspect::volatileValueChanged, aspect, [value]() {
             value.as<sol::function>().call();
         });
-    }
+    } else if (key == "enabler")
+        aspect->setEnabler(value.as<BoolAspect *>());
 }
 
 template<class T>
@@ -191,7 +191,7 @@ void registerAspectBindings()
                                          sol::meta_function::length,
                                          &LuaAspectContainer::size,
                                          sol::base_classes,
-                                         sol::bases<BaseAspect>());
+                                         sol::bases<AspectContainer, BaseAspect>());
 }
 
 } // namespace Lua::Internal

@@ -6,19 +6,9 @@
 #include "lua_global.h"
 
 #include "luaengine.h"
+#include "luaqttypes.h"
 
 #include "sol/sol.hpp"
-
-bool LUA_EXPORT sol_lua_check(sol::types<QString>,
-                              lua_State *L,
-                              int index,
-                              std::function<sol::check_handler_type> handler,
-                              sol::stack::record &tracking);
-QString LUA_EXPORT sol_lua_get(sol::types<QString>,
-                               lua_State *L,
-                               int index,
-                               sol::stack::record &tracking);
-int LUA_EXPORT sol_lua_push(sol::types<QString>, lua_State *L, const QString &qStr);
 
 namespace Lua {
 

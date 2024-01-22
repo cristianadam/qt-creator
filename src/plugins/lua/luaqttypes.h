@@ -1,0 +1,36 @@
+// Copyright (C) 2024 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+
+#pragma once
+
+#include "lua_global.h"
+
+#include "sol/sol.hpp"
+
+#include <QColor>
+#include <QRect>
+#include <QString>
+
+#define SOL_CONVERSION_FUNCTIONS(TYPE) \
+    bool LUA_EXPORT sol_lua_check(sol::types<TYPE>, \
+                                  lua_State *L, \
+                                  int index, \
+                                  std::function<sol::check_handler_type> handler, \
+                                  sol::stack::record &tracking); \
+    TYPE LUA_EXPORT sol_lua_get(sol::types<TYPE>, \
+                                lua_State *L, \
+                                int index, \
+                                sol::stack::record &tracking); \
+    int LUA_EXPORT sol_lua_push(sol::types<TYPE>, lua_State *L, const TYPE &rect);
+
+SOL_CONVERSION_FUNCTIONS(QString)
+
+SOL_CONVERSION_FUNCTIONS(QRect)
+SOL_CONVERSION_FUNCTIONS(QSize)
+SOL_CONVERSION_FUNCTIONS(QPoint)
+SOL_CONVERSION_FUNCTIONS(QRectF)
+SOL_CONVERSION_FUNCTIONS(QSizeF)
+SOL_CONVERSION_FUNCTIONS(QPointF)
+SOL_CONVERSION_FUNCTIONS(QColor)
+
+#undef SOL_CONVERSION_FUNCTIONS

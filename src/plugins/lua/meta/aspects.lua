@@ -5,10 +5,11 @@
 BaseAspect = {}
 
 ---@class AspectCreate
----@field settingsKey string The settings key of the aspect
----@field displayName string The display name of the aspect
----@field labelText string The label text of the aspect
----@field toolTip string The tool tip of the aspect
+---@field settingsKey? string The settings key of the aspect
+---@field displayName? string The display name of the aspect
+---@field labelText? string The label text of the aspect
+---@field toolTip? string The tool tip of the aspect
+---@field enabler? BoolAspect Enable / Disable this aspect based on the state of the `enabler`
 AspectCreate = {}
 
 ---The base class of most typed aspects

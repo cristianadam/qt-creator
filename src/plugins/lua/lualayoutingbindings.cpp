@@ -9,6 +9,8 @@
 
 #include <QDialog>
 
+#include <QMetaProperty>
+
 using namespace Layouting;
 using namespace Utils;
 
@@ -16,27 +18,22 @@ namespace Lua::Internal {
 
 void processChildren(LayoutItem *item, sol::table children)
 {
-    for (const auto &[k, v] : children) {
-        if (k.is<std::string>()) {
-            std::string key = k.as<std::string>();
-            if (key == "title") {
-                item->addItem(title(v.as<QString>()));
-            }
+    for (size_t i = 1; i <= children.size(); ++i) {
+        sol::object v = children[i];
+
+        if (v.is<LayoutItem *>()) {
+            item->addItem(*v.as<LayoutItem *>());
+        } else if (v.is<BaseAspect>()) {
+            v.as<BaseAspect *>()->addToLayout(*item);
+        } else if (v.is<QString>()) {
+            item->addItem(v.as<QString>());
+        } else if (v.is<sol::function>()) {
+            sol::function f = v.as<sol::function>();
+            LayoutItem *li = f.call<LayoutItem *>();
+            item->addItem(*li);
         } else {
-            if (v.is<LayoutItem *>()) {
-                item->addItem(*v.as<LayoutItem *>());
-            } else if (v.is<BaseAspect>()) {
-                v.as<BaseAspect *>()->addToLayout(*item);
-            } else if (v.is<QString>()) {
-                item->addItem(v.as<QString>());
-            } else if (v.is<sol::function>()) {
-                sol::function f = v.as<sol::function>();
-                LayoutItem *li = f.call<LayoutItem *>();
-                item->addItem(*li);
-            } else {
-                qWarning() << "Incompatible object added to layout item: " << (int) v.get_type()
-                           << " (expected LayoutItem or function returning LayoutItem)";
-            }
+            qWarning() << "Incompatible object added to layout item: " << (int) v.get_type()
+                       << " (expected LayoutItem or function returning LayoutItem)";
         }
     }
 }
@@ -55,7 +52,7 @@ void registerLayoutingBindings()
 {
     sol::state &lua = LuaEngine::instance().lua();
 
-    lua.new_usertype<LayoutItem>("LayoutItem");
+    lua.new_usertype<LayoutItem>("LayoutItem", "attachTo", &LayoutItem::attachTo);
 
     lua["Span"] = [](int span, LayoutItem *item) { return createItem(item, Span(span, *item)); };
     lua["Space"] = [](int space) { return createItem(nullptr, Space(space)); };
@@ -179,13 +176,17 @@ void registerLayoutingBindings()
         return onTextChanged([f](const QString &text) { f.call(text); });
     };
 
-    lua["showLayout"] = [](sol::object item) {
+    /*lua["createDialog"] = [](sol::object item) {
+        std::unique_ptr<QDialog> dialog;
+
         if (item.is<LayoutItem>()) {
-            QDialog *dialog = new QDialog;
-            item.as<LayoutItem *>()->attachTo(dialog);
+            dialog.reset(new QDialog);
+            item.as<LayoutItem *>()->attachTo(dialog.get());
             dialog->show();
         }
+        return dialog;
     };
+    */
 }
 
 } // namespace Lua::Internal
