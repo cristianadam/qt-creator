@@ -1,4 +1,4 @@
-// Copyright (C) 2023 The Qt Company Ltd.
+// Copyright (C) 2024 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 // **********************************************************************
@@ -10,12 +10,14 @@
 /*!
     \previouspage creator-copilot.html
     \page creator-mime-types.html
-    \nextpage creator-modeling.html
+    \previouspage creator-how-tos.html
 
-    \title Editing MIME Types
+    \ingroup creator-how-to-edit
+
+    \title Match MIME types with editors
 
     \QC uses the \l{https://www.iana.org/assignments/media-types/media-types.xhtml}
-    {MIME type} of the file to determine which mode and editor to use for
+    {MIME type} of a file to determine which mode and editor to use for
     opening the file. For example, \QC opens C++ source and header files in
     the C++ editor, and Qt widget based UI files (.ui) in \QD.
     For some MIME types, you can change the editor that is used to open the
