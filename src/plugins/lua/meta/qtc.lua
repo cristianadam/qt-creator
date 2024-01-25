@@ -141,3 +141,21 @@ function FilePath.fromUserInput(path) end
 ---@return FilePath The new absolute path
 ---Searches for the path inside the PATH environment variable
 function FilePath:searchInPath() end
+
+---@class (exact) DirEntriesOptions
+---@field nameFilters? string[] The name filters to use (e.g. "*.lua"), defaults to all files
+---@field fileFilters? integer The filters to use (combination of QDir.Filters.*), defaults to QDir.Filters.NoFilter
+---@field flags? integer The iterator flags (combination of QDirIterator.Flags.*), defaults to QDirIterator.Flags.NoIteratorFlags
+
+---Returns all entries in the directory
+---@param options DirEntriesOptions
+---@return FilePath[]
+function FilePath:dirEntries(options) end
+
+---Returns the FilePath as a string
+---@return string
+function FilePath:toUserOutput() end
+
+---Returns the last part of the path
+---@return string
+function FilePath:fileName() end

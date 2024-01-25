@@ -20,6 +20,8 @@
 #include <QNetworkReply>
 #include <QTimer>
 
+using namespace Utils;
+
 namespace Lua {
 
 void LuaApiRegistry::registerUtils()
@@ -52,35 +54,59 @@ void LuaApiRegistry::registerUtils()
         "writeFlashing");
 
     // HostOsInfo
-    auto hostOsInfoType = LuaApiRegistry::createClass<Utils::HostOsInfo>("HostOsInfo");
-    hostOsInfoType["isWindowsHost"] = &Utils::HostOsInfo::isWindowsHost;
-    hostOsInfoType["isMacHost"] = &Utils::HostOsInfo::isMacHost;
-    hostOsInfoType["isLinuxHost"] = &Utils::HostOsInfo::isLinuxHost;
+    auto hostOsInfoType = LuaApiRegistry::createClass<HostOsInfo>("HostOsInfo");
+    hostOsInfoType["isWindowsHost"] = &HostOsInfo::isWindowsHost;
+    hostOsInfoType["isMacHost"] = &HostOsInfo::isMacHost;
+    hostOsInfoType["isLinuxHost"] = &HostOsInfo::isLinuxHost;
     hostOsInfoType["os"] = sol::var([]() {
-        if (Utils::HostOsInfo::isMacHost())
+        if (HostOsInfo::isMacHost())
             return "mac";
-        else if (Utils::HostOsInfo::isLinuxHost())
+        else if (HostOsInfo::isLinuxHost())
             return "linux";
-        else if (Utils::HostOsInfo::isWindowsHost())
+        else if (HostOsInfo::isWindowsHost())
             return "windows";
         else
             return "unknown";
     }());
 
+    auto &lua = LuaEngine::instance().lua();
+
     // FilePath
-    auto filePathType = LuaEngine::instance()
-                            .lua()
-                            .new_usertype<Utils::FilePath>("FilePath",
-                                                           sol::call_constructor,
-                                                           sol::constructors<Utils::FilePath()>());
+    auto filePathType = lua.new_usertype<FilePath>(
+        "FilePath",
+        sol::call_constructor,
+        sol::constructors<FilePath()>(),
+        "fromUserInput",
+        &FilePath::fromUserInput,
+        "searchInPath",
+        &FilePath::searchInPath,
+        "exists",
+        &FilePath::exists,
+        "dirEntries",
+        [](sol::this_state s, const FilePath &p, sol::table options) -> sol::table {
+            sol::state_view lua(s);
+            sol::table result = lua.create_table();
+            const QStringList nameFilters = options.get_or<QStringList>("nameFilters", {});
+            QDir::Filters fileFilters = (QDir::Filters) options.get_or<int>("fileFilters",
+                                                                            QDir::NoFilter);
+            QDirIterator::IteratorFlags flags
+                = (QDirIterator::IteratorFlags) options.get_or<int>("flags",
+                                                                    QDirIterator::NoIteratorFlags);
 
-    filePathType["fromUserInput"] = &Utils::FilePath::fromUserInput;
+            FileFilter filter(nameFilters);
+            p.iterateDirectory(
+                [&result](const FilePath &item) {
+                    result.add(item);
+                    return IterationPolicy::Continue;
+                },
+                FileFilter(nameFilters, fileFilters, flags));
 
-    filePathType["searchInPath"] = [](Utils::FilePath *self) {
-        auto res = self->searchInPath();
-        return res;
-    };
-    filePathType["exists"] = [](Utils::FilePath *self) { return self->exists(); };
+            return result;
+        },
+        "toUserOutput",
+        &FilePath::toUserOutput,
+        "fileName",
+        &FilePath::fileName);
 
     // Actions
 
@@ -96,13 +122,13 @@ void LuaApiRegistry::registerUtils()
 
     createFunction(
         [](const QString &actionId, sol::table options) {
-            Core::ActionBuilder b(nullptr, Utils::Id::fromString(actionId));
+            Core::ActionBuilder b(nullptr, Id::fromString(actionId));
 
             for (const auto &[k, v] : options) {
                 QString key = k.as<QString>();
 
                 if (key == "context")
-                    b.setContext(Utils::Id::fromString(v.as<QString>()));
+                    b.setContext(Id::fromString(v.as<QString>()));
                 else if (key == "onTrigger")
                     b.addOnTriggered([f = v.as<sol::function>()]() { f.call(); });
                 else if (key == "text")
@@ -131,7 +157,7 @@ void LuaApiRegistry::registerUtils()
         "createAction");
 }
 
-Utils::expected_str<int> LuaApiRegistry::resumeImpl(sol::this_state s, int nArgs)
+expected_str<int> LuaApiRegistry::resumeImpl(sol::this_state s, int nArgs)
 {
     int res;
     auto success = lua_resume(s.lua_state(), nullptr, nArgs, &res);
@@ -139,7 +165,7 @@ Utils::expected_str<int> LuaApiRegistry::resumeImpl(sol::this_state s, int nArgs
     if (success == LUA_OK || success == LUA_YIELD)
         return res;
 
-    return Utils::make_unexpected((sol::stack::pop<QString>(s.lua_state())));
+    return make_unexpected((sol::stack::pop<QString>(s.lua_state())));
 }
 
 void LuaApiRegistry::registerFetch()
@@ -246,12 +272,12 @@ void LuaApiRegistry::registerProcess()
                                          "within a coroutine");
             }
 
-            Utils::Process *p = new Utils::Process;
-            p->setTerminalMode(Utils::TerminalMode::Run);
-            p->setCommand(Utils::CommandLine::fromUserInput((cmdline)));
-            p->setEnvironment(Utils::Environment::systemEnvironment());
+            Process *p = new Process;
+            p->setTerminalMode(TerminalMode::Run);
+            p->setCommand(CommandLine::fromUserInput((cmdline)));
+            p->setEnvironment(Environment::systemEnvironment());
 
-            QObject::connect(p, &Utils::Process::done, [p, s]() mutable {
+            QObject::connect(p, &Process::done, [p, s]() mutable {
                 p->deleteLater();
                 QTC_ASSERT_EXPECTED(Lua::LuaApiRegistry::resume(s, p->exitCode()), return);
             });
