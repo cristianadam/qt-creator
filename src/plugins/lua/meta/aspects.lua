@@ -4,6 +4,8 @@
 ---@class BaseAspect
 BaseAspect = {}
 
+---Applies the changes from its volatileValue to its value
+function BaseAspect:apply() end
 ---@class AspectCreate
 ---@field settingsKey? string The settings key of the aspect
 ---@field displayName? string The display name of the aspect
@@ -15,9 +17,9 @@ AspectCreate = {}
 ---The base class of most typed aspects
 ---@generic T
 ---@class TypedAspect<T> : BaseAspect
----@field value T The value of the aspect
----@field volatileValue T The temporary value of the aspect
----@field defaultValue T The default value of the aspect
+---@field value `T` The value of the aspect
+---@field volatileValue `T` The temporary value of the aspect
+---@field defaultValue `T` The default value of the aspect
 TypedAspect = {}
 
 ---@generic T
@@ -30,7 +32,7 @@ TypedAspectCreate = {}
 AspectContainer = {}
 
 ---Options for creating an AspectContainer
----@class AspectContainerCreate<K, V>: { [K]: V }
+---@class AspectContainerCreate
 ---@field autoApply boolean Whether the aspects should be applied automatically or not
 AspectContainerCreate = {}
 
