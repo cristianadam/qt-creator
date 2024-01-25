@@ -22,9 +22,6 @@ public:
 
     static void clearHeaderSourceCache();
 
-    void openDeclarationDefinitionInNextSplit();
-    void openIncludeHierarchy();
-    void showPreProcessorDialog();
     void renameSymbolUnderCursor();
     void switchDeclarationDefinition();
 
