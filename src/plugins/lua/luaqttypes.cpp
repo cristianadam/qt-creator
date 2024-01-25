@@ -210,3 +210,34 @@ int sol_lua_push(sol::types<QColor>, lua_State *L, const QColor &value)
               value.alpha());
     return sol::stack::push(L, table);
 }
+
+// QStringList
+bool sol_lua_check(sol::types<QStringList>,
+                   lua_State *L,
+                   int index,
+                   std::function<sol::check_handler_type> handler,
+                   sol::stack::record &tracking)
+{
+    return sol::stack::check<sol::table>(L, index, handler, tracking);
+}
+QStringList sol_lua_get(sol::types<QStringList>,
+                        lua_State *L,
+                        int index,
+                        sol::stack::record &tracking)
+{
+    QStringList result;
+    sol::state_view lua(L);
+    sol::table table = sol::stack::get<sol::table>(L, index, tracking);
+    for (size_t i = 1; i < table.size() + 1; i++) {
+        result.append(table.get<QString>(i));
+    }
+    return result;
+}
+int sol_lua_push(sol::types<QStringList>, lua_State *L, const QStringList &value)
+{
+    sol::state_view lua(L);
+    sol::table table = lua.create_table();
+    for (const QString &str : value)
+        table.add(str);
+    return sol::stack::push(L, table);
+}
