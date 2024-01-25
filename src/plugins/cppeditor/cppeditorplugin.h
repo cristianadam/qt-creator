@@ -5,9 +5,6 @@
 
 #include <extensionsystem/iplugin.h>
 
-namespace ProjectExplorer { class Project; }
-namespace Utils { class FilePath; }
-
 namespace CppEditor::Internal {
 
 class CppEditorPluginPrivate;
@@ -30,9 +27,6 @@ public:
     void showPreProcessorDialog();
     void renameSymbolUnderCursor();
     void switchDeclarationDefinition();
-
-signals:
-    void includeHierarchyRequested();
 
 private:
     void initialize() override;
