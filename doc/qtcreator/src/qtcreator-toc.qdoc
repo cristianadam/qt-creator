@@ -44,9 +44,6 @@
             \endlist
             \li \l{Refactoring}
             \li \l{Configuring the Editor}
-            \list
-                \li \l{Using FakeVim Mode}
-            \endlist
             \li \l{Using GitHub Copilot}
         \endlist
         \li \l{Building and Running}
