@@ -525,9 +525,6 @@ void Wizard::_q_pageRemoved(int pageId)
     d->m_wizardProgress->removeItem(item);
 }
 
-
-
-
 class WizardProgressPrivate
 {
     WizardProgress *q_ptr;
@@ -544,8 +541,6 @@ public:
     QMap<int, WizardProgressItem *> m_pageToItem;
     QMap<WizardProgressItem *, WizardProgressItem *> m_itemToItem;
 
-    QList<WizardProgressItem *> m_items;
-
     QList<WizardProgressItem *> m_visitedItems;
     QList<WizardProgressItem *> m_reachableItems;
 
@@ -555,7 +550,7 @@ public:
 
 inline QDebug &operator<<(QDebug &debug, const WizardProgressPrivate &progress)
 {
-    debug << "items:" << progress.m_items.size()
+    debug << "items:" << progress.m_itemToItem.size()
           << "; visited:" << progress.m_visitedItems.size()
           << "; reachable:" << progress.m_reachableItems.size();
 
