@@ -124,9 +124,15 @@ void FileInProjectFinder::addMappedPath(const FilePath &localFilePath, const QSt
 FilePaths FileInProjectFinder::findFile(const QUrl &fileUrl, bool *success) const
 {
     qCDebug(finderLog) << "FileInProjectFinder: trying to find file" << fileUrl.toString() << "...";
+    return findFile(FilePath::fromUrl(fileUrl), success);
+}
 
-    if (fileUrl.scheme() == "qrc" || fileUrl.toString().startsWith(':')) {
-        const FilePaths result = m_qrcUrlFinder.find(fileUrl);
+FilePaths FileInProjectFinder::findFile(const FilePath &filePath, bool *success) const
+{
+    qCDebug(finderLog) << "FileInProjectFinder: trying to find file" << filePath.toString() << "...";
+
+    if (filePath.isResourceFile()) {
+        const FilePaths result = m_qrcUrlFinder.find(filePath);
         if (!result.isEmpty()) {
             if (success)
                 *success = true;
@@ -134,16 +140,12 @@ FilePaths FileInProjectFinder::findFile(const QUrl &fileUrl, bool *success) cons
         }
     }
 
-    FilePath originalPath = FilePath::fromString(fileUrl.toLocalFile());
-    if (originalPath.isEmpty()) // e.g. qrc://
-        originalPath = FilePath::fromString(fileUrl.path());
-
     FilePaths result;
-    bool found = findFileOrDirectory(originalPath, [&](const FilePath &fileName, int) {
+    bool found = findFileOrDirectory(filePath, [&](const FilePath &fileName, int) {
         result << fileName;
     });
     if (!found)
-        result << originalPath;
+        result << filePath;
 
     if (success)
         *success = found;
@@ -441,7 +443,7 @@ FileInProjectFinder::PathMappingNode::~PathMappingNode()
     qDeleteAll(children);
 }
 
-FilePaths FileInProjectFinder::QrcUrlFinder::find(const QUrl &fileUrl) const
+FilePaths FileInProjectFinder::QrcFileFinder::find(const FilePath &fileUrl) const
 {
     const auto fileIt = m_fileCache.constFind(fileUrl);
     if (fileIt != m_fileCache.cend())
@@ -461,7 +463,7 @@ FilePaths FileInProjectFinder::QrcUrlFinder::find(const QUrl &fileUrl) const
     return result;
 }
 
-void FileInProjectFinder::QrcUrlFinder::setProjectFiles(const FilePaths &projectFiles)
+void FileInProjectFinder::QrcFileFinder::setProjectFiles(const FilePaths &projectFiles)
 {
     m_allQrcFiles = filtered(projectFiles, [](const FilePath &f) { return f.endsWith(".qrc"); });
     m_fileCache.clear();

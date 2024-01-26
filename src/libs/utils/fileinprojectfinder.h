@@ -18,7 +18,6 @@ class QrcParser;
 class QTCREATOR_UTILS_EXPORT FileInProjectFinder
 {
 public:
-
     using FileHandler = std::function<void(const FilePath &, int)>;
     using DirectoryHandler = std::function<void(const QStringList &, int)>;
 
@@ -34,6 +33,7 @@ public:
     void addMappedPath(const FilePath &localFilePath, const QString &remoteFilePath);
 
     FilePaths findFile(const QUrl &fileUrl, bool *success = nullptr) const;
+    FilePaths findFile(const FilePath &filePath, bool *success = nullptr) const;
     bool findFileOrDirectory(const FilePath &originalPath, FileHandler fileHandler = nullptr,
                              DirectoryHandler directoryHandler = nullptr) const;
 
@@ -53,13 +53,13 @@ private:
         int matchLength = 0;
     };
 
-    class QrcUrlFinder {
+    class QrcFileFinder {
     public:
-        FilePaths find(const QUrl &fileUrl) const;
+        FilePaths find(const FilePath &filePath) const;
         void setProjectFiles(const FilePaths &projectFiles);
     private:
         FilePaths m_allQrcFiles;
-        mutable QHash<QUrl, FilePaths> m_fileCache;
+        mutable QHash<FilePath, FilePaths> m_fileCache;
         mutable QHash<FilePath, QSharedPointer<QrcParser>> m_parserCache;
     };
 
@@ -83,7 +83,7 @@ private:
     PathMappingNode m_pathMapRoot;
 
     mutable QHash<FilePath, CacheEntry> m_cache;
-    QrcUrlFinder m_qrcUrlFinder;
+    QrcFileFinder m_qrcUrlFinder;
 };
 
 QTCREATOR_UTILS_EXPORT FilePath chooseFileFromList(const FilePaths &candidates);
