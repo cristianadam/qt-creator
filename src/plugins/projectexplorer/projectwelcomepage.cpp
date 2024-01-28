@@ -88,17 +88,6 @@ QVariant ProjectModel::data(const QModelIndex &index, int role) const
     }
 }
 
-QHash<int, QByteArray> ProjectModel::roleNames() const
-{
-    static QHash<int, QByteArray> extraRoles{
-        {Qt::DisplayRole, "displayName"},
-        {FilePathRole, "filePath"},
-        {PrettyFilePathRole, "prettyFilePath"}
-    };
-
-    return extraRoles;
-}
-
 void ProjectModel::resetProjects()
 {
     beginResetModel();

@@ -37,7 +37,6 @@ public:
 
     QVariant headerData(int section, Qt::Orientation orientation, int role) const override;
     QVariant data(const QModelIndex &index, int role) const override;
-    QHash<int, QByteArray> roleNames() const override;
     void sort(int column, Qt::SortOrder order = Qt::AscendingOrder) override;
 
     Q_SCRIPTABLE bool isDefaultVirgin() const;

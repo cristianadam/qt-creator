@@ -133,17 +133,6 @@ QVariant SessionModel::data(const QModelIndex &index, int role) const
     return {};
 }
 
-QHash<int, QByteArray> SessionModel::roleNames() const
-{
-    static const QHash<int, QByteArray> extraRoles{{Qt::DisplayRole, "sessionName"},
-                                                   {DefaultSessionRole, "defaultSession"},
-                                                   {ActiveSessionRole, "activeSession"},
-                                                   {LastSessionRole, "lastSession"}};
-    QHash<int, QByteArray> roles = QAbstractTableModel::roleNames();
-    Utils::addToHash(&roles, extraRoles);
-    return roles;
-}
-
 void SessionModel::sort(int column, Qt::SortOrder order)
 {
     beginResetModel();
