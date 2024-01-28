@@ -221,6 +221,29 @@ public:
         }
     }
 
+    enum class CapabilityFlag {
+        None          = 0,
+        Completion    = 1 << 0,
+        FunctionHint  = 1 << 1,
+        SemanticToken = 1 << 2
+    };
+    Q_DECLARE_FLAGS(CapabilityFlags, CapabilityFlag)
+    Q_FLAG(CapabilityFlags)
+
+    void updateCapabilities(CapabilityFlags flags)
+    {
+        if (flags == CapabilityFlag::None)
+            return;
+        for (auto it = m_openedDocument.cbegin(); it != m_openedDocument.cend(); ++it) {
+            if (flags & CapabilityFlag::Completion)
+                updateCompletionProvider(it.key());
+            if (flags & CapabilityFlag::FunctionHint)
+                updateFunctionHintProvider(it.key());
+            if (flags & CapabilityFlag::SemanticToken)
+                m_tokenSupport.updateSemanticTokens(it.key());
+        }
+    }
+
     void sendMessageNow(const JsonRpcMessage &message);
     void handleResponse(const MessageId &id,
                         const JsonRpcMessage &message);
@@ -1266,43 +1289,36 @@ void Client::documentContentsChanged(TextEditor::TextDocument *document,
 void Client::registerCapabilities(const QList<Registration> &registrations)
 {
     d->m_dynamicCapabilities.registerCapability(registrations);
+    ClientPrivate::CapabilityFlags flags = ClientPrivate::CapabilityFlag::None;
     for (const Registration &registration : registrations) {
-        if (registration.method() == CompletionRequest::methodName) {
-            for (auto document : d->m_openedDocument.keys())
-                d->updateCompletionProvider(document);
-        }
-        if (registration.method() == SignatureHelpRequest::methodName) {
-            for (auto document : d->m_openedDocument.keys())
-                d->updateFunctionHintProvider(document);
-        }
+        if (registration.method() == CompletionRequest::methodName)
+            flags |= ClientPrivate::CapabilityFlag::Completion;
+        if (registration.method() == SignatureHelpRequest::methodName)
+            flags |= ClientPrivate::CapabilityFlag::FunctionHint;
         if (registration.method() == "textDocument/semanticTokens") {
-            SemanticTokensOptions options(registration.registerOptions());
+            flags |= ClientPrivate::CapabilityFlag::SemanticToken;
+            const SemanticTokensOptions options(registration.registerOptions());
             if (options.isValid())
                 d->m_tokenSupport.setLegend(options.legend());
-            for (auto document : d->m_openedDocument.keys())
-                d->m_tokenSupport.updateSemanticTokens(document);
         }
     }
+    d->updateCapabilities(flags);
     emit capabilitiesChanged(d->m_dynamicCapabilities);
 }
 
 void Client::unregisterCapabilities(const QList<Unregistration> &unregistrations)
 {
     d->m_dynamicCapabilities.unregisterCapability(unregistrations);
+    ClientPrivate::CapabilityFlags flags = ClientPrivate::CapabilityFlag::None;
     for (const Unregistration &unregistration : unregistrations) {
-        if (unregistration.method() == CompletionRequest::methodName) {
-            for (auto document : d->m_openedDocument.keys())
-                d->updateCompletionProvider(document);
-        }
-        if (unregistration.method() == SignatureHelpRequest::methodName) {
-            for (auto document : d->m_openedDocument.keys())
-                d->updateFunctionHintProvider(document);
-        }
-        if (unregistration.method() == "textDocument/semanticTokens") {
-            for (auto document : d->m_openedDocument.keys())
-                d->m_tokenSupport.updateSemanticTokens(document);
-        }
+        if (unregistration.method() == CompletionRequest::methodName)
+            flags |= ClientPrivate::CapabilityFlag::Completion;
+        if (unregistration.method() == SignatureHelpRequest::methodName)
+            flags |= ClientPrivate::CapabilityFlag::FunctionHint;
+        if (unregistration.method() == "textDocument/semanticTokens")
+            flags |= ClientPrivate::CapabilityFlag::SemanticToken;
     }
+    d->updateCapabilities(flags);
     emit capabilitiesChanged(d->m_dynamicCapabilities);
 }
 
