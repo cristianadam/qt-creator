@@ -122,5 +122,6 @@
     \sa {Find preferences}, {C++ Code Style}, {Nim}
     \endif
 
-    \sa {Indent text or code}, {Qt Quick Code Style}, {Font & Colors}
+    \sa {Change text encoding}, {Indent text or code}, {Qt Quick Code Style},
+    {Font & Colors}
 */

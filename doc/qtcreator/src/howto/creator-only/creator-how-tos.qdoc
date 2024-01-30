@@ -99,26 +99,6 @@
 */
 
 /*!
-    \page creator-how-to-move-between-open-files.html
-    \previouspage creator-how-tos.html
-
-    \ingroup creator-how-to-edit
-
-    \title Move between open files
-
-    To quickly move between currently open files, press
-    \key Ctrl+Tab.
-
-    To move forward in the location history, press \key {Alt+Right}
-    (\key {Cmd+Opt+Right} on \macos).
-
-    To move backward, press \key {Alt+Left} (\key {Cmd+Opt+Left} on \macos).
-    For example, if you use the \uicontrol Locator
-    to jump to a symbol in the same file, you can jump back to your original
-    location in that file by pressing \key {Alt+Left}.
-*/
-
-/*!
     \page creator-how-to-switch-to-edit-mode.html
     \previouspage creator-how-tos.html
 
@@ -197,29 +177,6 @@
     \c {C:\qtcreator\bin>qtcreator.exe C:\Examples\alarms}
 
     \sa {Command-Line Options}
-*/
-
-/*!
-    \page creator-how-to-move-to-symbols.html
-    \previouspage creator-how-tos.html
-
-    \ingroup creator-how-to-edit
-
-    \title Move to symbols
-
-    To move straight to a symbol used in a project, select the symbol in the
-    \uicontrol Editor toolbar drop-down menu. For more information on the editor
-    toolbar, see \l {Using the Editor Toolbar}.
-
-    To jump to a symbol in the current file, press \key {Ctrl+K} to open the
-    \uicontrol Locator, enter a period (.), and start typing the symbol name. Then
-    select the symbol in the list. For more information on using the locator,
-    see \l{Searching with the Locator}.
-
-    Press \key Ctrl (\key Cmd on \macos) and click a symbol to move directly to
-    the definition or the declaration of the symbol. You can also move the
-    cursor on the symbol and press \key {F2}. For more information, see
-    \l{Moving to Symbol Definition or Declaration}.
 */
 
 /*!
