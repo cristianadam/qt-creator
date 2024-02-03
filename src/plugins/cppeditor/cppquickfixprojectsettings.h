@@ -19,7 +19,7 @@ public:
     bool isUsingGlobalSettings() const;
     const Utils::FilePath &filePathOfSettingsFile() const;
 
-    using CppQuickFixProjectsSettingsPtr = QSharedPointer<CppQuickFixProjectsSettings>;
+    using CppQuickFixProjectsSettingsPtr = std::shared_ptr<CppQuickFixProjectsSettings>;
     static CppQuickFixProjectsSettingsPtr getSettings(ProjectExplorer::Project *project);
     static CppQuickFixSettings *getQuickFixSettings(ProjectExplorer::Project *project);
 
@@ -42,4 +42,4 @@ private:
 } // namespace Internal
 } // namespace CppEditor
 
-Q_DECLARE_METATYPE(QSharedPointer<CppEditor::Internal::CppQuickFixProjectsSettings>)
+Q_DECLARE_METATYPE(std::shared_ptr<CppEditor::Internal::CppQuickFixProjectsSettings>)

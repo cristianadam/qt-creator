@@ -73,7 +73,7 @@ CppQuickFixProjectsSettings::CppQuickFixProjectsSettingsPtr CppQuickFixProjectsS
             CppQuickFixProjectsSettingsPtr{new CppQuickFixProjectsSettings(project)});
         project->setExtraData(key, v);
     }
-    return v.value<QSharedPointer<CppQuickFixProjectsSettings>>();
+    return v.value<std::shared_ptr<CppQuickFixProjectsSettings>>();
 }
 
 CppQuickFixSettings *CppQuickFixProjectsSettings::getQuickFixSettings(ProjectExplorer::Project *project)
