@@ -10,8 +10,6 @@
 #include <cplusplus/CppDocument.h>
 #include <cplusplus/Overview.h>
 
-#include <QSharedPointer>
-
 #include <utility>
 
 namespace Utils {

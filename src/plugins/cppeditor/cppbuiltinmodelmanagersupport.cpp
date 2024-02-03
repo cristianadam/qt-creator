@@ -10,6 +10,7 @@
 #include "cppeditorwidget.h"
 #include "cppelementevaluator.h"
 #include "cppfollowsymbolundercursor.h"
+#include "cppmodelmanager.h"
 #include "cpptoolsreuse.h"
 #include "symbolfinder.h"
 

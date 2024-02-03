@@ -11,7 +11,6 @@
 #include <QByteArray>
 #include <QList>
 #include <QObject>
-#include <QSharedPointer>
 #include <QStringList>
 
 namespace TextEditor { class QuickFixOperation; }

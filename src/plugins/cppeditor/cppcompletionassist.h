@@ -6,7 +6,6 @@
 #include "builtineditordocumentparser.h"
 #include "cppcompletionassistprocessor.h"
 #include "cppcompletionassistprovider.h"
-#include "cppmodelmanager.h"
 #include "cppworkingcopy.h"
 
 #include <cplusplus/Icons.h>
@@ -49,7 +48,7 @@ public:
 
     unsigned m_completionOperator = CPlusPlus::T_EOF_SYMBOL;
     bool m_replaceDotForArrow = false;
-    QSharedPointer<CPlusPlus::TypeOfExpression> m_typeOfExpression;
+    std::shared_ptr<CPlusPlus::TypeOfExpression> m_typeOfExpression;
 };
 
 using CppAssistProposalModelPtr = QSharedPointer<CppAssistProposalModel>;

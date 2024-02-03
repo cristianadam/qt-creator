@@ -12,7 +12,6 @@
 #include <cplusplus/Symbols.h>
 #include <cplusplus/TypeOfExpression.h>
 
-#include <QSharedPointer>
 #include <QTextCursor>
 
 namespace TextEditor {
@@ -44,7 +43,7 @@ public:
     struct Parameters {
         CPlusPlus::Function *function = nullptr;
         CPlusPlus::Class *staticClass = nullptr;
-        QSharedPointer<CPlusPlus::TypeOfExpression> typeOfExpression; // Keeps instantiated symbols.
+        std::shared_ptr<CPlusPlus::TypeOfExpression> typeOfExpression; // Keeps instantiated symbols.
         CPlusPlus::Snapshot snapshot;
         int cursorPosition = -1;
         bool openInNextSplit = false;

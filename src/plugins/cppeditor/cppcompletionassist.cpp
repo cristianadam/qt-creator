@@ -69,7 +69,7 @@ public:
     bool isOverloaded() const { return m_isOverloaded; }
     void markAsOverloaded() { m_isOverloaded = true; }
     void keepCompletionOperator(unsigned compOp) { m_completionOperator = compOp; }
-    void keepTypeOfExpression(const QSharedPointer<TypeOfExpression> &typeOfExp)
+    void keepTypeOfExpression(const std::shared_ptr<TypeOfExpression> &typeOfExp)
     { m_typeOfExpression = typeOfExp; }
     bool isKeyword() const final
     { return m_isKeyword; }
@@ -79,7 +79,7 @@ public:
     quint64 hash() const override;
 
 private:
-    QSharedPointer<TypeOfExpression> m_typeOfExpression;
+    std::shared_ptr<TypeOfExpression> m_typeOfExpression;
     unsigned m_completionOperator = T_EOF_SYMBOL;
     mutable QChar m_typedChar;
     bool m_isOverloaded = false;
@@ -332,7 +332,7 @@ class CppFunctionHintModel : public IFunctionHintProposalModel
 {
 public:
     CppFunctionHintModel(const QList<Function *> &functionSymbols,
-                         const QSharedPointer<TypeOfExpression> &typeOfExp)
+                         const std::shared_ptr<TypeOfExpression> &typeOfExp)
         : m_functionSymbols(functionSymbols)
         , m_currentArg(-1)
         , m_typeOfExpression(typeOfExp)
@@ -346,7 +346,7 @@ public:
 private:
     QList<Function *> m_functionSymbols;
     mutable int m_currentArg;
-    QSharedPointer<TypeOfExpression> m_typeOfExpression;
+    std::shared_ptr<TypeOfExpression> m_typeOfExpression;
 };
 
 QString CppFunctionHintModel::text(int index) const

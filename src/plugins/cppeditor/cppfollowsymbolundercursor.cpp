@@ -668,7 +668,7 @@ void FollowSymbolUnderCursor::findLink(
     QTC_CHECK(document == tc.document());
     const QString expression = expressionUnderCursorAsString(tc, documentFromSemanticInfo,
                                                              features);
-    const QSharedPointer<TypeOfExpression> typeOfExpression(new TypeOfExpression);
+    const std::shared_ptr<TypeOfExpression> typeOfExpression(new TypeOfExpression);
     typeOfExpression->init(doc, snapshot);
     // make possible to instantiate templates
     typeOfExpression->setExpandTemplates(true);
@@ -722,7 +722,7 @@ void FollowSymbolUnderCursor::findLink(
 
                     if (m_virtualFunctionAssistProvider->configure(params)) {
                         editorWidget->invokeTextEditorWidgetAssist(
-                                    FollowSymbol,m_virtualFunctionAssistProvider.data());
+                                    FollowSymbol,m_virtualFunctionAssistProvider.get());
                         m_virtualFunctionAssistProvider->clearParams();
                     }
 
@@ -851,13 +851,13 @@ void FollowSymbolUnderCursor::switchDeclDef(
     processLinkCallback(symbolLink);
 }
 
-QSharedPointer<VirtualFunctionAssistProvider> FollowSymbolUnderCursor::virtualFunctionAssistProvider()
+std::shared_ptr<VirtualFunctionAssistProvider> FollowSymbolUnderCursor::virtualFunctionAssistProvider()
 {
     return m_virtualFunctionAssistProvider;
 }
 
 void FollowSymbolUnderCursor::setVirtualFunctionAssistProvider(
-        const QSharedPointer<VirtualFunctionAssistProvider> &provider)
+        const std::shared_ptr<VirtualFunctionAssistProvider> &provider)
 {
     m_virtualFunctionAssistProvider = provider;
 }

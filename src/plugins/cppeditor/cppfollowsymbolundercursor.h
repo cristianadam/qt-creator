@@ -33,12 +33,12 @@ public:
                        const CPlusPlus::Document::Ptr &documentFromSemanticInfo,
                        SymbolFinder *symbolFinder);
 
-    QSharedPointer<VirtualFunctionAssistProvider> virtualFunctionAssistProvider();
+    std::shared_ptr<VirtualFunctionAssistProvider> virtualFunctionAssistProvider();
     void setVirtualFunctionAssistProvider(
-            const QSharedPointer<VirtualFunctionAssistProvider> &provider);
+            const std::shared_ptr<VirtualFunctionAssistProvider> &provider);
 
 private:
-    QSharedPointer<VirtualFunctionAssistProvider> m_virtualFunctionAssistProvider;
+    std::shared_ptr<VirtualFunctionAssistProvider> m_virtualFunctionAssistProvider;
 };
 
 } // namespace CppEditor

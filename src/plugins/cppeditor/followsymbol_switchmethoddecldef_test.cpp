@@ -333,11 +333,11 @@ F2TestCase::F2TestCase(CppEditorAction action,
         }
 
         FollowSymbolUnderCursor *builtinFollowSymbol = &CppModelManager::builtinFollowSymbol();
-        QSharedPointer<VirtualFunctionAssistProvider> original
+        std::shared_ptr<VirtualFunctionAssistProvider> original
                 = builtinFollowSymbol->virtualFunctionAssistProvider();
 
         // Set test provider, run and get results
-        QSharedPointer<VirtualFunctionTestAssistProvider> testProvider(
+        std::shared_ptr<VirtualFunctionTestAssistProvider> testProvider(
             new VirtualFunctionTestAssistProvider(widget));
         builtinFollowSymbol->setVirtualFunctionAssistProvider(testProvider);
         widget->openLinkUnderCursor();
