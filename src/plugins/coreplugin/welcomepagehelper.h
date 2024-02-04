@@ -6,6 +6,7 @@
 #include "core_global.h"
 #include "iwelcomepage.h"
 
+#include <utils/stylehelper.h>
 #include <utils/theme/theme.h>
 
 #include <QElapsedTimer>
@@ -53,6 +54,29 @@ namespace Color {
     constexpr Theme::Color Token_Stroke_Muted = Theme::Welcome_BackgroundSecondaryColor;
     constexpr Theme::Color Token_Stroke_Subtle = Theme::Welcome_HoverColor;
 }
+
+struct TextFormat {
+    const Utils::Theme::Color themeColor;
+    const Utils::StyleHelper::UiElement uiElement;
+    const int drawTextFlags = Qt::AlignLeft | Qt::AlignBottom | Qt::TextDontClip;
+
+    QColor color() const
+    {
+        return Utils::creatorTheme()->color(themeColor);
+    }
+
+    QFont font(bool underlined = false) const
+    {
+        QFont result = Utils::StyleHelper::uiFont(uiElement);
+        result.setUnderline(underlined);
+        return result;
+    }
+
+    int lineHeight() const
+    {
+        return Utils::StyleHelper::uiFontLineHeight(uiElement);
+    }
+};
 
 CORE_EXPORT QWidget *panelBar(QWidget *parent = nullptr);
 CORE_EXPORT void drawCardBackground(QPainter *painter, const QRectF &rect,
