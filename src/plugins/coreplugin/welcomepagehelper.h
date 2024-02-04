@@ -6,6 +6,8 @@
 #include "core_global.h"
 #include "iwelcomepage.h"
 
+#include <utils/theme/theme.h>
+
 #include <QElapsedTimer>
 #include <QListView>
 #include <QPen>
@@ -35,6 +37,22 @@ constexpr QSize GridItemImageSize(GridItemWidth - GridItemGap
                                   GridItemHeight - GridItemGap
                                       - GridItemGap - 1        // Upper margin + 1 pixel
                                       - 67);                   // Bottom margin (for title + tags)
+
+// Maps Welcome_* theme roles to Token_* roles
+// TODO: Provide Token_* based replacements for all existing themes and make Welcome_* disappear
+namespace Color {
+    using namespace Utils;
+    constexpr Theme::Color Token_Basic_White = Theme::Welcome_TextColor;
+    constexpr Theme::Color Token_Accent_Default = Theme::Welcome_LinkColor;
+    constexpr Theme::Color Token_Accent_Muted = Theme::Welcome_AccentColor;
+    constexpr Theme::Color Token_Background_Muted = Theme::Welcome_BackgroundPrimaryColor;
+    constexpr Theme::Color Token_Foreground_Subtle = Theme::Welcome_ForegroundSecondaryColor;
+    constexpr Theme::Color Token_Text_Default = Theme::Welcome_TextColor;
+    constexpr Theme::Color Token_Text_Muted = Theme::Welcome_ForegroundPrimaryColor;
+    constexpr Theme::Color Token_Text_Subtle = Theme::Welcome_ForegroundSecondaryColor;
+    constexpr Theme::Color Token_Stroke_Muted = Theme::Welcome_BackgroundSecondaryColor;
+    constexpr Theme::Color Token_Stroke_Subtle = Theme::Welcome_HoverColor;
+}
 
 CORE_EXPORT QWidget *panelBar(QWidget *parent = nullptr);
 CORE_EXPORT void drawCardBackground(QPainter *painter, const QRectF &rect,
