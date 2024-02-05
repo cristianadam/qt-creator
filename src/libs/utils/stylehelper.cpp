@@ -959,6 +959,8 @@ static const UiFontMetrics& uiFontMetrics(StyleHelper::UiElement element)
         {StyleHelper::UiElementH5,                  {14, 16, QFont::DemiBold}},
         {StyleHelper::UiElementH6,                  {12, 14, QFont::DemiBold}},
         {StyleHelper::UiElementH6Capital,           {12, 14, QFont::DemiBold}},
+        {StyleHelper::UiElementButtonMedium,        {12, 16, QFont::Bold}},
+        {StyleHelper::UiElementButtonSmall,         {10, 12, QFont::Bold}},
         {StyleHelper::UiElementCaptionStrong,       {10, 12, QFont::DemiBold}},
         {StyleHelper::UiElementCaption,             {10, 12, QFont::Normal}},
         {StyleHelper::UIElementIconStandard,        {12, 16, QFont::Normal}},

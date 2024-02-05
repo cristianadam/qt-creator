@@ -82,6 +82,8 @@ enum UiElement {
     UiElementH5,
     UiElementH6,
     UiElementH6Capital,
+    UiElementButtonMedium,
+    UiElementButtonSmall,
     UiElementCaptionStrong,
     UiElementCaption,
     UIElementIconStandard,
