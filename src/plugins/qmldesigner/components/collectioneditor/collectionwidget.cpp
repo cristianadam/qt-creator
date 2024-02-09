@@ -9,6 +9,7 @@
 #include "collectioneditorutils.h"
 #include "collectionsourcemodel.h"
 #include "collectionview.h"
+#include "designmodewidget.h"
 #include "qmldesignerconstants.h"
 #include "qmldesignerplugin.h"
 #include "theme.h"
@@ -273,7 +274,7 @@ bool CollectionWidget::addCollection(const QString &collectionName,
 bool CollectionWidget::importFile(const QString &collectionName, const QUrl &url)
 {
     using Utils::FilePath;
-    ensureDataStoreExists();
+    m_view->ensureDataStoreExists();
 
     const ModelNode node = dataStoreNode();
     if (!node.isValid()) {
@@ -335,7 +336,7 @@ bool CollectionWidget::importFile(const QString &collectionName, const QUrl &url
 
 bool CollectionWidget::addCollectionToDataStore(const QString &collectionName)
 {
-    ensureDataStoreExists();
+    m_view->ensureDataStoreExists();
     const ModelNode node = dataStoreNode();
     if (!node.isValid()) {
         warn(tr("Can not import to the main model"), tr("The default model node is not available."));
@@ -359,12 +360,10 @@ void CollectionWidget::assignCollectionToSelectedNode(const QString collectionNa
     m_view->assignCollectionToSelectedNode(collectionName);
 }
 
-void CollectionWidget::ensureDataStoreExists()
+void CollectionWidget::openCollection(const QString &collectionName)
 {
-    bool filesJustCreated = false;
-    bool filesExist = CollectionEditorUtils::ensureDataStoreExists(filesJustCreated);
-    if (filesExist && filesJustCreated)
-        m_view->resetDataStoreNode();
+    m_sourceModel->selectCollection(QVariant::fromValue(m_view->dataStoreNode()), collectionName);
+    QmlDesignerPlugin::instance()->mainWidget()->showDockWidget("CollectionEditor", true);
 }
 
 ModelNode CollectionWidget::dataStoreNode() const
