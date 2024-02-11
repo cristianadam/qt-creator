@@ -7,6 +7,7 @@
 #include "axivionprojectsettings.h"
 #include "axivionsettings.h"
 #include "axiviontr.h"
+#include "credentialquery.h"
 #include "dashboard/dto.h"
 #include "dashboard/error.h"
 
@@ -31,11 +32,13 @@
 
 #include <utils/algorithm.h>
 #include <utils/async.h>
+#include <utils/environment.h>
 #include <utils/networkaccessmanager.h>
 #include <utils/qtcassert.h>
 #include <utils/utilsicons.h>
 
 #include <QAction>
+#include <QInputDialog>
 #include <QMessageBox>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -43,7 +46,8 @@
 
 #include <memory>
 
-constexpr char AxivionTextMarkId[] = "AxivionTextMark";
+constexpr char s_axivionTextMarkId[] = "AxivionTextMark";
+constexpr char s_axivionKeychainService[] = "keychain.axivion.qtcreator";
 
 using namespace Core;
 using namespace ProjectExplorer;
@@ -96,6 +100,16 @@ QString anyToSimpleString(const Dto::Any &any)
     return {};
 }
 
+static QString apiTokenDescription()
+{
+    const QString ua = "Axivion" + QCoreApplication::applicationName() + "Plugin/"
+                       + QCoreApplication::applicationVersion();
+    QString user = Utils::qtcEnvironmentVariable("USERNAME");
+    if (user.isEmpty())
+        user = Utils::qtcEnvironmentVariable("USER");
+    return "Automatically created by " + ua + " on " + user + "@" + QSysInfo::machineHostName();
+}
+
 QString IssueListSearch::toQuery() const
 {
     if (kind.isEmpty())
@@ -142,6 +156,7 @@ public:
     void handleIssuesForFile(const Dto::FileViewDto &fileView);
     void fetchIssueInfo(const QString &id);
 
+    std::optional<QByteArray> m_apiToken; // TODO: Should be cleared on settings modification
     NetworkAccessManager m_networkAccessManager;
     AxivionOutputPane m_axivionOutputPane;
     std::optional<DashboardInfo> m_dashboardInfo;
@@ -159,7 +174,7 @@ class AxivionTextMark : public TextMark
 {
 public:
     AxivionTextMark(const FilePath &filePath, const Dto::LineMarkerDto &issue)
-        : TextMark(filePath, issue.startLine, {Tr::tr("Axivion"), AxivionTextMarkId})
+        : TextMark(filePath, issue.startLine, {Tr::tr("Axivion"), s_axivionTextMarkId})
     {
         const QString markText = issue.description;
         const QString id = issue.kind + QString::number(issue.id.value_or(-1));
@@ -278,6 +293,7 @@ static Group fetchHtmlRecipe(const QUrl &url, const std::function<void(const QBy
 
     const Storage<StorageData> storage;
 
+    // TODO: Refactor so that it's a common code with fetchDataRecipe().
     const auto onCredentialSetup = [storage] {
         storage->credentials = QByteArrayLiteral("AxToken ") + settings().server.token.toUtf8();
     };
@@ -424,6 +440,7 @@ static Group postDtoRecipe(const Storage<PostDtoStorage<DtoType>> &dtoStorage)
         const QByteArray ua = "Axivion" + QCoreApplication::applicationName().toUtf8() +
                               "Plugin/" + QCoreApplication::applicationVersion().toUtf8();
         request.setRawHeader("X-Axivion-User-Agent", ua);
+        request.setRawHeader("Content-Type", "application/json");
         request.setRawHeader("AX-CSRF-Token", dtoStorage->csrfToken);
         query.setRequest(request);
         query.setWriteData(dtoStorage->writeData);
@@ -490,30 +507,121 @@ static Group postDtoRecipe(const Storage<PostDtoStorage<DtoType>> &dtoStorage)
     return recipe;
 };
 
+static QString credentialKey()
+{
+    const auto escape = [](const QString &string) {
+        QString escaped = string;
+        return escaped.replace('\\', "\\\\").replace('@', "\\@");
+    };
+    return escape(settings().server.dashboard) + '@' + escape(settings().server.username);
+}
+
 template<typename DtoType>
 static Group fetchDataRecipe(const QUrl &url, const std::function<void(const DtoType &)> &handler)
 {
+    const Storage<QString> passwordStorage;
+    const Storage<GetDtoStorage<Dto::DashboardInfoDto>> dashboardStorage;
+    const Storage<PostDtoStorage<Dto::ApiTokenInfoDto>> apiTokenStorage;
     const Storage<GetDtoStorage<DtoType>> dtoStorage;
 
-    const auto onCredentialSetup = [dtoStorage, url] {
-        dtoStorage->credential = QByteArrayLiteral("AxToken ") + settings().server.token.toUtf8();
-        dtoStorage->url = url;
+    const auto onGetCredentialSetup = [](CredentialQuery &credential) {
+        credential.setOperation(CredentialOperation::Get);
+        credential.setService(s_axivionKeychainService);
+        credential.setKey(credentialKey());
+    };
+    const auto onGetCredentialDone = [](const CredentialQuery &credential, DoneWith result) {
+        if (result == DoneWith::Success)
+            dd->m_apiToken = credential.data();
+        return DoneResult::Success;
+    };
+    const auto onPasswordGroupSetup = [] {
+        return dd->m_apiToken ? SetupResult::StopWithSuccess : SetupResult::Continue;
+    };
+    const auto onPasswordDialog = [passwordStorage] {
+        bool ok = false;
+        const QString text(Tr::tr("Enter the password for:\nDashboard: %1\nUser: %2")
+                               .arg(settings().server.dashboard, settings().server.username));
+        *passwordStorage = QInputDialog::getText(ICore::mainWindow(), Tr::tr("Password Prompt"),
+                                                 text, QLineEdit::Password, {}, &ok);
+        return toDoneResult(ok);
+    };
+    const auto onDashboardSetup = [passwordStorage, dashboardStorage] {
+        const QString credential = settings().server.username + ':' + *passwordStorage;
+        dashboardStorage->credential = "Basic " + credential.toUtf8().toBase64();
+        dashboardStorage->url = QUrl(settings().server.dashboard);
     };
 
+    const auto onApiTokenSetup = [passwordStorage, dashboardStorage, apiTokenStorage] {
+        if (!dashboardStorage->dtoData)
+            return SetupResult::StopWithSuccess;
+
+        const Dto::DashboardInfoDto &dashboardDto = *dashboardStorage->dtoData;
+        if (!dashboardDto.userApiTokenUrl)
+            return SetupResult::StopWithError;
+
+        apiTokenStorage->credential = dashboardStorage->credential;
+        apiTokenStorage->url
+            = QUrl(settings().server.dashboard).resolved(*dashboardDto.userApiTokenUrl);
+        apiTokenStorage->csrfToken = dashboardDto.csrfToken.toUtf8();
+        const Dto::ApiTokenCreationRequestDto requestDto{*passwordStorage, "IdePlugin",
+                                                         apiTokenDescription(), 0};
+        apiTokenStorage->writeData = requestDto.serialize();
+        return SetupResult::Continue;
+    };
+
+    const auto onSetCredentialSetup = [apiTokenStorage](CredentialQuery &credential) {
+        if (!apiTokenStorage->dtoData || !apiTokenStorage->dtoData->token)
+            return SetupResult::StopWithSuccess;
+
+        dd->m_apiToken = apiTokenStorage->dtoData->token->toUtf8();
+        credential.setOperation(CredentialOperation::Set);
+        credential.setService(s_axivionKeychainService);
+        credential.setKey(credentialKey());
+        credential.setData(*dd->m_apiToken);
+        return SetupResult::Continue;
+    };
+
+    const auto onDtoSetup = [dtoStorage, url] {
+        if (!dd->m_apiToken)
+            return SetupResult::StopWithError;
+
+        dtoStorage->credential = "AxToken " + *dd->m_apiToken;
+        dtoStorage->url = url;
+        return SetupResult::Continue;
+    };
     const auto onDtoDone = [dtoStorage, handler] {
         if (dtoStorage->dtoData)
             handler(*dtoStorage->dtoData);
     };
 
     const Group recipe {
-        dtoStorage,
-        Sync(onCredentialSetup),
         Group {
+            LoopUntil([](int) { return !dd->m_apiToken; }),
+            CredentialQueryTask(onGetCredentialSetup, onGetCredentialDone),
+            Group {
+                passwordStorage,
+                onGroupSetup(onPasswordGroupSetup),
+                Sync(onPasswordDialog),
+                Group { // GET DashboardInfoDto
+                    dashboardStorage,
+                    onGroupSetup(onDashboardSetup),
+                    getDtoRecipe(dashboardStorage),
+                    Group { // POST ApiTokenCreationRequestDto, GET ApiTokenInfoDto.
+                        apiTokenStorage,
+                        onGroupSetup(onApiTokenSetup),
+                        postDtoRecipe(apiTokenStorage),
+                        CredentialQueryTask(onSetCredentialSetup)
+                    }
+                }
+            }
+        },
+        Group {
+            dtoStorage,
+            onGroupSetup(onDtoSetup),
             getDtoRecipe(dtoStorage),
             onGroupDone(onDtoDone)
         }
     };
-
     return recipe;
 }
 
@@ -718,7 +826,7 @@ void AxivionPluginPrivate::onDocumentClosed(IDocument *doc)
 
     const TextMarks &marks = document->marks();
     for (TextMark *mark : marks) {
-        if (mark->category().id == AxivionTextMarkId)
+        if (mark->category().id == s_axivionTextMarkId)
             delete mark;
     }
 }
