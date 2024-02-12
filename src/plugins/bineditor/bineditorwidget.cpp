@@ -24,7 +24,6 @@
 #include <utils/qtcassert.h>
 #include <utils/stringutils.h>
 
-#include <QAction>
 #include <QApplication>
 #include <QByteArrayMatcher>
 #include <QDebug>
@@ -1336,26 +1335,6 @@ QString BinEditorWidget::toolTip(const QHelpEvent *helpEvent) const
 
 void BinEditorWidget::keyPressEvent(QKeyEvent *e)
 {
-
-    if (e == QKeySequence::SelectAll) {
-            e->accept();
-            selectAll();
-            return;
-    } else if (e == QKeySequence::Copy) {
-        e->accept();
-        copy();
-        return;
-    } else if (e == QKeySequence::Undo) {
-        e->accept();
-        undo();
-        return;
-    } else if (e == QKeySequence::Redo) {
-        e->accept();
-        redo();
-        return;
-    }
-
-
     MoveMode moveMode = e->modifiers() & Qt::ShiftModifier ? KeepAnchor : MoveAnchor;
     bool ctrlPressed = e->modifiers() & Qt::ControlModifier;
     switch (e->key()) {

@@ -25,7 +25,6 @@
 #include <utils/reloadpromptutils.h>
 #include <utils/qtcassert.h>
 
-#include <QAction>
 #include <QHBoxLayout>
 #include <QLineEdit>
 #include <QMenu>
@@ -364,6 +363,40 @@ public:
         const QVariant setting = ICore::settings()->value(Constants::C_ENCODING_SETTING);
         if (!setting.isNull())
             m_codecChooser->setAssignedCodec(QTextCodec::codecForName(setting.toByteArray()));
+
+        static int num = 0;
+        const Context context(Id(Constants::C_BINEDITOR).withSuffix(++num));
+        setContext(context);
+
+        Action *undoAction = nullptr;
+        ActionBuilder(this, Core::Constants::UNDO)
+            .bindContextAction(&undoAction)
+            .setContext(context)
+            .setEnabled(false)
+            .addOnTriggered(widget, &BinEditorWidget::undo);
+
+        Action *redoAction = nullptr;
+        ActionBuilder(this, Core::Constants::REDO)
+            .bindContextAction(&redoAction)
+            .setContext(context)
+            .setEnabled(false)
+            .addOnTriggered(widget, &BinEditorWidget::redo);
+
+        ActionBuilder(this, Core::Constants::COPY)
+            .setContext(context)
+            .addOnTriggered(widget, &BinEditorWidget::copy);
+
+        ActionBuilder(this, Core::Constants::SELECTALL)
+            .setContext(context)
+            .setEnabled(true)
+            .addOnTriggered(widget, &BinEditorWidget::selectAll);
+
+        connect(widget, &BinEditorWidget::undoAvailable, undoAction, [widget, undoAction] {
+            undoAction->setEnabled(widget->isUndoAvailable());
+        });
+        connect(widget, &BinEditorWidget::redoAvailable, redoAction, [widget, redoAction] {
+            redoAction->setEnabled(widget->isRedoAvailable());
+        });
     }
 
     ~BinEditorImpl() override
@@ -433,11 +466,6 @@ public:
     BinEditorPluginPrivate();
     ~BinEditorPluginPrivate() override;
 
-    QAction *m_undoAction = nullptr;
-    QAction *m_redoAction = nullptr;
-    QAction *m_copyAction = nullptr;
-    QAction *m_selectAllAction = nullptr;
-
     FactoryServiceImpl m_factoryService;
     BinEditorFactory m_editorFactory;
 };
@@ -446,20 +474,6 @@ BinEditorPluginPrivate::BinEditorPluginPrivate()
 {
     ExtensionSystem::PluginManager::addObject(&m_factoryService);
     ExtensionSystem::PluginManager::addObject(&m_editorFactory);
-
-    m_undoAction = new QAction(Tr::tr("&Undo"), this);
-    m_redoAction = new QAction(Tr::tr("&Redo"), this);
-    m_copyAction = new QAction(this);
-    m_selectAllAction = new QAction(this);
-
-    Context context;
-    context.add(Core::Constants::K_DEFAULT_BINARY_EDITOR_ID);
-    context.add(Constants::C_BINEDITOR);
-
-    ActionManager::registerAction(m_undoAction, Core::Constants::UNDO, context);
-    ActionManager::registerAction(m_redoAction, Core::Constants::REDO, context);
-    ActionManager::registerAction(m_copyAction, Core::Constants::COPY, context);
-    ActionManager::registerAction(m_selectAllAction, Core::Constants::SELECTALL, context);
 }
 
 BinEditorPluginPrivate::~BinEditorPluginPrivate()
@@ -478,23 +492,9 @@ BinEditorFactory::BinEditorFactory()
     setDisplayName(::Core::Tr::tr("Binary Editor"));
     addMimeType(Utils::Constants::OCTET_STREAM_MIMETYPE);
 
-    setEditorCreator([] {
+    setEditorCreator([this] {
         auto widget = new BinEditorWidget();
         auto editor = new BinEditorImpl(widget);
-
-        connect(dd->m_undoAction, &QAction::triggered, widget, &BinEditorWidget::undo);
-        connect(dd->m_redoAction, &QAction::triggered, widget, &BinEditorWidget::redo);
-        connect(dd->m_copyAction, &QAction::triggered, widget, &BinEditorWidget::copy);
-        connect(dd->m_selectAllAction, &QAction::triggered, widget, &BinEditorWidget::selectAll);
-
-        auto updateActions = [widget] {
-            dd->m_selectAllAction->setEnabled(true);
-            dd->m_undoAction->setEnabled(widget->isUndoAvailable());
-            dd->m_redoAction->setEnabled(widget->isRedoAvailable());
-        };
-
-        connect(widget, &BinEditorWidget::undoAvailable, widget, updateActions);
-        connect(widget, &BinEditorWidget::redoAvailable, widget, updateActions);
 
         auto aggregate = new Aggregation::Aggregate;
         auto binEditorFind = new BinEditorFind(widget);
