@@ -44,7 +44,7 @@ add_qtc_library(KSyntaxHighlighting
     src/lib/xml_p.h
 )
 
-set(export_symbol_declaration DEFINES KF5SyntaxHighlighting_EXPORTS)
+set(export_symbol_declaration DEFINES KF6SyntaxHighlighting_EXPORTS)
 if (QTC_STATIC_BUILD)
   set(export_symbol_declaration PUBLIC_DEFINES KSYNTAXHIGHLIGHTING_STATIC_DEFINE)
 endif()
