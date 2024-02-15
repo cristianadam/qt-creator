@@ -314,7 +314,7 @@ IssuesWidget::IssuesWidget(QWidget *parent)
     m_issuesView = new BaseTreeView(this);
     m_issuesView->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_issuesView->enableColumnHiding();
-    m_issuesModel = new TreeModel;
+    m_issuesModel = new TreeModel(this);
     m_issuesView->setModel(m_issuesModel);
     auto sb = m_issuesView->verticalScrollBar();
     if (QTC_GUARD(sb)) {
