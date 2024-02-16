@@ -101,8 +101,9 @@ bool MoveManipulator::itemsCanReparented() const
 
 void MoveManipulator::setDirectUpdateInNodeInstances(bool directUpdate)
 {
-    for (FormEditorItem* item : std::as_const(m_itemList)) {
-        if (item && item->qmlItemNode().isValid())
+    for (FormEditorItem *item : std::as_const(m_itemList)) {
+        if (item && m_view->scene()->allFormEditorItems().contains(item)
+            && item->qmlItemNode().isValid())
             item->qmlItemNode().nodeInstance().setDirectUpdate(directUpdate);
     }
 }
