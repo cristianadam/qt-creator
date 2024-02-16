@@ -136,6 +136,7 @@
                         \li \l{Sharing Applications Online}
                           \list
                             \li \l{Creating a Single Page Navigation Web Application}
+                            \li \l {Using Qt UI Viewer}
                           \endlist
                     \endlist
                 \li \l {Asset Creation with Other Tools}

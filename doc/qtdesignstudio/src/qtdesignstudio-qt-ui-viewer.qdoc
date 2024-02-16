@@ -1,0 +1,185 @@
+// Copyright (C) 2024 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+
+    \previouspage design-viewer-single-page-navigation.html
+    \page qt-ui-viewer.html
+    \nextpage studio-exporting-and-importing.html
+
+
+    \title Using Qt UI Viewer
+
+    The UI designs or projects you create with \QDS can also be accessed
+    with an Android application. This enables you to test all
+    projects that you have shared online. Your unique user ID turns into a
+    scannable QR code in \QDS. From \QUV application in Android, you scan this
+    QR code to access all the projects you have shared online. These projects
+    then run on your Android device.
+
+    To learn more about application sharing in \QDS, read
+    \l{Sharing Applications Online}.
+
+    \section1 Accessing Qt UI Viewer Application
+
+    \QUV is an application designed for the Android operating system.
+    Install this app in the Android system to view the shared \QDS
+    projects on your Android devices.
+
+    \image qtuiviewer-appstore.webp
+
+    To get the \QUV on your Android device:
+    \list 1
+      \li Open the Google Play store on your Android device.
+      \li Search for \QUV.
+      \li Select the \uicontrol Install.
+      \li Open \QUV from the installed applications list.
+    \endlist
+
+    \section1 Connecting a Qt Design Studio ID with the Qt UI Viewer
+
+    Getting your shared projects from \QDS to \QUV:
+    \list 1
+      \li Open \QDS on your computer.
+        \note To learn how to get \QDS and begin with your task, follow the
+        guidelines from \l{Getting Started}.
+      \li Open or Create a project in \QDS.
+      \li Select the \uicontrol File > \uicontrol {Share Application Online}.
+
+          \inlineimage menu-share-application-online.webp
+          \inlineimage studio-share-application-online.webp
+      \li Open \QUV on your Android device.
+      \li Select the \uicontrol {Scan QR Code}.
+          \image qtuiviewer-scan-qr-code.webp
+      \li Scan the QR code from the Share Application Online in the \QDS.
+    \endlist
+
+    \section1 Utilities of Qt UI Viewer
+
+    Designs created using \QDS get shared online so that it is possible to
+    test them remotely. Android is a perfect platform for quick testing.
+    \QUV enables that window of opportunity. This tool has options that consider
+    the needs of technical artists and UI designers.
+
+    Access the options by selecting the \uicontrol Menu.
+    \image qtuiviewer-menu.webp
+
+      \section2 Qt UI Viewer: Home
+
+        \QUV application welcomes you with its home page.
+
+        During the first use, follow these steps for
+        \l {Connecting a Qt Design Studio ID with the Qt UI Viewer}. It
+        brings all the shared projects from the \QDS ID to the \QUV.
+
+        To run any project in \QUV:
+
+        \list 1
+          \li Select the project you want to try from the drop-down.
+          \li Select the \uicontrol {Run Project}.
+        \endlist
+
+        The project runs immediately inside the \QUV application. To change the screen
+        orientation, allow the native orientation on your Android device.
+        \image qtuiviewer-live-project.webp
+
+        \note Connecting another \QDS ID brings all the
+        shared projects from that ID to \QUV. Projects from the previous ID
+        don't remain connected with \QUV. So, only one \QDS ID
+        can be connected to the \QUV at a time.
+
+      \section2 Qt UI Viewer: Examples
+        Example projects are included in \QUV to provide you with an idea
+        about the power of \QDS.
+
+        To access these examples:
+
+        \list 1
+          \li Select the \uicontrol Menu > \uicontrol Examples.
+          \li Select an example from the available list.
+            \image qtuiviewer-examples.webp
+            \note \uicontrol {Clear demo caches} remove the example projects from the memory
+            of \QUV. They get downloaded again when accessed.
+        \endlist
+
+      \section2 Qt UI Viewer: Logs
+
+      \QUV keeps a log report. . If the project you have selected to
+      run has some technical issue, the details are noted in
+      the \uicontrol {Application Logs}. All the other issues related to
+      the projects and \QUV also get denoted.
+
+      To access the \uicontrol {Application Logs}:
+      \list 1
+        \li Select the \uicontrol Menu > \uicontrol Logs.
+        \li View the notes in the \uicontrol {Application Logs}.
+          \image qtuiviewer-logs.webp
+      \endlist
+
+      \note Logs get refreshed every time \QUV gets closed.
+
+      \section2 Qt UI Viewer: Network
+
+      \QUV lets you connect directly with the work-in-progress \QDS project
+      without connecting them with the \QDS ID. For that, first, get the
+      \e {Local IP} of your Android device from \QUV. Then, use the \e {Local IP}
+      in \QDS to establish a direct connection.
+
+      To get the \e {Local IP} from \QUV:
+
+      \list 1
+        \li Select the \uicontrol Menu > \uicontrol Network.
+        \li Note the \b {Local IP} of your Android device.
+          \image qtuiviewer-network.webp
+      \endlist
+
+      To establish a direct connection between \QUV and \QDS:
+
+      \list 1
+        \li Open \QDS on your computer.
+        \li Open the project you want to connect directly.
+        \li Select the \uicontrol File > \uicontrol {Deploy Project to Android}.
+        \li Insert the \e {Local IP} you got from \QUV into the \uicontrol {Device IP}.
+        \li Select the \uicontrol Connect.
+          \image studio-deploy-project-to-android.webp
+
+        \li Select the \uicontrol {Send Project}.
+        \li Go back to \QUV and select \uicontrol Menu > \uicontrol Network. \QDS application
+            is now accessible from \QUV.
+      \endlist
+
+      \note The Android device needs to be on the same network as the \QDS
+      workstation. Otherwise the network connection doesn't function. Also,
+      autometic syncronization is not possible. If you need an updated version
+      of your current project, manually send it again.
+
+      \section2 Qt UI Viewer: Settings
+
+      There are a few options that allow control over \QUV usage.
+
+      Toggling the \uicontrol {Update User projects in the background} on, checks for updates
+      in the connected \QDS ID. If the project gets updated on the \QDS end, it helps to
+      renew it to the latest version every ten seconds in \QUV.
+
+      Toggling the \uicontrol {Auto scale the project} on, makes the project fit
+      the screen dimension. Without it selected, the project loads in its
+      original dimension from \QDS. Which can be oversized for the Android device
+      display.
+
+      To set these settings:
+      \list 1
+        \li Select the \uicontrol File > \uicontrol {Settings}.
+        \li Toggle the options to your preference.
+          \image qtuiviewer-settings.webp
+      \endlist
+
+      \section2 Qt UI Viewer: About
+
+      The \QUV application's technical details stay in the \uicontrol About section.
+
+      To access this information:
+      \list 1
+        \li Select the \uicontrol File > \uicontrol {About}.
+          \image qtuiviewer-about.webp
+      \endlist
+*/
