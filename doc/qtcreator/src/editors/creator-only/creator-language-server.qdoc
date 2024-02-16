@@ -158,6 +158,10 @@
 
     \image qtcreator-qml-js-editing.webp {QML/JS Editing preferences}
 
+    When using \c qmlls from Qt 6.7 or a later version, it is recommended
+    to set \c{QT_QML_GENERATE_QMLLS_INI} to \c{ON} in
+    \uicontrol {Initial Configuration}.
+
     \section1 Supported Locator Filters
 
     The locator enables you to browse not only files, but any items defined by
