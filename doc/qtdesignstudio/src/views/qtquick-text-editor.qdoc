@@ -19,7 +19,7 @@
 
     To open the search dialog in the \uicontrol {Code} view, go to
     \uicontrol Edit > \uicontrol {Find/Replace} > \uicontrol {Find/Replace}.
-    You can also select \key Ctrl + \key {F}.
+    Or, select \key Ctrl + \key {F}.
 
     The view offers the following features:
 
@@ -30,4 +30,6 @@
         \li \l{Indent text or code}
         \li \l{Using Qt Quick Toolbars}
     \endlist
+
+    \sa {Finding}, {Apply quick fixes}, {QML Quick Fixes}
 */
