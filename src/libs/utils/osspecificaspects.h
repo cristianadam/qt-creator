@@ -33,15 +33,18 @@ inline QString osTypeToString(OsType osType)
     }
 }
 
-inline OsType osTypeFromString(const QString &string)
+inline OsType osTypeFromString(QString string)
 {
-    if (string == "Windows")
+    string = string.toLower();
+    if (string == "windows")
         return OsTypeWindows;
-    if (string == "Linux")
+    if (string == "linux")
         return OsTypeLinux;
-    if (string == "Mac")
+    if (string == "mac")
         return OsTypeMac;
-    if (string == "Other Unix")
+    if (string == "darwin")
+        return OsTypeMac;
+    if (string == "other unix")
         return OsTypeOtherUnix;
     return OsTypeOther;
 }
