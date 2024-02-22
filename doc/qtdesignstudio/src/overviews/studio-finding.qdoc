@@ -24,11 +24,10 @@
 
            Search for QML types and rename them in all files in a project.
 
-        \li \l{Searching with the Locator}
+        \li \l{Activate the locator}
 
-            Use the locator to browse
-            through projects, files, classes, functions, documentation and
-            file systems.
+            Use the locator to browse through projects, files, classes,
+            functions, documentation, and file systems.
 
         \li \l{Jump to the Code}
 
@@ -40,4 +39,5 @@
 
     \endlist
 
+    \sa {Locator}
 */

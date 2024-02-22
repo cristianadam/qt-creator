@@ -215,6 +215,8 @@
                                 \li \l{Search in projects or file systems}
                                 \li \l{Rename symbols}
                                 \li \l{Searching with the Locator}
+                                \li \l{Activate the locator}
+                                \li \l{Locator}
                                 \li \l{Jump to the Code}
                             \endlist
                         \li \l{Apply quick fixes}

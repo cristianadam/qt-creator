@@ -1,27 +1,24 @@
-// Copyright (C) 2023 The Qt Company Ltd.
+// Copyright (C) 2024 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
     \page creator-editor-locator.html
-    \previouspage creator-how-to-advanced-search.html
     \if defined(qtdesignstudio)
-    \nextpage creator-jump-to-the-code.html
+    \previouspage creator-how-to-advanced-search.html
+    \nextpage creator-editor-locator.html
     \else
-    \nextpage creator-how-tos.html
+    \previouspage creator-how-tos.html
     \endif
 
-    \title Searching with the Locator
+    \ingroup creator-how-to-search
 
-    The locator is the fastest way to find a particular project, file, class, or
-    function, or almost anything else in your project.
+    \title Activate the locator
 
-    By default, you can find the locator in the bottom left of the \QC window.
-    To open it as a centered popup, click \inlineimage icons/magnifier.png
-    (\uicontrol Options) in it and select \uicontrol {Open as Centered Popup}.
+    Locate not only files, but any items defined by \e{locator filters},
+    as well as trigger global actions and perform other tasks, such as build
+    projects or run external tools.
 
-    \image qtcreator-locator.webp "List of locator filters"
-
-    \section1 Activating the Locator
+    \image qtcreator-locator.webp {List of locator filters}
 
     To activate the locator:
 
@@ -29,35 +26,40 @@
 
         \li Press \key {Ctrl+K} (\key {Cmd+K} on \macos).
 
-        \li Select \uicontrol Tools > \uicontrol Locate.
+        \li Go to \uicontrol Tools, and then select \uicontrol Locate.
 
-        \li Select \uicontrol Edit > \uicontrol {Go to Line}.
+        \li Go to \uicontrol Edit, and then select \uicontrol {Go to Line}.
         \if defined(qtcreator)
         \li Click the line and column indicator on the
             \l{Edit Mode}{editor toolbar}.
         \endif
     \endlist
 
-    \section1 Using Locator Filters
+    By default, you can find the locator in the bottom left of the \QC window.
+    To open it as a centered popup, select \inlineimage icons/magnifier.png, and
+    then select \uicontrol {Open as Centered Popup}.
 
-    You can locate not only files, but any items defined by \e{locator filters},
-    as well as trigger global actions and perform other tasks, such as build
-    projects or run external tools.
+    \section1 Use locator filters
 
     The filters that are available depend on the file type. For more information
     about what a particular locator filter does, see the tooltips that appear
     when you hover over a filter in the locator. For longer descriptions of the
-    filters, select \uicontrol Configure to open the \uicontrol Locator
-    \l{Creating Locator Filters}{preferences}.
+    filters, select \inlineimage icons/magnifier.png > \uicontrol Configure to
+    open the \l{Locator} preferences.
 
-    To use a locator filter, type its prefix followed by \key Space. The prefix
-    is usually short, from one to three characters. Then type the search string
-    (for example, a filename or class name) or the command to execute.
+    To use a locator filter:
 
-    You can also double-click a locator filter in the filter list to use it. Use
-    the up and down arrow keys or the \key Ctrl+P and \key Ctrl+N
-    keyboard shortcuts to move up and down the list, and then press \key Enter
-    to use the selected filter.
+    \list
+        \li Type the locator filter prefix followed by \key Space. The prefix
+            is usually short, from one to three characters. Then type the search
+            string (for example, a filename or class name) or the command to
+            execute.
+
+        \li Double-click a locator filter in the filter list to use it. Press
+            the up and down arrow keys or press \key Ctrl+P and \key Ctrl+N
+            to move up and down the list, and then press \key Enter to use the
+            selected filter.
+    \endlist
 
     As you type a search string,
     the locator shows the occurrences of that string regardless of where in the
@@ -65,6 +67,8 @@
     and \c t, support \e fuzzy matching, which means that you can enter the
     uppercase letters to locate a symbol when using camel case or the letters
     after the underscore when using snake case.
+
+    \section2 Use wildcard characters in search strings
 
     To narrow down the search results, use the following wildcard characters:
 
@@ -76,7 +80,7 @@
 
     \endlist
 
-    \section2 Locating Lines and Columns
+    \section1 Locate lines and columns
 
     To move directly to a particular line and column in the document when you
     open the document, append the line and column number to the file name in
@@ -89,21 +93,25 @@
     HelloWorld.qml:41:2
     \endcode
 
-    \section2 Creating Files and Directories from Locator
+    \section1 Create files and directories from the locator
 
-    To create a new file and open it in the editor, type \c f
-    followed by \key Space, followed by path and file name, and then press
-    \key Enter or select \uicontrol {Create and Open File}. To create a
-    directory, select \uicontrol {Create Directory}.
+    To create a new file and open it in the editor:
 
-    \section2 Opening Sessions from Locator
+    \list 1
+        \li Type \c f followed by \key Space, followed by path and file name
+        \li Press \key Enter or select \uicontrol {Create and Open File}.
+    \endlist
 
-    You can use the filter that triggers menu commands to open
-    \l{Manage sessions}{sessions}. Enter
-    \c {t yoursess} or \c {t sess yoursess} to trigger \uicontrol File >
+    To create a directory, select \uicontrol {Create Directory}.
+
+    \section2 Open sessions from the locator
+
+    Use the filter that triggers menu commands to open sessions.
+
+    Enter \c {t yoursess} or \c {t sess yoursess} to trigger \uicontrol File >
     \uicontrol Sessions > \e <session_name>.
 
-    \section2 Default Filters
+    \section2 Default filters
 
     By default, you can use the following preset locator filters without a
     prefix:
@@ -118,10 +126,35 @@
 
     \endlist
 
+    \sa {Execute JavaScript}, {Manage sessions}, {Locator}
+
+    \if defined(qtcreator)
+    \sa {Search}{How To: Search}
+    \endif
+*/
+
+/*!
+    \page creator-preferences-locator.html
+    \if defined(qtdesignstudio)
+    \previouspage creator-how-to-activate-locator.html
+    \nextpage creator-jump-to-the-code.html
+    \else
+    \previouspage creator-reference.html
+    \endif
+
+    \ingroup creator-reference-preferences
+
+    \title Locator
+
+    \brief Add and change locator filters.
+
+    To set locator preferences, go to \preferences > \uicontrol Environment >
+    \uicontrol Locator.
+
     \section1 Changing Locator Filters
 
     You can change the preset locator filters to match your use case. For
-    example, you can change the filter prefix and restrict the search to
+    example, change the filter prefix and restrict the search to
     items that match the filter.
 
     \image qtcreator-locator-filter-edit-ai.webp {Filter Configuration dialog}
@@ -130,11 +163,8 @@
 
     \list 1
 
-        \li In the locator, click \inlineimage icons/magnifier.png
-            (\uicontrol Options) and select \uicontrol Configure to open the
-            \uicontrol Locator preferences.
-
-        \li Select a filter, and then select \uicontrol Edit.
+        \li In the \uicontrol Locator tab, select a filter, and then select
+            \uicontrol Edit.
 
         \li Specify the prefix string.
 
@@ -160,8 +190,8 @@
 
     \list 1
 
-        \li Select \preferences > \uicontrol Environment > \uicontrol Locator >
-            \uicontrol {Web Search} > \uicontrol Edit.
+        \li Go to \preferences > \uicontrol Environment > \uicontrol Locator, and
+            then select \uicontrol {Web Search} > \uicontrol Edit.
 
         \li Select \uicontrol Add to add a new entry to the list.
 
@@ -235,13 +265,31 @@
 
     \list 1
 
-        \li Select \preferences > \uicontrol Environment > \uicontrol Locator.
+        \li Go to \preferences > \uicontrol Environment > \uicontrol Locator.
 
         \li In \uicontrol {Refresh interval}, define new time in minutes.
 
     \endlist
 
-    \section1 Executing JavaScript
+    \sa {Activate the locator}, {Execute JavaScript}, {Locator}
+
+    \if defined(qtcreator)
+    \sa {Search}{How To: Search}
+    \endif
+*/
+
+/*!
+    \page creator-how-to-execute-javascript.html
+    \if defined(qtdesignstudio)
+    \previouspage creator-how-to-advanced-search.html
+    \nextpage creator-editor-locator.html
+    \else
+    \previouspage creator-how-tos.html
+    \endif
+
+    \ingroup creator-how-to-code
+
+    \title Execute JavaScript
 
     The locator has a JavaScript interpreter for performing calculations.
 
@@ -322,4 +370,6 @@
             \li  tan(x)
             \li  Returns the tangent of x (x is in radians)
         \endtable
+
+    \sa {Activate the locator}, {Locator}
 */
