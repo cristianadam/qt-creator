@@ -197,7 +197,7 @@ Analyzer
 
 ### Clang
 
-* Added `Edit Checks as Strings` for Clazy
+* Added `Edit Checks as String` for Clazy
   ([QTCREATORBUG-24846](https://bugreports.qt.io/browse/QTCREATORBUG-24846))
 
 ### Axivion
