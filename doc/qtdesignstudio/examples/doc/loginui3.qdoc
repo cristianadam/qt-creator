@@ -1,4 +1,4 @@
-// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2024 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
@@ -25,10 +25,10 @@
     when a user selects the \e {Create Account} button.
 
     The starting point for this tutorial is the completed
-    \l{Log In UI - Positioning} project. You can download the project from
+    \l{Log In UI - Positioning} project. You can download the project
     \l{https://git.qt.io/public-demos/qtdesign-studio/-/tree/master/tutorial%20projects/Loginui2}{here}.
 
-    Additionally, you can download the completed project of this tutorial from
+    Additionally, you can download the completed project of this tutorial
     \l{https://git.qt.io/public-demos/qtdesign-studio/-/tree/master/tutorial%20projects/Loginui3}{here}.
 
     The \e {Learn More} sections provide additional information relevant to the
@@ -40,10 +40,8 @@
     enter to create an account. You are already familiar with the tasks in
     this section from previous parts of the tutorial.
 
-    To preview the changes that you make to the UI while you make
-    them, select the \inlineimage icons/live_preview.png
-    (\uicontrol {Show Live Preview}) button on the \l {2D} view
-    toolbar or press \key {Alt+P}.
+    To preview the changes that you make, select the \uicontrol {Live Preview} button
+    or press \key {Alt+P}.
 
     To add the entry field needed on the second page to the \e Screen01
     component:
@@ -51,7 +49,7 @@
     \list 1
         \li Double-click \e Screen01.ui.qml in \uicontrol Projects to open it
             in the \uicontrol {2D} view.
-        \li Drag-and-drop an instance of the EntryField component from
+        \li Drag an instance of the EntryField component from
             \uicontrol Components > \uicontrol {My Components} to \e fields in
             \l Navigator.
         \li Select the EntryField instance in \uicontrol Navigator to modify
@@ -61,6 +59,7 @@
         \li In \uicontrol {Button Content} > \uicontrol Text, enter
             \e {Repeat Password} and select \uicontrol tr to mark the text
             translatable.
+            \image loginui3-new-entryfield-properties.webp "Entryfield properties"
         \li Select \uicontrol File > \uicontrol Save or press \key {Ctrl+S}
             to save your changes.
     \endlist
@@ -68,7 +67,7 @@
     \e Screen01 should now look something like this in the
     \uicontrol {2D} view:
 
-    \image loginui3-base-state.jpg "Login page with a Repeat Password field"
+    \image loginui3-base-state.webp "Login page with a Repeat Password field"
 
     Next, you will add states for the login page and the account creation page,
     where you use the visibility property to hide the repeat password field on
@@ -84,23 +83,21 @@
         \li In the \l States view, select \inlineimage icons/plus.png
         .
         \li Enter \e login as the state name.
-            \image loginui3-login-state.jpg "States view"
+            \image loginui3-login-state.webp "States view"
         \li Select \e repeatPassword in \uicontrol Navigator to display its
             properties in \uicontrol Properties.
-        \li In the \uicontrol Visibility section, deselect the
-            \uicontrol Visible check box to hide the repeat
+        \li In the \uicontrol Visibility section, clear the
+            \uicontrol Visible checkbox to hide the repeat
             password field in the login state.
             \image loginui3-visibility.png
-        \li In \uicontrol States, select \inlineimage icons/action-icon.png
-            for \e login to open the \uicontrol Actions menu, and then
-            select \uicontrol {Set as Default} to determine that the \e login
-            state is applied when the application starts.
+        \li In \uicontrol States, select \uicontrol Default for \e login to determine that the
+            \e login state is applied when the application starts.
         \li With the base state selected, add another state and name it
             \e createAccount. This state should now look identical to the base
             state.
         \li Select \e createAccount in the \uicontrol Navigator to display its
             properties in \uicontrol Properties.
-        \li In \uicontrol Visibility, deselect the \uicontrol Visible check box
+        \li In \uicontrol Visibility, clear the \uicontrol Visible checkbox
             to hide the \e {Create Account} button in the account creation
             state.
         \li Select \uicontrol File > \uicontrol Save or press \key {Ctrl+S}
@@ -109,11 +106,11 @@
 
     You can now see all the states in the \uicontrol States view:
 
-    \image loginui3-states.jpg "All states in the States view"
+    \image loginui3-states.webp "All states in the States view"
 
     The live preview displays the default state, \e login:
 
-    \image loginui3-login-state-preview.jpg "Preview of the login state"
+    \image loginui3-login-state-preview.webp "Preview of the login state"
 
     Next, you will create connections to specify that clicking the
     \uicontrol {Create Account} button on the login page triggers a
@@ -137,7 +134,7 @@
         \li In the \uicontrol Connections tab, select the \inlineimage icons/plus.png
             button to open the connection setup options.
         \li Set \uicontrol Signal to \c clicked, \uicontrol Action to
-            \c {Change State}, \uicontrol {State Group} to \c rectangle and
+            \c {Change State}, \uicontrol {State Group} to \c rectangle, and
             \uicontrol State to \c createAccount in the respective
             drop-down menus.
         \li Select the \inlineimage icons/close.png
@@ -148,7 +145,7 @@
         \li Select \uicontrol File > \uicontrol Save or press \key {Ctrl+S}
             to save your changes.
 
-        \note Or, you can right-click the \e createAccount button in \l Navigator.
+        \note Or, you can right-click the \e createAccount button in \uicontrol Navigator.
               Then select \uicontrol {Connections} > \uicontrol {Add signal handler} >
               \uicontrol {clicked} > \uicontrol {Change State to createAccount}.
     \endlist
@@ -171,7 +168,7 @@
     may be part of a selection group. Each of those states may have certain
     associated visual appearance (neutral, highlighted, expanded, and so on).
 
-    Youn can apply states to trigger behavior or animations. UI components
+    You can apply states to trigger behavior or animations. UI components
     typically have a default state that contains all of a component's initial
     property values and is therefore useful for managing property values before
     state changes.
