@@ -41,6 +41,9 @@ General
   ([QTCREATORBUG-29886](https://bugreports.qt.io/browse/QTCREATORBUG-29886))
 * Fixed issues with the window actions
   ([QTCREATORBUG-30381](https://bugreports.qt.io/browse/QTCREATORBUG-30381))
+* Known Issue: The texts in the installer are mostly displayed in English, not
+               in the system's language
+               ([QTIFW-3310](https://bugreports.qt.io/browse/QTIFW-3310))
 
 Editing
 -------
