@@ -120,7 +120,8 @@ public:
 
     void updateDocumentation(const QtVersions &added,
                              const QtVersions &removed,
-                             const QtVersions &allNew);
+                             const QtVersions &allNew,
+                             bool updateBlockedDocumentation = false);
 
     void setNewQtVersions(const QtVersions &newVersions);
     QString qmakePath(const QString &qtchooser, const QString &version);
@@ -174,7 +175,7 @@ void QtVersionManagerImpl::triggerQtVersionRestore()
     } // exists
 
     const QtVersions vs = QtVersionManager::versions();
-    updateDocumentation(vs, {}, vs);
+    updateDocumentation(vs, {}, vs, /*updateBlockedDocumentation=*/true);
 }
 
 bool QtVersionManager::isLoaded()
@@ -534,7 +535,8 @@ static QStringList documentationFiles(const QtVersions &vs, bool highestOnly = f
 
 void QtVersionManagerImpl::updateDocumentation(const QtVersions &added,
                                                const QtVersions &removed,
-                                               const QtVersions &allNew)
+                                               const QtVersions &allNew,
+                                               bool updateBlockedDocumentation)
 {
     using DocumentationSetting = QtVersionManager::DocumentationSetting;
     const DocumentationSetting setting = QtVersionManager::documentationSetting();
@@ -551,6 +553,17 @@ void QtVersionManagerImpl::updateDocumentation(const QtVersions &added,
                                                   [&docsOfAll](const QString &f) {
                                                       return docsOfAll.contains(f);
                                                   });
+
+    if (updateBlockedDocumentation) {
+        // The online installer registers documentation for Qt versions explicitly via an install
+        // setting, which defeats that we only register the Qt versions matching the setting.
+        // So the Qt support explicitly blocks the files that we do _not_ want to register, so the
+        // Help plugin knows about this.
+        const QSet<QString> reallyAllFiles = toSet(documentationFiles(allNew));
+        const QSet<QString> toBlock = reallyAllFiles - toSet(docsOfAll);
+        Core::HelpManager::setBlockedDocumentation(toList(toBlock));
+    }
+
     Core::HelpManager::unregisterDocumentation(docsToRemove);
     Core::HelpManager::registerDocumentation(docsToAdd);
 }
