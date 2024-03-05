@@ -1,6 +1,7 @@
 # Copyright (C) 2016 The Qt Company Ltd.
 # SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
+from utils import DisplayFormat
 from dumper import Children
 
 
@@ -288,6 +289,21 @@ def qdump__Utf8String(d, value):
     d.putByteArrayValue(value['byteArray'])
     d.putPlainChildren(value)
 
+
+def qdump__Utils__BasicSmallString(d, value):
+    data = value["m_data"]
+    control = data['control']
+    if not control['m_isReference']:
+         size = control['m_shortStringSize']
+         string = data['shortString']
+         d.putCharArrayValue(string, size, 1, DisplayFormat.SeparateUtf8String)
+    else:
+         reference = data['reference']
+         size = reference['size']
+         string = d.extractPointer(reference['pointer'])
+         string_data = d.readMemory(string)
+         d.putValue(string_data, 'utf8', length=size)
+    d.putPlainChildren(value)
 
 def qdump__CPlusPlus__Token(d, value):
     k = value["f"]["kind"]
