@@ -124,6 +124,8 @@
                 \generatelist creator-how-to-build-with-cmake
             \li Build with qmake
                 \generatelist creator-how-to-build-with-qmake
+            \li Deploy applications
+                \generatelist creator-how-to-deploy
             \li Run applications
                 \generatelist creator-how-to-run
             \li Create Models and Diagrams

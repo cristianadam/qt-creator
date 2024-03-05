@@ -1,0 +1,33 @@
+// Copyright (C) 2024 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page creator-how-to-deploy-to-app-manager.html
+    \previouspage creator-how-tos.html
+
+    \ingroup creator-how-to-deploy
+
+    \title Deploy to application manager
+
+     Use the experimental \l{Qt Application Manager} plugin to deploy, run, and
+    debug applications on the desktop, remote generic SSH Linux targets, or
+    \l{Boot2Qt}{Boot2Qt devices}.
+
+    To specify settings for deploying applications to the application manager,
+    go to \uicontrol Projects > \uicontrol {Run Settings}.
+
+    \image qtcreator-appman-deploy-settings.webp {Deploy to application manager}
+
+    \section1 CMake Builds
+
+    When using CMake as the build system, use the following functions in the
+    CMakeLists.txt file to indicate, which applications to create as built-in
+    packages and which to create as installable packages:
+
+    \list
+        \li \c {qt6_am_create_builtin_package}
+        \li \c {qt6_am_create_installable_package}
+    \endlist
+
+    \sa {Run in application manager}
+*/

@@ -1,0 +1,42 @@
+// Copyright (C) 2024 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page creator-how-to-run-in-app-manager.html
+    \previouspage creator-how-tos.html
+
+    \ingroup creator-how-to-run
+
+    \title Run in application manager
+
+    Use the experimental \l{Qt Application Manager} plugin to deploy, run, and
+    debug applications on the desktop, remote generic SSH Linux targets, or
+    \l{Boot2Qt}{Boot2Qt devices}.
+
+    To specify settings for deploying applications to the application manager,
+    go to \uicontrol Projects > \uicontrol {Run Settings}.
+
+    \image qtcreator-appman-run-settings.webp {Run in application manager}
+
+    To build an application and run it in the application manager:
+
+        \list 1
+            \li Specify a connection to the device.
+            \li Select \inlineimage icons/run_small.png (\uicontrol Run).
+        \endlist
+
+    \QC uses the compiler from the kit (toolchain) to build the application.
+
+    \QC copies the application files to the connected device and runs the
+    application in application manager. Command-line output is visible in the \QC
+    \uicontrol {Application Output} view.
+
+    In the \uicontrol {Projects} mode, select an appropriate kit and then
+    select \uicontrol {Run} to view the settings for deploying the application
+    to the connected device.
+
+    Debugging works transparently if GDB server is installed on the device and
+    it is compatible with the GDB on the computer.
+
+    \sa {Deploy to application manager}
+*/
