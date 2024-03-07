@@ -27,6 +27,7 @@ class Icon;
 class MacroExpander;
 class OutputLineParser;
 class ProcessRunData;
+class Process;
 } // Utils
 
 namespace ProjectExplorer {
@@ -271,6 +272,9 @@ protected:
     void setEnvironment(const Utils::Environment &environment);
     void setWorkingDirectory(const Utils::FilePath &workingDirectory);
     void setProcessMode(Utils::ProcessMode processMode);
+    void setForwardStdOut(bool forwardStdOut);
+    void setForwardStdErr(bool forwardStdErr);
+    Utils::Process *process() const;
 
     void forceRunOnHost();
 

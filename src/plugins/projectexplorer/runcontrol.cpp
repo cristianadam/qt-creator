@@ -1264,6 +1264,8 @@ public:
 
     bool m_stopReported = false;
     bool m_stopForced = false;
+    bool m_forwardStdOut = true;
+    bool m_forwardStdErr = true;
 
     void forwardStarted();
     void forwardDone();
@@ -1283,10 +1285,6 @@ SimpleTargetRunnerPrivate::SimpleTargetRunnerPrivate(SimpleTargetRunner *parent)
     m_process.setProcessChannelMode(defaultProcessChannelMode());
     connect(&m_process, &Process::started, this, &SimpleTargetRunnerPrivate::forwardStarted);
     connect(&m_process, &Process::done, this, &SimpleTargetRunnerPrivate::handleDone);
-    connect(&m_process, &Process::readyReadStandardError,
-                this, &SimpleTargetRunnerPrivate::handleStandardError);
-    connect(&m_process, &Process::readyReadStandardOutput,
-                this, &SimpleTargetRunnerPrivate::handleStandardOutput);
 
     if (WinDebugInterface::instance()) {
         connect(WinDebugInterface::instance(), &WinDebugInterface::cannotRetrieveDebugOutput,
@@ -1388,6 +1386,14 @@ void SimpleTargetRunnerPrivate::handleStandardError()
 
 void SimpleTargetRunnerPrivate::start()
 {
+    if (m_forwardStdErr)
+        connect(&m_process, &Process::readyReadStandardError,
+                this, &SimpleTargetRunnerPrivate::handleStandardError);
+
+    if (m_forwardStdOut)
+        connect(&m_process, &Process::readyReadStandardOutput,
+                this, &SimpleTargetRunnerPrivate::handleStandardOutput);
+
     const bool isLocal = !m_command.executable().needsDevice();
 
     CommandLine cmdLine = m_command;
@@ -1569,6 +1575,21 @@ void SimpleTargetRunner::setWorkingDirectory(const FilePath &workingDirectory)
 void SimpleTargetRunner::setProcessMode(Utils::ProcessMode processMode)
 {
     d->m_process.setProcessMode(processMode);
+}
+
+void SimpleTargetRunner::setForwardStdOut(bool forwardStdOut)
+{
+    d->m_forwardStdOut = forwardStdOut;
+}
+
+void SimpleTargetRunner::setForwardStdErr(bool forwardStdErr)
+{
+    d->m_forwardStdErr = forwardStdErr;
+}
+
+Process *SimpleTargetRunner::process() const
+{
+    return &d->m_process;
 }
 
 void SimpleTargetRunner::forceRunOnHost()
