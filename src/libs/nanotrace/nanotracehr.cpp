@@ -48,6 +48,9 @@ unsigned int getUnsignedIntegerHash(std::thread::id id)
 template<typename TraceEvent>
 void printEvent(std::ostream &out, const TraceEvent &event, qint64 processId, std::thread::id threadId)
 {
+    if (event.name.size() > 100)
+        qWarning("Event name too long");
+
     out << R"({"ph":")" << event.type << R"(","name":")" << event.name << R"(","cat":")"
         << event.category << R"(","ts":)"
         << static_cast<double>(event.time.time_since_epoch().count()) / 1000 << R"(,"pid":)"
@@ -204,6 +207,8 @@ void flushInThread(EnabledEventQueue<TraceEvent> &eventQueue)
         flushEvents(events, threadId, eventQueue);
     };
 
+    for (const auto &event : eventQueue.currentEvents.subspan(0, eventQueue.eventsIndex))
+        qDebug() << "event name" << QByteArray{event.name.data(), event.name.size()};
     eventQueue.file->processing = std::async(std::launch::async,
                                              flush,
                                              eventQueue.currentEvents.subspan(0, eventQueue.eventsIndex),
@@ -255,6 +260,9 @@ void EventQueue<TraceEvent, Tracing::IsEnabled>::flush()
 {
     std::lock_guard lock{mutex};
     if (isEnabled == IsEnabled::Yes && eventsIndex > 0) {
+        for (const auto &event : currentEvents.subspan(0, eventsIndex))
+            qDebug() << "event name" << QByteArray{event.name.data(), event.name.size()};
+
         flushEvents(currentEvents.subspan(0, eventsIndex), threadId, *this);
         eventsIndex = 0;
     }
