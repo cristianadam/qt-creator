@@ -30,7 +30,6 @@
         \li \l{Writing Code}
             \list
                 \li \l{Semantic Highlighting}
-                \li \l{Checking Code Syntax}
                 \li \l{Using Qt Quick Toolbars}
                 \li \l{Pasting and Fetching Code Snippets}
             \endlist

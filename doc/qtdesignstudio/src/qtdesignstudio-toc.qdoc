@@ -202,7 +202,7 @@
                         \li \l{Writing Code}
                             \list
                                 \li \l{Semantic Highlighting}
-                                \li \l{Checking Code Syntax}
+                                \li \l{Check code syntax}
                                 \li \l{Indent text or code}
                                 \li \l{Behavior}
                                 \li \l{Qt Quick Code Style}
