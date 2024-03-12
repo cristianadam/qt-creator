@@ -1319,6 +1319,8 @@ private:
         Internal::appendArguments(traceEvent.arguments, std::forward<Arguments>(arguments)...);
     }
 
+    CategoryFunctionPointer self() { return m_self; }
+
 private:
     StringType m_name;
     EnabledEventQueue<TraceEvent> &m_eventQueue;
@@ -1433,6 +1435,11 @@ public:
         }
     }
 
+    template<typename... Arguments>
+    [[nodiscard]] Tracer(ArgumentType name, Category &category, Arguments &&...arguments)
+        : Tracer(std::move(name), category.self(), std::forward<Arguments>(arguments)...)
+    {}
+
     Tracer(const Tracer &) = delete;
     Tracer &operator=(const Tracer &) = delete;
     Tracer(Tracer &&other) noexcept = delete;
@@ -1466,7 +1473,7 @@ private:
     void sendTrace(Arguments &&...arguments)
     {
         if (m_name.size()) {
-            auto category = m_category();
+            auto &category = m_category();
             if (category.isEnabled == IsEnabled::Yes) {
                 auto duration = Clock::now() - m_start;
                 auto &traceEvent = getTraceEvent(category.eventQueue());
