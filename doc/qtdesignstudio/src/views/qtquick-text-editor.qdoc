@@ -45,6 +45,13 @@
     To select the color scheme for semantic highlighting, go to
     \preferences > \uicontrol {Text Editor} > \uicontrol {Font & Colors}.
 
+    For more information, see:
+
+    \list
+        \li \l {Download highlight definitions}
+        \li \l {Highlight code blocks}
+    \endlist
+
     \section1 Refactoring Code
 
     Code refactoring is the process of improving and simplifying code without
@@ -52,7 +59,18 @@
     and rename symbols and apply quick fixes in the \uicontrol Code view to
     refactor code.
 
+    For more information, see:
+
+    \list
+        \li \l {Apply quick fixes}
+        \li \l {QML Quick Fixes}
+        \li \l {Rename symbols}
+    \endlist
+
     \section1 Searching in Code
+
+    The incremental search highlights the matching strings in the
+    editor while you type.
 
     To open the search dialog in the \uicontrol {Code} view:
 
@@ -62,6 +80,36 @@
         \li Select \key Ctrl + \key {F} (or \key Cmd + \key F on \macos).
     \endlist
 
-    \sa {Finding}, {Apply quick fixes}, {Download highlight definitions},
-    {Highlight code blocks}, {QML Quick Fixes}
+    With advanced search, you can search in currently open projects or
+    files on the file system.
+
+    For more information, see:
+
+    \list
+        \li \l{Search in current file}
+        \li \l{Search in projects or file systems}
+    \endlist
+
+    \title Configuring the Editor
+
+    To configure the text editor, go to \preferences > \uicontrol {Text Editor}.
+
+    \image qtcreator-font-colors.png {Text Editor preferences}
+
+    The settings you specify apply globally to all projects.
+
+    To specify indentation settings for QML files either globally or for the
+    open project.
+
+    For more information, see:
+
+    \list
+        \li \l{Behavior}
+        \li \l{Completion}
+        \li \l{Font & Colors}
+        \li \l{Snippets}
+        \li \l{Indent text or code}
+    \endlist
+
+    \sa {Jump to the Code}
 */

@@ -10,6 +10,7 @@
     \endif
 
     \ingroup creator-how-to-edit
+    \ingroup studio-how-to-edit
 
     \title Complete code
 
@@ -129,12 +130,13 @@
 /*!
     \page creator-preferences-text-editor-completion.html
     \if defined(qtdesignstudio)
-    \previouspage creator-completing-code.html
+    \previouspage qtquick-text-editor.html
     \else
     \previouspage creator-reference.html
     \endif
 
     \ingroup creator-reference-preferences-text-editor
+    \ingroup studio-preferences-text-editor
 
     \title Completion
 
@@ -192,12 +194,13 @@
 /*!
     \page creator-preferences-text-editor-shippets.html
     \if defined(qtdesignstudio)
-    \previouspage creator-completing-code.html
+    \previouspage qtquick-text-editor.html
     \else
     \previouspage creator-reference.html
     \endif
 
     \ingroup creator-reference-preferences-text-editor
+    \ingroup studio-preferences-text-editor
 
     \title Snippets
 
