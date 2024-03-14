@@ -260,19 +260,19 @@ inline std::string_view toArguments(std::string_view arguments)
 }
 
 template<typename String>
-void appendArguments(String &eventArguments)
+void setArguments(String &eventArguments)
 {
     eventArguments = {};
 }
 
 template<typename String>
-void appendArguments(String &eventArguments, TracerLiteral arguments)
+void setArguments(String &eventArguments, TracerLiteral arguments)
 {
     eventArguments = arguments;
 }
 
 template<typename String, typename... Arguments>
-[[maybe_unused]] void appendArguments(String &eventArguments, Arguments &&...arguments)
+[[maybe_unused]] void setArguments(String &eventArguments, Arguments &&...arguments)
 {
     static_assert(
         !std::is_same_v<String, std::string_view>,
@@ -1273,7 +1273,7 @@ private:
         traceEvent.id = id;
         traceEvent.bindId = bindId;
         traceEvent.flow = flow;
-        Internal::appendArguments(traceEvent.arguments, std::forward<Arguments>(arguments)...);
+        Internal::setArguments(traceEvent.arguments, std::forward<Arguments>(arguments)...);
         traceEvent.time = Clock::now();
     }
 
@@ -1299,7 +1299,7 @@ private:
         traceEvent.id = id;
         traceEvent.bindId = bindId;
         traceEvent.flow = flow;
-        Internal::appendArguments(traceEvent.arguments, std::forward<Arguments>(arguments)...);
+        Internal::setArguments(traceEvent.arguments, std::forward<Arguments>(arguments)...);
     }
 
     template<typename... Arguments>
@@ -1319,7 +1319,7 @@ private:
         traceEvent.id = id;
         traceEvent.bindId = 0;
         traceEvent.flow = IsFlow::No;
-        Internal::appendArguments(traceEvent.arguments, std::forward<Arguments>(arguments)...);
+        Internal::setArguments(traceEvent.arguments, std::forward<Arguments>(arguments)...);
     }
 
     CategoryFunctionPointer self() { return m_self; }
@@ -1477,10 +1477,8 @@ private:
             traceEvent.bindId = m_bindId;
             traceEvent.flow = flow;
             traceEvent.type = 'B';
-            if (sizeof...(arguments)) {
-                Internal::appendArguments<ArgumentsStringType>(traceEvent.arguments,
-                                                               std::forward<Arguments>(arguments)...);
-            }
+            Internal::setArguments<ArgumentsStringType>(traceEvent.arguments,
+                                                        std::forward<Arguments>(arguments)...);
             traceEvent.time = Clock::now();
         }
     }
@@ -1499,11 +1497,8 @@ private:
                 traceEvent.bindId = m_bindId;
                 traceEvent.flow = flow;
                 traceEvent.type = 'E';
-                if (sizeof...(arguments)) {
-                    Internal::appendArguments<ArgumentsStringType>(traceEvent.arguments,
-                                                                   std::forward<Arguments>(
-                                                                       arguments)...);
-                }
+                Internal::setArguments<ArgumentsStringType>(traceEvent.arguments,
+                                                            std::forward<Arguments>(arguments)...);
             }
         }
     }
