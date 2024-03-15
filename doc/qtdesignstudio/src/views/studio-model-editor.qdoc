@@ -1,0 +1,49 @@
+// Copyright (C) 2024 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page studio-model-editor.html
+    \previouspage 
+    \nextpage 
+
+    \title Model Editor
+
+    In the \uicontrol {Model Editor} view, create, manage, import, and export
+    data models. With data models, you can, for example, populate views with data.
+
+    For examples of how to use data models, see \l{Using Dummy Models} and
+    \l {Adding a Repeater3D Component with a List Model}.
+
+    \section1 Creating a Data Model
+
+    To create a new data model:
+    \list 1
+      \li In \uicontrol {Model Editor}, select \inlineimage {icons/zoomIn.png}.
+      \li Enter a name and select \uicontrol {Create}.
+    \endlist
+
+    This creates a single-cell table. Next, add columns, rows, and data to the model.
+
+    \note You must manually save the table after you have made changes. To do this,
+    select \inlineimage {icons/save-effect-composer.png}.
+
+    \section1 Editing a Data Model
+
+    Edit a data model in one of the following ways:
+    \list
+      \li Right-click a column name to edit its name and type, delete, or sort it.
+      \li Double-click a cell to edit its content.
+      \li Use the toolbar to add and remove columns and rows.
+    \endlist
+
+    \section1 Importing a Data Model
+
+    Import data models from JSON or CSV files. To do this, in \uicontrol {Model Editor}, select
+    \inlineimage {icons/import.png}.
+
+    \section1 Exporting a Data Model
+
+    Export data models to JSON or CSV files. To do this, in \uicontrol {Model Editor}, select
+    \inlineimage {icons/export.png}.
+
+*/
