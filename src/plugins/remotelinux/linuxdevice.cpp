@@ -685,7 +685,7 @@ void SshProcessInterfacePrivate::start()
     // TODO: Do we really need it for master process?
     m_sshParameters.x11DisplayName
             = q->m_setup.m_extraData.value("Ssh.X11ForwardToDisplay").toString();
-    if (m_useConnectionSharing) {
+    if (false && m_useConnectionSharing) {
         m_connecting = true;
         m_connectionHandle.reset(new SshConnectionHandle(m_device));
         m_connectionHandle->setParent(this);
@@ -1026,15 +1026,16 @@ LinuxDevice::LinuxDevice()
         proc->setTerminalMode(TerminalMode::Run);
         proc->setEnvironment(env);
         proc->setWorkingDirectory(workingDir);
-        proc->start();
 
-        QObject::connect(proc, &Process::done, proc, [proc](){
+        QObject::connect(proc, &Process::done, proc, [proc] {
             if (proc->exitCode() != 0){
                 qCWarning(linuxDeviceLog) << proc->exitMessage();
                 Core::MessageManager::writeFlashing(proc->exitMessage());
             }
             proc->deleteLater();
         });
+
+        proc->start();
 
         return {};
     });
