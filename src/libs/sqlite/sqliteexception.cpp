@@ -3,7 +3,11 @@
 
 #include "sqliteexception.h"
 
+#include "sqlitetracing.h"
+
 #include <utils/smallstringio.h>
+
+#include <nanotrace/nanotracehr.h>
 
 #include <sqlite.h>
 
@@ -11,14 +15,31 @@
 
 namespace Sqlite {
 
+using NanotraceHR::keyValue;
+
+Exception::Exception()
+{
+    NanotraceHR::Tracer tracer{"Sqlite::Exception"_t,
+                               sqliteLowLevelCategory(),
+                               keyValue("error message", what())};
+};
+
 const char *Exception::what() const noexcept
 {
     return "Sqlite::Exception";
 }
 
+ExceptionWithMessage::ExceptionWithMessage(Utils::SmallString &&sqliteErrorMessage)
+    : m_sqliteErrorMessage(std::move(sqliteErrorMessage))
+{
+}
+
 const char *ExceptionWithMessage::what() const noexcept
 {
-    return "Sqlite::ExceptionWithMessage";
+    static Utils::SmallString text = Utils::SmallString::join(
+        {"Sqlite::ExceptionWithMessage", m_sqliteErrorMessage});
+
+    return text.data();
 }
 
 void ExceptionWithMessage::printWarning() const
@@ -38,7 +59,10 @@ const char *DatabaseIsBusy::what() const noexcept
 
 const char *StatementHasError::what() const noexcept
 {
-    return "Sqlite::StatementHasError";
+    static Utils::SmallString text = Utils::SmallString::join(
+        {"Sqlite::StatementHasError: ", message()});
+
+    return text.data();
 }
 
 const char *StatementIsMisused::what() const noexcept

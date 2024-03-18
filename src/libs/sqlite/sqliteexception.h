@@ -16,19 +16,19 @@ namespace Sqlite {
 class SQLITE_EXPORT Exception : public std::exception
 {
 public:
-    Exception() = default;
+    Exception();
     const char *what() const noexcept override;
 };
 
 class SQLITE_EXPORT ExceptionWithMessage : public Exception
 {
 public:
-    ExceptionWithMessage(Utils::SmallString &&sqliteErrorMessage = Utils::SmallString{})
-        : m_sqliteErrorMessage(std::move(sqliteErrorMessage))
-    {}
+    ExceptionWithMessage(Utils::SmallString &&sqliteErrorMessage = Utils::SmallString{});
 
     const char *what() const noexcept override;
     void printWarning() const;
+
+    std::string_view message() const noexcept { return m_sqliteErrorMessage; }
 
 private:
     Utils::SmallString m_sqliteErrorMessage;
