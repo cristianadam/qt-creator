@@ -510,7 +510,7 @@
         \li \inlineimage icons/split-view.png
         \li Toggle Split View On/Off
         \li \key Ctrl + \key Alt + \key Q
-        \li \l{Using Split View}
+        \li \l{Controlling the 3D View Camera}
     \row
         \li \inlineimage icons/particles-seek.png
         \li Seek Particle System Time
