@@ -19,10 +19,10 @@ using namespace Utils;
 namespace QmlProjectManager {
 namespace GenerateCmake {
 
-const QRegularExpression projectNameRegexp("^(?!(import))(?!(QtQml))(?!(QtQuick))(?:[A-Z][a-zA-Z0-9-_]*)$");
 
 static bool projectNameValidationFunction(FancyLineEdit *editor, QString *)
 {
+    static const QRegularExpression projectNameRegexp("^(?!(import))(?!(QtQml))(?!(QtQuick))(?:[A-Z][a-zA-Z0-9-_]*)$");
     return editor->text().count(projectNameRegexp);
 }
 

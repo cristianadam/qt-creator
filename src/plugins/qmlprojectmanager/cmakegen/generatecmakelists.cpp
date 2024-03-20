@@ -450,10 +450,11 @@ QStringList CmakeFileGenerator::getSingletonsFromQmldirFile(const FilePath &file
     f.open(QIODevice::ReadOnly);
     QTextStream stream(&f);
 
+    static const QRegularExpression whitespaceRegex("\\s+");
     while (!stream.atEnd()) {
         QString line = stream.readLine();
         if (line.startsWith("singleton", Qt::CaseInsensitive)) {
-            QStringList tokenizedLine = line.split(QRegularExpression("\\s+"));
+            QStringList tokenizedLine = line.split(whitespaceRegex);
             QString fileName = tokenizedLine.last();
             if (fileName.endsWith(".qml", Qt::CaseInsensitive)) {
                 singletons.append(fileName);

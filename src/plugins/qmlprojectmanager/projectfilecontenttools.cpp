@@ -13,7 +13,6 @@
 namespace QmlProjectManager {
 namespace ProjectFileContentTools {
 
-QRegularExpression qdsVerRegexp(R"x(qdsVersion: "(.*)")x");
 
 const Utils::FilePaths rootCmakeFiles(ProjectExplorer::Project *project)
 {
@@ -34,8 +33,10 @@ const QString readFileContents(const Utils::FilePath &filePath)
 
 const QString qdsVersion(const Utils::FilePath &projectFilePath)
 {
+    static const QRegularExpression versionRegularExpression(R"x(qdsVersion: "(.*)")x");
+
     const QString projectFileContent = readFileContents(projectFilePath);
-    QRegularExpressionMatch match = qdsVerRegexp.match(projectFileContent);
+    QRegularExpressionMatch match = versionRegularExpression.match(projectFileContent);
     if (match.hasMatch()) {
         const QString version = match.captured(1);
         if (!version.isEmpty())
@@ -45,13 +46,17 @@ const QString qdsVersion(const Utils::FilePath &projectFilePath)
     return Tr::tr("Unknown");
 }
 
-QRegularExpression quickRegexp("(quickVersion:)\\s*\"(\\d+.\\d+)\"",
-                               QRegularExpression::CaseInsensitiveOption);
-QRegularExpression qt6Regexp("(qt6Project:)\\s*\"*(true|false)\"*",
-                             QRegularExpression::CaseInsensitiveOption);
+const QRegularExpression& qt6Regexp() {
+    static const QRegularExpression expression("(qt6Project:)\\s*\"*(true|false)\"*",
+                                              QRegularExpression::CaseInsensitiveOption);
+    return expression;
+}
 
 const QString qtVersion(const Utils::FilePath &projectFilePath)
 {
+    static const QRegularExpression quickRegexp("(quickVersion:)\\s*\"(\\d+.\\d+)\"",
+                                                QRegularExpression::CaseInsensitiveOption);
+
     const QString defaultReturn = Tr::tr("Unknown");
     const QString data = readFileContents(projectFilePath);
 
@@ -61,7 +66,7 @@ const QString qtVersion(const Utils::FilePath &projectFilePath)
         return QString("Qt %1").arg(match.captured(2));
 
     // If quickVersion wasn't found check for qt6Project
-    match = qt6Regexp.match(data);
+    match = qt6Regexp().match(data);
     if (match.hasMatch())
         return match.captured(2).contains("true", Qt::CaseInsensitive) ? Tr::tr("Qt 6")
                                                                        : Tr::tr("Qt 5");
@@ -72,7 +77,7 @@ const QString qtVersion(const Utils::FilePath &projectFilePath)
 bool isQt6Project(const Utils::FilePath &projectFilePath)
 {
     const QString data = readFileContents(projectFilePath);
-    QRegularExpressionMatch match = qt6Regexp.match(data);
+    QRegularExpressionMatch match = qt6Regexp().match(data);
     if (!match.hasMatch())
         return false;
     return match.captured(2).contains("true", Qt::CaseInsensitive);
@@ -82,7 +87,7 @@ const QString getMainQmlFile(const Utils::FilePath &projectFilePath)
 {
     const QString defaultReturn = "content/App.qml";
     const QString data = readFileContents(projectFilePath);
-    QRegularExpression regexp(R"x(mainFile: "(.*)")x");
+    static const QRegularExpression regexp(R"x(mainFile: "(.*)")x");
     QRegularExpressionMatch match = regexp.match(data);
     if (!match.hasMatch())
         return defaultReturn;
@@ -103,8 +108,8 @@ const Resolution resolutionFromConstants(const Utils::FilePath &projectFilePath)
     if (!reader.fetch(Utils::FilePath::fromString(fileName)))
         return {};
     const QByteArray data = reader.data();
-    const QRegularExpression regexpWidth(R"x(readonly\s+property\s+int\s+width:\s+(\d*))x");
-    const QRegularExpression regexpHeight(R"x(readonly\s+property\s+int\s+height:\s+(\d*))x");
+    static const QRegularExpression regexpWidth(R"x(readonly\s+property\s+int\s+width:\s+(\d*))x");
+    static const QRegularExpression regexpHeight(R"x(readonly\s+property\s+int\s+height:\s+(\d*))x");
     int width = -1;
     int height = -1;
     QRegularExpressionMatch match = regexpHeight.match(QString::fromUtf8(data));

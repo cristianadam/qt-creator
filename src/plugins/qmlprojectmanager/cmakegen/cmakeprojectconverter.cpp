@@ -404,8 +404,8 @@ bool CmakeProjectConverter::modifyProjectFile()
     QString projectFileContent = QString::fromUtf8(projectFile.readAll());
     projectFile.close();
 
-    const QRegularExpression mainFilePattern("^\\s*mainFile:\\s*\".*\"", QRegularExpression::MultilineOption);
-    const QString mainFileString("    mainFile: \"content/App.qml\"");
+    static const QRegularExpression mainFilePattern("^\\s*mainFile:\\s*\".*\"", QRegularExpression::MultilineOption);
+    static const QString mainFileString("    mainFile: \"content/App.qml\"");
 
     projectFileContent.replace(mainFilePattern, mainFileString);
 

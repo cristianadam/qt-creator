@@ -376,9 +376,10 @@ void CMakeGenerator::readQmlDir(const Utils::FilePath &filePath, NodePtr &node) 
     QTextStream stream(&f);
 
     Utils::FilePath dir = filePath.parentDir();
+    static const QRegularExpression whitespaceRegex("\\s+");
     while (!stream.atEnd()) {
         const QString line = stream.readLine();
-        const QStringList tokenizedLine = line.split(QRegularExpression("\\s+"));
+        const QStringList tokenizedLine = line.split(whitespaceRegex);
         const QString maybeFileName = tokenizedLine.last();
         if (tokenizedLine.first().compare("module", Qt::CaseInsensitive) == 0) {
             node->uri = tokenizedLine.last();
