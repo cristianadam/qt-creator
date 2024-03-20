@@ -139,7 +139,7 @@ public:
     DiagnosticMessage toDiagnosticMessage() const;
 
     QString suppressionString() const;
-    static QRegularExpression suppressionPattern();
+    static const QRegularExpression &suppressionPattern();
 
     SourceLocation location;
     QString message;

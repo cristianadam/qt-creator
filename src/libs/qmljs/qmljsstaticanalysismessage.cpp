@@ -307,9 +307,10 @@ QString Message::suppressionString() const
     return QString::fromLatin1("@disable-check M%1").arg(QString::number(type));
 }
 
-QRegularExpression Message::suppressionPattern()
+const QRegularExpression& Message::suppressionPattern()
 {
-    return QRegularExpression("@disable-check M(\\d+)");
+    static const QRegularExpression pattern("@disable-check M(\\d+)");
+    return pattern;
 }
 
 const PrototypeMessageData Message::prototypeForMessageType(Type type)
