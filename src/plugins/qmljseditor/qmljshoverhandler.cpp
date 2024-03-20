@@ -150,7 +150,7 @@ bool QmlJSHoverHandler::setQmlTypeHelp(const ScopeChain &scopeChain, const Docum
     const HelpItem::Links links = helpItem.links();
 
     // Check if the module name contains a major version.
-    QRegularExpression version("^([^\\d]*)(\\d+)\\.*\\d*$");
+    static const QRegularExpression version("^([^\\d]*)(\\d+)\\.*\\d*$");
     QRegularExpressionMatch m = version.match(moduleName);
     if (m.hasMatch()) {
         QMap<QString, QUrl> filteredUrlMap;
