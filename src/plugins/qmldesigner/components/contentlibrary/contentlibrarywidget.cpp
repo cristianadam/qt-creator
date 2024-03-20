@@ -561,7 +561,7 @@ bool ContentLibraryWidget::fetchTextureBundleIcons(const QDir &bundleDir)
 
 void ContentLibraryWidget::markTextureUpdated(const QString &textureKey)
 {
-    static QRegularExpression re("([^/]+)/([^/]+)/.*");
+    static const QRegularExpression re("([^/]+)/([^/]+)/.*");
     QString category = re.match(textureKey).captured(1);
     QString subcategory = re.match(textureKey).captured(2);
 

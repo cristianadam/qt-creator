@@ -116,7 +116,7 @@ bool isIdToAvoid(QStringView id)
 
 bool idContainsWrongLetter(const QString &id)
 {
-    static QRegularExpression idExpr(QStringLiteral("^[a-z_][a-zA-Z0-9_]*$"));
+    static const QRegularExpression idExpr(QStringLiteral("^[a-z_][a-zA-Z0-9_]*$"));
     return !id.contains(idExpr);
 }
 

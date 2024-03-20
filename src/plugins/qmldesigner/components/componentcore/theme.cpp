@@ -73,7 +73,7 @@ Theme *Theme::instance()
 
 QString Theme::replaceCssColors(const QString &input)
 {
-    const QRegularExpression rx("creatorTheme\\.(\\w+)");
+    static const QRegularExpression rx("creatorTheme\\.(\\w+)");
 
     QString output = input;
 

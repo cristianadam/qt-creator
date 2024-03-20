@@ -402,7 +402,7 @@ void ProjectStorageUpdater::updatePropertyEditorFilePath(
     Storage::Synchronization::SynchronizationPackage &package,
     SourceId directorySourceId)
 {
-    QRegularExpression regex{R"xo(.+\/(\w+)\/(\w+)(Specifics|Pane).qml)xo"};
+    static const QRegularExpression regex{R"xo(.+\/(\w+)\/(\w+)(Specifics|Pane).qml)xo"};
     auto match = regex.match(path);
     QString oldModuleName;
     ModuleId moduleId;

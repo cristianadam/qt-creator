@@ -1996,7 +1996,7 @@ ConditionListModel::ConditionToken ConditionListModel::valueToToken(const QStrin
         return token;
     }
 
-    static QRegularExpression regexp("^[a-z_]\\w*|^[A-Z]\\w*\\.{1}([a-z_]\\w*\\.?)+");
+    static const QRegularExpression regexp("^[a-z_]\\w*|^[A-Z]\\w*\\.{1}([a-z_]\\w*\\.?)+");
     QRegularExpressionMatch match = regexp.match(value);
 
     if (match.hasMatch()) { //variable

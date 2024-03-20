@@ -487,7 +487,7 @@ ModelNode ContentLibraryView::createMaterial(const TypeName &typeName)
     ModelNode newMatNode = createModelNode(typeName, -1, -1);
     matLib.defaultNodeListProperty().reparentHere(newMatNode);
 
-    static QRegularExpression rgx("([A-Z])([a-z]*)");
+    static const QRegularExpression rgx("([A-Z])([a-z]*)");
     QString newName = QString::fromUtf8(typeName).replace(rgx, " \\1\\2").trimmed();
     if (newName.endsWith(" Material"))
         newName.chop(9); // remove trailing " Material"
@@ -513,7 +513,7 @@ ModelNode ContentLibraryView::createMaterial(const NodeMetaInfo &metaInfo)
                                            metaInfo.minorVersion());
     matLib.defaultNodeListProperty().reparentHere(newMatNode);
 
-    static QRegularExpression rgx("([A-Z])([a-z]*)");
+    static const QRegularExpression rgx("([A-Z])([a-z]*)");
     QString newName = QString::fromLatin1(metaInfo.simplifiedTypeName()).replace(rgx, " \\1\\2").trimmed();
     if (newName.endsWith(" Material"))
         newName.chop(9); // remove trailing " Material"

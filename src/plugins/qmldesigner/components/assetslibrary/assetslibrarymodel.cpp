@@ -245,7 +245,7 @@ void AssetsLibraryModel::syncHaveFiles()
 }
 
 QString AssetsLibraryModel::getUniqueName(const QString &oldName) {
-    static QRegularExpression rgx("\\d+$"); // matches a number at the end of a string
+    static const QRegularExpression rgx("\\d+$"); // matches a number at the end of a string
 
     QString uniqueName = oldName;
     // if the folder name ends with a number, increment it

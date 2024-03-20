@@ -195,7 +195,7 @@ void StatesEditorView::cloneState(int nodeId)
     QString newName = modelState.name();
 
     // Strip out numbers at the end of the string
-    QRegularExpression regEx(QLatin1String("[0-9]+$"));
+    static const QRegularExpression regEx(QLatin1String("[0-9]+$"));
     const QRegularExpressionMatch match = regEx.match(newName);
     if (match.hasMatch() && (match.capturedStart() + match.capturedLength() == newName.length()))
         newName = newName.left(match.capturedStart());
@@ -249,7 +249,7 @@ void StatesEditorView::extendState(int nodeId)
     QString newName = modelState.name();
 
     // Strip out numbers at the end of the string
-    QRegularExpression regEx(QLatin1String("[0-9]+$"));
+    static const QRegularExpression regEx(QLatin1String("[0-9]+$"));
     const QRegularExpressionMatch match = regEx.match(newName);
     if (match.hasMatch() && (match.capturedStart() + match.capturedLength() == newName.length()))
         newName = newName.left(match.capturedStart());

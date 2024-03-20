@@ -198,7 +198,7 @@ void ItemLibraryEntry::setRequiredImport(const QString &requiredImport)
 
 void ItemLibraryEntry::setToolTip(const QString &tooltip)
 {
-    static QRegularExpression regularExpressionPattern(QLatin1String("^qsTr\\(\"(.*)\"\\)$"));
+    static const QRegularExpression regularExpressionPattern(QLatin1String("^qsTr\\(\"(.*)\"\\)$"));
     const QRegularExpressionMatch match = regularExpressionPattern.match(tooltip);
     if (match.hasMatch())
         m_data->toolTip = match.captured(1);

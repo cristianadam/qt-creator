@@ -349,7 +349,7 @@ void StylesheetMerger::adjustNodeIndex(ModelNode &node)
 
 void StylesheetMerger::applyStyleProperties(ModelNode &templateNode, const ModelNode &styleNode)
 {
-    const QRegularExpression regEx("[a-z]", QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression regEx("[a-z]", QRegularExpression::CaseInsensitiveOption);
     for (const VariantProperty &variantProperty : styleNode.variantProperties()) {
         if (templateNode.hasBindingProperty(variantProperty.name())) {
             // if the binding does not contain any alpha letters (i.e. binds to a term rather than a property,

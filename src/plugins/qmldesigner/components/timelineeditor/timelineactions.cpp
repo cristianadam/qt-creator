@@ -270,7 +270,7 @@ void TimelineActions::pasteKeyframes(AbstractView *timelineView, const QmlTimeli
 
 bool TimelineActions::clipboardContainsKeyframes()
 {
-    QRegularExpression rxp("\\bKeyframe\\s*{.*}", QRegularExpression::DotMatchesEverythingOption);
+    static const QRegularExpression rxp("\\bKeyframe\\s*{.*}", QRegularExpression::DotMatchesEverythingOption);
     return rxp.match(QApplication::clipboard()->text()).hasMatch();
 }
 

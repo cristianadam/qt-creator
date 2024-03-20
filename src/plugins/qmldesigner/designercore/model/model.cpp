@@ -1918,7 +1918,7 @@ QString Model::generateIdFromName(const QString &name, const QString &fallbackId
     if (!ModelNode::isValidId(newId))
         newId.prepend("_");
 
-    QRegularExpression rgx("\\d+$"); // matches a number at the end of a string
+   static const QRegularExpression rgx("\\d+$"); // matches a number at the end of a string
     while (hasId(newId)) { // id exists
         QRegularExpressionMatch match = rgx.match(newId);
         if (match.hasMatch()) { // ends with a number, increment it

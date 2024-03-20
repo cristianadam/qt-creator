@@ -134,7 +134,8 @@ QString GradientPresetItem::getNameByPreset(Preset value)
 
     QString enumName = QString::fromUtf8(metaEnum.valueToKey(static_cast<int>(value)));
 
-    const QStringList sl = enumName.split(QRegularExpression("(?=[A-Z])"), Qt::SkipEmptyParts);
+    static const QRegularExpression uppercaseRegex("(?=(?<![A-Z])[A-Z])");
+    const QStringList sl = enumName.split(uppercaseRegex, Qt::SkipEmptyParts);
 
     enumName.clear();
     std::for_each(sl.begin(), sl.end(), [&enumName](const QString &s) { enumName += (s + " "); });

@@ -222,7 +222,7 @@ bool PropertyEditorValue::isTranslated() const
             && metaInfo.property(name()).propertyType().isString()) {
             const QmlObjectNode objectNode(modelNode());
             if (objectNode.hasBindingProperty(name())) {
-                const QRegularExpression rx(
+                static const QRegularExpression rx(
                     QRegularExpression::anchoredPattern("qsTr(|Id|anslate)\\(\".*\"\\)"));
                 //qsTr()
                 if (objectNode.propertyAffectedByCurrentState(name()))
@@ -391,7 +391,7 @@ QString PropertyEditorValue::getTranslationContext() const
             && metaInfo.property(name()).propertyType().isString()) {
             const QmlObjectNode objectNode(modelNode());
             if (objectNode.hasBindingProperty(name())) {
-                const QRegularExpression rx(QRegularExpression::anchoredPattern(
+                static const QRegularExpression rx(QRegularExpression::anchoredPattern(
                     "qsTranslate\\(\"(.*)\"\\s*,\\s*\".*\"\\s*\\)"));
                 const QRegularExpressionMatch match = rx.match(expression());
                 if (match.hasMatch())

@@ -1474,8 +1474,8 @@ void addCustomFlowEffect(const SelectionContext &selectionContext)
 
 static QString fromCamelCase(const QString &s)
 {
-    static QRegularExpression regExp1 {"(.)([A-Z][a-z]+)"};
-    static QRegularExpression regExp2 {"([a-z0-9])([A-Z])"};
+    static const QRegularExpression regExp1 {"(.)([A-Z][a-z]+)"};
+    static const QRegularExpression regExp2 {"([a-z0-9])([A-Z])"};
 
     QString result = s;
     result.replace(regExp1, "\\1 \\2");
