@@ -13,6 +13,7 @@ Item {
     id: root
 
     signal showContextMenu()
+    signal addToProject()
 
     // Download states: "" (ie default, not downloaded), "unavailable", "downloading", "downloaded",
     //                  "failed"
@@ -29,7 +30,7 @@ Item {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
 
         onPressed: (mouse) => {
-            if (mouse.button === Qt.LeftButton && !materialsModel.importerRunning) {
+            if (mouse.button === Qt.LeftButton && !ContentLibraryBackend.materialsModel.importerRunning) {
                 if (root.downloadState === "downloaded")
                     ContentLibraryBackend.rootView.startDragMaterial(modelData, mapToGlobal(mouse.x, mouse.y))
             } else if (mouse.button === Qt.RightButton && root.downloadState === "downloaded") {
@@ -101,7 +102,7 @@ Item {
                          && (containsMouse || mouseArea.containsMouse)
 
                 onClicked: {
-                    ContentLibraryBackend.materialsModel.addToProject(modelData)
+                    root.addToProject()
                 }
             }
 
