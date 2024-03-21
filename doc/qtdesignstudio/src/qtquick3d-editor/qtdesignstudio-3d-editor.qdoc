@@ -71,6 +71,8 @@
 
     \section1 Controlling the 3D View Camera
 
+    \section2 Toggling Camera Mode
+
     To switch to perspective camera mode, select
     \inlineimage perspective_camera.png
     (\uicontrol {Toggle Perspective/Orthographic Edit Camera}).
@@ -78,14 +80,16 @@
     \inlineimage orthographic_camera.png
     . You can also Toggle the camera mode by using the keyboard shortcut \key T.
 
+    \section2 Navigating in the 3D Scene
+
     You can navigate the scene by panning, rotating, and zooming the 3D view
     camera:
 
     \list
         \li To pan, press \key Alt (or \key Option on \macos) and use the
             middle mouse button to click and drag anywhere in the rendered
-            view to slide the view around.
-            \note It is not possible to pan using Magic Mouse.
+            view to slide the view around. Alternatively, press and hold \key {right mouse
+            button} and \key {left mouse button} and drag anywhere in the view to pan.
         \li To orbit, press \key Alt and click and drag anywhere in the rendered
             view to rotate the view.
         \li To zoom, use the mouse wheel or press \key Alt and right-click
@@ -104,6 +108,17 @@
     selected, the camera is pointed at the world origin. This does not affect
     the camera zoom level.
 
+    \image studio-3d-editor-axis-helper.webp "Axis helper in the 3D view"
+
+    You can use scene cameras (2) to view the \uicontrol View3D component from a
+    specific angle in the \l {2D} view while editing scenes. Different types of
+    cameras are available in \uicontrol Components
+    > \uicontrol {Qt Quick 3D} > \uicontrol {Qt Quick 3D}. For more information
+    about using cameras in the scene, the available camera types, and their
+    properties, see \l{Cameras}.
+
+    \section2 Using Split View
+
     To view the scene in a split view of four different point of views, select
     \inlineimage icons/split-view.png.
 
@@ -114,14 +129,16 @@
     independently. Navigate each split by panning, rotating, and zooming, as
     described above.
 
-    \image studio-3d-editor-axis-helper.webp "Axis helper in the 3D view"
+    \section2 Using Fly Mode
 
-    You can use scene cameras (2) to view the \uicontrol View3D component from a
-    specific angle in the \l {2D} view while editing scenes. Different types of
-    cameras are available in \uicontrol Components
-    > \uicontrol {Qt Quick 3D} > \uicontrol {Qt Quick 3D}. For more information
-    about using cameras in the scene, the available camera types, and their
-    properties, see \l{Cameras}.
+    You can move around freely in the 3D scene with fly mode. To navigate the scene with
+    the fly mode, keep the \key {right mouse button} pressed and press:
+
+    \list
+        \li \key W, \key A, \key S, \key D to move around.
+        \li \key E to move up.
+        \li \key Q to move down.
+    \endlist
 
     \section1 Using Global and Local Orientation
 
