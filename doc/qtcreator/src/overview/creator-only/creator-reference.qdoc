@@ -36,6 +36,15 @@
 
     \annotatedlist creator-reference-build-configurations
 
+    \section1 Deploy Configurations
+
+    Deploy configurations handle the packaging of the application as an
+    executable and copying it to a location you want to run the executable at.
+    The files can be copied to a location in the file system of the computer
+    or a device.
+
+    \annotatedlist creator-reference-deploy-configurations
+
     \section1 Editors
 
     When you open files, \QC chooses a suitable editor according to the file

@@ -14,19 +14,11 @@
 
     \title Deploying to Devices
 
-    Deploy configurations in the \uicontrol Projects mode
-    \uicontrol {Run Settings} handle the packaging of the application as an
-    executable and copying it to a location you want to run the executable at.
-    The files can be copied to a location in the file system of the development
-    PC or a \l{glossary-device}{device}.
 
     \list
 
-        \li \l{Deploying to Android}
+        \li \l{Android Deploy Configuration}
 
-            When you deploy the application to an Android device, \QC copies
-            the application files to the device. In addition, you can determine
-            the Qt libraries to use.
 
         \li \l {Deploying to Boot2Qt}
 
