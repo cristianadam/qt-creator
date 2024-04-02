@@ -1907,6 +1907,51 @@ CMakeBuildConfigurationFactory::CMakeBuildConfigurationFactory()
         }
         return result;
     });
+
+    setIssueReporter(
+        [](Kit *kit,
+           const Utils::FilePath &projectDir,
+           const Utils::FilePath &buildDirectory) -> Tasks {
+            auto buildDevice = BuildDeviceKitAspect::device(kit);
+            if (!buildDevice) {
+                return {Task(
+                    Task::Error,
+                    Tr::tr("No build device is set for the kit \"%1\".").arg(kit->displayName()),
+                    {},
+                    0,
+                    ProjectExplorer::Constants::TASK_CATEGORY_BUILDSYSTEM)};
+            }
+
+            auto canMountHintFor = [&buildDevice](const FilePath &path) {
+                if (buildDevice->canMount(path))
+                    return Tr::tr("You can try mounting the folder in your device settings.");
+                return QString{};
+            };
+
+            if (!buildDevice->ensureReachable(projectDir)) {
+                return {Task(
+                    Task::Error,
+                    Tr::tr("The build device \"%1\" cannot reach the project directory.")
+                            .arg(buildDevice->displayName())
+                        + " " + canMountHintFor(projectDir),
+                    {},
+                    0,
+                    ProjectExplorer::Constants::TASK_CATEGORY_BUILDSYSTEM)};
+            }
+
+            if (!buildDirectory.isEmpty() && !buildDevice->ensureReachable(buildDirectory)) {
+                return {Task(
+                    Task::Error,
+                    Tr::tr("The build device \"%1\" cannot reach the build directory.")
+                            .arg(buildDevice->displayName())
+                        + " " + canMountHintFor(buildDirectory),
+                    {},
+                    0,
+                    ProjectExplorer::Constants::TASK_CATEGORY_BUILDSYSTEM)};
+            }
+
+            return {};
+        });
 }
 
 CMakeBuildConfigurationFactory::BuildType CMakeBuildConfigurationFactory::buildTypeFromByteArray(
