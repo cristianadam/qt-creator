@@ -151,6 +151,11 @@ public:
     virtual bool hasDeviceTester() const { return false; }
     virtual DeviceTester *createDeviceTester() const;
 
+    virtual bool canMount(const Utils::FilePath &filePath) const
+    {
+        return filePath.isSameDevice(rootPath());
+    }
+
     virtual DeviceProcessSignalOperation::Ptr signalOperation() const;
 
     enum DeviceState { DeviceReadyToUse, DeviceConnected, DeviceDisconnected, DeviceStateUnknown };
