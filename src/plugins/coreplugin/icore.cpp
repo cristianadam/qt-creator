@@ -2562,8 +2562,13 @@ void ICorePrivate::changeLog()
         ICore::raiseWindow(dialog);
         return;
     }
+
+    QString changelogPath = "changelog";
+    if (ICore::isQtDesignStudio())
+        changelogPath.append("qds");
+
     const FilePaths files =
-            ICore::resourcePath("changelog").dirEntries({{"changes-*"}, QDir::Files});
+            ICore::resourcePath(changelogPath).dirEntries({{"changes-*"}, QDir::Files});
     static const QRegularExpression versionRegex("\\d+[.]\\d+[.]\\d+");
     using VersionFilePair = std::pair<QVersionNumber, FilePath>;
     QList<VersionFilePair> versionedFiles = Utils::transform(files, [](const FilePath &fp) {
@@ -2578,6 +2583,7 @@ void ICorePrivate::changeLog()
     });
 
     auto versionCombo = new QComboBox;
+    versionCombo->setMinimumWidth(80);
     for (const VersionFilePair &f : versionedFiles)
         versionCombo->addItem(f.first.toString());
     dialog = new LogDialog(ICore::dialogParent());
