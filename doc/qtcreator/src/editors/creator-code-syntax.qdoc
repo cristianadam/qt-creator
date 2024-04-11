@@ -9,7 +9,7 @@
     \previouspage creator-how-tos.html
     \endif
 
-    \ingroup creator-how-to-edit
+    \ingroup creator-how-to-analyze
     \ingroup studio-how-to-code
 
     \title Check code syntax
@@ -79,7 +79,9 @@
     If you hide the annotations, you can move the mouse pointer over an icon to
     view them.
 
-    \sa {Analyze code with Clang-Tidy and Clazy}, {JavaScript and QML Checks}
+    \if defined(qtcreator)
+    \sa {Analyze}{How To: Analyze}, {Analyzers}, {Analyzing Code}
+    \endif
 */
 
 /*!
@@ -762,6 +764,10 @@
     \uicontrol {Reset Code Model}.
 
     \sa {Check code syntax}, {Using QML Modules with Plugins}
+
+    \if defined(qtcreator)
+    \sa {Analyzing Code}
+    \endif
 */
 
 /*!
