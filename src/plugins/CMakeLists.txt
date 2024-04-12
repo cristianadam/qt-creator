@@ -119,5 +119,6 @@ add_subdirectory(qnx)
 add_subdirectory(mcusupport)
 add_subdirectory(qtapplicationmanager)
 
+add_subdirectory(lualsp)
 add_subdirectory(luatests)
 add_subdirectory(luatemplates)
