@@ -556,5 +556,35 @@
         "License": "BSD 3-Clause \"New\" or \"Revised\" License",
         "LicenseFile": "src/libs/3rdparty/qtkeychain/COPYING",
         "Copyright": "Copyright (C) 2011-2015 Frank Osterfeld, Copyright (C) 2016 Mathias Hasselmann"
+    },
+    {
+        "Id": "lua",
+        "Name": "Lua",
+        "QDocModule": "qtcreator",
+        "QtParts": [
+            "tools"
+        ],
+        "QtUsage": "Used for scripting plugins.",
+        "Path": "src/libs/3rdparty/lua-5.4.6",
+        "Description": "Lua is a powerful, efficient, lightweight, embeddable scripting language.",
+        "Homepage": "https://www.lua.org/",
+        "License": "MIT License",
+        "LicenseFile": "src/libs/3rdparty/lua-5.4.6/doc/readme.html",
+        "Copyright": "Copyright © 1994–2023 Lua.org, PUC-Rio."
+    },
+    {
+        "Id": "sol2",
+        "Name": "sol2",
+        "QDocModule": "qtcreator",
+        "QtParts": [
+            "tools"
+        ],
+        "QtUsage": "Used for binding C++ and Lua.",
+        "Path": "src/libs/3rdparty/sol2",
+        "Description": "sol2 is a C++ library binding to Lua.",
+        "Homepage": "https://github.com/ThePhD/sol2",
+        "License": "MIT License",
+        "LicenseFile": "src/libs/3rdparty/sol2/LICENSE.txt",
+        "Copyright": "Copyright (c) 2008 Paul Evans"
     }
 ]
