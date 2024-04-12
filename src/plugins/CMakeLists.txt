@@ -118,3 +118,5 @@ endif()
 add_subdirectory(qnx)
 add_subdirectory(mcusupport)
 add_subdirectory(qtapplicationmanager)
+
+add_subdirectory(luatemplates)

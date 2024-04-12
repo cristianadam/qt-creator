@@ -12,6 +12,7 @@
 #include <extensionsystem/pluginspec.h>
 #include <extensionsystem/pluginmanager.h>
 
+#include <utils/algorithm.h>
 #include <utils/filepath.h>
 #include <utils/icon.h>
 #include <utils/qtcassert.h>
@@ -180,40 +181,17 @@ static Id actionId(const IWizardFactory *factory)
 QList<IWizardFactory*> IWizardFactory::allWizardFactories()
 {
     if (!s_areFactoriesLoaded) {
-        QTC_ASSERT(s_allFactories.isEmpty(), return s_allFactories);
+        //QTC_ASSERT(s_allFactories.isEmpty(), return s_allFactories);
 
         s_areFactoriesLoaded = true;
 
-        QHash<Id, IWizardFactory *> sanityCheck;
         for (const FactoryCreator &fc : std::as_const(s_factoryCreators)) {
             for (IWizardFactory *newFactory : fc()) {
-                if (!newFactory) // should not happen, but maybe something went wrong
-                    continue;
-                IWizardFactory *existingFactory = sanityCheck.value(newFactory->id());
-
-                QTC_ASSERT(existingFactory != newFactory, continue);
-                if (existingFactory) {
-                    qWarning("%s",
-                             qPrintable(
-                                 Tr::tr("Factory with id=\"%1\" already registered. Deleting.")
-                                     .arg(existingFactory->id().toString())));
+                auto r = registerFactory(newFactory);
+                if (!r) {
                     delete newFactory;
-                    continue;
+                    QTC_ASSERT_EXPECTED(r, continue);
                 }
-
-                QTC_ASSERT(!newFactory->m_action, continue);
-                ActionBuilder(newFactory, actionId(newFactory))
-                    .setText(newFactory->displayName())
-                    .bindContextAction(&newFactory->m_action)
-                    .addOnTriggered(newFactory, [newFactory] {
-                        if (!ICore::isNewItemDialogRunning()) {
-                            FilePath path = newFactory->runPath({});
-                            newFactory->runWizard(path, ICore::dialogParent(), Id(), QVariantMap());
-                        }
-                    });
-
-                sanityCheck.insert(newFactory->id(), newFactory);
-                s_allFactories << newFactory;
             }
         }
     }
@@ -327,6 +305,36 @@ void IWizardFactory::registerFactoryCreator(const IWizardFactory::FactoryCreator
 void IWizardFactory::registerFactoryCreator(const std::function<IWizardFactory *()> &creator)
 {
     s_factoryCreators << [creator] { return QList<IWizardFactory *>({creator()}); };
+}
+
+expected_str<void> IWizardFactory::registerFactory(IWizardFactory *newFactory)
+{
+    if (!newFactory) // should not happen, but maybe something went wrong
+        return make_unexpected(Tr::tr("Factory is null"));
+
+    if (Utils::anyOf(s_allFactories, [newFactory](const IWizardFactory *factory) {
+            return factory->id() == newFactory->id();
+        })) {
+        return make_unexpected(Tr::tr("Factory with id=\"%1\" already registered. Deleting.")
+                                   .arg(newFactory->id().toString()));
+    }
+
+    if (newFactory->m_action)
+        return make_unexpected(Tr::tr("Factory already has an action.,"));
+
+    ActionBuilder(newFactory, actionId(newFactory))
+        .setText(newFactory->displayName())
+        .bindContextAction(&newFactory->m_action)
+        .addOnTriggered(newFactory, [newFactory] {
+            if (!ICore::isNewItemDialogRunning()) {
+                FilePath path = newFactory->runPath({});
+                newFactory->runWizard(path, ICore::dialogParent(), Id(), QVariantMap());
+            }
+        });
+
+    s_allFactories << newFactory;
+
+    return {};
 }
 
 QSet<Id> IWizardFactory::allAvailablePlatforms()

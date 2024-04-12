@@ -6,6 +6,8 @@
 #include "core_global.h"
 #include "featureprovider.h"
 
+#include <utils/expected.h>
+
 #include <QIcon>
 #include <QObject>
 #include <QString>
@@ -80,6 +82,8 @@ public:
     using FactoryCreator = std::function<QList<IWizardFactory *>()>;
     static void registerFactoryCreator(const FactoryCreator &creator);
     static void registerFactoryCreator(const std::function<IWizardFactory *()> &creator);
+
+    static Utils::expected_str<void> registerFactory(IWizardFactory *factory);
 
     // Utility to find all registered wizards
     static QList<IWizardFactory*> allWizardFactories();
