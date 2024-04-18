@@ -13,6 +13,7 @@ function utils.waitms_cb(ms, callback) end
 
 ---@class FilePath
 ---@field exists boolean True if the path exists
+---@field isExecutableFile boolean True if the path exists and is an executable file
 utils.FilePath = {}
 
 ---@param path string The path to convert
