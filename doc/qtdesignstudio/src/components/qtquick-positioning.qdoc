@@ -8,7 +8,7 @@
 
     \title Scalable Layouts
 
-    The position of a \l{glossary-component}{component} in a UI can be either
+    The position of a \l{glossary-component}{component} in a UI is either
     absolute or relative to other components. The visual components exist at a
     particular location in the screen coordinate system at any instant in time.
     The x and y coordinates of a visual component are relative to those of its
@@ -17,7 +17,7 @@
     If you are designing a static UI,
     \l{Important Concepts In Qt Quick - Positioning#manual-positioning}
     {manual positioning} provides the most efficient form of positioning
-    components. For a dynamic UI, you can employ the following positioning
+    components. For a dynamic UI, employ the following positioning
     methods:
 
     \list
@@ -32,7 +32,7 @@
     \section2 Setting Bindings
 
     \l{Positioning with Bindings}{Property binding} is a declarative way of
-    specifying the value of a property. Binding allows a property value to be
+    selecting the value of a property. Binding allows a property value to be
     expressed as a JavaScript expression that defines the value relative to
     other property values or data accessible in the application. The property
     value is automatically kept up to date if the other properties or data
@@ -55,55 +55,59 @@
     \endlist
 
     When a binding is set, the \uicontrol Actions menu icon changes to
-    \inlineimage icons/action-icon-binding.png
-    . To remove bindings, select \uicontrol Actions > \uicontrol Reset.
+    \inlineimage icons/action-icon-binding.png.
+    To remove bindings, select \uicontrol Actions > \uicontrol Reset.
 
-    You can set bindings also on the \uicontrol Bindings tab in the
-    \l Connections view.
-    For more information, see \l {Adding Bindings Between Properties}.
+    To set bindings on the \uicontrol Bindings tab in the
+    \l Connections view, see \l {Adding Bindings Between Properties}.
 
-    For more information on the JavaScript environment provided, see
+    To learn information on the JavaScript environment, see
     \l{Integrating QML and JavaScript}.
 
-    Bindings are a black box for \QDS and using them might have a
-    negative impact on performance, so consider setting anchors and margins for
-    components, instead. For example, instead of setting \c {parent.width} for a
-    component, you could anchor the component to its sibling components on the
+    \note To have better performance, set anchors and margins for binding
+    components. For example, instead of setting \c {parent.width} for a
+    component, anchor the component to its sibling components on the
     left and the right.
 
     \section2 Setting Anchors and Margins
 
     In an \l{Important Concepts In Qt Quick - Positioning#anchors}
-    {anchor-based} layout, each component can be thought of as having a set of
+    {anchor-based} layout, each component has a set of
     invisible \e anchor lines: top, bottom, left, right, fill, horizontal
     center, vertical center, and baseline.
 
-    In \l Properties > \uicontrol Layout, you can set anchors and margins for
-    components. To set the anchors of a component, click the anchor buttons.
-    You can combine the top/bottom, left/right, and horizontal/vertical anchors
-    to anchor components in the corners of the parent component or center them
-    horizontally or vertically within the parent component.
+    To set anchors and margins for components:
+
+    \list 1
+        \li Go to \l Properties > \uicontrol Layout.
+        \li Set the anchors of a component.
+        \li Select anchor buttons.
+        \note Combine the top/bottom, left/right, and horizontal/vertical anchors
+        to anchor components in the corners of the parent component; or center them
+        horizontally or vertically within the parent component.
+    \endlist
 
     \image qmldesigner-anchor-buttons.png "Anchor buttons"
 
-    For convenience, you can click the \inlineimage icons/anchor-fill.png
-    (\uicontrol {Fill to Parent}) toolbar button to apply fill anchors to a
-    component and the \inlineimage icons/qtcreator-anchors-reset-icon.png
-    (\uicontrol {Reset Anchors}) button to reset the anchors to their saved
-    state.
+    To apply fill anchors to a component, select
+    \inlineimage icons/anchor-fill.png (\uicontrol {Fill to Parent}).
 
-    You can specify the baseline anchor in the \l{Code} view.
+    To reset the anchors to their saved state, select
+    \inlineimage icons/qtcreator-anchors-reset-icon.png
+    (\uicontrol {Reset Anchors})
 
-    For performance reasons, you can only anchor a component to its siblings
-    and direct parent. By default, a component is anchored to its parent when
-    you use the anchor buttons. Select a sibling of the component in the
-    \uicontrol Target field to anchor to it instead.
+    Specify the baseline anchor in the \l{Code} view.
 
-    Arbitrary anchoring is not supported. For example, you cannot specify:
-    \c {anchor.left: parent.right}. You have to specify:
+    For performance reasons, only anchor a component to its siblings
+    or direct parent. By default, a component is anchored to its parent when
+    you use the anchor buttons. To anchor to a sibling of the component, select
+    the sibling component as \uicontrol Target.
+
+    Arbitrary anchoring is not supported. For example, don't select:
+    \c {anchor.left: parent.right}. Select:
     \c {anchor.left: parent.left}. When you use the anchor buttons, anchors to
-    the parent component are always specified to the same side. However, anchors
-    to sibling components are specified to the opposite side:
+    the parent component are always set to the same side. However, anchors
+    to sibling components are set to the opposite side:
     \c {anchor.left: sibling.right}. This allows you to keep sibling components
     together.
 
@@ -113,7 +117,7 @@
 
     \image qmldesigner-anchors.png "Anchoring sibling components"
 
-    The anchors are specified as follows in code:
+    The anchors are set as follows in code:
 
     \qml
     Rectangle {
@@ -125,16 +129,16 @@
     }
     \endqml
 
-    Margins specify the amount of empty space to leave to the outside of a
-    component. Margins only have meaning for anchors. They do not take any
+    To define the empty space outside of a component, set the
+    \uicontrol Margin. Margins function for anchors. They do not take any
     effect when using layouts or absolute positioning.
 
     \section2 Aligning and Distributing Components
 
-    When you're working with a group of components, you can select them to align
+    For a group of components, select them to align
     and distribute them evenly. As the positions of the components are fixed,
     you cannot apply these functions to anchored components. For scalability,
-    you can anchor the aligned and distributed components when your design is
+    anchor the aligned and distributed components when your design is
     ready.
 
     \image qmldesigner-alignment.png "Aligning sibling components"
@@ -150,12 +154,12 @@
     that you select in the \uicontrol {Key object} field. The key component must
     be a part of the selection.
 
-    You can distribute either \e components or the \e spacing between them.
+    Distribute either \e components or the \e spacing between them.
     If the components or spacing cannot be distributed to equal pixel values
-    without ending up with half pixels, you receive a notification. You can
-    either allow \QDS to distribute components or spacing using the closest
+    without ending up with half pixels, you receive a notification.
+    Either allow \QDS to distribute components or spacing using the closest
     values possible or tweak your design so that the components and spacing
-    can be distributed perfectly.
+    is distributed perfectly.
 
     When distributing components, select the buttons in the
     \uicontrol {Distribute objects} field to determine whether the
@@ -166,11 +170,11 @@
     \uicontrol {Distribute spacing} field to determine whether
     it is distributed evenly within a target area or at
     specified distances, calculated from a starting point.
-    You can select the orientation in which the components are distributed
+    Select the orientation in which the components are distributed
     evenly within the target area: horizontally along the x axis or vertically
     along the y axis.
 
-    Alternatively, you can distribute spacing in pixels by selecting one of the
+    Alternatively, distribute spacing in pixels by selecting one of the
     starting point buttons: top/left or bottom/right edge of the target area or
     item, or its center. The edge to use depends on whether the items are
     distributed horizontally or vertically:
@@ -193,121 +197,50 @@
 
     \note Some components might end up outside the target area.
 
-    In the \uicontrol {Pixel spacing} field, you can set the space between
-    components in pixels. You can disable the distribution of spacing in
+    In the \uicontrol {Pixel spacing} field, set the space between
+    components in pixels. Disable the distribution of spacing in
     pixels by clicking the \inlineimage icons/distribute-origin-none.png
     button.
-
-    \section3 Summary of Aligment Buttons
-
-    The following table summarizes the buttons available in the
-    \uicontrol Alignment section.
-
-    \table
-    \header
-        \li Icon
-        \li Purpose
-    \row
-        \li \inlineimage icons/align-left.png
-        \li Aligns the left edges of the selected components to the one
-            farthest away from the center of the group.
-    \row
-        \li \inlineimage icons/align-center-horizontal.png
-        \li Aligns the horizontal centers of the selected components.
-    \row
-        \li \inlineimage icons/align-right.png
-        \li Aligns the right edges of the selected components.
-    \row
-        \li \inlineimage icons/align-top.png
-        \li Aligns the top edges of the selected components.
-    \row
-        \li \inlineimage icons/align-center-vertical.png
-        \li Aligns the verical centers of the selected components.
-    \row
-        \li \inlineimage icons/align-bottom.png
-        \li Aligns the bottom edges of the selected components.
-    \row
-        \li \inlineimage icons/distribute-left.png
-        \li Distributes the selected components and calculates the distance
-            between them from their left edges.
-    \row
-        \li \inlineimage icons/distribute-center-horizontal.png
-        \li Distributes the selected components and calculates the distance
-            between them from their horizontal centers.
-    \row
-        \li \inlineimage icons/distribute-right.png
-        \li Distributes the selected components and calculates the distance
-            between them from their right edges.
-    \row
-        \li \inlineimage icons/distribute-top.png
-        \li Distributes the selected components and calculates the distance
-            between them from their top edges.
-    \row
-        \li \inlineimage icons/distribute-center-vertical.png
-        \li Distributes the selected components and calculates the distance
-            between them from their vertical centers.
-    \row
-        \li \inlineimage icons/distribute-bottom.png
-        \li Distributes the selected components and calculates the distance
-            between them from their bottom edges.
-    \row
-        \li \inlineimage icons/distribute-spacing-horizontal.png
-        \li Distributes spacing between the selected components horizontally.
-    \row
-        \li \inlineimage icons/distribute-spacing-vertical.png
-        \li Distributes spacing between the selected components vertically.
-    \row
-        \li \inlineimage icons/distribute-origin-none.png
-        \li Disables the distribution of spacing in pixels.
-    \row
-        \li \inlineimage icons/distribute-origin-top-left.png
-        \li Sets the top or left edge of the target area or item as the
-            starting point for distributing spacing in pixels depending on
-            the distribution orientation.
-    \row
-        \li \inlineimage icons/distribute-origin-center.png
-        \li Sets the center of the target area as the starting point
-            for distributing spacing in pixels.
-    \row
-        \li \inlineimage icons/distribute-origin-bottom-right.png
-        \li Sets the bottom or right edge of the target area or item as the
-            starting point for distributing spacing in pixels, depending on
-            the distribution orientation.
-    \endtable
 
     \section2 Using Positioners
 
     Positioner components are containers that manage the positions of their
     child components. For many use cases, the best positioner to use is a simple
-    column, row, flow, or grid. You can use the components available in
+    column, row, flow, or grid. Use the components available in
     \uicontrol Components > \uicontrol {Default Components} >
     \uicontrol Positioner to position the children of a component in these
     formations in the most efficient manner possible.
 
-    To position several components in a \uicontrol Column, \uicontrol Row,
-    \uicontrol Flow, or \uicontrol Grid, select the components in
-    the \l {2D} view, and then select \uicontrol Position in
-    the context menu.
+    To position several components in a
+    \uicontrol Column \inlineimage column-positioner-icon-16px.png,
+    \uicontrol Row \inlineimage row-positioner-icon-16px.png,
+    \uicontrol Grid \inlineimage grid-positioner-icon-16px.png,
+    or \uicontrol Flow \inlineimage flow-positioner-icon-16px.png :
+
+    \list 1
+        \li Select the components in the \l {2D} view.
+        \li Select \uicontrol Position in the context menu.
+    \endlist
 
     \section3 Column Positioner
 
     A \uicontrol Column positions its child components along a single column.
-    It can be used as a convenient way to vertically position a series of
+    It is used as a convenient way to vertically position a series of
     components without using anchors.
 
     \image qtquick-positioner-column-properties.png "Column properties"
 
-    For all positioners, you can specify the spacing between the child
-    components that they contain in the \uicontrol Spacing field.
+    For all positioners, set the spacing between the child
+    components in the \uicontrol Spacing field.
 
-    In addition, you can specify the vertical and horizontal padding between
-    content and the left, right, top, and bottom edges of components as values
-    of the fields in the \l Padding section.
+    In addition, set the vertical and horizontal padding between
+    content and the left, right, top, and bottom edges of components
+    in the \l Padding section.
 
     \section3 Row and Flow Positioners
 
-    A \uicontrol Row positions its child components along a single row. It can
-    be used as a convenient way to horizontally position a series of components
+    A \uicontrol Row positions its child components along a single row. It is
+    used as a convenient way to horizontally position a series of components
     without using anchors.
 
     The \uicontrol Flow component positions its child components like words on a
@@ -315,14 +248,14 @@
 
     \image qtquick-positioner-flow-properties.png "Flow properties"
 
-    For flow and row positioners, you can also set the direction of a flow to
+    For flow and row positioners, also set the direction of a flow to
     either left-to-right or top-to-bottom in the \uicontrol Flow field.
     Components are positioned next to to each other according to the value you
     set in the \uicontrol {Layout direction} field until the width or height of
     the \uicontrol Flow component is exceeded, then wrapped to the next row or
     column.
 
-    You can set the layout direction to either \uicontrol LeftToRight or
+    Set the layout direction to either \uicontrol LeftToRight or
     \uicontrol RightToLeft in the \uicontrol {Layout direction} field. If
     the width of the row is explicitly set, the left anchor remains to the
     left of the row and the right anchor remains to the right of it.
@@ -350,59 +283,55 @@
     To also mirror the horizontal alignment of components, select
     \uicontrol AlignRight in the \uicontrol {Alignment H} field.
 
-    \section3 Summary of Positioners
-
-    The following table lists the positioners that you can use to arrange
-    components in UIs. They are available in \uicontrol Components
-    > \uicontrol {Default Components} > \uicontrol Positioner.
-
-    \table
-    \header
-        \li Icon
-        \li Name
-        \li Purpose
-    \row
-        \li \inlineimage column-positioner-icon-16px.png
-        \li \l[QtQuick] {Column}
-        \li Arranges its child components vertically.
-    \row
-        \li \inlineimage row-positioner-icon-16px.png
-        \li \l[QtQuick] {Row}
-        \li Arranges its child components horizontally.
-    \row
-        \li \inlineimage grid-positioner-icon-16px.png
-        \li \l[QtQuick] {Grid}
-        \li Arranges its child components so that they are aligned in a grid and
-            are not overlapping.
-    \row
-        \li \inlineimage flow-positioner-icon-16px.png
-        \li \l[QtQuick] {Flow}
-        \li Arranges its child components side by side, wrapping as necessary.
-    \endtable
-
     \section2 Using Layouts
 
-    You can use the components available in \uicontrol Components
+    Use the components available in \uicontrol Components
     > \uicontrol {Qt Quick Layouts} to arrange components in UIs.
 
     Unlike positioners, layouts manage both the positions and sizes of their
     child components, and are therefore well suited for dynamic and resizable
-    UIs. However, this means that you should not specify fixed positions and
+    UIs. However, do not select fixed positions and
     sizes for the child components in the \l{2D Geometry}{Geometry - 2D} section
     in \l Properties, unless their implicit sizes are not satisfactory.
 
-    You can use anchors or the width and height properties of the layout itself
-    to specify its size in respect to its non-layout parent component. However,
+    Use anchors or the width and height properties of the layout itself
+    to select its size in respect to its non-layout parent component. However,
     do not anchor the child components within layouts.
 
     To arrange several components in a column, row, grid, or
     \uicontrol {Stack Layout}, select the components in the \l {2D} view,
     and then select \uicontrol Layout in the context menu.
 
-    To make a component within a layout as wide as possible while respecting the
-    given constraints, select the component in the \uicontrol {2D} view, and
-    then select \uicontrol Layout > \uicontrol {Fill Width} in the context menu.
-    To make the component as high as possible, select \uicontrol {Fill Height}.
+    Follow the process to put components in the \uicontrol {Grid Layout}.
+    \list 1
+        \li Drag four \uicontrol Rectangle components to the \l {2D} view.
+            \image qtquick-layout-components.webp "Rectangle components in 2D view"
+        \li Select all the components and right-click on one of them.
+        \li From the context menu, select \uicontrol Layout > \uicontrol {Grid Layout}.
+            \image qtquick-layout-context-menu.webp "Grid Layout in the context-menu"
+        \li After you assign them to the \uicontrol {Grid Layout}, the components come
+            together and take their places in rows and columns.
+            \image qtquick-layout-in-grid.webp "Components in grid rows and columns"
+
+    \endlist
+
+    To make the components adept the width and height within the grid, follow these steps:
+    \list 1
+        \li Select a \uicontrol Rectangle component in the \l {2D} view
+            and go to \uicontrol Layout in the \l {Properties} view.
+        \li In the \uicontrol {Fill layout}, select both the \uicontrol Width and
+            \uicontrol Height checkboxes.
+            \image qtquick-layout-grid-layout-properties.webp "Layout properties for the component"
+            \note Manipulate the \uicontrol {Row span} and the \uicontrol {Column span}
+                  to allow the components to take more row and column spaces within the
+                  \uicontrol {Grid Layout}.
+        \li Repeat the previous step for all the \uicontrol Rectangle components.
+        \li Select the \uicontrol {Grid Layout} in the \uicontrol Navigator view.
+        \li Go to the \uicontrol {Geometry-2D} in the \uicontrol Properties view. In
+            \uicontrol Size, increase the \uicontrol Width and \uicontrol Height.
+        \li All the \uicontrol Rectangle components follow the change accordingly.
+            \image qtquick-layout-in-grid-enlarged.webp "Components follow the change in grid size"
+    \endlist
 
     \section3 Layout Properties
 
@@ -415,7 +344,7 @@
     The child components of row and column layout components are automatically
     positioned either horizontally from left to right as rows or vertically from
     top to bottom as columns. The number of the child components determines the
-    width of the row or the height of the column. You can specify the spacing
+    width of the row or the height of the column. Set the spacing
     between the child components in the \uicontrol Spacing field.
 
     The child components of grid layout components are arranged according to the
@@ -425,7 +354,7 @@
     \uicontrol {Columns & Rows} field is reached. Then,
     the auto-positioning wraps back to the beginning of the next row.
 
-    \image qtquick-layout-grid-properties.png "Grid Layout properties"
+    \image qtquick-layout-grid-properties.webp "Grid Layout properties"
 
     If you set the direction of the flow to \uicontrol TopToBottom, child
     components are auto-positioned vertically using the number of rows set
@@ -437,7 +366,7 @@
     When you select \uicontrol RightToLeft, the alignment of the components
     will be mirrored.
 
-    You can specify the spacing between rows and columns in the
+    Set the spacing between rows and columns in the
     \uicontrol Spacing field.
 
     \section3 Stack Layout
@@ -459,78 +388,31 @@
     \uicontrol {Stacked Container} > \uicontrol {Increase Index} or
     \uicontrol {Decrease Index}.
 
-    \section3 Summary of Layouts
-
-    The following table lists the layout components that you can use to arrange
-    components in UIs. They are available in \uicontrol Components
-    > \uicontrol {Qt Quick Layouts}.
-
-    \table
-    \header
-        \li Icon
-        \li Name
-        \li Purpose
-    \row
-        \li \inlineimage column-layouts-icon-16px.png
-        \li \l{ColumnLayout}{Column Layout}
-        \li Provides a grid layout with only one column.
-    \row
-        \li\inlineimage row-layouts-icon-16px.png
-        \li \l{RowLayout}{Row Layout}
-        \li Provides a grid layout with only one row.
-    \row
-        \li \inlineimage grid-layouts-icon-16px.png
-        \li \l{GridLayout}{Grid Layout}
-        \li Provides a way of dynamically arranging components in a grid.
-    \row
-        \li \inlineimage stack-layouts-icon-16px.png
-        \li \l{StackLayout}{Stack Layout}
-        \li Provides a stack of components where only one component is
-            visible at a time.
-    \endtable
-
-
     \section2 Organizing Components
 
-    You can use the \uicontrol Frame and \uicontrol {Group Box} controls to
-    draw frames around groups of controls.
+    To organize components in \QDS, use these controls:
 
-    If you don't want a frame, use the \uicontrol Group component instead.
+    \list
+        \li To draw frames around groups and controls, use the \uicontrol Frame
+            \inlineimage icons/frame-icon16.png and \uicontrol {Group Box}
+            \inlineimage icons/groupbox-icon16.png.
 
-    The following table lists the UI controls that you can use to organize
-    components in UIs (since Qt 5.7). The \e Location column indicates the
-    location of the component in \uicontrol Components.
+        \li To apply common style on components, use the \uicontrol Pane
+            \inlineimage icons/pane-icon16.png.
 
-    \table
-    \header
-        \li Icon
-        \li Name
-        \li Location
-        \li Purpose
-    \row
-        \li \inlineimage icons/frame-icon16.png
-        \li \l [QtQuickControls]{Frame}
-        \li Qt Quick Controls
-        \li A visual frame around a group of controls.
-    \row
-        \li \inlineimage icons/group-16px.png
-        \li Group
-        \li Qt Quick Studio Components
-        \li Enables handling the selected components as a group.
-    \row
-        \li \inlineimage icons/groupbox-icon16.png
-        \li \l [QtQuickControls]{GroupBox}{Group Box}
-        \li Qt Quick Controls
-        \li A titled visual frame around a group of controls.
-    \row
-        \li \inlineimage icons/page-icon16.png
-        \li \l [QtQuickControls]{Page}
-        \li Qt Quick Controls
-        \li A styled page control with support for a header and footer.
-    \row
-        \li \inlineimage icons/pane-icon16.png
-        \li \l [QtQuickControls]{Pane}
-        \li Qt Quick Controls
-        \li A background that matches the application style and theme.
-    \endtable
+        \li To get the compoents in a page supporting a header and footer,
+            use \uicontrol Page \inlineimage icons/page-icon16.png.
+
+        \li To keep \uicontrol {Qt Quick Controls} in a group,
+           use \uicontrol Group \inlineimage icons/group-16px.png.
+    \endlist
+
+    \note
+        \br
+        To access \uicontrol Frame, \uicontrol {Group Box}, \uicontrol Pane, and
+        \uicontrol Page controls, go to \uicontrol Components >
+        \uicontrol {Qt Quick Controls}.
+        \br
+        To access \uicontrol Group control,
+        go to \uicontrol Components > \uicontrol {Qt Quick Studio Components}.
 */
