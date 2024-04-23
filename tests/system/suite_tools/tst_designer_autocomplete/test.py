@@ -47,11 +47,12 @@ def main():
                 type(editor, ">")
             snooze(1)
             nativeType("%s" % buttonName[0])
-            test.verify(waitFor("object.exists(':popupFrame_TextEditor::GenericProposalWidget')", 1500),
-                        "Verify that GenericProposalWidget is being shown.")
-            nativeType("<Return>")
-            test.verify(waitFor('str(lineUnderCursor(editor)).strip() == "ui->%s" % buttonName', 1000),
-                        'Comparing line "%s" to expected "%s"' % (lineUnderCursor(editor), "ui->%s" % buttonName))
+            if test.verify(waitFor(proposalExistsStr, 4000),
+                           "Verify that GenericProposalWidget is being shown."):
+                waitFor("waitForObject(':popupFrame_Proposal_QListView').model().rowCount() == 1", 4000)
+                nativeType("<Return>")
+                test.verify(waitFor('str(lineUnderCursor(editor)).strip() == "ui->%s" % buttonName', 4000),
+                            'Comparing line "%s" to expected "%s"' % (lineUnderCursor(editor), "ui->%s" % buttonName))
             type(editor, "<Shift+Delete>") # Delete line
         selectFromLocator("mainwindow.ui")
     saveAndExit()
