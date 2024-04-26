@@ -338,6 +338,15 @@ class Dumper(DumperBase):
         self.ptrSize = lambda: result
         return result
 
+    def is_qobject_based(self, nativeType):
+        if nativeType.GetName() == self.qtNamespace() + 'QObject':
+            return True
+        if nativeType.GetNumberOfDirectBaseClasses() > 0:
+            return self.is_qobject_based(nativeType.GetDirectBaseClassAtIndex(0).GetType())
+        if nativeType.GetNumberOfFields() > 0:
+            return False
+        return None  # No info, can't drill deeper
+
     def from_native_type(self, nativeType):
         self.check(isinstance(nativeType, lldb.SBType))
 
@@ -459,6 +468,9 @@ class Dumper(DumperBase):
             elif code in (lldb.eTypeClassComplexInteger, lldb.eTypeClassComplexFloat):
                 type_code = TypeCode.Complex
             elif code in (lldb.eTypeClassClass, lldb.eTypeClassStruct, lldb.eTypeClassUnion):
+                type_code = TypeCode.Struct
+                self.type_qobject_based_cache[typeid] = self.is_qobject_based(nativeType)
+            elif code == lldb.eTypeClassUnion:
                 type_code = TypeCode.Struct
             elif code == lldb.eTypeClassFunction:
                 type_code = TypeCode.Function
