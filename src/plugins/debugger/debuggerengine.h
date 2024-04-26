@@ -188,7 +188,8 @@ public:
 
     QStringList validationErrors;
 
-    int fallbackQtVersion = 0x50200;
+    int qtVersion = 0;
+    QString qtNamespace = 0;
 
     // Common debugger constants.
     Utils::FilePath peripheralDescriptionFile;
