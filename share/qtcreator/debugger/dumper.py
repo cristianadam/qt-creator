@@ -26,12 +26,20 @@ try:
     # That fails on some QNX via Windows installations
     import base64
     def hexencode_(s):
-        return base64.b16encode(s).decode('utf8')
+        return base64.b16encode(s).decode('ascii')
 except:
     def hexencode_(s):
         return ''.join(["%x" % c for c in s])
 
 toInteger = int
+
+class Timer():
+    def __init__(self):
+        self.start_time = time.perf_counter()
+
+    def report(self, msg):
+        total = int(1000 * (time.perf_counter() - self.start_time))
+        DumperBase.warn("%s: %s ms" % (msg, total))
 
 class ReportItem():
     """
@@ -467,13 +475,14 @@ class DumperBase():
             self.type_encoding_cache[typeid] = enc
         return typeid
 
-    def register_int(self, name, size, enc=None):
+    def register_int(self, name, size, signed=False, charish=False):
         typeid = self.typeid_for_string(name)
         self.type_code_cache[typeid] = TypeCode.Integral
         self.type_size_cache[typeid] = size
         self.type_alignment_cache[typeid] = size
-        if enc is not None:
-            self.type_encoding_cache[typeid] = enc
+        self.type_is_signed_cache[typeid] = signed
+        self.type_is_charish_cache[typeid] = charish
+        self.type_encoding_cache[typeid] = ("int:%s" if signed else "uint:%s") % size
         return typeid
 
     def register_enum(self, name, size):
@@ -510,48 +519,50 @@ class DumperBase():
         self.type_name_cache[typeid] = '<Error>'
         self.type_size_cache[typeid] = 1
 
-        typeid_char = self.register_int('char', 1, 'uint:1')
+        typeid_char = \
+        self.register_int('char', 1, signed=True, charish=True)
         self.type_for_char = self.Type(self, typeid_char)
-        self.register_int('signed char', 1, 'int:1')
-        self.register_int('unsigned char', 1, 'uint:1')
-        self.register_int('bool', 1, 'uint:1')
-        self.register_int('char8_t', 1, 'uint:1')
-        self.register_int('int8_t', 1, 'int:1')
-        self.register_int('uint8_t', 1, 'uint:1')
-        self.register_int('qint8', 1, 'int:1')
-        self.register_int('quint8', 1, 'uint:1')
+        self.register_int('signed char', 1, signed=True, charish=True)
+        self.register_int('unsigned char', 1, charish=True)
+        self.register_int('bool', 1)
+        self.register_int('char8_t', 1, charish=True)
+        self.register_int('int8_t', 1, signed=True, charish=True)
+        self.register_int('uint8_t', 1)
+        self.register_int('qint8', 1, signed=True, charish=True)
+        self.register_int('quint8', 1)
+        self.register_int('CHAR', 1, signed=True, charish=True)
 
-        self.register_int('short', 2, 'int:2')
-        self.register_int('short int', 2, 'int:2')
-        self.register_int('signed short', 2, 'int:2')
-        self.register_int('signed short int', 2, 'int:2')
+        self.register_int('short', 2, signed=True)
+        self.register_int('short int', 2, signed=True)
+        self.register_int('signed short', 2, signed=True)
+        self.register_int('signed short int', 2, signed=True)
         typeid_unsigned_short = \
-        self.register_int('unsigned short', 2, 'uint:2')
-        self.register_int('unsigned short int', 2, 'uint:2')
-        self.register_int('char16_t', 2, 'uint:2')
-        self.register_int('int16_t', 2, 'int:2')
-        self.register_int('uint16_t', 2, 'uint:2')
-        self.register_int('qint16', 2, 'int:2')
-        self.register_int('quint16', 2, 'uint:2')
+        self.register_int('unsigned short', 2)
+        self.register_int('unsigned short int', 2)
+        self.register_int('char16_t', 2, charish=True)
+        self.register_int('int16_t', 2, signed=True)
+        self.register_int('uint16_t', 2)
+        self.register_int('qint16', 2, signed=True)
+        self.register_int('quint16', 2)
+        self.register_int('WCHAR', 2, signed=True, charish=True)
 
-        typeid_int = self.register_type('int', 4, 'int:4')
+        typeid_int = self.register_int('int', 4, signed=True)
         self.type_for_int = self.Type(self, typeid_int)
-        self.register_int('int', 4, 'int:4')
-        self.register_int('signed int', 4, 'int:4')
-        self.register_int('unsigned int', 4, 'uint:4')
-        self.register_int('char32_t', 4, 'int:4')
-        self.register_int('int32_t', 4, 'int:4')
-        self.register_int('uint32_t', 4, 'uint:4')
-        self.register_int('qint32', 4, 'int:4')
-        self.register_int('quint32', 4, 'uint:4')
+        self.register_int('signed int', 4, signed=True)
+        self.register_int('unsigned int', 4)
+        self.register_int('char32_t', 4, signed=True, charish=True)
+        self.register_int('int32_t', 4, signed=True)
+        self.register_int('uint32_t', 4)
+        self.register_int('qint32', 4, signed=True)
+        self.register_int('quint32', 4)
 
-        self.register_int('long long', 8, 'int:8')
-        self.register_int('signed long long', 8, 'int:8')
-        self.register_int('unsigned long long', 8, 'uint:8')
-        self.register_int('int64_t', 8, 'int:8')
-        self.register_int('uint64_t', 8, 'uint:8')
-        self.register_int('qint64', 8, 'int:8')
-        self.register_int('quint64', 8, 'uint:8')
+        self.register_int('long long', 8, signed=True)
+        self.register_int('signed long long', 8, signed=True)
+        self.register_int('unsigned long long', 8)
+        self.register_int('int64_t', 8, signed=True)
+        self.register_int('uint64_t', 8)
+        self.register_int('qint64', 8, signed=True)
+        self.register_int('quint64', 8)
 
         self.register_type('float', TypeCode.Float, 4, 'float:4')
         typeid_double = self.register_type('double', TypeCode.Float, 8, 'float:8')
@@ -680,9 +691,6 @@ class DumperBase():
     # Hex decoding operating on str, return str.
     @staticmethod
     def hexdecode(s, encoding='utf8'):
-        if sys.version_info[0] == 2:
-            # For python2 we need an extra str() call to return str instead of unicode
-            return str(s.decode('hex').decode(encoding))
         return bytes.fromhex(s).decode(encoding)
 
     # Hex encoding operating on str or bytes, return str.
@@ -690,10 +698,6 @@ class DumperBase():
     def hexencode(s):
         if s is None:
             s = ''
-        if sys.version_info[0] == 2:
-            if isinstance(s, buffer):
-                return bytes(s).encode('hex')
-            return s.encode('hex')
         if isinstance(s, str):
             s = s.encode('utf8')
         return hexencode_(s)
@@ -829,7 +833,7 @@ class DumperBase():
                         self.putSubItem(size, self.createValueFromAddress(data + i * charSize, charType))
 
     def readMemory(self, addr, size):
-        return self.hexencode(bytes(self.readRawMemory(addr, size)))
+        return self.hexencode(self.readRawMemory(addr, size))
 
     def encodeByteArray(self, value, limit=0):
         _, data = self.encodeByteArrayHelper(value, limit)
@@ -1269,21 +1273,7 @@ class DumperBase():
         n = arrayByteSize // innerType.size()
         p = value.address()
         if displayFormat != DisplayFormat.Raw and p:
-            if innerType.name in (
-                'char',
-                'int8_t',
-                'qint8',
-                'wchar_t',
-                'unsigned char',
-                'uint8_t',
-                'quint8',
-                'signed char',
-                'CHAR',
-                'WCHAR',
-                'char8_t',
-                'char16_t',
-                'char32_t'
-            ):
+            if self.is_charish_type(innerType.typeid):
                 self.putCharArrayHelper(p, n, innerType, self.currentItemFormat(),
                                         makeExpandable=False)
             else:
@@ -1466,6 +1456,9 @@ class DumperBase():
         self.putItem(derefValue)
         self.currentChildType = savedCurrentChildType
 
+    def is_charish_type(self, typeid):
+        return self.type_is_charish_cache.get(typeid, False)
+
     def putFormattedPointer(self, value):
         self.putOriginalAddress(value.address())
         #self.warn("PUT FORMATTED: %s" % value)
@@ -1541,21 +1534,7 @@ class DumperBase():
         #self.warn('INNER: %s' % innerType.name)
         if self.autoDerefPointers:
             # Generic pointer type with AutomaticFormat, but never dereference char types:
-            if innerType.name not in (
-                'char',
-                'signed char',
-                'int8_t',
-                'qint8',
-                'unsigned char',
-                'uint8_t',
-                'quint8',
-                'wchar_t',
-                'CHAR',
-                'WCHAR',
-                'char8_t',
-                'char16_t',
-                'char32_t'
-            ):
+            if not self.is_charish_type(innerType.typeid):
                 self.putDerefedPointer(value)
                 return
 
@@ -1582,7 +1561,7 @@ class DumperBase():
 
     def putQObjectNameValue(self, value):
         is_qobject_based = self.type_qobject_based_cache.get(value.typeid, None)
-        if is_qobject_based == False:
+        if is_qobject_based is False:
             #self.warn("SKIP TEST OBJNAME: %s" % self.type_name(value.typeid))
             return
 
@@ -1592,8 +1571,10 @@ class DumperBase():
         try:
             # dd = value['d_ptr']['d'] is just behind the vtable.
             (vtable, dd) = self.split('pp', value)
-            if not self.couldBeQObjectVTable(vtable):
-                return False
+            if is_qobject_based is None:
+                # We don't know whether this is QObject-based.
+                if not self.couldBeQObjectVTable(vtable):
+                    return False
 
             intSize = 4
             ptrSize = self.ptrSize()
@@ -2671,10 +2652,7 @@ typename))
         try:
             if funcname.startswith('qdump__'):
                 typename = funcname[7:]
-                if sys.version_info > (3,):
-                    spec = inspect.getfullargspec(function)
-                else:
-                    spec = inspect.getargspec(function)
+                spec = inspect.getfullargspec(function)
                 if len(spec.args) == 2:
                     self.qqDumpers[typename] = function
                 elif len(spec.args) == 3 and len(spec.defaults) == 1:
@@ -2720,12 +2698,8 @@ typename))
 
     def reloadDumpers(self, args):
         for mod in self.dumpermodules:
-            m = sys.modules[mod]
-            if sys.version_info[0] >= 3:
-                import importlib
-                importlib.reload(m)
-            else:
-                reload(m)
+            import importlib
+            importlib.reload(sys.modules[mod])
         self.setupDumpers(args)
 
     def loadDumpers(self, args):
@@ -3261,9 +3235,12 @@ typename))
         self.type_modulename_cache = {}
         self.type_encoding_cache = {}
         self.type_qobject_based_cache = {}
+        self.type_is_signed_cache = {}
+        self.type_is_charish_cache = {}
         self.typeid_cache = {}   # internal typename -> id
         self.typeid_current = 100
         self.typeid_from_typekey = {}   # typename -> id
+        self.struct_cache = {} # "bpattern" -> (structpattern, size, fields)
 
     def dump_type_cache(self):
         self.warn('NAME: %s' % self.type_name_cache)
@@ -3444,7 +3421,6 @@ typename))
             self.is_struct = is_struct
             self.is_base_class = is_base_class
 
-
     def ptrCode(self):
         return 'I' if self.ptrSize() == 4 else 'Q'
 
@@ -3593,17 +3569,21 @@ typename))
         return typeid
 
     def createValueFromAddress(self, address, typish):
+        return self.create_value_from_address(address, self.create_typeid(typish), self.useDynamicType)
+
+    def create_value_from_address(self, address, typeid, use_dynamic=False):
         val = self.Value(self)
-        val.typeid = self.create_typeid(typish)
         #self.warn('CREATING %s AT 0x%x' % (val.type.name, address))
         val.laddress = address
-        if self.useDynamicType:
-            val.typeid = self.dynamic_typeid_at_address(val.typeid, address)
+        val.typeid = self.dynamic_typeid_at_address(typeid, address) if use_dynamic else typeid
         return val
 
     def createValueFromData(self, data, typish):
+        return self.create_value_from_data(data, self.create_typeid(typish))
+
+    def create_value_from_data(self, data, typeid):
         val = self.Value(self)
-        val.typeid = self.create_typeid(typish)
+        val.typeid = typeid
         #self.warn('CREATING %s WITH DATA %s' % (val.type.name, self.hexencode(data)))
         val.ldata = data
         val.check()
@@ -3624,7 +3604,66 @@ typename))
         val.ldata = proxy_data
         return val
 
-    class StructBuilder():
+    def describe_simple_struct(self, pattern):
+        class SimpleStructBuilder():
+            def __init__(self, dumper):
+                self.dumper = dumper
+                self.pattern = ''
+                self.current_size = 0
+                self.fields = []
+
+            def add_field(self, field_size, code):
+                self.fields.append(self.dumper.Field(bitsize=8*field_size, bitpos=8*self.current_size))
+                self.current_size += field_size
+                self.pattern += code
+
+        ptr_size = self.ptrSize()
+        ptr_code = self.ptrCode()
+        builder = SimpleStructBuilder(self)
+        for c in pattern:
+            if c == 'p':  # Pointer as int
+                builder.add_field(ptr_size, ptr_code)
+            #elif c == 'P':  # Pointer as Value
+            #    builder.add_field(ptr_size, '%ss' % ptr_size, field_align=ptr_size)
+            #elif c in ('d'):
+            #    builder.add_field(8, c)  # field_type = 'double' ?
+            #elif c in ('q', 'Q'):
+            #    builder.add_field(8, c)
+            elif c in ('i', 'I', 'f'):
+                builder.add_field(4, c)
+            #elif c in ('h', 'H'):
+            #    builder.add_field(2, c)
+            #elif c in ('b', 'B', 'c'):
+            #    builder.add_field(1, c)
+            #elif c == 't':  # size_t
+            #    builder.add_field(ptr_size, ptr_code)
+            #elif c >= '0' and c <= '9':
+            #    if n is None:
+            #        n = ''
+            #    n += c
+            #elif c == 's':
+            #    builder.add_field(int(n), field_align=1)
+            #    n = None
+            #elif c == '{':
+            #    readingTypeName = True
+            #    typename = ''
+            #elif c == '@':
+            #    if n is None:
+            #        # Automatic padding depending on next item
+            #        builder.autoPadNext = True
+            #    else:
+            #        # Explicit padding.
+            #        padding = (int(n) - builder.current_size) % int(n)
+            #        field = self.Field(self)
+            #        builder.pattern += '%ds' % padding
+            #        builder.current_size += padding
+            #        builder.fields.append(field)
+            #        n = None
+            else:
+                raise RuntimeError('UNKNOWN STRUCT CODE: %s' % c)
+        return (builder.pattern, builder.current_size, builder.fields)
+
+    class ComplexStructBuilder():
         def __init__(self, dumper):
             self.dumper = dumper
             self.pattern = ''
@@ -3684,10 +3723,10 @@ typename))
         self.warn("UNKNOWN EMBEDDED TYPE: %s" % typename)
         return 0, 0
 
-    @functools.lru_cache(maxsize = None)
-    def describeStruct(self, pattern):
+    #@functools.lru_cache(maxsize = None)
+    def describe_complex_struct(self, pattern):
         ptrSize = self.ptrSize()
-        builder = self.StructBuilder(self)
+        builder = self.ComplexStructBuilder(self)
         n = None
         typename = ''
         readingTypeName = False
@@ -3748,13 +3787,29 @@ typename))
                     n = None
             else:
                 raise RuntimeError('UNKNOWN STRUCT CODE: %s' % c)
-        pp = builder.pattern
         size = builder.current_size
-        fields = builder.fields
         tailPad = (builder.maxAlign - size) % builder.maxAlign
-        size += tailPad
-        #self.warn("FIELDS: %s" % ((pp, size, fields),))
-        return (pp, size, fields)
+        return (builder.pattern, size + tailPad, builder.fields)
+
+    def describeStruct(self, pattern):
+        if pattern in self.struct_cache:
+            return self.struct_cache[pattern]
+        timer = Timer()
+        #self.warn("PATTERN: %s" % pattern)
+        desc = self.describe_complex_struct(pattern)
+
+        #if 's' in pattern or '{' in pattern:
+        #    desc = self.describe_complex_struct(pattern)
+        #    timer.report("COMPLEX PATTERN CREATION")
+        #else:
+        #    desc = self.describe_simple_struct(pattern)
+        #    timer.report("SIMPLE PATTERN CREATION")
+
+        #self.warn("STRUCTURE DESCRIPTION: %s" % (desc,))
+        #timer.report("COMPLEX PATTERN CREATION")
+        self.struct_cache[pattern] = desc
+        return desc
+
 
     def type_stringify(self, typeid):
         return 'Type(id="%s",name="%s",bsize=%s,code=%s)'% (
@@ -4087,11 +4142,8 @@ typename))
     def value_as_integer(self, value):
         if isinstance(value.ldata, int):
             return value.ldata
-        type_name = self.type_name(value.typeid)
-        signed = type_name != 'unsigned' \
-            and not type_name.startswith('unsigned ') \
-            and  type_name.find(' unsigned ') == -1
-        size = value.type.size()
+        signed = self.type_is_signed_cache.get(value.typeid, False)
+        size = self.type_size(value.typeid)
         return self.value_extract_integer(value, size, signed)
 
     def value_as_floating_point(self, value):
@@ -4199,14 +4251,17 @@ typename))
 
     def value_split(self, value, pattern):
         #self.warn('EXTRACT STRUCT FROM: %s' % self.type)
+        timer = Timer()
         (pp, size, fields) = self.describeStruct(pattern)
         #self.warn('SIZE: %s ' % size)
 
         blob = self.value_data(value, size)
-        address = value.laddress
 
         parts = struct.unpack_from(self.packCode + pp, blob)
+        if len(fields) != len(parts):
+            raise RuntimeError('STRUCT ERROR: %s %s' % (fields, parts))
 
+        address = value.laddress
         def fix_struct(field, part):
             #self.warn('STRUCT MEMBER: %s' % type(part))
             if field.is_struct:
@@ -4218,8 +4273,7 @@ typename))
                 return res
             return part
 
-        if len(fields) != len(parts):
-            raise RuntimeError('STRUCT ERROR: %s %s' % (fields, parts))
+        #timer.report("VALUE SPLIT " + pattern)
         return tuple(map(fix_struct, fields, parts))
 
     def type_dereference(self, typeid):
