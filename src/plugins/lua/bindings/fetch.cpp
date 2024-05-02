@@ -36,7 +36,10 @@ static QString opToString(QNetworkAccessManager::Operation op)
 
 void addFetchModule()
 {
-    LuaEngine::registerProvider("__fetch", [](sol::state_view lua) -> sol::object {
+    LuaEngine::registerProvider("Fetch", [](sol::state_view lua) -> sol::object {
+        sol::table async = lua.script("return require('async')", "_utils_").get<sol::table>();
+        sol::function wrap = async["wrap"];
+
         sol::table fetch = lua.create_table();
 
         auto networkReplyType = lua.new_usertype<QNetworkReply>(
@@ -112,23 +115,9 @@ void addFetchModule()
             }
         };
 
+        fetch["fetch"] = wrap(fetch["fetch_cb"]);
+
         return fetch;
-    });
-
-    LuaEngine::registerProvider("Fetch", [](sol::state_view lua) -> sol::object {
-        return lua
-            .script(
-                R"(
-local f = require("__fetch")
-local a = require("async")
-
-return {
-    fetch_cb = f.fetch_cb,
-    fetch = a.wrap(f.fetch_cb)
-}
-)",
-                "_fetch_")
-            .get<sol::table>();
     });
 }
 
