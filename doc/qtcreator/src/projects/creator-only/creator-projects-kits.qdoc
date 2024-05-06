@@ -31,9 +31,9 @@
         \li \l{Adding Docker Devices}{Docker} (experimental)
         \li \l{Developing for iOS}{iOS}
         \li iOS Simulator
-        \li \l{Connecting MCUs}{MCU} (commercial only)
+        \li \l{Developing for MCUs}{MCU} (commercial only)
         \li \l{Connecting QNX Devices}{QNX}
-        \li \l{Connecting Remote Linux Devices}{Remote Linux}
+        \li \l{Developing for Remote Linux}{Remote Linux}
         \li \l{Building Applications for the Web}{WebAssembly Runtime}
     \endlist
 

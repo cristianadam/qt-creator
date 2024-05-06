@@ -91,7 +91,8 @@
         \li 1.0
     \endtable
 
-    \sa {Enable and disable plugins}, {MCUs}{How To: Develop for MCUs}
+    \sa {Enable and disable plugins}, {MCUs}{How To: Develop for MCUs},
+    {Developing for MCUs}, {\QMCU}
 */
 
 /*!

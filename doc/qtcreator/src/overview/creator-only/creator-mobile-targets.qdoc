@@ -67,7 +67,7 @@
             supported for QNX Neutrino devices, and requires the QNX SDK to be
             installed on the development PC.
 
-        \li \l{Connecting Remote Linux Devices}
+        \li \l{Remote Linux}{How To: Develop for remote Linux}
 
             If you have a tool chain for building applications for embedded
             Linux devices installed on the development
