@@ -11,7 +11,7 @@
 
     If you have set up \l{Qt Application Manager}, you can deploy, run, and
     debug applications on the desktop, remote generic SSH Linux targets, or
-    \l{Boot2Qt}{Boot2Qt devices}. The applications can be either
+    Boot2Qt devices. The applications can be either
     \e {built-in applications} or \e {third-party applications}. The former
     are part of the System UI or the base installation, while the latter
     are dynamically installed, updated, and uninstalled.
@@ -148,7 +148,10 @@
     slowness and unresponsive, stuttering user interfaces. You cannot profile an
     in-process runtime as an individual process.
 
-    \sa {Activate kits for a project}, {Connecting Boot2Qt Devices},
-    {Remote Linux}{How To: Develop for remote Linux}, {Enable and disable plugins},
-    {Run on many platforms}, {Debugging}, {Debuggers}, {Debugger}, {Profiling QML Applications}
+    \sa {Activate kits for a project}, {Enable and disable plugins},
+    {Boot2Qt}{How To: Develop for Boot2Qt},
+    {Remote Linux}{How To: Develop for remote Linux},
+    {Run on many platforms}, {Debugging}, {Debuggers}, {Debugger},
+    {Developing for Boot2Qt Devices}, {Developing for Remote Linux Devices},
+    {Profiling QML Applications}
 */

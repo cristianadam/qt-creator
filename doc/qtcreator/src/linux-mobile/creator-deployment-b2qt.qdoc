@@ -11,9 +11,9 @@
 
     \brief Copy application files to Boot2Qt devices.
 
-    Specify settings for deploying applications to \l{Boot2Qt} devices
-    in the project configuration file and in \uicontrol Projects >
-    \uicontrol {Run Settings} > \uicontrol Deployment.
+    Specify settings for deploying applications to \l{Boot2Qt: Documentation}
+    {Boot2Qt} devices in the project configuration file and in \uicontrol Projects
+    > \uicontrol {Run Settings} > \uicontrol Deployment.
 
     \image qtcreator-boot2qt-deployment-steps.png "Boot2Qt deployment steps"
 
@@ -26,5 +26,7 @@
     \uicontrol {Add Deploy Step} > \uicontrol {Change default application}
     > \uicontrol {Set this application to start by default}.
 
-    \sa {Build and Run}{How To: Build and Run}, {Boot2Qt Run Settings}
+    \sa {Build and Run}{How To: Build and Run},
+    {Boot2Qt}{How To: Develop for Boot2Qt}, {Boot2Qt Run Settings},
+    {Developing for Boot2Qt Devices}
 */
