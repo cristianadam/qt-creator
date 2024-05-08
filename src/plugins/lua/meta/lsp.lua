@@ -11,6 +11,7 @@ local lsp = {}
 ---@field startBehavior? "AlwaysOn"|"RequiresFile"|"RequiresProject"
 ---@field initializationOptions? table|string The initialization options to pass to the language server, either a json string, or a table
 ---@field settings? AspectContainer
+---@field onStartFailed? function This callback is called when client failed to start. It has a single argument `ask(msg)` which you can call like this: `a.wait(ask("Install?"))`. It will return `true` if the user wants to install the language server.
 local ClientOptions = {}
 
 ---@class LanguageFilter
