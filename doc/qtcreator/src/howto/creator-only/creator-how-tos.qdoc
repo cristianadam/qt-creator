@@ -89,6 +89,8 @@
     When possible, \QOI creates suitable kits for you. Connect the devices
     to the computer to run, debug, and analyze applications on them.
 
+    \generatelist creator-how-to-devices
+
     \section2 Android
 
     Install \l {Qt for Android} and Android tools, and connect Android devices to
