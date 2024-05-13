@@ -1,0 +1,162 @@
+// Copyright (C) 2024 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \previouspage
+    \page best-practices-glow.html
+    \nextpage
+
+    \title Creating Glow and Bloom Effects
+
+    In \QDS, you can add a glow and bloom effect to your 3D scene. With this effect, you can,
+    for example, create glow around illuminated areas or add ambient light.
+    \omit
+    This example is meant to help you experiment and understand the effect.
+    \endomit
+
+    The glow effect is included in the \uicontrol ExtendedSceneEnvironment component. When you
+    create a new project, use the \uicontrol {3D Extended} project template to have
+    \uicontrol ExtendedSceneEnvironment as the default scene environment. You can also add
+    \uicontrol ExtendedSceneEnvironment from the \uicontrol Components view.
+
+    \image ext-scene-env-navigator.webp
+
+    To turn on the glow effect, select \e SceneEnvironment in the \uicontrol Navigator view and
+    then, in the \uicontrol Properties view, select \uicontrol Enabled in the
+    \uicontrol Glow section.
+
+    \image glow-properties.webp
+
+    \note When setting up or experimenting with the glow effect, use the \l {Blend Modes}{Replace}
+    blend mode to see the effect better.
+\omit
+    \section1 Running the Project
+
+    \section1 Controls
+
+    To rotate the flashlight, click it and drag left or right.
+
+    The application has sliders in the UI to control the most common properties. You can also adjust
+    the values directly in the \uicontrol Properties view in \QDS and see the changes live in either
+    the \uicontrol 2D view or in the \uicontrol {Live Preview} window.
+\endomit
+    \section1 Basic Properties
+
+    Usually, the best way to achieve a good looking glow effect in your 3D scene is to adjust
+    the \uicontrol {Strength}, \uicontrol {Intensity}, and \uicontrol {Bloom}
+    properties together.
+
+    \section2 Strength
+
+    The strength of the glow. If this property has a 0 value, the glow effect is disabled. The
+    strength is a scale factor (multiplier) applied per level. This means that
+    with more levels enabled in \l {Blur Levels}, a larger \uicontrol {strength} value has
+    a more pronounced effect.
+
+    \section2 Intensity
+
+    The intensity is effectively a scale factor (multiplier) for the accumulated glow color
+    (including all levels).
+
+    \section2 Bloom
+
+    The \uicontrol Bloom property effects the overall illumination of the whole scene. Use the
+    \uicontrol {Lower Threshold}, \uicontrol {Upper Threshold}, and \uicontrol {HDR Scale} to
+    fine tune the bloom.
+
+    \section2 Blur Levels
+
+    Sets which of the blur passes to apply to the glow effect.
+
+    The higher the level is, the more the glow effect spreads from the light source, but it is
+    also softer.
+
+    As seen in the example image below, lower blur levels produce an intense glow within a limited
+    area, while higher blur levels produce a softer glow in a more extensive area.
+
+    \note When experimenting with blur levels, use the \uicontrol Replace blend mode to Screen
+    the differences better.
+
+    \table
+      \header
+        \li Blur level
+        \li Example
+      \row
+        \li 1, 2, 3
+        \li \image glow_low_blur_levels.webp
+      \row
+        \li 5, 6, 7
+        \li \image glow_high_blur_levels.webp
+      \row
+        \li 1, 2, 3, 4, 5, 6, 7
+        \li \image glow_all_blur_levels.webp
+      \endtable
+
+    \section2 Blend Modes
+
+    The following blend modes are available.
+
+    \table
+      \header
+        \li Blend mode
+        \li Description
+        \li Example
+      \row
+        \li Additive
+        \li Often recommended for outdoor scenes with a visible sky or sun.
+        \li
+      \row
+        \li Screen
+        \li Similar to \uicontrol {Additive}, but the result is less bright.
+        \li
+      \row
+        \li SoftLight
+        \li Often recommended for in-door environments.
+        \li
+      \row
+        \li Replace
+        \li Does not perform any blending, but displays only the contribution
+        the glow effect would blend with the actual content. In practice, this is useful for
+        experimenting and troubleshooting when setting up the glow effect.
+        \li
+    \endtable
+
+    \section1 Improvement Properties
+
+    The following settings improve the quality of the glow blur.
+
+    There are two glow properties that improve the quality of the glow by upsampling. Using these
+    is a trade-off between rendering quality and performance. You can also try using the
+    \uicontrol Dithering property in the \uicontrol scenEnvironment instead. In some cases,
+    \uicontrol Dithering renders a similar result but at a lower cost.
+
+    \section2 High Quality
+
+    Increases the samples used for the glow when downsampling to improve the quality of the glow
+    effect.
+
+    \section2 Bicubical Upsampling
+
+    Reduces the aliasing artifacts and boxing in the glow effect.
+
+    \section2 Examples
+
+    These examples show a zoomed-in image of each effect.
+
+    \table
+      \header
+        \li Effect
+        \li Example
+      \row
+        \li No effect
+        \li \image glow-no-enhancment.webp
+      \row
+        \li High Quality
+        \li \image glow-high-quality.webp
+      \row
+        \li Bicubic Upsampling
+        \li \image glow-bicubic.webp
+    \endtable
+
+
+*/
