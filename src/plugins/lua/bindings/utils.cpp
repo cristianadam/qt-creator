@@ -79,9 +79,9 @@ void addUtilsModule()
             utils["waitms"] = wrap(utils["waitms_cb"]);
 
             auto hostOsInfoType = utils.new_usertype<HostOsInfo>("HostOsInfo");
-            hostOsInfoType["isWindowsHost"] = &HostOsInfo::isWindowsHost;
-            hostOsInfoType["isMacHost"] = &HostOsInfo::isMacHost;
-            hostOsInfoType["isLinuxHost"] = &HostOsInfo::isLinuxHost;
+            hostOsInfoType["isWindows"] = &HostOsInfo::isWindowsHost;
+            hostOsInfoType["isMac"] = &HostOsInfo::isMacHost;
+            hostOsInfoType["isLinux"] = &HostOsInfo::isLinuxHost;
             hostOsInfoType["os"] = sol::var([]() {
                 if (HostOsInfo::isMacHost())
                     return "mac";
@@ -91,6 +91,24 @@ void addUtilsModule()
                     return "windows";
                 else
                     return "unknown";
+            }());
+            hostOsInfoType["architecture"] = sol::var([]() {
+                switch (HostOsInfo::hostArchitecture()) {
+                case OsArchUnknown:
+                    return "unknown";
+                case OsArchX86:
+                    return "x86";
+                case OsArchAMD64:
+                    return "x86_64";
+                case OsArchItanium:
+                    return "itanium";
+                case OsArchArm:
+                    return "arm";
+                case OsArchArm64:
+                    return "arm64";
+                default:
+                    return "unknown";
+                }
             }());
 
             sol::usertype<FilePath> filePathType = utils.new_usertype<FilePath>(
