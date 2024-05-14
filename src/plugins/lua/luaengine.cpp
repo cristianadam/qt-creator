@@ -9,6 +9,7 @@
 
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QStandardPaths>
 
 using namespace Utils;
 
@@ -137,6 +138,12 @@ expected_str<void> LuaEngine::prepareSetup(
 
     const QString searchPath = (pluginSpec.location() / "?.lua").toUserOutput();
     lua["package"]["path"] = searchPath.toStdString();
+
+    const FilePath appDataPath = FilePath::fromUserInput(QStandardPaths::writableLocation(
+                                     QStandardPaths::StandardLocation::AppLocalDataLocation))
+                                 / "plugin-data" / "lua" / pluginSpec.location().fileName();
+
+    lua["AppDataPath"] = appDataPath;
 
     // TODO: only register what the plugin requested
     for (const auto &[name, func] : d->m_providers.asKeyValueRange()) {
