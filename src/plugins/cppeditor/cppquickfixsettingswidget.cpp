@@ -274,7 +274,7 @@ e.g. name = "m_test_foo_":
             },
         },
         Group {
-            title(Tr::tr("Value types:")),
+            title(Tr::tr("Value Types:")),
             Row {
                 m_valueTypes,
                 Column { pushButton_addValueType, pushButton_removeValueType, st, },

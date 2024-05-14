@@ -108,7 +108,7 @@ ClangFormatGlobalConfigWidget::ClangFormatGlobalConfigWidget(ICodeStylePreferenc
 
     Group globalSettingsGroupBox {
         bindTo(&globalSettingsGroupBoxWidget),
-        title(Tr::tr("ClangFormat settings:")),
+        title(Tr::tr("ClangFormat Settings:")),
         Column {
             m_useGlobalSettings,
             Form {
