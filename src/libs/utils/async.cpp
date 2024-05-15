@@ -15,6 +15,10 @@ public:
         setMaxThreadCount(s_maxThreadCount);
         moveToThread(qApp->thread());
     }
+    ~AsyncThreadPool() {
+        clear(); // Clear the queue of pending runnable objects
+        QThreadPool::~QThreadPool();
+    }
 };
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 3, 0)

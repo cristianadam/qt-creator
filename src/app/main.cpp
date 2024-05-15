@@ -46,6 +46,9 @@
 #include <string>
 #include <vector>
 
+#include <Windows.h>
+#include <intrin.h>
+
 #ifdef ENABLE_CRASHPAD
 #define NOMINMAX
 #include "client/crashpad_client.h"
@@ -520,8 +523,34 @@ private:
 
 ShowInGuiHandler *ShowInGuiHandler::instance = nullptr;
 
+static QtMessageHandler oldMessageHandler = 0;
+static int debugBreakPossibility = 0;
+
+void myMessageOutput(QtMsgType type, const QMessageLogContext &context, const QString &msg)
+{
+    oldMessageHandler(type, context, msg);
+    if (msg.contains(QStringLiteral("QWaitCondition"))) {
+        debugBreakPossibility++;
+        while (!IsDebuggerPresent())
+        {
+            Sleep(1000);
+        }
+        __debugbreak();
+    }
+    if (msg.contains(QStringLiteral("invalid nullptr"))) {
+        debugBreakPossibility++;
+        while (!IsDebuggerPresent())
+        {
+            Sleep(1000);
+        }
+        __debugbreak();
+    }
+}
+
 int main(int argc, char **argv)
 {
+    oldMessageHandler = qInstallMessageHandler(0);
+    qInstallMessageHandler(myMessageOutput);
     Restarter restarter(argc, argv);
     Utils::Environment::systemEnvironment(); // cache system environment before we do any changes
 
@@ -644,11 +673,11 @@ int main(int argc, char **argv)
 
     // create a custom Qt message handler that shows messages in a bare bones UI
     // if creation of the QGuiApplication fails.
-    auto handler = std::make_unique<ShowInGuiHandler>();
+    //auto handler = std::make_unique<ShowInGuiHandler>();
     std::unique_ptr<SharedTools::QtSingleApplication>
         appPtr(SharedTools::createApplication(QLatin1String(Core::Constants::IDE_DISPLAY_NAME),
                                               numberOfArguments, options.appArguments.data()));
-    handler.reset();
+    //handler.reset();
     SharedTools::QtSingleApplication &app = *appPtr;
     QCoreApplication::setApplicationName(Core::Constants::IDE_CASED_ID);
     QCoreApplication::setApplicationVersion(QLatin1String(Core::Constants::IDE_VERSION_LONG));
