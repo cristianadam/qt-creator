@@ -112,6 +112,7 @@ static void startAvd(const IDevice::Ptr &device, QWidget *parent)
     const QString name = androidDev->avdName();
     qCDebug(androidDeviceLog, "Starting Android AVD id \"%s\".", qPrintable(name));
     auto future = Utils::asyncRun([name, device] {
+        // SOURCE HERE: other thread
         const QString serialNumber = AndroidAvdManager::startAvd(name);
         // Mark the AVD as ReadyToUse once we know it's started
         if (!serialNumber.isEmpty()) {

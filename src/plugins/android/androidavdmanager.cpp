@@ -20,6 +20,7 @@ namespace Android::Internal::AndroidAvdManager {
 
 static Q_LOGGING_CATEGORY(avdManagerLog, "qtc.android.avdManager", QtWarningMsg)
 
+// HERE 1: other thread
 QString startAvd(const QString &name)
 {
     if (!findAvd(name).isEmpty() || startAvdAsync(name))
@@ -43,6 +44,7 @@ static bool is32BitUserSpace()
     return false;
 }
 
+// HERE 2: other thread
 bool startAvdAsync(const QString &avdName)
 {
     const FilePath emulator = AndroidConfig::emulatorToolPath();
@@ -87,6 +89,7 @@ bool startAvdAsync(const QString &avdName)
     return avdProcess->waitForStarted(QDeadlineTimer::Forever);
 }
 
+// HERE 2: other thread
 QString findAvd(const QString &avdName)
 {
     const QStringList lines = AndroidConfig::devicesCommandOutput();
@@ -105,6 +108,7 @@ QString findAvd(const QString &avdName)
     return {};
 }
 
+// HERE 3: other thread
 static bool waitForBooted(const QString &serialNumber, const std::optional<QFuture<void>> &future)
 {
     // found a serial number, now wait until it's done booting...
@@ -120,6 +124,7 @@ static bool waitForBooted(const QString &serialNumber, const std::optional<QFutu
     return false;
 }
 
+// HERE 2: other thread
 QString waitForAvd(const QString &avdName, const std::optional<QFuture<void>> &future)
 {
     // we cannot use adb -e wait-for-device, since that doesn't work if a emulator is already running
@@ -136,6 +141,7 @@ QString waitForAvd(const QString &avdName, const std::optional<QFuture<void>> &f
     return {};
 }
 
+// HERE 4: other thread
 bool isAvdBooted(const QString &device)
 {
     const CommandLine cmd{AndroidConfig::adbToolPath(), {AndroidDeviceInfo::adbSelector(device),

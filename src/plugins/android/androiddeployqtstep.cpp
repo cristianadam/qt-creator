@@ -349,6 +349,7 @@ bool AndroidDeployQtStep::init()
     return true;
 }
 
+// HERE B: other thread
 DeployErrorFlags AndroidDeployQtStep::runDeploy(QPromise<void> &promise)
 {
     CommandLine cmd(m_command);
@@ -405,6 +406,7 @@ DeployErrorFlags AndroidDeployQtStep::runDeploy(QPromise<void> &promise)
         stdError(line);
     });
 
+    // TODO: Make async
     process.start();
 
     emit addOutput(Tr::tr("Starting: \"%1\"").arg(cmd.toUserOutput()), OutputFormat::NormalMessage);
@@ -472,10 +474,11 @@ void AndroidDeployQtStep::slotAskForUninstall(DeployErrorFlags errorFlags)
                         QMessageBox::Yes, QMessageBox::No) == QMessageBox::Yes;
 }
 
-// TODO: This implementation is not thread safe.
+// TODO A: This implementation is not thread safe.
 void AndroidDeployQtStep::runImpl(QPromise<void> &promise)
 {
     if (!m_avdName.isEmpty()) {
+        // HERE B: other thread
         const QString serialNumber = AndroidAvdManager::waitForAvd(m_avdName, promise.future());
         qCDebug(deployStepLog) << "Deploying to AVD:" << m_avdName << serialNumber;
         if (serialNumber.isEmpty()) {
@@ -489,8 +492,11 @@ void AndroidDeployQtStep::runImpl(QPromise<void> &promise)
         AndroidManager::setDeviceSerialNumber(target(), serialNumber);
     }
 
+    // HERE B: other thread
     DeployErrorFlags returnValue = runDeploy(promise);
     if (returnValue > NoError && returnValue < Failure) {
+        // TODO: Crazy communication with the GUI thread.
+        //       Executed with BlockingQueuedConnection to the main thread - may deadlock!
         emit askForUninstall(returnValue);
         if (m_askForUninstall) {
             m_uninstallPreviousPackageRun = true;
@@ -565,6 +571,7 @@ Tasking::GroupItem AndroidDeployQtStep::runRecipe()
     return AsyncTask<void>(onSetup);
 }
 
+// HERE C: other thread
 void AndroidDeployQtStep::runCommand(const CommandLine &command)
 {
     Process buildProc;

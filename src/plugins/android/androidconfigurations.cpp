@@ -36,6 +36,7 @@
 #include <utils/qtcprocess.h>
 #include <utils/qtcassert.h>
 #include <utils/qtcsettings.h>
+#include <utils/scopedtimer.h>
 #include <utils/stringutils.h>
 
 #include <QApplication>
@@ -284,6 +285,7 @@ static FilePath ndkSubPathFromQtVersion(const QtVersion &version)
 // AndroidConfig
 //////////////////////////////////
 
+// HERE 3: other thread
 QString getAvdName(const QString &serialnumber)
 {
     const int index = serialnumber.indexOf(QLatin1String("-"));
@@ -687,6 +689,7 @@ QStringList devicesCommandOutput()
     return adbProcess.allOutput().split('\n', Qt::SkipEmptyParts).mid(1);
 }
 
+// HERE 4: other thread
 bool isConnected(const QString &serialNumber)
 {
     const QStringList lines = devicesCommandOutput();
