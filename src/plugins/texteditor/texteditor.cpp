@@ -4375,7 +4375,7 @@ static QColor calcBlendColor(const QColor &baseColor, int level, int count)
     if (level == count - 1)
         return color90;
 
-    const int blendFactor = level * (256 / (count - 2));
+    const int blendFactor = level * (256 / (count - 1));
 
     return blendColors(color80, color90, blendFactor);
 }
@@ -6870,8 +6870,8 @@ void TextEditorWidgetPrivate::handleBackspaceKey()
                 }
             }
         } else if (typingSettings.m_smartBackspaceBehavior == TypingSettings::BackspaceUnindents) {
-            const QChar previousChar = q->document()->characterAt(pos - 1);
-            if (!(previousChar == QLatin1Char(' ') || previousChar == QLatin1Char('\t'))) {
+            if (c.positionInBlock() == 0
+                || c.positionInBlock() > TabSettings::firstNonSpace(c.block().text())) {
                 if (cursorWithinSnippet)
                     c.beginEditBlock();
                 c.deletePreviousChar();

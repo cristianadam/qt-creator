@@ -41,9 +41,6 @@ def main():
         # needed because categoriesView and templatesView using same model
         for template in dumpItems(templatesView.model(), templatesView.rootIndex()):
             template = template.replace(".", "\\.")
-            # FIXME this needs Qt6.2+
-            if template == "Qt Quick 2 Extension Plugin":
-                continue
             # skip non-configurable
             if template not in ["Qt Quick UI Prototype", "Qt Creator Plugin"]:
                 availableProjectTypes.append({category:template})
@@ -116,9 +113,9 @@ def handleBuildSystemVerifyKits(category, template, kits, displayedPlatforms,
         return
 
     fixedBuildSystems = list(availableBuildSystems)
-    if template == 'Qt Quick Application':
-        fixedBuildSystems.remove('qmake')
-        test.log("Skipped qmake (not supported).")
+    if template == 'Qt Quick 2 Extension Plugin':
+        fixedBuildSystems.remove('Qbs')
+        test.log("Skipped Qbs (not supported).")
 
     for counter, buildSystem in enumerate(fixedBuildSystems):
         test.log("Using build system '%s'" % buildSystem)
@@ -126,7 +123,7 @@ def handleBuildSystemVerifyKits(category, template, kits, displayedPlatforms,
         clickButton(waitForObject(":Next_QPushButton"))
         if specialHandlingFunc:
             specialHandlingFunc(displayedPlatforms, *args)
-        if not ('Plain C' in template or template == 'Qt Quick Application'):
+        if not ('Plain C' in template):
             __createProjectHandleTranslationSelection__()
         verifyKitCheckboxes(kits, displayedPlatforms)
         safeClickButton("Cancel")

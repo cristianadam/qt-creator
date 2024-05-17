@@ -25,7 +25,9 @@ def main():
             openContextMenu(waitForObject("{container=':*Qt Creator.FormEditorStack_Designer::Internal::FormEditorStack'"
                                           "text='PushButton' type='QPushButton' visible='1'}"), 5, 5, 1)
             activateItem(waitForObjectItem("{type='QMenu' unnamed='1' visible='1'}", "Change objectName..."))
-            typeLines(waitForObject(":FormEditorStack_qdesigner_internal::PropertyLineEdit"), buttonName)
+            buttonNameEdit = waitForObject(":FormEditorStack_qdesigner_internal::PropertyLineEdit")
+            replaceEditorContent(buttonNameEdit, buttonName)
+            type(buttonNameEdit, "<Return>")
         else:
             # Verify that everything works without ever changing the name
             buttonName = "pushButton"
@@ -46,12 +48,15 @@ def main():
                 snooze(1)
                 type(editor, ">")
             snooze(1)
+            proposalExists = lambda: object.exists(':popupFrame_TextEditor::GenericProposalWidget')
             nativeType("%s" % buttonName[0])
-            test.verify(waitFor("object.exists(':popupFrame_TextEditor::GenericProposalWidget')", 1500),
-                        "Verify that GenericProposalWidget is being shown.")
-            nativeType("<Return>")
-            test.verify(waitFor('str(lineUnderCursor(editor)).strip() == "ui->%s" % buttonName', 1000),
-                        'Comparing line "%s" to expected "%s"' % (lineUnderCursor(editor), "ui->%s" % buttonName))
+            if test.verify(waitFor(proposalExists, 4000),
+                           "Verify that GenericProposalWidget is being shown."):
+                nativeType("<Return>")
+                lineCorrect = lambda: str(lineUnderCursor(editor)).strip() == "ui->%s" % buttonName
+                test.verify(waitFor(lineCorrect, 1000),
+                            ('Comparing line "%s" to expected "%s"'
+                             % (lineUnderCursor(editor), "ui->%s" % buttonName)))
             type(editor, "<Shift+Delete>") # Delete line
         selectFromLocator("mainwindow.ui")
     saveAndExit()

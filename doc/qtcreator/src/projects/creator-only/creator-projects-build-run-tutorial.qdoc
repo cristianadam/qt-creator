@@ -1,4 +1,4 @@
-// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2024 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 // **********************************************************************
@@ -28,8 +28,7 @@
     To run an example application on a Boot2Qt device, you must set up
     Boot2Qt on the development host and create connections
     between the host and devices. For more information, see
-    \l{https://doc.qt.io/Boot2Qt/b2qt-installation-guides.html}
-    {Boot2Qt: Installation Guides}
+    \l{Boot2Qt: Documentation}.
 
     If you have \l{Qt Design Studio Manual}{\QDS} installed, you can open
     \QDS examples from \QC in \QDS.
@@ -51,10 +50,17 @@
             the \uicontrol Boot2Qt tag (commercial only) in the search field
             (4) to list examples that you can run on Boot2Qt devices.
 
+        \li In \uicontrol {Configure Project}, select
+            \l{glossary-buildandrun-kit}{kits} for building the example for the
+            target platforms.
+
+            \image qtcreator-configure-project.webp {Configure Project view}
+
+        \li Select \uicontrol {Configure Project}.
+
         \li To check that you can compile and link the application code for a
-            device, click the \uicontrol {Kit Selector} and select a
-            \l{glossary-buildandrun-kit}{kit} for the
-            device.
+            device, click the \uicontrol {Kit Selector} and select the kit for
+            the device.
 
             \image qtcreator-examples-kit-selector.webp {Selecting a kit to build with}
 
@@ -62,7 +68,7 @@
             automatically detected the installed kit. If you cannot see any kits,
             see \l{Add kits}.
 
-        \li Click \inlineimage icons/run_small.png
+        \li Select \inlineimage icons/run_small.png
             (\uicontrol Run) to build and run the application.
 
         \li To see the compilation progress, press \key{Alt+4} to open
@@ -70,9 +76,8 @@
 
             If build errors occur, check that you have a Qt version, a
             \l{Add compilers}{compiler}, and the necessary kits installed. If
-            you are building for an \l{Connecting Android Devices}{Android device}
-            or \l{Connecting iOS Devices}{iOS device}, check that you set up the
-            development environment correctly.
+            you are building for an Android or iOS device, check that you set up
+            the development environment correctly.
 
             The \uicontrol Build progress bar on the toolbar turns green when
             you build the project successfully. The application opens on the
@@ -80,4 +85,7 @@
 
     \endlist
 
+    \sa {Manage Kits}{How To: Manage Kits}, {Open projects},
+    {Connecting Android Devices}, {Connecting iOS Devices},
+    {Compile Output}, {Boot2Qt: Documentation}, {Qt Design Studio Manual}
 */

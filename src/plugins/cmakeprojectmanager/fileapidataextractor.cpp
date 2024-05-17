@@ -308,7 +308,8 @@ static CMakeBuildTarget toBuildTarget(const TargetDetails &t,
 
                 std::optional<QString> dllName;
                 if (buildDir.osType() == OsTypeWindows && (f.role == "libraries")) {
-                    part = FilePath::fromUserInput(part).fileName();
+                    const auto partAsFilePath = FilePath::fromUserInput(part);
+                    part = partAsFilePath.fileName();
 
                     // Skip object libraries on Windows. This case can happen with static qml plugins
                     if (part.endsWith(".obj") || part.endsWith(".o"))
@@ -322,12 +323,15 @@ static CMakeBuildTarget toBuildTarget(const TargetDetails &t,
                     }
 
                     // MinGW has libQt6Core.a -> Qt6Core.dll
+                    // but libFoo.dll.a was already handled above
                     const QString mingwPrefix("lib");
-                    const QString mingwSuffix(".a");
-                    if (part.startsWith(mingwPrefix) && part.endsWith(mingwSuffix))
-                        dllName = part.chopped(mingwSuffix.length())
+                    const QString mingwSuffix("a");
+                    const QString completeSuffix = partAsFilePath.completeSuffix();
+                    if (part.startsWith(mingwPrefix) && completeSuffix == mingwSuffix) {
+                        dllName = part.chopped(mingwSuffix.length() + 1/*the '.'*/)
                                       .sliced(mingwPrefix.length())
                                       .append(".dll");
+                    }
                 }
 
                 if (!tmp.isEmpty() && tmp.isDir()) {
@@ -633,7 +637,7 @@ static FolderNode *createSourceGroupNode(const QString &sourceGroupName,
             FolderNode *existingNode = currentNode->findChildFolderNode(
                 [&p](const FolderNode *fn) { return fn->displayName() == p; });
             if (!existingNode) {
-                auto node = createCMakeVFolder(sourceDirectory, Node::DefaultFolderPriority + 5, p, true);
+                auto node = createCMakeVFolder(sourceDirectory, Node::DefaultFolderPriority + 5, p);
                 node->setListInProject(false);
                 node->setIcon([] { return Icon::fromTheme("edit-copy"); });
 
@@ -654,7 +658,6 @@ static void addCompileGroups(ProjectNode *targetRoot,
                              const FilePath &buildDirectory,
                              const TargetDetails &td)
 {
-    const bool showSourceFolders = settings().showSourceSubFolders();
     const bool inSourceBuild = (sourceDirectory == buildDirectory);
 
     QSet<FilePath> alreadyListed;
@@ -685,6 +688,9 @@ static void addCompileGroups(ProjectNode *targetRoot,
         if (isPchFile(buildDirectory, sourcePath) || isUnityFile(buildDirectory, sourcePath))
             node->setIsGenerated(true);
 
+        const bool showSourceFolders = settings().showSourceSubFolders()
+                                       && defaultCMakeSourceGroupFolder(td.sourceGroups[si.sourceGroup]);
+
         // Where does the file node need to go?
         if (showSourceFolders && sourcePath.isChildOf(buildDirectory) && !inSourceBuild) {
             buildFileNodes.emplace_back(std::move(node));
@@ -696,6 +702,9 @@ static void addCompileGroups(ProjectNode *targetRoot,
     }
 
     for (size_t i = 0; i < sourceGroupFileNodes.size(); ++i) {
+        const bool showSourceFolders = settings().showSourceSubFolders()
+                                       && defaultCMakeSourceGroupFolder(td.sourceGroups[i]);
+
         std::vector<std::unique_ptr<FileNode>> &current = sourceGroupFileNodes[i];
         FolderNode *insertNode = td.sourceGroups[i] == "TREE"
                                      ? targetRoot

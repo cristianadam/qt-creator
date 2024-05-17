@@ -532,7 +532,7 @@ QString androidNameForApiLevel(int x)
     case 33:
         return QLatin1String("Android 13.0 (\"Tiramisu\")");
     case 34:
-        return QLatin1String("Android API 34");
+        return QLatin1String("Android 14.0 (\"UpsideDownCake\")");
     default:
         return Tr::tr("Unknown Android version. API Level: %1").arg(x);
     }
@@ -614,7 +614,7 @@ bool checkKeystorePassword(const FilePath &keystorePath, const QString &keystore
                            "--storepass", keystorePasswd});
     Process proc;
     proc.setCommand(cmd);
-    proc.runBlocking(10s, EventLoopMode::On);
+    proc.runBlocking(10s);
     return proc.result() == ProcessResult::FinishedWithSuccess;
 }
 
@@ -631,7 +631,7 @@ bool checkCertificatePassword(const FilePath &keystorePath, const QString &keyst
 
     Process proc;
     proc.setCommand({androidConfig().keytoolPath(), arguments});
-    proc.runBlocking(10s, EventLoopMode::On);
+    proc.runBlocking(10s);
     return proc.result() == ProcessResult::FinishedWithSuccess;
 }
 
@@ -644,7 +644,7 @@ bool checkCertificateExists(const FilePath &keystorePath, const QString &keystor
 
     Process proc;
     proc.setCommand({androidConfig().keytoolPath(), arguments});
-    proc.runBlocking(10s, EventLoopMode::On);
+    proc.runBlocking(10s);
     return proc.result() == ProcessResult::FinishedWithSuccess;
 }
 
