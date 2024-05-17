@@ -60,9 +60,37 @@ public:
 
 using LibrariesMap = QMap<QString, Library>;
 
-static bool openXmlFile(QDomDocument &doc, const FilePath &fileName);
-static bool openManifest(const Target *target, QDomDocument &doc);
-static int parseMinSdk(const QDomElement &manifestElem);
+static std::optional<QDomElement> documentElement(const FilePath &fileName)
+{
+    QFile file(fileName.toString());
+    if (!file.open(QIODevice::ReadOnly)) {
+        qCDebug(androidManagerLog) << "Cannot open:" << fileName.toUserOutput();
+        return {};
+    }
+    QDomDocument doc;
+    if (!doc.setContent(file.readAll())) {
+        qCDebug(androidManagerLog) << "Cannot parse:" << fileName.toUserOutput();
+        return {};
+    }
+    return doc.documentElement();
+}
+
+static std::optional<QDomElement> documentElement(const Target *target)
+{
+    return documentElement(AndroidManager::manifestPath(target));
+}
+
+static int parseMinSdk(const QDomElement &manifestElem)
+{
+    const QDomElement usesSdk = manifestElem.firstChildElement("uses-sdk");
+    if (!usesSdk.isNull() && usesSdk.hasAttribute("android:minSdkVersion")) {
+        bool ok;
+        int tmp = usesSdk.attribute("android:minSdkVersion").toInt(&ok);
+        if (ok)
+            return tmp;
+    }
+    return 0;
+}
 
 static const ProjectNode *currentProjectNode(const Target *target)
 {
@@ -71,30 +99,27 @@ static const ProjectNode *currentProjectNode(const Target *target)
 
 QString packageName(const Target *target)
 {
-    QDomDocument doc;
-    if (!openManifest(target, doc))
+    const auto element = documentElement(target);
+    if (!element)
         return {};
-    QDomElement manifestElem = doc.documentElement();
-    return manifestElem.attribute(QLatin1String("package"));
+    return element->attribute("package");
 }
 
 QString packageName(const FilePath &manifestFile)
 {
-    QDomDocument doc;
-    if (!openXmlFile(doc, manifestFile))
+    const auto element = documentElement(manifestFile);
+    if (!element)
         return {};
-    QDomElement manifestElem = doc.documentElement();
-    return manifestElem.attribute(QLatin1String("package"));
+    return element->attribute("package");
 }
 
 QString activityName(const Target *target)
 {
-    QDomDocument doc;
-    if (!openManifest(target, doc))
+    const auto element = documentElement(target);
+    if (!element)
         return {};
-    QDomElement activityElem = doc.documentElement().firstChildElement(
-                QLatin1String("application")).firstChildElement(QLatin1String("activity"));
-    return activityElem.attribute(QLatin1String("android:name"));
+    return element->firstChildElement("application").firstChildElement("activity")
+                                                    .attribute("android:name");
 }
 
 static FilePath manifestSourcePath(const Target *target)
@@ -118,10 +143,11 @@ static FilePath manifestSourcePath(const Target *target)
 */
 int minimumSDK(const Target *target)
 {
-    QDomDocument doc;
-    if (!openXmlFile(doc, manifestSourcePath(target)))
+    const auto element = documentElement(manifestSourcePath(target));
+    if (!element)
         return minimumSDK(target->kit());
-    const int minSdkVersion = parseMinSdk(doc.documentElement());
+
+    const int minSdkVersion = parseMinSdk(*element);
     if (minSdkVersion == 0)
         return AndroidManager::defaultMinimumSDK(QtSupport::QtKitAspect::qtVersion(target->kit()));
     return minSdkVersion;
@@ -138,10 +164,10 @@ int minimumSDK(const Kit *kit)
     if (version && version->targetDeviceTypes().contains(Constants::ANDROID_DEVICE_TYPE)) {
         FilePath stockManifestFilePath = FilePath::fromUserInput(
             version->prefix().toString() + "/src/android/templates/AndroidManifest.xml");
-        QDomDocument doc;
-        if (openXmlFile(doc, stockManifestFilePath)) {
-            minSdkVersion = parseMinSdk(doc.documentElement());
-        }
+
+        const auto element = documentElement(stockManifestFilePath);
+        if (element)
+            minSdkVersion = parseMinSdk(*element);
     }
     if (minSdkVersion == 0)
         return AndroidManager::defaultMinimumSDK(version);
@@ -536,43 +562,6 @@ QString androidNameForApiLevel(int x)
     default:
         return Tr::tr("Unknown Android version. API Level: %1").arg(x);
     }
-}
-
-static void raiseError(const QString &reason)
-{
-    QMessageBox::critical(nullptr, Tr::tr("Error creating Android templates."), reason);
-}
-
-static bool openXmlFile(QDomDocument &doc, const FilePath &fileName)
-{
-    QFile f(fileName.toString());
-    if (!f.open(QIODevice::ReadOnly))
-        return false;
-
-    if (!doc.setContent(f.readAll())) {
-        raiseError(Tr::tr("Cannot parse \"%1\".").arg(fileName.toUserOutput()));
-        return false;
-    }
-    return true;
-}
-
-static bool openManifest(const Target *target, QDomDocument &doc)
-{
-    return openXmlFile(doc, AndroidManager::manifestPath(target));
-}
-
-static int parseMinSdk(const QDomElement &manifestElem)
-{
-    QDomElement usesSdk = manifestElem.firstChildElement(QLatin1String("uses-sdk"));
-    if (usesSdk.isNull())
-        return 0;
-    if (usesSdk.hasAttribute(QLatin1String("android:minSdkVersion"))) {
-        bool ok;
-        int tmp = usesSdk.attribute(QLatin1String("android:minSdkVersion")).toInt(&ok);
-        if (ok)
-            return tmp;
-    }
-    return 0;
 }
 
 void installQASIPackage(Target *target, const FilePath &packagePath)
