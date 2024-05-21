@@ -731,9 +731,17 @@ QList<AndroidDeviceInfo> connectedDevices(QString *error)
 
 bool isConnected(const QString &serialNumber)
 {
-    const QList<AndroidDeviceInfo> devices = connectedDevices();
-    for (const AndroidDeviceInfo &device : devices) {
-        if (device.serialNumber == serialNumber)
+    Process adbProcess;
+    adbProcess.setCommand({adbToolPath(), {"devices"}});
+    adbProcess.runBlocking();
+    if (adbProcess.result() != ProcessResult::FinishedWithSuccess)
+        return false;
+
+    // mid(1) - remove "List of devices attached" header line
+    const QStringList lines = adbProcess.allOutput().split('\n', Qt::SkipEmptyParts).mid(1);
+    for (const QString &line : lines) {
+        // skip the daemon logs
+        if (!line.startsWith("* daemon") && line.left(line.indexOf('\t')).trimmed() == serialNumber)
             return true;
     }
     return false;
