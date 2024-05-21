@@ -13,6 +13,7 @@
 
 #include <utils/algorithm.h>
 #include <utils/benchmarker.h>
+#include <utils/checkablemessagebox.h>
 #include <utils/fileutils.h>
 #include <utils/futuresynchronizer.h>
 #include <utils/hostosinfo.h>
@@ -56,6 +57,7 @@ Q_LOGGING_CATEGORY(pluginLog, "qtc.extensionsystem", QtWarningMsg)
 
 const char C_IGNORED_PLUGINS[] = "Plugins/Ignored";
 const char C_FORCEENABLED_PLUGINS[] = "Plugins/ForceEnabled";
+const char C_ALLOWED_TO_FETCH_PLUGINS[] = "Plugins/PluginsAllowedToFetch";
 const std::chrono::milliseconds DELAYED_INITIALIZE_INTERVAL{20};
 
 enum { debugLeaks = 0 };
@@ -995,15 +997,19 @@ void PluginManagerPrivate::writeSettings()
         return;
     QStringList tempDisabledPlugins;
     QStringList tempForceEnabledPlugins;
+    QStringList allowedToFetchPlugins;
     for (PluginSpec *spec : std::as_const(pluginSpecs)) {
         if (spec->isEnabledByDefault() && !spec->isEnabledBySettings())
             tempDisabledPlugins.append(spec->name());
         if (!spec->isEnabledByDefault() && spec->isEnabledBySettings())
             tempForceEnabledPlugins.append(spec->name());
+        if (spec->allowedToFetch().has_value() && !spec->allowedToFetch().value())
+            allowedToFetchPlugins.append(spec->name());
     }
 
     settings->setValueWithDefault(C_IGNORED_PLUGINS, tempDisabledPlugins);
     settings->setValueWithDefault(C_FORCEENABLED_PLUGINS, tempForceEnabledPlugins);
+    settings->setValueWithDefault(C_ALLOWED_TO_FETCH_PLUGINS, allowedToFetchPlugins);
 }
 
 /*!
@@ -1018,6 +1024,7 @@ void PluginManagerPrivate::readSettings()
     if (settings) {
         disabledPlugins = settings->value(C_IGNORED_PLUGINS).toStringList();
         forceEnabledPlugins = settings->value(C_FORCEENABLED_PLUGINS).toStringList();
+        allowedToFetchPlugins = settings->value(C_ALLOWED_TO_FETCH_PLUGINS).toStringList();
     }
 }
 
@@ -1649,6 +1656,47 @@ PluginSpec *PluginManager::specForPlugin(IPlugin *plugin)
 */
 void PluginManagerPrivate::loadPlugin(PluginSpec *spec, PluginSpec::State destState)
 {
+    if (spec->wantsToFetch()) {
+        if (spec->allowedToFetch().has_value() && !spec->allowedToFetch().value()) {
+            spec->setError("Plugins that fetch data from the internet have been disabled.");
+        } else if (!spec->allowedToFetch().has_value()) {
+            if (allowedToFetchPlugins.contains(spec->name())) {
+                spec->setAllowedToFetch(true);
+            } else {
+                static bool doNotAskAgain = false;
+
+                const QString loadWithoutFetch
+                    = spec->allowLoadWithoutFetch()
+                          ? Tr::tr("Plugin will still be enabled but unable to fetch")
+                          : Tr::tr("Plugin will be disabled otherwise");
+
+                const QMessageBox::StandardButton answer = Utils::CheckableMessageBox::question(
+                    nullptr,
+                    Tr::tr("A plugin wants to fetch data from the internet"),
+                    Tr::tr("The plugin \"%1\" wants to fetch data from the internet. Do you want "
+                           "to allow this? (%2)")
+                        .arg(spec->name())
+                        .arg(loadWithoutFetch),
+                    &doNotAskAgain,
+                    QMessageBox::Yes | QMessageBox::No,
+                    QMessageBox::No,
+                    QMessageBox::Yes,
+                    {},
+                    Tr::tr("Remember choice for all plugins"));
+                if (answer == QMessageBox::Yes) {
+                    allowedToFetchPlugins.append(spec->name());
+                    spec->setAllowedToFetch(true);
+                } else {
+                    spec->setAllowedToFetch(false);
+                }
+            }
+
+            // writeSettings();
+        }
+        if (!spec->allowedToFetch().value() && spec->disableIfNotAllowedToFetch())
+            return;
+    }
+
     if (spec->hasError() || spec->state() != destState-1)
         return;
 
@@ -1774,6 +1822,8 @@ void PluginManagerPrivate::addPlugins(const PluginSpecs &specs)
             spec->setEnabledBySettings(true);
         if (spec->isEnabledByDefault() && disabledPlugins.contains(spec->name()))
             spec->setEnabledBySettings(false);
+        if (allowedToFetchPlugins.contains(spec->name()))
+            spec->setAllowedToFetch(true);
 
         pluginCategories[spec->category()].append(spec);
     }

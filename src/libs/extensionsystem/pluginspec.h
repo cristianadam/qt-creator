@@ -119,6 +119,12 @@ public:
     virtual bool isForceDisabled() const;
     virtual bool isSoftLoadable() const;
 
+    virtual bool wantsToFetch() const;
+    virtual bool disableIfNotAllowedToFetch() const { return true; }
+    virtual std::optional<bool> allowedToFetch() const;
+    virtual void setAllowedToFetch(bool allowed);
+    virtual bool allowLoadWithoutFetch() const { return false; }
+
     virtual QVector<PluginDependency> dependencies() const;
     virtual QJsonObject metaData() const;
     virtual PerformanceData &performanceData() const;

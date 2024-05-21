@@ -214,6 +214,8 @@ public:
     bool forceEnabled{false};
     bool forceDisabled{false};
     bool softLoadable{false};
+    bool wantsToFetch{false};
+    std::optional<bool> allowedToFetch;
 
     std::optional<QString> errorString;
 
@@ -459,6 +461,24 @@ bool PluginSpec::isSoftLoadable() const
 }
 
 /*!
+    Returns whether the plugin will fetch data from the internet.
+*/
+bool PluginSpec::wantsToFetch() const
+{
+    return d->wantsToFetch;
+}
+
+std::optional<bool> PluginSpec::allowedToFetch() const
+{
+    return d->allowedToFetch;
+}
+
+void PluginSpec::setAllowedToFetch(bool allowed)
+{
+    d->allowedToFetch = allowed;
+}
+
+/*!
     The plugin dependencies. This is valid after the PluginSpec::Read state is reached.
 */
 QVector<PluginDependency> PluginSpec::dependencies() const
@@ -667,6 +687,7 @@ namespace {
     const char PLUGIN_DISABLED_BY_DEFAULT[] = "DisabledByDefault";
     const char PLUGIN_DEPRECATED[] = "Deprecated";
     const char PLUGIN_SOFTLOADABLE[] = "SoftLoadable";
+    const char PLUGIN_WANTSTOFETCH[] = "WantsToFetch";
     const char VENDOR[] = "Vendor";
     const char COPYRIGHT[] = "Copyright";
     const char LICENSE[] = "License";
@@ -852,6 +873,12 @@ Utils::expected_str<void> PluginSpecPrivate::readMetaData(const QJsonObject &dat
         return reportError(msgValueIsNotABool(PLUGIN_SOFTLOADABLE));
     softLoadable = value.toBool(false);
     qCDebug(pluginLog) << "softLoadable =" << softLoadable;
+
+    value = metaData.value(QLatin1String(PLUGIN_WANTSTOFETCH));
+    if (!value.isUndefined() && !value.isBool())
+        return reportError(msgValueIsNotABool(PLUGIN_WANTSTOFETCH));
+    wantsToFetch = value.toBool(false);
+    qCDebug(pluginLog) << "wantsToFetch =" << wantsToFetch;
 
     value = metaData.value(QLatin1String(VENDOR));
     if (!value.isUndefined() && !value.isString())

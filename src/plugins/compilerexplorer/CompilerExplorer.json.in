@@ -27,5 +27,6 @@
         "    </mime-type>",
         "</mime-info>"
     ],
+    "WantsToFetch" : true,
     "JsonWizardPaths" : [":/compilerexplorer/wizard/"]
 }

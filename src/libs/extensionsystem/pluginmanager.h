@@ -90,6 +90,9 @@ public:
     static Utils::QtcSettings *globalSettings();
     static void writeSettings();
 
+    bool allowPluginsThatFetchFromTheInternet() const;
+    void setAllowPluginsThatFetchFromTheInternet();
+
     // command line arguments
     static QStringList arguments();
     static QStringList argumentsForRestart();
