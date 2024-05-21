@@ -45,7 +45,7 @@ static bool is32BitUserSpace()
 
 bool startAvdAsync(const QString &avdName)
 {
-    const FilePath emulator = androidConfig().emulatorToolPath();
+    const FilePath emulator = AndroidConfig::emulatorToolPath();
     if (!emulator.exists()) {
         QMetaObject::invokeMethod(Core::ICore::mainWindow(), [emulator] {
             QMessageBox::critical(Core::ICore::dialogParent(),
@@ -75,11 +75,11 @@ bool startAvdAsync(const QString &avdName)
     });
 
     // start the emulator
-    CommandLine cmd(androidConfig().emulatorToolPath());
+    CommandLine cmd(AndroidConfig::emulatorToolPath());
     if (is32BitUserSpace())
         cmd.addArg("-force-32bit");
 
-    cmd.addArgs(androidConfig().emulatorArgs(), CommandLine::Raw);
+    cmd.addArgs(AndroidConfig::emulatorArgs(), CommandLine::Raw);
     cmd.addArgs({"-avd", avdName});
     qCDebug(avdManagerLog).noquote() << "Running command (startAvdAsync):" << cmd.toUserOutput();
     avdProcess->setCommand(cmd);
@@ -89,7 +89,7 @@ bool startAvdAsync(const QString &avdName)
 
 QString findAvd(const QString &avdName)
 {
-    const QList<AndroidDeviceInfo> devices = androidConfig().connectedDevices();
+    const QList<AndroidDeviceInfo> devices = AndroidConfig::connectedDevices();
     for (const AndroidDeviceInfo &device : devices) {
         if (device.type != ProjectExplorer::IDevice::Emulator)
             continue;
@@ -108,7 +108,7 @@ static bool waitForBooted(const QString &serialNumber, const std::optional<QFutu
         if (isAvdBooted(serialNumber))
             return true;
         QThread::sleep(2);
-        if (!androidConfig().isConnected(serialNumber)) // device was disconnected
+        if (!AndroidConfig::isConnected(serialNumber)) // device was disconnected
             return false;
     }
     return false;
@@ -132,7 +132,7 @@ QString waitForAvd(const QString &avdName, const std::optional<QFuture<void>> &f
 
 bool isAvdBooted(const QString &device)
 {
-    const CommandLine command{androidConfig().adbToolPath(), AndroidDeviceInfo::adbSelector(device)
+    const CommandLine command{AndroidConfig::adbToolPath(), AndroidDeviceInfo::adbSelector(device)
                               + QStringList{"shell", "getprop", "init.svc.bootanim"}};
     qCDebug(avdManagerLog).noquote() << "Running command (isAvdBooted):" << command.toUserOutput();
     Process adbProc;
