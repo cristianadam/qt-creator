@@ -119,6 +119,7 @@ add_qtc_plugin(CppEditor
     quickfixes/extractfunction.cpp quickfixes/extractfunction.h
     quickfixes/extractliteralasparameter.cpp quickfixes/extractliteralasparameter.h
     quickfixes/insertfunctiondefinition.cpp quickfixes/insertfunctiondefinition.h
+    quickfixes/layoutpreview.cpp quickfixes/layoutpreview.h
     quickfixes/logicaloperationquickfixes.cpp quickfixes/logicaloperationquickfixes.h
     quickfixes/moveclasstoownfile.cpp quickfixes/moveclasstoownfile.h
     quickfixes/movefunctiondefinition.cpp quickfixes/movefunctiondefinition.h
