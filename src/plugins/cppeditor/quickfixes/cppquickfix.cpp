@@ -24,6 +24,7 @@
 #include "extractfunction.h"
 #include "extractliteralasparameter.h"
 #include "insertfunctiondefinition.h"
+#include "layoutpreview.h"
 #include "logicaloperationquickfixes.h"
 #include "moveclasstoownfile.h"
 #include "movefunctiondefinition.h"
@@ -127,6 +128,7 @@ void createCppQuickFixFactories()
     registerExtractLiteralAsParameterQuickfix();
     registerInsertFunctionDefinitionQuickfixes();
     registerInsertVirtualMethodsQuickfix();
+    registerLayoutPreviewQuickfix();
     registerLogicalOperationQuickfixes();
     registerMoveClassToOwnFileQuickfix();
     registerMoveFunctionDefinitionQuickfixes();

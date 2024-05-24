@@ -21,6 +21,27 @@ int main(int argc, char *argv[])
     QGroupBox *g = nullptr;
     QLabel *l = nullptr;
 
+    TextEdit {
+        id(&textId),
+        text("World")
+    }.show();
+
+    const QString a = "AAA";
+    Row { "r", a, "s" }.emerge()->show();
+
+    Group gg {
+        title("Title"),
+        Column {
+            PushButton {
+                text("GGGGGG")
+            },
+            TextEdit {
+        //        id(&textId),
+                text("Och noe")
+            }
+        }
+    };
+
     Group {
         bindTo(&w),  // Works, as GroupInterface derives from WidgetInterface
         // bindTo(&l),  // Does (intentionally) not work, GroupInterface does not derive from LabelInterface
@@ -50,7 +71,7 @@ int main(int argc, char *argv[])
             br,
             "Grid",
             Grid {
-                Span { 2, QString("1111111") }, "3", br,
+                Span { 2,  Row { "1111111" } }, "3", br,
                 "3", "4", "6", br,
                 "4", empty, "6", br,
                 hr, "4", "6"

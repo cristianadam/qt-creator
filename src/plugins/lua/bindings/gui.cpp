@@ -384,6 +384,15 @@ void addGuiModule()
             sol::base_classes,
             sol::bases<Widget, Object, Thing>());
 
+        gui.new_usertype<Preview>(
+            "Preview",
+            sol::call_constructor,
+            sol::factories(&construct<Preview>),
+            "show",
+            &Preview::show,
+            sol::base_classes,
+            sol::bases<Layout, Object, Thing>());
+
         gui["br"] = &br;
         gui["st"] = &st;
         gui["empty"] = &empty;

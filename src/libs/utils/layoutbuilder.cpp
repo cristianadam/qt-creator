@@ -3,12 +3,14 @@
 
 #include "layoutbuilder.h"
 
+#include <QCloseEvent>
 #include <QDebug>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QLabel>
 #include <QPushButton>
+#include <QShortcut>
 #include <QSpacerItem>
 #include <QSpinBox>
 #include <QSplitter>
@@ -944,6 +946,40 @@ Tab::Tab(const QString &tabName, const Layout &inner)
 void addToTabWidget(TabWidget *tabWidget, const Tab &tab)
 {
     access(tabWidget)->addTab(tab.inner.emerge(), tab.tabName);
+}
+
+// Special Preview
+
+struct PreviewWidget final : public QWidget
+{
+    void keyPressEvent(QKeyEvent *) final
+    {
+        // FIXME: Escape only removes focus?
+        // if (ev->key() == Qt::Key_Escape)
+        deleteLater();
+    }
+};
+
+Preview::Preview(std::initializer_list<I> ps)
+    : Column(ps)
+{}
+
+void Preview::show() const
+{
+    auto widget = new PreviewWidget;
+    auto layout = access(this);
+
+    auto quit = new QPushButton("Quit Preview", widget);
+    QObject::connect(quit, &QAbstractButton::clicked, widget, &QObject::deleteLater);
+
+    auto hbox = new QHBoxLayout;
+    hbox->addStretch();
+    hbox->addWidget(quit);
+    layout->addWidget(createHr());
+    layout->addItem(hbox);
+
+    widget->setLayout(layout);
+    widget->show();
 }
 
 // Special If
