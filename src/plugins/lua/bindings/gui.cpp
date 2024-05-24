@@ -65,6 +65,7 @@ static std::unique_ptr<T> construct(const sol::table &children)
 {
     std::unique_ptr<T> item(new T({}));
     processChildren(item.get(), children);
+    item->flush();
     return item;
 }
 
@@ -899,6 +900,15 @@ void setupGuiModule()
             }),
             sol::base_classes,
             sol::bases<Widget, Object>());
+
+        gui.new_usertype<Preview>(
+            "Preview",
+            sol::call_constructor,
+            sol::factories(&construct<Preview>),
+            "show",
+            &Preview::show,
+            sol::base_classes,
+            sol::bases<Column, Layout, Object>());
 
         gui["br"] = &br;
         gui["st"] = &st;

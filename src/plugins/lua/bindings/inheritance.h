@@ -79,6 +79,7 @@ class Column;
 class Flow;
 class Form;
 class Grid;
+class Preview;
 
 class Widget;
 class Group;
@@ -98,6 +99,7 @@ SOL_BASE_CLASSES(Layouting::Row, Layouting::Layout);
 SOL_BASE_CLASSES(Layouting::Flow, Layouting::Layout);
 SOL_BASE_CLASSES(Layouting::Grid, Layouting::Layout);
 SOL_BASE_CLASSES(Layouting::Form, Layouting::Layout);
+SOL_BASE_CLASSES(Layouting::Preview, Layouting::Column, Layouting::Layout, Layouting::Object);
 SOL_BASE_CLASSES(Layouting::Widget, Layouting::Object);
 SOL_BASE_CLASSES(Layouting::Stack, Layouting::Widget);
 SOL_BASE_CLASSES(Layouting::Group, Layouting::Widget);
@@ -116,6 +118,7 @@ SOL_DERIVED_CLASSES(
     Layouting::Flow,
     Layouting::Grid,
     Layouting::Form,
+    Layouting::Preview,
     Layouting::Widget,
     Layouting::Stack,
     Layouting::Group,

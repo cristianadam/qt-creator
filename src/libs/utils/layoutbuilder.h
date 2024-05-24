@@ -575,6 +575,17 @@ public:
 
 // Special
 
+class QTCREATOR_UTILS_EXPORT Preview : public Column
+{
+public:
+    using Implementation = QVBoxLayout;
+    using I = Building::BuilderItem<Column>;
+
+    Preview(std::initializer_list<I> ps);
+
+    void show() const;
+};
+
 class QTCREATOR_UTILS_EXPORT Then
 {
 public:

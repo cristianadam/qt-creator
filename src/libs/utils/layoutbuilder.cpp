@@ -15,6 +15,7 @@
 #include "qtcassert.h"
 #include "spinner/spinner.h"
 
+#include <QCloseEvent>
 #include <QDebug>
 #include <QFormLayout>
 #include <QGridLayout>
@@ -25,6 +26,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QShortcut>
 #include <QSize>
 #include <QSizePolicy>
 #include <QSpacerItem>
@@ -1465,6 +1467,41 @@ Canvas::Canvas(std::initializer_list<I> ps)
 void Canvas::setPaintFunction(const CanvasWidget::PaintFunction &paintFunction)
 {
     access(this)->setPaintFunction(paintFunction);
+}
+
+// Special Preview
+
+struct PreviewWidget final : public QWidget
+{
+    void keyPressEvent(QKeyEvent *ev) final
+    {
+        if (ev->key() == Qt::Key_Escape)
+            deleteLater();
+        else
+            QWidget::keyPressEvent(ev);
+    }
+};
+
+Preview::Preview(std::initializer_list<I> ps)
+    : Column(ps)
+{}
+
+void Preview::show() const
+{
+    auto widget = new PreviewWidget;
+    auto layout = access(this);
+
+    auto quit = new QPushButton("Quit Preview", widget);
+    QObject::connect(quit, &QAbstractButton::clicked, widget, &QObject::deleteLater);
+
+    auto hbox = new QHBoxLayout;
+    hbox->addStretch();
+    hbox->addWidget(quit);
+    layout->addWidget(createHr());
+    layout->addItem(hbox);
+
+    widget->setLayout(layout);
+    widget->show();
 }
 
 // Special If

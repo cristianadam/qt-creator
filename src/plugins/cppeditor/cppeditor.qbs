@@ -258,6 +258,8 @@ QtcPlugin {
             "extractliteralasparameter.h",
             "insertfunctiondefinition.cpp",
             "insertfunctiondefinition.h",
+            "layoutpreview.cpp",
+            "layoutpreview.h",
             "logicaloperationquickfixes.cpp",
             "logicaloperationquickfixes.h",
             "moveclasstoownfile.cpp",
