@@ -9,7 +9,10 @@
     \title Scene Environments
 
     The \uicontrol {Scene Environment} and the \uicontrol {Extended Scene Environment}
-    components define how a scene is rendered globally.
+    components define how a scene is rendered globally. A scene environment component is
+    included in the \uicontrol View3D component. For a 3D scene that doesn't have a
+    \uicontrol View3D, the scene environment of the previous \uicontrol View3D is used for
+    rendering the scene.
 
     \note The available properties for the scene environments and their location in the
     \uicontrol Properties view vary according to \uicontrol {Target Qt Version} that
