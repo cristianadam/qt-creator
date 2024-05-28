@@ -23,6 +23,7 @@ add_qtc_plugin(Lua
     luapluginspec.h
     luaqttypes.cpp
     luaqttypes.h
+    luasettings.cpp
     luatr.h
     meta/action.lua
     meta/async.lua
@@ -43,6 +44,12 @@ add_qtc_plugin(Lua
     # generateqtbindings.cpp # Use this if you need to generate some code.
 )
 
+qt_add_resources(Lua lua_images_rcc
+  PREFIX "/lua"
+  FILES
+    images/settingscategory_lua.png
+    images/settingscategory_lua@2x.png
+)
 
 set_source_files_properties(luauibindings.cpp PROPERTY SKIP_AUTOMOC ON PROPERTY SKIP_AUTOGEN ON)
 
