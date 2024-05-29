@@ -141,10 +141,11 @@ struct ProjectStorage::Statements
     Sqlite::WriteStatement<1> deleteSignalDeclarationByTypeIdStatement{
         "DELETE FROM signalDeclarations WHERE typeId=?", database};
     Sqlite::WriteStatement<1> deleteTypeStatement{"DELETE FROM types  WHERE typeId=?", database};
-    mutable Sqlite::ReadStatement<4, 1> selectPropertyDeclarationsByTypeIdStatement{
-        "SELECT name, propertyTypeId, propertyTraits, (SELECT name FROM "
-        "propertyDeclarations WHERE propertyDeclarationId=pd.aliasPropertyDeclarationId) FROM "
-        "propertyDeclarations AS pd WHERE typeId=?",
+    mutable Sqlite::ReadStatement<6, 1> selectPropertyDeclarationsByTypeIdStatement{
+        "SELECT propertyDeclarationId, name, propertyTypeId, propertyTraits, (SELECT name FROM "
+        "  propertyDeclarations WHERE propertyDeclarationId=pd.aliasPropertyDeclarationId), typeId "
+        "FROM propertyDeclarations AS pd "
+        "WHERE typeId=?",
         database};
     Sqlite::ReadStatement<6, 1> selectPropertyDeclarationsForTypeIdStatement{
         "SELECT name, propertyTraits, propertyTypeId, propertyImportedTypeNameId, "
@@ -444,10 +445,9 @@ struct ProjectStorage::Statements
         database};
     Sqlite::WriteStatement<3> updatePropertyDeclarationAliasIdAndTypeNameIdStatement{
         "UPDATE propertyDeclarations SET aliasPropertyDeclarationId=?2, "
-        "propertyImportedTypeNameId=?3 WHERE propertyDeclarationId=?1 AND "
-        "(aliasPropertyDeclarationId IS NOT ?2 OR propertyImportedTypeNameId IS NOT ?3)",
+        "propertyImportedTypeNameId=?3 WHERE propertyDeclarationId=?1",
         database};
-    Sqlite::WriteStatement<1> updatetPropertiesDeclarationValuesOfAliasStatement{
+    Sqlite::WriteStatement<1> updatePropertiesDeclarationValuesOfAliasStatement{
         "WITH RECURSIVE "
         "  properties(propertyDeclarationId, propertyTypeId, propertyTraits) AS ( "
         "      SELECT aliasPropertyDeclarationId, propertyTypeId, propertyTraits FROM "
@@ -893,11 +893,8 @@ public:
                                                {Sqlite::PrimaryKey{}});
             auto &typeIdColumn = propertyDeclarationTable.addColumn("typeId");
             auto &nameColumn = propertyDeclarationTable.addColumn("name");
-            auto &propertyTypeIdColumn = propertyDeclarationTable.addForeignKeyColumn(
-                "propertyTypeId",
-                typesTable,
-                Sqlite::ForeignKeyAction::NoAction,
-                Sqlite::ForeignKeyAction::Restrict);
+            auto &propertyTypeIdColumn = propertyDeclarationTable.addColumn(
+                "propertyTypeId", Sqlite::StrictColumnType::Integer);
             propertyDeclarationTable.addColumn("propertyTraits", Sqlite::StrictColumnType::Integer);
             propertyDeclarationTable.addColumn("propertyImportedTypeNameId",
                                                Sqlite::StrictColumnType::Integer);
@@ -2001,6 +1998,7 @@ Storage::Synchronization::Type ProjectStorage::fetchTypeByTypeId(TypeId typeId)
         type.functionDeclarations = fetchFunctionDeclarations(type.typeId);
         type.signalDeclarations = fetchSignalDeclarations(type.typeId);
         type.enumerationDeclarations = fetchEnumerationDeclarations(type.typeId);
+        type.typeId = typeId;
 
         return type;
     });
@@ -2883,7 +2881,8 @@ void ProjectStorage::handleAliasPropertyDeclarationsWithPropertyType(
                                                          PropertyDeclarationId{propertyDeclarationId},
                                                          ImportedTypeNameId{propertyImportedTypeNameId},
                                                          std::move(aliasPropertyName),
-                                                         std::move(aliasPropertyNameTail));
+                                                         std::move(aliasPropertyNameTail),
+                                                         fetchTypeSourceId(typeId_));
 
         s->updateAliasPropertyDeclarationToNullStatement.write(propertyDeclarationId);
     };
@@ -3011,17 +3010,21 @@ void ProjectStorage::relinkAliasPropertyDeclarations(AliasPropertyDeclarations &
         [&](const AliasPropertyDeclaration &alias) {
             auto typeId = fetchTypeId(alias.aliasImportedTypeNameId);
 
-            if (!typeId)
-                throw TypeNameDoesNotExists{fetchImportedTypeName(alias.aliasImportedTypeNameId)};
+            if (typeId) {
+                auto [propertyTypeId, aliasId, propertyTraits] = fetchPropertyDeclarationByTypeIdAndNameUngarded(
+                    typeId, alias.aliasPropertyName);
 
-            auto [propertyTypeId, aliasId, propertyTraits] = fetchPropertyDeclarationByTypeIdAndNameUngarded(
-                typeId, alias.aliasPropertyName);
-
-            s->updatePropertyDeclarationWithAliasAndTypeStatement.write(alias.propertyDeclarationId,
-                                                                        propertyTypeId,
-                                                                        propertyTraits,
-                                                                        alias.aliasImportedTypeNameId,
-                                                                        aliasId);
+                s->updatePropertyDeclarationWithAliasAndTypeStatement.write(alias.propertyDeclarationId,
+                                                                            propertyTypeId,
+                                                                            propertyTraits,
+                                                                            alias.aliasImportedTypeNameId,
+                                                                            aliasId);
+            } else {
+                errorNotifier->typeNameCannotBeResolved(fetchImportedTypeName(
+                                                            alias.aliasImportedTypeNameId),
+                                                        fetchTypeSourceId(alias.typeId));
+                // TODO set to null
+            }
         },
         TypeCompare<AliasPropertyDeclaration>{});
 }
@@ -3046,8 +3049,12 @@ void ProjectStorage::relinkPropertyDeclarations(PropertyDeclarations &relinkable
         [&](const PropertyDeclaration &property) {
             TypeId propertyTypeId = fetchTypeId(property.importedTypeNameId);
 
-            if (!propertyTypeId)
-                throw TypeNameDoesNotExists{fetchImportedTypeName(property.importedTypeNameId)};
+            if (!propertyTypeId) {
+                errorNotifier->typeNameCannotBeResolved(fetchImportedTypeName(
+                                                            property.importedTypeNameId),
+                                                        fetchTypeSourceId(property.typeId));
+                propertyTypeId = TypeId{};
+            }
 
             s->updatePropertyDeclarationTypeStatement.write(property.propertyDeclarationId,
                                                             propertyTypeId);
@@ -3170,17 +3177,24 @@ void ProjectStorage::linkAliasPropertyDeclarationAliasIds(const AliasPropertyDec
     for (const auto &aliasDeclaration : aliasDeclarations) {
         auto aliasTypeId = fetchTypeId(aliasDeclaration.aliasImportedTypeNameId);
 
-        if (!aliasTypeId) {
-            throw TypeNameDoesNotExists{
-                fetchImportedTypeName(aliasDeclaration.aliasImportedTypeNameId)};
+        if (aliasTypeId) {
+            auto aliasId = fetchAliasId(aliasTypeId,
+                                        aliasDeclaration.aliasPropertyName,
+                                        aliasDeclaration.aliasPropertyNameTail);
+
+            s->updatePropertyDeclarationAliasIdAndTypeNameIdStatement
+                .write(aliasDeclaration.propertyDeclarationId,
+                       aliasId,
+                       aliasDeclaration.aliasImportedTypeNameId);
+        } else {
+            errorNotifier->typeNameCannotBeResolved(fetchImportedTypeName(
+                                                        aliasDeclaration.aliasImportedTypeNameId),
+                                                    aliasDeclaration.sourceId);
+            s->updatePropertyDeclarationStatement.write(aliasDeclaration.propertyDeclarationId,
+                                                        TypeId{},
+                                                        Storage::PropertyDeclarationTraits{},
+                                                        aliasDeclaration.aliasImportedTypeNameId);
         }
-
-        auto aliasId = fetchAliasId(aliasTypeId,
-                                    aliasDeclaration.aliasPropertyName,
-                                    aliasDeclaration.aliasPropertyNameTail);
-
-        s->updatePropertyDeclarationAliasIdAndTypeNameIdStatement.write(
-            aliasDeclaration.propertyDeclarationId, aliasId, aliasDeclaration.aliasImportedTypeNameId);
     }
 }
 
@@ -3192,7 +3206,7 @@ void ProjectStorage::updateAliasPropertyDeclarationValues(const AliasPropertyDec
                                keyValue("alias property declarations", aliasDeclarations)};
 
     for (const auto &aliasDeclaration : aliasDeclarations) {
-        s->updatetPropertiesDeclarationValuesOfAliasStatement.write(
+        s->updatePropertiesDeclarationValuesOfAliasStatement.write(
             aliasDeclaration.propertyDeclarationId);
         s->updatePropertyAliasDeclarationRecursivelyStatement.write(
             aliasDeclaration.propertyDeclarationId);
@@ -3364,7 +3378,8 @@ void ProjectStorage::synchronizePropertyDeclarationsInsertAlias(
                                                        fetchImportedTypeNameId(value.typeName,
                                                                                sourceId),
                                                        value.aliasPropertyName,
-                                                       value.aliasPropertyNameTail);
+                                                       value.aliasPropertyNameTail,
+                                                       sourceId);
         return Sqlite::CallbackControl::Abort;
     };
 
@@ -3452,8 +3467,12 @@ void ProjectStorage::synchronizePropertyDeclarationsInsertProperty(
     auto propertyImportedTypeNameId = fetchImportedTypeNameId(value.typeName, sourceId);
     auto propertyTypeId = fetchTypeId(propertyImportedTypeNameId);
 
-    if (!propertyTypeId)
-        throw TypeNameDoesNotExists{fetchImportedTypeName(propertyImportedTypeNameId), sourceId};
+    if (!propertyTypeId) {
+        auto typeName = std::visit([](auto &&importedTypeName) { return importedTypeName.name; },
+                                   value.typeName);
+        errorNotifier->typeNameCannotBeResolved(typeName, sourceId);
+        propertyTypeId = TypeId{};
+    }
 
     auto propertyDeclarationId = s->insertPropertyDeclarationStatement.value<PropertyDeclarationId>(
         typeId, value.name, propertyTypeId, value.traits, propertyImportedTypeNameId);
@@ -3479,11 +3498,12 @@ void ProjectStorage::synchronizePropertyDeclarationsUpdateAlias(
                                keyValue("property declaration", value),
                                keyValue("property declaration view", view)};
 
-    updatedAliasPropertyDeclarations.emplace_back(view.typeId,
+    updatedAliasPropertyDeclarations.emplace_back(view.propertyTypeId,
                                                   view.id,
                                                   fetchImportedTypeNameId(value.typeName, sourceId),
                                                   value.aliasPropertyName,
                                                   value.aliasPropertyNameTail,
+                                                  sourceId,
                                                   view.aliasId);
 }
 
@@ -3503,10 +3523,14 @@ Sqlite::UpdateChange ProjectStorage::synchronizePropertyDeclarationsUpdateProper
 
     auto propertyTypeId = fetchTypeId(propertyImportedTypeNameId);
 
-    if (!propertyTypeId)
-        throw TypeNameDoesNotExists{fetchImportedTypeName(propertyImportedTypeNameId), sourceId};
+    if (!propertyTypeId) {
+        auto typeName = std::visit([](auto &&importedTypeName) { return importedTypeName.name; },
+                                   value.typeName);
+        errorNotifier->typeNameCannotBeResolved(typeName, sourceId);
+        propertyTypeId = TypeId{};
+    }
 
-    if (view.traits == value.traits && propertyTypeId == view.typeId
+    if (view.traits == value.traits && propertyTypeId == view.propertyTypeId
         && propertyImportedTypeNameId == view.typeNameId)
         return Sqlite::UpdateChange::No;
 

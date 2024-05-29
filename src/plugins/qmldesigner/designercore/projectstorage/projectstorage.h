@@ -352,6 +352,7 @@ private:
             ImportedTypeNameId aliasImportedTypeNameId,
             Utils::SmallString aliasPropertyName,
             Utils::SmallString aliasPropertyNameTail,
+            SourceId sourceId,
             PropertyDeclarationId aliasPropertyDeclarationId = PropertyDeclarationId{})
             : typeId{typeId}
             , propertyDeclarationId{propertyDeclarationId}
@@ -359,6 +360,7 @@ private:
             , aliasPropertyName{std::move(aliasPropertyName)}
             , aliasPropertyNameTail{std::move(aliasPropertyNameTail)}
             , aliasPropertyDeclarationId{aliasPropertyDeclarationId}
+            , sourceId{sourceId}
         {}
 
         friend bool operator<(const AliasPropertyDeclaration &first,
@@ -394,6 +396,7 @@ private:
         Utils::SmallString aliasPropertyName;
         Utils::SmallString aliasPropertyNameTail;
         PropertyDeclarationId aliasPropertyDeclarationId;
+        SourceId sourceId;
     };
 
     using AliasPropertyDeclarations = std::vector<AliasPropertyDeclaration>;
