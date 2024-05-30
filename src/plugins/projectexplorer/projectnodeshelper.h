@@ -9,12 +9,66 @@
 #include <coreplugin/vcsmanager.h>
 
 #include <utils/algorithm.h>
+#include <utils/async.h>
 #include <utils/filepath.h>
+#include <utils/futuresynchronizer.h>
+#include <utils/scopedtimer.h>
 
 #include <QPromise>
 
 namespace ProjectExplorer {
 namespace Internal {
+
+struct DirectoryScanResult
+{
+    QList<FileNode *> nodes;
+    Utils::FilePaths subDirectories;
+};
+
+template<typename Result>
+DirectoryScanResult scanForFiles(
+    QPromise<Result> &promise,
+    double progressStart,
+    double progressRange,
+    const Utils::FilePath &directory,
+    const QDir::Filters &filter,
+    const std::function<FileNode *(const Utils::FilePath &)> factory,
+    const QList<Core::IVersionControl *> &versionControls)
+{
+    DirectoryScanResult result;
+
+    QTC_SCOPED_TIMER("scan for files " + directory.toString());
+    const Utils::FilePaths entries = directory.dirEntries(filter);
+    double progress = 0;
+    const double progressIncrement = progressRange / static_cast<double>(entries.count());
+    int lastIntProgress = 0;
+    Utils::FilePaths subdirs;
+    for (const Utils::FilePath &entry : entries) {
+        if (promise.isCanceled())
+            return result;
+
+        if (!Utils::contains(versionControls, [entry](const Core::IVersionControl *vc) {
+                return vc->isVcsFileOrDirectory(entry);
+            })) {
+            if (entry.isDir()) {
+                result.subDirectories.append(entry);
+            } else if (FileNode *node = factory(entry)) {
+                result.nodes.append(node);
+            }
+            progress += progressIncrement;
+            const int intProgress = std::min(static_cast<int>(progressStart + progress),
+                                             promise.future().progressMaximum());
+            if (lastIntProgress < intProgress) {
+                promise.setProgressValue(intProgress);
+                lastIntProgress = intProgress;
+            }
+        }
+    }
+
+    promise.setProgressValue(std::min(static_cast<int>(progressStart + progressRange),
+                                      promise.future().progressMaximum()));
+    return result;
+}
 
 template<typename Result>
 QList<FileNode *> scanForFilesRecursively(
@@ -24,51 +78,49 @@ QList<FileNode *> scanForFilesRecursively(
     const Utils::FilePath &directory,
     const QDir::Filters &filter,
     const std::function<FileNode *(const Utils::FilePath &)> factory,
-    QSet<Utils::FilePath> &visited,
+    QSet<Utils::FilePath> visited,
     const QList<Core::IVersionControl *> &versionControls)
 {
-    QList<FileNode *> result;
+    QTC_SCOPED_TIMER("scan for files recursively " + directory.toString());
 
-    // Do not follow directory loops:
-    if (!Utils::insert(visited, directory.canonicalPath()))
-        return result;
+    DirectoryScanResult result = scanForFiles(
+        promise, progressStart, progressRange, directory, filter, factory, versionControls);
+    QList<FileNode *> fileNodes = result.nodes;
+    QList<Utils::FilePath> subDirectories = result.subDirectories;
+    while (!subDirectories.isEmpty()) {
+        Tasking::TaskTree taskTree;
+        QList<Tasking::GroupItem> items;
+        items.append(Tasking::parallelIdealThreadCountLimit);
+        for (const Utils::FilePath &subDirectory : subDirectories) {
+            if (!Utils::insert(visited, subDirectory.canonicalPath()))
+                continue;
 
-    const Utils::FilePaths entries = directory.dirEntries(filter);
-    double progress = 0;
-    const double progressIncrement = progressRange / static_cast<double>(entries.count());
-    int lastIntProgress = 0;
-    for (const Utils::FilePath &entry : entries) {
-        if (promise.isCanceled())
-            return result;
-
-        if (!Utils::contains(versionControls, [entry](const Core::IVersionControl *vc) {
-                return vc->isVcsFileOrDirectory(entry);
-            })) {
-            if (entry.isDir()) {
-                result.append(scanForFilesRecursively(promise,
-                                                      progress,
-                                                      progressIncrement,
-                                                      entry,
-                                                      filter,
-                                                      factory,
-                                                      visited,
-                                                      versionControls));
-            } else if (FileNode *node = factory(entry)) {
-                result.append(node);
-            }
+            Utils::AsyncTask<DirectoryScanResult> task{
+                [=, &promise](Utils::Async<DirectoryScanResult> &task) {
+                    task.setConcurrentCallData([=, &promise](QPromise<DirectoryScanResult> &p) {
+                        p.addResult(scanForFiles(
+                            promise,
+                            progressStart,
+                            progressRange,
+                            subDirectory,
+                            filter,
+                            factory,
+                            versionControls));
+                    });
+                },
+                [&](const Utils::Async<DirectoryScanResult> &task) {
+                    fileNodes.append(task.result().nodes);
+                    subDirectories.append(task.result().subDirectories);
+                }};
+            items.append(task);
         }
-        progress += progressIncrement;
-        const int intProgress = std::min(static_cast<int>(progressStart + progress),
-                                         promise.future().progressMaximum());
-        if (lastIntProgress < intProgress) {
-            promise.setProgressValue(intProgress);
-            lastIntProgress = intProgress;
-        }
+        subDirectories.clear();
+        taskTree.setRecipe(items);
+        taskTree.runBlocking();
     }
-    promise.setProgressValue(std::min(static_cast<int>(progressStart + progressRange),
-                                      promise.future().progressMaximum()));
-    return result;
+    return fileNodes;
 }
+
 } // namespace Internal
 
 template<typename Result>
