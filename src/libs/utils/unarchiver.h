@@ -32,7 +32,10 @@ public:
 
     void setSourceAndCommand(const SourceAndCommand &data) { m_sourceAndCommand = data; }
     void setDestDir(const FilePath &destDir) { m_destDir = destDir; }
-
+    void setSingleFileDestName(const QString &singleFileDestName)
+    {
+        m_singleFileDestName = singleFileDestName;
+    }
     void start();
 
 signals:
@@ -43,6 +46,7 @@ private:
     std::optional<SourceAndCommand> m_sourceAndCommand;
     FilePath m_destDir;
     std::unique_ptr<Process> m_process;
+    QString m_singleFileDestName;
 };
 
 class QTCREATOR_UTILS_EXPORT UnarchiverTaskAdapter : public Tasking::TaskAdapter<Unarchiver>
