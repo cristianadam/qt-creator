@@ -554,7 +554,7 @@ void DebuggerEnginePrivate::setupViews()
 
     m_progress.setProgressRange(0, 1000);
     FutureProgress *fp = ProgressManager::addTask(m_progress.future(),
-        Tr::tr("Launching Debugger"), "Debugger.Launcher");
+        Tr::tr("Launching %1 Debugger").arg(m_debuggerName), "Debugger.Launcher");
     connect(fp, &FutureProgress::canceled, m_engine, &DebuggerEngine::quitDebugger);
     m_progress.reportStarted();
 
