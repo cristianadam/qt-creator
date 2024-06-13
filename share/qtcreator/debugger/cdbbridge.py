@@ -172,15 +172,17 @@ class Dumper(DumperBase):
                 self.type_name_cache[typeid] = nativeType.name()
                 self.type_code_cache[typeid] = code
                 self.type_target_cache[typeid] = self.typeid_for_string(targetName)
-                self.type_size_cache[typeid] = nativeType.bitsize() // 8
+                if nativeType.resolved():
+                    self.type_size_cache[typeid] = nativeType.bitsize() // 8
                 return typeid
 
             code = TypeCode.Struct
 
         self.type_name_cache[typeid] = nativeType.name()
-        self.type_size_cache[typeid] = nativeType.bitsize() // 8
+        if nativeType.resolved():
+            self.type_size_cache[typeid] = nativeType.bitsize() // 8
+            self.type_modulename_cache[typeid] = nativeType.module()
         self.type_code_cache[typeid] = code
-        self.type_modulename_cache[typeid] = nativeType.module()
         self.type_enum_display_cache[typeid] = lambda intval, addr, form: \
             self.nativeTypeEnumDisplay(nativeType, intval, form)
         return typeid
@@ -397,6 +399,25 @@ class Dumper(DumperBase):
             return FakeVoidType(name, self)
         return cdbext.lookupType(name, module)
 
+    def type_size(self, typeid):
+        self.check_typeid(typeid)
+        size = self.type_size_cache.get(typeid, None)
+        if size is not None:
+            return size
+
+        if size is None:
+            nativeType = self.type_nativetype(typeid)
+            size = nativeType.bitsize() // 8
+
+        if size is not None:
+            self.type_size_cache[typeid] = size
+        else:
+            self.dump_type_cache()
+            self.warn("CANNOT DETERMINE SIZE FOR TYPE %s" % str(typeid))
+
+        return size
+
+
     def reportResult(self, result, args):
         cdbext.reportResult('result={%s}' % result)
 
@@ -549,7 +570,6 @@ class Dumper(DumperBase):
             return
 
         self.putAddress(value.address())
-        self.putField('size', self.type_size(value.typeid))
 
         if typeobj.code == TypeCode.Function:
             #DumperBase.warn('FUNCTION VALUE: %s' % value)

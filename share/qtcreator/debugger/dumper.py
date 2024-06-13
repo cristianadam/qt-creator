@@ -2447,7 +2447,7 @@ typename))
         self.checkIntType(base)
         self.checkIntType(n)
         inner_typeid = self.typeid_for_typish(inner_typish)
-        inner_size = self.type_size_cache.get(inner_typeid, None)
+        inner_size = self.type_size(inner_typeid)
         self.putNumChild(n)
         #self.warn('ADDRESS: 0x%x INNERSIZE: %s INNERTYPE: %s' % (base, inner_size, inner_typeid))
         enc = self.type_encoding_cache.get(inner_typeid, None)
@@ -3566,7 +3566,9 @@ typename))
             return target_typeid
         self.type_code_cache[typeid] = TypeCode.Typedef
         self.type_target_cache[typeid] = target_typeid
-        self.type_size_cache[typeid] = self.type_size_cache.get(target_typeid, None)
+        size = self.type_size_cache.get(target_typeid, None)
+        if size is not None:
+            self.type_size_cache[typeid] = size
         return typeid
 
     def createType(self, typish, size=None):
@@ -3712,7 +3714,7 @@ typename))
 
         typeid = self.cheap_typeid_from_name_nons(typename)
         if typeid:
-            size = self.type_size_cache.get(typeid, None)
+            size = self.type_size(typeid)
             if size is not None:
                 return size, typeid
 
@@ -3720,7 +3722,7 @@ typename))
         self.warn("LOOKUP FIELD TYPE: %s TYPEOBJ: %s" % (typename, typeobj))
         if typeobj is not None:
             typeid = typeobj.typeid
-            size = self.type_size_cache.get(typeid, None)
+            size = self.type_size(typeid)
             if size is not None:
                 return size, typeid
 
