@@ -1291,11 +1291,11 @@ const void *Loop::valuePtr() const
 
 using StoragePtr = void *;
 
-static QString s_activeStorageWarning =
+static QString s_activeStorageWarning = QString::fromLatin1(
     "The referenced storage is not reachable in the running tree. "
     "A nullptr will be returned which might lead to a crash in the calling code. "
     "It is possible that no storage was added to the tree, "
-    "or the storage is not reachable from where it is referenced.";
+    "or the storage is not reachable from where it is referenced.");
 
 class StorageThreadData
 {
