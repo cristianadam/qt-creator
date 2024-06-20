@@ -1,0 +1,74 @@
+// Copyright (C) 2024 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page simple-effect-composer-example.html
+    \ingroup studioexamples
+
+    \title Simple Effect Composer Example
+    \brief Illustrates how to get started with the Effect Composer effects.
+
+    The \e {Simple Effect Composer Example} illustrates how to get started with the \l
+    {Effect Composer} effects. Use the example project to experiment with an effect and to get
+    familiar with \uicontrol {Effect Composer}.
+
+    \image effect-composer-example-swirl.webp
+
+    This example project consists of a 3D model of a monkey head and a swirl effect. When you run
+    the project, you can show and hide the effect from the scene with a switch and rotate the
+    monkey head with a slider to visualize the effect better.
+
+    To edit the effect properties, use \uicontrol {Effect Composer}, as described in
+    \l {Adjusting the Effect Properties}.
+
+    \section1 Running the Example
+
+    To run the example in \QDS, go to the \uicontrol Welcome screen and select the example
+    from the \uicontrol Examples tab.
+
+    \section1 The Effect
+
+    The effect used in this example consists of a \uicontrol {Swirl} effect with adjusted
+    properties.
+
+    \section2 Effect Properties
+
+    The following properties affect how the \e {SwirlEffect} effect renders.
+
+    \image effect-composer-example-swirl-properties.webp "Swirl Properties in Effect Composer."
+
+    \table
+    \header
+        \li Property
+        \li Description
+    \row
+        \li Wave Length
+        \li Sets how tightly or loosely the swirls wrap around the center point.
+    \row
+        \li Amplitude
+        \li Sets the intensity of the swirl. This defines how far the graphics deviate from the
+            center point
+    \row
+        \li Phase
+        \li Sets the starting point of the swirl.
+    \row
+        \li Center Point
+        \li Sets the point which the swirl effect revolves around. The center is \e {0.5}, \e {0.5}.
+    \endtable
+
+    \section2 Adjusting the Effect Properties
+
+    To adjust the properties of the \e {SwirlEffect} effect:
+
+    \list 1
+        \li In \uicontrol {Assets} > \uicontrol {Effects}, double-click \e {SwirlEffect.qep}.
+        \li In the \uicontrol {Effect Composer} view, edit the \uicontrol {Swirl} effect
+            properties.
+        \li To see the updated effect in the \uicontrol 2D view or \uicontrol {Live Preview},
+            save the changes by selecting \inlineimage icons/save-effect-composer.png.
+    \endlist
+
+    Alternatively, modify the effect in the \uicontrol Properties view by selecting \e swirlEffect
+    in the \uicontrol Navigator view to access its properties in \uicontrol Properties >
+    \uicontrol SwirlEffect.
+*/
