@@ -10,11 +10,7 @@ class QSplitter;
 class QVBoxLayout;
 QT_END_NAMESPACE
 
-namespace Core {
-
-class EditorManager;
-
-namespace Internal {
+namespace Core::Internal {
 
 class EditMode : public IMode
 {
@@ -22,7 +18,6 @@ class EditMode : public IMode
 
 public:
     EditMode();
-    ~EditMode() override;
 
 private:
     void grabEditorManager(Utils::Id mode);
@@ -31,5 +26,4 @@ private:
     QVBoxLayout *m_rightSplitWidgetLayout;
 };
 
-} // namespace Internal
-} // namespace Core
+} // namespace Core::Internal

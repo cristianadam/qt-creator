@@ -355,7 +355,6 @@ WelcomeMode::~WelcomeMode()
     settings->setValueWithDefault(currentPageSettingsKeyC,
                                   m_activePage.toSetting(),
                                   m_defaultPage.toSetting());
-    delete m_modeWidget;
 }
 
 void WelcomeMode::initPlugins()

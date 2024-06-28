@@ -126,7 +126,10 @@ IMode::IMode(QObject *parent)
     ModeManager::addMode(this);
 }
 
-IMode::~IMode() = default;
+IMode::~IMode()
+{
+    delete m_d->m_context.widget();
+}
 
 QString IMode::displayName() const
 {

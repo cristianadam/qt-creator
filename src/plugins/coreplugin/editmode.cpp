@@ -76,11 +76,6 @@ EditMode::EditMode() :
                        Constants::C_NAVIGATION_PANE));
 }
 
-EditMode::~EditMode()
-{
-    delete m_splitter;
-}
-
 void EditMode::grabEditorManager(Utils::Id mode)
 {
     if (mode != id())

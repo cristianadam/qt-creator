@@ -51,8 +51,7 @@ struct DesignEditorInfo
 class DesignModePrivate
 {
 public:
-    DesignModePrivate();
-    ~DesignModePrivate();
+    DesignModePrivate() : m_stackWidget(new QStackedWidget) {}
 
 public:
     QPointer<IEditor> m_currentEditor;
@@ -61,15 +60,6 @@ public:
     QStackedWidget *m_stackWidget;
     Context m_activeContext;
 };
-
-DesignModePrivate::DesignModePrivate()
-    : m_stackWidget(new QStackedWidget)
-{}
-
-DesignModePrivate::~DesignModePrivate()
-{
-    delete m_stackWidget;
-}
 
 static DesignMode *m_instance = nullptr;
 static DesignModePrivate *d = nullptr;

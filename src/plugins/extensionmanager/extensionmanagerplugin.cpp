@@ -56,8 +56,6 @@ public:
 
         setWidget(widget);
     }
-
-    ~ExtensionManagerMode() { delete widget(); }
 };
 
 class ExtensionManagerPlugin final : public ExtensionSystem::IPlugin

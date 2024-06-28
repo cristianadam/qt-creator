@@ -499,8 +499,6 @@ public:
 
         setMenu(DebuggerMainWindow::perspectiveMenu());
     }
-
-    ~DebugMode() { delete widget(); }
 };
 
 ///////////////////////////////////////////////////////////////////////
