@@ -16,6 +16,7 @@ namespace Internal {
 class IModePrivate
 {
 public:
+    IContext m_context;
     QString m_displayName;
     QIcon m_icon;
     QMenu *m_menu = nullptr;
@@ -119,7 +120,7 @@ public:
     Registers the mode in \QC.
 */
 IMode::IMode(QObject *parent)
-    : IContext(parent)
+    : QObject(parent)
     , m_d(new Internal::IModePrivate)
 {
     ModeManager::addMode(this);
@@ -191,6 +192,36 @@ void IMode::setMainWindow(Utils::FancyMainWindow *mw)
 {
     m_d->m_mainWindow = mw;
     emit ModeManager::instance()->currentMainWindowChanged();
+}
+
+IContext *IMode::icontext() const
+{
+    return &m_d->m_context;
+}
+
+Context IMode::context() const
+{
+    return m_d->m_context.context();
+}
+
+QWidget *IMode::widget() const
+{
+    return m_d->m_context.widget();
+}
+
+void IMode::setContext(const Context &context)
+{
+    m_d->m_context.setContext(context);
+}
+
+void IMode::setWidget(QWidget *widget)
+{
+    m_d->m_context.setWidget(widget);
+}
+
+void IMode::setContextHelp(const HelpItem &id)
+{
+    m_d->m_context.setContextHelp(id);
 }
 
 bool IMode::isEnabled() const

@@ -22,7 +22,7 @@ namespace Internal {
 class IModePrivate;
 }
 
-class CORE_EXPORT IMode : public IContext
+class CORE_EXPORT IMode : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QString displayName READ displayName WRITE setDisplayName)
@@ -52,6 +52,14 @@ public:
 
     Utils::FancyMainWindow *mainWindow();
     void setMainWindow(Utils::FancyMainWindow *mw);
+
+    IContext *icontext() const;
+    Context context() const;
+    QWidget *widget() const;
+
+    void setContext(const Context &context);
+    void setWidget(QWidget *widget);
+    void setContextHelp(const HelpItem &id);
 
 signals:
     void enabledStateChanged(bool enabled);
