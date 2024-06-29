@@ -1510,6 +1510,20 @@ ExecutableItem ExecutableItem::withLog(const QString &logName) const
     };
 }
 
+/*!
+    Returns an ExecutableItem with the DoneResult of \a item negated.
+
+    If \a item reports DoneResult::Success, the returned item reports DoneResult::Error.
+    If \a item reports DoneResult::Error, the returned item reports DoneResult::Success.
+*/
+ExecutableItem operator!(const ExecutableItem &item)
+{
+    return Group {
+        item,
+        onGroupDone([](DoneWith doneWith) { return toDoneResult(doneWith == DoneWith::Error); })
+    };
+}
+
 ExecutableItem ExecutableItem::withCancelImpl(
     const std::function<void(QObject *, const std::function<void()> &)> &connectWrapper) const
 {
