@@ -311,6 +311,8 @@ private:
     friend ExecutableItem operator!(const ExecutableItem &item);
     friend ExecutableItem operator&&(const ExecutableItem &first, const ExecutableItem &second);
     friend ExecutableItem operator||(const ExecutableItem &first, const ExecutableItem &second);
+    friend ExecutableItem operator&&(const ExecutableItem &item, DoneResult result);
+    friend ExecutableItem operator||(const ExecutableItem &item, DoneResult result);
 
     ExecutableItem withCancelImpl(
         const std::function<void(QObject *, const std::function<void()> &)> &connectWrapper) const;
