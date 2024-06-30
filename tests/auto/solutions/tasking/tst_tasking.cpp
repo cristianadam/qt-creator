@@ -121,6 +121,7 @@ private slots:
     void nestedBrokenStorage();
     void restart();
     void destructorOfTaskEmittingDone();
+    void ifCondition();
 };
 
 void tst_Tasking::validConstructs()
@@ -3791,6 +3792,222 @@ void tst_Tasking::destructorOfTaskEmittingDone()
 {
     TaskTree taskTree({BrokenTask()});
     taskTree.start();
+}
+
+static Group conditionRecipe(const std::optional<ExecutableItem> &condition, const Group &body)
+{
+    Storage<bool> skipContinuationStorage;
+
+    const auto onConditionDone = [skipContinuationStorage](DoneWith result) {
+        *skipContinuationStorage = result != DoneWith::Success;
+        return DoneResult::Success;
+    };
+
+    const auto onContinuationSetup = [skipContinuationStorage] {
+        return *skipContinuationStorage ? SetupResult::StopWithSuccess : SetupResult::Continue;
+    };
+
+    return {
+        skipContinuationStorage,
+        condition ? Group {
+            *condition,
+            onGroupDone(onConditionDone)
+        } : nullItem,
+        Group {
+            onGroupSetup(onContinuationSetup),
+            body
+        }
+    };
+}
+
+class If
+{
+public:
+    explicit If(const ExecutableItem &condition) : m_condition(condition) {}
+
+private:
+    friend class ThenItem;
+    ExecutableItem m_condition;
+};
+
+class ElseIf
+{
+public:
+    explicit ElseIf(const ExecutableItem &condition) : m_condition(condition) {}
+
+private:
+    friend class ElseIfItem;
+    ExecutableItem m_condition;
+};
+
+class Else
+{
+public:
+    explicit Else(const QList<GroupItem> &children) : m_body({children}) {}
+    explicit Else(std::initializer_list<GroupItem> children) : m_body({children}) {}
+
+private:
+    friend class ElseItem;
+    Group m_body;
+};
+
+class Then
+{
+public:
+    explicit Then(const QList<GroupItem> &children) : m_body({children}) {}
+    explicit Then(std::initializer_list<GroupItem> children) : m_body({children}) {}
+
+private:
+    friend class ThenItem;
+    Group m_body;
+};
+
+class ElseIfItem;
+
+class ThenItem : public ExecutableItem // can be final GroupItem
+{
+private:
+    friend ThenItem operator>>(const If &ifItem, const Then &thenItem);
+    friend ThenItem operator>>(const ElseIfItem &elseIfItem, const Then &thenItem);
+
+    ThenItem(const If &ifItem, const Then &thenItem);
+    ThenItem(const ElseIfItem &elseIfItem, const Then &thenItem);
+};
+
+class ElseItem : public ExecutableItem // can be final GroupItem
+{
+private:
+    friend ElseItem operator>>(const ThenItem &thenItem, const Else &elseItem);
+
+    ElseItem(const ThenItem &thenItem, const Else &elseItem);
+};
+
+class ElseIfItem // can't be final GroupItem
+{
+private:
+    friend ElseIfItem operator>>(const ThenItem &thenItem, const ElseIf &elseIfItem);
+
+    ElseIfItem(const ThenItem &thenItem, const ElseIf &elseIfItem)
+        : m_previousBraches(thenItem)
+        , m_condition(elseIfItem.m_condition)
+    {}
+
+    friend class ThenItem;
+    ExecutableItem m_previousBraches;
+    ExecutableItem m_condition;
+};
+
+ThenItem::ThenItem(const If &ifItem, const Then &thenItem)
+{
+    addChildren({conditionRecipe(ifItem.m_condition, thenItem.m_body)});
+}
+
+ThenItem::ThenItem(const ElseIfItem &elseIfItem, const Then &thenItem)
+{
+    addChildren({elseIfItem.m_previousBraches,
+                 conditionRecipe(elseIfItem.m_condition, thenItem.m_body)});
+}
+
+ElseItem::ElseItem(const ThenItem &thenItem, const Else &elseItem)
+{
+    addChildren({thenItem, conditionRecipe({}, elseItem.m_body)});
+}
+
+ThenItem operator>>(const If &ifItem, const Then &thenItem)
+{
+    return ThenItem(ifItem, thenItem);
+}
+
+ThenItem operator>>(const ElseIfItem &elseIfItem, const Then &thenItem)
+{
+    return {elseIfItem, thenItem};
+}
+
+ElseIfItem operator>>(const ThenItem &thenItem, const ElseIf &elseIfItem)
+{
+    return {thenItem, elseIfItem};
+}
+
+ElseItem operator>>(const ThenItem &thenItem, const Else &elseItem)
+{
+    return {thenItem, elseItem};
+}
+
+void tst_Tasking::ifCondition()
+{
+    const TestTask condition;
+    const TestTask continuation;
+
+    If (condition) >>
+        Then {continuation} >>
+    ElseIf (condition) >>
+        Then {continuation} >>
+    Else {continuation};
+
+    Group {
+        parallel,
+        TestTask(),
+        If (condition) >>
+            Then { continuation },
+        If (condition) >>
+            Then { continuation }
+    };
+
+    {
+        If (condition) >>
+            Then { continuation };
+    }
+
+    {
+        If (condition) >>
+            Then { continuation } >>
+        Else { continuation };
+    }
+
+    {
+        If (condition) >>
+            Then { continuation } >>
+        ElseIf (condition) >>
+            Then { continuation };
+    }
+
+    {
+        If (condition) >>
+            Then { continuation } >>
+        ElseIf (condition) >>
+            Then { continuation } >>
+        ElseIf (condition) >>
+            Then { continuation } >>
+        Else { continuation };
+    }
+
+    {
+        If (condition) >>
+            Then { continuation } >>
+        ElseIf (condition) >>
+            Then { continuation } >>
+        ElseIf (condition) >>
+            Then { continuation } >>
+        ElseIf (condition) >>
+            Then { continuation };
+    }
+
+    {
+        If (condition) >>
+            Then { continuation } >>
+        ElseIf (condition) >>
+            Then { continuation } >>
+        Else { continuation };
+    }
+
+    {
+        If (condition && condition) >>
+            Then { continuation } >>
+        ElseIf (!condition) >>
+            Then { } >>
+        Else { };
+    }
+
 }
 
 QTEST_GUILESS_MAIN(tst_Tasking)
