@@ -1188,6 +1188,8 @@ const ParallelLimitFunctor parallelLimit = ParallelLimitFunctor();
 const WorkflowPolicyFunctor workflowPolicy = WorkflowPolicyFunctor();
 
 const GroupItem nullItem = GroupItem({});
+const ExecutableItem successItem = Group { finishAllAndSuccess };
+const ExecutableItem errorItem = Group { finishAllAndError };
 
 const GroupItem sequential = parallelLimit(1);
 const GroupItem parallel = parallelLimit(0);

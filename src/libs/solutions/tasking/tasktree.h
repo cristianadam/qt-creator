@@ -416,6 +416,8 @@ TASKING_EXPORT extern const ParallelLimitFunctor parallelLimit;
 TASKING_EXPORT extern const WorkflowPolicyFunctor workflowPolicy;
 
 TASKING_EXPORT extern const GroupItem nullItem;
+TASKING_EXPORT extern const ExecutableItem successItem;
+TASKING_EXPORT extern const ExecutableItem errorItem;
 
 TASKING_EXPORT extern const GroupItem sequential;
 TASKING_EXPORT extern const GroupItem parallel;
