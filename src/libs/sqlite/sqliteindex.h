@@ -8,6 +8,8 @@
 
 #include "sqliteexception.h"
 
+#include <QVarLengthArray>
+
 #include <utils/smallstringvector.h>
 
 namespace Sqlite {
@@ -90,6 +92,6 @@ private:
     Utils::SmallString m_condition;
 };
 
-using SqliteIndices = std::vector<Index>;
+using SqliteIndices = QVarLengthArray<Index, 32>;
 
 } //
