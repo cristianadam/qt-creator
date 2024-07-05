@@ -9,6 +9,25 @@
 
 namespace Core {
 
+void IContext::contextHelp(const HelpCallback &callback) const
+{
+    if (m_contextHelpProvider) {
+        m_contextHelpProvider(callback);
+    } else {
+        // This is important as this triggers the continued iteration
+        // through other contexts that may provide items.
+        // FIXME: This could be simpler.
+        callback({});
+    }
+}
+
+void IContext::setContextHelp(const HelpItem &item)
+{
+    m_contextHelpProvider = [item](const HelpCallback &callback) {
+        callback(item);
+    };
+}
+
 void IContext::attach(QWidget *widget, const Context &context, const HelpItem &help)
 {
     auto icontext = new IContext(widget); // As QObject parent.
