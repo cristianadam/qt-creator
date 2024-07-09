@@ -746,8 +746,9 @@ void DockerDevicePrivate::stopCurrentContainer()
     if (*fileAccess)
         fileAccess->reset();
 
+    Process proc;
+    proc.setCommand({settings().dockerBinaryPath(), {"container", "kill", m_container}});
     m_container.clear();
-
     proc.runBlocking();
 
     m_cachedEnviroment.reset();
