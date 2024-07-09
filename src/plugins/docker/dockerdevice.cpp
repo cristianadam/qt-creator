@@ -749,7 +749,7 @@ void DockerDevicePrivate::stopCurrentContainer()
         fileAccess->reset();
 
     Process proc;
-    proc.setCommand({settings().dockerBinaryPath(), {"container", "stop", m_container}});
+    proc.setCommand({settings().dockerBinaryPath(), {"container", "kill", m_container}});
 
     m_container.clear();
 
