@@ -239,8 +239,10 @@ Client::Client(const Utils::FilePath &remoteCmdBridgePath)
 
 Client::~Client()
 {
-    d->thread->quit();
-    d->thread->wait();
+    if (d->thread->isRunning()) {
+        exit();
+        d->thread->wait();
+    }
 }
 
 expected_str<QFuture<Environment>> Client::start()
@@ -297,10 +299,14 @@ expected_str<QFuture<Environment>> Client::start()
                     func(QVariantMap{
                         {"Type", "error"},
                         {"Id", id},
-                        {"Error", QString("Process exited: %1").arg(d->process->errorString())}});
+                        {"Error", QString("Process exited: %1").arg(d->process->errorString())},
+                        {"ErrorType", (d->process->exitCode() == 0 ? "NormalExit" : "ErrorExit")}});
                 }
 
                 emit done(d->process->resultData());
+                d->process->deleteLater();
+                d->process = nullptr;
+                QThread::currentThread()->quit();
             });
 
             auto stateMachine = [state = int(0), packetSize(0), packetData = QByteArray(), this](
@@ -368,6 +374,9 @@ expected_str<QFuture<Environment>> Client::start()
 
             d->process->start();
 
+            if (!d->process)
+                return make_unexpected(Tr::tr("Failed starting bridge process"));
+
             if (!d->process->waitForStarted())
                 return make_unexpected(
                     Tr::tr("Failed starting bridge process: %1").arg(d->process->errorString()));
@@ -412,6 +421,10 @@ static Utils::expected_str<QFuture<R>> createJob(
             if (errType == "ENOENT") {
                 promise->setException(
                     std::make_exception_ptr(std::system_error(ENOENT, std::generic_category())));
+                promise->finish();
+            } else if (errType == "NormalExit") {
+                promise->setException(
+                    std::make_exception_ptr(std::runtime_error(err.toStdString())));
                 promise->finish();
             } else {
                 qCWarning(clientLog) << "Error (" << errType << "):" << err;
@@ -791,6 +804,15 @@ Utils::expected_str<QFuture<void>> Client::signalProcess(int pid, Utils::Control
         d.get(),
         QCborMap{{"Type", "signal"}, {"signal", QCborMap{{"Pid", pid}, {"Signal", signalString}}}},
         "signalsuccess");
+}
+
+void Client::exit()
+{
+    try {
+        createVoidJob(d.get(), QCborMap{{"Type", "exit"}}, "exitres")->waitForFinished();
+    } catch (...) {
+        return;
+    }
 }
 
 Utils::expected_str<QFuture<Client::Stat>> Client::stat(const QString &path)
