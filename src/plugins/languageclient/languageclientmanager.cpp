@@ -411,6 +411,15 @@ const BaseSettings *LanguageClientManager::settingForClient(Client *client)
     return nullptr;
 }
 
+Client *LanguageClientManager::clientByName(const QString &name)
+{
+    QTC_ASSERT(managerInstance, return {});
+
+    return Utils::findOr(managerInstance->m_clients, nullptr, [name](const Client *client) {
+        return client->name() == name;
+    });
+}
+
 void LanguageClientManager::updateWorkspaceConfiguration(const ProjectExplorer::Project *project,
                                                          const QJsonValue &json)
 {
