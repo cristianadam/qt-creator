@@ -41,10 +41,9 @@ bool MakefileParser::parse(const QFuture<void> &future)
     m_outputData.m_sources.clear();
     m_outputData.m_makefiles.clear();
 
-    auto file = new QFile(m_makefile);
-    if (!file->open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qWarning("%s: %s", qPrintable(m_makefile), qPrintable(file->errorString()));
-        delete file;
+    QFile file(m_makefile);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        qWarning("%s: %s", qPrintable(m_makefile), qPrintable(file.errorString()));
         return false;
     }
 
@@ -53,7 +52,7 @@ bool MakefileParser::parse(const QFuture<void> &future)
 
     emit status(Tr::tr("Parsing %1 in directory %2").arg(info.fileName()).arg(info.absolutePath()));
 
-    m_textStream.setDevice(file);
+    m_textStream.setDevice(&file);
 
     do {
         m_line = m_textStream.readLine();
