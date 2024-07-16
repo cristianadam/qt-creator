@@ -18,9 +18,9 @@ void addDocumentsModule()
             "TextDocument",
             sol::no_constructor,
             "setChangedCallback",
-            [](LuaTextDocument &self, sol::function callback) {
-                self.setChangedCallback(callback);
-            });
+            [](LuaTextDocument &self, sol::function callback) { self.setChangedCallback(callback); },
+            "file",
+            &LuaTextDocument::file);
 
         return documents;
     });

@@ -32,6 +32,8 @@ public:
             m_changedCallback();
     }
 
+    Utils::FilePath file() { return m_document->filePath(); }
+
 private:
     TextEditor::TextDocument *m_document;
     sol::function m_changedCallback;
