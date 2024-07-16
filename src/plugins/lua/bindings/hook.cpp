@@ -55,8 +55,24 @@ void addHookModule()
             [func](Core::IDocument *document) {
                 auto text_document = qobject_cast<TextEditor::TextDocument *>(document);
                 if (text_document) {
-                    QTC_CHECK_EXPECTED(LuaEngine::void_safe_call(
-                        func, std::make_unique<LuaTextDocument>(text_document)));
+                    Utils::expected_str<void> res = LuaEngine::void_safe_call(
+                        func, std::make_unique<LuaTextDocument>(text_document));
+                    QTC_CHECK_EXPECTED(res);
+                }
+            });
+    });
+
+    LuaEngine::registerHook("editors.activeDocumentChanged", [](const sol::protected_function &func) {
+        QObject::connect(
+            Core::EditorManager::instance(),
+            &Core::EditorManager::currentEditorChanged,
+            [func](Core::IEditor *editor) {
+                auto document = editor->document();
+                auto text_document = qobject_cast<TextEditor::TextDocument *>(document);
+                if (text_document) {
+                    Utils::expected_str<void> res = LuaEngine::void_safe_call(
+                        func, std::make_unique<LuaTextDocument>(text_document));
+                    QTC_CHECK_EXPECTED(res);
                 }
             });
     });
@@ -68,8 +84,9 @@ void addHookModule()
             [func](Core::IDocument *document) {
                 auto text_document = qobject_cast<TextEditor::TextDocument *>(document);
                 if (text_document) {
-                    QTC_CHECK_EXPECTED(LuaEngine::void_safe_call(
-                        func, std::make_unique<LuaTextDocument>(text_document)));
+                    Utils::expected_str<void> res = LuaEngine::void_safe_call(
+                        func, std::make_unique<LuaTextDocument>(text_document));
+                    QTC_CHECK_EXPECTED(res);
                 }
             });
     });
