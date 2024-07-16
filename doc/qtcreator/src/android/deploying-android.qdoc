@@ -240,7 +240,7 @@
 
     \li Check the path in \uicontrol {Android package source directory}.
 
-        \image qtcreator-android-create-template.png {Create Template dialog}
+        \image qtcreator-android-create-template.webp {Create Template dialog}
 
     \li Select \uicontrol {Copy the Gradle files to Android directory} if you
         plan to extend the Java part of your Qt application.

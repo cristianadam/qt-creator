@@ -94,7 +94,7 @@
             \uicontrol {C++ Class Wizard} > \uicontrol Choose.
         \li Specify the class name, base class, and header and source files for
             the class.
-            \image qtcreator-cpp-class-wizard.png {Enter Class Name dialog}
+            \image qtcreator-cpp-class-wizard.webp {Define Class dialog}
     \endlist
 
     The wizard supports namespaces. To use a namespace, enter a qualified
