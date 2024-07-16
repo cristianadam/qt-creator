@@ -38,7 +38,7 @@
     \list 1
         \li In the \l Projects view, right-click the project name to open the
             context menu and select \uicontrol {Add Library}.
-            \image qtcreator-add-library-wizard.png {Add Library wizard}
+            \image qtcreator-add-library-wizard.webp {Add Library dialog}
         \li Specify settings for the library.
             \image qtcreator-add-library-external.webp {Adding an external library}
             The settings depend on the library type.

@@ -14,7 +14,7 @@
     \c {templates/wizards/} directory in your \l{Locating Wizards}
     {user settings directory}.
 
-    \image qtcreator-cpp-class-wizard.png
+    \image qtcreator-cpp-class-wizard.webp {Define Class dialog}
 
     To create a new wizard:
 
