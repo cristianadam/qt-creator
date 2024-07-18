@@ -43,6 +43,7 @@ void addJsonModule();
 void addLocalSocketModule();
 void addMessageManagerModule();
 void addProcessModule();
+void addProjectModule();
 void addQtModule();
 void addSettingsModule();
 void addTextEditorModule();
@@ -259,6 +260,7 @@ public:
         addLocalSocketModule();
         addMessageManagerModule();
         addProcessModule();
+        addProjectModule();
         addQtModule();
         addSettingsModule();
         addTextEditorModule();

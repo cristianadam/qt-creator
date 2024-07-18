@@ -1,6 +1,6 @@
 add_qtc_plugin(Lua
   PLUGIN_DEPENDS Core
-  PUBLIC_DEPENDS lua546 sol2 TextEditor
+  PUBLIC_DEPENDS lua546 sol2 TextEditor ProjectExplorer
   PUBLIC_DEFINES LUA_AVAILABLE
   SOURCES
     bindings/action.cpp
@@ -14,6 +14,7 @@ add_qtc_plugin(Lua
     bindings/json.cpp
     bindings/localsocket.cpp
     bindings/messagemanager.cpp
+    bindings/project.cpp
     bindings/qtcprocess.cpp
     bindings/settings.cpp
     bindings/texteditor.cpp
