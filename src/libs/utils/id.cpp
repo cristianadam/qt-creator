@@ -82,7 +82,7 @@ static QHash<quintptr, StringHolder> stringFromId;
 static IdCache idFromString;
 static QReadWriteLock s_cacheMutex;
 
-static quintptr theId(const char *str, int n = 0)
+static quintptr theId(const char *str, int n)
 {
     QTC_ASSERT(str && *str, return 0);
     StringHolder sh(str, n);
@@ -107,7 +107,7 @@ static quintptr theId(const char *str, int n = 0)
     return res;
 }
 
-static quintptr theId(const QByteArray &ba)
+static quintptr theId(const QByteArrayView ba)
 {
     return theId(ba.constData(), ba.size());
 }
@@ -181,7 +181,7 @@ Key Id::toKey() const
   \sa toString(), fromSetting()
 */
 
-Id Id::fromString(const QString &name)
+Id Id::fromString(const QStringView name)
 {
     if (name.isEmpty())
         return Id();
@@ -199,7 +199,7 @@ Id Id::fromString(const QString &name)
   \sa toString(), fromSetting()
 */
 
-Id Id::fromName(const QByteArray &name)
+Id Id::fromName(const QByteArrayView name)
 {
     return Id(theId(name));
 }
@@ -236,11 +236,14 @@ Id Id::versionedId(const QByteArray &prefix, int major, int minor)
     QTC_ASSERT(major >= 0, return fromName(prefix));
 
     QByteArray result = prefix + '.';
-    result += QString::number(major).toLatin1();
+    result += QByteArray::number(major);
 
     if (minor < 0)
         return fromName(result);
-    return fromName(result + '.' + QString::number(minor).toLatin1());
+
+    result += '.';
+    result += QByteArray::number(minor);
+    return fromName(result);
 }
 
 QSet<Id> Id::fromStringList(const QStringList &list)
@@ -264,7 +267,7 @@ QStringList Id::toStringList(const QSet<Id> &ids)
 Id Id::withSuffix(int suffix) const
 {
     const QByteArray ba = name() + QByteArray::number(suffix);
-    return Id(ba.constData());
+    return Id(ba);
 }
 
 /*!
@@ -274,17 +277,17 @@ Id Id::withSuffix(int suffix) const
 Id Id::withSuffix(const char *suffix) const
 {
     const QByteArray ba = name() + suffix;
-    return Id(ba.constData());
+    return Id(ba);
 }
 
 /*!
   \overload
 */
 
-Id Id::withSuffix(const QString &suffix) const
+Id Id::withSuffix(const QStringView suffix) const
 {
     const QByteArray ba = name() + suffix.toUtf8();
-    return Id(ba.constData());
+    return Id(ba);
 }
 
 /*!
@@ -298,9 +301,8 @@ Id Id::withSuffix(const QString &suffix) const
 Id Id::withPrefix(const char *prefix) const
 {
     const QByteArray ba = prefix + name();
-    return Id(ba.constData());
+    return Id(ba);
 }
-
 
 bool Id::operator==(const char *name) const
 {
