@@ -258,28 +258,22 @@ bool MimeFilterModel::filterAcceptsRow(int source_row, const QModelIndex &source
 
 const QChar kSemiColon(QLatin1Char(';'));
 
-using UserMimeTypeHash = QHash<QString, UserMimeType>; // name -> mime type
-
 class MimeTypeSettings;
 static IOptionsPageWidget *createMimeTypeSettingsWidget(MimeTypeSettings *);
-
 
 class MimeTypeSettings final : public QObject, public IOptionsPage
 {
 public:
-    MimeTypeSettings(QObject *guard)
-        : QObject(guard)
-        , m_model(new MimeTypeSettingsModel(this))
-        , m_filterModel(new MimeFilterModel(this))
+    MimeTypeSettings()
     {
         setId(Constants::SETTINGS_ID_MIMETYPES);
         setDisplayName(Tr::tr("MIME Types"));
         setCategory(Constants::SETTINGS_CATEGORY_CORE);
         setWidgetCreator([this] { return createMimeTypeSettingsWidget(this); });
 
-        m_filterModel->setSourceModel(m_model);
-        m_filterModel->setFilterKeyColumn(-1);
-        m_filterModel->setFilterCaseSensitivity(Qt::CaseInsensitive);
+        m_filterModel.setSourceModel(&m_model);
+        m_filterModel.setFilterKeyColumn(-1);
+        m_filterModel.setFilterCaseSensitivity(Qt::CaseInsensitive);
         connect(ICore::instance(), &ICore::saveSettingsRequested,
                 this, &MimeTypeSettings::writeUserModifiedMimeTypes);
 
@@ -304,18 +298,18 @@ private:
     void editMagicHeader();
     void resetMimeTypes();
 
-    void ensurePendingMimeType(const Utils::MimeType &mimeType);
+    void ensurePendingMimeType(const MimeType &mimeType);
 
+public:
+    using UserMimeTypeHash = QHash<QString, UserMimeType>; // name -> mime type
     void writeUserModifiedMimeTypes();
+    void applyUserModifiedMimeTypes();
     void readUserModifiedMimeTypes();
     void registerUserModifiedMimeTypes(const UserMimeTypeHash &mimeTypes);
 
-public:
-    void applyUserModifiedMimeTypes();
-
     UserMimeTypeHash m_userModifiedMimeTypes; // these are already in mime database
-    MimeTypeSettingsModel *m_model;
-    MimeFilterModel *m_filterModel;
+    MimeTypeSettingsModel m_model;
+    MimeFilterModel m_filterModel;
     UserMimeTypeHash m_pendingModifiedMimeTypes; // currently edited in the options page
     QString m_filterPattern;
     QPointer<QWidget> m_widget;
@@ -342,9 +336,9 @@ public:
     void apply() final
     {
         m_settings->applyUserModifiedMimeTypes();
-        Core::Internal::setUserPreferredEditorTypes(m_settings->m_model->m_userDefault);
+        Core::Internal::setUserPreferredEditorTypes(m_settings->m_model.m_userDefault);
         m_settings->m_pendingModifiedMimeTypes.clear();
-        m_settings->m_model->load();
+        m_settings->m_model.load();
     }
 
     void finish() final
@@ -365,7 +359,7 @@ void MimeTypeSettings::configureUi(QWidget *w)
     auto filterLineEdit = new FancyLineEdit;
     filterLineEdit->setObjectName("filterLineEdit");
     filterLineEdit->setFiltering(true);
-    m_filterModel->setFilterWildcard({});
+    m_filterModel.setFilterWildcard({});
 
     m_mimeTypesTreeView = new QTreeView;
     m_mimeTypesTreeView->setObjectName("mimeTypesTreeView");
@@ -446,10 +440,10 @@ void MimeTypeSettings::configureUi(QWidget *w)
         splitter
     }.attachTo(w);
 
-    m_model->load();
+    m_model.load();
     connect(filterLineEdit, &FancyLineEdit::textChanged,
             this, &MimeTypeSettings::setFilterPattern);
-    m_mimeTypesTreeView->setModel(m_filterModel);
+    m_mimeTypesTreeView->setModel(&m_filterModel);
     m_mimeTypesTreeView->setItemDelegate(&m_delegate);
 
     new Utils::HeaderViewStretcher(m_mimeTypesTreeView->header(), 1);
@@ -470,7 +464,7 @@ void MimeTypeSettings::configureUi(QWidget *w)
     connect(resetButton, &QPushButton::clicked,
             this, &MimeTypeSettings::resetMimeTypes);
     connect(m_resetHandlersButton, &QPushButton::clicked,
-            m_model, &MimeTypeSettingsModel::resetUserDefaults);
+            &m_model, &MimeTypeSettingsModel::resetUserDefaults);
     connect(m_magicHeadersTreeWidget, &QTreeWidget::itemSelectionChanged,
             this, &MimeTypeSettings::updatePatternEditAndMagicButtons);
 
@@ -486,7 +480,7 @@ void MimeTypeSettings::syncData(const QModelIndex &current,
 
     if (current.isValid()) {
         const Utils::MimeType &currentMimeType =
-                m_model->m_mimeTypes.at(m_filterModel->mapToSource(current).row());
+                m_model.m_mimeTypes.at(m_filterModel.mapToSource(current).row());
         UserMimeType modifiedType = m_pendingModifiedMimeTypes.value(currentMimeType.name());
         m_patternsLineEdit->setText(
                     modifiedType.isValid() ? modifiedType.globPatterns.join(kSemiColon)
@@ -523,8 +517,8 @@ void MimeTypeSettings::handlePatternEdited()
     const QModelIndex &modelIndex = m_mimeTypesTreeView->currentIndex();
     QTC_ASSERT(modelIndex.isValid(), return);
 
-    int index = m_filterModel->mapToSource(modelIndex).row();
-    const Utils::MimeType mt = m_model->m_mimeTypes.at(index);
+    int index = m_filterModel.mapToSource(modelIndex).row();
+    const Utils::MimeType mt = m_model.m_mimeTypes.at(index);
     ensurePendingMimeType(mt);
     m_pendingModifiedMimeTypes[mt.name()].globPatterns
             = m_patternsLineEdit->text().split(kSemiColon, Qt::SkipEmptyParts);
@@ -554,8 +548,8 @@ void MimeTypeSettings::addMagicHeader()
     const QModelIndex &mimeTypeIndex = m_mimeTypesTreeView->currentIndex();
     QTC_ASSERT(mimeTypeIndex.isValid(), return);
 
-    int index = m_filterModel->mapToSource(mimeTypeIndex).row();
-    const Utils::MimeType mt = m_model->m_mimeTypes.at(index);
+    const int index = m_filterModel.mapToSource(mimeTypeIndex).row();
+    const MimeType mt = m_model.m_mimeTypes.at(index);
     MimeTypeMagicDialog dlg;
     if (dlg.exec()) {
         const MagicData &data = dlg.magicData();
@@ -573,8 +567,8 @@ void MimeTypeSettings::removeMagicHeader()
     const QModelIndex &magicIndex = m_magicHeadersTreeWidget->currentIndex();
     QTC_ASSERT(magicIndex.isValid(), return);
 
-    int index = m_filterModel->mapToSource(mimeTypeIndex).row();
-    const Utils::MimeType mt = m_model->m_mimeTypes.at(index);
+    int index = m_filterModel.mapToSource(mimeTypeIndex).row();
+    const Utils::MimeType mt = m_model.m_mimeTypes.at(index);
 
     QTreeWidgetItem *item = m_magicHeadersTreeWidget->topLevelItem(magicIndex.row());
     QTC_ASSERT(item, return);
@@ -593,8 +587,8 @@ void MimeTypeSettings::editMagicHeader()
     const QModelIndex &magicIndex = m_magicHeadersTreeWidget->currentIndex();
     QTC_ASSERT(magicIndex.isValid(), return);
 
-    int index = m_filterModel->mapToSource(mimeTypeIndex).row();
-    const Utils::MimeType mt = m_model->m_mimeTypes.at(index);
+    int index = m_filterModel.mapToSource(mimeTypeIndex).row();
+    const Utils::MimeType mt = m_model.m_mimeTypes.at(index);
 
     QTreeWidgetItem *item = m_magicHeadersTreeWidget->topLevelItem(magicIndex.row());
     QTC_ASSERT(item, return);
@@ -630,10 +624,10 @@ void MimeTypeSettings::resetMimeTypes()
 void MimeTypeSettings::setFilterPattern(const QString &pattern)
 {
     m_filterPattern = pattern;
-    m_filterModel->setFilterWildcard(pattern);
+    m_filterModel.setFilterWildcard(pattern);
 }
 
-void MimeTypeSettings::ensurePendingMimeType(const Utils::MimeType &mimeType)
+void MimeTypeSettings::ensurePendingMimeType(const MimeType &mimeType)
 {
     if (!m_pendingModifiedMimeTypes.contains(mimeType.name())) {
         // get a copy of the mime type into pending modified types
@@ -828,9 +822,9 @@ void MimeEditorDelegate::setModelData(QWidget *editor,
                    int(MimeTypeSettingsModel::Role::DefaultHandler));
 }
 
-void setupMimeTypeSettings(QObject *guard)
+void setupMimeTypeSettings()
 {
-    (void) new MimeTypeSettings(guard);
+    static MimeTypeSettings theMimeTypeSettings;
 }
 
 } // Core::Internal
