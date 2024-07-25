@@ -28,8 +28,9 @@
 #include <QPlainTextEdit>
 #include <QWaitCondition>
 
-#include <random>
+#include <memory>
 #include <queue>
+#include <random>
 
 using namespace ProjectExplorer;
 using namespace std;
@@ -267,12 +268,11 @@ void AssetExporter::preprocessQmlFile(const Utils::FilePath &path)
 
     QPlainTextEdit textEdit;
     textEdit.setPlainText(QString::fromUtf8(reader.data()));
-    NotIndentingTextEditModifier *modifier = new NotIndentingTextEditModifier(&textEdit);
-    modifier->setParent(model.get());
+    auto modifier = std::make_unique<NotIndentingTextEditModifier>(&textEdit);
     auto rewriterView = std::make_unique<RewriterView>(m_view->externalDependencies(),
                                                        QmlDesigner::RewriterView::Validate);
     rewriterView->setCheckSemanticErrors(false);
-    rewriterView->setTextModifier(modifier);
+    rewriterView->setTextModifier(modifier.get());
     model->attachView(rewriterView.get());
     rewriterView->restoreAuxiliaryData();
     ModelNode rootNode = rewriterView->rootModelNode();
