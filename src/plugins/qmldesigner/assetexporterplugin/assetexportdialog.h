@@ -6,6 +6,7 @@
 #include "assetexporter.h"
 
 #include <utils/filepath.h>
+#include <utils/uniqueobjectptr.h>
 
 #include <QDialog>
 #include <QStringListModel>
@@ -53,15 +54,15 @@ private:
     AssetExporter &m_assetExporter;
     FilePathModel &m_filePathModel;
     QPushButton *m_exportBtn = nullptr;
-    QCheckBox *m_exportAssetsCheck = nullptr;
-    QCheckBox *m_perComponentExportCheck = nullptr;
-    QListView *m_filesView = nullptr;
-    QPlainTextEdit *m_exportLogs = nullptr;
-    Utils::OutputFormatter *m_outputFormatter = nullptr;
-    Utils::PathChooser *m_exportPath = nullptr;
-    QDialogButtonBox *m_buttonBox = nullptr;
-    QStackedWidget *m_stackedWidget = nullptr;
-    QProgressBar *m_exportProgress = nullptr;
+    Utils::UniqueObjectPtr<QCheckBox> m_exportAssetsCheck;
+    Utils::UniqueObjectPtr<QCheckBox> m_perComponentExportCheck;
+    Utils::UniqueObjectPtr<QListView> m_filesView;
+    Utils::UniqueObjectPtr<QPlainTextEdit> m_exportLogs;
+    Utils::UniqueObjectPtr<Utils::OutputFormatter> m_outputFormatter;
+    Utils::UniqueObjectPtr<Utils::PathChooser> m_exportPath;
+    Utils::UniqueObjectPtr<QDialogButtonBox> m_buttonBox;
+    Utils::UniqueObjectPtr<QStackedWidget> m_stackedWidget;
+    Utils::UniqueObjectPtr<QProgressBar> m_exportProgress;
 };
 
 } // QmlDesigner
