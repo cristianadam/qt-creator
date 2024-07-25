@@ -11,22 +11,24 @@
 #include <QMessageBox>
 #include <QToolBar>
 
+#include <memory>
+
 namespace QmlDesigner {
 AnnotationTabWidget::AnnotationTabWidget(QWidget *parent)
     : QTabWidget(parent)
 {
-    auto *commentCornerWidget = new QToolBar;
+    auto commentCornerWidget = std::unique_ptr<QToolBar>();
 
     //Making it look similar to timeline editor button:
     commentCornerWidget->setStyleSheet("QToolBar { background-color: transparent; border-width: 1px; }");
 
-    auto *commentAddAction = new QAction(TimelineIcons::ADD_TIMELINE.icon(),
-                                         tr("Add Comment")); //timeline icons?
-    auto *commentRemoveAction = new QAction(TimelineIcons::REMOVE_TIMELINE.icon(),
-                                            tr("Remove Comment")); //timeline icons?
-    connect(commentAddAction, &QAction::triggered, this, [this] { addCommentTab(); });
+    auto commentAddAction = std::make_unique<QAction>(TimelineIcons::ADD_TIMELINE.icon(),
+                                                      tr("Add Comment")); //timeline icons?
+    auto commentRemoveAction = std::make_unique<QAction>(TimelineIcons::REMOVE_TIMELINE.icon(),
+                                                         tr("Remove Comment")); //timeline icons?
+    connect(commentAddAction.get(), &QAction::triggered, this, [this] { addCommentTab(); });
 
-    connect(commentRemoveAction, &QAction::triggered, this, [this] {
+    connect(commentRemoveAction.get(), &QAction::triggered, this, [this] {
         int currentIndex = this->currentIndex();
         QString currentTitle = tabText(currentIndex);
         if (QMessageBox::question(this,
@@ -39,9 +41,9 @@ AnnotationTabWidget::AnnotationTabWidget(QWidget *parent)
         }
     });
 
-    commentCornerWidget->addAction(commentAddAction);
-    commentCornerWidget->addAction(commentRemoveAction);
-    setCornerWidget(commentCornerWidget, Qt::TopRightCorner);
+    commentCornerWidget->addAction(commentAddAction.release());
+    commentCornerWidget->addAction(commentRemoveAction.release());
+    setCornerWidget(commentCornerWidget.release(), Qt::TopRightCorner);
 }
 
 QVector<Comment> AnnotationTabWidget::fetchComments() const
@@ -102,12 +104,17 @@ void AnnotationTabWidget::onCommentTitleChanged(const QString &text, QWidget *ta
 
 void AnnotationTabWidget::addCommentTab(const QmlDesigner::Comment &comment)
 {
-    auto *commentTab = new AnnotationCommentTab();
+    auto commentTab = std::make_unique<AnnotationCommentTab>();
     commentTab->setDefaultAnnotations(m_defaults);
     commentTab->setComment(comment);
 
+    connect(commentTab.get(),
+            &AnnotationCommentTab::titleChanged,
+            this,
+            &AnnotationTabWidget::onCommentTitleChanged);
+
     QString tabTitle(comment.title());
-    int tabIndex = addTab(commentTab, tabTitle);
+    int tabIndex = addTab(commentTab.release(), tabTitle);
     setCurrentIndex(tabIndex);
 
     if (tabTitle.isEmpty()) {
@@ -115,10 +122,6 @@ void AnnotationTabWidget::addCommentTab(const QmlDesigner::Comment &comment)
         tabTitle = QString("%1 %2").arg(defaultTabName).arg(appendix);
         setTabText(tabIndex, tabTitle);
     }
-    connect(commentTab,
-            &AnnotationCommentTab::titleChanged,
-            this,
-            &AnnotationTabWidget::onCommentTitleChanged);
 }
 
 void AnnotationTabWidget::deleteAllTabs()
