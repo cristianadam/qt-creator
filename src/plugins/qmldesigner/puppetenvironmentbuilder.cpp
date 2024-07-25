@@ -5,6 +5,8 @@
 #include "designersettings.h"
 #include "qmldesignerplugin.h"
 
+#include <qmldesignerbase/utils/qmlpuppetpaths.h>
+
 #include <model.h>
 
 #include <projectexplorer/kit.h>
@@ -114,10 +116,8 @@ void PuppetEnvironmentBuilder::addKit() const
         if (m_availablePuppetType == PuppetType::Kit) {
             m_target->kit()->addToBuildEnvironment(m_environment);
             const QtSupport::QtVersion *qt = QtSupport::QtKitAspect::qtVersion(m_target->kit());
-            if (qt) { // Kits without a Qt version should not have a puppet!
-                // Update PATH to include QT_HOST_BINS
-                m_environment.prependOrSetPath(qt->hostBinPath());
-            }
+            QTC_ASSERT(qt, return);
+            m_environment.prependOrSetPath(qt->hostBinPath());
         }
     }
 }
@@ -255,8 +255,13 @@ void PuppetEnvironmentBuilder::addResolveUrlsOnAssignment() const
 PuppetType PuppetEnvironmentBuilder::determinePuppetType() const
 {
     if (m_target && m_target->kit() && m_target->kit()->isValid()) {
-        if (m_qmlPuppetPath.isExecutableFile())
-            return PuppetType::Kit;
+        if (m_qmlPuppetPath.isExecutableFile()) {
+            if (const QtSupport::QtVersion *qt = QtSupport::QtKitAspect::qtVersion(m_target->kit())) {
+                if (m_qmlPuppetPath.contains(qt->hostBinPath().path())) {
+                    return PuppetType::Kit;
+                }
+            }
+        }
     }
 
     return PuppetType::Fallback;

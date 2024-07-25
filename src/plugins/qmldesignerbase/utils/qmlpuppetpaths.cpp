@@ -39,7 +39,7 @@ std::pair<Utils::FilePath, Utils::FilePath> qmlPuppetFallbackPaths(const Designe
     return {workingDirectory, qmlPuppetExecutablePath(workingDirectory)};
 }
 
-std::pair<Utils::FilePath, Utils::FilePath> pathsForKitPuppet(ProjectExplorer::Target *target)
+std::pair<Utils::FilePath, Utils::FilePath> pathsForKitPuppet(const ProjectExplorer::Target *target)
 {
     if (!target || !target->kit())
         return {};
@@ -55,7 +55,7 @@ std::pair<Utils::FilePath, Utils::FilePath> pathsForKitPuppet(ProjectExplorer::T
 }
 } // namespace
 
-std::pair<Utils::FilePath, Utils::FilePath> qmlPuppetPaths(ProjectExplorer::Target *target,
+std::pair<Utils::FilePath, Utils::FilePath> qmlPuppetPaths(const ProjectExplorer::Target *target,
                                                            const DesignerSettings &settings)
 {
     auto [workingDirectoryPath, puppetPath] = pathsForKitPuppet(target);

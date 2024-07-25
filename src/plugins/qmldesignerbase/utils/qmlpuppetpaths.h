@@ -15,6 +15,6 @@ class DesignerSettings;
 
 namespace QmlPuppetPaths {
 QMLDESIGNERBASE_EXPORT std::pair<Utils::FilePath, Utils::FilePath> qmlPuppetPaths(
-    ProjectExplorer::Target *target, const DesignerSettings &settings);
+    const ProjectExplorer::Target *target, const DesignerSettings &settings);
 }
 } // namespace QmlDesigner
