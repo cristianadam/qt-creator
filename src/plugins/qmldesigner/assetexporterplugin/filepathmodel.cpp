@@ -122,7 +122,7 @@ void FilePathModel::processProject()
     }
 
     beginResetModel();
-    m_preprocessWatcher.reset(new QFutureWatcher<Utils::FilePath>(this));
+    m_preprocessWatcher = Utils::makeUniqueObjectPtr<QFutureWatcher<Utils::FilePath>>();
     connect(m_preprocessWatcher.get(),
             &QFutureWatcher<Utils::FilePath>::resultReadyAt,
             this,

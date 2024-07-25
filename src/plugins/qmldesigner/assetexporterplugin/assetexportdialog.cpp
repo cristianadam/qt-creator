@@ -56,33 +56,34 @@ static void addFormattedMessage(OutputFormatter *formatter, const QString &str, 
 }
 
 AssetExportDialog::AssetExportDialog(const FilePath &exportPath,
-                                     AssetExporter &assetExporter, FilePathModel &model,
-                                     QWidget *parent) :
-    QDialog(parent),
-    m_assetExporter(assetExporter),
-    m_filePathModel(model),
-    m_filesView(new QListView),
-    m_exportLogs(new QPlainTextEdit),
-    m_outputFormatter(new Utils::OutputFormatter())
+                                     AssetExporter &assetExporter,
+                                     FilePathModel &model,
+                                     QWidget *parent)
+    : QDialog(parent)
+    , m_assetExporter(assetExporter)
+    , m_filePathModel(model)
+    , m_filesView(Utils::makeUniqueObjectPtr<QListView>())
+    , m_exportLogs(Utils::makeUniqueObjectPtr<QPlainTextEdit>())
+    , m_outputFormatter(Utils::makeUniqueObjectPtr<Utils::OutputFormatter>())
 {
     resize(768, 480);
     setWindowTitle(Tr::tr("Export Components"));
 
-    m_stackedWidget = new QStackedWidget;
+    m_stackedWidget = Utils::makeUniqueObjectPtr<QStackedWidget>();
 
-    m_exportProgress = new QProgressBar;
+    m_exportProgress = Utils::makeUniqueObjectPtr<QProgressBar>();
     m_exportProgress->setRange(0,0);
 
-    auto optionsWidget = new QWidget;
+    auto optionsWidget = std::make_unique<QWidget>();
 
-    auto advancedOptions = new DetailsWidget;
+    auto advancedOptions = std::make_unique<DetailsWidget>();
     advancedOptions->setSummaryText(tr("Advanced Options"));
-    advancedOptions->setWidget(optionsWidget);
+    advancedOptions->setWidget(optionsWidget.get());
 
-    m_buttonBox = new QDialogButtonBox;
+    m_buttonBox = Utils::makeUniqueObjectPtr<QDialogButtonBox>();
     m_buttonBox->setStandardButtons(QDialogButtonBox::Cancel|QDialogButtonBox::Close);
 
-    m_exportPath = new PathChooser;
+    m_exportPath = Utils::makeUniqueObjectPtr<PathChooser>();
     m_exportPath->setExpectedKind(PathChooser::Kind::SaveFile);
     m_exportPath->setFilePath(
                 exportPath.pathAppended(
@@ -95,20 +96,21 @@ AssetExportDialog::AssetExportDialog(const FilePath &exportPath,
         Core::FileUtils::showInGraphicalShell(Core::ICore::dialogParent(), m_exportPath->filePath());
     });
 
-    m_exportAssetsCheck = new QCheckBox(tr("Export assets"), this);
+    m_exportAssetsCheck = Utils::makeUniqueObjectPtr<QCheckBox>(tr("Export assets"), this);
     m_exportAssetsCheck->setChecked(true);
 
-    m_perComponentExportCheck = new QCheckBox(tr("Export components separately"), this);
+    m_perComponentExportCheck = Utils::makeUniqueObjectPtr<QCheckBox>(
+        tr("Export components separately"), this);
     m_perComponentExportCheck->setChecked(false);
 
     m_buttonBox->button(QDialogButtonBox::Cancel)->setEnabled(false);
 
-    m_stackedWidget->addWidget(m_filesView);
+    m_stackedWidget->addWidget(m_filesView.get());
     m_filesView->setModel(&m_filePathModel);
 
     m_exportLogs->setReadOnly(true);
-    m_outputFormatter->setPlainTextEdit(m_exportLogs);
-    m_stackedWidget->addWidget(m_exportLogs);
+    m_outputFormatter->setPlainTextEdit(m_exportLogs.get());
+    m_stackedWidget->addWidget(m_exportLogs.get());
     switchView(false);
 
     connect(m_buttonBox->button(QDialogButtonBox::Cancel), &QPushButton::clicked, [this] {
@@ -139,20 +141,22 @@ AssetExportDialog::AssetExportDialog(const FilePath &exportPath,
 
     using namespace Layouting;
 
-    Column {
-        m_exportAssetsCheck,
-        m_perComponentExportCheck,
+    Column{
+        m_exportAssetsCheck.get(),
+        m_perComponentExportCheck.get(),
         st,
         noMargin,
-    }.attachTo(optionsWidget);
+    }
+        .attachTo(optionsWidget.release());
 
-    Column {
-        Form { Tr::tr("Export path:"), m_exportPath },
-        advancedOptions,
-        m_stackedWidget,
-        m_exportProgress,
-        m_buttonBox,
-    }.attachTo(this);
+    Column{
+        Form{Tr::tr("Export path:"), m_exportPath.get()},
+        advancedOptions.release(),
+        m_stackedWidget.get(),
+        m_exportProgress.get(),
+        m_buttonBox.get(),
+    }
+        .attachTo(this);
 }
 
 AssetExportDialog::~AssetExportDialog()
@@ -202,9 +206,9 @@ void AssetExportDialog::updateExportProgress(double value)
 void AssetExportDialog::switchView(bool showExportView)
 {
     if (showExportView)
-        m_stackedWidget->setCurrentWidget(m_exportLogs);
+        m_stackedWidget->setCurrentWidget(m_exportLogs.get());
     else
-        m_stackedWidget->setCurrentWidget(m_filesView);
+        m_stackedWidget->setCurrentWidget(m_filesView.get());
 }
 
 void AssetExportDialog::onTaskAdded(const ProjectExplorer::Task &task)
@@ -221,7 +225,7 @@ void AssetExportDialog::onTaskAdded(const ProjectExplorer::Task &task)
         default:
             format = Utils::NormalMessageFormat;
         }
-        addFormattedMessage(m_outputFormatter, task.description(), format);
+        addFormattedMessage(m_outputFormatter.get(), task.description(), format);
     }
 }
 
