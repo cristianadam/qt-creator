@@ -4,9 +4,9 @@
 #include <QAbstractListModel>
 #include <QFutureWatcher>
 
-#include "utils/fileutils.h"
+#include <utils/fileutils.h>
+#include <utils/uniqueobjectptr.h>
 
-#include <memory>
 #include <unordered_set>
 
 namespace ProjectExplorer {
@@ -32,7 +32,7 @@ private:
     void processProject();
 
     ProjectExplorer::Project *m_project = nullptr;
-    std::unique_ptr<QFutureWatcher<Utils::FilePath>> m_preprocessWatcher;
+    Utils::UniqueObjectPtr<QFutureWatcher<Utils::FilePath>> m_preprocessWatcher;
     std::unordered_set<Utils::FilePath> m_skipped;
     Utils::FilePaths m_files;
 };
