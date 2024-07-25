@@ -16,6 +16,7 @@
 
 #include <nodemetainfo.h>
 
+#include <QDrag>
 #include <QList>
 #include <QPointer>
 #include <QSet>
@@ -381,7 +382,7 @@ private:
     QPointer<NodeInstanceView> m_nodeInstanceView;
     QPointer<Model> m_metaInfoProxyModel;
     QHash<TypeName, std::shared_ptr<NodeMetaInfoPrivate>> m_nodeMetaInfoCache;
-
+    std::unique_ptr<QDrag> drag;
     bool m_writeLock = false;
     qint32 m_internalIdCounter = 1;
 };
