@@ -179,7 +179,8 @@ static inline int askMsgSendFailed()
 static inline FilePaths getPluginPaths()
 {
     FilePaths rc;
-    rc << appInfo().paths.plugins << appInfo().paths.resourcePath / "lua-plugins";
+    rc << appInfo().paths.plugins << appInfo().paths.resourcePath / "lua-plugins"
+       << appInfo().paths.userResourcePath / "lua-plugins";
 
     auto version = [](int micro) {
         return QString::number(IDE_VERSION_MAJOR) + '.' + QString::number(IDE_VERSION_MINOR) + '.'
