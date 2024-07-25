@@ -274,8 +274,6 @@ public:
         m_filterModel.setSourceModel(&m_model);
         m_filterModel.setFilterKeyColumn(-1);
         m_filterModel.setFilterCaseSensitivity(Qt::CaseInsensitive);
-        connect(ICore::instance(), &ICore::saveSettingsRequested,
-                this, &MimeTypeSettings::writeUserModifiedMimeTypes);
 
         readUserModifiedMimeTypes();
         Utils::addMimeInitializer([this] { registerUserModifiedMimeTypes(m_userModifiedMimeTypes); });
@@ -336,9 +334,6 @@ public:
     void apply() final
     {
         m_settings->applyUserModifiedMimeTypes();
-        Core::Internal::setUserPreferredEditorTypes(m_settings->m_model.m_userDefault);
-        m_settings->m_pendingModifiedMimeTypes.clear();
-        m_settings->m_model.load();
     }
 
     void finish() final
@@ -765,7 +760,14 @@ void MimeTypeSettings::applyUserModifiedMimeTypes()
     for (auto it = m_pendingModifiedMimeTypes.constBegin();
              it != m_pendingModifiedMimeTypes.constEnd(); ++it)
         m_userModifiedMimeTypes.insert(it.key(), it.value());
+
     registerUserModifiedMimeTypes(m_pendingModifiedMimeTypes);
+    m_pendingModifiedMimeTypes.clear();
+
+    writeUserModifiedMimeTypes();
+
+    Core::Internal::setUserPreferredEditorTypes(m_model.m_userDefault);
+    m_model.load();
 }
 
 QStringList MimeTypeSettings::keywords() const
