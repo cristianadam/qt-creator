@@ -58,7 +58,7 @@ void MinimizableInfoBars::createActions()
 Key MinimizableInfoBars::settingsKey(const Id &id) const
 {
     QTC_CHECK(!m_settingsGroup.isEmpty());
-    return m_settingsGroup + '/' + SETTINGS_PREFIX + id.name();
+    return m_settingsGroup + '/' + SETTINGS_PREFIX + id.name().toByteArray();
 }
 
 void MinimizableInfoBars::createShowInfoBarActions(const ActionCreator &actionCreator) const
