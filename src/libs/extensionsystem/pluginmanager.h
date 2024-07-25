@@ -73,6 +73,7 @@ public:
     static QString pluginIID();
     static void setPluginIID(const QString &iid);
     static const QVector<PluginSpec *> plugins();
+    static QList<PluginSpec *> allPluginSpecs();
     static QHash<QString, QVector<PluginSpec *>> pluginCollections();
     static bool hasError();
     static const QStringList allErrors();

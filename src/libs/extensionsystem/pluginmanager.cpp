@@ -557,6 +557,11 @@ const PluginSpecs PluginManager::plugins()
     return d->pluginSpecs;
 }
 
+QList<PluginSpec *> PluginManager::allPluginSpecs()
+{
+    return d->pluginSpecs;
+}
+
 QHash<QString, PluginSpecs> PluginManager::pluginCollections()
 {
     return d->pluginCategories;
