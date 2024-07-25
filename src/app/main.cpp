@@ -521,6 +521,37 @@ private:
 
 ShowInGuiHandler *ShowInGuiHandler::instance = nullptr;
 
+Utils::FilePath userPluginsRoot()
+{
+    Utils::FilePath rootPath = Utils::FilePath::fromUserInput(
+        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation));
+
+    if (Utils::HostOsInfo::isAnyUnixHost() && !Utils::HostOsInfo::isMacHost())
+        rootPath /= "data";
+
+    rootPath /= Core::Constants::IDE_SETTINGSVARIANT_STR;
+
+    rootPath /= QLatin1StringView(
+        Utils::HostOsInfo::isMacHost() ? Core::Constants::IDE_DISPLAY_NAME
+                                       : Core::Constants::IDE_ID);
+    rootPath /= "plugins";
+
+    return rootPath;
+}
+
+Utils::FilePath userResourcePath(const QString &settingsPath, const QString &appId)
+{
+    const Utils::FilePath configDir = Utils::FilePath::fromUserInput(settingsPath).parentDir();
+    const Utils::FilePath urp = configDir / appId;
+
+    if (!urp.exists()) {
+        if (!urp.createDir())
+            qWarning() << "could not create" << urp;
+    }
+
+    return urp;
+}
+
 int main(int argc, char **argv)
 {
     Restarter restarter(argc, argv);
@@ -726,6 +757,15 @@ int main(int argc, char **argv)
     info.revision = Constants::IDE_REVISION_STR;
     info.revisionUrl = Constants::IDE_REVISION_URL;
     info.userFileExtension = Constants::IDE_PROJECT_USER_FILE_EXTENSION;
+
+    const Utils::FilePath appDirPath = Utils::FilePath::fromUserInput(
+        QApplication::applicationDirPath());
+
+    info.paths.plugins = (appDirPath / RELATIVE_PLUGIN_PATH).cleanPath();
+    info.paths.userPluginsRoot = userPluginsRoot();
+    info.paths.resourcePath = (appDirPath / RELATIVE_DATA_PATH).cleanPath();
+    info.paths.userResourcePath = userResourcePath(settings->fileName(), Constants::IDE_ID);
+
     Utils::Internal::setAppInfo(info);
 
     QTranslator translator;
