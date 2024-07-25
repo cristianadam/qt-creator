@@ -5,6 +5,8 @@
 
 #include "utils_global.h"
 
+#include "filepath.h"
+
 #include <QString>
 
 namespace Utils {
@@ -19,9 +21,18 @@ public:
     QString revision;
     QString revisionUrl;
     QString userFileExtension;
+
+    struct
+    {
+        FilePath plugins;
+        FilePath userPluginsRoot;
+
+        FilePath resourcePath;
+        FilePath userResourcePath;
+    } paths;
 };
 
-QTCREATOR_UTILS_EXPORT AppInfo appInfo();
+QTCREATOR_UTILS_EXPORT const AppInfo &appInfo();
 
 namespace Internal {
 QTCREATOR_UTILS_EXPORT void setAppInfo(const AppInfo &info);
