@@ -170,7 +170,8 @@ void TimelineRenderer::hoverMoveEvent(QHoverEvent *event)
 {
     Q_D(TimelineRenderer);
     if (!d->selectionLocked) {
-        d->findCurrentSelection(event->pos().x(), event->pos().y(), width());
+        const QPoint position = event->position().toPoint();
+        d->findCurrentSelection(position.x(), position.y(), width());
         if (d->currentEventIndex != -1)
             setSelectedItem(d->currentEventIndex);
     }

@@ -420,12 +420,13 @@ bool ScrollBar::event(QEvent *event)
         if (hoverEvent) {
             QStyleOptionSlider option;
             option.initFrom(this);
+            const QPoint position = hoverEvent->position().toPoint();
             d->isHandleUnderCursor = style()
                                          ->subControlRect(QStyle::CC_ScrollBar,
                                                           &option,
                                                           QStyle::SC_ScrollBarSlider,
                                                           this)
-                                         .contains(hoverEvent->pos());
+                                         .contains(position);
 
             d->isGrooveUnderCursor = !d->isHandleUnderCursor
                                      && style()
@@ -433,7 +434,7 @@ bool ScrollBar::event(QEvent *event)
                                                              &option,
                                                              QStyle::SC_ScrollBarGroove,
                                                              this)
-                                            .contains(hoverEvent->pos());
+                                            .contains(position);
         }
     } break;
     case QEvent::HoverLeave:
