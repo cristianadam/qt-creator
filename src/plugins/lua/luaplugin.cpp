@@ -32,23 +32,6 @@ using namespace ExtensionSystem;
 
 namespace Lua::Internal {
 
-void setupActionModule();
-void setupAsyncModule();
-void setupCoreModule();
-void setupFetchModule();
-void setupGuiModule();
-void setupHookModule();
-void setupInstallModule();
-void setupJsonModule();
-void setupLocalSocketModule();
-void setupMessageManagerModule();
-void setupProcessModule();
-void setupQtModule();
-void setupSettingsModule();
-void setupTextEditorModule();
-void setupTranslateModule();
-void setupUtilsModule();
-
 class LuaJsExtension : public QObject
 {
     Q_OBJECT
@@ -249,22 +232,26 @@ public:
     {
         m_luaEngine.reset(new LuaEngine());
 
-        setupActionModule();
-        setupAsyncModule();
-        setupCoreModule();
-        setupFetchModule();
-        setupGuiModule();
-        setupHookModule();
-        setupInstallModule();
-        setupJsonModule();
-        setupLocalSocketModule();
-        setupMessageManagerModule();
-        setupProcessModule();
-        setupQtModule();
-        setupSettingsModule();
-        setupTextEditorModule();
-        setupTranslateModule();
-        setupUtilsModule();
+#define SETUP_LUA_MODULE(name) \
+    void setup##name##Module(); \
+    setup##name##Module();
+
+        SETUP_LUA_MODULE(Action);
+        SETUP_LUA_MODULE(Async);
+        SETUP_LUA_MODULE(Core);
+        SETUP_LUA_MODULE(Fetch);
+        SETUP_LUA_MODULE(Gui);
+        SETUP_LUA_MODULE(Hook);
+        SETUP_LUA_MODULE(Install);
+        SETUP_LUA_MODULE(Json);
+        SETUP_LUA_MODULE(LocalSocket);
+        SETUP_LUA_MODULE(MessageManager);
+        SETUP_LUA_MODULE(Process);
+        SETUP_LUA_MODULE(Qt);
+        SETUP_LUA_MODULE(Settings);
+        SETUP_LUA_MODULE(TextEditor);
+        SETUP_LUA_MODULE(Translate);
+        SETUP_LUA_MODULE(Utils);
 
         Core::JsExpander::registerGlobalObject("Lua", [] { return new LuaJsExtension(); });
 
