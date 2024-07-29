@@ -33,14 +33,6 @@
  <content_rating type="oars-1.1" />
  <screenshots>
   <screenshot type="default">
-   <caption>Application development life-cycle</caption>
-   <image>https://doc.qt.io/qtcreator/images/qt-app-dev-flow.webp</image>
-  </screenshot>
-  <screenshot>
-   <caption>Overview</caption>
-   <image>https://doc.qt.io/qtcreator/images/qtcreator-breakdown.png</image>
-  </screenshot>
-  <screenshot>
    <caption>Examples</caption>
    <image>https://doc.qt.io/qtcreator/images/qtcreator-examples-open.webp</image>
   </screenshot>
