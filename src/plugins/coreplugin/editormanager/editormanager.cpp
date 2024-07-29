@@ -3639,7 +3639,7 @@ QByteArray EditorManager::saveState()
 
     \sa saveState()
 */
-bool EditorManager::restoreState(const QByteArray &state)
+void EditorManager::restoreState(const QByteArray &state)
 {
     closeAllEditors(true);
     // remove extra windows
@@ -3654,7 +3654,7 @@ bool EditorManager::restoreState(const QByteArray &state)
 
     const bool isVersion5 = version == "EditorManagerV5";
     if (version != "EditorManagerV4" && !isVersion5)
-        return false;
+        return;
 
     QApplication::setOverrideCursor(Qt::WaitCursor);
 
@@ -3716,7 +3716,7 @@ bool EditorManager::restoreState(const QByteArray &state)
 
     QApplication::restoreOverrideCursor();
 
-    return true;
+    return;
 }
 
 /*!
