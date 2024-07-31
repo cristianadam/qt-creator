@@ -316,6 +316,8 @@ public:
     QToolButton *m_toggleLeftSideBarButton = nullptr;
     QToolButton *m_toggleRightSideBarButton = nullptr;
     QList<std::function<bool()>> m_preCloseListeners;
+
+    std::function<Utils::FilePath(const Utils::FilePath &)> m_relativePathToProject = nullptr;
 };
 
 static QMenuBar *globalMenuBar()
@@ -1101,7 +1103,7 @@ void ICore::restart()
 */
 void ICore::setRelativePathToProjectFunction(const std::function<FilePath(const FilePath &)> &func)
 {
-    m_core->m_relativePathToProject = func;
+    d->m_relativePathToProject = func;
 }
 
 /*!
@@ -1109,8 +1111,8 @@ void ICore::setRelativePathToProjectFunction(const std::function<FilePath(const 
 */
 FilePath ICore::pathRelativeToActiveProject(const FilePath &path)
 {
-    if (m_core->m_relativePathToProject)
-        return m_core->m_relativePathToProject(path);
+    if (d->m_relativePathToProject)
+        return d->m_relativePathToProject(path);
 
     return path;
 }
