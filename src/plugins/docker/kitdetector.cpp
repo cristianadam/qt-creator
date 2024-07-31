@@ -362,6 +362,8 @@ void KitDetectorPrivate::autoDetect()
             return tc->detectionSource() == m_sharedId
                    && (!qt || qt->qtAbis().contains(tc->targetAbi()));
         });
+
+        // TODO: Here for instance (this loop is broken anyway ...)
         for (Toolchain *toolchain : toolchainsToSet)
             ToolchainKitAspect::setToolchain(k, toolchain);
 
