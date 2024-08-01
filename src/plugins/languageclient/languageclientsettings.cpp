@@ -451,12 +451,16 @@ void LanguageClientSettingsModel::reset(const QList<BaseSettings *> &settings)
     qDeleteAll(m_settings);
     qDeleteAll(m_removed);
     m_removed.clear();
-    m_settings = Utils::transform(settings, [](const BaseSettings *other) { return other->copy(); });
+    m_settings = Utils::transform(
+        Utils::filtered(settings, [](BaseSettings *settings) { return settings->m_showInSettings; }),
+        [](const BaseSettings *other) { return other->copy(); });
     endResetModel();
 }
 
 int LanguageClientSettingsModel::insertSettings(BaseSettings *settings)
 {
+    QTC_ASSERT(settings->m_showInSettings, return -1);
+
     int row = rowCount();
     beginInsertRows(QModelIndex(), row, row);
     m_settings.insert(row, settings);
