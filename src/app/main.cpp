@@ -317,6 +317,7 @@ struct Options
     std::optional<QString> userLibraryPath;
     bool hasTestOption = false;
     bool wantsCleanSettings = false;
+    bool hasStyleOption = false;
 };
 
 Options parseCommandLine(int argc, char *argv[])
@@ -356,9 +357,12 @@ Options parseCommandLine(int argc, char *argv[])
             if (arg == TEST_OPTION)
                 options.hasTestOption = true;
             options.appArguments.push_back(*it);
+            if (strcmp(*it, "-style") == 0)
+                options.hasStyleOption = true;
         }
         ++it;
     }
+
     return options;
 }
 
@@ -697,22 +701,17 @@ int main(int argc, char **argv)
     setPixmapCacheLimit();
     loadFonts();
 
-    if (HostOsInfo::isWindowsHost()) {
-        const bool hasStyleOption = Utils::findOrDefault(options.appArguments, [](char *arg) {
-            return arg && strcmp(arg, "-style") == 0;
-        });
-        if (!hasStyleOption) {
-            // The Windows 11 default style (Qt 6.7) has major issues, therefore
-            // set the previous default style: "windowsvista"
-            // FIXME: check newer Qt Versions
-            QApplication::setStyle(QLatin1String("windowsvista"));
+    if (Utils::HostOsInfo::isWindowsHost() && !options.hasStyleOption) {
+        // The Windows 11 default style (Qt 6.7) has major issues, therefore
+        // set the previous default style: "windowsvista"
+        // FIXME: check newer Qt Versions
+        QApplication::setStyle(QLatin1String("windowsvista"));
 
-            // On scaling different than 100% or 200% use the "fusion" style
-            qreal tmp;
-            const bool fractionalDpi = !qFuzzyIsNull(std::modf(qApp->devicePixelRatio(), &tmp));
-            if (fractionalDpi)
-                QApplication::setStyle(QLatin1String("fusion"));
-        }
+        // On scaling different than 100% or 200% use the "fusion" style
+        qreal tmp;
+        const bool fractionalDpi = !qFuzzyIsNull(std::modf(qApp->devicePixelRatio(), &tmp));
+        if (fractionalDpi)
+            QApplication::setStyle(QLatin1String("fusion"));
     }
 
     const int threadCount = QThreadPool::globalInstance()->maxThreadCount();
