@@ -20,8 +20,6 @@ public:
 
     static Ptr create() { return Ptr(new LinuxDevice); }
 
-    IDevice::Ptr clone() const override;
-
     ProjectExplorer::IDeviceWidget *createWidget() override;
 
     bool canCreateProcessModel() const override { return true; }
@@ -55,8 +53,7 @@ public:
 protected:
     LinuxDevice();
 
-    void fromMap(const Utils::Store &map) override;
-    void toMap(Utils::Store &map) const override;
+    Utils::BoolAspect disconnected{this};
 
     void _setOsType(Utils::OsType osType);
 
