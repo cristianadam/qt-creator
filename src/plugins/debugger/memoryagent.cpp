@@ -232,19 +232,24 @@ MemoryAgent::MemoryAgent(const MemoryViewSetupData &data, DebuggerEngine *engine
     // Separate view?
     if (data.separateView) {
         // Memory view tracking register value, providing its own updating mechanism.
+        MemoryView *view = nullptr;
         if (data.trackRegisters) {
-            auto view = new RegisterMemoryView(m_service, data.startAddress, data.registerName,
-                                               m_engine->registerHandler());
-            view->show();
+            view = new RegisterMemoryView(m_service, data.startAddress, data.registerName,
+                                          m_engine->registerHandler());
         } else {
             // Ordinary memory view
-            auto view = new MemoryView(m_service);
+            view = new MemoryView(m_service);
             view->setWindowTitle(title);
-            view->show();
         }
+        connect(view, &MemoryView::destroyed, [doc = m_service->editor()->document()] {
+            delete doc;
+        });
+        view->show();
     } else {
         m_service->editor()->document()->setTemporary(true);
         m_service->editor()->document()->setProperty(Constants::OPENED_BY_DEBUGGER, QVariant(true));
+        connect(m_service->editor(), &IEditor::destroyed,
+                [doc = m_service->editor()->document()] { delete doc; });
     }
 
     m_service->setReadOnly(data.readOnly);
