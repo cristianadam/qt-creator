@@ -311,6 +311,9 @@ void RunConfiguration::toMap(Store &map) const
 void RunConfiguration::toMapSimple(Store &map) const
 {
     ProjectConfiguration::toMap(map);
+    if (m_buildKey.isEmpty()) {
+        QTC_CHECK(false);
+    }
     QTC_CHECK(!m_buildKey.isEmpty());
     map.insert(BUILD_KEY, m_buildKey);
 }
