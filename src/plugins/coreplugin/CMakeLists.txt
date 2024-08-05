@@ -1,5 +1,5 @@
 add_qtc_plugin(Core
-  DEPENDS Qt::PrintSupport Qt::Qml Qt::Sql Qt::Gui Qt::GuiPrivate TerminalLib
+  DEPENDS Qt::PrintSupport Qt::Qml Qt::Sql Qt::Gui Qt::GuiPrivate TerminalLib qtkeychain
   PUBLIC_DEPENDS Aggregation ExtensionSystem Utils
   SOURCES
     actionmanager/actioncontainer.cpp
@@ -252,6 +252,8 @@ add_qtc_plugin(Core
     progressmanager/taskprogress.h
     rightpane.cpp
     rightpane.h
+    secretaspect.cpp
+    secretaspect.h
     session.cpp
     session.h
     sessiondialog.cpp
