@@ -11,6 +11,7 @@
 #include "iwizardfactory.h"
 #include "loggingviewer.h"
 #include "modemanager.h"
+#include "secretaspect.h"
 #include "session.h"
 #include "settingsdatabase.h"
 #include "themechooser.h"
@@ -376,6 +377,13 @@ void CorePlugin::extensionsInitialized()
     }
     checkSettings();
     registerActionsForOptions();
+    if (!SecretAspect::isSecretStorageAvailable()) {
+        Utils::InfoBarEntry info(
+            "Core.Secret.Warn.Unavailable",
+            SecretAspect::warningThatNoSecretStorageIsAvailable(),
+            Utils::InfoBarEntry::GlobalSuppression::Enabled);
+        Core::ICore::infoBar()->addInfo(info);
+    }
 }
 
 bool CorePlugin::delayedInitialize()
