@@ -10,7 +10,10 @@
 #include <coreplugin/dialogs/ioptionspage.h>
 #include <coreplugin/icore.h>
 
+#include <coreplugin/secretaspect.h>
+
 using namespace Utils;
+using namespace Core;
 
 namespace Lua::Internal {
 
@@ -307,7 +310,14 @@ void setupSettingsModule()
 
         sol::table settings = lua.create_table();
 
-        settings.new_usertype<BaseAspect>("Aspect", "apply", &BaseAspect::apply);
+        settings.new_usertype<BaseAspect>(
+            "Aspect",
+            "apply",
+            &BaseAspect::apply,
+            "writeSettings",
+            &BaseAspect::writeSettings,
+            "readSettings",
+            &BaseAspect::readSettings);
 
         settings.new_usertype<LuaAspectContainer>(
             "AspectContainer",
@@ -328,6 +338,7 @@ void setupSettingsModule()
         addTypedAspect<ColorAspect>(settings, "ColorAspect");
         addTypedAspect<MultiSelectionAspect>(settings, "MultiSelectionAspect");
         addTypedAspect<StringAspect>(settings, "StringAspect");
+        addTypedAspect<SecretAspect>(settings, "SecretAspect");
 
         settings.new_usertype<SelectionAspect>(
             "SelectionAspect",
