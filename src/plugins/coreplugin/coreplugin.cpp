@@ -11,6 +11,7 @@
 #include "iwizardfactory.h"
 #include "loggingviewer.h"
 #include "modemanager.h"
+#include "secretaspect.h"
 #include "session.h"
 #include "settingsdatabase.h"
 #include "themechooser.h"
@@ -376,6 +377,20 @@ void CorePlugin::extensionsInitialized()
     }
     checkSettings();
     registerActionsForOptions();
+    if (!SecretAspect::isAvailable()) {
+        QString warning = Tr::tr("Secret storage is not available. "
+                                 "Some features may not work correctly.");
+        const QString linuxHint = Tr::tr(
+            "You can install libsecret or KWallet to enable secret storage.");
+        if (HostOsInfo::isLinuxHost())
+            warning += QLatin1Char(' ') + linuxHint;
+
+        Utils::InfoBarEntry info(
+            "Core.Secret.Warn.Unavailable",
+            warning,
+            Utils::InfoBarEntry::GlobalSuppression::Enabled);
+        Core::ICore::infoBar()->addInfo(info);
+    }
 }
 
 bool CorePlugin::delayedInitialize()
