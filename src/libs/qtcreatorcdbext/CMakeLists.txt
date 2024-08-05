@@ -13,13 +13,51 @@ if (NOT QT_CREATOR_API_DEFINED)
   include(QtCreatorIDEBranding)
   include(QtCreatorAPI)
   qtc_handle_compiler_cache_support()
+
+  # Compile for x86, x64 and arm64
+  if (NOT ${PROJECT_NAME}-MultiBuild)
+    include(ExternalProject)
+
+    macro (setup_library arch)
+      set(generator "Visual Studio 16 2019")
+      if(CMAKE_CXX_COMPILER MATCHES "Microsoft Visual Studio/2022/")
+        set(generator "Visual Studio 17 2022")
+      endif()
+
+      ExternalProject_Add(${arch}-bld
+        SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+        CMAKE_GENERATOR "${generator}"
+        CMAKE_GENERATOR_PLATFORM "${arch}"
+        CMAKE_ARGS
+          -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}
+          -D${PROJECT_NAME}-MultiBuild=ON
+        BUILD_COMMAND
+          ${CMAKE_COMMAND} --build . --config ${CMAKE_BUILD_TYPE}
+        INSTALL_COMMAND
+          ${CMAKE_COMMAND} -P cmake_install.cmake
+      )
+    endmacro()
+
+    if (NOT BUILD_ARCHITECTURES)
+      set(BUILD_ARCHITECTURES arm64 win32 x64)
+    endif()
+    foreach(arch IN LISTS BUILD_ARCHITECTURES)
+      setup_library(${arch})
+    endforeach()
+
+    install(
+      DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+      DESTINATION .
+      COMPONENT qtcreatorcdbext
+    )
+    return()
+
+  endif()
 endif()
 
 if (NOT WIN32 OR NOT MSVC)
   return()
 endif()
-
-find_library(DbgEngLib dbgeng)
 
 set(ArchSuffix "32")
 if (CMAKE_SIZEOF_VOID_P EQUAL 8)
@@ -30,9 +68,13 @@ if (MSVC_CXX_ARCHITECTURE_ID MATCHES "^ARM")
   set(ArchSuffix "arm${ArchSuffix}")
 endif()
 
+if (NOT EXISTS "${CMAKE_BINARY_DIR}/lib/qtcreatorcdbext${ArchSuffix}")
+  file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/lib/qtcreatorcdbext${ArchSuffix}")
+endif()
+
 add_qtc_library(qtcreatorcdbext SHARED
   COMPONENT qtcreatorcdbext
-  DEPENDS ${DbgEngLib}
+  DEPENDS dbgeng
   DESTINATION lib/qtcreatorcdbext${ArchSuffix}/
   SOURCES
     common.cpp common.h
@@ -95,18 +137,25 @@ if (_library_enabled)
   endif()
 
   # Support for cross-compilation for arm64 on a x64 system
-  if (MSVC_CXX_ARCHITECTURE_ID MATCHES "^ARM" AND CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^AMD")
+  if (NOT MSVC_CXX_ARCHITECTURE_ID STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
     find_program(dumpbin_executable dumpbin)
     find_program(lib_executable lib)
 
     string(TOLOWER ${MSVC_CXX_ARCHITECTURE_ID} lower_arch_name)
+    if (lower_arch_name STREQUAL "arm64")
+      set(python_suffix "arm64")
+    elseif (lower_arch_name STREQUAL "x64")
+      set(python_suffix "amd64")
+    else()
+      set(python_suffix "win32")
+    endif()
 
     if (NOT dumpbin_executable OR NOT lib_executable)
       message(WARNING "Couldn't locate dumpbin.exe or lib.exe executables")
       return()
     endif()
 
-    if (Python3_VERSION VERSION_LESS "3.11.0")
+    if (Python3_VERSION VERSION_LESS "3.11.0" AND lower_arch_name STREQUAL "arm64")
       message(WARNING "Python 3.11.0 needs to be installed. This version is the first version that has arm64 Windows support")
       return()
     endif()
@@ -129,7 +178,7 @@ if (_library_enabled)
     file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/${PythonNameWithVersion}.def "${pythondef}")
 
     execute_process(
-      COMMAND ${lib_executable}
+      COMMAND "${lib_executable}"
               /def:${CMAKE_CURRENT_BINARY_DIR}/${PythonNameWithVersion}.def
               /out:${CMAKE_CURRENT_BINARY_DIR}/${PythonNameWithVersion}.lib /machine:${lower_arch_name} /nologo)
     set(Python3_LIBRARIES "${CMAKE_CURRENT_BINARY_DIR}/${PythonNameWithVersion}.lib")
@@ -139,7 +188,7 @@ if (_library_enabled)
     endif()
 
     if (NOT PythonTargetArchDll)
-      set(python_embed_url "https://www.python.org/ftp/python/${Python3_VERSION}/python-${Python3_VERSION}-embed-${lower_arch_name}.zip")
+      set(python_embed_url "https://www.python.org/ftp/python/${Python3_VERSION}/python-${Python3_VERSION}-embed-${python_suffix}.zip")
       message(STATUS "Downloading ${python_embed_url}")
 
       foreach(retry RANGE 10)
