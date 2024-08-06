@@ -369,6 +369,11 @@ void FancyLineEdit::setHistoryCompleter(
     // "a bit".
     connect(this, &QLineEdit::editingFinished,
             this, &FancyLineEdit::onEditingFinished, Qt::QueuedConnection);
+
+    connect(this, &FancyLineEdit::textChanged, this, [this](const QString &str) {
+        if (str.isEmpty())
+            d->m_historyCompleter->setCompletionPrefix({});
+    });
 }
 
 void FancyLineEdit::onEditingFinished()
@@ -378,6 +383,13 @@ void FancyLineEdit::onEditingFinished()
 
 void FancyLineEdit::keyPressEvent(QKeyEvent *event)
 {
+    if (event->key() == Qt::Key_Down) {
+        if (completer()) {
+            completer()->complete();
+            return;
+        }
+    }
+
     if (camelCaseNavigation) {
         if (event == QKeySequence::MoveToPreviousWord)
             CamelCaseCursor::left(this, QTextCursor::MoveAnchor);
