@@ -7,6 +7,7 @@
 #include "copilotsettings.h"
 #include "copilottr.h"
 
+#include <utils/guardcallback.h>
 #include <utils/layoutbuilder.h>
 #include <utils/stringutils.h>
 
@@ -79,15 +80,6 @@ void AuthWidget::setState(const QString &buttonText, const QString &errorText, b
     m_statusLabel->setText(errorText);
     m_statusLabel->setVisible(!m_statusLabel->text().isEmpty());
     m_button->setEnabled(!working);
-}
-
-template<class O, class F>
-auto guardCallback(O *guardObject, const F &method)
-{
-    return [gp = QPointer<O>(guardObject), method](auto &&...args) {
-        if (gp)
-            method(std::forward<decltype(args)>(args)...);
-    };
 }
 
 void AuthWidget::checkStatus()
