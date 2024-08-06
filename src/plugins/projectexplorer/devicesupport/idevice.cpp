@@ -124,8 +124,8 @@ namespace Internal {
 class IDevicePrivate
 {
 public:
-    QString displayType;
-    Id type;
+    QString displayType; // Set by device, not persisted.
+    TypedAspect<Id> type;
     IDevice::Origin origin = IDevice::AutoDetected;
     Id id;
     IDevice::DeviceState deviceState = IDevice::DeviceStateUnknown;
@@ -197,6 +197,9 @@ IDevice::IDevice()
 
             return newValue;
         });
+
+    registerAspect(&d->type);
+    d->type.setSettingsKey(TypeKey);
 
     registerAspect(&d->debugServerPath);
     d->debugServerPath.setSettingsKey(DebugServerKey);
@@ -376,12 +379,12 @@ IDevice::DeviceInfo IDevice::deviceInformation() const
 
 Id IDevice::type() const
 {
-    return d->type;
+    return d->type();
 }
 
 void IDevice::setType(Id type)
 {
-    d->type = type;
+    d->type.setValue(type);
 }
 
 /*!
@@ -508,7 +511,6 @@ Id IDevice::idFromMap(const Store &map)
 void IDevice::fromMap(const Store &map)
 {
     AspectContainer::fromMap(map);
-    d->type = typeFromMap(map);
 
     d->id = Id::fromSetting(map.value(IdKey));
     d->osType = osTypeFromString(map.value(ClientOsTypeKey).toString()).value_or(OsTypeLinux);
@@ -554,7 +556,6 @@ void IDevice::toMap(Store &map) const
 {
     AspectContainer::toMap(map);
 
-    map.insert(TypeKey, d->type.toString());
     map.insert(ClientOsTypeKey, osTypeToString(d->osType));
     map.insert(IdKey, d->id.toSetting());
     map.insert(OriginKey, d->origin);
@@ -579,7 +580,7 @@ void IDevice::toMap(Store &map) const
 
 IDevice::Ptr IDevice::clone() const
 {
-    IDeviceFactory *factory = IDeviceFactory::find(d->type);
+    IDeviceFactory *factory = IDeviceFactory::find(d->type());
     QTC_ASSERT(factory, return {});
     Store store;
     toMap(store);
