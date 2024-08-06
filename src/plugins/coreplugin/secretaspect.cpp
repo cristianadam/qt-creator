@@ -3,10 +3,21 @@
 
 #include "secretaspect.h"
 
+#include "coreplugintr.h"
+
 #include <qtkeychain/keychain.h>
 
 #include <tasking/tasktree.h>
 #include <tasking/tasktreerunner.h>
+
+#include <utils/guardcallback.h>
+#include <utils/hostosinfo.h>
+#include <utils/layoutbuilder.h>
+#include <utils/passworddialog.h>
+#include <utils/utilsicons.h>
+
+#include <QIcon>
+#include <QPointer>
 
 using namespace QKeychain;
 using namespace Tasking;
@@ -90,10 +101,13 @@ class SecretAspectPrivate
 {
 public:
     TaskTreeRunner runner;
+    bool wasFetchedFromSecretStorage = false;
+    bool wasEdited = false;
+    QString value;
 };
 
 SecretAspect::SecretAspect(AspectContainer *container)
-    : StringAspect(container)
+    : Utils::BaseAspect(container)
     , d(new SecretAspectPrivate)
 {}
 
@@ -109,10 +123,19 @@ bool applyKey(const SecretAspect &aspect, CredentialQuery &op)
     return true;
 }
 
-void SecretAspect::readSettings()
+void SecretAspect::readSecret(const std::function<void(Utils::expected_str<QString>)> &callback) const
 {
     if (d->runner.isRunning())
         return;
+
+    if (!QKeychain::isAvailable()) {
+        qWarning() << "No Keychain available, reading from plaintext";
+        qtcSettings()->beginGroup("Secrets");
+        auto value = qtcSettings()->value(settingsKey());
+        callback(fromSettingsValue(value).toString());
+        qtcSettings()->endGroup();
+        return;
+    }
 
     const auto onGetCredentialSetup = [this](CredentialQuery &credential) {
         credential.setOperation(CredentialOperation::Get);
@@ -120,17 +143,11 @@ void SecretAspect::readSettings()
             return SetupResult::StopWithError;
         return SetupResult::Continue;
     };
-    const auto onGetCredentialDone = [this](const CredentialQuery &credential, DoneWith result) {
-        if (result == DoneWith::Success)
-            setValue(QString::fromUtf8(credential.data().value_or(QByteArray{})));
-        else {
-            qWarning() << "Failed to read secret, falling back to plaintext storage";
-
-            qtcSettings()->beginGroup("Secrets");
-            auto value = qtcSettings()->value(settingsKey());
-            if (value.isValid())
-                setVariantValue(fromSettingsValue(value));
-            qtcSettings()->endGroup();
+    const auto onGetCredentialDone = [callback](const CredentialQuery &credential, DoneWith result) {
+        if (result == DoneWith::Success) {
+            callback(QString::fromUtf8(credential.data().value_or(QByteArray{})));
+        } else {
+            callback(make_unexpected(credential.errorString()));
         }
         return DoneResult::Success;
     };
@@ -140,35 +157,109 @@ void SecretAspect::readSettings()
     });
 }
 
+void SecretAspect::readSettings()
+{
+    readSecret([this](const expected_str<QString> &value) {
+        if (value) {
+            d->value = *value;
+            d->wasFetchedFromSecretStorage = true;
+        }
+    });
+}
+
 void SecretAspect::writeSettings() const
 {
     if (d->runner.isRunning())
         return;
 
+    if (!d->wasEdited)
+        return;
+
+    if (!QKeychain::isAvailable()) {
+        qtcSettings()->beginGroup("Secrets");
+        qtcSettings()->setValue(settingsKey(), toSettingsValue(variantValue()));
+        qtcSettings()->endGroup();
+        return;
+    }
+
     const auto onSetCredentialSetup = [this](CredentialQuery &credential) {
         credential.setOperation(CredentialOperation::Set);
-        credential.setData(value().toUtf8());
+        credential.setData(d->value.toUtf8());
 
         if (!applyKey(*this, credential))
             return SetupResult::StopWithError;
         return SetupResult::Continue;
     };
-    const auto onSetCredentialDone = [this](const CredentialQuery &, DoneWith result) {
-        if (result != DoneWith::Success) {
-            qWarning() << "Failed to write secret, falling back to plaintext storage";
-            qtcSettings()->beginGroup("Secrets");
-            qtcSettings()->setValue(settingsKey(), toSettingsValue(variantValue()));
-            qtcSettings()->endGroup();
-        }
-        return DoneResult::Success;
-    };
 
     d->runner.start({
-        CredentialQueryTask(onSetCredentialSetup, onSetCredentialDone),
+        CredentialQueryTask(onSetCredentialSetup),
     });
 }
 
-bool SecretAspect::isAvailable()
+void SecretAspect::addToLayoutImpl(Layouting::Layout &parent)
+{
+    auto edit = createSubWidget<FancyLineEdit>();
+    edit->setEchoMode(QLineEdit::Password);
+    auto showPasswordButton = createSubWidget<Utils::ShowPasswordButton>();
+    // Keep read-only/disabled until we have retrieved the value.
+    edit->setReadOnly(true);
+    showPasswordButton->setEnabled(false);
+    QLabel *warningLabel = nullptr;
+
+    if (!QKeychain::isAvailable()) {
+        warningLabel = new QLabel();
+        warningLabel->setPixmap(Utils::Icons::WARNING.icon().pixmap(16, 16));
+        QString warning = Tr::tr("Secret storage is not available. "
+                                 "Some features may not work correctly.");
+        const QString linuxHint = Tr::tr(
+            "You can install libsecret or KWallet to enable secret storage.");
+        if (HostOsInfo::isLinuxHost())
+            warning += QLatin1Char(' ') + linuxHint;
+        warningLabel->setToolTip(warning);
+        edit->setToolTip(warning);
+    }
+
+    requestValue(
+        guardCallback(edit, [edit, showPasswordButton](const Utils::expected_str<QString> &value) {
+            if (!value) {
+                edit->setPlaceholderText(value.error());
+                return;
+            }
+
+            edit->setReadOnly(false);
+            showPasswordButton->setEnabled(true);
+            edit->setText(*value);
+        }));
+
+    connect(showPasswordButton, &ShowPasswordButton::toggled, edit, [showPasswordButton, edit] {
+        edit->setEchoMode(
+            showPasswordButton->isChecked() ? QLineEdit::Normal : QLineEdit::PasswordEchoOnEdit);
+    });
+
+    connect(edit, &FancyLineEdit::textChanged, this, [this](const QString &text) {
+        d->value = text;
+        d->wasEdited = true;
+    });
+
+    addLabeledItem(parent, Layouting::Row{edit, warningLabel, showPasswordButton}.emerge());
+}
+
+void SecretAspect::requestValue(
+    const std::function<void(const Utils::expected_str<QString> &)> &callback) const
+{
+    if (d->wasFetchedFromSecretStorage)
+        callback(d->value);
+    else
+        readSecret(callback);
+}
+
+void SecretAspect::setValue(const QString &value)
+{
+    d->value = value;
+    d->wasEdited = true;
+}
+
+bool SecretAspect::isSecretStorageAvailable()
 {
     return QKeychain::isAvailable();
 }

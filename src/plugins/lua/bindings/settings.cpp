@@ -338,7 +338,39 @@ void setupSettingsModule()
         addTypedAspect<ColorAspect>(settings, "ColorAspect");
         addTypedAspect<MultiSelectionAspect>(settings, "MultiSelectionAspect");
         addTypedAspect<StringAspect>(settings, "StringAspect");
-        addTypedAspect<SecretAspect>(settings, "SecretAspect");
+        settings.new_usertype<SecretAspect>(
+            "SecretAspect",
+            "create",
+            [](const sol::table &options) {
+                return createAspectFromTable<SecretAspect>(
+                    options,
+                    [](SecretAspect *aspect, const std::string &key, const sol::object &value) {
+                        if (key == "settingsKey")
+                            aspect->setSettingsKey(keyFromString(value.as<QString>()));
+                        if (key == "labelText")
+                            aspect->setLabelText(value.as<QString>());
+                        if (key == "toolTip")
+                            aspect->setToolTip(value.as<QString>());
+                        else if (key == "displayName")
+                            aspect->setDisplayName(value.as<QString>());
+                    });
+            },
+            "requestValue",
+            [](SecretAspect *aspect, sol::function callback) {
+                aspect->requestValue([callback](const expected_str<QString> &secret) {
+                    if (secret) {
+                        auto res = void_safe_call(callback, true, secret.value());
+                        QTC_CHECK_EXPECTED(res);
+                    } else {
+                        auto res = void_safe_call(callback, false, secret.error());
+                        QTC_CHECK_EXPECTED(res);
+                    }
+                });
+            },
+            "setValue",
+            [](SecretAspect *aspect, const QString &value) { aspect->setValue(value); },
+            sol::base_classes,
+            sol::bases<BaseAspect>());
 
         settings.new_usertype<SelectionAspect>(
             "SelectionAspect",

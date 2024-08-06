@@ -377,7 +377,7 @@ void CorePlugin::extensionsInitialized()
     }
     checkSettings();
     registerActionsForOptions();
-    if (!SecretAspect::isAvailable()) {
+    if (!SecretAspect::isSecretStorageAvailable()) {
         QString warning = Tr::tr("Secret storage is not available. "
                                  "Some features may not work correctly.");
         const QString linuxHint = Tr::tr(

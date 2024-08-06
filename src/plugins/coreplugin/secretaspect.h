@@ -10,16 +10,27 @@
 namespace Core {
 class SecretAspectPrivate;
 
-class CORE_EXPORT SecretAspect : public Utils::StringAspect
+class CORE_EXPORT SecretAspect : public Utils::BaseAspect
 {
 public:
-    static bool isAvailable();
+    using valueType = QString;
+
+    static bool isSecretStorageAvailable();
 
     explicit SecretAspect(Utils::AspectContainer *container = nullptr);
     ~SecretAspect() override;
 
+    void addToLayoutImpl(Layouting::Layout &parent) override;
+
+    void requestValue(
+        const std::function<void(const Utils::expected_str<QString> &)> &callback) const;
+    void setValue(const QString &value);
+
     void readSettings() override;
     void writeSettings() const override;
+
+protected:
+    void readSecret(const std::function<void(Utils::expected_str<QString>)> &callback) const;
 
 private:
     std::unique_ptr<SecretAspectPrivate> d;
