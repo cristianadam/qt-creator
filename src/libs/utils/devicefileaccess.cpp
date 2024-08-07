@@ -11,6 +11,7 @@
 #include "hostosinfo.h"
 #include "osspecificaspects.h"
 #include "qtcassert.h"
+#include "synchronizedvalue.h"
 #include "utilstr.h"
 
 #ifndef UTILS_STATIC_LIBRARY
@@ -775,22 +776,95 @@ expected_str<FilePath> DesktopDeviceFileAccess::createTempFile(const FilePath &f
     return filePath.withNewPath(file.fileName());
 }
 
-class DesktopFilePathWatcher : public FilePathWatcher
+class DesktopFilePathWatcher final : public FilePathWatcher
 {
-    QFileSystemWatcher m_watcher;
+    class GlobalWatcher final : public QObject
+    {
+    public:
+        GlobalWatcher() { d.writeLocked()->init(this); }
+
+        void watch(DesktopFilePathWatcher *watcher) { d.writeLocked()->watch(watcher); }
+        void removeWatch(DesktopFilePathWatcher *watcher) { d.writeLocked()->removeWatch(watcher); }
+
+    private:
+        class Private
+        {
+        public:
+            void init(GlobalWatcher *parent)
+            {
+                auto forward = [parent](const QString &path) {
+                    parent->d.readLocked()->notify(path);
+                };
+
+                connect(&m_watcher, &QFileSystemWatcher::fileChanged, parent, forward);
+                connect(&m_watcher, &QFileSystemWatcher::directoryChanged, parent, forward);
+            }
+            void notify(const QString &path) const
+            {
+                const FilePath filePath = FilePath::fromString(path);
+                auto it = m_watchClients.find(filePath);
+                if (it == m_watchClients.end())
+                    return;
+
+                for (DesktopFilePathWatcher *watcher : it.value())
+                    watcher->emitChanged();
+            }
+            void watch(DesktopFilePathWatcher *watcher)
+            {
+                const FilePath path = watcher->path();
+                auto it = m_watchClients.find(path);
+
+                if (it == m_watchClients.end()) {
+                    QMetaObject::invokeMethod(&m_watcher, [this, path] {
+                        m_watcher.addPath(path.path());
+                    });
+                    it = m_watchClients.emplace(path);
+                }
+                it->append(watcher);
+            }
+            void removeWatch(DesktopFilePathWatcher *watcher)
+            {
+                const FilePath path = watcher->path();
+                auto it = m_watchClients.find(path);
+                QTC_ASSERT(it != m_watchClients.end(), return);
+
+                it->removeOne(watcher);
+                if (it->size() == 0) {
+                    QMetaObject::invokeMethod(&m_watcher, [this, path] {
+                        m_watcher.removePath(path.path());
+                    });
+
+                    m_watchClients.erase(it);
+                }
+            }
+
+        private:
+            QFileSystemWatcher m_watcher;
+            QHash<FilePath, QList<DesktopFilePathWatcher *>> m_watchClients;
+        };
+        Utils::SynchronizedValue<Private> d;
+    };
 
 public:
-    DesktopFilePathWatcher(const FilePath &path) {
-        connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, [this, path] {
-            emit pathChanged(path);
-        });
-        connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, [this, path] {
-            emit pathChanged(path);
-        });
-
-        m_watcher.addPath(path.path());
+    DesktopFilePathWatcher(const FilePath &path)
+        : m_path(path)
+    {
+        globalWatcherInstance.watch(this);
     }
+
+    ~DesktopFilePathWatcher() { globalWatcherInstance.removeWatch(this); }
+
+    FilePath path() const { return m_path; }
+
+    void emitChanged() { emit pathChanged(m_path); }
+
+private:
+    FilePath m_path;
+
+    static GlobalWatcher globalWatcherInstance;
 };
+
+DesktopFilePathWatcher::GlobalWatcher DesktopFilePathWatcher::globalWatcherInstance;
 
 Utils::expected_str<std::unique_ptr<FilePathWatcher>> DesktopDeviceFileAccess::watch(
     const FilePath &path) const
