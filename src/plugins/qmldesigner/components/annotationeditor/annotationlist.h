@@ -37,6 +37,20 @@ struct AnnotationListEntry {
                         const Annotation &argAnnotation, const ModelNode &argNode);
 };
 
+class AnnotationListDelegate final : public QStyledItemDelegate
+{
+    Q_OBJECT
+
+public:
+    AnnotationListDelegate() = default;
+
+private:
+    void paint(QPainter *painter,
+               const QStyleOptionViewItem &option,
+               const QModelIndex &index) const override;
+    QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
+};
+
 class AnnotationListModel final : public QAbstractItemModel
 {
     Q_OBJECT
@@ -47,7 +61,7 @@ public:
         AnnotationsCountRow
     };
 
-    AnnotationListModel(ModelNode rootNode, AnnotationListView *view = nullptr);
+    AnnotationListModel(ModelNode rootNode, AnnotationListView *view);
     ~AnnotationListModel() = default;
 
     void setRootNode(ModelNode rootNode);
@@ -83,8 +97,8 @@ class AnnotationListView final : public Utils::ListView
 {
     Q_OBJECT
 public:
-    explicit AnnotationListView(ModelNode rootNode, QWidget *parent = nullptr);
-    ~AnnotationListView() = default;
+    explicit AnnotationListView(ModelNode rootNode, QWidget *parent);
+    ~AnnotationListView();
 
     void setRootNode(ModelNode rootNode);
 
@@ -98,20 +112,8 @@ public:
     void saveChangesFromModel();
 
 private:
-    AnnotationListModel *m_model = nullptr;
+    AnnotationListModel m_model;
+    AnnotationListDelegate m_delegate;
 };
-
-class AnnotationListDelegate final : public QStyledItemDelegate
-{
-    Q_OBJECT
-
-public:
-    AnnotationListDelegate(QObject *parent = nullptr);
-
-private:
-    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
-    QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
-};
-
 }
 
