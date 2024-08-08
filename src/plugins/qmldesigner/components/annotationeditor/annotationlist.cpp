@@ -33,8 +33,7 @@ AnnotationListEntry::AnnotationListEntry(const QString &argId, const QString &ar
 // Model
 
 AnnotationListModel::AnnotationListModel(ModelNode rootNode, AnnotationListView *parent)
-    : QAbstractItemModel(parent)
-    , m_annotationView(parent)
+    : m_annotationView(parent)
     , m_rootNode(rootNode)
 {
     fillModel();
@@ -168,12 +167,12 @@ void AnnotationListModel::saveChanges()
 
 AnnotationListView::AnnotationListView(ModelNode rootNode, QWidget *parent)
     : Utils::ListView(parent)
-    , m_model(new AnnotationListModel(rootNode, this))
+    , m_model(rootNode, this)
 {
     setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Expanding);
 
-    setModel(m_model);
-    setItemDelegate(new AnnotationListDelegate(this));
+    setModel(&m_model);
+    setItemDelegate(&m_delegate);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setSelectionMode(QAbstractItemView::SingleSelection);
     setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -182,25 +181,30 @@ AnnotationListView::AnnotationListView(ModelNode rootNode, QWidget *parent)
     setDragEnabled(false);
 }
 
+AnnotationListView::~AnnotationListView()
+{
+    setModel(nullptr);
+}
+
 void AnnotationListView::setRootNode(ModelNode rootNode)
 {
-    m_model->setRootNode(rootNode);
+    m_model.setRootNode(rootNode);
 }
 
 ModelNode AnnotationListView::getModelNodeByAnnotationId(int id) const
 {
-    return m_model->getModelNode(id);
+    return m_model.getModelNode(id);
 }
 
 AnnotationListEntry AnnotationListView::getStoredAnnotationById(int id) const
 {
-    return m_model->getStoredAnnotation(id);
+    return m_model.getStoredAnnotation(id);
 }
 
 void AnnotationListView::selectRow(int row)
 {
-    if (m_model->rowCount() > row) {
-        QModelIndex index = m_model->index(row, 0);
+    if (m_model.rowCount() > row) {
+        QModelIndex index = m_model.index(row, 0);
         setCurrentIndex(index);
 
         emit activated(index);
@@ -209,26 +213,21 @@ void AnnotationListView::selectRow(int row)
 
 int AnnotationListView::rowCount() const
 {
-    return m_model->rowCount();
+    return m_model.rowCount();
 }
 
 void AnnotationListView::storeChangesInModel(int row, const QString &customId, const Annotation &annotation)
 {
-    m_model->storeChanges(row, customId, annotation);
+    m_model.storeChanges(row, customId, annotation);
 }
 
 void AnnotationListView::saveChangesFromModel()
 {
-    m_model->saveChanges();
+    m_model.saveChanges();
 }
 
 
 // Delegate
-
-AnnotationListDelegate::AnnotationListDelegate(QObject *parent)
-    : QStyledItemDelegate(parent)
-{
-}
 
 QSize AnnotationListDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const
 {
