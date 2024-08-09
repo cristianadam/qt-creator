@@ -205,8 +205,6 @@ public:
 
 class BinEditorWidget final : public QAbstractScrollArea
 {
-    Q_OBJECT
-
 public:
     explicit BinEditorWidget(const std::shared_ptr<BinEditorDocument> &doc);
     void init();
@@ -236,9 +234,6 @@ public:
 
     bool event(QEvent*) final;
 
-    bool isUndoAvailable() const { return !m_doc->m_undoStack.isEmpty(); }
-    bool isRedoAvailable() const { return !m_doc->m_redoStack.isEmpty(); }
-
     QString addressString(quint64 address);
 
     QList<Markup> markup() const { return m_markup; }
@@ -248,13 +243,15 @@ public:
     void copy(bool raw = false);
     void setMarkup(const QList<Markup> &markup);
     void setNewWindowRequestAllowed(bool c) { m_canRequestNewWindow = c; }
-    void setCodec(QTextCodec *codec);
 
     void clearMarkup() { m_markup.clear(); }
     void addMarkup(quint64 a, quint64 l, const QColor &c, const QString &t) { m_markup.append(Markup(a, l, c, t)); }
     void commitMarkup() { setMarkup(m_markup); }
 
-    QLineEdit *addressEdit() const { return m_addressEdit; }
+    QToolBar *toolBar() const;
+
+private:
+    void setCodec(QTextCodec *codec);
 
     void updateAddressDisplay() {
         m_addressEdit->setText(QString::number(baseAddress() + m_cursorPosition, 16));
@@ -267,7 +264,6 @@ public:
     void aboutToReload() { m_savedCursorPosition = m_cursorPosition; }
     void reloadFinished(bool) { m_cursorPosition = m_savedCursorPosition; }
 
-public:
     void scrollContentsBy(int dx, int dy) final;
     void paintEvent(QPaintEvent *e) final;
     void resizeEvent(QResizeEvent *) final { init(); }
@@ -341,6 +337,7 @@ public:
 
     QLineEdit *m_addressEdit = nullptr;
     QTextCodec *m_codec = nullptr;
+    QToolBar *m_toolBar = nullptr;
 };
 
 const QChar MidpointChar(u'\u00B7');
@@ -390,10 +387,7 @@ BinEditorWidget::BinEditorWidget(const std::shared_ptr<BinEditorDocument> &doc)
     connect(TextEditorSettings::instance(), &TextEditorSettings::fontSettingsChanged,
             this, &BinEditorWidget::setFontSettings);
 
-    const QByteArray setting = ICore::settings()->value(C_ENCODING_SETTING).toByteArray();
-    if (!setting.isEmpty())
-        setCodec(QTextCodec::codecForName(setting));
-
+    // Address line edit
     m_addressEdit = new QLineEdit;
     auto addressValidator = new QRegularExpressionValidator(QRegularExpression("[0-9a-fA-F]{1,16}"), m_addressEdit);
     m_addressEdit->setValidator(addressValidator);
@@ -403,6 +397,57 @@ BinEditorWidget::BinEditorWidget(const std::shared_ptr<BinEditorDocument> &doc)
     });
 
     updateAddressDisplay();
+
+    // Codec setup
+    auto codecChooser = new CodecChooser(CodecChooser::Filter::SingleByte);
+    codecChooser->prependNone();
+
+    const QByteArray setting = ICore::settings()->value(C_ENCODING_SETTING).toByteArray();
+    if (QTextCodec *codec = QTextCodec::codecForName(setting)) {
+        setCodec(codec);
+        codecChooser->setAssignedCodec(codec);
+    }
+    connect(codecChooser, &CodecChooser::codecChanged, this, &BinEditorWidget::setCodec);
+
+    // Text actions
+    auto undoAction = new QAction(Tr::tr("&Undo"), this);
+    auto redoAction = new QAction(Tr::tr("&Redo"), this);
+    auto copyAction = new QAction(this);
+    auto selectAllAction = new QAction(this);
+
+    Context context(Id::generate());
+    IContext::attach(this, context);
+
+    ActionManager::registerAction(undoAction, Core::Constants::UNDO, context);
+    ActionManager::registerAction(redoAction, Core::Constants::REDO, context);
+    ActionManager::registerAction(copyAction, Core::Constants::COPY, context);
+    ActionManager::registerAction(selectAllAction, Core::Constants::SELECTALL, context);
+
+    connect(undoAction, &QAction::triggered, doc.get(), &BinEditorDocument::undo);
+    connect(redoAction, &QAction::triggered, doc.get(), &BinEditorDocument::redo);
+    connect(copyAction, &QAction::triggered, this, &BinEditorWidget::copy);
+    connect(selectAllAction, &QAction::triggered, this, &BinEditorWidget::selectAll);
+
+    auto updateActions = [this, undoAction, redoAction, selectAllAction] {
+        selectAllAction->setEnabled(true);
+        undoAction->setEnabled(!m_doc->m_undoStack.isEmpty());
+        redoAction->setEnabled(!m_doc->m_redoStack.isEmpty());
+    };
+
+    connect(doc.get(), &BinEditorDocument::undoAvailable, this, updateActions);
+    connect(doc.get(), &BinEditorDocument::redoAvailable, this, updateActions);
+
+    using namespace Layouting;
+    auto w = Row {
+        customMargins(0, 0, 5, 0),
+        st,
+        codecChooser,
+        m_addressEdit
+    }.emerge();
+
+    m_toolBar = new QToolBar;
+    m_toolBar->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+    m_toolBar->addWidget(w);
 
     init();
 }
@@ -1853,7 +1898,7 @@ void BinEditorWidget::contextMenuEvent(QContextMenuEvent *event)
 }
 
 void BinEditorWidget::setupJumpToMenuAction(QMenu *menu, QAction *actionHere,
-                                      QAction *actionNew, quint64 addr)
+                                            QAction *actionNew, quint64 addr)
 {
     actionHere->setText(Tr::tr("Jump to Address 0x%1 in This Window")
                         .arg(QString::number(addr, 16)));
@@ -1863,6 +1908,11 @@ void BinEditorWidget::setupJumpToMenuAction(QMenu *menu, QAction *actionHere,
     menu->addAction(actionNew);
     if (!m_canRequestNewWindow)
         actionNew->setEnabled(false);
+}
+
+QToolBar *BinEditorWidget::toolBar() const
+{
+    return m_toolBar;
 }
 
 void BinEditorWidget::jumpToAddress(quint64 address)
@@ -2181,53 +2231,6 @@ public:
         setWidget(m_widget);
         setDuplicateSupported(true);
 
-        auto codecChooser = new CodecChooser(CodecChooser::Filter::SingleByte);
-        codecChooser->prependNone();
-        connect(codecChooser, &CodecChooser::codecChanged,
-                m_widget, &BinEditorWidget::setCodec);
-        const QVariant setting = ICore::settings()->value(C_ENCODING_SETTING);
-        if (!setting.isNull())
-            codecChooser->setAssignedCodec(QTextCodec::codecForName(setting.toByteArray()));
-
-        using namespace Layouting;
-        auto w = Row {
-            customMargins(0, 0, 5, 0),
-            st,
-            codecChooser,
-            m_widget->addressEdit()
-        }.emerge();
-
-        m_toolBar = new QToolBar;
-        m_toolBar->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
-        m_toolBar->addWidget(w);
-
-        m_undoAction = new QAction(Tr::tr("&Undo"), this);
-        m_redoAction = new QAction(Tr::tr("&Redo"), this);
-        m_copyAction = new QAction(this);
-        m_selectAllAction = new QAction(this);
-
-        Context context(Id::generate());
-        IContext::attach(m_widget, context);
-
-        ActionManager::registerAction(m_undoAction, Core::Constants::UNDO, context);
-        ActionManager::registerAction(m_redoAction, Core::Constants::REDO, context);
-        ActionManager::registerAction(m_copyAction, Core::Constants::COPY, context);
-        ActionManager::registerAction(m_selectAllAction, Core::Constants::SELECTALL, context);
-
-        connect(m_undoAction, &QAction::triggered, doc.get(), &BinEditorDocument::undo);
-        connect(m_redoAction, &QAction::triggered, doc.get(), &BinEditorDocument::redo);
-        connect(m_copyAction, &QAction::triggered, m_widget, &BinEditorWidget::copy);
-        connect(m_selectAllAction, &QAction::triggered, m_widget, &BinEditorWidget::selectAll);
-
-        auto updateActions = [this] {
-            m_selectAllAction->setEnabled(true);
-            m_undoAction->setEnabled(m_widget->isUndoAvailable());
-            m_redoAction->setEnabled(m_widget->isRedoAvailable());
-        };
-
-        connect(doc.get(), &BinEditorDocument::undoAvailable, m_widget, updateActions);
-        connect(doc.get(), &BinEditorDocument::redoAvailable, m_widget, updateActions);
-
         auto aggregate = new Aggregation::Aggregate;
         auto binEditorFind = new BinEditorFind(m_widget);
         aggregate->add(binEditorFind);
@@ -2238,7 +2241,7 @@ public:
 
     IDocument *document() const final { return m_document.get(); }
 
-    QWidget *toolBar() final { return m_toolBar; }
+    QWidget *toolBar() final { return m_widget->toolBar(); }
 
     IEditor *duplicate() final
     {
@@ -2319,12 +2322,6 @@ public:
 private:
     std::shared_ptr<BinEditorDocument> m_document;
     QPointer<BinEditorWidget> m_widget;
-    QToolBar *m_toolBar;
-
-    QAction *m_undoAction = nullptr;
-    QAction *m_redoAction = nullptr;
-    QAction *m_copyAction = nullptr;
-    QAction *m_selectAllAction = nullptr;
 };
 
 class BinEditorFactoryService final : public QObject, public FactoryService
