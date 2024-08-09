@@ -88,6 +88,12 @@ public:
         m_start = toTextCursor(origin_document->document(), suggestion.position());
         m_start.setKeepPositionOnInsert(true);
         setCurrentPosition(m_start.position());
+
+        connect(
+            origin_document,
+            &::TextEditor::TextDocument::contentsChangedWithPosition,
+            this,
+            &CyclicSuggestion::documentChanged);
     }
 
     virtual bool apply() override
@@ -97,6 +103,7 @@ public:
         const auto &suggestion = m_suggestions.at(m_currentSuggestion);
         QTextCursor cursor = toSelection(m_start.document(), suggestion.start(), suggestion.end());
         cursor.insertText(suggestion.text());
+        m_applied = true;
         return true;
     }
 
@@ -116,6 +123,8 @@ public:
 
         if (next == -1)
             return apply();
+
+        m_applied = true;
 
         // TODO: Allow adding more than one line
         QString subText = text.mid(startPos, next - startPos);
@@ -163,6 +172,13 @@ public:
 signals:
     void update();
 
+private slots:
+    void documentChanged(int /* position */, int /* charsRemoved */, int /* charsAdded */)
+    {
+        if (!m_applied)
+            lockCurrentSuggestion();
+    }
+
 private:
     // Be causious with this function, it should be the last called in the chain
     // since it replaces this object.
@@ -191,6 +207,7 @@ private:
     QList<Suggestion> m_suggestions;
     TextEditor::TextDocument *m_originDocument;
     bool m_locked = false;
+    bool m_applied = false;
 }; // class CyclicSuggestion
 
 class SuggestionToolTip : public QToolBar
@@ -253,9 +270,13 @@ private:
 
     void updateLabels()
     {
-        if (auto cs = currentSuggestion())
-            m_numberLabel->setText(
-                Lua::Tr::tr("%1 of %2").arg(cs->currentSuggestion() + 1).arg(cs->size()));
+        if (auto cs = currentSuggestion()) {
+            if (cs->isLocked())
+                m_numberLabel->setText("         ");
+            else
+                m_numberLabel->setText(
+                    Lua::Tr::tr("%1 of %2").arg(cs->currentSuggestion() + 1).arg(cs->size()));
+        }
     }
 
     void apply()
