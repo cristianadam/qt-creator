@@ -246,6 +246,7 @@ void ClangFormatConfigWidget::initPreview(TextEditor::ICodeStylePreferences *cod
         [] { return new CppEditor::CppHighlighter(); });
     m_indenter->setFileName(fileName);
     m_preview->show();
+    m_preview->autoFormat();
 }
 
 static clang::format::FormatStyle constructStyle(const QByteArray &baseStyle = QByteArray())

@@ -6,6 +6,7 @@
 #include "clangformatconfigwidget.h"
 #include "clangformatconstants.h"
 #include "clangformatfile.h"
+#include "clangformatglobalconfigwidget.h"
 #include "clangformatindenter.h"
 #include "clangformatsettings.h"
 #include "clangformattr.h"
@@ -433,6 +434,12 @@ public:
         ProjectExplorer::Project *project, QWidget *parent) final
     {
         return new ClangFormatSelectorWidget(this, project, parent);
+    }
+
+    CodeStyleEditorWidget *createCodeStyleEditor(
+        ICodeStylePreferences *codeStyle, ProjectExplorer::Project *project, QWidget *parent) final
+    {
+        return createClangFormatConfigWidget(codeStyle, project, parent);
     }
 };
 
