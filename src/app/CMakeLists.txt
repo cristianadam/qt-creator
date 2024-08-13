@@ -27,7 +27,7 @@ add_qtc_executable(qtcreator
 )
 
 extend_qtc_executable(qtcreator
-  CONDITION APPLE
+  CONDITION DARWIN
   DEPENDS ${FWFoundation}
   SOURCES
     main_mac.mm
@@ -95,7 +95,7 @@ if (WIN32)
   target_sources(qtcreator PRIVATE qtcreator.rc)
 endif()
 
-if (APPLE)
+if (DARWIN)
   if (CMAKE_OSX_DEPLOYMENT_TARGET)
     set(MACOSX_DEPLOYMENT_TARGET ${CMAKE_OSX_DEPLOYMENT_TARGET})
   endif()

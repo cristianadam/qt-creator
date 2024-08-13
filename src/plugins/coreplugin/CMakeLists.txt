@@ -308,7 +308,7 @@ extend_qtc_plugin(Core
 )
 
 extend_qtc_plugin(Core
-  CONDITION APPLE
+  CONDITION DARWIN
   DEPENDS ${FWAppKit}
   SOURCES
     progressmanager/progressmanager_mac.mm

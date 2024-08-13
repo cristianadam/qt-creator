@@ -12,6 +12,11 @@ if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.18)
   include(CheckLinkerFlag)
 endif()
 
+if (APPLE AND (CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR NOT CMAKE_TOOLCHAIN_FILE))
+  set(DARWIN 1)
+  set(DARWIN 1 PARENT_SCOPE)
+endif()
+
 include(FeatureSummary)
 
 #
@@ -45,7 +50,7 @@ endif()
 # Setup path handling
 #
 
-if (APPLE)
+if (DARWIN)
   set(_IDE_APP_PATH ".")
   set(_IDE_APP_TARGET "${IDE_DISPLAY_NAME}")
 
@@ -99,7 +104,7 @@ file(RELATIVE_PATH _PLUGIN_TO_LIB "/${_IDE_PLUGIN_PATH}" "/${_IDE_LIBRARY_PATH}"
 file(RELATIVE_PATH _PLUGIN_TO_QT "/${_IDE_PLUGIN_PATH}" "/${_IDE_LIBRARY_BASE_PATH}/Qt/lib")
 file(RELATIVE_PATH _LIB_TO_QT "/${_IDE_LIBRARY_PATH}" "/${_IDE_LIBRARY_BASE_PATH}/Qt/lib")
 
-if (APPLE)
+if (DARWIN)
   set(_RPATH_BASE "@executable_path")
   set(_LIB_RPATH "@loader_path")
   set(_PLUGIN_RPATH "@loader_path;@loader_path/${_PLUGIN_TO_LIB}")
@@ -544,7 +549,7 @@ function(extend_qtc_target target_name)
   endif()
   target_sources(${target_name} PRIVATE ${_arg_SOURCES})
 
-  if (APPLE AND BUILD_WITH_PCH)
+  if (DARWIN AND BUILD_WITH_PCH)
     foreach(source IN LISTS _arg_SOURCES)
       if (source MATCHES "^.*\.mm$")
         set_source_files_properties(${source} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)

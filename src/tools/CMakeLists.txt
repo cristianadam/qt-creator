@@ -21,7 +21,7 @@ add_qtc_cpp_tool(cplusplus-frontend "")
 add_qtc_cpp_tool(cplusplus-mkvisitor PATH_AST_H=\"${CMAKE_CURRENT_SOURCE_DIR}/../libs/3rdparty/cplusplus/AST.h\")
 add_qtc_cpp_tool(cplusplus-update-frontend PATH_CPP_FRONTEND=\"${CMAKE_CURRENT_SOURCE_DIR}/../libs/3rdparty/cplusplus\" PATH_DUMPERS_FILE=\"${CMAKE_CURRENT_SOURCE_DIR}/cplusplus-ast2png/dumpers.inc\")
 
-if (APPLE)
+if (DARWIN)
   add_subdirectory(disclaim)
   add_subdirectory(iostool)
 endif()

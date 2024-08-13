@@ -683,7 +683,7 @@ function(add_qtc_executable name)
   endif()
 
   set(_EXECUTABLE_PATH "${_DESTINATION}")
-  if (APPLE)
+  if (DARWIN)
     # path of executable might be inside app bundle instead of DESTINATION directly
     cmake_parse_arguments(_prop "" "MACOSX_BUNDLE;OUTPUT_NAME" "" "${_arg_PROPERTIES}")
     if (_prop_MACOSX_BUNDLE)

@@ -250,7 +250,7 @@ extend_qtc_library(Utils CONDITION WIN32
     _CRT_SECURE_NO_WARNINGS _SCL_SECURE_NO_WARNINGS
 )
 
-extend_qtc_library(Utils CONDITION APPLE
+extend_qtc_library(Utils CONDITION DARWIN
   SOURCES
     fileutils_mac.mm fileutils_mac.h
     processhandle_mac.mm
