@@ -533,7 +533,6 @@ add_qtc_plugin(QmlDesigner
     $<$<BOOL:${USE_PROJECTSTORAGE}>:QDS_USE_PROJECTSTORAGE>
     $<$<BOOL:${QTC_USE_QML_DESIGNER_LITE}>:QTC_USE_QML_DESIGNER_LITE>
   INCLUDES
-    ${CMAKE_CURRENT_LIST_DIR}/components
     ${CMAKE_CURRENT_LIST_DIR}/components/assetslibrary
     ${CMAKE_CURRENT_LIST_DIR}/components/debugview
     ${CMAKE_CURRENT_LIST_DIR}/components/edit3d
@@ -553,6 +552,7 @@ add_qtc_plugin(QmlDesigner
     ${CMAKE_CURRENT_LIST_DIR}/designercore #can not be a public dependency -> EXCLUDE_FROM_INSTALL in QmlDesignerCore
     ${CMAKE_CURRENT_LIST_DIR}/designercore/include #iwidgetplugin.h is used by other plugins
     ${CMAKE_CURRENT_LIST_DIR}/designercore/designercoreutils
+    ${CMAKE_CURRENT_LIST_DIR}/components
   SOURCES
     designmodecontext.cpp designmodecontext.h
     designmodewidget.cpp designmodewidget.h
@@ -631,17 +631,9 @@ if (QTC_STATIC_BUILD AND TARGET QmlDesigner)
 endif()
 
 extend_qtc_plugin(QmlDesigner
-  SOURCES_PREFIX components
-  PUBLIC_INCLUDES components
-  DEFINES QMLDESIGNERCOMPONENTS_LIBRARY
-  SOURCES
-    createtexture.cpp createtexture.h
-    qmldesignercomponents_global.h
-)
-
-extend_qtc_plugin(QmlDesigner
   SOURCES_PREFIX components/componentcore
   PUBLIC_INCLUDES components/componentcore
+  DEFINES QMLDESIGNERCOMPONENTS_LIBRARY
   SOURCES
     abstractaction.cpp abstractaction.h
     abstractactiongroup.cpp abstractactiongroup.h
@@ -651,6 +643,7 @@ extend_qtc_plugin(QmlDesigner
     changestyleaction.cpp changestyleaction.h
     componentcore.qrc
     componentcore_constants.h
+    createtexture.cpp createtexture.h
     crumblebar.cpp crumblebar.h
     designeractionmanager.cpp designeractionmanager.h
     designeractionmanagerview.cpp designeractionmanagerview.h
@@ -666,6 +659,7 @@ extend_qtc_plugin(QmlDesigner
     propertyeditorcomponentgenerator.cpp propertyeditorcomponentgenerator.h
     propertycomponentgenerator.cpp propertycomponentgenerator.h
     propertycomponentgeneratorinterface.h
+    qmldesignercomponents_global.h
     qmldesignericonprovider.cpp qmldesignericonprovider.h
     qmleditormenu.cpp qmleditormenu.h
     resourcegenerator.cpp resourcegenerator.h
