@@ -38,11 +38,6 @@ public:
     static int outputPaneHeightSetting();
     static void setOutputPaneHeightSetting(int value);
 
-    // FIXME: Hide again
-    static void create();
-    static void initialize();
-    static void destroy();
-
 public slots:
     void slotHide();
     void slotNext();
@@ -62,6 +57,10 @@ private:
 
     explicit OutputPaneManager(QWidget *parent = nullptr);
     ~OutputPaneManager() override;
+
+    static void create();
+    static void initialize();
+    static void destroy();
 
     void shortcutTriggered(int idx);
     void clearPage();
