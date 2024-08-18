@@ -59,10 +59,9 @@ template<typename Iterator1,
          typename Relation = std::ranges::less,
          typename Projection1 = std::identity,
          typename Projection2 = std::identity>
-concept callmergeable = std::input_iterator<Iterator1> && std::input_iterator<Iterator2>
-                        && std::indirect_strict_weak_order<Relation,
-                                                           std::projected<Iterator1, Projection1>,
-                                                           std::projected<Iterator2, Projection2>>;
+concept callmergeable = std::indirect_strict_weak_order<Relation,
+                                                        std::projected<Iterator1, Projection1>,
+                                                        std::projected<Iterator2, Projection2>>;
 
 template<typename Iterator1, typename Iterator2, typename OutIterator>
 using set_intersection_result = std::ranges::set_intersection_result<Iterator1, Iterator2, OutIterator>;
@@ -273,6 +272,7 @@ struct set_has_common_element_functor
 
     template<std::ranges::input_range Range1,
              std::ranges::input_range Range2,
+             std::invocable<std::iter_value_t<Range1> &> Callable,
              typename Comp = std::ranges::less,
              typename Projection1 = std::identity,
              typename Projection2 = std::identity>
