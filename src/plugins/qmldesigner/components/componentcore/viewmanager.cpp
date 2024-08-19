@@ -307,6 +307,7 @@ void ViewManager::registerViewAction(AbstractView &view)
 {
     auto viewAction = view.action();
     viewAction->setCheckable(true);
+#ifdef DETACH_DISABLED_VIEWS
     QObject::connect(view.action(),
                      &AbstractViewAction::viewCheckedChanged,
                      [&](bool checked, AbstractView &view) {
@@ -315,15 +316,16 @@ void ViewManager::registerViewAction(AbstractView &view)
                          else
                              disableView(view);
                      });
+#endif
 }
 
-void ViewManager::enableView(AbstractView &view)
+void ViewManager::enableView([[maybe_unused]] AbstractView &view)
 {
     if (auto model = currentModel())
         model->attachView(&view);
 }
 
-void ViewManager::disableView(AbstractView &view)
+void ViewManager::disableView([[maybe_unused]] AbstractView &view)
 {
     if (auto model = currentModel())
         model->detachView(&view);
