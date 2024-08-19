@@ -119,15 +119,10 @@ public:
                && first.m_propertyName == second.m_propertyName;
     }
 
-    friend bool operator!=(const AbstractProperty &first, const AbstractProperty &second)
-    {
-        return !(first == second);
-    }
-
-    friend bool operator<(const AbstractProperty &first, const AbstractProperty &second)
+    friend auto operator<=>(const AbstractProperty &first, const AbstractProperty &second)
     {
         return std::tie(first.m_internalNode, first.m_propertyName)
-               < std::tie(second.m_internalNode, second.m_propertyName);
+               <=> std::tie(second.m_internalNode, second.m_propertyName);
     }
 
 protected:
