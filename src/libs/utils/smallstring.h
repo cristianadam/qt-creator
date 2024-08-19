@@ -707,6 +707,16 @@ public:
         return (cacheLineBlocks  + 1) * cacheLineSize;
     }
 
+    friend bool operator==(const BasicSmallString &first, const BasicSmallString &second) noexcept
+    {
+        return std::string_view{first} == std::string_view{second};
+    }
+
+    friend auto operator<=>(const BasicSmallString &first, const BasicSmallString &second) noexcept
+    {
+        return std::string_view{first} <=> std::string_view{second};
+    }
+
 private:
     BasicSmallString(const Internal::StringDataLayout<Size> &data) noexcept
         : m_data(data)
