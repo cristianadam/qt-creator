@@ -626,9 +626,7 @@ void ContentLibraryView::addLibAssets(const QStringList &paths)
     QStringList fileNamesToRemove;
 
     const QStringList existingAssetsFileNames = Utils::transform(bundlePath.dirEntries(QDir::Files),
-                                                    [](const Utils::FilePath &path) {
-        return path.fileName();
-    });
+                                                                 &Utils::FilePath::fileName);
 
     for (const QString &path : paths) {
         auto assetFilePath = Utils::FilePath::fromString(path);
@@ -1174,10 +1172,9 @@ void ContentLibraryView::importBundleToProject()
     QTC_ASSERT(tempDir.isValid(), return);
     auto bundlePath = Utils::FilePath::fromString(tempDir.path());
 
-    const QStringList existingQmls = Utils::transform(compUtils.userBundlePath(bundleId)
-                                       .dirEntries(QDir::Files), [](const Utils::FilePath &path) {
-                                                                       return path.fileName();
-                                                                   });
+    const QStringList existingQmls = Utils::transform(compUtils.userBundlePath(bundleId).dirEntries(
+                                                          QDir::Files),
+                                                      &Utils::FilePath::fileName);
 
     for (const QJsonValueConstRef &itemRef : importedItemsArr) {
         QJsonObject itemObj = itemRef.toObject();
