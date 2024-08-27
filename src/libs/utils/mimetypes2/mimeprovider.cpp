@@ -423,8 +423,7 @@ void MimeBinaryProvider::addParents(const QString &mime, QStringList &result)
                 const int parentOffset = m_cacheFile->getUint32(parentsOffset + 4 + 4 * i);
                 const char *aParent = m_cacheFile->getCharStar(parentOffset);
                 const QString strParent = QString::fromLatin1(aParent);
-                if (!result.contains(strParent))
-                    result.append(strParent);
+                appendIfNew(result, strParent);
             }
             break;
         }
@@ -471,8 +470,7 @@ void MimeBinaryProvider::addAliases(const QString &name, QStringList &result)
             const int aliasOffset = m_cacheFile->getUint32(off);
             const char *alias = m_cacheFile->getCharStar(aliasOffset);
             const QString strAlias = QString::fromLatin1(alias);
-            if (!result.contains(strAlias))
-                result.append(strAlias);
+            appendIfNew(result, strAlias);
         }
     }
 }
@@ -568,8 +566,7 @@ bool MimeBinaryProvider::loadMimeTypePrivate(MimeTypePrivate &data)
                     if (mainPattern.isEmpty() && pattern.startsWith(u'*')) {
                         mainPattern = pattern;
                     }
-                    if (!extra.globPatterns.contains(pattern))
-                        extra.globPatterns.append(pattern);
+                    appendIfNew(extra.globPatterns, pattern);
                 }
                 xml.skipCurrentElement();
             }
@@ -872,13 +869,10 @@ void MimeXMLProvider::addParent(const QString &child, const QString &parent)
 void MimeXMLProvider::addAliases(const QString &name, QStringList &result)
 {
     // Iterate through the whole hash. This method is rarely used.
-    for (auto it = m_aliases.constBegin(), end = m_aliases.constEnd() ; it != end ; ++it) {
-        if (it.value() == name) {
-            if (!result.contains(it.key()))
-                result.append(it.key());
-        }
+    for (const auto &[alias, mimeName] : std::as_const(m_aliases).asKeyValueRange()) {
+        if (mimeName == name)
+            appendIfNew(result, alias);
     }
-
 }
 
 QString MimeXMLProvider::resolveAlias(const QString &name)
