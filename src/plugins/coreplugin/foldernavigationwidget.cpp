@@ -18,6 +18,9 @@
 #include "iwizardfactory.h"
 #include "vcsmanager.h"
 
+#include <coreplugin/iversioncontrol.h>
+#include <coreplugin/vcsmanager.h>
+
 #include <extensionsystem/pluginmanager.h>
 
 #include <utils/algorithm.h>
@@ -117,6 +120,13 @@ public:
     Qt::DropActions supportedDragActions() const final;
     Qt::ItemFlags flags(const QModelIndex &index) const final;
     bool setData(const QModelIndex &index, const QVariant &value, int role) final;
+
+    void setRootDir(const Utils::FilePath &rootDir);
+    void updateVCStatusFor(const Utils::FilePath &root, const QStringList &files);
+
+private:
+    Utils::FilePath m_rootDir;
+    QPointer<IVersionControl> m_vc;
 };
 
 // Sorts folders on top if wanted
@@ -169,14 +179,51 @@ bool FolderSortProxyModel::lessThan(const QModelIndex &source_left, const QModel
 FolderNavigationModel::FolderNavigationModel(QObject *parent) : QFileSystemModel(parent)
 { }
 
+void FolderNavigationModel::setRootDir(const Utils::FilePath &rootDir)
+{
+    if (rootDir == m_rootDir)
+        return;
+
+    m_rootDir = rootDir;
+    if (m_vc)
+        disconnect(m_vc, nullptr, this, nullptr);
+    m_vc = VcsManager::findVersionControlForDirectory(m_rootDir);
+    if (m_vc) {
+        connect(m_vc, &IVersionControl::updateFileStatus, this, &FolderNavigationModel::updateVCStatusFor);
+        m_vc->monitorDirectory(m_rootDir);
+    }
+}
+
+void FolderNavigationModel::updateVCStatusFor(const FilePath &rootDir, const QStringList &files)
+{
+    if ((m_rootDir != rootDir) && !m_rootDir.isChildOf(rootDir))
+        return;
+
+    std::for_each(std::begin(files), std::end(files), [rootDir, this](const QString &fileName) {
+        const QModelIndex idx = index(fileName);
+        emit dataChanged(idx, idx, {Qt::ForegroundRole});
+    });
+}
+
 QVariant FolderNavigationModel::data(const QModelIndex &index, int role) const
 {
-    if (role == Qt::ToolTipRole)
-        return QDir::toNativeSeparators(QDir::cleanPath(filePath(index)));
-    else if (role == IsFolderRole)
+    const FilePath &file =
+        FilePath::fromString(QFileSystemModel::data(index, QFileSystemModel::FilePathRole).toString());
+    if (role == Qt::ToolTipRole) {
+        QString tooltip = QDir::toNativeSeparators(QDir::cleanPath(filePath(index)));
+        if (m_vc) {
+            const QString &stateText = IVersionControl::modificationToText(m_vc->modificationState(file));
+            if (!stateText.isEmpty())
+                tooltip += "<p>" + stateText;
+        }
+        return tooltip;
+    } else if (role == IsFolderRole) {
         return isDir(index);
-    else
-        return QFileSystemModel::data(index, role);
+    } else if (role == Qt::ForegroundRole && m_vc) {
+        return IVersionControl::vcStateToColor(m_vc->modificationState(file));
+    }
+
+    return QFileSystemModel::data(index, role);
 }
 
 Qt::DropActions FolderNavigationModel::supportedDragActions() const
@@ -263,6 +310,7 @@ FolderNavigationWidget::FolderNavigationWidget(QWidget *parent) : QWidget(parent
     m_sortProxyModel->setSortRole(FolderNavigationModel::IsFolderRole);
     m_sortProxyModel->sort(0);
 
+    connect(m_fileSystemModel, &QFileSystemModel::dataChanged, m_listView, &QTreeView::dataChanged);
     m_fileSystemModel->setResolveSymlinks(false);
     m_fileSystemModel->setIconProvider(FileIconProvider::iconProvider());
     QDir::Filters filters = QDir::AllEntries | QDir::NoDotAndDotDot;
@@ -585,6 +633,8 @@ void FolderNavigationWidget::setRootDirectory(const FilePath &directory)
     const QModelIndex index = m_sortProxyModel->mapFromSource(
         m_fileSystemModel->setRootPath(directory.toUrlishString()));
     m_listView->setRootIndex(index);
+    if (!directory.isEmpty())
+        m_fileSystemModel->setRootDir(directory);
 }
 
 int FolderNavigationWidget::bestRootForFile(const FilePath &filePath)
