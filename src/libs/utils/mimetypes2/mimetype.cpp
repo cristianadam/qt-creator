@@ -6,9 +6,6 @@
 
 #include "mimetype_p.h"
 #include "mimedatabase_p.h"
-#include "mimeprovider_p.h"
-
-#include "mimeglobpattern_p.h"
 
 #include <QtCore/QDebug>
 #include <QtCore/QLocale>
@@ -20,7 +17,7 @@ using namespace Qt::StringLiterals;
 
 namespace Utils {
 
-static QString suffixFromPattern(const QString &pattern)
+QString MimeType::suffixFromPattern(const QString &pattern)
 {
     // Not a simple suffix if it looks like: README or *. or *.* or *.JP*G or *.JP?
     if (pattern.startsWith("*."_L1) &&
@@ -29,33 +26,6 @@ static QString suffixFromPattern(const QString &pattern)
         return pattern.mid(2);
     }
     return {};
-}
-
-MimeTypePrivate::MimeTypePrivate()
-    : loaded(false), fromCache(false)
-{}
-
-MimeTypePrivate::MimeTypePrivate(const MimeType &other)
-      : loaded(other.d->loaded),
-        name(other.d->name),
-        localeComments(other.d->localeComments),
-        genericIconName(other.d->genericIconName),
-        iconName(other.d->iconName),
-        globPatterns(other.d->globPatterns)
-{}
-
-void MimeTypePrivate::clear()
-{
-    name.clear();
-    localeComments.clear();
-    genericIconName.clear();
-    iconName.clear();
-    globPatterns.clear();
-}
-
-void MimeTypePrivate::addGlobPattern(const QString &pattern)
-{
-    globPatterns.append(pattern);
 }
 
 /*!
@@ -230,7 +200,7 @@ QString MimeType::name() const
  */
 QString MimeType::comment() const
 {
-    MimeDatabasePrivate::instance()->loadMimeTypePrivate(const_cast<MimeTypePrivate&>(*d));
+    const auto localeComments = MimeDatabasePrivate::instance()->localeComments(d->name);
 
     QStringList languageList = QLocale().uiLanguages(QLocale::TagSeparator::Underscore);
     qsizetype defaultIndex = languageList.indexOf(u"en_US"_s);
@@ -253,13 +223,13 @@ QString MimeType::comment() const
 
     for (const QString &language : std::as_const(languageList)) {
         const QString lang = language == "C"_L1 ? u"en_US"_s : language;
-        QString comm = d->localeComments.value(lang);
+        QString comm = localeComments.value(lang);
         if (!comm.isEmpty())
             return comm;
         const qsizetype cut = lang.indexOf(u'_');
         // If "de_CH" is missing, check for "de" (and similar):
         if (cut != -1) {
-            comm = d->localeComments.value(lang.left(cut));
+            comm = localeComments.value(lang.left(cut));
             if (!comm.isEmpty())
                 return comm;
         }
@@ -285,8 +255,8 @@ QString MimeType::comment() const
  */
 QString MimeType::genericIconName() const
 {
-    MimeDatabasePrivate::instance()->loadGenericIcon(const_cast<MimeTypePrivate&>(*d));
-    if (d->genericIconName.isEmpty()) {
+    QString genericIconName = MimeDatabasePrivate::instance()->genericIcon(d->name);
+    if (genericIconName.isEmpty()) {
         // From the spec:
         // If the generic icon name is empty (not specified by the mimetype definition)
         // then the mimetype is used to generate the generic icon by using the top-level
@@ -299,7 +269,7 @@ QString MimeType::genericIconName() const
             groupRef = groupRef.left(slashindex);
         return groupRef + "-x-generic"_L1;
     }
-    return d->genericIconName;
+    return genericIconName;
 }
 
 static QString make_default_icon_name_from_mimetype_name(QString iconName)
@@ -321,11 +291,11 @@ static QString make_default_icon_name_from_mimetype_name(QString iconName)
  */
 QString MimeType::iconName() const
 {
-    MimeDatabasePrivate::instance()->loadIcon(const_cast<MimeTypePrivate&>(*d));
-    if (d->iconName.isEmpty()) {
+    QString iconName = MimeDatabasePrivate::instance()->icon(d->name);
+    if (iconName.isEmpty()) {
         return make_default_icon_name_from_mimetype_name(name());
     }
-    return d->iconName;
+    return iconName;
 }
 
 /*!
@@ -337,8 +307,7 @@ QString MimeType::iconName() const
  */
 QStringList MimeType::globPatterns() const
 {
-    MimeDatabasePrivate::instance()->loadMimeTypePrivate(const_cast<MimeTypePrivate&>(*d));
-    return d->globPatterns;
+    return MimeDatabasePrivate::instance()->globPatterns(d->name);
 }
 
 /*!
@@ -432,10 +401,11 @@ QStringList MimeType::aliases() const
  */
 QStringList MimeType::suffixes() const
 {
-    MimeDatabasePrivate::instance()->loadMimeTypePrivate(const_cast<MimeTypePrivate&>(*d));
+    const QStringList patterns = globPatterns();
 
     QStringList result;
-    for (const QString &pattern : std::as_const(d->globPatterns)) {
+    result.reserve(patterns.size());
+    for (const QString &pattern : patterns) {
         const QString suffix = suffixFromPattern(pattern);
         if (!suffix.isEmpty())
             result.append(suffix);
@@ -471,15 +441,15 @@ QString MimeType::preferredSuffix() const
 */
 QString MimeType::filterString() const
 {
-    MimeDatabasePrivate::instance()->loadMimeTypePrivate(const_cast<MimeTypePrivate&>(*d));
+    const QStringList patterns = globPatterns();
     QString filter;
 
-    if (!d->globPatterns.empty()) {
+    if (!patterns.empty()) {
         filter += comment() + " ("_L1;
-        for (int i = 0; i < d->globPatterns.size(); ++i) {
+        for (int i = 0; i < patterns.size(); ++i) {
             if (i != 0)
                 filter += u' ';
-            filter += d->globPatterns.at(i);
+            filter += patterns.at(i);
         }
         filter +=  u')';
     }
@@ -520,16 +490,7 @@ bool MimeType::matchesName(const QString &nameOrAlias) const
 */
 void MimeType::setPreferredSuffix(const QString &suffix)
 {
-    MimeDatabasePrivate::instance()->loadMimeTypePrivate(const_cast<MimeTypePrivate&>(*d));
-
-    auto it = std::find_if(d->globPatterns.begin(),
-                           d->globPatterns.end(),
-                           [suffix](const QString &pattern) {
-                               return suffixFromPattern(pattern) == suffix;
-                           });
-    if (it != d->globPatterns.end())
-        d->globPatterns.erase(it);
-    d->globPatterns.prepend(QLatin1String("*.") + suffix);
+    MimeDatabasePrivate::instance()->setPreferredSuffix(d->name, suffix);
 }
 
 QDebug operator<<(QDebug debug, const Utils::MimeType &mime)
