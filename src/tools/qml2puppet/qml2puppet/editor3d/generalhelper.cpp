@@ -9,6 +9,7 @@
 #include <enumeration.h>
 
 #include <QGuiApplication>
+#include <private/qquickitem_p.h>
 #include <QtQuick3D/qquick3dobject.h>
 #include <QtQuick3D/private/qquick3dorthographiccamera_p.h>
 #include <QtQuick3D/private/qquick3dperspectivecamera_p.h>
@@ -1593,6 +1594,45 @@ void GeneralHelper::setActiveScenePreferredCamera(QQuick3DCamera *camera)
         emit activeScenePreferredCameraChanged();
     }
 }
+
+void GeneralHelper::resetEditorView3Ds()
+{
+    m_editorView3Ds.clear();
+}
+
+void GeneralHelper::addEditorView3D(QObject *mainView, QObject *overlayView, const QRect &rect)
+{
+    if (!mainView)
+        return;
+
+    // OverlayView is optional
+    QQuickItemPrivate *itemP1 = {};
+    QQuickItemPrivate *itemP2 = {};
+
+    if (QQuickItem *item = qobject_cast<QQuickItem *>(mainView))
+        itemP1 = QQuickItemPrivate::get(item);
+    if (QQuickItem *item = qobject_cast<QQuickItem *>(overlayView))
+        itemP2 = QQuickItemPrivate::get(item);
+    if (itemP1)
+        m_editorView3Ds.append(EditorViewData{rect, itemP1, itemP2});
+}
+
+void GeneralHelper::showSingleEditorView3D(QQuickItemPrivate *visibleViewP, bool ref)
+{
+    for (const EditorViewData &data : std::as_const(m_editorView3Ds)) {
+        const bool hide = data.mainView != visibleViewP;
+        if (ref) {
+            data.mainView->refFromEffectItem(hide);
+            if (data.overlayView)
+                data.overlayView->refFromEffectItem(hide);
+        } else {
+            data.mainView->derefFromEffectItem(hide);
+            if (data.overlayView)
+                data.overlayView->derefFromEffectItem(hide);
+        }
+    }
+}
+
 }
 }
 

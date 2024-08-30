@@ -83,6 +83,7 @@ protected:
     void modifyProperties(const QVector<InstancePropertyValueTriple> &properties);
     QList<ServerNodeInstance> createInstances(const QVector<InstanceContainer> &container) override;
     void initializeAuxiliaryViews() override;
+    bool eventFilter(QObject *obj, QEvent *event) override; // Just for debug
 
 private:
     void handleObjectPropertyChangeTimeout();
@@ -91,7 +92,7 @@ private:
     void createEditView3D();
     void setup3DEditView(const QList<ServerNodeInstance> &instanceList,
                          const CreateSceneCommand &command);
-    void createGizmos(const QList<ServerNodeInstance> &instanceList) const;
+    void createGizmos(const QList<ServerNodeInstance> &instanceList);
     void add3DViewPorts(const QList<ServerNodeInstance> &instanceList);
     void add3DScenes(const QList<ServerNodeInstance> &instanceList);
     QObject *findView3DForInstance(const ServerNodeInstance &instance) const;
@@ -130,7 +131,6 @@ private:
     void getNodeAtPos(const QPointF &pos);
     void getNodeAtMainScenePos(const QPointF &pos, qint32 viewId);
 
-    void createAuxiliaryQuickView(const QUrl &url, RenderViewData &viewData);
 #ifdef QUICK3D_PARTICLES_MODULE
     void handleParticleSystemSelected(QQuick3DParticleSystem* targetParticleSystem);
     void resetParticleSystem();
@@ -140,10 +140,13 @@ private:
     QVariantList alignCameraList(bool preferCurrentSceneCamera = false) const;
     void updateSceneEnvToHelper();
     bool isSceneEnvironmentBgProperty(const PropertyName &name) const;
+    void setEditViewVisible();
+    void resolveAllSceneView3Ds();
+    void hideSceneView3Ds(bool hide);
 
-    RenderViewData m_editView3DData;
-    RenderViewData m_modelNode3DImageViewData;
-    RenderViewData m_modelNode2DImageViewData;
+    RenderViewData *m_editView3DData = {};
+    RenderViewData *m_modelNode3DImageViewData = {};
+    RenderViewData *m_modelNode2DImageViewData = {};
 
     bool m_editView3DSetupDone = false;
     QSet<RequestModelNodePreviewImageCommand> m_modelNodePreviewImageCommands;
@@ -186,6 +189,9 @@ private:
         QString model;
     };
     PreviewData m_materialPreviewData;
+
+    QObjectList m_allView3Ds; // Includes View3Ds under components
+    bool m_allView3DsDirty = true;
 };
 
 } // namespace QmlDesigner

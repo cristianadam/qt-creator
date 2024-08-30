@@ -179,6 +179,17 @@ public:
     QQuick3DCamera *activeScenePreferredCamera() const;
     void setActiveScenePreferredCamera(QQuick3DCamera *camera);
 
+    struct EditorViewData {
+        QRect rect;
+        QQuickItemPrivate *mainView = {};
+        QQuickItemPrivate *overlayView = {};
+    };
+
+    Q_INVOKABLE void resetEditorView3Ds();
+    Q_INVOKABLE void addEditorView3D(QObject *mainView, QObject *overlayView, const QRect &rect);
+    void showSingleEditorView3D(QQuickItemPrivate *visibleViewP, bool ref);
+    const QList<EditorViewData> &editorView3Ds() const { return m_editorView3Ds; }
+
 signals:
     void overlayUpdateNeeded();
     void toolStateChanged(const QString &sceneId, const QString &tool, const QVariant &toolState);
@@ -256,6 +267,8 @@ private:
 
     QVariant m_bgColor;
     QHash<QString, QTimer *> m_eventTimers;
+
+    QList<EditorViewData> m_editorView3Ds;
 };
 
 }
