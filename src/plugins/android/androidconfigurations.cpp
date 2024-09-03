@@ -122,7 +122,7 @@ const char ndkRevisionKey[] = "Pkg.Revision";
 
 static QString sdkSettingsFileName()
 {
-    return Core::ICore::installerResourcePath("android.xml").toString();
+    return Core::ICore::installerResourcePath("android.xml").toFSPathString();
 }
 
 static QString ndkPackageMarker()
@@ -319,11 +319,15 @@ void AndroidConfigData::load(const QtcSettings &settings)
     if (reader.load(FilePath::fromString(sdkSettingsFileName()))
             && settings.value(changeTimeStamp).toInt() != QFileInfo(sdkSettingsFileName()).lastModified().toMSecsSinceEpoch() / 1000) {
         // persisten settings
-        m_sdkLocation = FilePath::fromUserInput(reader.restoreValue(SDKLocationKey, m_sdkLocation.toString()).toString()).cleanPath();
+        m_sdkLocation = FilePath::fromSettings(
+                            reader.restoreValue(SDKLocationKey, m_sdkLocation.toSettings()))
+                            .cleanPath();
         m_customNdkList = reader.restoreValue(CustomNdkLocationsKey).toStringList();
         m_sdkManagerToolArgs = reader.restoreValue(SDKManagerToolArgsKey, m_sdkManagerToolArgs).toStringList();
-        m_openJDKLocation = FilePath::fromString(reader.restoreValue(OpenJDKLocationKey, m_openJDKLocation.toString()).toString());
-        m_openSslLocation = FilePath::fromString(reader.restoreValue(OpenSslPriLocationKey, m_openSslLocation.toString()).toString());
+        m_openJDKLocation = FilePath::fromSettings(
+            reader.restoreValue(OpenJDKLocationKey, m_openJDKLocation.toSettings()));
+        m_openSslLocation = FilePath::fromSettings(
+            reader.restoreValue(OpenSslPriLocationKey, m_openSslLocation.toSettings()));
         m_automaticKitCreation = reader.restoreValue(AutomaticKitCreationKey, m_automaticKitCreation).toBool();
         m_sdkFullyConfigured = reader.restoreValue(SdkFullyConfiguredKey, m_sdkFullyConfigured).toBool();
         // persistent settings
@@ -345,12 +349,12 @@ void AndroidConfigData::save(QtcSettings &settings) const
         settings.setValue(changeTimeStamp, fileInfo.lastModified().toMSecsSinceEpoch() / 1000);
 
     // user settings
-    settings.setValue(SDKLocationKey, m_sdkLocation.toString());
+    settings.setValue(SDKLocationKey, m_sdkLocation.toSettings());
     settings.setValue(CustomNdkLocationsKey, m_customNdkList);
-    settings.setValue(DefaultNdkLocationKey, m_defaultNdk.toString());
+    settings.setValue(DefaultNdkLocationKey, m_defaultNdk.toSettings());
     settings.setValue(SDKManagerToolArgsKey, m_sdkManagerToolArgs);
-    settings.setValue(OpenJDKLocationKey, m_openJDKLocation.toString());
-    settings.setValue(OpenSslPriLocationKey, m_openSslLocation.toString());
+    settings.setValue(OpenJDKLocationKey, m_openJDKLocation.toSettings());
+    settings.setValue(OpenSslPriLocationKey, m_openSslLocation.toSettings());
     settings.setValue(EmulatorArgsKey, m_emulatorArgs);
     settings.setValue(AutomaticKitCreationKey, m_automaticKitCreation);
     settings.setValue(SdkFullyConfiguredKey, m_sdkFullyConfigured);
@@ -373,7 +377,7 @@ void AndroidConfigData::parseDependenciesJson()
         sdkConfigFile.copyFile(sdkConfigUserFile);
     }
 
-    QFile jsonFile(sdkConfigUserFile.toString());
+    QFile jsonFile(sdkConfigUserFile.path());
     if (!jsonFile.open(QIODevice::ReadOnly)) {
         qCDebug(avdConfigLog, "Couldn't open JSON config file %s.", qPrintable(jsonFile.fileName()));
         return;
@@ -449,14 +453,11 @@ static QList<int> availableNdkPlatformsLegacy(const FilePath &ndkLocation)
 {
     QList<int> availableNdkPlatforms;
 
-    ndkLocation
-        .pathAppended("platforms")
+    ndkLocation.pathAppended("platforms")
         .iterateDirectory(
             [&availableNdkPlatforms](const FilePath &filePath) {
-                availableNdkPlatforms.push_back(
-                    filePath.toString()
-                        .mid(filePath.path().lastIndexOf('-') + 1)
-                        .toInt());
+                const QString pathStr = filePath.path();
+                availableNdkPlatforms.push_back(pathStr.mid(pathStr.lastIndexOf('-') + 1).toInt());
                 return IterationPolicy::Continue;
             },
             {{"android-*"}, QDir::Dirs});
@@ -578,7 +579,7 @@ FilePath toolchainPathFromNdk(const FilePath &ndkLocation, OsType hostOs)
 {
     const FilePath tcPath = ndkLocation / "toolchains/";
     FilePath toolchainPath;
-    QDirIterator llvmIter(tcPath.toString(), {"llvm*"}, QDir::Dirs);
+    QDirIterator llvmIter(tcPath.toFSPathString(), {"llvm*"}, QDir::Dirs);
     if (llvmIter.hasNext()) {
         llvmIter.next();
         toolchainPath = tcPath / llvmIter.fileName() / "prebuilt/";
@@ -602,7 +603,7 @@ FilePath toolchainPathFromNdk(const FilePath &ndkLocation, OsType hostOs)
     default: /* unknown host */ return {};
     }
 
-    QDirIterator iter(toolchainPath.toString(), hostPatterns, QDir::Dirs);
+    QDirIterator iter(toolchainPath.toFSPathString(), hostPatterns, QDir::Dirs);
     if (iter.hasNext()) {
         iter.next();
         return toolchainPath / iter.fileName();
@@ -751,7 +752,7 @@ bool isValidNdk(const QString &ndkLocation)
 
     const FilePath ndkPlatformsDir = ndkPath.pathAppended("platforms");
     if (version.majorVersion() <= 22
-            && (!ndkPlatformsDir.exists() || ndkPlatformsDir.toString().contains(' ')))
+        && (!ndkPlatformsDir.exists() || ndkPlatformsDir.path().contains(' ')))
         return false;
     return true;
 }
@@ -799,7 +800,7 @@ QVersionNumber sdkToolsVersion()
         return {};
 
     const FilePath sdkToolsPropertiesPath = sdkToolsVersionPath();
-    const QSettings settings(sdkToolsPropertiesPath.toString(), QSettings::IniFormat);
+    const QSettings settings(sdkToolsPropertiesPath.toFSPathString(), QSettings::IniFormat);
     return QVersionNumber::fromString(settings.value(sdkToolsVersionKey).toString());
 }
 
@@ -807,7 +808,7 @@ QVersionNumber buildToolsVersion()
 {
     //TODO: return version according to qt version
     QVersionNumber maxVersion;
-    QDir buildToolsDir(config().m_sdkLocation.pathAppended("build-tools").toString());
+    QDir buildToolsDir(config().m_sdkLocation.pathAppended("build-tools").toFSPathString());
     const auto files = buildToolsDir.entryInfoList(QDir::Dirs|QDir::NoDotAndDotDot);
     for (const QFileInfo &file: files)
         maxVersion = qMax(maxVersion, QVersionNumber::fromString(file.fileName()));
@@ -842,7 +843,7 @@ QVersionNumber ndkVersion(const FilePath &ndkPath)
     const FilePath ndkPropertiesPath = ndkPath.pathAppended("source.properties");
     if (ndkPropertiesPath.exists()) {
         // source.properties files exists in NDK version > 11
-        QSettings settings(ndkPropertiesPath.toString(), QSettings::IniFormat);
+        QSettings settings(ndkPropertiesPath.toFSPathString(), QSettings::IniFormat);
         auto versionStr = settings.value(ndkRevisionKey).toString();
         version = QVersionNumber::fromString(versionStr);
     } else {
@@ -1016,9 +1017,7 @@ QString toolchainHostFromNdk(const FilePath &ndkPath)
         return toolchainHost;
     }
 
-    QDirIterator jt(ndkPath.pathAppended("prebuilt").toString(),
-                    hostPatterns,
-                    QDir::Dirs);
+    QDirIterator jt(ndkPath.pathAppended("prebuilt").toFSPathString(), hostPatterns, QDir::Dirs);
     if (jt.hasNext()) {
         jt.next();
         toolchainHost = jt.fileName();
@@ -1366,8 +1365,9 @@ void AndroidConfigurations::updateAutomaticKitList()
         if (DeviceTypeKitAspect::deviceTypeId(k) == Constants::ANDROID_DEVICE_TYPE) {
             if (k->value(Constants::ANDROID_KIT_NDK).isNull() || k->value(Constants::ANDROID_KIT_SDK).isNull()) {
                 if (QtVersion *qt = QtKitAspect::qtVersion(k)) {
-                    k->setValueSilently(Constants::ANDROID_KIT_NDK, AndroidConfig::ndkLocation(qt).toString());
-                    k->setValue(Constants::ANDROID_KIT_SDK, AndroidConfig::sdkLocation().toString());
+                    k->setValueSilently(
+                        Constants::ANDROID_KIT_NDK, AndroidConfig::ndkLocation(qt).toSettings());
+                    k->setValue(Constants::ANDROID_KIT_SDK, AndroidConfig::sdkLocation().toSettings());
                 }
             }
         }
@@ -1438,8 +1438,10 @@ void AndroidConfigurations::updateAutomaticKitList()
                 k->setUnexpandedDisplayName(Tr::tr("Android %1 Clang %2")
                                                 .arg(versionStr)
                                                 .arg(getMultiOrSingleAbiString(abis)));
-                k->setValueSilently(Constants::ANDROID_KIT_NDK, AndroidConfig::ndkLocation(qt).toString());
-                k->setValueSilently(Constants::ANDROID_KIT_SDK, AndroidConfig::sdkLocation().toString());
+                k->setValueSilently(
+                    Constants::ANDROID_KIT_NDK, AndroidConfig::ndkLocation(qt).toSettings());
+                k->setValueSilently(
+                    Constants::ANDROID_KIT_SDK, AndroidConfig::sdkLocation().toSettings());
             };
 
             if (existingKit) {
