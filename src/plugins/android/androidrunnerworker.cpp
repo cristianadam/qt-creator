@@ -659,8 +659,8 @@ static ExecutableItem uploadDebugServerRecipe(RunnerStorage *storage, const QStr
     };
 
     const auto onServerUploadSetup = [storage, tempDebugServerPathStorage](Process &process) {
-        process.setCommand(
-            storage->adbCommand({"push", storage->m_debugServerPath.toString(), *tempDebugServerPathStorage}));
+        process.setCommand(storage->adbCommand(
+            {"push", storage->m_debugServerPath.nativePath(), *tempDebugServerPathStorage}));
     };
 
     const auto onServerCopySetup = [storage, tempDebugServerPathStorage, debugServerFileName](Process &process) {
