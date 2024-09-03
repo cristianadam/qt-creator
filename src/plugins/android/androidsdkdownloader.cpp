@@ -65,7 +65,7 @@ static FilePath sdkFromUrl(const QUrl &url)
 // TODO: Make it a separate async task in a chain?
 static std::optional<QString> saveToDisk(const FilePath &filename, QIODevice *data)
 {
-    QFile file(filename.toString());
+    QFile file(filename.toFSPathString());
     if (!file.open(QIODevice::WriteOnly)) {
         return Tr::tr("Could not open \"%1\" for writing: %2.")
             .arg(filename.toUserOutput(), file.errorString());
@@ -77,10 +77,11 @@ static std::optional<QString> saveToDisk(const FilePath &filename, QIODevice *da
 static void validateFileIntegrity(QPromise<void> &promise, const FilePath &fileName,
                                   const QByteArray &sha256)
 {
-    QFile file(fileName.toString());
-    if (file.open(QFile::ReadOnly)) {
+    const auto result = fileName.fileContents();
+    if (result) {
         QCryptographicHash hash(QCryptographicHash::Sha256);
-        if (hash.addData(&file) && hash.result() == sha256)
+        hash.addData(*result);
+        if (hash.result() == sha256)
             return;
     }
     promise.future().cancel();
