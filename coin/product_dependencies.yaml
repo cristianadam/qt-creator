@@ -1,4 +1,4 @@
 dependencies:
   ../../qt/qt5.git:
-    ref: "6.7"
+    ref: "refs/changes/04/588704/2"
 
