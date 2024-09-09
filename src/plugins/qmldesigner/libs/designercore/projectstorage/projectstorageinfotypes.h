@@ -127,30 +127,8 @@ void convertToString(String &string, const TypeTraitsKind &kind)
 
 struct TypeTraits
 {
-    constexpr TypeTraits()
-        : kind{TypeTraitsKind::None}
-        , isEnum{false}
-        , isFileComponent{false}
-        , usesCustomParser{false}
-        , dummy{0U}
-        , canBeContainer{FlagIs::False}
-        , forceClip{FlagIs::False}
-        , doesLayoutChildren{FlagIs::False}
-        , canBeDroppedInFormEditor{FlagIs::False}
-        , canBeDroppedInNavigator{FlagIs::False}
-        , canBeDroppedInView3D{FlagIs::False}
-        , isMovable{FlagIs::False}
-        , isResizable{FlagIs::False}
-        , hasFormEditorItem{FlagIs::False}
-        , isStackedContainer{FlagIs::False}
-        , takesOverRenderingOfChildren{FlagIs::False}
-        , visibleInNavigator{FlagIs::False}
-        , visibleInLibrary{FlagIs::False}
-        , dummy2{0U}
-    {}
-
+    constexpr TypeTraits() = default;
     constexpr TypeTraits(TypeTraitsKind aKind)
-        : TypeTraits{}
     {
         kind = aKind;
     }
@@ -200,11 +178,12 @@ struct TypeTraits
     union {
         struct
         {
-            TypeTraitsKind kind : 4;
-            unsigned int isEnum : 1;
-            unsigned int isFileComponent : 1;
-            unsigned int usesCustomParser : 1;
-            unsigned int dummy : 25;
+            TypeTraitsKind kind : 4 = TypeTraitsKind::None;
+            unsigned int isEnum : 1 = false;
+            unsigned int isFileComponent : 1 = false;
+            unsigned int usesCustomParser : 1 = false;
+            unsigned int isSingleton : 1 = false;
+            unsigned int dummy : 24 = 0;
         };
 
         unsigned int type;
@@ -213,20 +192,20 @@ struct TypeTraits
     union {
         struct
         {
-            FlagIs canBeContainer : 2;
-            FlagIs forceClip : 2;
-            FlagIs doesLayoutChildren : 2;
-            FlagIs canBeDroppedInFormEditor : 2;
-            FlagIs canBeDroppedInNavigator : 2;
-            FlagIs canBeDroppedInView3D : 2;
-            FlagIs isMovable : 2;
-            FlagIs isResizable : 2;
-            FlagIs hasFormEditorItem : 2;
-            FlagIs isStackedContainer : 2;
-            FlagIs takesOverRenderingOfChildren : 2;
-            FlagIs visibleInNavigator : 2;
-            FlagIs visibleInLibrary : 2;
-            unsigned int dummy2 : 6;
+            FlagIs canBeContainer : 2 = FlagIs::False;
+            FlagIs forceClip : 2 = FlagIs::False;
+            FlagIs doesLayoutChildren : 2 = FlagIs::False;
+            FlagIs canBeDroppedInFormEditor : 2 = FlagIs::False;
+            FlagIs canBeDroppedInNavigator : 2 = FlagIs::False;
+            FlagIs canBeDroppedInView3D : 2 = FlagIs::False;
+            FlagIs isMovable : 2 = FlagIs::False;
+            FlagIs isResizable : 2 = FlagIs::False;
+            FlagIs hasFormEditorItem : 2 = FlagIs::False;
+            FlagIs isStackedContainer : 2 = FlagIs::False;
+            FlagIs takesOverRenderingOfChildren : 2 = FlagIs::False;
+            FlagIs visibleInNavigator : 2 = FlagIs::False;
+            FlagIs visibleInLibrary : 2 = FlagIs::False;
+            unsigned int dummy2 : 6 = 0;
         };
 
         unsigned int annotation;
