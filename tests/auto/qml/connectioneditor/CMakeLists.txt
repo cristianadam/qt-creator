@@ -1,5 +1,5 @@
 add_qtc_test(tst_connection_view
-  DEPENDS QmlJS Utils QmlDesigner
+  DEPENDS QmlJS Utils QmlDesigner QmlDesignerCore
   DEFINES
     QT_CREATOR
     QTCREATORDIR="${PROJECT_SOURCE_DIR}"
