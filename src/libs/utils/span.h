@@ -5,10 +5,11 @@
 
 #include <qcompilerdetection.h>
 
+#include <version>
+
 // The (Apple) Clang implementation of span is incomplete until LLVM 15 / Xcode 14.3 / macOS 13
-#if __cplusplus >= 202002L \
-    && !(defined(__apple_build_version__) && __apple_build_version__ < 14030022)
-#include <span>
+#if defined(__cpp_lib_span) && __cpp_lib_span >= 202002L
+#  include <span>
 
 namespace Utils {
 using std::as_bytes;
