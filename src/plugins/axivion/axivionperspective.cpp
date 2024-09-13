@@ -393,6 +393,7 @@ void IssuesWidget::reinitProjectList(const QString &currentProject)
         m_dashboardProjects->addItems(info->projects);
         if (!currentProject.isEmpty() && info->projects.contains(currentProject))
             m_dashboardProjects->setCurrentText(currentProject);
+        updatePerspectiveToolbar();
     };
     fetchDashboardAndProjectInfo(onDashboardInfoFetched, currentProject);
 }
@@ -774,12 +775,16 @@ public:
     bool handleContextMenu(const QString &issue, const ItemViewEvent &e);
     void setIssueDetailsHtml(const QString &html) { m_issueDetails->setHtml(html); }
     void handleAnchorClicked(const QUrl &url);
+    void updateToolbarButtons();
 
 private:
+    void openFilterHelp();
+
     IssuesWidget *m_issuesWidget = nullptr;
     QTextBrowser *m_issueDetails = nullptr;
     QAction *m_disableInlineIssues = nullptr;
     QAction *m_toggleIssues = nullptr;
+    QAction *m_showFilterHelp = nullptr;
 };
 
 void AxivionPerspective::initPerspective()
@@ -820,10 +825,16 @@ void AxivionPerspective::initPerspective()
         else
             TextEditor::TextDocument::temporaryHideMarksAnnotation("AxivionTextMark");
     });
-
+    m_showFilterHelp = new QAction(this);
+    m_showFilterHelp->setIcon(Utils::Icons::INFO_TOOLBAR.icon());
+    m_showFilterHelp->setToolTip(Tr::tr("Show online filter help"));
+    m_showFilterHelp->setEnabled(false);
+    connect(m_showFilterHelp, &QAction::triggered, this, &AxivionPerspective::openFilterHelp);
 
     addToolBarAction(m_disableInlineIssues);
     addToolBarAction(m_toggleIssues);
+    addToolbarSeparator();
+    addToolBarAction(m_showFilterHelp);
 
     addWindow(m_issuesWidget, Perspective::SplitVertical, nullptr);
     addWindow(m_issueDetails, Perspective::AddToTab, nullptr, true, Qt::RightDockWidgetArea);
@@ -924,6 +935,22 @@ void AxivionPerspective::handleAnchorClicked(const QUrl &url)
         EditorManager::openEditorAt(link);
 }
 
+void AxivionPerspective::updateToolbarButtons()
+{
+    m_showFilterHelp->setEnabled(currentDashboardInfo().has_value());
+}
+
+void AxivionPerspective::openFilterHelp()
+{
+    std::optional<DashboardInfo> dashboardInfo = currentDashboardInfo();
+    QTC_ASSERT(dashboardInfo, return);
+    std::optional<Dto::ProjectInfoDto> projInfo = projectInfo();
+    if (projInfo && projInfo->issueFilterHelp)
+        QDesktopServices::openUrl(dashboardInfo->source.resolved(*projInfo->issueFilterHelp));
+    else
+        QDesktopServices::openUrl(dashboardInfo->source.resolved(QString("/axivion/filterhelp")));
+}
+
 static QPointer<AxivionPerspective> theAxivionPerspective;
 
 void setupAxivionPerspective()
@@ -972,6 +999,12 @@ void updateIssueDetails(const QString &html)
 {
     QTC_ASSERT(theAxivionPerspective, return);
     theAxivionPerspective->setIssueDetailsHtml(html);
+}
+
+void updatePerspectiveToolbar()
+{
+    QTC_ASSERT(theAxivionPerspective, return);
+    theAxivionPerspective->updateToolbarButtons();
 }
 
 } // Axivion::Internal
