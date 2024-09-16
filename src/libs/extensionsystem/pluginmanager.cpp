@@ -1024,9 +1024,9 @@ void PluginManagerPrivate::writeSettings()
     QStringList tempForceEnabledPlugins;
     for (PluginSpec *spec : std::as_const(pluginSpecs)) {
         if (spec->isEnabledByDefault() && !spec->isEnabledBySettings())
-            tempDisabledPlugins.append(spec->name());
+            tempDisabledPlugins.append(spec->id());
         if (!spec->isEnabledByDefault() && spec->isEnabledBySettings())
-            tempForceEnabledPlugins.append(spec->name());
+            tempForceEnabledPlugins.append(spec->id());
     }
 
     settings->setValueWithDefault(C_IGNORED_PLUGINS, tempDisabledPlugins);
@@ -1800,6 +1800,12 @@ static const FilePaths pluginFiles(const FilePaths &pluginPaths)
     return pluginFiles;
 }
 
+static bool containsIdOrName(const QStringList &list, const PluginSpec &spec)
+{
+    return list.contains(spec.id(), Qt::CaseInsensitive)
+           || list.contains(spec.name(), Qt::CaseInsensitive);
+}
+
 void PluginManagerPrivate::addPlugins(const PluginSpecs &specs)
 {
     pluginSpecs += specs;
@@ -1807,17 +1813,20 @@ void PluginManagerPrivate::addPlugins(const PluginSpecs &specs)
     for (PluginSpec *spec : specs) {
         // defaultDisabledPlugins and defaultEnabledPlugins from install settings
         // is used to override the defaults read from the plugin spec
-        if (spec->isEnabledByDefault() && defaultDisabledPlugins.contains(spec->id())) {
+        if (spec->isEnabledByDefault() && containsIdOrName(defaultDisabledPlugins, *spec)) {
             spec->setEnabledByDefault(false);
             spec->setEnabledBySettings(false);
-        } else if (!spec->isEnabledByDefault() && defaultEnabledPlugins.contains(spec->id())) {
+        } else if (!spec->isEnabledByDefault() && containsIdOrName(defaultEnabledPlugins, *spec)) {
             spec->setEnabledByDefault(true);
             spec->setEnabledBySettings(true);
         }
-        if (!spec->isEnabledByDefault() && forceEnabledPlugins.contains(spec->id()))
-            spec->setEnabledBySettings(true);
-        if (spec->isEnabledByDefault() && disabledPlugins.contains(spec->id()))
-            spec->setEnabledBySettings(false);
+        if (spec->isEnabledByDefault()) {
+            if (containsIdOrName(disabledPlugins, *spec))
+                spec->setEnabledBySettings(false);
+        } else {
+            if (containsIdOrName(forceEnabledPlugins, *spec))
+                spec->setEnabledBySettings(true);
+        }
 
         pluginCategories[spec->category()].append(spec);
     }
