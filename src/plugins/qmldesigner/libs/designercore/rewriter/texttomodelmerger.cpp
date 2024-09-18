@@ -271,15 +271,16 @@ QVariant convertDynamicPropertyValueToVariant(const QString &astValue,
     if (astType.isEmpty())
         return QString();
 
-    const int type = propertyType(astType);
-    if (type == QMetaType::fromName("QVariant").id()) {
+    const int typeAsInt = propertyType(astType);
+    const QMetaType type(static_cast<QMetaType::Type>(typeAsInt));
+    if (typeAsInt == QMetaType::fromName("QVariant").id()) {
         if (cleanedValue.isNull()) // Explicitly isNull, NOT isEmpty!
-            return QVariant(static_cast<QVariant::Type>(type));
+            return QVariant::fromMetaType(type);
         else
             return QVariant(cleanedValue);
     } else {
         QVariant value = QVariant(cleanedValue);
-        value.convert(static_cast<QVariant::Type>(type));
+        value.convert(type);
         return value;
     }
 }
@@ -382,7 +383,7 @@ bool smartVeryFuzzyCompare(const QVariant &value1, const QVariant &value2)
     }
 bool smartColorCompare(const QVariant &value1, const QVariant &value2)
 {
-    if ((value1.typeId() == QVariant::Color) || (value2.typeId() == QVariant::Color))
+    if ((value1.typeId() == QMetaType::QColor) || (value2.typeId() == QMetaType::QColor))
         return value1.value<QColor>().rgba() == value2.value<QColor>().rgba();
     return false;
 }
@@ -519,15 +520,15 @@ public:
         const NodeMetaInfo &propertyTypeMetaInfo = propertyMetaInfo.propertyType();
 
         if (propertyTypeMetaInfo.isColor())
-            return PropertyParser::read(QVariant::Color, cleanedValue);
+            return PropertyParser::read(QMetaType::QColor, cleanedValue);
         else if (propertyTypeMetaInfo.isUrl())
-            return PropertyParser::read(QVariant::Url, cleanedValue);
+            return PropertyParser::read(QMetaType::QUrl, cleanedValue);
         else if (propertyTypeMetaInfo.isVector2D())
-            return PropertyParser::read(QVariant::Vector2D, cleanedValue);
+            return PropertyParser::read(QMetaType::QVector2D, cleanedValue);
         else if (propertyTypeMetaInfo.isVector3D())
-            return PropertyParser::read(QVariant::Vector3D, cleanedValue);
+            return PropertyParser::read(QMetaType::QVector3D, cleanedValue);
         else if (propertyTypeMetaInfo.isVector4D())
-            return PropertyParser::read(QVariant::Vector4D, cleanedValue);
+            return PropertyParser::read(QMetaType::QVector4D, cleanedValue);
 
         QVariant value(cleanedValue);
         if (propertyTypeMetaInfo.isBool()) {
