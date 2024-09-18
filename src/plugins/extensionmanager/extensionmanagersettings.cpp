@@ -56,8 +56,9 @@ public:
     ExtensionManagerSettingsPage()
     {
         setId(Constants::EXTENSIONMANAGER_SETTINGSPAGE_ID);
-        setDisplayName(Tr::tr("Extensions"));
-        setCategory(Core::Constants::SETTINGS_CATEGORY_CORE);
+        setDisplayName(Tr::tr("Browser"));
+        setCategory(Constants::EXTENSIONMANAGER_SETTINGSPAGE_CATEGORY);
+        setDisplayCategory(Tr::tr("Extensions"));
         setSettingsProvider([] { return &settings(); });
     }
 };
