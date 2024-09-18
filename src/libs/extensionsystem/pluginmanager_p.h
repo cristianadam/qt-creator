@@ -98,6 +98,7 @@ public:
     QStringList defaultEnabledPlugins; // Plugins/ForceEnabled from install settings
     QStringList disabledPlugins;
     QStringList forceEnabledPlugins;
+    QStringList pluginsWithAcceptedTermsAndConditions;
     // delayed initialization
     QTimer delayedInitializeTimer;
     std::queue<PluginSpec *> delayedInitializeQueue;
