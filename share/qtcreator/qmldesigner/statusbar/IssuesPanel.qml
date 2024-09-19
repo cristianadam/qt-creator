@@ -31,6 +31,17 @@ ScrollView {
         show: (root.hovered || root.focus) && verticalScrollBar.isNeeded
     }
 
+    ScrollBar.horizontal: StudioControls.TransientScrollBar {
+        id: horizontalScrollBar
+        parent: issuesPanel
+        style: StudioTheme.Values.viewStyle
+        x: issuesPanel.leftPadding
+        y: issuesPanel.height - height
+        width: issuesPanel.availableWidth
+        orientation: Qt.Horizontal
+        show: (issuesPanel.hovered || issuesPanel.focus) && horizontalScrollBar.isNeeded
+    }
+
     ColumnLayout {
         Repeater {
             id: listView
