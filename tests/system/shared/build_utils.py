@@ -147,10 +147,15 @@ def verifyBuildConfig(currentTarget, configName, shouldBeDebug=False, enableShad
     else:
         test.compare(buildCfCombo.currentText, 'Release', "Verifying whether it's a release build")
     qmlDebuggingCombo = waitForObject(':Qt Creator.QML debugging and profiling:_QComboBox')
-    if (selectFromCombo(qmlDebuggingCombo, "Enable" if enableQmlDebug else "Disable")
-        and buildSystem == "qmake"):
+    wantedState = "Enable" if enableQmlDebug else "Disable"
+    if buildSystem == "qmake" and wantedState != str(qmlDebuggingCombo.currentText):
+        # Wait for progress bars to disappear so the following wait condition can work properly
+        progressBarWait(14000, False)
+    if selectFromCombo(qmlDebuggingCombo, wantedState) and buildSystem == "qmake":
         # Don't rebuild now
         clickButton(waitForObject(":QML Debugging.No_QPushButton", 5000))
+        # Wait for parsing to finish
+        progressBarWait(14000)
     clickButton(waitForObject(":scrollArea.Details_Utils::DetailsButton"))
     switchViewTo(ViewConstants.EDIT)
 
