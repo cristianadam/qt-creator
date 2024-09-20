@@ -27,14 +27,19 @@
     \e CMakeLists.txt file as the project file. This enables you to share
     your project as a fully working C++ application with developers.
 
-    To export a \QDS project for Qt Creator, you need:
+    You can also enable \QDS projects for \e Python development. When enabled,
+    \QDS creates a \e Python folder within the project folder with the file
+    \e {main.py}. Python developers can use this file to start the development
+    in \e Python for the UI made with \QDS.
 
-    \list
-        \li Qt Creator 13.0 or above.
-        \li \QDS 4.5 or above.
-    \endlist
+    \section1 Exporting a \QDS Project for C++ Develoment
 
-    \section1 Exporting a \QDS Project
+        To export a \QDS project for Qt Creator, you need:
+
+        \list
+            \li Qt Creator 13.0 or above.
+            \li \QDS 4.5 or above.
+        \endlist
 
         \list 1
             \li \l {Creating a Project} {Create} or open your \QDS project with \QDS 4.5 or above.
@@ -44,14 +49,14 @@
                     used in your Qt Creator.
 
             \li Go to \uicontrol {File} > \uicontrol {Export Project}
-                > \uicontrol {Enable Automatic CMake Generation}. This creates a
+                > \uicontrol {Enable CMake Generator}. This creates a
                 \e {CMakeLists.txt} file in your project folder.
 
-                \note Enabling this option tracks the changes made to the project in Qt Creator
-                    and automatically updates in \QDS. The connection works unless you
+                \note Enabling this option tracks the changes made to the project in \QDS
+                    and automatically updates in Qt Creator. The connection works unless you
                     deactivate the option.
 
-            \image studio-project-export.webp "Exporting Qt Design Studio project"
+            \image studio-project-export-cmake.webp "Exporting Qt Design Studio project to CMake"
         \endlist
 
     \section1 Opening the \QDS Project in Qt Creator
@@ -75,5 +80,81 @@
 
                 \image qtcreator-qt-design-studio-project.webp "Qt Design studio projects in Qt Creator after successful import"
             \li To run the project, select \uicontrol Run.
+        \endlist
+
+        \note \QDS 4.4 and earlier versions have a project structure where
+        different explicit import paths such as \e imports or \e asset_imports
+        reference assets such as images or mesh files separately in their own
+        scope. So, linking them from one module to another does not work in the
+        generated CMake-based C++ application. Such cross-modular references are
+        not considered good practice. Since \QDS 4.5, this issue has been solved.
+        All the import assets are now bundled in the same folder, so the CMake
+        generation works properly.
+
+    \section1 Exporting a \QDS Project for Python Development
+
+        \list 1
+            \li \l {Creating a Project} {Create} or open your \QDS project with
+                \QDS 4.6 or above.
+
+            \li Go to \uicontrol {File} > \uicontrol {Export Project}
+                > \uicontrol {Enable Python Generator}. This creates a
+                \e {Python} folder in your project folder. You can find the
+                \e {main.py} file within the \e {Python} folder. This file is
+                necessary for working in python.
+
+                \note Do not modify the contents of the \e {autogen} folder inside
+                    the \e {Python} folder manually; it can break the project.
+
+            \image studio-project-export-python.webp "Exporting Qt Design Studio project to Python"
+        \endlist
+
+    \section1 Opening the \QDS Project with Python
+
+        After your project have the \e {Python} folder and the \e {main.py} file
+        available, you can start setting up your python environment for developing
+        with \QDS projects.
+
+        \table
+            \row
+                \li {2,1} \image studio-project-export-python-folder.webp "The generated Python folder in the Qt Design Studio project"
+                \li {2,2} \image studio-project-export-python-file.webp "The generated Python file in the Qt Design Studio project"
+        \endtable
+        \list 1
+            \li If you don't have \e Python installed on your computer, install it.
+                The latest version of \e Python is available
+                \l {https://www.python.org/downloads/} {here}.
+
+            \li Next, follow the steps from this document to
+                \l {https://doc.qt.io/qtforpython-6/quickstart.html} {install PySide6}.
+                You need this for working with \e Qt in \e Python.
+
+                \note In the \e Terminal, access the folder where you installed
+                    \e Python. Then run the commands written in the \e PySide6
+                    installation process. \br
+                    You need \e Python version between 3.8 and 3.13 to install
+                    PySide6.
+
+            \li After installing \e PySide6, install \QDS packages for \e Pyside6.
+                To do that, execute the command on the \e Terminal.
+                \code
+                    pip install PySide6_DS
+                \endcode
+
+            \li Go to your project folder in the Terminal.
+                \code
+                    cd path/to/your/project/folder
+                \endcode
+
+            \li Finally, run the command below in the \e Terminal to open the
+                \e {main.py} file from your project.
+                \code
+                    python Python\main.py
+                \endcode
+            \li Your \QDS project now runs in \e Python. Use \e Python to add
+                more functionalities to the project. \br
+                Go to \l {Qt for Python} to learn more about developing Qt
+                projects using \e Python.
+
         \endlist
 */
