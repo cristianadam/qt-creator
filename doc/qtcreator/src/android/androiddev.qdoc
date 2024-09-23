@@ -33,6 +33,9 @@
 
     \youtube 5OiIqFTjUZI
 
+    To learn more, take the \l {https://academy.qt.io/catalog/courses/3518738}
+    {Getting Started with Android} course in Qt Academy.
+
     \section1 Requirements
 
     To use \QC to develop Qt applications for Android, you need:
@@ -43,7 +46,7 @@
             automatically download, install, and configure for you.
     \endlist
 
-    \sa {Android}{How To: Develop for Android}
+    \sa {Android}{How To: Develop for Android}, {Get and Install Qt}
 */
 
 /*!
