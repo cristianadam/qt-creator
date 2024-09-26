@@ -1774,6 +1774,18 @@ FlagIs NodeMetaInfo::visibleInNavigator() const
     return FlagIs::Set;
 }
 
+FlagIs NodeMetaInfo::hideInNavigator() const
+{
+    if constexpr (useProjectStorage()) {
+        if (isValid())
+            return typeData().traits.hideInNavigator;
+
+        return FlagIs::False;
+    }
+
+    return FlagIs::Set;
+}
+
 FlagIs NodeMetaInfo::visibleInLibrary() const
 {
     if constexpr (useProjectStorage()) {
