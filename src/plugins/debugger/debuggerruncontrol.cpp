@@ -756,7 +756,8 @@ bool DebuggerRunTool::isQmlDebugging() const
 void DebuggerRunTool::setUsePortsGatherer(bool useCpp, bool useQml)
 {
     QTC_ASSERT(!d->portsGatherer, reportFailure(); return);
-    d->portsGatherer = new DebugServerPortsGatherer(runControl());
+    auto gatherer = new PortsGatherer(runControl());
+    d->portsGatherer = new DebugServerPortsGatherer(runControl(), gatherer);
     d->portsGatherer->setUseGdbServer(useCpp);
     d->portsGatherer->setUseQmlServer(useQml);
     addStartDependency(d->portsGatherer);
@@ -1104,12 +1105,11 @@ private:
     forwarding.
 */
 
-DebugServerPortsGatherer::DebugServerPortsGatherer(RunControl *runControl)
+DebugServerPortsGatherer::DebugServerPortsGatherer(RunControl *runControl,
+                                                   PortsGatherer *portsGatherer)
     : RunWorker(runControl)
 {
     setId("DebugServerPortsGatherer");
-    auto portsGatherer = new PortsGatherer(runControl);
-
     m_gdbChannelProvider = new Internal::SubChannelProvider(runControl, portsGatherer);
     addStartDependency(m_gdbChannelProvider);
 

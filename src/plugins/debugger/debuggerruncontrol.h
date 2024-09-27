@@ -130,7 +130,8 @@ private:
 class DEBUGGER_EXPORT DebugServerPortsGatherer : public ProjectExplorer::RunWorker
 {
 public:
-    explicit DebugServerPortsGatherer(ProjectExplorer::RunControl *runControl);
+    DebugServerPortsGatherer(ProjectExplorer::RunControl *runControl,
+                             ProjectExplorer::PortsGatherer *portsGatherer);
     ~DebugServerPortsGatherer() override;
 
     void setUseGdbServer(bool useIt) { m_useGdbServer = useIt; }

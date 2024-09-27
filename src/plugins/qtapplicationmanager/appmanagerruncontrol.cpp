@@ -112,7 +112,8 @@ public:
             runControl->setProperty("PerfProcess", QVariant::fromValue(process()));
         }
 
-        m_portsGatherer = new Debugger::DebugServerPortsGatherer(runControl);
+        auto gatherer = new PortsGatherer(runControl);
+        m_portsGatherer = new Debugger::DebugServerPortsGatherer(runControl, gatherer);
         m_portsGatherer->setUseGdbServer(useGdbServer || usePerf);
         m_portsGatherer->setUseQmlServer(useQmlServer);
         addStartDependency(m_portsGatherer);
