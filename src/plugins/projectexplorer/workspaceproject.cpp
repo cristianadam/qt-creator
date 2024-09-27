@@ -470,8 +470,11 @@ public:
     {
         if (extraInfos["forSetup"].toBool()) {
             originalExtraInfo = extraInfos;
+            setEnabled(false);
             buildInfoResetConnection = connect(
                 this, &BaseAspect::changed, this, &WorkspaceBuildConfiguration::resetExtraInfo);
+            for (BuildStep *step : buildSteps()->steps())
+                step->setEnabled(false);
         }
     }
 
@@ -500,6 +503,9 @@ public:
     {
         originalExtraInfo.reset();
         disconnect(buildInfoResetConnection);
+        setEnabled(true);
+        for (auto step : buildSteps()->steps())
+            step->setEnabled(true);
     }
 
     std::optional<QVariantMap> originalExtraInfo;

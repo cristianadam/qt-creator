@@ -1939,7 +1939,7 @@ void CMakeBuildConfiguration::setBuildPresetToBuildSteps(const ProjectExplorer::
 
         // Leave only the first build step enabled
         if (i > 0)
-            cbs->setEnabled(false);
+            cbs->setStepEnabled(false);
     }
 }
 

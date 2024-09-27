@@ -3123,6 +3123,7 @@ void AspectContainer::addToLayoutImpl(Layouting::Layout &parent)
 void AspectContainer::registerAspect(BaseAspect *aspect, bool takeOwnership)
 {
     aspect->setAutoApply(isAutoApply());
+    aspect->setEnabled(isEnabled());
     d->m_items.append(aspect);
     if (takeOwnership)
         d->m_ownedItems.append(aspect);
@@ -3275,6 +3276,14 @@ void AspectContainer::setUndoStack(QUndoStack *undoStack)
 
     for (BaseAspect *aspect : std::as_const(d->m_items))
         aspect->setUndoStack(undoStack);
+}
+
+void AspectContainer::setEnabled(bool enabled)
+{
+    BaseAspect::setEnabled(enabled);
+
+    for (BaseAspect *aspect : std::as_const(d->m_items))
+        aspect->setEnabled(enabled);
 }
 
 void AspectContainer::setMacroExpander(MacroExpander *expander)
