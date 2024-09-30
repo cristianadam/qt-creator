@@ -84,12 +84,12 @@ public:
         setStartModifier([this, debugger] {
             CommandLine cmd = commandLine();
             QStringList arguments;
-            if (SubChannelProvider *provider = debugger->debugChannelProvider()) {
+            if (ChannelProvider *provider = debugger->debugChannelProvider()) {
                 int pdebugPort = provider->channel().port();
                 cmd.setExecutable(device()->filePath(QNX_DEBUG_EXECUTABLE));
                 arguments.append(QString::number(pdebugPort));
             }
-            if (SubChannelProvider *provider = debugger->qmlChannelProvider()) {
+            if (ChannelProvider *provider = debugger->qmlChannelProvider()) {
                 arguments.append(QmlDebug::qmlDebugTcpArguments(QmlDebug::QmlDebuggerServices,
                                                                 provider->channel()));
             }

@@ -17,7 +17,7 @@ namespace Debugger {
 
 namespace Internal { class DebuggerRunToolPrivate; }
 
-class SubChannelProvider;
+class ChannelProvider;
 
 class DEBUGGER_EXPORT DebuggerRunTool : public ProjectExplorer::RunWorker
 {
@@ -83,10 +83,10 @@ public:
     Internal::DebuggerRunParameters &runParameters() { return m_runParameters; }
 
     QUrl debugChannel() const;
-    SubChannelProvider *debugChannelProvider() const;
+    ChannelProvider *debugChannelProvider() const;
 
     QUrl qmlChannel() const;
-    SubChannelProvider *qmlChannelProvider() const;
+    ChannelProvider *qmlChannelProvider() const;
 
 protected:
     bool isCppDebugging() const;
@@ -129,10 +129,10 @@ private:
     Internal::DebuggerRunParameters m_runParameters;
 };
 
-class DEBUGGER_EXPORT SubChannelProvider : public ProjectExplorer::RunWorker
+class DEBUGGER_EXPORT ChannelProvider : public ProjectExplorer::RunWorker
 {
 public:
-    explicit SubChannelProvider(ProjectExplorer::RunControl *runControl);
+    explicit ChannelProvider(ProjectExplorer::RunControl *runControl);
 
     void start() final;
 

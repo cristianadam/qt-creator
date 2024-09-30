@@ -109,17 +109,17 @@ public:
         if (usePerf) {
             suppressDefaultStdOutHandling();
             runControl->setProperty("PerfProcess", QVariant::fromValue(process()));
-            m_perfChannelProvider = new Debugger::SubChannelProvider(runControl);
+            m_perfChannelProvider = new Debugger::ChannelProvider(runControl);
             addStartDependency(m_perfChannelProvider);
         }
 
         if (useGdbServer) {
-            m_debugChannelProvider = new Debugger::SubChannelProvider(runControl);
+            m_debugChannelProvider = new Debugger::ChannelProvider(runControl);
             addStartDependency(m_debugChannelProvider);
         }
 
         if (useQmlServer) {
-            m_qmlChannelProvider = new Debugger::SubChannelProvider(runControl);
+            m_qmlChannelProvider = new Debugger::ChannelProvider(runControl);
             addStartDependency(m_qmlChannelProvider);
         }
 
@@ -194,9 +194,9 @@ public:
     }
 
 private:
-    Debugger::SubChannelProvider *m_debugChannelProvider = nullptr;
-    Debugger::SubChannelProvider *m_qmlChannelProvider = nullptr;
-    Debugger::SubChannelProvider *m_perfChannelProvider = nullptr;
+    Debugger::ChannelProvider *m_debugChannelProvider = nullptr;
+    Debugger::ChannelProvider *m_qmlChannelProvider = nullptr;
+    Debugger::ChannelProvider *m_perfChannelProvider = nullptr;
     QmlDebug::QmlDebugServicesPreset m_qmlServices;
 };
 

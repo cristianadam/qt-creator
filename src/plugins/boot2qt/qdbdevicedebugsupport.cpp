@@ -49,17 +49,17 @@ public:
         });
 
         if (useGdbServer) {
-            m_debugChannelProvider = new SubChannelProvider(runControl);
+            m_debugChannelProvider = new ChannelProvider(runControl);
             addStartDependency(m_debugChannelProvider);
         }
 
         if (useQmlServer) {
-            m_qmlChannelProvider = new SubChannelProvider(runControl);
+            m_qmlChannelProvider = new ChannelProvider(runControl);
             addStartDependency(m_qmlChannelProvider);
         }
 
         if (usePerf) {
-            m_perfChannelProvider = new SubChannelProvider(runControl);
+            m_perfChannelProvider = new ChannelProvider(runControl);
             addStartDependency(m_perfChannelProvider);
         }
     }
@@ -115,9 +115,9 @@ private:
     friend class QdbDeviceQmlToolingSupport;
     friend class QdbDevicePerfProfilerSupport;
 
-    Debugger::SubChannelProvider *m_debugChannelProvider = nullptr;
-    Debugger::SubChannelProvider *m_qmlChannelProvider = nullptr;
-    Debugger::SubChannelProvider *m_perfChannelProvider = nullptr;
+    Debugger::ChannelProvider *m_debugChannelProvider = nullptr;
+    Debugger::ChannelProvider *m_qmlChannelProvider = nullptr;
+    Debugger::ChannelProvider *m_perfChannelProvider = nullptr;
     QmlDebug::QmlDebugServicesPreset m_qmlServices;
     Process m_launcher;
 };
@@ -172,9 +172,9 @@ void QdbDeviceDebugSupport::start()
 {
     setStartMode(Debugger::AttachToRemoteServer);
     setCloseMode(KillAndExitMonitorAtClose);
-    if (SubChannelProvider *provider = m_debuggee->m_debugChannelProvider)
+    if (ChannelProvider *provider = m_debuggee->m_debugChannelProvider)
         setRemoteChannel(provider->channel());
-    if (SubChannelProvider *provider = m_debuggee->m_qmlChannelProvider)
+    if (ChannelProvider *provider = m_debuggee->m_qmlChannelProvider)
         setQmlServer(provider->channel());
     setUseContinueInsteadOfRun(true);
     setContinueAfterAttach(true);

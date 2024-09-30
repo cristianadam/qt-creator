@@ -156,8 +156,8 @@ class DebuggerRunToolPrivate
 {
 public:
     QPointer<CoreUnpacker> coreUnpacker;
-    QPointer<SubChannelProvider> debugChannelProvider;
-    QPointer<SubChannelProvider> qmlChannelProvider;
+    QPointer<ChannelProvider> debugChannelProvider;
+    QPointer<ChannelProvider> qmlChannelProvider;
     bool addQmlServerInferiorCommandLineArgumentIfNeeded = false;
     int snapshotCounter = 0;
     int engineStartsNeeded = 0;
@@ -761,17 +761,17 @@ void DebuggerRunTool::setUsePortsGatherer(bool useCpp, bool useQml)
     runControl()->enablePortsGatherer();
     if (useCpp) {
         QTC_ASSERT(!d->debugChannelProvider, reportFailure(); return);
-        d->debugChannelProvider = new SubChannelProvider(runControl());
+        d->debugChannelProvider = new ChannelProvider(runControl());
         addStartDependency(d->debugChannelProvider);
     }
     if (useQml) {
         QTC_ASSERT(!d->qmlChannelProvider, reportFailure(); return);
-        d->qmlChannelProvider = new SubChannelProvider(runControl());
+        d->qmlChannelProvider = new ChannelProvider(runControl());
         addStartDependency(d->qmlChannelProvider);
     }
 }
 
-SubChannelProvider *DebuggerRunTool::debugChannelProvider() const
+ChannelProvider *DebuggerRunTool::debugChannelProvider() const
 {
     return d->debugChannelProvider;
 }
@@ -782,7 +782,7 @@ QUrl DebuggerRunTool::debugChannel() const
     return d->debugChannelProvider->channel();
 }
 
-SubChannelProvider *DebuggerRunTool::qmlChannelProvider() const
+ChannelProvider *DebuggerRunTool::qmlChannelProvider() const
 {
     return d->qmlChannelProvider;
 }
@@ -1054,7 +1054,7 @@ void DebuggerRunTool::showMessage(const QString &msg, int channel, int timeout)
 ////////////////////////////////////////////////////////////////////////
 
 /*!
-    \class Debugger::SubChannelProvider
+    \class Debugger::ChannelProvider
 
     The class implements a \c RunWorker to provide provide a url
     indicating usable connection end
@@ -1070,7 +1070,7 @@ void DebuggerRunTool::showMessage(const QString &msg, int channel, int timeout)
 
     The tool implementations can assume that any needed port
     forwarding setup is setup and handled transparently by
-    a \c SubChannelProvider instance.
+    a \c ChannelProvider instance.
 
     If there are multiple subchannels needed that need to share a
     common set of resources on the remote side, a device implementation
@@ -1085,13 +1085,13 @@ void DebuggerRunTool::showMessage(const QString &msg, int channel, int timeout)
     forwarding.
 */
 
-SubChannelProvider::SubChannelProvider(RunControl *runControl)
+ChannelProvider::ChannelProvider(RunControl *runControl)
     : RunWorker(runControl)
 {
     setId("SubChannelProvider");
 }
 
-void SubChannelProvider::start()
+void ChannelProvider::start()
 {
     m_channel.setScheme(urlTcpScheme());
     if (device()->extraData(RemoteLinux::Constants::SshForwardDebugServerPort).toBool())
