@@ -115,6 +115,8 @@ public:
     void setError(const QString &message);
     void setWarning(const QString &message);
 
+    void updateInitialCMakeArguments();
+
 private:
     void updateButtonState();
     void updateAdvancedCheckBox();
@@ -133,7 +135,6 @@ private:
 
     void batchEditConfiguration();
     void reconfigureWithInitialParameters();
-    void updateInitialCMakeArguments();
     void kitCMakeConfiguration();
     void updateConfigureDetailsWidgetsSummary(
         const QStringList &configurationArguments = QStringList());
@@ -1832,7 +1833,19 @@ QString CMakeBuildSystem::warning() const
 
 NamedWidget *CMakeBuildConfiguration::createConfigWidget()
 {
-    return new CMakeBuildSettingsWidget(this);
+    m_configWidget = new CMakeBuildSettingsWidget(this);
+    return m_configWidget;
+}
+
+void CMakeBuildConfiguration::updateInitialCMakeArguments()
+{
+    Q_ASSERT(m_configWidget);
+    m_configWidget->updateInitialCMakeArguments();
+}
+
+QStringList CMakeBuildConfiguration::initialCMakeOptions() const
+{
+    return initialCMakeArguments.allValues();
 }
 
 CMakeConfig CMakeBuildConfiguration::signingFlags() const
