@@ -30,10 +30,11 @@ namespace PerfProfiler::Internal {
 class PerfParserWorker final : public RunWorker
 {
 public:
-    PerfParserWorker(RunControl *runControl)
+    explicit PerfParserWorker(RunControl *runControl)
         : RunWorker(runControl)
     {
         setId("PerfParser");
+        runControl->requestPerfChannel();
 
         auto tool = PerfProfilerTool::instance();
         m_reader.setTraceManager(&traceManager());
@@ -62,10 +63,9 @@ public:
     {
         CommandLine cmd{findPerfParser()};
         m_reader.addTargetArguments(&cmd, runControl());
-        QUrl url = runControl()->property("PerfConnection").toUrl();
-        if (url.isValid()) {
+        QUrl url = runControl()->perfChannel();
+        if (url.isValid())
             cmd.addArgs({"--host", url.host(), "--port", QString::number(url.port())});
-        }
         appendMessage("PerfParser args: " + cmd.arguments(), NormalMessageFormat);
         m_reader.createParser(cmd);
         m_reader.startParser();
