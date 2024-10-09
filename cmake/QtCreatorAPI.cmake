@@ -333,12 +333,18 @@ endfunction(add_qtc_library)
 
 
 function(markdown_to_json resultVarName filepath)
-  file(STRINGS ${filepath} markdown)
+  file(READ ${filepath} markdownstr)
+  # We need to first replace any ; as cmake would count them as a list separator
+  string(REPLACE ";" "<__SEMI__>" markdownstr "${markdownstr}")
+  # Convert the string to a list of lines
+  string(REGEX REPLACE "\n" ";" markdown "${markdownstr}")
   list(TRANSFORM markdown REPLACE "\\\\" "\\\\\\\\") # Replace \ with \\
   list(TRANSFORM markdown REPLACE "\\\"" "\\\\\"") # Replace " with \"
   list(TRANSFORM markdown PREPEND "        \"" )
   list(TRANSFORM markdown APPEND "\"")
   list(JOIN markdown ",\n" result)
+  # Replace the <__SEMI__> with \; again
+  string(REPLACE "<__SEMI__>" "\;" result "${result}")
   set(result "[\n${result}\n    ]")
   set("${resultVarName}" ${result} PARENT_SCOPE)
 endfunction()
