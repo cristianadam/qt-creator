@@ -543,6 +543,44 @@
 
     \endtable
 
+    \section2 Using Instant Blame
+
+    Instant Blame annotates the current editor line with the author and date this
+    line was last changed. The commit subject can optionally be shown.
+
+    \note Instant Blame is not available for unsaved files.
+
+    \note Instant Blame can be configured to ignore whitespace changes or line moves,
+    so the last real changes to the line are displayed.
+
+    When hovering the annotation, a tooltip with additional information is shown.
+    From the tooltip, the following actions are available:
+
+    \table
+        \header
+            \li Action
+            \li Description
+        \row
+            \li Blame <hash>
+            \li Opens the full file blame for the revision of \a hash
+        \row
+            \li Blame Parent
+            \li Opens the full file blame for the parent revision of \a hash
+        \row
+            \li File at <hash>
+            \li Opens the file contents at the revision of \a hash
+        \row
+            \li Log for line <line>
+            \li Shows a log with all the commits that touched the \a line
+        \row
+            \li Icon "Copy"
+            \li Copies the full \a hash to the clipboard
+        \row
+            \li commit <hash>
+            \li Opens the commit \a hash with full description and diff
+
+    \note Most of these actions have no meaning for uncommmited changes.
+
     \section2 Using Git with Subversion
 
     You can use Git as a client for a Subversion server. To fetch changes from a
