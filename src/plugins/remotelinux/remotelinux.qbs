@@ -5,6 +5,7 @@ QtcPlugin {
     Depends { name: "QmlDebug" }
     Depends { name: "Utils" }
 
+    Depends { name: "CmdBridgeClient" }
     Depends { name: "Core" }
     Depends { name: "Debugger" }
     Depends { name: "ProjectExplorer" }

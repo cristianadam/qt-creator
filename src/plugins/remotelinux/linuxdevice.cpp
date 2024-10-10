@@ -15,6 +15,9 @@
 #include <coreplugin/icore.h>
 #include <coreplugin/messagemanager.h>
 
+#include <gocmdbridge/client/bridgedfileaccess.h>
+#include <gocmdbridge/client/cmdbridgeclient.h>
+
 #include <projectexplorer/devicesupport/devicemanager.h>
 #include <projectexplorer/devicesupport/filetransfer.h>
 #include <projectexplorer/devicesupport/filetransferinterface.h>
@@ -38,6 +41,7 @@
 #include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
 #include <utils/stringutils.h>
+#include <utils/synchronizedvalue.h>
 #include <utils/temporaryfile.h>
 #include <utils/threadutils.h>
 
@@ -288,10 +292,10 @@ private:
 class ShellThreadHandler;
 class LinuxDevicePrivate;
 
-class LinuxDeviceFileAccess : public UnixDeviceFileAccess
+class LinuxDeviceFallbackFileAccess : public UnixDeviceFileAccess
 {
 public:
-    LinuxDeviceFileAccess(LinuxDevicePrivate *dev)
+    LinuxDeviceFallbackFileAccess(LinuxDevicePrivate *dev)
         : m_dev(dev)
     {}
 
@@ -329,14 +333,62 @@ public:
     void setDisconnected(bool disconnected);
     bool checkDisconnectedWithWarning();
 
+    enum ConnectionKnowledge { ConnectionOk, ConnectionStateUnknown };
+
+    DeviceFileAccess *createFileAccess(ConnectionKnowledge knowledge)
+    {
+        if (DeviceFileAccess *fileAccess = m_fileAccess.readLocked()->get())
+            return fileAccess;
+
+        SynchronizedValue<std::unique_ptr<DeviceFileAccess>>::unique_lock fileAccess
+            = m_fileAccess.writeLocked();
+
+        if (*fileAccess)
+            return fileAccess->get();
+
+        if (!q->disconnected()) {
+            bool connectionOk = false;
+            if (knowledge == ConnectionOk) {
+                qCWarning(linuxDeviceLog) << "Device is known to be connected, skipping quick test";
+                connectionOk = true;
+            } else {
+                qCWarning(linuxDeviceLog) << "Device not known to be connected, running quick test";
+                RunResult test = runInShell({"id", {}});
+                if (test.exitCode == 0) {
+                    qCWarning(linuxDeviceLog) << "Device is connected, result stdout:" << test.stdOut
+                              << "stderr: " << test.stdErr << "Trying to create bridge now";
+                    connectionOk = true;
+                } else {
+                    qCWarning(linuxDeviceLog) << "Device quick test failed";
+                }
+            }
+
+            if (connectionOk) {
+                auto fAccess = std::make_unique<CmdBridge::FileAccess>();
+                Result initResult = fAccess->deployAndInit(Core::ICore::libexecPath(), q->rootPath());
+                if (initResult) {
+                    qCWarning(linuxDeviceLog) << "Bridge ok to use";
+                    *fileAccess = std::move(fAccess);
+                    return fileAccess->get();
+                }
+                qCWarning(linuxDeviceLog) << "Failed to start CmdBridge:" << initResult.error()
+                                           << ", falling back to slow direct access";
+            }
+        } else {
+            qCWarning(linuxDeviceLog) << "Device not connected";
+        }
+        *fileAccess = std::make_unique<LinuxDeviceFallbackFileAccess>(this);
+        return fileAccess->get();
+    }
+
     LinuxDevice *q = nullptr;
     QThread m_shellThread;
     ShellThreadHandler *m_handler = nullptr;
     mutable QMutex m_shellMutex;
-    LinuxDeviceFileAccess m_fileAccess{this};
 
     QReadWriteLock m_environmentCacheLock;
     std::optional<Environment> m_environmentCache;
+    SynchronizedValue<std::unique_ptr<DeviceFileAccess>> m_fileAccess;
 };
 
 void LinuxDevicePrivate::invalidateEnvironmentCache()
@@ -369,7 +421,7 @@ Environment LinuxDevicePrivate::getEnvironment()
     return m_environmentCache.value();
 }
 
-RunResult LinuxDeviceFileAccess::runInShell(const CommandLine &cmdLine,
+RunResult LinuxDeviceFallbackFileAccess::runInShell(const CommandLine &cmdLine,
                                             const QByteArray &stdInData) const
 {
     if (disconnected())
@@ -377,7 +429,7 @@ RunResult LinuxDeviceFileAccess::runInShell(const CommandLine &cmdLine,
     return m_dev->runInShell(cmdLine, stdInData);
 }
 
-Environment LinuxDeviceFileAccess::deviceEnvironment() const
+Environment LinuxDeviceFallbackFileAccess::deviceEnvironment() const
 {
     if (disconnected())
         return {};
@@ -385,7 +437,7 @@ Environment LinuxDeviceFileAccess::deviceEnvironment() const
     return m_dev->getEnvironment();
 }
 
-bool LinuxDeviceFileAccess::disconnected() const
+bool LinuxDeviceFallbackFileAccess::disconnected() const
 {
     return m_dev->checkDisconnectedWithWarning();
 }
@@ -1004,6 +1056,7 @@ public:
            return false;
         return true;
     }
+
 private:
     mutable QMutex m_mutex;
     SshParameters m_displaylessSshParameters;
@@ -1016,7 +1069,6 @@ private:
 LinuxDevice::LinuxDevice()
     : d(new LinuxDevicePrivate(this))
 {
-    setFileAccess(&d->m_fileAccess);
     setDisplayType(Tr::tr("Remote Linux"));
     setOsType(OsTypeLinux);
     setDefaultDisplayName(Tr::tr("Remote Linux Device"));
@@ -1030,6 +1082,8 @@ LinuxDevice::LinuxDevice()
     setSshParameters(sshParams);
 
     disconnected.setSettingsKey("Disconnected");
+
+    setFileAccessFactory([this] { return d->createFileAccess(LinuxDevicePrivate::ConnectionStateUnknown); });
 
     addDeviceAction({Tr::tr("Deploy Public Key..."), [](const IDevice::Ptr &device, QWidget *parent) {
         if (auto d = Internal::PublicKeyDeploymentDialog::createDialog(device, parent)) {
@@ -1173,11 +1227,16 @@ void LinuxDevicePrivate::setDisconnected(bool disconnected)
     if (disconnected == q->disconnected())
         return;
 
+    qCWarning(linuxDeviceLog) << "Device changing disconnected to" << disconnected;
+
     q->disconnected.setValue(disconnected);
 
-    if (disconnected)
+    if (disconnected) {
         m_handler->closeShell();
-
+    } else {
+        m_fileAccess.writeLocked()->reset();  // Forces recreation
+        createFileAccess(ConnectionOk);
+    }
 }
 
 void LinuxDevicePrivate::checkOsType()
