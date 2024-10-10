@@ -174,8 +174,9 @@ static void initTAndCAcceptDialog()
             QDialog dialog(ICore::dialogParent());
             dialog.setWindowTitle(Tr::tr("Terms and Conditions"));
 
-            QDialogButtonBox buttonBox(
-                QDialogButtonBox::StandardButton::Yes | QDialogButtonBox::StandardButton::No);
+            QDialogButtonBox buttonBox;
+            buttonBox.addButton(Tr::tr("I Accept"), QDialogButtonBox::ButtonRole::YesRole);
+            buttonBox.setStandardButtons(QDialogButtonBox::StandardButton::No);
             QObject::connect(&buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
             QObject::connect(&buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 
