@@ -421,12 +421,6 @@ void IssuesWidget::initDashboardList(const QString &preferredProject)
     m_dashboardListUninitialized = false;
     const QList<AxivionServer> servers = settings().allAvailableServers();
     if (servers.isEmpty()) {
-        switchActiveDashboardId({});
-        {
-            GuardLocker lock(m_signalBlocker);
-            m_dashboardProjects->clear();
-        }
-        updateBasicProjectInfo(std::nullopt);
         showOverlay(Tr::tr("Configure dashboards in Preferences > Axivion > General."), SettingsIcon);
         return;
     }
