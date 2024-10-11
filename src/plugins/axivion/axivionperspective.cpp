@@ -253,6 +253,7 @@ IssuesWidget::IssuesWidget(QWidget *parent)
                 m_dashboardProjects->clear();
             }
             updateBasicProjectInfo(std::nullopt);
+            m_issuesView->hideProgressIndicator();
         }
     });
 
@@ -449,8 +450,10 @@ void IssuesWidget::reinitProjectList(const QString &currentProject)
 {
     const auto onDashboardInfoFetched
             = [this, currentProject] (const expected_str<DashboardInfo> &info) {
-        if (!info)
+        if (!info) {
+            m_issuesView->hideProgressIndicator();
             return;
+        }
         GuardLocker lock(m_signalBlocker);
         m_dashboardProjects->addItems(info->projects);
         if (!currentProject.isEmpty() && info->projects.contains(currentProject))
@@ -460,6 +463,9 @@ void IssuesWidget::reinitProjectList(const QString &currentProject)
         GuardLocker lock(m_signalBlocker);
         m_dashboardProjects->clear();
     }
+    if (m_overlay)
+        m_overlay->hide();
+    m_issuesView->showProgressIndicator();
     fetchDashboardAndProjectInfo(onDashboardInfoFetched, currentProject);
 }
 
