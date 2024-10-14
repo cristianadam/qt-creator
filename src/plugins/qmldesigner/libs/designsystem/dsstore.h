@@ -6,6 +6,8 @@
 #include <dsthememanager.h>
 #include <externaldependenciesinterface.h>
 
+#include <QStringList>
+
 namespace QmlDesigner {
 class DSThemeManager;
 class ExternalDependenciesInterface;
@@ -32,6 +34,9 @@ public:
 
     DSThemeManager *addCollection(const QString &qmlTypeName);
     std::optional<QString> typeName(DSThemeManager *collection) const;
+
+    QStringList collectionNames() const;
+    std::optional<DSThemeManager *> collection(const QString &typeName);
 
 private:
     std::optional<QString> loadCollection(const QString &typeName, const Utils::FilePath &qmlFilePath);
