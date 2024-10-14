@@ -112,6 +112,27 @@ Definitions definitionsForMimeType(const QString &mimeType)
         if (rememberedDefinition.isValid() && definitions.contains(rememberedDefinition))
             definitions = {rememberedDefinition};
     }
+
+    if (!definitions.isEmpty())
+        return definitions;
+
+    auto mt = Utils::mimeTypeForName(mimeType);
+
+    if (mt.isValid()) {
+        auto aliases = mt.aliases();
+        for (const auto &alias : aliases) {
+            definitions = highlightRepository()->definitionsForMimeType(alias).toList();
+            if (definitions.size() > 1) {
+                const Definition &rememberedDefinition
+                    = definitionForSetting(kDefinitionForMimeType, alias);
+                if (rememberedDefinition.isValid() && definitions.contains(rememberedDefinition))
+                    definitions = {rememberedDefinition};
+            }
+            if (!definitions.isEmpty())
+                break;
+        }
+    }
+
     return definitions;
 }
 
