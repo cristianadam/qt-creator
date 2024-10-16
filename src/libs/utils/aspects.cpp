@@ -96,7 +96,7 @@ public:
     BaseAspect::DataCloner m_dataCloner;
     QList<BaseAspect::DataExtractor> m_dataExtractors;
 
-    MacroExpander *m_expander = globalMacroExpander();
+    MacroExpander m_expander;
     QUndoStack *m_undoStack = nullptr;
 };
 
@@ -143,8 +143,10 @@ public:
 BaseAspect::BaseAspect(AspectContainer *container)
     : d(new Internal::BaseAspectPrivate(container))
 {
-    if (container)
+    if (container) {
         container->registerAspect(this);
+        d->m_expander.registerSubExpander(container->macroExpander());
+    }
     addDataExtractor(this, &BaseAspect::variantValue, &Data::value);
 }
 
@@ -741,12 +743,14 @@ QVariant BaseAspect::fromSettingsValue(const QVariant &val) const
 
 void BaseAspect::setMacroExpander(MacroExpander *expander)
 {
-    d->m_expander = expander;
+    d->m_expander.clear();
+    if (expander)
+        d->m_expander.registerSubExpander(expander);
 }
 
 MacroExpander *BaseAspect::macroExpander() const
 {
-    return d->m_expander;
+    return &d->m_expander;
 }
 
 void BaseAspect::addOnChanged(QObject *guard, const Callback &callback)
@@ -781,15 +785,11 @@ void BaseAspect::addOnLabelPixmapChanged(QObject *guard, const Callback &callbac
 
 void BaseAspect::addMacroExpansion(QWidget *w)
 {
-    if (!d->m_expander)
-        return;
     const auto chooser = new VariableChooser(w);
     chooser->addSupportedWidget(w);
-    if (d->m_expander == globalMacroExpander()) // default for VariableChooser()
-        return;
-    chooser->addMacroExpanderProvider([this] { return d->m_expander; });
+    chooser->addMacroExpanderProvider([this] { return &d->m_expander; });
     if (auto pathChooser = qobject_cast<PathChooser *>(w))
-        pathChooser->setMacroExpander(d->m_expander);
+        pathChooser->setMacroExpander(&d->m_expander);
 }
 
 namespace Internal {
@@ -3331,14 +3331,6 @@ void AspectContainer::setEnabled(bool enabled)
 
     for (BaseAspect *aspect : std::as_const(d->m_items))
         aspect->setEnabled(enabled);
-}
-
-void AspectContainer::setMacroExpander(MacroExpander *expander)
-{
-    BaseAspect::setMacroExpander(expander);
-
-    for (BaseAspect *aspect : std::as_const(d->m_items))
-        aspect->setMacroExpander(expander);
 }
 
 bool AspectContainer::equals(const AspectContainer &other) const

@@ -481,6 +481,16 @@ void MacroExpander::registerSubProvider(const MacroExpanderProvider &provider)
     d->m_subProviders.append(provider);
 }
 
+void MacroExpander::registerSubExpander(MacroExpander *expander)
+{
+    d->m_subProviders.append([expander] { return expander; });
+}
+
+void MacroExpander::clear()
+{
+    d->m_subProviders.clear();
+}
+
 bool MacroExpander::isAccumulating() const
 {
     return d->m_accumulating;

@@ -999,8 +999,6 @@ public:
     void setUndoStack(QUndoStack *undoStack) override;
     void setEnabled(bool enabled) override;
 
-    void setMacroExpander(MacroExpander *expander);
-
     template <typename T> T *aspect() const
     {
         for (BaseAspect *aspect : aspects())
