@@ -22,6 +22,9 @@ class JsonWizardGenerator;
 
 namespace Internal {
 
+bool isPluginRunning(const QString &id);
+bool isAnyPluginRunning(const QStringList &ids);
+
 class JsonWizardJsExtension : public QObject
 {
     Q_OBJECT
@@ -29,6 +32,8 @@ public:
     JsonWizardJsExtension(JsonWizard *wizard);
 
     Q_INVOKABLE QVariant value(const QString &name) const;
+    Q_INVOKABLE bool isPluginRunning(const QString &id) const;
+    Q_INVOKABLE bool isAnyPluginRunning(const QStringList &ids) const;
 
 private:
     JsonWizard *m_wizard;
