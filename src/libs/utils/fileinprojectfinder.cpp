@@ -37,6 +37,13 @@ static bool checkPath(const FilePath &candidate, int matchLength,
     return false;
 }
 
+static QString constructCandidatePath(const QStringList &segments, int index, const QString &projectDir)
+{
+    QString candidateString = segments.mid(index).join(QLatin1Char('/'));
+    candidateString.prepend(projectDir + QLatin1Char('/'));
+    return candidateString;
+}
+
 /*!
   \class Utils::FileInProjectFinder
   \inmodule QtCreator
@@ -213,55 +220,26 @@ bool FileInProjectFinder::findFileOrDirectory(const FilePath &originalPath, File
         m_cache.erase(it);
     }
 
-    if (!m_projectDir.isEmpty()) {
-        qCDebug(finderLog) << "FileInProjectFinder: checking project directory ...";
+    if (checkPath(originalPath, origLength, fileHandler, directoryHandler)) {
+        return handleSuccess(originalPath, {originalPath}, origLength, "exact match");
+    }
 
-        int prefixToIgnore = -1;
-        const QChar separator = QLatin1Char('/');
-        if (originalPath.startsWith(m_projectDir.toFSPathString() + separator)) {
-            if (originalPath.osType() == OsTypeMac) {
-                // starting with the project path is not sufficient if the file was
-                // copied in an insource build, e.g. into MyApp.app/Contents/Resources
-                static const QString appResourcePath = QString::fromLatin1(".app/Contents/Resources");
-                if (originalPath.contains(appResourcePath)) {
-                    // the path is inside the project, but most probably as a resource of an insource build
-                    // so ignore that path
-                    prefixToIgnore = originalPath.toFSPathString().indexOf(appResourcePath) + appResourcePath.length();
-                }
-            }
-
-            if (prefixToIgnore == -1
-                    && checkPath(originalPath, origLength, fileHandler, directoryHandler)) {
-                return handleSuccess(originalPath, {originalPath}, origLength,
-                                     "in project directory");
-            }
+    qCDebug(finderLog) << "FileInProjectFinder: checking project directory ...";
+    const QChar separator = QLatin1Char('/');
+    if (originalPath.startsWith(m_projectDir.toFSPathString() + separator)) {
+        if (checkPath(originalPath, origLength, fileHandler, directoryHandler)) {
+            return handleSuccess(originalPath, {originalPath}, origLength, "in project directory");
         }
+    }
 
-        qCDebug(finderLog) << "FileInProjectFinder:"
-                           << "checking stripped paths in project directory ...";
+    qCDebug(finderLog) << "FileInProjectFinder: checking stripped paths in project directory ...";
+    for (int index = 0; index < segments.size(); ++index) {
+        QString candidateString = constructCandidatePath(segments, index, m_projectDir.toString());
+        const FilePath candidate = FilePath::fromString(candidateString);
+        const int matchLength = origLength - candidateString.length();
 
-        // Strip directories one by one from the beginning of the path,
-        // and see if the new relative path exists in the build directory.
-        if (prefixToIgnore < 0) {
-            if (!originalPath.isAbsolutePath()
-                    && !originalPath.startsWith(separator)) {
-                prefixToIgnore = 0;
-            } else {
-                prefixToIgnore = originalPath.toFSPathString().indexOf(separator);
-            }
-        }
-        while (prefixToIgnore != -1) {
-            QString candidateString = originalPath.toFSPathString();
-            candidateString.remove(0, prefixToIgnore);
-            candidateString.prepend(m_projectDir.toString());
-            const FilePath candidate = FilePath::fromString(candidateString);
-            const int matchLength = origLength - prefixToIgnore;
-            // FIXME: This might be a worse match than what we find later.
-            if (checkPath(candidate, matchLength, fileHandler, directoryHandler)) {
-                return handleSuccess(originalPath, {candidate}, matchLength,
-                                     "in project directory");
-            }
-            prefixToIgnore = originalPath.toString().indexOf(separator, prefixToIgnore + 1);
+        if (checkPath(candidate, matchLength, fileHandler, directoryHandler)) {
+            return handleSuccess(originalPath, {candidate}, matchLength, "in project directory");
         }
     }
 
