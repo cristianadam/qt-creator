@@ -1,5 +1,6 @@
 add_subdirectory(3rdparty)
 add_subdirectory(buildoutputparser)
+add_subdirectory(testfindfileordirectoy)
 
 function(add_qtc_cpp_tool name)
   add_qtc_executable(${name}
