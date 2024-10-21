@@ -16,13 +16,6 @@
 
     To use the plugin, you must have access to an Axivion dashboard
     server.
-    To inspect issues found during the analyses:
-
-    \list
-        \li Go to \uicontrol Analyze > \uicontrol Axivion.
-        \li Switch to the \uicontrol Debug mode, and select \uicontrol Axivion
-            in the debugger toolbar.
-    \endlist
 
     The editor shows found issues as inline annotations if the project matches
     the currently open one and the respective file is part of the project.
@@ -38,10 +31,20 @@
 
     \section1 View issues
 
-    To view issues, select a dashboard and a project.
+    To inspect issues found during the analyses:
 
-    The \uicontrol Axivion dashboard displays the following types of
-    issues that Axivion found in the selected project:
+    \list 1
+        \li To go to the \uicontrol Axivion view:
+            \image qtcreator-axivion-issue-search.webp {Issues in Axivion view}
+            \list
+                \li Go to \uicontrol Analyze > \uicontrol Axivion.
+                \li Switch to the \uicontrol Debug mode, and select
+                    \uicontrol Axivion in the debugger toolbar.
+            \endlist
+        \li Select a dashboard and a project.
+    \endlist
+
+    Axivion looks for the following types of issues in the selected project:
 
     \table
     \header
@@ -78,8 +81,6 @@
     \endtable
 
     \section1 Filter issues
-
-    \image qtcreator-axivion-issue-search.webp {Issues in Axivion view}
 
     To filter issues, select:
 
