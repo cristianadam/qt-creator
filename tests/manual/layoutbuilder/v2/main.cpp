@@ -8,15 +8,12 @@
 #include <QLabel>
 #include <QGroupBox>
 #include <QTextEdit>
+#include <QSpinBox>
 
 using namespace Layouting;
 
-int main(int argc, char *argv[])
+void bindTest()
 {
-    QApplication app(argc, argv);
-
-    TextEdit::Id textId;
-
     QWidget *w = nullptr;
     QGroupBox *g = nullptr;
     QLabel *l = nullptr;
@@ -25,36 +22,93 @@ int main(int argc, char *argv[])
         bindTo(&w),  // Works, as GroupInterface derives from WidgetInterface
         // bindTo(&l),  // Does (intentionally) not work, GroupInterface does not derive from LabelInterface
         bindTo(&g),
+    };
+}
+
+Column direct()
+{
+    Binder<QString> content;
+
+    return Column {
+        Label {
+            text(content)
+        },
+        TextEdit {
+            onValueChanged(content)
+        },
+        Label {
+            text(content)
+        },
+    };
+}
+
+Column transformed()
+{
+    Binder<int> spinBox;
+
+    Binder<QString> spinboxAsText = spinBox.transformed<QString>([](int value) {
+         return QString("World: %1").arg(value);
+    });
+
+    return Column {
+        SpinBox {
+            onValueChanged(spinBox),
+        },
+        TextEdit {
+            text(spinboxAsText),
+        },
+    };
+}
+
+int main(int argc, char *argv[])
+{
+    QApplication app(argc, argv);
+
+    // Binder<int> spinBox;
+    // Binder<int> spinBox2;
+
+    // Binder<QString> spinboxAsText = spinBox.transformed<QString>([](int value) {
+    //       // return QString("World: %1").arg(value);
+    //       return QString("XX");
+    // });
+
+    Group {
         size(300, 200),
         title("HHHHHHH"),
         Form {
             "Hallo",
             Group {
                 title("Title"),
-                Column {
-                    Label {
-                        text("World")
-                    },
-                    TextEdit {
-                        id(&textId),
-                        text("Och noe")
-                    }
-                }
+                direct(),
+                //transformed(),
             },
-            br,
-            "Col",
-            Column {
-                Row { "1", "2", "3" },
-                Row { "3", "4", "6" }
-            },
-            br,
-            "Grid",
-            Grid {
-                Span { 2, QString("1111111") }, "3", br,
-                "3", "4", "6", br,
-                "4", empty, "6", br,
-                hr, "4", "6"
-            },
+            // Group {
+            //     title("Title"),
+            //     Column {
+            //         SpinBox {
+            //             // value(spinBox2),
+            //             onValueChanged(spinBox),
+            //         },
+            //         TextEdit {
+            //             // text(spinboxAsText),
+            //             // onValueChanged(content)
+            //         },
+            //     }
+            // },
+            // br,
+            // "Col",
+            // Column {
+            //     Row { "1", "2", "3" },
+            //     Row { "3", "4", "6" }
+            // },
+            // br,
+            // "Grid",
+            // Grid {
+            //     Span { 2, QString("1111111") }, "3", br,
+            //     "3", "4", "6", br,
+            //     "4", empty, "6", br,
+            //     hr, "4", "6"
+            // },
             br,
             Column {
                 Label {
@@ -62,9 +116,10 @@ int main(int argc, char *argv[])
                     size(30, 20)
                 },
                 Row {
-                    SpinBox {
-                        onTextChanged([&](const QString &text) { textId->setText(text); })
-                    },
+                    // SpinBox {
+                    //     bindAs(spinBox),
+                    //     // onTextChanged([&](const QString &text) { textId->setText(text); })
+                    // },
                     st,
                     PushButton {
                         text("Quit"),

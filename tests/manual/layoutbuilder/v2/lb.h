@@ -5,10 +5,13 @@
 #pragma once
 
 #include <QMargins>
+#include <QMetaMethod>
+#include <QPointer>
 #include <QString>
 
 #include <functional>
 #include <initializer_list>
+#include <memory>
 
 #if defined(UTILS_LIBRARY)
 #  define QTCREATOR_UTILS_EXPORT Q_DECL_EXPORT
@@ -90,6 +93,96 @@ inline void doit(L *x, name##_TAG, const std::tuple<Args...> &arg) { \
 namespace Layouting {
 
 //////////////////////////////////////////////
+
+struct Trigger
+{
+    QPointer<QObject> sender;
+    QMetaMethod method;
+};
+
+template <typename T>
+class Binder
+{
+public:
+    using Producer = std::function<T()>;
+
+    struct BaseData
+    {
+        // Shared with transformers
+        std::shared_ptr<Trigger> trigger = std::make_shared<Trigger>();
+        Producer producer;
+    };
+
+    struct Data : BaseData {
+        QList<std::function<void()>> pendingReceiverUpdates;
+        QList<std::function<void()>> pendingTransformerUpdates;
+    };
+
+    Binder() : data(std::make_shared<Data>()) {}
+
+    Binder(QObject *sender, const QMetaMethod &method, const Producer &producer)
+        : data(std::make_shared<Data>())
+    {
+        data->trigger->sender = sender;
+        data->trigger->method = method;
+        data->producer = producer;
+    }
+
+    Binder(const std::shared_ptr<Data> &data)
+        : data(data)
+    {}
+
+    template <class U>
+    Binder<U> transformed(const std::function<U(const T &)> &transformer) {
+        auto newData = std::make_shared<typename Binder<U>::Data>();
+        newData->trigger = data->trigger;
+        if (data->producer) {
+            qDebug() << "Transforming producer";
+            newData->producer = [transformer, producer=data->producer] { return transformer(producer()); };
+        } else {
+            qDebug() << "Not transforming producer yet";
+        }
+        newData->pendingReceiverUpdates = data->pendingReceiverUpdates;
+        qDebug() << "Copying pending connects" << newData->pendingReceiverUpdates.size()
+                 << newData->trigger->sender;
+        // newData->pendingTransformerUpdates.append([]) = data->pendingReceiversUpdates;
+        Binder<U> result{newData};
+        // data->pendingTransformerUpdates.append([result, *this] {
+        //     result.data->trigger = data->trigger;
+        //     result.data->trigger = data->trigger;
+        //     qDebug() << "Handling transformer update " << result.data->trigger->sender;
+        // });
+        return result;
+    };
+
+    T value() const { return data->producer(); }
+    Producer producer() const { return data->producer; }
+    QObject *sender() const { return data->sender; }
+    QMetaMethod method() const { return data->method; }
+
+    void setup(QObject *sender, const QMetaMethod &method, const Producer &producer)
+    {
+        data->trigger->sender = sender;
+        data->trigger->method = method;
+        data->producer = producer;
+        qDebug() << "FINALIZING CONNECTS" << data->pendingReceiverUpdates.size();
+        for (const std::function<void()> &pendingUpdate : data->pendingReceiverUpdates) {
+            qDebug() << "FINALIZING RECEIVER CONNECT";
+            pendingUpdate();
+        }
+        for (const std::function<void()> &pendingUpdate : data->pendingTransformerUpdates) {
+            qDebug() << "FINALIZING TRANSFORMER UPDATE";
+            pendingUpdate();
+        }
+        data->pendingTransformerUpdates.clear();
+        data->pendingReceiverUpdates.clear();
+    }
+
+// private:
+    std::shared_ptr<Data> data;
+};
+
+template <class T> using SetterArg = std::variant<T, Binder<T>>;
 
 //
 // Basic
@@ -282,13 +375,15 @@ public:
 class QTCREATOR_UTILS_EXPORT Label : public Widget
 {
 public:
-    using Implementation = QLabel;
+    using Implementation = class LabelImpl;
     using I = Building::BuilderItem<Label>;
 
     Label(std::initializer_list<I> ps);
-    Label(const QString &text);
+    Label(const SetterArg<QString> &text);
 
-    void setText(const QString &);
+    void setText(const SetterArg<QString> &);
+    // QLabel does not have a suitable signal
+    // void onValueChanged(Binder<QString> &binder);
 };
 
 class QTCREATOR_UTILS_EXPORT Group : public Widget
@@ -306,13 +401,15 @@ public:
 class QTCREATOR_UTILS_EXPORT SpinBox : public Widget
 {
 public:
-    using Implementation = QSpinBox;
+    // using Implementation = QSpinBox;
+    using Implementation = class SpinBoxImpl;
     using I = Building::BuilderItem<SpinBox>;
 
     SpinBox(std::initializer_list<I> ps);
 
-    void setValue(int);
-    void onTextChanged(const std::function<void(QString)> &);
+    void setValue(const SetterArg<int> &);
+
+    void onValueChanged(Binder<int> &binder);
 };
 
 class QTCREATOR_UTILS_EXPORT PushButton : public Widget
@@ -330,13 +427,15 @@ public:
 class QTCREATOR_UTILS_EXPORT TextEdit : public Widget
 {
 public:
-    using Implementation = QTextEdit;
+    // using Implementation = QTextEdit;
+    using Implementation = class TextEditImpl;
     using I = Building::BuilderItem<TextEdit>;
-    using Id = Implementation *;
 
     TextEdit(std::initializer_list<I> ps);
 
-    void setText(const QString &);
+    void setText(const SetterArg<QString> &);
+
+    void onValueChanged(Binder<QString> &binder);
 };
 
 class QTCREATOR_UTILS_EXPORT Splitter : public Widget
@@ -418,29 +517,39 @@ public:
 
 // Special dispatchers
 
+// Binding to a raw pointer
 
-class BindToId {};
+class BindToPtr {};
 
 template <typename T>
 auto bindTo(T **p)
 {
-    return Building::IdAndArg{BindToId{}, p};
+    return Building::IdAndArg{BindToPtr{}, p};
 }
 
 template <typename Interface>
-void doit(Interface *x, BindToId, auto p)
+void doit(Interface *x, BindToPtr, auto p)
 {
     *p = static_cast<Interface::Implementation *>(x->ptr);
 }
 
-class IdId {};
-auto id(auto p) { return Building::IdAndArg{IdId{}, p}; }
+
+// Binding to another LayoutBuilder element
+
+class ForwardValueId {};
+
+template <typename T>
+auto onValueChanged(Binder<T> &p)
+{
+    return Building::IdAndArg{ForwardValueId{}, p};
+}
 
 template <typename Interface>
-void doit(Interface *x, IdId, auto p)
+void doit(Interface *x, ForwardValueId, auto p)
 {
-    *p = static_cast<Interface::Implementation *>(x->ptr);
+    x->onValueChanged(p);
 }
+
 
 // Setter dispatchers
 
@@ -450,6 +559,7 @@ QTC_DEFINE_BUILDER_SETTER(groupChecker, setGroupChecker)
 QTC_DEFINE_BUILDER_SETTER(openExternalLinks, setOpenExternalLinks)
 QTC_DEFINE_BUILDER_SETTER(size, setSize)
 QTC_DEFINE_BUILDER_SETTER(text, setText)
+QTC_DEFINE_BUILDER_SETTER(bindText, bindText)
 QTC_DEFINE_BUILDER_SETTER(textFormat, setTextFormat)
 QTC_DEFINE_BUILDER_SETTER(textInteractionFlags, setTextInteractionFlags)
 QTC_DEFINE_BUILDER_SETTER(title, setTitle)
@@ -462,6 +572,7 @@ QTC_DEFINE_BUILDER_SETTER(onClicked, onClicked)
 QTC_DEFINE_BUILDER_SETTER(onLinkHovered, onLinkHovered)
 QTC_DEFINE_BUILDER_SETTER(onTextChanged, onTextChanged)
 QTC_DEFINE_BUILDER_SETTER(customMargins, setContentsMargins)
+QTC_DEFINE_BUILDER_SETTER(value, setValue)
 
 // Nesting dispatchers
 

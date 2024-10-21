@@ -17,6 +17,7 @@
 #include <QStyle>
 #include <QTabWidget>
 #include <QTextEdit>
+#include <QTimer>
 #include <QToolBar>
 
 namespace Layouting {
@@ -741,24 +742,102 @@ QWidget *Widget::emerge() const
     return access(this);
 }
 
+// ArgHandler
+
+
+class ValueUpdaterBase : public QObject
+{
+    Q_OBJECT
+
+public slots:
+    virtual void doUpdate() = 0;
+};
+
+template <class T>
+class ValueUpdater final : public ValueUpdaterBase
+{
+public:
+    ValueUpdater(const std::function<void(const T &)> &plainSetter)
+        : m_plainSetter(plainSetter)
+    {}
+
+    void operator()(const SetterArg<T> &arg)
+    {
+        if (std::holds_alternative<T>(arg)) {
+            m_plainSetter(std::get<T>(arg));
+        } else {
+            Binder<T> binder = std::get<Binder<T>>(arg);
+            if (binder.data->trigger->sender) {
+                qDebug() << "SETTING TRIGGER DIRECTLY";
+                doConnect(binder);
+            } else {
+                binder.data->pendingReceiverUpdates.append([this, binder] {
+                    qDebug() << "UPDATE TRIGGER FINALLY USED";
+                    doConnect(binder);
+                });
+                qDebug() << "UPDATE TRIGGER NOT USED YET, #RECEIVERS"
+                         << binder.data->pendingReceiverUpdates.size();
+            }
+        }
+    }
+
+    void doConnect(const Binder<T> &binder)
+    {
+        qDebug() << "DOING CONNECT";
+        m_producer = binder.data->producer;
+        int methodIndex = metaObject()->indexOfMethod("doUpdate()");
+        QObject::connect(binder.data->trigger->sender,
+                         binder.data->trigger->method,
+                         this,
+                         metaObject()->method(methodIndex));
+        doUpdate();
+    }
+
+    void doUpdate() override
+    {
+        qDebug() << "ACCESS producer" << bool(m_producer);
+        QTC_ASSERT(m_producer, return);
+        T val = m_producer();
+        qDebug() << "  PRODUCED producer" << val;
+        m_plainSetter(val);
+    }
+
+public:
+    std::function<void(const T &)> m_plainSetter;
+    std::function<T()> m_producer;
+};
+
 // Label
+
+class LabelImpl final : public QLabel
+{
+public:
+    ValueUpdater<QString> updater = { [this](const QString &t) { setText(t); } };
+};
 
 Label::Label(std::initializer_list<I> ps)
 {
-    ptr = new Implementation;
+    ptr = new LabelImpl;
     apply(this, ps);
 }
 
-Label::Label(const QString &text)
+Label::Label(const SetterArg<QString> &text)
 {
-    ptr = new Implementation;
-    setText(text);
+    ptr = new LabelImpl;
+    access(this)->updater(text);
 }
 
-void Label::setText(const QString &text)
+void Label::setText(const SetterArg<QString> &text)
 {
-    access(this)->setText(text);
+    access(this)->updater(text);
 }
+
+// void Label::onValueChanged(Binder<QString> &binder)
+// {
+//     Implementation *label = access(this);
+//     binder.setProducer([label] { return label->text(); });
+//     // binder.setTrigger({label, QMetaMethod::fromSignal(&QString::textChanged)});
+// }
 
 // Group
 
@@ -781,23 +860,39 @@ void Group::setGroupChecker(const std::function<void (QObject *)> &checker)
 
 // SpinBox
 
+class SpinBoxImpl : public QSpinBox
+{
+public:
+    ValueUpdater<int> updater = { [this](const int &t) { setValue(t); } };
+};
+
 SpinBox::SpinBox(std::initializer_list<I> ps)
 {
     ptr = new Implementation;
     apply(this, ps);
 }
 
-void SpinBox::setValue(int val)
+void SpinBox::setValue(const SetterArg<int> &val)
 {
-    access(this)->setValue(val);
+    access(this)->updater(val);
 }
 
-void SpinBox::onTextChanged(const std::function<void (QString)> &func)
+void SpinBox::onValueChanged(Binder<int> &binder)
 {
-    QObject::connect(access(this), &QSpinBox::textChanged, func);
+    qDebug() << "Setting up sender" << &binder.data;
+    Implementation *sp = access(this);
+    binder.setup(sp, QMetaMethod::fromSignal(&QSpinBox::valueChanged), [sp] {
+        return sp->value();
+    });
 }
 
 // TextEdit
+
+class TextEditImpl final : public QTextEdit
+{
+public:
+    ValueUpdater<QString> updater = { [this](const QString &t) { setText(t); } };
+};
 
 TextEdit::TextEdit(std::initializer_list<I> ps)
 {
@@ -805,9 +900,17 @@ TextEdit::TextEdit(std::initializer_list<I> ps)
     apply(this, ps);
 }
 
-void TextEdit::setText(const QString &text)
+void TextEdit::setText(const SetterArg<QString> &text)
 {
-    access(this)->setText(text);
+    access(this)->updater(text);
+}
+
+void TextEdit::onValueChanged(Binder<QString> &binder)
+{
+    Implementation *textEdit = access(this);
+    binder.setup(textEdit, QMetaMethod::fromSignal(&QTextEdit::textChanged), [textEdit] {
+        return textEdit->toPlainText();
+    });
 }
 
 // PushButton
@@ -970,3 +1073,5 @@ void addToLayout(Layout *layout, const Stretch &inner)
 
 
 } // Layouting
+
+#include "lb.moc"
