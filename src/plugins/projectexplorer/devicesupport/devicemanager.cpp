@@ -40,6 +40,12 @@ class DeviceManagerPrivate
 {
 public:
     DeviceManagerPrivate() = default;
+    ~DeviceManagerPrivate()
+    {
+        for (const IDevice::Ptr &dev : std::as_const(devices)) {
+            qDebug() << "DEV" << dev->displayName() << ":" << dev.use_count();
+        }
+    }
 
     int indexForId(Id id) const
     {

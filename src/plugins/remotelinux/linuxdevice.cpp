@@ -403,6 +403,7 @@ class SshProcessInterfacePrivate : public QObject
 {
 public:
     SshProcessInterfacePrivate(SshProcessInterface *sshInterface, const IDevice::ConstPtr &device);
+    ~SshProcessInterfacePrivate() { qDebug() << "DTOR SshProcessInterfacePrivate " << this << --n; }
 
     void start();
 
@@ -435,6 +436,8 @@ public:
     QByteArray m_output;
     QByteArray m_error;
     bool m_pidParsed = false;
+
+    inline static int n = 0;
 };
 
 SshProcessInterface::SshProcessInterface(const IDevice::ConstPtr &device)
@@ -631,6 +634,7 @@ SshProcessInterfacePrivate::SshProcessInterfacePrivate(SshProcessInterface *sshI
     , m_device(device)
     , m_process(this)
 {
+    qDebug() << "CTOR SshProcessInterfacePrivate " << this << n++;
     connect(&m_process, &Process::started, this, &SshProcessInterfacePrivate::handleStarted);
     connect(&m_process, &Process::done, this, &SshProcessInterfacePrivate::handleDone);
     connect(&m_process, &Process::readyReadStandardOutput,
