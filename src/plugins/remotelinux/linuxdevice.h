@@ -18,8 +18,13 @@ class SshConnectionHandle : public QObject
     Q_OBJECT
 
 public:
-    SshConnectionHandle(const ProjectExplorer::DeviceConstRef &device) : m_device(device) {}
-    ~SshConnectionHandle() override { emit detachFromSharedConnection(); }
+    SshConnectionHandle(const ProjectExplorer::DeviceConstRef &device) : m_device(device) {
+        qDebug() << "CTOR SshConnectionHandle " << this << n++;
+    }
+    ~SshConnectionHandle() override {
+        qDebug() << "DTOR SshConnectionHandle " << this << --n;
+        emit detachFromSharedConnection();
+    }
 
 signals:
     void connected(const QString &socketFilePath);
@@ -29,6 +34,7 @@ signals:
 
 private:
     ProjectExplorer::DeviceConstRef m_device;
+    inline static int n = 0;
 };
 
 } // Internal
