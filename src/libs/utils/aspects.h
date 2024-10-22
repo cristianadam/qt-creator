@@ -633,7 +633,12 @@ public:
     void setAutoApplyOnEditingFinished(bool applyOnEditingFinished);
     void setElideMode(Qt::TextElideMode elideMode);
 
-    void makeCheckable(CheckBoxPlacement checkBoxPlacement, const QString &optionalLabel, const Key &optionalBaseKey);
+    void makeCheckable(
+        CheckBoxPlacement checkBoxPlacement,
+        const QString &optionalLabel,
+        const Key &optionalBaseKey,
+        bool inverted = false,
+        bool defaultChecked = false);
     bool isChecked() const;
     void setChecked(bool checked);
 

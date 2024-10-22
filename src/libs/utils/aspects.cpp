@@ -896,7 +896,7 @@ public:
     template<class Widget>
     void updateWidgetFromCheckStatus(BaseAspect *aspect, Widget *w)
     {
-        const bool enabled = !m_checked || m_checked->volatileValue();
+        const bool enabled = (!m_checked || m_checked->volatileValue()) ^ (m_invertedChecked);
         if (m_uncheckedSemantics == UncheckedSemantics::Disabled)
             w->setEnabled(enabled && aspect->isEnabled());
         else
@@ -920,16 +920,23 @@ public:
         m_checked->setValue(checked);
     }
 
-    void makeCheckable(CheckBoxPlacement checkBoxPlacement, const QString &checkerLabel,
-                       const Key &checkerKey, BaseAspect *aspect)
+    void makeCheckable(
+        CheckBoxPlacement checkBoxPlacement,
+        const QString &checkerLabel,
+        const Key &checkerKey,
+        BaseAspect *aspect,
+        bool inverted,
+        bool defaultChecked)
     {
         QTC_ASSERT(!m_checked, return);
+        m_invertedChecked = inverted;
         m_checkBoxPlacement = checkBoxPlacement;
         m_checked.reset(new BoolAspect);
         m_checked->setLabel(checkerLabel, checkBoxPlacement == CheckBoxPlacement::Top
                                               ? BoolAspect::LabelPlacement::InExtraLabel
                                               : BoolAspect::LabelPlacement::AtCheckBox);
         m_checked->setSettingsKey(checkerKey);
+        m_checked->setDefaultValue(defaultChecked);
         m_checked->addOnChanged(aspect, [aspect] {
             // FIXME: Check.
             aspect->internalToBuffer();
@@ -965,6 +972,7 @@ public:
     CheckBoxPlacement m_checkBoxPlacement = CheckBoxPlacement::Right;
     UncheckedSemantics m_uncheckedSemantics = UncheckedSemantics::Disabled;
     std::unique_ptr<BoolAspect> m_checked;
+    bool m_invertedChecked = false;
 };
 
 class StringAspectPrivate
@@ -1451,10 +1459,15 @@ void StringAspect::bufferToGui()
     The state of the check box is made persistent when using a non-emtpy
     \a checkerKey.
 */
-void StringAspect::makeCheckable(CheckBoxPlacement checkBoxPlacement,
-                                 const QString &checkerLabel, const Key &checkerKey)
+void StringAspect::makeCheckable(
+    CheckBoxPlacement checkBoxPlacement,
+    const QString &checkerLabel,
+    const Key &checkerKey,
+    bool inverted,
+    bool defaultChecked)
 {
-    d->m_checkerImpl.makeCheckable(checkBoxPlacement, checkerLabel, checkerKey, this);
+    d->m_checkerImpl
+        .makeCheckable(checkBoxPlacement, checkerLabel, checkerKey, this, inverted, defaultChecked);
 }
 
 bool StringAspect::isChecked() const
@@ -1638,7 +1651,7 @@ void FilePathAspect::makeCheckable(CheckBoxPlacement checkBoxPlacement,
                                    const QString &checkerLabel,
                                    const Key &checkerKey)
 {
-    d->m_checkerImpl.makeCheckable(checkBoxPlacement, checkerLabel, checkerKey, this);
+    d->m_checkerImpl.makeCheckable(checkBoxPlacement, checkerLabel, checkerKey, this, false, false);
 }
 
 bool FilePathAspect::isChecked() const
