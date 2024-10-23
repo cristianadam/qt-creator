@@ -292,7 +292,6 @@ public:
 
     QtVersionData m_data;
 
-    bool m_isUpdating = false;
     bool m_mkspecUpToDate = false;
     bool m_mkspecReadUpToDate = false;
     bool m_defaultConfigIsDebug = true;
@@ -1319,52 +1318,45 @@ QVersionNumber QtVersion::qtVersion() const
     return QVersionNumber::fromString(qtVersionString());
 }
 
-void QtVersionPrivate::updateVersionInfo()
+Utils::expected_str<QtVersionData> dataForQMake(const FilePath m_qmakeCommand, const Environment env)
 {
-    if (m_data.versionInfoUpToDate || !m_qmakeIsExecutable || m_isUpdating)
-        return;
-
-    m_isUpdating = true;
-
-    // extract data from qmake executable
-    m_data.versionInfo.clear();
-    m_data.installed = true;
-    m_data.hasExamples = false;
-    m_data.hasDocumentation = false;
+    QtVersionData data;
 
     QString error;
-    if (!queryQMakeVariables(m_qmakeCommand, q->qmakeRunEnvironment(), &m_data.versionInfo, &error)) {
-        m_qmakeIsExecutable = false;
-        qWarning("Cannot update Qt version information from %s: %s.",
-                 qPrintable(m_qmakeCommand.displayName()), qPrintable(error));
-        qWarning("If this appears when running Qt Creator in Qt Creator make "
-                 "sure to disable \"Add build library search path to LD_LIBRARY_PATH\"");
-        return;
+    if (!QtVersionPrivate::queryQMakeVariables(m_qmakeCommand, env, &data.versionInfo, &error)) {
+        return Utils::make_unexpected(
+            QString("Cannot update Qt version information from %s: %s.\nIf this appears when "
+                    "running Qt Creator in Qt Creator make "
+                    "sure to disable \"Add build library search path to LD_LIBRARY_PATH\"")
+                .arg(m_qmakeCommand.displayName(), error));
     }
-    m_qmakeIsExecutable = true;
 
-    auto fileProperty = [this](const QByteArray &name) {
-        return m_qmakeCommand.withNewPath(qmakeProperty(name)).cleanPath();
+    auto fileProperty = [&](const QByteArray &name) {
+        return m_qmakeCommand.withNewPath(QtVersionPrivate::qmakeProperty(data.versionInfo, name))
+            .cleanPath();
     };
 
-    m_data.prefix = fileProperty("QT_INSTALL_PREFIX");
-    m_data.binPath = fileProperty("QT_INSTALL_BINS");
-    m_data.libExecPath = fileProperty("QT_INSTALL_LIBEXECS");
-    m_data.configurationPath = fileProperty("QT_INSTALL_CONFIGURATION");
-    m_data.dataPath = fileProperty("QT_INSTALL_DATA");
-    m_data.demosPath = fileProperty("QT_INSTALL_DEMOS");
-    m_data.docsPath = fileProperty("QT_INSTALL_DOCS");
-    m_data.examplesPath = fileProperty("QT_INSTALL_EXAMPLES");
-    m_data.headerPath = fileProperty("QT_INSTALL_HEADERS");
-    m_data.importsPath = fileProperty("QT_INSTALL_IMPORTS");
-    m_data.libraryPath = fileProperty("QT_INSTALL_LIBS");
-    m_data.pluginPath = fileProperty("QT_INSTALL_PLUGINS");
-    m_data.qmlPath = fileProperty("QT_INSTALL_QML");
-    m_data.translationsPath = fileProperty("QT_INSTALL_TRANSLATIONS");
-    m_data.hostBinPath = fileProperty("QT_HOST_BINS");
-    m_data.hostLibexecPath = fileProperty("QT_HOST_LIBEXECS");
-    m_data.hostDataPath = fileProperty("QT_HOST_DATA");
-    m_data.hostPrefixPath = fileProperty("QT_HOST_PREFIX");
+    data.installed = true;
+    data.hasExamples = false;
+    data.hasDocumentation = false;
+    data.prefix = fileProperty("QT_INSTALL_PREFIX");
+    data.binPath = fileProperty("QT_INSTALL_BINS");
+    data.libExecPath = fileProperty("QT_INSTALL_LIBEXECS");
+    data.configurationPath = fileProperty("QT_INSTALL_CONFIGURATION");
+    data.dataPath = fileProperty("QT_INSTALL_DATA");
+    data.demosPath = fileProperty("QT_INSTALL_DEMOS");
+    data.docsPath = fileProperty("QT_INSTALL_DOCS");
+    data.examplesPath = fileProperty("QT_INSTALL_EXAMPLES");
+    data.headerPath = fileProperty("QT_INSTALL_HEADERS");
+    data.importsPath = fileProperty("QT_INSTALL_IMPORTS");
+    data.libraryPath = fileProperty("QT_INSTALL_LIBS");
+    data.pluginPath = fileProperty("QT_INSTALL_PLUGINS");
+    data.qmlPath = fileProperty("QT_INSTALL_QML");
+    data.translationsPath = fileProperty("QT_INSTALL_TRANSLATIONS");
+    data.hostBinPath = fileProperty("QT_HOST_BINS");
+    data.hostLibexecPath = fileProperty("QT_HOST_LIBEXECS");
+    data.hostDataPath = fileProperty("QT_HOST_DATA");
+    data.hostPrefixPath = fileProperty("QT_HOST_PREFIX");
 
     struct CheckDir
     {
@@ -1373,22 +1365,42 @@ void QtVersionPrivate::updateVersionInfo()
     };
 
     QList<CheckDir> checkDirs = {
-        {&m_data.hostBinPath, &m_data.installed},
-        {&m_data.docsPath, &m_data.hasDocumentation},
-        {&m_data.examplesPath, &m_data.hasExamples},
-        {&m_data.demosPath, &m_data.hasDemos},
-    };
-    if (m_data.binPath.osType() != OsTypeMac)
-        checkDirs.push_back({&m_data.headerPath, &m_data.installed});
+                                 {&data.hostBinPath, &data.installed},
+                                 {&data.docsPath, &data.hasDocumentation},
+                                 {&data.examplesPath, &data.hasExamples},
+                                 {&data.demosPath, &data.hasDemos},
+                                 };
+    if (data.binPath.osType() != OsTypeMac)
+        checkDirs.push_back({&data.headerPath, &data.installed});
 
     QtConcurrent::map(checkDirs, [](CheckDir &checkDir) {
         *checkDir.isReadable = checkDir.path->isReadableDir();
     }).waitForFinished();
 
-    m_data.qtVersionString = qmakeProperty("QT_VERSION");
+    data.qtVersionString = QtVersionPrivate::qmakeProperty(data.versionInfo, "QT_VERSION");
 
-    m_isUpdating = false;
-    m_data.versionInfoUpToDate = true;
+    data.versionInfoUpToDate = true;
+
+    return data;
+}
+
+void QtVersionPrivate::updateVersionInfo()
+{
+    if (m_data.versionInfoUpToDate || !m_qmakeIsExecutable)
+        return;
+
+    // extract data from qmake executable
+    m_data.versionInfo.clear();
+    m_data.installed = true;
+    m_data.hasExamples = false;
+    m_data.hasDocumentation = false;
+
+    Utils::expected_str<QtVersionData> data = dataForQMake(m_qmakeCommand, q->qmakeRunEnvironment());
+    m_qmakeIsExecutable = data.has_value();
+    if (data.has_value())
+        m_data = data.value();
+    else
+        qWarning() << data.error();
 }
 
 QHash<ProKey,ProString> QtVersionPrivate::versionInfo()
