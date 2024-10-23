@@ -415,10 +415,7 @@ static ExecutableItem logcatRecipe(const Storage<RunnerStorage> &storage)
             const QString pidString = QString::number(storagePtr->m_processPID);
             for (const QByteArray &msg : std::as_const(lines)) {
                 const QString line = QString::fromUtf8(msg).trimmed() + QLatin1Char('\n');
-                // Get type excluding the initial color characters
-                const QString msgType = line.mid(5, 2);
-                const bool isFatal = msgType == "F/";
-                if (!line.contains(pidString) && !isFatal)
+                if (!line.contains(pidString))
                     continue;
 
                 if (storagePtr->m_useCppDebugger) {
@@ -430,31 +427,32 @@ static ExecutableItem logcatRecipe(const Storage<RunnerStorage> &storage)
 
                 static const QRegularExpression regExpLogcat{
                     "^\\x1B\\[[0-9]+m"   // color
-                    "\\w/"               // message type
+                    "(\\w/)"             // message type  1. capture
                     ".*"                 // source
-                    "(\\(\\s*\\d*\\)):"  // pid           1. capture
+                    "(\\(\\s*\\d*\\)):"  // pid           2. capture
                     "\\s*"
                     ".*"                 // message
                     "\\x1B\\[[0-9]+m"    // color
                     "[\\n\\r]*$"
                 };
 
-                static QStringList errorMsgTypes{"W/", "E/", "F/"};
+                static QStringList errorMsgTypes{"F/", "E/", "W/"};
                 const bool onlyError = channel == QProcess::StandardError;
                 const QRegularExpressionMatch match = regExpLogcat.match(line);
                 if (match.hasMatch()) {
-                    const QString pidMatch = match.captured(1);
+                    const QString pidMatch = match.captured(2);
                     const QString cleanPidMatch = pidMatch.mid(1, pidMatch.size() - 2).trimmed();
-                    const QString output = QString(line).remove(pidMatch);
-                    if (isFatal) {
-                        storagePtr->m_glue->addStdErr(output);
-                    } else if (cleanPidMatch == pidString) {
+                    if (cleanPidMatch == pidString) {
+                        const QString msgType = match.captured(1);
+                        const QString output = QString(line).remove(pidMatch);
                         if (onlyError || errorMsgTypes.contains(msgType))
                             storagePtr->m_glue->addStdErr(output);
                         else
                             storagePtr->m_glue->addStdOut(output);
                     }
                 } else {
+                    // Get type excluding the initial color characters
+                    const QString msgType = line.mid(5, 7);
                     if (onlyError || errorMsgTypes.contains(msgType))
                         storagePtr->m_glue->addStdErr(line);
                     else
