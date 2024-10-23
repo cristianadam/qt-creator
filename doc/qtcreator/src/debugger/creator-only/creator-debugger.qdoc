@@ -157,9 +157,9 @@
     the display text might do something wrong. You can step through the code and
     examine changes to the variable to find out where the error occurs.
 
-    The following video shows how to examine variable values:
-
-    \youtube EhJ1eV_6RH8
+    To learn how to examine variable values, take the
+    \l{https://www.qt.io/academy/course-catalog#getting-started-with-qt-creator-14}
+    {Getting Started with Qt Creator} course in Qt Academy.
 
     \section1 Remote Debugging
 

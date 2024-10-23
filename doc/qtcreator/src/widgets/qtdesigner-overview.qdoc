@@ -37,7 +37,10 @@
     The following video shows how to use the integrated \QD to create a small Qt
     Widgets-based application:
 
-    \youtube LnVjI0I7cKs
+    To learn how to use the integrated \QD to create a small
+    Qt Widgets-based application, take the
+    \l{https://www.qt.io/academy/course-catalog#getting-started-with-qt-creator-14}
+    {Getting Started with Qt Creator} course in Qt Academy.
 
     \section1 Code Editor Integration
 
