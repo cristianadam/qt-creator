@@ -1,19 +1,10 @@
-// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2024 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
-    \page quick-converting-ui-projects.html
-    \previouspage studio-porting-projects.html
-    \nextpage creator-editor-external.html
+//! [converting-ui-projects-to-applications]
 
-    \ingroup creator-reference-ui-design
-
-    \title Converting UI Projects to Applications
-
-    \brief Converting a project that has a .qmlproject file to one that has a
-    .pro file.
-
-    Qt Quick UI Prototype projects are useful for creating user interfaces. To
+    \1 projects are useful for creating user interfaces. To
     use them for application development in Qt Creator you have to add:
 
     \list
@@ -38,6 +29,11 @@
     \l{https://code.qt.io/cgit/qt-labs/qtquickdesigner-components.git/} {Qt Code Review},
     using CMake. To turn off this feature, use the option \e BUILD_QDS_COMPONENTS
     in the CMake configuration.
+
+    \if defined(qtcreator)
+        For more information about using \QDS to create projects, see
+        \l{Qt Design Studio Manual}.
+    \endif
 
     If you want to use qmake as the build system, you can use a Qt Creator
     wizard template to create a Qt Quick application that is built using the
@@ -102,4 +98,10 @@
         and \e <path_to_qtquickdesigner-components> like this \e ../qtquickdesigner-components/
     \endlist
 
+    \if defined(qtcreator)
+    \sa {Create Qt Quick UI Prototypes}
+    \endif
+
+
+//! [converting-ui-projects-to-applications]
 */
