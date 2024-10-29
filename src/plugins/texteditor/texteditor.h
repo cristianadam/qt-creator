@@ -205,6 +205,12 @@ public:
 
     void print(QPrinter *);
 
+    QRectF cursorBlockRect(
+        const QTextBlock &block,
+        int cursorPosition,
+        QRectF blockBoundingRect = {},
+        bool *doSelection = nullptr) const;
+
     void appendStandardContextMenuActions(QMenu *menu);
 
     uint optionalActions();

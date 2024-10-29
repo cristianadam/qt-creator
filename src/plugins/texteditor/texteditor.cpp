@@ -1518,6 +1518,13 @@ void TextEditorWidget::print(QPrinter *printer)
     delete dlg;
 }
 
+QRectF TextEditorWidget::cursorBlockRect(
+    const QTextBlock &block, int cursorPosition, QRectF blockBoundingRect, bool *doSelection) const
+{
+    return d->cursorBlockRect(
+        this->textDocument()->document(), block, cursorPosition, blockBoundingRect, doSelection);
+}
+
 static int foldBoxWidth(const QFontMetrics &fm)
 {
     const int lineSpacing = fm.lineSpacing();
