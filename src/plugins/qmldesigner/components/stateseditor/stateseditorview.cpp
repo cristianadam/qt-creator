@@ -717,8 +717,13 @@ void StatesEditorView::modelAttached(Model *model)
 
     checkForStatesAvailability();
 
-    resetModel();
-    resetStateGroups();
+    QTimer::singleShot(200, [this](){
+        resetModel();
+        resetStateGroups();
+
+        emit m_statesEditorModel->activeStateGroupChanged();
+        emit m_statesEditorModel->activeStateGroupIndexChanged();
+    });
 
     // Initially set background color from auxiliary data
     if (rootModelNode().hasAuxiliaryData(formeditorColorProperty)) {
@@ -727,8 +732,7 @@ void StatesEditorView::modelAttached(Model *model)
             color == BackgroundAction::ContextImage ? Qt::transparent : color);
     }
 
-    emit m_statesEditorModel->activeStateGroupChanged();
-    emit m_statesEditorModel->activeStateGroupIndexChanged();
+
 }
 
 void StatesEditorView::modelAboutToBeDetached(Model *model)
