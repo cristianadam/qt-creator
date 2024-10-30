@@ -373,6 +373,24 @@ MarkdownBrowser::MarkdownBrowser(QWidget *parent)
     setDocument(new AnimatedDocument(this));
 }
 
+QSize MarkdownBrowser::sizeHint() const
+{
+    return document()->size().toSize();
+}
+QSize MarkdownBrowser::minimumSizeHint() const
+{
+    //Lets use the size of the first few blocks as minimum size hint
+    QTextBlock block = document()->begin();
+    QRectF boundingRect;
+    for (int i = 0; i < 5 && block.isValid(); ++i, block = block.next()) {
+        QTextLayout *layout = block.layout();
+        QRectF blockRect = layout->boundingRect();
+        boundingRect.adjust(0, 0, 0, blockRect.height());
+        boundingRect.setWidth(qMax(boundingRect.width(), blockRect.width()));
+    }
+    return boundingRect.size().toSize() + QTextBrowser::minimumSizeHint();
+}
+
 void MarkdownBrowser::setAllowRemoteImages(bool allow)
 {
     static_cast<AnimatedDocument *>(document())->setAllowRemoteImages(allow);
