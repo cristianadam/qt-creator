@@ -35,6 +35,7 @@ CommonSettings::CommonSettings()
 {
     setAutoApply(false);
     const Key debugModeGroup("DebugMode");
+    const BoolAspect::LabelPlacement tip = BoolAspect::LabelPlacement::ShowTip;
 
     useAlternatingRowColors.setSettingsKey(debugModeGroup, "UseAlternatingRowColours");
     useAlternatingRowColors.setLabelText(Tr::tr("Use alternating row colors in debug views"));
@@ -100,15 +101,15 @@ CommonSettings::CommonSettings()
 
     closeMemoryBuffersOnExit.setSettingsKey(debugModeGroup, "CloseMemoryBuffersOnExit");
     closeMemoryBuffersOnExit.setDefaultValue(true);
-    closeMemoryBuffersOnExit.setLabelText(Tr::tr("Close temporary memory views on debugger exit"));
+    closeMemoryBuffersOnExit.setLabel(Tr::tr("Close temporary memory views on debugger exit"), tip);
     closeMemoryBuffersOnExit.setToolTip(t + Tr::tr("Closes automatically opened memory views when the debugger exits."));
 
     switchModeOnExit.setSettingsKey(debugModeGroup, "SwitchModeOnExit");
     switchModeOnExit.setLabelText(Tr::tr("Switch to previous mode on debugger exit"));
 
     breakpointsFullPathByDefault.setSettingsKey(debugModeGroup, "BreakpointsFullPath");
-    breakpointsFullPathByDefault.setToolTip(Tr::tr("Enables a full file path in breakpoints by default also for GDB."));
     breakpointsFullPathByDefault.setLabelText(Tr::tr("Set breakpoints using a full absolute path"));
+    breakpointsFullPathByDefault.setToolTip(Tr::tr("Enables a full file path in breakpoints by default also for GDB."));
 
     raiseOnInterrupt.setSettingsKey(debugModeGroup, "RaiseOnInterrupt");
     raiseOnInterrupt.setDefaultValue(true);
@@ -116,12 +117,10 @@ CommonSettings::CommonSettings()
                                       .arg(QGuiApplication::applicationDisplayName()));
 
     useAnnotationsInMainEditor.setSettingsKey(debugModeGroup, "UseAnnotations");
-    useAnnotationsInMainEditor.setLabelText(Tr::tr("Use annotations in main editor when debugging"));
-    useAnnotationsInMainEditor.setToolTip(
-        "<p>"
-        + Tr::tr("Shows simple variable values "
-                 "as annotations in the main editor during debugging."));
     useAnnotationsInMainEditor.setDefaultValue(true);
+    useAnnotationsInMainEditor.setLabel(Tr::tr("Use annotations in main editor when debugging"), tip);
+    useAnnotationsInMainEditor.setToolTip("<p>" + Tr::tr("Shows simple variable values "
+                 "as annotations in the main editor during debugging."));
 
     warnOnReleaseBuilds.setSettingsKey(debugModeGroup, "WarnOnReleaseBuilds");
     warnOnReleaseBuilds.setDefaultValue(true);
