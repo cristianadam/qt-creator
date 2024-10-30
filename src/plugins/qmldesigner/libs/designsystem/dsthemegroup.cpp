@@ -54,16 +54,14 @@ bool DSThemeGroup::addProperty(ThemeId theme, const ThemeProperty &prop)
         m_values[prop.name] = {};
 
     auto &tValues = m_values.at(prop.name);
-    if (tValues.contains(theme)) {
+    if (auto iter = tValues.lower_bound(theme); iter != tValues.end() && iter->first == theme) {
         qCDebug(dsLog) << "Add property failed. Duplicate property name." << prop;
         return false;
+    } else {
+        tValues.try_emplace(iter, theme, prop.value, prop.isBinding);
+
+        return true;
     }
-
-    tValues.emplace(std::piecewise_construct,
-                    std::forward_as_tuple(theme),
-                    std::forward_as_tuple(prop.value, prop.isBinding));
-
-    return true;
 }
 
 std::optional<ThemeProperty> DSThemeGroup::propertyValue(ThemeId theme, const PropertyName &name) const
