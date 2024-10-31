@@ -5,6 +5,8 @@
 
 #include "messageoutputwindow.h"
 
+#include <extensionsystem/shutdownguard.h>
+
 #include <utils/qtcassert.h>
 
 #include <QFont>
@@ -19,55 +21,45 @@
     \uicontrol{General Messages} pane.
 */
 
+using namespace Core::Internal;
+
 namespace Core::MessageManager {
 
-static Internal::MessageOutputWindow *s_messageOutputWindow = nullptr;
+static MessageOutputWindow *messageOutputWindow()
+{
+    static QPointer<MessageOutputWindow> theMessageOutputWindow
+            = new MessageOutputWindow(ExtensionSystem::shutdownGuard());
+    return theMessageOutputWindow.get();
+}
 
 enum class Flag { Silent, Flash, Disrupt };
 
 static void showOutputPane(Flag flags)
 {
-    QTC_ASSERT(s_messageOutputWindow, return);
+    QTC_ASSERT(messageOutputWindow(), return);
     switch (flags) {
     case Flag::Silent:
         break;
     case Flag::Flash:
-        s_messageOutputWindow->flash();
+        messageOutputWindow()->flash();
         break;
     case Flag::Disrupt:
-        s_messageOutputWindow->popup(IOutputPane::ModeSwitch | IOutputPane::WithFocus);
+        messageOutputWindow()->popup(IOutputPane::ModeSwitch | IOutputPane::WithFocus);
         break;
     }
 }
 
 static void doWrite(const QString &text, Flag flags)
 {
-    QTC_ASSERT(s_messageOutputWindow, return);
+    QTC_ASSERT(messageOutputWindow(), return);
     showOutputPane(flags);
-    s_messageOutputWindow->append(text + '\n');
+    messageOutputWindow()->append(text + '\n');
 }
 
 static void writeImpl(const QString &text, Flag flags)
 {
-    QTC_ASSERT(s_messageOutputWindow, return);
-    QMetaObject::invokeMethod(s_messageOutputWindow, [text, flags] { doWrite(text, flags); });
-}
-
-/*!
-    \internal
-*/
-void init()
-{
-    s_messageOutputWindow = new Internal::MessageOutputWindow;
-}
-
-/*!
-    \internal
-*/
-void destroy()
-{
-    delete s_messageOutputWindow;
-    s_messageOutputWindow = nullptr;
+    QTC_ASSERT(messageOutputWindow(), return);
+    QMetaObject::invokeMethod(messageOutputWindow(), [text, flags] { doWrite(text, flags); });
 }
 
 /*!
@@ -75,8 +67,8 @@ void destroy()
 */
 void setFont(const QFont &font)
 {
-    QTC_ASSERT(s_messageOutputWindow, return);
-    s_messageOutputWindow->setFont(font);
+    QTC_ASSERT(messageOutputWindow(), return);
+    messageOutputWindow()->setFont(font);
 }
 
 /*!
@@ -84,8 +76,8 @@ void setFont(const QFont &font)
 */
 void setWheelZoomEnabled(bool enabled)
 {
-    QTC_ASSERT(s_messageOutputWindow, return);
-    s_messageOutputWindow->setWheelZoomEnabled(enabled);
+    QTC_ASSERT(messageOutputWindow(), return);
+    messageOutputWindow()->setWheelZoomEnabled(enabled);
 }
 
 /*!
