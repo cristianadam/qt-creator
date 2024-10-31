@@ -26,6 +26,7 @@ gui.widget = {}
 ---@field windowFlags? WindowType[] The window flags of the widget.
 ---@field widgetAttributes? WidgetAttributeMapT<boolean> The widget attributes of the widget.
 ---@field autoFillBackground? boolean A boolean, representing whether the widget should automatically fill its background.
+---@field visible? boolean A boolean, representing whether the widget should be visible.
 gui.baseWidgetOptions = {}
 
 ---@class (exact) WidgetOptions : BaseWidgetOptions
