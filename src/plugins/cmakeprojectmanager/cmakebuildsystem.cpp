@@ -2504,11 +2504,11 @@ void CMakeBuildSystem::runGenerator(Id id)
     connect(proc, &Process::done, proc, &Process::deleteLater);
     connect(proc, &Process::readyReadStandardOutput, this, [proc] {
         Core::MessageManager::writeFlashing(
-            addCMakePrefix(QString::fromLocal8Bit(proc->readAllRawStandardOutput()).split('\n')));
+            addCMakePrefix(proc->readAllStandardOutput().split('\n')));
     });
     connect(proc, &Process::readyReadStandardError, this, [proc] {
         Core::MessageManager::writeDisrupting(
-            addCMakePrefix(QString::fromLocal8Bit(proc->readAllRawStandardError()).split('\n')));
+            addCMakePrefix(proc->readAllStandardError().split('\n')));
     });
     proc->setWorkingDirectory(outDir);
     proc->setEnvironment(buildConfiguration()->environment());
