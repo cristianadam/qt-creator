@@ -5,31 +5,15 @@
 
 #include "utils_global.h"
 
-#include "singleton.h"
-
-#include <QThread>
+#include <chrono>
 
 QT_BEGIN_NAMESPACE
 class QProcess;
 QT_END_NAMESPACE
 
-namespace Utils {
-namespace Internal { class ProcessReaperPrivate; }
-
-class QTCREATOR_UTILS_EXPORT ProcessReaper final
-        : public SingletonWithOptionalDependencies<ProcessReaper>
+namespace Utils::ProcessReaper
 {
-public:
-    static void reap(QProcess *process,
-                     std::chrono::milliseconds timeout = std::chrono::milliseconds(500));
-
-private:
-    ProcessReaper();
-    ~ProcessReaper();
-
-    QThread m_thread;
-    Internal::ProcessReaperPrivate *m_private;
-    friend class SingletonWithOptionalDependencies<ProcessReaper>;
-};
-
-} // namespace Utils
+QTCREATOR_UTILS_EXPORT void deleteAll();
+QTCREATOR_UTILS_EXPORT void reap(QProcess *process,
+                                 std::chrono::milliseconds timeout = std::chrono::milliseconds(500));
+} // namespace Utils::ProcessReaper
