@@ -357,7 +357,7 @@ qint64 DeviceFileAccess::fileSize(const FilePath &filePath) const
 {
     Q_UNUSED(filePath)
     QTC_CHECK(false);
-    return false;
+    return -1;
 }
 
 qint64 DeviceFileAccess::bytesAvailable(const FilePath &filePath) const
