@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "androidconstants.h"
-#include "androidglobal.h"
 #include "androidrunconfiguration.h"
-#include "androidtoolchain.h"
+#include "androidmanager.h"
 #include "androidtr.h"
 
+#include <projectexplorer/buildconfiguration.h>
 #include <projectexplorer/buildsystem.h>
 #include <projectexplorer/kitaspects.h>
 #include <projectexplorer/project.h>
@@ -77,6 +77,12 @@ public:
         postStartShellCmd.setId(Constants::ANDROID_POSTFINISHSHELLCMDLIST);
         postStartShellCmd.setSettingsKey("Android.PostStartShellCmdListKey");
         postStartShellCmd.setLabelText(Tr::tr("Post-quit on-device shell commands:"));
+
+        setCommandLineGetter([target] {
+            // This here is for now for cosmetical purposes to be displayed in the
+            // started/stopped messages.
+            return CommandLine(FilePath::fromParts(u"android", {}, AndroidManager::packageName(target)));
+        });
 
         setUpdater([this] {
             const BuildTargetInfo bti = buildTargetInfo();
