@@ -986,14 +986,22 @@ class Dumper(DumperBase):
                     and self.platform_ == 'remote-android'):
 
             connect_options = lldb.SBPlatformConnectOptions(self.remoteChannel_)
-            res = self.target.GetPlatform().ConnectRemote(connect_options)
+            platform = self.target.GetPlatform()
 
-            DumperBase.warn("CONNECT: %s %s platform: %s connected: %s" % (res,
-                        self.remoteChannel_,
-                        self.target.GetPlatform().GetName(),
-                        self.target.GetPlatform().IsConnected()))
+            res = platform.ConnectRemote(connect_options)
+
+            is_connected = platform.IsConnected()
+
+            DumperBase.warn("CONNECT: %s %s platform: %s connected: %s"
+                % (res, self.remoteChannel_, platform.GetName(), is_connected))
+
             if not res.Success():
                 self.report(self.describeError(res))
+                self.reportState('enginerunfailed')
+                return
+
+            if not is_connected:
+                self.report('Could not connect to debug server')
                 self.reportState('enginerunfailed')
                 return
 
