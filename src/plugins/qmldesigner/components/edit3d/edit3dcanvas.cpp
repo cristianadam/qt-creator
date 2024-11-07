@@ -156,7 +156,7 @@ void Edit3DCanvas::mousePressEvent(QMouseEvent *e)
 {
     m_contextMenuPending = false;
     if (!m_flyMode && e->modifiers() == Qt::NoModifier && e->buttons() == Qt::RightButton) {
-        setFlyMode(true, e->globalPos());
+        setFlyMode(true, e->globalPosition().toPoint());
         m_parent->view()->startContextMenu(e->pos());
         m_contextMenuPending = true;
     }
@@ -186,12 +186,12 @@ void Edit3DCanvas::mouseMoveEvent(QMouseEvent *e)
 
     QWidget::mouseMoveEvent(e);
 
-    if (m_flyMode && e->globalPos() != m_hiddenCursorPos) {
+    if (m_flyMode && e->globalPosition().toPoint() != m_hiddenCursorPos) {
         if (!m_flyModeFirstUpdate) {
             // We notify explicit camera rotation need for puppet rather than rely in mouse events,
             // as mouse isn't grabbed on puppet side and can't handle fast movements that go out of
             // edit camera mouse area. This also simplifies split view handling.
-            QPointF diff = m_isQDSTrusted ? (m_hiddenCursorPos - e->globalPos()) : (m_lastCursorPos - e->globalPos());
+            QPointF diff = m_isQDSTrusted ? (m_hiddenCursorPos - e->globalPosition().toPoint()) : (m_lastCursorPos - e->globalPosition().toPoint());
 
             if (auto model = m_parent->view()->model()) {
                 if (e->buttons() == (Qt::LeftButton | Qt::RightButton)) {
@@ -209,7 +209,7 @@ void Edit3DCanvas::mouseMoveEvent(QMouseEvent *e)
         if (m_isQDSTrusted)
             QCursor::setPos(m_hiddenCursorPos);
         else
-            m_lastCursorPos = e->globalPos();
+            m_lastCursorPos = e->globalPosition().toPoint();
     }
 }
 
