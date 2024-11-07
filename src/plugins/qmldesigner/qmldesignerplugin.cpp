@@ -174,6 +174,8 @@ public:
     ViewManager viewManager{projectManager.asynchronousImageCache(), externalDependencies};
     DocumentManager documentManager{projectManager, externalDependencies};
     ShortCutManager shortCutManager;
+    DeviceShare::DeviceManager deviceManager;
+    RunManager runManager{deviceManager};
     SettingsPage settingsPage{externalDependencies};
     DesignModeWidget mainWidget;
     QtQuickDesignerFactory m_qtQuickDesignerFactory;
@@ -913,6 +915,16 @@ const DocumentManager &QmlDesignerPlugin::documentManager() const
 ViewManager &QmlDesignerPlugin::viewManager()
 {
     return instance()->d->viewManager;
+}
+
+DeviceShare::DeviceManager &QmlDesignerPlugin::deviceManager()
+{
+    return instance()->d->deviceManager;
+}
+
+RunManager &QmlDesignerPlugin::runManager()
+{
+    return instance()->d->runManager;
 }
 
 DesignerActionManager &QmlDesignerPlugin::designerActionManager()

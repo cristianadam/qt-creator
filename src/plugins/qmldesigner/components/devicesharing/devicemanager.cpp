@@ -3,11 +3,15 @@
 
 #include "devicemanager.h"
 
+#include "devicemanagerwidget.h"
+
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QNetworkDatagram>
 #include <QNetworkInterface>
+
+#include <coreplugin/icore.h>
 
 namespace QmlDesigner::DeviceShare {
 
@@ -390,6 +394,14 @@ bool DeviceManager::stopRunningProject(const QString &deviceId)
         return false;
 
     return device->sendProjectStopped();
+}
+
+QPointer<DeviceManagerWidget> DeviceManager::widget()
+{
+    if (!m_widget)
+        m_widget = new DeviceManagerWidget(*this, Core::ICore::instance()->dialogParent());
+
+    return m_widget;
 }
 
 } // namespace QmlDesigner::DeviceShare

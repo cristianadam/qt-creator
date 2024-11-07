@@ -10,6 +10,8 @@
 
 namespace QmlDesigner::DeviceShare {
 
+class DeviceManagerWidget;
+
 class DeviceManager : public QObject
 {
     Q_OBJECT
@@ -35,6 +37,8 @@ public:
     bool sendProjectFile(const QString &deviceId, const QString &projectFile);
     bool stopRunningProject(const QString &deviceId);
 
+    QPointer<DeviceManagerWidget> widget();
+
 private:
     // Devices management
     QList<QSharedPointer<Device>> m_devices;
@@ -43,6 +47,8 @@ private:
     // settings
     const QString m_settingsPath;
     QString m_uuid;
+
+    QPointer<DeviceManagerWidget> m_widget;
 
 private:
     // internal slots

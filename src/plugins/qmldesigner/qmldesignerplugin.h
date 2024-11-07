@@ -6,7 +6,9 @@
 #include "documentmanager.h"
 #include "qmldesigner_global.h"
 
+#include <devicesharing/devicemanager.h>
 #include <qmldesignercorelib_global.h>
+#include <runmanager/runmanager.h>
 #include <viewmanager.h>
 
 #include <extensionsystem/iplugin.h>
@@ -50,6 +52,8 @@ public:
     const DocumentManager &documentManager() const;
 
     static ViewManager &viewManager();
+    static DeviceShare::DeviceManager &deviceManager();
+    static RunManager &runManager();
 
     DesignerActionManager &designerActionManager();
     const DesignerActionManager &designerActionManager() const;
