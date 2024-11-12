@@ -47,8 +47,6 @@ QtcPlugin {
         "androidrunner.h",
         "androidrunnerworker.cpp",
         "androidrunnerworker.h",
-        "androidsdkdownloader.cpp",
-        "androidsdkdownloader.h",
         "androidsdkmanager.cpp",
         "androidsdkmanager.h",
         "androidsdkmanagerdialog.cpp",
