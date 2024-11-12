@@ -16,7 +16,7 @@
     you select when \l {Creating Projects}{creating your project}.
 
     \note \uicontrol {Extended Scene Environment} is available in projects created with
-    Qt 6.5 or higher as the \uicontrol {Target Qt Version}.
+    Qt 6.5 or higher as \uicontrol {Target Qt Version}.
 
     \section1 Adding Scene Environments to Projects
 
@@ -24,12 +24,18 @@
     \l{Creating Projects}{creating your project}.
 
     Use the \uicontrol {3D} preset to create a project with a \uicontrol View3D
-    component that includes a scene environment. If you need to add it manually, it is
-    available in \uicontrol Components > \uicontrol {Qt Quick 3D}.
+    component that includes a \uicontrol {Scene Environment}. Use the
+    \uicontrol {Extended 3D} preset to create a project with an
+    \uicontrol {Extended View3D} component that includes an
+    \uicontrol {Extended Scene Environment}. Add the 3D view components manually
+    to your project by dragging them from \uicontrol Components > \uicontrol {Qt Quick 3D} >
+    \uicontrol Items to \uicontrol Navigator or the \uicontrol {2D} view.
 
-    Use the \uicontrol {Extended 3D} preset to create a project with a 3D view
-    component that includes an extended scene environment. It is also
-    available in \uicontrol Components > \uicontrol {Qt Quick 3D Helpers}.
+    You can also add the scene environment components separately to your project by
+    dragging them from \uicontrol Components to a 3D view component in \uicontrol Navigator.
+    The \uicontrol {Scene Environment} component is available in \uicontrol {Qt Quick 3D} >
+    \uicontrol Components, and the \uicontrol {Extended Scene Environment} in
+    \uicontrol {Qt Quick 3D Helpers}.
 
     \section1 Setting the Scene Environment
 
