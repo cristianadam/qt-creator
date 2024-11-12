@@ -32,7 +32,6 @@ add_qtc_plugin(Android
     androidutils.cpp androidutils.h
     avddialog.cpp avddialog.h
     avdmanageroutputparser.cpp avdmanageroutputparser.h
-    certificatesmodel.cpp certificatesmodel.h
     createandroidmanifestwizard.cpp createandroidmanifestwizard.h
     javaeditor.cpp javaeditor.h
     javaindenter.cpp javaindenter.h
