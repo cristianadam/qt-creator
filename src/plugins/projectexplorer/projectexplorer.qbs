@@ -215,7 +215,6 @@ QtcPlugin {
             "deviceprocessesdialog.cpp", "deviceprocessesdialog.h",
             "devicesettingspage.cpp", "devicesettingspage.h",
             "devicetestdialog.cpp", "devicetestdialog.h",
-            "deviceusedportsgatherer.cpp", "deviceusedportsgatherer.h",
             "filetransfer.cpp", "filetransfer.h",
             "filetransferinterface.h",
             "idevice.cpp", "idevice.h",
