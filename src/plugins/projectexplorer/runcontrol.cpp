@@ -7,7 +7,6 @@
 #include "buildconfiguration.h"
 #include "customparser.h"
 #include "devicesupport/devicemanager.h"
-#include "devicesupport/deviceusedportsgatherer.h"
 #include "devicesupport/idevice.h"
 #include "devicesupport/idevicefactory.h"
 #include "devicesupport/sshparameters.h"
@@ -358,14 +357,14 @@ public:
     void startTaskTree();
     void checkAutoDeleteAndEmitStopped();
 
-    void enablePortsGatherer();
+    bool isPortsGatherer() const
+    { return useDebugChannel || useQmlChannel || usePerfChannel || useWorkerChannel; }
     QUrl getNextChannel(PortList *portList, const QList<Port> &usedPorts);
 
     RunControl *q;
     Id runMode;
     TaskTreeRunner m_taskTreeRunner;
-
-    std::unique_ptr<DeviceUsedPortsGatherer> portsGatherer;
+    TaskTreeRunner m_portsGathererRunner;
 };
 
 } // Internal
@@ -593,41 +592,43 @@ void RunControlPrivate::initiateReStart()
 
 void RunControlPrivate::startPortsGathererIfNeededAndContinueStart()
 {
-    if (!portsGatherer) {
+    if (!isPortsGatherer()) {
         continueStart();
         return;
     }
 
-    connect(portsGatherer.get(), &DeviceUsedPortsGatherer::done, this, [this](bool success) {
-        if (success) {
-            PortList portList = device->freePorts();
-            const QList<Port> usedPorts = portsGatherer->usedPorts();
-            q->appendMessage(Tr::tr("Found %n free ports.", nullptr, portList.count()) + '\n',
-                             NormalMessageFormat);
-            if (useDebugChannel)
-                debugChannel = getNextChannel(&portList, usedPorts);
-            if (useQmlChannel)
-                qmlChannel = getNextChannel(&portList, usedPorts);
-            if (usePerfChannel)
-                perfChannel = getNextChannel(&portList, usedPorts);
-            if (useWorkerChannel)
-                workerChannel = getNextChannel(&portList, usedPorts);
+    const Storage<PortsOutputData> portsStorage;
 
-            continueStart();
-        } else {
-            onWorkerFailed(nullptr, portsGatherer->errorString());
+    const auto onDone = [this, portsStorage] {
+        const auto ports = *portsStorage;
+        if (!ports) {
+            onWorkerFailed(nullptr, ports.error());
+            return;
         }
-    });
+        PortList portList = device->freePorts();
+        const QList<Port> usedPorts = *ports;
+        q->appendMessage(Tr::tr("Found %n free ports.", nullptr, portList.count()) + '\n',
+                         NormalMessageFormat);
+        if (useDebugChannel)
+            debugChannel = getNextChannel(&portList, usedPorts);
+        if (useQmlChannel)
+            qmlChannel = getNextChannel(&portList, usedPorts);
+        if (usePerfChannel)
+            perfChannel = getNextChannel(&portList, usedPorts);
+        if (useWorkerChannel)
+            workerChannel = getNextChannel(&portList, usedPorts);
+
+        continueStart();
+    };
+
+    const Group recipe {
+        portsStorage,
+        device->portsGatheringRecipe(portsStorage),
+        onGroupDone(onDone)
+    };
 
     q->appendMessage(Tr::tr("Checking available ports...") + '\n', NormalMessageFormat);
-    portsGatherer->setDevice(device);
-    portsGatherer->start();
-}
-
-void RunControlPrivate::enablePortsGatherer()
-{
-    if (!portsGatherer)
-        portsGatherer = std::make_unique<DeviceUsedPortsGatherer>();
+    m_portsGathererRunner.start(recipe);
 }
 
 QUrl RunControlPrivate::getNextChannel(PortList *portList, const QList<Port> &usedPorts)
@@ -644,7 +645,6 @@ QUrl RunControlPrivate::getNextChannel(PortList *portList, const QList<Port> &us
 
 void RunControl::requestDebugChannel()
 {
-    d->enablePortsGatherer();
     d->useDebugChannel = true;
 }
 
@@ -660,7 +660,6 @@ QUrl RunControl::debugChannel() const
 
 void RunControl::requestQmlChannel()
 {
-    d->enablePortsGatherer();
     d->useQmlChannel = true;
 }
 
@@ -681,7 +680,6 @@ void RunControl::setQmlChannel(const QUrl &channel)
 
 void RunControl::requestPerfChannel()
 {
-    d->enablePortsGatherer();
     d->usePerfChannel = true;
 }
 
@@ -697,7 +695,6 @@ QUrl RunControl::perfChannel() const
 
 void RunControl::requestWorkerChannel()
 {
-    d->enablePortsGatherer();
     d->useWorkerChannel = true;
 }
 
