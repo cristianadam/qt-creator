@@ -157,6 +157,7 @@ Projects
   ([QTCREATORBUG-31141](https://bugreports.qt.io/browse/QTCREATORBUG-31141))
 * Fixed a focus issue when renaming files
   ([QTCREATORBUG-30926](https://bugreports.qt.io/browse/QTCREATORBUG-30926))
+* Fixed that the `default` session could be renamed and deleted
 
 ### CMake
 
@@ -183,6 +184,8 @@ Projects
 * Added the option of opening `CMakeCache.txt` to open the project
   ([QTCREATORBUG-24439](https://bugreports.qt.io/browse/QTCREATORBUG-24439),
    [QTCREATORBUG-30507](https://bugreports.qt.io/browse/QTCREATORBUG-30507))
+* Made `conanfile.py` and `vcpkg.json` visible in the project tree when used
+  ([QTCREATORBUG-32041](https://bugreports.qt.io/browse/QTCREATORBUG-32041))
 * Fixed the option `Build Only the Application to Be Run` for the
   `Build before deploying` preferences
   ([QTCREATORBUG-31416](https://bugreports.qt.io/browse/QTCREATORBUG-31416))
@@ -245,6 +248,12 @@ Analyzer
 * Added column sorting to the list of issues
 * Added a `Reload` button
 
+Terminal
+--------
+
+* Fixed the flushing of output after a process terminates
+  ([QTCREATORBUG-30733](https://bugreports.qt.io/browse/QTCREATORBUG-30733))
+
 Version Control Systems
 -----------------------
 
@@ -258,6 +267,7 @@ Version Control Systems
   from the revision, and the log for the line to the tooltip for `Instant Blame`
   ([Documentation](https://doc-snapshots.qt.io/qtcreator-15.0/creator-vcs-git.html#using-instant-blame))
 * Added visual indications that files are modified to the `Projects` view
+  (opt-in)
   ([QTCREATORBUG-8857](https://bugreports.qt.io/browse/QTCREATORBUG-8857))
 * Added the option to include all local branches in the log
 * Gerrit
@@ -269,6 +279,9 @@ Test Integration
 
 * Added test duration information for test frameworks that support it
   ([QTCREATORBUG-31242](https://bugreports.qt.io/browse/QTCREATORBUG-31242))
+* Added support for running auto tests on Android for Qt 6.8.1 and later
+* Fixed the execution of tests with multiple test classes
+  ([QTCREATORBUG-31935](https://bugreports.qt.io/browse/QTCREATORBUG-31935))
 
 Extension Manager
 -----------------
