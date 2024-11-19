@@ -1010,10 +1010,8 @@ static bool checkTopLevelBindingForParentReference(ExpressionStatement *expStmt,
     SourceLocation location = locationFromRange(expStmt->firstSourceLocation(), expStmt->lastSourceLocation());
     QString stmtSource = source.mid(int(location.begin()), int(location.length));
 
-    if (stmtSource.contains(QRegularExpression("(^|\\W)parent\\.")))
-        return true;
-
-    return false;
+    static const QRegularExpression regex("(^|\\W)parent\\.");
+    return stmtSource.contains(regex);
 }
 
 void Check::visitQmlObject(Node *ast, UiQualifiedId *typeId,
@@ -1718,7 +1716,7 @@ void Check::addMessage(StaticAnalysis::Type type, const SourceLocation &location
 void Check::scanCommentsForAnnotations()
 {
     m_disabledMessageTypesByLine.clear();
-    const QRegularExpression disableCommentPattern = Message::suppressionPattern();
+    static const QRegularExpression disableCommentPattern = Message::suppressionPattern();
 
     const QList<SourceLocation> comments = _doc->engine()->comments();
     for (const SourceLocation &commentLoc : comments) {
