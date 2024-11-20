@@ -279,7 +279,7 @@ private:
  * sufficient for running purposes.
  */
 
-class PROJECTEXPLORER_EXPORT SimpleTargetRunner : public RunWorker
+class PROJECTEXPLORER_EXPORT SimpleTargetRunner final : public RunWorker
 {
     Q_OBJECT
 
