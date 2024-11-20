@@ -1,63 +1,25 @@
 // Copyright (C) 2019 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
-#include "qmlpreviewconnectionmanager.h"
 #include "qmlpreviewruncontrol.h"
 
-#include <qmlprojectmanager/qmlproject.h>
-#include <qmlprojectmanager/qmlmainfileaspect.h>
+#include "qmlpreviewconnectionmanager.h"
 
 #include <projectexplorer/projectexplorer.h>
-#include <projectexplorer/projectexplorerconstants.h>
-#include <projectexplorer/projectmanager.h>
 #include <projectexplorer/qmldebugcommandlinearguments.h>
 #include <projectexplorer/target.h>
 
+#include <qmlprojectmanager/buildsystem/qmlbuildsystem.h>
+#include <qmlprojectmanager/qmlmainfileaspect.h>
 #include <qmlprojectmanager/qmlmultilanguageaspect.h>
-#include <qtsupport/baseqtversion.h>
-#include <qtsupport/qtkitaspect.h>
 
-#include <utils/async.h>
 #include <utils/filepath.h>
-#include <utils/port.h>
-#include <utils/qtcprocess.h>
 #include <utils/url.h>
-
-#include <QFutureWatcher>
 
 using namespace ProjectExplorer;
 using namespace Utils;
 
 namespace QmlPreview {
-
-class RefreshTranslationWorker final : public RunWorker
-{
-public:
-    explicit RefreshTranslationWorker(ProjectExplorer::RunControl *runControl,
-                                      const QmlPreviewRunnerSetting &runnerSettings)
-        : ProjectExplorer::RunWorker(runControl), m_runnerSettings(runnerSettings)
-    {
-        setId("RefreshTranslationWorker");
-        connect(this, &RunWorker::started, this, &RefreshTranslationWorker::startRefreshTranslationsAsync);
-        connect(this, &RunWorker::stopped, &m_futureWatcher, &QFutureWatcher<void>::cancel);
-        connect(&m_futureWatcher, &QFutureWatcherBase::finished, this, &RefreshTranslationWorker::stop);
-    }
-    ~RefreshTranslationWorker()
-    {
-        m_futureWatcher.cancel();
-        m_futureWatcher.waitForFinished();
-    }
-
-private:
-    void startRefreshTranslationsAsync()
-    {
-        m_futureWatcher.setFuture(Utils::asyncRun([this] {
-            m_runnerSettings.refreshTranslationsFunction();
-        }));
-    }
-    QmlPreviewRunnerSetting m_runnerSettings;
-    QFutureWatcher<void> m_futureWatcher;
-};
 
 class QmlPreviewRunner : public ProjectExplorer::RunWorker
 {
@@ -129,8 +91,6 @@ QmlPreviewRunner::QmlPreviewRunner(RunControl *runControl, const QmlPreviewRunne
 
         runControl->initiateStop();
     });
-
-    addStartDependency(new RefreshTranslationWorker(runControl, settings));
 }
 
 void QmlPreviewRunner::start()

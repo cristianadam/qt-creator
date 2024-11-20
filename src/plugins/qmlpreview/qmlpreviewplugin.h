@@ -22,7 +22,6 @@ using QmlPreviewFpsHandler = void (*)(quint16[8]);
 using QmlPreviewRunControlList = QList<ProjectExplorer::RunControl *>;
 using QmlDebugTranslationClientFactoryFunction =
     std::function<std::unique_ptr<QmlDebugTranslationClient>(QmlDebug::QmlDebugConnection *)>;
-using QmlPreviewRefreshTranslationFunction = std::function<void ()>;
 
 class QMLPREVIEW_EXPORT QmlPreviewPlugin : public ExtensionSystem::IPlugin
 {
@@ -67,7 +66,6 @@ public:
     void setLocaleIsoCode(const QString &localeIsoCode);
 
     void setQmlDebugTranslationClientCreator(QmlDebugTranslationClientFactoryFunction creator);
-    void setRefreshTranslationsFunction(QmlPreviewRefreshTranslationFunction refreshTranslationsFunction);
 
     void previewCurrentFile();
     void addPreview(ProjectExplorer::RunControl *preview);
