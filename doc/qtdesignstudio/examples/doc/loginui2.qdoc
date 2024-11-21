@@ -7,13 +7,13 @@
     \previouspage {Log In UI - Components}
     \nextpage {Log In UI - States}
 
-    \title Log In UI - Positioning
+    \title Log in UI: Positioning
     \brief Illustrates how to position UI components on pages using anchors and
     positioners.
 
     \image loginui2.webp "Log In UI"
 
-    \e{Log In UI - Positioning} is the second in a series of tutorials that build
+    \e{Log in UI: Positioning} is the second in a series of tutorials that build
     on each other to illustrate how to use \QDS to create a simple UI with
     some basic UI components, such as pages, buttons, and entry fields. The
     second tutorial in the series describes how to position the UI components
@@ -33,7 +33,7 @@
     The \e {Learn More} sections provide additional information about the
     task at hand.
 
-    \section1 Anchoring UI Components
+    \section1 Anchoring UI components
 
     First, you will \l {Setting Anchors and Margins}{anchor} the
     static page elements, background image (\e adventurePage), logo
@@ -102,7 +102,7 @@
 
     \image loginui2-loginpage.webp "Login page in the 2D view and live preview"
 
-    \section1 Using Column Positioners
+    \section1 Using column positioners
 
     You will now position the entry fields and buttons in columns
     to learn another method of \l{Using Positioners}{positioning components}.
@@ -171,7 +171,7 @@
 
     \image loginui2-loginpage-ready.webp "Login page in the 2D view and live preview"
 
-    \section1 Learn More
+    \section1 Learn more
     \section2 Anchors
     In an anchor-based layout, each component instance can be thought of as
     having a set of invisible \e anchor lines: top, bottom, left, right, fill,
@@ -194,7 +194,7 @@
     For more complicated UI designs, you can use components from the
     \l {Using Layouts}{Qt Quick Layouts module}.
 
-    \section1 Next Steps
+    \section1 Next steps
 
     To learn how to add a second page and move to it from the main page, see
     the next tutorial in the series, \l {Log In UI - States}.

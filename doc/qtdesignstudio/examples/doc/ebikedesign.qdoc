@@ -5,7 +5,7 @@
     \example EBikeDesign
     \ingroup studioexamples
 
-    \title E-Bike Design
+    \title The E-Bike design example
     \brief Illustrates how to use the timeline and states to animate transitions
     in an application.
 
@@ -27,7 +27,7 @@
     viewport, and the timeline to animate the \l{glossary-transition}
     {transitions} between and on the screens.
 
-    \section1 Using Timelines to Animate Transitions
+    \section1 Using timelines to animate transitions
 
     We use the \l Timeline view to animate the transitions between
     the screens in \e {Screen01.ui.qml}.
@@ -71,7 +71,7 @@
     For more information about using the timeline, see
     \l {Creating Timeline Animations}.
 
-    \section1 Using States to Move Between Screens
+    \section1 Using states to move between screens
 
     We use the \l States view to determine the contents of the viewport.
     The animations are run in a particular state or when moving from one state

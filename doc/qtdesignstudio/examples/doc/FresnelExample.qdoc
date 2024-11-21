@@ -19,12 +19,12 @@
 
     \image fresnel-angle.webp
 
-    \section1 Running the Example
+    \section1 Running the example
 
     To run the example in \QDS, go to the \uicontrol Welcome screen and select the example
     from the \uicontrol Examples tab.
 
-    \section1 The 3D Scene
+    \section1 The 3D scene
 
     The example project consists of a basic 3D scene with the following components:
 
@@ -34,7 +34,7 @@
       \li An HDR image used to light the scene (image-based lighting).
     \endlist
 
-    \section1 The Material
+    \section1 The material
 
     The material on the 3D model in this example is a principled material with a
     clearcoat.
@@ -47,7 +47,7 @@
 
     You adjust clearcoat properties independently from the base material.
 
-    \section2 Fresnel Properties
+    \section2 Fresnel properties
 
     The following properties affect how the fresnel effect renders. These properties are
     available both for the base material and the clearcoat layer. Adjusting the settings for the
@@ -76,7 +76,7 @@
         angle changes. A larger bias value shifts the transition point toward steeper angles.
     \endtable
 
-    \section3 Adjusting the Fresnel Settings
+    \section3 Adjusting the fresnel settings
 
     To adjust the settings:
 

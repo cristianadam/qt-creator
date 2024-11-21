@@ -5,12 +5,12 @@
     \example Loginui3
     \ingroup gstutorials
 
-    \title Log In UI - States
+    \title Log in UI:  States
     \brief Illustrates how to use states to create a second UI page.
     \previouspage {Log In UI - Positioning}
     \nextpage {Log In UI - Timeline}
 
-    \image loginui3.gif "Log In UI"
+    \image loginui3.gif "Log in UI"
 
     \e{Log In UI - States} is the third in a series of tutorials that build
     on each other to illustrate how to use \QDS to create a simple UI with
@@ -25,7 +25,7 @@
     when a user selects the \e {Create Account} button.
 
     The starting point for this tutorial is the completed
-    \l{Log In UI - Positioning} project. You can download the project
+    \l{Log in UI: Positioning} project. You can download the project
     \l{https://git.qt.io/public-demos/qtdesign-studio/-/tree/master/tutorial%20projects/Loginui2}{here}.
 
     Additionally, you can download the completed project of this tutorial
@@ -33,7 +33,7 @@
 
     For more information, see \l{Working with states} and \l{Signal and Handler Event System}.
 
-    \section1 Adding UI Components
+    \section1 Adding UI components
 
     You will add another entry field for verifying the password that users
     enter to create an account. You are already familiar with the tasks in
@@ -73,7 +73,7 @@
     the login page and the \e {Create Account} button on the account creation
     page.
 
-    \section1 Using States to Simulate Page Changes
+    \section1 Using states to simulate page changes
 
     You will now add \l{Working with States}{states} to the UI to show and hide UI
     components in the \uicontrol {2D} view, depending on the current page:
@@ -114,7 +114,7 @@
     \e {Create Account} button on the login page triggers a
     transition to the account creation page.
 
-    \section1 Connecting Buttons to States
+    \section1 Connecting buttons to states
 
     Components have predefined signals that are emitted when users interact
     with the UI. The \e PushButton component contains a \l{Mouse Area} component
@@ -154,7 +154,7 @@
 
     \image loginui3.gif "Moving between login page and account creation page"
 
-    \section1 Next Steps
+    \section1 Next steps
 
     To learn how to use a timeline to animate the transition between the login
     and account creation pages, see the next tutorial in the series,
