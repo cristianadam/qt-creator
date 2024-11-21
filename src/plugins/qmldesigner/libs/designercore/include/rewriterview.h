@@ -174,6 +174,8 @@ public:
 
     void forceAmend();
 
+    void convertPosition(int pos, int *line, int *column) const;
+
 signals:
     void modelInterfaceProjectUpdated();
 

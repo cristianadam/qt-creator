@@ -38,6 +38,8 @@ QMLDESIGNERCORE_EXPORT QString componentFilePath(const PathCacheType &pathCache,
 
 QMLDESIGNERCORE_EXPORT QString componentFilePath(const ModelNode &node);
 
+QMLDESIGNERCORE_EXPORT std::vector<TypeName> unsupportedQMLTypes();
+
 QMLDESIGNERCORE_EXPORT QList<ModelNode> pruneChildren(const QList<ModelNode> &nodes);
 
 QMLDESIGNERCORE_EXPORT QList<ModelNode> allModelNodesWithId(AbstractView *view);
@@ -57,8 +59,9 @@ constexpr std::u16string_view toStdStringView(QStringView view)
 }
 
 QMLDESIGNERCORE_EXPORT QStringList expressionToList(QStringView exp);
-
 QMLDESIGNERCORE_EXPORT QString listToExpression(const QStringList &stringList);
-;
+
+QMLDESIGNERCORE_EXPORT bool isUnsupportedQMLType(QByteArrayView type);
+QMLDESIGNERCORE_EXPORT bool isUnsupportedQMLRootType(QByteArrayView type);
 
 } // namespace QmlDesigner::ModelUtils

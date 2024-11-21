@@ -674,6 +674,11 @@ void RewriterView::forceAmend()
     amendQmlText();
 }
 
+void RewriterView::convertPosition(int pos, int *line, int *column) const
+{
+    m_textModifier->convertPosition(pos, line, column);
+}
+
 Internal::ModelNodePositionStorage *RewriterView::positionStorage() const
 {
     return m_positionStorage.get();

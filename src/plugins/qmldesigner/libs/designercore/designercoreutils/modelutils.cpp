@@ -33,6 +33,17 @@ constexpr auto toSortedArray(const Entries &...entries)
     return sortedArray;
 }
 
+constexpr auto unsupportedQmlRootTypes = toSortedArray<std::string_view>(
+    "ApplicationWindow", "Component", "ListModel", "Package", "QtObject", "Timer");
+
+constexpr auto unsupportedQmlTypes = toSortedArray<std::string_view>("ApplicationWindow",
+                                                                     "Dialog",
+                                                                     "Drawer",
+                                                                     "Package",
+                                                                     "Particles",
+                                                                     "ShaderEffect"
+                                                                     "StateMachine");
+
 // alias, print, console are not part of qmljs
 constexpr auto qmlKeywords = toSortedArray<std::u16string_view>(u"abstract",
                                                                 u"alias",
@@ -496,5 +507,19 @@ QString listToExpression(const QStringList &stringList)
 
     return QString();
 }
+
+bool isUnsupportedQMLType(QByteArrayView type)
+{
+    std::string_view view = type;
+    return std::binary_search(std::begin(unsupportedQmlTypes), std::end(unsupportedQmlTypes), view);
+};
+
+bool isUnsupportedQMLRootType(QByteArrayView type)
+{
+    std::string_view view = type;
+    return std::binary_search(std::begin(unsupportedQmlRootTypes),
+                              std::end(unsupportedQmlRootTypes),
+                              view);
+};
 
 } // namespace QmlDesigner::ModelUtils

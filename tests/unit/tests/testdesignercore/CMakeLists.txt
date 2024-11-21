@@ -50,12 +50,18 @@ extend_qtc_library(TestDesignerCore
   PUBLIC_INCLUDES ${QML_DESIGNER_CORE_DIRECTORY}/designercoreutils
   SOURCES_PREFIX ${QML_DESIGNER_CORE_DIRECTORY}/designercoreutils
   SOURCES
+    astcheck.cpp
+    astcheck.h
     generatedcomponentutils.cpp
     generatedcomponentutils.h
     modelmerger.cpp
     modelmerger.h
     modelutils.cpp
     modelutils.h
+    modelcheck.cpp
+    modelcheck.h
+    modelvisitor.cpp
+    modelvisitor.h
     predicate.h
     stylesheetmerger.cpp
     stylesheetmerger.h

@@ -20,6 +20,8 @@
 #include "rewriterview.h"
 #include "signalhandlerproperty.h"
 #include "variantproperty.h"
+#include <astcheck.h>
+#include <modelcheck.h>
 
 #include <externaldependenciesinterface.h>
 #include <import.h>
@@ -1051,7 +1053,7 @@ bool TextToModelMerger::load(const QString &data, DifferenceHandler &differenceH
         collectImportErrors(&errors);
 
         if (view()->checkSemanticErrors()) {
-            collectSemanticErrorsAndWarnings(&errors, &warnings);
+            collectSemanticErrorsAndWarningsAst(&errors, &warnings);
 
             if (!errors.isEmpty()) {
                 m_rewriterView->setErrors(errors);
@@ -1070,6 +1072,8 @@ bool TextToModelMerger::load(const QString &data, DifferenceHandler &differenceH
                 astRootNode = program->members->member;
         ModelNode modelRootNode = m_rewriterView->rootModelNode();
         syncNode(modelRootNode, astRootNode, &ctxt, differenceHandler);
+        //PrettyPrinter::print(modelRootNode);
+
         m_rewriterView->positionStorage()->cleanupInvalidOffsets();
 
         qCInfo(rewriterBenchmark) << "synced nodes:" << time.elapsed();
@@ -1079,6 +1083,19 @@ bool TextToModelMerger::load(const QString &data, DifferenceHandler &differenceH
 #endif
 
         setActive(false);
+
+        if (view()->checkSemanticErrors()) {
+            collectSemanticErrorsAndWarningsModel(&errors, &warnings);
+
+            if (!errors.isEmpty()) {
+                m_rewriterView->setErrors(errors);
+                setActive(false);
+                clearPossibleImportKeys();
+                return false;
+            }
+            if (!justSanityCheck)
+                m_rewriterView->setWarnings(warnings);
+        }
 
         return true;
     } catch (Exception &e) {
@@ -2220,9 +2237,10 @@ void TextToModelMerger::collectImportErrors(QList<DocumentMessage> *errors)
         errors->append(DocumentMessage(DesignerCore::Tr::tr("No import for Qt Quick found.")));
 }
 
-void TextToModelMerger::collectSemanticErrorsAndWarnings(
+void TextToModelMerger::collectSemanticErrorsAndWarningsAst(
     [[maybe_unused]] QList<DocumentMessage> *errors, [[maybe_unused]] QList<DocumentMessage> *warnings)
 {
+    QList<StaticAnalysis::Message> messages;
 #ifndef QDS_USE_PROJECTSTORAGE
     Check check(m_document, m_scopeChain->context());
     check.disableMessage(StaticAnalysis::ErrPrototypeCycle);
@@ -2239,15 +2257,37 @@ void TextToModelMerger::collectSemanticErrorsAndWarnings(
     }
 
     check.enableQmlDesignerChecks();
+    messages messages = check();
+#else
+    AstCheck check(m_document);
+    messages = check();
+#endif
 
     QUrl fileNameUrl = QUrl::fromLocalFile(m_document->fileName().toString());
-    const QList<StaticAnalysis::Message> messages = check();
     for (const StaticAnalysis::Message &message : messages) {
         if (message.severity == Severity::Error) {
             if (message.type == StaticAnalysis::ErrUnknownComponent)
                 warnings->append(DocumentMessage(message.toDiagnosticMessage(), fileNameUrl));
             else
                 errors->append(DocumentMessage(message.toDiagnosticMessage(), fileNameUrl));
+        }
+        if (message.severity == Severity::Warning)
+            warnings->append(DocumentMessage(message.toDiagnosticMessage(), fileNameUrl));
+    }
+}
+
+void TextToModelMerger::collectSemanticErrorsAndWarningsModel(
+    [[maybe_unused]] QList<DocumentMessage> *errors, [[maybe_unused]] QList<DocumentMessage> *warnings)
+{
+#ifdef QDS_USE_PROJECTSTORAGE
+    ModelCheck check(m_rewriterView->rootModelNode());
+
+    const QList<StaticAnalysis::Message> messages = check();
+
+    QUrl fileNameUrl = QUrl::fromLocalFile(m_document->fileName().toString());
+    for (const StaticAnalysis::Message &message : messages) {
+        if (message.severity == Severity::Error) {
+            errors->append(DocumentMessage(message.toDiagnosticMessage(), fileNameUrl));
         }
         if (message.severity == Severity::Warning)
             warnings->append(DocumentMessage(message.toDiagnosticMessage(), fileNameUrl));
