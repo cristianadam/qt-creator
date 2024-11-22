@@ -248,7 +248,6 @@ void WidgetTip::configure(const QPoint &pos)
 
     move(pos);
     m_layout->addWidget(m_widget);
-    m_layout->setSizeConstraint(QLayout::SetFixedSize);
     adjustSize();
 }
 
