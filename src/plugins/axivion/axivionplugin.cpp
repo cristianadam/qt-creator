@@ -881,6 +881,15 @@ Group tableInfoRecipe(const QString &prefix, const TableInfoHandler &handler)
     return fetchDataRecipe<Dto::TableInfoDto>(url, handler);
 }
 
+static QByteArray injectImages()
+{
+    return
+        "<p><img class=\"issue-image\" src=\"/axivion/api/projects/qt-creator/issues/CY1/issue_svg?embedFont=true&amp;highlightEdge=1&amp;version=2024-11-21T19%3A22%3A05.450091Z\" alt=\"Visual representation of the Issue\"/></p>"
+        "<p><img class=\"issue-image\" src=\"/axivion/api/projects/qt-creator/issues/CY2/issue_svg?embedFont=true&amp;highlightEdge=1&amp;version=2024-11-21T19%3A22%3A05.450091Z\" alt=\"Visual representation of the Issue\"/></p>"
+        "<p><img class=\"issue-image\" src=\"/axivion/api/projects/qt-creator/issues/CY20/issue_svg?embedFont=true&amp;highlightEdge=1&amp;version=2024-11-21T19%3A22%3A05.450091Z\" alt=\"Visual representation of the Issue\"/></p>"
+        ;
+}
+
 void AxivionPluginPrivate::fetchIssueInfo(const QString &id)
 {
     if (!m_currentProjectInfo || !dd->m_analysisVersion)
@@ -898,7 +907,7 @@ void AxivionPluginPrivate::fetchIssueInfo(const QString &id)
         QByteArray fixedHtml = storage->outputData;
         const int idx = fixedHtml.indexOf("<div class=\"ax-issuedetails-table-container\">");
         if (idx >= 0)
-            fixedHtml = "<html><body>" + fixedHtml.mid(idx);
+            fixedHtml = "<html><body>" + injectImages() + fixedHtml.mid(idx);
         updateIssueDetails(QString::fromUtf8(fixedHtml));
     };
 
