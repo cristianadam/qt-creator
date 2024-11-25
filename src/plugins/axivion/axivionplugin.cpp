@@ -372,6 +372,13 @@ static QUrl constructUrl(const QString &projectName, const QString &subPath, con
     return url;
 }
 
+static QUrl urlFromFilePath(const FilePath &filePath, const QString &subPath)
+{
+    const QString fileName = QString::fromUtf8(QUrl::toPercentEncoding(filePath.path()));
+    const QUrlQuery query({{"filename", fileName}, {"version", *dd->m_analysisVersion}});
+    return constructUrl(dd->m_currentProjectInfo->name, subPath, query);
+}
+
 static constexpr int httpStatusCodeOk = 200;
 constexpr char s_htmlContentType[] = "text/html";
 constexpr char s_plaintextContentType[] = "text/plain";
@@ -861,11 +868,7 @@ Group lineMarkerRecipe(const FilePath &filePath, const LineMarkerHandler &handle
     QTC_ASSERT(dd->m_currentProjectInfo, return {}); // TODO: Call handler with unexpected?
     QTC_ASSERT(!filePath.isEmpty(), return {}); // TODO: Call handler with unexpected?
     QTC_ASSERT(dd->m_analysisVersion, return {}); // TODO: Call handler with unexpected?
-
-    const QString fileName = QString::fromUtf8(QUrl::toPercentEncoding(filePath.path()));
-    const QUrlQuery query({{"filename", fileName}, {"version", *dd->m_analysisVersion}});
-    const QUrl url = constructUrl(dd->m_currentProjectInfo->name, "files", query);
-    return fetchDataRecipe<Dto::FileViewDto>(url, handler);
+    return fetchDataRecipe<Dto::FileViewDto>(urlFromFilePath(filePath, "files"), handler);
 }
 
 void AxivionPluginPrivate::fetchDashboardAndProjectInfo(const DashboardInfoHandler &handler,
@@ -951,14 +954,9 @@ void AxivionPluginPrivate::onDocumentOpened(IDocument *doc)
     if (m_allMarks.contains(filePath))
         return;
 
-    // TODO: Refactor, as the code below repeats with that inside lineMarkerRecipe().
-    const QString fileName = QString::fromUtf8(QUrl::toPercentEncoding(filePath.path()));
-    const QUrlQuery query({{"filename", fileName}, {"version", *dd->m_analysisVersion}});
-    const QUrl url = constructUrl(dd->m_currentProjectInfo->name, "sourcecode", query);
-
     const Storage<DownloadData> storage;
-    const auto onSetup = [storage, url] {
-        storage->inputUrl = url;
+    const auto onSetup = [storage, filePath] {
+        storage->inputUrl = urlFromFilePath(filePath, "sourcecode");
         storage->expectedContentType = ContentType::PlainText;
     };
 
