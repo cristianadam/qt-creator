@@ -210,7 +210,7 @@ public:
     void onDocumentClosed(IDocument * doc);
     void clearAllMarks();
     void updateExistingMarks();
-    void handleIssuesForFile(const Dto::FileViewDto &fileView);
+    void handleIssuesForFile(const Dto::FileViewDto &fileView, const QByteArray &origSource);
     void enableInlineIssues(bool enable);
     void fetchIssueInfo(const QString &id);
 
@@ -960,13 +960,31 @@ void AxivionPluginPrivate::onDocumentOpened(IDocument *doc)
     if (m_allMarks.contains(filePath))
         return;
 
-    const auto handler = [this](const Dto::FileViewDto &data) {
+    // TODO: Refactor, as the code below repeats with that inside lineMarkerRecipe().
+    const QString fileName = QString::fromUtf8(QUrl::toPercentEncoding(filePath.path()));
+    const QUrlQuery query({{"filename", fileName}, {"version", *dd->m_analysisVersion}});
+    const QUrl url = constructUrl(dd->m_currentProjectInfo->name, "sourcecode", query);
+
+    const Storage<DownloadData> storage;
+    const auto onSetup = [storage, url] {
+        storage->inputUrl = url;
+        storage->expectedContentType = ContentType::PlainText;
+    };
+
+    const auto handler = [this, storage](const Dto::FileViewDto &data) {
         if (data.lineMarkers.empty())
             return;
-        handleIssuesForFile(data);
+        handleIssuesForFile(data, storage->outputData);
     };
+
+    const Group recipe {
+        storage,
+        downloadDataRecipe(storage),
+        lineMarkerRecipe(filePath, handler)
+    };
+
     TaskTree *taskTree = new TaskTree;
-    taskTree->setRecipe(lineMarkerRecipe(filePath, handler));
+    taskTree->setRecipe(recipe);
     m_docMarksTrees.insert_or_assign(doc, std::unique_ptr<TaskTree>(taskTree));
     connect(taskTree, &TaskTree::done, this, [this, doc] {
         const auto it = m_docMarksTrees.find(doc);
@@ -990,8 +1008,10 @@ void AxivionPluginPrivate::onDocumentClosed(IDocument *doc)
     qDeleteAll(m_allMarks.take(document->filePath()));
 }
 
-void AxivionPluginPrivate::handleIssuesForFile(const Dto::FileViewDto &fileView)
+void AxivionPluginPrivate::handleIssuesForFile(const Dto::FileViewDto &fileView,
+                                               const QByteArray &origSource)
 {
+    Q_UNUSED(origSource) // Is going to be used for showing diff
     if (fileView.lineMarkers.empty())
         return;
 
