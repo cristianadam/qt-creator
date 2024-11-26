@@ -24,30 +24,30 @@
 class QtcFrameInfo
 {
 public:
-    QPixmap pixmap;
+    QImage image;
     int delay;
     bool endMark;
     inline QtcFrameInfo(bool endMark)
-        : pixmap(QPixmap())
+        : image(QImage())
         , delay(QTC_MOVIE_INVALID_DELAY)
         , endMark(endMark)
     {}
 
     inline QtcFrameInfo()
-        : pixmap(QPixmap())
+        : image(QImage())
         , delay(QTC_MOVIE_INVALID_DELAY)
         , endMark(false)
     {}
 
-    inline QtcFrameInfo(QPixmap &&pixmap, int delay)
-        : pixmap(std::move(pixmap))
+    inline QtcFrameInfo(QImage &&image, int delay)
+        : image(image)
         , delay(delay)
         , endMark(false)
     {}
 
     inline bool isValid()
     {
-        return endMark || !(pixmap.isNull() && (delay == QTC_MOVIE_INVALID_DELAY));
+        return endMark || !(image.isNull() && (delay == QTC_MOVIE_INVALID_DELAY));
     }
 
     inline bool isEndMarker() { return endMark; }
@@ -89,7 +89,7 @@ public:
 
     QtcMovie::MovieState movieState = QtcMovie::NotRunning;
     QRect frameRect;
-    QPixmap currentPixmap;
+    QImage currentImage;
     int currentFrameNumber = -1;
     int nextFrameNumber = 0;
     int greatestFrameNumber = -1;
@@ -233,7 +233,7 @@ QtcFrameInfo QtcMoviePrivate::infoForFrame(int frameNumber)
             }
             if (frameNumber > greatestFrameNumber)
                 greatestFrameNumber = frameNumber;
-            return QtcFrameInfo(QPixmap::fromImage(std::move(anImage)), nextFrameDelay());
+            return QtcFrameInfo(std::move(anImage), nextFrameDelay());
         } else if (frameNumber != 0) {
             // We've read all frames now. Return an end marker
             haveReadAll = true;
@@ -261,7 +261,7 @@ QtcFrameInfo QtcMoviePrivate::infoForFrame(int frameNumber)
                     return QtcFrameInfo(); // Invalid
                 }
                 greatestFrameNumber = i;
-                QtcFrameInfo info(QPixmap::fromImage(std::move(anImage)), nextFrameDelay());
+                QtcFrameInfo info(std::move(anImage), nextFrameDelay());
                 // Cache it!
                 frameMap.insert(i, info);
                 if (i == frameNumber) {
@@ -283,7 +283,7 @@ QtcFrameInfo QtcMoviePrivate::infoForFrame(int frameNumber)
     \internal
 
     Attempts to advance the animation to the next frame.
-    If successful, currentFrameNumber, currentPixmap and
+    If successful, currentFrameNumber, currentImage and
     nextDelay are updated accordingly, and true is returned.
     Otherwise, false is returned.
     When false is returned, isDone() can be called to
@@ -320,7 +320,7 @@ bool QtcMoviePrivate::next()
     }
     // Image and delay OK, update internal state
     currentFrameNumber = nextFrameNumber++;
-    currentPixmap = info.pixmap;
+    currentImage = info.image;
 
     if (!speed)
         return true;
@@ -351,8 +351,8 @@ void QtcMoviePrivate::_q_loadNextFrame(bool starting)
             emit q->started();
         }
 
-        if (frameRect.size() != currentPixmap.rect().size()) {
-            frameRect = currentPixmap.rect();
+        if (frameRect.size() != currentImage.rect().size()) {
+            frameRect = currentImage.rect();
             emit q->resized(frameRect.size());
         }
 
@@ -630,18 +630,18 @@ QRect QtcMovie::frameRect() const
 QPixmap QtcMovie::currentPixmap() const
 {
     Q_D(const QtcMovie);
-    return d->currentPixmap;
+    return QPixmap::fromImage(d->currentImage);
 }
 
 /*!
     Returns the current frame as a QImage.
 
-    \sa currentPixmap(), updated()
+    \sa currentImage(), updated()
 */
 QImage QtcMovie::currentImage() const
 {
     Q_D(const QtcMovie);
-    return d->currentPixmap.toImage();
+    return d->currentImage;
 }
 
 /*!
