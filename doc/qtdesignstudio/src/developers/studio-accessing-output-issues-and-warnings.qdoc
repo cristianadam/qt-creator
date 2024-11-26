@@ -1,0 +1,69 @@
+// Copyright (C) 2024 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page studio-accessing-output-issues-and-warnings.html
+    \nextpage studio-on-mcus.html
+    \previouspage creator-editor-external.html
+
+    \title Accessing output, issue, and warning messages
+
+    \image studio-output-view.webp
+
+    \QDS projects generate output information for the user to represent the
+    executed processes. It also shows you the issues that stop a project from
+    getting executed or gives you warnings about probable failures.
+
+    Access the output, issue, and warning messageses in \QDS by selecting
+    these buttons:
+    \table
+        \header
+            \li Action
+            \li Button
+        \row
+            \li Output
+            \li \inlineimage icons/output.png
+        \row
+            \li Issue and warning
+            \li \inlineimage icons/warning.png \inlineimage icons/error.png
+    \endtable
+
+    \section1 Accessing the Output messages
+
+    To access the output view:
+    \list 1
+        \li Create or open a \QDS project.
+        \li Select \inlineimage icons/output.png.
+        \li Select \uicontrol {Run Project}, to execute the project.
+        \li Find the executed processes listed in the \uicontrol Output
+            messages.
+            \image studio-output-view-message.webp
+    \endlist
+
+    \section1 Accessing the Issue and Warning messages
+
+    Technical problems in the \QDS project are visible as a part of the
+    output view. To access these issues select \inlineimage icons/warning.png \inlineimage icons/error.png .
+
+    Select the link from the issue notification to jump into the location of the error.
+
+    \table
+        \header
+            \li Message type
+            \li Message example
+        \row
+            \li Issue notification
+            \li \image studio-issue-message.webp
+        \row
+            \li Warning notification
+            \li \image studio-warning-message.webp
+
+    \endtable
+
+    \note Selecting the link takes you to the location of the issue in the view (\uicontrol 2D,
+        \uicontrol 3D, or \uicontrol Code) you are currently in.
+
+    To clean the \uicontrol Output view select \inlineimage icons/clear-view.png. \br
+    To close the Output view select \inlineimage icons/distribute-origin-none.png.
+
+*/
