@@ -198,7 +198,7 @@ bool CMakeGenerator::checkUri(const QString& uri, const Utils::FilePath &path) c
     for (const auto& import : buildSystem()->allImports()) {
         Utils::FilePath importPath = Utils::FilePath::fromUserInput(import);
         for (const auto& component : importPath.pathView().split('/', Qt::SkipEmptyParts)) {
-            if (component == pathComponents.first())
+            if (!pathComponents.isEmpty() && component == pathComponents.first())
                 pathComponents.pop_front();
         }
     }
