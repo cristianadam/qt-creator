@@ -5,15 +5,17 @@
     \page fresnel-effect-example.html
     \ingroup studioexamples
 
-    \title The Fresnel example
-    \brief Illustrates how to work with the fresnel effect.
+    \title Fresnel monkey
+    \brief Illustrates how to work with the Fresnel effect.
+    \sa {Material Editor and Browser}, {Setting Image Based Lighting}, {Directional Light},
+    {3D Models}, {Content Library}
 
     \image fresnel-example.webp
 
-    The \e{Fresnel} example illustrates how to add and adjust a Fresnel effect on
-    a 3D model.
+    The \e {Fresnel monkey} example illustrates how to add a Fresnel effect to a material
+    and use the material on a 3D model.
 
-    The fresnel effect affects how materials reflect light at different viewing angles. Imagine the
+    The Fresnel effect affects how materials reflect light at different viewing angles. Imagine the
     water on a lake. If you look down at the water from straight above, you can see through the
     water, but if you look from a lower angle, the reflections are stronger.
 
@@ -26,18 +28,58 @@
 
     \section1 The 3D scene
 
-    The example project consists of a basic 3D scene with the following components:
+    The 3D scene of the example project consists of the following models:
 
     \list
-      \li A 3D model.
-      \li A directional light.
-      \li An HDR image used to light the scene (image-based lighting).
+        \li Monkey head (\e {monkeyModel})
+        \li Sphere (\e {sphere})
+        \li Plane (\e {mirror})
     \endlist
+
+    The 3D scene uses a directional light and an HDR image to light the scene (image-based
+    lighting).
+
+    Use the example UI controls to manipulate the scene.
+
+    \table
+    \header
+        \li Control
+        \li Description
+    \row
+        \li \uicontrol {Rotate background} slider
+        \li Rotate the background to see the models from different angles.
+    \row
+        \li \uicontrol {Move camera} or \uicontrol {Move model} switch
+        \li Switch between moving the monkey head model and the camera.
+    \row
+        \li \uicontrol {Reset camera} button
+        \li Reset the camera to its initial position.
+    \row
+        \li \uicontrol {Reset monkey} button
+        \li Resets the monkey to its initial position.
+    \endtable
+
+    Navigate the scene with your keyboard using the \uicontrol {Camera controls} listed in
+    the example.
 
     \section1 The material
 
-    The material on the 3D model in this example is a principled material with a
-    clearcoat.
+    The following materials are used in this example.
+
+    \table
+    \header
+        \li Material
+        \li Description
+    \row
+        \li Monkey Material
+        \li A yellow principled material with a clearcoat.
+    \row
+        \li Green Material
+        \li A green principled material with a clearcoat.
+    \row
+        \li Mirror
+        \li A ready-made material from \uicontrol {Content Library}.
+    \endtable
 
     \section2 Clearcoat
 
@@ -71,20 +113,37 @@
         a smaller scale creates a more abrupt shift in reflection intensity.
       \row
         \li Fresnel Bias
-        \li Controls the offset for the fresnel power property and determines how quickly the
+        \li Controls the offset for the Fresnel power property and determines how quickly the
         reflection transitions from weak to strong as the viewing
         angle changes. A larger bias value shifts the transition point toward steeper angles.
     \endtable
 
-    \section3 Adjusting the Fresnel settings
+    \section2 Adjusting the Fresnel properties
 
-    To adjust the settings:
+    To adjust the Fresnel properties, use the sliders in the example UI.
+
+    To improve performance, select a lower reflection detail from the
+    \uicontrol {Reflection detail} dropdown menu.
+
+    To reset the Fresnel properties back to their initial state, select \uicontrol {Reset fresnel}.
+
+    \section1 Getting started with Fresnel
+
+    To edit an existing material:
 
     \list 1
-      \li In \uicontrol {Material Browser}, double-click \e {Monkey Material}.
+      \li In \uicontrol {Material Browser}, double-click a material.
       \li In \uicontrol {Material Editor}, find the properties under
       \uicontrol {Clearcoat} and \uicontrol {Fresnel} respectively.
     \endlist
 
     \note You see the changes live as you edit them in the \uicontrol 2D view.
+
+    To create a new material with Fresnel:
+
+    \list 1
+      \li In \uicontrol {Material Editor}, select \inlineimage icons/plus.png.
+      \li Edit the properties under \uicontrol {Clearcoat} and \uicontrol {Fresnel} respectively.
+    \endlist
+
 */
