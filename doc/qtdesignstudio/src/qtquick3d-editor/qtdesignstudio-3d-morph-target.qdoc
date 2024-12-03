@@ -25,7 +25,7 @@
     \l Properties > \uicontrol Model > \uicontrol {Morph Targets}, select the
     name of the \uicontrol {Morph Target} component.
 
-    \section1 Morph Target Properties
+    \section1 Morph Target properties
 
     To define attributes and weight for a \uicontrol {Morph Target}, select it
     in \uicontrol Navigator and specify its properties in the

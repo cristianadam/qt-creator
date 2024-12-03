@@ -1,4 +1,4 @@
-// Copyright (C) 2021 The Qt Company Ltd.
+// Copyright (C) 2024 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
 
 /*!
@@ -23,15 +23,15 @@
         \li \l {Particle Directions}
     \endlist
 
-    Preset particle \l{Particle Components}{components},
-    \l{Particle Templates}{templates}, and \l{Particle Effects}{effects} are
+    Preset particle \l{Particle components}{components},
+    \l{Particle templates}{templates}, and \l{Particle effects}{effects} are
     available in \uicontrol Components > \uicontrol {QtQuick3D Particles3D}
     after you add the \uicontrol {QtQuick3D.Particles3D} module to
     your project, as instructed in \l{Adding and Removing Modules}.
 
     \image studio-3d-particles.png "3D Particles"
 
-    \section1 Particle Components
+    \section1 Particle components
 
     When you add an instance of the \uicontrol {Particle System} component to a
     scene, \QDS automatically adds instances of the \uicontrol {Sprite Particle},
@@ -40,7 +40,7 @@
     \image studio-3d-particle-system-navigator.png "Particle System in Navigator"
 
     The \uicontrol {Sprite Particle} is a visual \l{Textures}{2D texture}
-    particle. To use \l{3D Models}{3D model} particles, add instances of the
+    particle. To use \l{3D models}{3D model} particles, add instances of the
     \uicontrol {Model Particle} component to the particle system. It is
     important to define the amount of particles to use in \uicontrol Properties
     > \uicontrol Particle > \uicontrol {Max amount}, so that the optimal buffer
@@ -155,7 +155,7 @@
         \li Applies random wave curves to particles.
     \endtable
 
-    \section1 Particle Templates
+    \section1 Particle templates
 
     A particle template is a preset of particle components that you can use to
     create specific particle effects in a convenient way.
@@ -276,7 +276,7 @@
       \endlist
     \endtable
 
-    \section1 Particle Effects
+    \section1 Particle effects
 
     A particle effect is a ready-made effect that you can use to create, for
     example, fire, rain, or mist in a convenient way.
@@ -313,7 +313,7 @@
 
     \image studio-3d-particles-sprite-template.png
 
-    \section1 Performance Considerations
+    \section1 Performance considerations
 
     The particles are designed to be usable on a variety of hardware on
     desktops, as well as mobile and embedded devices. However, in addition
@@ -339,7 +339,7 @@
 
     \youtube 9MqUCP6JLCQ
 
-    \section1 Particle System Tutorials
+    \section1 Particle System tutorials
 
     \list
       \li \l{Particle System: The fire effect}
@@ -422,9 +422,9 @@
     \list
       \li \uicontrol {Sprite Particle} and \uicontrol{Line Particle} for
       \l{Textures}{2D texture} particles.
-      \li \uicontrol {Model Particle} for \l{3D Models}{3D model} particles.
-      Model particles use \l{Instanced Rendering}{instanced rendering} to render
-      thousands of particles, with full \l{3D Materials}{materials} and
+      \li \uicontrol {Model Particle} for \l{3D models}{3D model} particles.
+      Model particles use \l{Instanced rendering}{instanced rendering} to render
+      thousands of particles, with full \l{3D materials}{materials} and
       \l{Lights}{lights} support.
     \endlist
 
@@ -1050,7 +1050,7 @@
     milliseconds.
 
     \uicontrol {Easing Curve} defines the
-    \l{Editing Easing Curves}{easing curve} for the scaling animation.
+    \l{Editing easing curves}{easing curve} for the scaling animation.
 
     \section1 Wander
 
