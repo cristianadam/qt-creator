@@ -499,6 +499,10 @@ static Group dtoRecipe(const Storage<DtoStorageType<DtoType>> &dtoStorage)
                 errorString = Error(DashboardError(reply->url(), statusCode,
                     reply->attribute(QNetworkRequest::HttpReasonPhraseAttribute).toString(),
                                      *error)).message();
+                if (statusCode >= 400) {
+                    MessageManager::writeFlashing(QString("Axivion: " + errorString));
+                    return DoneResult::Error;
+                }
             } else {
                 errorString = error.error();
             }
