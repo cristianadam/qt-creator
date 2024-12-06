@@ -31,6 +31,7 @@
 #include <zoomaction.h>
 
 #include <coreplugin/icore.h>
+#include <studioutils.h>
 #include <utils/algorithm.h>
 #include <utils/qtcassert.h>
 
@@ -472,7 +473,8 @@ void FormEditorView::bindingPropertiesChanged(
     }
 }
 
-void FormEditorView::documentMessagesChanged(const QList<DocumentMessage> &errors, const QList<DocumentMessage> &)
+void FormEditorView::documentMessagesChanged(const QList<DocumentMessage> &errors,
+                                             const QList<DocumentMessage> &warnings)
 {
     QTC_ASSERT(model(), return);
     QTC_ASSERT(model()->rewriterView(), return);
@@ -481,6 +483,22 @@ void FormEditorView::documentMessagesChanged(const QList<DocumentMessage> &error
         m_formEditorWidget->showErrorMessageBox(errors);
     else if (rewriterView()->errors().isEmpty())
         m_formEditorWidget->hideErrorMessageBox();
+
+    StudioUtils::clearTasks(ProjectExplorer::Constants::TASK_CATEGORY_SANITIZER);
+
+    for (const auto &error : errors) {
+        StudioUtils::logError(error.description(),
+                              ProjectExplorer::Constants::TASK_CATEGORY_SANITIZER,
+                              Utils::FilePath::fromUrl(error.url()),
+                              error.line());
+    }
+
+    for (const auto &warning : warnings) {
+        StudioUtils::logError(warning.description(),
+                              ProjectExplorer::Constants::TASK_CATEGORY_SANITIZER,
+                              Utils::FilePath::fromUrl(warning.url()),
+                              warning.line());
+    }
 
     checkRootModelNode();
 }
