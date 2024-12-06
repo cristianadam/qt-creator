@@ -46,6 +46,7 @@ extend_qtc_plugin(QmlDesignerBase
   SOURCES_PREFIX studio
   SOURCES
     studioquickutils.cpp studioquickutils.h
+    studioutils.cpp studioutils.h
     studiostyle.cpp studiostyle.h
     studiostyle_p.cpp studiostyle_p.h
     studioquickwidget.cpp studioquickwidget.h
