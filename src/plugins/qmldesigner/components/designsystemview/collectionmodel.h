@@ -17,7 +17,7 @@ class CollectionModel : public QAbstractItemModel
     Q_OBJECT
 
 public:
-    enum class Roles { GroupRole = Qt::UserRole + 1, BindingRole };
+    enum class Roles { GroupRole = Qt::UserRole + 1, BindingRole, ActiveThemeRole };
 
     CollectionModel(DSThemeManager *collection);
 

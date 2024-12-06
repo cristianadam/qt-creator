@@ -39,6 +39,8 @@ QVariant CollectionModel::data(const QModelIndex &index, int role) const
         return QVariant::fromValue<GroupType>(groupType);
     case static_cast<int>(Roles::BindingRole):
         return property->isBinding;
+    case static_cast<int>(Roles::ActiveThemeRole):
+        return m_collection->activeTheme() == themeId;
     }
 
     return {};
@@ -64,8 +66,17 @@ int CollectionModel::rowCount(const QModelIndex &parent) const
 
 QVariant CollectionModel::headerData(int section, Qt::Orientation orientation, int role) const
 {
-    if (orientation == Qt::Horizontal && role == Qt::DisplayRole)
-        return QString::fromLatin1(m_collection->themeName(findThemeId(section)));
+    if (orientation == Qt::Horizontal) {
+        auto themeId = findThemeId(section);
+        switch (role) {
+        case Qt::DisplayRole:
+            return QString::fromLatin1(m_collection->themeName(themeId));
+        case static_cast<int>(Roles::ActiveThemeRole):
+            return m_collection->activeTheme() == themeId;
+        default:
+            break;
+        }
+    }
 
     if (orientation == Qt::Vertical) {
         if (auto propInfo = findPropertyName(section)) {
@@ -75,7 +86,6 @@ QVariant CollectionModel::headerData(int section, Qt::Orientation orientation, i
                 return QVariant::fromValue<GroupType>(propInfo->first);
         }
     }
-
     return {};
 }
 
@@ -89,6 +99,7 @@ QHash<int, QByteArray> CollectionModel::roleNames() const
     auto roles = QAbstractItemModel::roleNames();
     roles.insert(static_cast<int>(Roles::GroupRole), "group");
     roles.insert(static_cast<int>(Roles::BindingRole), "isBinding");
+    roles.insert(static_cast<int>(Roles::ActiveThemeRole), "isActive");
     return roles;
 }
 
@@ -190,9 +201,6 @@ bool CollectionModel::setHeaderData(int section,
                                     const QVariant &value,
                                     int role)
 {
-    if (role != Qt::EditRole)
-        return false;
-
     if (section < 0 || (orientation == Qt::Horizontal && section >= columnCount())
         || (orientation == Qt::Vertical && section >= rowCount())) {
         return false; // Out of bounds
@@ -200,14 +208,23 @@ bool CollectionModel::setHeaderData(int section,
 
     const auto &newName = value.toString().toUtf8();
     bool success = false;
-    if (orientation == Qt::Horizontal) {
-        // Theme
-        success = m_collection->renameTheme(findThemeId(section), newName);
-    } else {
+    if (orientation == Qt::Vertical && role == Qt::EditRole) {
         // Property Name
         if (auto propInfo = findPropertyName(section)) {
             auto [groupType, propName] = *propInfo;
             success = m_collection->renameProperty(groupType, propName, newName);
+        }
+    } else {
+        // Theme
+        const auto themeId = findThemeId(section);
+        switch (role) {
+        case Qt::EditRole:
+            success = m_collection->renameTheme(themeId, newName);
+            break;
+        case static_cast<int>(Roles::ActiveThemeRole):
+            m_collection->setActiveTheme(themeId);
+            success = true;
+            break;
         }
     }
 
