@@ -267,7 +267,7 @@ class SshConnectionHandle : public QObject
 {
     Q_OBJECT
 public:
-    SshConnectionHandle(const IDevice::ConstPtr &device) : m_device(device) {}
+    SshConnectionHandle(const DeviceConstRef &device) : m_device(device) {}
     ~SshConnectionHandle() override { emit detachFromSharedConnection(); }
 
 signals:
@@ -278,9 +278,7 @@ signals:
     void detachFromSharedConnection();
 
 private:
-    // Store the IDevice::ConstPtr in order to extend the lifetime of device for as long
-    // as this object is alive.
-    IDevice::ConstPtr m_device;
+    DeviceConstRef m_device;
 };
 
 // LinuxDevicePrivate
@@ -420,7 +418,7 @@ Environment LinuxDeviceAccess::deviceEnvironment() const
 class SshProcessInterfacePrivate : public QObject
 {
 public:
-    SshProcessInterfacePrivate(SshProcessInterface *sshInterface, const IDevice::ConstPtr &device);
+    SshProcessInterfacePrivate(SshProcessInterface *sshInterface, const DeviceConstRef &device);
 
     void start();
 
@@ -438,9 +436,7 @@ public:
     SshProcessInterface *q = nullptr;
 
     qint64 m_processId = 0;
-    // Store the IDevice::ConstPtr in order to extend the lifetime of device for as long
-    // as this object is alive.
-    IDevice::ConstPtr m_device;
+    DeviceConstRef m_device;
     std::unique_ptr<SshConnectionHandle> m_connectionHandle;
     Process m_process;
 
@@ -455,7 +451,7 @@ public:
     bool m_pidParsed = false;
 };
 
-SshProcessInterface::SshProcessInterface(const IDevice::ConstPtr &device)
+SshProcessInterface::SshProcessInterface(const DeviceConstRef &device)
     : d(new SshProcessInterfacePrivate(this, device))
 {}
 
@@ -490,14 +486,14 @@ ProcessResult SshProcessInterface::runInShell(const CommandLine &command, const 
     QString tmp;
     ProcessArgs::addArg(&tmp, command.executable().path());
     ProcessArgs::addArgs(&tmp, command.arguments());
-    process.setCommand({d->m_device->filePath("/bin/sh"), {"-c", tmp}});
+    process.setCommand({d->m_device.filePath("/bin/sh"), {"-c", tmp}});
     process.setWriteData(data);
     using namespace std::chrono_literals;
     process.runBlocking(2s);
     if (process.result() == ProcessResult::Canceled) {
         Core::MessageManager::writeFlashing(Tr::tr("Can't send control signal to the %1 device. "
                                                    "The device might have been disconnected.")
-                                                .arg(d->m_device->displayName()));
+                                                .arg(d->m_device.displayName()));
     }
     return process.result();
 }
@@ -643,7 +639,7 @@ void SshProcessInterfacePrivate::handleReadyReadStandardError()
 }
 
 SshProcessInterfacePrivate::SshProcessInterfacePrivate(SshProcessInterface *sshInterface,
-                                                       const IDevice::ConstPtr &device)
+                                                       const DeviceConstRef &device)
     : QObject(sshInterface)
     , q(sshInterface)
     , m_device(device)
@@ -659,9 +655,9 @@ SshProcessInterfacePrivate::SshProcessInterfacePrivate(SshProcessInterface *sshI
 
 void SshProcessInterfacePrivate::start()
 {
-    m_sshParameters = m_device->sshParameters();
+    m_sshParameters = m_device.sshParameters();
 
-    const Id linkDeviceId = Id::fromSetting(m_device->extraData(Constants::LinkDevice));
+    const Id linkDeviceId = Id::fromSetting(m_device.extraData(Constants::LinkDevice));
     if (const IDevice::ConstPtr linkDevice = DeviceManager::instance()->find(linkDeviceId)) {
         CommandLine cmd{linkDevice->filePath("ssh")};
         if (!m_sshParameters.userName().isEmpty()) {
@@ -708,7 +704,7 @@ void SshProcessInterfacePrivate::start()
         return;
     }
 
-    auto linuxDevice = std::dynamic_pointer_cast<const LinuxDevice>(m_device);
+    auto linuxDevice = std::dynamic_pointer_cast<const LinuxDevice>(m_device.lock());
     QTC_ASSERT(linuxDevice, handleDone(); return);
     if (linuxDevice->isDisconnected() && !linuxDevice->isTesting())
         return handleDone();
@@ -784,7 +780,7 @@ CommandLine SshProcessInterfacePrivate::fullLocalCommandLine() const
     const FilePath sshBinary = SshSettings::sshFilePath();
     const bool useTerminal = q->m_setup.m_terminalMode != TerminalMode::Off || q->m_setup.m_ptyData;
     const bool usePidMarker = !useTerminal;
-    const bool sourceProfile = m_device->extraData(Constants::SourceProfile).toBool();
+    const bool sourceProfile = m_device.extraData(Constants::SourceProfile).toBool();
     const bool useX = !m_sshParameters.x11DisplayName.isEmpty();
 
     CommandLine cmd{sshBinary};
@@ -1300,7 +1296,7 @@ class SshTransferInterface : public FileTransferInterface
     Q_OBJECT
 
 protected:
-    SshTransferInterface(const FileTransferSetupData &setup, const IDevice::ConstPtr &device)
+    SshTransferInterface(const FileTransferSetupData &setup, const DeviceConstRef &device)
         : FileTransferInterface(setup)
         , m_device(device)
         , m_process(this)
@@ -1312,7 +1308,7 @@ protected:
         connect(&m_process, &Process::done, this, &SshTransferInterface::doneImpl);
     }
 
-    IDevice::ConstPtr device() const { return m_device; }
+    DeviceConstRef device() const { return m_device; }
 
     bool handleError()
     {
@@ -1357,8 +1353,8 @@ private:
 
     void start() final
     {
-        m_sshParameters = displayless(m_device->sshParameters());
-        const Id linkDeviceId = Id::fromSetting(m_device->extraData(Constants::LinkDevice));
+        m_sshParameters = displayless(m_device.sshParameters());
+        const Id linkDeviceId = Id::fromSetting(m_device.extraData(Constants::LinkDevice));
         const auto linkDevice = DeviceManager::instance()->find(linkDeviceId);
         const bool useConnectionSharing = !linkDevice && SshSettings::connectionSharingEnabled();
 
@@ -1370,7 +1366,7 @@ private:
                     this, &SshTransferInterface::handleConnected);
             connect(m_connectionHandle.get(), &SshConnectionHandle::disconnected,
                     this, &SshTransferInterface::handleDisconnected);
-            auto linuxDevice = std::dynamic_pointer_cast<const LinuxDevice>(m_device);
+            auto linuxDevice = std::dynamic_pointer_cast<const LinuxDevice>(m_device.lock());
             QTC_ASSERT(linuxDevice, startFailed("No Linux device"); return);
             linuxDevice->connectionAccess()
                 ->attachToSharedConnection(m_connectionHandle.get(), m_sshParameters);
@@ -1400,7 +1396,7 @@ private:
             emit done(resultData); // TODO: don't emit done() on process finished afterwards
     }
 
-    IDevice::ConstPtr m_device;
+    DeviceConstRef m_device;
     SshParameters m_sshParameters;
 
     // ssh shared connection related
@@ -1414,7 +1410,7 @@ private:
 class SftpTransferImpl : public SshTransferInterface
 {
 public:
-    SftpTransferImpl(const FileTransferSetupData &setup, const IDevice::ConstPtr &device)
+    SftpTransferImpl(const FileTransferSetupData &setup, const DeviceConstRef &device)
         : SshTransferInterface(setup, device)
     {}
 
@@ -1424,7 +1420,7 @@ private:
         FilePath sftpBinary = SshSettings::sftpFilePath();
 
         // This is a hack. We only test the last hop here.
-        const Id linkDeviceId = Id::fromSetting(device()->extraData(Constants::LinkDevice));
+        const Id linkDeviceId = Id::fromSetting(device().extraData(Constants::LinkDevice));
         if (const auto linkDevice = DeviceManager::instance()->find(linkDeviceId))
             sftpBinary = linkDevice->filePath(sftpBinary.fileName()).searchInPath();
 
@@ -1475,7 +1471,7 @@ private:
 class RsyncTransferImpl : public SshTransferInterface
 {
 public:
-    RsyncTransferImpl(const FileTransferSetupData &setup, const IDevice::ConstPtr &device)
+    RsyncTransferImpl(const FileTransferSetupData &setup, const DeviceConstRef &device)
         : SshTransferInterface(setup, device)
     { }
 

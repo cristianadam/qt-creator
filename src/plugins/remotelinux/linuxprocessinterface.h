@@ -16,7 +16,7 @@ class SshProcessInterfacePrivate;
 class REMOTELINUX_EXPORT SshProcessInterface : public Utils::ProcessInterface
 {
 public:
-    explicit SshProcessInterface(const ProjectExplorer::IDevice::ConstPtr &device);
+    explicit SshProcessInterface(const ProjectExplorer::DeviceConstRef &device);
     ~SshProcessInterface();
 
 protected:
