@@ -24,7 +24,8 @@ public:
     Utils::TextFileFormat format() const;
     const QTextCodec *codec() const;
     void setCodec(const QTextCodec *);
-    virtual bool supportsCodec(const QTextCodec *) const;
+    void setCodec(const QByteArray &name);
+    virtual bool supportsCodec(const QByteArray &) const;
     void switchUtf8Bom();
     bool supportsUtf8Bom() const;
     Utils::TextFileFormat::LineTerminationMode lineTerminationMode() const;

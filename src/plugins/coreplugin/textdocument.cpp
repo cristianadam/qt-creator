@@ -162,11 +162,19 @@ void BaseTextDocument::setCodec(const QTextCodec *codec)
 {
     if (debug)
         qDebug() << Q_FUNC_INFO << this << (codec ? codec->name() : QByteArray());
-    if (supportsCodec(codec))
+    if (supportsCodec(codec ? codec->name() : QByteArray()))
         d->m_format.codec = codec;
 }
 
-bool BaseTextDocument::supportsCodec(const QTextCodec *) const
+void BaseTextDocument::setCodec(const QByteArray &name)
+{
+    if (debug)
+        qDebug() << Q_FUNC_INFO << this << name;
+    if (supportsCodec(name))
+        d->m_format.codec = QTextCodec::codecForName(name);
+}
+
+bool BaseTextDocument::supportsCodec(const QByteArray &) const
 {
     return true;
 }
