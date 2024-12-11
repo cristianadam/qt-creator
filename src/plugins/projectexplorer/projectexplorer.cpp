@@ -3028,27 +3028,29 @@ static bool hasDeploySettings(Project *pro)
     });
 }
 
-void ProjectExplorerPlugin::runProject(Project *pro, Id mode, const bool forceSkipDeploy)
+bool ProjectExplorerPlugin::runProject(Project *pro, Id mode, const bool forceSkipDeploy)
 {
     if (!pro)
-        return;
+        return false;
 
     if (Target *target = pro->activeTarget())
         if (RunConfiguration *rc = target->activeRunConfiguration())
-            runRunConfiguration(rc, mode, forceSkipDeploy);
+            return runRunConfiguration(rc, mode, forceSkipDeploy);
+
+    return false;
 }
 
-void ProjectExplorerPlugin::runStartupProject(Id runMode, bool forceSkipDeploy)
+bool ProjectExplorerPlugin::runStartupProject(Id runMode, bool forceSkipDeploy)
 {
-    runProject(ProjectManager::startupProject(), runMode, forceSkipDeploy);
+    return runProject(ProjectManager::startupProject(), runMode, forceSkipDeploy);
 }
 
-void ProjectExplorerPlugin::runRunConfiguration(RunConfiguration *rc,
+bool ProjectExplorerPlugin::runRunConfiguration(RunConfiguration *rc,
                                                 Id runMode,
                                                 const bool forceSkipDeploy)
 {
     if (!rc->isEnabled(runMode))
-        return;
+        return false;
     const auto delay = [rc, runMode] {
         dd->m_runMode = runMode;
         dd->m_delayedRunConfiguration = rc;
@@ -3065,9 +3067,9 @@ void ProjectExplorerPlugin::runRunConfiguration(RunConfiguration *rc,
 
     switch (buildStatus) {
     case BuildForRunConfigStatus::BuildFailed:
-        return;
+        return false;
     case BuildForRunConfigStatus::Building:
-        QTC_ASSERT(dd->m_runMode == Constants::NO_RUN_MODE, return);
+        QTC_ASSERT(dd->m_runMode == Constants::NO_RUN_MODE, return false);
         delay();
         break;
     case BuildForRunConfigStatus::NotBuilding:
@@ -3079,6 +3081,7 @@ void ProjectExplorerPlugin::runRunConfiguration(RunConfiguration *rc,
     }
 
     dd->doUpdateRunActions();
+    return true;
 }
 
 QList<RunControl *> ProjectExplorerPlugin::allRunControls()

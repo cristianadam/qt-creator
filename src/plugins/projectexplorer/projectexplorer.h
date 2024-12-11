@@ -139,9 +139,9 @@ public:
                                      const Utils::FilePaths &files, bool preferLowerCaseFileNames);
 
     static Utils::expected_str<void> canRunStartupProject(Utils::Id runMode);
-    static void runProject(Project *pro, Utils::Id, const bool forceSkipDeploy = false);
-    static void runStartupProject(Utils::Id runMode, bool forceSkipDeploy = false);
-    static void runRunConfiguration(RunConfiguration *rc, Utils::Id runMode,
+    static bool runProject(Project *pro, Utils::Id, const bool forceSkipDeploy = false);
+    static bool runStartupProject(Utils::Id runMode, bool forceSkipDeploy = false);
+    static bool runRunConfiguration(RunConfiguration *rc, Utils::Id runMode,
                              const bool forceSkipDeploy = false);
     static QList<RunControl *> allRunControls();
 
