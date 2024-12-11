@@ -181,6 +181,7 @@ signals:
     void runActionsUpdated();
     void runControlStarted(ProjectExplorer::RunControl *runControl);
     void runControlStoped(ProjectExplorer::RunControl *runControl);
+    void runFailed();
 
     void filesRenamed(const Utils::FilePairs &oldAndNewPaths);
 

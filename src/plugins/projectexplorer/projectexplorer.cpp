@@ -3065,6 +3065,7 @@ void ProjectExplorerPlugin::runRunConfiguration(RunConfiguration *rc,
 
     switch (buildStatus) {
     case BuildForRunConfigStatus::BuildFailed:
+        emit m_instance->runFailed();
         return;
     case BuildForRunConfigStatus::Building:
         QTC_ASSERT(dd->m_runMode == Constants::NO_RUN_MODE, return);
