@@ -50,6 +50,7 @@
 #include <QTextDocument>
 #include <QMenu>
 #include <QAction>
+#include <QLibraryInfo>
 
 using namespace ProjectExplorer;
 using namespace Core;
@@ -136,11 +137,15 @@ QmlJSEditorPluginPrivate::QmlJSEditorPluginPrivate()
     connect(semanticScan, &QAction::triggered, this, &QmlJSEditorPluginPrivate::runSemanticScan);
     qmlToolsMenu->addAction(cmd);
 
-    m_reformatFileAction = new QAction(Tr::tr("Reformat File"), this);
-    cmd = ActionManager::registerAction(m_reformatFileAction,
-                                        Id("QmlJSEditor.ReformatFile"),
-                                        context);
-    connect(m_reformatFileAction, &QAction::triggered, this, &QmlJSEditorPluginPrivate::reformatFile);
+
+    m_reformatFileAction = ActionBuilder(this, TextEditor::Constants::REFORMAT_DOCUMENT)
+                             .setContext(context)
+                             .addOnTriggered([this] { reformatFile(); })
+                             .setDefaultKeySequence(QKeySequence(Tr::tr("Ctrl+Shift+;")))
+                             .setText(Tr::tr("Reformat Document"))
+                             .addToContainer(Core::Constants::M_EDIT_ADVANCED, Core::Constants::G_EDIT_FORMAT)
+                             .contextAction();
+    cmd = ActionManager::command(TextEditor::Constants::REFORMAT_DOCUMENT);
     qmlToolsMenu->addAction(cmd);
 
     QAction *inspectElementAction = new QAction(Tr::tr("Inspect API for Element Under Cursor"), this);
@@ -167,6 +172,9 @@ QmlJSEditorPluginPrivate::QmlJSEditorPluginPrivate()
     cmd = ActionManager::command(TextEditor::Constants::AUTO_INDENT_SELECTION);
     contextMenu->addAction(cmd);
 
+    cmd = ActionManager::command(TextEditor::Constants::REFORMAT_DOCUMENT);
+    contextMenu->addAction(cmd);
+
     cmd = ActionManager::command(TextEditor::Constants::UN_COMMENT_SELECTION);
     contextMenu->addAction(cmd);
 
@@ -186,13 +194,11 @@ QmlJS::JsonSchemaManager *jsonManager()
 
 static void reformatByQmlFormat(QPointer<QmlJSEditorDocument> document)
 {
-    QString formatCommand = settings().formatCommand();
-    if (formatCommand.isEmpty())
-        formatCommand = settings().defaultFormatCommand();
-    const auto exe = FilePath::fromUserInput(globalMacroExpander()->expand(formatCommand));
-    const QString args = globalMacroExpander()->expand(
-        settings().formatCommandOptions());
-    const CommandLine commandLine(exe, args, CommandLine::Raw);
+    const Utils::FilePath &qmlformatPath = QmlJS::ModelManagerInterface::qmlformatBinPath(FilePath::fromUserInput(QLibraryInfo::path(
+                                                         QLibraryInfo::BinariesPath)),
+                                                     QLibraryInfo::version());
+    QStringList args{};
+    const CommandLine commandLine(qmlformatPath, args);
     TextEditor::Command command;
     command.setExecutable(commandLine.executable());
     command.setProcessing(TextEditor::Command::FileProcessing);
@@ -275,15 +281,15 @@ void QmlJSEditorPluginPrivate::reformatFile()
     if (!m_currentDocument)
         return;
 
+    if (settings().useBuiltInFormatter()) {
+        reformatByBuiltInFormatter(m_currentDocument);
+        return;
+    }
+
     if (reformatUsingLanguageServer(m_currentDocument))
         return;
 
-    if (settings().useCustomFormatCommand()) {
-       reformatByQmlFormat(m_currentDocument);
-       return;
-    }
-
-    reformatByBuiltInFormatter(m_currentDocument);
+    reformatByQmlFormat(m_currentDocument);
 }
 
 Command *QmlJSEditorPluginPrivate::addToolAction(QAction *a,
