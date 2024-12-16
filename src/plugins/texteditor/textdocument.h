@@ -82,6 +82,7 @@ public:
     Utils::MultiTextCursor unindent(const Utils::MultiTextCursor &cursor);
 
     void setFormatter(Formatter *indenter); // transfers ownership
+    void setFormatterMode(Formatter::FormatMode mode);
     void autoFormat(const QTextCursor &cursor);
     bool applyChangeSet(const Utils::ChangeSet &changeSet);
 

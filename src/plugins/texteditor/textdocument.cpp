@@ -510,6 +510,12 @@ void TextDocument::setFormatter(Formatter *formatter)
     d->m_formatter.reset(formatter);
 }
 
+void TextDocument::setFormatterMode(Formatter::FormatMode mode)
+{
+    if (d->m_formatter)
+        d->m_formatter->setMode(mode);
+}
+
 void TextDocument::autoFormat(const QTextCursor &cursor)
 {
     using namespace Utils::Text;
