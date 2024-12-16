@@ -11,6 +11,7 @@
 
 namespace QmlJSTools {
 class QmlJSCodeStyleSettingsWidget;
+class QmlFormatSettingsWidget;
 
 class QMLJSTOOLS_EXPORT QmlJSCodeStylePreferencesWidget : public QWidget
 {
@@ -26,6 +27,7 @@ private:
     void slotSettingsChanged(const QmlJSCodeStyleSettings &settings);
 
     QmlJSCodeStyleSettingsWidget *m_codeStyleSettingsWidget;
+    QmlFormatSettingsWidget *m_qmlformatSettingsWidget;
     QmlJSCodeStylePreferences *m_preferences = nullptr;
 };
 

@@ -28,7 +28,6 @@
 #include <QVBoxLayout>
 
 using namespace TextEditor;
-
 namespace QmlJSTools::Internal {
 
 // QmlJSCodeStylePreferencesWidget
@@ -54,8 +53,7 @@ QmlJSCodeStylePreferencesWidget::QmlJSCodeStylePreferencesWidget(
             m_codeStylePreferencesWidget,
             st,
         },
-        m_previewTextEdit,
-        noMargin
+        m_previewTextEdit
     }.attachTo(this);
 
     connect(TextEditorSettings::instance(), &TextEditorSettings::fontSettingsChanged,

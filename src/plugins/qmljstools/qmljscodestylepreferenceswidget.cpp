@@ -5,6 +5,7 @@
 
 #include "qmljscodestylesettings.h"
 #include "qmljscodestylesettingswidget.h"
+#include "qmlformatsettingswidget.h"
 
 #include <QLabel>
 #include <QVBoxLayout>
@@ -15,8 +16,11 @@ QmlJSCodeStylePreferencesWidget::QmlJSCodeStylePreferencesWidget(QWidget *parent
       QWidget(parent)
 {
     m_codeStyleSettingsWidget = new QmlJSCodeStyleSettingsWidget(this);
+    m_qmlformatSettingsWidget = new QmlJSTools::QmlFormatSettingsWidget(this);
+
     auto layout = new QVBoxLayout(this);
     layout->addWidget(m_codeStyleSettingsWidget);
+    layout->addWidget(m_qmlformatSettingsWidget);
     layout->setContentsMargins(QMargins());
 }
 
@@ -52,8 +56,10 @@ void QmlJSCodeStylePreferencesWidget::setPreferences(QmlJSCodeStylePreferences *
 
 void QmlJSCodeStylePreferencesWidget::slotCurrentPreferencesChanged(TextEditor::ICodeStylePreferences *preferences)
 {
-    m_codeStyleSettingsWidget->setEnabled(preferences && preferences->currentPreferences() &&
-                                          !preferences->currentPreferences()->isReadOnly());
+    const bool enableWidgets = preferences && preferences->currentPreferences() &&
+                                          !preferences->currentPreferences()->isReadOnly();
+    m_codeStyleSettingsWidget->setEnabled(enableWidgets);
+    m_qmlformatSettingsWidget->setEnabled(enableWidgets);
 }
 
 void QmlJSCodeStylePreferencesWidget::slotSettingsChanged(const QmlJSCodeStyleSettings &settings)
