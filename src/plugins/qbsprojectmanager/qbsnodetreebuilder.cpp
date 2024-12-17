@@ -200,10 +200,10 @@ QbsProjectNode *buildQbsProjectTree(const QString &projectName,
     auto buildSystemFiles = std::make_unique<FolderNode>(projectDir);
     buildSystemFiles->setDisplayName(Tr::tr("Qbs files"));
 
-    const FilePath buildDir = FilePath::fromString(projectData.value("build-directory").toString());
+    const FilePath buildDir = projectFile.withNewPath(projectData.value("build-directory").toString());
     const QStringList files = unreferencedBuildSystemFiles(projectData);
     for (const QString &f : files) {
-        const FilePath filePath = FilePath::fromString(f);
+        const FilePath filePath = projectFile.withNewPath(f);
         if (filePath.isChildOf(projectDir)) {
             auto fileNode = std::make_unique<FileNode>(filePath, FileType::Project);
             fileNode->setIsGenerated(filePath.isChildOf(buildDir));
