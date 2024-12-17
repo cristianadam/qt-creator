@@ -8,7 +8,6 @@
 #include "optionsparser.h"
 #include "pluginmanager_p.h"
 #include "pluginspec.h"
-#include "shutdownguard.h"
 
 #include <nanotrace/nanotrace.h>
 
@@ -21,6 +20,7 @@
 #include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
 #include <utils/qtcsettings.h>
+#include <utils/shutdownguard.h>
 #include <utils/stringutils.h>
 #include <utils/threadutils.h>
 
