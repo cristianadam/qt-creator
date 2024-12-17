@@ -10,6 +10,7 @@
 #include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/editormanager/documentmodel.h>
 
+#include <utils/shutdownguard.h>
 #include <utils/qtcsettings.h>
 
 using namespace Utils;
@@ -115,7 +116,7 @@ QByteArray FindInOpenFiles::settingsKey() const
 
 void setupFindInOpenFiles()
 {
-    static FindInOpenFiles theFindInOpenFiles;
+    static GuardedObject<FindInOpenFiles> theFindInOpenFiles;
 }
 
 } // TextEditor::Internal

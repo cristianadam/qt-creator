@@ -15,8 +15,9 @@ template <class T>
 class GuardedObject
 {
 public:
-    GuardedObject()
-        : m_object(new T)
+    template <typename ...Args>
+    GuardedObject(Args && ...args)
+        : m_object(new T(std::forward<Args>(args)...))
     {
         QObject::connect(shutdownGuard(), &QObject::destroyed, shutdownGuard(), [this] {
             delete m_object;
@@ -25,6 +26,7 @@ public:
     }
     ~GuardedObject() = default;
 
+    operator T&() const { return *m_object; }
     T *get() const { return m_object; }
 
 private:
