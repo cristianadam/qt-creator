@@ -100,7 +100,7 @@ DebuggerKitAspect::ConfigurationErrors DebuggerKitAspect::configurationErrors(co
     if (!item)
         return NoDebugger;
 
-    const FilePath debugger = item->command();
+    const FilePath debugger = k->resolvePath(item->command());
     if (debugger.isEmpty())
         return NoDebugger;
 
@@ -108,7 +108,7 @@ DebuggerKitAspect::ConfigurationErrors DebuggerKitAspect::configurationErrors(co
         return NoConfigurationError;
 
     ConfigurationErrors result = NoConfigurationError;
-    if (!debugger.isExecutableFile())
+    if (debugger.isLocal() && !debugger.isExecutableFile()) // Checking remote is expensive
         result |= DebuggerNotExecutable;
 
     const Abi tcAbi = ToolchainKitAspect::targetAbi(k);
@@ -142,11 +142,7 @@ ProcessRunData DebuggerKitAspect::runnable(const Kit *kit)
 {
     ProcessRunData runnable;
     if (const DebuggerItem *item = debugger(kit)) {
-        FilePath cmd = item->command();
-        if (cmd.isRelativePath()) {
-            if (const IDeviceConstPtr buildDevice = BuildDeviceKitAspect::device(kit))
-                cmd = buildDevice->searchExecutableInPath(cmd.path());
-        }
+        FilePath cmd = kit->resolvePath(item->command());
         runnable.command.setExecutable(cmd);
         runnable.workingDirectory = item->workingDirectory();
         runnable.environment = cmd.deviceEnvironment();

@@ -132,6 +132,8 @@ public:
     QString newKitName(const QList<Kit *> &allKits) const;
     static QString newKitName(const QString &name, const QList<Kit *> &allKits);
 
+    Utils::FilePath resolvePath(const Utils::FilePath &filePath) const;
+
 private:
     static void copyKitCommon(Kit *target, const Kit *source);
     void setSdkProvided(bool sdkProvided);
