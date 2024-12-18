@@ -333,6 +333,7 @@ public:
     void announceConnectionAttempt();
     void unannounceConnectionAttempt();
     Id announceId() const { return q->id().withPrefix("announce_"); }
+    bool m_isAnnouncingConnectionAttempt = false;
 
     CommandLine unameCommand() const { return {"uname", {"-s"}, OsType::OsTypeLinux}; }
     void setOsTypeFromUnameResult(const RunResult &result);
@@ -1214,7 +1215,8 @@ void LinuxDevicePrivate::announceConnectionAttempt()
     const QString message = Tr::tr("Establishing initial connection to device \"%1\". "
                                    "This might take a moment.").arg(q->displayName());
     qCDebug(linuxDeviceLog) << message;
-    if (isMainThread()) {
+    if (isMainThread() && !m_isAnnouncingConnectionAttempt) {
+        m_isAnnouncingConnectionAttempt = true;
         Core::ICore::infoBar()->addInfo(InfoBarEntry(announceId(), message));
         QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
         QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents); // Yes, twice.
@@ -1223,8 +1225,10 @@ void LinuxDevicePrivate::announceConnectionAttempt()
 
 void LinuxDevicePrivate::unannounceConnectionAttempt()
 {
-    if (isMainThread())
+    if (isMainThread()) {
+        m_isAnnouncingConnectionAttempt = false;
         Core::ICore::infoBar()->removeInfo(announceId());
+    }
 }
 
 bool LinuxDevicePrivate::checkDisconnectedWithWarning()
