@@ -396,6 +396,12 @@ IDevice::ConstPtr RunDeviceKitAspect::device(const Kit *k)
     return DeviceManager::instance()->find(deviceId(k));
 }
 
+IDevice::ConstPtr RunDeviceKitAspect::deviceOrDesktop(const Kit *k)
+{
+    const IDeviceConstPtr dev = device(k);
+    return dev ? dev : DeviceManager::defaultDesktopDevice();
+}
+
 Id RunDeviceKitAspect::deviceId(const Kit *k)
 {
     if (!k)
@@ -517,6 +523,12 @@ IDevice::ConstPtr BuildDeviceKitAspect::device(const Kit *k)
 {
     QTC_ASSERT(DeviceManager::instance()->isLoaded(), return IDevice::ConstPtr());
     return DeviceManager::instance()->find(deviceId(k));
+}
+
+IDevice::ConstPtr BuildDeviceKitAspect::deviceOrDesktop(const Kit *k)
+{
+    const IDeviceConstPtr dev = device(k);
+    return dev ? dev : DeviceManager::defaultDesktopDevice();
 }
 
 Id BuildDeviceKitAspect::deviceId(const Kit *k)

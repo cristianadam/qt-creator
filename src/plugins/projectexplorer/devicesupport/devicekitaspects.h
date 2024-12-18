@@ -26,6 +26,7 @@ class PROJECTEXPLORER_EXPORT RunDeviceKitAspect
 public:
     static Utils::Id id();
     static IDeviceConstPtr device(const Kit *k);
+    static IDeviceConstPtr deviceOrDesktop(const Kit *k);
     static Utils::Id deviceId(const Kit *k);
     static void setDevice(Kit *k, IDeviceConstPtr dev);
     static void setDeviceId(Kit *k, Utils::Id dataId);
@@ -45,6 +46,7 @@ class PROJECTEXPLORER_EXPORT BuildDeviceKitAspect
 public:
     static Utils::Id id();
     static IDeviceConstPtr device(const Kit *k);
+    static IDeviceConstPtr deviceOrDesktop(const Kit *k);
     static Utils::Id deviceId(const Kit *k);
     static void setDevice(Kit *k, IDeviceConstPtr dev);
     static void setDeviceId(Kit *k, Utils::Id dataId);
