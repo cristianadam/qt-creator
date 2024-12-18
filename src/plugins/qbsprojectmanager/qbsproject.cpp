@@ -1192,13 +1192,14 @@ void QbsBuildSystem::updateDeploymentInfo()
 {
     if (session()->projectData().isEmpty())
         return;
+    const FilePath buildDir = m_buildConfiguration->buildDirectory();
     DeploymentData deploymentData;
-    forAllProducts(session()->projectData(), [&deploymentData](const QJsonObject &product) {
-        forAllArtifacts(product, ArtifactType::All, [&deploymentData](const QJsonObject &artifact) {
+    forAllProducts(session()->projectData(), [&deploymentData, buildDir](const QJsonObject &product) {
+        forAllArtifacts(product, ArtifactType::All, [&deploymentData, buildDir](const QJsonObject &artifact) {
             const QJsonObject installData = artifact.value("install-data").toObject();
             if (installData.value("is-installable").toBool()) {
                 deploymentData.addFile(
-                            FilePath::fromSettings(artifact.value("file-path")),
+                            buildDir.withNewPath(artifact.value("file-path").toString()),
                             QFileInfo(installData.value("install-file-path").toString()).path(),
                             artifact.value("is-executable").toBool()
                                 ? DeployableFile::TypeExecutable : DeployableFile::TypeNormal);
