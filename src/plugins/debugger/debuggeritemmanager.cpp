@@ -258,7 +258,7 @@ DebuggerItemModel::DebuggerItemModel()
     genericGdb.setGeneric(true);
     genericGdb.setEngineType(GdbEngineType);
     genericGdb.setAbi(Abi());
-    genericGdb.setCommand("gdb");
+    genericGdb.setCommand("builddevice:///./gdb");
     genericGdb.setUnexpandedDisplayName(Tr::tr("GDB from PATH on Build Device"));
     generic->appendChild(new DebuggerTreeItem(genericGdb, false));
 
@@ -267,7 +267,7 @@ DebuggerItemModel::DebuggerItemModel()
     genericLldb.setEngineType(LldbEngineType);
     genericLldb.setGeneric(true);
     genericLldb.setAbi(Abi());
-    genericLldb.setCommand("lldb");
+    genericLldb.setCommand("builddevice:///./lldb");
     genericLldb.setUnexpandedDisplayName(Tr::tr("LLDB from PATH on Build Device"));
     generic->appendChild(new DebuggerTreeItem(genericLldb, false));
 

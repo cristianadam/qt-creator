@@ -759,6 +759,24 @@ QString Kit::newKitName(const QString &name, const QList<Kit *> &allKits)
     return Utils::makeUniquelyNumbered(baseName, transform(allKits, &Kit::unexpandedDisplayName));
 }
 
+static FilePath resolvePathHelper(const IDeviceConstPtr &device, const FilePath &filePath)
+{
+    if (!device)
+        return FilePath::fromParts({}, {}, filePath.path());
+    return device->filePath(filePath.path());
+}
+
+FilePath Kit::resolvePath(const FilePath &filePath) const
+{
+    if (filePath.scheme() == u"builddevice")
+        return resolvePathHelper(BuildDeviceKitAspect::device(this), filePath);
+
+    if (filePath.scheme() == u"rundevice")
+        return resolvePathHelper(BuildDeviceKitAspect::device(this), filePath);
+
+    return filePath;
+}
+
 void Kit::kitUpdated()
 {
     if (d->m_nestedBlockingLevel > 0) {
