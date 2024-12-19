@@ -104,13 +104,13 @@ int ClangFormatIndenter::lastSaveRevision() const
 
 bool ClangFormatIndenter::formatOnSave() const
 {
-    return ClangFormatSettings::instance().formatOnSave() && !isBeautifierOnSaveActivated()
+    return clangFormatSettings().formatOnSave() && !isBeautifierOnSaveActivated()
            && formatCodeInsteadOfIndent();
 }
 
 bool ClangFormatIndenter::formatWhileTyping() const
 {
-    return ClangFormatSettings::instance().formatWhileTyping() && formatCodeInsteadOfIndent();
+    return clangFormatSettings().formatWhileTyping() && formatCodeInsteadOfIndent();
 }
 
 // ClangFormatIndenterWrapper
@@ -135,7 +135,7 @@ TextEditor::Indenter *ClangFormatForwardingIndenter::currentIndenter() const
     ClangFormatSettings::Mode mode = getCurrentIndentationOrFormattingSettings(m_fileName);
 
     if (mode == ClangFormatSettings::Disable
-        || m_fileName.fileSize() >= ClangFormatSettings::instance().fileSizeThreshold() * 1024)
+        || m_fileName.fileSize() >= clangFormatSettings().fileSizeThreshold() * 1024)
         return m_cppIndenter.get();
 
     return m_clangFormatIndenter.get();

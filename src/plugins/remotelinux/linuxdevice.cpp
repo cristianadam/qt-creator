@@ -378,7 +378,8 @@ Environment LinuxDevicePrivate::getEnvironment()
     getEnvProc.runBlocking(5s);
 
     const QString remoteOutput = getEnvProc.cleanedStdOut();
-    m_environmentCache = Environment(remoteOutput.split('\n', Qt::SkipEmptyParts), q->osType());
+    const QStringList envs = remoteOutput.split('\n', Qt::SkipEmptyParts);
+    m_environmentCache = Environment(envs, q->osType());
     return m_environmentCache.value();
 }
 

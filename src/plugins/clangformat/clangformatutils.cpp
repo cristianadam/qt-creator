@@ -229,11 +229,11 @@ void fromCppCodeStyleSettings(clang::format::FormatStyle &style,
                                    || settings.bindStarToRightSpecifier;
 
     if ((settings.bindStarToIdentifier || settings.bindStarToRightSpecifier)
-        && ClangFormatSettings::instance().mode() == ClangFormatSettings::Mode::Formatting)
+        && clangFormatSettings().mode() == ClangFormatSettings::Mode::Formatting)
         style.PointerAlignment = FormatStyle::PAS_Right;
 
     if ((settings.bindStarToTypeName || settings.bindStarToLeftSpecifier)
-        && ClangFormatSettings::instance().mode() == ClangFormatSettings::Mode::Formatting)
+        && clangFormatSettings().mode() == ClangFormatSettings::Mode::Formatting)
         style.PointerAlignment = FormatStyle::PAS_Left;
 }
 
@@ -281,7 +281,7 @@ bool getProjectCustomSettings(const ProjectExplorer::Project *project)
 
     return projectCustomSettings.isValid()
                ? projectCustomSettings.toBool()
-               : ClangFormatSettings::instance().useCustomSettings();
+               : clangFormatSettings().useCustomSettings();
 }
 
 bool getCurrentCustomSettings(const Utils::FilePath &filePath)
@@ -290,7 +290,7 @@ bool getCurrentCustomSettings(const Utils::FilePath &filePath)
         filePath);
 
     return getProjectUseGlobalSettings(project)
-               ? ClangFormatSettings::instance().useCustomSettings()
+               ? clangFormatSettings().useCustomSettings()
                : getProjectCustomSettings(project);
 }
 
@@ -303,7 +303,7 @@ ClangFormatSettings::Mode getProjectIndentationOrFormattingSettings(
 
     return projectIndentationOrFormatting.isValid()
                ? static_cast<ClangFormatSettings::Mode>(projectIndentationOrFormatting.toInt())
-               : ClangFormatSettings::instance().mode();
+               : clangFormatSettings().mode();
 }
 
 ClangFormatSettings::Mode getCurrentIndentationOrFormattingSettings(const Utils::FilePath &filePath)
@@ -312,7 +312,7 @@ ClangFormatSettings::Mode getCurrentIndentationOrFormattingSettings(const Utils:
         filePath);
 
     return getProjectUseGlobalSettings(project)
-               ? ClangFormatSettings::instance().mode()
+               ? clangFormatSettings().mode()
                : getProjectIndentationOrFormattingSettings(project);
 }
 
