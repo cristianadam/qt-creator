@@ -40,7 +40,7 @@ public:
     int currentPosition() const { return m_currentPosition; }
     void setCurrentPosition(int position) { m_currentPosition = position; }
 
-    QTextDocument *replacementDocument() { return &m_replacementDocument; }
+    std::unique_ptr<QTextDocument> createReplacementDocument();
     QTextDocument *sourceDocument() { return m_sourceDocument; }
 
 private:
@@ -48,7 +48,6 @@ private:
     bool applyPart(Part part, TextEditor::TextEditorWidget *widget);
 
     Data m_suggestion;
-    QTextDocument m_replacementDocument;
     QTextDocument *m_sourceDocument = nullptr;
     int m_currentPosition = -1;
 };

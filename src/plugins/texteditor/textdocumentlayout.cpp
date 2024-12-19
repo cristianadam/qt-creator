@@ -363,6 +363,21 @@ void TextBlockUserData::clearSuggestion()
     m_suggestion.reset();
 }
 
+void TextBlockUserData::insertReplacement(std::unique_ptr<QTextDocument> &&replacement)
+{
+    m_replacement = std::move(replacement);
+}
+
+QTextDocument *TextBlockUserData::replacement() const
+{
+    return m_replacement.get();
+}
+
+void TextBlockUserData::clearReplacement()
+{
+    m_replacement.reset();
+}
+
 void TextBlockUserData::addMark(TextMark *mark)
 {
     int i = 0;
@@ -543,6 +558,13 @@ TextSuggestion *TextDocumentLayout::suggestion(const QTextBlock &block)
     return nullptr;
 }
 
+QTextDocument *TextDocumentLayout::replacement(const QTextBlock &block)
+{
+    if (TextBlockUserData *userData = textUserData(block))
+        return userData->replacement();
+    return nullptr;
+}
+
 void TextDocumentLayout::setAttributeState(const QTextBlock &block, quint8 attrState)
 {
     if (TextBlockUserData * const data = textUserData(block))
@@ -558,54 +580,56 @@ quint8 TextDocumentLayout::attributeState(const QTextBlock &block)
     return 0;
 }
 
-void TextDocumentLayout::updateSuggestionFormats(const QTextBlock &block,
-                                                 const FontSettings &fontSettings)
+void TextDocumentLayout::updateSuggestionFormats(
+    const QTextBlock &block, const FontSettings &fontSettings)
 {
-    if (TextSuggestion *suggestion = TextDocumentLayout::suggestion(block)) {
-        QTextDocument *suggestionDoc = suggestion->replacementDocument();
-        const QTextCharFormat replacementFormat = fontSettings.toTextCharFormat(
-            TextStyles{C_TEXT, {C_DISABLED_CODE}});
-        QList<QTextLayout::FormatRange> formats = block.layout()->formats();
-        QTextCursor cursor(suggestionDoc);
-        cursor.select(QTextCursor::Document);
-        cursor.setCharFormat(fontSettings.toTextCharFormat(C_TEXT));
-        const int position = suggestion->currentPosition() - block.position();
-        cursor.setPosition(position);
-        const QString trailingText = block.text().mid(position);
-        if (!trailingText.isEmpty()) {
-            const int trailingIndex = suggestionDoc->firstBlock().text().indexOf(trailingText,
-                                                                               position);
-            if (trailingIndex >= 0) {
-                cursor.setPosition(trailingIndex, QTextCursor::KeepAnchor);
-                cursor.setCharFormat(replacementFormat);
-                cursor.setPosition(trailingIndex + trailingText.size());
-                const int length = std::max(trailingIndex - position, 0);
-                if (length) {
-                    // we have a replacement in the middle of the line adjust all formats that are
-                    // behind the replacement
-                    QTextLayout::FormatRange rest;
-                    rest.start = -1;
-                    for (QTextLayout::FormatRange &range : formats) {
-                        if (range.start >= position) {
-                            range.start += length;
-                        } else if (range.start + range.length > position) {
-                            // the format range starts before and ends after the position so we need to
-                            // split the format into before and after the suggestion format ranges
-                            rest.start = trailingIndex;
-                            rest.length = range.length - (position - range.start);
-                            rest.format = range.format;
-                            range.length = position - range.start;
-                        }
+    QTextDocument *replacementDoc = TextDocumentLayout::replacement(block);
+    TextSuggestion *suggestion = TextDocumentLayout::suggestion(block);
+    if (!replacementDoc || !suggestion)
+        return;
+
+    const QTextCharFormat replacementFormat = fontSettings.toTextCharFormat(
+        TextStyles{C_TEXT, {C_DISABLED_CODE}});
+    QList<QTextLayout::FormatRange> formats = block.layout()->formats();
+    QTextCursor cursor(replacementDoc);
+    cursor.select(QTextCursor::Document);
+    cursor.setCharFormat(fontSettings.toTextCharFormat(C_TEXT));
+    const int position = suggestion->currentPosition() - block.position();
+    cursor.setPosition(position);
+    const QString trailingText = block.text().mid(position);
+    if (!trailingText.isEmpty()) {
+        const int trailingIndex
+            = replacementDoc->firstBlock().text().indexOf(trailingText, position);
+        if (trailingIndex >= 0) {
+            cursor.setPosition(trailingIndex, QTextCursor::KeepAnchor);
+            cursor.setCharFormat(replacementFormat);
+            cursor.setPosition(trailingIndex + trailingText.size());
+            const int length = std::max(trailingIndex - position, 0);
+            if (length) {
+                // we have a replacement in the middle of the line adjust all formats that are
+                // behind the replacement
+                QTextLayout::FormatRange rest;
+                rest.start = -1;
+                for (QTextLayout::FormatRange &range : formats) {
+                    if (range.start >= position) {
+                        range.start += length;
+                    } else if (range.start + range.length > position) {
+                        // the format range starts before and ends after the position so we need to
+                        // split the format into before and after the suggestion format ranges
+                        rest.start = trailingIndex;
+                        rest.length = range.length - (position - range.start);
+                        rest.format = range.format;
+                        range.length = position - range.start;
                     }
-                    if (rest.start >= 0)
-                        formats += rest;
                 }
+                if (rest.start >= 0)
+                    formats += rest;
             }
         }
-        cursor.movePosition(QTextCursor::End, QTextCursor::KeepAnchor);
-        cursor.setCharFormat(replacementFormat);
-        suggestionDoc->firstBlock().layout()->setFormats(formats);
     }
+    cursor.movePosition(QTextCursor::End, QTextCursor::KeepAnchor);
+    cursor.setCharFormat(replacementFormat);
+    replacementDoc->firstBlock().layout()->setFormats(formats);
 }
 
 void TextDocumentLayout::requestExtraAreaUpdate()
@@ -762,11 +786,11 @@ static QRectF replacementBoundingRect(const QTextDocument *replacement)
 
 QRectF TextDocumentLayout::blockBoundingRect(const QTextBlock &block) const
 {
-    if (TextSuggestion *suggestion = TextDocumentLayout::suggestion(block)) {
+    if (QTextDocument *replacement = TextDocumentLayout::replacement(block)) {
         // since multiple code paths expects that we have a valid block layout after requesting the
         // block bounding rect explicitly create that layout here
         ensureBlockLayout(block);
-        return replacementBoundingRect(suggestion->replacementDocument());
+        return replacementBoundingRect(replacement);
     }
 
     QRectF boundingRect = QPlainTextDocumentLayout::blockBoundingRect(block);

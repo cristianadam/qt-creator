@@ -21,9 +21,6 @@ TextSuggestion::TextSuggestion(const Data &suggestion, QTextDocument *sourceDocu
     : m_suggestion(suggestion)
     , m_sourceDocument(sourceDocument)
 {
-    m_replacementDocument.setDocumentLayout(new TextDocumentLayout(&m_replacementDocument));
-    m_replacementDocument.setDocumentMargin(0);
-    replacementDocument()->setPlainText(suggestion.text);
     setCurrentPosition(suggestion.position.toPositionInDocument(sourceDocument));
 }
 
@@ -54,6 +51,14 @@ bool TextSuggestion::filterSuggestions(TextEditorWidget *widget)
     QTextCursor c = m_suggestion.range.begin.toTextCursor(sourceDocument());
     c.setPosition(currentPosition(), QTextCursor::KeepAnchor);
     return m_suggestion.text.startsWith(c.selectedText(), Qt::CaseInsensitive);
+}
+
+std::unique_ptr<QTextDocument> TextSuggestion::createReplacementDocument()
+{
+    auto replacementDocument = new QTextDocument(m_suggestion.text);
+    replacementDocument->setDocumentLayout(new TextDocumentLayout(replacementDocument));
+    replacementDocument->setDocumentMargin(0);
+    return std::unique_ptr<QTextDocument>(replacementDocument);
 }
 
 bool TextSuggestion::applyPart(Part part, TextEditorWidget *widget)

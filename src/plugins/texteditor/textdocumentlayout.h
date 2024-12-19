@@ -130,6 +130,10 @@ public:
     TextSuggestion *suggestion() const;
     void clearSuggestion();
 
+    void insertReplacement(std::unique_ptr<QTextDocument> &&suggestion);
+    QTextDocument *replacement() const;
+    void clearReplacement();
+
     void setAttrState(quint8 state) { m_attrState = state; }
     quint8 attrState() const { return m_attrState; }
 
@@ -184,10 +188,10 @@ public:
     static void setExpectedRawStringSuffix(const QTextBlock &block, const QByteArray &suffix);
     static QByteArray expectedRawStringSuffix(const QTextBlock &block);
     static TextSuggestion *suggestion(const QTextBlock &block);
+    static QTextDocument *replacement(const QTextBlock &block);
     static void setAttributeState(const QTextBlock &block, quint8 attrState);
     static quint8 attributeState(const QTextBlock &block);
-    static void updateSuggestionFormats(const QTextBlock &block,
-                                        const FontSettings &fontSettings);
+    static void updateSuggestionFormats(const QTextBlock &block, const FontSettings &fontSettings);
 
     class TEXTEDITOR_EXPORT FoldValidator
     {
