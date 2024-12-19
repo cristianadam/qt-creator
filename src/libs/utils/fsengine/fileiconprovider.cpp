@@ -211,6 +211,11 @@ QIcon FileIconProviderImplementation::icon(const FilePath &filePath) const
     if (filePath.isEmpty())
         return unknownFileIcon();
 
+    // Already the isDir() below triggers an file system access that we want
+    // to avoid for "decorative" purposes.
+    if (!filePath.isLocal())
+        return QIcon();
+
     // Check if its one of the virtual devices directories
     if (filePath.path().startsWith(FilePath::specialRootPath())) {
         // If the filepath does not need a device, it is a virtual device directory
@@ -236,9 +241,6 @@ QIcon FileIconProviderImplementation::icon(const FilePath &filePath) const
         if (icon)
             return *icon;
     }
-
-    if (!filePath.isLocal())
-        return isDir ? dirIcon() : unknownFileIcon();
 
     // Get icon from OS (and cache it based on suffix!)
     QIcon icon;
