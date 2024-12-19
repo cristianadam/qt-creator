@@ -1166,6 +1166,12 @@ Result LinuxDevicePrivate::setupShell(const SshParameters &sshParameters, bool a
 
     invalidateEnvironmentCache();
 
+    // The announcement below lets the main event loop spin which might lead
+    // to handling pending events that in turn want to access this device here,
+    // e.g. to figure out what file icon to use in the Open Documents view.
+    // Avoid the problem by setting disconnectedAccess already now.
+    q->setFileAccess(&m_disconnectedAccess);
+
     if (announce)
         announceConnectionAttempt();
 
