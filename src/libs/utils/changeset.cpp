@@ -279,70 +279,72 @@ void ChangeSet::doReplace(const EditOp &op, QList<EditOp> *replaceList)
     }
 }
 
-void ChangeSet::convertToReplace(const EditOp &op, QList<EditOp> *replaceList)
+QList<ChangeSet::EditOp> ChangeSet::EditOp::toReplace(
+    const std::function<QString(int, int)> &textAt) const
 {
-
-    switch (op.type()) {
+    QList<EditOp> replaceList;
+    switch (type()) {
     case EditOp::Replace:
-        replaceList->append(op);
+        replaceList.append(*this);
         break;
     case EditOp::Move: {
         EditOp replace1(EditOp::Replace);
-        replace1.pos1 = op.pos1;
-        replace1.length1 = op.length1;
-        if (op.hasFormat1())
-            replace1.setFormat1(op.format1());
-        replaceList->append(replace1);
+        replace1.pos1 = pos1;
+        replace1.length1 = length1;
+        if (hasFormat1())
+            replace1.setFormat1(format1());
+        replaceList.append(replace1);
 
-        EditOp replace2(EditOp::Replace, textAt(op.pos1, op.length1));
-        replace2.pos1 = op.pos2;
-        if (op.hasFormat2())
-            replace2.setFormat1(op.format2());
-        replaceList->append(replace2);
+        EditOp replace2(EditOp::Replace, textAt(pos1, length1));
+        replace2.pos1 = pos2;
+        if (hasFormat2())
+            replace2.setFormat1(format2());
+        replaceList.append(replace2);
         break;
     }
     case EditOp::Insert: {
-        EditOp replace(EditOp::Replace, op.text());
-        replace.pos1 = op.pos1;
-        if (op.hasFormat1())
-            replace.setFormat1(op.format1());
-        replaceList->append(replace);
+        EditOp replace(EditOp::Replace, text());
+        replace.pos1 = pos1;
+        if (hasFormat1())
+            replace.setFormat1(format1());
+        replaceList.append(replace);
         break;
     }
     case EditOp::Remove: {
         EditOp replace(EditOp::Replace);
-        replace.pos1 = op.pos1;
-        replace.length1 = op.length1;
-        if (op.hasFormat1())
-            replace.setFormat1(op.format1());
-        replaceList->append(replace);
+        replace.pos1 = pos1;
+        replace.length1 = length1;
+        if (hasFormat1())
+            replace.setFormat1(format1());
+        replaceList.append(replace);
         break;
     }
     case EditOp::Flip: {
-        EditOp replace1(EditOp::Replace, textAt(op.pos2, op.length2));
-        replace1.pos1 = op.pos1;
-        replace1.length1 = op.length1;
-        if (op.hasFormat1())
-            replace1.setFormat1(op.format1());
-        replaceList->append(replace1);
+        EditOp replace1(EditOp::Replace, textAt(pos2, length2));
+        replace1.pos1 = pos1;
+        replace1.length1 = length1;
+        if (hasFormat1())
+            replace1.setFormat1(format1());
+        replaceList.append(replace1);
 
-        EditOp replace2(EditOp::Replace, textAt(op.pos1, op.length1));
-        replace2.pos1 = op.pos2;
-        replace2.length1 = op.length2;
-        if (op.hasFormat2())
-            replace2.setFormat1(op.format2());
-        replaceList->append(replace2);
+        EditOp replace2(EditOp::Replace, textAt(pos1, length1));
+        replace2.pos1 = pos2;
+        replace2.length1 = length2;
+        if (hasFormat2())
+            replace2.setFormat1(format2());
+        replaceList.append(replace2);
         break;
     }
     case EditOp::Copy: {
-        EditOp replace(EditOp::Replace, textAt(op.pos1, op.length1));
-        replace.pos1 = op.pos2;
-        if (op.hasFormat2())
-            replace.setFormat1(op.format2());
-        replaceList->append(replace);
+        EditOp replace(EditOp::Replace, textAt(pos1, length1));
+        replace.pos1 = pos2;
+        if (hasFormat2())
+            replace.setFormat1(format2());
+        replaceList.append(replace);
         break;
     }
     }
+    return replaceList;
 }
 
 bool ChangeSet::hadErrors() const
@@ -386,8 +388,8 @@ void ChangeSet::apply_helper()
 {
     // convert all ops to replace
     QList<EditOp> replaceList;
-    while (!m_operationList.isEmpty())
-        convertToReplace(m_operationList.takeFirst(), &replaceList);
+    for (const EditOp &op : qAsConst(m_operationList))
+        replaceList << op.toReplace([this](int pos, int length) { return textAt(pos, length); });
 
     // execute replaces
     if (m_cursor)

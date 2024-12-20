@@ -43,6 +43,8 @@ public:
         bool format2() const { return hasFormat2() && *m_format2; }
         void setFormat2(bool f) { m_format2 = f; }
 
+        QList<EditOp> toReplace(const std::function<QString(int, int)> &textAt) const;
+
         int pos1 = 0;
         int pos2 = 0;
         int length1 = 0;
