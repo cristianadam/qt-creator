@@ -958,20 +958,21 @@ function(add_qtc_executable name)
       endforeach()
       list(REMOVE_DUPLICATES _rpaths_to_remove)
       set(_code)
-      foreach(_rpath ${_rpaths_to_remove})
-        set(_code "${_code}
-          execute_process(COMMAND \"${CMAKE_INSTALL_NAME_TOOL}\"
-            -delete_rpath \"${_rpath}\"
-            \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${_EXECUTABLE_FILE_PATH}\" ${QTC_COMMAND_ERROR_IS_FATAL})"
-        )
-      endforeach()
-      foreach(_rpath ${install_rpath})
-        set(_code "${_code}
-          execute_process(COMMAND \"${CMAKE_INSTALL_NAME_TOOL}\"
-            -add_rpath \"${_rpath}\"
-            \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${_EXECUTABLE_FILE_PATH}\" ${QTC_COMMAND_ERROR_IS_FATAL})"
-        )
-      endforeach()
+      # TODO: This breaks when building against a no-prefix qt for some reason.
+      #foreach(_rpath ${_rpaths_to_remove})
+        #set(_code "${_code}
+          #execute_process(COMMAND \"${CMAKE_INSTALL_NAME_TOOL}\"
+            #-delete_rpath \"${_rpath}\"
+            #\"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${_EXECUTABLE_FILE_PATH}\" ${QTC_COMMAND_ERROR_IS_FATAL})"
+        #)
+      #endforeach()
+      #foreach(_rpath ${install_rpath})
+        #set(_code "${_code}
+          #execute_process(COMMAND \"${CMAKE_INSTALL_NAME_TOOL}\"
+            #-add_rpath \"${_rpath}\"
+            #\"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${_EXECUTABLE_FILE_PATH}\" ${QTC_COMMAND_ERROR_IS_FATAL})"
+        #)
+      #endforeach()
       install(CODE "${_code}")
     else()
       install(TARGETS ${name}
