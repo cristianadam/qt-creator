@@ -35,6 +35,14 @@ add_qtc_plugin(Lua
     luatr.h
     wizards/wizards.qrc
     # generateqtbindings.cpp # Use this if you need to generate some code.
+  USE_ATTRIBUTION_FILES
+  CREATE_SBOM_FOR_EACH_ATTRIBUTION
+  ATTRIBUTION_FILE_PATHS
+    ../../../qt_attributions.json
+  ATTRIBUTION_IDS
+    sol2
+    ms-jpq-lua-async-await
+    kikito/inspect.lua
 )
 
 if(TARGET Lua)

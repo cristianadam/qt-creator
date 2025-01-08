@@ -8,6 +8,12 @@ add_qtc_library(Zip
     zip_global.h
     INCLUDES
       ${CMAKE_CURRENT_LIST_DIR}/../../3rdparty/zlib/src
+  USE_ATTRIBUTION_FILES
+  CREATE_SBOM_FOR_EACH_ATTRIBUTION
+  ATTRIBUTION_FILE_PATHS
+    ../../../../qt_attributions.json
+  ATTRIBUTION_IDS
+    zlib
 )
 
 extend_qtc_library(Zip

@@ -3,5 +3,11 @@ add_qtc_executable(cplusplus-keywordgen
   DEPENDS CPlusPlus Utils
   SOURCES cplusplus-keywordgen.cpp
   PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  USE_ATTRIBUTION_FILES
+  CREATE_SBOM_FOR_EACH_ATTRIBUTION
+  ATTRIBUTION_FILE_PATHS
+    ../../../../qt_attributions.json
+  ATTRIBUTION_IDS
+    cpp-keywordgen
 )
 
