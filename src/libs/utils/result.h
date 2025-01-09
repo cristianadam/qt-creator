@@ -36,6 +36,8 @@ private:
     std::optional<QString> m_error;
 };
 
+using ResultHandler = std::function<void(const Result &)>;
+
 #define QTC_ASSERT_AND_ERROR_OUT(cond) \
   QTC_ASSERT(cond, \
     return Result::Error(QString("The condition %1 failed unexpectedly in %2:%3") \
