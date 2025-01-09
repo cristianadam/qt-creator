@@ -9,6 +9,7 @@
 #include <projectexplorer/devicesupport/filetransfer.h>
 #include <projectexplorer/projectexplorerconstants.h>
 
+#include <solutions/tasking/barrier.h>
 #include <solutions/tasking/tasktreerunner.h>
 
 #include <utils/algorithm.h>
@@ -89,26 +90,31 @@ QStringList GenericLinuxDeviceTesterPrivate::commandsToTest() const
 
 GroupItem GenericLinuxDeviceTesterPrivate::connectionTask() const
 {
-    const auto onSetup = [this](Async<bool> &task) {
+    Storage<bool> storage;
+
+    const auto onSetup = [storage, this](Barrier &barrier) {
         emit q->progressMessage(Tr::tr("Connecting to device..."));
-        task.setConcurrentCallData([device = m_device] {
-            Result res = Result::Ok;
-            device->tryToConnect([&res](const Result &result) { res = result; });
-            return bool(res);
+
+        m_device->tryToConnect([&barrier, storage, this](const Result &result) {
+            // FIXME: I get a crash here when running the device test for some linux device.
+            // *storage.activeStorage() = bool(result);
+            if (result) {
+                emit q->progressMessage(Tr::tr("Connected. Now doing extended checks.") + '\n');
+            } else {
+                emit q->errorMessage(
+                    Tr::tr("Basic connectivity test failed: %1.").arg(result.error()) + '\n' +
+                    Tr::tr("Device is considered unusable.") + '\n');
+            }
+            barrier.advance();
         });
     };
-    const auto onDone = [this](const Async<bool> &task) {
-        const bool success = task.isResultAvailable() && task.result();
-        if (success) {
-            // TODO: For master: move the '\n' outside of Tr().
-            emit q->progressMessage(Tr::tr("Connected. Now doing extended checks.") + "\n");
-        } else {
-            emit q->errorMessage(
-                Tr::tr("Basic connectivity test failed, device is considered unusable.") + '\n');
-        }
-        return toDoneResult(success);
+
+    const auto onDone = [storage] {
+        //return toDoneResult(*storage.activeStorage());
+        return toDoneResult(true);
     };
-    return AsyncTask<bool>(onSetup, onDone);
+
+    return BarrierTask(onSetup, onDone);
 }
 
 GroupItem GenericLinuxDeviceTesterPrivate::echoTask(const QString &contents) const
