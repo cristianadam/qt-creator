@@ -91,7 +91,11 @@ GroupItem GenericLinuxDeviceTesterPrivate::connectionTask() const
 {
     const auto onSetup = [this](Async<bool> &task) {
         emit q->progressMessage(Tr::tr("Connecting to device..."));
-        task.setConcurrentCallData([device = m_device] { return device->tryToConnect(); });
+        task.setConcurrentCallData([device = m_device] {
+            Result res = Result::Ok;
+            device->tryToConnect([&res](const Result &result) { res = result; });
+            return bool(res);
+        });
     };
     const auto onDone = [this](const Async<bool> &task) {
         const bool success = task.isResultAvailable() && task.result();

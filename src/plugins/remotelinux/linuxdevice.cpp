@@ -318,14 +318,18 @@ public:
 
     void setupDisconnectedAccess();
 
-    Result setupShell(const SshParameters &sshParameters, bool announce);
+    void setupShell(const SshParameters &sshParameters, bool announce, const ResultHandler &resultHandler);
 
     RunResult runInShell(const CommandLine &cmd, const QByteArray &stdInData = {});
 
-    bool tryToConnect(const SshParameters &sshParameters)
+    void tryToConnect(const SshParameters &sshParameters, const ResultHandler &resultHandler)
     {
-        QMutexLocker locker(&m_scriptAccess.m_shellMutex);
-        return setupShell(sshParameters, false);
+        ResultHandler wrapped = [this, resultHandler](const Result &result) {
+            m_scriptAccess.m_shellMutex.unlock();
+            resultHandler(result);
+        };
+        m_scriptAccess.m_shellMutex.lock();
+        setupShell(sshParameters, false, wrapped);
     }
 
     bool checkDisconnectedWithWarning();
@@ -1161,11 +1165,13 @@ void LinuxDevicePrivate::setupDisconnectedAccess()
 }
 
 // Call me with shell mutex locked
-Result LinuxDevicePrivate::setupShell(const SshParameters &sshParameters, bool announce)
+void LinuxDevicePrivate::setupShell(const SshParameters &sshParameters, bool announce,
+                                    const ResultHandler &resultHandler)
 {
     if (m_scriptAccess.m_handler->isRunning(sshParameters)) {
         setupConnectedAccess();
-        return Result::Ok;
+        resultHandler(Result::Ok);
+        return;
     }
 
     invalidateEnvironmentCache();
@@ -1183,7 +1189,8 @@ Result LinuxDevicePrivate::setupShell(const SshParameters &sshParameters, bool a
 
     if (!result) {
         setupDisconnectedAccess();
-        return result;
+        resultHandler(result);
+        return;
     }
 
     setupConnectedAccess();
@@ -1199,7 +1206,7 @@ Result LinuxDevicePrivate::setupShell(const SshParameters &sshParameters, bool a
                                   << ", falling back to slow shell access";
     }
 
-    return Result::Ok; // Both are fine.
+    resultHandler(Result::Ok); // Both are fine.
 }
 
 RunResult LinuxDevicePrivate::runInShell(const CommandLine &cmd, const QByteArray &data)
@@ -1208,10 +1215,13 @@ RunResult LinuxDevicePrivate::runInShell(const CommandLine &cmd, const QByteArra
     DEBUG(cmd.toUserOutput());
     if (checkDisconnectedWithWarning())
         return {};
-    const bool isSetup = setupShell(q->sshParameters(), true);
+
+    setupShell(q->sshParameters(), true, [](const Result &res) {
+        QTC_CHECK(res);
+    });
+
     if (checkDisconnectedWithWarning())
         return {};
-    QTC_ASSERT(isSetup, return {});
     return m_scriptAccess.m_handler->runInShell(cmd, data);
 }
 
@@ -1313,9 +1323,9 @@ bool LinuxDevice::isDisconnected() const
     return d->m_disconnected();
 }
 
-bool LinuxDevice::tryToConnect()
+void LinuxDevice::tryToConnect(const ResultHandler &resultHandler)
 {
-    return d->tryToConnect(sshParameters());
+    d->tryToConnect(sshParameters(), resultHandler);
 }
 
 namespace Internal {
