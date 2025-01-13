@@ -154,7 +154,7 @@ Item {
                                     ContentLibraryItem {
                                         width: root.cellWidth
                                         height: root.cellHeight
-                                        visible: !infoText.visible
+                                        visible: !infoText.visible && !noMatch.visible
 
                                         onShowContextMenu: ctxMenuItem.popupMenu(modelData)
                                         onAddToProject: ContentLibraryBackend.userModel.addToProject(modelData)
@@ -174,7 +174,7 @@ Item {
                                     delegate: ContentLibraryItem {
                                         width: root.cellWidth
                                         height: root.cellHeight
-                                        visible: !infoText.visible
+                                        visible: !infoText.visible && !noMatch.visible
 
                                         onShowContextMenu: ctxMenuItem.popupMenu(modelData)
                                         onAddToProject: ContentLibraryBackend.userModel.addToProject(modelData)
@@ -187,6 +187,8 @@ Item {
                     }
 
                     Text {
+                        id: noMatch
+
                         text: qsTr("No match found.");
                         color: StudioTheme.Values.themeTextColor
                         font.pixelSize: StudioTheme.Values.baseFontSize
