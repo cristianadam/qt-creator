@@ -509,6 +509,47 @@
     \list
         \li Put the left curly brace on the same line as the \c namespace keyword.
         \li Do not indent declarations or definitions inside.
+        \li The content of the namespace should be separated from opening and closing lines
+            by an empty newline. This requirement does not apply to trivial cases
+            e.g. when a namespace contains only a simple class/function declarations.
+            \code
+            namespace {
+
+            class MyClass
+            {
+                ...
+            }
+
+            MyClass myFunc()
+            {
+                ...
+            }
+
+            }
+
+            -NOT-
+
+            namespace {
+            class MyClass
+            {
+                ...
+            }
+
+            MyClass myFunc()
+            {
+                ...
+            }
+            }
+
+            -BUT-
+
+            namespace {
+            class MyClass;
+            MyClass& myFunc();
+            }
+
+            \endcode
+
         \li Optional, but recommended if the namespaces spans more than a few lines:
             Add a comment after the right curly brace repeating the namespace.
 
@@ -904,6 +945,16 @@
             \endcode
 
     \endlist
+
+    Note than when \c auto is used with pointer types, the asterisk (\c *) should be omitted.
+
+    \code
+    auto widget = new Widget;
+
+    -NOT-
+
+    auto *widget = new Widget;
+    \endcode
 
     \section3 Scoped enums
 
