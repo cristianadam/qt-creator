@@ -4136,6 +4136,8 @@ std::unique_ptr<EmbeddedWidgetInterface> TextEditorWidgetPrivate::insertWidget(
     auto position = [this, pState, carrier] {
         QTextBlock block = pState->cursor.block();
         QTC_ASSERT(block.isValid(), return);
+        auto documentLayout = qobject_cast<TextDocumentLayout *>(q->document()->documentLayout());
+        QTC_ASSERT(documentLayout, return);
 
         TextBlockUserData *userData = TextDocumentLayout::userData(block);
         if (block != pState->block) {
@@ -4149,17 +4151,9 @@ std::unique_ptr<EmbeddedWidgetInterface> TextEditorWidgetPrivate::insertWidget(
             pState->height = 0;
         }
 
-        QRectF r = cursorBlockRect(m_document->document(), block, block.position());
-
-        int y = 0;
-        for (const auto &wdgt : userData->embeddedWidgets()) {
-            if (wdgt == carrier)
-                break;
-            y += wdgt->height();
-        }
-
-        QPoint pos = r.topLeft().toPoint()
-                     + QPoint(0, TextEditorSettings::fontSettings().lineSpacing() + y);
+        const QPoint pos
+            = q->blockBoundingGeometry(block).translated(q->contentOffset()).topLeft().toPoint()
+              + QPoint(0, documentLayout->embeddedWidgetOffset(block, carrier));
 
         int h = carrier->embedHeight();
         if (h == pState->height && pos == carrier->pos())
@@ -4170,7 +4164,7 @@ std::unique_ptr<EmbeddedWidgetInterface> TextEditorWidgetPrivate::insertWidget(
 
         pState->height = h;
 
-        qobject_cast<TextDocumentLayout *>(q->document()->documentLayout())->scheduleUpdate();
+        documentLayout->scheduleUpdate();
     };
 
     position();

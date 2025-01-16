@@ -186,8 +186,8 @@ public:
     static TextSuggestion *suggestion(const QTextBlock &block);
     static void setAttributeState(const QTextBlock &block, quint8 attrState);
     static quint8 attributeState(const QTextBlock &block);
-    static void updateSuggestionFormats(const QTextBlock &block,
-                                        const FontSettings &fontSettings);
+    static void updateSuggestionFormats(const QTextBlock &block, const FontSettings &fontSettings);
+    static int embeddedWidgetOffset(const QTextBlock &block, QWidget *widget);
 
     class TEXTEDITOR_EXPORT FoldValidator
     {
