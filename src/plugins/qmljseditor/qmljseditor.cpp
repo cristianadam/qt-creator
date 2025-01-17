@@ -28,8 +28,10 @@
 
 #include <projectexplorer/project.h>
 #include <projectexplorer/projectexplorerconstants.h>
+#include <projectexplorer/projectmanager.h>
 #include <projectexplorer/projectnodes.h>
 #include <projectexplorer/projecttree.h>
+#include <projectexplorer/target.h>
 
 #include <coreplugin/actionmanager/actioncontainer.h>
 #include <coreplugin/actionmanager/actionmanager.h>
@@ -97,9 +99,9 @@ using namespace Utils;
 
 namespace QmlJSEditor {
 
-static LanguageClient::Client *getQmllsClient(const Utils::FilePath &fileName)
+static LanguageClient::Client *getQmllsClient(ProjectExplorer::Target *target, const FilePath &fileName)
 {
-    if (qmllsSettings()->useQmllsWithBuiltinCodemodelOnProject(fileName))
+    if (qmllsSettings()->useQmllsWithBuiltinCodemodelOnProject(target, fileName))
         return nullptr;
 
     auto client = LanguageClient::LanguageClientManager::clientForFilePath(fileName);
@@ -764,7 +766,7 @@ void QmlJSEditorWidget::findLinkAt(const QTextCursor &cursor,
                                    bool resolveTarget,
                                    bool /*inNextSplit*/)
 {
-    if (auto client = getQmllsClient(textDocument()->filePath())) {
+    if (auto client = getQmllsClient(ProjectExplorer::ProjectManager::startupTarget(), textDocument()->filePath())) {
         client->findLinkAt(textDocument(),
                            cursor,
                            processLinkCallback,
@@ -916,7 +918,7 @@ void QmlJSEditorWidget::findUsages()
 {
     const Utils::FilePath fileName = textDocument()->filePath();
 
-    if (auto client = getQmllsClient(fileName)) {
+    if (auto client = getQmllsClient(ProjectExplorer::ProjectManager::startupTarget(), fileName)) {
         client->symbolSupport().findUsages(textDocument(), textCursor());
     } else {
         const int offset = textCursor().position();
@@ -928,7 +930,7 @@ void QmlJSEditorWidget::renameSymbolUnderCursor()
 {
     const Utils::FilePath fileName = textDocument()->filePath();
 
-    if (auto client = getQmllsClient(fileName)) {
+    if (auto client = getQmllsClient(ProjectExplorer::ProjectManager::startupTarget(), fileName)) {
         client->symbolSupport().renameSymbol(textDocument(), textCursor(), QString());
     } else {
         const int offset = textCursor().position();

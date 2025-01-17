@@ -26,6 +26,7 @@
 #include <projectexplorer/projectnodes.h>
 #include <projectexplorer/projecttree.h>
 #include <projectexplorer/projectmanager.h>
+#include <projectexplorer/target.h>
 
 #include <texteditor/basefilefind.h>
 
@@ -151,7 +152,7 @@ ClangdFindReferences::ClangdFindReferences(ClangdClient *client, TextDocument *d
         const auto renameFilesCheckBox = new QCheckBox;
         renameFilesCheckBox->setVisible(false);
         d->search->setAdditionalReplaceWidget(renameFilesCheckBox);
-        const bool preferLowerCase = CppEditor::preferLowerCaseFileNames(client->project());
+        const bool preferLowerCase = CppEditor::preferLowerCaseFileNames(client->target()->project());
         const auto renameHandler = [search = d->search, preferLowerCase](
                                        const QString &newSymbolName,
                                        const SearchResultItems &checkedItems,

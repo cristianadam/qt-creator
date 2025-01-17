@@ -8,6 +8,8 @@
 #include "languageclientutils.h"
 #include "semantichighlightsupport.h"
 
+#include <cmakeprojectmanager/fileapiparser.h>
+
 namespace Core { class IDocument; }
 namespace ProjectExplorer { class Project; }
 namespace TextEditor
@@ -134,11 +136,11 @@ public:
     void setDocumentChangeUpdateThreshold(int msecs);
 
     // workspace control
-    virtual void setCurrentProject(ProjectExplorer::Project *project);
-    ProjectExplorer::Project *project() const;
-    virtual void projectOpened(ProjectExplorer::Project *project);
-    virtual void projectClosed(ProjectExplorer::Project *project);
-    virtual bool canOpenProject(ProjectExplorer::Project *project);
+    virtual void setCurrentProject(ProjectExplorer::Target *target);
+    ProjectExplorer::Target *target() const;
+    virtual void projectOpened(ProjectExplorer::Target *target);
+    virtual void projectClosed(ProjectExplorer::Target *target);
+    virtual bool canOpenProject(ProjectExplorer::Target *target);
     void updateConfiguration(const QJsonValue &configuration);
 
     // commands

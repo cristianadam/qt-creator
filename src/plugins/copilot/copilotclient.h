@@ -46,9 +46,9 @@ public:
         const QString &userCode,
         std::function<void(const SignInConfirmRequest::Response &response)> callback);
 
-    bool canOpenProject(ProjectExplorer::Project *project) override;
+    bool canOpenProject(ProjectExplorer::Target *target) override;
 
-    bool isEnabled(ProjectExplorer::Project *project);
+    bool isEnabled(ProjectExplorer::Target *target);
 
     void proxyAuthenticationFailed();
 

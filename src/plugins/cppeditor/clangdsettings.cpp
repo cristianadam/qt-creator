@@ -17,6 +17,7 @@
 #include <projectexplorer/project.h>
 #include <projectexplorer/projectpanelfactory.h>
 #include <projectexplorer/projectsettingswidget.h>
+#include <projectexplorer/target.h>
 #include <utils/clangutils.h>
 #include <utils/itemviews.h>
 #include <utils/layoutbuilder.h>
@@ -379,6 +380,10 @@ ClangdProjectSettings::ClangdProjectSettings(Project *project) : m_project(proje
 {
     loadSettings();
 }
+
+ClangdProjectSettings::ClangdProjectSettings(Target *target)
+    : ClangdProjectSettings(target ? target->project() : nullptr)
+{}
 
 ClangdSettings::Data ClangdProjectSettings::settings() const
 {

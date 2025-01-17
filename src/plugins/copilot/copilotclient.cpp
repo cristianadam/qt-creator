@@ -15,6 +15,7 @@
 #include <coreplugin/icore.h>
 
 #include <projectexplorer/projectmanager.h>
+#include <projectexplorer/target.h>
 
 #include <texteditor/textdocumentlayout.h>
 #include <texteditor/texteditor.h>
@@ -101,8 +102,8 @@ CopilotClient::~CopilotClient() = default;
 
 void CopilotClient::openDocument(TextDocument *document)
 {
-    auto project = ProjectManager::projectForFile(document->filePath());
-    if (!isEnabled(project))
+    // auto project = ProjectManager::projectForFile(document->filePath());
+    if (!isEnabled(target()))
         return;
 
     Client::openDocument(document);
@@ -114,8 +115,8 @@ void CopilotClient::openDocument(TextDocument *document)
                 if (!settings().autoComplete())
                     return;
 
-                auto project = ProjectManager::projectForFile(document->filePath());
-                if (!isEnabled(project))
+                // auto project = ProjectManager::projectForFile(document->filePath());
+                if (!isEnabled(target()))
                     return;
 
                 auto textEditor = BaseTextEditor::currentTextEditor();
@@ -159,9 +160,9 @@ void CopilotClient::scheduleRequest(TextEditorWidget *editor)
 
 void CopilotClient::requestCompletions(TextEditorWidget *editor)
 {
-    auto project = ProjectManager::projectForFile(editor->textDocument()->filePath());
+    // auto project = ProjectManager::projectForFile(editor->textDocument()->filePath());
 
-    if (!isEnabled(project))
+    if (!isEnabled(target()))
         return;
 
     MultiTextCursor cursor = editor->multiTextCursor();
@@ -310,17 +311,17 @@ void CopilotClient::requestSignInConfirm(
     sendMessage(request);
 }
 
-bool CopilotClient::canOpenProject(Project *project)
+bool CopilotClient::canOpenProject(Target *target)
 {
-    return isEnabled(project);
+    return isEnabled(target);
 }
 
-bool CopilotClient::isEnabled(Project *project)
+bool CopilotClient::isEnabled(Target *target)
 {
-    if (!project)
+    if (!target)
         return settings().enableCopilot();
 
-    CopilotProjectSettings settings(project);
+    CopilotProjectSettings settings(target->project());
     return settings.isEnabled();
 }
 

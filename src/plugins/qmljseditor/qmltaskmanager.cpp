@@ -122,7 +122,7 @@ void QmlTaskManager::updateSemanticMessagesNow()
 
     const bool isCMake = buildSystem->name() == "cmake";
     // heuristic: qmllint will output meaningful warnings if qmlls is enabled
-    if (isCMake && qmllsSettings()->isEnabledOnProject(buildSystem->project())) {
+    if (isCMake && qmllsSettings()->isEnabledOnProject(buildSystem->target())) {
         // abort any update that's going on already, and remove old codemodel warnings
         m_messageCollector.cancel();
         removeAllTasks(true);

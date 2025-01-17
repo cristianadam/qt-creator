@@ -382,11 +382,13 @@ void QmlJSHoverHandler::reset()
 void QmlJSHoverHandler::operateTooltip(TextEditorWidget *editorWidget, const QPoint &point)
 {
     // disable hoverhandling in case qmlls is enabled
-    if (editorWidget->textDocument()
-        && qmllsSettings()->isEnabledOnProjectFile(editorWidget->textDocument()->filePath())) {
-        BaseHoverHandler::operateTooltip(editorWidget, point);
-        return;
-    }
+
+    // FIXME
+    // if (editorWidget->textDocument()
+    //     && qmllsSettings()->isEnabledOnProjectFile(editorWidget->textDocument()->filePath())) {
+    //     BaseHoverHandler::operateTooltip(editorWidget, point);
+    //     return;
+    // }
 
     if (toolTip().isEmpty())
         Utils::ToolTip::hide();

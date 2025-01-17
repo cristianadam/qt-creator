@@ -49,7 +49,7 @@ public:
     void fromMap(const Store &map) final;
     BaseSettings *copy() const final;
     Client *createClient(BaseClientInterface *interface) const final;
-    BaseClientInterface *createInterface(Project *project) const final;
+    BaseClientInterface *createInterface(Target *target) const final;
 
     FilePath m_languageServer;
 
@@ -184,7 +184,7 @@ private:
     TemporaryDirectory m_workspaceDir = TemporaryDirectory("QtCreator-jls-XXXXXX");
 };
 
-BaseClientInterface *JLSSettings::createInterface(Project *) const
+BaseClientInterface *JLSSettings::createInterface(Target *) const
 {
     auto interface = new JLSInterface();
     CommandLine cmd{m_executable, arguments(), CommandLine::Raw};
@@ -199,12 +199,12 @@ public:
     using Client::Client;
 
     void executeCommand(const LanguageServerProtocol::Command &command) override;
-    void setCurrentProject(Project *project) override;
+    void setCurrentProject(Target *target) override;
     void updateProjectFiles();
     void updateTarget(Target *target);
 
 private:
-    Target *m_currentTarget = nullptr;
+    Target *m_target = nullptr;
 };
 
 void JLSClient::executeCommand(const LanguageServerProtocol::Command &command)
@@ -223,13 +223,13 @@ void JLSClient::executeCommand(const LanguageServerProtocol::Command &command)
     }
 }
 
-void JLSClient::setCurrentProject(Project *project)
+void JLSClient::setCurrentProject(Target *target)
 {
-    Client::setCurrentProject(project);
-    QTC_ASSERT(project, return);
-    updateTarget(project->activeTarget());
+    Client::setCurrentProject(target);
+    QTC_ASSERT(target, return);
+    updateTarget(target);
     updateProjectFiles();
-    connect(project, &Project::activeTargetChanged, this, &JLSClient::updateTarget);
+    connect(m_target, &Target::parsingFinished, this, &JLSClient::updateProjectFiles);
 }
 
 static void generateProjectFile(const FilePath &projectDir,
@@ -294,18 +294,18 @@ static void generateClassPathFile(const FilePath &projectDir,
 
 void JLSClient::updateProjectFiles()
 {
-    if (!m_currentTarget)
+    if (!m_target)
         return;
-    if (Target *target = m_currentTarget) {
-        Kit *kit = m_currentTarget->kit();
+    if (m_target) {
+        Kit *kit = m_target->kit();
         if (RunDeviceTypeKitAspect::deviceTypeId(kit) != Android::Constants::ANDROID_DEVICE_TYPE)
             return;
-        if (ProjectNode *node = project()->findNodeForBuildKey(target->activeBuildKey())) {
+        if (ProjectNode *node = m_target->project()->findNodeForBuildKey(m_target->activeBuildKey())) {
             QtSupport::QtVersion *version = QtSupport::QtKitAspect::qtVersion(kit);
             if (!version)
                 return;
             const FilePath qtSrc = version->prefix().pathAppended("src/android/java/src");
-            const FilePath &projectDir = project()->rootProjectDirectory();
+            const FilePath &projectDir = m_target->project()->rootProjectDirectory();
             if (!projectDir.exists())
                 return;
             const FilePath packageSourceDir = FilePath::fromVariant(
@@ -324,7 +324,7 @@ void JLSClient::updateProjectFiles()
             const QStringList classPaths = node->data(Constants::AndroidClassPaths).toStringList();
 
             const FilePath &sdkLocation = AndroidConfig::sdkLocation();
-            const QString &targetSDK = buildTargetSDK(m_currentTarget);
+            const QString &targetSDK = buildTargetSDK(m_target);
             const FilePath androidJar = sdkLocation / QString("platforms/%2/android.jar")
                                            .arg(targetSDK);
             FilePaths libs = {androidJar};
@@ -333,7 +333,7 @@ void JLSClient::updateProjectFiles()
             for (const QString &path : classPaths)
                 libs << FilePath::fromString(path);
 
-            generateProjectFile(projectDir, qtSrc.path(), project()->displayName());
+            generateProjectFile(projectDir, qtSrc.path(), m_target->project()->displayName());
             generateClassPathFile(projectDir, sourceDir, libs);
         }
     }
@@ -341,14 +341,7 @@ void JLSClient::updateProjectFiles()
 
 void JLSClient::updateTarget(Target *target)
 {
-    if (m_currentTarget)
-        disconnect(m_currentTarget, &Target::parsingFinished, this, &JLSClient::updateProjectFiles);
-
-    m_currentTarget = target;
-
-    if (m_currentTarget)
-        connect(m_currentTarget, &Target::parsingFinished, this, &JLSClient::updateProjectFiles);
-
+    m_target = target;
     updateProjectFiles();
 }
 

@@ -122,28 +122,26 @@ static const QList<TextEditor::TextDocument *> allCppDocuments()
     return Utils::qobject_container_cast<TextEditor::TextDocument *>(documents);
 }
 
-static const QList<Project *> projectsForClient(const Client *client)
+static const QList<Target *> targetsForClient(const Client *client)
 {
-    QList<Project *> projects;
+    QList<Target *> targets;
     if (sessionModeEnabled()) {
-        for (Project * const p : ProjectManager::projects()) {
-            if (ClangdProjectSettings(p).settings().useClangd)
-                projects << p;
+        for (Project * const project : ProjectManager::projects()) {
+            if (ClangdProjectSettings(project).settings().useClangd)
+                targets << project->targets();
         }
-    } else if (client->project()) {
-        projects << client->project();
+    } else if (client->target()) {
+        targets << client->target();
     }
-    return projects;
+    return targets;
 }
 
 static bool fileIsProjectBuildArtifact(const Client *client, const FilePath &filePath)
 {
-    for (const Project * const p : projectsForClient(client)) {
-        if (const auto t = p->activeTarget()) {
-            if (const auto bc = t->activeBuildConfiguration()) {
-                if (filePath.isChildOf(bc->buildDirectory()))
-                    return true;
-            }
+    for (const Target * const t : targetsForClient(client)) {
+        if (const auto bc = t->activeBuildConfiguration()) {
+            if (filePath.isChildOf(bc->buildDirectory()))
+                return true;
         }
     }
     return false;
@@ -209,9 +207,8 @@ static void updateParserConfig(ClangdClient *client)
 
 static bool projectIsParsing(const ClangdClient *client)
 {
-    for (const Project * const p : projectsForClient(client)) {
-        const BuildSystem * const bs = p && p->activeTarget()
-                ? p->activeTarget()->buildSystem() : nullptr;
+    for (const Target * const t : targetsForClient(client)) {
+        const BuildSystem * const bs = t ? t->buildSystem() : nullptr;
         if (bs && (bs->isParsing() || bs->isWaitingForParse()))
             return true;
     }
@@ -229,7 +226,7 @@ ClangModelManagerSupport::ClangModelManagerSupport()
             if (client && client->state() != Client::Shutdown
                     && client->state() != Client::ShutdownRequested
                     && !projectIsParsing(client)) {
-                updateLanguageClient(client->project());
+                updateLanguageClient(client->target()->project());
             }
         }
     });
@@ -391,7 +388,8 @@ void ClangModelManagerSupport::findUsages(const CursorInEditor &cursor) const
 void ClangModelManagerSupport::switchHeaderSource(const FilePath &filePath, bool inNextSplit)
 {
     if (ClangdClient * const client = clientForFile(filePath)) {
-        switch (ClangdProjectSettings(client->project()).settings().headerSourceSwitchMode) {
+        Project * project = client->target() ? client->target()->project() : nullptr;
+        switch (ClangdProjectSettings(project).settings().headerSourceSwitchMode) {
         case ClangdSettings::HeaderSourceSwitchMode::BuiltinOnly:
             CppModelManager::switchHeaderSource(inNextSplit, CppModelManager::Backend::Builtin);
             return;
@@ -414,7 +412,7 @@ void ClangModelManagerSupport::checkUnused(const Link &link, SearchResult *searc
                                            const LinkHandler &callback)
 {
     if (const Project * const project = ProjectManager::projectForFile(link.targetFilePath)) {
-        if (ClangdClient * const client = clientWithProject(project);
+        if (ClangdClient * const client = clientWithTarget(project->activeTarget());
                 client && client->isFullyIndexed()) {
             client->checkUnused(link, search, callback);
             return;
@@ -556,7 +554,7 @@ void ClangModelManagerSupport::updateLanguageClient(Project *project)
             previousId = oldClient->id();
             LanguageClientManager::shutdownClient(oldClient);
         }
-        ClangdClient * const client = new ClangdClient(project, jsonDbDir, previousId);
+        ClangdClient * const client = new ClangdClient(project->activeTarget(), jsonDbDir, previousId);
         connect(client, &Client::shadowDocumentSwitched, this, [](const FilePath &fp) {
             ClangdClient::handleUiHeaderChange(fp.fileName());
         });
@@ -588,11 +586,11 @@ void ClangModelManagerSupport::updateLanguageClient(Project *project)
                     continue;
                 }
                 const Project * const docProject = ProjectManager::projectForFile(doc->filePath());
-                if (currentClient && currentClient->project()
-                        && currentClient->project() != project
-                        && currentClient->project() == docProject) {
+                const Target *currentTarget = currentClient ? currentClient->target() : nullptr;
+                Project *currentProject = currentTarget ? currentTarget->project() : nullptr;
+                if (currentProject != project && currentProject == docProject)
                     continue;
-                }
+
                 if (docProject != project
                         && (docProject || !ProjectFile::isHeader(doc->filePath()))) {
                     continue;
@@ -667,18 +665,18 @@ ClangdClient *ClangModelManagerSupport::clientForProject(const Project *project)
 {
     if (sessionModeEnabled())
         project = nullptr;
-    return clientWithProject(project);
+    return clientWithTarget(project ? project->activeTarget() : nullptr);
 }
 
-ClangdClient *ClangModelManagerSupport::clientWithProject(const Project *project)
+ClangdClient *ClangModelManagerSupport::clientWithTarget(const Target *target)
 {
     const QList<Client *> clients = Utils::filtered(
-                LanguageClientManager::clientsForProject(project), [](const Client *c) {
+                LanguageClientManager::clientsForTarget(target), [](const Client *c) {
         return qobject_cast<const ClangdClient *>(c)
                 && c->state() != Client::ShutdownRequested
                 && c->state() != Client::Shutdown;
     });
-    QTC_ASSERT(clients.size() <= 1, qDebug() << project << clients.size());
+    QTC_ASSERT(clients.size() <= 1, qDebug() << target << clients.size());
     if (clients.size() > 1) {
         Client *activeClient = nullptr;
         for (Client * const c : clients) {
@@ -773,14 +771,14 @@ void ClangModelManagerSupport::claimNonProjectSources(ClangdClient *client)
     for (TextEditor::TextDocument * const doc : allCppDocuments()) {
         Client * const currentClient = LanguageClientManager::clientForDocument(doc);
         if (currentClient && currentClient->state() == Client::Initialized
-                && (currentClient == client || currentClient->project())) {
+                && (currentClient == client || currentClient->target())) {
             continue;
         }
         if (!ClangdSettings::instance().sizeIsOkay(doc->filePath()))
             continue;
         if (ProjectManager::projectForFile(doc->filePath()))
             continue;
-        if (client->project() && !ProjectFile::isHeader(doc->filePath()))
+        if (client->target() && !ProjectFile::isHeader(doc->filePath()))
             continue;
         if (currentClient)
             currentClient->closeDocument(doc);
@@ -975,9 +973,9 @@ void ClangModelManagerSupport::onClangdSettingsChanged()
 
     for (Project * const project : ProjectManager::projects()) {
         const ClangdSettings settings(ClangdProjectSettings(project).settings());
-        ClangdClient * const client = clientWithProject(project);
+        ClangdClient * const client = clientWithTarget(project->activeTarget());
         if (sessionMode) {
-            if (client && client->project())
+            if (client && client->target())
                 LanguageClientManager::shutdownClient(client);
             continue;
         }

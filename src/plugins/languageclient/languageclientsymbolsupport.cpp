@@ -16,6 +16,7 @@
 #include <projectexplorer/projectmanager.h>
 #include <projectexplorer/projectnodes.h>
 #include <projectexplorer/projecttree.h>
+#include <projectexplorer/target.h>
 
 #include <utils/algorithm.h>
 #include <utils/mimeutils.h>
@@ -324,9 +325,9 @@ Utils::SearchResultItems generateSearchResultItems(
                 item.setSelectForReplacement(!node->isGenerated());
             } else {
                 item.setSelectForReplacement(
-                    client->project()
+                    client->target()
                     && ProjectExplorer::ProjectManager::isInProjectSourceDir(
-                        filePath, *client->project()));
+                        filePath, *client->target()->project()));
             }
             if (item.selectForReplacement()
                 && filePath.baseName().compare(oldSymbolName, Qt::CaseInsensitive) == 0) {

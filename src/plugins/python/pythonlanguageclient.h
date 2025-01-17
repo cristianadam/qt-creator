@@ -25,9 +25,9 @@ public:
     ~PyLSClient();
 
     void openDocument(TextEditor::TextDocument *document) override;
-    void projectClosed(ProjectExplorer::Project *project) override;
+    void projectClosed(ProjectExplorer::Target *target) override;
 
-    void updateExtraCompilers(ProjectExplorer::Project *project,
+    void updateExtraCompilers(ProjectExplorer::Target *target,
                               const QList<PySideUicExtraCompiler *> &extraCompilers);
 
     static PyLSClient *clientForPython(const Utils::FilePath &python);
@@ -42,7 +42,7 @@ private:
     Utils::FilePaths m_extraWorkspaceDirs;
     Utils::FilePath m_extraCompilerOutputDir;
 
-    QHash<ProjectExplorer::Project *, QList<ProjectExplorer::ExtraCompiler *>> m_extraCompilers;
+    QHash<ProjectExplorer::Target *, QList<ProjectExplorer::ExtraCompiler *>> m_extraCompilers;
 };
 
 void openDocumentWithPython(const Utils::FilePath &python, TextEditor::TextDocument *document);

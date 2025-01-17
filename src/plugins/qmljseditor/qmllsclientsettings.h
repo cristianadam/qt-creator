@@ -24,11 +24,10 @@ public:
     void toMap(Utils::Store &map) const override;
     void fromMap(const Utils::Store &map) override;
 
-    bool isValidOnProject(ProjectExplorer::Project *project) const override;
+    bool isValidOnProject(ProjectExplorer::Target *target) const override;
 
-    // helpers:
-    bool isEnabledOnProjectFile(const Utils::FilePath &file) const;
-    bool useQmllsWithBuiltinCodemodelOnProject(const Utils::FilePath &file) const;
+    // helper:
+    bool useQmllsWithBuiltinCodemodelOnProject(ProjectExplorer::Target *target, const Utils::FilePath &file) const;
 
     bool m_useLatestQmlls = false;
     bool m_ignoreMinimumQmllsVersion = false;
@@ -37,7 +36,7 @@ public:
     bool m_generateQmllsIniFiles = false;
 
 protected:
-    LanguageClient::BaseClientInterface *createInterface(ProjectExplorer::Project *) const override;
+    LanguageClient::BaseClientInterface *createInterface(ProjectExplorer::Target *) const override;
     LanguageClient::Client *createClient(
         LanguageClient::BaseClientInterface *interface) const override;
 };

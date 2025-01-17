@@ -198,15 +198,11 @@ void PyLSClient::openDocument(TextEditor::TextDocument *document)
     using namespace LanguageServerProtocol;
     if (reachable()) {
         const FilePath documentPath = document->filePath();
-        if (PythonProject *project = pythonProjectForFile(documentPath)) {
-            if (Target *target = project->activeTarget()) {
-                if (BuildConfiguration *buildConfig = target->activeBuildConfiguration()) {
-                    if (BuildStepList *buildSteps = buildConfig->buildSteps()) {
-                        BuildStep *buildStep = buildSteps->firstStepWithId(PySideBuildStep::id());
-                        if (auto *pythonBuildStep = qobject_cast<PySideBuildStep *>(buildStep))
-                            updateExtraCompilers(project, pythonBuildStep->extraCompilers());
-                    }
-                }
+        if (BuildConfiguration *buildConfig = target()->activeBuildConfiguration()) {
+            if (BuildStepList *buildSteps = buildConfig->buildSteps()) {
+                BuildStep *buildStep = buildSteps->firstStepWithId(PySideBuildStep::id());
+                if (auto *pythonBuildStep = qobject_cast<PySideBuildStep *>(buildStep))
+                    updateExtraCompilers(target(), pythonBuildStep->extraCompilers());
             }
         } else if (isSupportedDocument(document)) {
             const FilePath workspacePath = documentPath.parentDir();
@@ -225,22 +221,22 @@ void PyLSClient::openDocument(TextEditor::TextDocument *document)
     Client::openDocument(document);
 }
 
-void PyLSClient::projectClosed(ProjectExplorer::Project *project)
+void PyLSClient::projectClosed(Target *target)
 {
-    for (ProjectExplorer::ExtraCompiler *compiler : m_extraCompilers.value(project))
+    for (ProjectExplorer::ExtraCompiler *compiler : m_extraCompilers.value(target))
         closeExtraCompiler(compiler);
-    Client::projectClosed(project);
+    Client::projectClosed(target);
 }
 
-void PyLSClient::updateExtraCompilers(ProjectExplorer::Project *project,
+void PyLSClient::updateExtraCompilers(Target *target,
                                       const QList<PySideUicExtraCompiler *> &extraCompilers)
 {
-    auto oldCompilers = m_extraCompilers.take(project);
+    auto oldCompilers = m_extraCompilers.take(target);
     for (PySideUicExtraCompiler *extraCompiler : extraCompilers) {
         QTC_ASSERT(extraCompiler->targets().size() == 1 , continue);
         int index = oldCompilers.indexOf(extraCompiler);
         if (index < 0) {
-            m_extraCompilers[project] << extraCompiler;
+            m_extraCompilers[target] << extraCompiler;
             connect(extraCompiler,
                     &ExtraCompiler::contentsChanged,
                     this,
@@ -250,7 +246,7 @@ void PyLSClient::updateExtraCompilers(ProjectExplorer::Project *project,
             if (extraCompiler->isDirty())
                 extraCompiler->compileFile();
         } else {
-            m_extraCompilers[project] << oldCompilers.takeAt(index);
+            m_extraCompilers[target] << oldCompilers.takeAt(index);
         }
     }
     for (ProjectExplorer::ExtraCompiler *compiler : oldCompilers)

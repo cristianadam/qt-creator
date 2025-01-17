@@ -67,18 +67,10 @@ QmllsClientSettings::QmllsClientSettings()
     m_initializationOptions = "{\"qtCreatorHighlighting\": true}";
 }
 
-static QtVersion *qtVersionFromProject(const Project *project)
+static QtVersion *qtVersionFromTarget(const Target *target)
 {
-    if (!project)
-        return {};
-    auto *target = project->activeTarget();
-    if (!target)
-        return {};
-    auto *kit = target->kit();
-    if (!kit)
-        return {};
-    auto qtVersion = QtKitAspect::qtVersion(kit);
-    return qtVersion;
+    Kit *kit = target ? target->kit() : nullptr;
+    return  kit ? QtKitAspect::qtVersion(kit) : nullptr;
 }
 
 static std::pair<FilePath, QVersionNumber> evaluateLatestQmlls()
@@ -115,9 +107,9 @@ static std::pair<FilePath, QVersionNumber> evaluateLatestQmlls()
     return std::make_pair(latestQmlls, latestVersion);
 }
 
-static CommandLine commandLineForQmlls(Project *project)
+static CommandLine commandLineForQmlls(Target *target)
 {
-    const auto *qtVersion = qtVersionFromProject(project);
+    const auto *qtVersion = qtVersionFromTarget(target);
     QTC_ASSERT(qtVersion, return {});
 
     auto [executable, version] = qmllsSettings()->m_useLatestQmlls
@@ -129,7 +121,7 @@ static CommandLine commandLineForQmlls(Project *project)
 
     CommandLine result{executable, {}};
 
-    if (auto *configuration = project->activeTarget()->activeBuildConfiguration())
+    if (BuildConfiguration *configuration = target->activeBuildConfiguration())
         result.addArgs({"-b", configuration->buildDirectory().path()});
 
     // qmlls 6.8 and later require the import path
@@ -138,7 +130,7 @@ static CommandLine commandLineForQmlls(Project *project)
 
         // add custom import paths that the embedded codemodel uses too
         const QmlJS::ModelManagerInterface::ProjectInfo projectInfo
-            = QmlJS::ModelManagerInterface::instance()->projectInfo(project);
+            = QmlJS::ModelManagerInterface::instance()->projectInfo(target->project());
         for (QmlJS::PathAndLanguage path : projectInfo.importPaths) {
             if (path.language() == QmlJS::Dialect::Qml)
                 result.addArgs({"-I", path.path().path()});
@@ -152,15 +144,15 @@ static CommandLine commandLineForQmlls(Project *project)
     return result;
 }
 
-bool QmllsClientSettings::isValidOnProject(ProjectExplorer::Project *project) const
+bool QmllsClientSettings::isValidOnProject(Target *target) const
 {
-    if (!BaseSettings::isValidOnProject(project))
+    if (!BaseSettings::isValidOnProject(target))
         return false;
 
-    if (!project || !QtVersionManager::isLoaded())
+    if (!target || !QtVersionManager::isLoaded())
         return false;
 
-    if (!qtVersionFromProject(project)) {
+    if (!qtVersionFromTarget(target)) {
         Core::MessageManager::writeSilently(
             Tr::tr("Current kit does not have a valid Qt version, disabling QML Language Server..."));
         return false;
@@ -178,10 +170,10 @@ public:
     FilePath qmllsFilePath() const { return m_cmd.executable(); }
 };
 
-BaseClientInterface *QmllsClientSettings::createInterface(Project *project) const
+BaseClientInterface *QmllsClientSettings::createInterface(Target *target) const
 {
     auto interface = new QmllsClientInterface;
-    interface->setCommandLine(commandLineForQmlls(project));
+    interface->setCommandLine(commandLineForQmlls(target));
     return interface;
 }
 
@@ -279,20 +271,13 @@ void QmllsClientSettings::fromMap(const Store &map)
     m_useQmllsSemanticHighlighting = map[useQmllsSemanticHighlightingKey].toBool();
 }
 
-bool QmllsClientSettings::isEnabledOnProjectFile(const Utils::FilePath &file) const
-{
-    Project *project = ProjectManager::projectForFile(file);
-    return isEnabledOnProject(project);
-}
-
-bool QmllsClientSettings::useQmllsWithBuiltinCodemodelOnProject(const Utils::FilePath &file) const
+bool QmllsClientSettings::useQmllsWithBuiltinCodemodelOnProject(Target *target, const Utils::FilePath &file) const
 {
     if (m_disableBuiltinCodemodel)
         return false;
 
     // disableBuitinCodemodel only makes sense when qmlls is enabled
-    Project *project = ProjectManager::projectForFile(file);
-    return isEnabledOnProject(project);
+    return isEnabledOnProject(target) && target->project()->isKnownFile(file);
 }
 
 // first time initialization: port old settings from the QmlJsEditingSettings AspectContainer
