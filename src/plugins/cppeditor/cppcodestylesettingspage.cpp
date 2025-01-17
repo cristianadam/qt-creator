@@ -476,7 +476,6 @@ void CppCodeStylePreferencesWidget::slotCodeStyleSettingsChanged()
             current->setCodeStyleSettings(cppCodeStyleSettings());
     }
 
-    emit codeStyleSettingsChanged(cppCodeStyleSettings());
     updatePreview();
 }
 
@@ -491,7 +490,6 @@ void CppCodeStylePreferencesWidget::slotTabSettingsChanged(const TabSettings &se
             current->setTabSettings(settings);
     }
 
-    emit tabSettingsChanged(settings);
     updatePreview();
 }
 
