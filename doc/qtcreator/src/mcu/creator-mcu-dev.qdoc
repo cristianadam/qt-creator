@@ -41,7 +41,12 @@
     The hardware-specific requirements vary depending on the hardware platform you are developing for.
     For more information see:
     \list
-        \li \l{Getting Started on NXP}
+        \li Getting Started on NXP
+        \list
+            \li \l {Getting started on NXP (BareMetal and FreeRTOS)}
+            \li \l {Getting started on NXP (Linux)}
+            \li \l {Getting started on NXP (Zephyr)}
+        \endlist
         \li \l{Getting Started on STM}
         \li \l{Getting Started on Renesas}
         \li \l{Getting Started on Infineon}
@@ -57,8 +62,17 @@
         \li \QC version
         \li \QMCU SDK version
     \row
-        \li 12.0.2 or later
-        \li 2.7 or later
+        \li 16.0.0 or later
+        \li 2.10 or later
+    \row
+        \li 15.0.0
+        \li 2.9
+    \row
+        \li 13.0.2
+        \li 2.8
+    \row
+        \li 12.0.2
+        \li 2.7
     \row
         \li 11.0.3
         \li 2.6
@@ -108,7 +122,7 @@
     To configure a connection between \QC and your MCU board:
 
     \list 1
-        \li Go to \preferences > \uicontrol SDKs > \uicontrol MCU.
+        \li Go to \preferences > \uicontrol Devices > \uicontrol MCU.
         \li In \uicontrol {\QMCU SDK}, specify the path to the directory where
             you installed \QMCU SDK.
             \image qtcreator-preferences-mcu.webp {MCU preferences}
@@ -189,15 +203,15 @@
 
     \QC automatically adds kits for all the available MCU targets if you select
     \uicontrol {Automatically create kits for all available targets on start}
-    in \preferences > \uicontrol SDKs > \uicontrol MCU.
+    in \preferences > \uicontrol Devices > \uicontrol MCU.
 
-    \image qtcreator-preferences-kits-mcu.webp {MCU kit}
+    \image qtcreator-mcu-new-kit.webp {Automatically create MCU kits}
 
     \note When you update the \QMCU SDK, \QC asks you whether you want to replace
     the existing kits or create additional kits. To do this manually for each
     target, select \uicontrol {Update Kit} or \uicontrol {Create Kit}.
 
-    To add new kits, go to \preferences > \uicontrol SDKs > \uicontrol MCU,
+    To add new kits, go to \preferences > \uicontrol Devices > \uicontrol MCU,
     and select \uicontrol {Create Kit}. This adds the paths to the kit's toolkits
     and SDKs, and keeps them synchronized when you select \uicontrol Apply or
     \uicontrol OK.
@@ -206,7 +220,9 @@
 
     To change or remove individual kits, go to \preferences > \uicontrol Kits.
 
-    The \uicontrol {MCU dependencies} field displays paths to 3rd party
+    \image qtcreator-preferences-kits-mcu.webp {MCU kit}
+
+    The \uicontrol {Qbs profile additions} field displays paths to 3rd party
     software required for MCU development with the current kit.
 
     \sa {Enable and disable plugins}, {MCUs}{How To: Develop for MCUs},
