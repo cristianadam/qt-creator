@@ -1398,6 +1398,14 @@ Utils::FilePath CppPluginSpec::installLocation(bool inUserFolder) const
     return inUserFolder ? appInfo().userPluginsRoot : appInfo().plugins;
 }
 
+Utils::Result CppPluginSpec::removePluginFiles() const
+{
+    if (filePath().isChildOf(appInfo().plugins))
+        return Result::Error(::ExtensionSystem::Tr::tr("Cannot remove system plugin"));
+
+    return filePath().removeFile();
+}
+
 static QStringList libraryNameFilter()
 {
     if (HostOsInfo::isWindowsHost())

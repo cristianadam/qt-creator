@@ -57,6 +57,8 @@ public:
 
     Utils::FilePath installLocation(bool inUserFolder) const override;
 
+    Utils::Result removePluginFiles() const override { return location().removeRecursively(); }
+
 public:
     bool printToOutputPane() const;
 };

@@ -844,6 +844,8 @@ int main(int argc, char **argv)
     PluginManager::setPluginPaths(
         getPluginPaths() + Utils::transform(pluginPaths, &FilePath::fromUserInput));
 
+    PluginManager::reInstallPlugins();
+
     QMap<QString, QString> foundAppOptions;
     if (pluginArguments.size() > 1) {
         QMap<QString, bool> appOptions;

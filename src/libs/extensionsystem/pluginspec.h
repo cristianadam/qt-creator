@@ -161,6 +161,8 @@ public:
 
     virtual Utils::FilePath installLocation(bool inUserFolder) const = 0;
 
+    virtual Utils::Result removePluginFiles() const = 0;
+
 protected:
     virtual void setEnabledByDefault(bool value);
     virtual void setEnabledIndirectly(bool value);
@@ -220,6 +222,8 @@ public:
     Utils::expected_str<void> readMetaData(const QJsonObject &pluginMetaData) override;
 
     Utils::FilePath installLocation(bool inUserFolder) const override;
+
+    Utils::Result removePluginFiles() const override;
 
 protected:
     CppPluginSpec();
