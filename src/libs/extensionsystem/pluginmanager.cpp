@@ -347,6 +347,27 @@ void PluginManager::addPlugins(const PluginSpecs &specs)
     d->addPlugins(specs);
 }
 
+void PluginManager::removePluginsAfterRestart()
+{
+    d->removePluginsAfterRestart();
+}
+
+void PluginManager::installPluginsAfterRestart()
+{
+    d->installPluginsAfterRestart();
+}
+
+void PluginManager::removePluginOnRestart(const QString &id)
+{
+    d->removePluginOnNextRestart(id);
+}
+
+void PluginManager::installPluginOnRestart(
+    const Utils::FilePath &source, const Utils::FilePath &destination)
+{
+    d->installPluginOnNextRestart(source, destination);
+}
+
 /*!
     Returns \c true if any plugin has errors even though it is enabled.
     Most useful to call after loadPlugins().
@@ -1689,6 +1710,15 @@ PluginSpec *PluginManager::specForPlugin(IPlugin *plugin)
     return findOrDefault(d->pluginSpecs, equal(&PluginSpec::plugin, plugin));
 }
 
+bool PluginManager::takePluginIdForRemoval(const QString &id)
+{
+    if (!d->m_pluginsToRemove.contains(id))
+        return false;
+
+    d->m_pluginsToRemove.remove(id);
+    return true;
+}
+
 static QString pluginListString(const QSet<PluginSpec *> &plugins)
 {
     QStringList names = Utils::transform<QList>(plugins, &PluginSpec::name);
@@ -1899,6 +1929,35 @@ static const FilePaths pluginFiles(const FilePaths &pluginPaths)
     return pluginFiles;
 }
 
+bool PluginManagerPrivate::removePlugin(const QString &pluginId)
+{
+    PluginSpec *existingSpec = Utils::findOrDefault(pluginSpecs, [pluginId](PluginSpec *spec) {
+        return spec->id() == pluginId;
+    });
+    if (existingSpec) {
+        QTC_ASSERT(existingSpec->state() == PluginSpec::State::Resolved, return false);
+
+        auto removeResult = existingSpec->removePluginFiles();
+        if (!removeResult) {
+            qCWarning(pluginLog) << "Failed to remove plugin files for" << pluginId << ":"
+                                 << removeResult.error();
+            return false;
+        }
+
+        for (auto &category : pluginCategories) {
+            category.removeOne(existingSpec);
+        }
+
+        if (pluginSpecs.removeOne(existingSpec)) {
+            delete existingSpec;
+            return true;
+        }
+    }
+
+    m_pluginsToRemove << pluginId;
+    return true;
+}
+
 void PluginManagerPrivate::addPlugins(const PluginSpecs &specs)
 {
     pluginSpecs += specs;
@@ -1928,6 +1987,87 @@ void PluginManagerPrivate::addPlugins(const PluginSpecs &specs)
     emit q->pluginsChanged();
 }
 
+static const char PLUGINS_TO_INSTALL_KEY[] = "PluginsToInstall";
+static const char PLUGINS_TO_REMOVE_KEY[] = "PluginsToRemove";
+
+void PluginManagerPrivate::removePluginOnNextRestart(const QString &pluginId)
+{
+    settings->setValue(
+        PLUGINS_TO_REMOVE_KEY, settings->value(PLUGINS_TO_REMOVE_KEY).toStringList() << pluginId);
+    settings->sync();
+}
+
+static QList<QPair<FilePath, FilePath>> readPluginInstallList(QtcSettings *settings)
+{
+    int size = settings->beginReadArray(PLUGINS_TO_INSTALL_KEY);
+
+    QList<QPair<FilePath, FilePath>> installList;
+    for (int i = 0; i < size; ++i) {
+        settings->setArrayIndex(i);
+        installList.append(
+            {FilePath::fromVariant(settings->value("src")),
+             FilePath::fromVariant(settings->value("dest"))});
+    }
+    settings->endArray();
+    return installList;
+}
+
+void PluginManagerPrivate::installPluginOnNextRestart(
+    const Utils::FilePath &src, const Utils::FilePath &dest)
+{
+    auto list = readPluginInstallList(settings) << qMakePair(src, dest);
+
+    settings->beginWriteArray(PLUGINS_TO_INSTALL_KEY);
+    for (int i = 0; i < list.size(); ++i) {
+        settings->setArrayIndex(i);
+        settings->setValue("src", list.at(i).first.toVariant());
+        settings->setValue("dest", list.at(i).second.toVariant());
+    }
+    settings->endArray();
+
+    settings->sync();
+}
+
+void PluginManagerPrivate::removePluginsAfterRestart()
+{
+    QStringList removeList = settings->value(PLUGINS_TO_REMOVE_KEY).toStringList();
+    for (const QString &pluginId : removeList)
+        removePlugin(pluginId);
+
+    settings->remove(PLUGINS_TO_REMOVE_KEY);
+}
+
+void PluginManagerPrivate::installPluginsAfterRestart()
+{
+    QTC_CHECK(pluginSpecs.isEmpty());
+
+    QList<QPair<FilePath, FilePath>> installList = readPluginInstallList(settings);
+    for (const auto &[src, dest] : installList) {
+        if (dest.exists()) {
+            if (dest.isDir()) {
+                if (auto result = dest.removeRecursively(); !result) {
+                    qCWarning(pluginLog()) << "Failed to remove" << dest << ":" << result.error();
+                    continue;
+                }
+            }
+        }
+        Utils::Result result = src.isDir() ? src.copyRecursively(dest) : src.copyFile(dest);
+
+        if (!result) {
+            qCWarning(pluginLog())
+                << "Failed to install" << src << "to" << dest << ":" << result.error();
+            continue;
+        }
+
+        result = src.isDir() ? src.removeRecursively() : src.removeFile();
+        if (!result)
+            qCWarning(pluginLog())
+                << "Failed to remove the source file in" << src << ":" << result.error();
+    }
+
+    settings->remove(PLUGINS_TO_INSTALL_KEY);
+}
+
 /*!
     \internal
 */
@@ -1953,6 +2093,13 @@ void PluginManagerPrivate::readPluginPaths()
         QTC_ASSERT_EXPECTED(spec, continue);
         newSpecs.append(spec->release());
     }
+
+    newSpecs = Utils::filtered(newSpecs, [this](PluginSpec *spec) {
+        return pluginById(spec->id()) == nullptr;
+    });
+
+    if (newSpecs.empty())
+        return;
 
     addPlugins(newSpecs);
 }
