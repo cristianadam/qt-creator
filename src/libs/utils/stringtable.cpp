@@ -110,7 +110,7 @@ static inline bool isQStringInUse(const QString &string)
         if (ref > 10)
             qDebug() << ref << string.size() << string.left(50);
     }
-    return data_ptr->isShared() || !data_ptr->isMutable() /* QStringLiteral ? */;
+    return data_ptr->isShared();
 }
 
 void StringTablePrivate::GC(QPromise<void> &promise)
