@@ -95,19 +95,14 @@ void PythonGenerator::updateProject(QmlProject *project)
     CMakeWriter::writeFile(settingsPath, settingsFileContent());
 }
 
-QString PythonGenerator::settingsFileContent() const
+void PythonGenerator::update(const QSet<QString> &added, const QSet<QString> &removed)
 {
-    QTC_ASSERT(buildSystem(), return {});
+    qDebug() << "PythonGenerator::update";
+}
 
-    QString content("\n");
-    content.append("url = \"" + buildSystem()->mainFile() + "\"\n");
-
-    content.append("import_paths = [\n");
-    for (const QString &path : buildSystem()->importPaths())
-        content.append("\t\"" + path + "\",\n");
-    content.append("]\n");
-
-    return content;
+void PythonGenerator::update(const QSet<QString> &added, const QSet<QString> &removed)
+{
+    qDebug() << "PythonGenerator::update";
 }
 
 } // namespace QmlProjectExporter.

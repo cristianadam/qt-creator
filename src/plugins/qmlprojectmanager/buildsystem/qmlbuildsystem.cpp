@@ -85,13 +85,23 @@ QmlBuildSystem::QmlBuildSystem(Target *target)
 
     updateDeploymentData();
 //    registerMenuButtons(); //is wip
+    connect(target->project(), &Project::activeTargetChanged, this, [this](Target *activeTarget) {
+        if (activeTarget != this->target()) {
+            m_fileGen->stopWatchingFileChanges(m_projectItem.data());
+            return;
+        }
 
-    connect(target->project(), &Project::activeTargetChanged, this, [this](Target *target) {
         refresh(RefreshOptions::NoFileRefresh);
         m_fileGen->updateProject(qmlProject());
-        updateMcuBuildStep(target, qtForMCUs());
+        m_fileGen->watchFileChanges(m_projectItem.data());
+        updateMcuBuildStep(activeTarget, qtForMCUs());
     });
+
     connect(target->project(), &Project::projectFileIsDirty, this, [this] {
+        if (!this->target()->isActive()) {
+            return;
+        }
+
         refresh(RefreshOptions::Project);
         m_fileGen->updateProject(qmlProject());
         m_fileGen->updateMenuAction();
@@ -223,7 +233,7 @@ void QmlBuildSystem::initProjectItem()
     m_projectItem.reset(new QmlProjectItem{projectPath});
 
     connect(m_projectItem.data(), &QmlProjectItem::filesChanged, this, &QmlBuildSystem::refreshFiles);
-    m_fileGen->updateProjectItem(m_projectItem.data(), true);
+    m_fileGen->updateGeneratorStatus(m_projectItem.data());
     initMcuProjectItems();
 }
 
@@ -239,7 +249,9 @@ void QmlBuildSystem::initMcuProjectItems()
 
         m_mcuProjectItems.append(qmlProjectItem);
         connect(qmlProjectItem.data(), &QmlProjectItem::filesChanged, this, &QmlBuildSystem::refreshFiles);
-        m_fileGen->updateProjectItem(m_projectItem.data(), false);
+        // FIXME: Is it necessary to watch more folders in the case of a MCU project ?
+        // I guess it is not ...
+        // m_fileGen->watchFileChanges(m_projectItem.data());
 
         m_mcuProjectFilesWatcher.addFile(mcuProjectFile, Utils::FileSystemWatcher::WatchModifiedDate);
 

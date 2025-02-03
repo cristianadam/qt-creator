@@ -19,7 +19,9 @@ public:
 
     void updateMenuAction();
     void updateProject(QmlProject *project);
-    void updateProjectItem(QmlProjectItem *item, bool updateEnabled);
+    void updateGeneratorStatus(QmlProjectItem *item);
+    void watchFileChanges(QmlProjectItem *item);
+    void stopWatchingFileChanges(QmlProjectItem *item);
 
 private:
     CMakeGenerator *m_cmakeGen;

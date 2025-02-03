@@ -21,6 +21,9 @@ public:
     static void createMenuAction(QObject *parent);
 
     PythonGenerator(QmlBuildSystem *bs);
+
+    void update(const QSet<QString> &added, const QSet<QString> &removed);
+
     void updateMenuAction() override;
     void updateProject(QmlProject *project) override;
 
