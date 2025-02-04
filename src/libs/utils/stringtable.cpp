@@ -4,6 +4,8 @@
 #include "stringtable.h"
 
 #include "async.h"
+#include "shutdownguard.h"
+#include "threadutils.h"
 
 #include <QDebug>
 #include <QElapsedTimer>
@@ -44,7 +46,7 @@ public:
 
 static StringTablePrivate &stringTable()
 {
-    static StringTablePrivate theStringTable;
+    static GuardedObject<StringTablePrivate> theStringTable;
     return theStringTable;
 }
 
@@ -56,6 +58,12 @@ StringTablePrivate::StringTablePrivate()
     m_gcCountDown.setSingleShot(true);
     m_gcCountDown.setInterval(GCTimeOut);
     connect(&m_gcCountDown, &QTimer::timeout, this, &StringTablePrivate::startGC);
+}
+
+QTCREATOR_UTILS_EXPORT void setupStringTable()
+{
+    QTC_CHECK(isMainThread());
+    stringTable();
 }
 
 QTCREATOR_UTILS_EXPORT QString insert(const QString &string)

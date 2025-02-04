@@ -7,6 +7,7 @@
 
 namespace Utils::StringTable {
 
+QTCREATOR_UTILS_EXPORT void setupStringTable(); // Ensure called from the main thread.
 QTCREATOR_UTILS_EXPORT QString insert(const QString &string);
 QTCREATOR_UTILS_EXPORT void scheduleGC();
 

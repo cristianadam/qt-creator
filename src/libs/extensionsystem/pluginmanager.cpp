@@ -21,6 +21,7 @@
 #include <utils/qtcprocess.h>
 #include <utils/qtcsettings.h>
 #include <utils/shutdownguard.h>
+#include <utils/stringtable.h>
 #include <utils/stringutils.h>
 #include <utils/threadutils.h>
 
@@ -265,6 +266,7 @@ PluginManager::PluginManager()
     m_instance = this;
     d = new PluginManagerPrivate(this);
     shutdownGuard(); // ensure creation on main thread
+    StringTable::setupStringTable(); // enasure creation on main thread
 }
 
 /*!
