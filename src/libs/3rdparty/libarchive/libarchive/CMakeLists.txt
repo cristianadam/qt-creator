@@ -280,5 +280,3 @@ IF(ENABLE_INSTALL)
   INSTALL_MAN(${libarchive_MANS})
   INSTALL(FILES ${include_HEADERS} DESTINATION include)
 ENDIF()
-
-add_subdirectory(test)
