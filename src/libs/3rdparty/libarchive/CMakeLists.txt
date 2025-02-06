@@ -1,9 +1,4 @@
 #
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12 FATAL_ERROR)
-if(APPLE AND CMAKE_VERSION VERSION_LESS "3.17.0")
-  message(WARNING "CMake>=3.17.0 required to make the generated shared library have the same Mach-O headers as autotools")
-endif()
-
 if(POLICY CMP0065)
   cmake_policy(SET CMP0065 NEW) #3.4 don't use `-rdynamic` with executables
 endif()
@@ -13,8 +8,6 @@ endif()
 if(POLICY CMP0075)
   cmake_policy(SET CMP0075 NEW) #3.12.0 `check_include_file()`` and friends use ``CMAKE_REQUIRED_LIBRARIES``.
 endif()
-#
-PROJECT(libarchive C)
 #
 SET(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/build/cmake")
 if(NOT CMAKE_RUNTIME_OUTPUT_DIRECTORY)
@@ -223,7 +216,7 @@ ENDIF (MSVC)
 # Enable CTest/CDash support
 include(CTest)
 
-option(BUILD_SHARED_LIBS "Build shared libraries" ON)
+option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 
 OPTION(ENABLE_MBEDTLS "Enable use of mbed TLS" OFF)
 OPTION(ENABLE_NETTLE "Enable use of Nettle" OFF)
@@ -2205,12 +2198,8 @@ IF(DONT_FAIL_ON_CRC_ERROR)
   ADD_DEFINITIONS(-DDONT_FAIL_ON_CRC_ERROR=1)
 ENDIF(DONT_FAIL_ON_CRC_ERROR)
 
-IF(ENABLE_TEST)
-  ADD_CUSTOM_TARGET(run_all_tests)
-ENDIF(ENABLE_TEST)
+#IF(ENABLE_TEST)
+#  ADD_CUSTOM_TARGET(run_all_tests)
+#ENDIF(ENABLE_TEST)
 
 add_subdirectory(libarchive)
-add_subdirectory(cat)
-add_subdirectory(tar)
-add_subdirectory(cpio)
-add_subdirectory(unzip)
