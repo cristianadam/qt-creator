@@ -14,6 +14,7 @@
 #include <solutions/tasking/tasktree.h>
 
 #include <utils/algorithm.h>
+#include <utils/async.h>
 #include <utils/infobar.h>
 #include <utils/networkaccessmanager.h>
 #include <utils/stylehelper.h>
@@ -156,25 +157,26 @@ static Group installRecipe(
     };
 
     const auto onUnarchiveSetup =
-        [appDataPath, installOptionsIt, storage, emitResult](Unarchiver &unarchiver) {
-            const auto sourceAndCommand = Unarchiver::sourceAndCommand(
-                FilePath::fromUserInput(storage->fileName()));
+        [appDataPath, installOptionsIt, storage, emitResult](Async<Result> &unarchiver) {
+            //TODO: ??? unarchiver.setGZipFileDestName(installOptionsIt->name);
+            unarchiver.setConcurrentCallData(
+                unarchivePromised,
+                FilePath::fromUserInput(storage->fileName()),
+                destination(appDataPath, *installOptionsIt),
+                std::function<void(FilePath)>());
 
-            if (!sourceAndCommand) {
-                emitResult(sourceAndCommand.error());
-                return SetupResult::StopWithError;
-            }
-            unarchiver.setGZipFileDestName(installOptionsIt->name);
-            unarchiver.setSourceAndCommand(*sourceAndCommand);
-            unarchiver.setDestDir(destination(appDataPath, *installOptionsIt));
             return SetupResult::Continue;
         };
 
-    const auto onUnarchiverDone = [appDataPath, installOptionsIt, emitResult](DoneWith result) {
-        if (result == DoneWith::Error)
-            return emitResult(Tr::tr("Unarchiving failed."));
+    const auto onUnarchiverDone = [appDataPath,
+                                   installOptionsIt,
+                                   emitResult](const Async<Result> &unarchiver, DoneWith result) {
         if (result == DoneWith::Cancel)
             return DoneResult::Error;
+
+        Result r = unarchiver.result();
+        if (!r)
+            return emitResult(r.error());
 
         const FilePath destDir = destination(appDataPath, *installOptionsIt);
         const FilePath binary = destDir / installOptionsIt->name;
@@ -199,6 +201,7 @@ static Group installRecipe(
         return DoneResult::Success;
     };
 
+    // clang-format off
     return For (installOptionsIt) >> Do {
         storage,
         parallelIdealThreadCountLimit,
@@ -223,16 +226,17 @@ static Group installRecipe(
                 return SetupResult::Continue;
             }),
             NetworkQueryTask(onDownloadSetup, onDownloadDone),
-            UnarchiverTask(onUnarchiveSetup, onUnarchiverDone),
-            onGroupDone([storage, emitResult] { storage->remove(); }),
+            AsyncTask<Result>(onUnarchiveSetup, onUnarchiverDone),
+            onGroupDone([storage] { storage->remove(); }),
         },
         onGroupDone([emitResult](DoneWith result) {
             if (result == DoneWith::Cancel)
-                emitResult("Installation was canceled");
+                emitResult(Tr::tr("Installation was canceled"));
             else if (result == DoneWith::Success)
                 emitResult();
         }),
     };
+    // clang-format on
 }
 
 void setupInstallModule()

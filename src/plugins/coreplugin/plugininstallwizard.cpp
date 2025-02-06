@@ -113,12 +113,7 @@ public:
             }
             return true;
         }
-
-        const auto sourceAndCommand = Unarchiver::sourceAndCommand(path);
-        if (!sourceAndCommand)
-            m_info->setText(sourceAndCommand.error());
-
-        return bool(sourceAndCommand);
+        return true;
     }
 
     InfoLabel *m_info = nullptr;
@@ -252,23 +247,35 @@ public:
 
         m_output->clear();
 
-        const auto sourceAndCommand = Unarchiver::sourceAndCommand(m_data->sourcePath);
-        if (!sourceAndCommand) {
-            m_label->setType(InfoLabel::Error);
-            m_label->setText(sourceAndCommand.error());
-            return;
-        }
+        const auto onUnarchiverSetup = [this](Async<Result> &unarchiver) {
+            auto callback = [this](const FilePath &filePath) {
+                QMetaObject::invokeMethod(
+                    m_output,
+                    [output = m_output, filePath] { output->append(filePath.toUserOutput()); },
+                    Qt::QueuedConnection);
+            };
 
-        const auto onUnarchiverSetup = [this, sourceAndCommand](Unarchiver &unarchiver) {
-            unarchiver.setSourceAndCommand(*sourceAndCommand);
-            unarchiver.setDestDir(m_data->extractedPath);
-            connect(&unarchiver, &Unarchiver::outputReceived, this, [this](const QString &output) {
-                m_output->append(output);
-            });
+            // Make sure we wait until the async is done, so that the callback won't crash if the user
+            // cancels the operation.
+            unarchiver.setFutureSynchronizer(nullptr);
+            unarchiver.setConcurrentCallData(
+                unarchivePromised,
+                m_data->sourcePath,
+                FilePath::fromString(m_tempDir->path()),
+                callback);
         };
-        const auto onUnarchiverError = [this] {
+
+        const auto onUnarchiverDone = [this](const Async<Result> &unarchiver) {
+            if (unarchiver.result()) {
+                m_label->setType(InfoLabel::Ok);
+                m_label->setText(Tr::tr("Archive extracted successfully."));
+                return DoneResult::Success;
+            }
+
             m_label->setType(InfoLabel::Error);
-            m_label->setText(Tr::tr("There was an error while unarchiving."));
+            m_label->setText(
+                Tr::tr("There was an error while unarchiving: %1").arg(unarchiver.result().error()));
+            return DoneResult::Error;
         };
 
         const auto onCheckerSetup = [this](Async<CheckResult> &async) {
@@ -295,7 +302,7 @@ public:
 
         // clang-format off
         const Group root{
-            UnarchiverTask(onUnarchiverSetup, onUnarchiverError, CallDoneIf::Error),
+            AsyncTask<Result>(onUnarchiverSetup, onUnarchiverDone),
             AsyncTask<CheckResult>(onCheckerSetup, onCheckerDone, CallDoneIf::Success)
         };
         // clang-format on
