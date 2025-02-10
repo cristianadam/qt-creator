@@ -24,15 +24,9 @@ namespace QmlJSTools {
 class QmlJsCodeStyleEditor final : public TextEditor::CodeStyleEditor
 {
 public:
-    static QmlJsCodeStyleEditor *create(
-        const TextEditor::ICodeStylePreferencesFactory *factory,
-        ProjectExplorer::Project *project,
-        TextEditor::ICodeStylePreferences *codeStyle,
-        QWidget *parent = nullptr);
-
-private:
     QmlJsCodeStyleEditor(QWidget *parent = nullptr);
 
+private:
     CodeStyleEditorWidget *createEditorWidget(
         const void * /*project*/,
         TextEditor::ICodeStylePreferences *codeStyle,
@@ -41,16 +35,7 @@ private:
     QString snippetProviderGroupId() const override;
 };
 
-QmlJsCodeStyleEditor *QmlJsCodeStyleEditor::create(
-    const TextEditor::ICodeStylePreferencesFactory *factory,
-    ProjectExplorer::Project *project,
-    TextEditor::ICodeStylePreferences *codeStyle,
-    QWidget *parent)
-{
-    auto editor = new QmlJsCodeStyleEditor{parent};
-    editor->init(factory, wrapProject(project), codeStyle);
-    return editor;
-}
+
 
 QmlJsCodeStyleEditor::QmlJsCodeStyleEditor(QWidget *parent)
     : CodeStyleEditor{parent}
@@ -101,8 +86,9 @@ TextEditor::CodeStyleEditorWidget *QmlJSCodeStylePreferencesFactory::createCodeS
     TextEditor::ICodeStylePreferences *codeStyle,
     QWidget *parent) const
 {
-    return QmlJsCodeStyleEditor::create(
-        this, ProjectExplorer::unwrapProject(project), codeStyle, parent);
+    auto editor = new QmlJsCodeStyleEditor{parent};
+    editor->init(this, project, codeStyle);
+    return editor;
 }
 
 Utils::Id QmlJSCodeStylePreferencesFactory::languageId()

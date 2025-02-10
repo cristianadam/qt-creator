@@ -59,19 +59,14 @@ private:
 class ClangFormatCodeStyleEditor final : public CodeStyleEditor
 {
 public:
-    static ClangFormatCodeStyleEditor *create(
-        const ICodeStylePreferencesFactory *factory,
-        Project *project,
-        ICodeStylePreferences *codeStyle,
-        QWidget *parent);
-
-private:
     ClangFormatCodeStyleEditor(QWidget *parent);
 
     void init(
         const ICodeStylePreferencesFactory *factory,
         const ProjectWrapper &project,
         ICodeStylePreferences *codeStyle) override;
+
+private:
     void apply() override;
     void finish() override;
 
@@ -247,16 +242,7 @@ void ClangFormatCodeStyleEditorWidget::finish()
     m_clangFormatSettings->apply();
 }
 
-ClangFormatCodeStyleEditor *ClangFormatCodeStyleEditor::create(
-    const ICodeStylePreferencesFactory *factory,
-    Project *project,
-    ICodeStylePreferences *codeStyle,
-    QWidget *parent)
-{
-    auto editor = new ClangFormatCodeStyleEditor{parent};
-    editor->init(factory, wrapProject(project), codeStyle);
-    return editor;
-}
+
 
 ClangFormatCodeStyleEditor::ClangFormatCodeStyleEditor(QWidget *parent)
     : CodeStyleEditor{parent}
@@ -357,7 +343,9 @@ void ClangFormatCodeStylePreferencesFactory::setup(QObject *guard)
 CodeStyleEditorWidget *ClangFormatCodeStylePreferencesFactory::createCodeStyleEditor(
     const ProjectWrapper &project, ICodeStylePreferences *codeStyle, QWidget *parent) const
 {
-    return ClangFormatCodeStyleEditor::create(this, unwrapProject(project), codeStyle, parent);
+    auto editor = new ClangFormatCodeStyleEditor{parent};
+    editor->init(this, project, codeStyle);
+    return editor;
 }
 
 Id ClangFormatCodeStylePreferencesFactory::languageId()

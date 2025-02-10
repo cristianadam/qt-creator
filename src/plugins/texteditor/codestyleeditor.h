@@ -54,17 +54,19 @@ public:
 class TEXTEDITOR_EXPORT CodeStyleEditor : public CodeStyleEditorWidget
 {
     Q_OBJECT
-public:
-    void apply() override;
-    void finish() override;
 
-protected:
+public:
     CodeStyleEditor(QWidget *parent = nullptr);
+
     virtual void init(
         const ICodeStylePreferencesFactory *factory,
         const ProjectWrapper &project,
         ICodeStylePreferences *codeStyle);
 
+    void apply() override;
+    void finish() override;
+
+protected:
     QVBoxLayout *m_layout = nullptr;
     CodeStyleSelectorWidget *m_selector = nullptr;
     SnippetEditorWidget *m_preview = nullptr;

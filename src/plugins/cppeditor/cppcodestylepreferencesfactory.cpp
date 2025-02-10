@@ -24,15 +24,9 @@ namespace CppEditor {
 class CppCodeStyleEditor final : public TextEditor::CodeStyleEditor
 {
 public:
-    static CppCodeStyleEditor *create(
-        const TextEditor::ICodeStylePreferencesFactory *factory,
-        ProjectExplorer::Project *project,
-        TextEditor::ICodeStylePreferences *codeStyle,
-        QWidget *parent = nullptr);
-
-private:
     CppCodeStyleEditor(QWidget *parent = nullptr);
 
+private:
     CodeStyleEditorWidget *createEditorWidget(
         const void * /*project*/,
         TextEditor::ICodeStylePreferences *codeStyle,
@@ -41,16 +35,7 @@ private:
     QString snippetProviderGroupId() const override;
 };
 
-CppCodeStyleEditor *CppCodeStyleEditor::create(
-    const TextEditor::ICodeStylePreferencesFactory *factory,
-    ProjectExplorer::Project *project,
-    TextEditor::ICodeStylePreferences *codeStyle,
-    QWidget *parent)
-{
-    auto editor = new CppCodeStyleEditor{parent};
-    editor->init(factory, wrapProject(project), codeStyle);
-    return editor;
-}
+
 
 CppCodeStyleEditor::CppCodeStyleEditor(QWidget *parent)
     : CodeStyleEditor{parent}
@@ -88,8 +73,9 @@ TextEditor::CodeStyleEditorWidget *CppCodeStylePreferencesFactory::createCodeSty
     TextEditor::ICodeStylePreferences *codeStyle,
     QWidget *parent) const
 {
-    return CppCodeStyleEditor::create(
-        this, ProjectExplorer::unwrapProject(project), codeStyle, parent);
+    auto editor = new CppCodeStyleEditor{parent};
+    editor->init(this, project, codeStyle);
+    return editor;
 }
 
 Utils::Id CppCodeStylePreferencesFactory::languageId()
