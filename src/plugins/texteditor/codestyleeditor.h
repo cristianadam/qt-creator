@@ -67,14 +67,18 @@ public:
     void finish() override;
 
 protected:
+    using SelectorWidgetCreator =
+        std::function<CodeStyleSelectorWidget *(ICodeStylePreferences *codeStyle)>;
+    void setCodeStyleSelectorWidgetCreator(const SelectorWidgetCreator &creator);
+
+    SelectorWidgetCreator m_selectorWidgetCreator;
+
     QVBoxLayout *m_layout = nullptr;
     CodeStyleSelectorWidget *m_selector = nullptr;
     SnippetEditorWidget *m_preview = nullptr;
     CodeStyleEditorWidget *m_editor = nullptr;
 
 private:
-    virtual CodeStyleSelectorWidget *createCodeStyleSelectorWidget(
-        ICodeStylePreferences *codeStyle, QWidget *parent = nullptr) const;
     virtual SnippetEditorWidget *createPreviewWidget(
         const ICodeStylePreferencesFactory *factory,
         const ProjectWrapper &project,

@@ -41,7 +41,7 @@ namespace ClangFormat {
 class ClangFormatSelectorWidget final : public CodeStyleSelectorWidget
 {
 public:
-    ClangFormatSelectorWidget(QWidget *parent = nullptr);
+    ClangFormatSelectorWidget() = default;
 
     void onModeChanged(ClangFormatSettings::Mode newMode);
     void onUseCustomSettingsChanged(bool doUse);
@@ -74,8 +74,6 @@ private:
         const void *project,
         ICodeStylePreferences *codeStyle,
         QWidget *parent = nullptr) const override;
-    CodeStyleSelectorWidget *createCodeStyleSelectorWidget(
-        ICodeStylePreferences *codeStyle, QWidget *parent = nullptr) const override;
     QString previewText() const override;
     QString snippetProviderGroupId() const override;
 
@@ -117,10 +115,6 @@ private:
     TextEditor::ICodeStylePreferences *createCodeStyle() const override;
     TextEditor::Indenter *createIndenter(QTextDocument *doc) const override;
 };
-
-ClangFormatSelectorWidget::ClangFormatSelectorWidget(QWidget *parent)
-    : CodeStyleSelectorWidget{parent}
-{}
 
 void ClangFormatSelectorWidget::onModeChanged(ClangFormatSettings::Mode newMode)
 {
@@ -242,11 +236,15 @@ void ClangFormatCodeStyleEditorWidget::finish()
     m_clangFormatSettings->apply();
 }
 
-
-
 ClangFormatCodeStyleEditor::ClangFormatCodeStyleEditor(QWidget *parent)
     : CodeStyleEditor{parent}
-{}
+{
+    setCodeStyleSelectorWidgetCreator([](ICodeStylePreferences *codeStyle) {
+        auto selector = new ClangFormatSelectorWidget;
+        selector->setCodeStyle(codeStyle);
+        return selector;
+    });
+}
 
 void ClangFormatCodeStyleEditor::init(
     const ICodeStylePreferencesFactory *factory, const ProjectWrapper &project, ICodeStylePreferences *codeStyle)
@@ -307,14 +305,6 @@ CodeStyleEditorWidget *ClangFormatCodeStyleEditor::createEditorWidget(
 {
     return new ClangFormatCodeStyleEditorWidget{
             reinterpret_cast<const Project *>(project), codeStyle, parent};
-}
-
-CodeStyleSelectorWidget *ClangFormatCodeStyleEditor::createCodeStyleSelectorWidget(
-    ICodeStylePreferences *codeStyle, QWidget *parent) const
-{
-    auto selector = new ClangFormatSelectorWidget{parent};
-    selector->setCodeStyle(codeStyle);
-    return selector;
 }
 
 QString ClangFormatCodeStyleEditor::previewText() const

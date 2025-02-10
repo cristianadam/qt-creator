@@ -29,7 +29,7 @@ void CodeStyleEditor::init(
     const ProjectWrapper &project,
     ICodeStylePreferences *codeStyle)
 {
-    m_selector = createCodeStyleSelectorWidget(codeStyle);
+    m_selector = m_selectorWidgetCreator(codeStyle);
     m_layout->addWidget(m_selector);
     if (!project) {
         m_editor = createEditorWidget(project.project(), codeStyle);
@@ -51,14 +51,6 @@ void CodeStyleEditor::init(
     label->setFont(font);
     label->setWordWrap(true);
     m_layout->addWidget(label);
-}
-
-CodeStyleSelectorWidget *CodeStyleEditor::createCodeStyleSelectorWidget(
-    ICodeStylePreferences *codeStyle, QWidget *parent) const
-{
-    auto selector = new CodeStyleSelectorWidget{parent};
-    selector->setCodeStyle(codeStyle);
-    return selector;
 }
 
 SnippetEditorWidget *CodeStyleEditor::createPreviewWidget(
@@ -118,6 +110,12 @@ CodeStyleEditor::CodeStyleEditor(QWidget *parent)
 {
     m_layout = new QVBoxLayout{this};
     m_layout->setContentsMargins(0, 0, 0, 0);
+
+    m_selectorWidgetCreator = [](ICodeStylePreferences *codeStyle) {
+        auto selector = new CodeStyleSelectorWidget;
+        selector->setCodeStyle(codeStyle);
+        return selector;
+    };
 }
 
 void CodeStyleEditor::apply()
