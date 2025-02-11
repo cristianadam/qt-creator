@@ -130,11 +130,84 @@
             the CMake Generator ignores everything inside the MockDatas folder.
 
         \section2 Is it possible to manually change the contents of the \e CMakeLists.txt files?
-            Yes, you can make changes to the \e CMakeLists.txt files existing in the
+            Yes, you can change the \e CMakeLists.txt files existing in the
             App and the Root folders of your project. The \e CMakeLists.txt files
             in other folders of your project are overwritten as soon as the
             CMake generator runs next time. Only the \e CMakeLists.txt files in
             the App and the Root folders of your project are not overwritten.
+
+        \section2 How has the project structure differed since \QDS 4.5?
+            \QDS project structure has been changed since \QDS 4.5. Now, there is
+            only a common import path (./) at the root of the project. This makes
+            the project in line with the QML compiler and tooling. Learn more about
+            the \l {Qt Quick Compiler} {QML compiler}.
+
+            Find the difference between the project structures from the table below:
+
+            \table
+                \header
+                    \li Project structure before \QDS 4.5
+                    \li Project structure since \QDS 4.5
+                \row
+                    \li It has two import folders, \c imports, and \c assets_imports.
+                    \li It imports directly to the root project folder.
+                \row
+                    \li 2D assets are imported to the \c assets_imports folder.
+                    \li 2D assets are imported to the \c Generated folder.
+                \row
+                    \li 3D assets are imported to the \c assets_imports/QtQuick3DAssets folder.
+                    \li 3D assets are imported to the \c Generated/QtQuick3D folder.
+            \endtable
+
+        \section2 How do you convert the project structure before \QDS 4.5 to the current \QDS project structure?
+
+            To convert:
+            \list 1
+                \li Move the project files from \c ./import/ProjectName to the
+                    \c ./ProjectName folder. If you have additional modules in the
+                    \c {./import/}, move them similarly. You do not need to adjust the URI.
+                \li Move the project files from \c ./assets_imports to the
+                    \c ./Generated folder. Adjust the import URIs throughout the project.
+                \li Rename \c ./content to \c ./ProjectNameContent.
+                    Adjust the import URIs throughout the project.
+                \li Make sure that URIs in \c qmldir files match the folder structure.
+                    \note  A qmldir defined in \c ./Generated/QtQuick3D/DangerArrow/qmldir
+                        should be defined as \c {module Generated.QtQuick3D.DangerArrow}.
+                        This ensures the same URIs between \QDS and generated
+                        \c CMakeLists files. Ensure that \c import in \c .qml files
+                        matches these URIs.
+                \li Add missing filters to the \c .qmlproject file.
+                    \list
+                        \li If a folder contains \c QML and \c JavaScript files, define
+                            \c QMLFiles and \c JavaScriptFiles in the \c .qmlproject file.
+                        \li For the files that don't have dedicated keywords, such as
+                            \c ImageFiles or \c FontFiles, add them to the
+                            \c .qmlproject as a filter. To add \c WAV or \c MP3 files,
+                            define filters in the \c .qmlproject file like this:
+                            \code
+                                Files {
+                                    filter: "*.wav;*.mp3"
+                                }
+                            \endcode
+                            To learn more about the defined file formats, read
+                            \l {https://doc.qt.io/archives/QtForMCUs-2.5/qtul-qmlproject-reference.html#imagefiles} {this}.
+                    \endlist
+                \li Remove all the \c CMakeLists.txt files. This is automatically generated
+                    when you access CMake generation using \uicontrol File >
+                    \uicontrol {Export Project} > \uicontrol {Enable CMake Generator}.
+                \li In the \c examples/dataImports/DataModels/ folder, update the
+                    \c ExamplesModel.qml and \c ExamplesModelV2.qml files to reflect
+                    \c qmlFileName correctly after a successful CMake generation.
+                \li If the project uses shaders, add the following snippet to the
+                    \c .qmlproject file:
+                    \code
+                        ShaderTool {
+                            args: "-s --glsl \"100 es,120,150\" --hlsl 50 --msl 12"
+                            files: [ "UntitledProject3DContent/shaders/*" ]
+                        }
+                    \endcode
+
+            \endlist
 
     \enddetails
 
