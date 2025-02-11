@@ -12,4 +12,5 @@ if(WIN32)
 endif()
 
 add_subdirectory(xz)
+add_subdirectory(bzip2)
 add_subdirectory(libarchive)
