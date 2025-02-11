@@ -177,6 +177,11 @@ bzip2_reader_vtable = {
 	.close = bzip2_filter_close,
 };
 
+void bz_internal_error(int errorCode)
+{
+    // TODO ???
+}
+
 /*
  * Setup the callbacks.
  */
