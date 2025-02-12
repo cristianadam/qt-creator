@@ -2,6 +2,7 @@ add_qtc_plugin(Python
   DEPENDS QmlJS
   PLUGIN_DEPENDS Core LanguageClient ProjectExplorer TextEditor QtSupport
   SOURCES
+    ../../libs/3rdparty/toml11/toml.hpp
     pipsupport.cpp pipsupport.h
     pyside.cpp pyside.h
     pythonbuildconfiguration.cpp pythonbuildconfiguration.h
@@ -23,4 +24,5 @@ add_qtc_plugin(Python
     pythontr.h
     pythonutils.cpp pythonutils.h
     pythonwizardpage.cpp pythonwizardpage.h
+    pyprojecttoml.cpp pyprojecttoml.h
 )

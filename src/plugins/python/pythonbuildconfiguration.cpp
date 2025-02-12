@@ -391,7 +391,7 @@ public:
     {
         registerBuildConfiguration<PythonBuildConfiguration>("Python.PySideBuildConfiguration");
         setSupportedProjectType(PythonProjectId);
-        setSupportedProjectMimeTypeName(Constants::C_PY_PROJECT_MIME_TYPE);
+        setSupportedProjectMimeTypeName(Constants::C_PY_PROJECT_MIME_TYPE_TOML);
         setBuildGenerator([](const Kit *k, const FilePath &projectPath, bool forSetup) {
             if (std::optional<Interpreter> python = PythonKitAspect::python(k)) {
                 BuildInfo base;

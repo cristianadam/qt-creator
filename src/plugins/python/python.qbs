@@ -20,6 +20,8 @@ QtcPlugin {
         files: [
             "pipsupport.cpp",
             "pipsupport.h",
+            "pyprojecttoml.cpp",
+            "pyprojecttoml.h",
             "pyside.cpp",
             "pyside.h",
             "pythonbuildconfiguration.cpp",

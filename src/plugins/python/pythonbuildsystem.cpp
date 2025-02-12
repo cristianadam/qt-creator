@@ -3,6 +3,7 @@
 
 #include "pythonbuildsystem.h"
 
+#include "pyprojecttoml.h"
 #include "pythonbuildconfiguration.h"
 #include "pythonconstants.h"
 #include "pythonproject.h"
@@ -12,6 +13,8 @@
 #include <coreplugin/messagemanager.h>
 
 #include <projectexplorer/projectexplorerconstants.h>
+#include <projectexplorer/target.h>
+#include <projectexplorer/taskhub.h>
 #include <projectexplorer/target.h>
 
 #include <qmljs/qmljsmodelmanagerinterface.h>
@@ -216,28 +219,42 @@ void PythonBuildSystem::triggerParsing()
     emitBuildSystemUpdated();
 }
 
+/*!
+    \brief Saves the build system configuration in the corresponding project file.
+    Currently, three project file formats are supported: pyproject.toml, *.pyproject and the legacy
+    *.pyqtc file.
+    \returns true if the save was successful, false otherwise.
+*/
 bool PythonBuildSystem::save()
 {
     const FilePath filePath = projectFilePath();
-    const QStringList rawList = Utils::transform(m_files, &FileEntry::rawEntry);
+    const QStringList projectFiles = Utils::transform(m_files, &FileEntry::rawEntry);
     const FileChangeBlocker changeGuard(filePath);
 
     QByteArray newContents;
 
-    // New project file
-    if (filePath.endsWith(".pyproject")) {
-        expected_str<QByteArray> contents = filePath.fileContents();
-        if (contents) {
-            QJsonDocument doc = QJsonDocument::fromJson(*contents);
-            QJsonObject project = doc.object();
-            project["files"] = QJsonArray::fromStringList(rawList);
-            doc.setObject(project);
-            newContents = doc.toJson();
-        } else {
-            MessageManager::writeDisrupting(contents.error());
+    if (filePath.fileName() == "pyproject.toml") {
+        auto newPyProjectToml = updatedPyProjectTomlContents(filePath, projectFiles);
+        if (!newPyProjectToml) {
+            MessageManager::writeDisrupting(newPyProjectToml.error());
+            return false;
         }
-    } else { // Old project file
-        newContents = rawList.join('\n').toUtf8();
+        newContents = newPyProjectToml.value().toUtf8();
+    } else if (filePath.endsWith(".pyproject")) {
+        // *.pyproject project file
+        expected_str<QByteArray> contents = filePath.fileContents();
+        if (!contents) {
+            MessageManager::writeDisrupting(contents.error());
+            return false;
+        }
+        QJsonDocument doc = QJsonDocument::fromJson(*contents);
+        QJsonObject project = doc.object();
+        project["files"] = QJsonArray::fromStringList(projectFiles);
+        doc.setObject(project);
+        newContents = doc.toJson();
+    } else {
+        // Old project file
+        newContents = projectFiles.join('\n').toUtf8();
     }
 
     const expected_str<qint64> writeResult = filePath.writeFileContents(newContents);
@@ -326,14 +343,14 @@ void PythonBuildSystem::parse()
     QStringList qmlImportPaths;
 
     const FilePath filePath = projectFilePath();
-    // The PySide project file is JSON based
+    QString errorMessage;
     if (filePath.endsWith(".pyproject")) {
-        QString errorMessage;
+        // The PySide .pyproject file is JSON based
         files = readLinesJson(filePath, &errorMessage);
-        if (!errorMessage.isEmpty())
+        if (!errorMessage.isEmpty()) {
             MessageManager::writeFlashing(errorMessage);
-
-        errorMessage.clear();
+            errorMessage.clear();
+        }
         qmlImportPaths = readImportPathsJson(filePath, &errorMessage);
         if (!errorMessage.isEmpty())
             MessageManager::writeFlashing(errorMessage);
@@ -341,6 +358,18 @@ void PythonBuildSystem::parse()
         // To keep compatibility with PyQt we keep the compatibility with plain
         // text files as project files.
         files = readLines(filePath);
+    } else if (filePath.fileName() == "pyproject.toml") {
+        PyProjectTomlParseResult pyProjectTomlConfiguration = parsePyProjectToml(filePath);
+
+        TaskHub::clearTasks(ProjectExplorer::Constants::TASK_CATEGORY_BUILDSYSTEM);
+        for (const PyProjectTomlParseError &error : pyProjectTomlConfiguration.errors) {
+            TaskHub::addTask(
+                BuildSystemTask(Task::TaskType::Error, error.text, filePath, error.line));
+        }
+        if (!pyProjectTomlConfiguration.projectName.isEmpty()) {
+            project()->setDisplayName(pyProjectTomlConfiguration.projectName);
+        }
+        files = pyProjectTomlConfiguration.projectFiles;
     }
 
     m_files = processEntries(files);

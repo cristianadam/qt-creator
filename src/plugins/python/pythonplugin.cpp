@@ -95,11 +95,13 @@ class PythonPlugin final : public ExtensionSystem::IPlugin
 
         setupPipSupport(this);
 
-        KitManager::setIrrelevantAspects(KitManager::irrelevantAspects()
-                                         + QSet<Id>{PythonKitAspect::id()});
+        KitManager::setIrrelevantAspects(
+            KitManager::irrelevantAspects() + QSet<Id>{PythonKitAspect::id()});
 
         ProjectManager::registerProjectType<PythonProject>(Constants::C_PY_PROJECT_MIME_TYPE);
-        ProjectManager::registerProjectType<PythonProject>(Constants::C_PY_PROJECT_MIME_TYPE_LEGACY);
+        ProjectManager::registerProjectType<PythonProject>(
+            Constants::C_PY_PROJECT_MIME_TYPE_LEGACY);
+        ProjectManager::registerProjectType<PythonProject>(Constants::C_PY_PROJECT_MIME_TYPE_TOML);
 
         auto oldHighlighter = Utils::Text::codeHighlighter();
         Utils::Text::setCodeHighlighter(
@@ -128,6 +130,6 @@ class PythonPlugin final : public ExtensionSystem::IPlugin
     }
 };
 
-} // Python::Internal
+} // namespace Python::Internal
 
 #include "pythonplugin.moc"
