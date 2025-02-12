@@ -4,6 +4,7 @@
 #pragma once
 
 #include "qmljstools_global.h"
+#include "qmljscodestylesettings.h"
 #include <QWidget>
 
 
@@ -16,10 +17,13 @@ class QMLJSTOOLS_EXPORT QmlFormatSettingsWidget : public QWidget
 {
     Q_OBJECT
 public:
-    explicit QmlFormatSettingsWidget(QWidget *parent = nullptr);
+    explicit QmlFormatSettingsWidget(QWidget *parent = nullptr, QmlJSCodeStylePreferences *preferences = nullptr);
+    void setCodeStyleSettings(const QmlJSCodeStyleSettings& s);
+    void setPreferences(QmlJSCodeStylePreferences *preferences);
 
 private:
     TextEditor::SnippetEditorWidget *m_qmlformatConfigTextEdit;
+    QmlJSCodeStylePreferences *m_preferences = nullptr;
 };
 
 } // namespace QmlJSTools

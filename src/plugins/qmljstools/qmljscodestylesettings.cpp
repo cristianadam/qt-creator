@@ -18,6 +18,7 @@
 #include <utils/qtcassert.h>
 
 static const char lineLengthKey[] = "LineLength";
+static const char qmlformatIniContentKey[] = "QmlFormatIniContent";
 
 using namespace Utils;
 
@@ -30,18 +31,21 @@ QmlJSCodeStyleSettings::QmlJSCodeStyleSettings() = default;
 Store QmlJSCodeStyleSettings::toMap() const
 {
     return {
-        {lineLengthKey, lineLength}
+        {lineLengthKey, lineLength},
+        {qmlformatIniContentKey, qmlformatIniContent}
     };
 }
 
 void QmlJSCodeStyleSettings::fromMap(const Store &map)
 {
     lineLength = map.value(lineLengthKey, lineLength).toInt();
+    qmlformatIniContent = map.value(qmlformatIniContentKey, qmlformatIniContent).toString();
 }
 
 bool QmlJSCodeStyleSettings::equals(const QmlJSCodeStyleSettings &rhs) const
 {
-    return lineLength == rhs.lineLength;
+    return lineLength == rhs.lineLength &&
+           qmlformatIniContent == rhs.qmlformatIniContent;
 }
 
 QmlJSCodeStyleSettings QmlJSCodeStyleSettings::currentGlobalCodeStyle()

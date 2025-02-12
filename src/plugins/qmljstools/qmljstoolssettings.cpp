@@ -6,6 +6,7 @@
 #include "qmljscodestylepreferencesfactory.h"
 #include "qmljstoolsconstants.h"
 #include "qmljstoolssettings.h"
+#include "qmlformatsettings.h"
 #include "qmljstoolstr.h"
 
 #include <coreplugin/icore.h>
@@ -58,9 +59,21 @@ QmlJSToolsSettings::QmlJSToolsSettings()
     qtTabSettings.m_indentSize = 4;
     qtTabSettings.m_continuationAlignBehavior = TabSettings::ContinuationAlignWithIndent;
     qtCodeStyle->setTabSettings(qtTabSettings);
-    QmlJSCodeStyleSettings qtQmlJSSetings;
-    qtQmlJSSetings.lineLength = 80;
-    qtCodeStyle->setCodeStyleSettings(qtQmlJSSetings);
+
+    connect(&QmlFormatSettings::instance(), &QmlFormatSettings::versionEvaluated, []() {
+        QmlJSCodeStyleSettings s;
+        s.lineLength = 80;
+        s.qmlformatIniContent = QString::fromUtf8(
+            QmlFormatSettings::instance().generateQmlFormatIniContent().value_or(QByteArray()));
+        auto builtInCodeStyles = TextEditorSettings::codeStylePool(
+                                     QmlJSTools::Constants::QML_JS_SETTINGS_ID)
+                                     ->builtInCodeStyles();
+        for (auto codeStyle : builtInCodeStyles) {
+            if (auto qtCodeStyle = dynamic_cast<QmlJSCodeStylePreferences *>(codeStyle))
+                qtCodeStyle->setCodeStyleSettings(s);
+        }
+    });
+
     pool->addCodeStyle(qtCodeStyle);
 
     // default delegate for global preferences

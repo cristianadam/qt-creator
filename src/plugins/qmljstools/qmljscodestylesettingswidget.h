@@ -4,6 +4,7 @@
 #pragma once
 
 #include "qmljstools_global.h"
+#include "qmljscodestylesettings.h"
 
 #include <QGroupBox>
 
@@ -12,7 +13,6 @@ class QSpinBox;
 QT_END_NAMESPACE
 
 namespace QmlJSTools {
-class QmlJSCodeStyleSettings;
 
 class QMLJSTOOLS_EXPORT QmlJSCodeStyleSettingsWidget : public QWidget
 {
@@ -24,12 +24,13 @@ public:
         QtQuickLink
     };
 
-    explicit QmlJSCodeStyleSettingsWidget(QWidget *parent = nullptr);
+    explicit QmlJSCodeStyleSettingsWidget(QWidget *parent = nullptr, QmlJSCodeStylePreferences *preferences = nullptr);
 
     QmlJSCodeStyleSettings codeStyleSettings() const;
 
     void setCodingStyleWarningVisible(bool visible);
-    void setCodeStyleSettings(const QmlJSCodeStyleSettings &settings);
+    void setCodeStyleSettings(const QmlJSCodeStyleSettings& s);
+    void setPreferences(QmlJSCodeStylePreferences *preferences);
 
 signals:
     void settingsChanged(const QmlJSCodeStyleSettings &);
@@ -39,6 +40,7 @@ private:
     void codingStyleLinkActivated(const QString &linkString);
 
     QSpinBox *m_lineLengthSpinBox;
+    QmlJSCodeStylePreferences *m_preferences = nullptr;
 };
 
 } // namespace QmlJSTools

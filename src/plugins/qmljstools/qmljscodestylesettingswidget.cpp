@@ -12,8 +12,9 @@
 
 namespace QmlJSTools {
 
-QmlJSCodeStyleSettingsWidget::QmlJSCodeStyleSettingsWidget(QWidget *parent)
+QmlJSCodeStyleSettingsWidget::QmlJSCodeStyleSettingsWidget(QWidget *parent, QmlJSCodeStylePreferences *preferences)
     : QWidget(parent)
+    , m_preferences(preferences)
 {
     m_lineLengthSpinBox = new QSpinBox;
     m_lineLengthSpinBox->setMinimum(0);
@@ -44,16 +45,20 @@ void QmlJSCodeStyleSettingsWidget::setCodeStyleSettings(const QmlJSCodeStyleSett
 
 QmlJSCodeStyleSettings QmlJSCodeStyleSettingsWidget::codeStyleSettings() const
 {
-    QmlJSCodeStyleSettings set;
-
+    QmlJSCodeStyleSettings set = m_preferences ? m_preferences->currentCodeStyleSettings()
+                                               : QmlJSCodeStyleSettings::currentGlobalCodeStyle();
     set.lineLength = m_lineLengthSpinBox->value();
-
     return set;
 }
 
 void QmlJSCodeStyleSettingsWidget::slotSettingsChanged()
 {
     emit settingsChanged(codeStyleSettings());
+}
+
+void QmlJSCodeStyleSettingsWidget::setPreferences(QmlJSCodeStylePreferences *preferences)
+{
+    m_preferences = preferences;
 }
 
 } // namespace TextEditor

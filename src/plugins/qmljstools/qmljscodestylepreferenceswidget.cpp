@@ -15,8 +15,8 @@ namespace QmlJSTools {
 QmlJSCodeStylePreferencesWidget::QmlJSCodeStylePreferencesWidget(QWidget *parent) :
       QWidget(parent)
 {
-    m_codeStyleSettingsWidget = new QmlJSCodeStyleSettingsWidget(this);
-    m_qmlformatSettingsWidget = new QmlJSTools::QmlFormatSettingsWidget(this);
+    m_codeStyleSettingsWidget = new QmlJSCodeStyleSettingsWidget(this, m_preferences);
+    m_qmlformatSettingsWidget = new QmlJSTools::QmlFormatSettingsWidget(this, m_preferences);
 
     auto layout = new QVBoxLayout(this);
     layout->addWidget(m_codeStyleSettingsWidget);
@@ -43,9 +43,10 @@ void QmlJSCodeStylePreferencesWidget::setPreferences(QmlJSCodeStylePreferences *
     // fillup new
     if (m_preferences) {
         m_codeStyleSettingsWidget->setCodeStyleSettings(m_preferences->currentCodeStyleSettings());
-
+        m_qmlformatSettingsWidget->setCodeStyleSettings(m_preferences->currentCodeStyleSettings());
         connect(m_preferences, &QmlJSCodeStylePreferences::currentValueChanged, this, [this] {
             m_codeStyleSettingsWidget->setCodeStyleSettings(m_preferences->currentCodeStyleSettings());
+            m_qmlformatSettingsWidget->setCodeStyleSettings(m_preferences->currentCodeStyleSettings());
         });
         connect(m_preferences, &QmlJSCodeStylePreferences::currentPreferencesChanged,
                 this, &QmlJSCodeStylePreferencesWidget::slotCurrentPreferencesChanged);
@@ -56,10 +57,12 @@ void QmlJSCodeStylePreferencesWidget::setPreferences(QmlJSCodeStylePreferences *
 
 void QmlJSCodeStylePreferencesWidget::slotCurrentPreferencesChanged(TextEditor::ICodeStylePreferences *preferences)
 {
-    const bool enableWidgets = preferences && preferences->currentPreferences() &&
-                                          !preferences->currentPreferences()->isReadOnly();
+    QmlJSCodeStylePreferences *current = dynamic_cast<QmlJSCodeStylePreferences*>(preferences->currentPreferences());
+    const bool enableWidgets = current && !current->isReadOnly();
     m_codeStyleSettingsWidget->setEnabled(enableWidgets);
+    m_codeStyleSettingsWidget->setPreferences(current);
     m_qmlformatSettingsWidget->setEnabled(enableWidgets);
+    m_qmlformatSettingsWidget->setPreferences(current);
 }
 
 void QmlJSCodeStylePreferencesWidget::slotSettingsChanged(const QmlJSCodeStyleSettings &settings)

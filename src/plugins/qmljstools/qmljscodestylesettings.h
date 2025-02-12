@@ -20,6 +20,7 @@ public:
     QmlJSCodeStyleSettings();
 
     int lineLength = 80;
+    QString qmlformatIniContent;
 
     Utils::Store toMap() const;
     void fromMap(const Utils::Store &map);

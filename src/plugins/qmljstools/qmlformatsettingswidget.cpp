@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "qmlformatsettingswidget.h"
+#include "qmlformatsettings.h"
 #include "qmljstoolstr.h"
 
 #include <texteditor/snippets/snippeteditor.h>
@@ -11,27 +12,14 @@
 
 namespace QmlJSTools {
 
-// TODO: Fetch this from qmlformat --write-defaults
-static const char *defaultQmlFormatIniText =
-    "[General]\n"
-    "FunctionsSpacing=false\n"
-    "IndentWidth=4\n"
-    "MaxColumnWidth=-1\n"
-    "NewlineType=native\n"
-    "NormalizeOrder=false\n"
-    "ObjectsSpacing=false\n"
-    "SortImports=false\n"
-    "UseTabs=false\n"
-;
-
-QmlFormatSettingsWidget::QmlFormatSettingsWidget(QWidget *parent)
+QmlFormatSettingsWidget::QmlFormatSettingsWidget(QWidget *parent, QmlJSCodeStylePreferences *preferences)
     : QWidget(parent)
+    , m_preferences(preferences)
 {
     m_qmlformatConfigTextEdit = new TextEditor::SnippetEditorWidget;
     QSizePolicy sp(QSizePolicy::MinimumExpanding, QSizePolicy::MinimumExpanding);
     sp.setHorizontalStretch(1);
     m_qmlformatConfigTextEdit->setSizePolicy(sp);
-    m_qmlformatConfigTextEdit->setPlainText(QLatin1StringView(defaultQmlFormatIniText));
 
     using namespace Layouting;
     // clang-format off
@@ -45,6 +33,32 @@ QmlFormatSettingsWidget::QmlFormatSettingsWidget(QWidget *parent)
         noMargin
     }.attachTo(this);
     // clang-format on
+
+    connect(
+        m_qmlformatConfigTextEdit,
+        // &TextEditor::SnippetEditorWidget::snippetContentChanged,
+        &TextEditor::SnippetEditorWidget::textChanged,
+        [this]() {
+            // write to settings
+            if (!m_preferences)
+                return;
+            QmlJSCodeStyleSettings settings =  m_preferences->currentCodeStyleSettings();
+            settings.qmlformatIniContent = m_qmlformatConfigTextEdit->toPlainText();
+            QmlFormatSettings::instance().globalQmlFormatIniFile().writeFileContents(settings.qmlformatIniContent.toUtf8());
+            m_preferences->setCodeStyleSettings(settings);
+        });
+}
+
+void QmlFormatSettingsWidget::setCodeStyleSettings(const QmlJSCodeStyleSettings& s)
+{
+    if (s.qmlformatIniContent != m_qmlformatConfigTextEdit->toPlainText()) {
+        m_qmlformatConfigTextEdit->setPlainText(s.qmlformatIniContent);
+    }
+}
+
+void QmlFormatSettingsWidget::setPreferences(QmlJSCodeStylePreferences *preferences)
+{
+    m_preferences = preferences;
 }
 
 } // namespace QmlJSTools
