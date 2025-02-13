@@ -28,14 +28,6 @@ PythonProject::PythonProject(const FilePath &fileName)
     setBuildSystemCreator<PythonBuildSystem>();
 }
 
-Tasks PythonProject::projectIssues(const Kit *k) const
-{
-    if (PythonKitAspect::python(k))
-        return {};
-    return {BuildSystemTask{
-        Task::Error, Tr::tr("No Python interpreter set for kit \"%1\".").arg(k->displayName())}};
-}
-
 PythonProjectNode::PythonProjectNode(const FilePath &path)
     : ProjectNode(path)
 {
