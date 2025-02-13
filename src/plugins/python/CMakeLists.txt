@@ -26,3 +26,11 @@ add_qtc_plugin(Python
     pythonwizardpage.cpp pythonwizardpage.h
     pyprojecttoml.cpp pyprojecttoml.h
 )
+
+extend_qtc_plugin(Python
+  CONDITION WITH_TESTS
+  SOURCES
+    tests/pyprojecttoml_test.cpp
+    tests/pyprojecttoml_test.h
+    tests/testprojects/testprojects.qrc
+)

@@ -1,0 +1,6 @@
+[project]
+name = "ToolMissingTest"
+version = "0.1"
+
+[pyside6-project]
+files = []

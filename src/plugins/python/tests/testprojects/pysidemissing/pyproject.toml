@@ -1,0 +1,6 @@
+[project]
+name = "PysideMissingTest"
+version = "0.1"
+
+[tool.black]
+line-length = 100

@@ -1,0 +1,5 @@
+[project]
+name = "PysideEmptyTest"
+version = "0.1"
+
+[tool.pyside6-project]

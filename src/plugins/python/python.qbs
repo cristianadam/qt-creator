@@ -59,4 +59,12 @@ QtcPlugin {
             "pythonwizardpage.h",
         ]
     }
+
+    QtcTestFiles {
+        prefix: "tests/"
+        files: [
+            "pyprojecttoml_test.cpp",
+            "pyprojecttoml_test.h",
+        ]
+    }
 }

@@ -1,0 +1,5 @@
+tool = 33
+
+[project]
+name = "ToolWrongTypeTest"
+version = "0.1"

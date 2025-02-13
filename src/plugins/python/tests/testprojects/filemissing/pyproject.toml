@@ -1,0 +1,6 @@
+[project]
+name = "FileMissingTest"
+version = "0.1"
+
+[tool.pyside6-project]
+files = ["non_existing_file.py", "main.py"]

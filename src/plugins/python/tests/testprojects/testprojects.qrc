@@ -1,0 +1,24 @@
+<RCC>
+    <qresource prefix="/unittests/Python">
+        <file>correct/main.py</file>
+        <file>correct/folder/file_in_folder.py</file>
+        <file>correct/pyproject.toml</file>
+        <file>empty/pyproject.toml</file>
+        <file>filemissing/main.py</file>
+        <file>filemissing/pyproject.toml</file>
+        <file>filesblank/pyproject.toml</file>
+        <file>fileswrongtype/pyproject.toml</file>
+        <file>filewrongtype/main.py</file>
+        <file>filewrongtype/pyproject.toml</file>
+        <file>filewrongtype/window.py</file>
+        <file>projectempty/pyproject.toml</file>
+        <file>projectmissing/pyproject.toml</file>
+        <file>projectwrongtype/pyproject.toml</file>
+        <file>pysideempty/pyproject.toml</file>
+        <file>pysidemissing/pyproject.toml</file>
+        <file>pysidewrongtype/pyproject.toml</file>
+        <file>toolempty/pyproject.toml</file>
+        <file>toolmissing/pyproject.toml</file>
+        <file>toolwrongtype/pyproject.toml</file>
+    </qresource>
+</RCC>
