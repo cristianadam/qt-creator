@@ -746,13 +746,27 @@ void TestRunner::runNextViaRunControl()
     runControl->start();
 }
 
-void TestRunner::debugTests()
+void TestRunner::onDebugSingleFinished()
 {
-    // TODO improve to support more than one test configuration
-    QTC_ASSERT(m_selectedTests.size() == 1, onFinished(); return);
+    disconnect(m_debugRunControlConnect);
+    disconnect(m_stopDebugConnect);
+    QTC_ASSERT(m_selectedTests.size(), onFinished(); return);
+    QMetaObject::invokeMethod(this, [this] { debugTests(true); }, Qt::QueuedConnection);
+}
+
+void TestRunner::debugTests(bool followUp)
+{
+    if (followUp) {
+        QTC_ASSERT(m_selectedTests.size(), onFinished(); return);
+        delete m_selectedTests.takeFirst();
+    }
+    if (m_debugTestRunCanceled || m_selectedTests.size() == 0) {
+        onFinished();
+        return;
+    }
 
     ITestConfiguration *itc = m_selectedTests.first();
-    QTC_ASSERT(itc->testBase()->type() == ITestBase::Framework, onFinished(); return);
+    QTC_ASSERT(itc->testBase()->type() == ITestBase::Framework, onDebugSingleFinished(); return);
 
     TestConfiguration *config = static_cast<TestConfiguration *>(itc);
     config->completeTestInformation(TestRunMode::Debug);
@@ -769,7 +783,7 @@ void TestRunner::debugTests()
 
     if (!config->runConfiguration()) {
         reportResult(ResultType::MessageFatal, Tr::tr("Failed to get run configuration."));
-        onFinished();
+        onDebugSingleFinished();
         return;
     }
 
@@ -778,7 +792,7 @@ void TestRunner::debugTests()
             ResultType::MessageFatal,
             Tr::tr("Could not find command \"%1\". (%2)")
                 .arg(config->executableFilePath().toUserOutput(), config->displayName()));
-        onFinished();
+        onDebugSingleFinished();
         return;
     }
 
@@ -790,18 +804,20 @@ void TestRunner::debugTests()
         return;
     }
     bool useOutputProcessor = true;
-    if (Kit *kit = config->project()->activeKit()) {
-        if (DebuggerKitAspect::engineType(kit) == CdbEngineType) {
-            reportResult(ResultType::MessageWarn,
-                         Tr::tr("Unable to display test results when using CDB."));
-            useOutputProcessor = false;
-        }
-        if (auto devType = RunDeviceTypeKitAspect::deviceTypeId(kit);
-                devType != ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE
-                && devType != RemoteLinux::Constants::GenericLinuxOsType) {
-            reportResult(ResultType::MessageWarn,
-                         Tr::tr("Unable to display test results when debugging on device."));
-            useOutputProcessor = false;
+    if (!followUp) {
+        if (Kit *kit = config->project()->activeKit()) {
+            if (DebuggerKitAspect::engineType(kit) == CdbEngineType) {
+                reportResult(ResultType::MessageWarn,
+                             Tr::tr("Unable to display test results when using CDB."));
+                useOutputProcessor = false;
+            }
+            if (auto devType = RunDeviceTypeKitAspect::deviceTypeId(kit);
+                    devType != ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE
+                    && devType != RemoteLinux::Constants::GenericLinuxOsType) {
+                reportResult(ResultType::MessageWarn,
+                             Tr::tr("Unable to display test results when debugging on device."));
+                useOutputProcessor = false;
+            }
         }
     }
 
@@ -819,9 +835,13 @@ void TestRunner::debugTests()
     }
 
     m_stopDebugConnect = connect(this, &TestRunner::requestStopTestRun,
-                                 runControl, &RunControl::initiateStop);
+                                 this, [this, runControl] {
+        m_debugTestRunCanceled = true;
+        runControl->initiateStop();
+    });
 
-    connect(runControl, &RunControl::stopped, this, &TestRunner::onFinished);
+    m_debugRunControlConnect = connect(runControl, &RunControl::stopped,
+                                       this, &TestRunner::onDebugSingleFinished);
     runControl->start();
     if (useOutputProcessor && testSettings().popupOnStart())
         popupResultsPane();
@@ -871,7 +891,8 @@ void TestRunner::runOrDebugTests()
     }
     case TestRunMode::Debug:
     case TestRunMode::DebugWithoutDeploy:
-        debugTests();
+        m_debugTestRunCanceled = false;
+        debugTests(false);
         return;
     default:
         break;
@@ -994,16 +1015,18 @@ void TestRunner::onBuildQueueFinished(bool success)
         return;
 
     auto testTreeModel = TestTreeModel::instance();
-    if (!testTreeModel->hasTests())
+    if (!testTreeModel->hasTests(false))
         return;
 
     const QList<ITestConfiguration *> tests = mode == RunAfterBuildMode::All
-            ? testTreeModel->getAllTestCases() : testTreeModel->getSelectedTests();
+            ? testTreeModel->getAllTestCases(m_runMode) : testTreeModel->getSelectedTests();
     runTests(TestRunMode::RunAfterBuild, tests);
 }
 
 void TestRunner::onFinished()
 {
+    m_taskTreeRunner.reset();
+    disconnect(m_debugRunControlConnect);
     disconnect(m_stopDebugConnect);
     disconnect(m_targetConnect);
     qDeleteAll(m_selectedTests);

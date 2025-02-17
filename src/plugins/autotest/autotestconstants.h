@@ -14,6 +14,7 @@ const char ACTION_RUN_ALL_ID[]               = "AutoTest.RunAll";
 const char ACTION_RUN_ALL_NODEPLOY_ID[]      = "AutoTest.RunAllNoDeploy";
 const char ACTION_RUN_SELECTED_ID[]          = "AutoTest.RunSelected";
 const char ACTION_RUN_SELECTED_NODEPLOY_ID[] = "AutoTest.RunSelectedNoDeploy";
+const char ACTION_RUN_ALL_DBG_ID[]           = "AutoTest.RunAllDebug";
 const char ACTION_RUN_FAILED_ID[]            = "AutoTest.RunFailed";
 const char ACTION_RUN_FILE_ID[]              = "AutoTest.RunFile";
 const char ACTION_RUN_UCURSOR[]              = "AutoTest.RunUnderCursor";
