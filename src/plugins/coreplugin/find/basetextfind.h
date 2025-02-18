@@ -18,11 +18,40 @@ QT_END_NAMESPACE
 namespace Core {
 struct BaseTextFindPrivate;
 
+class FindEditorBridge
+{
+public:
+    virtual ~FindEditorBridge() = default;
+
+    virtual QTextCursor textCursor() const = 0;
+    virtual void setTextCursor(const QTextCursor&) = 0;
+    virtual QTextDocument *document() const = 0;
+    virtual bool isReadOnly() const = 0;
+    virtual QWidget *widget() const = 0;
+};
+
+template <class T>
+class TextEditorBridge : public FindEditorBridge
+{
+public:
+    explicit TextEditorBridge(T *editor) : m_editor(editor) {}
+
+    QTextCursor textCursor() const override { return m_editor->textCursor(); }
+    void setTextCursor(const QTextCursor& cursor) override { m_editor->setTextCursor(cursor); }
+    QTextDocument *document() const override { return m_editor->document(); }
+    bool isReadOnly() const override { return m_editor->isReadOnly(); }
+    QWidget *widget() const override { return m_editor; }
+
+private:
+    QPointer<T> m_editor;
+};
+
 class CORE_EXPORT BaseTextFind : public IFindSupport
 {
     Q_OBJECT
 
 public:
+    explicit BaseTextFind(std::unique_ptr<FindEditorBridge> &&bridge);
     explicit BaseTextFind(QPlainTextEdit *editor);
     explicit BaseTextFind(QTextEdit *editor);
     ~BaseTextFind() override;

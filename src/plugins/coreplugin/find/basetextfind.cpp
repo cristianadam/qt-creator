@@ -28,32 +28,20 @@ QRegularExpression BaseTextFind::regularExpression(const QString &txt, FindFlags
 
 struct BaseTextFindPrivate
 {
-    explicit BaseTextFindPrivate(QPlainTextEdit *editor);
-    explicit BaseTextFindPrivate(QTextEdit *editor);
+    explicit BaseTextFindPrivate(std::unique_ptr<FindEditorBridge> &&bridge);
+    explicit BaseTextFindPrivate() = default;
 
-    QPointer<QTextEdit> m_editor;
-    QPointer<QPlainTextEdit> m_plaineditor;
-    QPointer<QWidget> m_widget;
+    std::unique_ptr<FindEditorBridge> m_bridge;
     Utils::MultiTextCursor m_scope;
     std::function<Utils::MultiTextCursor()> m_cursorProvider;
-    int m_incrementalStartPos;
-    bool m_incrementalWrappedState;
+    int m_incrementalStartPos = -1;
+    bool m_incrementalWrappedState = false;
 };
 
-BaseTextFindPrivate::BaseTextFindPrivate(QTextEdit *editor)
-    : m_editor(editor)
-    , m_widget(editor)
-    , m_incrementalStartPos(-1)
-    , m_incrementalWrappedState(false)
+BaseTextFindPrivate::BaseTextFindPrivate(std::unique_ptr<FindEditorBridge> &&bridge)
+    : m_bridge(std::move(bridge))
 {
-}
 
-BaseTextFindPrivate::BaseTextFindPrivate(QPlainTextEdit *editor)
-    : m_plaineditor(editor)
-    , m_widget(editor)
-    , m_incrementalStartPos(-1)
-    , m_incrementalWrappedState(false)
-{
 }
 
 /*!
@@ -84,22 +72,24 @@ BaseTextFindPrivate::BaseTextFindPrivate(QPlainTextEdit *editor)
 /*!
     \internal
 */
-BaseTextFind::BaseTextFind(QTextEdit *editor)
-    : d(new BaseTextFindPrivate(editor))
+BaseTextFind::BaseTextFind(std::unique_ptr<FindEditorBridge> &&bridge)
+    : d(new BaseTextFindPrivate(std::move(bridge)))
 {
+
 }
 
-/*!
-    \internal
-*/
 BaseTextFind::BaseTextFind(QPlainTextEdit *editor)
-    : d(new BaseTextFindPrivate(editor))
+    : BaseTextFind(std::make_unique<TextEditorBridge<QPlainTextEdit>>(editor))
 {
+
 }
 
-/*!
-    \internal
-*/
+BaseTextFind::BaseTextFind(QTextEdit *editor)
+    : BaseTextFind(std::make_unique<TextEditorBridge<QTextEdit>>(editor))
+{
+
+}
+
 BaseTextFind::~BaseTextFind()
 {
     delete d;
@@ -107,26 +97,26 @@ BaseTextFind::~BaseTextFind()
 
 QTextCursor BaseTextFind::textCursor() const
 {
-    QTC_ASSERT(d->m_editor || d->m_plaineditor, return QTextCursor());
-    return d->m_editor ? d->m_editor->textCursor() : d->m_plaineditor->textCursor();
+    QTC_ASSERT(d->m_bridge, return QTextCursor());
+    return d->m_bridge->textCursor();
 }
 
 void BaseTextFind::setTextCursor(const QTextCursor &cursor)
 {
-    QTC_ASSERT(d->m_editor || d->m_plaineditor, return);
-    d->m_editor ? d->m_editor->setTextCursor(cursor) : d->m_plaineditor->setTextCursor(cursor);
+    QTC_ASSERT(d->m_bridge, return);
+    d->m_bridge->setTextCursor(cursor);
 }
 
 QTextDocument *BaseTextFind::document() const
 {
-    QTC_ASSERT(d->m_editor || d->m_plaineditor, return nullptr);
-    return d->m_editor ? d->m_editor->document() : d->m_plaineditor->document();
+    QTC_ASSERT(d->m_bridge, return nullptr);
+    return d->m_bridge->document();
 }
 
 bool BaseTextFind::isReadOnly() const
 {
-    QTC_ASSERT(d->m_editor || d->m_plaineditor, return true);
-    return d->m_editor ? d->m_editor->isReadOnly() : d->m_plaineditor->isReadOnly();
+    QTC_ASSERT(d->m_bridge, return true);
+    return d->m_bridge->isReadOnly();
 }
 
 /*!
@@ -215,7 +205,7 @@ IFindSupport::Result BaseTextFind::findIncremental(const QString &txt, FindFlags
     bool found =  find(txt, findFlags, cursor, &wrapped);
     if (wrapped != d->m_incrementalWrappedState && found) {
         d->m_incrementalWrappedState = wrapped;
-        showWrapIndicator(d->m_widget);
+        showWrapIndicator(d->m_bridge->widget());
     }
     if (found)
         highlightAll(txt, findFlags);
@@ -232,7 +222,7 @@ IFindSupport::Result BaseTextFind::findStep(const QString &txt, FindFlags findFl
     bool wrapped = false;
     bool found = find(txt, findFlags, textCursor(), &wrapped);
     if (wrapped)
-        showWrapIndicator(d->m_widget);
+        showWrapIndicator(d->m_bridge->widget());
     if (found) {
         d->m_incrementalStartPos = textCursor().selectionStart();
         d->m_incrementalWrappedState = false;
@@ -310,7 +300,7 @@ bool BaseTextFind::replaceStep(const QString &before, const QString &after, Find
     bool wrapped = false;
     bool found = find(before, findFlags, cursor, &wrapped);
     if (wrapped)
-        showWrapIndicator(d->m_widget);
+        showWrapIndicator(d->m_bridge->widget());
     return found;
 }
 
