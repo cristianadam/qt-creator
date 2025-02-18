@@ -82,6 +82,9 @@ add_qtc_plugin(TextEditor
     marginsettings.cpp marginsettings.h
     markdowneditor.cpp markdowneditor.h
     outlinefactory.cpp outlinefactory.h
+    plaintextedit/inputcontrol.h plaintextedit/inputcontrol.cpp
+    plaintextedit/plaintextedit.h plaintextedit/plaintextedit.cpp
+    plaintextedit/widgettextcontrol.h plaintextedit/widgettextcontrol.cpp
     plaintexteditorfactory.cpp plaintexteditorfactory.h
     quickfix.cpp quickfix.h
     refactoringchanges.cpp refactoringchanges.h
