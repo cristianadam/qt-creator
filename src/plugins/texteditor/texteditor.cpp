@@ -2396,28 +2396,28 @@ void TextEditorWidget::gotoNextWordWithSelection()
 void TextEditorWidget::gotoPreviousWordCamelCase()
 {
     MultiTextCursor cursor = multiTextCursor();
-    CamelCaseCursor::left(&cursor, this, QTextCursor::MoveAnchor);
+    CamelCaseCursor::left(&cursor, QTextCursor::MoveAnchor);
     setMultiTextCursor(cursor);
 }
 
 void TextEditorWidget::gotoPreviousWordCamelCaseWithSelection()
 {
     MultiTextCursor cursor = multiTextCursor();
-    CamelCaseCursor::left(&cursor, this, QTextCursor::KeepAnchor);
+    CamelCaseCursor::left(&cursor, QTextCursor::KeepAnchor);
     setMultiTextCursor(cursor);
 }
 
 void TextEditorWidget::gotoNextWordCamelCase()
 {
     MultiTextCursor cursor = multiTextCursor();
-    CamelCaseCursor::right(&cursor, this, QTextCursor::MoveAnchor);
+    CamelCaseCursor::right(&cursor, QTextCursor::MoveAnchor);
     setMultiTextCursor(cursor);
 }
 
 void TextEditorWidget::gotoNextWordCamelCaseWithSelection()
 {
     MultiTextCursor cursor = multiTextCursor();
-    CamelCaseCursor::right(&cursor, this, QTextCursor::KeepAnchor);
+    CamelCaseCursor::right(&cursor, QTextCursor::KeepAnchor);
     setMultiTextCursor(cursor);
 }
 
@@ -2906,7 +2906,7 @@ void TextEditorWidget::cleanWhitespace()
 bool TextEditorWidgetPrivate::cursorMoveKeyEvent(QKeyEvent *e)
 {
     MultiTextCursor cursor = m_cursors;
-    if (cursor.handleMoveKeyEvent(e, q, q->camelCaseNavigationEnabled())) {
+    if (cursor.handleMoveKeyEvent(e, q->camelCaseNavigationEnabled())) {
         resetCursorFlashTimer();
         q->setMultiTextCursor(cursor);
         q->ensureCursorVisible();
@@ -3091,7 +3091,7 @@ void TextEditorWidget::keyPressEvent(QKeyEvent *e)
         e->accept();
         if (!cursor.hasSelection()) {
             if (camelCaseNavigationEnabled())
-                CamelCaseCursor::left(&cursor, this, QTextCursor::KeepAnchor);
+                CamelCaseCursor::left(&cursor, QTextCursor::KeepAnchor);
             else
                 cursor.movePosition(QTextCursor::PreviousWord, QTextCursor::KeepAnchor);
         }
@@ -3102,7 +3102,7 @@ void TextEditorWidget::keyPressEvent(QKeyEvent *e)
         e->accept();
         if (!cursor.hasSelection()) {
             if (camelCaseNavigationEnabled())
-                CamelCaseCursor::right(&cursor, this, QTextCursor::KeepAnchor);
+                CamelCaseCursor::right(&cursor, QTextCursor::KeepAnchor);
             else
                 cursor.movePosition(QTextCursor::NextWord, QTextCursor::KeepAnchor);
         }
@@ -8858,7 +8858,7 @@ void TextEditorWidget::deleteEndOfWord()
 void TextEditorWidget::deleteEndOfWordCamelCase()
 {
     MultiTextCursor cursor = multiTextCursor();
-    CamelCaseCursor::right(&cursor, this, QTextCursor::KeepAnchor);
+    CamelCaseCursor::right(&cursor, QTextCursor::KeepAnchor);
     cursor.removeSelectedText();
     setMultiTextCursor(cursor);
 }
@@ -8882,7 +8882,7 @@ void TextEditorWidget::deleteStartOfWord()
 void TextEditorWidget::deleteStartOfWordCamelCase()
 {
     MultiTextCursor cursor = multiTextCursor();
-    CamelCaseCursor::left(&cursor, this, QTextCursor::KeepAnchor);
+    CamelCaseCursor::left(&cursor, QTextCursor::KeepAnchor);
     cursor.removeSelectedText();
     setMultiTextCursor(cursor);
 }
