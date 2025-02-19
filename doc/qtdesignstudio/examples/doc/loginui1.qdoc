@@ -38,7 +38,7 @@
                 that projects cannot be easily renamed later.
                 \li Select the path (3) for the project files. You can move project
                 folders later.
-                \li Set \uicontrol Width (4) to 720 and \uicontrol Height (5) to 1280.
+                \li Set \uicontrol Width (4) to 720 and \uicontrol Height to 1280.
                 You can change the screen size later in \l Properties.
             \endlist
 
@@ -90,7 +90,7 @@
     \l{https://fonts.google.com/specimen/Titillium+Web#standard-styles}
     {here} or use Arial as a substitute.
 
-    To add the assets:
+    To add the assets to your project:
     \list 1
         \li Select \uicontrol Assets > \imageplus
         (Select \uicontrol View > \uicontrol Views > \uicontrol Assets to enable it,
@@ -101,6 +101,8 @@
             \uicontrol {Add Resources} dialog.
         \li Select \uicontrol OK.
     \endlist
+
+    Alternatively, drag the asset files to the \uicontrol FONTS or \uicontrol IMAGES tab. 
 
     To preview the changes that you make, select the \uicontrol {Live Preview} button
     or select \key {Alt+P}.
