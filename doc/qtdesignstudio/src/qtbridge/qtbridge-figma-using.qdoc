@@ -238,17 +238,88 @@
     Because MCUs only support simple images, disable the
     \uicontrol {Export as shapes} check box when designing for MCUs.
 
+    Below is a list of all the export customizations one can make. Note that some of these options interact with each other to support different scenarios.
+
     \table
     \header
         \li Name
         \li Purpose
     \row
+        \li \uicontrol {Export target}
+        \li Changes export between regular Qt and Qt for MCUs. Some things are limited when using the \l{https://wiki.qt.io/QtDesignStudio/MCU_FAQ}{MCU target}.
+    \row
         \li \uicontrol {Asset settings}
-        \li Exports assets in the selected format (JPG, PNG, or SVG).
+        \li Exports assets in the selected format (JPG, PNG, or SVG). When SVG is selected a fallback option appears as not all assets can be exported properly in SVG format.
+    \row
+        \li \uicontrol {Constraints settings}
+        \li Defines how Figma constraints are translated into QML. 
+        By default, each node in Figma has a top-left constraint defined that references its parent, which could be translated to either XY coordinates or anchors with margins.
+        This setting controls this and provides the following customizations:
+            \list
+                \li No constraints - no anchors will be generated in QML. The constraints are ignored and XY values are calculated to position the elements.
+                \li In-Component Only - as above but skips the in-component nodes. For the in-component nodes, anchors are still used. This is mainly useful for component state transitions where anchors are essential for proper behavior.
+                \li All constraints - generate anchors everywhere. This is the default behavior and the initial selection for all the users.
+            \endlist
+    \row
+        \li \uicontrol {Constraints settings}
+        Skip default constraints
+        \li By default the top-left constraint is generated for every node in Figma design. As it is not the user who created it, the plugin provides the option to skip those and generate XY coordinates instead. This can be used in combination with `In-Component Only` and `All constraints` options above. 
+        However, there are some exceptions to these settings:
+            \list
+                \li All Figma Group and Image types, as well as auto layouts, will have their anchors generated.
+                \li The nodes inside layouts will have XY coordinates regardless of the options, because anchors should not be used with elements inside layouts.
+            \endlist
+    \row
+        \li \uicontrol {Effect settings}
+        \li Controls how the layers with effects are exported. 
+            \list
+                \li Skipped - effects properties will be skipped and layers will be exported without any effect.
+                \li Rasterized - layers with effects will be rasterized and exported as image assets.
+                \li Design Effects - layers with effects will be exported as items with QtQuick.Studio.DesignEffects. This option is disabled when exporting for Qt for MCUs.
+            \endlist
+    \row
+        \li \uicontrol {Mask settings}
+        \li Defines the rules for masked items export.
+            \list
+                \li Skipped - masks are skipped and the nodes are exported as if the mask node was invisible.
+                \li Rasterized - all the masked objects are rasterized and exported as image assets.
+            \endlist
+    \row
+        \li \uicontrol {Gradient settings}
+        \li Exports Component, Frame, and Rectangle layers with linear gradients as items with generated QtQuick.Gradient.
+    \row
+        \li \uicontrol {Shape gradients}
+        \li Exports shape-based items with gradients following the selected rule. Currently limited to Vector, Ellipse, Arc, Pie.
+            \list
+                \li Rasterized - supported layers with gradients will be rasterized and exported as image assets.
+                \li Only Linear - supported layers with linear gradients will be exported as shape items with gradients, while others will be rasterized.
+                \li All Supported Types - supported layers with gradients will be exported as shape items with gradients. Includes Linear, Radial, and Conical gradients. This option is disabled when exporting for Qt for MCUs.
+            \endlist
+    \row
+        \li \uicontrol {Reset plugin data}
+        \li Resets all settings for all layers and groups (also in the
+            \uicontrol Home tab) to default values. This means that you
+            will lose all your changes to the settings.
+    \endtable
+
+    \section3 Additional settings:
+    \table
+    \header
+        \li Name
+        \li Purpose
     \row
         \li \uicontrol {Export as shapes}
         \li Exports vectors as components of the type \l{SVG Path Item} from the
-            Qt Quick Studio Components module.
+            Qt Quick Studio Components module. This option is disabled when exporting for Qt for MCUs.
+    \row
+        \li \uicontrol {Export ellipse items as qml items}
+        \li Export ellipses as ArcItem components. Uses QtQuickUltralite ArcItem when exporting for Qt for MCUs.
+    \row
+        \li \uicontrol {Use antialiasing on vector items}
+        \li Generate vector items with activated antialiasing. Only applied to dynamic vector items, such as SvgPathItem and ArcItem. This option is disabled when exporting for Qt for MCUs.
+    \row
+        \li \uicontrol {Export auto layouts}
+        \li Export Figma auto layouts as the QtQuick.Layouts components.
     \row
         \li \uicontrol {Create page hierarchy}
         \li Organize the generated UI in \QDS under the directory named after the
@@ -256,11 +327,6 @@
     \row
         \li \uicontrol {Export Variables}
         \li Enable exporting variables.
-    \row
-        \li \uicontrol {Reset plugin data}
-        \li Resets all settings for all layers and groups (also in the
-            \uicontrol Home tab) to default values. This means that you
-            will lose all your changes to the settings.
     \endtable
 
     \include qtdesignstudio-qt-academy.qdocinc qt-academy-using-qt-bridge-for-figma
