@@ -26,9 +26,6 @@ public:
     void start() final;
     void stop() final;
 
-    void kickoffTerminalProcess();
-    void interruptTerminal();
-
     void setupPortsGatherer();
 
     DebuggerRunParameters &runParameters() { return m_runParameters; }
