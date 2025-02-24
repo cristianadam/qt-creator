@@ -10342,14 +10342,14 @@ BaseTextEditor *BaseTextEditor::currentTextEditor()
     return qobject_cast<BaseTextEditor *>(EditorManager::currentEditor());
 }
 
-QVector<BaseTextEditor *> BaseTextEditor::textEditorsForDocument(TextDocument *textDocument)
+QList<BaseTextEditor *> BaseTextEditor::textEditorsForDocument(TextDocument *doc)
 {
-    QVector<BaseTextEditor *> ret;
-    for (IEditor *editor : Core::DocumentModel::editorsForDocument(textDocument)) {
-        if (auto textEditor = qobject_cast<BaseTextEditor *>(editor))
-            ret << textEditor;
-    }
-    return ret;
+    return qobject_container_cast<BaseTextEditor *>(Core::DocumentModel::editorsForDocument(doc));
+}
+
+QList<BaseTextEditor *> BaseTextEditor::textEditorsForFilePath(const Utils::FilePath &path)
+{
+    return qobject_container_cast<BaseTextEditor *>(Core::DocumentModel::editorsForFilePath(path));
 }
 
 TextEditorWidget *BaseTextEditor::editorWidget() const
