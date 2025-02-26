@@ -9,10 +9,9 @@
 
 #include <utils/filepath.h>
 
-#include <QPlainTextEdit>
-
 namespace TextEditor {
 
+class PlainTextEdit;
 class TextEditorWidget;
 
 TEXTEDITOR_EXPORT void formatCurrentFile(const TextEditor::Command &command, int startPos = -1, int endPos = 0);
@@ -20,6 +19,6 @@ TEXTEDITOR_EXPORT void formatEditor(TextEditorWidget *editor, const TextEditor::
                   int startPos = -1, int endPos = 0);
 TEXTEDITOR_EXPORT void formatEditorAsync(TextEditorWidget *editor, const TextEditor::Command &command,
                        int startPos = -1, int endPos = 0);
-TEXTEDITOR_EXPORT void updateEditorText(QPlainTextEdit *editor, const QString &text);
+TEXTEDITOR_EXPORT void updateEditorText(PlainTextEdit *editor, const QString &text);
 
 } // namespace TextEditor

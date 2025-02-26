@@ -97,7 +97,7 @@ void SourceAgent::setContent(const QString &filePath, const QString &content)
         EditorManager::activateEditor(d->editor);
     }
 
-    QPlainTextEdit *plainTextEdit = d->editor->editorWidget();
+    PlainTextEdit *plainTextEdit = d->editor->editorWidget();
     QTC_ASSERT(plainTextEdit, return);
     plainTextEdit->setReadOnly(true);
 

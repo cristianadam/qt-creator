@@ -5,6 +5,7 @@
 
 #include "texteditor_global.h"
 
+#include "plaintextedit/plaintextedit.h"
 #include "textdocument.h"
 #include "textmark.h"
 #include "textsuggestion.h"
@@ -153,7 +154,7 @@ private:
     quint8 m_attrState = 0;
 };
 
-class TEXTEDITOR_EXPORT TextDocumentLayout : public QPlainTextDocumentLayout
+class TEXTEDITOR_EXPORT TextDocumentLayout : public PlainTextDocumentLayout
 {
     Q_OBJECT
 

@@ -7,6 +7,7 @@
 
 #include "codeassist/assistenums.h"
 #include "indenter.h"
+#include "plaintextedit/plaintextedit.h"
 #include "refactoroverlay.h"
 #include "snippets/snippetparser.h"
 
@@ -190,7 +191,7 @@ private:
     Internal::BaseTextEditorPrivate *d;
 };
 
-class TEXTEDITOR_EXPORT TextEditorWidget : public QPlainTextEdit
+class TEXTEDITOR_EXPORT TextEditorWidget : public PlainTextEdit
 {
     Q_OBJECT
 public:
@@ -212,7 +213,7 @@ public:
     QTextCursor textCursorAt(int position) const;
     Utils::Text::Position lineColumn() const;
     void convertPosition(int pos, int *line, int *column) const;
-    using QPlainTextEdit::cursorRect;
+    using PlainTextEdit::cursorRect;
     QRect cursorRect(int pos) const;
     void setCursorPosition(int pos);
     QWidget *toolBarWidget() const;
