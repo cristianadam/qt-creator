@@ -41,23 +41,22 @@
                 \li Set \uicontrol Width (4) to 720 and \uicontrol Height to 1280.
                 You can change the screen size later in \l Properties.
             \endlist
-
-        \li Select \uicontrol Create (6) to create the project.
-    \image loginui1-new-project.webp "New Project window in Qt Design Studio."
+        \li Select \uicontrol Create (5) to create the project.
+    \image loginui1-new-project.webp Creating a new project in Qt Design Studio.
     \endlist
 
     Your project should now look something like this in the \uicontrol Projects view:
 
-    \image loginui1-project.webp "A new project."
+    \image loginui1-project.webp A new project.
 
     The wizard constructs the \e Screen01 \l{glossary-component}{component}
-    using instances of a \l{basic-rectangle}{rectangle} component that forms
-    the background, a \l Button, and a \l Text component that displays some text.
+    using a \l{basic-rectangle}{rectangle} component that forms the background,
+    a \l Button, and a \l Text component that displays some text.
 
-    \note The visibility of views depends on the selected workspace,
-    so your \QDS might look somewhat different from the above image.
-    To open hidden views, select \uicontrol View > \uicontrol Views. For more
-    information about moving views around, see \l {Managing Workspaces}.
+    \note The visibility of views depends on the selection of views on the
+    selected workspace, so your \QDS might look somewhat different from the
+    image above. To open and close views, select \uicontrol View > \uicontrol Views.
+    For more information about arranging the \QDS workspace, see \l {Managing workspaces}.
 
     Remove the button and the text component from the UI to have a clean workspace. Later
     in this tutorial, you will add and modify them as you need.
@@ -67,12 +66,13 @@
 
     Next, you will edit the values of the properties of the component instances
     to create the main page of the UI.
-    \section1 Creating the Main Page
 
-    You will now add a text component instance to create a tag line using a custom font.
-    You will add the font as an asset and set it to be used in the properties of the component.
-    In addition, you will import a background image and logo as assets and
-    add them to the page as instances of the \l{Images}{Image} component.
+    \section1 Creating the main page
+
+    You will now create the main page of your UI. First, you will download
+    a logo, a background imaage, and a custom font and import them to \QDS as
+    assets. You will then use these assets to add a background image, a logo and
+    a tag line to your main page. 
 
     Download the logo and the background image from here:
 
@@ -93,41 +93,47 @@
     To add the assets to your project:
     \list 1
         \li Select \uicontrol Assets > \imageplus
-        (Select \uicontrol View > \uicontrol Views > \uicontrol Assets to enable it,
-            if you can't find it).
-        \image loginui1-add-assets.webp "The Assets view."
+        (If you can't see the \uicontrol Assets view, select \uicontrol View >
+        \uicontrol Views > \uicontrol Assets.)
+        \image loginui1-add-assets.webp The Assets view.
         \li Select the asset files, and then select \uicontrol Open.
         \li Select the location where the files will be saved in the
             \uicontrol {Add Resources} dialog.
         \li Select \uicontrol OK.
     \endlist
 
-    Alternatively, drag the asset files to the \uicontrol FONTS or \uicontrol IMAGES tab. 
+    Alternatively, drag the asset files from the file explorer to the \uicontrol Fonts
+    or \uicontrol Images tab in the \uicontrol Assets view. 
 
-    To preview the changes that you make, select the \uicontrol {Live Preview} button
-    or select \key {Alt+P}.
+    To preview the changes that you make, select the \uicontrol Run dropdown menu from the
+    top toolbar, and then select \uicontrol {Live Preview}, or select \key {Alt+P}.
 
-    The \e Screen01.ui.qml file that the wizard template created for you should
+    \note If you can't see the changes that you make in the \uicontrol 2D view,
+    select \imagereset on the \uicontrol {2D} view toolbar to refresh the
+    \uicontrol{2D} view.
+
+    The \e Screen01.ui.qml file, that the wizard template created for you, should
     be open. If it is not, you can double-click it in the \uicontrol Projects view
     to open it.
 
     To modify the \e Screen01 component in the \uicontrol {2D} view:
 
     \list 1
-        \li Drag the background image (1) from \uicontrol Assets to the rectangle (2)
-            in \l Navigator.
-            \image loginui1-add-image.webp "The project with the new background image."
-            \QDS automatically creates an instance of the \l{Images}{Image}
-            component for you with the path to the image file set as the
-            value of \uicontrol Properties > \uicontrol Image > \uicontrol Source.
-            \image loginui1-properties-image.webp "Image properties."
-        \li Drag the Qt logo from \uicontrol Assets to the rectangle
-            in \uicontrol Navigator in the same way as in the previous step and
-            move it to the top-center of the background image in the \uicontrol {2D} view.
+        \li Drag the background image (1) from \uicontrol Assets to to the
+            \uicontrol 2D view (2). Use the guidelines to drag the background
+            image so that it covers the whole \uicontrol 2D view.
+            \image loginui1-add-background.webp Adding the background image to the main page.
+            \QDS creates an \l{Images}{Image} component for you
+            with the path to the image file set as the value of \uicontrol Properties
+            > \uicontrol Image > \uicontrol Source.
+            \image loginui1-properties-image.webp Image properties.
+        \li Drag the Qt logo from \uicontrol Assets to the background image in
+            the \uicontrol {2D} view. Use the guidelines to drag the logo
+            precisely in the top horizontal center of the background image.
         \li Drag a \uicontrol Text component from \uicontrol Components >
-            \uicontrol {Default Components} > \uicontrol Basic to the rectangle and move it
-            below the logo image in the \uicontrol {2D} view.
-        \li Select the instance of the text component to edit the text properties in the
+            \uicontrol {Default Components} > \uicontrol Basic below the logo image
+            in the \uicontrol {2D} view.
+        \li Select the \uicontrol Text component to edit the text properties in the
             \uicontrol Properties view:
             \list
                 \li In \uicontrol Component > \uicontrol ID, enter the ID
@@ -135,37 +141,38 @@
                 \li In \uicontrol Character > \uicontrol Text, enter the tag
                     line: \e {Are you ready to explore?}.
                 \li In \uicontrol Character > \uicontrol Font, select
-                    \e {Titillium Web ExtraLight}.
-                \li In \uicontrol Character > \uicontrol Size, first select the scale to pixels
-                (\uicontrol px), and then set font size of the tag line to \e 50 (\uicontrol px).
+                    \e {Titillium Web}.
+                \li In \uicontrol {Style name}, enter \uicontrol ExtraLight.
+                \li In \uicontrol Character > \uicontrol Size, set font size of the
+                    tag line to \e 50 (\uicontrol px).
                 \li In \uicontrol Character > \uicontrol {Text color}, set the text color to
                     white (\e #ffffff).
-                    \image loginui1-properties-text.webp "Text properties."
+                    \image loginui1-properties-text.webp Text properties.
+                \li Drag the tagline in the horizontal center below the logo using
+                    the guidelines.
             \endlist
-        \li Select \uicontrol File > \uicontrol Save or select \key {Ctrl+S}
-            to save your changes.
+        \li Select \uicontrol File > \uicontrol Save or \key {Ctrl+S} to save
+            your changes.
     \endlist
 
     Your UI should now look something like this in the \uicontrol {2D} view
     and \uicontrol {Live Preview}:
 
-    \image loginui1-project-main-page.webp "Modified UI with background image, logo, and text."
+    \image loginui1-project-main-page.webp Modified UI with background image, logo, and text.
 
-    You can resize the preview dialog to display the whole screen.
+    Resize the \uicontrol {Live Preview} window to see the whole screen.
+
     \section1 Creating a Push Button
 
     You can use another wizard template to create a push button and to add it to
     the project. The wizard template creates a reusable button component that
     appears in \uicontrol Components > \uicontrol {My Components}.
-    You can drag it to \uicontrol Navigator to create button instances and
-    modify their properties in the \uicontrol Properties view to change their
-    appearance and functionality.
+    You can drag it to the \uicontrol 2D view and modify its properties in
+    the \uicontrol Properties view to change its appearance and functionality.
 
-    If you cannot use the wizard template nor the preset
-    button controls available in \uicontrol Components >
-    \uicontrol {Qt Quick Controls} to create the kind of push button that you
-    want, you can create your button from scratch using default components. For
-    more information, see \l {Creating buttons} and
+    If you cannot use the wizard template nor the preset \l {Button controls}{button controls}
+    to create the kind of push button that you want, you can create your button from scratch
+    using default components. For more information, see \l {Creating buttons} and
     \l {Creating scalable buttons and borders}.
 
     To create a push button by using the wizard template:
@@ -174,16 +181,16 @@
         \li Select \uicontrol File > \uicontrol {New File} >
             \uicontrol {Qt Quick Controls} >
             \uicontrol {Custom Button} > \uicontrol Choose.
-            \image loginui1-new-button.webp "New File window."
+            \image loginui1-new-button.webp The New File window.
         \li In the \uicontrol {Component name} field, enter a name for your
             button component: \e {EntryField}.
         \li Select \uicontrol Finish (or \uicontrol Done on \macos) to create
-            the button UI file, \e EntryField.ui.qml.
+            the button UI file, \c EntryField.ui.qml.
     \endlist
 
     Your button should now look something like this:
 
-    \image loginui1-button.webp "A new button."
+    \image loginui1-button.webp A new button in Qt Design Studio.
 
     Next, you will change the appearance of the EntryField component by
     modifying its properties.
@@ -192,15 +199,16 @@
 
     You can now modify the properties of the EntryField component to your
     liking. To make the changes apply to all the EntryField instances, you
-    must make them in the \e EntryField.ui.qml file.
+    must make them in the \c EntryField.ui.qml file.
 
-    The Custom Button wizard template adds a \e normal state and a \e down state
-    to change the button background and text color when the button is clicked.
-    You will now change the colors in all states. When you make changes to the
-    button in the \e base state, they are automatically applied to the other
-    states. However, the property values that have been explicitly changed in
-    the \e normal or \e down state are not changed automatically and you have
-    to either reset them to the base state or set them separately in that state.
+    The \uicontrol {Custom Button} wizard template adds a \e normal state
+    and a \e down state to change the button background and the text color
+    when the button is clicked. You will now change the colors in all states.
+    When you make changes to the button in the \e {Base State}, they are
+    automatically applied to the other states. However, the property values that
+    have been explicitly changed in the \uicontrol normal or \uicontrol down state
+    are not changed automatically, and you have to either reset them to the
+    \uicontrol {Base State} or set them separately in that state.
 
     To change the button property values:
 
@@ -227,7 +235,8 @@
             in \uicontrol Properties.
         \li In \uicontrol Properties > \uicontrol Character, set:
             \list
-                \li \uicontrol Font to \e {Titillium Web ExtraLight}.
+                \li \uicontrol Font to \e {Titillium Web}
+                \li \uicontrol {Style name} to \e ExtraLight.
                 \li \uicontrol Size to \e 34 pixels (\uicontrol px).
                 \li \uicontrol {Text color} to white (\e #ffffff).
                 \li \uicontrol {Alignment H} to left to align the text horizontally to the left.
@@ -246,7 +255,7 @@
 
     Your button should now look something like this:
 
-    \image loginui1-entry-field-styled.webp "Modified button in the 2D view."
+    \image loginui1-entry-field-styled.webp Modified button in the 2D view.
 
     \note Do not edit the value of \uicontrol Text in the \uicontrol Character
     property because this will break the connection, and later you won't be able
@@ -262,38 +271,33 @@
     \list 1
         \li Double-click \e Screen01.ui.qml in \uicontrol Projects
             to open it in the \uicontrol {2D} view.
-        \li Drag two instances of the EntryField component (1) from
-            \uicontrol Components > \uicontrol {My Components} to the rectangle (2)
-            in \uicontrol Navigator.
-            \image loginui1-add-entry-fields.webp "Adding entry fields from the Components view."
-        \li Select the first EntryField instance in \uicontrol Navigator
-            to modify its ID and text in \uicontrol Properties.
+        \li Drag two \e EntryField components (1) from \uicontrol Components >
+            \uicontrol {My Components} below the tagline in the \uicontrol {2D} view.
+            Use the guidelines (2) to align the buttons directly below the tagline.
+            \image loginui1-add-entry-fields.webp Aligning EntryFields in the 2D view.
+        \li Select the first EntryField button in \uicontrol the \uicontrol 2D view or 
+            \uicontrol Navigator to modify its ID and text in \uicontrol Properties.
         \li In \uicontrol Component > \uicontrol ID, enter \e username.
         \li In \uicontrol {Button Content} > \uicontrol Text, enter
             \e {Username or Email} and select \uicontrol tr to mark the text
             \l {Mark Strings for Translation}{translatable}.
-            \image loginui1-entry-field-properties.webp "Entry field properties."
-        \li Select the second EntryField instance, and change its ID to
+            \image loginui1-entry-field-properties.webp Entry field properties.
+        \li Select the second EntryField, and change its ID to
             \e password and text to \e Password. Again, mark the text
             translatable.
-        \li Move the cursor on the selected button instance to make the
-            selection icon appear. You can now drag the button instance
-            to another position in the \uicontrol {2D} view. Use the
-            guidelines to align the button instances below the tag line:
-            \image loginui1-align-entry-fields.webp "Aligned entry fields."
         \li Select \uicontrol File > \uicontrol Save or select \key {Ctrl+S}
             to save your changes.
     \endlist
 
     \section1 Creating another button
 
-    We want to center-align the text of two additional push buttons and use
-    brighter colors for them, so we create a second button component as
-    instructed in \l{Creating a Push Button}. This time we call it
+    Next, We want to add two more buttons to our UI. This time, we want to center-align
+    the text of the buttons and use brighter colors for them, so we create a second
+    button component as instructed in \l{Creating a Push Button}. This time we call it
     \e PushButton.
 
     To make the changes apply to all the PushButton instances, you
-    must make them in the \e PushButton.ui.qml file.
+    must make them in the \c PushButton.ui.qml file.
 
     To change the button property values:
 
@@ -334,33 +338,30 @@
             to save your changes.
     \endlist
 
-    Your button should now look something like this:
+    Your button should now look something like this in \e {Base State}:
 
-    \image loginui1-button-styled.webp "Modified push button in the 2D view."
+    \image loginui1-button-styled.webp Modified push button in the 2D view.
 
     \section1 Adding push buttons to the UI
 
     You will now add two buttons to the UI and modify their properties:
 
     \list 1
-        \li Double-click \e Screen01.ui.qml in \uicontrol Projects
-            to open it in the \uicontrol {2D} view.
-        \li Drag two instances of the PushButton component (1) from
-            \uicontrol Components > \uicontrol {My Components} to the rectangle (2)
-            in \uicontrol Navigator.
-            \image loginui1-add-push-buttons.webp "Adding push buttons from the Components view."
-        \li Drag the button instances to the bottom of the background image in
-            the \uicontrol {2D} view. Use the guidelines to align the button
-            instances horizontally with the entry fields.
-            \image loginui1-align-push-buttons.webp "Aligned push buttons."
-        \li Select the first PushButton instance in \uicontrol Navigator
+        \li Select the file dropdown menu (1) from the top toolbar, and then select
+            \c Screen01.ui.qml to open it in the \uicontrol {2D} view.
+        \li Drag two PushButton components (2) from \uicontrol Components >
+            \uicontrol {My Components} to the bottom of the background image in
+            the \uicontrol {2D} view. Use the guidelines (3) to align the push buttons
+            horizontally with the entry fields.
+            \image loginui1-add-push-buttons.webp Adding push buttons from the Components view.
+        \li Select the first \e PushButton in \uicontrol Navigator or the \uicontrol 2D view
             to modify its ID and text label in \uicontrol Properties.
         \li In \uicontrol Component > \uicontrol ID, enter \e login.
         \li In \uicontrol {Button Content} > \uicontrol Text, enter
             \e Continue and select \uicontrol tr to mark the text
             translatable.
-            \image loginui1-push-button-properties.webp "Push button properties."
-        \li Select the second PushButton instance, and change its ID to
+            \image loginui1-push-button-properties.webp Push button properties.
+        \li Select the second \e PushButton and change its ID to
             \e createAccount and text label to \e {Create Account}. Again,
             mark the text translatable.
         \li Select \uicontrol File > \uicontrol Save or select \key {Ctrl+S}
@@ -370,25 +371,26 @@
     The first iteration of your UI is now ready and should now look something
     like this in the \uicontrol {2D} view and \uicontrol {Live Preview}:
 
-    \image loginui1-ready.webp "The finished UI in the 2D view and live preview."
+    \image loginui1-ready.webp The finished UI in the 2D view and live preview.
 
     \section1 Learn more
+
     The \e {Learn More} sections provide additional information about the
     tasks performed by the wizards and about other basic tasks and concepts.
 
     \section2 Projects and files
         \QDS creates a set of files and folders that you need to create
-        a UI. The files are listed in the \l{File System} view.
+        a UI. The files are listed in the \l{File system} view.
 
         \image loginui1-project-files.png
         \list
-            \li The \e {loginui1.qmlproject} project file defines that all
+            \li The \c {loginui1.qmlproject} project file defines that all
                 component, JavaScript, and image files in the project folder belong
                 to the project. Therefore, you do not need to individually list new
                 files when you add them to the project.
             \li The \e {loginui1.qml} file defines the functionality of
                 the UI. For the time being, it does not do anything.
-            \li The \e {Screen01.ui.qml} file is a custom component created by
+            \li The \c {Screen01.ui.qml} file is a custom component created by
                 the wizard template. For more information, see \l {UI files}.
 
                 By default, this is the main file in the project, but you can
@@ -400,22 +402,22 @@
             \li The \e CMakeLists.txt project configuration file allowing you to
                 share your project as a fully working C++ application with
                 developers.
-            \li The \e {qtquickcontrols2.conf} file specifies the selected
+            \li The \c {qtquickcontrols2.conf} file specifies the selected
                 \l {Styling Qt Quick Controls}{UI style} and some style-specific
                 arguments.
             \li The \e imports folder contains \e {Constants.qml} and
-                \e {DirectoryFontLoader.qml} files that specify a font loader
+                \c {DirectoryFontLoader.qml} files that specify a font loader
                 and a \e qmldir module definition file that declares the Constant
                 component. For more information, see
-                \l {Module Definition qmldir Files}. The \e EventListModel.qml and
-                \e EventListSimulator.qml files are not used in this example, so
+                \l {Module Definition qmldir Files}. The \c EventListModel.qml and
+                \c EventListSimulator.qml files are not used in this example, so
                 you can ignore them for now.
         \endlist
         \l{UI files} define a hierarchy of components with a highly-readable,
         structured layout. Every UI file consists of two parts: an imports section
         and a component declaration section. The components and functionality most
         common to UIs are provided in the \c QtQuick import. You can view the code
-        of a \e .ui.qml file in the \l{Code} view.
+        of a \c .ui.qml file in the \l{Code} view.
 
 
     \section2 Components
@@ -478,8 +480,7 @@
         The \l {Images}{Image} component is used for adding images to the UI in several
         supported formats, including bitmap formats such as PNG and JPEG and vector
         graphics formats such as SVG. To add an image to \uicontrol Assets, select
-        \imageplus
-        , and then select the image file.
+        \imageplus, and then select the image file.
 
         If you need to display animated images, use the \l {Animated Image}
         component, also available in \uicontrol Components >
@@ -495,7 +496,7 @@
         you to set text, display an icon, react to mouse clicks, and so on.
 
         To be able to use the functionality of the Button control, the wizard template
-        adds the following \e import statements to the \e EntryField.ui.qml file:
+        adds the following \e import statements to the \c EntryField.ui.qml file:
 
         \quotefromfile Loginui1/content/EntryField.ui.qml
         \skipto import
