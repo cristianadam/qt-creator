@@ -42,6 +42,17 @@
             then select \uicontrol Install.
     \endlist
 
+    \section1 Enable code syntax highlighting in the inline chat window
+
+    To enable code syntax highlighting in the inline chat window:
+
+    \list 1
+        \li Go to \preferences > \uicontrol {Text Editor}.
+        \li Select the \uicontrol {Generic Highlighter} tab.
+            \image qtaiassistant-enable_syntax_highlighting.webp {Enable Code Syntax Highlighting}
+        \li Select \uicontrol {Download Definitions}.
+    \endlist
+
     \section1 Connect to an LLM
 
     You can connect to the following LLMs:
