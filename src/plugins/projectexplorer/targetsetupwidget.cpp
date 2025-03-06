@@ -236,13 +236,13 @@ void TargetSetupWidget::update(const TasksGenerator &generator)
 
     const Task errorTask = Utils::findOrDefault(tasks, Utils::equal(&Task::type, Task::Error));
 
-    // Kits that where the taskGenarator reports an error are not selectable, because we cannot
-    // guarantee that we can handle the project sensibly (e.g. qmake project without Qt).
-    if (!errorTask.isNull()) {
-        setValid(false);
-        m_infoStore.clear();
-        return;
-    }
+    // // Kits that where the taskGenarator reports an error are not selectable, because we cannot
+    // // guarantee that we can handle the project sensibly (e.g. qmake project without Qt).
+    // if (!errorTask.isNull()) {
+    //     setValid(false);
+    //     m_infoStore.clear();
+    //     return;
+    // }
 
     setValid(true);
     updateDefaultBuildDirectories();
