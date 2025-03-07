@@ -45,7 +45,7 @@
             \li \l{https://fossil-scm.org/index.html/doc/trunk/www/index.wiki}
             \li Enable the plugin to use it.
              \row
-            \li \l{Git}
+            \li \l{Use Git}
             \li \l{https://git-scm.com/}
             \li Git version 2.13.0, or later
 
@@ -73,7 +73,7 @@
     \endtable
 
     \sa {Create VCS repositories for new projects}, {Enable and disable plugins},
-    {Use Git}{How To: Use Git}, {Set up version control systems},
+    {Use Git version control system}{How to: Use Git version control system}, {Set up version control systems},
     {Use common VCS functions}
 */
 
@@ -105,8 +105,8 @@
             to import the project.
     \endlist
 
-    \sa {Use Git}{How To: Use Git}, {Use project wizards}, {Creating Projects},
-    {Git}, {Version Control Systems}
+    \sa {Use Git version control system}{How to: Use Git version control system}, {Use project wizards}, {Creating Projects},
+    {Use Git}, {Version Control Systems}
 */
 
 /*!
@@ -124,7 +124,7 @@
     functions and options available for a particular version control system
     are described in separate topics.
 
-    \sa {Bazaar}, {ClearCase}, {CVS}, {Fossil}, {Git}, {GitLab}, {Mercurial},
+    \sa {Bazaar}, {ClearCase}, {CVS}, {Fossil}, {Use Git}, {GitLab}, {Mercurial},
     {Perforce}, {Subversion}
 
     The \uicontrol{Version Control} view displays the commands that are
@@ -218,6 +218,6 @@
 
     You can select \uicontrol Delete to delete obsolete files from the repository.
 
-    \sa {Use Git}{How To: Use Git}, {Set up version control systems},
+    \sa {Use Git version control system}{How to: Use Git version control system}, {Set up version control systems},
     {Version Control Systems}
 */

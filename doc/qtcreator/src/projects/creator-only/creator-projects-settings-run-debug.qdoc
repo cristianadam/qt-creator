@@ -42,5 +42,5 @@
     {enable QML debugging} either globally or in the \uicontrol {Build Settings}
     of the project.
 
-    \sa {Configuring Projects}, {Debugging}, {Debuggers}, {Debugger}
+    \sa {Build and run projects}, {Debug applications and source code}, {Debuggers}, {Debugger}
 */

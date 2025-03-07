@@ -27,8 +27,8 @@
 
     \include linuxdev.qdoc openssh
 
-    \sa {\B2Q}{How To: Develop for \B2Q},
-    {Manage Kits}{How To: Manage Kits}, {Run in Qt Application Manager},
+    \sa {\B2Q}{How to: Develop for \B2Q},
+    {Manage Kits}{How to: Manage Kits}, {Run in Qt Application Manager},
     {\B2Q Deploy Configuration}, {\B2Q Run Settings},
     {\B2Q: Documentation}
 */
@@ -87,8 +87,8 @@
     \endlist
 
     \sa {Configure SSH connections}, {Generate SSH keys},
-    {Enable and disable plugins}, {\B2Q}{How To: Develop for \B2Q},
-    {Manage Kits}{How To: Manage Kits}, {\B2Q Deploy Configuration},
+    {Enable and disable plugins}, {\B2Q}{How to: Develop for \B2Q},
+    {Manage Kits}{How to: Manage Kits}, {\B2Q Deploy Configuration},
     {\B2Q Run Settings}, {Developing for \B2Q Devices}
 */
 
@@ -142,7 +142,7 @@
     To restore the default application to the device, select
     \uicontrol {Restore Default App}.
 
-    \sa {Enable and disable plugins}, {\B2Q}{How To: Develop for \B2Q},
+    \sa {Enable and disable plugins}, {\B2Q}{How to: Develop for \B2Q},
     {Developing for \B2Q Devices},
     {\B2Q: Setting Up USB Access to Embedded Devices}
 */

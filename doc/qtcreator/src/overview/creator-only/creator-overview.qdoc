@@ -54,14 +54,14 @@
             version control system. Store and edit only project
             source files and configuration files. Do not store
             generated files.
-        \li \l{Configuring Projects}
+        \li \l{Build and run projects}
 
             Installation programs and project wizards create default
             configurations for \QC and your projects. Change the
             configurations in the \uicontrol Projects mode.
     \endlist
 
-    For more information, see \l{Manage Projects}{How To: Manage Projects}.
+    For more information, see \l{Manage Projects}{How to: Manage Projects}.
 
     \section1 Designing User Interfaces
 
@@ -103,7 +103,7 @@
     enforces a platform look and feel, use \l{Qt Widgets} and the integrated
     \l{\QD}.
 
-    For more information, see \l{Design UIs}{How To: Design UIs} and
+    For more information, see \l{Design UIs}{How to: Design UIs} and
     \l{UI Design}.
 
     \section1 Editing Code
@@ -174,7 +174,7 @@
     If you are used to the Vim editor, run the main editor in the
     \l {FakeVim Modes and Commands}{FakeVim mode}.
 
-    For more information, see \l{Edit Code}{How To: Edit Code}, \l{Editors},
+    For more information, see \l{Edit Code}{How to: Edit Code}, \l{Editors},
     and \l{Text Editor}.
 
     \section1 Building, Deploying, and Running Applications
@@ -195,7 +195,7 @@
     configurations, you can quickly switch between different setups and
     target platforms.
 
-    For more information, see \l{Build and Run}{How To: Build and Run},
+    For more information, see \l{Build and Run}{How to: Build and Run},
     \l{Build Systems}, \l{Build Configurations}, and \l{Run Configurations}.
 
     \section2 Embedded Platforms
@@ -223,7 +223,7 @@
     files to a location you want to run the executable at, such as the file
     system of a device.
 
-    For more information, see \l{Develop for Devices}{How To: Develop for Devices}
+    For more information, see \l{Develop for Devices}{How to: Develop for Devices}
     and \l{Devices}.
 
     \section2 Mobile Platforms
@@ -248,7 +248,7 @@
     and a smooth user experience on mobile devices.
 
     For more information, see
-    \l{Develop for Devices}{How To: Develop for Devices},
+    \l{Develop for Devices}{How to: Develop for Devices},
     \l{Optimizing Applications for Mobile Devices}, \l {Supported Platforms}, and
     \l{Deploy Configurations}.
 
@@ -278,7 +278,7 @@
 
     Connect devices to your computer to debug processes running on the devices.
 
-    For more information, see \l{Debugging} and \l{Debug}{How To: Debug}.
+    For more information, see \l{Debug applications and source code} and \l{Debug}{How to: Debug}.
 
     \section1 Finding Issues in Source Code
 
@@ -291,7 +291,7 @@
     \QC. Install and configure the other supported tools on the computer to use
     them from \QC.
 
-    For more information, see \l{Analyzing Code} and \l{Analyze}{How To: Analyze}.
+    For more information, see \l{Analyze code} and \l{Analyze}{How to: Analyze}.
 
     \section1 Running Tests
 
@@ -348,7 +348,7 @@
     To use the plugin, you must download and install Squish, create a connection
     to the Squish Server, and specify the application under test (AUT) to run.
 
-    For more information, see \l{Test}{How To: Test}.
+    For more information, see \l{Test}{How to: Test}.
 
     \section1 Publishing Applications
 

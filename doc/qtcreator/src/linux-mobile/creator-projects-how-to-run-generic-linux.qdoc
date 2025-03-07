@@ -6,6 +6,7 @@
     \previouspage creator-how-tos.html
 
     \ingroup creator-how-to-remote-linux
+    \ingroup creator-how-to-run
 
     \title Run on remote Linux devices
 
@@ -34,7 +35,7 @@
     Debugging works transparently if GDB server is installed on the device and
     it is compatible with the GDB on the host.
 
-    \sa {Remote Linux}{How To: Develop for remote Linux},
-    {Debug remotely with GDB}, {Run on many platforms}, {Compilers},
+    \sa {Remote Linux}{How to: Develop for remote Linux},
+    {Debug remotely with GDB}, {Run applications}, {Compilers},
     {Embedded Platforms}, {Kits}
 */

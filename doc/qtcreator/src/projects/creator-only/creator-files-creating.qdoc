@@ -73,7 +73,7 @@
         \li Empty Nim source and script files.
     \endtable
 
-    \sa {Navigate with locator}, {Add Files}{How To: Add Files},
+    \sa {Navigate with locator}, {Add Files}{How to: Add Files},
     {Add tests to existing test projects}, {Create UML-style models},
     {Use project wizards}
 */

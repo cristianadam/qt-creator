@@ -25,6 +25,6 @@
 
     \image qtcreator-preferences-vcs-git.webp {Git preferences}
 
-    \sa {Use Git}{How To: Use Git}, {Compare files},
+    \sa {Use Git version control system}{How to: Use Git version control system}, {Compare files},
     {Set up version control systems}, {Version Control Systems}
 */

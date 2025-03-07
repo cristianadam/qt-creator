@@ -103,7 +103,7 @@
     \uicontrol {Clean Without Dependencies} options in the context menu in the
     \uicontrol Projects view.
 
-    \sa {Configure projects for building}, {Build and Run}{How To: Build and Run},
+    \sa {Configure projects for building}, {Build and Run}{How to: Build and Run},
     {Add Docker devices}, {Specifying Build Settings}
 */
 
@@ -121,5 +121,5 @@
 
     \image qtcreator-preferences-build-run-qmake.png {Build & Run Qmake Preferences}
 
-    \sa {Build and Run}{How To: Build and Run}, {qmake Build Configuration}
+    \sa {Build and Run}{How to: Build and Run}, {Build projects with qmake}
 */

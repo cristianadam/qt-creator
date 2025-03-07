@@ -122,7 +122,7 @@
     should include \QC console output with the environment
     variable \c {QT_LOGGING_RULES=qtc.languageclient.*=true} set.
 
-    \sa {Manage Language Servers}{How To: Manage Language Servers}, {Behavior}
+    \sa {Manage Language Servers}{How to: Manage Language Servers}, {Behavior}
 */
 
 /*!
@@ -163,7 +163,7 @@
             arguments.
     \endlist
 
-    \sa {Manage Language Servers}{How To: Manage Language Servers},
+    \sa {Manage Language Servers}{How to: Manage Language Servers},
     {Language Servers}
 */
 
@@ -193,7 +193,7 @@
             {Eclipse Downloads}.
     \endlist
 
-    \sa {Manage Language Servers}{How To: Manage Language Servers},
+    \sa {Manage Language Servers}{How to: Manage Language Servers},
     {Use Qt Creator variables}, {Language Servers}
 */
 
@@ -223,7 +223,7 @@
     To disable the Python language server, clear
     \uicontrol {Use Python Language Server}.
 
-    \sa {Manage Language Servers}{How To: Manage Language Servers},
+    \sa {Manage Language Servers}{How to: Manage Language Servers},
     {Develop Qt for Python applications}, {Language Servers}
 */
 
@@ -274,8 +274,8 @@
     To automatically configure new CMake projects, select
     \uicontrol {Create .qmlls.ini files for new projects}.
 
-    \sa {Manage Language Servers}{How To: Manage Language Servers},
-    {Enabling and Disabling Messages}, {CMake Build Configuration}, {Kits},
+    \sa {Manage Language Servers}{How to: Manage Language Servers},
+    {Enabling and Disabling Messages}, {Build projects with CMake}, {Kits},
     {Language Servers}
 */
 
@@ -332,7 +332,7 @@
 
     \image qtcreator-language-client-inspector-memory-usage.webp {Language Client Inspector Memory Usage tab}
 
-    \sa {Manage Language Servers}{How To: Manage Language Servers},
+    \sa {Manage Language Servers}{How to: Manage Language Servers},
     {Language Servers}
 */
 
@@ -370,6 +370,6 @@
     In \uicontrol {Workspace Configuration}, specify language server settings
     using valid JSON format.
 
-    \sa {Manage Language Servers}{How To: Manage Language Servers},
-    {Language Servers}, {Configuring Projects}
+    \sa {Manage Language Servers}{How to: Manage Language Servers},
+    {Language Servers}, {Build and run projects}
 */

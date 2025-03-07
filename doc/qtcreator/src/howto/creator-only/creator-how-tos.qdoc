@@ -12,7 +12,7 @@
     \page creator-how-tos.html
     \nextpage creator-reference.html
 
-    \title How To
+    \title How to
 
     The following topics describe how to use \QC to perform a particular task.
 
@@ -25,7 +25,7 @@
 
     \generatelist creator-how-to-analyze
 
-    \section1 Build and Run
+    \section1 Build and run
 
     Use integrated cross-platform systems for build automation to compile your
     source code for different target platforms or with different compilers,
@@ -48,21 +48,12 @@
 
     \generatelist creator-how-to-build-with-qmake
 
-    \section2 Run applications
+    \section2 Run projects
 
     Run applications on local and remote desktop systems, as well as on
     embedded and mobile devices that you connect to the computer.
 
     \generatelist creator-how-to-run
-
-    \section1 Create Models and Diagrams
-
-    Create Universal Modeling Language (UML) style models with structured and
-    behavioral diagrams that offer different views to your system. Or, use a
-    file wizard to create State Chart XML (SCXML) files with boilerplate code
-    and edit them with an SCXML editor.
-
-    \generatelist creator-how-to-models
 
     \section1 Debug
 
@@ -79,7 +70,7 @@
 
     \generatelist creator-how-to-design
 
-    \section1 Develop for Devices
+    \section1 Develop for devices
 
     Install the toolchain for building applications for the targeted
     embedded or mobile platform on the computer, and use \QOI to
@@ -160,7 +151,7 @@
 
     \generatelist creator-how-to-webassembly
 
-    \section1 Edit Code
+    \section1 Edit code
 
     The code editor offers useful features for editing C++ and QML code, such
     as semantic highlighting, checking code syntax, code completion, and quick
@@ -170,14 +161,14 @@
 
     \generatelist creator-how-to-edit
 
-    \section2 Configure Editors
+    \section2 Configure editors
 
     Configure the code and text editor to suit your specific needs by
     changing the fonts, colors, highlighting, and indentation.
 
     \generatelist creator-how-to-configure-editors
 
-    \section2 Manage Language Servers
+    \section2 Manage language servers
 
     Configure language servers that \QC adds by default or add more of them.
 
@@ -191,7 +182,21 @@
 
     \generatelist creator-how-to-search
 
-    \section1 Manage Kits
+    \section1 Edit state charts
+
+    Use a file wizard to create State Chart XML (SCXML) files with boilerplate
+    code and edit them with an SCXML editor.
+
+    \generatelist creator-how-to-scxml
+
+    \section1 Edit UML-style models and diagrams
+
+    Create Universal Modeling Language (UML) style models with structured and
+    behavioral diagrams that offer different views to your system.
+
+    \generatelist creator-how-to-models
+
+    \section1 Manage kits
 
     \QC groups build and run specific settings as kits to make cross-platform
     development easier. Each kit consists of a set of values that define one
@@ -200,34 +205,34 @@
 
     \generatelist creator-how-to-manage-kits
 
-    \section1 Manage Projects
+    \section1 Manage projects
 
     Create projects for developing applications and libraries. Then configure
     the projects for building and running the applications on target platforms.
 
     \generatelist creator-how-to-projects
 
-    \section2 Create Projects
+    \section2 Create projects
 
     Use preset wizards to create projects or add custom wizards. You can also
     import projects from version control systems.
 
     \generatelist creator-how-to-projects-create
 
-    \section2 Add Files
+    \section2 Add files
 
     Add files to projects.
 
     \generatelist creator-how-to-projects-files
 
-    \section2 Configure Projects
+    \section2 Configure projects
 
     Change the default configurations that installation programs and project
     wizards create.
 
     \generatelist creator-how-to-projects-configure
 
-    \section1 Read Documentation
+    \section1 Read documentation
 
     \QC integrates the reference documentation for the Qt versions that you
     install. You can add documentation from other sources.
@@ -246,9 +251,9 @@
 
     \generatelist creator-how-to-test
 
-    \section1 Use Git
+    \section1 Use Git version control system
 
-    \l{Git} is a fast decentralized version control system
+    \l{Use Git} is a fast decentralized version control system
     that is available for Windows, Linux, and \macos. You can use the
     \l {Gerrit Code Review} tool for projects that use Git.
 
@@ -309,7 +314,7 @@
 
     \endlist
 
-    \sa {Edit Code}{How To: Edit Code}, {Edit Mode}
+    \sa {Edit Code}{How to: Edit Code}, {Edit Mode}
 */
 
 /*!
@@ -409,7 +414,7 @@
 
     \image qtcreator-locator-customize.webp "Locator preferences"
 
-    \sa {Creating Locator Filters}, {Edit Code}{How To: Edit Code}, {Edit Mode}
+    \sa {Creating Locator Filters}, {Edit Code}{How to: Edit Code}, {Edit Mode}
 */
 
 /*!
@@ -563,7 +568,7 @@
         \li Go to \uicontrol {Follow Symbol Under Cursor} in the context menu.
     \endlist
 
-    \sa {Edit Code}{How To: Edit Code}, {Clangd}, {Edit Mode},
+    \sa {Edit Code}{How to: Edit Code}, {Clangd}, {Edit Mode},
     {Navigate with locator}
 */
 
@@ -614,7 +619,7 @@
     history, press \key {Ctrl+Shift+V} until the clip appears.
     The number of clips in the history is fixed to 10.
 
-    \sa {Edit Code}{How To: Edit Code}, {Edit Mode}
+    \sa {Edit Code}{How to: Edit Code}, {Edit Mode}
 */
 
 /*!
@@ -642,7 +647,7 @@
 
     \image qtcreator-preferences-texteditor-completion.webp "Completion preferences"
 
-    \sa {Completion}, {Edit Code}{How To: Edit Code}, {Edit Mode}
+    \sa {Completion}, {Edit Code}{How to: Edit Code}, {Edit Mode}
 */
 
 /*!
@@ -668,7 +673,7 @@
 
     \image qtcreator-preferences-texteditor-behavior.webp {Text Editor Behavior preferences}
 
-    \sa {Edit Code}{How To: Edit Code}, {Edit Mode}
+    \sa {Edit Code}{How to: Edit Code}, {Edit Mode}
 */
 
 /*!
@@ -759,5 +764,5 @@
     \li Select \uicontrol Replace to replace all instances of the text.
     \endlist
 
-    \sa {Edit Code}{How To: Edit Code}, {Search}{How To: Search}, {Edit Mode}
+    \sa {Edit Code}{How to: Edit Code}, {Search}{How to: Search}, {Edit Mode}
 */

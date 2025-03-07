@@ -300,5 +300,5 @@
     }
     \endcode
 
-    \sa {CMake Build Configuration}, {CMake}, {SDK Tool}
+    \sa {Build projects with CMake}, {CMake}, {SDK Tool}
 */

@@ -126,7 +126,7 @@
     of the compiler files for that compiler.
 
     \sa {Configure projects for building}, {Enable and disable plugins},
-    {View code coverage reports from Coco}, {Font & Colors}, {Analyzing Code}
+    {View code coverage reports from Coco}, {Font & Colors}, {Analyze code}
 */
 
 /*!
@@ -186,5 +186,5 @@
     \endlist
 
     \sa {Enable and disable plugins}, {Set up code coverage from Coco},
-    {Font & Colors}, {Analyzing Code},
+    {Font & Colors}, {Analyze Code}
 */

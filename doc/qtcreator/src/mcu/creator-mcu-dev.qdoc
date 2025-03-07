@@ -105,7 +105,7 @@
         \li 1.0
     \endtable
 
-    \sa {Enable and disable plugins}, {MCUs}{How To: Develop for MCUs}, {\QMCU}
+    \sa {Enable and disable plugins}, {MCUs}{How to: Develop for MCUs}, {\QMCU}
 */
 
 /*!
@@ -168,7 +168,7 @@
         \li Select \uicontrol Apply to save the preferences.
     \endlist
 
-    \sa {Enable and disable plugins}, {MCUs}{How To: Develop for MCUs},
+    \sa {Enable and disable plugins}, {MCUs}{How to: Develop for MCUs},
     {Developing for MCUs}
 */
 
@@ -197,7 +197,7 @@
            \li Select \uicontrol Apply to add the device.
        \endlist
 
-    \sa {Enable and disable plugins}, {MCUs}{How To: Develop for MCUs},
+    \sa {Enable and disable plugins}, {MCUs}{How to: Develop for MCUs},
     {Developing for MCUs}
 */
 
@@ -237,8 +237,8 @@
     The \uicontrol {MCU dependencies} field displays paths to 3rd party
     software required for MCU development with the current kit.
 
-    \sa {Enable and disable plugins}, {MCUs}{How To: Develop for MCUs},
-    {Manage Kits}{How To: Manage Kits}, {Developing for MCUs}
+    \sa {Enable and disable plugins}, {MCUs}{How to: Develop for MCUs},
+    {Manage Kits}{How to: Manage Kits}, {Developing for MCUs}
 */
 
 /*!
@@ -273,6 +273,6 @@
     \endlist
 
     \sa {Configure projects for running}, {Enable and disable plugins},
-    {MCUs}{How To: Develop for MCUs}, {Use project wizards},
+    {MCUs}{How to: Develop for MCUs}, {Use project wizards},
     {Developing for MCUs}
 */

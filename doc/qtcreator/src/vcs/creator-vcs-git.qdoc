@@ -19,12 +19,12 @@
 
     \ingroup creator-reference-vcs
 
-    \title Git
+    \title Use Git
 
     \brief Additional Git functions.
     \endif
 
-    \l{Git Downloads}{Git} is a fast decentralized version control system.
+    \l{Git Downloads}{Use Git} is a fast decentralized version control system.
     Git is available for Windows, Linux, and \macos.
 
     You can use the \l{Gerrit Code Review} tool for projects that use Git.
@@ -97,8 +97,8 @@
     \endtable
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Compare files},
-    {Set up version control systems}, {Version Control Systems}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Compare files}, {Set up version control systems}, {Version Control Systems}
     \endif
 */
 
@@ -173,7 +173,8 @@
     \endlist
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -202,7 +203,8 @@
     create an initial commit to start tracking the project files.
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -287,7 +289,8 @@
     \endtable
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -468,7 +471,8 @@
     \image qtcreator-vcs-show.png {Commit description in Git Show}
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -542,7 +546,8 @@
     of it.
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -578,7 +583,8 @@
     \l{git diff}{Git Diff} view.
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -636,7 +642,8 @@
     To recover removed files, select \uicontrol {Recover Deleted Files}.
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -678,7 +685,8 @@
     \endlist
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -702,7 +710,8 @@
     \uicontrol Reflog.
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -728,7 +737,8 @@
     \uicontrol {Status (Including All Untracked)}.
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -773,7 +783,8 @@
     \uicontrol {Branch}.
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -816,7 +827,8 @@
     rebase. In case of conflicts, a merge tool is suggested.
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -850,7 +862,8 @@
     menu.
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -981,7 +994,8 @@
     \endtable
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -1023,7 +1037,8 @@
     \endcode
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -1051,7 +1066,8 @@
     \uicontrol {Apply from File}.
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -1103,7 +1119,8 @@
     \uicontrol {Stash Pop}.
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -1151,7 +1168,8 @@
     \endtable
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -1174,7 +1192,8 @@
     select \uicontrol Fetch.
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -1204,7 +1223,8 @@
     pulling.
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -1229,7 +1249,8 @@
     repository, \QC prompts you to create it and set it as upstream.
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -1290,7 +1311,8 @@
     \note Most of these actions have no meaning for uncommmited changes.
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -1325,7 +1347,8 @@
     depending on whether or not there is a diff between Subversion and head.
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -1399,7 +1422,8 @@
     \image qtcreator-preferences-vcs-gerrit.webp {Gerrit preferences}
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */
 
@@ -1462,6 +1486,7 @@
     visible only when you have merge conflicts to resolve.
 
     \if defined(qtcreator)
-    \sa {Use Git}{How To: Use Git}, {Git}
+    \sa {Use Git version control system}{How to: Use Git version control system},
+    {Use Git}
     \endif
 */

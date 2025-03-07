@@ -10,7 +10,7 @@
     \title Switch between modes
 
     \e Modes let you quickly switch between tasks such as editing
-    project and source files, designing application UIs, configuring projects
+    project and source files, designing application UIs, Build and run projects
     for building and running, and debugging or analyzing source code.
 
     To switch between modes:
@@ -49,13 +49,13 @@
         \li \key Ctrl+4
         \li Inspect the state of your application while debugging or use code
             analysis tools to detect memory leaks and profile code.
-        \li \l{Debugging}
+        \li \l{Debug applications and source code}
     \row
         \li \uicontrol Projects
         \li \key Ctrl+5
         \li Configure how to build and run projects.
             This mode is available when a project is open.
-        \li \l{Configuring Projects}
+        \li \l{Build and run projects}
     \row
         \li \uicontrol Extensions
         \li \key Ctrl+6

@@ -65,7 +65,7 @@
 
     Build Qt applications in WebAssembly format and run them in
     a web browser as described in \l {Build for many platforms} and
-    \l{Run on many platforms}.
+    \l{Run applications}.
 
     \sa {Build applications for the Web}, {Enable and disable plugins}
 */

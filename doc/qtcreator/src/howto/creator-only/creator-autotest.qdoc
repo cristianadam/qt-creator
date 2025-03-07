@@ -38,7 +38,7 @@
 
     For more information about creating Qt tests, see \l{Creating a Test}.
 
-    \sa {Test}{How To: Test}, {Select the build system}, {Testing},
+    \sa {Test}{How to: Test}, {Select the build system}, {Testing},
     {Test Results}
 */
 
@@ -77,7 +77,7 @@
     \QC creates the test in the specified project directory. Edit the .cpp file
     to add private slots for each test function in your test.
 
-    \sa {Test}{How To: Test}, {Select the build system}, {Testing},
+    \sa {Test}{How to: Test}, {Select the build system}, {Testing},
     {Test Results}
 */
 
@@ -137,7 +137,7 @@
     \l{https://github.com/google/googletest/blob/master/docs/primer.md}
     {Google Test Primer}.
 
-    \sa {Test}{How To: Test}, {Select the build system}, {Testing},
+    \sa {Test}{How to: Test}, {Select the build system}, {Testing},
     {Test Results}
 */
 
@@ -191,7 +191,7 @@
     \l{https://www.boost.org/doc/libs/1_81_0/libs/test/doc/html/index.html}
     {Boost.Test}.
 
-    \sa {Test}{How To: Test}, {Select the build system}, {Testing},
+    \sa {Test}{How to: Test}, {Select the build system}, {Testing},
     {Test Results}
 */
 
@@ -246,7 +246,7 @@
     \l{https://github.com/catchorg/Catch2/blob/master/docs/Readme.md}
     {Catch2}.
 
-    \sa {Test}{How To: Test}, {Select the build system}, {Testing},
+    \sa {Test}{How to: Test}, {Select the build system}, {Testing},
     {Test Results}
 */
 
@@ -275,7 +275,7 @@
     \l{https://gitlab.kitware.com/cmake/community/-/wikis/doc/ctest/Testing-With-CTest}
     {Testing with CTest}.
 
-    \sa {Test}{How To: Test}, {Select the build system}, {Testing},
+    \sa {Test}{How to: Test}, {Select the build system}, {Testing},
     {Test Results}
 */
 
@@ -306,7 +306,7 @@
     inside a single Qt test application, and it is better to create
     a separate test sub project for each test case.
 
-    \sa {Test}{How To: Test}, {Testing}, {Test Results}
+    \sa {Test}{How to: Test}, {Testing}, {Test Results}
 */
 
 /*!
@@ -425,7 +425,7 @@
         \li Enter \c qdt, followed by a space.
     \endlist
 
-    \sa {Test}{How To: Test}, {Select the build system}, {Testing},
+    \sa {Test}{How to: Test}, {Select the build system}, {Testing},
     {Test Results}
 */
 
@@ -754,7 +754,7 @@
             CPU load to pass the threshold set in \uicontrol {Threshold}.
     \endtable
 
-    \sa {Test}{How To: Test}, {Test Results}
+    \sa {Test}{How to: Test}, {Test Results}
 */
 
 /*!
@@ -873,5 +873,5 @@
 
     \endtable
 
-    \sa {Test}{How To: Test}
+    \sa {Test}{How to: Test}
 */

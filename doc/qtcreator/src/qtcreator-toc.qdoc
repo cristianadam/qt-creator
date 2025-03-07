@@ -20,27 +20,23 @@
                 \li \l{User interface}
                 \li \l{Configuring Qt Creator}
             \endlist
-        \li \l{Creating Projects}
-        \li \l{Configuring Projects}
-        \li \l{Debugging}
-        \li \l{Analyzing Code}
         \li \l{Tutorials}
             \generatelist creator-tutorials
-        \li \l{How To}
+        \li \l{How to}
         \list
-            \li Analyze
+            \li \l{Analyze code}
                 \generatelist creator-how-to-analyze
-            \li Build and Run
+            \li \l{Build and run projects}
                 \generatelist creator-how-to-build
-            \li Build with CMake
-                \generatelist creator-how-to-build-with-cmake
-            \li Build with qmake
-                \generatelist creator-how-to-build-with-qmake
-            \li Run applications
-                \generatelist creator-how-to-run
-            \li Create Models and Diagrams
-                \generatelist creator-how-to-models
-            \li Debug
+            \list
+                \li \l{Build projects with CMake}
+                    \generatelist creator-how-to-build-with-cmake
+                \li \l{Build projects with qmake}
+                    \generatelist creator-how-to-build-with-qmake
+                \li \l{Run applications}
+                    \generatelist creator-how-to-run
+            \endlist
+            \li \l{Debug applications and source code}
                 \generatelist creator-how-to-debug
             \li Design UIs
                 \generatelist creator-how-to-design
@@ -79,12 +75,16 @@
                     \li Search
                         \generatelist creator-how-to-search
                 \endlist
+            \li \l{Edit SCXML state charts}
+                \generatelist creator-how-to-scxml
+            \li \l{Edit UML-style models}
+                \generatelist creator-how-to-models
             \li Manage Kits
                 \generatelist creator-how-to-manage-kits
             \li Manage Projects
                 \generatelist creator-how-to-projects
                 \list
-                    \li Create Projects
+                    \li \l{Creating Projects}{Create Projects}
                         \generatelist creator-how-to-projects-create
                     \li Add Files
                         \generatelist creator-how-to-projects-files
@@ -95,7 +95,7 @@
                 \generatelist creator-how-to-get-help
             \li Test
                 \generatelist creator-how-to-test
-            \li Use Git
+            \li \l{Use Git}
                 \generatelist creator-how-to-git
                 \list
                     \li Current file

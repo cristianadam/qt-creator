@@ -47,7 +47,7 @@
     file in the editor.
 
     \if defined(qtcreator)
-    \sa {Debug}{How To: Debug}, {Debugging}, {Debuggers}, {Debugger}
+    \sa {Debug}{How to: Debug}, {Debug applications and source code}, {Debuggers}, {Debugger}
     \endif
 */
 
@@ -146,7 +146,7 @@
 
     \generatelist studio-how-to-debug
     \else
-    \sa {Add breakpoints}, {Debug}{How To: Debug}, {Debugging}, {Debuggers},
+    \sa {Add breakpoints}, {Debug}{How to: Debug}, {Debug applications and source code}, {Debuggers},
     {Debugger}
     \endif
 */
@@ -250,7 +250,7 @@
     \endtable
 
     \if defined(qtcreator)
-    \sa {Debug}{How To: Debug}, {Debugging}, {Debuggers}, {Debugger}
+    \sa {Debug}{How to: Debug}, {Debug applications and source code}, {Debuggers}, {Debugger}
     \endif
 */
 
@@ -329,7 +329,7 @@
     debugged application is restarted.
 
     \if defined(qtcreator)
-    \sa {Debug}{How To: Debug}, {Debugging}, {Debuggers}, {Debugger}
+    \sa {Debug}{How to: Debug}, {Debug applications and source code}, {Debuggers}, {Debugger}
     \endif
 */
 
@@ -376,7 +376,7 @@
     it manually.
 
     \if defined(qtcreator)
-    \sa {Debug}{How To: Debug}, {Debugging}, {Debuggers}, {Debugger}
+    \sa {Debug}{How to: Debug}, {Debug applications and source code}, {Debuggers}, {Debugger}
     \endif
 */
 
@@ -443,7 +443,7 @@
     might be slower.
 
     \if defined(qtcreator)
-    \sa {Debug}{How To: Debug}, {Debugging}, {Debuggers}, {Debugger}
+    \sa {Debug}{How to: Debug}, {Debug applications and source code}, {Debuggers}, {Debugger}
     \endif
 */
 
@@ -575,6 +575,6 @@
 
     \include creator-debug-views.qdoc 0
 
-    \sa {Debug}{How To: Debug}, {Debugging}, {Debuggers}, {Debugger}
+    \sa {Debug}{How to: Debug}, {Debug applications and source code}, {Debuggers}, {Debugger}
     \endif
 */

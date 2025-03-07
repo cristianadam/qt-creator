@@ -156,5 +156,5 @@
 
     \sa {Activate kits for a project}, {Add clean steps},
     {Configure projects for building}, {Configure projects for running},
-    {Open projects}, {Configuring projects}, {IncrediBuild}
+    {Open projects}, {Build and run projects}, {IncrediBuild}
 */

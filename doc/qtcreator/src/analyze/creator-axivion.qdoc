@@ -134,8 +134,8 @@
     select the link in the details or in the \uicontrol {Right Path}
     or \uicontrol {Target Path} column.
 
-    \sa {Enable and disable plugins}, {Analyze}{How To: Analyze},
-    {Analyzers}, {Axivion}, {Analyzing Code}
+    \sa {Enable and disable plugins}, {Analyze}{How to: Analyze},
+    {Analyzers}, {Axivion}, {Analyze code}
 */
 
 /*!

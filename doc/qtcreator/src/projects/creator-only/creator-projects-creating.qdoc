@@ -68,7 +68,7 @@
     install and configure some additional software on the devices to be able to
     \l{Develop for Devices}{connect} to them from the computer.
 
-    \sa {Manage Projects}{How To: Manage Projects}, {Custom Wizards}
+    \sa {Manage Projects}{How to: Manage Projects}, {Custom Wizards}
 */
 
 /*!
@@ -168,8 +168,8 @@
     \uicontrol Impl there.
 
     \sa {Assign keyboard shortcuts}, {Activate kits for a project},
-    {Create files}, {Test}{How To: Test},
-    {Create Projects}{How To: Create Projects}, {Creating Projects}
+    {Create files}, {Test}{How to: Test},
+    {Create Projects}{How to: Create Projects}, {Creating Projects}
 */
 
 /*!

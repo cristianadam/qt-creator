@@ -86,7 +86,7 @@
 
     \endlist
 
-    \sa {Manage Kits}{How To: Manage Kits}, {Open projects},
+    \sa {Manage Kits}{How to: Manage Kits}, {Open projects},
     {Developing for Android}, {Developing for iOS},
     {Compile Output}, {\B2Q: Documentation}, {Qt Design Studio documentation}
 */

@@ -172,8 +172,8 @@
             editing, go to \uicontrol {Add Next Occurrence to Selection} or select \key {Ctrl+D}
     \endlist
 
-    \sa {Edit Code}{How To: Edit Code},
-    {Manage Language Servers}{How To: Manage Language Servers},
+    \sa {Edit Code}{How to: Edit Code},
+    {Manage Language Servers}{How to: Manage Language Servers},
     {Navigate with locator}, {Keyboard Shortcuts}, {Sidebar Views}
 */
 
@@ -259,7 +259,7 @@
             back to your original location in that file.
     \endlist
 
-    \sa {Edit Code}{How To: Edit Code}, {Edit Mode},
+    \sa {Edit Code}{How to: Edit Code}, {Edit Mode},
     {Navigate with locator}, {File System}, {Projects}
 */
 
@@ -379,7 +379,7 @@
 
     \image qtcreator-add-resource.png {Resource Browser}
 
-    \sa {Edit Code}{How To: Edit Code}, {Edit Mode}, {Editor Shortcuts},
+    \sa {Edit Code}{How to: Edit Code}, {Edit Mode}, {Editor Shortcuts},
     {Navigate with locator}
 */
 
@@ -433,7 +433,7 @@
     can set other encoding options as the default encoding. Select the
     \uicontrol System option to use the file encoding used by your system.
 
-    \sa {Edit Code}{How To: Edit Code}, {Edit Mode}, {Behavior}
+    \sa {Edit Code}{How to: Edit Code}, {Edit Mode}, {Behavior}
 */
 
 /*!
@@ -466,7 +466,7 @@
 
     \image qtcreator-editor-settings.webp {Editor settings for a project}
 
-    \sa {Edit Code}{How To: Edit Code}, {Specify editor settings}, {Edit Mode}
+    \sa {Edit Code}{How to: Edit Code}, {Specify editor settings}, {Edit Mode}
 */
 
 /*!
@@ -497,7 +497,7 @@
         \li Select \key Esc to remove all the cursors and selections.
     \endlist
 
-    \sa {Edit Code}{How To: Edit Code}, {Editing Selected Lines}, {Edit Mode}
+    \sa {Edit Code}{How to: Edit Code}, {Editing Selected Lines}, {Edit Mode}
 */
 
 /*!
@@ -567,7 +567,7 @@
         \li Select \key {Ctrl+E, 1}.
     \endlist
 
-    \sa {Edit Code}{How To: Edit Code}, {Detach views}, {Edit Mode}
+    \sa {Edit Code}{How to: Edit Code}, {Detach views}, {Edit Mode}
 */
 
 /*!
@@ -642,7 +642,7 @@
     To list bookmarks alphabetically by the name of the file where you set them,
     select \uicontrol {Sort by Filenames}.
 
-    \sa {Edit Code}{How To: Edit Code}, {Edit Mode}
+    \sa {Edit Code}{How to: Edit Code}, {Edit Mode}
 */
 
 /*!
@@ -683,7 +683,7 @@
     \uicontrol {C++} > \uicontrol {Reparse Externally Changed Files} to update
     the code model.
 
-    \sa {Edit Code}{How To: Edit Code}, {Edit Mode}, {Clang Code Model},
+    \sa {Edit Code}{How to: Edit Code}, {Edit Mode}, {Clang Code Model},
     {Code Model}
 */
 
@@ -714,6 +714,6 @@
     resolved or that are resolved to the wrong file,
     go to \uicontrol {Project Parts} > \uicontrol {Header Paths}.
 
-    \sa {Edit Code}{How To: Edit Code}, {Edit Mode}, {Clang Code Model},
+    \sa {Edit Code}{How to: Edit Code}, {Edit Mode}, {Clang Code Model},
     {Code Model}
 */

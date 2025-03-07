@@ -58,7 +58,7 @@
     choose the kit to use. To set the selected kit as the default kit,
     select \uicontrol {Make Default}.
 
-    \sa {Manage Kits}{How To: Manage Kits}, {Compilers}, {Kits}
+    \sa {Manage Kits}{How to: Manage Kits}, {Compilers}, {Kits}
 */
 
 /*!
@@ -220,6 +220,6 @@
             \uicontrol Manage to add installed Ninja tools to the list.
     \endtable
 
-    \sa {Manage Kits}{How To: Manage Kits}, {Add CMake Tools},
+    \sa {Manage Kits}{How to: Manage Kits}, {Add CMake Tools},
     {Edit Qbs profiles}
 */

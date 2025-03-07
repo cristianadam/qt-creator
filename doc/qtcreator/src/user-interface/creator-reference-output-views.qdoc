@@ -165,7 +165,7 @@
     \sa {View output}
 
     \if defined(qtcreator)
-    \sa {Search}{How To: Search}
+    \sa {Search}{How to: Search}
     \endif
 */
 

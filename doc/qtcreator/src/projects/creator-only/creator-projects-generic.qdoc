@@ -135,5 +135,5 @@
     \uicontrol Add > \uicontrol {Custom Executable}.
 
     \sa {Specify a custom executable to run},  {Use project wizards},
-    {Configuring Projects}
+    {Build and run projects}
 */

@@ -520,7 +520,7 @@
             \li
     \endtable
 
-    For more information, see \l{Develop for Devices}{How To: Develop for Devices}.
+    For more information, see \l{Develop for Devices}{How to: Develop for Devices}.
 
     \section2 Linux Device Example
 
@@ -757,5 +757,5 @@
 
     Where \c <ID> is the ID of the item.
 
-    \sa {Manage Kits}{How To: Manage Kits}, {Installation}, {Kits}
+    \sa {Manage Kits}{How to: Manage Kits}, {Installation}, {Kits}
 */

@@ -4,10 +4,11 @@
 /*!
     \page creator-build-settings-qmake.html
     \previouspage creator-reference.html
+    \nextpage creator-running-targets.html
 
     \ingroup creator-reference-build-configurations
 
-    \title qmake Build Configuration
+    \title Build projects with qmake
 
     \brief Settings for building applications with qmake.
 
@@ -17,7 +18,7 @@
 
     \image qtcreator-projectpane.webp {qmake build settings}
 
-    \section1 Build Directory
+    \section1 Build directory
 
     By default, \QC builds qmake projects (that have .pro files) in a separate
     directory from the source directory, as \l{glossary-shadow-build}
@@ -35,7 +36,7 @@
     \uicontrol {Default Build Properties}, and enter a period (.) in the
     \uicontrol {Default build directory} field.
 
-    \section1 Tooltips in Kit Selector
+    \section1 Tooltips in kit selector
 
     In the \uicontrol {Tooltip in target selector} field, you can enter text
     that is displayed as a tooltip when you hover over the build
@@ -46,7 +47,7 @@
     {scopes} to select the file to process depending on which platform qmake is
     run on.
 
-    \section1 Separating Debug Info
+    \section1 Separating debug info
 
     If debug info is being generated, you can have it placed into separate
     files, rather than embedded into the binary, by selecting
@@ -69,7 +70,7 @@
     You can specify default behavior for compiling QML code in \preferences >
     \uicontrol {Build & Run} > \uicontrol Qmake > \uicontrol {Use qmlcachegen}.
 
-    \section1 Parsing Project Contents
+    \section1 Parsing project contents
 
     In the \uicontrol {qmake system() behavior when parsing} field, you can
     select whether processes are run via qmake's \c system() function or
@@ -77,7 +78,7 @@
     or closing projects takes too long, but it might produce inexact parsing
     results.
 
-    \section1 Global qmake Settings
+    \section1 Global qmake settings
 
     To specify settings for all qmake builds, select \preferences >
     \uicontrol {Build & Run} > \uicontrol Qmake.
@@ -96,7 +97,7 @@
     \uicontrol Build > \uicontrol {Build Settings} > \uicontrol {Build Directory}
     field for a kit.
 
-    \section1 qmake Build Steps
+    \section1 qmake build steps
 
     \QC builds qmake projects by running the \c make or \c nmake command from
     the Qt version defined for the current build configuration.

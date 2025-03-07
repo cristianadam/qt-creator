@@ -72,7 +72,7 @@
     The available settings depend on the debug server provider.
 
     \sa {Add kits}, {Enable and disable plugins},
-    {Bare Metal}{How To: Develop for Bare Metal}
+    {Bare Metal}{How to: Develop for Bare Metal}
 */
 
 /*!
@@ -118,7 +118,7 @@
 
     \endlist
 
-    \sa {Bare Metal}{How To: Develop for Bare Metal},
+    \sa {Bare Metal}{How to: Develop for Bare Metal},
     {Developing for Bare Metal Devices}
 */
 
@@ -157,7 +157,7 @@
 
     \endlist
 
-    \sa {Bare Metal}{How To: Develop for Bare Metal},
+    \sa {Bare Metal}{How to: Develop for Bare Metal},
     {Developing for Bare Metal Devices}
 */
 
@@ -195,7 +195,7 @@
 
     \endlist
 
-    \sa {Bare Metal}{How To: Develop for Bare Metal},
+    \sa {Bare Metal}{How to: Develop for Bare Metal},
     {Developing for Bare Metal Devices}
 */
 
@@ -234,7 +234,7 @@
 
     \endlist
 
-    \sa {Bare Metal}{How To: Develop for Bare Metal},
+    \sa {Bare Metal}{How to: Develop for Bare Metal},
     {Developing for Bare Metal Devices}
 */
 
@@ -288,7 +288,7 @@
 
     \endlist
 
-    \sa {Bare Metal}{How To: Develop for Bare Metal},
+    \sa {Bare Metal}{How to: Develop for Bare Metal},
     {Developing for Bare Metal Devices}
 */
 
@@ -331,6 +331,6 @@
     in same way as for and on the desktop.
 
     \sa {Add kits}, {Build for many platforms},
-    {Bare Metal}{How To: Develop for Bare Metal}, {Run on many platforms},
+    {Bare Metal}{How to: Develop for Bare Metal}, {Run applications},
     {Developing for Bare Metal Devices}
 */

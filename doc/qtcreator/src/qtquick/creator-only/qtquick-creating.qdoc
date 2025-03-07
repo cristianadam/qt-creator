@@ -182,6 +182,6 @@
     To use JavaScript and image files in the application, copy them to the
     project folder.
 
-    \sa {Create Qt Quick Applications}, {Manage Kits}{How To: Manage Kits},
+    \sa {Create Qt Quick Applications}, {Manage Kits}{How to: Manage Kits},
     {Creating Projects}
 */

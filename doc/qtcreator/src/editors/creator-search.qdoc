@@ -119,7 +119,7 @@
     search for symbols to refactor code.
 
     \if defined(qtcreator)
-    \sa {Search}{How To: Search}
+    \sa {Search}{How to: Search}
     \else
     \sa {Search in projects or file systems}
     \endif
@@ -215,7 +215,7 @@
     \l {Preserve case when replacing} apply here as well.
 
     \if defined(qtcreator)
-    \sa {Search}{How To: Search}, {Find symbols}, {Turn on Silver Searcher}
+    \sa {Search}{How to: Search}, {Find symbols}, {Turn on Silver Searcher}
     \endif
 
     \sa {Search in current file}, {Search Results View}

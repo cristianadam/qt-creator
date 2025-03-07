@@ -74,6 +74,6 @@
     \QC automatically runs scheduled checks for updates based on the settings
     specified in \preferences > \uicontrol Environment > \uicontrol Update.
 
-    \sa {Develop for Devices}{How To: Develop for Devices}, {Desktop Platforms},
+    \sa {Develop for Devices}{How to: Develop for Devices}, {Desktop Platforms},
     {Devices}
 */

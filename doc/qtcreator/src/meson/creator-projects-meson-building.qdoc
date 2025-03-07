@@ -54,6 +54,6 @@
     The build errors and warnings are parsed and displayed in \uicontrol Issues.
 
     \sa {Activate kits for a project}, {Configure projects for building},
-    {Configure projects for running}, {Open projects}, {Configuring projects},
+    {Configure projects for running}, {Open projects}, {Build and run projects},
     {Meson}
 */

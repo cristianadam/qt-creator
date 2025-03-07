@@ -12,7 +12,14 @@
     \page creator-configuring-projects.html
     \nextpage creator-project-managing-sessions.html
 
-    \title Configuring Projects
+    \ingroup creator-reference-build-systems
+
+    \title Build and run projects
+
+    \brief Use integrated cross-platform systems for build automation to compile
+    your source code for different target platforms or with different compilers,
+    debuggers, or Qt versions. Deploy applications to the target platforms
+    and run them there.
 
     When you install Qt for a development or target platform, such as Linux,
     \macos, Windows, Android or QNX, \l{https://www.qt.io/download-qt-installer}
@@ -30,7 +37,7 @@
     To specify build or run settings for a kit, select \uicontrol Build or
     \uicontrol Run below the kit name.
 
-    \section1 Specifying Build Settings
+    \section1 Specifying build settings
 
     \image qtcreator-build-configurations.png {Build configurations}
 
@@ -62,7 +69,7 @@
     of the binary package as small as possible, even if this makes the
     application slower.
 
-    \section1 Specifying Run Settings
+    \section1 Specifying run settings
 
     The run settings to specify depend on the type of the project and on the
     \l{Kits}{Run device} that you select for the kit.
@@ -75,7 +82,7 @@
     \preferences > \uicontrol {Build & Run}, and then clear the
     \uicontrol {Create suitable run configurations automatically} check box.
 
-    \section1 Overriding Global Preferences
+    \section1 Overriding global preferences
 
     In \uicontrol {Project Settings}, you can override global preferences for
     the project:
@@ -137,7 +144,7 @@
 
     Each kit consists of a set of values that define one environment, such as a
     \l{glossary-device}{device}, \l{Add compilers}{compiler},
-    \l{Add debuggers}{Debugging}, and \l{Add Qt versions}{Qt version}, as well
+    \l{Add debuggers}{Debug applications and source code}, and \l{Add Qt versions}{Qt version}, as well
     as steps for building, deploying, and running applications.
 
     To copy the build, deploy, and run steps from another kit, select
@@ -179,5 +186,5 @@
     might still see them listed for existing projects. You can copy the build,
     deploy, and run steps from them to other kits.
 
-    \sa {Manage Kits}{How To: Manage Kits}, {Configuring Projects}, {Kits}
+    \sa {Manage Kits}{How to: Manage Kits}, {Build and run projects}, {Kits}
 */

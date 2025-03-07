@@ -148,5 +148,5 @@
 
     \image qtcreator-run-settings-python.webp {Run settings for a Python project}
 
-    \sa {Debug}{How To: Debug}, {Debugging}, {Debuggers}, {Debugger}, {Kits}
+    \sa {Debug}{How to: Debug}, {Debug applications and source code}, {Debuggers}, {Debugger}, {Kits}
 */

@@ -64,7 +64,7 @@
     \if defined(qtdesignstudio)
     \sa Code
     \else
-    \sa {Edit Code}{How To: Edit Code}, {Edit Mode}
+    \sa {Edit Code}{How to: Edit Code}, {Edit Mode}
     \endif
 */
 
@@ -138,6 +138,6 @@
     \if defined(qtdesignstudio)
     \sa Code
     \else
-    \sa {Edit Code}{How To: Edit Code}, {Edit Mode}
+    \sa {Edit Code}{How to: Edit Code}, {Edit Mode}
     \endif
 */

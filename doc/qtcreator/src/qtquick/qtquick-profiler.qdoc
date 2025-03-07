@@ -138,7 +138,7 @@
     \sa {Profiling QML applications}
 
     \if defined(qtcreator)
-    \sa {Analyze}{How To: Analyze}, {Analyzers}, {Analyzing Code}
+    \sa {Analyze}{How to: Analyze}, {Analyzers}, {Analyze code}
     \endif
 */
 
@@ -629,6 +629,6 @@
     \sa {Profile QML applications}
 
     \if defined(qtcreator)
-    \sa {Analyze}{How To: Analyze}, {Analyzers}, {Analyzing Code}
+    \sa {Analyze}{How to: Analyze}, {Analyzers}, {Analyze code}
     \endif
 */

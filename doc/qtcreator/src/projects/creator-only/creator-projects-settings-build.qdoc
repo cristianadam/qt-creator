@@ -45,8 +45,8 @@
     for the project:
 
     \list
-        \li \l{CMake Build Configuration}{CMake}
-        \li \l{qmake Build Configuration}{qmake}
+        \li \l{Build projects with CMake}{CMake}
+        \li \l{Build projects with qmake}{qmake}
         \li \l{Qbs Build Configuration}{Qbs}
         \li \l{Meson Build Configuration}{Meson}
         \li \l{IncrediBuild Build Configuration}{IncrediBuild}
@@ -161,7 +161,7 @@
 
     \image qtcreator-cmake-clean-steps.webp {Clean steps}
 
-    \sa {Configuring Projects}, {Select the build system}, {Use \QC variables},
+    \sa {Build and run projects}, {Select the build system}, {Use \QC variables},
     {Enable debugging}, {Setting Up QML Debugging},
     {Build Systems}{Reference: Build Systems}
 */

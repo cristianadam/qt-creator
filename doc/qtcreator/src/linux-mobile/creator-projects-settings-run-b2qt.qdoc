@@ -24,7 +24,7 @@
     The run settings display the path to the executable file on the development
     host and on the device.
 
-    \sa {\B2Q}{How To: Develop for \B2Q}, {Manage Kits}{How To: Manage Kits},
+    \sa {\B2Q}{How to: Develop for \B2Q}, {Manage Kits}{How to: Manage Kits},
     {Configure projects for running}, {Kits},
     {\B2Q Deploy Configuration}
 */

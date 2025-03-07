@@ -99,7 +99,7 @@
 
     \generatelist creator-how-to-get-help
     \else
-    \sa {Read Documentation}{How To: Read Documentation}
+    \sa {Read Documentation}{How to: Read Documentation}
     \endif
 */
 
@@ -153,7 +153,7 @@
     \endlist
 
     \if defined(qtcreator)
-    \sa {Read Documentation}{How To: Read Documentation}, {Installation},
+    \sa {Read Documentation}{How to: Read Documentation}, {Installation},
     {Get and Install Qt}
     \endif
 */
@@ -196,7 +196,7 @@
     \uicontrol {Export Bookmarks}.
 
     \if defined(qtcreator)
-    \sa {Read Documentation}{How To: Read Documentation}
+    \sa {Read Documentation}{How to: Read Documentation}
     \endif
 */
 
@@ -254,7 +254,7 @@
     example, to find \c {Pastebin.Com}, enter the search term \c {Pastebin*}.
 
     \if defined(qtcreator)
-    \sa {Read Documentation}{How To: Read Documentation}
+    \sa {Read Documentation}{How to: Read Documentation}
     \endif
 */
 
@@ -288,7 +288,7 @@
     \endlist
 
     \if defined(qtcreator)
-    \sa {Read Documentation}{How To: Read Documentation}
+    \sa {Read Documentation}{How to: Read Documentation}
     \endif
 */
 
@@ -326,7 +326,7 @@
     To change this setting in a help view, select \inlineimage icons/linkicon.png.
 
     \if defined(qtcreator)
-    \sa {Read Documentation}{How To: Read Documentation}
+    \sa {Read Documentation}{How to: Read Documentation}
     \endif
 */
 
@@ -363,7 +363,7 @@
     \endlist
 
     \if defined(qtcreator)
-    \sa {Read Documentation}{How To: Read Documentation}
+    \sa {Read Documentation}{How to: Read Documentation}
     \endif
 */
 
@@ -431,6 +431,6 @@
     To remove the selected filter, select \inlineimage icons/minus.png.
 
     \if defined(qtcreator)
-    \sa {Read Documentation}{How To: Read Documentation}
+    \sa {Read Documentation}{How to: Read Documentation}
     \endif
 */

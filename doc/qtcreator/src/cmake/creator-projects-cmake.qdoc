@@ -48,7 +48,7 @@
     \endlist
 
     \sa {Configure projects for building}, {Configure projects for running},
-    {Build with CMake}{How To: Build with CMake}, {CMake Build Configuration},
+    {Build with CMake}{How to: Build with CMake}, {Build projects with CMake},
     {Debug CMake project files}, {Remote Linux Deploy Configuration}, {Open projects},
     {Use compilation databases}
 */
@@ -98,7 +98,7 @@
     box. The change takes effect after you select \uicontrol Build >
     \uicontrol {Run CMake}.
 
-    \sa {Build with CMake}{How To: Build with CMake}, {CMake}, {Open projects},
+    \sa {Build with CMake}{How to: Build with CMake}, {CMake}, {Open projects},
     {File System}, {Projects}
 */
 
@@ -126,8 +126,8 @@
     To view the documentation online, open it in the \uicontrol Help mode and
     select \inlineimage icons/online.png (\uicontrol {Open Online Documentation}).
 
-    \sa {Build with CMake}{How To: Build with CMake},
-    {Read Documentation}{How To: Read Documentation}, {CMake}
+    \sa {Build with CMake}{How to: Build with CMake},
+    {Read Documentation}{How to: Read Documentation}, {CMake}
 */
 
 /*!
@@ -193,8 +193,8 @@
     \image qtcreator-preferences-kits.webp {Kits preferences}
 
     \sa {Build applications on remote Linux devices}, {Build on Docker devices},
-    {Build with CMake}{How To: Build with CMake},
-    {Manage Kits}{How To: Manage Kits}, {CMake}, {Kits}
+    {Build with CMake}{How to: Build with CMake},
+    {Manage Kits}{How to: Manage Kits}, {CMake}, {Kits}
 */
 
 /*!
@@ -245,7 +245,7 @@
 
     Warnings and errors are displayed in \l {Issues}.
 
-    \sa {Build with CMake}{How To: Build with CMake}, {CMake}, {Completion},
+    \sa {Build with CMake}{How to: Build with CMake}, {CMake}, {Completion},
     {Snippets}
 */
 
@@ -274,7 +274,7 @@
     Select \key Tab or \key Enter to accept the selected suggestion and complete
     the code.
 
-    \sa {Build with CMake}{How To: Build with CMake}, {CMake}, {Completion},
+    \sa {Build with CMake}{How to: Build with CMake}, {CMake}, {Completion},
     {Snippets}
 */
 
@@ -309,7 +309,7 @@
             current project.
     \endlist
 
-    \sa {Build with CMake}{How To: Build with CMake}, {Edit MIME types}, {CMake}
+    \sa {Build with CMake}{How to: Build with CMake}, {Edit MIME types}, {CMake}
 */
 
 /*!
@@ -335,7 +335,7 @@
     When you rename or remove files in the \l {Projects} or \l {File System}
     view, \QC renames them in the CMakeLists.txt file or removes them from it.
 
-    \sa {Create files}, {Build with CMake}{How To: Build with CMake}, {CMake},
+    \sa {Create files}, {Build with CMake}{How to: Build with CMake}, {CMake},
     {File System}, {Projects}
 */
 
@@ -387,6 +387,6 @@
     list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
     \endcode
 
-    \sa {Build with CMake}{How To: Build with CMake}, {CMake}, {Completion},
+    \sa {Build with CMake}{How to: Build with CMake}, {CMake}, {Completion},
     {Snippets}
 */
