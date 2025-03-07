@@ -19,7 +19,7 @@ PropertyEditorPane {
 
         DynamicPropertiesSection {
             propertiesModel: SelectionDynamicPropertiesModel {}
-            visible: !hasMultiSelection
+            visible: !hasMultiSelection && !isSelectionLocked
         }
 
         Loader {
