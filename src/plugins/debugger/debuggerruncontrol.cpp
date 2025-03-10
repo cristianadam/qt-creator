@@ -443,6 +443,50 @@ ExecutableItem DebuggerRunToolPrivate::debugServerRecipe(const SingleBarrier &ba
     };
 }
 
+class EnginesDriver : public QObject
+{
+    Q_OBJECT
+
+public:
+    ~EnginesDriver() { clearEngines(); }
+
+    Result setupEngines(RunControl *runControl, const DebuggerRunParameters &rp);
+    Result checkBreakpoints() const;
+    QString debuggerName() const
+    {
+        return Utils::transform<QStringList>(m_engines, &DebuggerEngine::objectName).join(" ");
+    }
+    QString startParameters() const
+    {
+        return m_engines.isEmpty() ? QString() : m_engines.first()->formatStartParameters();
+    }
+    void start();
+    void stop()
+    {
+        Utils::reverseForeach(m_engines, [](DebuggerEngine *engine) { engine->quitDebugger(); });
+    }
+
+signals:
+    void done(DoneResult result);
+    void interruptTerminalRequested();
+    void kickoffTerminalProcessRequested();
+    void started();
+
+private:
+    void clearEngines()
+    {
+        qDeleteAll(m_engines);
+        m_engines.clear();
+    }
+
+    RunControl *m_runControl = nullptr;
+    QList<QPointer<Internal::DebuggerEngine>> m_engines;
+    int m_runningEngines = 0;
+    int m_snapshotCounter = 0;
+};
+
+using EnginesDriverTask = SimpleCustomTask<EnginesDriver>;
+
 static expected_str<QList<QPointer<Internal::DebuggerEngine>>> createEngines(
     RunControl *runControl, const DebuggerRunParameters &rp)
 {
@@ -502,6 +546,113 @@ static int newRunId()
     if (EngineManager::engines().isEmpty())
         toolRunCount = 0;
     return ++toolRunCount;
+}
+
+Result EnginesDriver::setupEngines(RunControl *runControl, const DebuggerRunParameters &rp)
+{
+    m_runControl = runControl;
+    clearEngines();
+    const auto engines = createEngines(runControl, rp);
+    if (!engines)
+        return Result::Error(engines.error());
+
+    m_engines = *engines;
+    const QString runId = QString::number(newRunId());
+    for (auto engine : m_engines) {
+        if (engine != m_engines.first())
+            engine->setSecondaryEngine();
+        engine->setRunParameters(rp);
+        engine->setRunId(runId);
+        for (auto companion : m_engines) {
+            if (companion != engine)
+                engine->addCompanionEngine(companion);
+        }
+        engine->setDevice(m_runControl->device());
+    }
+
+    return Result::Ok;
+}
+
+Result EnginesDriver::checkBreakpoints() const
+{
+    QStringList unhandledIds;
+    bool hasQmlBreakpoints = false;
+    for (const GlobalBreakpoint &gbp : BreakpointManager::globalBreakpoints()) {
+        if (gbp->isEnabled()) {
+            const BreakpointParameters &bp = gbp->requestedParameters();
+            hasQmlBreakpoints = hasQmlBreakpoints || bp.isQmlFileAndLineBreakpoint();
+            const auto engineAcceptsBp = [bp](const DebuggerEngine *engine) {
+                return engine->acceptsBreakpoint(bp);
+            };
+            if (!Utils::anyOf(m_engines, engineAcceptsBp))
+                unhandledIds.append(gbp->displayName());
+        }
+    }
+
+    if (unhandledIds.isEmpty())
+        return Result::Ok;
+
+    QString warningMessage = Tr::tr("Some breakpoints cannot be handled by the debugger "
+                                    "languages currently active, and will be ignored.<p>"
+                                    "Affected are breakpoints %1").arg(unhandledIds.join(", "));
+    if (hasQmlBreakpoints) {
+        warningMessage += "<p>" + Tr::tr("QML debugging needs to be enabled both in the Build "
+                                         "and the Run settings.");
+    }
+    return Result::Error(warningMessage);
+}
+
+void EnginesDriver::start()
+{
+    const QString runId = QString::number(newRunId());
+    for (auto engine : m_engines) {
+        connect(engine, &DebuggerEngine::interruptTerminalRequested,
+                this, &EnginesDriver::interruptTerminalRequested);
+        connect(engine, &DebuggerEngine::kickoffTerminalProcessRequested,
+                this, &EnginesDriver::kickoffTerminalProcessRequested);
+        connect(engine, &DebuggerEngine::requestRunControlStop, m_runControl, &RunControl::initiateStop);
+
+        connect(engine, &DebuggerEngine::engineStarted, this, [this, engine] {
+            ++m_runningEngines;
+            if (engine->isPrimaryEngine()) {
+                EngineManager::activateDebugMode();
+                emit started();
+            }
+        });
+
+        connect(engine, &DebuggerEngine::engineFinished, this, [this, engine] {
+            engine->prepareForRestart();
+            if (--m_runningEngines == 0) {
+                const QString cmd = engine->runParameters().inferior().command.toUserOutput();
+                const QString msg = engine->runParameters().exitCode() // Main engine.
+                                        ? Tr::tr("Debugging of %1 has finished with exit code %2.")
+                                              .arg(cmd)
+                                              .arg(*engine->runParameters().exitCode())
+                                        : Tr::tr("Debugging of %1 has finished.").arg(cmd);
+                m_runControl->postMessage(msg, NormalMessageFormat);
+                emit done(engine->runParameters().exitCode() ? DoneResult::Error : DoneResult::Success);
+            }
+        });
+        connect(engine, &DebuggerEngine::postMessageRequested, m_runControl, &RunControl::postMessage);
+
+        if (engine->isPrimaryEngine()) {
+            connect(engine, &DebuggerEngine::attachToCoreRequested, this, [this](const QString &coreFile) {
+                auto rc = new RunControl(ProjectExplorer::Constants::DEBUG_RUN_MODE);
+                rc->copyDataFromRunControl(m_runControl);
+                rc->resetDataForAttachToCore();
+                auto name = QString(Tr::tr("%1 - Snapshot %2").arg(m_runControl->displayName()).arg(++m_snapshotCounter));
+                auto debugger = new DebuggerRunTool(rc);
+                DebuggerRunParameters &rp = debugger->runParameters();
+                rp.setStartMode(AttachToCore);
+                rp.setCloseMode(DetachAtClose);
+                rp.setDisplayName(name);
+                rp.setCoreFilePath(FilePath::fromString(coreFile));
+                rp.setSnapshot(true);
+                rc->start();
+            });
+        }
+    }
+    Utils::reverseForeach(m_engines, [](DebuggerEngine *engine) { engine->start(); });
 }
 
 void DebuggerRunTool::continueAfterDebugServerStart()
@@ -642,6 +793,7 @@ void DebuggerRunTool::continueAfterDebugServerStart()
         }
     }
 
+    // TODO: Move to setup handler
     appendMessage(Tr::tr("Debugging %1 ...").arg(d->m_runParameters.inferior().command.toUserOutput()),
                   NormalMessageFormat);
     const QString debuggerName = Utils::transform<QStringList>(m_engines, &DebuggerEngine::objectName).join(" ");
