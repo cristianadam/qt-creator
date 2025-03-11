@@ -13,11 +13,11 @@
 
     \image loginui2.webp "Login UI"
 
-    \e{Login UI: Positioning} is the second in a series of tutorials that build
-    on each other to illustrate how to use \QDS to create a simple UI with
-    some basic UI components, such as pages, buttons, and entry fields. The
-    second tutorial in the series describes how to position the UI components
-    on pages to create a scalable UI.
+    \e{Login UI: Positioning} is the second in a series of \QDS \e{Login UI} tutorials.
+    The Login UI tutorials build on each other to illustrate how to create a simple UI
+    with some basic UI components, such as pages, buttons, and entry fields. 
+    This tutorial describes how to position the UI components on pages to create a
+    scalable UI.
 
     To ensure that the layout is responsive and all the UI components stay in
     their proper places when you resize the UI on the desktop or on devices
@@ -35,30 +35,28 @@
 
     \section1 Anchoring UI components
 
-    First, you will \l {Setting anchors and margins}{anchor} the
-    static page elements, background image (\e adventurePage), logo
-    (\e qt_logo_green_128x128px), and tag line (\e tagLine), to the page.
+    You will now \l {Setting anchors and margins}{anchor} the
+    static page elements, the background image (\e adventurePage), the logo
+    (\e qt_logo_green_128x128px), and the tag line (\e tagLine), to the page.
 
-    To preview the changes that you make, select the \uicontrol {Live Preview} button
-    or select \key {Alt+P}.
+    To preview the changes that you make, select the \uicontrol Run dropdown menu from the
+    top toolbar, and then select \uicontrol {Live Preview}, or select \key {Alt+P}.
 
-    To anchor component instances on a page:
+    To edit the main page, first select \e {Screen01.ui.qml} in the \l Projects view.
+    Then, to anchor the components in your UI:
 
     \list 1
-        \li Open \e {Screen01.ui.qml} for editing in the
-            \l {2D} view.
         \li Select \e adventurePage in the \l Navigator view to display its
             properties in the \l Properties view.
         \li In \uicontrol Properties > \uicontrol Layout, select
-            the \imageanchorfill
-            anchor button to anchor \e adventurePage to its
+            the \imageanchorfill anchor button to anchor \e adventurePage to its
             parent in the \uicontrol Target field. This attaches the background
             image to the rectangle on all sides.
             \note Selecting the anchor button should automatically select the
             four buttons on the left side of it. If it doesn't, select
             \imagereset on the \uicontrol {2D} view toolbar to refresh the
             \uicontrol{2D} view.
-            \image loginui2-layout.png "Layout properties"
+            \image loginui2-layout.png Layout properties
         \li Select \e qt_logo_green_128x128px in \uicontrol Navigator.
         \li In \uicontrol Properties > \uicontrol Layout, set:
             \list
@@ -66,9 +64,8 @@
                     \imageanchorcenterhorizontal.
                 \li \uicontrol Target \imageanchortop to \e parent to anchor
                     the logo to its parent.
-                \li \uicontrol Margin \imageanchortop to \e 40 and
-                    select \imageanchortop to anchor the logo to the top of
-                    the target.
+                \li \uicontrol Margin \imageanchortop to \e 40, and select
+                    \imageanchortop to anchor the logo to the top of the target.
             \endlist
             This attaches the logo to the rectangle at the top while keeping its horizontal
             center aligned with that of the rectangle.
@@ -89,7 +86,7 @@
             \image loginui2-layout-text.png "Text Layout properties"
             \note You can anchor component instances to their parent and sibling
             components. If a component instance is not listed in the
-            \uicontrol Target field, check that the component instance is
+            \uicontrol Target field dropdown menu, check that the component is
             located in the correct place in the component hierarchy in
             \uicontrol Navigator. For more information,
             see \l{Arranging components}.
@@ -173,14 +170,14 @@
 
     \section1 Learn more
     \section2 Anchors
-    In an anchor-based layout, each component instance can be thought of as
+    In an anchor-based layout, each component can be thought of as
     having a set of invisible \e anchor lines: top, bottom, left, right, fill,
     horizontal center, vertical center, and baseline.
 
-    Anchors enable placing a component instance either adjacent to or inside of
-    another component instance, by attaching one or more of the instance's
-    anchor lines to the anchor lines of the other component instance. If a
-    component instance changes, the instances that are anchored to it will
+    Anchors enable placing a component either adjacent to or inside of
+    another component, by attaching one or more of the component's
+    anchor lines to the anchor lines of the other component. If a
+    component changes, the component that are anchored to it will
     adjust automatically to maintain the anchoring.
 
     For more information, see \l{Positioning with Anchors}{Positioning with anchors}.
