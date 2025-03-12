@@ -16,6 +16,7 @@
 #include <utils/id.h>
 #include <utils/infobar.h>
 #include <utils/processinterface.h>
+#include <utils/fileutils.h>
 
 #include <QDesktopServices>
 #include <QTimer>
@@ -168,6 +169,8 @@ void setupUtilsModule()
                 &FilePath::completeSuffix,
                 "isAbsolutePath",
                 &FilePath::isAbsolutePath,
+                "createDir",
+                &FilePath::createDir,
                 "resolvePath",
                 sol::overload(
                     [](const FilePath &p, const QString &path) { return p.resolvePath(path); },
@@ -214,6 +217,37 @@ void setupUtilsModule()
 
                 return FilePath::fromString(path);
             };
+
+            utils.new_enum("OpenModeFlag",
+                "NotOpen", QIODeviceBase::NotOpen,
+                "ReadOnly", QIODeviceBase::ReadOnly,
+                "WriteOnly", QIODeviceBase::WriteOnly,
+                "ReadWrite", QIODeviceBase::ReadWrite,
+                "Append", QIODeviceBase::Append,
+                "Truncate", QIODeviceBase::Truncate,
+                "Text", QIODeviceBase::Text,
+                "Unbuffered", QIODeviceBase::Unbuffered,
+                "NewOnly", QIODeviceBase::NewOnly,
+                "ExistingOnly", QIODeviceBase::ExistingOnly
+            );
+
+            utils.new_usertype<FileSaver>(
+                "FileSaver",
+                sol::meta_function::construct,
+                sol::factories(
+                     [](const FilePath &path, QIODeviceBase::OpenModeFlag mode) -> std::shared_ptr<FileSaver> {
+                        return std::make_shared<FileSaver>(path, mode);
+                     },
+                     [](sol::object, const FilePath &path, QIODeviceBase::OpenModeFlag mode) -> std::shared_ptr<FileSaver> {
+                        return std::make_shared<FileSaver>(path, mode);
+                     }),
+                "finalize", [](FileSaver& fs){
+                    return fs.finalize();
+                },
+                "write", [](FileSaver& fs, const char *data, int len) {
+                    fs.write(data, len);
+                }
+            );
 
             utils.new_usertype<CommandLine>(
                 "CommandLine",
