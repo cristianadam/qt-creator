@@ -7,6 +7,7 @@ add_qtc_plugin(Lua
     bindings/async.h
     bindings/core.cpp
     bindings/fetch.cpp
+    bindings/filedialog.cpp
     bindings/gui.cpp
     bindings/hook.cpp
     bindings/inheritance.h
