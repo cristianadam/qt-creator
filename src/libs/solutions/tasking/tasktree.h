@@ -187,8 +187,16 @@ class Storage final : public StorageBase
 {
 public:
     Storage() : StorageBase(Storage::ctor(), Storage::dtor()) {}
-    Storage(const StorageStruct &data)
-        : StorageBase([data] { return new StorageStruct(data); }, Storage::dtor()) {}
+    template <typename ...Args>
+    Storage(const Args &...args)
+        : StorageBase([args = std::tuple(args...)]() mutable {
+            return std::apply([](auto &&...args) { return new StorageStruct(std::move(args)...); },
+                              std::move(args));
+        }, Storage::dtor()) {}
+    // TODO: For C++20 just do:
+    // template <typename ...Args>
+    // Storage(const Args &...data)
+    //     : StorageBase([...data = data] { return new StorageStruct(data...); }, Storage::dtor()) {}
     StorageStruct &operator*() const noexcept { return *activeStorage(); }
     StorageStruct *operator->() const noexcept { return activeStorage(); }
     StorageStruct *activeStorage() const {
