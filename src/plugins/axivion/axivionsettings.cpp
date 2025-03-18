@@ -12,8 +12,10 @@
 #include <solutions/tasking/tasktree.h>
 
 #include <utils/algorithm.h>
+#include <utils/async.h>
 #include <utils/id.h>
 #include <utils/layoutbuilder.h>
+#include <utils/qtcprocess.h>
 #include <utils/stringutils.h>
 #include <utils/utilsicons.h>
 
@@ -34,6 +36,24 @@ using namespace Utils;
 using namespace Tasking;
 
 namespace Axivion::Internal {
+
+static AxivionVersionInfo parseInfoOutImpl(const FilePath &info)
+{
+    Process process;
+    process.setCommand(CommandLine{info, {"--json"}});
+    process.runBlocking();
+    const QString output = process.allOutput();
+    QJsonParseError error;
+    const QJsonDocument doc = QJsonDocument::fromJson(output.toUtf8(), &error);
+    if (error.error != QJsonParseError::NoError)
+        return {};
+    if (!doc.isObject())
+        return {};
+    const QJsonObject obj = doc.object();
+    const QString version = obj.value("versionNumber").toString();
+    const QString date = obj.value("dateTime").toString();
+    return {version, date};
+}
 
 bool AxivionServer::operator==(const AxivionServer &other) const
 {
@@ -231,14 +251,27 @@ AxivionSettings::AxivionSettings()
     highlightMarks.setLabelText(Tr::tr("Highlight marks"));
     highlightMarks.setToolTip(Tr::tr("Marks issues on the scroll bar."));
     highlightMarks.setDefaultValue(false);
+
+    axivionSuitePath.setSettingsKey("SuitePath");
+    axivionSuitePath.setExpectedKind(PathChooser::ExistingDirectory);
+    axivionSuitePath.setAllowPathFromDevice(false);
+    axivionSuitePath.setLabelText(Tr::tr("Axivion Suite Path:"));
+
+    saveOpenFiles.setSettingsKey("SaveOpenFiles");
+    saveOpenFiles.setLabelText(Tr::tr("Save all open files before starting an analysis"));
+
     m_defaultServerId.setSettingsKey("DefaultDashboardId");
     pathMappingSettings().readSettings();
     AspectContainer::readSettings();
+    if (!axivionSuitePath().isEmpty())
+        validatePath();
 
     m_allServers = readAxivionJson(axivionJsonFilePath());
 
     if (m_allServers.size() == 1 && m_defaultServerId().isEmpty()) // handle settings transition
         m_defaultServerId.setValue(m_allServers.first().id.toString());
+
+    connect(&axivionSuitePath, &BaseAspect::changed, this, [this] { m_versionInfo.reset(); });
 }
 
 void AxivionSettings::toSettings() const
@@ -320,6 +353,28 @@ bool AxivionSettings::updateDashboardServers(const QList<AxivionServer> &other,
 const QList<PathMapping> AxivionSettings::validPathMappings() const
 {
     return pathMappingSettings().validPathMappings();
+}
+
+void AxivionSettings::validatePath()
+{
+    if (m_versionInfo)
+        return;
+
+    const FilePath &suitePath = axivionSuitePath();
+    const FilePath info = (suitePath.isEmpty() ? FilePath{"axivion_suite_info"}
+                                               : suitePath.pathAppended("bin/axivion_suite_info"))
+            .withExecutableSuffix();
+
+    QObject::disconnect(m_watchConnection);
+    m_watcher.reset(new QFutureWatcher<AxivionVersionInfo>);
+    m_watchConnection = QObject::connect(m_watcher.get(), &QFutureWatcherBase::finished, this,
+                                         [this] {
+        m_versionInfo.emplace(m_watcher->result());
+        emit suitePathValidated();
+    });
+    const auto future = Utils::asyncRun(parseInfoOutImpl, info);
+    m_watcher->setFuture(future);
+    Utils::futureSynchronizer()->addFuture(future);
 }
 
 static QString escapeKey(const QString &string)
@@ -505,6 +560,7 @@ private:
     void mappingChanged();
     void currentChanged(const QModelIndex &index, const QModelIndex &previous);
     void moveCurrentMapping(bool up);
+    void updateVersionAndBuildDate(QLabel *version, QLabel *buildDate);
 
     QComboBox *m_dashboardServers = nullptr;
     QPushButton *m_editServerButton = nullptr;
@@ -542,6 +598,9 @@ AxivionSettingsWidget::AxivionSettingsWidget()
     m_moveUpMappingButton = new QPushButton(Tr::tr("Move Up"), this);
     m_moveDownMappingButton = new QPushButton(Tr::tr("Move Down"), this);
 
+    auto version = new QLabel(this);
+    auto build = new QLabel(this);
+
     Column buttons { addMappingButton, m_deleteMappingButton, empty, m_moveUpMappingButton, m_moveDownMappingButton, st };
 
     Column {
@@ -561,6 +620,18 @@ AxivionSettingsWidget::AxivionSettingsWidget()
             }
         },
         Layouting::Group {
+            title(Tr::tr("Local Analyses")),
+            Column {
+                Row { settings().axivionSuitePath },
+                Row { settings().saveOpenFiles },
+                Form {
+                    Tr::tr("Version:"), version, br,
+                    Tr::tr("Build date:"), build, br,
+                },
+                Row { Tr::tr("Contact support@axivion.com if you need assistance.") }
+            }
+        },
+        Layouting::Group {
             title(Tr::tr("Misc Options")),
             Row {settings().highlightMarks },
         },
@@ -577,6 +648,12 @@ AxivionSettingsWidget::AxivionSettingsWidget()
     connect(m_removeServerButton, &QPushButton::clicked,
             this, &AxivionSettingsWidget::removeCurrentServerConfig);
 
+    connect(&settings().axivionSuitePath, &BaseAspect::changed,
+            &settings(), &AxivionSettings::validatePath);
+    connect(&settings(), &AxivionSettings::suitePathValidated, this,
+            [this, version, build] {
+        updateVersionAndBuildDate(version, build);
+    });
     const QList<QTreeWidgetItem *> items = Utils::transform(pathMappingSettings().validPathMappings(),
                                                             [this](const PathMapping &m) {
         QTreeWidgetItem *item = new QTreeWidgetItem(&m_mappingTree,
@@ -605,6 +682,7 @@ AxivionSettingsWidget::AxivionSettingsWidget()
             &AxivionSettingsWidget::mappingChanged);
 
     updateEnabledStates();
+    settings().validatePath();
 }
 
 void AxivionSettingsWidget::apply()
@@ -766,6 +844,14 @@ void AxivionSettingsWidget::moveCurrentMapping(bool up)
     QTreeWidgetItem *item = m_mappingTree.takeTopLevelItem(row);
     m_mappingTree.insertTopLevelItem(up ? row - 1 : row + 1, item);
     m_mappingTree.setCurrentItem(item);
+}
+
+void AxivionSettingsWidget::updateVersionAndBuildDate(QLabel *version, QLabel *buildDate)
+{
+    QTC_ASSERT(version && buildDate, return);
+    std::optional<AxivionVersionInfo> info = settings().versionInfo();
+    version->setText(info ? info->versionNumber : QString{});
+    buildDate->setText(info ? info->dateTime : QString{});
 }
 
 // settings pages
