@@ -6,6 +6,7 @@
 #include <utils/aspects.h>
 #include <utils/id.h>
 
+#include <QFutureWatcher>
 #include <QtGlobal>
 
 #include <solutions/tasking/tasktreerunner.h>
@@ -49,6 +50,12 @@ public:
     Utils::FilePath localPath;
 };
 
+struct AxivionVersionInfo
+{
+    QString versionNumber;
+    QString dateTime;
+};
+
 class AxivionSettings : public Utils::AspectContainer
 {
     Q_OBJECT
@@ -64,14 +71,22 @@ public:
     const QList<AxivionServer> allAvailableServers() const { return m_allServers; };
     bool updateDashboardServers(const QList<AxivionServer> &other, const Utils::Id &selected);
     const QList<PathMapping> validPathMappings() const;
+    void validatePath();
+    std::optional<AxivionVersionInfo> versionInfo() const { return m_versionInfo; }
 
     Utils::BoolAspect highlightMarks{this};
+    Utils::BoolAspect saveOpenFiles{this};
+    Utils::FilePathAspect axivionSuitePath{this};
 signals:
     void serversChanged();
+    void suitePathValidated();
 private:
+    std::optional<AxivionVersionInfo> m_versionInfo = std::nullopt;
     Utils::StringAspect m_defaultServerId{this};
     QList<AxivionServer> m_allServers;
     Tasking::TaskTreeRunner m_taskTreeRunner;
+    std::unique_ptr<QFutureWatcher<AxivionVersionInfo>> m_watcher = nullptr;
+    QMetaObject::Connection m_watchConnection;
 };
 
 AxivionSettings &settings();
