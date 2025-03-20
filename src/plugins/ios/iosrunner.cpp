@@ -528,7 +528,6 @@ public:
 
     Port gdbServerPort() const;
     Port qmlServerPort();
-    qint64 pid() const;
     bool isAppRunning() const;
 
 private:
@@ -695,6 +694,7 @@ void IosRunner::handleGotServerPorts(IosToolHandler *handler, const FilePath &bu
             reportFailure(Tr::tr("Failed to get a local debugger port."));
             return;
         }
+        runControl()->setAttachPid(ProcessHandle(m_pid));
         appendMessage(
             Tr::tr("Listening for debugger on local port %1.").arg(m_gdbServerPort.number()),
             LogMessageFormat);
@@ -780,11 +780,6 @@ void IosRunner::handleFinished(IosToolHandler *handler)
     }
     handler->deleteLater();
     reportStopped();
-}
-
-qint64 IosRunner::pid() const
-{
-    return m_pid;
 }
 
 bool IosRunner::isAppRunning() const
@@ -882,7 +877,6 @@ static void startDebugger(RunControl *runControl, DebuggerRunTool *debugger, Ios
 
     const Port gdbServerPort = iosRunner->gdbServerPort();
     const Port qmlServerPort = iosRunner->qmlServerPort();
-    runControl->setAttachPid(ProcessHandle(iosRunner->pid()));
 
     const bool cppDebug = rp.isCppDebugging();
     const bool qmlDebug = rp.isQmlDebugging();
