@@ -841,22 +841,18 @@ IosRunWorkerFactory::IosRunWorkerFactory()
 
 static void startDebugger(RunControl *runControl, DebuggerRunTool *debugger, IosRunner *iosRunner)
 {
-    DebuggerRunParameters &rp = debugger->runParameters();
-    const IosDeviceTypeAspect::Data *data = runControl->aspectData<IosDeviceTypeAspect>();
-
     if (!iosRunner->isAppRunning()) {
         debugger->reportFailure(Tr::tr("Application not running."));
         return;
     }
 
-    const Port gdbServerPort = iosRunner->gdbServerPort();
-    const Port qmlServerPort = iosRunner->qmlServerPort();
-
+    DebuggerRunParameters &rp = debugger->runParameters();
     const bool cppDebug = rp.isCppDebugging();
     const bool qmlDebug = rp.isQmlDebugging();
     if (cppDebug) {
+        const IosDeviceTypeAspect::Data *data = runControl->aspectData<IosDeviceTypeAspect>();
         rp.setInferiorExecutable(data->localExecutable);
-        rp.setRemoteChannel("connect://localhost:" + gdbServerPort.toString());
+        rp.setRemoteChannel("connect://localhost:" + iosRunner->gdbServerPort().toString());
 
         QString bundlePath = data->bundleDirectory.toUrlishString();
         bundlePath.chop(4);
@@ -869,21 +865,18 @@ static void startDebugger(RunControl *runControl, DebuggerRunTool *debugger, Ios
         }
     }
 
-    QUrl qmlServer;
     if (qmlDebug) {
         QTcpServer server;
         const bool isListening = server.listen(QHostAddress::LocalHost)
                                  || server.listen(QHostAddress::LocalHostIPv6);
         QTC_ASSERT(isListening, return);
+        QUrl qmlServer;
         qmlServer.setHost(server.serverAddress().toString());
         if (!cppDebug)
             rp.setStartMode(AttachToRemoteServer);
+        qmlServer.setPort(iosRunner->qmlServerPort().number());
+        rp.setQmlServer(qmlServer);
     }
-
-    if (qmlServerPort.isValid())
-        qmlServer.setPort(qmlServerPort.number());
-
-    rp.setQmlServer(qmlServer);
 }
 
 static RunWorker *createWorker(RunControl *runControl)
