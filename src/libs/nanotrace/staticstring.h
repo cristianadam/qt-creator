@@ -12,7 +12,8 @@
 #if !defined(__cpp_lib_to_chars) || (__cpp_lib_to_chars < 201611L) || \
     (defined(__GNUC__) && __GNUC__ < 11) || \
     (defined(_MSC_VER) && _MSC_VER < 1930) || \
-    (defined(__clang_major__) && __clang_major__ < 14)
+    (defined(__clang_major__) && __clang_major__ < 14) || \
+    defined(__APPLE__)
 #define NO_STD_FLOAT_TO_CHARS 1
 #endif
 
@@ -68,7 +69,7 @@ public:
             auto size = std::snprintf(buffer, sizeof(buffer), "%.9f", number);
 
             if (size >= 0)
-                append({buffer, size});
+                append({buffer, static_cast<std::size_t>(size)});
             return;
         }
 #endif
