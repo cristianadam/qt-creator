@@ -180,7 +180,6 @@ WidgetInfo MaterialBrowserView::widgetInfo()
             });
         });
 
-        // custom notifications below are sent to the TextureEditor
         MaterialBrowserTexturesModel *texturesModel = m_widget->materialBrowserTexturesModel().data();
         connect(texturesModel,
                 &MaterialBrowserTexturesModel::duplicateTextureTriggered,
