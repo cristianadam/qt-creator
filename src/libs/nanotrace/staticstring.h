@@ -65,7 +65,7 @@ public:
         // Fallback using snprintf with sufficient precision.
         if constexpr (std::is_floating_point_v<Type>) {
             char buffer[std::numeric_limits<Type>::max_digits10 + 2];
-            auto size = std::snprintf(buffer, sizeof(buffer), "%.9f", number);
+            auto size = std::snprintf(buffer, sizeof(buffer), "%.g", number);
 
             if (size >= 0)
                 append({buffer, size});
