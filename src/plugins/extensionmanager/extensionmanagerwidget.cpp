@@ -46,6 +46,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QCheckBox>
+#include <QCryptographicHash>
 #include <QHBoxLayout>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -63,13 +64,10 @@ namespace ExtensionManager::Internal {
 
 Q_LOGGING_CATEGORY(widgetLog, "qtc.extensionmanager.widget", QtWarningMsg)
 
-constexpr TextFormat contentTF
-    {Theme::Token_Text_Default, UiElement::UiElementBody2};
+constexpr TextFormat contentTF{Theme::Token_Text_Default, UiElement::UiElementBody2};
 
-constexpr TextFormat h6TF
-    {contentTF.themeColor, UiElement::UiElementH6};
-constexpr TextFormat h6CapitalTF
-    {Theme::Token_Text_Muted, UiElement::UiElementH6Capital};
+constexpr TextFormat h6TF{contentTF.themeColor, UiElement::UiElementH6};
+constexpr TextFormat h6CapitalTF{Theme::Token_Text_Muted, UiElement::UiElementH6Capital};
 
 static QLabel *sectionTitle(const TextFormat &tf, const QString &title)
 {
@@ -80,8 +78,11 @@ static QLabel *sectionTitle(const TextFormat &tf, const QString &title)
 
 static QWidget *toScrollableColumn(QWidget *widget)
 {
-    widget->setContentsMargins(SpacingTokens::ExVPaddingGapXl, SpacingTokens::ExVPaddingGapXl,
-                               SpacingTokens::ExVPaddingGapXl, SpacingTokens::ExVPaddingGapXl);
+    widget->setContentsMargins(
+        SpacingTokens::ExVPaddingGapXl,
+        SpacingTokens::ExVPaddingGapXl,
+        SpacingTokens::ExVPaddingGapXl,
+        SpacingTokens::ExVPaddingGapXl);
     widget->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Minimum);
 
     auto scrollArea = new QScrollArea;
@@ -124,10 +125,7 @@ public:
         updateGeometry();
     }
 
-    QSize sizeHint() const override
-    {
-        return {m_width, 0};
-    }
+    QSize sizeHint() const override { return {m_width, 0}; }
 
 private:
     int m_width = 100;
@@ -234,14 +232,10 @@ public:
         m_icon = new QLabel;
         m_icon->setFixedSize(iconBgSizeBig);
 
-        static const TextFormat titleTF
-            {Theme::Token_Text_Default, UiElementH4};
-        static const TextFormat vendorTF
-            {Theme::Token_Text_Accent, UiElementLabelMedium};
-        static const TextFormat dlTF
-            {Theme::Token_Text_Muted, vendorTF.uiElement};
-        static const TextFormat detailsTF
-            {titleTF.themeColor, Utils::StyleHelper::UiElementCaption};
+        static const TextFormat titleTF{Theme::Token_Text_Default, UiElementH4};
+        static const TextFormat vendorTF{Theme::Token_Text_Accent, UiElementLabelMedium};
+        static const TextFormat dlTF{Theme::Token_Text_Muted, vendorTF.uiElement};
+        static const TextFormat detailsTF{titleTF.themeColor, Utils::StyleHelper::UiElementCaption};
 
         m_title = new ElidingLabel;
         applyTf(m_title, titleTF);
@@ -251,8 +245,9 @@ public:
         m_divider->setFixedSize(1, dividerH);
         WelcomePageHelpers::setBackgroundColor(m_divider, dlTF.themeColor);
         m_dlIcon = new QLabel;
-        const QPixmap dlIcon = Icon({{":/extensionmanager/images/download.png", dlTF.themeColor}},
-                                    Icon::Tint).pixmap();
+        const QPixmap dlIcon
+            = Icon({{":/extensionmanager/images/download.png", dlTF.themeColor}}, Icon::Tint)
+                  .pixmap();
         m_dlIcon->setPixmap(dlIcon);
         m_dlCount = new ElidingLabel;
         applyTf(m_dlCount, dlTF);
@@ -453,10 +448,14 @@ public:
         setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
 
         using namespace Layouting;
-        Grid {
-            Span(2, m_label), br,
-            m_switch, empty, br,
-        }.attachTo(this);
+        Grid{
+            Span(2, m_label),
+            br,
+            m_switch,
+            empty,
+            br,
+        }
+            .attachTo(this);
 
         connect(m_switch, &QCheckBox::clicked, this, [this](bool checked) {
             PluginSpec *spec = pluginSpecForId(m_pluginId);
@@ -545,14 +544,15 @@ public:
             layout()->addWidget(m_container);
 
             using namespace Layouting;
-            Flow flow {};
+            Flow flow{};
             flow.setNoMargins();
             flow.setSpacing(SpacingTokens::HGapXs);
 
             for (const QString &tag : tags) {
                 QAbstractButton *tagButton = new Button(tag, Button::Tag);
-                connect(tagButton, &QAbstractButton::clicked,
-                        this, [this, tag] { emit tagSelected(tag); });
+                connect(tagButton, &QAbstractButton::clicked, this, [this, tag] {
+                    emit tagSelected(tag);
+                });
                 flow.addItem(tagButton);
             }
 
@@ -576,7 +576,7 @@ public:
 
 private:
     void updateView(const QModelIndex &current);
-    void fetchAndInstallPlugin(const QUrl &url, bool update);
+    void fetchAndInstallPlugin(const QUrl &url, bool update, const QString &sha);
 
     QString m_currentItemName;
     ExtensionsModel *m_extensionModel;
@@ -605,9 +605,7 @@ private:
 static QWidget *descriptionPlaceHolder()
 {
     auto placeHolder = new QWidget;
-    static const TextFormat tF {
-        Theme::Token_Text_Muted, UiElement::UiElementH4
-    };
+    static const TextFormat tF{Theme::Token_Text_Muted, UiElement::UiElementH4};
     auto title = new ElidingLabel(Tr::tr("No details to show"));
     applyTf(title, tF);
     title->setAlignment(Qt::AlignCenter);
@@ -744,8 +742,11 @@ ExtensionManagerWidget::ExtensionManagerWidget()
 
     WelcomePageHelpers::setBackgroundColor(this, Theme::Token_Background_Default);
 
-    connect(m_extensionBrowser, &ExtensionsBrowser::itemSelected,
-            this, &ExtensionManagerWidget::updateView);
+    connect(
+        m_extensionBrowser,
+        &ExtensionsBrowser::itemSelected,
+        this,
+        &ExtensionManagerWidget::updateView);
     connect(this, &ResizeSignallingWidget::resized, this, [this](const QSize &size) {
         const int intendedBrowserColumnWidth = size.width() / 3;
         m_extensionBrowser->adjustToWidth(intendedBrowserColumnWidth);
@@ -759,7 +760,7 @@ ExtensionManagerWidget::ExtensionManagerWidget()
         QTC_ASSERT(m_headingWidget->selectedVersion(), return);
         const std::optional<Source> source = m_headingWidget->selectedVersion()->compatibleSource();
         QTC_ASSERT(source, return);
-        fetchAndInstallPlugin(QUrl::fromUserInput(source->url), update);
+        fetchAndInstallPlugin(QUrl::fromUserInput(source->url), update, source->sha);
     };
 
     connect(m_headingWidget, &HeadingWidget::pluginInstallationRequested, this, [installOrUpdate] {
@@ -770,8 +771,11 @@ ExtensionManagerWidget::ExtensionManagerWidget()
     });
 
     connect(m_tags, &TagList::tagSelected, m_extensionBrowser, &ExtensionsBrowser::setFilter);
-    connect(m_headingWidget, &HeadingWidget::vendorClicked,
-            m_extensionBrowser, &ExtensionsBrowser::setFilter);
+    connect(
+        m_headingWidget,
+        &HeadingWidget::vendorClicked,
+        m_extensionBrowser,
+        &ExtensionsBrowser::setFilter);
 
     auto dropSupport = new DropSupport(this, [](QDropEvent *event, DropSupport *) {
         // only accept drops from the "outside" (e.g. file manager)
@@ -827,14 +831,14 @@ void ExtensionManagerWidget::updateView(const QModelIndex &current)
         return QString("<a href=\"%1\">%2</a>").arg(id).arg(displayName);
     };
 
-    auto toContentParagraph =
-        [](const QStringList &text) {
-            const QString lines = text.join("<br/>");
-            const QString pHtml = QString::fromLatin1("<p style=\"margin-top:0;margin-bottom:0;"
-                                                      "line-height:%1px\">%2</p>")
-                                      .arg(contentTF.lineHeight()).arg(lines);
-            return pHtml;
-        };
+    auto toContentParagraph = [](const QStringList &text) {
+        const QString lines = text.join("<br/>");
+        const QString pHtml = QString::fromLatin1("<p style=\"margin-top:0;margin-bottom:0;"
+                                                  "line-height:%1px\">%2</p>")
+                                  .arg(contentTF.lineHeight())
+                                  .arg(lines);
+        return pHtml;
+    };
 
     const QDate dateUpdated = current.data(RoleDateUpdated).toDate();
     const bool hasDateUpdated = dateUpdated.isValid();
@@ -875,13 +879,14 @@ void ExtensionManagerWidget::updateView(const QModelIndex &current)
     m_packExtensions->setVisible(hasExtensions);
 }
 
-void ExtensionManagerWidget::fetchAndInstallPlugin(const QUrl &url, bool update)
+void ExtensionManagerWidget::fetchAndInstallPlugin(const QUrl &url, bool update, const QString &sha)
 {
     using namespace Tasking;
 
     struct StorageStruct
     {
-        StorageStruct() {
+        StorageStruct()
+        {
             progressDialog.reset(new QProgressDialog(
                 Tr::tr("Downloading..."), Tr::tr("Cancel"), 0, 0, ICore::dialogParent()));
             progressDialog->setWindowTitle(Tr::tr("Download Extension"));
@@ -893,20 +898,43 @@ void ExtensionManagerWidget::fetchAndInstallPlugin(const QUrl &url, bool update)
         std::unique_ptr<QProgressDialog> progressDialog;
         QByteArray packageData;
         QUrl url;
+        QString sha;
         QString filename;
     };
     Storage<StorageStruct> storage;
 
-    const auto onQuerySetup = [url, storage](NetworkQuery &query) {
+    const auto onQuerySetup = [url, sha, storage](NetworkQuery &query) {
         storage->url = url;
+        storage->sha = sha;
         query.setRequest(QNetworkRequest(url));
         query.setNetworkAccessManager(NetworkAccessManager::instance());
     };
-    const auto onQueryDone = [storage](const NetworkQuery &query, DoneWith result) {
+    const auto onQueryDone = [storage](const NetworkQuery &query, DoneWith result) -> DoneResult {
         storage->progressDialog->close();
-        if (result == DoneWith::Success) {
-            storage->packageData = query.reply()->readAll();
 
+        if (result != DoneWith::Success) {
+            QMessageBox::warning(
+                ICore::dialogParent(),
+                Tr::tr("Download Error"),
+                Tr::tr("Cannot download extension") + "\n\n" + storage->url.toString() + "\n\n"
+                    + Tr::tr("Code: %1.").arg(query.reply()->error()));
+            return DoneResult::Error;
+        }
+
+        storage->packageData = query.reply()->readAll();
+
+        const QByteArray hash
+            = QCryptographicHash::hash(storage->packageData, QCryptographicHash::Sha256);
+
+        if (QString::fromLatin1(hash.toHex()) != storage->sha) {
+            QMessageBox::warning(
+                ICore::dialogParent(),
+                Tr::tr("Download Error"),
+                Tr::tr("Downloaded extension has invalid hash"));
+            return DoneResult::Error;
+        }
+
+        const auto checkContentDisposition = [storage, &query] {
             QString contentDispo
                 = query.reply()->header(QNetworkRequest::ContentDispositionHeader).toString();
 
@@ -937,13 +965,11 @@ void ExtensionManagerWidget::fetchAndInstallPlugin(const QUrl &url, bool update)
                 return;
 
             storage->filename = match.captured(1);
-        } else {
-            QMessageBox::warning(
-                ICore::dialogParent(),
-                Tr::tr("Download Error"),
-                Tr::tr("Cannot download extension") + "\n\n" + storage->url.toString() + "\n\n"
-                    + Tr::tr("Code: %1.").arg(query.reply()->error()));
-        }
+        };
+
+        checkContentDisposition();
+
+        return DoneResult::Success;
     };
 
     const auto onPluginInstallation = [storage, update]() {
@@ -1008,6 +1034,6 @@ QWidget *createExtensionManagerWidget()
     return new ExtensionManagerWidget;
 }
 
-} // ExtensionManager::Internal
+} // namespace ExtensionManager::Internal
 
 #include "extensionmanagerwidget.moc"
