@@ -1509,7 +1509,7 @@ void PluginManagerPrivate::loadPluginsAtRuntime(const QSet<PluginSpec *> &plugin
             const bool delay = spec->delayedInitialize();
             if (delay)
                 QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
-        } else {
+        } else if (spec->isEffectivelyEnabled()) {
             // Plugin initialization failed, so cleanup after it
             spec->kill();
         }
