@@ -3,21 +3,8 @@
 
 #pragma once
 
-#include <coreplugin/locator/ilocatorfilter.h>
-
-#include <qmljslocatordata.h>
-
 namespace QmlJSTools::Internal {
 
-class QmlJSFunctionsFilter final : public Core::ILocatorFilter
-{
-public:
-    QmlJSFunctionsFilter();
-
-private:
-    Core::LocatorMatcherTasks matchers() final;
-
-    LocatorData m_data;
-};
+void setupQmlJSFunctionsFilter();
 
 } // namespace QmlJSTools::Internal
