@@ -645,6 +645,7 @@ DockerDevice::DockerDevice()
                                  errorItem->setToolTip(result.error());
                                  cb({errorItem});
                              }
+                watcher->deleteLater();
                          });
         watcher->setFuture(future);
     });
