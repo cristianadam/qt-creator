@@ -3774,7 +3774,8 @@ void AspectList::addToLayoutImpl(Layouting::Layout &parent)
         if (scrollArea->widget())
             delete scrollArea->takeWidget();
 
-        auto add = new QPushButton(Tr::tr("Add"));
+        auto add = new IconButton;
+        add->setIcon(Utils::Icons::PLUS.icon());
         QObject::connect(add, &QPushButton::clicked, scrollArea, [this] {
             addItem(d->createItem());
         });
@@ -3801,7 +3802,7 @@ void AspectList::addToLayoutImpl(Layouting::Layout &parent)
         });
 
         ColoredRow *rowWdgt = new ColoredRow(size());
-        Row{st, add}.attachTo(rowWdgt);
+        Row{add}.attachTo(rowWdgt);
         column.addItem(rowWdgt);
 
         QWidget *contentWidget = column.emerge();
@@ -3814,6 +3815,8 @@ void AspectList::addToLayoutImpl(Layouting::Layout &parent)
     QObject::connect(this, &AspectList::volatileValueChanged, scrollArea, fill);
 
     parent.addItem(scrollArea);
+
+    registerSubWidget(scrollArea);
 }
 
 StringSelectionAspect::StringSelectionAspect(AspectContainer *container)
