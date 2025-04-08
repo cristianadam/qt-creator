@@ -744,7 +744,7 @@ static void handleDevicesListChange(const QString &serialNumber)
 
             qCDebug(androidDeviceLog, "Registering new Android device id \"%s\".",
                     newDev->id().toString().toUtf8().data());
-            devMgr->addDevice(IDevice::ConstPtr(newDev));
+            devMgr->addDevice(IDevice::Ptr(newDev));
         }
     }
 }
@@ -818,7 +818,7 @@ static void handleAvdListChange(const AndroidDeviceInfoList &avdList)
             }
         }
 
-        AndroidDevice *newDev = new AndroidDevice;
+        AndroidDevice::Ptr newDev = std::make_shared<AndroidDevice>();
         newDev->setupId(IDevice::AutoDetected, deviceId);
         newDev->setDisplayName(displayName);
         newDev->setMachineType(item.type);
@@ -832,9 +832,8 @@ static void handleAvdListChange(const AndroidDeviceInfoList &avdList)
 
         qCDebug(androidDeviceLog, "Registering new Android device id \"%s\".",
                 newDev->id().toString().toUtf8().data());
-        const IDevice::ConstPtr constNewDev = IDevice::ConstPtr(newDev);
-        devMgr->addDevice(IDevice::ConstPtr(constNewDev));
-        connectedDevs.append(constNewDev->id());
+        devMgr->addDevice(newDev);
+        connectedDevs.append(newDev->id());
     }
 
     // Set devices no longer connected to disconnected state.
