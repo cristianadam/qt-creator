@@ -78,6 +78,8 @@
         \li \c codellama:7b-code
         \li \c deepseek-coder-v2:lite
         \li \c starcoder2:7b
+        \li \c theqtcompany/codellama-7b-qml
+        \li \c theqtcompany/codellama-13b-qml
     \endlist
 
     \section2 Custom models
@@ -109,6 +111,8 @@
             \l {https://platform.openai.com/}{platform.openai.com})
         \li Meta Code Llama 7B through Ollama (running locally on your computer)
         \li BigCode StarCoder2 through Ollama (running locally on your computer)
+        \li CodeLlama-7B-QML through Ollama (running locally on your computer)
+        \li CodeLlama-13B-QML through Ollama (running locally on your computer)
     \endlist
 
     To connect to an LLM:
