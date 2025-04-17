@@ -2,14 +2,15 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "formatoperation.h"
-#include "utils/fileutils.h"
 
-#include <coreplugin/icore.h>
 #include <qmlobjectnode.h>
 #include <nodemetainfo.h>
+
+#include <coreplugin/icore.h>
+
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QJsonArray>
 
 namespace QmlDesigner {
 namespace FormatOperation{
@@ -38,12 +39,9 @@ void readFormatConfiguration(){
     if (copyableProperties.isEmpty()){
         QString source = "formatconfiguration.json";
         Utils::FilePath path = Core::ICore::resourcePath("qmldesigner") / source;
-        QString errorString;
-        Utils::FileReader reader;
-
-       if (reader.fetch(path, &errorString)){
+        if (Utils::Result<QByteArray> result = path.fileContents()) {
            QJsonParseError jsonError;
-           QJsonDocument document =   QJsonDocument::fromJson(reader.data(), &jsonError );
+           QJsonDocument document = QJsonDocument::fromJson(result.value(), &jsonError);
 
            if (jsonError.error != QJsonParseError::NoError)
                return;
