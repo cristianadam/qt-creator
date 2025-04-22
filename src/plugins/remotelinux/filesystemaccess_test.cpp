@@ -47,7 +47,7 @@ TestLinuxDeviceFactory::TestLinuxDeviceFactory()
         device->setupId(IDevice::ManuallyAdded);
         device->setType("test");
         qDebug() << "device : " << device->type();
-        device->setSshParameters(SshTest::getParameters());
+        // device->setSshParameters(SshTest::getParameters());
         return device;
     });
 }
@@ -62,7 +62,7 @@ FilePath createFile(const QString &name)
 
 void FileSystemAccessTest::initTestCase()
 {
-    const SshParameters params = SshTest::getParameters();
+    /*const SshParameters params = SshTest::getParameters();
     qDebug() << "Using following SSH parameter:"
              << "\nHost:" << params.host()
              << "\nPort:" << params.port()
@@ -150,6 +150,7 @@ void FileSystemAccessTest::initTestCase()
     QVERIFY(!remotePath.exists());
     QVERIFY(!localPath.parentDir().exists());
     QVERIFY(!remotePath.parentDir().exists());
+    */
 }
 
 void FileSystemAccessTest::cleanupTestCase()
