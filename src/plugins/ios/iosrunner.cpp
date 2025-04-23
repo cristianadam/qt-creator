@@ -317,21 +317,25 @@ static Group deviceCtlRecipe(RunControl *runControl, bool startStopped)
     };
 }
 
+static FilePath xcrunFilePath() { return FilePath::fromString("/usr/bin/xcrun"); }
+
+static QStringList deviceCtlArgs() { return {"devicectl", "device"}; }
+
+static QStringList deviceArgs(const IosDevice::ConstPtr &device)
+{
+    return { "--device", device->uniqueInternalDeviceId(), "--quiet", "--json-output", "-" };
+}
+
 static Group deviceCtlPollingTask(RunControl *runControl, const Storage<AppInfo> &appInfo)
 {
     const Storage<qint64> pidStorage;
 
     const auto onLaunchSetup = [appInfo](Process &process) {
-        process.setCommand({FilePath::fromString("/usr/bin/xcrun"),
-                            {"devicectl",
-                             "device",
+        process.setCommand({xcrunFilePath(),
+                            {deviceCtlArgs(),
                              "process",
                              "launch",
-                             "--device",
-                             appInfo->device->uniqueInternalDeviceId(),
-                             "--quiet",
-                             "--json-output",
-                             "-",
+                             deviceArgs(appInfo->device),
                              appInfo->bundleIdentifier,
                              appInfo->arguments}});
     };
@@ -358,16 +362,11 @@ static Group deviceCtlPollingTask(RunControl *runControl, const Storage<AppInfo>
 
     const auto onPollSetup = [appInfo, pidStorage](Process &process) {
         process.setCommand(
-            {FilePath::fromString("/usr/bin/xcrun"),
-             {"devicectl",
-              "device",
+            {xcrunFilePath(),
+             {deviceCtlArgs(),
               "info",
               "processes",
-              "--device",
-              appInfo->device->uniqueInternalDeviceId(),
-              "--quiet",
-              "--json-output",
-              "-",
+              deviceArgs(appInfo->device),
               "--filter",
               QLatin1String("processIdentifier == %1").arg(QString::number(*pidStorage))}});
     };
@@ -386,16 +385,11 @@ static Group deviceCtlPollingTask(RunControl *runControl, const Storage<AppInfo>
     };
 
     const auto onStopSetup = [appInfo, pidStorage](Process &process) {
-        process.setCommand({FilePath::fromString("/usr/bin/xcrun"),
-                            {"devicectl",
-                             "device",
+        process.setCommand({xcrunFilePath(),
+                            {deviceCtlArgs(),
                              "process",
                              "signal",
-                             "--device",
-                             appInfo->device->uniqueInternalDeviceId(),
-                             "--quiet",
-                             "--json-output",
-                             "-",
+                             deviceArgs(appInfo->device),
                              "--signal",
                              "SIGKILL",
                              "--pid",
