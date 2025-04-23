@@ -459,7 +459,7 @@ struct DebugInfo
     bool cppDebug = false;
 };
 
-static Group iosRecipe(RunControl *runControl, const DebugInfo &debugInfo = {})
+static Group iosKicker(const SingleBarrier &barrier, RunControl *runControl, const DebugInfo &debugInfo)
 {
     stopRunningRunControl(runControl);
     const IosDeviceTypeAspect::Data *data = runControl->aspectData<IosDeviceTypeAspect>();
@@ -478,10 +478,10 @@ static Group iosRecipe(RunControl *runControl, const DebugInfo &debugInfo = {})
         return SetupResult::StopWithError;
     };
 
-    const auto onIosSetup = [runControl, debugInfo, bundleDir, deviceType, device](IosToolRunner &runner) {
+    const auto onIosSetup = [runControl, debugInfo, bundleDir, deviceType, device,
+                             barrier = barrier->barrier()](IosToolRunner &runner) {
         runner.setDeviceType(deviceType);
-        RunInterface *iface = runStorage().activeStorage();
-        runner.setStartHandler([runControl, debugInfo, bundleDir, device, iface](IosToolHandler *handler) {
+        runner.setStartHandler([runControl, debugInfo, bundleDir, device, barrier](IosToolHandler *handler) {
             const auto messageHandler = [runControl](const QString &message) {
                 runControl->postMessage(message, StdOutFormat);
             };
@@ -542,7 +542,7 @@ static Group iosRecipe(RunControl *runControl, const DebugInfo &debugInfo = {})
                 }
             });
             QObject::connect(handler, &IosToolHandler::gotInferiorPid, runControl,
-                             [runControl, debugInfo, handler, iface](qint64 pid) {
+                             [runControl, debugInfo, handler, barrier](qint64 pid) {
                 if (pid <= 0) {
                     runControl->postMessage(Tr::tr("Could not get inferior PID."), ErrorMessageFormat);
                     handler->stop();
@@ -555,7 +555,7 @@ static Group iosRecipe(RunControl *runControl, const DebugInfo &debugInfo = {})
                     handler->stop();
                     return;
                 }
-                emit iface->started();
+                barrier->advance();
             });
 
             const CommandLine command = runControl->commandLine();
@@ -586,6 +586,16 @@ static Group iosRecipe(RunControl *runControl, const DebugInfo &debugInfo = {})
     return {
         onGroupSetup(onSetup),
         IosToolTask(onIosSetup, onIosDone)
+    };
+}
+
+static Group iosRecipe(RunControl *runControl, const DebugInfo &debugInfo = {})
+{
+    const auto kicker = [runControl, debugInfo](const SingleBarrier &barrier) {
+        return iosKicker(barrier, runControl, debugInfo);
+    };
+    return When (kicker) >> Do {
+        Sync([] { emit runStorage()->started(); })
     };
 }
 
