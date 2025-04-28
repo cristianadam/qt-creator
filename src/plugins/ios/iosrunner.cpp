@@ -568,11 +568,11 @@ static Group iosToolKicker(const SingleBarrier &barrier, RunControl *runControl,
     };
 
     const auto onIosToolSetup = [runControl, debugInfo, bundleDir, deviceType, device,
-                                 barrier](IosToolRunner &runner) {
+                                 barrier = barrier->barrier()](IosToolRunner &runner) {
         runner.setDeviceType(deviceType);
         RunInterface *iface = runStorage().activeStorage();
         runner.setStartHandler([runControl, debugInfo, bundleDir, device, iface,
-                                barrier = barrier->barrier()](IosToolHandler *handler) {
+                                barrier](IosToolHandler *handler) {
             const auto messageHandler = [runControl](const QString &message) {
                 runControl->postMessage(message, StdOutFormat);
             };
