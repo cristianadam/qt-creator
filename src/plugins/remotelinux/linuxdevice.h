@@ -80,7 +80,10 @@ public:
     void toMap(Utils::Store &map) const override;
 
 public:
+    enum AccessMethod { CmdBridge, SshOnly };
+
     Utils::BoolAspect sourceProfile{this};
+    Utils::TypedSelectionAspect<AccessMethod> accessMethod{this};
 
 protected:
     LinuxDevice();

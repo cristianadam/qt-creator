@@ -1040,6 +1040,13 @@ LinuxDevice::LinuxDevice()
     sourceProfile.setLabelText(Tr::tr("Source %1 and %2").arg("/etc/profile").arg("$HOME/.profile"));
     sourceProfile.setLabelPlacement(BoolAspect::LabelPlacement::AtCheckBox);
 
+    accessMethod.setSettingsKey("AccessMethod");
+    accessMethod.addOption(Tr::tr("CmdBridge over SSH"));
+    accessMethod.addOption(Tr::tr("Only SSH"));
+    accessMethod.setDefaultValue(CmdBridge);
+    accessMethod.setLabelText(Tr::tr("Access Method"));
+    accessMethod.setDisplayStyle(SelectionAspect::DisplayStyle::ComboBox);
+
     addDeviceAction({Tr::tr("Deploy Public Key..."), [](const IDevice::Ptr &device) {
         runPublicKeyDeploymentDialog(device);
     }});

@@ -66,9 +66,10 @@ GenericLinuxDeviceConfigurationWidget::GenericLinuxDeviceConfigurationWidget(
         device->sshParametersAspectContainer().userName, st, br,
         device->sshParametersAspectContainer().useKeyFile, st, br,
         device->sshParametersAspectContainer().privateKeyFile, createKeyButton, br,
+        linuxDevice->accessMethod, br,
+        linuxDevice->sourceProfile, br,
         device->debugServerPathAspect, br,
         device->qmlRunCommandAspect, br,
-        linuxDevice->sourceProfile, br,
         device->sshForwardDebugServerPort, br,
         device->linkDevice, br,
     }.attachTo(this);
