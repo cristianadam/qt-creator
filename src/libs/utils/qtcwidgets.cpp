@@ -632,6 +632,32 @@ void IconButton::onClicked(QObject *guard, const std::function<void()> &func)
     QObject::connect(Layouting::Tools::access(this), &QtcIconButton::clicked, guard, func);
 }
 
+Switch::Switch()
+{
+    ptr = new Implementation("");
+}
+
+Switch::Switch(std::initializer_list<I> ps)
+{
+    ptr = new Implementation("");
+    Layouting::Tools::apply(this, ps);
+}
+
+void Switch::setText(const QString &text)
+{
+    Layouting::Tools::access(this)->setText(text);
+}
+
+void Switch::setChecked(bool checked)
+{
+    Layouting::Tools::access(this)->setChecked(checked);
+}
+
+void Switch::onClicked(QObject *guard, const std::function<void()> &func)
+{
+    QObject::connect(Layouting::Tools::access(this), &QtcSwitch::clicked, guard, func);
+}
+
 } // namespace QtcWidgets
 
 } // namespace Utils
