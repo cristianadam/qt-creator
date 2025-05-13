@@ -131,6 +131,37 @@ private:
     bool m_containsMouse{false};
 };
 
+class QTCREATOR_UTILS_EXPORT QtcRectangleWidget : public QWidget
+{
+    Q_OBJECT
+
+public:
+    QtcRectangleWidget(QWidget *parent = nullptr);
+
+    QSize sizeHint() const override;
+
+    int radius() const;
+    void setRadius(int radius);
+
+    bool stroke() const;
+    void setStroke(bool stroke);
+
+    QColor backgroundColor() const;
+    void setBackgroundColor(const QColor &color);
+
+    QColor outlineColor() const;
+    void setOutlineColor(const QColor &color);
+
+protected:
+    void paintEvent(QPaintEvent *event) override;
+
+private:
+    int m_radius = 10;
+    bool m_stroke = false;
+    QColor m_backgroundColor = Qt::black;
+    QColor m_outlineColor = Qt::white;
+};
+
 namespace QtcWidgets {
 
 class QTCREATOR_UTILS_EXPORT Label : public Layouting::Widget
@@ -194,8 +225,26 @@ public:
     void onTextChanged(QObject *guard, const std::function<void(QString)> &);
 };
 
+class QTCREATOR_UTILS_EXPORT Rectangle : public Layouting::Widget
+{
+public:
+    using Implementation = QtcRectangleWidget;
+    using I = Building::BuilderItem<Rectangle>;
+
+    Rectangle(std::initializer_list<I> ps);
+
+    void setRadius(int radius);
+    void setStroke(bool stroke);
+    void setBackgroundColor(const QColor &color);
+    void setOutlineColor(const QColor &color);
+};
+
 } // namespace QtcWidgets
 
 QTC_DEFINE_BUILDER_SETTER(role, setRole);
+QTC_DEFINE_BUILDER_SETTER(backgroundColor, setBackgroundColor);
+QTC_DEFINE_BUILDER_SETTER(outlineColor, setOutlineColor);
+QTC_DEFINE_BUILDER_SETTER(radius, setRadius);
+QTC_DEFINE_BUILDER_SETTER(stroke, setStroke);
 
 } // namespace Utils

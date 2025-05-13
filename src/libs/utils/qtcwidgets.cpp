@@ -8,8 +8,10 @@
 
 #include <QEvent>
 #include <QGuiApplication>
+#include <QLayout>
 #include <QPaintEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QWidget>
 
 namespace Utils {
@@ -588,6 +590,86 @@ QSize QtcIconButton::sizeHint() const
     return s;
 }
 
+QtcRectangleWidget::QtcRectangleWidget(QWidget *parent)
+    : QWidget(parent)
+{}
+
+QSize QtcRectangleWidget::sizeHint() const
+{
+    if (layout())
+        return layout()->sizeHint() + QSize(m_radius * 2, m_radius * 2);
+    return QSize(m_radius * 2, m_radius * 2);
+}
+
+void QtcRectangleWidget::paintEvent(QPaintEvent *event)
+{
+    Q_UNUSED(event);
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::TextAntialiasing);
+
+    QPainterPath path;
+    path.addRoundedRect(rect(), m_radius, m_radius);
+    painter.fillPath(path, m_backgroundColor);
+    if (m_stroke) {
+        QPen outlinePen(m_outlineColor);
+        outlinePen.setCosmetic(true);
+        painter.strokePath(path, outlinePen);
+    }
+}
+
+int QtcRectangleWidget::radius() const
+{
+    return m_radius;
+}
+
+void QtcRectangleWidget::setRadius(int radius)
+{
+    if (m_radius != radius) {
+        m_radius = radius;
+        update();
+    }
+}
+
+bool QtcRectangleWidget::stroke() const
+{
+    return m_stroke;
+}
+
+void QtcRectangleWidget::setStroke(bool stroke)
+{
+    if (m_stroke != stroke) {
+        m_stroke = stroke;
+        update();
+    }
+}
+
+QColor QtcRectangleWidget::backgroundColor() const
+{
+    return m_backgroundColor;
+}
+
+void QtcRectangleWidget::setBackgroundColor(const QColor &color)
+{
+    if (m_backgroundColor != color) {
+        m_backgroundColor = color;
+        update();
+    }
+}
+
+QColor QtcRectangleWidget::outlineColor() const
+{
+    return m_outlineColor;
+}
+
+void QtcRectangleWidget::setOutlineColor(const QColor &color)
+{
+    if (m_outlineColor != color) {
+        m_outlineColor = color;
+        update();
+    }
+}
+
 namespace QtcWidgets {
 
 Button::Button()
@@ -713,6 +795,32 @@ void SearchBox::setText(const QString &text)
 void SearchBox::onTextChanged(QObject *guard, const std::function<void(QString)> &func)
 {
     QObject::connect(Layouting::Tools::access(this), &QtcSearchBox::textChanged, guard, func);
+}
+
+Rectangle::Rectangle(std::initializer_list<I> ps)
+{
+    ptr = new Implementation;
+    Layouting::Tools::apply(this, ps);
+}
+
+void Rectangle::setBackgroundColor(const QColor &color)
+{
+    Layouting::Tools::access(this)->setBackgroundColor(color);
+}
+
+void Rectangle::setStroke(bool stroke)
+{
+    Layouting::Tools::access(this)->setStroke(stroke);
+}
+
+void Rectangle::setRadius(int radius)
+{
+    Layouting::Tools::access(this)->setRadius(radius);
+}
+
+void Rectangle::setOutlineColor(const QColor &color)
+{
+    Layouting::Tools::access(this)->setOutlineColor(color);
 }
 
 } // namespace QtcWidgets
