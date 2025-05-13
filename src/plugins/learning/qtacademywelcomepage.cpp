@@ -17,15 +17,21 @@
 #include <utils/layoutbuilder.h>
 #include <utils/networkaccessmanager.h>
 #include <utils/qtcwidgets.h>
+#include <utils/utilsicons.h>
 
 #include <QApplication>
 #include <QDesktopServices>
+#include <QGridLayout>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QMouseEvent>
 #include <QNetworkReply>
+#include <QPainter>
+#include <QPainterPath>
 #include <QPixmapCache>
+#include <QScrollArea>
 
 using namespace Utils;
 using namespace Core;
@@ -39,6 +45,7 @@ class CourseItem : public ListItem
 public:
     QString id;
     QString rawName;
+    QJsonObject json;
 };
 
 static QString courseUrl(const CourseItem *item)
@@ -48,15 +55,12 @@ static QString courseUrl(const CourseItem *item)
 
 class CourseItemDelegate : public ListItemDelegate
 {
+    Q_OBJECT
 public:
-    void clickAction(const ListItem *item) const override
-    {
-        QTC_ASSERT(item, return);
-        auto courseItem = static_cast<const CourseItem *>(item);
-        const QUrl url(courseUrl(courseItem));
-        qCDebug(qtAcademyLog) << "QDesktopServices::openUrl" << url;
-        QDesktopServices::openUrl(url);
-    }
+    void clickAction(const ListItem *item) const override { emit clicked(item); }
+
+signals:
+    void clicked(const ListItem *item) const;
 };
 
 static QString courseName(const QJsonObject &courseObj)
@@ -132,6 +136,7 @@ static void setJson(const QByteArray &json, ListModel *model)
             continue;
 
         auto courseItem = new CourseItem;
+        courseItem->json = courseObj;
         courseItem->name = courseName(courseObj).trimmed();
         courseItem->rawName = courseName(courseObj);
         courseItem->description = courseDescription(courseObj);
@@ -143,8 +148,187 @@ static void setJson(const QByteArray &json, ListModel *model)
     model->appendItems(items);
 }
 
+static auto createDetailWidget(const CourseItem *course)
+{
+    static auto blackLabel = [](const QString &text) {
+        QLabel *label = new QLabel;
+        auto pal = label->palette();
+        pal.setColor(QPalette::WindowText, Qt::black);
+        label->setPalette(pal);
+        label->setText(text);
+        return label;
+    };
+
+    static auto heading = [](const QString &text) {
+        QLabel *label = new QLabel;
+        label->setFont(StyleHelper::uiFont(StyleHelper::UiElementH3));
+        label->setText(text);
+        return label;
+    };
+
+    static auto nameLabel = [](const QString &text) {
+        QLabel *label = new QLabel;
+        label->setFont(StyleHelper::uiFont(StyleHelper::UiElementH2));
+        label->setText(text);
+        label->setWordWrap(true);
+        return label;
+    };
+
+    static auto difficultyLevelTr = [](const CourseItem *course) {
+        const auto text = course->json.value("difficulty_level").toString();
+        if (text == "basic")
+            return Tr::tr("Basic");
+        else if (text == "intermediate")
+            return Tr::tr("Intermediate");
+        else if (text == "advanced")
+            return Tr::tr("Advanced");
+        else
+            return text;
+    };
+
+    static auto difficultyColor = [](const CourseItem *course) -> QColor {
+        const auto text = course->json.value("difficulty_level").toString();
+        if (text == "basic")
+            return QColor::fromString("#d2f9d4");
+        else if (text == "intermediate")
+            return QColor::fromString("#f9f2d4");
+        else if (text == "advanced")
+            return QColor::fromString("#f9d4d4");
+        else
+            return Qt::gray;
+    };
+
+    static auto durationToString = [](const CourseItem *course) {
+        int length = course->json.value("minute_length").toInt();
+        QString units = course->json.value("course_length_unit").toString();
+
+        if (units == "minutes") {
+            if (length < 60)
+                return QString("%1 %2").arg(length).arg(Tr::tr("min", "minutes"));
+
+            const int hours = length / 60;
+            const int minutes = length % 60;
+            if (minutes != 0) {
+                return QString("%1%2 %3%4")
+                    .arg(hours)
+                    .arg(Tr::tr("h", "hours"))
+                    .arg(minutes)
+                    .arg(Tr::tr("min", "minutes"));
+            }
+
+            // Fall back to hours if minutes == 0
+            units = "hours";
+            length /= 60;
+        }
+
+        if (units == "hours")
+            return QString("%1 %2").arg(length).arg(Tr::tr("h", "hours"));
+
+        return QString("%1 %2").arg(length).arg(units);
+    };
+
+    QLabel *image = new QLabel;
+    QPixmap px;
+    if (QPixmapCache::find(course->imageUrl, &px))
+        image->setPixmap(px);
+    else
+        image->setPixmap({});
+
+    using namespace Layouting;
+
+    // clang-format off
+    return Grid {
+        image,
+        Column {
+            nameLabel(course->name),
+            Row {
+                QtcWidgets::Rectangle {
+                    radius(5),
+                    fillBrush(Qt::gray),
+                    Row {
+                        customMargins(5, 0, 0, 0),
+                        Layouting::IconDisplay {
+                            icon(Utils::Icons::CLOCK_BLACK)
+                        },
+                        blackLabel(durationToString(course))
+                    }
+                },
+                QtcWidgets::Rectangle {
+                    radius(5),
+                    fillBrush(difficultyColor(course)),
+                    Row {
+                        customMargins(5, 0, 0, 0),
+                        blackLabel(difficultyLevelTr(course))
+                    }
+                },
+                st
+            },
+            Row {
+                QtcWidgets::Button {
+                    role(QtcButton::Role::LargePrimary),
+                    text(Tr::tr("Start Course")),
+                    onClicked(qApp, [course]() {
+                        const QUrl url(courseUrl(course));
+                        qCDebug(qtAcademyLog) << "QDesktopServices::openUrl" << url;
+                        QDesktopServices::openUrl(url);
+                    })
+                },
+                st
+            },
+            st,
+        },
+        br,
+        Column {
+            heading(Tr::tr("Course description")),
+            Label {
+                wordWrap(true),
+                text(course->json.value("description_html").toString()),
+            },
+            st,
+        },
+        Column {
+            heading(Tr::tr("Objectives")),
+            Label {
+                wordWrap(true),
+                text(course->json.value("objectives_html").toString()),
+            },
+            st
+        }
+    };
+    // clang-format on
+}
+
+class MouseCatcher : public QWidget
+{
+    Q_OBJECT
+public:
+    MouseCatcher() { setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding); }
+
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        if (event->type() == QEvent::MouseButtonPress) {
+            QMouseEvent *mouseEvent = static_cast<QMouseEvent *>(event);
+            if (mouseEvent->button() == Qt::LeftButton) {
+                event->accept();
+                emit clicked();
+            }
+        }
+    }
+
+    void paintEvent(QPaintEvent *event) override
+    {
+        Q_UNUSED(event);
+        QPainter painter(this);
+        painter.fillRect(rect(), QColor(0, 0, 0, 128));
+    }
+
+signals:
+    void clicked();
+};
+
 class QtAcademyWelcomePageWidget final : public QWidget
 {
+    Q_OBJECT
 public:
     QtAcademyWelcomePageWidget()
     {
@@ -162,22 +346,74 @@ public:
         m_view->setModel(m_filteredModel);
         m_view->setItemDelegate(&m_delegate);
 
+        using namespace Layouting;
+
+        // clang-format off
+        auto detailWdgt = QtcWidgets::Rectangle {
+            Layouting::sizePolicy(QSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding)),
+            fillBrush(creatorColor(Theme::Color::BackgroundColorNormal)),
+            replaceLayoutOn(this, &QtAcademyWelcomePageWidget::courseSelected, [this]() -> Layouting::Layout {
+                if (m_selectedCourse) {
+                    return Column {
+                        ScrollArea {
+                            fixSizeHintBug(true),
+                            Layouting::sizePolicy(QSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding)),
+                            frameShape(QFrame::NoFrame),
+                            createDetailWidget(m_selectedCourse)
+                        }
+                    };
+                }
+                return Row {};
+            })
+        }.emerge();
+        // clang-format on
+
+        auto mouseCatcher = new MouseCatcher;
+        connect(mouseCatcher, &MouseCatcher::clicked, this, [this]() {
+            setSelectedCourse(nullptr);
+        });
+
+        mouseCatcher->setVisible(false);
+        detailWdgt->setVisible(false);
+
+        connect(
+            this,
+            &QtAcademyWelcomePageWidget::courseSelected,
+            this,
+            [this, detailWdgt, mouseCatcher]() {
+                detailWdgt->setVisible(m_selectedCourse);
+                mouseCatcher->setVisible(m_selectedCourse);
+            });
+
+        QGridLayout *grid = new QGridLayout;
+        grid->addWidget(m_view, 0, 0);
+        grid->addWidget(mouseCatcher, 0, 0);
+        grid->addWidget(detailWdgt, 0, 0, Qt::AlignCenter);
+
         using namespace StyleHelper::SpacingTokens;
         using namespace Layouting;
+        // clang-format off
         Column {
             Row {
                 m_searcher,
                 customMargins(0, 0, ExVPaddingGapXl, 0),
             },
-            m_view,
+            grid,
             spacing(ExVPaddingGapXl),
             customMargins(ExVPaddingGapXl, ExVPaddingGapXl, 0, 0),
         }.attachTo(this);
+        // clang-format on
 
         connect(m_searcher, &QLineEdit::textChanged,
                 m_filteredModel, &ListModelFilter::setSearchString);
         connect(&m_delegate, &CourseItemDelegate::tagClicked,
                 this, &QtAcademyWelcomePageWidget::onTagClicked);
+
+
+        connect(&m_delegate, &CourseItemDelegate::clicked, this, [this](const ListItem *item) {
+            QTC_ASSERT(item, return);
+            setSelectedCourse(static_cast<const CourseItem *>(item));
+        });
 
         m_spinner = new SpinnerSolution::Spinner(SpinnerSolution::SpinnerSize::Large, this);
         m_spinner->hide();
@@ -305,6 +541,22 @@ private:
                             + QString(tagStr + "\"%1\" ").arg(tag));
     }
 
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        if (event->button() == Qt::LeftButton)
+            setSelectedCourse(nullptr);
+    }
+
+    void setSelectedCourse(const CourseItem *course)
+    {
+        m_selectedCourse = course;
+        emit courseSelected();
+    }
+
+signals:
+    void courseSelected();
+
+private:
     QLineEdit *m_searcher;
     ListModel m_model;
     ListModelFilter *m_filteredModel;
@@ -315,6 +567,7 @@ private:
     bool m_isDownloadingImage = false;
     Tasking::TaskTreeRunner taskTreeRunner;
     SpinnerSolution::Spinner *m_spinner;
+    const CourseItem *m_selectedCourse = nullptr;
 };
 
 class QtAcademyWelcomePage final : public IWelcomePage
@@ -335,3 +588,5 @@ void setupQtAcademyWelcomePage(QObject *guard)
 }
 
 } // namespace Learning::Internal
+
+#include "qtacademywelcomepage.moc"
