@@ -19,6 +19,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QSize>
 #include <QSizePolicy>
 #include <QSpacerItem>
@@ -1097,16 +1098,44 @@ void addToScrollArea(ScrollArea *scrollArea, const Widget &inner)
 
 // ScrollArea
 
+// See QTBUG-136762
+class FixedScrollArea : public QScrollArea
+{
+public:
+    QSize sizeHint() const override
+    {
+        const int f = 2 * frameWidth();
+        QSize sz(f, f);
+        const int h = fontMetrics().height();
+        if (auto w = widget()) {
+            sz += w->sizeHint();
+        } else {
+            sz += QSize(12 * h, 8 * h);
+        }
+        if (verticalScrollBarPolicy() == Qt::ScrollBarAlwaysOn)
+            sz.setWidth(sz.width() + verticalScrollBar()->sizeHint().width());
+        if (horizontalScrollBarPolicy() == Qt::ScrollBarAlwaysOn)
+            sz.setHeight(sz.height() + horizontalScrollBar()->sizeHint().height());
+        if (!m_fixSizeHintBug)
+            return sz.boundedTo(QSize(36 * h, 24 * h));
+        return sz;
+    }
+
+    void setFixSizeHintBug(bool fix) { m_fixSizeHintBug = fix; }
+
+    bool m_fixSizeHintBug{false};
+};
+
 ScrollArea::ScrollArea(std::initializer_list<I> items)
 {
-    ptr = new Implementation;
+    ptr = new FixedScrollArea;
     apply(this, items);
     access(this)->setWidgetResizable(true);
 }
 
 ScrollArea::ScrollArea(const Layout &inner)
 {
-    ptr = new Implementation;
+    ptr = new FixedScrollArea;
     access(this)->setWidget(inner.emerge());
     access(this)->setWidgetResizable(true);
 }
@@ -1119,6 +1148,12 @@ void ScrollArea::setLayout(const Layout &inner)
 void ScrollArea::setFrameShape(QFrame::Shape shape)
 {
     access(this)->setFrameShape(shape);
+}
+
+void ScrollArea::setFixSizeHintBug(bool fixBug)
+{
+    auto fixedScrollArea = static_cast<FixedScrollArea *>(access(this));
+    fixedScrollArea->setFixSizeHintBug(fixBug);
 }
 
 // Splitter
