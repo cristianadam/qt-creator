@@ -1039,9 +1039,16 @@
 
     \ingroup studio-how-to-git
 
-    \title Apply patches
+    \title Create and Apply patches
 
     Patches are rewriting instructions that Git can apply to a set of files.
+
+    To generate patch files from local commits, go to \uicontrol Tools >
+    \uicontrol Git > \uicontrol {Local Repository} and select \uicontrol Patch >
+    \uicontrol {Create from Commits} and select the desired commits in the dialog.
+    The patches are generated in the local repositories root directory and follow
+    the scheme `NNNN-Title-of-Commit.patch`, where `NNNN` is a four digit number
+    starting with `0000`.
 
     To apply a patch file that is open in \QC, go to \uicontrol Tools >
     \uicontrol Git > \uicontrol {Local Repository} and select \uicontrol Patch >
@@ -1049,6 +1056,8 @@
 
     To select the patch file to apply from the file system, select
     \uicontrol {Apply from File}.
+
+    To apply a patch from the clipboard, select \uicontrol {Apply from Clipboard}.
 
     \if defined(qtcreator)
     \sa {Use Git}{How To: Use Git}, {Git}
