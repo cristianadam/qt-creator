@@ -284,9 +284,20 @@ static auto createDetailWidget(const CourseItem *course)
 
     QLabel *image = new QLabel;
     QPixmap px;
-    if (QPixmapCache::find(course->imageUrl, &px))
+    if (QPixmapCache::find(course->imageUrl, &px)) {
+        // Remove the edges of the Pixmap to give them rounded corners
+        QPainter p(&px);
+        p.scale(1 / px.devicePixelRatio(), 1 / px.devicePixelRatio());
+        p.setRenderHint(QPainter::Antialiasing);
+        QPainterPath rect;
+        QSize s = px.size();
+        rect.addRect(QRect(0, 0, px.width(), px.height()));
+        QPainterPath path;
+        path.addRoundedRect(QRect(0, 0, s.width(), s.height()), 10, 10);
+        p.setCompositionMode(QPainter::CompositionMode_Clear);
+        p.fillPath(rect.subtracted(path), Qt::white);
         image->setPixmap(px);
-    else
+    } else
         image->setPixmap({});
 
     const bool hasObjectives = course->json.contains("objectives_html");
