@@ -128,9 +128,10 @@ void ClangCodeModelPlugin::createCompilationDBAction()
 {
     // generate compile_commands.json
     ActionBuilder(this, Constants::GENERATE_COMPILATION_DB)
-        .setParameterText(Tr::tr("Generate Compilation Database for \"%1\""),
-                          Tr::tr("Generate Compilation Database"),
-                          ActionBuilder::AlwaysEnabled)
+        .setParameterText(
+            Tr::tr("Compilation Database for \"%1\""),
+            Tr::tr("Compilation Database"),
+            ActionBuilder::AlwaysEnabled)
         .bindContextAction(&m_generateCompilationDBAction)
         .setCommandAttribute(Command::CA_UpdateText)
         .setCommandDescription(m_generateCompilationDBAction->text());
