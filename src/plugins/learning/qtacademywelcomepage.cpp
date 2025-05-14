@@ -314,8 +314,10 @@ static auto createDetailWidget(const CourseItem *course)
                     radius(5),
                     fillBrush(difficultyColor(course)),
                     Row {
-                        customMargins(5, 0, 0, 0),
-                        blackLabel(difficultyLevelTr(course))
+                        customMargins(5, 0, 5, 0),
+                        st,
+                        blackLabel(difficultyLevelTr(course)),
+                        st
                     }
                 },
                 If(hasRating,
