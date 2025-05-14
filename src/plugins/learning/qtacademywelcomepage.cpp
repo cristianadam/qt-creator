@@ -185,6 +185,45 @@ static auto createDetailWidget(const CourseItem *course)
         return label;
     };
 
+    const bool hasRating = course->json.contains("number_of_reviews")
+                           && course->json.contains("number_of_stars");
+
+    const int numReviews = course->json.value("number_of_reviews").toInt(0);
+    const int numStars = course->json.value("number_of_stars").toInt(0);
+    const float rating = hasRating ? ((float) numStars / (float) numReviews) / 5.0f : 0.0f;
+
+    auto paintRating = [rating](QPainter &painter) {
+        painter.setRenderHint(QPainter::Antialiasing);
+
+        static QPainterPath starPath = [] {
+            QPainterPath p;
+            // A 5 sided star with a radius of 10
+            p.moveTo(10, 0);
+            p.lineTo(12, 7);
+            p.lineTo(20, 7);
+            p.lineTo(14, 11);
+            p.lineTo(16, 18);
+            p.lineTo(10, 14);
+            p.lineTo(4, 18);
+            p.lineTo(6, 11);
+            p.lineTo(0, 7);
+            p.lineTo(8, 7);
+            return p;
+        }();
+
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor::fromString("#ffc30f"));
+
+        painter.setClipRect(QRectF(0.0, 0.0, 100.0 * rating, 20.0));
+
+        painter.save();
+        for (int i = 0; i < 5; i++) {
+            painter.drawPath(starPath);
+            painter.translate(20, 0);
+        }
+        painter.restore();
+    };
+
     static auto difficultyLevelTr = [](const CourseItem *course) {
         const auto text = course->json.value("difficulty_level").toString();
         if (text == "basic")
@@ -279,6 +318,23 @@ static auto createDetailWidget(const CourseItem *course)
                         blackLabel(difficultyLevelTr(course))
                     }
                 },
+                If(hasRating,
+                    {
+                        Row {
+                            Label {
+                                text(QString("%1")
+                                    .arg(qFloor((rating*5.0) * 10.0) / 10.0, 0, 'g', 2)),
+                            },
+                            Canvas {
+                                fixedSize(QSize{100, 20}),
+                                paint(paintRating),
+                            },
+                            Label {
+                                text(QString("(%1)").arg(numReviews)),
+                            },
+                        }
+                    }
+                ),
                 st
             },
             Row {
