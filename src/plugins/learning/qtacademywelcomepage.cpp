@@ -43,6 +43,7 @@ namespace Learning::Internal {
 class CourseItem : public ListItem
 {
 public:
+    bool isPath{false};
     QString id;
     QString rawName;
     QJsonObject json;
@@ -50,7 +51,10 @@ public:
 
 static QString courseUrl(const CourseItem *item)
 {
-    return QString("https://academy.qt.io/catalog/courses/%1").arg(item->id);
+    if (item->isPath)
+        return QString("https://academy.qt.io/catalog/learning-paths/%1").arg(item->id);
+    else
+        return QString("https://academy.qt.io/catalog/courses/%1").arg(item->id);
 }
 
 class CourseItemDelegate : public ListItemDelegate
@@ -129,23 +133,30 @@ static void setJson(const QByteArray &json, ListModel *model)
     const QJsonObject jsonObj = QJsonDocument::fromJson(json, &error).object();
     qCDebug(qtAcademyLog) << "QJsonParseError:" << error.errorString();
     const QJsonArray courses = jsonObj.value("courses").toArray();
-    QList<ListItem *> items;
-    for (const auto course : courses) {
-        const QJsonObject courseObj = course.toObject();
-        if (!courseIsValid(courseObj))
-            continue;
+    const QJsonArray learningPaths = jsonObj.value("learningPaths").toArray();
 
-        auto courseItem = new CourseItem;
-        courseItem->json = courseObj;
-        courseItem->name = courseName(courseObj).trimmed();
-        courseItem->rawName = courseName(courseObj);
-        courseItem->description = courseDescription(courseObj);
-        courseItem->imageUrl = courseThumbnail(courseObj);
-        courseItem->tags = courseTags(courseObj);
-        courseItem->id = courseId(courseObj);
-        items.append(courseItem);
-    }
-    model->appendItems(items);
+    auto createItemsFromArray = [](const QJsonArray &array, bool isPath = false) {
+        QList<ListItem *> items;
+        for (const auto course : array) {
+            const QJsonObject courseObj = course.toObject();
+            if (!courseIsValid(courseObj))
+                continue;
+
+            auto courseItem = new CourseItem;
+            courseItem->id = courseId(courseObj);
+            courseItem->json = courseObj;
+            courseItem->name = courseName(courseObj).trimmed();
+            courseItem->rawName = courseName(courseObj);
+            courseItem->description = courseDescription(courseObj);
+            courseItem->imageUrl = courseThumbnail(courseObj);
+            courseItem->tags = courseTags(courseObj);
+            courseItem->isPath = isPath;
+            items.append(courseItem);
+        }
+        return items;
+    };
+
+    model->appendItems(createItemsFromArray(courses) + createItemsFromArray(learningPaths, true));
 }
 
 static auto createDetailWidget(const CourseItem *course)
@@ -200,9 +211,14 @@ static auto createDetailWidget(const CourseItem *course)
 
     static auto durationToString = [](const CourseItem *course) {
         int length = course->json.value("minute_length").toInt();
-        QString units = course->json.value("course_length_unit").toString();
 
-        if (units == "minutes") {
+        QString units;
+        if (course->json.contains("course_length_unit"))
+            length = course->json.value("course_length_unit").toInt();
+        else if (course->json.contains("path_length_unit"))
+            length = course->json.value("path_length_unit").toInt();
+
+        if (units.isEmpty() || units == "minutes") {
             if (length < 60)
                 return QString("%1 %2").arg(length).arg(Tr::tr("min", "minutes"));
 
@@ -233,6 +249,8 @@ static auto createDetailWidget(const CourseItem *course)
         image->setPixmap(px);
     else
         image->setPixmap({});
+
+    const bool hasObjectives = course->json.contains("objectives_html");
 
     using namespace Layouting;
 
@@ -278,22 +296,29 @@ static auto createDetailWidget(const CourseItem *course)
             st,
         },
         br,
-        Column {
-            heading(Tr::tr("Course description")),
-            Label {
-                wordWrap(true),
-                text(course->json.value("description_html").toString()),
-            },
-            st,
+        Span {
+            hasObjectives ? 1 : 2, 
+            Column {
+                heading(Tr::tr("Course description")),
+                Label {
+                    wordWrap(true),
+                    text(course->json.value("description_html").toString()),
+                },
+                st,
+            },    
         },
-        Column {
-            heading(Tr::tr("Objectives")),
-            Label {
-                wordWrap(true),
-                text(course->json.value("objectives_html").toString()),
-            },
-            st
-        }
+        If (hasObjectives,
+        {
+            Column {
+                heading(Tr::tr("Objectives")),
+                Label {
+                    wordWrap(true),
+                    text(course->json.value("objectives_html").toString()),
+                },
+                st
+            }
+        }),
+        
     };
     // clang-format on
 }
