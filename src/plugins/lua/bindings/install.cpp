@@ -319,7 +319,7 @@ void setupInstallModule()
                         auto tree = state.createTree();
 
                         auto progress = new TaskProgress(tree);
-                        progress->setDisplayName(Tr::tr("Installing package(s) %1").arg("..."));
+                        progress->setDisplayName(Tr::tr("Installing package(s)..."));
 
                         tree->setRecipe(
                             installRecipe(pluginSpec->appDataPath, installOptionsList, callback));
