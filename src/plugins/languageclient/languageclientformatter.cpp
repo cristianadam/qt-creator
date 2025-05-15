@@ -26,10 +26,11 @@ LanguageClientFormatter::LanguageClientFormatter(TextEditor::TextDocument *docum
     m_cancelConnection = QObject::connect(document->document(),
                                           &QTextDocument::contentsChanged,
                                           [this] {
-        if (m_ignoreCancel)
-            m_ignoreCancel = false;
-        else
+        if (!m_ignoreCancel) {
+            // Don't do anything while formatting is in progress
+            // m_ignoreCancel will be reset in handleResponse
             cancelCurrentRequest();
+        }
     });
 }
 
@@ -52,6 +53,9 @@ void LanguageClientFormatter::handleResponse(const ResponseType &response)
     }
     m_progress.reportResult(changeSet);
     m_progress.reportFinished();
+
+    // Reset ignore flag after formatting is fully complete
+    m_ignoreCancel = false;
 }
 
 static const FormattingOptions formattingOptions(const TextEditor::TabSettings &settings)
