@@ -271,6 +271,8 @@ public:
     void setCursor(Qt::CursorShape shape);
     void setMinimumWidth(int);
     void setMinimumHeight(int height);
+    void setMaximumWidth(int maxWidth);
+    void setMaximumHeight(int maxHeight);
 
     void activateWindow();
     void close();
@@ -602,6 +604,10 @@ QTC_DEFINE_BUILDER_SETTER(placeholderText, setPlaceholderText);
 QTC_DEFINE_BUILDER_SETTER(frameShape, setFrameShape);
 QTC_DEFINE_BUILDER_SETTER(fixSizeHintBug, setFixSizeHintBug);
 QTC_DEFINE_BUILDER_SETTER(paint, setPaintFunction);
+QTC_DEFINE_BUILDER_SETTER(maximumWidth, setMaximumWidth)
+QTC_DEFINE_BUILDER_SETTER(maximumHeight, setMaximumHeight)
+QTC_DEFINE_BUILDER_SETTER(minimumWidth, setMinimumWidth)
+QTC_DEFINE_BUILDER_SETTER(minimumHeight, setMinimumHeight)
 
 // Nesting dispatchers
 

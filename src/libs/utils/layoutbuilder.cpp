@@ -877,6 +877,16 @@ void Widget::setMinimumHeight(int height)
     access(this)->setMinimumHeight(height);
 }
 
+void Widget::setMaximumWidth(int maxWidth)
+{
+    access(this)->setMaximumWidth(maxWidth);
+}
+
+void Widget::setMaximumHeight(int maxHeight)
+{
+    access(this)->setMaximumHeight(maxHeight);
+}
+
 void Widget::setSizePolicy(const QSizePolicy &policy)
 {
     access(this)->setSizePolicy(policy);
