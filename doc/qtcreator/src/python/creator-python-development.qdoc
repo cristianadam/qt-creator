@@ -62,10 +62,11 @@
     The \uicontrol Empty wizard adds code to the source file, but it
     does not add any classes, so you need to add and instantiate them yourself.
 
-    The \c{.pyproject} files are JSON-based configuration files that replace
-    the previously used \c {.pyqtc} configuration files. You can still open and
-    use \c {.pyqtc} files, but we recommend that you choose \c{.pyproject} files
-    for new projects.
+    The \c{.pyproject} files are JSON-based configuration files that you can use
+    when developing with PySide6 version 6.8.0, or earlier.
+
+    When developing with PySide6 version 6.9.0, or later, use the standard
+    \c {pyproject.toml} files. For more information, see \l {pyside6-project}.
 
     \section1 Select the Python version
 
