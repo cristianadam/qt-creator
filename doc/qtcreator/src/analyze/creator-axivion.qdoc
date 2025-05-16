@@ -17,9 +17,10 @@
 
     \section1 View inline annotations in editor
 
-    The editor shows found issues as inline annotations if the project matches
+    The editor shows found issues as inline annotations for projects that
+    are configured with a path mapping or if the project matches
     the currently open one and the respective file is part of the project.
-   hover over an annotation to bring up a tooltip with a short
+    Hover over an annotation to bring up a tooltip with a short
     description of the issue.
 
     \image {qtcreator-axivion-annotation.webp} {Annotation popup}
@@ -112,8 +113,10 @@
     Select \inlineimage icons/filtericon.png for a column to set or clear the
     filter expression for the column.
 
-    The information you see depends on the issue type. Double-click an issue
+    The information you see depends on the issue type. Select an issue
     to see more information about it in the \uicontrol {Issue Details} view.
+    Double-click an issue to see the respective code responsible for an
+    issue inside the editor.
 
     To show inline issues, select \inlineimage icons/location.png.
 
@@ -134,8 +137,50 @@
     select the link in the details or in the \uicontrol {Right Path}
     or \uicontrol {Target Path} column.
 
-    \sa {Enable and disable plugins}, {Analyze}{How To: Analyze},
-    {Analyzers}, {Axivion}, {Analyzing Code}
+    \section1 Performing a local analysis
+
+    Local analyses can be done for projects you are connected to on a dashboard.
+    Inside the issue table select the respective dashboard and project.
+    You need to have the Axivion Suite set up locally and a valid licence.
+
+    Select \inlineimage icons/ax-localbuild.png to bring up a dialog for specifying
+    the needed configuration.
+
+    \image {qtcreator-axivion-localbuild.webp} {Local Build dialog}
+
+    In the \uicontrol {Axivion Suite Installation Directory} select the
+    Axivion Suite base directory.
+
+    Enter the command or choose a script or the respective JSON file holding
+    the Axivion configuration.
+
+    Select the preferred build type from \uicontrol {Build Type}.
+    You may choose either a clean build or an incremental build.
+
+    Select \uicontrol {Start Local Build} to perform the build with the given
+    parameters.
+
+    Running and finished local builds are displayed inside
+    \uicontrol {Local Build Progress}.
+
+    \image {qtcreator-axivion-localbuild-progress.webp} {Local Build Progress}
+
+    Right-click a local build to bring up a context menu which allows you to
+    cancel the build if it is still running.
+    Finished local builds allow inspecting their Axivion log or the build log.
+    Additionally you can select \uicontrol {Remove All Finished} to remove
+    the local builds which have finished already from the local build progress.
+
+    \section1 Local Dashboard
+
+    If the current selected project has some local build present you may see
+    its result by switching to the local dashboard view.
+
+    Select \inlineimage icons/ax-dashboard.png to do so. This starts the local
+    dashboard and switches the issue table to display the latest results.
+
+    \sa {Axivion}{Axivion Settings}, {Enable and disable plugins},
+    {Analyze}{How To: Analyze}, {Analyzers}, {Analyzing Code}
 */
 
 /*!
@@ -194,6 +239,22 @@
         \li In \uicontrol {Local path}, enter the path to the project on the
             computer.
     \endlist
+
+    \section1 Local Analyses
+
+    To be able to perform local analyses you need to setup additional settings.
+
+    In \uicontrol {Axivion Suite path}, enter the path to the locally installed
+    Axivion Suite.
+
+    In \uicontrol {BAUHAUS_PYTHON}, enter the path to the python executable to be
+    used by the local analysis if it cannot be found automatically.
+
+    In \uicontrol {JAVA_HOME}, enter the path to a Java runtime or Java development
+    kit if it cannot be found automatically.
+
+    Select \uicontrol {Save all open files before starting an analysis} to
+    automatically save files opened inside the editor before starting an analysis.
 
     \sa {Enable and disable plugins}, {View Axivion static code analysis results}
 */
