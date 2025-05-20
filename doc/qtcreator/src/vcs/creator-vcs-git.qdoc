@@ -501,7 +501,8 @@
     \title git blame
 
     By default, each line is annotated in the editor when you move the cursor
-    through a file. Hover over the annotation to view commit details.
+    through a file. Hover over the annotation to view commit details and to apply
+    actions to the commit.
 
     \image {qtcreator-git-instant-blame.webp} {Instant blame in the code editor}
     \caption Instant blame in the code editor
@@ -617,6 +618,14 @@
     commit as well as to the state staged in the index.
 
     \section1 Revert changes in the current file
+
+    To revert the change you are currently hovering over, select
+    \uicontrol {Revert <hash>} in the annotation view.
+
+    \image {qtcreator-git-instant-blame.webp} {Instant blame in the code editor}
+    \caption Actions in the annotation view for instant blame
+
+    \section2 Revert all changes in the current file
 
     To revert all changes and reset the current file to the state of the index,
     go to \uicontrol Tools > \uicontrol Git > \uicontrol {Current File} and
