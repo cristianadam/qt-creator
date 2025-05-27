@@ -46,6 +46,10 @@ public:
     virtual void addAction(Command *action, Utils::Id group = {}) = 0;
     virtual void addMenu(ActionContainer *menu, Utils::Id group = {}) = 0;
     virtual void addMenu(ActionContainer *before, ActionContainer *menu) = 0;
+    virtual void removeAction(Command *command) = 0;
+    virtual void removeMenu(ActionContainer *container) = 0;
+    virtual void insertAction(QAction *before, Command *command) = 0;
+    virtual void insertMenu(QAction *before, ActionContainer *container) = 0;
     Command *addSeparator(Utils::Id group = {});
     virtual Command *addSeparator(const Context &context, Utils::Id group = {}, QAction **outSeparator = nullptr) = 0;
 

@@ -49,12 +49,6 @@ public:
     virtual QAction *containerAction() const = 0;
     virtual QAction *actionForItem(QObject *item) const;
 
-    virtual void insertAction(QAction *before, Command *command) = 0;
-    virtual void insertMenu(QAction *before, ActionContainer *container) = 0;
-
-    virtual void removeAction(Command *command) = 0;
-    virtual void removeMenu(ActionContainer *container) = 0;
-
     virtual bool update() = 0;
 
 protected:
