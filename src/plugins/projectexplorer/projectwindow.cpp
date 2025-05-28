@@ -1382,8 +1382,6 @@ public:
         m_projectSettingsView->setContextMenuPolicy(Qt::CustomContextMenu);
         connect(m_projectSettingsView, &QAbstractItemView::activated,
                 this, &ProjectWindowPrivate::itemActivated);
-        connect(m_projectSettingsView, &QWidget::customContextMenuRequested,
-                this, &ProjectWindowPrivate::openContextMenu);
 
         const QFont labelFont = StyleHelper::uiFont(StyleHelper::UiElementH4);
 
