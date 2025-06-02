@@ -38,4 +38,6 @@ private:
     const std::unique_ptr<ProjectWindowPrivate> d;
 };
 
+QWidget *createProjectPanel(QWidget *inner);
+
 } // namespace ProjectExplorer::Internal

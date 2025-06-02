@@ -9,6 +9,6 @@ namespace ProjectExplorer { class Target; }
 
 namespace ProjectExplorer::Internal {
 
-QWidget *createBuildSettingsWidget(Target *target);
+QWidget *createBuildSettingsPanel(Target *target);
 
 } // namespace ProjectExplorer::Internal

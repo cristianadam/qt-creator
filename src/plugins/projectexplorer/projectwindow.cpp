@@ -10,7 +10,6 @@
 #include "kit.h"
 #include "kitmanager.h"
 #include "kitoptionspage.h"
-#include "panelswidget.h"
 #include "project.h"
 #include "projectexplorer.h"
 #include "projectexplorerconstants.h"
@@ -76,10 +75,34 @@ using namespace Utils;
 
 namespace ProjectExplorer::Internal {
 
+static int constexpr PanelVMargin = 14;
+
 const char kBuildSystemOutputContext[] = "ProjectsMode.BuildSystemOutput";
 const char kRegExpActionId[] = "OutputFilter.RegularExpressions.BuildSystemOutput";
 const char kCaseSensitiveActionId[] = "OutputFilter.CaseSensitive.BuildSystemOutput";
 const char kInvertActionId[] = "OutputFilter.Invert.BuildSystemOutput";
+
+const int CONTENTS_MARGIN = 16;
+
+QWidget *createProjectPanel(QWidget *inner)
+{
+    auto panel = new QWidget;
+
+    const auto scroller = new QScrollArea(panel);
+    scroller->setWidget(inner);
+    scroller->setFrameStyle(QFrame::NoFrame);
+    scroller->setWidgetResizable(true);
+    scroller->setFocusPolicy(Qt::NoFocus);
+
+    panel->setFocusProxy(inner);
+
+    auto layout = new QVBoxLayout(panel);
+    layout->setContentsMargins(CONTENTS_MARGIN, CONTENTS_MARGIN, CONTENTS_MARGIN, CONTENTS_MARGIN);
+    layout->setSpacing(0);
+    layout->addWidget(scroller);
+
+    return panel;
+}
 
 class BuildSystemOutputWindow : public OutputWindow
 {
@@ -515,11 +538,8 @@ ProjectPanels MiscSettingsPanelItem::panelWidgets() const
 {
     if (!m_widget) {
         ProjectSettingsWidget *inner = m_factory->createWidget(m_project);
-        auto panel = new PanelsWidget(true);
-        panel->addGlobalSettingsProperties(inner);
-        panel->addWidget(inner);
-        panel->setFocusProxy(inner);
-        m_widget = panel;
+        m_widget = createProjectPanel(inner);
+        inner->addGlobalHandlingToLayout(m_widget->layout());
     }
     ProjectPanel panel;
     panel.displayName = m_factory->displayName();
@@ -888,9 +908,9 @@ public:
     ProjectPanels panelWidgets() const final
     {
         if (!m_buildSettingsWidget)
-            m_buildSettingsWidget = createBuildSettingsWidget(target());
+            m_buildSettingsWidget = createBuildSettingsPanel(target());
         if (!m_runSettingsWidget)
-            m_runSettingsWidget = createRunSettingsWidget(target());
+            m_runSettingsWidget = createRunSettingsPanel(target());
 
         return {
             ProjectPanel(Tr::tr("Build Settings"), m_buildSettingsWidget),
@@ -1098,13 +1118,8 @@ ProjectItemBase *TargetGroupItem::activeItem()
 
 ProjectPanels TargetGroupItem::panelWidgets() const
 {
-    if (!m_targetSetupPage) {
-        auto inner = new TargetSetupPageWrapper(m_project);
-        auto panel = new PanelsWidget(false);
-        panel->addWidget(inner);
-        panel->setFocusProxy(inner);
-        m_targetSetupPage = panel;
-    }
+    if (!m_targetSetupPage)
+        m_targetSetupPage = createProjectPanel(new TargetSetupPageWrapper(m_project));
 
     ProjectPanel panel;
     panel.displayName = Tr::tr("Configure Project");
@@ -1449,8 +1464,7 @@ public:
 
         auto innerLayout = new QVBoxLayout;
         innerLayout->setSpacing(10);
-        innerLayout->setContentsMargins(PanelsWidget::PanelVMargin, innerLayout->spacing(),
-                                        PanelsWidget::PanelVMargin, 0);
+        innerLayout->setContentsMargins(PanelVMargin, innerLayout->spacing(), PanelVMargin, 0);
 #ifdef QT_NO_DEBUG
         const QStringList list = ICore::settings()->value("HideOptionCategories").toStringList();
 #else

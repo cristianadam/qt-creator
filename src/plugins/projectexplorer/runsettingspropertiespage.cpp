@@ -7,12 +7,12 @@
 #include "buildmanager.h"
 #include "buildstepspage.h"
 #include "deployconfiguration.h"
-#include "panelswidget.h"
 #include "project.h"
 #include "projectconfigurationmodel.h"
 #include "projectexplorerconstants.h"
 #include "projectexplorertr.h"
 #include "projectmanager.h"
+#include "projectwindow.h"
 #include "runconfiguration.h"
 #include "target.h"
 
@@ -789,11 +789,9 @@ void RunSettingsWidget::updateEnabledState()
     m_disabledText->setText(reason);
 }
 
-QWidget *createRunSettingsWidget(Target *target)
+QWidget *createRunSettingsPanel(Target *target)
 {
-    auto panel = new PanelsWidget(true);
-    panel->addWidget(new RunSettingsWidget(target));
-    return panel;
+    return createProjectPanel(new RunSettingsWidget(target));
 }
 
 } // ProjectExplorer::Internal
