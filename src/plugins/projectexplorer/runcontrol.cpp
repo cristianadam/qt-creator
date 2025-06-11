@@ -1703,8 +1703,11 @@ private slots:
                         if (factory->canCreate(runMode, device, runConfig.toString()))
                             creators.append(factory->id());
                     }
-                    if (!creators.isEmpty())
+                    if (!creators.isEmpty()) {
                         ++supported;
+                        qDebug() << "SUPPORTED" << runMode << device << runConfig
+                                 << " FACTORIES " << creators;
+                    }
                     if (creators.size() > 1) {
                         qDebug() << "CONFLICT FOR" << runMode << device << runConfig
                                  << " FACTORIES " << creators;
