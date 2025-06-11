@@ -269,7 +269,6 @@ private:
     void extensionsInitialized() final
     {
         // These rely on the base tool factories being present:
-        static ProcessRunnerFactory runWorkerFactory{{Constants::QML_RUNCONFIG_ID}};
         static SimpleQmlProfilerRunnerFactory qmlProfilerRunWorkerFactory{{Constants::QML_RUNCONFIG_ID}};
         static SimpleDebugRunnerFactory debugRunWorkerFactory{{Constants::QML_RUNCONFIG_ID}};
         static SimplePreviewRunnerFactory previewRunWorkerFactory{{Constants::QML_RUNCONFIG_ID}};
