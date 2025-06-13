@@ -35,11 +35,15 @@ install(EXPORT QtCreator
   FILE QtCreatorTargets.cmake
 )
 
+set(QTCREATOR_RELOCATABLE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
+
 include(CMakePackageConfigHelpers)
 configure_package_config_file(
   "${PROJECT_SOURCE_DIR}/cmake/QtCreatorConfig.in.cmake"
   "${CMAKE_BINARY_DIR}/cmake/QtCreatorConfig.cmake"
   INSTALL_DESTINATION "${IDE_CMAKE_INSTALL_PATH}/QtCreator"
+  PATH_VARS
+    QTCREATOR_RELOCATABLE_INSTALL_PREFIX
   NO_SET_AND_CHECK_MACRO
   NO_CHECK_REQUIRED_COMPONENTS_MACRO
 )
