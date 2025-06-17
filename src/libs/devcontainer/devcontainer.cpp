@@ -153,8 +153,6 @@ static ProcessTask inspectImageTask(
 
         instanceConfig.logFunction(
             QString(Tr::tr("Inspecting Image: %1")).arg(process.commandLine().toUserOutput()));
-
-        // imageDetails->Id = "Hallo Welt";
     };
 
     const auto doneInspectImage = [imageDetails](const Process &process) -> DoneResult {
@@ -325,8 +323,7 @@ static Result<Group> prepareContainerRecipe(
         connectProcessToLog(process, instanceConfig, Tr::tr("Build Dockerfile"));
 
         const FilePath configFileDir = instanceConfig.configFilePath.parentDir();
-        const FilePath contextPath = configFileDir.resolvePath(
-            containerConfig.context.value_or("."));
+        const FilePath contextPath = configFileDir.resolvePath(containerConfig.context);
         const FilePath dockerFile = configFileDir.resolvePath(containerConfig.dockerfile);
 
         CommandLine buildCmdLine{
