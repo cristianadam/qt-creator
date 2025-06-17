@@ -299,8 +299,8 @@ static ExecutableItem waitForStartTask(
             qCWarning(devcontainerlog) << "Docker events error:" << text;
         });
 
-        QObject::connect(&process, &Process::started, &process, [barrier]() {
-            barrier->barrier()->advance();
+        QObject::connect(&process, &Process::started, &process, [barrier = barrier->barrier()]() {
+            barrier->advance();
         });
     };
 
