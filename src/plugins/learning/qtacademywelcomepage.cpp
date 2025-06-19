@@ -437,10 +437,12 @@ class QtAcademyWelcomePageWidget final : public QWidget
 {
     Q_OBJECT
 public:
-    QtAcademyWelcomePageWidget()
+    QtAcademyWelcomePageWidget(IWelcomePage::PageStyle style)
     {
-        m_searcher = new QtcSearchBox(this);
-        m_searcher->setPlaceholderText(Tr::tr("Search for Qt Academy courses..."));
+        if (style == IWelcomePage::PageStyle::Full) {
+            m_searcher = new QtcSearchBox(this);
+            m_searcher->setPlaceholderText(Tr::tr("Search for Qt Academy courses..."));
+        }
 
         m_model.setPixmapFunction([this](const QString &url) -> QPixmap {
             queueImageForDownload(url);
@@ -496,9 +498,14 @@ public:
         using namespace Layouting;
         // clang-format off
         Column {
-            Row {
-                m_searcher,
-                customMargins(0, 0, PaddingVXxl, 0),
+            If {
+                m_searcher != nullptr,
+                {
+                    Row {
+                        m_searcher,
+                        customMargins(0, 0, PaddingVXxl, 0),
+                    },
+                },
             },
             Grid {
                 GridCell({
@@ -512,8 +519,6 @@ public:
         }.attachTo(this);
         // clang-format on
 
-        connect(m_searcher, &QLineEdit::textChanged,
-                m_filteredModel, &ListModelFilter::setSearchString);
         connect(&m_delegate, &CourseItemDelegate::tagClicked,
                 this, &QtAcademyWelcomePageWidget::onTagClicked);
 
@@ -521,6 +526,10 @@ public:
             QTC_ASSERT(item, return);
             setSelectedCourse(static_cast<const CourseItem *>(item));
         });
+        if (m_searcher != nullptr) {
+            connect(m_searcher, &QLineEdit::textChanged,
+                    m_filteredModel, &ListModelFilter::setSearchString);
+        }
 
         m_spinner = new SpinnerSolution::Spinner(SpinnerSolution::SpinnerSize::Large, this);
         m_spinner->hide();
@@ -664,7 +673,7 @@ signals:
     void courseSelected();
 
 private:
-    QLineEdit *m_searcher;
+    QLineEdit *m_searcher = nullptr;
     ListModel m_model;
     ListModelFilter *m_filteredModel;
     GridView *m_view;
@@ -685,7 +694,10 @@ public:
     QString title() const final { return Tr::tr("Courses"); }
     int priority() const final { return 60; }
     Utils::Id id() const final { return "Courses"; }
-    QWidget *createWidget() const final { return new QtAcademyWelcomePageWidget; }
+    QWidget *createWidget(PageStyle style) const final
+    {
+        return new QtAcademyWelcomePageWidget(style);
+    }
 };
 
 void setupQtAcademyWelcomePage(QObject *guard)

@@ -716,7 +716,8 @@ public:
 class SessionsPage : public QWidget
 {
 public:
-    explicit SessionsPage(ProjectWelcomePage *projectWelcomePage)
+    explicit SessionsPage(ProjectWelcomePage::PageStyle style,
+                          ProjectWelcomePage *projectWelcomePage)
         : m_projectWelcomePage(projectWelcomePage)
     {
         // FIXME: Remove once facilitateQml() is gone.
@@ -726,67 +727,80 @@ public:
             m_projectWelcomePage->m_projectModel = new ProjectModel(this);
 
         using namespace Layouting;
-
-        auto sessions = new QWidget;
-        {
-            auto sessionsLabel = new QtcLabel(Tr::tr("Sessions"), QtcLabel::Primary);
-            auto manageSessionsButton = new QtcButton(Tr::tr("Manage..."),
-                                                      QtcButton::LargeSecondary);
-            m_sessionList = new TreeView(this, "Sessions");
-            m_sessionList->setModel(m_projectWelcomePage->m_sessionModel);
-            m_sessionList->header()->setSectionHidden(1, true); // The "last modified" column.
-            m_sessionList->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-            QSizePolicy sessionsSp(QSizePolicy::Expanding, QSizePolicy::Expanding);
-            sessionsSp.setHorizontalStretch(3);
-            sessions->setSizePolicy(sessionsSp);
-            Column {
-                Row {
-                    sessionsLabel,
-                    st,
-                    manageSessionsButton,
-                    customMargins(PaddingHXl, 0, sessionScrollBarGap, 0),
-                },
-                m_sessionList,
-                spacing(GapVL),
-                customMargins(PaddingHXxl, PaddingVXxl, 0, 0),
-            }.attachTo(sessions);
-            connect(manageSessionsButton, &QtcButton::clicked,
-                    this, &SessionManager::showSessionManager);
-            connect(m_projectWelcomePage->m_sessionModel, &QAbstractItemModel::modelReset,
-                    this, &SessionsPage::syncModelView);
-        }
-
-        auto projects = new QWidget;
-        {
-            auto projectsLabel = new QtcLabel(Tr::tr("Projects"), QtcLabel::Primary);
-            auto projectsList = new TreeView(this, "Recent Projects");
-            projectsList->setUniformRowHeights(true);
-            projectsList->setModel(projectWelcomePage->m_projectModel);
-            projectsList->setItemDelegate(&m_projectDelegate);
-            projectsList->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-            QSizePolicy projectsSP(QSizePolicy::Expanding, QSizePolicy::Expanding);
-            projectsSP.setHorizontalStretch(5);
-            projects->setSizePolicy(projectsSP);
-            Column {
-                Row {
-                    projectsLabel,
-                    customMargins(PaddingHXl, 0, 0, 0),
-                },
-                projectsList,
-                spacing(GapVL),
-                customMargins(PaddingHXxl - sessionScrollBarGap, PaddingVXxl, 0, 0),
-            }.attachTo(projects);
-        }
-
         Row {
-            sessions,
-            projects,
+            If {
+                style == ProjectWelcomePage::Full,
+                { sessionsWidget() },
+            },
+            projectsWidget(),
             spacing(0),
             noMargin,
         }.attachTo(this);
     }
 
 private:
+    QWidget *sessionsWidget()
+    {
+        auto sessions = new QWidget;
+        auto sessionsLabel = new QtcLabel(Tr::tr("Sessions"), QtcLabel::Primary);
+        auto manageSessionsButton = new QtcButton(Tr::tr("Manage..."),
+                                                  QtcButton::LargeSecondary);
+        m_sessionList = new TreeView(this, "Sessions");
+        m_sessionList->setModel(m_projectWelcomePage->m_sessionModel);
+        m_sessionList->header()->setSectionHidden(1, true); // The "last modified" column.
+        m_sessionList->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        QSizePolicy sessionsSp(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        sessionsSp.setHorizontalStretch(3);
+        sessions->setSizePolicy(sessionsSp);
+
+        using namespace Layouting;
+        Column {
+            Row {
+                sessionsLabel,
+                st,
+                manageSessionsButton,
+                customMargins(PaddingHXl, 0, sessionScrollBarGap, 0),
+            },
+            m_sessionList,
+            spacing(GapVL),
+            customMargins(PaddingHXxl, PaddingVXxl, 0, 0),
+        }.attachTo(sessions);
+
+        connect(manageSessionsButton, &QtcButton::clicked,
+                this, &SessionManager::showSessionManager);
+        connect(m_projectWelcomePage->m_sessionModel, &QAbstractItemModel::modelReset,
+                this, &SessionsPage::syncModelView);
+
+        return sessions;
+    }
+
+    QWidget *projectsWidget()
+    {
+        auto projects = new QWidget;
+        auto projectsLabel = new QtcLabel(Tr::tr("Projects"), QtcLabel::Primary);
+        auto projectsList = new TreeView(this, "Recent Projects");
+        projectsList->setUniformRowHeights(true);
+        projectsList->setModel(m_projectWelcomePage->m_projectModel);
+        projectsList->setItemDelegate(&m_projectDelegate);
+        projectsList->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        QSizePolicy projectsSP(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        projectsSP.setHorizontalStretch(5);
+        projects->setSizePolicy(projectsSP);
+
+        using namespace Layouting;
+        Column {
+            Row {
+                projectsLabel,
+                customMargins(PaddingHXl, 0, 0, 0),
+            },
+            projectsList,
+            spacing(GapVL),
+            customMargins(PaddingHXxl - sessionScrollBarGap, PaddingVXxl, 0, 0),
+        }.attachTo(projects);
+
+        return projects;
+    }
+
     void syncModelView()
     {
         const int rowsCount = m_projectWelcomePage->m_sessionModel->rowCount();
@@ -824,10 +838,10 @@ private:
     TreeView *m_sessionList;
 };
 
-QWidget *ProjectWelcomePage::createWidget() const
+QWidget *ProjectWelcomePage::createWidget(PageStyle style) const
 {
     auto that = const_cast<ProjectWelcomePage *>(this);
-    QWidget *widget = new SessionsPage(that);
+    QWidget *widget = new SessionsPage(style, that);
     that->createActions();
 
     return widget;

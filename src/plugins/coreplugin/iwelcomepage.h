@@ -23,13 +23,18 @@ class CORE_EXPORT IWelcomePage : public QObject
     Q_PROPERTY(int priority READ priority CONSTANT)
 
 public:
+    enum PageStyle {
+        Full,
+        Simplified,
+    };
+
     IWelcomePage();
     ~IWelcomePage() override;
 
     virtual QString title() const = 0;
     virtual int priority() const { return 0; }
     virtual Utils::Id id() const = 0;
-    virtual QWidget *createWidget() const = 0;
+    virtual QWidget *createWidget(PageStyle style = Full) const = 0;
 
     static const QList<IWelcomePage *> allWelcomePages();
 };

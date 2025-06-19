@@ -61,7 +61,7 @@ public:
     QString title() const final;
     int priority() const final;
     Id id() const final;
-    QWidget *createWidget() const final;
+    QWidget *createWidget(PageStyle) const final;
 
 private:
     const bool m_showExamples;
@@ -272,18 +272,60 @@ protected:
 class ExamplesPageWidget : public QWidget
 {
 public:
-    ExamplesPageWidget(bool isExamples)
+    ExamplesPageWidget(bool isExamples, IWelcomePage::PageStyle style)
         : m_isExamples(isExamples)
     {
         m_exampleDelegate.setShowExamples(isExamples);
 
         using namespace StyleHelper::SpacingTokens;
         using namespace Layouting;
+
+        auto gridView = new SectionedGridView;
+        gridView->setItemDelegate(&m_exampleDelegate);
+
+        Column {
+            If { style == ExamplesWelcomePage::Full, {searcher()} },
+            gridView,
+            spacing(GapVXxl),
+            customMargins(PaddingHXxl, PaddingVXxl, 0, 0),
+        }.attachTo(this);
+
+        m_viewController
+            = new ExamplesViewController(s_exampleSetModel, gridView, m_searcher, isExamples, this);
+
+        connect(&m_exampleDelegate, &ExampleDelegate::tagClicked,
+                this, &ExamplesPageWidget::onTagClicked);
+    }
+
+    void onTagClicked(const QString &tag)
+    {
+        const QString text = m_searcher->text();
+        m_searcher->setText((text.startsWith("tag:\"") ? text.trimmed() + " " : QString())
+                            + QString("tag:\"%1\" ").arg(tag));
+    }
+
+    void showEvent(QShowEvent *event) override
+    {
+        if (m_viewController)
+            m_viewController->setVisible(true);
+        QWidget::showEvent(event);
+    }
+
+    void hideEvent(QHideEvent *event) override
+    {
+        if (m_viewController)
+            m_viewController->setVisible(false);
+        QWidget::hideEvent(event);
+    }
+
+    QWidget *searcher()
+    {
+        using namespace StyleHelper::SpacingTokens;
+        using namespace Layouting;
         Row titleRow {
             customMargins(0, 0, PaddingHXxl, 0),
             spacing(GapHXxl),
         };
-
         m_searcher = new QtcSearchBox;
         if (m_isExamples) {
             m_searcher->setPlaceholderText(Tr::tr("Search in Examples..."));
@@ -307,52 +349,18 @@ public:
             m_searcher->setPlaceholderText(Tr::tr("Search in Tutorials..."));
         }
         titleRow.addItem(m_searcher);
-
-        auto gridView = new SectionedGridView;
-        m_viewController
-            = new ExamplesViewController(s_exampleSetModel, gridView, m_searcher, isExamples, this);
-
-        gridView->setItemDelegate(&m_exampleDelegate);
-
-        Column {
-            titleRow,
-            gridView,
-            spacing(GapVXxl),
-            customMargins(PaddingHXxl, PaddingVXxl, 0, 0),
-        }.attachTo(this);
-
-        connect(&m_exampleDelegate, &ExampleDelegate::tagClicked,
-                this, &ExamplesPageWidget::onTagClicked);
-    }
-
-    void onTagClicked(const QString &tag)
-    {
-        const QString text = m_searcher->text();
-        m_searcher->setText((text.startsWith("tag:\"") ? text.trimmed() + " " : QString())
-                            + QString("tag:\"%1\" ").arg(tag));
-    }
-
-    void showEvent(QShowEvent *event) override
-    {
-        m_viewController->setVisible(true);
-        QWidget::showEvent(event);
-    }
-
-    void hideEvent(QHideEvent *event) override
-    {
-        m_viewController->setVisible(false);
-        QWidget::hideEvent(event);
+        return titleRow.emerge();
     }
 
     const bool m_isExamples;
     ExampleDelegate m_exampleDelegate;
-    QLineEdit *m_searcher;
+    QLineEdit *m_searcher = nullptr;
     ExamplesViewController *m_viewController = nullptr;
 };
 
-QWidget *ExamplesWelcomePage::createWidget() const
+QWidget *ExamplesWelcomePage::createWidget(PageStyle style) const
 {
-    return new ExamplesPageWidget(m_showExamples);
+    return new ExamplesPageWidget(m_showExamples, style);
 }
 
 void setupGettingStartedWelcomePage()

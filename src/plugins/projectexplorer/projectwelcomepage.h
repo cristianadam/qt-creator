@@ -47,7 +47,7 @@ public:
     QString title() const override { return QCoreApplication::translate("QtC::ProjectExplorer", "Projects"); }
     int priority() const override { return 20; }
     Utils::Id id() const override;
-    QWidget *createWidget() const override;
+    QWidget *createWidget(PageStyle) const override;
 
     void reloadWelcomeScreenData() const;
 
