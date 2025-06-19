@@ -25,8 +25,6 @@ struct InstancePrivate
 {
     Config config;
     Tasking::TaskTree taskTree;
-
-    Environment probedUserEnvironment;
 };
 
 Instance::Instance(Config config)
@@ -147,6 +145,13 @@ QDebug operator<<(QDebug debug, const ContainerDetails &details)
     debug.nospace() << "]";
     return debug;
 }
+
+struct RunningContainerDetails
+{
+    QString userName;
+    QString userShell;
+    Environment probedUserEnvironment;
+};
 
 struct ImageDetails
 {
@@ -633,50 +638,56 @@ static ExecutableItem execInContainerTask(
     return ProcessTask{setupExec, doneHandler};
 }
 
-template<typename C>
-static ExecutableItem probeUserEnvTask(C containerConfig, const InstanceConfig &instanceConfig)
+static ExecutableItem probeUserEnvTask(
+    Storage<RunningContainerDetails> containerDetails,
+    const DevContainerCommon &commonConfig,
+    const InstanceConfig &instanceConfig)
 {
-    const auto setupProbe = [containerConfig, instanceConfig](Process &process) {
-        if (containerConfig.probeUserEnv == UserEnvProbe::None)
-            return SetupResult::StopWithSuccess;
+    if (commonConfig.userEnvProbe == UserEnvProbe::None)
+        return Group{};
 
-        const QString args = QMap<UserEnvProbe, QString>{
-            {UserEnvProbe::None, "-c"},
-            {UserEnvProbe::InteractiveShell, "-ic"},
-            {UserEnvProbe::LoginShell, "-lc"},
-            {UserEnvProbe::LoginInteractiveShell, "-lic"}}[containerConfig.userEnvProbe];
+    const QString shellArg = QMap<UserEnvProbe, QString>{
+        {UserEnvProbe::None, "-c"},
+        {UserEnvProbe::InteractiveShell, "-ic"},
+        {UserEnvProbe::LoginShell, "-lc"},
+        {UserEnvProbe::LoginInteractiveShell, "-lic"}}[commonConfig.userEnvProbe];
 
-        connectProcessToLog(process, {}, Tr::tr("Probe User Environment"));
+    return execInContainerTask(
+        instanceConfig,
+        [containerDetails, shellArg]() -> CommandLine {
+            return {FilePath::fromUserInput(containerDetails->userShell), {shellArg, "printenv"}};
+        },
+        [containerDetails,
+         commonConfig,
+         instanceConfig](const Process &process, DoneWith doneWith) -> DoneResult {
+            if (doneWith == DoneWith::Error) {
+                qCWarning(devcontainerlog)
+                    << "Failed to probe user environment:" << process.cleanedStdErr();
+                return DoneResult::Error;
+            }
+            //
+            const QString output = process.cleanedStdOut().trimmed();
+            if (output.isEmpty()) {
+                qCWarning(devcontainerlog) << "No output from user environment probe.";
+                return DoneResult::Success;
+            }
+            const QStringList envLines = output.split('\n', Qt::SkipEmptyParts);
+            NameValueDictionary envDict;
 
-        CommandLine probeCmdLine{
-            instanceConfig.dockerCli,
-            {
-                "exec",
-                containerName(instanceConfig),
-            }};
-        process.setCommand(probeCmdLine);
+            // We don't want to capture the following environment variables:
+            static const QStringList filterKeys{"_", "PWD"};
 
-        qCDebug(devcontainerlog) << "Probing user environment with command:"
-                                 << process.commandLine().toUserOutput();
-    };
+            for (const QString &line : envLines) {
+                const QStringList parts = line.split('=', Qt::KeepEmptyParts);
+                if (parts.size() == 2 && !filterKeys.contains(parts[0]))
+                    envDict.set(parts[0], parts[1]);
+            }
 
-    const auto doneProbe = [](const Process &process) -> DoneResult {
-        if (process.exitCode() != 0) {
-            qCWarning(devcontainerlog)
-                << "Failed to probe user environment:" << process.cleanedStdErr();
-            return DoneResult::Error;
-        }
-        return DoneResult::Success;
-    };
+            containerDetails->probedUserEnvironment = Environment(envDict);
 
-    return ProcessTask{setupProbe, doneProbe};
+            return DoneResult::Success;
+        });
 }
-
-struct RunningContainerDetails
-{
-    QString userName;
-    QString userShell;
-};
 
 struct UserFromPasswd
 {
@@ -703,6 +714,7 @@ Result<UserFromPasswd> parseUserFromPasswd(const QString &passwdLine)
 static ExecutableItem runningContainerDetailsTask(
     Storage<ContainerDetails> containerDetails,
     Storage<RunningContainerDetails> runningDetails,
+    const DevContainerCommon &commonConfig,
     const InstanceConfig &instanceConfig)
 {
     return Group{
@@ -771,7 +783,8 @@ static ExecutableItem runningContainerDetailsTask(
                 runningDetails->userShell = user->shell;
 
                 return DoneResult::Success;
-            })};
+            }),
+        probeUserEnvTask(runningDetails, commonConfig, instanceConfig)};
 }
 
 static Result<Group> prepareContainerRecipe(
@@ -833,7 +846,7 @@ static Result<Group> prepareContainerRecipe(
                 ProcessTask(setupStart)
             },
         },
-        runningContainerDetailsTask(containerDetails, runningDetails, instanceConfig),
+        runningContainerDetailsTask(containerDetails, runningDetails, commonConfig, instanceConfig),
     };
     // clang-format on
 }
