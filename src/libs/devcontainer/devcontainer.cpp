@@ -6,6 +6,7 @@
 #include "devcontainertr.h"
 
 #include <tasking/barrier.h>
+#include <tasking/conditional.h>
 
 #include <utils/algorithm.h>
 #include <utils/environment.h>
@@ -385,11 +386,13 @@ static ProcessTask inspectContainerTask(
 }
 
 static ProcessTask inspectImageTask(
-    Storage<ImageDetails> imageDetails, const InstanceConfig &instanceConfig)
+    Storage<ImageDetails> imageDetails,
+    const InstanceConfig &instanceConfig,
+    const QString &imageName)
 {
-    const auto setupInspectImage = [imageDetails, instanceConfig](Process &process) {
-        CommandLine inspectCmdLine{
-            instanceConfig.dockerCli, {"inspect", {"--type", "image"}, imageName(instanceConfig)}};
+    const auto setupInspectImage = [imageDetails, instanceConfig, imageName](Process &process) {
+        CommandLine
+            inspectCmdLine{instanceConfig.dockerCli, {"inspect", {"--type", "image"}, imageName}};
 
         process.setCommand(inspectCmdLine);
         process.setWorkingDirectory(instanceConfig.workspaceFolder);
@@ -398,7 +401,14 @@ static ProcessTask inspectImageTask(
             QString(Tr::tr("Inspecting Image: %1")).arg(process.commandLine().toUserOutput()));
     };
 
-    const auto doneInspectImage = [imageDetails](const Process &process) -> DoneResult {
+    const auto doneInspectImage =
+        [imageDetails](const Process &process, DoneWith doneWith) -> DoneResult {
+        if (doneWith != DoneWith::Success) {
+            qCWarning(devcontainerlog) << "Docker inspect failed with result:" << doneWith
+                                       << "Output:" << process.cleanedStdOut();
+            return DoneResult::Error;
+        }
+
         const auto output = process.cleanedStdOut();
         QJsonParseError error;
         QJsonDocument doc = QJsonDocument::fromJson(output.toUtf8(), &error);
@@ -837,7 +847,7 @@ static Result<Group> prepareContainerRecipe(
         containerDetails,
 
         ProcessTask(setupBuildImage),
-        inspectImageTask(imageDetails, instanceConfig),
+        inspectImageTask(imageDetails, instanceConfig, imageName(instanceConfig)),
         ProcessTask(setupCreateContainer),
         inspectContainerTask(containerDetails, instanceConfig),
         Group {
@@ -851,9 +861,9 @@ static Result<Group> prepareContainerRecipe(
     // clang-format on
 }
 
-static Result<Group> prepareContainerRecipe(
+static ExecutableItem prepareDockerImageRecipe(
+    Storage<ImageDetails> imageDetails,
     const ImageContainer &imageConfig,
-    const DevContainerCommon &commonConfig,
     const InstanceConfig &instanceConfig)
 {
     const auto setupPullImage = [imageConfig, instanceConfig](Process &process) {
@@ -879,6 +889,21 @@ static Result<Group> prepareContainerRecipe(
             QString("Tagging Image: %1").arg(process.commandLine().toUserOutput()));
     };
 
+    return Group{
+        If(inspectImageTask(imageDetails, instanceConfig, imageConfig.image)) >> Then{
+            ProcessTask(setupTagImage),
+        } >> Else {
+            ProcessTask(setupPullImage),
+            ProcessTask(setupTagImage),
+            inspectImageTask(imageDetails, instanceConfig, imageName(instanceConfig)),
+        }};
+}
+
+static Result<Group> prepareContainerRecipe(
+    const ImageContainer &imageConfig,
+    const DevContainerCommon &commonConfig,
+    const InstanceConfig &instanceConfig)
+{
     Storage<ImageDetails> imageDetails;
     Storage<ContainerDetails> containerDetails;
     Storage<RunningContainerDetails> runningDetails;
@@ -902,9 +927,7 @@ static Result<Group> prepareContainerRecipe(
         imageDetails,
         containerDetails,
         runningDetails,
-        ProcessTask(setupPullImage),
-        ProcessTask(setupTagImage),
-        inspectImageTask(imageDetails, instanceConfig),
+        prepareDockerImageRecipe(imageDetails, imageConfig, instanceConfig),
         ProcessTask(setupCreateContainer),
         inspectContainerTask(containerDetails, instanceConfig),
         Group {
@@ -913,7 +936,7 @@ static Result<Group> prepareContainerRecipe(
                 ProcessTask(setupStart)
             },
         },
-        runningContainerDetailsTask(containerDetails, runningDetails, instanceConfig),
+        runningContainerDetailsTask(containerDetails, runningDetails, commonConfig, instanceConfig),
     };
     // clang-format on
 }
