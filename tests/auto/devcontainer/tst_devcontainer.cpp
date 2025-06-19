@@ -33,6 +33,7 @@ private slots:
 
     void readConfig();
     void testCommands();
+    void upImage();
     void upDockerfile();
 };
 
@@ -143,6 +144,38 @@ FROM alpine:latest
     };
     config.containerConfig = dockerFileConfig;
     config.common.name = "Test Dockerfile";
+
+    qDebug() << "DevContainer Config:" << config;
+
+    std::unique_ptr<DevContainer::Instance> instance = DevContainer::Instance::fromConfig(config);
+
+    DevContainer::InstanceConfig instanceConfig{
+        .dockerCli = "docker",
+        .dockerComposeCli = "docker-compose",
+        .workspaceFolder = Utils::FilePath::fromUserInput(QDir::tempPath()),
+        .configFilePath = Utils::FilePath::fromUserInput(QDir::tempPath()) / "devcontainer.json",
+    };
+
+    using namespace std::chrono_literals;
+
+    Utils::Result<Tasking::Group> recipe = instance->upRecipe(instanceConfig);
+    QVERIFY_RESULT(recipe);
+    QCOMPARE(Tasking::TaskTree::runBlocking((*recipe).withTimeout(5s)), Tasking::DoneWith::Success);
+
+    Utils::Result<Tasking::Group> downRecipe = instance->downRecipe(instanceConfig);
+    QVERIFY_RESULT(downRecipe);
+    QCOMPARE(Tasking::TaskTree::runBlocking(*downRecipe), Tasking::DoneWith::Success);
+}
+
+void tst_DevContainer::upImage()
+{
+    DevContainer::Config config;
+    DevContainer::ImageContainer imageConfig{
+        .image = "vision3-sdk-container:1_3_0_0.5_15_18.2",
+    };
+    config.containerConfig = imageConfig;
+    config.common.name = "Test Image";
+    config.common.forwardPorts = {8080};
 
     qDebug() << "DevContainer Config:" << config;
 
