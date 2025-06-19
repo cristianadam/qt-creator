@@ -195,14 +195,22 @@ static void connectProcessToLog(
     process.setTextChannelMode(Channel::Error, TextChannelMode::MultiLine);
     QObject::connect(
         &process, &Process::textOnStandardOutput, [instanceConfig, context](const QString &text) {
-            for (const auto &line : text.split('\n'))
-                instanceConfig.logFunction(QString("[%1] %2").arg(context).arg(line.trimmed()));
+            for (const auto &line : text.split('\n')) {
+                if (context.isEmpty())
+                    instanceConfig.logFunction(line.trimmed());
+                else
+                    instanceConfig.logFunction(QString("[%1] %2").arg(context).arg(line.trimmed()));
+            }
         });
 
     QObject::connect(
         &process, &Process::textOnStandardError, [instanceConfig, context](const QString &text) {
-            for (const auto &line : text.split('\n'))
-                instanceConfig.logFunction(QString("[%1] %2").arg(context).arg(line.trimmed()));
+            for (const auto &line : text.split('\n')) {
+                if (context.isEmpty())
+                    instanceConfig.logFunction(line.trimmed());
+                else
+                    instanceConfig.logFunction(QString("[%1] %2").arg(context).arg(line.trimmed()));
+            }
         });
 }
 
@@ -805,6 +813,114 @@ static ExecutableItem runningContainerDetailsTask(
     return Group{idTask, shellTask, probeUserEnvTask(runningDetails, commonConfig, instanceConfig)};
 }
 
+static ExecutableItem singleCommandLifecycleRecipe(
+    const InstanceConfig &instanceConfig,
+    std::variant<QString, QStringList> command,
+    const CommandLine &prefix = {},
+    const QString &name = {})
+{
+    const CommandLine hostShellPrefix = HostOsInfo::isWindowsHost()
+                                            ? CommandLine{"cmd.exe", {"/c"}}
+                                            : CommandLine{"/bin/sh", {"-c"}};
+    const CommandLine shellPrefix = prefix.isEmpty() ? hostShellPrefix
+                                                     : CommandLine{"/bin/sh", {"-c"}};
+
+    CommandLine cmdLine = prefix;
+    if (std::holds_alternative<QString>(command)) {
+        if (prefix.isEmpty())
+            cmdLine = shellPrefix;
+        else
+            cmdLine.addCommandLineAsArgs(shellPrefix);
+    }
+
+    if (std::holds_alternative<QString>(command)) {
+        const QString cmd = std::get<QString>(command);
+        if (cmd.isEmpty())
+            return Group{};
+
+        if (cmdLine.isEmpty())
+            cmdLine = CommandLine(FilePath::fromUserInput(cmd));
+        else
+            cmdLine.addArg(cmd);
+    } else {
+        const auto stringList = std::get<QStringList>(command);
+        if (stringList.isEmpty())
+            return Group{};
+
+        const CommandLine cmdLineFromList
+            = CommandLine(FilePath::fromUserInput(stringList[0]), stringList.mid(1));
+        if (cmdLine.isEmpty())
+            cmdLine = cmdLineFromList;
+        else
+            cmdLine.addCommandLineAsArgs(cmdLineFromList);
+    }
+
+    return ProcessTask([cmdLine, instanceConfig, name](Process &process) {
+        process.setCommand(cmdLine);
+        process.setWorkingDirectory(instanceConfig.workspaceFolder);
+
+        connectProcessToLog(process, instanceConfig, name);
+    });
+}
+
+static ExecutableItem lifecycleHookRecipe(
+    const QString &hookName,
+    const InstanceConfig &instanceConfig,
+    std::optional<Command> command,
+    const CommandLine &prefix = {})
+{
+    if (!command)
+        return Group{};
+
+    auto logExecution = Sync([instanceConfig, hookName] {
+        instanceConfig.logFunction(QString("Executing the %1 hook from %2")
+                                       .arg(hookName)
+                                       .arg(instanceConfig.configFilePath.fileName()));
+    });
+
+    const auto cmds = std::visit(
+        overloaded{
+            [instanceConfig, prefix](const QString &cmd) -> GroupItems {
+                return {singleCommandLifecycleRecipe(instanceConfig, cmd, prefix)};
+            },
+            [instanceConfig, prefix](const QStringList &cmds) -> GroupItems {
+                return {singleCommandLifecycleRecipe(instanceConfig, cmds, prefix)};
+            },
+            [instanceConfig, prefix](const CommandMap &map) {
+                GroupItems commands;
+                for (const auto &[key, value] : map)
+                    commands.push_back(
+                        singleCommandLifecycleRecipe(instanceConfig, value, prefix, key));
+                return commands;
+            }},
+        *command);
+
+    return Group{logExecution, Group{parallelIdealThreadCountLimit, cmds}};
+}
+
+static ExecutableItem runLifecycleHooksRecipe(
+    DevContainerCommon commonConfig, const InstanceConfig &instanceConfig)
+{
+    const CommandLine dockerExecPrefix
+        = CommandLine{instanceConfig.dockerCli, {"exec", containerName(instanceConfig)}};
+
+    return Group{
+        lifecycleHookRecipe("InitializeCommand", instanceConfig, commonConfig.initializeCommand),
+        lifecycleHookRecipe(
+            "onCreateCommand", instanceConfig, commonConfig.onCreateCommand, dockerExecPrefix),
+        lifecycleHookRecipe(
+            "updateContentCommand",
+            instanceConfig,
+            commonConfig.updateContentCommand,
+            dockerExecPrefix),
+        lifecycleHookRecipe(
+            "postCreateCommand", instanceConfig, commonConfig.postCreateCommand, dockerExecPrefix),
+        lifecycleHookRecipe(
+            "postStartCommand", instanceConfig, commonConfig.postStartCommand, dockerExecPrefix),
+        lifecycleHookRecipe(
+            "postAttachCommand", instanceConfig, commonConfig.postAttachCommand, dockerExecPrefix)};
+}
+
 static Result<Group> prepareContainerRecipe(
     const DockerfileContainer &containerConfig,
     const DevContainerCommon &commonConfig,
@@ -858,6 +974,7 @@ static Result<Group> prepareContainerRecipe(
             ProcessTask(setupStart)
         },
         runningContainerDetailsTask(containerDetails, runningDetails, commonConfig, instanceConfig),
+        runLifecycleHooksRecipe(commonConfig, instanceConfig),
     };
     // clang-format on
 }
@@ -931,6 +1048,7 @@ static Result<Group> prepareContainerRecipe(
             ProcessTask(setupStart)
         },
         runningContainerDetailsTask(containerDetails, runningDetails, commonConfig, instanceConfig),
+        runLifecycleHooksRecipe(commonConfig, instanceConfig),
     };
     // clang-format on
 }
