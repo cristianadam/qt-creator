@@ -17,6 +17,8 @@ namespace Utils {
 
 namespace Internal { class ProcessPrivate; }
 
+class ProcessInterface;
+
 namespace Pty {
 
 enum PtyInputFlag {
@@ -95,6 +97,8 @@ public:
     bool m_belowNormalPriority = false; // internal, dependent on other fields and specific code path
     bool m_createConsoleOnWindows = false;
     bool m_forceDefaultErrorMode = false;
+
+    std::function<ProcessInterface *()> m_createProcessInterface;
 };
 
 class QTCREATOR_UTILS_EXPORT ProcessResultData
