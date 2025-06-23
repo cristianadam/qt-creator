@@ -44,9 +44,21 @@ class tst_DevContainer : public QObject
 {
     Q_OBJECT
 
+    const FilePath tempDir = FilePath::fromString(QDir::tempPath()) / "tst_DevContainer";
+
 private slots:
     void initTestCase()
     {
+        QTC_ASSERT_RESULT(
+            tempDir.ensureWritableDir(), QSKIP("Failed to create temp directory for tests."));
+
+        (tempDir / "main.cpp").writeFileContents(R"(
+#include <iostream>
+int main() {
+    std::cout << "Hello, DevContainer!" << std::endl;
+    return 0;
+})");
+
         if (!testDocker("docker"))
             QSKIP("Docker is not set up correctly, skipping tests.");
 
@@ -72,8 +84,8 @@ void tst_DevContainer::instanceConfigToString_data()
     DevContainer::InstanceConfig instanceConfig{
         .dockerCli = "docker",
         .dockerComposeCli = "docker-compose",
-        .workspaceFolder = Utils::FilePath::fromUserInput(QDir::tempPath()),
-        .configFilePath = Utils::FilePath::fromUserInput(QDir::tempPath()) / "devcontainer.json",
+        .workspaceFolder = tempDir,
+        .configFilePath = tempDir / "devcontainer.json",
         .mounts = {},
     };
 
@@ -173,8 +185,8 @@ void tst_DevContainer::readConfig()
     DevContainer::InstanceConfig instanceConfig{
         .dockerCli = "docker",
         .dockerComposeCli = "docker-compose",
-        .workspaceFolder = Utils::FilePath::fromUserInput(QDir::tempPath()),
-        .configFilePath = Utils::FilePath::fromUserInput(QDir::tempPath()) / "devcontainer.json",
+        .workspaceFolder = tempDir,
+        .configFilePath = tempDir / "devcontainer.json",
         .mounts = {},
     };
 
@@ -256,8 +268,8 @@ FROM alpine:latest
     DevContainer::InstanceConfig instanceConfig{
         .dockerCli = "docker",
         .dockerComposeCli = "docker-compose",
-        .workspaceFolder = Utils::FilePath::fromUserInput(QDir::tempPath()),
-        .configFilePath = Utils::FilePath::fromUserInput(QDir::tempPath()) / "devcontainer.json",
+        .workspaceFolder = tempDir,
+        .configFilePath = tempDir / "devcontainer.json",
         .mounts = {}};
 
     std::unique_ptr<DevContainer::Instance> instance
@@ -289,8 +301,8 @@ void tst_DevContainer::upImage()
     DevContainer::InstanceConfig instanceConfig{
         .dockerCli = "docker",
         .dockerComposeCli = "docker-compose",
-        .workspaceFolder = Utils::FilePath::fromUserInput(QDir::tempPath()),
-        .configFilePath = Utils::FilePath::fromUserInput(QDir::tempPath()) / "devcontainer.json",
+        .workspaceFolder = tempDir,
+        .configFilePath = tempDir / "devcontainer.json",
         .mounts = {}};
 
     std::unique_ptr<DevContainer::Instance> instance
@@ -330,8 +342,8 @@ void tst_DevContainer::upWithHooks()
     DevContainer::InstanceConfig instanceConfig{
         .dockerCli = "docker",
         .dockerComposeCli = "docker-compose",
-        .workspaceFolder = Utils::FilePath::fromUserInput(QDir::tempPath()),
-        .configFilePath = Utils::FilePath::fromUserInput(QDir::tempPath()) / "devcontainer.json",
+        .workspaceFolder = tempDir,
+        .configFilePath = tempDir / "devcontainer.json",
         .mounts = {},
     };
 
