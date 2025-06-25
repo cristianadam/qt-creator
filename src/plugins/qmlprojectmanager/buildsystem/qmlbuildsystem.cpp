@@ -45,7 +45,6 @@
 #include <texteditor/textdocument.h>
 
 #include <QAction>
-#include <QtCore5Compat/qtextcodec.h>
 
 using namespace ProjectExplorer;
 using namespace Utils;

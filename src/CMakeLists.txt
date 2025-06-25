@@ -52,7 +52,7 @@ endif()
 
 include(CMakeFindDependencyMacro)
 find_dependency(Qt6 ${IDE_QT_VERSION_MIN}
-  COMPONENTS Concurrent Core Gui Widgets Core5Compat Network PrintSupport Qml Sql REQUIRED
+  COMPONENTS Concurrent Core Gui Widgets Network PrintSupport Qml Sql REQUIRED
 )
 find_dependency(Qt6 COMPONENTS Quick QuickWidgets QUIET)
 
