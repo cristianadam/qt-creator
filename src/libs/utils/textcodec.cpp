@@ -3,7 +3,6 @@
 
 #include "textcodec.h"
 
-#include "algorithm.h"
 #include "qtcassert.h"
 
 #include <QHash>
@@ -122,17 +121,23 @@ bool operator!=(const TextEncoding &left, const TextEncoding &right)
     return left.name() != right.name();
 }
 
+bool operator<(const TextEncoding &left, const TextEncoding &right)
+{
+    return left.name() < right.name();
+}
+
 static QList<TextEncoding> getAvailableEncoding()
 {
-    std::set<QByteArray> encodingNames;
+    std::set<TextEncoding> encodings;
 
-    const QList<QByteArray> codecs = QTextCodec::availableCodecs();
-    for (const QByteArray &codec : codecs)
-        encodingNames.insert(codec);
+    const QStringList codecNames = QStringConverter::availableCodecs();
+    for (const QString &name : codecNames) {
+        const TextEncoding encoding(name.toUtf8());
+        if (encoding.isValid())
+            encodings.insert(encoding);
+    }
 
-    return Utils::transform<QList<TextEncoding>>(encodingNames, [](const QByteArray &name) {
-        return TextEncoding(name);
-    });
+    return {encodings.begin(), encodings.end()};
 }
 
 const QList<TextEncoding> &TextEncoding::availableEncodings()
