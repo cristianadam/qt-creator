@@ -19,7 +19,10 @@
 
     The \QC development team is aware of the issues described here, and
     therefore, you do not need to report them in the \l{https://bugreports.qt.io}
-    {Qt Project Bug Tracker}.
+    {Qt Project Bug Tracker}. However, if you run into these issues,
+    feel free to check the links to the applicable bug ticket
+    and add your vote or any additional information you might have
+    about your development environment.
 
     For a list of fixed issues and added features, go to \uicontrol Help >
     \uicontrol {Change Log}.
@@ -111,6 +114,17 @@
     \section1 Debugging Issues
 
     \list
+        \li Native (C++) debugging on Android has a few issues. Many factors
+        affect this, such as the specific target hardware, the Android version,
+        Qt version, and NDK version. Here are the current issues with this
+        version of \QC:
+        \list
+            \li Device debugging stops in Android code during startup.
+                See \l QTCREATORBUG-32004 for any up-to-date workarounds.
+            \li Native debugging on Android 15 lands in disassembler.
+                See \l QTCREATORBUG-32937 and \l QTCREATORBUG-29928 for any
+                up-to-date workarounds.
+        \endlist
 
         \li  When debugging executables created by the GNU Compiler version 4.5.0
             (all platforms), some data types will not be displayed in the
