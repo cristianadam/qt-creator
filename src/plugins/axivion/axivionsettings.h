@@ -96,5 +96,6 @@ private:
 AxivionSettings &settings();
 
 QString credentialKey(const AxivionServer &server);
+bool handleMissingPathMapping(const Utils::FilePath &missingPath, const QString &projectName);
 
 } // Axivion::Internal
