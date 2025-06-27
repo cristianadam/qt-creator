@@ -93,6 +93,9 @@ public:
     virtual bool visit(ArrayTypeAST *) { return true; }
     virtual void endVisit(ArrayTypeAST *) {}
 
+    virtual bool visit(ArrayTypeAST::ArraySpecAST *) { return true; }
+    virtual void endVisit(ArrayTypeAST::ArraySpecAST *) {}
+
     virtual bool visit(StructTypeAST *) { return true; }
     virtual void endVisit(StructTypeAST *) {}
 
@@ -131,6 +134,9 @@ public:
 
     virtual bool visit(InterfaceBlockAST *) { return true; }
     virtual void endVisit(InterfaceBlockAST *) {}
+
+    virtual bool visit(SubroutineTypeAST *) { return true; }
+    virtual void endVisit(SubroutineTypeAST *) {}
 
 };
 

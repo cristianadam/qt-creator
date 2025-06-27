@@ -250,11 +250,19 @@ bool NamedTypeAST::setPrecision(Precision)
     return false;
 }
 
+void ArrayTypeAST::ArraySpecAST::accept0(Visitor *visitor)
+{
+    if (visitor->visit(this)) {
+        accept(size, visitor);
+    }
+}
+
 void ArrayTypeAST::accept0(Visitor *visitor)
 {
     if (visitor->visit(this)) {
-        accept(elementType, visitor);
-        accept(size, visitor);
+        accept(elementType, visitor); // REMOVE
+        accept(arraySpecifier, visitor);
+        accept(size, visitor); // REMOVE
     }
     visitor->endVisit(this);
 }
@@ -423,5 +431,22 @@ TypeAST::Precision InterfaceBlockAST::precision() const
 bool InterfaceBlockAST::setPrecision(Precision)
 {
     // interface blocks cannot have a precision set.
+    return false;
+}
+
+void SubroutineTypeAST::accept0(Visitor *visitor)
+{
+    visitor->visit(this);
+    // ignore the function decl to avoid declaring it for real
+    visitor->endVisit(this);
+}
+
+TypeAST::Precision SubroutineTypeAST::precision() const
+{
+    return PrecNotValid;
+}
+
+bool SubroutineTypeAST::setPrecision(Precision)
+{
     return false;
 }
