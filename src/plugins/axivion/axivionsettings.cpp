@@ -899,6 +899,51 @@ void AxivionSettingsWidget::updateVersionAndBuildDate(QLabel *version, QLabel *b
     buildDate->setText(info ? info->dateTime : QString{});
 }
 
+bool showPathMappingsDialog(const PathMapping &suggested)
+{
+    QDialog d;
+    d.setWindowTitle(Tr::tr("Missing Path Mapping"));
+    QVBoxLayout *layout = new QVBoxLayout;
+    auto label = new QLabel(Tr::tr("No matching path mapping for '%1' configured.\n"
+                                   "To be able to open files for this project you need to specify "
+                                   "a valid path mapping.").arg(suggested.projectName), &d);
+    layout->addWidget(label);
+    auto buttons = new QDialogButtonBox(QDialogButtonBox::Cancel | QDialogButtonBox::Ok, &d);
+    auto ok = buttons->button(QDialogButtonBox::Ok);
+    auto mappingWidget = new QWidget(&d);
+    PathMappingDetails details;
+    details.updateContent(suggested);
+    details.layouter()().attachTo(mappingWidget);
+    layout->addWidget(mappingWidget);
+    ok->setEnabled(suggested.isValid()
+                   && suggested.localPath.resolvePath(suggested.analysisPath).exists());
+    QObject::connect(buttons->button(QDialogButtonBox::Cancel),
+                     &QPushButton::clicked, &d, &QDialog::reject);
+    QObject::connect(ok, &QPushButton::clicked, &d, &QDialog::accept);
+    QObject::connect(&details, &BaseAspect::changed, &d, [&details, ok] {
+        const PathMapping pm = details.toPathMapping();
+        ok->setEnabled(pm.isValid() && pm.localPath.resolvePath(pm.analysisPath).exists());
+    });
+    layout->addWidget(buttons);
+    d.setLayout(layout);
+    d.resize(500, 200);
+
+    if (d.exec() != QDialog::Accepted)
+        return false;
+
+    const PathMapping pm = details.toPathMapping();
+    QList<PathMapping> mappings = settings().validPathMappings();
+    if (mappings.contains(pm)) // do not store an already existing mapping
+        return false;
+
+    // add and store the new mapping
+    mappings.append(pm);
+    pathMappingSettings().setVariantValue(pathMappingsToSetting(mappings));
+    pathMappingSettings().writeSettings();
+
+    return true;
+}
+
 // settings pages
 
 class AxivionSettingsPage : public IOptionsPage
