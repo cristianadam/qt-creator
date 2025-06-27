@@ -96,5 +96,6 @@ private:
 AxivionSettings &settings();
 
 QString credentialKey(const AxivionServer &server);
+bool showPathMappingsDialog(const PathMapping &suggested);
 
 } // Axivion::Internal
