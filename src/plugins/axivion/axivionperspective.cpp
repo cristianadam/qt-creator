@@ -141,6 +141,25 @@ static FilePath mappedPathForLink(const Link &link)
     return {};
 }
 
+static FilePath requestPathMapping(const Link &link)
+{
+    Project *startupProj = ProjectManager::startupProject();
+    const FilePath computedPath
+        = startupProj ? findFileForIssuePath(link.targetFilePath) : FilePath{};
+    std::optional<Dto::ProjectInfoDto> pi = projectInfo();
+    PathMapping suggested;
+    if (pi)
+        suggested.projectName = pi->name;
+    if (computedPath.exists()) {
+        suggested.localPath = computedPath.chopped(
+            link.targetFilePath.pathView().size() + 1);
+    }
+    if (!showPathMappingsDialog(suggested)) // mapping still invalid
+        return {};
+
+    return mappedPathForLink(link);
+}
+
 class IssueListItem final : public ListItem
 {
 public:
@@ -176,22 +195,8 @@ public:
                 }).link;
 
                 FilePath targetFilePath = mappedPathForLink(link);
-                if (targetFilePath.isEmpty()) {
-                    Project *startupProj = ProjectManager::startupProject();
-                    const FilePath computedPath
-                        = startupProj ? findFileForIssuePath(link.targetFilePath) : FilePath{};
-                    std::optional<Dto::ProjectInfoDto> pi = projectInfo();
-                    PathMapping suggested;
-                    if (pi)
-                        suggested.projectName = pi->name;
-                    if (computedPath.exists()) {
-                        suggested.localPath = computedPath.chopped(
-                            link.targetFilePath.pathView().size() + 1);
-                    }
-                    if (!showPathMappingsDialog(suggested)) // mapping still invalid
-                        return true;
-                    targetFilePath = mappedPathForLink(link);
-                }
+                if (targetFilePath.isEmpty())
+                    targetFilePath = requestPathMapping(link);
                 link.targetFilePath = targetFilePath;
                 if (link.targetFilePath.exists()) {
                     EditorManager::openEditorAt(link);
@@ -1777,7 +1782,11 @@ void AxivionPerspective::handleAnchorClicked(const QUrl &url)
         return;
     Link link;
     if (const QString path = query.queryItemValue("filename", QUrl::FullyDecoded); !path.isEmpty())
-        link.targetFilePath = findFileForIssuePath(FilePath::fromUserInput(path));
+        link.targetFilePath = FilePath::fromUserInput(path);
+    FilePath targetFilePath = mappedPathForLink(link);
+    if (targetFilePath.isEmpty())
+        targetFilePath = requestPathMapping(link);
+    link.targetFilePath = targetFilePath;
     if (const QString line = query.queryItemValue("line"); !line.isEmpty())
         link.targetLine = line.toInt();
     // column entry is wrong - so, ignore it
