@@ -254,7 +254,6 @@ class AxivionPluginPrivate : public QObject
 public:
     AxivionPluginPrivate();
     void handleSslErrors(QNetworkReply *reply, const QList<QSslError> &errors);
-    void onStartupProjectChanged(Project *project);
     void fetchLocalDashboardInfo(const DashboardInfoHandler &handler,
                                  const QString &projectName);
     void fetchDashboardAndProjectInfo(const DashboardInfoHandler &handler,
@@ -293,14 +292,11 @@ public:
     std::optional<QString> m_analysisVersion;
     QList<Dto::NamedFilterInfoDto> m_globalNamedFilters;
     QList<Dto::NamedFilterInfoDto> m_userNamedFilters;
-    Project *m_project = nullptr;
     bool m_runningQuery = false;
     TaskTreeRunner m_taskTreeRunner;
     std::unordered_map<IDocument *, std::unique_ptr<TaskTree>> m_docMarksTrees;
     TaskTreeRunner m_issueInfoRunner;
     TaskTreeRunner m_namedFilterRunner;
-    FileInProjectFinder m_fileFinder; // FIXME maybe obsolete when path mapping is implemented
-    QMetaObject::Connection m_fileFinderConnection;
     QHash<FilePath, QSet<TextMark *>> m_allMarks;
     bool m_inlineIssuesEnabled = true;
     DashboardMode m_dashboardMode = DashboardMode::Global;
@@ -466,29 +462,6 @@ void AxivionPluginPrivate::handleSslErrors(QNetworkReply *reply, const QList<QSs
     Q_UNUSED(reply)
     Q_UNUSED(errors)
 #endif // ssl
-}
-
-void AxivionPluginPrivate::onStartupProjectChanged(Project *project)
-{
-    if (project == m_project)
-        return;
-
-    if (m_project)
-        disconnect(m_fileFinderConnection);
-
-    m_project = project;
-
-    if (!m_project) {
-        m_fileFinder.setProjectDirectory({});
-        m_fileFinder.setProjectFiles({});
-        return;
-    }
-
-    m_fileFinder.setProjectDirectory(m_project->projectDirectory());
-    m_fileFinderConnection = connect(m_project, &Project::fileListChanged, this, [this] {
-        m_fileFinder.setProjectFiles(m_project->files(Project::AllFiles));
-        handleOpenedDocs();
-    });
 }
 
 static QUrl constructUrl(DashboardMode dashboardMode, const QString &projectName,
@@ -1250,14 +1223,11 @@ void AxivionPluginPrivate::onDocumentOpened(IDocument *doc)
         return;
 
     const FilePath docFilePath = doc->filePath();
-    FilePath filePath = settings().mappedFilePath(docFilePath, m_currentProjectInfo->name);
-    if (filePath.isEmpty() && m_project && m_project->isKnownFile(docFilePath))
-        filePath = docFilePath.relativeChildPath(m_project->projectDirectory());
-
-    if (filePath.isEmpty())
+    if (m_allMarks.contains(docFilePath)) // FIXME local vs global dashboard
         return;
 
-    if (m_allMarks.contains(filePath)) // FIXME local vs global dashboard
+    FilePath filePath = settings().mappedFilePath(docFilePath, m_currentProjectInfo->name);
+    if (filePath.isEmpty())
         return;
 
     const auto handler = [this, docFilePath](const Dto::FileViewDto &data) {
@@ -1380,7 +1350,7 @@ class AxivionPlugin final : public ExtensionSystem::IPlugin
         dd = new AxivionPluginPrivate;
 
         connect(ProjectManager::instance(), &ProjectManager::startupProjectChanged,
-                dd, &AxivionPluginPrivate::onStartupProjectChanged);
+                dd, &AxivionPluginPrivate::handleOpenedDocs);
         connect(EditorManager::instance(), &EditorManager::documentOpened,
                 dd, &AxivionPluginPrivate::onDocumentOpened);
         connect(EditorManager::instance(), &EditorManager::documentClosed,
@@ -1446,11 +1416,18 @@ void enableInlineIssues(bool enable)
 Utils::FilePath findFileForIssuePath(const Utils::FilePath &issuePath)
 {
     QTC_ASSERT(dd, return {});
-    if (!dd->m_project || !dd->m_currentProjectInfo)
+    if (!dd->m_currentProjectInfo)
         return {};
-    const FilePaths result = dd->m_fileFinder.findFile(issuePath.toUrl());
+    Project *startupProj = ProjectManager::startupProject();
+    if (!startupProj)
+        return {};
+
+    FileInProjectFinder fileFinder;
+    fileFinder.setProjectDirectory(startupProj->projectDirectory());
+    fileFinder.setProjectFiles(startupProj->files(Project::AllFiles));
+    const FilePaths result = fileFinder.findFile(issuePath.toUrl());
     if (result.size() == 1)
-        return dd->m_project->projectDirectory().resolvePath(result.first());
+        return startupProj->projectDirectory().resolvePath(result.first());
     return {};
 }
 
