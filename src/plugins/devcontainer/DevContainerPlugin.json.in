@@ -7,7 +7,12 @@
     "VendorId" : "theqtcompany",
     "Vendor" : "The Qt Company Ltd",
     "Copyright" : "${IDE_COPYRIGHT}",
-    "Experimental" : true,
+    "DisabledByDefault" : true,
+    "SoftLoadable" : true,
+    "VcsDetectionFiles" : [
+        ".devcontainer",
+        ".devcontainer/devcontainer.json"
+    ],
     "License" : [ "Commercial Usage",
                   "",
                   "Licensees holding valid Qt Commercial licenses may use this plugin in accordance with the Qt Commercial License Agreement provided with the Software or, alternatively, in accordance with the terms contained in a written agreement between you and The Qt Company.",
