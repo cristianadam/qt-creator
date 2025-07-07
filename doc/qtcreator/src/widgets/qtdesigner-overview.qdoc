@@ -101,7 +101,7 @@
 
         \li \preferences > \uicontrol Designer.
             \image {qtdesigner-embedded-design.png} {Qt Widgets Designer preferences}
-        \li In \uicontrol {Embedded Design}, select \inlineimage icons/plus.png
+        \li In \uicontrol {Embedded Design}, select \inlineimage {icons/plus.png} {Plus}
             to open the \uicontrol {Add Profile} dialog.
             \image {qtdesigner-add-profile.png} {Add Profile dialog}
         \li In \uicontrol Name, enter a name for the device. The name is
