@@ -207,6 +207,10 @@ add_qtc_plugin(Core
     locator/urllocatorfilter.h
     loggingviewer.cpp
     loggingviewer.h
+    loggingcategorymodel.cpp
+    loggingcategorymodel.h
+    loggingcategoryregistry.cpp
+    loggingcategoryregistry.h
     manhattanstyle.cpp
     manhattanstyle.h
     messagebox.cpp
