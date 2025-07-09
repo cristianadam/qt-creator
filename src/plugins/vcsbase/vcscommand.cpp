@@ -8,6 +8,8 @@
 
 #include <coreplugin/icore.h>
 
+#include <solutions/tasking/tasktreerunner.h>
+
 #include <utils/environment.h>
 #include <utils/globalfilechangeblocker.h>
 #include <utils/qtcprocess.h>
@@ -360,7 +362,7 @@ ExecutableItem errorTask(const FilePath &workingDir, const QString &errorMessage
 static ProcessTask vcsProcessTaskHelper(
     const VcsProcessData &data,
     const std::optional<Storage<CommandResult>> &resultStorage = {},
-    const std::chrono::seconds timeout = std::chrono::seconds(10),
+    const seconds timeout = seconds(10),
     const std::optional<EventLoopMode> eventLoopMode = {})
 {
     const auto onDone = [data, resultStorage](const Process &process) {
@@ -468,6 +470,26 @@ ProcessTask vcsProcessTask(const VcsProcessData &data,
                            const std::optional<Storage<CommandResult>> &resultStorage)
 {
     return vcsProcessTaskHelper(data, resultStorage);
+}
+
+CommandResult vcsRunBlocking(const VcsProcessData &data, const seconds timeout,
+                             const EventLoopMode eventLoopMode)
+{
+    CommandResult result;
+    const Storage<CommandResult> resultStorage;
+
+    const auto onDone = [resultStorage, &result] { result = *resultStorage; };
+
+    const Group recipe {
+        resultStorage,
+        vcsProcessTaskHelper(data, resultStorage, timeout, eventLoopMode),
+        onGroupDone(onDone)
+    };
+
+    TaskTreeRunner taskTreeRunner;
+    taskTreeRunner.start(recipe);
+    QTC_CHECK(!taskTreeRunner.isRunning());
+    return result;
 }
 
 } // namespace VcsBase
