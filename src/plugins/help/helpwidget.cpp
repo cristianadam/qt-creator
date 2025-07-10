@@ -384,7 +384,6 @@ HelpWidget::HelpWidget(const Core::Context &context, WidgetStyle style, QWidget 
             cmd = Core::ActionManager::registerAction(m_gotoPrevious,
                                                       Core::Constants::GOTOPREVINHISTORY,
                                                       context);
-            windowMenu->addAction(cmd, Core::Constants::G_WINDOW_NAVIGATE);
             connect(m_gotoPrevious,
                     &QAction::triggered,
                     openPagesManager(),
@@ -394,7 +393,6 @@ HelpWidget::HelpWidget(const Core::Context &context, WidgetStyle style, QWidget 
             cmd = Core::ActionManager::registerAction(m_gotoNext,
                                                       Core::Constants::GOTONEXTINHISTORY,
                                                       context);
-            windowMenu->addAction(cmd, Core::Constants::G_WINDOW_NAVIGATE);
             connect(m_gotoNext,
                     &QAction::triggered,
                     openPagesManager(),
