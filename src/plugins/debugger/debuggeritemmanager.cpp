@@ -1016,8 +1016,7 @@ Tasking::ExecutableItem removeAutoDetected(
               });
 
         for (const auto &debugger : debuggers) {
-            logCallback(
-                Tr::tr("Removing auto-detected debugger: \"%1\"").arg(debugger.displayName()));
+            logCallback(Tr::tr("Removing Debugger: \"%1\"").arg(debugger.displayName()));
             DebuggerItemManager::deregisterDebugger(debugger.id());
         }
     });

@@ -485,14 +485,14 @@ Tasking::Group removeDetectedKitsRecipe(const IDeviceConstPtr &device, const Log
     }
 
     const auto removeKits = [device, detectionSource, logCallback]() {
-        logCallback(Tr::tr("Removing auto-detected Kits for device: %1").arg(device->displayName()));
+        logCallback(Tr::tr("Removing Kits for device: %1").arg(device->displayName()));
 
         const auto detectedKits = filtered(KitManager::kits(), [detectionSource](const Kit *k) {
             return k->isAutoDetected() && k->autoDetectionSource() == detectionSource;
         });
 
         for (Kit *kit : detectedKits) {
-            logCallback(Tr::tr("Removing auto-detected Kit: %1").arg(kit->displayName()));
+            logCallback(Tr::tr("Removing Kit: %1").arg(kit->displayName()));
             KitManager::deregisterKit(kit);
         }
     };
@@ -514,7 +514,7 @@ void listAutoDetected(const IDeviceConstPtr &device, const LogCallback &logCallb
 
     for (const auto kit : KitManager::kits()) {
         if (kit->isAutoDetected() && kit->autoDetectionSource() == detectionSource)
-            logCallback(Tr::tr("Auto-detected Kit: %1").arg(kit->displayName()));
+            logCallback(Tr::tr("Kit: %1").arg(kit->displayName()));
     }
 
     for (const auto &factory : KitAspectFactory::kitAspectFactories())

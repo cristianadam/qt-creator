@@ -375,12 +375,7 @@ std::optional<Tasking::ExecutableItem> CMakeKitAspectFactory::removeAutoDetected
     using namespace Tasking;
 
     return Sync([detectionSource, logCallback]() {
-        QString logMessages;
-        CMakeToolManager::instance()->removeDetectedCMake(detectionSource, &logMessages);
-        for (const auto &line : logMessages.split('\n', Qt::KeepEmptyParts)) {
-            if (!line.isEmpty())
-                logCallback(line);
-        }
+        CMakeToolManager::instance()->removeDetectedCMake(detectionSource, logCallback);
     });
 }
 
@@ -389,7 +384,7 @@ void CMakeKitAspectFactory::listAutoDetected(
 {
     for (const CMakeTool *tool : CMakeToolManager::cmakeTools()) {
         if (tool->isAutoDetected() && tool->detectionSource() == detectionSource)
-            logCallback(Tr::tr("Auto-detected CMake tool: %1").arg(tool->displayName()));
+            logCallback(Tr::tr("CMake: %1").arg(tool->displayName()));
     }
 }
 
