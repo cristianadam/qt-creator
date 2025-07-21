@@ -239,8 +239,8 @@ void QuickFixOperationTest::run(const QList<TestDocumentPtr> &testDocuments,
                                 const QString &headerPath,
                                 int operationIndex)
 {
-    ProjectExplorer::HeaderPaths headerPaths;
-    headerPaths.push_back(ProjectExplorer::HeaderPath::makeUser(headerPath));
+    HeaderPaths headerPaths;
+    headerPaths.push_back(HeaderPath::makeUser(FilePath::fromUserInput(headerPath)));
     QuickFixOperationTest(testDocuments, factory, headerPaths, operationIndex);
 }
 
