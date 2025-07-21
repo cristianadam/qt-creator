@@ -30,11 +30,9 @@ using namespace TextEditor;
 using namespace Utils;
 
 using CppEditor::Tests::TemporaryDir;
-using CppEditor::Tests::Internal::TestIncludePaths;
+using namespace CppEditor::Tests::Internal;
 
-namespace CppEditor {
-namespace Internal {
-namespace Tests {
+namespace CppEditor::Internal::Tests {
 
 QList<TestDocumentPtr> singleDocument(
     const QByteArray &original, const QByteArray &expected, const QByteArray fileName)
@@ -407,7 +405,4 @@ void CppQuickFixTestObject::test()
     QuickFixOperationTest(testDocuments, m_factory.get(), {}, opIndex, failMessage);
 }
 
-} // namespace Tests
-} // namespace Internal
-} // namespace CppEditor
-
+} // namespace CppEditor::Internal::Tests

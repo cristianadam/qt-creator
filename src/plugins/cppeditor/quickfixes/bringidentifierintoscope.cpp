@@ -1364,7 +1364,7 @@ private slots:
             testDocuments,
             &factory,
             ProjectExplorer::toUserHeaderPaths(
-                QStringList{TestIncludePaths::globalQtCoreIncludePath()}),
+                FilePaths{TestIncludePaths::globalQtCoreIncludePath()}),
             expectedOperations);
     }
 
