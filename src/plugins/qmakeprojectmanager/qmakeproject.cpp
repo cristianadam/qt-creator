@@ -364,7 +364,8 @@ void QmakeBuildSystem::updateCppCodeModel()
         rpp.setFlagsForCxx({kitInfo.cxxToolchain, cxxArgs, includeFileBaseDir});
         rpp.setFlagsForC({kitInfo.cToolchain, cArgs, includeFileBaseDir});
         rpp.setMacros(ProjectExplorer::Macro::toMacros(pro->cxxDefines()));
-        rpp.setPreCompiledHeaders(FilePaths::fromStrings(pro->variableValue(Variable::PrecompiledHeader)));
+        rpp.setPreCompiledHeaders(
+            FilePaths::resolvePaths(pro->filePath(), pro->variableValue(Variable::PrecompiledHeader)));
         rpp.setSelectedForBuilding(pro->includedInExactParse());
 
         // Qt Version
@@ -375,9 +376,10 @@ void QmakeBuildSystem::updateCppCodeModel()
 
         // Header paths
         ProjectExplorer::HeaderPaths headerPaths;
-        const QStringList includes = pro->variableValue(Variable::IncludePath);
-        for (const QString &inc : includes) {
-            const auto headerPath = HeaderPath::makeUser(inc);
+        const FilePaths includes =
+            FilePaths::resolvePaths(pro->filePath(), pro->variableValue(Variable::IncludePath));
+        for (const FilePath &inc : includes) {
+            const HeaderPath headerPath = HeaderPath::makeUser(inc);
             if (!headerPaths.contains(headerPath))
                 headerPaths += headerPath;
         }
@@ -387,8 +389,11 @@ void QmakeBuildSystem::updateCppCodeModel()
         rpp.setHeaderPaths(headerPaths);
 
         // Files and generators
-        const FilePaths cumulativeSourceFiles = FilePaths::fromStrings(pro->variableValue(Variable::CumulativeSource));
-        FilePaths fileList = FilePaths::fromStrings(pro->variableValue(Variable::ExactSource)) + cumulativeSourceFiles;
+        const FilePaths cumulativeSourceFiles =
+            FilePaths::resolvePaths(pro->filePath(), pro->variableValue(Variable::CumulativeSource));
+        FilePaths fileList =
+            FilePaths::resolvePaths(pro->filePath(), pro->variableValue(Variable::ExactSource))
+            + cumulativeSourceFiles;
         const QList<ProjectExplorer::ExtraCompiler *> proGenerators = pro->extraCompilers();
         for (ProjectExplorer::ExtraCompiler *ec : proGenerators) {
             ec->forEachTarget([&](const FilePath &generatedFile) { fileList += generatedFile; });
