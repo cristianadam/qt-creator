@@ -174,7 +174,9 @@ void AutotoolsBuildSystem::makefileParsingFinished(const MakefileParserOutputDat
 
     const QString absBuild = bc ? bc->buildDirectory().path() : QString();
 
-    rpp.setIncludePaths(filterIncludes(absSrc, absBuild, outputData.m_includePaths));
+    rpp.setIncludePaths(
+        FilePaths::resolvePaths(project()->projectDirectory(),
+            filterIncludes(absSrc, absBuild, outputData.m_includePaths)));
     rpp.setMacros(outputData.m_macros);
     rpp.setFiles(m_files);
 
