@@ -57,8 +57,7 @@
     \section1 Customize the installation
 
     To change the settings for deploying and running the application with the
-    selected kit, go to \uicontrol Projects and select \uicontrol {Build & Run}
-    > \uicontrol Run.
+    selected kit, go to \uicontrol Projects > \uicontrol {Run Settings}.
 
     \image {qtcreator-appman-deploy-settings.webp} {Deploy to application manager}
 

@@ -11,9 +11,8 @@
 
     \brief Settings for building applications with qmake.
 
-    Specify build settings for the selected \l{Kits}{kit}
-    in \uicontrol Projects > \uicontrol {Build & Run}
-    > \uicontrol Build > \uicontrol {Build Settings}.
+    To specify build settings for the selected \l{Kits}{kit}, go to
+    \uicontrol Projects > \uicontrol {Build Settings}.
 
     \image {qtcreator-projectpane.webp} {qmake build settings}
 
@@ -92,9 +91,8 @@
     that are listed when you select \inlineimage {icons/replace.png} {Variables},
     as well as
     variables that are available for a particular kit. Those you can see when
-    you select the button in the \uicontrol Projects > \uicontrol {Build & Run} >
-    \uicontrol Build > \uicontrol {Build Settings} > \uicontrol {Build Directory}
-    field for a kit.
+    you go to \uicontrol Projects > \uicontrol {Build Settings} and select the
+    button in the \uicontrol {Build Directory} field for a kit.
 
     \section1 qmake Build Steps
 

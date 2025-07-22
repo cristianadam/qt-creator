@@ -68,14 +68,13 @@
     To add a build configuration to the workspace:
 
     \list 1
-        \li Go to \uicontrol Projects > \uicontrol {Build & Run} >
-            \uicontrol Build.
+        \li Go to \uicontrol Projects > \uicontrol {Build Settings}.
         \li Select \uicontrol Add > \uicontrol Build.
         \li Specify build settings.
     \endlist
 
     To specify run settings for the workspace, go to \uicontrol Projects >
-    \uicontrol {Build & Run} > \uicontrol Run.
+    \uicontrol {Run Settings}.
 
     \section1 Re-configure projects
 

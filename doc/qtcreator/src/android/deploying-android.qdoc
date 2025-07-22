@@ -41,8 +41,8 @@
     \note Since \QC 4.12, Ministro is not supported.
 
     To \l{Specifying Settings for Packages}{specify settings} for application
-    packages, select \uicontrol Projects > \uicontrol Build >
-    \uicontrol {Build Android APK} > \uicontrol Details.
+    packages, go to \uicontrol Projects > \uicontrol {Build Settings} >
+    \uicontrol {Build Android APK} and select \uicontrol Details.
 
     For more information about the options that you have for running applications,
     see \l {Android Run Settings}.
@@ -84,9 +84,9 @@
 
     \section2 Specifying Settings for Packages
 
-    To specify settings for the \c androiddeployqt tool, select
-    \uicontrol Projects > \uicontrol {Build & Run} > \uicontrol Build >
-    \uicontrol {Build Android APK} > \uicontrol Details.
+    To specify settings for the \c androiddeployqt tool, go to
+    \uicontrol Projects > \uicontrol {Build Settings} >
+    \uicontrol {Build Android APK} and select \uicontrol Details.
 
     \image {qtcreator-build-settings-android-apk.webp} {Build Android APK step}
 
@@ -212,9 +212,10 @@
     \section3 Adding External Libraries
 
     \QC automatically detects which Qt libraries the application uses and adds
-    them as dependencies. If the application needs external libraries, specify
-    them in \uicontrol Projects > \uicontrol Build > \uicontrol {Build Android APK}
-    > \uicontrol {Additional Libraries} field. The libraries are copied into
+    them as dependencies. If the application needs external libraries, go to
+    \uicontrol Projects > \uicontrol {Build Settings} >
+    \uicontrol {Build Android APK} and specify them in
+    \uicontrol {Additional Libraries}. The libraries are copied into
     your application's library folder and loaded on startup.
 
     To add OpenSSL libraries, select \uicontrol {Include prebuilt OpenSSL libraries}
@@ -246,8 +247,8 @@
 
     \list 1
 
-    \li Select \uicontrol Projects > \uicontrol Build >
-        \uicontrol {Build Android APK} > \uicontrol {Create Templates}.
+    \li Go to \uicontrol Projects > \uicontrol {Build Settings} >
+        \uicontrol {Build Android APK}, and select \uicontrol {Create Templates}.
 
     \li Check the path in \uicontrol {Android package source directory}.
 
