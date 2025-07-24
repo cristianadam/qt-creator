@@ -20,11 +20,16 @@ using namespace ProjectExplorer::Constants;
 
 namespace ProjectExplorer::Internal {
 
+static Id makeOldId(Id oldId)
+{
+    return oldId == Constants::DESKTOP_RUNCONFIG_ID ? Constants::CMAKE_RUNCONFIG_ID : oldId;
+}
+
 class DesktopRunConfiguration : public RunConfiguration
 {
 public:
-    DesktopRunConfiguration(BuildConfiguration *bc, Id id)
-        : RunConfiguration(bc, id)
+    DesktopRunConfiguration(BuildConfiguration *bc, Id oldId)
+        : RunConfiguration(bc, Constants::DESKTOP_RUNCONFIG_ID, makeOldId(oldId))
     {
         environment.setSupportForBuildEnvironment(bc);
 
@@ -145,21 +150,27 @@ public:
     DesktopRunConfigurationFactory(const Utils::Id &runConfigId, const Utils::Id &projectTypeId)
     {
         registerRunConfiguration<DesktopRunConfiguration>(runConfigId);
-        addSupportedProjectType(projectTypeId);
-        addSupportedTargetDeviceType(ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE);
-        addSupportedTargetDeviceType(ProjectExplorer::Constants::DOCKER_DEVICE_TYPE);
+        if (projectTypeId.isValid()) {
+            addSupportedProjectType(projectTypeId);
+            // We don't actually want to use these anymore, so we give them a device id that will never match.
+            addSupportedTargetDeviceType("InvalidDeviceType");
+        }
     }
 };
 
 
 void setupDesktopRunConfigurations()
 {
+    // Old configs, for backwards compatibility.
     static DesktopRunConfigurationFactory theQmakeRunConfigFactory
         (Constants::QMAKE_RUNCONFIG_ID, QmakeProjectManager::Constants::QMAKEPROJECT_ID);
     static DesktopRunConfigurationFactory theQbsRunConfigFactory
         (Constants::QBS_RUNCONFIG_ID, QbsProjectManager::Constants::PROJECT_ID);
     static DesktopRunConfigurationFactory theCmakeRunConfigFactory
         (Constants::CMAKE_RUNCONFIG_ID, CMakeProjectManager::Constants::CMAKE_PROJECT_ID);
+
+    // The new all-in-one desktop run configuration.
+    static DesktopRunConfigurationFactory theDesktopFactory{Constants::DESKTOP_RUNCONFIG_ID, Id()};
 }
 
 void setupDesktopRunWorker()
@@ -167,7 +178,8 @@ void setupDesktopRunWorker()
     static ProcessRunnerFactory theDesktopRunWorkerFactory({
         Constants::CMAKE_RUNCONFIG_ID,
         Constants::QBS_RUNCONFIG_ID,
-        Constants::QMAKE_RUNCONFIG_ID
+        Constants::QMAKE_RUNCONFIG_ID,
+        Constants::DESKTOP_RUNCONFIG_ID,
     });
 }
 

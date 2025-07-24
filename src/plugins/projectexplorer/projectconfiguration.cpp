@@ -14,9 +14,10 @@ using namespace Utils;
 
 namespace ProjectExplorer {
 
-ProjectConfiguration::ProjectConfiguration(Target *target, Id id)
+ProjectConfiguration::ProjectConfiguration(Target *target, Id id, Id oldId)
     : m_target(target)
     , m_id(id)
+    , m_oldId(oldId)
 {
     QTC_CHECK(target);
     QTC_CHECK(id.isValid());
@@ -68,7 +69,12 @@ QString ProjectConfiguration::toolTip() const
 void ProjectConfiguration::toMap(Store &map) const
 {
     QTC_CHECK(m_id.isValid());
-    map.insert(Constants::CONFIGURATION_ID_KEY, m_id.toSetting());
+    if (m_oldId.isValid()) {
+        map.insert(Constants::CONFIGURATION_ID_KEY, m_oldId.toSetting());
+        map.insert(Constants::CONFIGURATION_ID_KEY_V2, m_id.toSetting());
+    } else {
+        map.insert(Constants::CONFIGURATION_ID_KEY, m_id.toSetting());
+    }
     m_displayName.toMap(map, Constants::DISPLAY_NAME_KEY);
     AspectContainer::toMap(map);
 }
@@ -78,20 +84,22 @@ Target *ProjectConfiguration::target() const
     return m_target;
 }
 
+Id idFromMap(const Store &map)
+{
+    if (map.contains(Constants::CONFIGURATION_ID_KEY_V2))
+        return Id::fromSetting(map.value(Constants::CONFIGURATION_ID_KEY_V2));
+    return Id::fromSetting(map.value(Constants::CONFIGURATION_ID_KEY));
+}
+
 void ProjectConfiguration::fromMap(const Store &map)
 {
-    Id id = Id::fromSetting(map.value(Constants::CONFIGURATION_ID_KEY));
+    const Id id = idFromMap(map);
     // Note: This is only "startsWith", not ==, as RunConfigurations currently still
     // mangle in their build keys.
     QTC_ASSERT(id.name().startsWith(m_id.name()), reportError(); return);
 
     m_displayName.fromMap(map, Constants::DISPLAY_NAME_KEY);
     AspectContainer::fromMap(map);
-}
-
-Id idFromMap(const Store &map)
-{
-    return Id::fromSetting(map.value(Constants::CONFIGURATION_ID_KEY));
 }
 
 QString ProjectConfiguration::expandedDisplayName() const

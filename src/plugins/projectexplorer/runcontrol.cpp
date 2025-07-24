@@ -100,6 +100,7 @@ void RunWorkerFactory::addSupportedDeviceType(Id deviceType)
 
 void RunWorkerFactory::addSupportForLocalRunConfigs()
 {
+    addSupportedRunConfig(ProjectExplorer::Constants::DESKTOP_RUNCONFIG_ID);
     addSupportedRunConfig(ProjectExplorer::Constants::QMAKE_RUNCONFIG_ID);
     addSupportedRunConfig(ProjectExplorer::Constants::QBS_RUNCONFIG_ID);
     addSupportedRunConfig(ProjectExplorer::Constants::CMAKE_RUNCONFIG_ID);

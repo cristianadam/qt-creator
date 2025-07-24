@@ -24,7 +24,7 @@ class PROJECTEXPLORER_EXPORT ProjectConfiguration : public Utils::AspectContaine
     Q_OBJECT
 
 protected:
-    explicit ProjectConfiguration(Target *target, Utils::Id id);
+    explicit ProjectConfiguration(Target *target, Utils::Id id, Utils::Id oldId = Utils::Id());
 
 public:
     ~ProjectConfiguration() override;
@@ -60,6 +60,7 @@ signals:
 private:
     QPointer<Target> m_target;
     const Utils::Id m_id;
+    const Utils::Id m_oldId;
     Utils::DisplayName m_displayName;
     QString m_toolTip;
     bool m_hasError = false;

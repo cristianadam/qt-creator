@@ -201,7 +201,7 @@ public:
         Utils::MacroExpander &exp, const RunConfiguration *rc, bool documentationOnly);
 
 protected:
-    RunConfiguration(BuildConfiguration *bc, Utils::Id id);
+    RunConfiguration(BuildConfiguration *bc, Utils::Id id, Utils::Id oldId = Utils::Id());
 
     using Updater = std::function<void()>;
     void setUpdater(const Updater &updater);

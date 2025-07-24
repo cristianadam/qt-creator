@@ -236,8 +236,9 @@ static std::vector<RunConfiguration::AspectFactory> theAspectFactories;
 
 static QList<RunConfigurationFactory *> g_runConfigurationFactories;
 
-RunConfiguration::RunConfiguration(BuildConfiguration *bc, Id id)
-    : ProjectConfiguration(bc->target(), id), m_buildConfiguration(bc)
+RunConfiguration::RunConfiguration(BuildConfiguration *bc, Id id, Id oldId)
+    : ProjectConfiguration(bc->target(), id, oldId)
+    , m_buildConfiguration(bc)
 {
     forceDisplayNameSerialization();
     connect(bc->buildSystem(), &BuildSystem::parsingFinished, this, &RunConfiguration::update);
@@ -504,6 +505,8 @@ void RunConfiguration::cloneFromOther(const RunConfiguration *rc)
     Store copyData;
     rc->toMap(copyData);
     copyData.insert(Constants::CONFIGURATION_ID_KEY, ownData.value(Constants::CONFIGURATION_ID_KEY));
+    copyData.insert(
+        Constants::CONFIGURATION_ID_KEY_V2, ownData.value(Constants::CONFIGURATION_ID_KEY_V2));
     copyData.insert(Constants::DISPLAY_NAME_KEY, ownData.value(Constants::DISPLAY_NAME_KEY));
     copyData.insert(BUILD_KEY, ownData.value(BUILD_KEY));
     fromMap(copyData);

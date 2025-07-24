@@ -129,6 +129,7 @@ const char CUSTOM_PROCESS_STEP[] =  "ProjectExplorer.ProcessStep";
 
 // Project Configuration
 const char CONFIGURATION_ID_KEY[] = "ProjectExplorer.ProjectConfiguration.Id";
+const char CONFIGURATION_ID_KEY_V2[] = "ProjectExplorer.ProjectConfiguration.Id.V2";
 const char DISPLAY_NAME_KEY[] = "ProjectExplorer.ProjectConfiguration.DisplayName";
 
 // Language
@@ -199,6 +200,7 @@ const char QMAKE_RUNCONFIG_ID[] = "Qt4ProjectManager.Qt4RunConfiguration:";
 const char QBS_RUNCONFIG_ID[]   = "Qbs.RunConfiguration:";
 const char CMAKE_RUNCONFIG_ID[] = "CMakeProjectManager.CMakeRunConfiguration.";
 const char CUSTOM_EXECUTABLE_RUNCONFIG_ID[] = "ProjectExplorer.CustomExecutableRunConfiguration";
+const char DESKTOP_RUNCONFIG_ID[] = "ProjectExplorer.DesktopRunConfiguration";
 
 // Navigation Widget
 const char PROJECTTREE_ID[] = "Projects";
