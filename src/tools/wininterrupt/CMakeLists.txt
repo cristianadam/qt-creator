@@ -24,11 +24,16 @@ if (NOT QT_CREATOR_API_DEFINED)
   include(QtCreatorSbom)
   qtc_handle_compiler_cache_support()
 
-  # Need to look for Qt6 optionally, so that we can use the SBOM feature, even though the
+  # Need to look for Qt6, so that we can use the SBOM feature, even though the
   # project doesn't link to Qt.
-  find_package(Qt6
-    COMPONENTS Core
-  )
+  # Explicitly disable the version checks, because when configuring for an architecture that
+  # is not compatible with the found Qt, we'd fail to find the package. We don't care about
+  # binary compatibility here, we only want the SBOM feature.
+  set(QT_NO_PACKAGE_VERSION_CHECK ON)
+  set(QT_NO_PACKAGE_VERSION_INCOMPATIBLE_WARNING ON)
+  find_package(Qt6 REQUIRED)
+  unset(QT_NO_PACKAGE_VERSION_CHECK)
+  unset(QT_NO_PACKAGE_VERSION_INCOMPATIBLE_WARNING)
 
   set(QT_WIN_INTERRUPT_STANDALONE_BUILD TRUE)
   qtc_setup_sbom()
@@ -62,6 +67,7 @@ if (NOT QT_CREATOR_API_DEFINED)
         SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
         CMAKE_GENERATOR "${generator}"
         CMAKE_GENERATOR_PLATFORM "${arch}"
+        LIST_SEPARATOR |
         CMAKE_ARGS
           -D${PROJECT_NAME}-MultiBuild=ON
           -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH_ALT_SEP}
