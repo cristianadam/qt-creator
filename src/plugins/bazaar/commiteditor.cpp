@@ -39,15 +39,17 @@ void CommitEditor::setFields(const FilePath &repositoryRoot, const BranchInfo &b
     m_fileModel = new VcsBase::SubmitFileModel(this);
     m_fileModel->setRepositoryRoot(repositoryRoot);
     m_fileModel->setFileStatusQualifier([](const QString &status, const QVariant &) {
+        if (status == QLatin1String(Constants::FSTATUS_UNKNOWN))
+            return Core::IVersionControl::FileState::Untracked;
         if (status == QLatin1String(Constants::FSTATUS_CREATED))
-            return VcsBase::SubmitFileModel::FileAdded;
+            return Core::IVersionControl::FileState::Added;
         if (status == QLatin1String(Constants::FSTATUS_MODIFIED))
-            return VcsBase::SubmitFileModel::FileModified;
+            return Core::IVersionControl::FileState::Modified;
         if (status == QLatin1String(Constants::FSTATUS_DELETED))
-            return VcsBase::SubmitFileModel::FileDeleted;
+            return Core::IVersionControl::FileState::Deleted;
         if (status == QLatin1String(Constants::FSTATUS_RENAMED))
-            return VcsBase::SubmitFileModel::FileRenamed;
-        return VcsBase::SubmitFileModel::FileStatusUnknown;
+            return Core::IVersionControl::FileState::Renamed;
+        return Core::IVersionControl::FileState::Unknown;
     } );
 
     for (const VcsBase::VcsBaseClient::StatusItem &item : repoStatus)

@@ -39,20 +39,22 @@ void CommitEditor::setFields(const Utils::FilePath &repositoryRoot, const Branch
     m_fileModel = new VcsBase::SubmitFileModel(this);
     m_fileModel->setRepositoryRoot(repositoryRoot);
     m_fileModel->setFileStatusQualifier([](const QString &status, const QVariant &) {
-        if (status == Constants::FSTATUS_ADDED
+        if (status == Constants::FSTATUS_NEW) {
+            return Core::IVersionControl::FileState::Untracked;
+        } else if (status == Constants::FSTATUS_ADDED
             || status == Constants::FSTATUS_ADDED_BY_MERGE
             || status == Constants::FSTATUS_ADDED_BY_INTEGRATE) {
-            return VcsBase::SubmitFileModel::FileAdded;
+            return Core::IVersionControl::FileState::Added;
         } else if (status == Constants::FSTATUS_EDITED
             || status == Constants::FSTATUS_UPDATED_BY_MERGE
             || status == Constants::FSTATUS_UPDATED_BY_INTEGRATE) {
-            return VcsBase::SubmitFileModel::FileModified;
+            return Core::IVersionControl::FileState::Modified;
         } else if (status == Constants::FSTATUS_DELETED) {
-            return VcsBase::SubmitFileModel::FileDeleted;
+            return Core::IVersionControl::FileState::Deleted;
         } else if (status == Constants::FSTATUS_RENAMED) {
-            return VcsBase::SubmitFileModel::FileRenamed;
+            return Core::IVersionControl::FileState::Renamed;
         }
-        return VcsBase::SubmitFileModel::FileStatusUnknown;
+        return Core::IVersionControl::FileState::Unknown;
     });
 
     const QList<VcsBase::VcsBaseClient::StatusItem> toAdd = Utils::filtered(repoStatus,

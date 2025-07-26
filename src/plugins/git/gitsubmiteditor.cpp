@@ -125,16 +125,18 @@ void GitSubmitEditor::setCommitData(const CommitData &d)
     m_model->setFileStatusQualifier([](const QString &, const QVariant &extraData) {
         const FileStates state = static_cast<FileStates>(extraData.toInt());
         if (state & (UnmergedFile | UnmergedThem | UnmergedUs))
-            return SubmitFileModel::FileUnmerged;
-        if (state.testFlag(AddedFile) || state.testFlag(UntrackedFile))
-            return SubmitFileModel::FileAdded;
+            return Core::IVersionControl::FileState::Unmerged;
+        if (state.testFlag(UntrackedFile))
+            return Core::IVersionControl::FileState::Untracked;
+        if (state.testFlag(AddedFile))
+            return Core::IVersionControl::FileState::Added;
         if (state.testFlag(ModifiedFile) || state.testFlag(TypeChangedFile))
-            return SubmitFileModel::FileModified;
+            return Core::IVersionControl::FileState::Modified;
         if (state.testFlag(DeletedFile))
-            return SubmitFileModel::FileDeleted;
+            return Core::IVersionControl::FileState::Deleted;
         if (state.testFlag(RenamedFile))
-            return SubmitFileModel::FileRenamed;
-        return SubmitFileModel::FileStatusUnknown;
+            return Core::IVersionControl::FileState::Renamed;
+        return Core::IVersionControl::FileState::Unknown;
     } );
 
     if (!d.files.isEmpty()) {

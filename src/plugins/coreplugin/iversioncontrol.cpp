@@ -67,7 +67,7 @@ FilePaths IVersionControl::additionalToolsPath() const
 IVersionControl::FileState IVersionControl::modificationState(const FilePath &path) const
 {
     Q_UNUSED(path)
-    return IVersionControl::FileState::NoModification;
+    return IVersionControl::FileState::Unknown;
 }
 
 void IVersionControl::monitorDirectory(const Utils::FilePath &path)
@@ -231,15 +231,17 @@ QColor IVersionControl::vcStateToColor(const IVersionControl::FileState &state)
     using CIVF = Core::IVersionControl::FileState;
     using UT = Utils::Theme;
     switch (state) {
-    case CIVF::ModifiedState:
+    case CIVF::Modified:
         return Utils::creatorColor(UT::VcsBase_FileModified_TextColor);
-    case CIVF::AddedState:
+    case CIVF::Added:
         return Utils::creatorColor(UT::VcsBase_FileAdded_TextColor);
-    case CIVF::RenamedState:
+    case CIVF::Renamed:
         return Utils::creatorColor(UT::VcsBase_FileRenamed_TextColor);
-    case CIVF::DeletedState:
+    case CIVF::Deleted:
         return Utils::creatorColor(UT::VcsBase_FileDeleted_TextColor);
-    case CIVF::UnmanagedState:
+    case CIVF::Untracked:
+        return Utils::creatorColor(UT::VcsBase_FileUntracked_TextColor);
+    case CIVF::Unmerged:
         return Utils::creatorColor(UT::VcsBase_FileUnmerged_TextColor);
     default:
         return Utils::creatorColor(UT::PaletteText);
@@ -250,16 +252,18 @@ QString IVersionControl::modificationToText(const IVersionControl::FileState &st
 {
     using CIVF = Core::IVersionControl::FileState;
     switch (state) {
-    case CIVF::AddedState:
+    case CIVF::Added:
         return Tr::tr("Version control state: added.");
-    case CIVF::ModifiedState:
+    case CIVF::Modified:
         return Tr::tr("Version control state: modified.");
-    case CIVF::DeletedState:
+    case CIVF::Deleted:
         return Tr::tr("Version control state: deleted.");
-    case CIVF::RenamedState:
+    case CIVF::Renamed:
         return Tr::tr("Version control state: renamed.");
-    case CIVF::UnmanagedState:
+    case CIVF::Untracked:
         return Tr::tr("Version control state: untracked.");
+    case CIVF::Unmerged:
+        return Tr::tr("Version control state: unmerged.");
     default:
         return {};
     }
