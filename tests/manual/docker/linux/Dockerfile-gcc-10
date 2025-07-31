@@ -1,7 +1,6 @@
 ARG platform=x86_64
 
-
-FROM ubuntu:22.04 AS base
+FROM ubuntu:25.10 AS base
 
 RUN apt-get update && \
     apt-get install -y \
