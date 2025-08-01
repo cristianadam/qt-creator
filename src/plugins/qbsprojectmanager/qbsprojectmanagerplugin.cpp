@@ -4,6 +4,7 @@
 #include "qbsprojectmanagerplugin.h"
 
 #include "qbsbuildconfiguration.h"
+#include "qbsprojectmanagerconstants.h"
 #include "qbsbuildstep.h"
 #include "qbscleanstep.h"
 #include "qbseditor.h"
@@ -38,6 +39,7 @@
 #include <projectexplorer/projectmanager.h>
 #include <projectexplorer/target.h>
 
+#include <projectexplorer/devicesupport/idevice.h>
 #include <utils/action.h>
 #include <utils/fsengine/fileiconprovider.h>
 #include <utils/mimeconstants.h>
@@ -61,6 +63,17 @@ static QbsProject *currentEditorProject()
     return doc ? qobject_cast<QbsProject *>(ProjectManager::projectForFile(doc->filePath())) : nullptr;
 }
 
+class QbsToolFactory : public DeviceToolAspectFactory
+{
+public:
+    QbsToolFactory()
+    {
+        setToolId(Constants::QBS_TOOL_ID);
+        setFilePattern({"qbs"});
+        setLabelText(Tr::tr("Qbs executable:"));
+    }
+};
+
 class QbsProjectManagerPluginPrivate
 {
 public:
@@ -71,6 +84,7 @@ public:
     QbsSettingsPage settingsPage;
     QbsProfilesSettingsPage profilesSetttingsPage;
     QbsEditorFactory editorFactory;
+    QbsToolFactory toolFactory;
 };
 
 class QbsProjectManagerPlugin final : public ExtensionSystem::IPlugin
