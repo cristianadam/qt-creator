@@ -106,6 +106,22 @@
     \QC automatically adds run configurations for all targets declared with
     \c {executable()} function in Meson build descriptions.
 
+    \section1 Set the default working directory
+
+    To set the default working directory for run configurations,
+    go to \preferences > \uicontrol {Build & Run} >
+    \uicontrol {Default Build Properties}.
+
+    \image {qtcreator-build-settings-default.webp} {Default Build Properties tab in Build & Run preferences}
+
+    In \uicontrol {Default working directory}, specify a template for
+    constructing the default working directory of a run configuration.
+    You can use the variables that are listed when you select
+    \inlineimage {icons/replace.png} {Variables}.
+
+    You can also use the \c QTC_DEFAULT_WORKING_DIRECTORY_TEMPLATE environment
+    variable to set a template for creating the default working directory.
+
     \sa {Enable debugging}, {Configuring Projects},
     {Specify a custom executable to run},
     {Specify Valgrind settings for a project},
