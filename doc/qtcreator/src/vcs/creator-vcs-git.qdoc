@@ -799,6 +799,28 @@
     To view the log of the current branch, select the branch name in
     \uicontrol {Branch}.
 
+    The \uicontrol Files list provides context menu actions. Some actions (like
+    \uicontrol {Open in Editor} and \uicontrol {Show in File System})) are provided
+    for all files, other actions depend on the state of the file.
+
+    \list
+        \li Untracked files can be added to the version control with \uicontrol Stage,
+            added to the ignore list with \uicontrol {Add to gitignore} or removed
+            with \uicontrol Remove.
+        \li Modified files can be reverted to the previous state with
+            \uicontrol {Revert Unstaged Changes}. The whole file can be staged for commit
+            with \uicontrol Stage or unstaged with \uicontrol Unstage.
+        \li Files deleted from version control can be restored with \uicontrol Recover
+        \li Conflicted files provide actions to \uicontrol {Run Merge Tool} for fine
+            graded conflict resolution. For deleted file, \uicontrol {Resolve by Recovering}
+            and \uicontrol {Resolve by Removing} exists. Other merge conflicts can be
+            resolved by completely take the our or their version with
+            \uicontrol {Resolve Conflicts with Ours} respective with
+            \uicontrol {Resolve Conflicts with Theirs}. When you resolved the conlicts
+            manually, use \uicontrol {Mark Conflicts Resolved} to move the file out of
+            conflicted state.
+    \endlist
+
     \if defined(qtcreator)
     \sa {Use Git}{How To: Use Git}, {Git}
     \endif
