@@ -235,7 +235,7 @@ DockerDeviceWidget::DockerDeviceWidget(const IDevice::Ptr &device)
             pathListLabel, dockerDevice->mounts, br,
             Tr::tr("Port mappings:"), dockerDevice->portMappings, br,
             If (!dockerDevice->isAutoDetected()) >> Then {
-                new DetectionControls(dockerDevice, m_logger),
+                new DetectionControls(dockerDevice, m_logger), br,
                 m_logView
             },
         }, br,
