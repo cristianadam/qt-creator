@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include "dockerdevice.h"
-
 #include <projectexplorer/devicesupport/idevice.h>
 #include <projectexplorer/devicesupport/idevicewidget.h>
 
@@ -17,10 +15,19 @@ QT_BEGIN_NAMESPACE
 class QCheckBox;
 class QLabel;
 class QLineEdit;
+class QTextBrowser;
 class QToolButton;
 QT_END_NAMESPACE
 
 namespace Docker::Internal {
+
+class Logger
+{
+public:
+    std::function<void(const QString &message)> log;
+    std::function<void()> clear;
+    std::function<void()> onDone;
+};
 
 class DockerDeviceWidget final : public ProjectExplorer::IDeviceWidget
 {
@@ -33,7 +40,8 @@ public:
 private:
     QLabel *m_daemonState;
     QToolButton *m_daemonReset;
-    Tasking::TaskTreeRunner m_detectionRunner;
+    QTextBrowser *m_logView = nullptr;
+    Logger m_logger;
 };
 
 } // Docker::Internal
