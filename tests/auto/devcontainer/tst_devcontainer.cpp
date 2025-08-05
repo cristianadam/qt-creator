@@ -98,6 +98,7 @@ int main() {
     void upImage();
     void upDockerfile();
     void containerWorkspaceReplacers();
+    void localFeature();
 };
 
 void tst_DevContainer::instanceConfigToString_data()
@@ -582,6 +583,24 @@ volumes:
     QCOMPARE(
         Tasking::TaskTree::runBlocking((*downRecipe).withTimeout(recipeTimeout)),
         Tasking::DoneWith::Success);
+}
+
+void tst_DevContainer::localFeature()
+{
+    static const QByteArray devontainer_feature_json = R"json(
+{
+    "id": "test-feature",
+    "version": "1.0.0",
+    "name": "Test Feature",
+}
+)json";
+
+    static const QByteArray install_sh = R"sh(
+#!/bin/sh
+echo "Installing test feature..."
+echo "test_data" > /test_data.txt
+echo "Feature installed successfully."
+)sh";
 }
 
 QTEST_GUILESS_MAIN(tst_DevContainer)

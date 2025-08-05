@@ -6,6 +6,7 @@
 #include "devcontainertr.h"
 #include "substitute.h"
 
+#include <utils/algorithm.h>
 #include <utils/overloaded.h>
 #include <utils/stringutils.h>
 
@@ -195,7 +196,10 @@ Result<DevContainer::DevContainerCommon> DevContainer::DevContainerCommon::fromJ
     if (json.contains("features") && json["features"].isObject()) {
         QJsonObject featuresObj = json["features"].toObject();
         for (auto it = featuresObj.begin(); it != featuresObj.end(); ++it) {
-            common.features[it.key()] = it.value();
+            const auto dep = FeatureDependency::fromJson(it.key(), it.value().toObject());
+            if (!dep)
+                return ResultError(dep.error());
+            common.features.push_back(*dep);
         }
     }
 
@@ -792,10 +796,10 @@ QDebug operator<<(QDebug debug, const DevContainer::DevContainerCommon &value)
     if (!value.features.empty()) {
         debug << "  features={";
         bool first = true;
-        for (const auto &[key, val] : value.features) {
+        for (const auto &dep : value.features) {
             if (!first)
                 debug << ", ";
-            debug << key;
+            debug << dep;
             first = false;
         }
         debug << "}\n";
@@ -1253,6 +1257,25 @@ QDebug operator<<(QDebug debug, const DevContainer::NonComposeBase &value)
     return debug;
 }
 
+QDebug operator<<(QDebug debug, const DevContainer::FeatureDependency &value)
+{
+    QDebugStateSaver saver(debug);
+    debug.nospace() << "FeatureDependency(id=" << value.id << ":" << value.version;
+    if (!value.options.empty()) {
+        debug << ", options={";
+        bool first = true;
+        for (const auto &[key, val] : value.options) {
+            if (!first)
+                debug << ", ";
+            debug << key << ": " << val;
+            first = false;
+        }
+        debug << "}";
+    }
+    debug << ")";
+    return debug;
+}
+
 FilePath Config::workspaceFolder(const Config &config)
 {
     if (!config.containerConfig)
@@ -1264,6 +1287,28 @@ FilePath Config::workspaceFolder(const Config &config)
             [](const ImageContainer &image) { return image.workspaceFolder; },
             [](const ComposeContainer &compose) { return compose.workspaceFolder; }},
         *config.containerConfig));
+}
+
+Utils::Result<FeatureDependency> FeatureDependency::fromJson(
+    const QString &key, const QJsonObject &obj)
+{
+    FeatureDependency dep;
+
+    if (key.isEmpty())
+        return ResultError(Tr::tr("Feature dependency key cannot be empty"));
+
+    auto [id, version] = Utils::splitAtFirst(key, ':');
+    if (id.isEmpty())
+        return ResultError(Tr::tr("Feature dependency key must contain an ID"));
+
+    dep.id = id.toString();
+    if (!version.isEmpty())
+        dep.version = version.toString();
+
+    for (auto it = obj.begin(); it != obj.end(); ++it)
+        dep.options[it.key()] = it.value();
+
+    return dep;
 }
 
 } // namespace DevContainer

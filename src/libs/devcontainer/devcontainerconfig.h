@@ -48,12 +48,15 @@ enum class UserEnvProbe { None, LoginShell, LoginInteractiveShell, InteractiveSh
 enum class OnAutoForward { Notify, OpenBrowser, OpenBrowserOnce, OpenPreview, Silent, Ignore };
 enum class MountType { Bind, Volume };
 
+// Returns a string from the provided JSON value. Can modifiy the string to replace variables.
+using JsonStringToString = std::function<QString(const QJsonValue &)>;
+
 // Command can be string, array, or object of commands
 using CommandMap = std::map<QString, std::variant<QString, QStringList>>;
 using Command = std::variant<QString, QStringList, CommandMap>;
 
-// Returns a string from the provided JSON value. Can modifiy the string to replace variables.
-using JsonStringToString = std::function<QString(const QJsonValue &)>;
+DEVCONTAINER_EXPORT Command
+parseCommand(const QJsonValue &value, const JsonStringToString &jsonStringToString);
 
 // Port attributes structure
 struct PortAttributes
@@ -135,6 +138,15 @@ struct DEVCONTAINER_EXPORT BuildOptions
         const QJsonObject &json, const JsonStringToString &jsonStringToString);
 };
 
+struct FeatureDependency
+{
+    QString id;
+    QString version = "latest";
+    std::map<QString, QJsonValue> options;
+
+    static Utils::Result<FeatureDependency> fromJson(const QString &key, const QJsonObject &obj);
+};
+
 // Non-compose base structure
 struct DEVCONTAINER_EXPORT NonComposeBase
 {
@@ -194,7 +206,7 @@ struct DEVCONTAINER_EXPORT DevContainerCommon
 {
     std::optional<QString> schema;
     std::optional<QString> name;
-    std::map<QString, QJsonValue> features;
+    QList<FeatureDependency> features;
     std::optional<QStringList> overrideFeatureInstallOrder;
     std::map<QString, SecretMetadata> secrets;
     std::optional<QList<std::variant<int, QString>>> forwardPorts;
@@ -267,5 +279,6 @@ DEVCONTAINER_EXPORT QDebug operator<<(QDebug debug, const DevContainer::NonCompo
 DEVCONTAINER_EXPORT QDebug operator<<(QDebug debug, const DevContainer::Command &cmd);
 DEVCONTAINER_EXPORT QDebug operator<<(QDebug debug, const DevContainer::DevContainerCommon &value);
 DEVCONTAINER_EXPORT QDebug operator<<(QDebug debug, const DevContainer::Config &value);
+DEVCONTAINER_EXPORT QDebug operator<<(QDebug debug, const DevContainer::FeatureDependency &value);
 
 } // namespace DevContainer
