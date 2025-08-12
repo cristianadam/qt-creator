@@ -18,7 +18,7 @@ class QTCREATOR_UTILS_EXPORT BuildableHelperLibrary
 public:
     static FilePaths findQtsInEnvironment(const Environment &env);
     static bool isQtChooser(const FilePath &filePath);
-    static FilePath qtChooserToQmakePath(const FilePath &path);
+    static FilePath qtChooserToQmakePath(FilePath path);
     // return true if the qmake at qmakePath is a Qt (used by QtVersion)
     static QString qtVersionForQMake(const FilePath &qmakePath);
     // returns something like qmake4, qmake, qmake-qt4 or whatever distributions have chosen (used by QtVersion)

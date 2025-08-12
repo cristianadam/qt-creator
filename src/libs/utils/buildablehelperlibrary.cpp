@@ -22,8 +22,11 @@ bool BuildableHelperLibrary::isQtChooser(const FilePath &filePath)
     return filePath.symLinkTarget().endsWith("/qtchooser");
 }
 
-FilePath BuildableHelperLibrary::qtChooserToQmakePath(const FilePath &qtChooser)
+FilePath BuildableHelperLibrary::qtChooserToQmakePath(FilePath qtChooser)
 {
+    if (qtChooser.isSymLink())
+        qtChooser = qtChooser.resolveSymlinks();
+
     const QString toolDir = QLatin1String("QTTOOLDIR=\"");
     Process proc;
     proc.setEnvironment(qtChooser.deviceEnvironment());
