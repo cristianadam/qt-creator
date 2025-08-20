@@ -26,15 +26,14 @@ class CORE_EXPORT IOptionsPageWidget : public QWidget
 public:
     IOptionsPageWidget();
     ~IOptionsPageWidget();
+
     void setOnApply(const std::function<void()> &func);
     void setOnCancel(const std::function<void()> &func);
-    void setOnFinish(const std::function<void()> &func);
 
 protected:
     friend class IOptionsPage;
     virtual void apply();
     virtual void cancel();
-    virtual void finish();
 
 private:
     std::unique_ptr<Internal::IOptionsPageWidgetPrivate> d;
@@ -65,7 +64,6 @@ public:
     virtual QWidget *widget();
     virtual void apply();
     virtual void cancel();
-    virtual void finish();
 
     virtual bool matches(const QRegularExpression &regexp) const;
 

@@ -324,6 +324,8 @@ public:
     QList<std::function<bool()>> m_preCloseListeners;
 
     std::function<Utils::FilePath(const Utils::FilePath &)> m_relativePathToProject = nullptr;
+
+    SettingsMode *m_settingMode = nullptr;
 };
 
 static QMenuBar *globalMenuBar()
@@ -454,9 +456,7 @@ void ICore::showNewItemDialog(const QString &title,
 }
 
 /*!
-    Opens the options dialog on the specified \a page. The dialog's \a parent
-    defaults to dialogParent(). If the dialog is already shown when this method
-    is called, it is just switched to the specified \a page.
+    Opens the options mode on the specified \a page.
 
     Returns whether the user accepted the dialog.
 
@@ -465,7 +465,10 @@ void ICore::showNewItemDialog(const QString &title,
 */
 bool ICore::showOptionsDialog(const Id page, QWidget *parent)
 {
-    return executeSettingsDialog(parent ? parent : dialogParent(), page);
+    Q_UNUSED(parent); // FIXME: Drop from caller side.
+    QTC_ASSERT(d->m_settingMode, return false);
+    d->m_settingMode->open(page);
+    return true;
 }
 
 /*!
@@ -1453,6 +1456,8 @@ void ICorePrivate::init()
 
     m_mainwindow->setCentralWidget(d->m_modeStack);
 
+    m_settingMode = new SettingsMode;
+
     registerDefaultContainers();
     registerDefaultActions();
 
@@ -1538,6 +1543,9 @@ ICorePrivate::~ICorePrivate()
 
     delete m_rightPaneWidget;
     m_rightPaneWidget = nullptr;
+
+    delete m_settingMode;
+    m_settingMode = nullptr;
 
     delete m_modeManager;
     m_modeManager = nullptr;
