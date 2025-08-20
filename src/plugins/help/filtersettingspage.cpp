@@ -46,8 +46,6 @@ public:
                 onChanged();
             widget->readSettings(LocalHelpManager::filterEngine());
         });
-
-        setOnFinish([connection] {  disconnect(connection); });
     }
 };
 
