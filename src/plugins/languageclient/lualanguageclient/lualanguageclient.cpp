@@ -318,7 +318,7 @@ public:
                 updateOptions();
                 auto settings = Utils::findOr(
                     LanguageClientManager::currentSettings(), nullptr, [this](BaseSettings *s) {
-                        return s->m_id == m_clientSettingsId;
+                        return s->id() == m_clientSettingsId;
                     });
 
                 if (settings) {
@@ -762,7 +762,7 @@ static void registerLuaApi()
 
                 // ... then register the settings.
                 LanguageClientManager::registerClientSettings(clientSettings);
-                luaClientWrapper->m_clientSettingsId = clientSettings->m_id;
+                luaClientWrapper->m_clientSettingsId = clientSettings->id();
 
                 // and the client type.
                 ClientType type;

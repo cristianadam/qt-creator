@@ -69,7 +69,7 @@ public:
 
     Utils::StringAspect name{this};
 
-    QString m_id = QUuid::createUuid().toString();
+    Utils::StringAspect id{this};
     Utils::Id m_settingsTypeId;
     Utils::BoolAspect enabled{this};
     Utils::TypedSelectionAspect<StartBehavior> startBehavior{this};
