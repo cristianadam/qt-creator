@@ -58,12 +58,9 @@
 
 constexpr char typeIdKey[] = "typeId";
 constexpr char idKey[] = "id";
-constexpr char enabledKey[] = "enabled";
 constexpr char startupBehaviorKey[] = "startupBehavior";
 constexpr char mimeTypeKey[] = "mimeType";
 constexpr char filePatternKey[] = "filePattern";
-constexpr char initializationOptionsKey[] = "initializationOptions";
-constexpr char configurationKey[] = "configuration";
 constexpr char executableKey[] = "executable";
 constexpr char argumentsKey[] = "arguments";
 constexpr char settingsGroupKey[] = "LanguageClient";
@@ -127,7 +124,7 @@ public:
         const QModelIndex index = sourceModel()->index(sourceRow, 0, sourceParent);
         const BaseSettings *setting
             = static_cast<LanguageClientSettingsModel *>(sourceModel())->settingForIndex(index);
-        return setting && setting->m_showInSettings;
+        return setting && setting->showInSettings();
     }
 
     void reset(QList<BaseSettings *> settings)
@@ -402,9 +399,9 @@ QVariant LanguageClientSettingsModel::data(const QModelIndex &index, int role) c
         return QVariant();
     if (role == Qt::DisplayRole)
         return setting->name();
-    else if (role == Qt::CheckStateRole)
-        return setting->m_enabled ? Qt::Checked : Qt::Unchecked;
-    else if (role == idRole)
+    if (role == Qt::CheckStateRole)
+        return setting->enabled() ? Qt::Checked : Qt::Unchecked;
+    if (role == idRole)
         return setting->m_id;
     return QVariant();
 }
@@ -438,8 +435,8 @@ bool LanguageClientSettingsModel::setData(const QModelIndex &index, const QVaria
     if (!setting || role != Qt::CheckStateRole)
         return false;
 
-    if (setting->m_enabled != value.toBool()) {
-        setting->m_enabled = !setting->m_enabled;
+    if (setting->enabled() != value.toBool()) {
+        setting->setEnabled(value.toBool());
         emit dataChanged(index, index, { Qt::CheckStateRole });
     }
     return true;
@@ -520,9 +517,9 @@ void LanguageClientSettingsModel::enableSetting(const QString &id, bool enable)
     BaseSettings *setting = Utils::findOrDefault(m_settings, Utils::equal(&BaseSettings::m_id, id));
     if (!setting)
         return;
-    if (setting->m_enabled == enable)
+    if (setting->enabled() == enable)
         return;
-    setting->m_enabled = enable;
+    setting->enabled.setEnabled(enable);
     const QModelIndex &index = indexForSetting(setting);
     if (index.isValid())
         emit dataChanged(index, index, {Qt::CheckStateRole});
@@ -549,17 +546,27 @@ BaseSettings::BaseSettings()
     name.setDefaultValue("New Language Server");
     name.setLabelText(Tr::tr("Name:"));
     name.setDisplayStyle(StringAspect::LineEditDisplay);
+
+    enabled.setSettingsKey("enabled");
+    enabled.setDefaultValue(true);
+
+    showInSettings.setDefaultValue(true);
+
+    activatable.setDefaultValue(true);
+
+    initializationOptions.setSettingsKey("initializationOptions");
+
+    configuration.setSettingsKey("configuration");
 }
 
-QJsonObject BaseSettings::initializationOptions() const
+QJsonObject BaseSettings::initializationOptionsAsJson() const
 {
-    return QJsonDocument::fromJson(Utils::globalMacroExpander()->
-                                   expand(m_initializationOptions).toUtf8()).object();
+    return QJsonDocument::fromJson(initializationOptions().toUtf8()).object();
 }
 
-QJsonValue BaseSettings::configuration() const
+QJsonValue BaseSettings::configurationAsJson() const
 {
-    const QJsonDocument document = QJsonDocument::fromJson(m_configuration.toUtf8());
+    const QJsonDocument document = QJsonDocument::fromJson(configuration().toUtf8());
     if (document.isArray())
         return document.array();
     if (document.isObject())
@@ -583,8 +590,8 @@ bool BaseSettings::applyFromSettingsWidget(QWidget *widget)
             m_startBehavior = settingsWidget->startupBehavior();
             changed = true;
         }
-        if (m_initializationOptions != settingsWidget->initializationOptions()) {
-            m_initializationOptions = settingsWidget->initializationOptions();
+        if (initializationOptions.isDirty()) {
+            initializationOptions.apply();
             changed = true;
         }
     }
@@ -629,7 +636,7 @@ bool BaseSettings::isEnabledOnProject(Project *project) const
         if (settings.disabledSettings().contains(m_id))
             return false;
     }
-    return m_enabled;
+    return enabled();
 }
 
 Client *BaseSettings::createClient(BuildConfiguration *bc) const
@@ -647,10 +654,10 @@ Client *BaseSettings::createClient(BuildConfiguration *bc) const
         client->setName(name());
 
     client->setSupportedLanguage(m_languageFilter);
-    client->setInitializationOptions(initializationOptions());
-    client->setActivatable(m_activatable);
+    client->setInitializationOptions(initializationOptionsAsJson());
+    client->setActivatable(activatable());
     client->setCurrentBuildConfiguration(bc);
-    client->updateConfiguration(m_configuration);
+    client->updateConfiguration(configurationAsJson());
     return client;
 }
 
@@ -664,26 +671,20 @@ void BaseSettings::toMap(Store &map) const
     AspectContainer::toMap(map);
     map.insert(typeIdKey, m_settingsTypeId.toSetting());
     map.insert(idKey, m_id);
-    map.insert(enabledKey, m_enabled);
     map.insert(startupBehaviorKey, m_startBehavior);
     map.insert(mimeTypeKey, m_languageFilter.mimeTypes);
     map.insert(filePatternKey, m_languageFilter.filePattern);
-    map.insert(initializationOptionsKey, m_initializationOptions);
-    map.insert(configurationKey, m_configuration);
 }
 
 void BaseSettings::fromMap(const Store &map)
 {
     AspectContainer::fromMap(map);
     m_id = map.value(idKey, QUuid::createUuid().toString()).toString();
-    m_enabled = map[enabledKey].toBool();
     m_startBehavior = BaseSettings::StartBehavior(
         map.value(startupBehaviorKey, BaseSettings::RequiresFile).toInt());
     m_languageFilter.mimeTypes = map[mimeTypeKey].toStringList();
     m_languageFilter.filePattern = map[filePatternKey].toStringList();
     m_languageFilter.filePattern.removeAll(QString()); // remove empty entries
-    m_initializationOptions = map[initializationOptionsKey].toString();
-    m_configuration = map[configurationKey].toString();
     m_settingsTypeId = Id::fromSetting(map[typeIdKey]);
 }
 
@@ -960,7 +961,7 @@ BaseSettingsWidget::BaseSettingsWidget(const BaseSettings *settings, QWidget *pa
             }
             return ResultOk;
         });
-    m_initializationOptions->setText(settings->m_initializationOptions);
+    m_initializationOptions->setText(settings->initializationOptions());
     m_initializationOptions->setPlaceholderText(Tr::tr("Language server-specific JSON to pass via "
                                                    "\"initializationOptions\" field of \"initialize\" "
                                                    "request."));

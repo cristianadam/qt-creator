@@ -73,8 +73,8 @@ QmllsClientSettings::QmllsClientSettings()
 
     m_settingsTypeId = Constants::QMLLS_CLIENT_SETTINGS_ID;
     m_startBehavior = RequiresProject;
-    m_initializationOptions = "{\"qtCreatorHighlighting\": true}";
-    m_enabled = false; // disabled by default
+    initializationOptions.setValue("{\"qtCreatorHighlighting\": true}");
+    enabled.setValue(false); // disabled by default
 }
 
 static std::pair<FilePath, QVersionNumber> evaluateLatestQmlls()
@@ -424,7 +424,9 @@ static void portFromOldSettings(QmllsClientSettings* qmllsClientSettings)
     constexpr char USE_QMLLS_SEMANTIC_HIGHLIGHTING[]
         = "QmlJSEditor.EnableQmllsSemanticHighlighting";
 
-    portSetting(baseKey + USE_QMLLS, &qmllsClientSettings->m_enabled);
+    if (settings->contains(baseKey + USE_QMLLS))
+        qmllsClientSettings->enabled.setValue(settings->value(baseKey + USE_QMLLS).toBool());
+
     if (settings->contains(baseKey + USE_LATEST_QMLLS))
         qmllsClientSettings->m_executableSelection = QmllsClientSettings::FromLatestQtKit;
     portSetting(baseKey + DISABLE_BUILTIN_CODEMODEL, &qmllsClientSettings->m_disableBuiltinCodemodel);
