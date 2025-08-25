@@ -128,12 +128,7 @@ void PySideInstaller::installPySide(const FilePath &python, const QString &pySid
         }
     }
 
-    auto install = new PipInstallTask(python);
-    connect(install, &PipInstallTask::finished, install, &QObject::deleteLater);
-    connect(install, &PipInstallTask::finished, this, [this, python, pySide](bool success) {
-        if (success)
-            emit pySideInstalled(python, pySide);
-    });
+    PipInstallerData data;
     if (availablePySides.isEmpty()) {
         if (!quiet) {
             QMessageBox::StandardButton selected = CheckableMessageBox::question(
@@ -146,7 +141,7 @@ void PySideInstaller::installPySide(const FilePath &python, const QString &pySid
             if (selected == QMessageBox::No)
                 return;
         }
-        install->setPackages({PipPackage(pySide)});
+        data.packages = {PipPackage(pySide)};
     } else {
         QDialog dialog;
         dialog.setWindowTitle(Tr::tr("Select PySide Version"));
@@ -194,13 +189,19 @@ void PySideInstaller::installPySide(const FilePath &python, const QString &pySid
 
         const FilePath requirementsFile = FilePath::fromVariant(pySideSelector->currentData());
         if (requirementsFile.isEmpty()) {
-            install->setPackages({PipPackage(pySide)});
+            data.packages = {PipPackage(pySide)};
         } else {
-            install->setWorkingDirectory(requirementsFile.parentDir());
-            install->setRequirements(requirementsFile);
+            data.workingDirectory = requirementsFile.parentDir();
+            data.requirementsFile = requirementsFile;
         }
     }
-    install->run();
+
+    const auto onDone = [this, python, pySide](bool success) {
+        if (success)
+            emit pySideInstalled(python, pySide);
+    };
+
+    m_pipInstallerRunner.start(pipInstallerTask(data, onDone));
 }
 
 void PySideInstaller::handlePySideMissing(const FilePath &python,

@@ -27,6 +27,8 @@
 #include <projectexplorer/projectmanager.h>
 #include <projectexplorer/target.h>
 
+#include <solutions/tasking/tasktreerunner.h>
+
 #include <texteditor/textdocument.h>
 #include <texteditor/texteditor.h>
 
@@ -312,6 +314,7 @@ public:
     QHash<FilePath, QList<TextEditor::TextDocument *>> m_infoBarEntries;
     QHash<TextEditor::TextDocument *, QPointer<QFutureWatcher<PythonLanguageServerState>>>
         m_runningChecks;
+    Tasking::SingleTaskTreeRunner m_pipInstallerRunner;
 };
 
 void PyLSConfigureAssistant::installPythonLanguageServer(const FilePath &python,
@@ -327,10 +330,13 @@ void PyLSConfigureAssistant::installPythonLanguageServer(const FilePath &python,
     for (TextEditor::TextDocument *additionalDocument : m_infoBarEntries[python])
         additionalDocument->infoBar()->removeInfo(installPylsInfoBarId);
 
-    auto install = new PipInstallTask(python);
+    PipInstallerData data;
+    data.targetPath = pylsPath;
+    data.packages = {PipPackage{"python-lsp-server[all]", "Python Language Server"}};
+    data.upgrade = upgrade;
+    data.silent = silent;
 
-    connect(install, &PipInstallTask::finished, this,
-            [this, python, document, install](const bool success) {
+    const auto onDone = [this, python, document](bool success) {
         const QList<TextEditor::TextDocument *> additionalDocuments = m_infoBarEntries.take(python);
         if (success) {
             if (PyLSClient *client = clientForPython(python)) {
@@ -340,14 +346,9 @@ void PyLSConfigureAssistant::installPythonLanguageServer(const FilePath &python,
                     LanguageClientManager::openDocumentWithClient(additionalDocument, client);
             }
         }
-        install->deleteLater();
-    });
+    };
 
-    install->setTargetPath(pylsPath);
-    install->setPackages({PipPackage{"python-lsp-server[all]", "Python Language Server"}});
-    install->setUpgrade(upgrade);
-    install->setSilent(silent);
-    install->run();
+    m_pipInstallerRunner.start(pipInstallerTask(data, onDone));
 }
 
 void PyLSConfigureAssistant::openDocument(const FilePath &python, TextEditor::TextDocument *document)
