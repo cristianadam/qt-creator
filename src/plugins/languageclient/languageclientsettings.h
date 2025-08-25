@@ -105,19 +105,16 @@ protected:
 class LANGUAGECLIENT_EXPORT StdIOSettings : public BaseSettings
 {
 public:
-    StdIOSettings() = default;
+    StdIOSettings();
     ~StdIOSettings() override = default;
 
-    Utils::FilePath m_executable;
-    QString m_arguments;
+    Utils::FilePathAspect executable{this};
+    Utils::StringAspect arguments{this};
 
-    bool applyFromSettingsWidget(QWidget *widget) override;
     QWidget *createSettingsWidget(QWidget *parent = nullptr) const override;
     BaseSettings *create() const override { return new StdIOSettings; }
     bool isValid() const override;
-    void toMap(Utils::Store &map) const override;
-    void fromMap(const Utils::Store &map) override;
-    QString arguments() const;
+
     Utils::CommandLine command() const;
 
 protected:

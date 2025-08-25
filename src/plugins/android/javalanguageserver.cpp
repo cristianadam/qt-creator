@@ -34,8 +34,6 @@ using namespace LanguageClient;
 using namespace ProjectExplorer;
 using namespace Utils;
 
-constexpr char languageServerKey[] = "languageServer";
-
 namespace Android::Internal {
 
 class JLSSettings final : public StdIOSettings
@@ -46,12 +44,11 @@ public:
     bool applyFromSettingsWidget(QWidget *widget) final;
     QWidget *createSettingsWidget(QWidget *parent) const final;
     bool isValid() const final;
-    void toMap(Store &map) const final;
-    void fromMap(const Store &map) final;
+
     Client *createClient(BaseClientInterface *interface) const final;
     BaseClientInterface *createInterface(BuildConfiguration *) const final;
 
-    FilePath m_languageServer;
+    Utils::FilePathAspect languageServer{this};
 };
 
 class JLSSettingsWidget : public QWidget
@@ -73,12 +70,12 @@ JLSSettingsWidget::JLSSettingsWidget(const JLSSettings *settings, QWidget *paren
     , m_ls(new PathChooser(this))
 {
     m_java->setExpectedKind(PathChooser::ExistingCommand);
-    m_java->setFilePath(settings->m_executable);
+    m_java->setFilePath(settings->executable());
 
     m_ls->setExpectedKind(PathChooser::File);
     m_ls->lineEdit()->setPlaceholderText(Tr::tr("Path to equinox launcher jar"));
     m_ls->setPromptDialogFilter("org.eclipse.equinox.launcher_*.jar");
-    m_ls->setFilePath(settings->m_languageServer);
+    m_ls->setFilePath(settings->languageServer());
 
     using namespace Layouting;
     Form {
@@ -96,23 +93,16 @@ JLSSettings::JLSSettings()
     m_languageFilter.mimeTypes = QStringList(Utils::Constants::JAVA_MIMETYPE);
     const FilePath &javaPath = Environment::systemEnvironment().searchInPath("java");
     if (javaPath.exists())
-        m_executable = javaPath;
+        executable.setValue(javaPath);
+
+    languageServer.setSettingsKey("languageServer");
 }
 
 bool JLSSettings::applyFromSettingsWidget(QWidget *widget)
 {
-    bool changed = false;
-    auto jlswidget = static_cast<JLSSettingsWidget *>(widget);
-    changed |= name.isDirty();
-    name.apply();
+    bool changed = StdIOSettings::applyFromSettingsWidget(widget);
 
-    changed |= m_languageServer != jlswidget->languageServer();
-    m_languageServer = jlswidget->languageServer();
-
-    changed |= m_executable != jlswidget->java();
-    m_executable = jlswidget->java();
-
-    QString arguments = "-Declipse.application=org.eclipse.jdt.ls.core.id1 "
+    QString args = "-Declipse.application=org.eclipse.jdt.ls.core.id1 "
                         "-Dosgi.bundles.defaultStartLevel=4 "
                         "-Declipse.product=org.eclipse.jdt.ls.core.product "
                         "-Dlog.level=WARNING "
@@ -121,7 +111,7 @@ bool JLSSettings::applyFromSettingsWidget(QWidget *widget)
                         "-jar \"%1\" "
                         "-configuration \"%2\"";
 
-    QDir configDir = m_languageServer.toFileInfo().absoluteDir();
+    QDir configDir = languageServer().toFileInfo().absoluteDir();
     if (configDir.exists()) {
         configDir.cdUp();
         if constexpr (HostOsInfo::hostOs() == OsTypeWindows)
@@ -132,9 +122,9 @@ bool JLSSettings::applyFromSettingsWidget(QWidget *widget)
             configDir.cd("config_mac");
     }
     if (configDir.exists()) {
-        arguments = arguments.arg(m_languageServer.path(), configDir.absolutePath());
-        changed |= m_arguments != arguments;
-        m_arguments = arguments;
+        args = args.arg(languageServer().path(), configDir.absolutePath());
+        changed |= arguments() != args;
+        arguments.setValue(args);
     }
     return changed;
 }
@@ -146,25 +136,13 @@ QWidget *JLSSettings::createSettingsWidget(QWidget *parent) const
 
 bool JLSSettings::isValid() const
 {
-    return StdIOSettings::isValid() && !m_languageServer.isEmpty();
-}
-
-void JLSSettings::toMap(Store &map) const
-{
-    StdIOSettings::toMap(map);
-    map.insert(languageServerKey, m_languageServer.toSettings());
-}
-
-void JLSSettings::fromMap(const Store &map)
-{
-    StdIOSettings::fromMap(map);
-    m_languageServer = FilePath::fromSettings(map[languageServerKey]);
+    return StdIOSettings::isValid() && !languageServer().isEmpty();
 }
 
 class JLSInterface : public StdIOClientInterface
 {
 public:
-    QString workspaceDir() const { return m_workspaceDir.path().path(); }
+    FilePath workspaceDir() const { return m_workspaceDir.path(); }
 
 private:
     TemporaryDirectory m_workspaceDir = TemporaryDirectory("QtCreator-jls-XXXXXX");
@@ -173,8 +151,8 @@ private:
 BaseClientInterface *JLSSettings::createInterface(BuildConfiguration *) const
 {
     auto interface = new JLSInterface();
-    CommandLine cmd{m_executable, arguments(), CommandLine::Raw};
-    cmd.addArgs({"-data", interface->workspaceDir()});
+    CommandLine cmd{executable(), arguments(), CommandLine::Raw};
+    cmd.addArgs({"-data", interface->workspaceDir().path()});
     interface->setCommandLine(cmd);
     return interface;
 }

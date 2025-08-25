@@ -61,8 +61,6 @@ constexpr char idKey[] = "id";
 constexpr char startupBehaviorKey[] = "startupBehavior";
 constexpr char mimeTypeKey[] = "mimeType";
 constexpr char filePatternKey[] = "filePattern";
-constexpr char executableKey[] = "executable";
-constexpr char argumentsKey[] = "arguments";
 constexpr char settingsGroupKey[] = "LanguageClient";
 constexpr char clientsKey[] = "clients";
 constexpr char typedClientsKey[] = "typedClients";
@@ -824,21 +822,11 @@ void LanguageClientSettings::setOutlineComboBoxSorted(bool sorted)
     settings->endGroup();
 }
 
-bool StdIOSettings::applyFromSettingsWidget(QWidget *widget)
+StdIOSettings::StdIOSettings()
 {
-    bool changed = false;
-    if (auto settingsWidget = qobject_cast<StdIOSettingsWidget *>(widget)) {
-        changed = BaseSettings::applyFromSettingsWidget(settingsWidget);
-        if (m_executable != settingsWidget->executable()) {
-            m_executable = settingsWidget->executable();
-            changed = true;
-        }
-        if (m_arguments != settingsWidget->arguments()) {
-            m_arguments = settingsWidget->arguments();
-            changed = true;
-        }
-    }
-    return changed;
+    executable.setSettingsKey("executable");
+
+    arguments.setSettingsKey("arguments");
 }
 
 QWidget *StdIOSettings::createSettingsWidget(QWidget *parent) const
@@ -848,31 +836,12 @@ QWidget *StdIOSettings::createSettingsWidget(QWidget *parent) const
 
 bool StdIOSettings::isValid() const
 {
-    return BaseSettings::isValid() && !m_executable.isEmpty();
+    return BaseSettings::isValid() && !executable().isEmpty();
 }
 
-void StdIOSettings::toMap(Store &map) const
+CommandLine StdIOSettings::command() const
 {
-    BaseSettings::toMap(map);
-    map.insert(executableKey, m_executable.toSettings());
-    map.insert(argumentsKey, m_arguments);
-}
-
-void StdIOSettings::fromMap(const Store &map)
-{
-    BaseSettings::fromMap(map);
-    m_executable = Utils::FilePath::fromSettings(map[executableKey]);
-    m_arguments = map[argumentsKey].toString();
-}
-
-QString StdIOSettings::arguments() const
-{
-    return Utils::globalMacroExpander()->expand(m_arguments);
-}
-
-Utils::CommandLine StdIOSettings::command() const
-{
-    return Utils::CommandLine(m_executable, arguments(), Utils::CommandLine::Raw);
+    return Utils::CommandLine(executable(), arguments(), CommandLine::Raw);
 }
 
 BaseClientInterface *StdIOSettings::createInterface(BuildConfiguration *bc) const
@@ -1094,12 +1063,12 @@ void BaseSettingsWidget::showAddMimeTypeDialog()
 StdIOSettingsWidget::StdIOSettingsWidget(const StdIOSettings *settings, QWidget *parent)
     : BaseSettingsWidget(settings, parent)
     , m_executable(new Utils::PathChooser(this))
-    , m_arguments(new QLineEdit(settings->m_arguments, this))
+    , m_arguments(new QLineEdit(settings->arguments(), this))
 {
     using namespace Layouting;
 
     m_executable->setExpectedKind(Utils::PathChooser::ExistingCommand);
-    m_executable->setFilePath(settings->m_executable);
+    m_executable->setFilePath(settings->executable());
 
     auto mainLayout = qobject_cast<QFormLayout *>(layout());
     QTC_ASSERT(mainLayout, return);
