@@ -58,7 +58,6 @@
 
 constexpr char typeIdKey[] = "typeId";
 constexpr char idKey[] = "id";
-constexpr char startupBehaviorKey[] = "startupBehavior";
 constexpr char mimeTypeKey[] = "mimeType";
 constexpr char filePatternKey[] = "filePattern";
 constexpr char settingsGroupKey[] = "LanguageClient";
@@ -555,6 +554,10 @@ BaseSettings::BaseSettings()
     initializationOptions.setSettingsKey("initializationOptions");
 
     configuration.setSettingsKey("configuration");
+
+    startBehavior.setSettingsKey("startupBehavior");
+    startBehavior.setDefaultValue(RequiresFile);
+    startBehavior.setDisplayStyle(SelectionAspect::DisplayStyle::ComboBox);
 }
 
 QJsonObject BaseSettings::initializationOptionsAsJson() const
@@ -584,8 +587,8 @@ bool BaseSettings::applyFromSettingsWidget(QWidget *widget)
             m_languageFilter = settingsWidget->filter();
             changed = true;
         }
-        if (m_startBehavior != settingsWidget->startupBehavior()) {
-            m_startBehavior = settingsWidget->startupBehavior();
+        if (startBehavior.isDirty()) {
+            startBehavior.apply();
             changed = true;
         }
         if (initializationOptions.isDirty()) {
@@ -669,7 +672,6 @@ void BaseSettings::toMap(Store &map) const
     AspectContainer::toMap(map);
     map.insert(typeIdKey, m_settingsTypeId.toSetting());
     map.insert(idKey, m_id);
-    map.insert(startupBehaviorKey, m_startBehavior);
     map.insert(mimeTypeKey, m_languageFilter.mimeTypes);
     map.insert(filePatternKey, m_languageFilter.filePattern);
 }
@@ -678,8 +680,6 @@ void BaseSettings::fromMap(const Store &map)
 {
     AspectContainer::fromMap(map);
     m_id = map.value(idKey, QUuid::createUuid().toString()).toString();
-    m_startBehavior = BaseSettings::StartBehavior(
-        map.value(startupBehaviorKey, BaseSettings::RequiresFile).toInt());
     m_languageFilter.mimeTypes = map[mimeTypeKey].toStringList();
     m_languageFilter.filePattern = map[filePatternKey].toStringList();
     m_languageFilter.filePattern.removeAll(QString()); // remove empty entries
@@ -912,7 +912,7 @@ BaseSettingsWidget::BaseSettingsWidget(const BaseSettings *settings, QWidget *pa
 
     for (int behavior = 0; behavior < BaseSettings::LastSentinel ; ++behavior)
         m_startupBehavior->addItem(startupBehaviorString(BaseSettings::StartBehavior(behavior)));
-    m_startupBehavior->setCurrentIndex(settings->m_startBehavior);
+    m_startupBehavior->setCurrentIndex(settings->startBehavior());
 
     m_initializationOptions->setValidationFunction([](const QString &text) -> Result<> {
             const QString value = globalMacroExpander()->expand(text);
@@ -1284,7 +1284,7 @@ public:
         QFormLayout *settingsLayout = nullptr;
         for (auto settings : LanguageClientSettings::pageSettings()) {
 
-            if (settings->m_startBehavior != BaseSettings::RequiresProject)
+            if (settings->startBehavior() != BaseSettings::RequiresProject)
                 continue;
             if (!settingsLayout) {
                 auto group = new QGroupBox(Tr::tr("Project Specific Language Servers"));

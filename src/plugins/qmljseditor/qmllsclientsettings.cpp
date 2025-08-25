@@ -72,8 +72,11 @@ QmllsClientSettings::QmllsClientSettings()
     m_languageFilter.mimeTypes = supportedMimeTypes();
 
     m_settingsTypeId = Constants::QMLLS_CLIENT_SETTINGS_ID;
-    m_startBehavior = RequiresProject;
+
+    startBehavior.setValue(RequiresProject);
+
     initializationOptions.setValue("{\"qtCreatorHighlighting\": true}");
+
     enabled.setValue(false); // disabled by default
 }
 

@@ -58,7 +58,6 @@ class LANGUAGECLIENT_EXPORT BaseSettings : public Utils::AspectContainer
 {
 public:
     BaseSettings();
-
     virtual ~BaseSettings() = default;
 
     enum StartBehavior {
@@ -73,7 +72,7 @@ public:
     QString m_id = QUuid::createUuid().toString();
     Utils::Id m_settingsTypeId;
     Utils::BoolAspect enabled{this};
-    StartBehavior m_startBehavior = RequiresFile;
+    Utils::TypedSelectionAspect<StartBehavior> startBehavior{this};
     LanguageFilter m_languageFilter;
     Utils::StringAspect initializationOptions{this};
     Utils::StringAspect configuration{this};

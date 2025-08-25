@@ -55,7 +55,9 @@ JLSSettings::JLSSettings()
 {
     m_settingsTypeId = Constants::JLS_SETTINGS_ID;
     name.setValue("Java Language Server");
-    m_startBehavior = RequiresProject;
+
+    startBehavior.setValue(RequiresProject);
+
     m_languageFilter.mimeTypes = QStringList(Utils::Constants::JAVA_MIMETYPE);
 
     const FilePath javaPath = Environment::systemEnvironment().searchInPath("java");
