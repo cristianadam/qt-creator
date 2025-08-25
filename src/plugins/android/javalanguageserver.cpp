@@ -51,51 +51,24 @@ public:
     Utils::FilePathAspect languageServer{this};
 };
 
-class JLSSettingsWidget : public QWidget
-{
-public:
-    JLSSettingsWidget(const JLSSettings *settings, QWidget *parent);
-
-    FilePath java() const { return m_java->filePath(); }
-    FilePath languageServer() const { return m_ls->filePath(); }
-
-private:
-    PathChooser *m_java = nullptr;
-    PathChooser *m_ls = nullptr;
-};
-
-JLSSettingsWidget::JLSSettingsWidget(const JLSSettings *settings, QWidget *parent)
-    : QWidget(parent)
-    , m_java(new PathChooser(this))
-    , m_ls(new PathChooser(this))
-{
-    m_java->setExpectedKind(PathChooser::ExistingCommand);
-    m_java->setFilePath(settings->executable());
-
-    m_ls->setExpectedKind(PathChooser::File);
-    m_ls->lineEdit()->setPlaceholderText(Tr::tr("Path to equinox launcher jar"));
-    m_ls->setPromptDialogFilter("org.eclipse.equinox.launcher_*.jar");
-    m_ls->setFilePath(settings->languageServer());
-
-    using namespace Layouting;
-    Form {
-        settings->name, br,
-        Tr::tr("Java:"), m_java, br,
-        Tr::tr("Java Language Server:"), m_ls, br,
-    }.attachTo(this);
-}
-
 JLSSettings::JLSSettings()
 {
     m_settingsTypeId = Constants::JLS_SETTINGS_ID;
     name.setValue("Java Language Server");
     m_startBehavior = RequiresProject;
     m_languageFilter.mimeTypes = QStringList(Utils::Constants::JAVA_MIMETYPE);
-    const FilePath &javaPath = Environment::systemEnvironment().searchInPath("java");
+
+    const FilePath javaPath = Environment::systemEnvironment().searchInPath("java");
     if (javaPath.exists())
         executable.setValue(javaPath);
+    executable.setLabelText(Tr::tr("Java:"));
+    executable.setExpectedKind(PathChooser::ExistingCommand);
 
     languageServer.setSettingsKey("languageServer");
+    languageServer.setLabelText(Tr::tr("Java Language Server:"));
+    languageServer.setExpectedKind(PathChooser::File);
+    languageServer.setPlaceHolderText(Tr::tr("Path to equinox launcher jar"));
+    languageServer.setPromptDialogFilter("org.eclipse.equinox.launcher_*.jar");
 }
 
 bool JLSSettings::applyFromSettingsWidget(QWidget *widget)
@@ -129,9 +102,14 @@ bool JLSSettings::applyFromSettingsWidget(QWidget *widget)
     return changed;
 }
 
-QWidget *JLSSettings::createSettingsWidget(QWidget *parent) const
+QWidget *JLSSettings::createSettingsWidget(QWidget *) const
 {
-    return new JLSSettingsWidget(this, parent);
+    using namespace Layouting;
+    return Form {
+        name, br,
+        executable, br,
+        languageServer, br
+    }.emerge();
 }
 
 bool JLSSettings::isValid() const
