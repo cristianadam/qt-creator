@@ -18,15 +18,11 @@
 namespace Core { class SearchResult; }
 namespace Utils { class SearchResultItem; }
 
-namespace CppEditor {
-namespace Internal {
+namespace CppEditor::Internal {
 
 class SymbolsFindFilter : public Core::IFindFilter
 {
     Q_OBJECT
-
-public:
-    using SearchScope = SymbolSearcher::SearchScope;
 
 public:
     SymbolsFindFilter();
@@ -73,6 +69,7 @@ private:
 class SymbolsFindFilterConfigWidget : public QWidget
 {
     Q_OBJECT
+
 public:
     explicit SymbolsFindFilterConfigWidget(SymbolsFindFilter *filter);
 
@@ -92,5 +89,4 @@ private:
     QButtonGroup *m_searchGroup;
 };
 
-} // Internal
-} // CppEditor
+} // CppEditor::Internal

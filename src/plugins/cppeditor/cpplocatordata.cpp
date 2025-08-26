@@ -13,10 +13,10 @@ enum { MaxPendingDocuments = 10 };
 
 CppLocatorData::CppLocatorData()
 {
-    m_search.setSymbolsToSearchFor(SymbolSearcher::Enums |
-                                   SymbolSearcher::Classes |
-                                   SymbolSearcher::Functions |
-                                   SymbolSearcher::TypeAliases);
+    m_search.setSymbolsToSearchFor(Internal::Enums |
+                                   Internal::Classes |
+                                   Internal::Functions |
+                                   Internal::TypeAliases);
     m_pendingDocuments.reserve(MaxPendingDocuments);
 }
 
