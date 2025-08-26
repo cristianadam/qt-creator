@@ -1,0 +1,16 @@
+// Copyright (C) 2025 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+
+#include <QTest>
+
+class tst_Template : public QObject
+{
+    Q_OBJECT
+
+private slots:
+    void test_example() { QVERIFY(true); }
+};
+
+QTEST_GUILESS_MAIN(tst_Template)
+
+#include "tst_template.moc"
