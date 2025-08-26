@@ -21,13 +21,13 @@ using ScopedIndexItemPtr = ScopedSwap<IndexItem::Ptr>;
 using ScopedScope = ScopedSwap<QString>;
 
 SearchSymbols::SymbolTypes SearchSymbols::AllTypes =
-        SymbolSearcher::Classes
-        | SymbolSearcher::Functions
-        | SymbolSearcher::Enums
-        | SymbolSearcher::Declarations;
+          Internal::Classes
+        | Internal::Functions
+        | Internal::Enums
+        | Internal::Declarations;
 
 SearchSymbols::SearchSymbols()
-    : symbolsToSearchFor(SymbolSearcher::Classes | SymbolSearcher::Functions | SymbolSearcher::Enums)
+    : symbolsToSearchFor(Internal::Classes | Internal::Functions | Internal::Enums)
 {
     overview.showTemplateParameters = true;
 }
@@ -64,7 +64,7 @@ IndexItem::Ptr SearchSymbols::operator()(Document::Ptr doc, const QString &scope
 
 bool SearchSymbols::visit(Enum *symbol)
 {
-    if (!(symbolsToSearchFor & SymbolSearcher::Enums))
+    if (!(symbolsToSearchFor & Internal::Enums))
         return false;
 
     QString name = overview.prettyName(symbol->name());
@@ -101,10 +101,10 @@ bool SearchSymbols::visit(Namespace *symbol)
 
 bool SearchSymbols::visit(Declaration *symbol)
 {
-    if (!(symbolsToSearchFor & SymbolSearcher::Declarations)) {
-        if ((symbolsToSearchFor & SymbolSearcher::TypeAliases) && symbol->type().isTypedef()) {
+    if (!(symbolsToSearchFor & Internal::Declarations)) {
+        if ((symbolsToSearchFor & Internal::TypeAliases) && symbol->type().isTypedef()) {
             // Continue.
-        } else if (symbolsToSearchFor & SymbolSearcher::Functions) {
+        } else if (symbolsToSearchFor & Internal::Functions) {
             // if we're searching for functions, still allow signal declarations to show up.
             Function *funTy = symbol->type()->asFunctionType();
             if (!funTy) {
@@ -302,7 +302,7 @@ void SearchSymbols::processClass(T *clazz)
     QString name = overview.prettyName(clazz->name());
 
     IndexItem::Ptr newParent;
-    if (symbolsToSearchFor & SymbolSearcher::Classes)
+    if (symbolsToSearchFor & Internal::Classes)
         newParent = addChildItem(name, QString(), _scope, IndexItem::Class, clazz);
     if (!newParent)
         newParent = _parent;
@@ -317,7 +317,7 @@ void SearchSymbols::processClass(T *clazz)
 template<class T>
 void SearchSymbols::processFunction(T *func)
 {
-    if (!(symbolsToSearchFor & SymbolSearcher::Functions) || !func->name())
+    if (!(symbolsToSearchFor & Internal::Functions) || !func->name())
         return;
     QString name = overview.prettyName(func->name());
     QString scope = _scope;

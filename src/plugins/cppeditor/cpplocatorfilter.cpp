@@ -172,10 +172,10 @@ static QList<IndexItem::Ptr> itemsOfCurrentDocument(const FilePath &currentFileN
     const Snapshot snapshot = CppModelManager::snapshot();
     if (const Document::Ptr thisDocument = snapshot.document(currentFileName)) {
         SearchSymbols search;
-        search.setSymbolsToSearchFor(SymbolSearcher::Declarations |
-                                     SymbolSearcher::Enums |
-                                     SymbolSearcher::Functions |
-                                     SymbolSearcher::Classes);
+        search.setSymbolsToSearchFor(Internal::Declarations |
+                                     Internal::Enums |
+                                     Internal::Functions |
+                                     Internal::Classes);
         IndexItem::Ptr rootNode = search(thisDocument);
         rootNode->visitAllChildren([&](const IndexItem::Ptr &info) {
             results.append(info);

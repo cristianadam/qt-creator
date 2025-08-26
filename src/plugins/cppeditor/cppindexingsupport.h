@@ -15,9 +15,7 @@
 
 namespace Utils { class SearchResultItem; }
 
-namespace CppEditor {
-
-namespace SymbolSearcher {
+namespace CppEditor::Internal {
 
 enum SymbolType {
     Classes      = 0x1,
@@ -47,23 +45,14 @@ CPPEDITOR_EXPORT void search(QPromise<Utils::SearchResultItem> &promise,
                              const Parameters &parameters,
                              const QSet<Utils::FilePath> &filePaths);
 
-} // namespace SymbolSearcher
+CPPEDITOR_EXPORT bool isFindErrorsIndexingActive();
 
-class CPPEDITOR_EXPORT CppIndexingSupport
-{
-public:
-    static bool isFindErrorsIndexingActive();
+CPPEDITOR_EXPORT QFuture<void> refreshSourceFiles(
+    const std::function<QSet<Utils::FilePath>()> &sourceFiles,
+    CppModelManager::ProgressNotificationMode mode);
 
-    QFuture<void> refreshSourceFiles(
-        const std::function<QSet<Utils::FilePath>()> &sourceFiles,
-        CppModelManager::ProgressNotificationMode mode);
+} // namespace CppEditor::Internal
 
-private:
-    Utils::FutureSynchronizer m_synchronizer;
-};
-
-} // namespace CppEditor
-
-Q_DECLARE_METATYPE(CppEditor::SymbolSearcher::SearchScope)
-Q_DECLARE_METATYPE(CppEditor::SymbolSearcher::Parameters)
-Q_DECLARE_METATYPE(CppEditor::SymbolSearcher::SymbolTypes)
+Q_DECLARE_METATYPE(CppEditor::Internal::SearchScope)
+Q_DECLARE_METATYPE(CppEditor::Internal::Parameters)
+Q_DECLARE_METATYPE(CppEditor::Internal::SymbolTypes)
