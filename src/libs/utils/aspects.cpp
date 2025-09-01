@@ -1417,13 +1417,18 @@ void StringAspect::addToLayoutImpl(Layout &parent)
     d->m_checkerImpl.addToLayoutLast(parent);
 }
 
-QString StringAspect::expandedValue() const
+QString StringAspect::operator()() const
 {
     if (!m_internal.isEmpty()) {
         if (auto expander = macroExpander())
             return expander->expand(m_internal);
     }
     return m_internal;
+}
+
+QString StringAspect::expandedValue() const
+{
+    return operator()();
 }
 
 bool StringAspect::guiToBuffer()
