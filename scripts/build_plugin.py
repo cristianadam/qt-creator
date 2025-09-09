@@ -80,6 +80,8 @@ def build(args, paths):
                   '-DQTC_SEPARATE_DEBUG_INFO=' + separate_debug_info_option,
                   '-DCMAKE_INSTALL_PREFIX=' + common.to_posix_path(paths.install),
                   '-DQT_GENERATE_SBOM=ON',
+                  '-DQT_SBOM_GENERATE_JSON=ON',
+                  '-DQT_SBOM_REQUIRE_GENERATE_JSON=' + cmake_option(not args.no_sbom),
                   '-G', 'Ninja']
 
     if args.module_paths:

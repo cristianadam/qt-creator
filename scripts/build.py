@@ -170,6 +170,8 @@ def build_qtcreator(args, paths):
                   '-DSHOW_BUILD_DATE=' + cmake_option(not args.no_build_date),
                   '-DWITH_DOCS=' + cmake_option(not args.no_docs),
                   '-DQT_GENERATE_SBOM=' + cmake_option(not args.no_sbom),
+                  '-DQT_SBOM_GENERATE_JSON=' + cmake_option(not args.no_sbom),
+                  '-DQT_SBOM_REQUIRE_GENERATE_JSON=' + cmake_option(not args.no_sbom),
                   '-DBUILD_QBS=' + cmake_option(build_qbs),
                   '-DBUILD_DEVELOPER_DOCS=' + cmake_option(not args.no_docs),
                   '-DBUILD_LIBRARY_SDKTOOLLIB=' + cmake_option(args.with_sdk_tool),
