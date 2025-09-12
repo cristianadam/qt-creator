@@ -1,0 +1,49 @@
+// Copyright (C) 2025 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page creator-how-to-create-qtif.html
+    \previouspage creator-how-tos.html
+
+    \ingroup creator-how-to-projects-create
+
+    \title Create \QIF projects
+
+    Use the \l {\QIF} tools and core APIs to implement middleware APIs, backends,
+    and services. With the \QIF Generator, you can use the Interface Definition
+    Language (IDL) to define new APIs and generate Qt C++ classes and QML types.
+
+    \QIF consists of:
+
+    \list
+        \li The core module, which has base classes and common code for all APIs
+            that you create.
+        \li A front-end API, that implements a \e feature.
+        \li A backend interface, and one or more backends that implement it to
+            connect to either the underlying service or to a simulation of it.
+    \endlist
+
+    \QIF separates the feature and the backends. You can connect one feature to
+    many backends, as the core module makes it easy to find the corresponding
+    backend.
+
+    To create a \QIF project with a feature and a backend:
+
+    \list 1
+        \li Go to \uicontrol File > \uicontrol {New Project} >
+            \uicontrol {Other Project}, and select \uicontrol {\QIF Project}.
+        \li Specify the name and location of the application.
+        \li Select \uicontrol Next.
+        \li Specify the interface that describes the data to exchange between
+            the \QIF feature and backend.
+            \image {qtcreator-new-project-qtif.webp} {Configure Interface dialog}
+        \li Select \uicontrol Next to select a kit for building and running the
+            project.
+        \li Select \uicontrol Next to create the project.
+    \endlist
+
+    Modify the boilerplate code in the project to implement a feature that
+    connects to a backend.
+
+    \sa {Create Projects}{How To: Create Projects}
+*/
