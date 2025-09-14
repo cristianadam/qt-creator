@@ -1,0 +1,14 @@
+{
+    "Id" : "zenmodeplugin",
+    "Name" : "Zen Mode",
+    "Version" : "1.0.0",
+    "CompatVersion" : "1.0.0",
+    "Vendor" : "Sebastian Mosiej",
+    "VendorId" : "sebastianmosiej",
+    "Copyright" : "(C) 2025 Sebastian Mosiej",
+    "License" : "Put short license information here",
+    "Description" : "Provide Distraction Free and Zen Mode.",
+    "Url" : "",
+    "DocumentationUrl" : "",
+    ${IDE_PLUGIN_DEPENDENCIES}
+}

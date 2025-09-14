@@ -1,0 +1,19 @@
+add_qtc_plugin(ZenModePlugin
+  PLUGIN_DEPENDS
+    Core
+  DEPENDS
+    Qt::Widgets
+    QtCreator::ExtensionSystem
+    QtCreator::Utils
+  SOURCES
+    README.md
+    zenmodeplugin.cpp
+    zenmodeplugin.h
+    zenmodepluginconstants.h
+    zenmodeplugintr.h
+)
+
+target_sources(ZenModePlugin
+  PRIVATE
+    zenmodeplugin.h
+)
