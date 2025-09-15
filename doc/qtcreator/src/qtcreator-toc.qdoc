@@ -45,6 +45,7 @@
             \li Design UIs
                 \generatelist creator-how-to-design
             \li Develop for Devices
+                \generatelist creator-how-to-devices-general
                 \list
                     \li Android
                         \generatelist creator-how-to-android

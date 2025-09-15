@@ -49,7 +49,8 @@
     \image {qtcreator-ssh-options.png} {SSH tab in Devices preferences}
     //! [openssh]
 
-    \sa {Add Docker devices}, {Remote Linux}{How To: Develop for remote Linux},
+    \sa {Add Docker devices}, {Configure tools on devices},
+    {Remote Linux}{How To: Develop for remote Linux},
     {Run in Qt Application Manager}, {Remote Linux Deploy Configuration},
     {Remote Linux Run Settings}
 */
@@ -116,7 +117,7 @@
 
     \endlist
 
-    \sa {Remote Linux}{How To: Develop for remote Linux},
+    \sa {Remote Linux}{How To: Develop for remote Linux}, {Configure tools on devices},
     {Manage Kits}{How To: Manage Kits}, {Developing for Remote Linux Devices},
     {Remote Linux Deploy Configuration}, {Remote Linux Run Settings}
 */
@@ -137,7 +138,7 @@
 
     \include qtcreator-add-linux-device.qdocinc {add linux device} {Remote Linux Device}
 
-    \sa {Remote Linux}{How To: Develop for remote Linux},
+    \sa {Remote Linux}{How To: Develop for remote Linux}, {Configure tools on devices},
     {Debug remotely with GDB}, {Developing for Remote Linux Devices},
     {Remote Linux Deploy Configuration}
 */
