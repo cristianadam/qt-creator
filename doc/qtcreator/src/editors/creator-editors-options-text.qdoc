@@ -31,8 +31,8 @@
     \section1 Configuring Fonts
 
     You can select the font family and size. You can specify a zoom setting in
-    percentage for viewing the text. You can also zoom in or out by pressing
-    \key {Ctrl++} or \key {Ctrl+-}, or by pressing \key Ctrl and rolling
+    percentage for viewing the text. You can also zoom in or out by selecting
+    \key {Ctrl++} or \key {Ctrl+-}, or by selecting \key Ctrl and rolling
     the mouse button up or down. To disable the mouse wheel function, select
     \preferences > \uicontrol {Text Editor} > \uicontrol Behavior and clear
     the \uicontrol {Enable scroll wheel zooming} check box.

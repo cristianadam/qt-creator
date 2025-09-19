@@ -17,7 +17,7 @@
 
     To temporarily escape FakeVim mode to access the normal \QC keyboard
     shortcuts like \key {Ctrl-R} for \uicontrol Run, select the comma
-    key (\key {,}) before pressing the shortcut.
+    key (\key {,}) before selecting the shortcut.
 
     \section1 Quit FakeVim mode
 
