@@ -3,15 +3,28 @@
 
 /*!
     \page distributing-plugins.html
-    \title Distributing Plugins
+    \title Distributing Extensions and Plugins
 
-    To make your plugin available to a wider range of users, you should look
-    into distributing binary builds of it.
+    To make your extension or plugin available to a wider range of users, publish
+    it as a \QC extension that users can install in the \uicontrol Extensions
+    mode.
 
-    \section1 Creating Binaries
+    You can also distribute binary builds of C++-based extensions that users can
+    install in \uicontrol Help > \uicontrol {About Plugins}.
 
-    If your plugin runs and works on multiple platforms, you should provide
-    binary builds for all of the supported platforms.
+    \section1 Publishing Extensions
+
+    You can publish both commercial and open source extensions.
+
+    \section2 Commercial Extensions
+
+    \section2 Open Source Extensions
+
+
+    \section1 Creating Binaries of C++-Based Plugins
+
+    If your C++-based plugin runs and works on multiple platforms, you should
+    provide binary builds for all of the supported platforms.
 
     Qt Creator currently supports:
 

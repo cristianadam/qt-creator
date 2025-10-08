@@ -3,7 +3,7 @@
 
 /*!
     \page lua-extensions.html
-    \title Extending \QC with Lua
+    \title Creating Lua-Based Extensions
 
     \QC can be extended with Lua scripts. The included Lua engine is based on Lua 5.4.6.
 
@@ -154,6 +154,8 @@
     The \QC LuaLanguageClient Plugin provides support for registering your own Language Server
     clients. You can find an example of how to use this in the \QC Extension "Lua Language Server"
     and "Rust Language Server".
+
+    \sa {Creating C++-Based Plugins}
 */
 
 /*!
