@@ -76,6 +76,9 @@
     You can install compatible extensions either from the
     \l{\QC extension registry} or from other external repositories.
 
+    The extension registry must have a compressed \c tar file that lists the
+    extensions it contains.
+
     To install extensions from the extension registry:
 
     \list 1
