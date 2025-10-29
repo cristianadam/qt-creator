@@ -806,4 +806,9 @@ void TestResultsPane::showTestResult(const QModelIndex &index)
     }
 }
 
+bool TestResultsPane::expandIntermediate() const
+{
+    return m_expandCollapse->isChecked();
+}
+
 } // namespace Autotest::Internal
