@@ -13,8 +13,53 @@ the public Git repository or view online at
 New plugins
 -----------
 
+### <Plugin>
+
 General
 -------
+
+### Additions
+
+#### <Addition>
+
+<Description of the feature as a short story.>
+
+<Reasons for the change.>
+
+<Location of the added feature.>
+
+<Screenshot or video.>
+
+([Documentation](<URL>))
+
+### Changes
+
+<List of changes>
+
+#### <Bigger change>
+
+<Description of the change as a short story.>
+
+<Reasons for the change.>
+
+<Location of the changed feature.>
+
+<Screenshot or video.>
+
+([Documentation](<URL>))
+
+### Fixes
+
+<List of fixes>
+
+#### <Big fix>
+
+<Description of the fix as a short story.>
+
+<Location of the fixed feature.>
+
+([Documentation](<URL>))
+
 
 Help
 ----
