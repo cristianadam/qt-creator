@@ -429,7 +429,6 @@ private:
                                     QString msgBoxText, const QString &buttonName,
                                     const QString &gitCommand, ContinueCommandMode continueMode);
 
-    void setupTimer();
     mutable QMap<Utils::FilePath, Utils::FilePath> m_gitExecutableCache;
 
     QString m_gitQtcEditor;
