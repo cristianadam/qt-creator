@@ -173,6 +173,15 @@ public:
     Guard m_avdPathGuard;
 };
 
+static void updateDeviceFileAccess(const Id &deviceId)
+{
+    if (IDevice::Ptr dev = DeviceManager::find(deviceId)) {
+        auto androidDevice = qobject_cast<AndroidDevice *>(dev.get());
+        if (QTC_GUARD(androidDevice))
+            androidDevice->updateDeviceFileAccess();
+    }
+}
+
 static QString displayNameFromInfo(const AndroidDeviceInfo &info)
 {
     return info.type == IDevice::Hardware ? AndroidConfig::getProductModel(info.serialNumber)
@@ -680,8 +689,10 @@ void AndroidDevice::startAvd()
     const Storage<QString> serialNumberStorage;
 
     const auto onDone = [this, serialNumberStorage] {
-        if (!serialNumberStorage->isEmpty())
+        if (!serialNumberStorage->isEmpty()) {
             DeviceManager::setDeviceState(id(), IDevice::DeviceReadyToUse);
+            updateDeviceFileAccess();
+        }
     };
 
     const Group recipe {
@@ -847,6 +858,7 @@ static void handleDevicesListChange(const QString &serialNumber)
             if (QTC_GUARD(androidDev))
                 androidDev->updateSerialNumber(serial);
         }
+        updateDeviceFileAccess(avdId);
     } else {
         const Id id = Id(Constants::ANDROID_DEVICE_ID).withSuffix(':').withSuffix(serial);
         QString displayName = AndroidConfig::getProductModel(serial);
@@ -878,11 +890,7 @@ static void handleDevicesListChange(const QString &serialNumber)
                     newDev->id().toString().toUtf8().data());
             DeviceManager::addDevice(IDevice::Ptr(newDev));
         }
-        if (IDevice::Ptr dev = DeviceManager::find(id)) {
-            auto androidDevice = qobject_cast<AndroidDevice *>(dev.get());
-            if (QTC_GUARD(androidDevice))
-                androidDevice->updateDeviceFileAccess();
-        }
+        updateDeviceFileAccess(id);
     }
 }
 
@@ -977,7 +985,7 @@ static void handleAvdListChange(const AndroidDeviceInfoList &avdList)
         }
     }
 
-    // Set devices no longer connected to disconnected state.
+    // Remove AVDs that no longer exist from Qt Creator's device list.
     for (const Id &id : existingAvds) {
         if (!connectedDevs.contains(id)) {
             qCDebug(androidDeviceLog, "Removing AVD id \"%s\" because it no longer exists.",
@@ -985,6 +993,9 @@ static void handleAvdListChange(const AndroidDeviceInfoList &avdList)
             DeviceManager::removeDevice(id);
         }
     }
+    // update the device file access for "connected" AVDs
+    for (const Id &deviceId : std::as_const(connectedDevs))
+        updateDeviceFileAccess(deviceId);
 }
 
 AndroidDeviceManagerInstance::AndroidDeviceManagerInstance()
