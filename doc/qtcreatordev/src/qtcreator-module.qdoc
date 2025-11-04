@@ -34,9 +34,9 @@
                 object pool.
 
         \row
-            \li \l{Tasking}
-            \li A solution containing a TaskTree and other classes for writing
-                declarative trees of asynchronous task flows.
+            \li \l{Qt TaskTree}{Tasking}
+            \li Provides a declarative way to compose and execute asynchronous
+                task workflows with proper error handling and execution policies.
 
         \row
             \li \l{Utils}
@@ -125,7 +125,7 @@
                 which may be attached to any widget as an overlay.
 
         \row
-            \li \l{Tasking Solution}{Tasking}
+            \li \l{Qt TaskTree}{Tasking}
             \li Enables you to build extensible, declarative task tree structures
                 that contain possibly asynchronous tasks.
     \endtable
