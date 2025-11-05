@@ -34,6 +34,7 @@
 #include <utils/qtcprocess.h>
 #include <utils/shutdownguard.h>
 #include <utils/stringutils.h>
+#include <utils/synchronizedvalue.h>
 #include <utils/url.h>
 
 #include <QFileSystemWatcher>
@@ -93,25 +94,38 @@ static SdkToolResult runAdbCommand(const QStringList &args)
 class AndroidFileAccess : public UnixDeviceFileAccess
 {
 public:
-    AndroidFileAccess(AndroidDevice *device);
+    AndroidFileAccess(AndroidDevicePrivate *devicePrivate);
 
 protected:
     Utils::Result<RunResult> runInShellImpl(
         const CommandLine &cmdLine, const QByteArray &inputData) const final;
 
 private:
-    AndroidDevice *m_device = nullptr;
+    AndroidDevicePrivate *m_d;
 };
 
-AndroidFileAccess::AndroidFileAccess(AndroidDevice *device)
-    : m_device(device)
+class AndroidDevicePrivate final
+{
+public:
+    std::unique_ptr<QSettings> m_avdSettings;
+    QSingleTaskTreeRunner m_taskTreeRunner;
+    std::unique_ptr<AndroidFileAccess> m_deviceAccess;
+    UnavailableDeviceFileAccess m_disconnectedAccess;
+
+    // thread-safe data for use of AndroidFileAccess and the ProcessInterface
+    SynchronizedValue<QString> serialNumber;
+    SynchronizedValue<FilePath> adbToolPath;
+};
+
+AndroidFileAccess::AndroidFileAccess(AndroidDevicePrivate *devicePrivate)
+    : m_d(devicePrivate)
 {}
 
 Utils::Result<RunResult> AndroidFileAccess::runInShellImpl(
     const CommandLine &cmdLine, const QByteArray &inputData) const
 {
-    CommandLine cmd(AndroidConfig::adbToolPath());
-    cmd.addArgs({"-s", m_device->serialNumber(), "shell"});
+    CommandLine cmd(*m_d->adbToolPath.readLocked());
+    cmd.addArgs({"-s", *m_d->serialNumber.readLocked(), "shell"});
     cmd.addCommandLineAsSingleArg(cmdLine);
     Process proc;
     proc.setWriteData(inputData);
@@ -132,15 +146,6 @@ Utils::Result<RunResult> AndroidFileAccess::runInShellImpl(
     }
     return result;
 }
-
-class AndroidDevicePrivate final
-{
-public:
-    std::unique_ptr<QSettings> m_avdSettings;
-    QSingleTaskTreeRunner m_taskTreeRunner;
-    std::unique_ptr<AndroidFileAccess> m_deviceAccess;
-    UnavailableDeviceFileAccess m_disconnectedAccess;
-};
 
 class AndroidDeviceManagerInstance : public QObject
 {
@@ -443,6 +448,11 @@ AndroidDevice::AndroidDevice()
     addDeviceAction({Tr::tr("Refresh"), [](const IDevice::Ptr &device) {
         updateDeviceState(device);
     }});
+
+    QObject::connect(
+        AndroidConfigurations::instance(), &AndroidConfigurations::sdkLocationChanged, this, [this] {
+            *d->adbToolPath.writeLocked() = AndroidConfig::adbToolPath();
+        });
     setFileAccess(&d->m_disconnectedAccess);
 }
 
@@ -594,7 +604,7 @@ QString AndroidDevice::serialNumber() const
         return serialNumber;
     const QString avdSerial = getRunningAvdsSerialNumber(avdName());
     auto that = const_cast<AndroidDevice *>(this);
-    that->setExtraData(Constants::AndroidSerialNumber, avdSerial);
+    that->updateSerialNumber(avdSerial);
     return avdSerial;
 }
 
@@ -730,14 +740,19 @@ QUrl AndroidDevice::toolControlChannel(const ControlChannelHint &) const
     return url;
 }
 
+void AndroidDevice::updateSerialNumber(const QString &serial)
+{
+    setExtraData(Constants::AndroidSerialNumber, serial);
+    *d->serialNumber.writeLocked() = serial;
+}
+
 ProcessInterface *AndroidDevice::createProcessInterface() const
 {
     // Just "more or less" so that the generic things in UnixDeviceFileAccess work
     const auto wrapCommandLine =
-        [serial = serialNumber()](const ProcessSetupData &setupData, const QString &pidMarker)
-        -> Result<CommandLine> {
-        CommandLine cmd(AndroidConfig::adbToolPath());
-        cmd.addArgs({"-s", serial, "shell"});
+        [this](const ProcessSetupData &setupData, const QString &pidMarker) -> Result<CommandLine> {
+        CommandLine cmd(*d->adbToolPath.readLocked());
+        cmd.addArgs({"-s", *d->serialNumber.readLocked(), "shell"});
         CommandLine inner("echo", {pidMarker.arg("1234")}); // dummy PID
         if (!setupData.m_workingDirectory.isEmpty())
             inner.addCommandLineWithAnd({"cd", {setupData.m_workingDirectory.path()}});
@@ -771,7 +786,7 @@ void AndroidDevice::updateDeviceFileAccess()
     DeviceState state = deviceState();
     if (state == IDevice::DeviceReadyToUse) {
         if (!d->m_deviceAccess) {
-            d->m_deviceAccess = std::make_unique<AndroidFileAccess>(this);
+            d->m_deviceAccess = std::make_unique<AndroidFileAccess>(d);
             setFileAccess(d->m_deviceAccess.get());
         }
     } else {
@@ -814,8 +829,11 @@ static void handleDevicesListChange(const QString &serialNumber)
         const QString avdName = emulatorName(serial);
         const Id avdId = Id(Constants::ANDROID_DEVICE_ID).withSuffix(':').withSuffix(avdName);
         DeviceManager::setDeviceState(avdId, state);
-        if (IDevice::Ptr dev = DeviceManager::find(avdId))
-            dev->setExtraData(Constants::AndroidSerialNumber, serial);
+        if (IDevice::Ptr dev = DeviceManager::find(avdId)) {
+            AndroidDevice *androidDev = static_cast<AndroidDevice *>(dev.get());
+            if (QTC_GUARD(androidDev))
+                androidDev->updateSerialNumber(serial);
+        }
     } else {
         const Id id = Id(Constants::ANDROID_DEVICE_ID).withSuffix(':').withSuffix(serial);
         QString displayName = AndroidConfig::getProductModel(serial);
