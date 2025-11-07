@@ -406,10 +406,7 @@ class LinuxDevicePrivate
 public:
     explicit LinuxDevicePrivate(LinuxDevice *parent)
         : q(parent)
-        , m_disconnectedAccess(std::make_shared<UnavailableDeviceFileAccess>())
-    {
-        q->setFileAccess(m_disconnectedAccess);
-    }
+    {}
 
     void setOsType(OsType osType)
     {
@@ -439,14 +436,13 @@ public:
     {
         QMutexLocker locker(&m_shellMutex);
         DeviceManager::setDeviceState(q->id(), IDevice::DeviceDisconnected, announce);
-        q->setFileAccess(m_disconnectedAccess);
+        q->setFileAccess(nullptr);
         m_cmdBridgeAccess.reset();
         m_scriptAccess.reset();
     }
 
     LinuxDevice *q = nullptr;
 
-    std::shared_ptr<UnavailableDeviceFileAccess> m_disconnectedAccess;
     std::shared_ptr<LinuxDeviceAccess> m_scriptAccess;
     std::shared_ptr<CmdBridge::FileAccess> m_cmdBridgeAccess;
 
@@ -1380,7 +1376,7 @@ void LinuxDevicePrivate::setupShellPhase2(const Result<> &result,
         }
     } else {
         DEBUG("Failed to setup state");
-        q->setFileAccess(m_disconnectedAccess);
+        q->setFileAccess(nullptr);
         q->setDeviceState(IDevice::DeviceDisconnected);
     }
 
