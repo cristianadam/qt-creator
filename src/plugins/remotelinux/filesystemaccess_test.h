@@ -9,10 +9,10 @@
 namespace RemoteLinux {
 namespace Internal {
 
-class TestLinuxDeviceFactory final : public ProjectExplorer::IDeviceFactory
+class TestSshDeviceFactory final : public ProjectExplorer::IDeviceFactory
 {
 public:
-    TestLinuxDeviceFactory();
+    TestSshDeviceFactory();
 };
 
 class FileSystemAccessTest : public QObject
@@ -38,7 +38,7 @@ private slots:
     void cleanupTestCase();
 
 private:
-    TestLinuxDeviceFactory m_testLinuxDeviceFactory;
+    TestSshDeviceFactory m_testSshDeviceFactory;
     bool m_skippedAtWhole = false;
     ProjectExplorer::IDeviceConstPtr m_device;
     Utils::FilePath m_localStreamerDir;

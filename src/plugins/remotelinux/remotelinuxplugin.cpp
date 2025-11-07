@@ -59,7 +59,7 @@ public:
 
     void initialize() final
     {
-        m_linuxDeviceFactory = std::make_unique<LinuxDeviceFactory>();
+        m_linuxDeviceFactory = std::make_unique<SshDeviceFactory>();
         setupRemoteLinuxRunConfiguration();
         setupRemoteLinuxCustomRunConfiguration();
         setupRemoteLinuxRunAndDebugSupport();
@@ -75,7 +75,7 @@ public:
     }
 
 private:
-    std::unique_ptr<LinuxDeviceFactory> m_linuxDeviceFactory;
+    std::unique_ptr<SshDeviceFactory> m_linuxDeviceFactory;
     RsyncToolFactory m_rsyncToolFactory;
 };
 

@@ -6,18 +6,16 @@
 #include "remotelinuxtr.h"
 
 #include <projectexplorer/projectexplorersettings.h>
+
 #include <utils/commandline.h>
-#include <utils/fileutils.h>
 #include <utils/qtcprocess.h>
-#include <utils/qtcassert.h>
 
 using namespace ProjectExplorer;
 using namespace Utils;
 
 namespace RemoteLinux {
 
-RemoteLinuxSignalOperation::RemoteLinuxSignalOperation(
-        const IDeviceConstPtr &device)
+RemoteLinuxSignalOperation::RemoteLinuxSignalOperation(const IDeviceConstPtr &device)
     : m_device(device)
 {}
 

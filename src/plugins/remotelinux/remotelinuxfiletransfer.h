@@ -9,7 +9,7 @@ namespace RemoteLinux::Internal {
 
 ProjectExplorer::FileTransferInterface *
     createRemoteLinuxFileTransferInterface(
-        const LinuxDevice &device,
+        const SshDevice &device,
         const ProjectExplorer::FileTransferSetupData &setup);
 
 } // namespace RemoteLinux

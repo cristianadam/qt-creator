@@ -280,10 +280,10 @@ QStringList SshSharedConnection::connectionArgs(const FilePath &binary) const
 
 // LinuxDeviceConfigurationWidget
 
-class LinuxDeviceConfigurationWidget final : public IDeviceWidget
+class SshDeviceConfigurationWidget final : public IDeviceWidget
 {
 public:
-    explicit LinuxDeviceConfigurationWidget(const IDevicePtr &device);
+    explicit SshDeviceConfigurationWidget(const IDevicePtr &device);
 
 private:
     void createNewKey();
@@ -292,7 +292,7 @@ private:
     QSingleTaskTreeRunner m_detectionRunner;
 };
 
-LinuxDeviceConfigurationWidget::LinuxDeviceConfigurationWidget(
+SshDeviceConfigurationWidget::SshDeviceConfigurationWidget(
     const IDevice::Ptr &device)
     : IDeviceWidget(device)
 {
@@ -301,7 +301,7 @@ LinuxDeviceConfigurationWidget::LinuxDeviceConfigurationWidget(
     const QString machineType = device->machineType() == IDevice::Hardware
                                     ? Tr::tr("Physical Device")
                                     : Tr::tr("Emulator");
-    auto linuxDevice = std::dynamic_pointer_cast<LinuxDevice>(device);
+    auto linuxDevice = std::dynamic_pointer_cast<SshDevice>(device);
     QTC_ASSERT(linuxDevice, return);
 
     using namespace Layouting;
@@ -359,10 +359,10 @@ LinuxDeviceConfigurationWidget::LinuxDeviceConfigurationWidget(
         createKeyButton,
         &QAbstractButton::clicked,
         this,
-        &LinuxDeviceConfigurationWidget::createNewKey);
+        &SshDeviceConfigurationWidget::createNewKey);
 }
 
-void LinuxDeviceConfigurationWidget::createNewKey()
+void SshDeviceConfigurationWidget::createNewKey()
 {
     SshKeyCreationDialog dialog(this);
     if (dialog.exec() == QDialog::Accepted) {
@@ -373,18 +373,18 @@ void LinuxDeviceConfigurationWidget::createNewKey()
 
 IDeviceWidget *createLinuxDeviceWidget(const IDevicePtr &device)
 {
-    return new LinuxDeviceConfigurationWidget(device);
+    return new SshDeviceConfigurationWidget(device);
 }
 
 // LinuxDevicePrivate
 
 class ShellThreadHandler;
 
-class LinuxDeviceAccess final : public UnixDeviceFileAccess
+class SshDeviceAccess final : public UnixDeviceFileAccess
 {
 public:
-    explicit LinuxDeviceAccess(LinuxDevicePrivate *devicePrivate);
-    ~LinuxDeviceAccess();
+    explicit SshDeviceAccess(SshDevicePrivate *devicePrivate);
+    ~SshDeviceAccess();
 
     Result<RunResult> runInShellImpl(const CommandLine &cmdLine,
                                      const QByteArray &stdInData) const final;
@@ -394,17 +394,17 @@ public:
     void attachToSharedConnection(SshConnectionHandle *connectionHandle,
                                   const SshParameters &sshParameters);
 
-    LinuxDevicePrivate *m_devicePrivate = nullptr;
+    SshDevicePrivate *m_devicePrivate = nullptr;
     ShellThreadHandler *m_handler = nullptr;
 
 private:
     QThread m_shellThread;
 };
 
-class LinuxDevicePrivate
+class SshDevicePrivate
 {
 public:
-    explicit LinuxDevicePrivate(LinuxDevice *parent)
+    explicit SshDevicePrivate(SshDevice *parent)
         : q(parent)
     {}
 
@@ -441,9 +441,9 @@ public:
         m_scriptAccess.reset();
     }
 
-    LinuxDevice *q = nullptr;
+    SshDevice *q = nullptr;
 
-    std::shared_ptr<LinuxDeviceAccess> m_scriptAccess;
+    std::shared_ptr<SshDeviceAccess> m_scriptAccess;
     std::shared_ptr<CmdBridge::FileAccess> m_cmdBridgeAccess;
 
     QRecursiveMutex m_shellMutex;
@@ -451,13 +451,13 @@ public:
     std::optional<Environment> m_environmentCache;
 };
 
-void LinuxDevicePrivate::invalidateEnvironmentCache()
+void SshDevicePrivate::invalidateEnvironmentCache()
 {
     QWriteLocker locker(&m_environmentCacheLock);
     m_environmentCache.reset();
 }
 
-Environment LinuxDevicePrivate::getEnvironment()
+Environment SshDevicePrivate::getEnvironment()
 {
     QReadLocker locker(&m_environmentCacheLock);
     if (m_environmentCache.has_value())
@@ -496,7 +496,7 @@ Environment LinuxDevicePrivate::getEnvironment()
     return m_environmentCache.value();
 }
 
-Result<RunResult> LinuxDeviceAccess::runInShellImpl(
+Result<RunResult> SshDeviceAccess::runInShellImpl(
     const CommandLine &cmdLine, const QByteArray &stdInData) const
 {
     if (m_devicePrivate->checkDisconnectedWithWarning())
@@ -504,7 +504,7 @@ Result<RunResult> LinuxDeviceAccess::runInShellImpl(
     return m_devicePrivate->runInShell(cmdLine, stdInData);
 }
 
-Result<Environment> LinuxDeviceAccess::deviceEnvironment() const
+Result<Environment> SshDeviceAccess::deviceEnvironment() const
 {
     if (m_devicePrivate->checkDisconnectedWithWarning())
         return {};
@@ -805,7 +805,7 @@ void SshProcessInterfacePrivate::start()
         return;
     }
 
-    auto linuxDevice = std::dynamic_pointer_cast<const LinuxDevice>(m_device);
+    auto linuxDevice = std::dynamic_pointer_cast<const SshDevice>(m_device);
     QTC_ASSERT(linuxDevice, handleDone(); return);
     if (linuxDevice->isDisconnected() && !linuxDevice->isTesting())
         return handleDone();
@@ -877,7 +877,7 @@ void SshProcessInterfacePrivate::doStart()
 
 CommandLine SshProcessInterfacePrivate::fullLocalCommandLine() const
 {
-    auto linuxDevice = std::dynamic_pointer_cast<const LinuxDevice>(m_device);
+    auto linuxDevice = std::dynamic_pointer_cast<const SshDevice>(m_device);
     QTC_ASSERT(linuxDevice, return {});
 
     const FilePath sshBinary = sshSettings().sshFilePath();
@@ -976,10 +976,10 @@ signals:
     void shellExitedIrregularly();
 
 private:
-    class LinuxDeviceShell : public DeviceShell
+    class SshDeviceShell : public DeviceShell
     {
     public:
-        LinuxDeviceShell(const CommandLine &cmdLine, const FilePath &devicePath)
+        SshDeviceShell(const CommandLine &cmdLine, const FilePath &devicePath)
             : m_cmdLine(cmdLine)
             , m_devicePath(devicePath)
         {
@@ -1031,7 +1031,7 @@ public:
                     << m_displaylessSshParameters.host());
         cmd.addArg("/bin/sh");
 
-        m_shell = new LinuxDeviceShell(cmd,
+        m_shell = new SshDeviceShell(cmd,
             FilePath::fromString(QString("ssh://%1/").arg(parameters.userAtHostAndPort())));
         connect(m_shell.get(), &DeviceShell::exitedIrregularly,
                 this, &ShellThreadHandler::shellExitedIrregularly);
@@ -1124,13 +1124,13 @@ private:
     mutable QMutex m_mutex;
     SshParameters m_displaylessSshParameters;
     QList<SshSharedConnection *> m_connections;
-    QPointer<LinuxDeviceShell> m_shell;
+    QPointer<SshDeviceShell> m_shell;
 };
 
 // LinuxDevice
 
-LinuxDevice::LinuxDevice()
-    : d(new LinuxDevicePrivate(this))
+SshDevice::SshDevice()
+    : d(new SshDevicePrivate(this))
 {
     setupId(IDevice::ManuallyAdded, Utils::Id());
     setDisplayType(Tr::tr("Remote Linux"));
@@ -1164,9 +1164,9 @@ LinuxDevice::LinuxDevice()
     addDeviceAction({
         Tr::tr("Connect"),
         [](const IDevicePtr &device) {
-            const auto dev = std::dynamic_pointer_cast<const LinuxDevice>(device);
+            const auto dev = std::dynamic_pointer_cast<const SshDevice>(device);
             QTC_ASSERT(dev, return);
-            dev->tryToConnect({const_cast<LinuxDevice *>(dev.get()), [](const Result<> &res) {
+            dev->tryToConnect({const_cast<SshDevice *>(dev.get()), [](const Result<> &res) {
                if (!res) {
                    QMessageBox::critical(dialogParent(), Tr::tr("Connection"),
                                          Tr::tr("Connection failed: %1").arg(res.error()));
@@ -1182,7 +1182,7 @@ LinuxDevice::LinuxDevice()
     addDeviceAction({
         Tr::tr("Disconnect"),
         [](const IDevicePtr &device) {
-            const auto dev = std::dynamic_pointer_cast<const LinuxDevice>(device);
+            const auto dev = std::dynamic_pointer_cast<const SshDevice>(device);
             QTC_ASSERT(dev, return);
             dev->closeConnection(true);
         },
@@ -1232,54 +1232,54 @@ LinuxDevice::LinuxDevice()
      }});
 }
 
-LinuxDevice::~LinuxDevice()
+SshDevice::~SshDevice()
 {
     delete d;
 }
 
-IDeviceWidget *LinuxDevice::createWidget()
+IDeviceWidget *SshDevice::createWidget()
 {
     return createLinuxDeviceWidget(shared_from_this());
 }
 
-DeviceTester *LinuxDevice::createDeviceTester()
+DeviceTester *SshDevice::createDeviceTester()
 {
-    return new GenericLinuxDeviceTester(shared_from_this());
+    return new SshDeviceTester(shared_from_this());
 }
 
-DeviceProcessSignalOperation::Ptr LinuxDevice::signalOperation() const
+DeviceProcessSignalOperation::Ptr SshDevice::signalOperation() const
 {
     return DeviceProcessSignalOperation::Ptr(new RemoteLinuxSignalOperation(shared_from_this()));
 }
 
-QString LinuxDevice::userAtHost() const
+QString SshDevice::userAtHost() const
 {
     return sshParameters().userAtHost();
 }
 
-QString LinuxDevice::userAtHostAndPort() const
+QString SshDevice::userAtHostAndPort() const
 {
     return sshParameters().userAtHostAndPort();
 }
 
-FilePath LinuxDevice::rootPath() const
+FilePath SshDevice::rootPath() const
 {
     return FilePath::fromParts(u"ssh", userAtHostAndPort(), u"/");
 }
 
-Result<> LinuxDevice::handlesFile(const FilePath &filePath) const
+Result<> SshDevice::handlesFile(const FilePath &filePath) const
 {
     if (filePath.scheme() == u"ssh" && filePath.host() == userAtHostAndPort())
         return ResultOk;
     return IDevice::handlesFile(filePath);
 }
 
-ProcessInterface *LinuxDevice::createProcessInterface() const
+ProcessInterface *SshDevice::createProcessInterface() const
 {
     return new SshProcessInterface(shared_from_this());
 }
 
-LinuxDeviceAccess::LinuxDeviceAccess(LinuxDevicePrivate *devicePrivate)
+SshDeviceAccess::SshDeviceAccess(SshDevicePrivate *devicePrivate)
     : m_devicePrivate(devicePrivate)
 {
     m_shellThread.setObjectName("LinuxDeviceShell");
@@ -1293,7 +1293,7 @@ LinuxDeviceAccess::LinuxDeviceAccess(LinuxDevicePrivate *devicePrivate)
     m_shellThread.start();
 }
 
-LinuxDeviceAccess::~LinuxDeviceAccess()
+SshDeviceAccess::~SshDeviceAccess()
 {
     QMutexLocker locker(&m_devicePrivate->m_shellMutex);
     auto closeShell = [this] {
@@ -1306,7 +1306,7 @@ LinuxDeviceAccess::~LinuxDeviceAccess()
         QMetaObject::invokeMethod(&m_shellThread, closeShell, Qt::BlockingQueuedConnection);
 }
 
-void LinuxDevicePrivate::setOsTypeFromUnameResult(const RunResult &result)
+void SshDevicePrivate::setOsTypeFromUnameResult(const RunResult &result)
 {
     if (result.exitCode != 0)
         setOsType(OsTypeOtherUnix);
@@ -1317,7 +1317,7 @@ void LinuxDevicePrivate::setOsTypeFromUnameResult(const RunResult &result)
         setOsType(OsTypeLinux);
 }
 
-void LinuxDevicePrivate::setupShell(const SshParameters &sshParameters,
+void SshDevicePrivate::setupShell(const SshParameters &sshParameters,
                                     const Continuation<> &cont)
 {
     QTC_ASSERT(isMainThread(),
@@ -1328,7 +1328,7 @@ void LinuxDevicePrivate::setupShell(const SshParameters &sshParameters,
     // Remove previous access first.
     closeConnection(true);
 
-    m_scriptAccess = std::make_shared<LinuxDeviceAccess>(this);
+    m_scriptAccess = std::make_shared<SshDeviceAccess>(this);
 
     m_shellMutex.lock();
 
@@ -1347,7 +1347,7 @@ void LinuxDevicePrivate::setupShell(const SshParameters &sshParameters,
     });
 }
 
-void LinuxDevicePrivate::setupShellPhase2(const Result<> &result,
+void SshDevicePrivate::setupShellPhase2(const Result<> &result,
                                           const Continuation<> &cont)
 {
     if (result) {
@@ -1389,7 +1389,7 @@ void LinuxDevicePrivate::setupShellPhase2(const Result<> &result,
     DeviceManager::instance()->deviceUpdated(q->id());
 }
 
-RunResult LinuxDevicePrivate::runInShell(const CommandLine &cmd, const QByteArray &data)
+RunResult SshDevicePrivate::runInShell(const CommandLine &cmd, const QByteArray &data)
 {
     DEBUG(cmd.toUserOutput());
     QMutexLocker locker(&m_shellMutex);
@@ -1397,7 +1397,7 @@ RunResult LinuxDevicePrivate::runInShell(const CommandLine &cmd, const QByteArra
     return m_scriptAccess->m_handler->runInShell(cmd, data);
 }
 
-void LinuxDevicePrivate::announceConnectionAttempt()
+void SshDevicePrivate::announceConnectionAttempt()
 {
     const QString message = Tr::tr("Establishing initial connection to device \"%1\". "
                                    "This might take a moment.").arg(q->displayName());
@@ -1410,7 +1410,7 @@ void LinuxDevicePrivate::announceConnectionAttempt()
     Core::MessageManager::writeSilently(message);
 }
 
-void LinuxDevicePrivate::unannounceConnectionAttempt()
+void SshDevicePrivate::unannounceConnectionAttempt()
 {
     QString message =
         Tr::tr("Connection attempt to device \"%1\" finished.").arg(q->displayName()) + "\n";
@@ -1446,7 +1446,7 @@ void LinuxDevicePrivate::unannounceConnectionAttempt()
     QTimer::singleShot(5000, q, [id=announceId(), infoBar] { infoBar->removeInfo(id); });
 }
 
-void LinuxDevicePrivate::announceConnectionLoss()
+void SshDevicePrivate::announceConnectionLoss()
 {
     const QString message = Tr::tr("Device \"%1\" unexpectedly lost connection.")
                                 .arg(q->displayName());
@@ -1461,7 +1461,7 @@ void LinuxDevicePrivate::announceConnectionLoss()
     closeConnection(true);
 }
 
-bool LinuxDevicePrivate::checkDisconnectedWithWarning()
+bool SshDevicePrivate::checkDisconnectedWithWarning()
 {
     if (q->deviceState() != IDevice::DeviceDisconnected)
         return false;
@@ -1493,7 +1493,7 @@ bool LinuxDevicePrivate::checkDisconnectedWithWarning()
     return true;
 }
 
-void LinuxDeviceAccess::attachToSharedConnection(SshConnectionHandle *connectionHandle,
+void SshDeviceAccess::attachToSharedConnection(SshConnectionHandle *connectionHandle,
                                                   const SshParameters &sshParameters)
 {
     QString socketFilePath;
@@ -1508,25 +1508,25 @@ void LinuxDeviceAccess::attachToSharedConnection(SshConnectionHandle *connection
         emit connectionHandle->connected(socketFilePath);
 }
 
-FileTransferInterface *LinuxDevice::createFileTransferInterface(
+FileTransferInterface *SshDevice::createFileTransferInterface(
         const FileTransferSetupData &setup) const
 {
     return Internal::createRemoteLinuxFileTransferInterface(*this, setup);
 }
 
-void LinuxDevice::attachToSharedConnection(SshConnectionHandle *sshConnectionHandle,
+void SshDevice::attachToSharedConnection(SshConnectionHandle *sshConnectionHandle,
                                            const SshParameters &sshParams) const
 {
     QTC_ASSERT(d->m_scriptAccess, return);
     return d->m_scriptAccess->attachToSharedConnection(sshConnectionHandle, sshParams);
 }
 
-void LinuxDevice::checkOsType()
+void SshDevice::checkOsType()
 {
     d->setOsTypeFromUnameResult(d->runInShell(d->unameCommand()));
 }
 
-QString LinuxDevice::deviceStateToString() const
+QString SshDevice::deviceStateToString() const
 {
     // We use DeviceConnected if (only) the shell access is usable (either fully,
     // or single-shot fallback only), and Device::ReadyToUse if the gocmdbridge
@@ -1545,12 +1545,12 @@ QString LinuxDevice::deviceStateToString() const
     return IDevice::deviceStateToString();
 }
 
-bool LinuxDevice::isDisconnected() const
+bool SshDevice::isDisconnected() const
 {
     return deviceState() == IDevice::DeviceDisconnected;
 }
 
-void LinuxDevice::tryToConnect(const Continuation<> &cont) const
+void SshDevice::tryToConnect(const Continuation<> &cont) const
 {
     if (isDisconnected())
         d->setupShell(sshParameters(), cont);
@@ -1558,20 +1558,20 @@ void LinuxDevice::tryToConnect(const Continuation<> &cont) const
         cont(ResultOk);
 }
 
-void LinuxDevice::closeConnection(bool announce) const
+void SshDevice::closeConnection(bool announce) const
 {
     d->closeConnection(announce);
 }
 
-Internal::LinuxDeviceFactory::LinuxDeviceFactory()
+Internal::SshDeviceFactory::SshDeviceFactory()
     : IDeviceFactory(Constants::GenericLinuxOsType)
 {
     setDisplayName(Tr::tr("Remote Linux Device"));
     setIcon(QIcon());
-    setConstructionFunction(&LinuxDevice::create);
+    setConstructionFunction(&SshDevice::create);
     setQuickCreationAllowed(true);
     setCreator([this]() -> IDevice::Ptr {
-        auto device = LinuxDevice::create();
+        auto device = SshDevice::create();
         m_existingDevices.writeLocked()->push_back(device);
 
         SshDeviceWizard
@@ -1582,21 +1582,21 @@ Internal::LinuxDeviceFactory::LinuxDeviceFactory()
     });
 
     setConstructionFunction([this] {
-        auto device = LinuxDevice::create();
+        auto device = SshDevice::create();
         m_existingDevices.writeLocked()->push_back(device);
         return device;
     });
     setExecutionTypeId(Constants::ExecutionType);
 }
 
-Internal::LinuxDeviceFactory::~LinuxDeviceFactory()
+Internal::SshDeviceFactory::~SshDeviceFactory()
 {
     shutdownExistingDevices();
 }
 
-void Internal::LinuxDeviceFactory::shutdownExistingDevices()
+void Internal::SshDeviceFactory::shutdownExistingDevices()
 {
-    m_existingDevices.read([](const std::vector<std::weak_ptr<LinuxDevice>> &devices) {
+    m_existingDevices.read([](const std::vector<std::weak_ptr<SshDevice>> &devices) {
         for (auto device : devices) {
             if (auto d = device.lock())
                 d->closeConnection(false);
@@ -1606,31 +1606,31 @@ void Internal::LinuxDeviceFactory::shutdownExistingDevices()
 
 static const char SourceProfile[] = "RemoteLinux.SourceProfile";
 
-static void backwardsFromExtraData(LinuxDevice *device)
+static void backwardsFromExtraData(SshDevice *device)
 {
     QVariant sourceProfile = device->extraData(SourceProfile);
     if (sourceProfile.isValid())
         device->sourceProfile.setValue(sourceProfile.toBool());
 }
 
-static void backwardsToExtraData(LinuxDevice *device)
+static void backwardsToExtraData(SshDevice *device)
 {
     device->setExtraData(SourceProfile, device->sourceProfile.value());
 }
 
-void LinuxDevice::fromMap(const Store &map)
+void SshDevice::fromMap(const Store &map)
 {
     IDevice::fromMap(map);
     backwardsFromExtraData(this);
 }
 
-void LinuxDevice::toMap(Store &map) const
+void SshDevice::toMap(Store &map) const
 {
-    backwardsToExtraData(const_cast<LinuxDevice *>(this));
+    backwardsToExtraData(const_cast<SshDevice *>(this));
     IDevice::toMap(map);
 }
 
-void LinuxDevice::postLoad()
+void SshDevice::postLoad()
 {
     if (!autoConnectOnStartup())
         return;

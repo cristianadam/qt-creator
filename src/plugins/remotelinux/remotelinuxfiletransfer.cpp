@@ -133,7 +133,7 @@ private:
                     this, &SshTransferInterface::handleConnected);
             connect(m_connectionHandle.get(), &SshConnectionHandle::disconnected,
                     this, &SshTransferInterface::handleDisconnected);
-            auto linuxDevice = std::dynamic_pointer_cast<const LinuxDevice>(m_device.lock());
+            auto linuxDevice = std::dynamic_pointer_cast<const SshDevice>(m_device.lock());
             QTC_ASSERT(linuxDevice, startFailed("No Linux device"); return);
             linuxDevice->attachToSharedConnection(m_connectionHandle.get(), m_sshParameters);
         } else {
@@ -448,7 +448,7 @@ private:
 };
 
 FileTransferInterface *createRemoteLinuxFileTransferInterface
-    (const LinuxDevice &device, const FileTransferSetupData &setup)
+    (const SshDevice &device, const FileTransferSetupData &setup)
 {
     const bool isLocal = Utils::allOf(setup.m_files, [](const FileToTransfer &f) {
         return f.m_source.isLocal();

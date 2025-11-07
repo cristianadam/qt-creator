@@ -36,14 +36,14 @@ static const FilePath baseFilePath()
     return FilePath::fromString("ssh://" + SshTest::userAtHostAndPort() + QString(TEST_DIR));
 }
 
-TestLinuxDeviceFactory::TestLinuxDeviceFactory()
+TestSshDeviceFactory::TestSshDeviceFactory()
     : IDeviceFactory("test")
 {
     setDisplayName("Remote Linux Device");
     setIcon(QIcon());
-    setConstructionFunction(&LinuxDevice::create);
+    setConstructionFunction(&SshDevice::create);
     setCreator([] {
-        LinuxDevice::Ptr device = LinuxDevice::create();
+        SshDevice::Ptr device = SshDevice::create();
         device->setupId(IDevice::ManuallyAdded);
         device->setType("test");
         qDebug() << "device : " << device->type();
@@ -78,7 +78,7 @@ void FileSystemAccessTest::initTestCase()
     FilePath filePath = baseFilePath();
 
     // Create device.
-    const IDevice::Ptr device = m_testLinuxDeviceFactory.create();
+    const IDevice::Ptr device = m_testSshDeviceFactory.create();
     QVERIFY(device);
     DeviceManager::addDevice(device);
     m_device = DeviceManager::find(device->id());
@@ -92,7 +92,7 @@ void FileSystemAccessTest::initTestCase()
     timer.setSingleShot(true);
     timer.start(30 * 1000);
     const auto handler = [&](const Result<> &res) { loop.exit(res.has_value() ? 0 : 1); };
-    std::static_pointer_cast<LinuxDevice>(device)->tryToConnect(Continuation<>(this, handler));
+    std::static_pointer_cast<SshDevice>(device)->tryToConnect(Continuation<>(this, handler));
     QCOMPARE(loop.exec(), 0);
     QVERIFY(timer.isActive());
     timer.stop();

@@ -13,16 +13,15 @@ QT_END_NAMESPACE
 
 namespace RemoteLinux {
 
-namespace Internal { class GenericLinuxDeviceTesterPrivate; }
+namespace Internal { class SshDeviceTesterPrivate; }
 
-class REMOTELINUX_EXPORT GenericLinuxDeviceTester : public ProjectExplorer::DeviceTester
+class REMOTELINUX_EXPORT SshDeviceTester : public ProjectExplorer::DeviceTester
 {
     Q_OBJECT
 
 public:
-    explicit GenericLinuxDeviceTester(
-        const ProjectExplorer::IDevice::Ptr &device, QObject *parent = nullptr);
-    ~GenericLinuxDeviceTester() override;
+    explicit SshDeviceTester(const ProjectExplorer::IDevice::Ptr &device);
+    ~SshDeviceTester() override;
 
     void setExtraCommandsToTest(const QStringList &extraCommands);
     void setExtraTests(const QList<QtTaskTree::GroupItem> &extraTests);
@@ -30,7 +29,7 @@ public:
     void stopTest() override;
 
 private:
-    std::unique_ptr<Internal::GenericLinuxDeviceTesterPrivate> d;
+    std::unique_ptr<Internal::SshDeviceTesterPrivate> d;
 };
 
 } // namespace RemoteLinux

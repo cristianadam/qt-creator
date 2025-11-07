@@ -127,7 +127,7 @@ QdbDevice::QdbDevice()
 
 ProjectExplorer::IDeviceWidget *QdbDevice::createWidget()
 {
-    ProjectExplorer::IDeviceWidget *w = RemoteLinux::LinuxDevice::createWidget();
+    ProjectExplorer::IDeviceWidget *w = RemoteLinux::SshDevice::createWidget();
 
     return w;
 }

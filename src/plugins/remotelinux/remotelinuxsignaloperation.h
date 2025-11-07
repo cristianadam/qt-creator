@@ -32,7 +32,7 @@ private:
     const ProjectExplorer::IDeviceConstPtr m_device;
     std::unique_ptr<Utils::Process> m_process;
 
-    friend class LinuxDevice;
+    friend class SshDevice;
 };
 
-}
+} // RemoteLinux

@@ -47,7 +47,7 @@ public:
     }
 };
 
-class QnxDevice final : public LinuxDevice
+class QnxDevice final : public SshDevice
 {
 public:
     QnxDevice()

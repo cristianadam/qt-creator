@@ -25,10 +25,10 @@ using namespace Utils;
 namespace RemoteLinux {
 namespace Internal {
 
-class GenericLinuxDeviceTesterPrivate
+class SshDeviceTesterPrivate
 {
 public:
-    GenericLinuxDeviceTesterPrivate(GenericLinuxDeviceTester *tester) : q(tester) {}
+    SshDeviceTesterPrivate(SshDeviceTester *tester) : q(tester) {}
 
     QStringList commandsToTest() const;
 
@@ -40,14 +40,14 @@ public:
     GroupItem transferTasks() const;
     GroupItem commandTasks() const;
 
-    GenericLinuxDeviceTester *q = nullptr;
-    LinuxDevice::Ptr m_device;
+    SshDeviceTester *q = nullptr;
+    SshDevice::Ptr m_device;
     QSingleTaskTreeRunner m_taskTreeRunner;
     QStringList m_extraCommands;
     GroupItems m_extraTests;
 };
 
-QStringList GenericLinuxDeviceTesterPrivate::commandsToTest() const
+QStringList SshDeviceTesterPrivate::commandsToTest() const
 {
     static const QStringList s_commandsToTest = {"base64",
                                                  "cat",
@@ -90,7 +90,7 @@ QStringList GenericLinuxDeviceTesterPrivate::commandsToTest() const
 class ConnectionData
 {
 public:
-    LinuxDevice::ConstPtr device;
+    SshDevice::ConstPtr device;
     QPointer<QObject> guard;
     Result<> result;
 };
@@ -112,7 +112,7 @@ public:
 
 using ConnectionTask = QCustomTask<ConnectionData, ConnectionTaskAdapter>;
 
-GroupItem GenericLinuxDeviceTesterPrivate::connectionTask() const
+GroupItem SshDeviceTesterPrivate::connectionTask() const
 {
     const auto onSetup = [this](ConnectionData &data) {
         data.device = m_device;
@@ -134,7 +134,7 @@ GroupItem GenericLinuxDeviceTesterPrivate::connectionTask() const
     return ConnectionTask(onSetup, onDone);
 }
 
-GroupItem GenericLinuxDeviceTesterPrivate::echoTask(const QString &contents) const
+GroupItem SshDeviceTesterPrivate::echoTask(const QString &contents) const
 {
     const auto onSetup = [this, contents](Process &process) {
         emit q->progressMessage(Tr::tr("Sending echo to device..."));
@@ -161,7 +161,7 @@ GroupItem GenericLinuxDeviceTesterPrivate::echoTask(const QString &contents) con
     return ProcessTask(onSetup, onDone);
 }
 
-GroupItem GenericLinuxDeviceTesterPrivate::unameTask() const
+GroupItem SshDeviceTesterPrivate::unameTask() const
 {
     const auto onSetup = [this](Process &process) {
         emit q->progressMessage(Tr::tr("Checking kernel version..."));
@@ -184,7 +184,7 @@ GroupItem GenericLinuxDeviceTesterPrivate::unameTask() const
     };
 }
 
-GroupItem GenericLinuxDeviceTesterPrivate::gathererTask() const
+GroupItem SshDeviceTesterPrivate::gathererTask() const
 {
     const Storage<PortsOutputData> portsStorage;
 
@@ -216,7 +216,7 @@ GroupItem GenericLinuxDeviceTesterPrivate::gathererTask() const
     };
 }
 
-GroupItem GenericLinuxDeviceTesterPrivate::transferTask(FileTransferMethod method) const
+GroupItem SshDeviceTesterPrivate::transferTask(FileTransferMethod method) const
 {
     const auto onSetup = [this, method](FileTransfer &transfer) {
         emit q->progressMessage(Tr::tr("Checking whether \"%1\" works...")
@@ -270,7 +270,7 @@ GroupItem GenericLinuxDeviceTesterPrivate::transferTask(FileTransferMethod metho
     return FileTransferTestTask(onSetup, onDone);
 }
 
-GroupItem GenericLinuxDeviceTesterPrivate::transferTasks() const
+GroupItem SshDeviceTesterPrivate::transferTasks() const
 {
     return Group {
         continueOnSuccess,
@@ -284,7 +284,7 @@ GroupItem GenericLinuxDeviceTesterPrivate::transferTasks() const
     };
 }
 
-GroupItem GenericLinuxDeviceTesterPrivate::commandTasks() const
+GroupItem SshDeviceTesterPrivate::commandTasks() const
 {
     const ListIterator iterator(commandsToTest());
 
@@ -321,31 +321,31 @@ GroupItem GenericLinuxDeviceTesterPrivate::commandTasks() const
 
 using namespace Internal;
 
-GenericLinuxDeviceTester::GenericLinuxDeviceTester(const IDevice::Ptr &device, QObject *parent)
-    : DeviceTester(device, parent), d(new GenericLinuxDeviceTesterPrivate(this))
+SshDeviceTester::SshDeviceTester(const IDevice::Ptr &device)
+    : DeviceTester(device), d(new SshDeviceTesterPrivate(this))
 {
     connect(&d->m_taskTreeRunner, &QSingleTaskTreeRunner::done, this, [this](DoneWith result) {
         emit finished(result == DoneWith::Success ? TestSuccess : TestFailure);
     });
 }
 
-GenericLinuxDeviceTester::~GenericLinuxDeviceTester() = default;
+SshDeviceTester::~SshDeviceTester() = default;
 
-void GenericLinuxDeviceTester::setExtraCommandsToTest(const QStringList &extraCommands)
+void SshDeviceTester::setExtraCommandsToTest(const QStringList &extraCommands)
 {
     d->m_extraCommands = extraCommands;
 }
 
-void GenericLinuxDeviceTester::setExtraTests(const GroupItems &extraTests)
+void SshDeviceTester::setExtraTests(const GroupItems &extraTests)
 {
     d->m_extraTests = extraTests;
 }
 
-void GenericLinuxDeviceTester::testDevice()
+void SshDeviceTester::testDevice()
 {
     QTC_ASSERT(!d->m_taskTreeRunner.isRunning(), return);
 
-    d->m_device = std::static_pointer_cast<LinuxDevice>(device());
+    d->m_device = std::static_pointer_cast<SshDevice>(device());
 
     const Group recipe {
         d->connectionTask(),
@@ -360,7 +360,7 @@ void GenericLinuxDeviceTester::testDevice()
     d->m_taskTreeRunner.start(recipe);
 }
 
-void GenericLinuxDeviceTester::stopTest()
+void SshDeviceTester::stopTest()
 {
     QTC_ASSERT(d->m_taskTreeRunner.isRunning(), return);
     d->m_taskTreeRunner.reset();

@@ -35,15 +35,15 @@ private:
 
 } // Internal
 
-class REMOTELINUX_EXPORT LinuxDevice : public ProjectExplorer::IDevice
+class REMOTELINUX_EXPORT SshDevice : public ProjectExplorer::IDevice
 {
 public:
-    using Ptr = std::shared_ptr<LinuxDevice>;
-    using ConstPtr = std::shared_ptr<const LinuxDevice>;
+    using Ptr = std::shared_ptr<SshDevice>;
+    using ConstPtr = std::shared_ptr<const SshDevice>;
 
-    ~LinuxDevice();
+    ~SshDevice();
 
-    static Ptr create() { return Ptr(new LinuxDevice); }
+    static Ptr create() { return Ptr(new SshDevice); }
 
     ProjectExplorer::IDeviceWidget *createWidget() override;
 
@@ -83,22 +83,22 @@ public:
     Utils::BoolAspect autoConnectOnStartup{this};
 
 protected:
-    LinuxDevice();
+    SshDevice();
 
-    class LinuxDevicePrivate *d;
-    friend class LinuxDevicePrivate;
+    class SshDevicePrivate *d;
+    friend class SshDevicePrivate;
 };
 
 namespace Internal {
 
-class LinuxDeviceFactory final : public ProjectExplorer::IDeviceFactory
+class SshDeviceFactory final : public ProjectExplorer::IDeviceFactory
 {
 public:
-    LinuxDeviceFactory();
-    ~LinuxDeviceFactory() override;
+    SshDeviceFactory();
+    ~SshDeviceFactory() override;
 
 private:
-    Utils::SynchronizedValue<std::vector<std::weak_ptr<LinuxDevice>>> m_existingDevices;
+    Utils::SynchronizedValue<std::vector<std::weak_ptr<SshDevice>>> m_existingDevices;
     void shutdownExistingDevices();
 };
 
