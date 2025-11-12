@@ -11,11 +11,54 @@
 
     To develop Qt applications for VxWorks, build \l {Qt for VxWorks} and create
     a VxWorks \l {Kits}{kit}. Currently, you can develop applications with Qt 6.8
-    and build them for VxWorks 24.03 devices. You cannot connect the devices to
-    \QC yet, so you must deploy the built packages to the devices and run them
-    there manually.
+    and build them for VxWorks 24.03 devices.
 
     \note Enable the VxWorks plugin to use it.
+
+    \subtitle Prerequisites
+
+    The VxWorks device needs to run an ssh server, to achieve this the following
+    settings are needed:
+    The VxWorks Source Build (VSB) configuration needs the following settings:
+
+    \badcode
+    "USER_MANAGEMENT"
+    "USER_MANAGEMENT_USER_PRIVILEGES"
+    \endcode
+
+    The VxWokrs Kernel configuration (VIP) needs the following includes:
+    \badcode
+    "INCLUDE_IPSSH_CLIENT_CMD"
+    "INCLUDE_SHELL_SECURITY"
+    "INCLUDE_USER_DATABASE"
+    "INCLUDE_USER_IDENTIFICATION"
+    "INCLUDE_USER_PRIVILEGES"
+    "INCLUDE_USER_MGT_SHELL_CMD"
+    "INCLUDE_SEC_KEY_STORE_CMD"
+    "INCLUDE_SHELL"
+    "INCLUDE_SSH"
+    "INCLUDE_IPD_CMD"
+    \endcode
+
+    The startup script should setup the usermanagement and also the ssh server.
+
+    An example startup script:
+
+    \badcode
+    cp "/romfs/ssh/keys/WindRiver.pk2","/ram"
+    cmd keyStore import default_rsa /romfs/ssh/keys/default_rsa.pem
+    cmd keyStore import default_dsa /romfs/ssh/keys/default_dsa.pem
+    cmd ipd start ipssh
+    udbReset
+    userAdd "WindRiver","vxTarget"
+    \endcode
+
+    The connection can be tested from terminal VxWorks is using old key
+    algorithms so the need to be specified for the connection:
+
+    \badcode
+    ssh -oHostKeyAlgorithms=+ssh-rsa -lWindRiver 192.168.0.3
+    \endcode
 
     To create a kit:
 
