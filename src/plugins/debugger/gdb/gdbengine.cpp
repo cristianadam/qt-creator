@@ -692,7 +692,7 @@ void GdbEngine::interruptInferior()
                         }
                     });
             signalOperation->setDebuggerCommand(runParameters().debugger().command.executable());
-            signalOperation->interruptProcess(inferiorPid());
+            signalOperation->interruptProcess(inferiorPid()); // 1
         } else {
             interruptInferior2();
         }

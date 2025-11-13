@@ -146,7 +146,7 @@ void ProcessList::killProcess(int row)
         }
         d->signalOperation.reset();
     });
-    d->signalOperation->killProcess(processInfo.processId);
+    d->signalOperation->killProcess(processInfo.processId); // 3
 }
 
 ProcessInfo ProcessList::at(int row) const

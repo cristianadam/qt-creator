@@ -750,6 +750,17 @@ DeviceProcessSignalOperation::Ptr IDevice::signalOperation() const
     return {};
 }
 
+ExecutableItem IDevice::signalOperationRecipe(
+    const SignalOperationData &data,
+    const Storage<Utils::Result<>> &resultStorage) const
+{
+    Q_UNUSED(data)
+    return QSyncTask([resultStorage] {
+        *resultStorage = ResultError(Tr::tr("No signal operation recipe available for this device."));
+        return DoneResult::Error;
+    });
+}
+
 void IDevice::setDeviceState(DeviceState deviceState)
 {
     DeviceManager::setDeviceState(id(), deviceState);
@@ -1113,6 +1124,22 @@ void IDevice::doApply() const
     const_cast<IDevice *>(this)->apply();
 }
 
+Result<> SignalOperationData::isValid() const
+{
+    switch (mode) {
+    case SignalOperationMode::KillByPath:
+        if (filePath.isEmpty())
+            return ResultError(Tr::tr("No path specified for SignalOperationData."));
+        break;
+    case SignalOperationMode::KillByPid:
+    case SignalOperationMode::InterruptByPid:
+        if (pid <= 0)
+            return ResultError(Tr::tr("No valid pid specified for SignalOperationData."));
+        break;
+    }
+    return ResultOk;
+}
+
 void DeviceProcessSignalOperation::setDebuggerCommand(const FilePath &cmd)
 {
     m_debuggerCommand = cmd;
@@ -1147,7 +1174,7 @@ void DeviceProcessKiller::start()
         emit done(toDoneResult(result.has_value()));
     });
 
-    m_signalOperation->killProcess(m_processPath);
+    m_signalOperation->killProcess(m_processPath); // 2
 }
 
 // DeviceConstRef
