@@ -4,6 +4,7 @@
 #include "devcontainer/devcontainerfeature.h"
 #include <devcontainer/devcontainer.h>
 #include <devcontainer/devcontainerconfig.h>
+#include <devcontainer/devcontainerfeature.h>
 
 #include <utils/qtcprocess.h>
 #include <utils/stringutils.h>
@@ -92,6 +93,8 @@ int main() {
 
     void parseUserFromPasswd_data();
     void parseUserFromPasswd();
+    void merge_data();
+    void merge();
     void dockerCompose();
     void processInterface();
     void instanceConfigToString_data();
@@ -313,14 +316,11 @@ FROM alpine:latest AS test
     dockerFile.flush();
 
     DevContainer::Config config;
-    DevContainer::DockerfileContainer dockerFileConfig {
+    DevContainer::DockerfileContainer dockerFileConfig{
         //.appPort = 10,
         .dockerfile = dockerFile.fileName(),
-        .buildOptions = DevContainer::BuildOptions{
-            .target = "test",
-            .args = {{"arg1", "value1"}, {"arg2", "value2"}},
-            .cacheFrom = QStringList{"cache1", "cache2"}
-        },
+        .buildOptions = DevContainer::
+            BuildOptions{.target = "test", .args = {{"arg1", "value1"}, {"arg2", "value2"}}, .cacheFrom = QStringList{"cache1", "cache2"}},
     };
     config.containerConfig = dockerFileConfig;
     config.common.name = "Test Dockerfile";
@@ -536,6 +536,66 @@ void tst_DevContainer::containerWorkspaceReplacers()
     QCOMPARE(containerConfig.workspaceFolder, "/custom/workspace/folder");
     QCOMPARE((*config).common.containerEnv.at("folder"), "/custom/workspace/folder");
     QCOMPARE((*config).common.containerEnv.at("basename"), "folder");
+}
+
+void tst_DevContainer::merge_data()
+{
+    QTest::addColumn<QString>("left");
+    QTest::addColumn<QString>("right");
+    QTest::addColumn<QString>("expected");
+
+    QTest::newRow("empty") << "({})" << "({})" << "({})";
+    QTest::newRow("simple") << R"({"key1": "value1"})" << R"({"key2": "value2"})"
+                            << R"({"key1": "value1", "key2": "value2"})";
+    QTest::newRow("array") << R"({"array": [1, 2, 3]})" << R"({"array": [4, 5, 6]})"
+                           << R"({"array": [1, 2, 3, 4, 5, 6]})";
+
+    QTest::newRow("merge") << R"json({
+            "key1": "value1","key2": "value2",
+            "nested": {"subkey1": "subvalue1",
+                "secondLvl": 
+                    {"subkey1": "subvalue1", "subkey2": "subvalue2", "array": [1,2,3]}
+                },
+            "array": ["item1","item2"]}
+        )json"
+                           << R"json({
+            "key2": "new_value2", "key3": "value3",
+            "nested": {
+                "subkey2": "subvalue2",
+                "secondLvl": {
+                    "subkey2": "new_subvalue2", "subkey3": "new_subvalue3",
+                    "array": [
+                        {"test": 1}
+                    ]
+                }
+            },
+            "array": ["item3"]
+        })json"
+                           << R"json({
+            "key1": "value1", "key2": "new_value2", "key3": "value3",
+            "nested": {
+                "subkey1": "subvalue1", "subkey2": "subvalue2",
+                "secondLvl": {
+                    "subkey1": "subvalue1", "subkey2": "new_subvalue2", "subkey3": "new_subvalue3",
+                    "array": [1,2,3,{"test": 1}]
+                }
+            },
+            "array": ["item1","item2","item3"]
+        })json";
+}
+
+void tst_DevContainer::merge()
+{
+    QFETCH(QString, left);
+    QFETCH(QString, right);
+    QFETCH(QString, expected);
+
+    QJsonObject leftObj = QJsonDocument::fromJson(left.toUtf8()).object();
+    QJsonObject rightObj = QJsonDocument::fromJson(right.toUtf8()).object();
+    QJsonObject expectedObj = QJsonDocument::fromJson(expected.toUtf8()).object();
+
+    QJsonObject result = DevContainer::mergeCustomizations(leftObj, rightObj);
+    QCOMPARE(result, expectedObj);
 }
 
 void tst_DevContainer::dockerCompose()

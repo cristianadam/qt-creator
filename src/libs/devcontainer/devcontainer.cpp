@@ -103,12 +103,7 @@ Result<Config> Instance::configFromFile(InstanceConfig instanceConfig)
     if (!contents)
         return ResultError(contents.error());
 
-    const Result<Config> config
-        = Config::fromJson(*contents, [instanceConfig](const QJsonValue &value) {
-              return instanceConfig.jsonToString(value);
-          });
-
-    return config;
+    return Config::fromJson(*contents, instanceConfig.jsonToStringFunc);
 }
 
 std::unique_ptr<Instance> Instance::fromConfig(const Config &config, InstanceConfig instanceConfig)
@@ -248,6 +243,32 @@ QDebug operator<<(QDebug debug, const ImageDetails &details)
                     << ", Entrypoint: " << details.Config.Entrypoint.value_or(QStringList())
                     << ", Cmd: " << details.Config.Cmd.value_or(QStringList()) << " })";
     return debug;
+}
+
+//! Combination of the initial devcontainer config and the feature configs
+struct MergedConfig
+{
+    bool init = false;
+    bool privileged = false;
+    QStringList capAdd;
+    QStringList securityOpt;
+    std::map<QString, QString> containerEnv;
+    QJsonObject customizations;
+    std::vector<std::variant<Mount, QString>> mounts;
+};
+
+static auto initMergedConfig(
+    Storage<MergedConfig> &mergedConfig, const DevContainerCommon &commonConfig)
+{
+    return [mergedConfig, commonConfig]() {
+        mergedConfig->init = commonConfig.init;
+        mergedConfig->privileged = commonConfig.privileged;
+        mergedConfig->capAdd = commonConfig.capAdd;
+        mergedConfig->securityOpt = commonConfig.securityOpt;
+        mergedConfig->containerEnv = commonConfig.containerEnv;
+        mergedConfig->customizations = commonConfig.customizations;
+        mergedConfig->mounts = commonConfig.mounts;
+    };
 }
 
 static void connectProcessToLog(
@@ -616,9 +637,125 @@ static ExecutableItem fetchFeatureTask(
     // clang-format on
 }
 
+static const QString s_featuresContainerTempDestFolder = "/tmp/dev-container-features";
+
+static const QString s_featureBaseDockerFile
+    = QString(R"dockerfile(
+#{nonBuildKitFeatureContentFallback}
+
+FROM $_DEV_CONTAINERS_BASE_IMAGE AS dev_containers_feature_content_normalize
+USER root
+COPY --from=dev_containers_feature_content_source /tmp/build-features/devcontainer-features.builtin.env /tmp/build-features/
+RUN chmod -R 0755 /tmp/build-features/
+
+FROM $_DEV_CONTAINERS_BASE_IMAGE AS dev_containers_target_stage
+
+USER root
+
+RUN mkdir -p #{featuresContainerTempDestFolder}
+COPY --from=dev_containers_feature_content_normalize /tmp/build-features/ #{featuresContainerTempDestFolder}
+
+#{featureLayer}
+
+#{containerEnv}
+
+ARG _DEV_CONTAINERS_IMAGE_USER=root
+USER $_DEV_CONTAINERS_IMAGE_USER
+
+#{devcontainerMetadata}
+
+#{containerEnvMetadata}
+
+)dockerfile")
+          .replace("#{featuresContainerTempDestFolder}", s_featuresContainerTempDestFolder);
+
+QString escapeRegExCharacters(QString str)
+{
+    static QRegularExpression re(R"([.*+?^${}()|\[\]\\])");
+    return str.replace(re, R"(\\\1)");
+}
+
+QString getEntPasswdShellCommand(const QString &userNameOrId)
+{
+    QString escapedForShell = userNameOrId;
+    escapedForShell.replace(QRegularExpression(R"(['\\])"), R"(\\\1)");
+
+    QString escapedForRegExp = escapeRegExCharacters(userNameOrId);
+    escapedForRegExp.replace("'", "\\'");
+
+    return QStringLiteral(
+               " (command -v getent >/dev/null 2>&1 && getent passwd '%1' || grep -E "
+               "'^%2|^[^:]*:[^:]*:%2:' /etc/passwd || true)")
+        .arg(escapedForShell, escapedForRegExp);
+}
+
+static QString featureLayers(
+    Storage<QList<FetchedFeature>> features,
+    const QString &containerUser,
+    const QString &remoteUser,
+    Storage<bool> useBuildKit)
+{
+    const QString builtinsEnvFile = s_featuresContainerTempDestFolder
+                                    + "/devcontainer-features.builtin.env";
+
+    QString layer = QString(R"docker(
+RUN \
+    echo "_CONTAINER_USER_HOME=#{containerUserHomeCmd} | cut -d: -f6)" >> #{builtinsEnvFile} && \\
+    echo "_REMOTE_USER_HOME=#{remoteUserHomeCmd} | cut -d: -f6)" >> #{builtinsEnvFile}
+)docker")
+                        .replace("#{containerUserHomeCmd}", getEntPasswdShellCommand(containerUser))
+                        .replace("#{remoteUserHomeCmd}", getEntPasswdShellCommand(remoteUser))
+                        .replace("#{builtinsEnvFile}", builtinsEnvFile);
+
+    for (const auto &feature : *features) {
+        const auto source
+            = "/tmp/build-features/"
+              + feature.consecutiveId; // path.posix.join(contentSourceRootPath, feature.consecutiveId!);
+        const auto dest
+            = s_featuresContainerTempDestFolder + "/"
+              + feature.consecutiveId; //path.posix.join(FEATURES_CONTAINER_TEMP_DEST_FOLDER, feature.consecutiveId !);
+
+        if (*useBuildKit) {
+            //
+        } else {
+            layer += QString(R"(
+COPY --chown=root:root --from=dev_containers_feature_content_source %1 %2
+RUN chmod -R 0755 %2 \\
+&& cd %2 \\
+&& chmod +x ./devcontainer-features-install.sh \\
+&& ./devcontainer-features-install.sh
+            )")
+                         .arg(source)
+                         .arg(dest);
+        }
+    }
+
+    return QString();
+}
+
+static QString featureDockerFile(
+    Storage<QList<FetchedFeature>> features,
+    const QString &containerUser,
+    const QString &remoteUser,
+    Storage<bool> useBuildKit)
+{
+    const auto fallback
+        = *useBuildKit
+              ? ""
+              : "FROM dev_container_feature_content_temp as dev_containers_feature_content_source";
+
+    return QString(s_featureBaseDockerFile)
+        .replace("#{nonBuildKitFeatureContentFallback}", QString::fromLatin1(fallback))
+        .replace("#{featureLayer}", featureLayers(features, containerUser, remoteUser, useBuildKit))
+        .replace("#{containerEnv}", "")
+        .replace("#{devcontainerMetadata}", "")
+        .replace("#{containerEnvMetadata}", "");
+}
+
 static ExecutableItem resolveFeaturesTask(
     const QList<FeatureDependency> &features,
     Storage<QList<FetchedFeature>> fetchedFeatures,
+    Storage<MergedConfig> mergedConfig,
     const InstanceConfig &instanceConfig)
 {
     ListIterator featureIterator(features);
@@ -632,8 +769,37 @@ static ExecutableItem resolveFeaturesTask(
             QSyncTask([fetchedFeature, fetchedFeatures](){
                 fetchedFeatures->push_back(*fetchedFeature);
             })
-        }
+        },
+
+        QSyncTask([mergedConfig, fetchedFeatures] {
+            for(const auto &fetchedFeature : *fetchedFeatures) {
+                mergedConfig->init = mergedConfig->init || fetchedFeature.feature.init;
+                mergedConfig->privileged = mergedConfig->privileged || fetchedFeature.feature.privileged;
+
+                const auto merge = [](QStringList &list1, const QStringList &list2) {
+                    for (const QString &item : list2) {
+                        if (!list1.contains(item))
+                            list1.append(item);
+                    }
+                };
+                merge(mergedConfig->capAdd, fetchedFeature.feature.capAdd);
+                merge(mergedConfig->securityOpt, fetchedFeature.feature.securityOpt);
+
+                mergedConfig->customizations = mergeCustomizations(mergedConfig->customizations,
+                             fetchedFeature.feature.customizations);
+
+                for (const auto &[key, value] : fetchedFeature.feature.containerEnv)
+                    mergedConfig->containerEnv.insert_or_assign(key, value);
+
+                mergedConfig->mounts.insert(
+                    mergedConfig->mounts.end(),
+                    fetchedFeature.feature.mounts.begin(),
+                    fetchedFeature.feature.mounts.end());
+            }
+        })
+            
     };
+    // clang-format on
 }
 
 static ProcessTask inspectImageTask(
@@ -719,7 +885,7 @@ static ProcessTask inspectImageTask(
 }
 
 static QStringList generateMountArgs(
-    const InstanceConfig &instanceConfig, const DevContainerCommon &commonConfig)
+    const InstanceConfig &instanceConfig, Storage<MergedConfig> mergedConfig)
 {
     auto mountToString = [](const std::variant<Mount, QString> &mount) -> QString {
         return std::visit(
@@ -734,12 +900,14 @@ static QStringList generateMountArgs(
             mount);
     };
 
-    return Utils::transform<QStringList>(commonConfig.mounts, mountToString)
+    return Utils::transform<QStringList>(mergedConfig->mounts, mountToString)
            + Utils::transform<QStringList>(instanceConfig.mounts, mountToString);
 }
 
 template<typename C>
 static void setupCreateContainerFromImage(
+    Storage<MergedConfig> mergedConfig,
+    Storage<QList<FetchedFeature>> fetchedFeatures,
     const C &containerConfig,
     const DevContainerCommon &commonConfig,
     const InstanceConfig &instanceConfig,
@@ -750,7 +918,7 @@ static void setupCreateContainerFromImage(
 
     QStringList containerEnvArgs;
 
-    for (auto &[key, value] : commonConfig.containerEnv)
+    for (auto &[key, value] : mergedConfig->containerEnv)
         containerEnvArgs << "-e" << QString("%1=%2").arg(key, value);
 
     QStringList appPortArgs;
@@ -758,7 +926,13 @@ static void setupCreateContainerFromImage(
     if (containerConfig.appPort)
         appPortArgs = createAppPortArgs(*containerConfig.appPort);
 
-    QStringList customEntryPoints = {}; // TODO: Get entry points from features.
+    QStringList customEntryPoints;
+
+    for (const FetchedFeature &fetchedFeature : *fetchedFeatures) {
+        if (fetchedFeature.feature.entrypoint.isEmpty())
+            continue;
+        customEntryPoints << fetchedFeature.feature.entrypoint;
+    }
 
     QStringList cmd
         = {"-c",
@@ -783,9 +957,7 @@ while sleep 1 & wait $!; do :; done
         workspaceMountArgs
             = {"--mount",
                QString("type=bind,source=%1,target=%2")
-                   .arg(
-                       instanceConfig.workspaceFolder.path(),
-                       containerConfig.workspaceFolder)};
+                   .arg(instanceConfig.workspaceFolder.path(), containerConfig.workspaceFolder)};
     }
 
     const auto containerUserArgs = [&commonConfig]() -> QStringList {
@@ -794,16 +966,15 @@ while sleep 1 & wait $!; do :; done
         return {};
     }();
 
-    const auto featureArgs = [&commonConfig]() -> QStringList {
+    const auto featureArgs = [mergedConfig]() -> QStringList {
         QStringList args;
-        // TODO: Merge feature args from features
-        if (commonConfig.init)
+        if (mergedConfig->init)
             args << "--init";
-        if (commonConfig.privileged)
+        if (mergedConfig->privileged)
             args << "--privileged";
-        for (const QString &cap : commonConfig.capAdd)
+        for (const QString &cap : mergedConfig->capAdd)
             args << "--cap-add" << cap;
-        for (const QString &securityOpt : commonConfig.securityOpt)
+        for (const QString &securityOpt : mergedConfig->securityOpt)
             args << "--security-opt" << securityOpt;
         return args;
     }();
@@ -816,7 +987,7 @@ while sleep 1 & wait $!; do :; done
          containerUserArgs,
          appPortArgs,
          workspaceMountArgs,
-         generateMountArgs(instanceConfig, commonConfig),
+         generateMountArgs(instanceConfig, mergedConfig),
          featureArgs,
          {"--entrypoint", "/bin/sh"},
          imageName(instanceConfig),
@@ -1308,15 +1479,24 @@ static ExecutableItem containerState(const InstanceConfig &instanceConfig, Stora
 
 template<typename C>
 static ExecutableItem createContainerRecipe(
+    Storage<MergedConfig> mergedConfig,
+    Storage<QList<FetchedFeature>> fetchedFeatures,
     Storage<ImageDetails> imageDetails,
     const C &containerConfig,
     const DevContainerCommon &commonConfig,
     const InstanceConfig &instanceConfig)
 {
     auto createContainerSetup =
-        [imageDetails, containerConfig, commonConfig, instanceConfig](Process &process) {
+        [mergedConfig, fetchedFeatures, imageDetails, containerConfig, commonConfig, instanceConfig](
+            Process &process) {
             setupCreateContainerFromImage(
-                containerConfig, commonConfig, instanceConfig, *imageDetails, process);
+                mergedConfig,
+                fetchedFeatures,
+                containerConfig,
+                commonConfig,
+                instanceConfig,
+                *imageDetails,
+                process);
         };
 
     // clang-format off
@@ -1473,6 +1653,7 @@ static Result<Group> prepareContainerRecipe(
     Storage<ContainerDetails> containerDetails;
     Storage<RunningContainerDetails> runningDetails;
     Storage<QList<FetchedFeature>> fetchedFeatures;
+    Storage<MergedConfig> mergedConfig;
     Storage<bool> useBuildKit(false);
 
     // clang-format off
@@ -1482,12 +1663,15 @@ static Result<Group> prepareContainerRecipe(
         containerDetails,
         useBuildKit,
         fetchedFeatures,
+        mergedConfig,
+        useBuildKit,
         checkDocker(instanceConfig),
         testBuildKit(instanceConfig, useBuildKit),
+        QSyncTask(initMergedConfig(mergedConfig, commonConfig)),
         ProcessTask(setupBuildImage),
         inspectImageTask(imageDetails, instanceConfig, imageName(instanceConfig)),
-        resolveFeaturesTask(commonConfig.features, fetchedFeatures, instanceConfig),
-        createContainerRecipe(imageDetails, containerConfig, commonConfig, instanceConfig),
+        resolveFeaturesTask(commonConfig.features, fetchedFeatures, mergedConfig, instanceConfig),
+        createContainerRecipe(mergedConfig, fetchedFeatures, imageDetails, containerConfig, commonConfig, instanceConfig),
         inspectContainerTask(containerDetails, instanceConfig),
         startContainerRecipe(instanceConfig),
         runningContainerDetailsTask(containerDetails, runningDetails, commonConfig, instanceConfig, containerName(instanceConfig)),
@@ -1545,6 +1729,7 @@ static Result<Group> prepareContainerRecipe(
     Storage<ContainerDetails> containerDetails;
     Storage<RunningContainerDetails> runningDetails;
     Storage<QList<FetchedFeature>> fetchedFeatures;
+    Storage<MergedConfig> mergedConfig;
     Storage<bool> useBuildKit(false);
 
     // clang-format off
@@ -1553,12 +1738,14 @@ static Result<Group> prepareContainerRecipe(
         containerDetails,
         runningDetails,
         fetchedFeatures,
+        mergedConfig,
         useBuildKit,
         checkDocker(instanceConfig),
         testBuildKit(instanceConfig, useBuildKit),
+        QSyncTask(initMergedConfig(mergedConfig, commonConfig)),
         prepareDockerImageRecipe(imageDetails, imageConfig, instanceConfig),
-        resolveFeaturesTask(commonConfig.features, fetchedFeatures, instanceConfig),
-        createContainerRecipe(imageDetails, imageConfig, commonConfig, instanceConfig),
+        resolveFeaturesTask(commonConfig.features, fetchedFeatures, mergedConfig, instanceConfig),
+        createContainerRecipe(mergedConfig, fetchedFeatures, imageDetails, imageConfig, commonConfig, instanceConfig),
         inspectContainerTask(containerDetails, instanceConfig),
         startContainerRecipe(instanceConfig),
         runningContainerDetailsTask(containerDetails, runningDetails, commonConfig, instanceConfig, containerName(instanceConfig)),
@@ -1613,15 +1800,16 @@ static Result<Group> prepareContainerRecipe(
         instanceConfig.logFunction(
             QString("Compose Up: %1").arg(process.commandLine().toUserOutput()));
     };
+
     Storage<ContainerDetails> containerDetails;
     Storage<RunningContainerDetails> runningDetails;
     Storage<QString> containerId;
     Storage<ImageDetails> imageDetails;
     Storage<QList<FetchedFeature>> fetchedFeatures;
+    Storage<MergedConfig> mergedConfig;
     Storage<bool> useBuildKit(false);
 
-    DynamicString getImage = (std::function<QString()>) [containerDetails]
-    {
+    DynamicString getImage = (std::function<QString()>) [containerDetails] {
         return containerDetails->Image;
     };
 
@@ -1630,11 +1818,12 @@ static Result<Group> prepareContainerRecipe(
         containerId, containerDetails, runningDetails, imageDetails, useBuildKit, fetchedFeatures,
         checkDocker(instanceConfig),
         testBuildKit(instanceConfig, useBuildKit),
+        QSyncTask(initMergedConfig(mergedConfig, commonConfig)),
         ProcessTask(setupComposeUp),
         findContainerId(containerId, config, instanceConfig),
         inspectContainerTask(containerDetails, instanceConfig, containerId),
         inspectImageTask(imageDetails, instanceConfig, getImage),
-        resolveFeaturesTask(commonConfig.features, fetchedFeatures, instanceConfig),
+        resolveFeaturesTask(commonConfig.features, fetchedFeatures, mergedConfig, instanceConfig),
         runningContainerDetailsTask(containerDetails, runningDetails, commonConfig, instanceConfig, containerId),
         fillRunningInstance(runningInstance, runningDetails, imageDetails, containerId)
     };
