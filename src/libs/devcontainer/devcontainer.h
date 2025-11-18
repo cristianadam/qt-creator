@@ -35,6 +35,10 @@ struct DEVCONTAINER_EXPORT InstanceConfig
 
     QString jsonToString(const QJsonValue &value) const;
     QString devContainerId() const;
+
+    JsonStringToString jsonToStringFunc = [this](const QJsonValue &value) {
+        return this->jsonToString(value);
+    };
 };
 
 struct DEVCONTAINER_EXPORT RunningInstanceData

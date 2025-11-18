@@ -3,6 +3,7 @@
 
 #include "devcontainer.h"
 
+#include "devcontainerfeature.h"
 #include "devcontainertr.h"
 #include "substitute.h"
 
@@ -535,6 +536,104 @@ static ProcessTask inspectContainerTask(
     Storage<ContainerDetails> containerDetails, const InstanceConfig &instanceConfig)
 {
     return inspectContainerTask(containerDetails, instanceConfig, containerName(instanceConfig));
+}
+
+struct FetchedFeature
+{
+    QString consecutiveId;
+    Feature feature;
+    FilePath featureDirectory;
+};
+
+static ExecutableItem fetchFeatureTask(
+    const ListIterator<FeatureDependency> &featureIterator,
+    Storage<FetchedFeature> &fetchedFeature,
+    const InstanceConfig &instanceConfig)
+{
+    const auto isLocal = [featureIterator]() { return featureIterator->id.startsWith(u"./"); };
+    const auto isHttps = [featureIterator]() { return featureIterator->id.startsWith(u"https://"); };
+
+    const auto fetchLocalFeature = [featureIterator, fetchedFeature, instanceConfig]() {
+        // https://containers.dev/implementors/features-distribution/#addendum-locally-referenced
+        const FilePath featureDir = instanceConfig.workspaceFolder.resolvePath(featureIterator->id);
+        if (!featureDir.isChildOf(instanceConfig.workspaceFolder)) {
+            instanceConfig.logFunction(
+                QString(Tr::tr("Feature path %1 is outside the workspace folder."))
+                    .arg(featureDir.toUserOutput()));
+            return DoneResult::Error;
+        }
+
+        const FilePath featurePath = featureDir / "devcontainer-feature.json";
+        const Result<QByteArray> featureContents = featurePath.fileContents();
+        if (!featureContents) {
+            instanceConfig.logFunction(QString(Tr::tr("Failed to read feature file %1: %2"))
+                                           .arg(featureDir.toUserOutput())
+                                           .arg(featureContents.error()));
+            return DoneResult::Error;
+        }
+
+        const Result<Feature> feature
+            = Feature::fromJson(*featureContents, instanceConfig.jsonToStringFunc);
+        if (!feature) {
+            instanceConfig.logFunction(QString(Tr::tr("Failed to parse feature file %1: %2"))
+                                           .arg(featureDir.toUserOutput())
+                                           .arg(feature.error()));
+            return DoneResult::Error;
+        }
+
+        if (feature->id != featureDir.baseName()
+            && !feature->legacyIds.contains(featureDir.baseName())) {
+            instanceConfig.logFunction(
+                QString(Tr::tr("Feature ID %1 does not match directory name %2."))
+                    .arg(feature->id, featureDir.baseName()));
+            return DoneResult::Error;
+        }
+
+        static int consecutiveIdCounter = 0;
+        *fetchedFeature = FetchedFeature{
+            QString::number(consecutiveIdCounter++), std::move(*feature), featureDir};
+
+        return DoneResult::Success;
+    };
+
+    // clang-format off
+    return Group {
+        If (isLocal) >> Then {
+            QSyncTask(fetchLocalFeature),
+        } >> ElseIf (isHttps) >> Then {
+            QSyncTask([instanceConfig](){
+                instanceConfig.logFunction(Tr::tr("Fetching features from remote URL is not yet implemented."));
+                return DoneResult::Error;
+            })
+        } >> Else {
+            QSyncTask([featureIterator, instanceConfig](){
+                instanceConfig.logFunction(
+                    QString(Tr::tr("Fetching features from OCI registries is not yet implemented.")));
+                return DoneResult::Error;
+            })
+        }
+    };
+    // clang-format on
+}
+
+static ExecutableItem resolveFeaturesTask(
+    const QList<FeatureDependency> &features,
+    Storage<QList<FetchedFeature>> fetchedFeatures,
+    const InstanceConfig &instanceConfig)
+{
+    ListIterator featureIterator(features);
+    Storage<FetchedFeature> fetchedFeature;
+
+    // clang-format off
+    return Group {
+        For (featureIterator) >> Do {
+            fetchedFeature,
+            fetchFeatureTask(featureIterator, fetchedFeature, instanceConfig),
+            QSyncTask([fetchedFeature, fetchedFeatures](){
+                fetchedFeatures->push_back(*fetchedFeature);
+            })
+        }
+    };
 }
 
 static ProcessTask inspectImageTask(
@@ -1373,6 +1472,7 @@ static Result<Group> prepareContainerRecipe(
     Storage<ImageDetails> imageDetails;
     Storage<ContainerDetails> containerDetails;
     Storage<RunningContainerDetails> runningDetails;
+    Storage<QList<FetchedFeature>> fetchedFeatures;
     Storage<bool> useBuildKit(false);
 
     // clang-format off
@@ -1381,12 +1481,13 @@ static Result<Group> prepareContainerRecipe(
         runningDetails,
         containerDetails,
         useBuildKit,
+        fetchedFeatures,
         checkDocker(instanceConfig),
         testBuildKit(instanceConfig, useBuildKit),
         ProcessTask(setupBuildImage),
         inspectImageTask(imageDetails, instanceConfig, imageName(instanceConfig)),
-        createContainerRecipe(
-            imageDetails, containerConfig, commonConfig, instanceConfig),
+        resolveFeaturesTask(commonConfig.features, fetchedFeatures, instanceConfig),
+        createContainerRecipe(imageDetails, containerConfig, commonConfig, instanceConfig),
         inspectContainerTask(containerDetails, instanceConfig),
         startContainerRecipe(instanceConfig),
         runningContainerDetailsTask(containerDetails, runningDetails, commonConfig, instanceConfig, containerName(instanceConfig)),
@@ -1443,6 +1544,7 @@ static Result<Group> prepareContainerRecipe(
     Storage<ImageDetails> imageDetails;
     Storage<ContainerDetails> containerDetails;
     Storage<RunningContainerDetails> runningDetails;
+    Storage<QList<FetchedFeature>> fetchedFeatures;
     Storage<bool> useBuildKit(false);
 
     // clang-format off
@@ -1450,10 +1552,12 @@ static Result<Group> prepareContainerRecipe(
         imageDetails,
         containerDetails,
         runningDetails,
+        fetchedFeatures,
         useBuildKit,
         checkDocker(instanceConfig),
         testBuildKit(instanceConfig, useBuildKit),
         prepareDockerImageRecipe(imageDetails, imageConfig, instanceConfig),
+        resolveFeaturesTask(commonConfig.features, fetchedFeatures, instanceConfig),
         createContainerRecipe(imageDetails, imageConfig, commonConfig, instanceConfig),
         inspectContainerTask(containerDetails, instanceConfig),
         startContainerRecipe(instanceConfig),
@@ -1513,6 +1617,7 @@ static Result<Group> prepareContainerRecipe(
     Storage<RunningContainerDetails> runningDetails;
     Storage<QString> containerId;
     Storage<ImageDetails> imageDetails;
+    Storage<QList<FetchedFeature>> fetchedFeatures;
     Storage<bool> useBuildKit(false);
 
     DynamicString getImage = (std::function<QString()>) [containerDetails]
@@ -1522,13 +1627,14 @@ static Result<Group> prepareContainerRecipe(
 
     // clang-format off
     return Group {
-        containerId, containerDetails, runningDetails, imageDetails, useBuildKit,
+        containerId, containerDetails, runningDetails, imageDetails, useBuildKit, fetchedFeatures,
         checkDocker(instanceConfig),
         testBuildKit(instanceConfig, useBuildKit),
         ProcessTask(setupComposeUp),
         findContainerId(containerId, config, instanceConfig),
         inspectContainerTask(containerDetails, instanceConfig, containerId),
         inspectImageTask(imageDetails, instanceConfig, getImage),
+        resolveFeaturesTask(commonConfig.features, fetchedFeatures, instanceConfig),
         runningContainerDetailsTask(containerDetails, runningDetails, commonConfig, instanceConfig, containerId),
         fillRunningInstance(runningInstance, runningDetails, imageDetails, containerId)
     };
