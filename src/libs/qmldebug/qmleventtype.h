@@ -12,7 +12,7 @@
 #include <QMetaType>
 #include <QHash>
 
-namespace QmlProfiler {
+namespace QmlDebug {
 
 class QmlEventType : public Timeline::TraceEventType {
 public:
@@ -42,10 +42,30 @@ private:
     int m_detailType; // can be EventType, BindingType, PixmapEventType or SceneGraphFrameType
 };
 
-} // namespace QmlProfiler
+inline size_t qHash(const QmlEventType &type)
+{
+    return qHash(type.location()) ^ qHash(type.data())
+        ^ (((type.message() << 12) & 0xf000)             // 4 bits of message
+          | ((type.rangeType() << 24) & 0xf000000)      // 4 bits of rangeType
+          | ((type.detailType() << 28) & 0xf0000000));  // 4 bits of detailType
+}
 
-Q_DECLARE_METATYPE(QmlProfiler::QmlEventType)
+inline bool operator==(const QmlEventType &type1, const QmlEventType &type2)
+{
+    return type1.message() == type2.message() && type1.rangeType() == type2.rangeType()
+        && type1.detailType() == type2.detailType() && type1.location() == type2.location()
+        && type1.data() == type2.data();
+}
+
+inline bool operator!=(const QmlEventType &type1, const QmlEventType &type2)
+{
+    return !(type1 == type2);
+}
+
+} // namespace QmlDebug
+
+Q_DECLARE_METATYPE(QmlDebug::QmlEventType)
 
 QT_BEGIN_NAMESPACE
-Q_DECLARE_TYPEINFO(QmlProfiler::QmlEventType, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QmlDebug::QmlEventType, Q_MOVABLE_TYPE);
 QT_END_NAMESPACE

@@ -33,9 +33,6 @@ set(QMLPROFILER_CPP_SOURCES
   inputeventsmodel.cpp inputeventsmodel.h
   memoryusagemodel.cpp memoryusagemodel.h
   pixmapcachemodel.cpp pixmapcachemodel.h
-  qmlevent.cpp qmlevent.h
-  qmleventlocation.cpp qmleventlocation.h
-  qmleventtype.cpp qmleventtype.h
   qmlnote.cpp qmlnote.h
   qmlprofiler_global.h
   qmlprofilertr.h
@@ -46,7 +43,6 @@ set(QMLPROFILER_CPP_SOURCES
   qmlprofilerconstants.h
   qmlprofilerdetailsrewriter.cpp qmlprofilerdetailsrewriter.h
   qmlprofilereventsview.h
-  qmlprofilereventtypes.h
   qmlprofilermodelmanager.cpp qmlprofilermodelmanager.h
   qmlprofilernotesmodel.cpp qmlprofilernotesmodel.h
   qmlprofilerplugin.cpp
@@ -61,11 +57,9 @@ set(QMLPROFILER_CPP_SOURCES
   qmlprofilertextmark.cpp qmlprofilertextmark.h
   qmlprofilertimelinemodel.cpp qmlprofilertimelinemodel.h
   qmlprofilertool.cpp qmlprofilertool.h
-  qmlprofilertraceclient.cpp qmlprofilertraceclient.h
   qmlprofilertracefile.cpp qmlprofilertracefile.h
   qmlprofilertraceview.cpp qmlprofilertraceview.h
   qmlprofilerviewmanager.cpp qmlprofilerviewmanager.h
-  qmltypedevent.cpp qmltypedevent.h
   scenegraphtimelinemodel.cpp scenegraphtimelinemodel.h
   quick3dmodel.cpp quick3dmodel.h
   quick3dframeview.cpp quick3dframeview.h

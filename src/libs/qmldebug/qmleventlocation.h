@@ -3,14 +3,14 @@
 
 #pragma once
 
-#include "qmlprofiler_global.h"
+#include "qmldebug_global.h"
 
 #include <QString>
 #include <QHash>
 
-namespace QmlProfiler {
+namespace QmlDebug {
 
-class QMLPROFILER_EXPORT QmlEventLocation
+class QMLDEBUG_EXPORT QmlEventLocation
 {
 public:
     QmlEventLocation() = default;
@@ -62,8 +62,8 @@ private:
     int m_column = -1;
 };
 
-} // namespace QmlProfiler
+} // namespace QmlDebug
 
 QT_BEGIN_NAMESPACE
-Q_DECLARE_TYPEINFO(QmlProfiler::QmlEventLocation, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QmlDebug::QmlEventLocation, Q_MOVABLE_TYPE);
 QT_END_NAMESPACE

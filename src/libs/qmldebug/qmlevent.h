@@ -15,7 +15,7 @@
 #include <limits>
 #include <type_traits>
 
-namespace QmlProfiler {
+namespace QmlDebug {
 
 class QmlEvent : public Timeline::TraceEvent
 {
@@ -288,10 +288,10 @@ private:
 QDataStream &operator>>(QDataStream &stream, QmlEvent &event);
 QDataStream &operator<<(QDataStream &stream, const QmlEvent &event);
 
-} // namespace QmlProfiler
+} // namespace QmlDebug
 
-Q_DECLARE_METATYPE(QmlProfiler::QmlEvent)
+Q_DECLARE_METATYPE(QmlDebug::QmlEvent)
 
 QT_BEGIN_NAMESPACE
-Q_DECLARE_TYPEINFO(QmlProfiler::QmlEvent, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QmlDebug::QmlEvent, Q_MOVABLE_TYPE);
 QT_END_NAMESPACE
