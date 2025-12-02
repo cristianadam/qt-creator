@@ -2320,7 +2320,7 @@ class GITSHARED_EXPORT GitPlugin final : public ExtensionSystem::IPlugin
         auto cmdContext = new QObject(this);
         connect(ICore::instance(), &ICore::coreOpened, cmdContext, [this, cmdContext, arguments] {
             NANOTRACE_SCOPE("Git", "GitPlugin::initialize::coreOpened");
-            remoteCommand(arguments, QDir::currentPath(), {});
+            remoteCommand(arguments, QDir::currentPath(), {}, nullptr);
             cmdContext->deleteLater();
         });
         return ResultOk;
@@ -2332,7 +2332,7 @@ class GITSHARED_EXPORT GitPlugin final : public ExtensionSystem::IPlugin
     }
 
     QObject *remoteCommand(const QStringList &options, const QString &workingDirectory,
-                           const QStringList &args) final
+                           const QStringList &args, QLocalSocket * /*socket*/) final
     {
         Q_UNUSED(args)
 

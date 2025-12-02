@@ -11,6 +11,8 @@
 
 #include <functional>
 
+QT_FORWARD_DECLARE_CLASS(QLocalSocket);
+
 namespace ExtensionSystem {
 
 namespace Internal { class IPluginPrivate; }
@@ -36,7 +38,8 @@ public:
     virtual ShutdownFlag aboutToShutdown() { return SynchronousShutdown; }
     virtual QObject *remoteCommand(const QStringList & /* options */,
                                    const QString & /* workingDirectory */,
-                                   const QStringList & /* arguments */) { return nullptr; }
+                                   const QStringList & /* arguments */,
+                                   QLocalSocket */*socket*/) { return nullptr; }
 
 
     template <typename Test, typename ...Args>

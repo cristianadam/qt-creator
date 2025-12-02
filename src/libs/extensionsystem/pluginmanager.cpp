@@ -34,6 +34,7 @@
 #include <QGuiApplication>
 #include <QLibrary>
 #include <QLibraryInfo>
+#include <QLocalSocket>
 #include <QMessageBox>
 #include <QMetaProperty>
 #include <QPluginLoader>
@@ -632,7 +633,7 @@ static QStringList subList(const QStringList &in, const QString &key)
     document is closed) for supporting the \c -block flag.
 */
 
-void PluginManager::remoteArguments(const QString &serializedArgument, QObject *socket)
+void PluginManager::remoteArguments(const QString &serializedArgument, QLocalSocket *socket)
 {
     if (isShuttingDown())
         return;
@@ -647,7 +648,7 @@ void PluginManager::remoteArguments(const QString &serializedArgument, QObject *
             const QStringList pluginOptions = subList(serializedArguments, QLatin1Char(':') + ps->id());
             if (IPlugin *plugin = ps->plugin()) {
                 QObject *socketParent
-                    = plugin->remoteCommand(pluginOptions, workingDirectory, arguments);
+                    = plugin->remoteCommand(pluginOptions, workingDirectory, arguments, socket);
                 if (socketParent && socket) {
                     socket->setParent(socketParent);
                     socket = nullptr;

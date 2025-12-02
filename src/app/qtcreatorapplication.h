@@ -31,7 +31,7 @@ private:
     void onNewConnection();
 
 signals:
-    void messageReceived(const QString &message, QObject *socket);
+    void messageReceived(const QString &message, QLocalSocket *socket);
     void fileOpenRequest(const QString &file);
 
 private:

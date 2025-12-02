@@ -93,7 +93,8 @@ public:
     ShutdownFlag aboutToShutdown() final;
     QObject *remoteCommand(const QStringList & /* options */,
                            const QString &workingDirectory,
-                           const QStringList &args) final;
+                           const QStringList &args,
+                           QLocalSocket *socket) final;
 
     static QString msgCrashpadInformation();
 
@@ -520,12 +521,15 @@ bool CorePlugin::delayedInitialize()
 
 QObject *CorePlugin::remoteCommand(const QStringList & /* options */,
                                    const QString &workingDirectory,
-                                   const QStringList &args)
+                                   const QStringList &args,
+                                   QLocalSocket *socket)
 {
     if (!ExtensionSystem::PluginManager::isInitializationDone()) {
         connect(ExtensionSystem::PluginManager::instance(),
                 &ExtensionSystem::PluginManager::initializationDone, this,
-                [this, workingDirectory, args] { remoteCommand({}, workingDirectory, args); });
+                [this, workingDirectory, args, socket] { 
+                    remoteCommand({}, workingDirectory, args, socket); 
+            });
         return nullptr;
     }
     const FilePaths filePaths = Utils::transform(args, FilePath::fromUserInput);
@@ -541,7 +545,7 @@ void CorePlugin::fileOpenRequest(const QString &f)
 {
     if (ExtensionSystem::PluginManager::isShuttingDown())
         return;
-    remoteCommand(QStringList(), QString(), QStringList(f));
+    remoteCommand(QStringList(), QString(), QStringList(f), nullptr);
 }
 
 void CorePlugin::checkSettings()

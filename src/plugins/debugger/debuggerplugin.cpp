@@ -2065,7 +2065,8 @@ private:
     Utils::Result<> initialize(const QStringList &arguments) final;
     QObject *remoteCommand(const QStringList &options,
                            const QString &workingDirectory,
-                           const QStringList &arguments) final;
+                           const QStringList &arguments,
+                           QLocalSocket * /*socket*/) final;
     ShutdownFlag aboutToShutdown() final;
     void extensionsInitialized() final;
 
@@ -2128,7 +2129,8 @@ IPlugin::ShutdownFlag DebuggerPlugin::aboutToShutdown()
 
 QObject *DebuggerPlugin::remoteCommand(const QStringList &options,
                                        const QString &workingDirectory,
-                                       const QStringList &list)
+                                       const QStringList &list,
+                                       QLocalSocket * /*socket*/)
 {
     Q_UNUSED(workingDirectory)
     Q_UNUSED(list)

@@ -14,6 +14,7 @@
 
 QT_BEGIN_NAMESPACE
 class QTextStream;
+class QLocalSocket;
 QT_END_NAMESPACE
 
 namespace ExtensionSystem {
@@ -121,7 +122,7 @@ public:
     static bool isInitializationDone();
     static bool isShuttingDown();
 
-    static void remoteArguments(const QString &serializedArguments, QObject *socket);
+    static void remoteArguments(const QString &serializedArguments, QLocalSocket *socket);
     static void shutdown();
 
     static QString systemInformation();
