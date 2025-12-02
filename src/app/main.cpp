@@ -3,12 +3,13 @@
 
 #include "../tools/qtcreatorcrashhandler/crashhandlersetup.h"
 
+#include "qtcreatorapplication.h"
+
 #include <app/app_version.h>
 #include <extensionsystem/iplugin.h>
 #include <extensionsystem/pluginerroroverview.h>
 #include <extensionsystem/pluginmanager.h>
 #include <extensionsystem/pluginspec.h>
-#include <qtsingleapplication.h>
 
 #include <utils/algorithm.h>
 #include <utils/appinfo.h>
@@ -21,6 +22,7 @@
 #include <utils/processreaper.h>
 #include <utils/qtcsettings.h>
 #include <utils/qtcsettings_p.h>
+#include <utils/stringutils.h>
 #include <utils/stylehelper.h>
 #include <utils/temporarydirectory.h>
 #include <utils/terminalcommand.h>
@@ -753,7 +755,7 @@ int main(int argc, char **argv)
     setHighDpiEnvironmentVariable();
     setRHIOpenGLVariable();
 
-    SharedTools::QtSingleApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
+    QApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
 
     int numberOfArguments = static_cast<int>(options.appArguments.size());
 
@@ -762,10 +764,10 @@ int main(int argc, char **argv)
     auto handler = std::make_unique<ShowInGuiHandler>();
     const QString singleAppId = QString(Core::Constants::IDE_DISPLAY_NAME)
                                 + options.singleAppIdPostfix;
-    std::unique_ptr<SharedTools::QtSingleApplication> appPtr(
-        SharedTools::createApplication(singleAppId, numberOfArguments, options.appArguments.data()));
+
+    QtCreatorApplication app(numberOfArguments, options.appArguments.data());
     handler.reset();
-    SharedTools::QtSingleApplication &app = *appPtr;
+
     QCoreApplication::setApplicationName(Core::Constants::IDE_CASED_ID);
     QCoreApplication::setApplicationVersion(QLatin1String(Core::Constants::IDE_VERSION_LONG));
     QCoreApplication::setOrganizationName(QLatin1String(Core::Constants::IDE_SETTINGSVARIANT_STR));
@@ -973,37 +975,80 @@ int main(int argc, char **argv)
     }
 
     qint64 pid = -1;
-    if (foundAppOptions.contains(QLatin1String(PID_OPTION))) {
-        QString pidString = foundAppOptions.value(QLatin1String(PID_OPTION));
+    const QString pidString
+        = foundAppOptions
+              .value(QLatin1String(PID_OPTION), QString::fromUtf8(qgetenv("QTC_CLIENT_PID")));
+
+    if (!pidString.isEmpty()) {
         bool pidOk;
         qint64 tmpPid = pidString.toInt(&pidOk);
         if (pidOk)
             pid = tmpPid;
     }
 
-    bool isBlock = foundAppOptions.contains(QLatin1String(BLOCK_OPTION));
-    if (app.isRunning() && (pid != -1 || isBlock
-                            || foundAppOptions.contains(QLatin1String(CLIENT_OPTION)))) {
-        app.setBlock(isBlock);
-        if (app.sendMessage(PluginManager::serializedArguments(), 5000 /*timeout*/, pid))
+    bool clientMode = foundAppOptions.contains(QLatin1String(CLIENT_OPTION))
+                      || qEnvironmentVariableIsSet("QTC_CLIENT_MODE");
+    bool isBlock = foundAppOptions.contains(QLatin1String(BLOCK_OPTION))
+                   || qEnvironmentVariable("QTC_CLIENT_MODE") == "block";
+
+    if (pid != -1 || isBlock || clientMode) {
+        if (pid == -1) {
+            const Utils::Result<QList<qint64>> pids = app.pidsOfRunningInstances();
+            if (!pids) {
+                displayError(pids.error());
+                return -1;
+            }
+            pid = pids->first();
+        }
+
+        const QString argsFromEnv = QString::fromUtf8(qgetenv("QTC_CLIENT_ARGS"));
+        const QString args
+            = Utils::joinStrings({argsFromEnv, PluginManager::serializedArguments()}, '|');
+
+        using namespace std::chrono_literals;
+
+        if (app.sendMessage(args, 5000ms, pid, isBlock))
             return 0;
 
-        // Message could not be send, maybe it was in the process of quitting
-        if (app.isRunning(pid)) {
-            // Nah app is still running, ask the user
-            int button = askMsgSendFailed();
-            while (button == QMessageBox::Retry) {
-                if (app.sendMessage(PluginManager::serializedArguments(), 5000 /*timeout*/, pid))
-                    return 0;
-                if (!app.isRunning(pid)) // App quit while we were trying so start a new creator
-                    button = QMessageBox::Yes;
-                else
-                    button = askMsgSendFailed();
+        if (args.contains("-client-fail-silent"))
+            return -1;
+
+        const auto appIsRunning = [&]() -> Result<> {
+            const Utils::Result<QList<qint64>> pids = app.pidsOfRunningInstances();
+            if (!pids)
+                return ResultError(pids.error());
+
+            if (pid != -1) {
+                if (!pids->contains(pid))
+                    return ResultError(
+                        QStringLiteral("No application with PID %1 is running.").arg(pid));
             }
-            if (button == QMessageBox::No)
-                return -1;
+            return ResultOk;
+        };
+
+        Result<> isRunning = appIsRunning();
+        if (!isRunning) {
+            displayError(isRunning.error());
+            exit(-1);
         }
+
+        int button = askMsgSendFailed();
+        while (button == QMessageBox::Retry) {
+            if (app.sendMessage(PluginManager::serializedArguments(), 5000ms, pid, isBlock))
+                return 0;
+            isRunning = appIsRunning();
+            if (!isRunning) // App quit while we were trying so start a new creator
+                button = QMessageBox::Yes;
+            else
+                button = askMsgSendFailed();
+        }
+        if (button == QMessageBox::No)
+            return -1;
     }
+
+    const Utils::Result<> result = app.listenForMessages();
+    if (!result)
+        displayError(result.error());
 
     PluginManager::checkForProblematicPlugins();
     PluginManager::loadPlugins();
@@ -1013,8 +1058,11 @@ int main(int argc, char **argv)
     }
 
     // Set up remote arguments.
-    QObject::connect(&app, &SharedTools::QtSingleApplication::messageReceived,
-                     &pluginManager, &PluginManager::remoteArguments);
+    QObject::connect(
+        &app,
+        &QtCreatorApplication::messageReceived,
+        &pluginManager,
+        &PluginManager::remoteArguments);
 
     // shutdown plugin manager on the exit
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &pluginManager, [] {
