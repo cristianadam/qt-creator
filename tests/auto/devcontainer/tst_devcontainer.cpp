@@ -5,6 +5,7 @@
 #include <devcontainer/devcontainer.h>
 #include <devcontainer/devcontainerconfig.h>
 #include <devcontainer/devcontainerfeature.h>
+#include <devcontainer/oci.h>
 
 #include <utils/qtcprocess.h>
 #include <utils/stringutils.h>
@@ -106,6 +107,9 @@ int main() {
     void upDockerfile();
     void containerWorkspaceReplacers();
     void readLocalFeature();
+    void ociref();
+    void ocirefToUrl_data();
+    void ocirefToUrl();
 };
 
 void tst_DevContainer::parseUserFromPasswd_data()
@@ -756,6 +760,77 @@ void tst_DevContainer::readLocalFeature()
     QCOMPARE(feature->init, true);
     QCOMPARE(feature->containerEnv.size(), 1);
     QCOMPARE(feature->containerEnv.at("feature-container-env"), "Hello Feature");
+}
+
+void tst_DevContainer::ociref()
+{
+    Result<DevContainer::OCI::Ref> ociRef = DevContainer::OCI::Ref::fromString(
+        "docker.io/library/nginx:alpine");
+    QVERIFY_RESULT(ociRef);
+    QCOMPARE(ociRef->registry, "docker.io");
+    QCOMPARE(ociRef->repository, "library/nginx");
+    QCOMPARE(ociRef->tag, std::optional<QString>("alpine"));
+    QCOMPARE(ociRef->digest, std::nullopt);
+
+    Result<DevContainer::OCI::Ref> ociRef2 = DevContainer::OCI::Ref::fromString(
+        "ghcr.io/devcontainers/features/"
+        "docker-in-docker@sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
+
+    QVERIFY_RESULT(ociRef2);
+    QCOMPARE(ociRef2->registry, "ghcr.io");
+    QCOMPARE(ociRef2->repository, "devcontainers/features/docker-in-docker");
+    QCOMPARE(ociRef2->tag, std::nullopt);
+    QCOMPARE(
+        ociRef2->digest,
+        std::optional<QString>("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"));
+
+    QEXPECT_FAIL(nullptr, "Local Paths are not valid", Continue);
+    QVERIFY_RESULT(DevContainer::OCI::Ref::fromString("./myrepo/myimage:2"));
+
+    QEXPECT_FAIL(nullptr, "Only sha256 digest is supported", Continue);
+    QVERIFY_RESULT(
+        DevContainer::OCI::Ref::fromString(
+            "registry.io/repo/image@md5:1234567890abcdef1234567890abcdef"));
+
+    QEXPECT_FAIL(nullptr, "Too long sha", Continue);
+    QVERIFY_RESULT(
+        DevContainer::OCI::Ref::fromString("registry.io/repo/image@sha256:" + QString(130, 'a')));
+
+    QEXPECT_FAIL(nullptr, "Invalid sha character", Continue);
+    QVERIFY_RESULT(DevContainer::OCI::Ref::fromString("registry.io/repo/image@sha256:xyz<>1235"));
+
+    QEXPECT_FAIL(nullptr, "Invalid version character", Continue);
+    QVERIFY_RESULT(DevContainer::OCI::Ref::fromString("registry.io/repo/image:latest<>newest"));
+
+    QEXPECT_FAIL(nullptr, "Not enough path components", Continue);
+    QVERIFY_RESULT(DevContainer::OCI::Ref::fromString("registry.io/image:tag"));
+}
+
+void tst_DevContainer::ocirefToUrl_data()
+{
+    QTest::addColumn<QString>("input");
+    QTest::addColumn<QString>("expectedUrl");
+
+    QTest::newRow("with-tag") << "docker.io/library/nginx:alpine"
+                              << "https://docker.io/v2/library/nginx/manifests/alpine";
+    QTest::newRow("with-digest")
+        << "ghcr.io/devcontainers/features/docker-in-docker@sha256:abcdef"
+        << "https://ghcr.io/v2/devcontainers/features/docker-in-docker/manifests/abcdef";
+
+    QTest::newRow("automatic-latest") << "registry.io/repo/image"
+                                      << "https://registry.io/v2/repo/image/manifests/latest";
+}
+
+void tst_DevContainer::ocirefToUrl()
+{
+    QFETCH(QString, input);
+    QFETCH(QString, expectedUrl);
+
+    Result<DevContainer::OCI::Ref> ociRef = DevContainer::OCI::Ref::fromString(input);
+    QVERIFY_RESULT(ociRef);
+
+    QUrl url = ociRef->toUrl();
+    QCOMPARE(url.toString(), expectedUrl);
 }
 
 QTEST_GUILESS_MAIN(tst_DevContainer)

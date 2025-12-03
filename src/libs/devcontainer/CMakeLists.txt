@@ -9,6 +9,8 @@ add_qtc_library(DevContainer
     devcontainerfeature.h
     devcontainer_global.h
     devcontainertr.h
+    oci.cpp
+    oci.h
     substitute.cpp
     substitute.h
 )

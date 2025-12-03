@@ -5,13 +5,16 @@
 
 #include "devcontainerfeature.h"
 #include "devcontainertr.h"
+#include "oci.h"
 #include "substitute.h"
 
 #include <QtTaskTree/QBarrier>
 #include <QtTaskTree/qconditional.h>
+#include <QtTaskTree/qnetworkreplywrappertask.h>
 
 #include <utils/algorithm.h>
 #include <utils/environment.h>
+#include <utils/networkaccessmanager.h>
 #include <utils/overloaded.h>
 #include <utils/qtcprocess.h>
 #include <utils/stringutils.h>
@@ -617,6 +620,20 @@ static ExecutableItem fetchFeatureTask(
         return DoneResult::Success;
     };
 
+    auto setupFetchOCIFeatureTask =
+        [featureIterator, fetchedFeature, instanceConfig](QTaskTree &tree) {
+            auto ociRef = OCI::Ref::fromString(featureIterator->id);
+            if (!ociRef) {
+                instanceConfig.logFunction(ociRef.error());
+                return SetupResult::StopWithError;
+            }
+
+            // Fetch feature from OCI registry
+            tree.setRecipe(Group{OCI::fetchOCIManifestTask(*ociRef, instanceConfig.logFunction)});
+
+            return SetupResult::Continue;
+        };
+
     // clang-format off
     return Group {
         If (isLocal) >> Then {
@@ -627,11 +644,7 @@ static ExecutableItem fetchFeatureTask(
                 return DoneResult::Error;
             })
         } >> Else {
-            QSyncTask([featureIterator, instanceConfig](){
-                instanceConfig.logFunction(
-                    QString(Tr::tr("Fetching features from OCI registries is not yet implemented.")));
-                return DoneResult::Error;
-            })
+            QTaskTreeTask(setupFetchOCIFeatureTask),
         }
     };
     // clang-format on
@@ -1815,7 +1828,12 @@ static Result<Group> prepareContainerRecipe(
 
     // clang-format off
     return Group {
-        containerId, containerDetails, runningDetails, imageDetails, useBuildKit, fetchedFeatures,
+        containerId,
+        containerDetails,
+        runningDetails,
+        imageDetails,
+        useBuildKit,
+        fetchedFeatures,
         checkDocker(instanceConfig),
         testBuildKit(instanceConfig, useBuildKit),
         QSyncTask(initMergedConfig(mergedConfig, commonConfig)),
