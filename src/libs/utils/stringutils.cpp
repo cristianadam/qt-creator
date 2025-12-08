@@ -14,6 +14,7 @@
 #include <QClipboard>
 #endif
 
+#include <QAbstractTextDocumentLayout>
 #include <QCollator>
 #include <QDir>
 #include <QFontMetrics>
@@ -21,9 +22,11 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QLocale>
+#include <QPainter>
 #include <QPalette>
 #include <QRegularExpression>
 #include <QSet>
+#include <QScrollBar>
 #include <QStack>
 #include <QTextDocument>
 #include <QTextList>
@@ -682,7 +685,6 @@ QTCREATOR_UTILS_EXPORT int endOfNextWord(const QString &string, int position)
 
 MarkdownHighlighter::MarkdownHighlighter(QTextDocument *parent)
     : QSyntaxHighlighter(parent)
-    , h2Brush(Qt::NoBrush)
     , m_codeBgBrush(Qt::NoBrush)
 {
     parent->setIndentWidth(30); // default value is 40
@@ -709,27 +711,6 @@ void MarkdownHighlighter::highlightBlock(const QString &text)
     if (fmt.hasProperty(QTextFormat::HeadingLevel)) {
         fmt.setTopMargin(10);
         fmt.setBottomMargin(10);
-
-        // Draw an underline for Heading 2, by creating a texture brush
-        // with the last pixel visible
-        if (fmt.property(QTextFormat::HeadingLevel) == 2) {
-            QTextCharFormat charFmt = currentBlock().charFormat();
-            charFmt.setBaselineOffset(15);
-            setFormat(0, text.size(), charFmt);
-
-            if (h2Brush.style() == Qt::NoBrush) {
-                const int height = QFontMetrics(charFmt.font()).height();
-                QImage image(1, height, QImage::Format_ARGB32);
-
-                image.fill(QColor(0, 0, 0, 0).rgba());
-                image.setPixel(0,
-                               height - 1,
-                               Utils::creatorColor(Theme::TextColorDisabled).rgba());
-
-                h2Brush = QBrush(image);
-            }
-            fmt.setBackground(h2Brush);
-        }
         cur.setBlockFormat(fmt);
     } else if (fmt.hasProperty(QTextFormat::BlockCodeLanguage) && fmt.indent() == 0) {
         // set identation and background for code blocks
@@ -757,6 +738,42 @@ void MarkdownHighlighter::highlightBlock(const QString &text)
             setFormat(fragment.position() - block.position(), fragment.length(), fmt);
         }
     }
+}
+
+MarkdownView::MarkdownView(QWidget *parent)
+    : QTextBrowser(parent)
+{}
+
+void MarkdownView::paintEvent(QPaintEvent *ev)
+{
+    QTextBrowser::paintEvent(ev);
+
+    QPainter painter(viewport());
+    const QRectF visibleRect = viewport()->rect();
+    const QPointF offset = contentOffset();
+
+    QPen headingPen(Utils::creatorColor(Theme::TextColorDisabled).rgba());
+    headingPen.setWidth(1);
+    painter.setPen(headingPen);
+
+    for (QTextBlock blk = document()->begin(); blk.isValid(); blk = blk.next()) {
+        const int lvl = blk.blockFormat().headingLevel();
+        if (lvl == 1 || lvl == 2) {
+            const QRectF blkRect = document()->documentLayout()->blockBoundingRect(blk);
+            const QRectF viewRect = blkRect.translated(offset)
+                                        // Draw line slightly below the text
+                                        .adjusted(0, 0, 0, 2);
+
+            if (viewRect.intersects(visibleRect)) {
+                painter.drawLine(viewRect.bottomLeft(), viewRect.bottomRight());
+            }
+        }
+    }
+}
+
+QPointF MarkdownView::contentOffset() const
+{
+    return QPointF(-horizontalScrollBar()->value(), -verticalScrollBar()->value());
 }
 
 QString ansiColoredText(const QString &text, const QColor &color)

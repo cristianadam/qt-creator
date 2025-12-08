@@ -2542,7 +2542,7 @@ void ICorePrivate::changeLog()
         versionCombo->addItem(f.first.toString());
     dialog = new LogDialog(ICore::dialogParent());
     auto showInExplorer = new QPushButton(FileUtils::msgGraphicalShellAction());
-    auto textEdit = new QTextBrowser;
+    auto textEdit = new MarkdownView();
     textEdit->setOpenExternalLinks(true);
 
     Aggregation::aggregate({textEdit, new BaseTextFind(textEdit)});

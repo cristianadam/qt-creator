@@ -9,6 +9,7 @@
 #include <QList>
 #include <QString>
 #include <QSyntaxHighlighter>
+#include <QTextBrowser>
 #include <QTextDocument>
 
 #include <functional>
@@ -124,8 +125,19 @@ public:
 private:
     QBrush codeBgBrush();
 
-    QBrush h2Brush;
     QBrush m_codeBgBrush;
+};
+
+class QTCREATOR_UTILS_EXPORT MarkdownView : public QTextBrowser
+{
+public:
+    MarkdownView(QWidget *parent = nullptr);
+
+protected:
+    void paintEvent(QPaintEvent *ev) override;
+
+private:
+    QPointF contentOffset() const;
 };
 
 QTCREATOR_UTILS_EXPORT QString ansiColoredText(const QString &text, const QColor &color);

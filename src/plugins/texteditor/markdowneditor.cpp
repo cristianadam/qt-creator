@@ -85,7 +85,7 @@ public:
         m_splitter = new MiniSplitter;
 
         // preview
-        m_previewWidget = new QTextBrowser();
+        m_previewWidget = new MarkdownView();
         m_previewWidget->setOpenLinks(false); // we want to open files in QtC, not the browser
         m_previewWidget->setFrameShape(QFrame::NoFrame);
         new Utils::MarkdownHighlighter(m_previewWidget->document());
