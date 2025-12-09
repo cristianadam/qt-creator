@@ -18,6 +18,8 @@ using QtcMovie = QMovie;
 
 #define QTC_MOVIE_COPY_INCLUDED
 
+#include "utils_global.h"
+
 #include <QtCore/qbytearray.h>
 #include <QtCore/qlist.h>
 #include <QtCore/qobject.h>
@@ -37,7 +39,7 @@ class QRect;
 class QSize;
 
 class QtcMoviePrivate;
-class QtcMovie : public QObject
+class QTCREATOR_UTILS_EXPORT QtcMovie : public QObject
 {
     Q_OBJECT
     Q_DECLARE_PRIVATE(QtcMovie)
