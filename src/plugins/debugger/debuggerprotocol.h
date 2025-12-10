@@ -32,7 +32,6 @@ public:
     DebuggerCommand(const QString &f, int fl, const Callback &cb) : function(f), callback(cb), flags(fl) {}
     DebuggerCommand(const QString &f, const Callback &cb) : function(f), callback(cb) {}
 
-    void arg(const char *value);
     void arg(const char *name, bool value);
     void arg(const char *name, int value);
     void arg(const char *name, qlonglong value);
