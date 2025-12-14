@@ -20,6 +20,8 @@ namespace ZenModePlugin::Internal {
 const Utils::Id LEFT_SIDEBAR_COMMAND_ID{"QtCreator.ToggleLeftSidebar"};
 const Utils::Id RIGHT_SIDEBAR_COMMAND_ID{"QtCreator.ToggleRightSidebar"};
 const Utils::Id OUTPUT_PANE_COMMAND_ID{"QtCreator.Pane.GeneralMessages"};
+const Utils::Id FULLSCREEN_COMMAND_ID("QtCreator.ToggleFullScreen");
+
 const ZenModePluginCore::ModeStyle MODES_STATE_ON_ACTIVE_ZENMODE{ZenModePluginCore::ModeStyle::Hidden};
 
 const std::vector<Utils::Id> TOGGLE_MODES_STATES_COMMANDS = {
@@ -50,11 +52,15 @@ void ZenModePluginCore::extensionsInitialized()
 bool ZenModePluginCore::delayedInitialize()
 {
     getActions();
+
+    m_window = Core::ICore::mainWindow();
+    setFullScreenMode(false);
     return true;
 }
 
 ZenModePluginCore::ShutdownFlag ZenModePluginCore::aboutToShutdown()
 {
+    setFullScreenMode(false);
     restoreModeSidebar();
     restoreSidebars();
     return SynchronousShutdown;
@@ -93,6 +99,13 @@ void ZenModePluginCore::getActions()
                 m_prevModesSidebarState = (ModeStyle)i;
             }
         }
+    }
+
+    if (const Core::Command* cmd = Core::ActionManager::command(FULLSCREEN_COMMAND_ID))
+    {
+        m_toggleFullscreenAction = cmd->action();
+    } else {
+        qWarning() << "ZenModePlugin - fail to get" <<  FULLSCREEN_COMMAND_ID.toString() << "action";
     }
 }
 
@@ -169,6 +182,14 @@ void ZenModePluginCore::restoreModeSidebar()
         if (action && !action->isChecked()) {
             action->trigger();
         }
+    }
+}
+
+void ZenModePluginCore::setFullScreenMode(bool state)
+{
+    if (m_toggleFullscreenAction && state != m_window->isFullScreen())
+    {
+        m_toggleFullscreenAction->trigger();
     }
 }
 
