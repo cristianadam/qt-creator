@@ -28,11 +28,17 @@ private:
     void toggleDistractionFreeMode();
 
     void hideOutputPanes();
+    void hideSidebars();
+    void restoreSidebars();
 
 private:
     bool m_distractionFreeModeActive{0};
 
     QPointer<QAction> m_outputPaneAction;
+    QPointer<QAction> m_toggleLeftSidebarAction;
+    QPointer<QAction> m_toggleRightSidebarAction;
+    bool m_prevLeftSidebarState{false};
+    bool m_prevRightSidebarState{false};
 };
 
 } // namespace ZenModePlugin::Internal
