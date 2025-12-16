@@ -48,6 +48,7 @@ depends +=    qtwidgets \
 include(../../config/macros.qdocconf)
 include(../../config/qt-cpp-ignore.qdocconf)
 include(../../config/qt-defines.qdocconf)
+include(../../config/icon-macros.qdocconf)
 
 defines += qtcreator
 

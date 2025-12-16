@@ -1,0 +1,31 @@
+// Copyright (C) 2025 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page qtquick-states-view.html
+    \previouspage creator-how-tos.html
+
+    \ingroup creator-how-to-design-qtquick
+
+    \title Apply states to components
+
+    The \uicontrol States view displays the different
+    \l{Working with states}{states} of a UI.
+
+    \image qmldesigner-transitions.webp "States view"
+
+    To open the \uicontrol States view, select \uicontrol View >
+    \uicontrol Views > \uicontrol States.
+
+    Initially, \uicontrol States displays a \e {base state} that shows the
+    selected \l{glossary-component}{component} in its initial state. To add
+    states, select \imageplus
+    in the \uicontrol States view.
+
+    For more information, watch the following video:
+
+    \youtube FzmLuRHQXaw
+
+    \sa {Design Qt Quick UIs}{How to: Design Qt Quick UIs}, {Qt Quick UI design},
+    {\QMLD views}
+*/

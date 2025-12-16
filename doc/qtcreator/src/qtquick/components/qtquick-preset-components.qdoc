@@ -1,0 +1,44 @@
+// Copyright (C) 2025 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page quick-preset-components.html
+    \previouspage creator-reference.html
+
+    \ingroup creator-reference-ui-design-qtquick
+
+    \title Preset components
+
+    \brief Use preset components in UIs.
+
+    To use preset components, add the modules that contain them to your project
+    by selecting \uicontrol Components > \imageplus. For more information, see
+    \l{Adding and Removing Modules}. You can then create instances of the
+    components by dragging them from \uicontrol Components to the \l {Design 2D UIs}{2D} or
+    \l {Navigate component files}{Navigator} view.
+
+    To edit the appearance of a component instance, select it in
+    the \uicontrol {2D} or \uicontrol Navigator view
+    and set its properties in the \l Properties view.
+
+    For more information about creating your own components, see
+    \l{Create custom components}.
+
+    \section1 2D Components
+
+    \list
+        \li \l Shapes
+        \li \l Text
+        \li \l Images
+        \li \l {User interaction methods}
+        \li \l {UI controls}
+        \li \l {Lists and other data models}
+        \li \l {2D effects}
+        \li \l {Design Effects}
+        \li \l {Logic Helpers}
+        \li \l Animations
+    \endlist
+
+    \sa {Design Qt Quick UIs}{How to: Design Qt Quick UIs}, {Qt Quick UI design},
+    {\QMLD views}
+*/

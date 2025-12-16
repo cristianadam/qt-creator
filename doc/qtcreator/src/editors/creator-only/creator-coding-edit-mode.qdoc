@@ -130,8 +130,8 @@
         \li \l {Managing language servers}
     \row
         \li \uicontrol {QDS}
-        \li Open \l {UI files} (\c .ui.qml) in \QDS.
-        \li \l {\QDS documentation}
+        \li Open \l {UI files} (\c .ui.qml) in \QMLD.
+        \li \l {\QMLD documentation}
     \row
         \li \inlineimage {icons/live-preview.png} {Preview}
         \li Preview changes to QML code live in your application.

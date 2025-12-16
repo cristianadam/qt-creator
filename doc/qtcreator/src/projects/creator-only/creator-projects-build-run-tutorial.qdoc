@@ -31,8 +31,8 @@
     between the host and devices. For more information, see
     \l{\B2Q: Documentation}.
 
-    If you have \l{\QDS documentation}{\QDS} installed, you can open
-    \QDS examples from \QC in \QDS.
+    If you have \l{\QMLD documentation}{\QMLD} installed, you can open
+    \QMLD examples from \QC in \QMLD.
 
     \list 1
 
@@ -88,5 +88,5 @@
 
     \sa {Manage kits}{How to: Manage kits}, {Open projects},
     {Developing for Android}, {Developing for iOS},
-    {Compile Output}, {\B2Q: Documentation}, {\QDS documentation}
+    {Compile Output}, {\B2Q: Documentation}, {\QMLD documentation}
 */

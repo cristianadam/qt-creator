@@ -16,26 +16,26 @@
     \previouspage creator-reference.html
     \endif
 
-    \ingroup creator-reference-ui-design
-    \ingroup creator-reference-ui-design-quick
+    \ingroup creator-reference-ui-design-qtquick
+    \ingroup creator-reference-ui-design-qtquick-quick
 
     \title UI files
 
-    \brief Limitations of \QDS UI files (.ui.qml).
+    \brief Limitations of \QMLD UI files (.ui.qml).
 
     \if defined(qtdesignstudio)
-    \QDS wizards create UI files that have the filename extension \c .ui.qml.
-    Edit the UI files in the \l {2D} view.
+    \QMLD wizards create UI files that have the filename extension \c .ui.qml.
+    Edit the UI files in the \l {Design 2D UIs}{2D} view.
 
     If you use the \l {Code} view to add code that the \uicontrol {2D} view does
-    not support, \QDS displays error messages.
+    not support, \QMLD displays error messages.
     \else
-    If you switch between \QC and \QDS or cooperate with designers on
+    If you switch between \QC and \QMLD or cooperate with designers on
     a project, you might encounter UI files (\c .ui.qml). They are intended to
-    be edited in \QDS only.
+    be edited in \QMLD only.
 
-    To open UI files with \QDS, select \uicontrol {Open With} >
-    \uicontrol {\QDS} in the context menu for the file.
+    To open UI files with \QMLD, select \uicontrol {Open With} >
+    \uicontrol {\QMLD} in the context menu for the file.
     \endif
 
 
@@ -159,7 +159,7 @@
     \if defined(qtdesignstudio)
     \section1 Using UI files
 
-    You can edit the UI files in the \l {2D} and
+    You can edit the UI files in the \l {Design 2D UIs}{2D} and
     \uicontrol {Code} views. Components that are
     supposed to be used in code have to be exported as properties:
 
@@ -180,7 +180,7 @@
 
     The property alias exports the button to the code that uses the form.
     You can use the \inlineimage {icons/alias.png} {Export}
-    (\uicontrol Export) button in \l Navigator to export a component
+    (\uicontrol Export) button in \l {Navigate component files}{Navigator} to export a component
     as a property:
 
     \image {qmldesigner-export-item.png} {Navigator view.}
@@ -198,7 +198,7 @@
 
     You can also assign properties or define behavior or transitions.
 
-    To move from the \l {2D} or \l Navigator view directly to the
+    To move from the \l {Design 2D UIs}{2D} or \l {Navigate component files}{Navigator} view directly to the
     implementation of a component in the \c .qml file, right-click the
     component and select \uicontrol {Go to Implementation} in the
     context menu.

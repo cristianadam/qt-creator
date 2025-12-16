@@ -468,44 +468,44 @@
     \row
         \li M203
         \li Warning
-        \li Imperative code is not supported in \QDS
+        \li Imperative code is not supported in \QMLD
         \li
 
     \row
         \li M204
         \li Warning
-        \li This QML type is not supported in \QDS
+        \li This QML type is not supported in \QMLD
         \li
     \row
         \li M205
         \li Warning
-        \li Reference to parent QML type cannot be resolved correctly by \QDS
+        \li Reference to parent QML type cannot be resolved correctly by \QMLD
         \li
 
     \row
         \li M206
         \li Warning
         \li This visual property binding cannot be evaluated in the local
-            context and might not show up in \QDS as expected
+            context and might not show up in \QMLD as expected
         \li
 
     \row
         \li M207
         \li Warning
-        \li \QDS only supports states in the root QML type
+        \li \QMLD only supports states in the root QML type
         \li
 
     \row
         \li M208
         \li Error
-        \li This id might be ambiguous and is not supported in \QDS
+        \li This id might be ambiguous and is not supported in \QMLD
         \li
 
     \row
         \li M209
         \li Error
         \li This type (type name) is not supported as a root element in
-            \QDS
+            \QMLD
         \li
     \endif
 
@@ -771,7 +771,7 @@
     \endlist
 
     To see an error message, move the mouse pointer over code that
-    \QC underlines in the code editor or when you open a QML file in \QDS.
+    \QC underlines in the code editor or when you open a QML file in \QMLD.
 
     To reset the code model, select \uicontrol Tools > \uicontrol {QML/JS} >
     \uicontrol {Reset Code Model}.
