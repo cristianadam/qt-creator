@@ -1,2 +1,7 @@
 .idea
 .github
+build-*
+build_*
+.qtcreator
+CMakeLists.txt.user
+
