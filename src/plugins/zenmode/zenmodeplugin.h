@@ -41,6 +41,8 @@ private:
     void hideModeSidebar();
     void restoreModeSidebar();
 
+    void setSidebarsModesVisibility(bool _visible);
+
 private:
     bool m_distractionFreeModeActive{0};
 
