@@ -54,6 +54,8 @@ bool ZenModePluginCore::delayedInitialize()
     getActions();
 
     m_window = Core::ICore::mainWindow();
+    m_menuBar = m_window->menuBar();
+    m_menuBar->setVisible(true);
     setFullScreenMode(false);
     return true;
 }
@@ -63,6 +65,7 @@ ZenModePluginCore::ShutdownFlag ZenModePluginCore::aboutToShutdown()
     setFullScreenMode(false);
     restoreModeSidebar();
     restoreSidebars();
+    m_menuBar->setVisible(true);
     return SynchronousShutdown;
 }
 

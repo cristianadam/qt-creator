@@ -5,6 +5,7 @@
 
 #include <QAction>
 #include <QMenu>
+#include <QMenuBar>
 
 QT_BEGIN_NAMESPACE
 class QMainWindow;
@@ -63,6 +64,7 @@ private:
 
     QPointer<QAction> m_toggleFullscreenAction;
     QPointer<QMainWindow> m_window;
+    QPointer<QMenuBar> m_menuBar;
 };
 
 } // namespace ZenModePlugin::Internal
