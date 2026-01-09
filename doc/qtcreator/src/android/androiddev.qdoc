@@ -384,6 +384,8 @@
     Select a \l{glossary-build-config}{debug build configuration} to build
     the application for debugging.
 
+    \include {androiddev.qdoc} {android-emulator-info}
+
     \note \QC cannot debug applications on Android devices if Android Studio is
     running. If the following message appears in \l {Application Output},
     close Android Studio and try again:
