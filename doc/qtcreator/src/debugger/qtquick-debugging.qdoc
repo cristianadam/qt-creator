@@ -271,7 +271,7 @@
     \if defined(qtcreator)
     code.
     \else
-    the \l Properties view.
+    the \uicontrol {Properties} view.
     \endif
 
     \section1 Applying QML changes at runtime
