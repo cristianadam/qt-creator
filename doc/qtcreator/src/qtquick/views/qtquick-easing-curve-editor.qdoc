@@ -81,7 +81,7 @@
 
     When you attach easing curves to keyframes, the shape of the
     keyframe marker on a keyframe track in
-    \l Timeline changes from \imagekeyframelinearactive
+    \uicontrol {Timeline} changes from \imagekeyframelinearactive
     to a marker that describes the type of the selected easing curve.
 
     \section1 Attach easing curves to transitions
