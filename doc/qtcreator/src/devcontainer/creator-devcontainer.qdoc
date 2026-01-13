@@ -1,0 +1,127 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page devcontainer.html
+    \previouspage creator-reference.html
+
+    \ingroup creator-reference-devices
+
+    \title Using Development Containers
+
+    \brief Use Development Containers to define and configure a consistent development
+    environment for your project.
+
+    Use Development Containers (dev container) to define and configure a consistent
+    development environment for your project.
+
+    A dev container is defined by a \c devcontainer.json file in your project directory.
+    You can customize the dev container for \QC by adding a \c qt-creator section
+    under \c customizations in the \c devcontainer.json file, and using the customization
+    options described in this topic.
+
+    For the full specification and the \c devcontainer.json file format, see the
+    \l{https://containers.dev/}{Development Container} documentation.
+
+    \note Enable the Development Container Support plugin to use it.
+
+    \section1 Customization options for dev containers
+
+    The following table shows the available options for customizing \QC in the
+    \c devcontainer.json file.
+
+    \table
+    \header
+        \li Property
+        \li Type
+        \li Description
+    \row
+        \li \c auto-detect-kits
+        \li \c boolean
+        \li Set to \c true to try to automatically detect a kit in the dev container.
+    \row
+        \li \c run-processes-in-terminal
+        \li \c boolean
+        \li Set to \c true to run some of the dev container setup processes in
+            a terminal window. Currently only used for \c {docker build}.
+    \row
+        \li \c copy-cmd-bridge
+        \li \c boolean
+        \li Set to \c true to copy the Command Bridge Helper into the dev container
+            instead of trying to mount it. This is useful if the dev container is
+            not able to mount the host filesystem.
+    \row
+        \li \c mount-libexec
+        \li \c boolean
+        \li Set to \c true to mount the libexec directory into the dev container.
+            This is used for the Command Bridge Helper.
+    \row
+        \li \c libexec-mount-point
+        \li \c string
+        \li Specify the mount point for the libexec directory in the dev container.
+            This is used for the Command Bridge Helper.
+    \row
+        \li \c kits
+        \li an array of objects
+        \li Specify the custom kits to be used in the dev container.
+    \endtable
+
+    \section1 Using the customization options
+
+    To customize a dev container for \QC, add a \c qt-creator section under
+    \c customizations in the \c devcontainer.json file, and use the customization
+    options described in the previous section.
+
+    Example of \c devcontainer.json with customizations for \QC:
+
+    \code
+    {
+        "customizations": {
+            "qt-creator": {
+                "device": {
+                    "auto-detect-kits": true,
+                    "run-processes-in-terminal": false,
+                    "copy-cmd-bridge": false,
+                    "mount-libexec": true,
+                    "libexec-mount-point": "/devcontainer/libexec"
+                }
+            }
+        }
+    }
+    \endcode
+
+    \section1 Using custom kits in dev containers
+
+    To use a specific Qt version or a compiler in the dev container, define custom
+    kits in the \c devcontainer.json file using the \c kits property. For cross-compilation
+    and different build configurations, you can define more than one kit.
+
+    Example of \c devcontainer.json with a custom kit for \QC:
+
+    \code
+    {
+        "customizations": {
+            "qt-creator": {
+                "auto-detect-kits": false,
+                "kits": [
+                    {
+                        "name": "My DevContainer Kit",
+                        "qt": "/6.7.0/gcc_64/bin/qmake6",
+                        "compiler": {
+                            "Cxx": "/usr/bin/c++",
+                            "C": "/usr/bin/gcc"
+                        },
+                        "cmake": {
+                            "binary": "/usr/bin/cmake",
+                            "generator": "Unix Makefiles"
+                        },
+                        "debugger": "/usr/bin/lldb"
+                    }
+                ]
+            }
+        }
+    }
+    \endcode
+
+    \sa {Enable and disable plugins}, {Docker}{How to: Develop for Docker}
+*/
