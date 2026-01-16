@@ -447,7 +447,9 @@ public:
     void currentTabChanged(int);
     void filter(const QString &text);
 
+    bool isDirty() const { return m_isDirty; }
     void setDirty(bool dirty);
+
     void createGui();
     void showCategory(int index);
     void updateEnabledTabs(Category *category, const QString &searchText);
@@ -455,14 +457,8 @@ public:
 
     void setupDirtyHook(QWidget *widget);
 
-    void switchBackIfNeeded();
-    void switchBack()
-    {
-        Id previousPage = m_previousPage;
-        m_previousPage = {};
-        showPage(previousPage);
-    };
-
+    enum SwitchTarget { Page, Mode };
+    void switchBackIfNeeded(SwitchTarget switchTarget);
 
 private:
     const QList<IOptionsPage *> m_pages;
@@ -742,12 +738,12 @@ void SettingsWidget::updateEnabledTabs(Category *category, const QString &search
     }
 }
 
-void SettingsWidget::switchBackIfNeeded()
+void SettingsWidget::switchBackIfNeeded(SwitchTarget switchTarget)
 {
     if (!m_isDirty)
         return;
 
-    if (!m_previousPage.isValid())
+    if (switchTarget == Page && !m_previousPage.isValid())
         return;
 
     if (m_currentlySwitching)
@@ -757,19 +753,35 @@ void SettingsWidget::switchBackIfNeeded()
     dialog.setWindowTitle(Tr::tr("Unapplied Changes"));
     dialog.setIcon(QMessageBox::Warning);
     dialog.resize(400, 500);
-    dialog.setText(Tr::tr("The previous page contains unsaved changes."));
+    if (switchTarget == Page)
+        dialog.setText(Tr::tr("The previous page contains unsaved changes."));
+    else
+        dialog.setText(Tr::tr("There are unsaved changes."));
 
-    QPushButton *applyButton
-        = dialog.addButton(Tr::tr("Apply Unsaved Changes"), QMessageBox::AcceptRole);
-    connect(applyButton, &QAbstractButton::clicked, this, &SettingsWidget::apply);
+    QPushButton applyButton(Tr::tr("Apply Unsaved Changes"));
+    connect(&applyButton, &QAbstractButton::clicked, this, &SettingsWidget::apply);
 
-    QPushButton *abandonButton
-        = dialog.addButton(Tr::tr("Abandon Unsaved Changes"), QMessageBox::AcceptRole);
-    connect(abandonButton, &QAbstractButton::clicked, this, &SettingsWidget::cancel);
+    QPushButton abandonButton(Tr::tr("Abandon Unsaved Changes"));
+    connect(&abandonButton, &QAbstractButton::clicked, this, &SettingsWidget::cancel);
 
-    QPushButton *backButton
-        = dialog.addButton(Tr::tr("Return to Previous Page"), QMessageBox::RejectRole);
-    connect(backButton, &QAbstractButton::clicked, this, &SettingsWidget::switchBack);
+    QPushButton backButton;
+    if (switchTarget == Page) {
+        backButton.setText(Tr::tr("Return to Previous Page"));
+        connect(&backButton, &QAbstractButton::clicked, this, [this] {
+            Id previousPage = m_previousPage;
+            m_previousPage = {};
+            showPage(previousPage);
+        });
+    } else {
+        backButton.setText(Tr::tr("Return to Preferences"));
+        connect(&backButton, &QAbstractButton::clicked, this, [] {
+            ModeManager::activateMode(Constants::MODE_SETTINGS);
+        });
+    }
+
+    dialog.addButton(&applyButton, QMessageBox::AcceptRole);
+    dialog.addButton(&abandonButton, QMessageBox::AcceptRole);
+    dialog.addButton(&backButton, QMessageBox::RejectRole);
 
     m_currentlySwitching = true;
     dialog.exec();
@@ -785,7 +797,7 @@ void SettingsWidget::currentCategoryChanged(const QModelIndex &current)
         m_headerLabel->clear();
     }
 
-    QTimer::singleShot(0, this, [this] { switchBackIfNeeded(); });
+    QTimer::singleShot(0, this, [this] { switchBackIfNeeded(Page); });
 }
 
 void SettingsWidget::currentTabChanged(int index)
@@ -805,7 +817,7 @@ void SettingsWidget::currentTabChanged(int index)
     m_currentPage = page->id();
     m_visitedPages.insert(m_currentPage);
 
-    QTimer::singleShot(0, this, [this] { switchBackIfNeeded(); });
+    QTimer::singleShot(0, this, [this] { switchBackIfNeeded(Page); });
 }
 
 void SettingsWidget::filter(const QString &text)
@@ -841,6 +853,7 @@ void SettingsWidget::cancel()
 {
     for (const Id page : std::as_const(m_visitedPages)) {
         SettingsTab *tab = s_tabForPage.value(page);
+        QTC_ASSERT(tab, continue);
         tab->cancel();
     }
 
@@ -862,7 +875,8 @@ public:
                 if (!inner)
                     open({});
             } else if (oldMode == Constants::MODE_SETTINGS) {
-                ICore::saveSettings(ICore::SettingsDialogDone);
+                QTC_ASSERT(inner, return);
+                inner->switchBackIfNeeded(SettingsWidget::Mode);
             }
         });
     }
