@@ -769,6 +769,13 @@ static Group authorizationRecipe(DashboardMode dashboardMode)
 
         bool ok = false;
         const AxivionServer server = settings().serverForId(serverId);
+        if (server.username == "anon_auth" || server.username.isEmpty()) {
+            QMessageBox::critical(ICore::dialogParent(),
+                                  Tr::tr("No Unauthenticated Access"),
+                                  Tr::tr("This server does not support unauthenticated access.\n"
+                                         "Change its configuration inside the preferences."));
+            return SetupResult::StopWithError;
+        }
         const QString text(Tr::tr("Enter the password for:\nDashboard: %1\nUser: %2")
                                .arg(server.dashboard, server.username));
         *passwordStorage = QInputDialog::getText(ICore::dialogParent(),
