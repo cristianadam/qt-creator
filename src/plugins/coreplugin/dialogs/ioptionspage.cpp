@@ -69,6 +69,7 @@ public:
     std::function<AspectContainer *()> m_settingsProvider;
     bool m_recreateOnCancel = false;
     bool m_autoApply = false;
+    bool m_usesDirtyHook = false;
     QPointer<IOptionsPageWidget> m_widget; // Cache.
 };
 
@@ -294,6 +295,7 @@ void IOptionsPage::setWidgetCreator(const WidgetCreator &widgetCreator)
 {
     d->m_widgetCreator = widgetCreator;
     d->m_recreateOnCancel = true;
+    d->m_usesDirtyHook = true;
 }
 
 /*!
@@ -321,6 +323,7 @@ void IOptionsPage::setSettingsProvider(const std::function<AspectContainer *()> 
 {
     d->m_settingsProvider = provider;
     d->m_recreateOnCancel = false;
+    d->m_usesDirtyHook = false;
 }
 
 static QList<IOptionsPage *> &optionsPages()
@@ -408,6 +411,16 @@ bool IOptionsPage::recreateOnCancel() const
 void IOptionsPage::setAutoApply()
 {
     d->m_autoApply = true;
+}
+
+bool IOptionsPage::useDirtyHook() const
+{
+    return d->m_usesDirtyHook;
+}
+
+void IOptionsPage::setUseDirtyHook(bool on)
+{
+    d->m_usesDirtyHook = on;
 }
 
 /*!
@@ -527,7 +540,7 @@ IOptionsPageWidget *IOptionsPagePrivate::createWidget()
     if (m_widgetCreator) {
         m_widget = m_widgetCreator();
         QTC_ASSERT(m_widget, return nullptr);
-        if (!m_autoApply)
+        if (!m_autoApply && m_usesDirtyHook)
             m_widget->setupDirtyHook(m_widget);
         return m_widget;
     }
