@@ -36,7 +36,7 @@ public:
     void setupDirtyHook(QWidget *widget);
     void gotDirty();
 
-    static void setIgnoreForDirtyHook(QWidget *widget, bool ignore = true);
+    static bool setIgnoreForDirtyHook(QWidget *widget, bool ignore = true);
 
 signals:
     void dirtyChanged(bool dirty);
