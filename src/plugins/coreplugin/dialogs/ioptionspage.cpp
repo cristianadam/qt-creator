@@ -215,28 +215,33 @@ void IOptionsPageWidget::setupDirtyHook(QWidget *widget)
         if (child->metaObject() == &QMenu::staticMetaObject)
             continue;
 
+        auto makeDirty = [child, this] {
+            if (!child->property(IGNORE_FOR_DIRTY_HOOK).toBool())
+                gotDirty();
+        };
+
         if (auto ob = qobject_cast<QPushButton *>(child)) {
-            connect(ob, &QPushButton::pressed, this, &IOptionsPageWidget::gotDirty);
+            connect(ob, &QPushButton::pressed, this, makeDirty);
             continue;
         }
         if (auto ob = qobject_cast<QLineEdit *>(child)) {
-            connect(ob, &QLineEdit::textEdited, this, &IOptionsPageWidget::gotDirty);
+            connect(ob, &QLineEdit::textEdited, this, makeDirty);
             continue;
         }
         if (auto ob = qobject_cast<QComboBox *>(child)) {
-            connect(ob, &QComboBox::currentIndexChanged, this, &IOptionsPageWidget::gotDirty);
+            connect(ob, &QComboBox::currentIndexChanged, this, makeDirty);
             continue;
         }
         if (auto ob = qobject_cast<QSpinBox *>(child)) {
-            connect(ob, &QSpinBox::valueChanged, this, &IOptionsPageWidget::gotDirty);
+            connect(ob, &QSpinBox::valueChanged, this, makeDirty);
             continue;
         }
         if (auto ob = qobject_cast<QGroupBox *>(child)) {
-            connect(ob, &QGroupBox::toggled, this, &IOptionsPageWidget::gotDirty);
+            connect(ob, &QGroupBox::toggled, this, makeDirty);
             continue;
         }
         if (auto ob = qobject_cast<QCheckBox *>(child)) {
-            connect(ob, &QCheckBox::toggled, this, &IOptionsPageWidget::gotDirty);
+            connect(ob, &QCheckBox::toggled, this, makeDirty);
             continue;
         }
     }
