@@ -1,0 +1,120 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page creator-how-to-mcp-server.html
+    \previouspage creator-how-tos.html
+
+    \ingroup creator-how-to-build
+    \ingroup creator-how-to-debug
+    \ingroup creator-how-to-run
+
+    \title Use MCP client
+
+    \QC supports the model context protocol (MCP) to let AI assistants control it
+    for debugging, building, and managing projects.
+
+    To use an MCP client, install one and activate the \QC MCP server extension
+    to start the MCP server.
+
+    \section1 View MCP server status
+
+    \QC starts the MCP server when you activate the \QC MCP server extension. The
+    server runs at \c 127.0.0.1 and accepts connections on port \c 3001. For
+    security reasons, you cannot run it on a remote computer.
+
+    To view the MCP server status, go to \uicontrol Tools >
+    \uicontrol {MCP Server} > \uicontrol {About MCP Server}.
+
+    \image {qtcreator-mcp-server-status.webp} {MCP Server Status dialog}
+
+    If the server does not start, see whether \uicontrol {General Messages} shows
+    a warning about the port being in use.
+
+    Make sure that no other process is bound to the port. For example, on Linux,
+    enter \c {lsof -i :3001} in \uicontrol Terminal.
+
+    To use another port than \c 3001, set the \c MCP_SERVER_PORT
+    environment variable to configure the port before \QC starts.
+
+    \section1 Set up a simple MCP client
+
+    You can use any  HTTP client that can send POST requests and read SSE
+    responses. This section describes how to use \c pip to install a simple
+    MCP client and how to configure it.
+
+    To install and configure a simple MCP client:
+
+    \list 1
+        \li Go to \uicontrol Terminal, and enter:
+            \badcode
+            pip install simple-mcp-client
+            \endcode
+        \li Change the \c {simple_mcp_client\config.json} configuration
+            file to point to the \c qtcreator MCP server:
+            \badcode
+            "mcpServers": {
+              "qtcreator": {
+                "enable": false,
+                "type": "sse",
+                "url": "http://127.0.0.1:3001/sse",
+                "command": null,
+                "args": [],
+                "env": {}
+              }
+            }
+            \endcode
+    \endlist
+
+    You can find the \c {config.json} file in the following locations:
+
+    \list
+        \li On Linux: \c {~/.config/simple_mcp_client/}
+        \li On Windows: \c {C:\Users\<username>\AppData\Roaming\simple_mcp_client}
+    \endlist
+
+    \section1 Run \QC tools
+
+    To run \QC tools from the MCP client, start the client and connect to the
+    \QC MCP server.
+
+    To start the MCP client and view the list of \QC tools:
+
+    \list 1
+        \li Go to \uicontrol Terminal, and enter:
+            \badcode
+            python -m simple_mcp_client.main
+            \endcode
+        \li In \uicontrol {Mini MCP Client Network Hub}, enter:
+            \badcode
+            connect qtcreator
+            \endcode
+        \li To view a list of tools, enter:
+            \badcode
+            tools qtcreator
+            \endcode
+            \image {qtcreator-mcp-client-tools.webp} {Qt Creator tools in the MCP client}
+        \li To run a tool, enter
+            \badcode
+            execute qtcreator <tool-name>
+            \endcode
+            For example:
+            \badcode
+            execute qtcreator list_sessions
+            \endcode
+    \endlist
+
+    If the SSE connection fails, make sure that the MCP client supports
+    cross-origin resource sharing (CORS). It is an HTTP-header based mechanism
+    that lets servers permit loading resources for other domains, schemes, or
+    ports.
+
+    On Windows, the firewall might block inbound connections to \c localhost.
+    Make sure that the \QC executable can accept local traffic.
+
+    If a debug session does not stop when \QC exits, you can manually stop
+    debugging in the \uicontrol Debug mode or increase the timeout by setting the
+    \c {MCP_QUIT_TIMEOUT} environment variable to 60 seconds.
+
+    \sa {Activate extensions}
+*/
