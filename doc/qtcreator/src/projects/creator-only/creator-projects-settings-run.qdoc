@@ -56,6 +56,10 @@
     all run configurations that belong to a build configuration, select
     \uicontrol {Remove All}.
 
+    To remove multiple run configurations, select \uicontrol {Bulk Remove},
+    multiselect run configurations by holding \key Ctrl and clicking them,
+    and then select \uicontrol {Remove selected}.
+
     To edit the active run configuration, select \key {Ctrl+E, Ctrl+R}
     (or \key {Cmd+E, Cmd+R} on \macos).
 
