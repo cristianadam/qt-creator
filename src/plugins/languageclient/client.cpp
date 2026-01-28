@@ -2394,13 +2394,29 @@ LanguageClientOutlineItem *Client::createOutlineItem(
 
 FilePath toHostPath(const FilePath serverDeviceTemplate, const FilePath localClientPath)
 {
-    const FilePath onDevice = serverDeviceTemplate.withNewPath(localClientPath.path());
+    const FilePath onDevice = serverDeviceTemplate.withNewMappedPath(localClientPath);
     return onDevice.localSource().value_or(onDevice);
 }
 
 DocumentUri::PathMapper Client::hostPathMapper() const
 {
-    return [serverDeviceTemplate = d->m_serverDeviceTemplate](const Utils::FilePath &serverPath) {
+    FilePath projectPath;
+    if (project())
+        projectPath = project()->projectFilePath();
+
+    return [serverDeviceTemplate = d->m_serverDeviceTemplate, projectPath, this](
+            const Utils::FilePath &serverPath) {
+        /* If the project is remote (opened from build device)
+         *    and the project is in a dir mounted to build device (i.e. docker)
+         *    and serverPath exists on the device of the project
+         *    and serverPath is a part of the project,
+         * remote path should be preferred.
+         */
+        if (!projectPath.isEmpty() && !projectPath.isLocal()) {
+            const FilePath pathOnDevice = projectPath.withNewMappedPath(serverPath);
+            if (pathOnDevice.exists() && fileBelongsToProject(pathOnDevice))
+                return pathOnDevice;
+        }
         return toHostPath(serverDeviceTemplate, serverPath);
     };
 }
