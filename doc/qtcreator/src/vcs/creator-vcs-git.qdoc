@@ -495,6 +495,10 @@
 
     \image {qtcreator-git-blame.webp} {Git Blame view}
 
+    To hide the path information in the view, select \uicontrol {Omit Path}.
+
+    To hide the author information in the view, select \uicontrol {Omit Author}.
+
     To hide the date and time information in the view, select
     \uicontrol {Omit Date}.
 
