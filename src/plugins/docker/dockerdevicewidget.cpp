@@ -7,6 +7,8 @@
 #include "dockerdevice.h"
 #include "dockertr.h"
 
+#include <coreplugin/dialogs/ioptionspage.h>
+
 #include <cppeditor/cppeditorconstants.h>
 
 #include <projectexplorer/kitaspect.h>
@@ -136,6 +138,14 @@ DockerDeviceWidget::DockerDeviceWidget(const IDevice::Ptr &device)
     auto createLineLabel = new QLabel(dockerDevice->createCommandLine().toUserOutput());
     createLineLabel->setWordWrap(true);
 
+    auto refreshNetworksButton = new QToolButton();
+    Core::IOptionsPageWidget::setIgnoreForDirtyHook(refreshNetworksButton);
+    refreshNetworksButton->setIcon(Icons::RELOAD_TOOLBAR.icon());
+    refreshNetworksButton->setToolTip(Tr::tr("Refresh Docker networks"));
+    connect(refreshNetworksButton, &QPushButton::clicked, this, [dockerDevice] {
+        DockerApi::instance()->refreshNetworks();
+    });
+
     using namespace Layouting;
 
     // clang-format off
@@ -151,7 +161,7 @@ DockerDeviceWidget::DockerDeviceWidget(const IDevice::Ptr &device)
             dockerDevice->keepEntryPoint, br,
             dockerDevice->enableLldbFlags, br,
             dockerDevice->mountCmdBridge, br,
-            dockerDevice->network, br,
+            dockerDevice->network, refreshNetworksButton,br,
             dockerDevice->extraArgs, br,
             dockerDevice->environment, br,
             pathListLabel, dockerDevice->mounts, br,
