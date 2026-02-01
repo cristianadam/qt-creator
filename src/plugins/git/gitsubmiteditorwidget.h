@@ -47,7 +47,7 @@ public:
     void refreshLog(const Utils::FilePath &repository);
 
 protected:
-    bool canSubmit(QString *whyNot) const override;
+    Utils::Result<> canSubmit() const override;
     QString cleanupDescription(const QString &) const override;
     QString commitName() const override;
     void addFileContextMenuActions(QMenu *menu, const QModelIndex &index) override;

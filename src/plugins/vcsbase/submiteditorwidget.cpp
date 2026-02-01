@@ -287,16 +287,15 @@ void SubmitEditorWidget::registerActions(QAction *editorUndoAction, QAction *edi
 
     if (submitAction) {
         auto updateSubmitEnabled = [this, submitAction] {
-            QString errorMessage;
-            const bool submitEnabled = canSubmit(&errorMessage);
-            submitAction->setEnabled(submitEnabled);
+            const Result<> submitEnabled = canSubmit();
+            submitAction->setEnabled(submitEnabled.has_value());
 
-            if (submitEnabled || errorMessage.isEmpty()) {
+            if (submitEnabled) {
                 d->error->clear();
             } else {
                 const QString hint = QString("<font color=\"%1\">")
                     .arg(Utils::creatorColor(Utils::Theme::TextColorError).name());
-                d->error->setText(hint + Tr::tr("Cannot commit: %1").arg(errorMessage));
+                d->error->setText(hint + Tr::tr("Cannot commit: %1").arg(submitEnabled.error()));
             }
         };
 
@@ -526,10 +525,10 @@ void SubmitEditorWidget::updateActions()
 void SubmitEditorWidget::updateSubmitAction()
 {
     const unsigned checkedCount = checkedFilesCount();
-    const bool newCommitState = canSubmit();
+    const Result<> newCommitState = canSubmit();
     // Emit signal to update action
-    if (d->m_commitEnabled != newCommitState) {
-        d->m_commitEnabled = newCommitState;
+    if (d->m_commitEnabled != newCommitState.has_value()) {
+        d->m_commitEnabled = newCommitState.has_value();
         emit submitActionEnabledChanged(d->m_commitEnabled);
     }
     if (d->fileView && d->fileView->model()) {
@@ -693,23 +692,20 @@ void SubmitEditorWidget::descriptionTextChanged()
     updateSubmitAction();
 }
 
-bool SubmitEditorWidget::canSubmit(QString *whyNot) const
+Result<> SubmitEditorWidget::canSubmit() const
 {
-    if (d->m_updateInProgress) {
-        if (whyNot)
-            *whyNot = Tr::tr("Update in progress");
-        return false;
-    }
-    if (isDescriptionMandatory() && d->m_description.trimmed().isEmpty()) {
-        if (whyNot)
-            *whyNot = Tr::tr("Description is empty");
-        return false;
-    }
+    if (d->m_updateInProgress)
+        return ResultError(Tr::tr("Update in progress"));
+
+    if (isDescriptionMandatory() && d->m_description.trimmed().isEmpty())
+        return ResultError(Tr::tr("Description is empty"));
+
     const unsigned checkedCount = checkedFilesCount();
     const bool res = d->m_emptyFileListEnabled || checkedCount > 0;
-    if (!res && whyNot)
-        *whyNot = Tr::tr("No files checked");
-    return res;
+    if (!res)
+        return ResultError(Tr::tr("No files checked"));
+
+    return ResultOk;
 }
 
 bool SubmitEditorWidget::isEdited() const

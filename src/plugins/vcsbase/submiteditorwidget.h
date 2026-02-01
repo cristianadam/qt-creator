@@ -5,6 +5,8 @@
 
 #include "vcsbase_global.h"
 
+#include <utils/result.h>
+
 #include <QAbstractItemView>
 
 QT_BEGIN_NAMESPACE
@@ -62,7 +64,7 @@ public:
     void addSubmitFieldWidget(SubmitFieldWidget *f);
     QList<SubmitFieldWidget *> submitFieldWidgets() const;
 
-    virtual bool canSubmit(QString *whyNot = nullptr) const;
+    virtual Utils::Result<> canSubmit() const;
     bool isEdited() const;
     void setUpdateInProgress(bool value);
     bool updateInProgress() const;

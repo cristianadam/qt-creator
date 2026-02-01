@@ -42,7 +42,7 @@ public:
     bool isPrivateOptionEnabled() const;
 
 private:
-    bool canSubmit(QString *whyNot = nullptr) const final;
+    Utils::Result<> canSubmit() const final;
 
     void branchChanged();
     bool isValidBranch() const;

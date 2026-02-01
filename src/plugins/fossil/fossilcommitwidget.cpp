@@ -167,15 +167,12 @@ bool FossilCommitWidget::isPrivateOptionEnabled() const
     return m_isPrivateCheckBox->isChecked();
 }
 
-bool FossilCommitWidget::canSubmit(QString *whyNot) const
+Result<> FossilCommitWidget::canSubmit() const
 {
-    QString message = cleanupDescription(descriptionText()).trimmed();
+    const QString message = cleanupDescription(descriptionText()).trimmed();
 
-    if (m_invalidBranchLabel->isVisible() || message.isEmpty()) {
-        if (whyNot)
-            *whyNot = Tr::tr("Message check failed.");
-        return false;
-    }
+    if (m_invalidBranchLabel->isVisible() || message.isEmpty())
+        return ResultError(Tr::tr("Message check failed."));
 
     return VcsBase::SubmitEditorWidget::canSubmit();
 }

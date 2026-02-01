@@ -114,7 +114,7 @@ private:
     void slotUpdateEditorSettings();
 
     void createUserFields(const Utils::FilePath &fieldConfigFile);
-    bool checkSubmitMessage(QString *errorMessage) const;
+    Utils::Result<> checkSubmitMessage() const;
     bool runSubmitMessageCheckScript(const Utils::FilePath &script, QString *errorMessage) const;
     QString promptForNickName();
     void close();

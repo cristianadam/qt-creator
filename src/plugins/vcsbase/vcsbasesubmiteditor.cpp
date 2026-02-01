@@ -429,13 +429,12 @@ void VcsBaseSubmitEditor::accept(VersionControlBase *plugin)
 
     EditorManager::activateEditor(this, EditorManager::IgnoreNavigationHistory);
 
-    QString errorMessage;
-    const bool canCommit = checkSubmitMessage(&errorMessage) && submitWidget->canSubmit(&errorMessage);
-    if (!canCommit) {
-        VcsOutputWindow::appendError({}, plugin->commitErrorMessage(errorMessage));
-    } else if (plugin->activateCommit()) {
+    if (const Result<> res = checkSubmitMessage(); !res)
+        VcsOutputWindow::appendError({}, plugin->commitErrorMessage(res.error()));
+    else if (const Result<> res = submitWidget->canSubmit(); !res)
+        VcsOutputWindow::appendError({}, plugin->commitErrorMessage(res.error()));
+    else if (plugin->activateCommit())
         close();
-    }
 }
 
 void VcsBaseSubmitEditor::close()
@@ -494,24 +493,27 @@ void VcsBaseSubmitEditor::slotSetFieldNickName(int i)
 
 void VcsBaseSubmitEditor::slotCheckSubmitMessage()
 {
-    QString errorMessage;
-    if (!checkSubmitMessage(&errorMessage)) {
+    const Result<> res = checkSubmitMessage();
+    if (!res) {
         QMessageBox msgBox(QMessageBox::Warning, Tr::tr("Submit Message Check Failed"),
-                           errorMessage, QMessageBox::Ok, d->m_widget);
+                           res.error(), QMessageBox::Ok, d->m_widget);
         msgBox.setMinimumWidth(500);
         msgBox.exec();
     }
 }
 
-bool VcsBaseSubmitEditor::checkSubmitMessage(QString *errorMessage) const
+Result<> VcsBaseSubmitEditor::checkSubmitMessage() const
 {
     const FilePath checkScript = commonSettings().submitMessageCheckScript();
     if (checkScript.isEmpty())
-        return true;
+        return ResultOk;
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    const bool rc = runSubmitMessageCheckScript(checkScript, errorMessage);
+    QString errorMessage;
+    const bool rc = runSubmitMessageCheckScript(checkScript, &errorMessage);
     QApplication::restoreOverrideCursor();
-    return rc;
+    if (!rc)
+        return ResultError(errorMessage);
+    return ResultOk;
 }
 
 static QString msgCheckScript(const FilePath &workingDir, const FilePath &cmd)
