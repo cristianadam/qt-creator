@@ -209,6 +209,42 @@
     Depending on the local build result you may limit the issue table to
     local issues or changed issues.
 
+    \section1 Single file analysis
+
+    Instead of a full local build it is also possible to just perform a single
+    file analysis in case you want to check whether minor changes eliminate or
+    create new style issues.
+
+    You need to have an active dashboard, a valid path mapping for this project,
+    and some file opened from this dashboard.
+    The single file analysis may be started by using the
+    \uicontrol Analyzer > \uicontrol {Single File Analysis} or the respective
+    item inside the context menu of the file's editor.
+
+    \image {qtcreator-axivion-startsfa.webp} {Single File Analysis dialog}
+
+    In \uicontrol {BAUHAUS_CONFIG Directory} provide the directory containing the
+    Axivion configuration for this project.
+    In \uicontrol {Analysis Command} provide a command performing the build and the
+    analysis.
+
+    \note The analysis command usually is a call to build_compile_commands provided
+    by the Axivion suite in use, but may also be a script file consisting of commands
+    to build the respective file using cafeCC and analyze it.
+    build_compile_commands can make use of a generated \c compile_commands.json
+    representing the build instructions of the project. \sa {Use compilation databases}
+    More complex commands can be put into a script file, e.g. when it is necessary
+    to set up some special environment.
+
+    After starting the single file analysis, the progress of the running analysis
+    gets shown on the \uicontrol {Local Build Progress}. These analyses will have
+    a prefix of \c {SFA:}.
+
+    When the single file analysis finishes additional line markers may be added to
+    the opened file. These markers have a different color to see whether issues got
+    solved or added to the opened file. In case of a failed analysis you may inspect
+    the Axivion log or the build log similar to local builds in general.
+
     \sa {Axivion}{Axivion Preferences}, {View Axivion static code analysis results},
     {Enable and disable plugins}, {Analyze}{How To: Analyze}, {Analyzers},
     {Analyzing code}
