@@ -163,3 +163,20 @@
 
     \sa {Activate kits for a project}, {Analyze}{How to: Analyze}, {Analyzers}
 */
+
+/*!
+    \page creator-reference-analyzers.html
+    \previouspage creator-reference.html
+
+    \ingroup creator-reference
+
+    \title Analyzers
+
+    \summary {Learn more about the code analysis tools that you can use from \QC
+    to improve your C++ or QML code.}
+
+    \annotatedlist creator-reference-analyzer
+
+    \sa {Analyze}{How to: Analyze}, {Analyzing code}
+
+*/

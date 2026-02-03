@@ -13,14 +13,6 @@
 
     \annotatedlist creator-reference
 
-    \section1 Analyzers
-
-    Use integrated code analysis tools to improve your C++ or QML code.
-
-    \details {Reference topics}
-    \annotatedlist creator-reference-analyzer
-    \enddetails
-
     \section1 Build Systems
 
     When you create projects, you can choose the build system to use for

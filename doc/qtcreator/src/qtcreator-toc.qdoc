@@ -112,7 +112,7 @@
             \li \l{Reference}
                 \generatelist creator-reference
                 \list
-                    \li Analyzers
+                    \li \l {Analyzers}
                         \generatelist creator-reference-analyzer
                     \li Build Systems
                         \generatelist creator-reference-build-systems
