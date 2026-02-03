@@ -207,7 +207,13 @@ public:
         updatePointSizes();
         refreshColorSchemeList();
 
-        setupDirtyHook(this);
+        installMarkSettingsDirtyTrigger(m_antialias);
+        installMarkSettingsDirtyTrigger(m_zoomSpinBox);
+        installMarkSettingsDirtyTrigger(m_lineSpacingSpinBox);
+        installMarkSettingsDirtyTrigger(m_fontComboBox);
+        installMarkSettingsDirtyTrigger(m_sizeComboBox);
+        installMarkSettingsDirtyTrigger(m_schemeComboBox);
+        installMarkSettingsDirtyTrigger(m_schemeEdit);
     }
 
     void apply() final;

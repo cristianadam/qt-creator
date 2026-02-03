@@ -9,6 +9,7 @@
 #include <QComboBox>
 #include <QEvent>
 #include <QGuiApplication>
+#include <QLabel>
 #include <QLineEdit>
 #include <QPlainTextEdit>
 #include <QSpinBox>
