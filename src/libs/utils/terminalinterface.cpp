@@ -56,7 +56,8 @@ static QString msgCannotExecute(const FilePath &p, const QString &why)
 static QString msgPromptToClose()
 {
     // Shown in a terminal which might have a different character set on Windows.
-    return Tr::tr("Press <RETURN> to close this window...");
+    return Tr::tr("\nProcess exited with code %1.\n"
+                  "Press Return to close this window...");
 }
 
 class TerminalInterfacePrivate : public QObject

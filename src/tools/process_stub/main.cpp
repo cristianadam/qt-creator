@@ -9,6 +9,7 @@
 #include <QMutex>
 #include <QProcess>
 #include <QSocketNotifier>
+#include <QTextStream>
 #include <QThread>
 #include <QTimer>
 #include <QWinEventNotifier>
@@ -188,8 +189,10 @@ void doExit(int exitCode)
     if (controlSocket.state() == QLocalSocket::ConnectedState && controlSocket.bytesToWrite())
         controlSocket.waitForBytesWritten(1000);
 
-    if (!commandLineParser.value("wait").isEmpty()) {
-        std::cout << commandLineParser.value("wait").toStdString() << std::endl;
+    const QString wait = commandLineParser.value("wait");
+    if (!wait.isEmpty()) {
+        QTextStream cout(stdout);
+        cout << wait.arg(exitCode) << Qt::endl;
 
         waitingForExitKeyPress = true;
         onKeyPress([] { doExit(0); });
