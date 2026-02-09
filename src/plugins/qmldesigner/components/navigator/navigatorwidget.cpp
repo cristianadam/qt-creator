@@ -148,9 +148,7 @@ QList<QWidget *> NavigatorWidget::createToolBarWidgets()
     button = new QToolButton();
     button->setIcon(cIcon);
     button->setCheckable(true);
-    bool colorizeFlag = designerSettings()
-                           .value(DesignerSettingsKey::NAVIGATOR_COLORIZE_ICONS)
-                           .toBool();
+    bool colorizeFlag = designerSettings().navigatorColorizeIcons();
     button->setChecked(colorizeFlag);
     button->setToolTip(tr("Colorize Component Icons"));
     connect(button, &QAbstractButton::toggled, this, &NavigatorWidget::colorizeToggled);
@@ -167,9 +165,7 @@ QList<QWidget *> NavigatorWidget::createToolBarWidgets()
     button = new QToolButton();
     button->setIcon(refIcon);
     button->setCheckable(true);
-    bool referenceFlag = designerSettings()
-                             .value(DesignerSettingsKey::NAVIGATOR_SHOW_REFERENCE_NODES)
-                             .toBool();
+    bool referenceFlag = designerSettings().navigatorShowReferenceNodes();
     button->setChecked(referenceFlag);
     button->setToolTip(tr("Show reference nodes"));
     connect(button, &QAbstractButton::toggled, this, &NavigatorWidget::referenceToggled);
@@ -186,9 +182,7 @@ QList<QWidget *> NavigatorWidget::createToolBarWidgets()
     button = new QToolButton();
     button->setIcon(vIcon);
     button->setCheckable(true);
-    bool visibleFlag = designerSettings()
-                           .value(DesignerSettingsKey::NAVIGATOR_SHOW_ONLY_VISIBLE_ITEMS)
-                           .toBool();
+    bool visibleFlag = designerSettings().navigatorShowOnlyVisibleItems();
     button->setChecked(visibleFlag);
     button->setToolTip(tr("Show Only Visible Components"));
     connect(button, &QAbstractButton::toggled, this, &NavigatorWidget::filterToggled);
@@ -205,9 +199,7 @@ QList<QWidget *> NavigatorWidget::createToolBarWidgets()
     button = new QToolButton();
     button->setIcon(rIcon);
     button->setCheckable(true);
-    bool reverseFlag = designerSettings()
-                           .value(DesignerSettingsKey::NAVIGATOR_REVERSE_ITEM_ORDER)
-                           .toBool();
+    bool reverseFlag = designerSettings().navigatorReverseItemOrder();
     button->setChecked(reverseFlag);
     button->setToolTip(tr("Reverse Component Order"));
     connect(button, &QAbstractButton::toggled, this, &NavigatorWidget::reverseOrderToggled);

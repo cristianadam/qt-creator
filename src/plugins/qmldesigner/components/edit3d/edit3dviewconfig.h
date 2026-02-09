@@ -43,11 +43,6 @@ public:
         return designerSettings().value(key, defaultValue);
     }
 
-    static void save(const QByteArray &key, const QVariant &value)
-    {
-        designerSettings().insert(key, value);
-    }
-
     static void setColors(AbstractView *view, const AuxiliaryDataKeyView &auxProp, const QList<QColor> &colorConfig)
     {
         QVariant param;

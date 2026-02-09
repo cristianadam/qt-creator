@@ -5,6 +5,8 @@
 
 #include "qmldesignersettings_global.h"
 
+#include <utils/aspects.h>
+
 #include <QHash>
 #include <QVariant>
 #include <QByteArray>
@@ -14,73 +16,67 @@ namespace Utils { class QtcSettings; }
 
 namespace QmlDesigner {
 
-namespace DesignerSettingsKey {
-inline constexpr char ITEMSPACING[] = "ItemSpacing";
-inline constexpr char CONTAINERPADDING[] = "ContainerPadding";
-inline constexpr char CANVASWIDTH[] = "CanvasWidth";
-inline constexpr char CANVASHEIGHT[] = "CanvasHeight";
-inline constexpr char ROOT_ELEMENT_INIT_WIDTH[] = "RootElementInitWidth";
-inline constexpr char ROOT_ELEMENT_INIT_HEIGHT[] = "RootElementInitHeight";
-inline constexpr char WARNING_FOR_FEATURES_IN_DESIGNER[] = "WarnAboutQtQuickFeaturesInDesigner";
-inline constexpr char WARNING_FOR_QML_FILES_INSTEAD_OF_UIQML_FILES[]
-    = "WarnAboutQmlFilesInsteadOfUiQmlFiles";
-inline constexpr char WARNING_FOR_DESIGNER_FEATURES_IN_EDITOR[]
-    = "WarnAboutQtQuickDesignerFeaturesInCodeEditor";
-inline constexpr char SHOW_DEBUGVIEW[] = "ShowQtQuickDesignerDebugView";
-inline constexpr char ENABLE_DEBUGVIEW[] = "EnableQtQuickDesignerDebugView";
-inline constexpr char EDIT3DVIEW_BACKGROUND_COLOR[] = "Edit3DViewBackgroundColor";
-inline constexpr char EDIT3DVIEW_GRID_COLOR[] = "Edit3DViewGridLineColor";
-inline constexpr char EDIT3DVIEW_SNAP_ABSOLUTE[] = "Edit3DViewSnapAbsolute";
-inline constexpr char EDIT3DVIEW_SNAP_ENABLED[] = "Edit3DViewSnapEnabled";
-inline constexpr char EDIT3DVIEW_SNAP_POSITION[] = "Edit3DViewSnapPosition";
-inline constexpr char EDIT3DVIEW_SNAP_POSITION_INTERVAL[] = "Edit3DViewSnapPositionInterval";
-inline constexpr char EDIT3DVIEW_SNAP_ROTATION[] = "Edit3DViewSnapRotation";
-inline constexpr char EDIT3DVIEW_SNAP_ROTATION_INTERVAL[] = "Edit3DViewSnapRotationInterval";
-inline constexpr char EDIT3DVIEW_SNAP_SCALE[] = "Edit3DViewSnapScale";
-inline constexpr char EDIT3DVIEW_SNAP_SCALE_INTERVAL[] = "Edit3DViewSnapScaleInterval";
-inline constexpr char ALWAYS_SAVE_IN_CRUMBLEBAR[] = "AlwaysSaveInCrumbleBar";
-inline constexpr char CONTROLS_STYLE[] = "ControlsStyle";
-inline constexpr char TYPE_OF_QSTR_FUNCTION[] = "TypeOfQsTrFunction";
-inline constexpr char SHOW_PROPERTYEDITOR_WARNINGS[] = "ShowPropertyEditorWarnings";
-inline constexpr char ENABLE_MODEL_EXCEPTION_OUTPUT[] = "WarnException";
-inline constexpr char PUPPET_KILL_TIMEOUT[] = "PuppetKillTimeout";
-inline constexpr char DEBUG_PUPPET[] = "DebugPuppet";
-inline constexpr char FORWARD_PUPPET_OUTPUT[] = "ForwardPuppetOutput";
-inline constexpr char NAVIGATOR_SHOW_REFERENCE_NODES[] = "NavigatorShowReferenceNodes";
-inline constexpr char NAVIGATOR_SHOW_ONLY_VISIBLE_ITEMS[] = "NavigatorShowOnlyVisibleItems";
-inline constexpr char NAVIGATOR_REVERSE_ITEM_ORDER[] = "NavigatorReverseItemOrder";
-inline constexpr char NAVIGATOR_COLORIZE_ICONS[] = "NavigatorColorizeIcons";
-inline constexpr char REFORMAT_UI_QML_FILES[]
-    = "ReformatUiQmlFiles"; /* These settings are not exposed in ui. */
-inline constexpr char IGNORE_DEVICE_PIXEL_RATIO[]
-    = "IgnoreDevicePixelRaio"; /* The settings can be used to turn off the feature, if there are serious issues */
-inline constexpr char SHOW_DEBUG_SETTINGS[] = "ShowDebugSettings";
-inline constexpr char ENABLE_TIMELINEVIEW[] = "EnableTimelineView";
-inline constexpr char ENABLE_DOCKWIDGET_CONTENT_MIN_SIZE[] = "EnableDockWidgetContentMinSize";
-inline constexpr char COLOR_PALETTE_RECENT[] = "ColorPaletteRecent";
-inline constexpr char COLOR_PALETTE_FAVORITE[] = "ColorPaletteFavorite";
-inline constexpr char ALWAYS_DESIGN_MODE[] = "AlwaysDesignMode";
-inline constexpr char DISABLE_ITEM_LIBRARY_UPDATE_TIMER[] = "DisableItemLibraryUpdateTimer";
-inline constexpr char ASK_BEFORE_DELETING_ASSET[] = "AskBeforeDeletingAsset";
-inline constexpr char ASK_BEFORE_DELETING_CONTENTLIB_FILE[] = "AskBeforeDeletingContentLibFile";
-inline constexpr char SMOOTH_RENDERING[] = "SmoothRendering";
-inline constexpr char EDITOR_ZOOM_FACTOR[] = "EditorZoomFactor";
-inline constexpr char ACTIONS_MERGE_TEMPLATE_ENABLED[] = "ActionsMergeTemplateEnabled";
-inline constexpr char DOWNLOADABLE_BUNDLES_URL[] = "DownloadableBundlesLocation";
-inline constexpr char CONTENT_LIBRARY_NEW_FLAG_EXPIRATION_DAYS[] = "ContentLibraryNewFlagExpirationInDays";
-inline constexpr char GROQ_API_KEY[] = "GroqApiKey";
-}
-
-class QMLDESIGNERSETTINGS_EXPORT DesignerSettings
+class QMLDESIGNERSETTINGS_EXPORT DesignerSettings : public Utils::AspectContainer
 {
 public:
     DesignerSettings();
 
-    void insert(const QByteArray &key, const QVariant &value);
-    void insert(const QHash<QByteArray, QVariant> &settingsHash);
-    QVariant value(const QByteArray &key, const QVariant &defaultValue = {}) const;
+    Utils::IntegerAspect itemSpacing{this};
+    Utils::IntegerAspect containerPadding{this};
+    Utils::IntegerAspect canvasWidth{this};
+    Utils::IntegerAspect canvasHeight{this};
+    Utils::IntegerAspect rootElementInitWidth{this};
+    Utils::IntegerAspect rootElementInitHeight{this};
+    Utils::BoolAspect warningForFeaturesInDesigner{this};
+    Utils::BoolAspect warningForQmlFilesInsteadOfUiQmlFiles{this};
+    Utils::BoolAspect warningForDesignerFeaturesInEditor{this};
+    Utils::BoolAspect showDebugView{this};
+    Utils::BoolAspect enableDebugView{this};
+    Utils::StringListAspect edit3DViewBackgroundColor{this};
+    Utils::StringAspect edit3DViewGridLineColor{this};
+    Utils::BoolAspect edit3DViewSnapAbsolute{this};
+    Utils::BoolAspect edit3DViewSnapEnabled{this};
+    Utils::BoolAspect edit3DViewSnapPosition{this};
+    Utils::DoubleAspect edit3DViewSnapPositionInterval{this};
+    Utils::BoolAspect edit3DViewSnapRotation{this};
+    Utils::DoubleAspect edit3DViewSnapRotationInterval{this};
+    Utils::BoolAspect edit3DViewSnapScale{this};
+    Utils::DoubleAspect edit3DViewSnapScaleInterval{this};
+    Utils::BoolAspect particleMode{this};
+    Utils::BoolAspect alwaysSaveInCrumbleBar{this};
+    Utils::StringAspect controlsStyle{this};
+    Utils::SelectionAspect controls2Style{this};
+    Utils::SelectionAspect typeOfQsTrFunction{this};
+    Utils::BoolAspect showPropertyEditorWarnings{this};
+    Utils::BoolAspect enableModelExceptionOutput{this};
+    Utils::IntegerAspect puppetKillTimeout{this};
+    Utils::SelectionAspect debugPuppet{this};
+    Utils::SelectionAspect forwardPuppetOutput{this};
+    Utils::BoolAspect navigatorShowReferenceNodes{this};
+    Utils::BoolAspect navigatorShowOnlyVisibleItems{this};
+    Utils::BoolAspect navigatorReverseItemOrder{this};
+    Utils::BoolAspect navigatorColorizeIcons{this};
+    Utils::BoolAspect reformatUiQmlFiles{this};
+    Utils::BoolAspect ignoreDevicePixelRatio{this};
+    Utils::BoolAspect showDebugSettings{this};
+    Utils::BoolAspect enableTimelineView{this};
+    Utils::BoolAspect enableDockWidgetContentMinSize{this};
+    Utils::StringListAspect colorPaletteRecent{this};
+    Utils::StringListAspect colorPaletteFavorite{this};
+    Utils::BoolAspect alwaysDesignMode{this};
+    Utils::BoolAspect disableItemLibraryUpdateTimer{this};
+    Utils::BoolAspect askBeforeDeletingAsset{this};
+    Utils::BoolAspect askBeforeDeletingContentLibFile{this};
+    Utils::BoolAspect smoothRendering{this};
+    Utils::DoubleAspect editorZoomFactor{this};
+    Utils::BoolAspect actionsMergeTemplateEnabled{this};
+    Utils::StringAspect downloadableBundlesLocation{this};
+    Utils::IntegerAspect contentLibraryNewFlagExpirationInDays{this};
+    Utils::StringAspect groqApiKey{this};
 
 private:
+    void apply() override;
+
     void fromSettings(Utils::QtcSettings *);
     void toSettings(Utils::QtcSettings *) const;
 

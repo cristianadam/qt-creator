@@ -248,7 +248,7 @@ static bool documentIsAlreadyOpen(DesignDocument *designDocument, Core::IEditor 
 
 static bool warningsForQmlFilesInsteadOfUiQmlEnabled()
 {
-    return designerSettings().value(DesignerSettingsKey::WARNING_FOR_QML_FILES_INSTEAD_OF_UIQML_FILES).toBool();
+    return designerSettings().warningForQmlFilesInsteadOfUiQmlFiles();
 }
 
 QmlDesignerPlugin::QmlDesignerPlugin()
@@ -300,9 +300,7 @@ Utils::Result<> QmlDesignerPlugin::initialize(const QStringList &)
     Quick2PropertyEditorView::registerQmlTypes();
     StudioQuickWidget::registerDeclarativeType();
 
-    Exception::setWarnAboutException(!designerSettings()
-                                          .value(DesignerSettingsKey::ENABLE_MODEL_EXCEPTION_OUTPUT)
-                                          .toBool());
+    Exception::setWarnAboutException(!designerSettings().enableModelExceptionOutput());
 
     Exception::setShowExceptionCallback([&](QStringView title, QStringView description) {
         const QString composedTitle = title.isEmpty() ? Tr::tr("Error") : title.toString();

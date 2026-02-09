@@ -31,17 +31,13 @@ void InteractiveConnectionManager::setUp(NodeInstanceServerInterface *nodeInstan
 {
     ConnectionManager::setUp(nodeInstanceServer, qrcMappingString, target, view, externalDependencies);
 
-    int timeOutTime = designerSettings()
-            .value(DesignerSettingsKey::PUPPET_KILL_TIMEOUT).toInt();
+    int timeOutTime = designerSettings().puppetKillTimeout();
     for (Connection &connection : connections()) {
         connection.timer.reset(new QTimer);
         connection.timer->setInterval(timeOutTime);
     }
 
-    if (designerSettings()
-            .value(DesignerSettingsKey::DEBUG_PUPPET)
-            .toString()
-            .isEmpty()) {
+    if (designerSettings().debugPuppet.stringValue().isEmpty()) {
         for (Connection &connection : connections()) {
             QObject::connect(connection.timer.get(), &QTimer::timeout, [&]() {
                 puppetTimeout(connection);

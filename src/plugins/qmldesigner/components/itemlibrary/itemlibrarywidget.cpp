@@ -306,9 +306,8 @@ void ItemLibraryWidget::delayedUpdateModel()
 {
     NanotraceHR::Tracer tracer{"item library widget delayed update model", category()};
 
-    static bool disableTimer = designerSettings()
-                                   .value(DesignerSettingsKey::DISABLE_ITEM_LIBRARY_UPDATE_TIMER)
-                                   .toBool();
+    static bool disableTimer = designerSettings().disableItemLibraryUpdateTimer();
+
     if (disableTimer)
         updateModel();
     else

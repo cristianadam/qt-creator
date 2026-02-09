@@ -51,7 +51,7 @@ constexpr QStringView annotationsEnd{u"##^##*/"};
 
 bool debugQmlPuppet(const DesignerSettings &settings)
 {
-    const QString debugPuppet = settings.value(DesignerSettingsKey::DEBUG_PUPPET).toString();
+    const QString debugPuppet = settings.debugPuppet.stringValue();
     return !debugPuppet.isEmpty();
 }
 
