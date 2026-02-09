@@ -56,6 +56,7 @@ public:
     Utils::TypedSelectionAspect<StopBeforeBuild> stopBeforeBuild{this};
     Utils::TypedSelectionAspect<TerminalMode> terminalMode{this};
     Utils::TypedAspect<Utils::EnvironmentItems> appEnvChanges{this};
+    Utils::StringAspect appEnvChangeDisplay{this};
 
     Utils::BoolAspect useCurrentDirectory{this};
     Utils::BoolAspect useProjectDirectory{this};
