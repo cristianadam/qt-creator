@@ -57,6 +57,10 @@ public:
     Utils::TypedSelectionAspect<TerminalMode> terminalMode{this};
     Utils::TypedAspect<Utils::EnvironmentItems> appEnvChanges{this};
 
+    Utils::BoolAspect useCurrentDirectory{this};
+    Utils::BoolAspect useProjectDirectory{this};
+    Utils::FilePathAspect projectsDirectory{this};
+
     // Add a UUid which is used to identify the development environment.
     // This is used to warn the user when he is trying to open a .user file that was created
     // somewhere else (which might lead to unexpected results).
