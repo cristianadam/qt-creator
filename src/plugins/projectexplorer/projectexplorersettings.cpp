@@ -180,7 +180,112 @@ ProjectExplorerSettings::ProjectExplorerSettings(bool global)
     // appEnvChanges = EnvironmentItem::fromStringList(
     //     s->value("ProjectExplorer/Settings/AppEnvChanes").toStringList());
 
+    const QString appEnvToolTip = Tr::tr("Environment changes to apply to run configurations, "
+                                         "but not build configurations.");
+
+    appEnvChangeDisplay.setDisplayStyle(StringAspect::LabelDisplay);
+    appEnvChangeDisplay.setLabelText(Tr::tr("Application environment:"));
+    appEnvChangeDisplay.setElideMode(Qt::ElideRight);
+    appEnvChangeDisplay.setToolTip(appEnvToolTip);
+
     environmentId.setSettingsKey("EnvironmentId");
+
+    auto updateAppEnvChangesLabel = [this] {
+        const EnvironmentItems changes = appEnvChanges.volatileValue();
+        appEnvChangeDisplay.setValue(EnvironmentItem::toShortSummary(changes));
+    };
+
+    setLayouter([this, appEnvToolTip, updateAppEnvChangesLabel] {
+        using namespace Layouting;
+
+        PushButton appEnvButton {
+            text(Tr::tr("Change...")),
+            Layouting::toolTip(appEnvToolTip),
+            Layouting::sizePolicy(QSizePolicy{QSizePolicy::Fixed, QSizePolicy::Preferred}),
+            onClicked(this, [this, updateAppEnvChangesLabel] {
+                const std::optional<EnvironmentItems> changes =
+                        runEnvironmentItemsDialog(dialogParent(), appEnvChanges.volatileValue());
+                if (!changes)
+                    return;
+                appEnvChanges.setVolatileValue(*changes);
+                updateAppEnvChangesLabel();
+            })
+        };
+
+        return
+            Column {
+                Group {
+                    title(Tr::tr("Projects Directory")),
+                    Column {
+                        useCurrentDirectory,
+                        Row { useProjectDirectory, projectsDirectory },
+                    }
+                },
+                Group {
+                    title(Tr::tr("Closing Projects")),
+                    Column {
+                        closeSourceFilesWithProject
+                    },
+                },
+                Group {
+                    title(Tr::tr("Build and Run")),
+                    Column {
+                        saveBeforeBuild,
+                        deployBeforeRun,
+                        addLibraryPathsToRunEnv,
+                        promptToStopRunControl,
+                        automaticallyCreateRunConfigurations,
+                        clearIssuesOnRebuild,
+                        abortBuildAllOnError,
+                        lowBuildPriority,
+                        warnAgainstNonAsciiBuildDir,
+                        Form {
+                            kitFilter, br,
+                            appEnvChangeDisplay, appEnvButton, br,
+                            buildBeforeDeploy, br,
+                            stopBeforeBuild, br,
+                            terminalMode, br,
+                            syncRunConfigurations, br,
+                            reaperTimeoutInSeconds, st, br,
+                        },
+                        If (HostOsInfo::isWindowsHost()) >> Then {
+                            Label {
+                                text("<i>jom</i> is a drop-in replacement for <i>nmake</i> which "
+                                     "distributes the compilation process to multiple CPU core "
+                                     "The latest binary is available at "
+                                     "<a href=\"http://download.qt.io/official_releases/jom/\">"
+                                     "http://download.qt.io/official_releases/jom/</a>. "
+                                     "Disable it if you experience problems with your builds."),
+                                wordWrap(true)
+                            },
+                            useJom,
+                        }
+                    },
+                },
+                st
+            };
+    });
+
+    useCurrentDirectory.addOnVolatileValueChanged(this, [this] {
+        const bool useCurrent = useCurrentDirectory.volatileValue();
+        useProjectDirectory.setVolatileValue(!useCurrent);
+        projectsDirectory.setEnabled(!useCurrent);
+    });
+    useProjectDirectory.addOnVolatileValueChanged(this, [this] {
+        const bool useProject = useProjectDirectory.volatileValue();
+        useCurrentDirectory.setVolatileValue(!useProject);
+        projectsDirectory.setEnabled(useProject);
+    });
+
+    const bool useProjectDirs = DocumentManager::useProjectsDirectory();
+    useCurrentDirectory.setValue(!useProjectDirs);
+    useProjectDirectory.setValue(useProjectDirs);
+
+    projectsDirectory.setValue(DocumentManager::projectsDirectory());
+
+            updateAppEnvChangesLabel();
+
+    connect(this, &AspectContainer::volatileValueChanged, &checkSettingsDirty);
 
     if (global)
         readSettings();
@@ -235,9 +340,18 @@ Project *ProjectExplorerSettings::projectForContext(QObject *context)
     return nullptr;
 }
 
-namespace Internal {
+void ProjectExplorerSettings::apply()
+{
+    if (isDirty()) {
+        AspectContainer::apply();
+        writeSettings();
+    }
 
-enum { UseCurrentDirectory, UseProjectDirectory };
+    DocumentManager::setProjectsDirectory(projectsDirectory());
+    DocumentManager::setUseProjectsDirectory(useProjectDirectory());
+}
+
+namespace Internal {
 
 void setPromptToStopSettings(bool promptToStop)
 {
@@ -252,142 +366,6 @@ void setSaveBeforeBuildSettings(bool saveBeforeBuild)
     globalProjectExplorerSettings().writeSettings();
 }
 
-class ProjectExplorerSettingsWidget : public IOptionsPageWidget
-{
-public:
-    ProjectExplorerSettingsWidget();
-
-    void apply() final
-    {
-        ProjectExplorerSettings &settings = globalProjectExplorerSettings();
-        if (settings.isDirty()) {
-            settings.apply();
-            settings.writeSettings();
-        }
-
-        DocumentManager::setProjectsDirectory(settings.projectsDirectory());
-        DocumentManager::setUseProjectsDirectory(settings.useProjectDirectory());
-    }
-
-    void cancel() final
-    {
-        globalProjectExplorerSettings().cancel();
-    }
-
-    bool isDirty() const final
-    {
-        return globalProjectExplorerSettings().isDirty();
-    }
-};
-
-ProjectExplorerSettingsWidget::ProjectExplorerSettingsWidget()
-{
-    ProjectExplorerSettings &s = globalProjectExplorerSettings();
-
-    auto updateAppEnvChangesLabel = [&s] {
-        const EnvironmentItems changes = s.appEnvChanges.volatileValue();
-        s.appEnvChangeDisplay.setValue(EnvironmentItem::toShortSummary(changes));
-    };
-
-    const QString appEnvToolTip = Tr::tr("Environment changes to apply to run configurations, "
-                                         "but not build configurations.");
-
-    s.appEnvChangeDisplay.setDisplayStyle(StringAspect::LabelDisplay);
-    s.appEnvChangeDisplay.setLabelText(Tr::tr("Application environment:"));
-    s.appEnvChangeDisplay.setElideMode(Qt::ElideRight);
-    s.appEnvChangeDisplay.setToolTip(appEnvToolTip);
-
-    using namespace Layouting;
-
-    PushButton appEnvButton {
-        text(Tr::tr("Change...")),
-        Layouting::toolTip(appEnvToolTip),
-        Layouting::sizePolicy(QSizePolicy{QSizePolicy::Fixed, QSizePolicy::Preferred}),
-        onClicked(this, [this, &s, updateAppEnvChangesLabel] {
-            const std::optional<EnvironmentItems> changes =
-                    runEnvironmentItemsDialog(this, s.appEnvChanges.volatileValue());
-            if (!changes)
-                return;
-            s.appEnvChanges.setVolatileValue(*changes);
-            updateAppEnvChangesLabel();
-        })
-    };
-
-    using namespace Layouting;
-    Column {
-        Group {
-            title(Tr::tr("Projects Directory")),
-            Column {
-                s.useCurrentDirectory,
-                Row { s.useProjectDirectory, s.projectsDirectory },
-            }
-        },
-        Group {
-            title(Tr::tr("Closing Projects")),
-            Column {
-                s.closeSourceFilesWithProject
-            },
-        },
-        Group {
-            title(Tr::tr("Build and Run")),
-            Column {
-                s.saveBeforeBuild,
-                s.deployBeforeRun,
-                s.addLibraryPathsToRunEnv,
-                s.promptToStopRunControl,
-                s.automaticallyCreateRunConfigurations,
-                s.clearIssuesOnRebuild,
-                s.abortBuildAllOnError,
-                s.lowBuildPriority,
-                s.warnAgainstNonAsciiBuildDir,
-                Form {
-                    s.kitFilter, br,
-                    s.appEnvChangeDisplay, appEnvButton, br,
-                    s.buildBeforeDeploy, br,
-                    s.stopBeforeBuild, br,
-                    s.terminalMode, br,
-                    s.syncRunConfigurations, br,
-                    s.reaperTimeoutInSeconds, st, br,
-                },
-                If (HostOsInfo::isWindowsHost()) >> Then {
-                    Label {
-                        text("<i>jom</i> is a drop-in replacement for <i>nmake</i> which "
-                             "distributes the compilation process to multiple CPU cores. "
-                             "The latest binary is available at "
-                             "<a href=\"http://download.qt.io/official_releases/jom/\">"
-                             "http://download.qt.io/official_releases/jom/</a>. "
-                             "Disable it if you experience problems with your builds."),
-                        wordWrap(true)
-                    },
-                    s.useJom,
-                }
-            },
-        },
-        st,
-    }.attachTo(this);
-
-    s.useCurrentDirectory.addOnVolatileValueChanged(this, [&s] {
-        const bool useCurrent = s.useCurrentDirectory.volatileValue();
-        s.useProjectDirectory.setVolatileValue(!useCurrent);
-        s.projectsDirectory.setEnabled(!useCurrent);
-    });
-    s.useProjectDirectory.addOnVolatileValueChanged(this, [&s] {
-        const bool useProject = s.useProjectDirectory.volatileValue();
-        s.useCurrentDirectory.setVolatileValue(!useProject);
-        s.projectsDirectory.setEnabled(useProject);
-    });
-
-    const bool useProjectDirs = DocumentManager::useProjectsDirectory();
-    s.useCurrentDirectory.setValue(!useProjectDirs);
-    s.useProjectDirectory.setValue(useProjectDirs);
-
-    s.projectsDirectory.setValue(DocumentManager::projectsDirectory());
-
-    updateAppEnvChangesLabel();
-
-    connect(&s, &AspectContainer::volatileValueChanged, &checkSettingsDirty);
-}
-
 // ProjectExplorerSettingsPage
 
 class ProjectExplorerSettingsPage final : public IOptionsPage
@@ -398,7 +376,7 @@ public:
         setId(ProjectExplorer::Constants::BUILD_AND_RUN_SETTINGS_PAGE_ID);
         setDisplayName(Tr::tr("General"));
         setCategory(ProjectExplorer::Constants::BUILD_AND_RUN_SETTINGS_CATEGORY);
-        setWidgetCreator([] { return new ProjectExplorerSettingsWidget; });
+        setSettingsProvider([] { return &globalProjectExplorerSettings(); });
     }
 };
 

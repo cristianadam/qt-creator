@@ -69,6 +69,7 @@ public:
 
 private:
     static Project *projectForContext(QObject *context);
+    void apply() final;
 };
 
 PROJECTEXPLORER_EXPORT ProjectExplorerSettings &globalProjectExplorerSettings();
