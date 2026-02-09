@@ -162,7 +162,7 @@ void AiAssistantWidget::handleMessage(const QString &prompt)
         currentQml.remove(startIndex, lengthToRemove);
     }
 
-    QByteArray groqApiKey = designerSettings().value("GroqApiKey", "").toByteArray();
+    QByteArray groqApiKey = designerSettings().groqApiKey().toUtf8();
 
     QNetworkRequest request(QUrl("https://api.groq.com/openai/v1/chat/completions"));
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");

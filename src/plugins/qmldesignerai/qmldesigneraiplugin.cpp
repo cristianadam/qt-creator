@@ -16,7 +16,7 @@ namespace QmlDesigner {
 
 static bool enableAiAssistant()
 {
-    return designerSettings().value(DesignerSettingsKey::GroqApiKey).toBool();
+    return !designerSettings().groqApiKey().isEmpty();
 }
 
 QmlDesignerAiPlugin::QmlDesignerAiPlugin() {}
