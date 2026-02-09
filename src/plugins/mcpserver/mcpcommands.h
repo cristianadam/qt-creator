@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 #pragma once
 
+#include "issuesmanager.h"
+
 #include <QMap>
 #include <QObject>
 #include <QStringList>
@@ -55,7 +57,7 @@ public:
     bool saveSession();
 
     // Issue management commands
-    QStringList listIssues();
+    QJsonObject listIssues();
 
     // TODO: list issues for a File
 
@@ -70,7 +72,7 @@ public:
 
 private:
     // Issues management
-    IssuesManager *m_issuesManager;
+    IssuesManager m_issuesManager;
 };
 
 } // namespace Mcp::Internal

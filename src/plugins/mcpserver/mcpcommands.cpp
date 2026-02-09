@@ -41,10 +41,7 @@ namespace Mcp::Internal {
 
 McpCommands::McpCommands(QObject *parent)
     : QObject(parent)
-{
-    // Initialize issues manager
-    m_issuesManager = new IssuesManager(this);
-}
+{}
 
 QString McpCommands::stopDebug()
 {
@@ -690,24 +687,9 @@ bool McpCommands::saveSession()
     return successB;
 }
 
-QStringList McpCommands::listIssues()
+QJsonObject McpCommands::listIssues()
 {
-    qCDebug(mcpCommands) << "Listing issues from Qt Creator's Issues panel";
-
-    if (!m_issuesManager) {
-        qCDebug(mcpCommands) << "IssuesManager not initialized";
-        return QStringList() << "ERROR:Issues manager not initialized";
-    }
-
-    QStringList issues = m_issuesManager->getCurrentIssues();
-
-    // Add project status information for context
-    if (ProjectExplorer::BuildManager::isBuilding()) {
-        issues.prepend("INFO:Build in progress - issues may not be current");
-    }
-
-    qCDebug(mcpCommands) << "Found" << issues.size() << "issues total";
-    return issues;
+    return m_issuesManager.getCurrentIssues();
 }
 
 // handleSessionLoadRequest method removed - using direct session loading instead
