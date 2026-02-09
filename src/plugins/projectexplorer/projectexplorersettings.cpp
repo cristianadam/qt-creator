@@ -278,36 +278,40 @@ public:
     {
         return globalProjectExplorerSettings().isDirty();
     }
-
-private:
-    void updateAppEnvChangesLabel();
-
-    ElidingLabel *m_appEnvLabel;
 };
 
 ProjectExplorerSettingsWidget::ProjectExplorerSettingsWidget()
 {
     ProjectExplorerSettings &s = globalProjectExplorerSettings();
 
+    auto updateAppEnvChangesLabel = [&s] {
+        const EnvironmentItems changes = s.appEnvChanges.volatileValue();
+        s.appEnvChangeDisplay.setValue(EnvironmentItem::toShortSummary(changes));
+    };
+
     const QString appEnvToolTip = Tr::tr("Environment changes to apply to run configurations, "
                                          "but not build configurations.");
-    const auto appEnvDescriptionLabel = new QLabel(Tr::tr("Application environment:"));
-    appEnvDescriptionLabel->setToolTip(appEnvToolTip);
-    m_appEnvLabel = new Utils::ElidingLabel;
-    m_appEnvLabel->setElideMode(Qt::ElideRight);
-    m_appEnvLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
-    const auto appEnvButton = new QPushButton(Tr::tr("Change..."));
-    appEnvButton->setSizePolicy(QSizePolicy::Fixed, appEnvButton->sizePolicy().verticalPolicy());
-    appEnvButton->setToolTip(appEnvToolTip);
-    connect(appEnvButton, &QPushButton::clicked, this, [appEnvButton, &s, this] {
-        const std::optional<EnvironmentItems> changes =
-                runEnvironmentItemsDialog(appEnvButton, s.appEnvChanges.volatileValue());
-        if (!changes)
-            return;
-        s.appEnvChanges.setVolatileValue(*changes);
-        updateAppEnvChangesLabel();
-    });
+    s.appEnvChangeDisplay.setDisplayStyle(StringAspect::LabelDisplay);
+    s.appEnvChangeDisplay.setLabelText(Tr::tr("Application environment:"));
+    s.appEnvChangeDisplay.setElideMode(Qt::ElideRight);
+    s.appEnvChangeDisplay.setToolTip(appEnvToolTip);
+
+    using namespace Layouting;
+
+    PushButton appEnvButton {
+        text(Tr::tr("Change...")),
+        Layouting::toolTip(appEnvToolTip),
+        Layouting::sizePolicy(QSizePolicy{QSizePolicy::Fixed, QSizePolicy::Preferred}),
+        onClicked(this, [this, &s, updateAppEnvChangesLabel] {
+            const std::optional<EnvironmentItems> changes =
+                    runEnvironmentItemsDialog(this, s.appEnvChanges.volatileValue());
+            if (!changes)
+                return;
+            s.appEnvChanges.setVolatileValue(*changes);
+            updateAppEnvChangesLabel();
+        })
+    };
 
     using namespace Layouting;
     Column {
@@ -338,7 +342,7 @@ ProjectExplorerSettingsWidget::ProjectExplorerSettingsWidget()
                 s.warnAgainstNonAsciiBuildDir,
                 Form {
                     s.kitFilter, br,
-                    appEnvDescriptionLabel, Row{m_appEnvLabel, appEnvButton, st}, br,
+                    s.appEnvChangeDisplay, appEnvButton, br,
                     s.buildBeforeDeploy, br,
                     s.stopBeforeBuild, br,
                     s.terminalMode, br,
@@ -382,12 +386,6 @@ ProjectExplorerSettingsWidget::ProjectExplorerSettingsWidget()
     updateAppEnvChangesLabel();
 
     connect(&s, &AspectContainer::volatileValueChanged, &checkSettingsDirty);
-}
-
-void ProjectExplorerSettingsWidget::updateAppEnvChangesLabel()
-{
-    const EnvironmentItems changes = globalProjectExplorerSettings().appEnvChanges.volatileValue();
-    m_appEnvLabel->setText(EnvironmentItem::toShortSummary(changes));
 }
 
 // ProjectExplorerSettingsPage
