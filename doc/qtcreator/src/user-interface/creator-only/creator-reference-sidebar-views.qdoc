@@ -88,7 +88,7 @@
 
     \summary {Shows the base classes and derived classes of a class.}
 
-    To view type hierarchy of a class:
+    To view the type hierarchy of a class:
 
     \list 1
         \li Right-click a class in the code editor.
@@ -97,18 +97,10 @@
 
     \image {qtcreator-type-hierarchy-view.webp} {Type Hierarchy view}
 
-    To navigate in the type hierarchy:
-
-    \list
-        \li Double-click a class or select it.
-        \li Select \uicontrol {Open Type Hierarchy} in the context menu.
-    \endlist
+    To navigate in the type hierarchy, double-click a class or select it.
+    The definition of the selected class opens in the code editor.
 
     The view highlights the previous class.
-
-    The definition of the selected class opens in the code editor. You
-    can also select \uicontrol {Open in Editor} in the context menu to open
-    it.
 */
 
 /*!

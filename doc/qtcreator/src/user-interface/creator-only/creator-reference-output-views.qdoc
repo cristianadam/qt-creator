@@ -115,7 +115,7 @@
     \ingroup creator-reference-views
     \ingroup creator-reference-output-views
 
-    \title Search Results View
+    \title Search Results view
 
     \brief Search through projects, files on a file system or the
     currently open files and view search results.
@@ -154,7 +154,7 @@
 
     \image {qtcreator-search-file-system.webp} {Search Results view with search options}
 
-    \section1 Viewing Search Results
+    \section1 Viewing search results
 
     After you select \uicontrol Search or \uicontrol {Search & Replace}, the view
     shows a list of files that have search hits.
@@ -174,7 +174,7 @@
     To repeat the search after you have made changes to the listed files,
     for example, select \uicontrol {Search Again}.
 
-    \section1 Search Results View Toolbar
+    \section1 Search Results view toolbar
 
     The toolbar contains options for searching again and navigating search
     results:
@@ -227,7 +227,7 @@
     Select toolbar buttons to run applications, to attach the debugger to the
     running application, and to stop running or debugging.
 
-    \section1 Application Output Preferences
+    \section1 Application Output preferences
 
     To set preferences for displaying application output:
 
@@ -258,7 +258,7 @@
 
     \brief Shows all output from the compiler.
 
-    \uicontrol{Compile Output} shows a more detailed version of information
+    \uicontrol{Compile Output} shows a more detailed version of the information
     displayed in \l Issues.
 
     \image {qtcreator-compile-output.webp} {Compile Output}
@@ -273,7 +273,7 @@
     you want to examine it later without having to build the project again.
     This is useful for large projects that take a long time to build.
 
-    \section1 Compile Output Preferences
+    \section1 Compile Output preferences
 
     To specify whether to open the \uicontrol {Compile Output} view on output
     when building applications:

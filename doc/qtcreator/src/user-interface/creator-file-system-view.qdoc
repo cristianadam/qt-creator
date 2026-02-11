@@ -46,7 +46,7 @@
     The view displays the path to the active file as bread crumbs. You can move
     to any directory along the path by clicking it.
 
-    \section1 File System Context Menu
+    \section1 File System context menu
 
     Use the context menu functions to:
 
@@ -78,7 +78,7 @@
         \li Collapse all open folders.
     \endlist
 
-    \section1 File System View Toolbar
+    \section1 File System view toolbar
 
     The toolbar in the \uicontrol {File System} view has additional
     options.
