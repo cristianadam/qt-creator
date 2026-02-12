@@ -594,14 +594,14 @@ void CppFileSettingsForProject::saveSettings()
 class CppFileSettingsForProjectWidget : public ProjectExplorer::ProjectSettingsWidget
 {
 public:
-    CppFileSettingsForProjectWidget(const CppFileSettingsForProject &settings)
-        : m_settings(settings),
-        m_initialSettings(settings.settings()),
+    CppFileSettingsForProjectWidget(Project *project) :
+        m_settings(project),
+        m_initialSettings(m_settings.settings()),
         m_widget(&m_initialSettings),
-        m_wasGlobal(settings.useGlobalSettings())
+        m_wasGlobal(m_settings.useGlobalSettings())
     {
         setGlobalSettingsId(Constants::CPP_FILE_SETTINGS_ID);
-        setUseGlobalSettings(settings.useGlobalSettings());
+        setUseGlobalSettings(m_settings.useGlobalSettings());
 
         const auto layout = new QVBoxLayout(this);
         layout->setContentsMargins(0, 0, 0, 0);
