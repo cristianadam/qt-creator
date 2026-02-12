@@ -272,7 +272,9 @@ class CppFileSettingsWidget final : public Core::IOptionsPageWidget
     Q_OBJECT
 
 public:
-    explicit CppFileSettingsWidget(CppFileSettings *settings);
+    CppFileSettingsWidget() = default;
+
+    void setup(CppFileSettings *settings);
 
     void apply() final;
     void setSettings(const CppFileSettings &s);
@@ -301,18 +303,19 @@ private:
     HeaderGuardExpander m_headerGuardExpander{{}};
 };
 
-CppFileSettingsWidget::CppFileSettingsWidget(CppFileSettings *settings)
-    : m_settings(settings)
-    , m_headerSuffixComboBox(new QComboBox)
-    , m_headerSearchPathsEdit(new QLineEdit)
-    , m_headerPrefixesEdit(new QLineEdit)
-    , m_headerPragmaOnceCheckBox(new QCheckBox(Tr::tr("Use \"#pragma once\" instead")))
-    , m_sourceSuffixComboBox(new QComboBox)
-    , m_sourceSearchPathsEdit(new QLineEdit)
-    , m_sourcePrefixesEdit(new QLineEdit)
-    , m_lowerCaseFileNamesCheckBox(new QCheckBox(Tr::tr("&Lower case file names")))
-    , m_licenseTemplatePathChooser(new PathChooser)
+void CppFileSettingsWidget::setup(CppFileSettings *settings)
 {
+    m_settings = settings;
+    m_headerSuffixComboBox = new QComboBox;
+    m_headerSearchPathsEdit = new QLineEdit;
+    m_headerPrefixesEdit = new QLineEdit;
+    m_headerPragmaOnceCheckBox = new QCheckBox(Tr::tr("Use \"#pragma once\" instead"));
+    m_sourceSuffixComboBox = new QComboBox;
+    m_sourceSearchPathsEdit = new QLineEdit;
+    m_sourcePrefixesEdit = new QLineEdit;
+    m_lowerCaseFileNamesCheckBox = new QCheckBox(Tr::tr("&Lower case file names"));
+    m_licenseTemplatePathChooser = new PathChooser;
+
     m_headerSearchPathsEdit->setToolTip(Tr::tr("Comma-separated list of header paths.\n"
         "\n"
         "Paths can be absolute or relative to the directory of the current open document.\n"
@@ -510,7 +513,11 @@ public:
         setId(Constants::CPP_FILE_SETTINGS_ID);
         setDisplayName(Tr::tr("File Naming"));
         setCategory(Constants::CPP_SETTINGS_CATEGORY);
-        setWidgetCreator([] { return new CppFileSettingsWidget(&globalCppFileSettings()); });
+        setWidgetCreator([] {
+            auto w = new CppFileSettingsWidget;
+            w->setup(&globalCppFileSettings());
+            return w;
+        });
     }
 };
 
@@ -595,11 +602,12 @@ class CppFileSettingsForProjectWidget : public ProjectExplorer::ProjectSettingsW
 {
 public:
     CppFileSettingsForProjectWidget(Project *project) :
-        m_settings(project),
-        m_initialSettings(m_settings.settings()),
-        m_widget(&m_initialSettings),
-        m_wasGlobal(m_settings.useGlobalSettings())
+        m_settings(project)
     {
+        m_initialSettings = m_settings.settings();
+        m_wasGlobal = m_settings.useGlobalSettings();
+        m_widget.setup(&m_initialSettings);
+
         setGlobalSettingsId(Constants::CPP_FILE_SETTINGS_ID);
         setUseGlobalSettings(m_settings.useGlobalSettings());
 
@@ -642,7 +650,7 @@ public:
     CppFileSettings m_initialSettings;
     CppFileSettingsWidget m_widget;
     QCheckBox m_useGlobalSettingsCheckBox;
-    const bool m_wasGlobal;
+    bool m_wasGlobal;
 };
 
 class CppFileSettingsProjectPanelFactory final : public ProjectPanelFactory
