@@ -3,39 +3,36 @@
 
 #pragma once
 
-#include "cppeditorconstants.h"
-
 #include <coreplugin/dialogs/ioptionspage.h>
-
-#include <QDir>
+#include <utils/aspects.h>
 
 namespace ExtensionSystem { class IPlugin; }
 namespace ProjectExplorer { class Project; }
 
 namespace CppEditor::Internal {
 
-class CppFileSettings
+class CppFileSettings : public Utils::AspectContainer
 {
 public:
-    QStringList headerPrefixes;
-    QString headerSuffix = "h";
-    QStringList headerSearchPaths = {"include",
-                                     "Include",
-                                     QDir::toNativeSeparators("../include"),
-                                     QDir::toNativeSeparators("../Include")};
-    QStringList sourcePrefixes;
-    QString sourceSuffix = "cpp";
-    QStringList sourceSearchPaths = {QDir::toNativeSeparators("../src"),
-                                     QDir::toNativeSeparators("../Src"),
-                                     ".."};
-    Utils::FilePath licenseTemplatePath;
-    QString headerGuardTemplate
-        = "%{JS: '%{Header:FileName}'.toUpperCase().replace(/^[1-9]/, '_').replace(/[^_a-zA-Z1-9]/g, '_')}";
-    bool headerPragmaOnce = false;
-    bool lowerCaseFiles = Constants::LOWERCASE_CPPFILES_DEFAULT;
+    CppFileSettings();
+    CppFileSettings(const CppFileSettings &other);
 
-    void toSettings(Utils::QtcSettings *) const;
-    void fromSettings(Utils::QtcSettings *);
+    void operator=(const CppFileSettings &other);
+
+    Utils::StringListAspect headerPrefixes{this};
+    Utils::StringAspect headerSuffix{this};
+    Utils::StringListAspect headerSearchPaths{this};
+
+    Utils::StringListAspect sourcePrefixes{this};
+    Utils::StringAspect sourceSuffix{this};
+    Utils::StringListAspect sourceSearchPaths{this};
+
+    Utils::FilePathAspect licenseTemplatePath{this};
+    Utils::StringAspect headerGuardTemplate{this};
+
+    Utils::BoolAspect headerPragmaOnce{this};
+    Utils::BoolAspect lowerCaseFiles{this};
+
     void addMimeInitializer() const;
     bool applySuffixesToMimeDB();
 
@@ -45,7 +42,6 @@ public:
     // Expanded headerGuardTemplate.
     QString headerGuard(const Utils::FilePath &headerFilePath) const;
 
-    bool equals(const CppFileSettings &rhs) const;
     bool operator==(const CppFileSettings &s) const { return equals(s); }
     bool operator!=(const CppFileSettings &s) const { return !equals(s); }
 };

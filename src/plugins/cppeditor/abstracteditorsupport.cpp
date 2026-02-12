@@ -29,7 +29,7 @@ QString licenseTemplate(ProjectExplorer::Project *project,
 
 bool usePragmaOnce(ProjectExplorer::Project *project)
 {
-    return Internal::cppFileSettingsForProject(project).headerPragmaOnce;
+    return Internal::cppFileSettingsForProject(project).headerPragmaOnce();
 }
 
 } // CppEditor

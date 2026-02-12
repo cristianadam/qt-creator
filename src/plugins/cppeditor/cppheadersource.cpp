@@ -102,8 +102,8 @@ static QStringList baseNamesWithAllPrefixes(const CppFileSettings &settings,
                                             const QStringList &baseNames, bool isHeader)
 {
     QStringList result;
-    const QStringList &sourcePrefixes = settings.sourcePrefixes;
-    const QStringList &headerPrefixes = settings.headerPrefixes;
+    const QStringList sourcePrefixes = settings.sourcePrefixes();
+    const QStringList headerPrefixes = settings.headerPrefixes();
 
     for (const QString &name : baseNames) {
         for (const QString &prefix : isHeader ? headerPrefixes : sourcePrefixes) {
@@ -213,8 +213,8 @@ FilePath correspondingHeaderOrSource(const FilePath &filePath, bool *wasHeader, 
     const QDir absoluteDir = filePath.toFileInfo().absoluteDir();
     QStringList candidateDirs(absoluteDir.absolutePath());
     // If directory is not root, try matching against its siblings
-    const QStringList searchPaths = isHeader ? settings.sourceSearchPaths
-                                             : settings.headerSearchPaths;
+    const QStringList searchPaths = isHeader ? settings.sourceSearchPaths()
+                                             : settings.headerSearchPaths();
     candidateDirs += baseDirWithAllDirectories(absoluteDir, searchPaths);
 
     candidateFileNames += baseNamesWithAllPrefixes(settings, candidateFileNames, isHeader);
@@ -335,24 +335,23 @@ void HeaderSourceTest::initTestCase()
 {
     QDir(baseTestDir()).mkpath(_("."));
     CppFileSettings &fs = globalCppFileSettings();
-    fs.headerSearchPaths.append(QLatin1String("include"));
-    fs.headerSearchPaths.append(QLatin1String("../include"));
-    fs.sourceSearchPaths.append(QLatin1String("src"));
-    fs.sourceSearchPaths.append(QLatin1String("../src"));
-    fs.headerPrefixes.append(QLatin1String("testh_"));
-    fs.sourcePrefixes.append(QLatin1String("testc_"));
+    fs.headerSearchPaths.setValue(fs.headerSearchPaths() + QStringList{"include", "../include"});
+    fs.sourceSearchPaths.setValue(fs.sourceSearchPaths() + QStringList{"src", "../src"});
+    fs.headerPrefixes.setValue(fs.headerPrefixes() + QStringList{"testh_"});
+    fs.sourcePrefixes.setValue(fs.sourcePrefixes() + QStringList{"testc_"});
 }
 
 void HeaderSourceTest::cleanupTestCase()
 {
     Utils::FilePath::fromString(baseTestDir()).removeRecursively();
     CppFileSettings &fs = globalCppFileSettings();
-    fs.headerSearchPaths.removeLast();
-    fs.headerSearchPaths.removeLast();
-    fs.sourceSearchPaths.removeLast();
-    fs.sourceSearchPaths.removeLast();
-    fs.headerPrefixes.removeLast();
-    fs.sourcePrefixes.removeLast();
+
+    auto pop = [](QStringList l) { l.takeLast(); return l; };
+
+    fs.headerSearchPaths.setValue(pop(pop(fs.headerSearchPaths())));
+    fs.sourceSearchPaths.setValue(pop(pop(fs.sourceSearchPaths())));
+    fs.headerPrefixes.setValue(pop(fs.headerPrefixes()));
+    fs.sourcePrefixes.setValue(pop(fs.sourcePrefixes()));
 }
 
 QObject *createCppHeaderSourceTest()

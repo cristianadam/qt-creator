@@ -343,17 +343,17 @@ void openEditor(const Utils::FilePath &filePath, bool inNextSplit, Utils::Id edi
 
 bool preferLowerCaseFileNames(ProjectExplorer::Project *project)
 {
-    return Internal::cppFileSettingsForProject(project).lowerCaseFiles;
+    return Internal::cppFileSettingsForProject(project).lowerCaseFiles();
 }
 
 QString preferredCxxHeaderSuffix(ProjectExplorer::Project *project)
 {
-    return Internal::cppFileSettingsForProject(project).headerSuffix;
+    return Internal::cppFileSettingsForProject(project).headerSuffix();
 }
 
 QString preferredCxxSourceSuffix(ProjectExplorer::Project *project)
 {
-    return Internal::cppFileSettingsForProject(project).sourceSuffix;
+    return Internal::cppFileSettingsForProject(project).sourceSuffix();
 }
 
 SearchResultItems symbolOccurrencesInDeclarationComments(

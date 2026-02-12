@@ -52,7 +52,7 @@ QString CppToolsJsExtension::licenseTemplate() const
 
 bool CppToolsJsExtension::usePragmaOnce() const
 {
-    return fileSettings().headerPragmaOnce;
+    return fileSettings().headerPragmaOnce();
 }
 
 static QStringList parts(const QString &klass)
@@ -82,7 +82,7 @@ QString CppToolsJsExtension::classToFileName(const QString &klass, const QString
 {
     const QString raw = fileName(className(klass), extension);
     const CppFileSettings &settings = fileSettings();
-    if (!settings.lowerCaseFiles)
+    if (!settings.lowerCaseFiles())
         return raw;
 
     QFileInfo fi = QFileInfo(raw);
@@ -263,12 +263,12 @@ QString CppToolsJsExtension::includeStatement(
 
 QString CppToolsJsExtension::cxxHeaderSuffix() const
 {
-    return fileSettings().headerSuffix;
+    return fileSettings().headerSuffix();
 }
 
 QString CppToolsJsExtension::cxxSourceSuffix() const
 {
-    return fileSettings().sourceSuffix;
+    return fileSettings().sourceSuffix();
 }
 
 } // namespace CppEditor::Internal

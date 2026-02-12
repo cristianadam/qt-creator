@@ -329,11 +329,11 @@ private:
         const CppFileSettings fileSettings = cppFileSettingsForProject(project);
         const auto constructDefaultFilePaths = [&] {
             const QString className = ov.prettyName(state->classAst->symbol->name());
-            const QString baseFileName = fileSettings.lowerCaseFiles ? className.toLower() : className;
-            const QString headerFileName = baseFileName + '.' + fileSettings.headerSuffix;
+            const QString baseFileName = fileSettings.lowerCaseFiles() ? className.toLower() : className;
+            const QString headerFileName = baseFileName + '.' + fileSettings.headerSuffix();
             const FilePath baseDir = state->originalFilePath.parentDir();
             const FilePath headerFilePath = baseDir.pathAppended(headerFileName);
-            const QString sourceFileName = baseFileName + '.' + fileSettings.sourceSuffix;
+            const QString sourceFileName = baseFileName + '.' + fileSettings.sourceSuffix();
             const FilePath sourceFilePath = baseDir.pathAppended(sourceFileName);
             return std::make_pair(headerFilePath, sourceFilePath);
         };
@@ -385,7 +385,7 @@ private:
                   return ov.prettyName(ns->name());
               });
         const QString headerGuard = fileSettings.headerGuard(headerFilePath);
-        if (fileSettings.headerPragmaOnce) {
+        if (fileSettings.headerPragmaOnce()) {
             headerContent.append("#pragma once\n");
         } else {
             headerContent.append("#ifndef " + headerGuard + "\n");
@@ -433,7 +433,7 @@ private:
                     content->append("} // namespace " + *it + '\n');
             }
         }
-        if (!fileSettings.headerPragmaOnce)
+        if (!fileSettings.headerPragmaOnce())
             headerContent.append("\n#endif // " + headerGuard + '\n');
 
         headerFilePath.ensureExistingFile();

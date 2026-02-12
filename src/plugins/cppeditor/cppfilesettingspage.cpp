@@ -3,6 +3,7 @@
 
 #include "cppfilesettingspage.h"
 
+#include "cppeditorconstants.h"
 #include "cppeditortr.h"
 #include "cppheadersource.h"
 
@@ -60,15 +61,7 @@ private:
 
 const char projectSettingsKeyC[] = "CppEditorFileNames";
 const char useGlobalKeyC[] = "UseGlobal";
-const char headerPrefixesKeyC[] = "HeaderPrefixes";
-const char sourcePrefixesKeyC[] = "SourcePrefixes";
-const char headerSuffixKeyC[] = "HeaderSuffix";
-const char sourceSuffixKeyC[] = "SourceSuffix";
-const char headerSearchPathsKeyC[] = "HeaderSearchPaths";
-const char sourceSearchPathsKeyC[] = "SourceSearchPaths";
-const char headerPragmaOnceC[] = "HeaderPragmaOnce";
-const char licenseTemplatePathKeyC[] = "LicenseTemplate";
-const char headerGuardTemplateKeyC[] = "HeaderGuardTemplate";
+
 
 const char *licenseTemplateTemplate = QT_TRANSLATE_NOOP("QtC::CppEditor",
 "/**************************************************************************\n"
@@ -78,40 +71,56 @@ const char *licenseTemplateTemplate = QT_TRANSLATE_NOOP("QtC::CppEditor",
 "**   To protect a percent sign, use '%%'.\n"
 "**************************************************************************/\n");
 
-void CppFileSettings::toSettings(QtcSettings *s) const
+CppFileSettings::CppFileSettings()
 {
-    const CppFileSettings def;
-    s->beginGroup(Constants::CPPEDITOR_SETTINGSGROUP);
-    s->setValueWithDefault(headerPrefixesKeyC, headerPrefixes, def.headerPrefixes);
-    s->setValueWithDefault(sourcePrefixesKeyC, sourcePrefixes, def.sourcePrefixes);
-    s->setValueWithDefault(headerSuffixKeyC, headerSuffix, def.headerSuffix);
-    s->setValueWithDefault(sourceSuffixKeyC, sourceSuffix, def.sourceSuffix);
-    s->setValueWithDefault(headerSearchPathsKeyC, headerSearchPaths, def.headerSearchPaths);
-    s->setValueWithDefault(sourceSearchPathsKeyC, sourceSearchPaths, def.sourceSearchPaths);
-    s->setValueWithDefault(Constants::LOWERCASE_CPPFILES_KEY, lowerCaseFiles, def.lowerCaseFiles);
-    s->setValueWithDefault(headerPragmaOnceC, headerPragmaOnce, def.headerPragmaOnce);
-    s->setValueWithDefault(licenseTemplatePathKeyC, licenseTemplatePath.toSettings(),
-                           def.licenseTemplatePath.toSettings());
-    s->setValueWithDefault(headerGuardTemplateKeyC, headerGuardTemplate, def.headerGuardTemplate);
-    s->endGroup();
+    setAutoApply(false);
+
+    setSettingsGroup(Constants::CPPEDITOR_SETTINGSGROUP);
+
+    headerPrefixes.setSettingsKey("HeaderPrefixes");
+
+    headerSuffix.setSettingsKey("HeaderSuffix");
+    headerSuffix.setDefaultValue("h");
+
+    headerSearchPaths.setSettingsKey("HeaderSearchPaths");
+    headerSearchPaths.setDefaultValue({"include",
+                                     "Include",
+                                     QDir::toNativeSeparators("../include"),
+                                     QDir::toNativeSeparators("../Include")});
+
+    sourcePrefixes.setSettingsKey("SourcePrefixes");
+
+    sourceSuffix.setSettingsKey("SourceSuffix");
+    sourceSuffix.setDefaultValue("cpp");
+
+    sourceSearchPaths.setSettingsKey("SourceSearchPaths");
+    sourceSearchPaths.setDefaultValue({QDir::toNativeSeparators("../src"),
+                                     QDir::toNativeSeparators("../Src"),
+                                     ".."});
+
+    licenseTemplatePath.setSettingsKey("LicenseTemplate");
+
+    headerGuardTemplate.setSettingsKey("HeaderGuardTemplate");
+    headerGuardTemplate.setDefaultValue(
+        "%{JS: '%{Header:FileName}'.toUpperCase().replace(/^[1-9]/, '_').replace(/[^_a-zA-Z1-9]/g, '_')}");
+
+    headerPragmaOnce.setSettingsKey("HeaderPragmaOnce");
+    headerPragmaOnce.setDefaultValue(false);
+
+    lowerCaseFiles.setSettingsKey(Constants::LOWERCASE_CPPFILES_KEY);
+    lowerCaseFiles.setDefaultValue(Constants::LOWERCASE_CPPFILES_DEFAULT);
 }
 
-void CppFileSettings::fromSettings(QtcSettings *s)
+CppFileSettings::CppFileSettings(const CppFileSettings &other)
+    : AspectContainer()
 {
-    const CppFileSettings def;
-    s->beginGroup(Constants::CPPEDITOR_SETTINGSGROUP);
-    headerPrefixes = s->value(headerPrefixesKeyC, def.headerPrefixes).toStringList();
-    sourcePrefixes = s->value(sourcePrefixesKeyC, def.sourcePrefixes).toStringList();
-    headerSuffix = s->value(headerSuffixKeyC, def.headerSuffix).toString();
-    sourceSuffix = s->value(sourceSuffixKeyC, def.sourceSuffix).toString();
-    headerSearchPaths = s->value(headerSearchPathsKeyC, def.headerSearchPaths).toStringList();
-    sourceSearchPaths = s->value(sourceSearchPathsKeyC, def.sourceSearchPaths).toStringList();
-    lowerCaseFiles = s->value(Constants::LOWERCASE_CPPFILES_KEY, def.lowerCaseFiles).toBool();
-    headerPragmaOnce = s->value(headerPragmaOnceC, def.headerPragmaOnce).toBool();
-    licenseTemplatePath = FilePath::fromSettings(s->value(licenseTemplatePathKeyC,
-                                                          def.licenseTemplatePath.toSettings()));
-    headerGuardTemplate = s->value(headerGuardTemplateKeyC, def.headerGuardTemplate).toString();
-    s->endGroup();
+    AspectContainer::copyFrom(other);
+}
+
+void CppFileSettings::operator=(const CppFileSettings &other)
+{
+    if (this != &other)
+        AspectContainer::copyFrom(other);
 }
 
 static bool applySuffixes(const QString &sourceSuffix, const QString &headerSuffix)
@@ -130,7 +139,7 @@ static bool applySuffixes(const QString &sourceSuffix, const QString &headerSuff
 
 void CppFileSettings::addMimeInitializer() const
 {
-    Utils::addMimeInitializer([sourceSuffix = sourceSuffix, headerSuffix = headerSuffix] {
+    Utils::addMimeInitializer([sourceSuffix = sourceSuffix(), headerSuffix = headerSuffix()] {
         if (!applySuffixes(sourceSuffix, headerSuffix))
             qWarning("Unable to apply cpp suffixes to mime database (cpp mime types not found).\n");
     });
@@ -138,21 +147,7 @@ void CppFileSettings::addMimeInitializer() const
 
 bool CppFileSettings::applySuffixesToMimeDB()
 {
-    return applySuffixes(sourceSuffix, headerSuffix);
-}
-
-bool CppFileSettings::equals(const CppFileSettings &rhs) const
-{
-    return lowerCaseFiles == rhs.lowerCaseFiles
-           && headerPragmaOnce == rhs.headerPragmaOnce
-           && headerPrefixes == rhs.headerPrefixes
-           && sourcePrefixes == rhs.sourcePrefixes
-           && headerSuffix == rhs.headerSuffix
-           && sourceSuffix == rhs.sourceSuffix
-           && headerSearchPaths == rhs.headerSearchPaths
-           && sourceSearchPaths == rhs.sourceSearchPaths
-           && headerGuardTemplate == rhs.headerGuardTemplate
-           && licenseTemplatePath == rhs.licenseTemplatePath;
+    return applySuffixes(sourceSuffix(), headerSuffix());
 }
 
 // Replacements of special license template keywords.
@@ -241,12 +236,12 @@ static void parseLicenseTemplatePlaceholders(QString *t)
 // Convenience that returns the formatted license template.
 QString CppFileSettings::licenseTemplate() const
 {
-    if (licenseTemplatePath.isEmpty())
+    if (licenseTemplatePath().isEmpty())
         return QString();
-    QFile file(licenseTemplatePath.toFSPathString());
+    QFile file(licenseTemplatePath().toFSPathString());
     if (!file.open(QIODevice::ReadOnly|QIODevice::Text)) {
         qWarning("Unable to open the license template %s: %s",
-                 qPrintable(licenseTemplatePath.toUserOutput()),
+                 qPrintable(licenseTemplatePath().toUserOutput()),
                  qPrintable(file.errorString()));
         return QString();
     }
@@ -267,7 +262,7 @@ QString CppFileSettings::licenseTemplate() const
 
 QString CppFileSettings::headerGuard(const Utils::FilePath &headerFilePath) const
 {
-    return HeaderGuardExpander(headerFilePath).expand(headerGuardTemplate);
+    return HeaderGuardExpander(headerFilePath).expand(headerGuardTemplate());
 }
 
 // ------------------ CppFileSettingsWidget
@@ -442,7 +437,7 @@ void CppFileSettingsWidget::apply()
         return;
 
     *m_settings = rc;
-    m_settings->toSettings(Core::ICore::settings());
+    m_settings->writeSettings();
     m_settings->applySuffixesToMimeDB();
     clearHeaderSourceCache();
 }
@@ -456,31 +451,31 @@ static inline void setComboText(QComboBox *cb, const QString &text, int defaultI
 void CppFileSettingsWidget::setSettings(const CppFileSettings &s)
 {
     const QChar comma = QLatin1Char(',');
-    m_lowerCaseFileNamesCheckBox->setChecked(s.lowerCaseFiles);
-    m_headerPragmaOnceCheckBox->setChecked(s.headerPragmaOnce);
-    m_headerPrefixesEdit->setText(s.headerPrefixes.join(comma));
-    m_sourcePrefixesEdit->setText(s.sourcePrefixes.join(comma));
-    setComboText(m_headerSuffixComboBox, s.headerSuffix);
-    setComboText(m_sourceSuffixComboBox, s.sourceSuffix);
-    m_headerSearchPathsEdit->setText(s.headerSearchPaths.join(comma));
-    m_sourceSearchPathsEdit->setText(s.sourceSearchPaths.join(comma));
-    setLicenseTemplatePath(s.licenseTemplatePath);
-    m_headerGuardAspect.setValue(s.headerGuardTemplate);
+    m_lowerCaseFileNamesCheckBox->setChecked(s.lowerCaseFiles());
+    m_headerPragmaOnceCheckBox->setChecked(s.headerPragmaOnce());
+    m_headerPrefixesEdit->setText(s.headerPrefixes().join(comma));
+    m_sourcePrefixesEdit->setText(s.sourcePrefixes().join(comma));
+    setComboText(m_headerSuffixComboBox, s.headerSuffix());
+    setComboText(m_sourceSuffixComboBox, s.sourceSuffix());
+    m_headerSearchPathsEdit->setText(s.headerSearchPaths().join(comma));
+    m_sourceSearchPathsEdit->setText(s.sourceSearchPaths().join(comma));
+    setLicenseTemplatePath(s.licenseTemplatePath());
+    m_headerGuardAspect.setValue(s.headerGuardTemplate());
 }
 
 CppFileSettings CppFileSettingsWidget::currentSettings() const
 {
     CppFileSettings rc;
-    rc.lowerCaseFiles = m_lowerCaseFileNamesCheckBox->isChecked();
-    rc.headerPragmaOnce = m_headerPragmaOnceCheckBox->isChecked();
-    rc.headerPrefixes = trimmedPaths(m_headerPrefixesEdit->text());
-    rc.sourcePrefixes = trimmedPaths(m_sourcePrefixesEdit->text());
-    rc.headerSuffix = m_headerSuffixComboBox->currentText();
-    rc.sourceSuffix = m_sourceSuffixComboBox->currentText();
-    rc.headerSearchPaths = trimmedPaths(m_headerSearchPathsEdit->text());
-    rc.sourceSearchPaths = trimmedPaths(m_sourceSearchPathsEdit->text());
-    rc.licenseTemplatePath = licenseTemplatePath();
-    rc.headerGuardTemplate = m_headerGuardAspect.value();
+    rc.lowerCaseFiles.setValue(m_lowerCaseFileNamesCheckBox->isChecked());
+    rc.headerPragmaOnce.setValue(m_headerPragmaOnceCheckBox->isChecked());
+    rc.headerPrefixes.setValue(trimmedPaths(m_headerPrefixesEdit->text()));
+    rc.sourcePrefixes.setValue(trimmedPaths(m_sourcePrefixesEdit->text()));
+    rc.headerSuffix.setValue(m_headerSuffixComboBox->currentText());
+    rc.sourceSuffix.setValue(m_sourceSuffixComboBox->currentText());
+    rc.headerSearchPaths.setValue(trimmedPaths(m_headerSearchPathsEdit->text()));
+    rc.sourceSearchPaths.setValue(trimmedPaths(m_sourceSearchPathsEdit->text()));
+    rc.licenseTemplatePath.setValue(licenseTemplatePath());
+    rc.headerGuardTemplate.setValue(m_headerGuardAspect.value());
     return rc;
 }
 
@@ -532,6 +527,7 @@ public:
 
     CppFileSettings settings() const;
     void setSettings(const CppFileSettings &settings);
+
     bool useGlobalSettings() const { return m_useGlobalSettings; }
     void setUseGlobalSettings(bool useGlobal);
 
@@ -572,27 +568,9 @@ void CppFileSettingsForProject::loadSettings()
 
     const QVariantMap data = mapEntryFromStoreEntry(entry).toMap();
     m_useGlobalSettings = data.value(useGlobalKeyC, true).toBool();
-    m_customSettings.headerPrefixes = data.value(headerPrefixesKeyC,
-                                                 m_customSettings.headerPrefixes).toStringList();
-    m_customSettings.sourcePrefixes = data.value(sourcePrefixesKeyC,
-                                                 m_customSettings.sourcePrefixes).toStringList();
-    m_customSettings.headerSuffix = data.value(headerSuffixKeyC, m_customSettings.headerSuffix)
-                                        .toString();
-    m_customSettings.sourceSuffix = data.value(sourceSuffixKeyC, m_customSettings.sourceSuffix)
-                                        .toString();
-    m_customSettings.headerSearchPaths
-        = data.value(headerSearchPathsKeyC, m_customSettings.headerSearchPaths).toStringList();
-    m_customSettings.sourceSearchPaths
-        = data.value(sourceSearchPathsKeyC, m_customSettings.sourceSearchPaths).toStringList();
-    m_customSettings.lowerCaseFiles = data.value(Constants::LOWERCASE_CPPFILES_KEY,
-                                                 m_customSettings.lowerCaseFiles).toBool();
-    m_customSettings.headerPragmaOnce = data.value(headerPragmaOnceC,
-                                                   m_customSettings.headerPragmaOnce).toBool();
-    m_customSettings.headerGuardTemplate
-        = data.value(headerGuardTemplateKeyC, m_customSettings.headerGuardTemplate).toString();
-    m_customSettings.licenseTemplatePath
-        = FilePath::fromSettings(data.value(licenseTemplatePathKeyC,
-                                            m_customSettings.licenseTemplatePath.toSettings()));
+
+    const Store store = storeFromMap(data);
+    m_customSettings.fromMap(store);
 }
 
 void CppFileSettingsForProject::saveSettings()
@@ -604,18 +582,12 @@ void CppFileSettingsForProject::saveSettings()
     if (m_useGlobalSettings && !m_project->namedSettings(projectSettingsKeyC).isValid())
         return;
 
-    QVariantMap data;
+    Store store;
+    m_customSettings.toMap(store);
+
+    QVariantMap data = mapFromStore(store);
     data.insert(useGlobalKeyC, m_useGlobalSettings);
-    data.insert(headerPrefixesKeyC, m_customSettings.headerPrefixes);
-    data.insert(sourcePrefixesKeyC, m_customSettings.sourcePrefixes);
-    data.insert(headerSuffixKeyC, m_customSettings.headerSuffix);
-    data.insert(sourceSuffixKeyC, m_customSettings.sourceSuffix);
-    data.insert(headerSearchPathsKeyC, m_customSettings.headerSearchPaths);
-    data.insert(sourceSearchPathsKeyC, m_customSettings.sourceSearchPaths);
-    data.insert(Constants::LOWERCASE_CPPFILES_KEY, m_customSettings.lowerCaseFiles);
-    data.insert(headerPragmaOnceC, m_customSettings.headerPragmaOnce);
-    data.insert(headerGuardTemplateKeyC, m_customSettings.headerGuardTemplate);
-    data.insert(licenseTemplatePathKeyC, m_customSettings.licenseTemplatePath.toSettings());
+
     m_project->setNamedSettings(projectSettingsKeyC, data);
 }
 
@@ -655,8 +627,8 @@ public:
     {
         const CppFileSettings &s = m_settings.settings();
         if (m_settings.useGlobalSettings() != m_wasGlobal
-            || s.headerSearchPaths != m_initialSettings.headerSearchPaths
-            || s.sourceSearchPaths != m_initialSettings.sourceSearchPaths) {
+            || s.headerSearchPaths() != m_initialSettings.headerSearchPaths()
+            || s.sourceSearchPaths() != m_initialSettings.sourceSearchPaths()) {
             clearHeaderSourceCache();
         }
     }
@@ -730,7 +702,7 @@ private slots:
 
         CppFileSettings settings;
         if (!guardTemplate.isEmpty())
-            settings.headerGuardTemplate = guardTemplate;
+            settings.headerGuardTemplate.setValue(guardTemplate);
         QCOMPARE(settings.headerGuard(FilePath::fromUserInput(headerFile)), expectedGuard);
     }
 };
@@ -743,7 +715,7 @@ void setupCppFileSettings(ExtensionSystem::IPlugin &plugin)
 
     static CppFileSettingsPage theCppFileSettingsPage;
 
-    globalCppFileSettings().fromSettings(Core::ICore::settings());
+    globalCppFileSettings().readSettings();
     globalCppFileSettings().addMimeInitializer();
 
 #ifdef WITH_TESTS
