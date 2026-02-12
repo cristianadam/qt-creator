@@ -665,9 +665,23 @@ CppFileSettings &globalCppFileSettings()
     return theGlobalCppFileSettings;
 }
 
-CppFileSettings cppFileSettingsForProject(ProjectExplorer::Project *project)
+CppFileSettings cppFileSettingsForProject(Project *project)
 {
-    return CppFileSettingsForProject(project).settings();
+    if (!project)
+        return globalCppFileSettings();
+
+    const QVariant entry = project->namedSettings(projectSettingsKeyC);
+    if (!entry.isValid())
+        return globalCppFileSettings();
+
+    const QVariantMap data = mapEntryFromStoreEntry(entry).toMap();
+    const bool useGlobalSettings = data.value(useGlobalKeyC, true).toBool();
+    if (useGlobalSettings)
+        return globalCppFileSettings();
+
+    CppFileSettings customSettings;
+    customSettings.fromMap(storeFromMap(data));
+    return customSettings;
 }
 
 #ifdef WITH_TESTS
