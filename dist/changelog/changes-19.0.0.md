@@ -375,12 +375,13 @@ Terminal
 
 Added
 
-([Documentation](https://doc-snapshots.qt.io/qtcreator-19.0/creator-reference-terminal-view.html))
 * A `qtc` helper function that passes its arguments to the running
   Qt Creator instance, for example for opening files from the terminal
   ([QTCREATORBUG-33784](https://bugreports.qt.io/browse/QTCREATORBUG-33784))
 * The option to paste the values of Qt Creator variables into the terminal
   ([QTCREATORBUG-29282](https://bugreports.qt.io/browse/QTCREATORBUG-29282))
+
+([Documentation](https://doc-snapshots.qt.io/qtcreator-19.0/creator-reference-terminal-view.html))
 
 Version Control Systems
 -----------------------
