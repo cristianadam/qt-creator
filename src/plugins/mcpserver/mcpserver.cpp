@@ -619,6 +619,48 @@ McpServer::McpServer(QObject *parent)
         });
 
     addTool(
+        {{"name", "get_symbol_information"},
+         {"title", "Get symbol information at position"},
+         {"description", "Get information about the symbol at a specific line and column in a file using the language server"},
+         {"inputSchema",
+          QJsonObject{
+              {"type", "object"},
+              {"properties",
+               QJsonObject{
+                   {"path",
+                    QJsonObject{
+                        {"type", "string"},
+                        {"format", "uri"},
+                        {"description", "Absolute path of the file"}}},
+                   {"line",
+                    QJsonObject{
+                        {"type", "integer"},
+                        {"description", "Line number (1-based)"}}},
+                   {"column",
+                    QJsonObject{
+                        {"type", "integer"},
+                        {"description", "Column number (1-based)"}}}}},
+              {"required", QJsonArray{"path", "line", "column"}}}},
+         {"outputSchema",
+          QJsonObject{
+              {"type", "object"},
+              {"properties",
+               QJsonObject{
+                   {"success", QJsonObject{{"type", "boolean"}}},
+                   {"symbols",
+                    QJsonObject{
+                        {"type", "array"},
+                        {"items", QJsonObject{{"type", "object"}}}}}}},
+              {"required", QJsonArray{"success"}}}},
+         {"annotations", QJsonObject{{"readOnlyHint", true}}}},
+        [this](const QJsonObject &p, const Callback &callback) {
+            const QString path = p.value("path").toString();
+            const int line = p.value("line").toInt();
+            const int column = p.value("column").toInt();
+            m_commands.getSymbolInformation(path, line, column, callback);
+        });
+
+    addTool(
         {{"name", "list_projects"},
          {"title", "List all available projects"},
          {"description", "List all available projects"},

@@ -88,6 +88,12 @@ public:
         bool regex,
         bool caseSensitive,
         const ResponseCallback &callback);
+
+    void getSymbolInformation(
+        const QString &path,
+        int line,
+        int column,
+        const ResponseCallback &callback);
     // TODO: get symbol info
     // TODO: rename symbol
 

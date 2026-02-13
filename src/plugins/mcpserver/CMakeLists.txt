@@ -1,6 +1,7 @@
 add_qtc_plugin(mcpserver
   PLUGIN_DEPENDS
     QtCreator::Core
+    QtCreator::LanguageClient
     QtCreator::ProjectExplorer
   DEPENDS
    Qt::Widgets

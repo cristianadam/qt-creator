@@ -28,6 +28,9 @@
 
 #include <texteditor/textdocument.h>
 
+#include <languageclient/documentsymbolcache.h>
+#include <languageclient/languageclientmanager.h>
+
 #include <utils/algorithm.h>
 #include <utils/async.h>
 #include <utils/filesearch.h>
@@ -46,6 +49,7 @@
 
 using namespace Utils;
 using namespace ProjectExplorer;
+using namespace LanguageServerProtocol;
 
 Q_LOGGING_CATEGORY(mcpCommands, "qtc.mcpserver.commands", QtWarningMsg)
 
@@ -621,6 +625,126 @@ void McpCommands::replaceInDirectory(
     SubDirFileContainer fileContainer({dirPath}, {}, {}, {});
 
     replace(fileContainer, regex, caseSensitive, pattern, replacement, this, callback);
+}
+
+static QString symbolKindToString(int kind)
+{
+    using namespace LanguageServerProtocol;
+    switch (SymbolKind(kind)) {
+    case SymbolKind::File: return "File";
+    case SymbolKind::Module: return "Module";
+    case SymbolKind::Namespace: return "Namespace";
+    case SymbolKind::Package: return "Package";
+    case SymbolKind::Class: return "Class";
+    case SymbolKind::Method: return "Method";
+    case SymbolKind::Property: return "Property";
+    case SymbolKind::Field: return "Field";
+    case SymbolKind::Constructor: return "Constructor";
+    case SymbolKind::Enum: return "Enum";
+    case SymbolKind::Interface: return "Interface";
+    case SymbolKind::Function: return "Function";
+    case SymbolKind::Variable: return "Variable";
+    case SymbolKind::Constant: return "Constant";
+    case SymbolKind::String: return "String";
+    case SymbolKind::Number: return "Number";
+    case SymbolKind::Boolean: return "Boolean";
+    case SymbolKind::Array: return "Array";
+    case SymbolKind::Object: return "Object";
+    case SymbolKind::Key: return "Key";
+    case SymbolKind::Null: return "Null";
+    case SymbolKind::EnumMember: return "EnumMember";
+    case SymbolKind::Struct: return "Struct";
+    case SymbolKind::Event: return "Event";
+    case SymbolKind::Operator: return "Operator";
+    case SymbolKind::TypeParameter: return "TypeParameter";
+    }
+    return "Unknown";
+}
+
+static QString toString(SymbolTag tag)
+{
+    using namespace LanguageServerProtocol;
+    switch (tag) {
+    case SymbolTag::Deprecated: return "Deprecated";
+    case SymbolTag::Private: return "Private";
+    case SymbolTag::Package: return "Package";
+    case SymbolTag::Protected: return "Protected";
+    case SymbolTag::Public: return "Public";
+    case SymbolTag::Internal: return "Internal";
+    case SymbolTag::File: return "File";
+    case SymbolTag::Static: return "Static";
+    case SymbolTag::Abstract: return "Abstract";
+    case SymbolTag::Final: return "Final";
+    case SymbolTag::Sealed: return "Sealed";
+    case SymbolTag::Transient: return "Transient";
+    case SymbolTag::Volatile: return "Volatile";
+    case SymbolTag::Synchronized: return "Synchronized";
+    case SymbolTag::Virtual: return "Virtual";
+    case SymbolTag::Nullable: return "Nullable";
+    case SymbolTag::NonNull: return "NonNull";
+    case SymbolTag::Declaration: return "Declaration";
+    case SymbolTag::Definition: return "Definition";
+    case SymbolTag::ReadOnly: return "ReadOnly";
+    }
+    return "Unknown";
+}
+
+QJsonArray symbolsForPosition(
+    const QList<DocumentSymbol> &symbols,
+    const Position &position)
+{
+    QJsonArray result;
+    for (const DocumentSymbol &symbol : symbols) {
+        if (auto children = symbol.children())
+            result.append(symbolsForPosition(*children, position));
+        if (symbol.range().contains(position)) {
+            auto copy = symbol;
+            copy.clearChildren(); // Children are filtered separately, so clear them to avoid duplication
+            QJsonObject obj = copy;
+            obj[kindKey] = symbolKindToString(symbol.kind());
+            if (auto tags = symbol.symbolTags())
+                obj[tagsKey] = QJsonArray::fromStringList(Utils::transform(*tags, toString));
+            result.append(obj);
+        }
+    }
+
+    return result;
+}
+
+void McpCommands::getSymbolInformation(
+    const QString &path, int line, int column, const ResponseCallback &callback)
+{
+    using namespace LanguageClient;
+
+    const FilePath filePath = FilePath::fromUserInput(path);
+
+    Client *client = LanguageClientManager::clientForFilePath(filePath);
+    if (!client) {
+        callback(QJsonObject{{"success", false}});
+        qCDebug(mcpCommands) << "No language client found for file:" << path;
+        return;
+    }
+
+    DocumentSymbolCache *documentSymbolCache = client->documentSymbolCache();
+    DocumentUri uri = client->hostPathToServerUri(filePath);
+    connect(
+        documentSymbolCache,
+        &DocumentSymbolCache::gotSymbols,
+        this,
+        [uri, line, column, callback](
+            const DocumentUri &resultUri,
+            const DocumentSymbolsResult &symbols) {
+            if (resultUri != uri)
+                return;
+
+            if (const auto documentSymbols
+                = std::get_if<QList<DocumentSymbol>>(&symbols)) {
+                const QJsonArray resultsArray
+                    = symbolsForPosition(*documentSymbols, Position(line - 1, column - 1));
+                callback(QJsonObject{{"success", true}, {"symbols", resultsArray}});
+            }
+        });
+    documentSymbolCache->requestSymbols(uri, Schedule::Delayed);
 }
 
 QStringList McpCommands::listProjects()
