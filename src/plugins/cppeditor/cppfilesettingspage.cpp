@@ -191,16 +191,84 @@ CppFileSettings::CppFileSettings()
     headerGuardTemplate.setDefaultValue(
         "%{JS: '%{Header:FileName}'.toUpperCase().replace(/^[1-9]/, '_').replace(/[^_a-zA-Z1-9]/g, '_')}");
     headerGuardTemplate.setDisplayStyle(Utils::StringAspect::LineEditDisplay);
+    // Provides the macro names, expansion happens on actual access.
+    static HeaderGuardExpander dummyHeaderGuardExpander{{}};
+    headerGuardTemplate.setMacroExpander(&dummyHeaderGuardExpander);
 
     headerPragmaOnce.setSettingsKey("HeaderPragmaOnce");
     headerPragmaOnce.setDefaultValue(false);
     headerPragmaOnce.setLabelText(Tr::tr("Use \"#pragma once\" instead"));
     headerPragmaOnce.setToolTip(
         Tr::tr("Uses \"#pragma once\" instead of \"#ifndef\" include guards."));
+    headerPragmaOnce.addOnVolatileValueChanged(this, [this] {
+        headerGuardTemplate.setEnabled(!headerPragmaOnce.volatileValue());
+    });
 
     lowerCaseFiles.setSettingsKey(Constants::LOWERCASE_CPPFILES_KEY);
     lowerCaseFiles.setDefaultValue(Constants::LOWERCASE_CPPFILES_DEFAULT);
     lowerCaseFiles.setLabelText(Tr::tr("&Lower case file names"));
+
+    setLayouter([this] {
+        using namespace Layouting;
+        headerGuardTemplate.setEnabled(!headerPragmaOnce());
+        return Column {
+            Group {
+                title(Tr::tr("Headers")),
+                Form {
+                    headerSuffix, st, br,
+                    headerSearchPaths, br,
+                    headerPrefixes, br,
+                    Tr::tr("Include guard template:"), headerPragmaOnce, headerGuardTemplate
+                },
+            },
+            Group {
+                title(Tr::tr("Sources")),
+                Form {
+                    sourceSuffix, st, br,
+                    sourceSearchPaths, br,
+                    sourcePrefixes
+                }
+            },
+            lowerCaseFiles,
+            Row {
+                licenseTemplatePath,
+                PushButton {
+                    text(Tr::tr("Edit...")),
+                    onClicked(this, [this] { slotEdit(); })
+                },
+            },
+            st
+        };
+    });
+}
+
+void CppFileSettings::apply()
+{
+    AspectContainer::apply();
+    writeSettings();
+    applySuffixesToMimeDB();
+    clearHeaderSourceCache();
+}
+
+void CppFileSettings::slotEdit()
+{
+    FilePath path = FilePath::fromUserInput(licenseTemplatePath.volatileValue());
+    if (path.isEmpty()) {
+        // Pick a file name and write new template, edit with C++
+        path = FileUtils::getSaveFilePath(Tr::tr("Choose Location for New License Template File"));
+        if (path.isEmpty())
+            return;
+        FileSaver saver(path, QIODevice::Text);
+        saver.write(
+            Tr::tr(licenseTemplateTemplate).arg(QGuiApplication::applicationDisplayName()).toUtf8());
+        if (const Result<> res = saver.finalize(); !res) {
+            FileUtils::showError(res.error());
+            return;
+        }
+        licenseTemplatePath.setValue(path.toUserOutput());
+    }
+    // Edit (now) existing file with C++
+    Core::EditorManager::openEditor(path, CppEditor::Constants::CPPEDITOR_ID);
 }
 
 static bool applySuffixes(const QString &sourceSuffix, const QString &headerSuffix)
@@ -340,105 +408,9 @@ QString CppFileSettings::licenseTemplate() const
     return license;
 }
 
-QString CppFileSettings::headerGuard(const Utils::FilePath &headerFilePath) const
+QString CppFileSettings::headerGuard(const FilePath &headerFilePath) const
 {
     return HeaderGuardExpander(headerFilePath).expand(headerGuardTemplate());
-}
-
-// ------------------ CppFileSettingsWidget
-
-class CppFileSettingsWidget final : public Core::IOptionsPageWidget
-{
-    Q_OBJECT
-
-public:
-    CppFileSettingsWidget() = default;
-
-    void setup(CppFileSettings *settings);
-
-    void apply() final
-    {
-        m_settings->apply();
-        m_settings->writeSettings();
-        m_settings->applySuffixesToMimeDB();
-        clearHeaderSourceCache();
-    }
-
-    void cancel() final { m_settings->cancel(); }
-
-    bool isDirty() const final { return m_settings->isDirty(); }
-
-    void slotEdit();
-
-    CppFileSettings *m_settings = nullptr;
-    HeaderGuardExpander m_headerGuardExpander{{}};
-};
-
-void CppFileSettingsWidget::setup(CppFileSettings *settings)
-{
-    m_settings = settings;
-
-    CppFileSettings &s = *settings;
-
-    s.headerGuardTemplate.setMacroExpander(&m_headerGuardExpander);
-
-    using namespace Layouting;
-    Column {
-        Group {
-            title(Tr::tr("Headers")),
-            Form {
-                s.headerSuffix, st, br,
-                s.headerSearchPaths, br,
-                s.headerPrefixes, br,
-                Tr::tr("Include guard template:"), s.headerPragmaOnce, s.headerGuardTemplate
-            },
-        },
-        Group {
-            title(Tr::tr("Sources")),
-            Form {
-                s.sourceSuffix, st, br,
-                s.sourceSearchPaths, br,
-                s.sourcePrefixes
-            }
-        },
-        s.lowerCaseFiles,
-        Row {
-            s.licenseTemplatePath,
-            PushButton {
-                text(Tr::tr("Edit...")),
-                onClicked(this, [this] { slotEdit(); })
-            },
-        },
-        st
-    }.attachTo(this);
-
-    s.headerPragmaOnce.addOnVolatileValueChanged(this, [&s] {
-        s.headerGuardTemplate.setEnabled(!s.headerPragmaOnce.volatileValue());
-    });
-    s.headerGuardTemplate.setEnabled(!s.headerPragmaOnce());
-
-    connect(m_settings, &AspectContainer::volatileValueChanged, &checkSettingsDirty);
-}
-
-void CppFileSettingsWidget::slotEdit()
-{
-    FilePath path = FilePath::fromUserInput(m_settings->licenseTemplatePath.volatileValue());
-    if (path.isEmpty()) {
-        // Pick a file name and write new template, edit with C++
-        path = FileUtils::getSaveFilePath(Tr::tr("Choose Location for New License Template File"));
-        if (path.isEmpty())
-            return;
-        FileSaver saver(path, QIODevice::Text);
-        saver.write(
-            Tr::tr(licenseTemplateTemplate).arg(QGuiApplication::applicationDisplayName()).toUtf8());
-        if (const Result<> res = saver.finalize(); !res) {
-            FileUtils::showError(res.error());
-            return;
-        }
-        m_settings->licenseTemplatePath.setValue(path.toUserOutput());
-    }
-    // Edit (now) existing file with C++
-    Core::EditorManager::openEditor(path, CppEditor::Constants::CPPEDITOR_ID);
 }
 
 // CppFileSettingsPage
@@ -451,11 +423,7 @@ public:
         setId(Constants::CPP_FILE_SETTINGS_ID);
         setDisplayName(Tr::tr("File Naming"));
         setCategory(Constants::CPP_SETTINGS_CATEGORY);
-        setWidgetCreator([] {
-            auto w = new CppFileSettingsWidget;
-            w->setup(&globalCppFileSettings());
-            return w;
-        });
+        setSettingsProvider([] { return &globalCppFileSettings(); });
     }
 };
 
@@ -481,13 +449,16 @@ public:
 
         setGlobalSettingsId(Constants::CPP_FILE_SETTINGS_ID);
 
+        using namespace Layouting;
+        Column {
+            &m_customSettings,
+            noMargin
+        }.attachTo(this);
+
+        auto updateSubWidget = [this] { setEnabled(!useGlobalSettings()); };
+
         updateSubWidget();
-
-        const auto layout = new QVBoxLayout(this);
-        layout->setContentsMargins(0, 0, 0, 0);
-        layout->addWidget(&m_widget);
-
-        connect(this, &ProjectSettingsWidget::useGlobalSettingsChanged, this, [this] {
+        connect(this, &ProjectSettingsWidget::useGlobalSettingsChanged, this, [this, updateSubWidget] {
             saveSettings();
             clearHeaderSourceCache();
             updateSubWidget();
@@ -500,17 +471,6 @@ public:
     }
 
 private:
-    void updateSubWidget()
-    {
-        if (useGlobalSettings()) {
-            m_widget.setup(&globalCppFileSettings());
-            m_widget.setEnabled(false);
-        } else {
-            m_widget.setup(&m_customSettings);
-            m_widget.setEnabled(true);
-        }
-    }
-
     void saveSettings()
     {
         if (!m_project)
@@ -530,7 +490,6 @@ private:
     }
 
     Project * const m_project;
-    CppFileSettingsWidget m_widget;
     CppFileSettings m_customSettings;
 };
 
