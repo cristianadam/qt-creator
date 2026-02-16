@@ -34,7 +34,7 @@
     To unedit files in the local directory, as well as recursively in all
     subdirectories, select \uicontrol {Unedit Repository}.
 
-    \section1 CVS Preferences
+    \section1 CVS preferences
 
     To set CVS preferences, select \preferences >
     \uicontrol {Version Control} > \uicontrol CVS:

@@ -45,11 +45,11 @@
     \uicontrol {New Project} > \uicontrol {Import Project} >
     \uicontrol {Fossil Clone}.
 
-    \section1 Additional Fossil Functions
+    \section1 Additional Fossil functions
 
     In addition to the standard version control system functions described in
     \l {Version Control Systems}, the \uicontrol Fossil submenu has
-    the following items:
+    the following items.
 
     \table
         \header
@@ -70,7 +70,7 @@
             \li Configure the settings of the local repository.
     \endtable
 
-    \section1 Fossil Preferences
+    \section1 Fossil preferences
 
     To set Fossil preferences, select \preferences >
     \uicontrol {Version Control} > \uicontrol Fossil:

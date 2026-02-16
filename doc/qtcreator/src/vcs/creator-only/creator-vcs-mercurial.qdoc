@@ -23,7 +23,7 @@
 
     In addition to the standard version control system functions described in
     \l {Use common VCS Functions}, you can select the following functions in the
-    \uicontrol Tools > \uicontrol Mercurial submenu:
+    \uicontrol Tools > \uicontrol Mercurial submenu.
 
     \table
         \header
@@ -48,7 +48,7 @@
             \li Push changes to the remote repository.
      \endtable
 
-    \section1 Mercurial Preferences
+    \section1 Mercurial preferences
 
     To set preferences for Mercurial, select \preferences >
     \uicontrol {Version Control} > \uicontrol Mercurial:

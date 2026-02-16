@@ -28,7 +28,7 @@
     \uicontrol Bazaar > \uicontrol Pull to turn a branch into a mirror of
     another branch. To update the mirror of the branch, select \uicontrol Push.
 
-    \section1 Uncommitting Revisions
+    \section1 Uncommitting revisions
 
     In Bazaar and Breezy, committing changes to a branch creates a new revision that holds
     a snapshot of the state of the working tree. To remove the last committed
@@ -48,7 +48,7 @@
     change it might make is restoring pending merges that were present before
     the commit.
 
-    \section1 Bazaar and Breezy Preferences
+    \section1 Bazaar and Breezy preferences
 
     To set Bazaar or Breezy preferences, select \preferences >
     \uicontrol {Version Control} > \uicontrol Bazaar:

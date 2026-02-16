@@ -29,7 +29,7 @@
     You can use Git as a client for a Subversion server. For more information,
     see \l{Use Git with Subversion}.
 
-    \section1 Subversion Preferences
+    \section1 Subversion preferences
 
     To set Subversion preferences, go to \preferences >
     \uicontrol {Version Control} > \uicontrol Subversion:
