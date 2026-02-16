@@ -5,12 +5,19 @@
 #include "androidtr.h"
 #include "androidmanifestutils.h"
 
+#include <projectexplorer/buildconfiguration.h>
+#include <projectexplorer/project.h>
+#include <projectexplorer/projectmanager.h>
+#include <projectexplorer/target.h>
+#include <qtsupport/baseqtversion.h>
+#include <qtsupport/qtkitaspect.h>
 #include <texteditor/textdocument.h>
 #include <texteditor/texteditor.h>
 
 #include <QAbstractListModel>
 #include <QApplication>
 #include <QCheckBox>
+#include <QVersionNumber>
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -22,8 +29,11 @@
 #include <QLineEdit>
 #include <QListView>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QPushButton>
 
+
+using namespace ProjectExplorer;
 using namespace Utils;
 
 namespace Android::Internal {
@@ -154,6 +164,88 @@ PermissionsContainerWidget::PermissionsContainerWidget(QWidget *parent)
 {
 }
 
+bool PermissionsContainerWidget::hasPermissionsInManifest(Utils::FilePath &manifestPath)
+{
+    auto dataResult = AndroidManifestParser::readManifest(manifestPath / "AndroidManifest.xml");
+    if (!dataResult)
+        return false;
+
+    return !dataResult->permissions.isEmpty();
+}
+
+bool PermissionsContainerWidget::isCMakePermissionsSupported()
+{
+    Utils::FilePath manifestPath = m_textEditorWidget->textDocument()->filePath();
+    if (manifestPath.isEmpty())
+        return false;
+
+    if (hasPermissionsInManifest(manifestPath))
+        return false;
+    Project *project = ProjectManager::projectForFile(manifestPath);
+    if (!project)
+        return false;
+
+    const QList<Target *> targets = project->targets();
+
+    QVersionNumber lowestTargetQtVersion;
+    if (targets.isEmpty()) {
+        lowestTargetQtVersion = QVersionNumber(6, 9);
+    } else {
+        for (Target *target : targets) {
+            QtSupport::QtVersion *qtVersion = QtSupport::QtKitAspect::qtVersion(target->kit());
+            if (qtVersion) {
+                QVersionNumber ver = qtVersion->qtVersion();
+                if (lowestTargetQtVersion.isNull() || ver < lowestTargetQtVersion)
+                    lowestTargetQtVersion = ver;
+            }
+        }
+    }
+
+    if (lowestTargetQtVersion.isNull())
+        lowestTargetQtVersion = QVersionNumber(6, 9);
+
+    if (lowestTargetQtVersion < QVersionNumber(6, 9))
+        return false;
+
+    return true;
+}
+
+
+static const Utils::Key suppressCMakeWarning{"Android.SuppressCMakePermissionsWarning"};
+
+void PermissionsContainerWidget::showCMakePermissionsConsentDialog()
+{
+    if (!m_CMakePermissionsCheckBox->isChecked())
+        return;
+
+    Utils::FilePath manifestPath = m_textEditorWidget->textDocument()->filePath();
+    if (manifestPath.isEmpty())
+        return;
+
+    Project *project = ProjectManager::projectForFile(manifestPath / "AndroidManifest.xml");
+    if (project && project->namedSettings(suppressCMakeWarning).toBool())
+        return;
+
+    QMessageBox msgBox(this);
+    msgBox.setIcon(QMessageBox::Warning);
+    msgBox.setWindowTitle(Tr::tr("CMake Permission Management"));
+    msgBox.setText(Tr::tr("Permissions will be managed via qt_add_android_permission() calls in "
+                          "CMakeLists.txt instead of AndroidManifest.xml. "
+                          "This requires Qt 6.9 or newer."));
+    msgBox.setStandardButtons(QMessageBox::Ok | QMessageBox::Cancel);
+
+    QCheckBox *dontAskCheckBox = new QCheckBox(Tr::tr("Don't ask again"), &msgBox);
+    msgBox.setCheckBox(dontAskCheckBox);
+
+    if (msgBox.exec() == QMessageBox::Cancel) {
+        m_CMakePermissionsCheckBox->setCheckState(Qt::Unchecked);
+        return;
+    }
+
+    if (project && dontAskCheckBox->isChecked())
+        project->setNamedSettings(suppressCMakeWarning, true);
+}
+
 bool PermissionsContainerWidget::initialize(TextEditor::TextEditorWidget *textEditorWidget)
 {
     if (!textEditorWidget)
@@ -168,19 +260,21 @@ bool PermissionsContainerWidget::initialize(TextEditor::TextEditorWidget *textEd
 
     m_defaultPermissonsCheckBox = new QCheckBox(this);
     m_defaultPermissonsCheckBox->setText(
-        Android::Tr::tr("Include default permissions for Qt modules"));
+        Android::Tr::tr("Include default permissions for Qt modules."));
     layout->addWidget(m_defaultPermissonsCheckBox, 0, 0);
 
     m_defaultFeaturesCheckBox = new QCheckBox(this);
-    m_defaultFeaturesCheckBox->setText(Android::Tr::tr("Include default features for Qt modules"));
+    m_defaultFeaturesCheckBox->setText(Android::Tr::tr("Include default features for Qt modules."));
     layout->addWidget(m_defaultFeaturesCheckBox, 1, 0);
 
-    m_cmakePermissionsCheckBox = new QCheckBox(this);
-    m_cmakePermissionsCheckBox->setText(Android::Tr::tr("Manage permissions through CMake."));
-    m_cmakePermissionsCheckBox->setToolTip(
+    m_CMakePermissionsCheckBox = new QCheckBox(this);
+    m_CMakePermissionsCheckBox->setText(Android::Tr::tr("Manage permissions through CMake."));
+    m_CMakePermissionsCheckBox->setToolTip(
         Tr::tr("Permissions will be added as qt_add_android_permission() calls in CMakeLists.txt "
                "instead of AndroidManifest.xml. This requires Qt 6.9 or newer."));
-    layout->addWidget(m_cmakePermissionsCheckBox, 2, 0);
+    m_CMakePermissionsCheckBox->setCheckState(isCMakePermissionsSupported() ?
+                                                Qt::Checked : Qt::Unchecked);
+    layout->addWidget(m_CMakePermissionsCheckBox, 2, 0);
 
     m_permissionsComboBox = new QComboBox(permissionsGroupBox);
     m_permissionsComboBox->insertItems(0, {
@@ -350,6 +444,8 @@ bool PermissionsContainerWidget::initialize(TextEditor::TextEditorWidget *textEd
             this, &PermissionsContainerWidget::defaultPermissionOrFeatureCheckBoxClicked);
     connect(m_defaultFeaturesCheckBox, &QCheckBox::stateChanged,
             this, &PermissionsContainerWidget::defaultPermissionOrFeatureCheckBoxClicked);
+    connect(m_CMakePermissionsCheckBox, &QCheckBox::stateChanged,
+            this, &PermissionsContainerWidget::showCMakePermissionsConsentDialog);
     connect(m_addPermissionButton, &QAbstractButton::clicked,
             this, &PermissionsContainerWidget::addPermission);
     connect(m_removePermissionButton, &QAbstractButton::clicked,
