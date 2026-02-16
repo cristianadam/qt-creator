@@ -4,13 +4,12 @@
 #pragma once
 
 #include <utils/fileutils.h>
+#include <utils/result.h>
 
 #include <QMap>
 #include <QWidget>
 #include <QStringList>
 #include <QTreeView>
-
-#include <utils/fileutils.h>
 
 class QCheckBox;
 class QComboBox;
@@ -39,22 +38,27 @@ private:
     void removePermission();
     void editAttributes();
     void updateAddRemovePermissionButtons();
+    void updateCMakePermissionsCheckBoxState();
     void defaultPermissionOrFeatureCheckBoxClicked();
     void updateManifestPermissions();
     void loadPermissionsFromManifest();
     void showCMakePermissionsConsentDialog();
     void onCMakePermissionsCheckBoxChanged();
     bool isCMakePermissionsSupported();
+    void revertCMakePermissionsCheckBox(Qt::CheckState state, const QString &error);
+
     bool hasPermissionsInManifest(Utils::FilePath &manifestPath);
-    bool resolveCmakeProjectInfo();
-    void loadPermissionsFromCmake();
-    void addCmakePermission(const QString &permission);
-    bool removeCmakePermission(const QString &permission);
-    void updateCmakePermission(const QString &permission, const QMap<QString, QString> &attributes);
+    bool resolveCMakeProjectInfo();
+    void loadPermissionsFromCMake();
+    void addCMakePermission(const QString &permission, const QMap<QString, QString> &attributes = {});
+    bool removeCMakePermission(const QString &permission);
+    bool updateCMakePermission(const QString &permission, const QMap<QString, QString> &attributes);
+    Utils::Result<> migratePermissionsManifestToCMake();
+    Utils::Result<> migratePermissionsCMakeToManifest();
 
     TextEditor::TextEditorWidget *m_textEditorWidget = nullptr;
-    Utils::FilePath m_cmakeFilePath;
-    QString m_cmakeTargetName;
+    Utils::FilePath m_CMakeFilePath;
+    QString m_CMakeTargetName;
     ProjectExplorer::Project *m_project = nullptr;
     QCheckBox *m_defaultPermissonsCheckBox = nullptr;
     QCheckBox *m_defaultFeaturesCheckBox = nullptr;
