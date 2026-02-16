@@ -43,6 +43,7 @@ private:
     QCheckBox *m_defaultPermissonsCheckBox = nullptr;
     QCheckBox *m_defaultFeaturesCheckBox = nullptr;
     QComboBox *m_permissionsComboBox = nullptr;
+    QCheckBox *m_cmakePermissionsCheckBox = nullptr;
     QPushButton *m_addPermissionButton = nullptr;
     QPushButton *m_removePermissionButton = nullptr;
     QPushButton *m_editAttributesButton = nullptr;
