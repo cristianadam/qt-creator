@@ -22,6 +22,7 @@ void insertPermission(PermissionMap &permissions, const QString &name,
 class AndroidManifestParser
 {
 public:
+
     struct ManifestData {
         QString iconName;
         bool hasIcon = false;
@@ -37,6 +38,7 @@ public:
 
         bool shouldModifyPermissions = false;
         QSet<QString> permissionsToKeep;
+        PermissionMap permissionAttributes;
         bool shouldModifyDefaultsComments = false;
         bool writeDefaultPermissionsComment = false;
         bool writeDefaultFeaturesComment = false;
@@ -56,7 +58,7 @@ Utils::Result<> updateManifestApplicationAttribute(const Utils::FilePath &manife
                                                        const QString &attributeKey,
                                                        const QString &attributeValue);
 Utils::Result<> updateManifestPermissions(const Utils::FilePath &manifestPath,
-                                              const QStringList &permissions,
+                                              const PermissionMap &permissions,
                                               bool includeDefaultPermissions,
                                               bool includeDefaultFeatures);
 Utils::Result<> updateManifestDefaultComments(const Utils::FilePath &manifestPath,

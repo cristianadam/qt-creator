@@ -42,7 +42,8 @@ static Result<QDomDocument> loadManifestDocument(const FilePath &manifestPath)
     return doc;
 }
 
-static void extractPlaceholderTags(const QDomElement &manifest, AndroidManifestParser::ManifestData &data)
+static void extractPlaceholderTags(const QDomElement &manifest,
+                                   AndroidManifestParser::ManifestData &data)
 {
     QDomNodeList manifestChildren = manifest.childNodes();
     for (int i = 0; i < manifestChildren.size(); ++i) {
@@ -52,7 +53,7 @@ static void extractPlaceholderTags(const QDomElement &manifest, AndroidManifestP
             QString commentText = comment.data().trimmed();
             if (commentText == QLatin1String("%%INSERT_PERMISSIONS"))
                 data.hasDefaultPermissionsComment = true;
-            else if (commentText == QLatin1String("%%INSERT_FEATURES"))
+            if (commentText == QLatin1String("%%INSERT_FEATURES"))
                 data.hasDefaultFeaturesComment = true;
         }
     }
@@ -68,20 +69,27 @@ void insertPermission(PermissionMap &permissions, const QString &name,
         existingIt.value() = attributes;
 }
 
-static void extractPermissions(const QDomElement &manifest, AndroidManifestParser::ManifestData &data)
+static PermissionAttributes getExtraAttributes(const QDomElement &elem)
+{
+    PermissionAttributes attributes;
+    const QDomNamedNodeMap attrMap = elem.attributes();
+    for (int i = 0; i < attrMap.size(); ++i) {
+        const QDomAttr attr = attrMap.item(i).toAttr();
+        if (attr.name() != keyAndroidName)
+            attributes.insert(attr.name(), attr.value());
+    }
+    return attributes;
+}
+
+static void extractPermissions(const QDomElement &manifest,
+                               AndroidManifestParser::ManifestData &data)
 {
     QDomElement permissionElem = manifest.firstChildElement(keyUsesPermission);
     while (!permissionElem.isNull()) {
         const QString name = permissionElem.attribute(keyAndroidName);
         if (!name.isEmpty()) {
-            QMap<QString, QString> attributes;
-            const QDomNamedNodeMap attrMap = permissionElem.attributes();
-            for (int i = 0; i < attrMap.count(); ++i) {
-                const QDomAttr attr = attrMap.item(i).toAttr();
-                if (attr.name() != keyAndroidName)
-                    attributes.insert(attr.name(), attr.value());
-            }
-            data.permissions.insert(name, attributes);
+            const PermissionAttributes attributes = getExtraAttributes(permissionElem);
+            insertPermission(data.permissions, name, attributes);
         }
         permissionElem = permissionElem.nextSiblingElement(keyUsesPermission);
     }
@@ -99,7 +107,8 @@ static void extractIconInfo(const QDomElement &manifest, AndroidManifestParser::
     }
 }
 
-Result<AndroidManifestParser::ManifestData> AndroidManifestParser::readManifest(const FilePath &manifestPath)
+Result<AndroidManifestParser::ManifestData>
+    AndroidManifestParser::readManifest(const FilePath &manifestPath)
 {
     if (!manifestPath.isReadableFile())
         return ResultError("Could not read manifest file");
@@ -133,6 +142,26 @@ static void modifyApplicationAttributes(QDomElement &manifest,
     }
 }
 
+static bool hasExtraAttributes(const QDomElement &elem)
+{
+    return !getExtraAttributes(elem).isEmpty();
+}
+
+static void applyPermissionAttributes(QDomElement &permissionElem,
+                                      const PermissionAttributes &attributes)
+{
+    const QDomNamedNodeMap attrMap = permissionElem.attributes();
+    QStringList attrNames;
+    for (int i = 0; i < attrMap.size(); ++i)
+        attrNames << attrMap.item(i).toAttr().name();
+    for (const QString &name : std::as_const(attrNames)) {
+        if (name != keyAndroidName)
+            permissionElem.removeAttribute(name);
+    }
+    for (auto it = attributes.cbegin(); it != attributes.cend(); ++it)
+        permissionElem.setAttribute(it.key(), it.value());
+}
+
 static void modifyPermissions(QDomDocument &doc, QDomElement &manifest,
                               const AndroidManifestParser::ModifyParams &instructions)
 {
@@ -141,6 +170,7 @@ static void modifyPermissions(QDomDocument &doc, QDomElement &manifest,
     if (instructions.shouldModifyPermissions) {
         QSet<QString> permissionsToAdd = instructions.permissionsToKeep;
         QDomElement lastPermissionElem;
+        QMap<QString, QDomElement> keptElements;
 
         QDomElement permissionElem = manifest.firstChildElement(keyUsesPermission);
         while (!permissionElem.isNull()) {
@@ -149,18 +179,40 @@ static void modifyPermissions(QDomDocument &doc, QDomElement &manifest,
 
             if (instructions.permissionsToKeep.contains(permissionName)) {
                 permissionsToAdd.remove(permissionName);
-                lastPermissionElem = permissionElem;
+
+                auto keptIt = keptElements.find(permissionName);
+                if (keptIt == keptElements.end()) {
+                    keptElements.insert(permissionName, permissionElem);
+                    lastPermissionElem = permissionElem;
+                } else if (hasExtraAttributes(permissionElem)
+                           && !hasExtraAttributes(keptIt.value())) {
+                    // Prefer the duplicate that has attributes
+                    manifest.removeChild(keptIt.value());
+                    keptIt.value() = permissionElem;
+                    lastPermissionElem = permissionElem;
+                } else {
+                    manifest.removeChild(permissionElem);
+                }
             } else {
                 manifest.removeChild(permissionElem);
             }
 
             permissionElem = nextPermission;
         }
+        for (auto it = keptElements.begin(); it != keptElements.end(); ++it) {
+            const PermissionAttributes attributes =
+                instructions.permissionAttributes.value(it.key());
+            if (!attributes.isEmpty())
+                applyPermissionAttributes(it.value(), attributes);
+        }
 
         for (const QString &permission : std::as_const(permissionsToAdd)) {
             QDomElement newPermission = doc.createElement(keyUsesPermission);
             newPermission.setAttribute(keyAndroidName, permission);
-
+            const PermissionAttributes attributes =
+                instructions.permissionAttributes.value(permission);
+            if (!attributes.isEmpty())
+                applyPermissionAttributes(newPermission, attributes);
             if (!lastPermissionElem.isNull()) {
                 manifest.insertAfter(newPermission, lastPermissionElem);
                 lastPermissionElem = newPermission;
@@ -226,7 +278,8 @@ static Result<> modifyActivityMetaData(QDomDocument &doc, QDomElement &manifest,
         return ResultError("No activity element found in manifest");
 
     QDomElement metaData = activity.firstChildElement(keyMetaData);
-    while (!metaData.isNull() && metaData.attribute(keyAndroidName) != instructions.activityMetaDataName)
+    while (!metaData.isNull() && metaData.attribute(keyAndroidName)
+                              != instructions.activityMetaDataName)
         metaData = metaData.nextSiblingElement(keyMetaData);
 
     const QString &value = instructions.activityMetaDataValue;
@@ -285,7 +338,7 @@ AndroidManifestParser::processAndWriteManifest(const FilePath &manifestPath,
     if (instructions.shouldModifyApplication)
         modifyApplicationAttributes(manifest, instructions);
 
-    if (instructions.shouldModifyPermissions)
+    if (instructions.shouldModifyPermissions || instructions.shouldModifyDefaultsComments)
         modifyPermissions(doc, manifest, instructions);
 
     if (instructions.shouldModifyActivityMetaData) {
@@ -314,12 +367,14 @@ Result<> updateManifestApplicationAttribute(const FilePath &manifestPath,
     return AndroidManifestParser::processAndWriteManifest(manifestPath, instructions);
 }
 
-Result<> updateManifestPermissions(const FilePath &manifestPath, const QStringList &permissions,
+Result<> updateManifestPermissions(const FilePath &manifestPath,
+                                       const PermissionMap &permissions,
                                        bool includeDefaultPermissions, bool includeDefaultFeatures)
 {
     AndroidManifestParser::ModifyParams instructions;
     instructions.shouldModifyPermissions = true;
-    instructions.permissionsToKeep = QSet<QString>(permissions.begin(), permissions.end());
+    instructions.permissionsToKeep = QSet<QString>(permissions.keyBegin(), permissions.keyEnd());
+    instructions.permissionAttributes = permissions;
     instructions.shouldModifyDefaultsComments = true;
     instructions.writeDefaultPermissionsComment = includeDefaultPermissions;
     instructions.writeDefaultFeaturesComment = includeDefaultFeatures;
@@ -378,7 +433,7 @@ Result<> updateManifestActivityMetaData(const FilePath &manifestPath,
 
 Result<> updateManifestPermissionAttributes(const FilePath &manifestPath,
                                                 const QString &permission,
-                                                const QMap<QString, QString> &attributes)
+                                                const PermissionAttributes &attributes)
 {
     auto docResult = loadManifestDocument(manifestPath);
     if (!docResult)
@@ -390,16 +445,7 @@ Result<> updateManifestPermissionAttributes(const FilePath &manifestPath,
     QDomElement permissionElem = manifest.firstChildElement(keyUsesPermission);
     while (!permissionElem.isNull()) {
         if (permissionElem.attribute(keyAndroidName) == permission) {
-            const QDomNamedNodeMap attrMap = permissionElem.attributes();
-            QStringList attrNames;
-            for (int i = 0; i < attrMap.count(); ++i)
-                attrNames << attrMap.item(i).toAttr().name();
-            for (const QString &name : std::as_const(attrNames)) {
-                if (name != keyAndroidName)
-                    permissionElem.removeAttribute(name);
-            }
-            for (auto it = attributes.cbegin(); it != attributes.cend(); ++it)
-                permissionElem.setAttribute(it.key(), it.value());
+            applyPermissionAttributes(permissionElem, attributes);
             break;
         }
         permissionElem = permissionElem.nextSiblingElement(keyUsesPermission);

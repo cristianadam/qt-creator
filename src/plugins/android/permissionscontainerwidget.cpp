@@ -36,6 +36,7 @@
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QScopeGuard>
 #include <QTreeView>
 #include <QVersionNumber>
 
@@ -52,6 +53,25 @@ struct ParsedPermission {
     QString name;
     PermissionAttributes attributes;
 };
+
+struct CMakePermissionCalls {
+    PermissionMap permissions;
+    QList<std::pair<int, int>> ranges;
+    QString content;
+};
+
+struct MigrationContext {
+    FilePath manifestPath;
+    CMakePermissionCalls parsed;
+    PermissionMap merged;
+};
+
+static QString restoreAlsoFailedError(const QString &error, const FilePath &filePath,
+                                      const QString &restoreError)
+{
+    return Tr::tr("%1 Restoring \"%2\" also failed: %3")
+        .arg(error, filePath.toUserOutput(), restoreError);
+}
 
 using CMakeProjectManager::CMakeFunctionCall;
 
@@ -120,6 +140,37 @@ static Result<CMakeProjectManager::CMakeListFile> parseCMakeFileOrDocument(
     return CMakeProjectManager::parseCMakeFile(path);
 }
 
+static Result<CMakePermissionCalls> parseAllPermissionCalls(
+    const CMakeProjectManager::CMakeListFile &cmakeFile, const QString &targetName,
+    const FilePath &path)
+{
+    CMakePermissionCalls result;
+    result.content = cmakeFile.content;
+    for (const CMakeFunctionCall &func : cmakeFile.functions) {
+        if (!isPermissionCallForTarget(func, targetName))
+            continue;
+        const std::optional<ParsedPermission> parsed = parsePermissionCall(func);
+        if (!parsed) {
+            return ResultError(
+                Tr::tr("The %1() call at line %2 of \"%3\" could not be parsed.")
+                    .arg(qtAddAndroidPermission).arg(func.line).arg(path.toUserOutput()));
+        }
+
+        insertPermission(result.permissions, parsed->name, parsed->attributes);
+        result.ranges.append({func.line, func.lineEnd});
+    }
+    return result;
+}
+
+static PermissionMap mergePermissions(const PermissionMap &primary, const PermissionMap &secondary)
+{
+    PermissionMap result = primary;
+    for (auto it = secondary.cbegin(); it != secondary.cend(); ++it) {
+        insertPermission(result, it.key(), it.value());
+    }
+    return result;
+}
+
 static QString quotedCMakeArgument(const QString &value)
 {
     static const QRegularExpression unsafe(R"([\s()#"\\;])");
@@ -161,6 +212,30 @@ static void appendBlock(QStringList &lines, const QString &block)
     lines.append(QString());
 }
 
+static std::optional<QString> rewrittenPermissionCalls(
+    const CMakePermissionCalls &parsed, const QString &targetName,
+    const PermissionMap &newPermissions)
+{
+    QStringList lines = parsed.content.split('\n');
+    removeLineRanges(lines, parsed.ranges);
+
+    QStringList calls;
+    for (auto it = newPermissions.cbegin(); it != newPermissions.cend(); ++it)
+        calls.append(buildPermissionCall(targetName, it.key(), it.value()));
+
+    if (!calls.isEmpty()) {
+        if (!parsed.ranges.isEmpty())
+            lines.insert(parsed.ranges.first().first - 1, calls.join('\n'));
+        else
+            appendBlock(lines, calls.join('\n'));
+    }
+
+    const QString newContent = lines.join('\n');
+    if (newContent == parsed.content)
+        return std::nullopt;
+
+    return newContent;
+}
 class PermissionsModel : public QAbstractListModel
 {
 public:
@@ -353,17 +428,37 @@ void PermissionsContainerWidget::showCMakePermissionsConsentDialog()
 
 void PermissionsContainerWidget::onCMakePermissionsCheckBoxChanged()
 {
-    if (m_CMakePermissionsCheckBox->isChecked()) {
+    m_updating = true;
+    const auto resetUpdating = qScopeGuard([this] { m_updating = false; });
+
+    const bool toCMake = m_CMakePermissionsCheckBox->isChecked();
+    if (toCMake) {
         m_CMakePermissionsCheckBox->blockSignals(true);
         showCMakePermissionsConsentDialog();
         m_CMakePermissionsCheckBox->blockSignals(false);
         if (!m_CMakePermissionsCheckBox->isChecked())
             return;
-        loadPermissionsFromCMake();
-    } else {
-        loadPermissionsFromManifest();
     }
-    updateAddRemovePermissionButtons();
+
+    const Result<> result = toCMake ? migratePermissionsManifestToCMake()
+                                           : migratePermissionsCMakeToManifest();
+    const bool cmakeMode = result ? toCMake : !toCMake;
+    if (!result)
+        revertCMakePermissionsCheckBox(cmakeMode ? Qt::Checked : Qt::Unchecked, result.error());
+
+    if (cmakeMode)
+        loadPermissionsFromCMake();
+    else
+        loadPermissionsFromManifest();
+}
+
+void PermissionsContainerWidget::revertCMakePermissionsCheckBox(Qt::CheckState state,
+                                                              const QString &error)
+{
+    const QSignalBlocker blocker(m_CMakePermissionsCheckBox);
+    m_CMakePermissionsCheckBox->setCheckState(state);
+    QMessageBox::warning(this, Tr::tr("CMake Permission Management"),
+                         Tr::tr("Cannot migrate permissions: %1").arg(error));
 }
 
 void PermissionsContainerWidget::updateCMakePermissionsCheckBoxState(
@@ -840,30 +935,29 @@ Result<> PermissionsContainerWidget::updateManifestDefaultComments()
     return ResultOk;
 }
 
-Utils::Result<> PermissionsContainerWidget::updateManifestPermissions()
+Result<> PermissionsContainerWidget::updateManifestPermissions()
 {
-    Utils::FilePath manifestPath = m_textEditorWidget->textDocument()->filePath();
+    const FilePath path = manifestPath();
 
-    if (manifestPath.isEmpty() || !manifestPath.exists())
-        return Utils::ResultError(Tr::tr("The manifest file does not exist."));
+    if (path.isEmpty() || !path.exists())
+        return ResultError(Tr::tr("The manifest file does not exist."));
 
-    const Utils::Result<> result = Android::Internal::updateManifestPermissions(
-        manifestPath,
-        m_permissionsModel->permissions().keys(),
+    const Result<> result = Android::Internal::updateManifestPermissions(
+        path,
+        m_permissionsModel->permissions(),
         m_defaultPermissonsCheckBox->isChecked(),
         m_defaultFeaturesCheckBox->isChecked());
     if (!result)
         return result;
 
     m_textEditorWidget->textDocument()->reload();
-    return Utils::ResultOk;
+    return ResultOk;
 }
 
 void PermissionsContainerWidget::refresh()
 {
-    if (!m_textEditorWidget)
+    if (!m_textEditorWidget || m_updating)
         return;
-
     std::optional<Result<CMakeProjectManager::CMakeListFile>> cmakeFile;
     if (resolveCMakeProjectInfo())
         cmakeFile = parseCMakeFileOrDocument(m_CMakeFilePath);
@@ -1021,6 +1115,86 @@ Result<> PermissionsContainerWidget::removeCMakePermission(const QString &permis
     QStringList lines = cmakeFile->content.split('\n');
     removeLineRanges(lines, ranges);
     return writeCMakeFile(lines.join('\n'));
+}
+
+Result<MigrationContext> PermissionsContainerWidget::prepareMigration()
+{
+    if (!resolveCMakeProjectInfo())
+        return ResultError(Tr::tr("No CMake target found for the Android manifest."));
+
+    MigrationContext context;
+    context.manifestPath = manifestPath();
+    if (context.manifestPath.isEmpty())
+        return ResultError(Tr::tr("No manifest document available."));
+
+    const auto manifestData = AndroidManifestParser::readManifest(context.manifestPath);
+    if (!manifestData)
+        return ResultError(manifestData.error());
+
+    const auto cmakeFile = syncAndParseCMakeFile(m_CMakeFilePath);
+    if (!cmakeFile)
+        return ResultError(cmakeFile.error());
+
+    Result<CMakePermissionCalls> parsed =
+        parseAllPermissionCalls(*cmakeFile, m_CMakeTargetName, m_CMakeFilePath);
+    if (!parsed)
+        return ResultError(parsed.error());
+
+    context.parsed = std::move(*parsed);
+    context.merged = mergePermissions(manifestData->permissions, context.parsed.permissions);
+    return context;
+}
+
+Result<> PermissionsContainerWidget::migratePermissionsManifestToCMake()
+{
+    const Result<MigrationContext> context = prepareMigration();
+    if (!context)
+        return ResultError(context.error());
+
+    if (const std::optional<QString> newContent =
+            rewrittenPermissionCalls(context->parsed, m_CMakeTargetName, context->merged)) {
+        if (const Result<> result = writeCMakeFile(*newContent); !result)
+            return result;
+    }
+
+    m_permissionsModel->setPermissions({});
+    if (const Result<> result = updateManifestPermissions(); !result) {
+        // Undo the CMake write
+        if (const Result<> restored = writeCMakeFile(context->parsed.content); !restored) {
+            return ResultError(
+                restoreAlsoFailedError(result.error(), m_CMakeFilePath, restored.error()));
+        }
+        return result;
+    }
+    return ResultOk;
+}
+
+Result<> PermissionsContainerWidget::migratePermissionsCMakeToManifest()
+{
+    const Result<MigrationContext> context = prepareMigration();
+    if (!context)
+        return ResultError(context.error());
+
+    const Result<QByteArray> manifestPreImage = context->manifestPath.fileContents();
+    if (!manifestPreImage)
+        return ResultError(manifestPreImage.error());
+
+    m_permissionsModel->setPermissions(context->merged);
+    if (const Result<> result = updateManifestPermissions(); !result)
+        return result;
+
+    if (const std::optional<QString> newContent =
+            rewrittenPermissionCalls(context->parsed, m_CMakeTargetName, {})) {
+        if (const Result<> result = writeCMakeFile(*newContent); !result) {
+            if (const Result<> restored = writeFileWithEditorReload(
+                    context->manifestPath, *manifestPreImage, QIODevice::NotOpen); !restored) {
+                return ResultError(restoreAlsoFailedError(
+                    result.error(), context->manifestPath, restored.error()));
+            }
+            return result;
+        }
+    }
+    return ResultOk;
 }
 
 Result<> PermissionsContainerWidget::updateCMakePermission(const QString &permission,

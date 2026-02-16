@@ -24,6 +24,7 @@ namespace CMakeProjectManager { class CMakeListFile; }
 
 namespace Android::Internal {
 class PermissionsModel;
+struct MigrationContext;
 
 class PermissionsContainerWidget : public QWidget
 {
@@ -53,6 +54,7 @@ private:
     void showCMakePermissionsConsentDialog();
     void onCMakePermissionsCheckBoxChanged();
     bool isCMakePermissionsSupported() const;
+    void revertCMakePermissionsCheckBox(Qt::CheckState state, const QString &error);
     Utils::FilePath manifestPath() const;
     ProjectExplorer::Project *currentProject() const;
     bool ensureCMakeInfo();
@@ -67,6 +69,9 @@ private:
     Utils::Result<> removeCMakePermission(const QString &permission);
     Utils::Result<> updateCMakePermission(const QString &permission,
                                           const PermissionAttributes &attributes);
+    Utils::Result<MigrationContext> prepareMigration();
+    Utils::Result<> migratePermissionsManifestToCMake();
+    Utils::Result<> migratePermissionsCMakeToManifest();
     Utils::Result<> writeCMakeFile(const QString &content);
 
     TextEditor::TextEditorWidget *m_textEditorWidget = nullptr;
@@ -83,6 +88,7 @@ private:
     QTreeView *m_permissionsListView = nullptr;
     PermissionsModel *m_permissionsModel = nullptr;
     bool m_checkBoxStateInitialized = false;
+    bool m_updating = false;
     Utils::InfoLabel *m_CMakeErrorLabel = nullptr;
     bool m_CMakeFileBroken = false;
 };
