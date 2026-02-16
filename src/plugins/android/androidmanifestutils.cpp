@@ -58,6 +58,16 @@ static void extractPlaceholderTags(const QDomElement &manifest, AndroidManifestP
     }
 }
 
+void insertPermission(PermissionMap &permissions, const QString &name,
+                      const PermissionAttributes &attributes)
+{
+    auto existingIt = permissions.find(name);
+    if (existingIt == permissions.end())
+        permissions.insert(name, attributes);
+    else if (existingIt.value().isEmpty() && !attributes.isEmpty())
+        existingIt.value() = attributes;
+}
+
 static void extractPermissions(const QDomElement &manifest, AndroidManifestParser::ManifestData &data)
 {
     QDomElement permissionElem = manifest.firstChildElement(keyUsesPermission);
@@ -126,80 +136,85 @@ static void modifyApplicationAttributes(QDomElement &manifest,
 static void modifyPermissions(QDomDocument &doc, QDomElement &manifest,
                               const AndroidManifestParser::ModifyParams &instructions)
 {
-    QSet<QString> permissionsToAdd = instructions.permissionsToKeep;
-    QDomElement lastPermissionElem;
-
-    QDomElement permissionElem = manifest.firstChildElement(keyUsesPermission);
-    while (!permissionElem.isNull()) {
-        QDomElement nextPermission = permissionElem.nextSiblingElement(keyUsesPermission);
-        QString permissionName = permissionElem.attribute(keyAndroidName);
-
-        if (instructions.permissionsToKeep.contains(permissionName)) {
-            permissionsToAdd.remove(permissionName);
-            lastPermissionElem = permissionElem;
-        } else {
-            manifest.removeChild(permissionElem);
-        }
-
-        permissionElem = nextPermission;
-    }
-
     QDomElement applicationElement = manifest.firstChildElement(keyApplication);
-    for (const QString &permission : std::as_const(permissionsToAdd)) {
-        QDomElement newPermission = doc.createElement(keyUsesPermission);
-        newPermission.setAttribute(keyAndroidName, permission);
 
-        if (!lastPermissionElem.isNull()) {
-            manifest.insertAfter(newPermission, lastPermissionElem);
-            lastPermissionElem = newPermission;
-        } else if (!applicationElement.isNull()) {
-            manifest.insertBefore(newPermission, applicationElement);
-        } else {
-            manifest.appendChild(newPermission);
+    if (instructions.shouldModifyPermissions) {
+        QSet<QString> permissionsToAdd = instructions.permissionsToKeep;
+        QDomElement lastPermissionElem;
+
+        QDomElement permissionElem = manifest.firstChildElement(keyUsesPermission);
+        while (!permissionElem.isNull()) {
+            QDomElement nextPermission = permissionElem.nextSiblingElement(keyUsesPermission);
+            QString permissionName = permissionElem.attribute(keyAndroidName);
+
+            if (instructions.permissionsToKeep.contains(permissionName)) {
+                permissionsToAdd.remove(permissionName);
+                lastPermissionElem = permissionElem;
+            } else {
+                manifest.removeChild(permissionElem);
+            }
+
+            permissionElem = nextPermission;
         }
-    }
 
-    bool hasPermissionsComment = false;
-    bool hasFeaturesComment = false;
+        for (const QString &permission : std::as_const(permissionsToAdd)) {
+            QDomElement newPermission = doc.createElement(keyUsesPermission);
+            newPermission.setAttribute(keyAndroidName, permission);
 
-    QDomNodeList children = manifest.childNodes();
-    for (int i = children.size() - 1; i >= 0; --i) {
-        QDomNode child = children.at(i);
-        if (child.isComment()) {
-            QDomComment comment = child.toComment();
-            QString commentText = comment.data().trimmed();
-
-            if (commentText == QLatin1String("%%INSERT_PERMISSIONS")) {
-                if (!instructions.writeDefaultPermissionsComment)
-                    manifest.removeChild(child);
-                else
-                    hasPermissionsComment = true;
-            } else if (commentText == QLatin1String("%%INSERT_FEATURES")) {
-                if (!instructions.writeDefaultFeaturesComment)
-                    manifest.removeChild(child);
-                else
-                    hasFeaturesComment = true;
+            if (!lastPermissionElem.isNull()) {
+                manifest.insertAfter(newPermission, lastPermissionElem);
+                lastPermissionElem = newPermission;
+            } else if (!applicationElement.isNull()) {
+                manifest.insertBefore(newPermission, applicationElement);
+            } else {
+                manifest.appendChild(newPermission);
             }
         }
     }
 
-    if (instructions.writeDefaultPermissionsComment && !hasPermissionsComment) {
-        QDomComment permComment = doc.createComment(QLatin1String("%%INSERT_PERMISSIONS"));
-        if (!applicationElement.isNull())
-            manifest.insertBefore(permComment, applicationElement);
-        else
-            manifest.appendChild(permComment);
-    }
-    if (instructions.writeDefaultFeaturesComment && !hasFeaturesComment) {
-        QDomComment featComment = doc.createComment(QLatin1String("%%INSERT_FEATURES"));
-        if (!applicationElement.isNull())
-            manifest.insertBefore(featComment, applicationElement);
-        else
-            manifest.appendChild(featComment);
+    if (instructions.shouldModifyDefaultsComments) {
+        bool hasPermissionsComment = false;
+        bool hasFeaturesComment = false;
+
+        QDomNodeList children = manifest.childNodes();
+        for (int i = children.size() - 1; i >= 0; --i) {
+            QDomNode child = children.at(i);
+            if (child.isComment()) {
+                QDomComment comment = child.toComment();
+                QString commentText = comment.data().trimmed();
+
+                if (commentText == QLatin1String("%%INSERT_PERMISSIONS")) {
+                    if (!instructions.writeDefaultPermissionsComment)
+                        manifest.removeChild(child);
+                    else
+                        hasPermissionsComment = true;
+                } else if (commentText == QLatin1String("%%INSERT_FEATURES")) {
+                    if (!instructions.writeDefaultFeaturesComment)
+                        manifest.removeChild(child);
+                    else
+                        hasFeaturesComment = true;
+                }
+            }
+        }
+
+        if (instructions.writeDefaultPermissionsComment && !hasPermissionsComment) {
+            QDomComment permComment = doc.createComment(QLatin1String("%%INSERT_PERMISSIONS"));
+            if (!applicationElement.isNull())
+                manifest.insertBefore(permComment, applicationElement);
+            else
+                manifest.appendChild(permComment);
+        }
+        if (instructions.writeDefaultFeaturesComment && !hasFeaturesComment) {
+            QDomComment featComment = doc.createComment(QLatin1String("%%INSERT_FEATURES"));
+            if (!applicationElement.isNull())
+                manifest.insertBefore(featComment, applicationElement);
+            else
+                manifest.appendChild(featComment);
+        }
     }
 }
 
-static Result<void> modifyActivityMetaData(QDomDocument &doc, QDomElement &manifest,
+static Result<> modifyActivityMetaData(QDomDocument &doc, QDomElement &manifest,
                                            const AndroidManifestParser::ModifyParams &instructions)
 {
     QDomElement application = manifest.firstChildElement(keyApplication);
@@ -231,17 +246,19 @@ static Result<void> modifyActivityMetaData(QDomDocument &doc, QDomElement &manif
     return {};
 }
 
-static Result<void> saveDocument(const FilePath &manifestPath, const QDomDocument &doc)
+Result<> writeFileWithEditorReload(const FilePath &filePath,
+                                       const QByteArray &content,
+                                       QIODevice::OpenMode mode)
 {
-    QScopeGuard unexpect([&] { Core::DocumentManager::unexpectFileChange(manifestPath); });
-    Core::DocumentManager::expectFileChange(manifestPath);
+    QScopeGuard unexpect([&] { Core::DocumentManager::unexpectFileChange(filePath); });
+    Core::DocumentManager::expectFileChange(filePath);
 
-    Utils::FileSaver saver(manifestPath, QIODevice::Text);
-    saver.write(doc.toString(4).toUtf8());
+    FileSaver saver(filePath, mode);
+    saver.write(content);
     if (!saver.finalize())
         return ResultError(QString("Cannot write to manifest file: %1").arg(saver.errorString()));
 
-    const QList<Core::IEditor *> editors = Core::DocumentModel::editorsForFilePath(manifestPath);
+    const QList<Core::IEditor *> editors = Core::DocumentModel::editorsForFilePath(filePath);
     for (Core::IEditor *editor : editors) {
         if (Core::IDocument *editorDocument = editor->document())
             editorDocument->reload(Core::IDocument::FlagReload, Core::IDocument::TypeContents);
@@ -249,7 +266,12 @@ static Result<void> saveDocument(const FilePath &manifestPath, const QDomDocumen
     return {};
 }
 
-Result<void>
+static Result<> saveDocument(const FilePath &filePath, const QDomDocument &doc)
+{
+    return writeFileWithEditorReload(filePath, doc.toString(4).toUtf8(), QIODevice::Text);
+}
+
+Result<>
 AndroidManifestParser::processAndWriteManifest(const FilePath &manifestPath,
                                                const ModifyParams &instructions)
 {
@@ -275,7 +297,7 @@ AndroidManifestParser::processAndWriteManifest(const FilePath &manifestPath,
     return saveDocument(manifestPath, doc);
 }
 
-Result<void> updateManifestApplicationAttribute(const FilePath &manifestPath,
+Result<> updateManifestApplicationAttribute(const FilePath &manifestPath,
                                                 const QString &attributeKey,
                                                 const QString &attributeValue)
 {
@@ -292,12 +314,25 @@ Result<void> updateManifestApplicationAttribute(const FilePath &manifestPath,
     return AndroidManifestParser::processAndWriteManifest(manifestPath, instructions);
 }
 
-Result<void> updateManifestPermissions(const FilePath &manifestPath, const QStringList &permissions,
+Result<> updateManifestPermissions(const FilePath &manifestPath, const QStringList &permissions,
                                        bool includeDefaultPermissions, bool includeDefaultFeatures)
 {
     AndroidManifestParser::ModifyParams instructions;
     instructions.shouldModifyPermissions = true;
     instructions.permissionsToKeep = QSet<QString>(permissions.begin(), permissions.end());
+    instructions.shouldModifyDefaultsComments = true;
+    instructions.writeDefaultPermissionsComment = includeDefaultPermissions;
+    instructions.writeDefaultFeaturesComment = includeDefaultFeatures;
+
+    return AndroidManifestParser::processAndWriteManifest(manifestPath, instructions);
+}
+
+Result<> updateManifestDefaultComments(const FilePath &manifestPath,
+                                           bool includeDefaultPermissions,
+                                           bool includeDefaultFeatures)
+{
+    AndroidManifestParser::ModifyParams instructions;
+    instructions.shouldModifyDefaultsComments = true;
     instructions.writeDefaultPermissionsComment = includeDefaultPermissions;
     instructions.writeDefaultFeaturesComment = includeDefaultFeatures;
 
@@ -330,7 +365,7 @@ Result<QString> readManifestActivityMetaData(const FilePath &manifestPath,
     return QString();
 }
 
-Result<void> updateManifestActivityMetaData(const FilePath &manifestPath,
+Result<> updateManifestActivityMetaData(const FilePath &manifestPath,
                                             const QString &metaDataName,
                                             const QString &metaDataValue)
 {
@@ -341,7 +376,7 @@ Result<void> updateManifestActivityMetaData(const FilePath &manifestPath,
     return AndroidManifestParser::processAndWriteManifest(manifestPath, instructions);
 }
 
-Result<void> updateManifestPermissionAttributes(const FilePath &manifestPath,
+Result<> updateManifestPermissionAttributes(const FilePath &manifestPath,
                                                 const QString &permission,
                                                 const QMap<QString, QString> &attributes)
 {

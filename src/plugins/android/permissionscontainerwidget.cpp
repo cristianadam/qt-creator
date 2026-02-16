@@ -7,6 +7,7 @@
 
 #include <cmakeprojectmanager/cmakeparser.h>
 #include <cmakeprojectmanager/cmakeprojectconstants.h>
+#include <coreplugin/documentmanager.h>
 #include <coreplugin/editormanager/documentmodel.h>
 #include <projectexplorer/buildconfiguration.h>
 #include <projectexplorer/buildsystem.h>
@@ -45,14 +46,67 @@ namespace Android::Internal {
 
 constexpr QLatin1StringView qtAddAndroidPermission("qt_add_android_permission");
 
+static const Key suppressCMakeWarning{"Android.SuppressCMakePermissionsWarning"};
+
+struct ParsedPermission {
+    QString name;
+    PermissionAttributes attributes;
+};
+
 using CMakeProjectManager::CMakeFunctionCall;
 
-static bool isPermissionCallForTarget(const CMakeFunctionCall &func, const QString &target)
+static std::optional<ParsedPermission> parsePermissionCall(const CMakeFunctionCall &func)
+{
+    const auto &arguments = func.arguments;
+    ParsedPermission result;
+    bool inAttributes = false;
+    for (qsizetype i = 1; i < arguments.size(); ++i) {
+        if (inAttributes) {
+            if (i + 1 >= arguments.size())
+                return std::nullopt;
+            result.attributes.insert(arguments.at(i), arguments.at(i + 1));
+            ++i;
+        } else if (arguments.at(i) == "NAME" && i + 1 < arguments.size()
+                   && result.name.isEmpty()) {
+            result.name = arguments.at(++i);
+        } else if (arguments.at(i) == "ATTRIBUTES") {
+            inAttributes = true;
+        } else {
+            return std::nullopt;
+        }
+    }
+    if (result.name.isEmpty())
+        return std::nullopt;
+    return result;
+}
+
+static bool isPermissionCallForTarget(const CMakeFunctionCall &func, const QString &target,
+                                        const QString &permission = {})
 {
     if (func.name != qtAddAndroidPermission)
         return false;
     const auto &arguments = func.arguments;
-    return !arguments.isEmpty() && arguments.first() == target;
+    if (arguments.isEmpty() || arguments.first() != target)
+        return false;
+    if (permission.isEmpty())
+        return true;
+    for (qsizetype i = 1; i + 1 < arguments.size(); ++i) {
+        if (arguments.at(i) == "NAME" && arguments.at(i + 1) == permission)
+            return true;
+    }
+    return false;
+}
+
+static Result<CMakeProjectManager::CMakeListFile> syncAndParseCMakeFile(
+    const FilePath &path)
+{
+    if (!Core::DocumentManager::saveModifiedDocumentSilently(
+            Core::DocumentModel::documentForFilePath(path))) {
+        return ResultError(
+            Tr::tr("\"%1\" has unsaved changes that could not be saved.")
+                .arg(path.toUserOutput()));
+    }
+    return CMakeProjectManager::parseCMakeFile(path);
 }
 
 static Result<CMakeProjectManager::CMakeListFile> parseCMakeFileOrDocument(
@@ -66,20 +120,60 @@ static Result<CMakeProjectManager::CMakeListFile> parseCMakeFileOrDocument(
     return CMakeProjectManager::parseCMakeFile(path);
 }
 
+static QString quotedCMakeArgument(const QString &value)
+{
+    static const QRegularExpression unsafe(R"([\s()#"\\;])");
+    if (!value.isEmpty() && !value.contains(unsafe))
+        return value;
+    QString escaped = value;
+    escaped.replace('\\', "\\\\");
+    escaped.replace('"', "\\\"");
+    return '"' + escaped + '"';
+}
+
+static QString buildPermissionCall(const QString &target, const QString &permission,
+                                   const PermissionAttributes &attributes)
+{
+    QString call = QString("%1(%2 NAME %3")
+                    .arg(qtAddAndroidPermission, target, quotedCMakeArgument(permission));
+    if (!attributes.isEmpty()) {
+        call += "\n    ATTRIBUTES";
+        for (auto it = attributes.cbegin(); it != attributes.cend(); ++it)
+            call += QString("\n        %1 %2").arg(quotedCMakeArgument(it.key()),
+                                                   quotedCMakeArgument(it.value()));
+    }
+    call += "\n)";
+    return call;
+}
+
+static void removeLineRanges(QStringList &lines, const QList<std::pair<int, int>> &ranges)
+{
+    for (auto it = ranges.crbegin(); it != ranges.crend(); ++it)
+        lines.remove(it->first - 1, it->second - it->first + 1);
+}
+
+static void appendBlock(QStringList &lines, const QString &block)
+{
+    if (!lines.isEmpty() && lines.last().isEmpty())
+        lines.last() = block;
+    else
+        lines.append(block);
+    lines.append(QString());
+}
+
 class PermissionsModel : public QAbstractListModel
 {
 public:
     PermissionsModel(QObject *parent = nullptr) : QAbstractListModel(parent) {}
 
-    void setPermissions(const QMap<QString, QMap<QString, QString>> &permissions)
+    void setPermissions(const PermissionMap &permissions)
     {
         beginResetModel();
         m_permissions = permissions;
         endResetModel();
     }
 
-    const QMap<QString, QMap<QString, QString>> &permissions() const { return m_permissions; }
-
+    const PermissionMap &permissions() const { return m_permissions; }
 
     QModelIndex addPermission(const QString &permission)
     {
@@ -120,7 +214,7 @@ public:
         return QVariant();
     }
 
-    void setAttributes(const QString &permission, const QMap<QString, QString> &attributes)
+    void setAttributes(const QString &permission, const PermissionAttributes &attributes)
     {
         auto it = m_permissions.find(permission);
         if (it != m_permissions.end() && it.value() != attributes) {
@@ -158,9 +252,8 @@ public:
                     return Tr::tr("No attributes");
 
                 QStringList parts;
-                for (auto ait = it.value().cbegin(); ait != it.value().cend(); ++ait) {
+                for (auto ait = it.value().cbegin(); ait != it.value().cend(); ++ait)
                     parts.append(ait.key() + ": " + ait.value());
-                }
                 return parts.join(", ");
             }
             default:
@@ -184,7 +277,7 @@ public:
     }
 
 private:
-    QMap<QString, QMap<QString, QString>> m_permissions; // key = permission, value = <attrName: Value>
+    PermissionMap m_permissions;
 };
 
 PermissionsContainerWidget::PermissionsContainerWidget(QWidget *parent)
@@ -205,6 +298,11 @@ Project *PermissionsContainerWidget::currentProject() const
     return path.isEmpty() ? nullptr : ProjectManager::projectForFile(path);
 }
 
+bool PermissionsContainerWidget::ensureCMakeInfo()
+{
+    return !m_CMakeFilePath.isEmpty() || resolveCMakeProjectInfo();
+}
+
 bool PermissionsContainerWidget::isCMakePermissionsSupported() const
 {
     Project *project = currentProject();
@@ -221,6 +319,51 @@ bool PermissionsContainerWidget::isCMakePermissionsSupported() const
         return false;
 
     return activeQtVersion >= QVersionNumber(6, 9);
+}
+
+void PermissionsContainerWidget::showCMakePermissionsConsentDialog()
+{
+    if (!m_CMakePermissionsCheckBox->isChecked())
+        return;
+
+    Project *project = currentProject();
+
+    if (project && project->namedSettings(suppressCMakeWarning).toBool())
+        return;
+
+    QMessageBox msgBox(this);
+    msgBox.setIcon(QMessageBox::Warning);
+    msgBox.setWindowTitle(Tr::tr("CMake Permission Management"));
+    msgBox.setText(Tr::tr("Manage permissions via qt_add_android_permission() calls in "
+                          "CMakeLists.txt instead of AndroidManifest.xml. "
+                          "This requires Qt 6.9 or newer."));
+    msgBox.setStandardButtons(QMessageBox::Ok | QMessageBox::Cancel);
+
+    QCheckBox *dontAskCheckBox = new QCheckBox(Tr::tr("Don't ask again"), &msgBox);
+    msgBox.setCheckBox(dontAskCheckBox);
+
+    if (msgBox.exec() == QMessageBox::Cancel) {
+        m_CMakePermissionsCheckBox->setCheckState(Qt::Unchecked);
+        return;
+    }
+
+    if (project && dontAskCheckBox->isChecked())
+        project->setNamedSettings(suppressCMakeWarning, true);
+}
+
+void PermissionsContainerWidget::onCMakePermissionsCheckBoxChanged()
+{
+    if (m_CMakePermissionsCheckBox->isChecked()) {
+        m_CMakePermissionsCheckBox->blockSignals(true);
+        showCMakePermissionsConsentDialog();
+        m_CMakePermissionsCheckBox->blockSignals(false);
+        if (!m_CMakePermissionsCheckBox->isChecked())
+            return;
+        loadPermissionsFromCMake();
+    } else {
+        loadPermissionsFromManifest();
+    }
+    updateAddRemovePermissionButtons();
 }
 
 void PermissionsContainerWidget::updateCMakePermissionsCheckBoxState(
@@ -463,6 +606,8 @@ bool PermissionsContainerWidget::initialize(TextEditor::TextEditorWidget *textEd
             this, &PermissionsContainerWidget::defaultPermissionOrFeatureCheckBoxClicked);
     connect(m_defaultFeaturesCheckBox, &QCheckBox::stateChanged,
             this, &PermissionsContainerWidget::defaultPermissionOrFeatureCheckBoxClicked);
+    connect(m_CMakePermissionsCheckBox, &QCheckBox::stateChanged,
+            this, &PermissionsContainerWidget::onCMakePermissionsCheckBoxChanged);
     connect(m_addPermissionButton, &QAbstractButton::clicked,
             this, &PermissionsContainerWidget::addPermission);
     connect(m_removePermissionButton, &QAbstractButton::clicked,
@@ -489,11 +634,17 @@ void PermissionsContainerWidget::addPermission()
     if (permission.isEmpty())
         return;
 
+    const bool cmakeMode = m_CMakePermissionsCheckBox->isChecked();
+    if (cmakeMode && !ensureCMakeInfo())
+        return;
+
     const QModelIndex added = m_permissionsModel->addPermission(permission);
     if (!added.isValid())
         return;
 
-    if (const Utils::Result<> result = updateManifestPermissions(); !result) {
+    const Result<> result = cmakeMode ? addCMakePermission(permission)
+                                           : updateManifestPermissions();
+    if (!result) {
         m_permissionsModel->removePermission(added.row());
         QMessageBox::warning(this, Tr::tr("Add Permission"),
                              Tr::tr("Cannot add permission: %1").arg(result.error()));
@@ -511,12 +662,13 @@ void PermissionsContainerWidget::editAttributes()
 
     auto it = std::next(m_permissionsModel->permissions().cbegin(), index.row());
     const QString permission = it.key();
-    QMap<QString, QString> attributes = it.value();
+    PermissionAttributes attributes = it.value();
 
     QDialog dialog(this);
     QVBoxLayout *dialogLayout = new QVBoxLayout(&dialog);
 
-    QLabel *permissionLabel = new QLabel(Tr::tr("Permission: %1").arg("<b>" + permission + "</b>"), &dialog);
+    QLabel *permissionLabel = new QLabel(Tr::tr("Permission: %1").arg("<b>" + permission + "</b>"),
+                                         &dialog);
     dialogLayout->addWidget(permissionLabel);
 
     QListWidget *attrListWidget = new QListWidget(&dialog);
@@ -574,24 +726,42 @@ void PermissionsContainerWidget::editAttributes()
 
     dialogLayout->addWidget(addRowButton);
 
-    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok
+                                                     | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, [&]() {
+        const QString name = attributeCombo->currentText().trimmed();
+        const QString val = valueEdit->text().trimmed();
+        if (!name.isEmpty() && !val.isEmpty())
+            attributes.insert(name, val);
+        dialog.accept();
+    });
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     dialogLayout->addWidget(buttons);
 
     if (dialog.exec() != QDialog::Accepted)
         return;
 
-    m_permissionsModel->setAttributes(permission, attributes);
+    const bool cmakeMode = m_CMakePermissionsCheckBox->isChecked();
+    if (cmakeMode && !ensureCMakeInfo())
+        return;
 
-    if (m_textEditorWidget && m_textEditorWidget->textDocument()) {
-        const Utils::FilePath manifestPath = m_textEditorWidget->textDocument()->filePath();
-        if (manifestPath.exists())
-            updateManifestPermissionAttributes(manifestPath, permission, attributes);
+    Result<> result = ResultOk;
+    if (cmakeMode) {
+        result = updateCMakePermission(permission, attributes);
+        if (!result)
+            loadPermissionsFromCMake();
+    } else {
+        const FilePath path = manifestPath();
+        if (path.exists())
+            result = updateManifestPermissionAttributes(path, permission, attributes);
     }
-
+    if (!result) {
+        QMessageBox::warning(this, Tr::tr("Edit Attributes"),
+                             Tr::tr("Cannot update attributes: %1").arg(result.error()));
+        return;
+    }
+    m_permissionsModel->setAttributes(permission, attributes);
     emit permissionsModified();
-
 }
 
 void PermissionsContainerWidget::removePermission()
@@ -600,12 +770,26 @@ void PermissionsContainerWidget::removePermission()
     if (!index.isValid())
         return;
 
-    m_permissionsModel->removePermission(index.row());
-    if (const Utils::Result<> result = updateManifestPermissions(); !result) {
-        loadPermissionsFromManifest();
-        QMessageBox::warning(this, Tr::tr("Remove Permission"),
-                             Tr::tr("Cannot remove permission: %1").arg(result.error()));
-        return;
+    const QString permission = index.siblingAtColumn(0).data().toString();
+
+    if (m_CMakePermissionsCheckBox->isChecked()) {
+        if (!ensureCMakeInfo())
+            return;
+        if (const Result<> result = removeCMakePermission(permission); !result) {
+            loadPermissionsFromCMake();
+            QMessageBox::warning(this, Tr::tr("Remove Permission"),
+                                 Tr::tr("Cannot remove permission: %1").arg(result.error()));
+            return;
+        }
+        m_permissionsModel->removePermission(index.row());
+    } else {
+        m_permissionsModel->removePermission(index.row());
+        if (const Result<> result = updateManifestPermissions(); !result) {
+            loadPermissionsFromManifest();
+            QMessageBox::warning(this, Tr::tr("Remove Permission"),
+                                 Tr::tr("Cannot remove permission: %1").arg(result.error()));
+            return;
+        }
     }
 
     emit permissionsModified();
@@ -626,13 +810,34 @@ void PermissionsContainerWidget::updateAddRemovePermissionButtons()
 
 void PermissionsContainerWidget::defaultPermissionOrFeatureCheckBoxClicked()
 {
-    if (const Utils::Result<> result = updateManifestPermissions(); !result) {
+    const Result<> result = m_CMakePermissionsCheckBox->isChecked()
+        ? updateManifestDefaultComments()
+        : updateManifestPermissions();
+    if (!result) {
         QMessageBox::warning(this, Tr::tr("Permissions"),
                              Tr::tr("Cannot update the manifest: %1").arg(result.error()));
         refresh();
         return;
     }
     emit permissionsModified();
+}
+
+Result<> PermissionsContainerWidget::updateManifestDefaultComments()
+{
+    const FilePath path = manifestPath();
+
+    if (path.isEmpty() || !path.exists())
+        return ResultError(Tr::tr("The manifest file does not exist."));
+
+    const Result<> result = Android::Internal::updateManifestDefaultComments(
+        path,
+        m_defaultPermissonsCheckBox->isChecked(),
+        m_defaultFeaturesCheckBox->isChecked());
+    if (!result)
+        return result;
+
+    m_textEditorWidget->textDocument()->reload();
+    return ResultOk;
 }
 
 Utils::Result<> PermissionsContainerWidget::updateManifestPermissions()
@@ -666,7 +871,10 @@ void PermissionsContainerWidget::refresh()
         AndroidManifestParser::readManifest(manifestPath());
 
     updateCMakePermissionsCheckBoxState(cmakeFile, manifestData);
-    loadPermissionsFromManifest(manifestData);
+    if (m_CMakePermissionsCheckBox->isChecked())
+        loadPermissionsFromCMake(cmakeFile, manifestData);
+    else
+        loadPermissionsFromManifest(manifestData);
     updateAddRemovePermissionButtons();
 }
 
@@ -686,6 +894,30 @@ void PermissionsContainerWidget::loadPermissionsFromManifest(
     const QSignalBlocker blockFeatures(m_defaultFeaturesCheckBox);
     m_defaultPermissonsCheckBox->setChecked(manifestData->hasDefaultPermissionsComment);
     m_defaultFeaturesCheckBox->setChecked(manifestData->hasDefaultFeaturesComment);
+}
+
+Result<> PermissionsContainerWidget::addCMakePermission(
+    const QString &permission, const PermissionAttributes &attributes)
+{
+    const auto cmakeFile = syncAndParseCMakeFile(m_CMakeFilePath);
+    if (!cmakeFile)
+        return ResultError(cmakeFile.error());
+
+    const QString newCall = buildPermissionCall(m_CMakeTargetName, permission, attributes);
+
+    int lastLineEnd = -1;
+    for (const CMakeFunctionCall &func : cmakeFile->functions) {
+        if (isPermissionCallForTarget(func, m_CMakeTargetName))
+            lastLineEnd = func.lineEnd;
+    }
+
+    QStringList lines = cmakeFile->content.split('\n');
+    if (lastLineEnd != -1)
+        lines.insert(lastLineEnd, newCall);
+    else
+        appendBlock(lines, newCall);
+
+    return writeCMakeFile(lines.join('\n'));
 }
 
 bool PermissionsContainerWidget::resolveCMakeProjectInfo()
@@ -733,4 +965,101 @@ bool PermissionsContainerWidget::resolveCMakeProjectInfo()
     m_CMakeFilePath = cmakeFile;
     return true;
 }
+
+void PermissionsContainerWidget::loadPermissionsFromCMake()
+{
+    std::optional<Result<CMakeProjectManager::CMakeListFile>> cmakeFile;
+    if (resolveCMakeProjectInfo())
+        cmakeFile = parseCMakeFileOrDocument(m_CMakeFilePath);
+    loadPermissionsFromCMake(cmakeFile, AndroidManifestParser::readManifest(manifestPath()));
+}
+
+void PermissionsContainerWidget::loadPermissionsFromCMake(
+    const std::optional<Result<CMakeProjectManager::CMakeListFile>> &cmakeFile,
+        const Result<AndroidManifestParser::ManifestData> &manifestData)
+{
+    if (!cmakeFile)
+        return;
+    if (!*cmakeFile) {
+        m_permissionsModel->setPermissions({});
+        return;
+    }
+    PermissionMap permissions;
+    for (const CMakeFunctionCall &func : (*cmakeFile)->functions) {
+        if (!isPermissionCallForTarget(func, m_CMakeTargetName))
+            continue;
+        if (const auto result = parsePermissionCall(func))
+            insertPermission(permissions, result->name, result->attributes);
+    }
+    m_permissionsModel->setPermissions(permissions);
+
+    if (manifestData) {
+        const QSignalBlocker blockPermissions(m_defaultPermissonsCheckBox);
+        const QSignalBlocker blockFeatures(m_defaultFeaturesCheckBox);
+        m_defaultPermissonsCheckBox->setChecked(manifestData->hasDefaultPermissionsComment);
+        m_defaultFeaturesCheckBox->setChecked(manifestData->hasDefaultFeaturesComment);
+    }
+}
+
+Result<> PermissionsContainerWidget::removeCMakePermission(const QString &permission)
+{
+    const auto cmakeFile = syncAndParseCMakeFile(m_CMakeFilePath);
+    if (!cmakeFile)
+        return ResultError(cmakeFile.error());
+
+    QList<std::pair<int, int>> ranges;
+    for (const CMakeFunctionCall &func : cmakeFile->functions) {
+        if (isPermissionCallForTarget(func, m_CMakeTargetName, permission))
+            ranges.append({func.line, func.lineEnd});
+    }
+
+    if (ranges.isEmpty())
+        return ResultError(Tr::tr("No %1() call for \"%2\" found in \"%3\".")
+                                  .arg(qtAddAndroidPermission, permission,
+                                       m_CMakeFilePath.toUserOutput()));
+
+    QStringList lines = cmakeFile->content.split('\n');
+    removeLineRanges(lines, ranges);
+    return writeCMakeFile(lines.join('\n'));
+}
+
+Result<> PermissionsContainerWidget::updateCMakePermission(const QString &permission,
+                                                       const PermissionAttributes &attributes)
+{
+    if (m_CMakeFilePath.isEmpty())
+        return ResultError(Tr::tr("No CMake target found for the Android manifest."));
+
+    const auto cmakeFile = syncAndParseCMakeFile(m_CMakeFilePath);
+    if (!cmakeFile)
+        return ResultError(cmakeFile.error());
+
+    int lineStart = -1, lineEnd = -1;
+    for (const CMakeFunctionCall &func : cmakeFile->functions) {
+        if (isPermissionCallForTarget(func, m_CMakeTargetName, permission)) {
+            const std::optional<ParsedPermission> current = parsePermissionCall(func);
+            if (current && current->attributes == attributes)
+                return ResultOk; // No change needed
+            lineStart = func.line;
+            lineEnd = func.lineEnd;
+            break;
+        }
+    }
+
+    if (lineStart == -1)
+        return ResultError(Tr::tr("No %1() call for \"%2\" found in \"%3\".")
+                                  .arg(qtAddAndroidPermission, permission,
+                                       m_CMakeFilePath.toUserOutput()));
+
+    QStringList lines = cmakeFile->content.split('\n');
+    removeLineRanges(lines, {{lineStart, lineEnd}});
+    lines.insert(lineStart - 1, buildPermissionCall(m_CMakeTargetName, permission, attributes));
+
+    return writeCMakeFile(lines.join('\n'));
+}
+
+Result<> PermissionsContainerWidget::writeCMakeFile(const QString &content)
+{
+    return writeFileWithEditorReload(m_CMakeFilePath, content.toUtf8(), QIODevice::Text);
+}
+
 } // namespace Android::Internal
