@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <utils/fileutils.h>
+
+#include <QMap>
 #include <QWidget>
 #include <QStringList>
 #include <QTreeView>
@@ -18,7 +21,6 @@ namespace ProjectExplorer { class Project; }
 namespace TextEditor { class TextEditorWidget; }
 
 namespace Android::Internal {
-
 class PermissionsModel;
 
 class PermissionsContainerWidget : public QWidget
@@ -41,11 +43,19 @@ private:
     void updateManifestPermissions();
     void loadPermissionsFromManifest();
     void showCMakePermissionsConsentDialog();
+    void onCMakePermissionsCheckBoxChanged();
     bool isCMakePermissionsSupported();
     bool hasPermissionsInManifest(Utils::FilePath &manifestPath);
+    bool resolveCmakeProjectInfo();
+    void loadPermissionsFromCmake();
+    void addCmakePermission(const QString &permission);
+    bool removeCmakePermission(const QString &permission);
+    void updateCmakePermission(const QString &permission, const QMap<QString, QString> &attributes);
 
     TextEditor::TextEditorWidget *m_textEditorWidget = nullptr;
-
+    Utils::FilePath m_cmakeFilePath;
+    QString m_cmakeTargetName;
+    ProjectExplorer::Project *m_project = nullptr;
     QCheckBox *m_defaultPermissonsCheckBox = nullptr;
     QCheckBox *m_defaultFeaturesCheckBox = nullptr;
     QComboBox *m_permissionsComboBox = nullptr;
