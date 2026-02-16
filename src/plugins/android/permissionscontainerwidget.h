@@ -7,11 +7,14 @@
 #include <QStringList>
 #include <QTreeView>
 
+#include <utils/fileutils.h>
+
 class QCheckBox;
 class QComboBox;
 class QPushButton;
 class QListView;
 
+namespace ProjectExplorer { class Project; }
 namespace TextEditor { class TextEditorWidget; }
 
 namespace Android::Internal {
@@ -37,13 +40,16 @@ private:
     void defaultPermissionOrFeatureCheckBoxClicked();
     void updateManifestPermissions();
     void loadPermissionsFromManifest();
+    void showCMakePermissionsConsentDialog();
+    bool isCMakePermissionsSupported();
+    bool hasPermissionsInManifest(Utils::FilePath &manifestPath);
 
     TextEditor::TextEditorWidget *m_textEditorWidget = nullptr;
 
     QCheckBox *m_defaultPermissonsCheckBox = nullptr;
     QCheckBox *m_defaultFeaturesCheckBox = nullptr;
     QComboBox *m_permissionsComboBox = nullptr;
-    QCheckBox *m_cmakePermissionsCheckBox = nullptr;
+    QCheckBox *m_CMakePermissionsCheckBox = nullptr;
     QPushButton *m_addPermissionButton = nullptr;
     QPushButton *m_removePermissionButton = nullptr;
     QPushButton *m_editAttributesButton = nullptr;
