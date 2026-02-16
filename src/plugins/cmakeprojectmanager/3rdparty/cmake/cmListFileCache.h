@@ -3,6 +3,8 @@
 #pragma once
 
 #include <algorithm>
+#include <cmakeprojectmanager/cmake_global.h>
+#include <iosfwd>
 #include <memory>
 #include <string>
 #include <utility>
@@ -107,7 +109,7 @@ private:
 
 struct cmListFile
 {
-  bool ParseString(const std::string &str, const std::string &virtual_filename, std::string &error);
+  bool CMAKE_EXPORT ParseString(const std::string &str, const std::string &virtual_filename, std::string &error);
 
   std::vector<cmListFileFunction> Functions;
 };

@@ -51,7 +51,7 @@ static void extractPlaceholderTags(const QDomElement &manifest, AndroidManifestP
             QString commentText = comment.data().trimmed();
             if (commentText == QLatin1String("%%INSERT_PERMISSIONS"))
                 data.hasDefaultPermissionsComment = true;
-            else if (commentText == QLatin1String("%%INSERT_FEATURES"))
+            if (commentText == QLatin1String("%%INSERT_FEATURES"))
                 data.hasDefaultFeaturesComment = true;
         }
     }
