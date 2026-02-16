@@ -89,7 +89,6 @@ add_subdirectory(gitlab)
 add_subdirectory(qmljseditor)
 
 # Level 7:
-add_subdirectory(android)
 add_subdirectory(autotest)
 add_subdirectory(axivion)
 add_subdirectory(baremetal)
@@ -104,6 +103,7 @@ add_subdirectory(squish)
 add_subdirectory(valgrind)
 
 # Level 8:
+add_subdirectory(android)
 add_subdirectory(boot2qt)
 add_subdirectory(harmonyos)
 add_subdirectory(incredibuild)

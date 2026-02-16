@@ -5,8 +5,20 @@
 #include "androidtr.h"
 #include "androidmanifestutils.h"
 
+#include <cmakeprojectmanager/cmakeparser.h>
+#include <cmakeprojectmanager/cmakeprojectconstants.h>
+#include <coreplugin/editormanager/documentmodel.h>
+#include <projectexplorer/buildconfiguration.h>
+#include <projectexplorer/buildsystem.h>
+#include <projectexplorer/project.h>
+#include <projectexplorer/projectmanager.h>
+#include <projectexplorer/target.h>
+#include <qtsupport/baseqtversion.h>
+#include <qtsupport/qtkitaspect.h>
 #include <texteditor/textdocument.h>
 #include <texteditor/texteditor.h>
+#include <utils/algorithm.h>
+#include <utils/infolabel.h>
 
 #include <QAbstractListModel>
 #include <QApplication>
@@ -20,14 +32,39 @@
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QLineEdit>
-#include <QListView>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QTreeView>
+#include <QVersionNumber>
 
+using namespace ProjectExplorer;
 using namespace Utils;
 
 namespace Android::Internal {
+
+constexpr QLatin1StringView qtAddAndroidPermission("qt_add_android_permission");
+
+using CMakeProjectManager::CMakeFunctionCall;
+
+static bool isPermissionCallForTarget(const CMakeFunctionCall &func, const QString &target)
+{
+    if (func.name != qtAddAndroidPermission)
+        return false;
+    const auto &arguments = func.arguments;
+    return !arguments.isEmpty() && arguments.first() == target;
+}
+
+static Result<CMakeProjectManager::CMakeListFile> parseCMakeFileOrDocument(
+    const FilePath &path)
+{
+    if (const auto *textDocument = qobject_cast<TextEditor::TextDocument *>(
+            Core::DocumentModel::documentForFilePath(path))) {
+        if (textDocument->isModified())
+            return CMakeProjectManager::parseCMakeText(textDocument->plainText(), path.fileName());
+    }
+    return CMakeProjectManager::parseCMakeFile(path);
+}
 
 class PermissionsModel : public QAbstractListModel
 {
@@ -153,6 +190,79 @@ private:
 PermissionsContainerWidget::PermissionsContainerWidget(QWidget *parent)
     : QWidget(parent)
 {
+}
+
+FilePath PermissionsContainerWidget::manifestPath() const
+{
+    if (!m_textEditorWidget || !m_textEditorWidget->textDocument())
+        return {};
+    return m_textEditorWidget->textDocument()->filePath();
+}
+
+Project *PermissionsContainerWidget::currentProject() const
+{
+    const FilePath path = manifestPath();
+    return path.isEmpty() ? nullptr : ProjectManager::projectForFile(path);
+}
+
+bool PermissionsContainerWidget::isCMakePermissionsSupported() const
+{
+    Project *project = currentProject();
+    if (!project)
+        return false;
+
+    QVersionNumber activeQtVersion;
+    if (const Kit *kit = project->activeKit()) {
+        if (const QtSupport::QtVersion *qtVersion = QtSupport::QtKitAspect::qtVersion(kit))
+            activeQtVersion = qtVersion->qtVersion();
+    }
+
+    if (activeQtVersion.isNull())
+        return false;
+
+    return activeQtVersion >= QVersionNumber(6, 9);
+}
+
+void PermissionsContainerWidget::updateCMakePermissionsCheckBoxState(
+    const std::optional<Result<CMakeProjectManager::CMakeListFile>> &cmakeFile,
+    const Result<AndroidManifestParser::ManifestData> &manifestData)
+{
+    if (!m_textEditorWidget->textDocument())
+        return;
+    Project *project = currentProject();
+
+    bool checked = false;
+    QString cmakeError;
+    if (cmakeFile) {
+        if (*cmakeFile) {
+            checked = Utils::anyOf((*cmakeFile)->functions,
+                                   [this](const CMakeFunctionCall &func) {
+                                        return isPermissionCallForTarget(func, m_CMakeTargetName);
+                                   });
+        } else {
+            cmakeError = cmakeFile->error();
+        }
+    }
+    m_CMakeFileBroken = !cmakeError.isEmpty();
+
+    if (m_CMakeFileBroken) {
+        checked = m_CMakePermissionsCheckBox->isChecked();
+    } else if (!checked && (!manifestData || manifestData->permissions.isEmpty())) {
+        if (m_checkBoxStateInitialized)
+            checked = m_CMakePermissionsCheckBox->isChecked();
+        else
+            checked = isCMakePermissionsSupported();
+    }
+
+    m_CMakeErrorLabel->setText(cmakeError);
+    m_CMakeErrorLabel->setToolTip(cmakeError);
+    m_CMakeErrorLabel->setVisible(m_CMakeFileBroken);
+
+    if (project)
+        m_checkBoxStateInitialized = true;
+
+    const QSignalBlocker blocker(m_CMakePermissionsCheckBox);
+    m_CMakePermissionsCheckBox->setCheckState(checked ? Qt::Checked : Qt::Unchecked);
 }
 
 bool PermissionsContainerWidget::initialize(TextEditor::TextEditorWidget *textEditorWidget)
@@ -340,12 +450,14 @@ bool PermissionsContainerWidget::initialize(TextEditor::TextEditorWidget *textEd
     m_removePermissionButton->setText(Android::Tr::tr("Remove"));
     layout->addWidget(m_removePermissionButton, 5, 1);
 
+    m_CMakeErrorLabel = new InfoLabel(QString(), InfoLabelType::Error,
+                                      permissionsGroupBox);
+    m_CMakeErrorLabel->setVisible(false);
+    layout->addWidget(m_CMakeErrorLabel, layout->rowCount(), 0, 1, 2);
+
     permissionsGroupBox->setLayout(layout);
     mainLayout->addWidget(permissionsGroupBox);
     setLayout(mainLayout);
-
-    updateAddRemovePermissionButtons();
-    loadPermissionsFromManifest();
 
     connect(m_defaultPermissonsCheckBox, &QCheckBox::stateChanged,
             this, &PermissionsContainerWidget::defaultPermissionOrFeatureCheckBoxClicked);
@@ -365,6 +477,8 @@ bool PermissionsContainerWidget::initialize(TextEditor::TextEditorWidget *textEd
             this, &PermissionsContainerWidget::updateAddRemovePermissionButtons);
     connect(m_permissionsListView, &QTreeView::doubleClicked,
             this, &PermissionsContainerWidget::editAttributes);
+
+    refresh();
 
     return true;
 }
@@ -499,13 +613,15 @@ void PermissionsContainerWidget::removePermission()
 
 void PermissionsContainerWidget::updateAddRemovePermissionButtons()
 {
-    m_addPermissionButton->setEnabled(!m_permissionsComboBox->currentText().trimmed().isEmpty());
+    const bool cmakeReady = !m_CMakePermissionsCheckBox->isChecked() ||
+                            (!m_CMakeFilePath.isEmpty() && !m_CMakeFileBroken);
+    m_addPermissionButton->setEnabled(cmakeReady && !m_permissionsComboBox->currentText().trimmed()
+                                                     .isEmpty());
+    m_removePermissionButton->setEnabled(cmakeReady && m_permissionsListView->currentIndex()
+                                                       .isValid());
     const bool hasSelection = m_permissionsListView->selectionModel()
                               && m_permissionsListView->selectionModel()->hasSelection();
-
-    m_removePermissionButton->setEnabled(hasSelection);
-    m_editAttributesButton->setEnabled(hasSelection);
-
+    m_editAttributesButton->setEnabled(cmakeReady && hasSelection);
 }
 
 void PermissionsContainerWidget::defaultPermissionOrFeatureCheckBoxClicked()
@@ -543,26 +659,78 @@ void PermissionsContainerWidget::refresh()
     if (!m_textEditorWidget)
         return;
 
-    loadPermissionsFromManifest();
+    std::optional<Result<CMakeProjectManager::CMakeListFile>> cmakeFile;
+    if (resolveCMakeProjectInfo())
+        cmakeFile = parseCMakeFileOrDocument(m_CMakeFilePath);
+    const Result<AndroidManifestParser::ManifestData> manifestData =
+        AndroidManifestParser::readManifest(manifestPath());
+
+    updateCMakePermissionsCheckBoxState(cmakeFile, manifestData);
+    loadPermissionsFromManifest(manifestData);
+    updateAddRemovePermissionButtons();
 }
 
 void PermissionsContainerWidget::loadPermissionsFromManifest()
 {
+    loadPermissionsFromManifest(AndroidManifestParser::readManifest(manifestPath()));
+}
+
+void PermissionsContainerWidget::loadPermissionsFromManifest(
+    const Result<AndroidManifestParser::ManifestData> &manifestData)
+{
+    if (!manifestData)
+        return;
+
+    m_permissionsModel->setPermissions(manifestData->permissions);
+    const QSignalBlocker blockPermissions(m_defaultPermissonsCheckBox);
+    const QSignalBlocker blockFeatures(m_defaultFeaturesCheckBox);
+    m_defaultPermissonsCheckBox->setChecked(manifestData->hasDefaultPermissionsComment);
+    m_defaultFeaturesCheckBox->setChecked(manifestData->hasDefaultFeaturesComment);
+}
+
+bool PermissionsContainerWidget::resolveCMakeProjectInfo()
+{
+    m_CMakeTargetName.clear();
+    m_CMakeFilePath.clear();
+
     if (!m_textEditorWidget || !m_textEditorWidget->textDocument())
-        return;
+        return false;
 
-    Utils::FilePath manifestPath = m_textEditorWidget->textDocument()->filePath();
-    if (!manifestPath.exists())
-        return;
+    const FilePath path = manifestPath();
+    Project *project = currentProject();
+    if (!project)
+        return false;
 
-    auto dataResult = AndroidManifestParser::readManifest(manifestPath);
-    if (!dataResult)
-        return;
+    Target *target = project->activeTarget();
+    if (!target || !target->activeBuildConfiguration())
+        return false;
 
-    const AndroidManifestParser::ManifestData &data = *dataResult;
+    BuildSystem *buildSystem = target->activeBuildConfiguration()->buildSystem();
+    if (!buildSystem)
+        return false;
 
-    m_permissionsModel->setPermissions(data.permissions);
-    m_defaultPermissonsCheckBox->setChecked(data.hasDefaultPermissionsComment);
-    m_defaultFeaturesCheckBox->setChecked(data.hasDefaultFeaturesComment);
+    if (project->type() != Id(CMakeProjectManager::Constants::CMAKE_PROJECT_ID))
+        return false;
+
+    const QList<BuildTargetInfo> appTargets = buildSystem->applicationTargets();
+
+    const BuildTargetInfo *matched = nullptr;
+    for (const BuildTargetInfo &ti : appTargets) {
+        if (!ti.projectFilePath.isEmpty()
+            && path.parentDir().isChildOf(ti.projectFilePath.parentDir())) {
+            matched = &ti;
+            break;
+        }
+    }
+
+    if (!matched || matched->buildKey.isEmpty())
+        return false;
+    const FilePath cmakeFile = matched->projectFilePath.isEmpty() ? buildSystem->projectFilePath()
+                                                                  : matched->projectFilePath;
+    if (cmakeFile.isEmpty())
+        return false;
+    m_CMakeTargetName = matched->buildKey;
+    m_CMakeFilePath = cmakeFile;
+    return true;
 }
 } // namespace Android::Internal

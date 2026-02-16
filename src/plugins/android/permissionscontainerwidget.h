@@ -3,18 +3,24 @@
 
 #pragma once
 
+#include "androidmanifestutils.h"
+
+#include <utils/filepath.h>
 #include <utils/result.h>
 
 #include <QWidget>
-#include <QStringList>
-#include <QTreeView>
+
+#include <optional>
 
 class QCheckBox;
 class QComboBox;
 class QPushButton;
-class QListView;
+class QTreeView;
 
+namespace ProjectExplorer { class Project; }
 namespace TextEditor { class TextEditorWidget; }
+namespace Utils { class InfoLabel; }
+namespace CMakeProjectManager { class CMakeListFile; }
 
 namespace Android::Internal {
 
@@ -36,11 +42,23 @@ private:
     void removePermission();
     void editAttributes();
     void updateAddRemovePermissionButtons();
+    void updateCMakePermissionsCheckBoxState(
+        const std::optional<Utils::Result<CMakeProjectManager::CMakeListFile>> &cmakeFile,
+        const Utils::Result<AndroidManifestParser::ManifestData> &manifestData);
     void defaultPermissionOrFeatureCheckBoxClicked();
     Utils::Result<> updateManifestPermissions();
     void loadPermissionsFromManifest();
+    void loadPermissionsFromManifest(
+        const Utils::Result<AndroidManifestParser::ManifestData> &manifestData);
+    bool isCMakePermissionsSupported() const;
+    Utils::FilePath manifestPath() const;
+    ProjectExplorer::Project *currentProject() const;
+
+    bool resolveCMakeProjectInfo();
 
     TextEditor::TextEditorWidget *m_textEditorWidget = nullptr;
+    Utils::FilePath m_CMakeFilePath;
+    QString m_CMakeTargetName;
 
     QCheckBox *m_defaultPermissonsCheckBox = nullptr;
     QCheckBox *m_defaultFeaturesCheckBox = nullptr;
@@ -51,6 +69,9 @@ private:
     QPushButton *m_editAttributesButton = nullptr;
     QTreeView *m_permissionsListView = nullptr;
     PermissionsModel *m_permissionsModel = nullptr;
+    bool m_checkBoxStateInitialized = false;
+    Utils::InfoLabel *m_CMakeErrorLabel = nullptr;
+    bool m_CMakeFileBroken = false;
 };
 
 } // namespace Android::Internal
