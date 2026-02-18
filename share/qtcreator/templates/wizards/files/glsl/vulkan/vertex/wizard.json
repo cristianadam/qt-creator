@@ -1,0 +1,40 @@
+{
+    "version": 1,
+    "supportedProjectTypes": [ ],
+    "id": "E.GLSL",
+    "category": "U.GLSL",
+    "trDescription": "Creates a vertex shader in Vulkan-compatible GLSL. Vertex shaders transform the positions, normals and texture coordinates of triangles, points and lines to be rendered.\nUse this when targeting Qt6 or later.",
+    "trDisplayName": "Vertex Shader (Vulkan-compatible)",
+    "trDisplayCategory": "GLSL",
+    "iconText": "vert",
+    "platformIndependent": true,
+    "enabled": "%{JS: isPluginRunning('glsleditor')}",
+
+    "options": { "key": "DefaultSuffix", "value": "%{JS: Util.preferredSuffix('text/x-glsl-vert')}" },
+
+    "pages" :
+    [
+        {
+            "trDisplayName": "Location",
+            "trShortTitle": "Location",
+            "typeId": "File"
+        },
+        {
+            "trDisplayName": "Project Management",
+            "trShortTitle": "Summary",
+            "typeId": "Summary"
+        }
+    ],
+    "generators" :
+    [
+        {
+            "typeId": "File",
+            "data":
+            {
+                "source": "file.vert",
+                "target": "%{JS: Util.fileName(value('TargetPath'), value('DefaultSuffix'))}",
+                "openInEditor": true
+            }
+        }
+    ]
+}

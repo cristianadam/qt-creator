@@ -1,0 +1,40 @@
+{
+    "version": 1,
+    "supportedProjectTypes": [ ],
+    "id": "D.GLSL",
+    "category": "U.GLSL",
+    "trDescription": "Creates a fragment shader in Vulkan-compatible GLSL. Fragment shaders generate the final pixel colors for triangles, points and lines to be rendered.\nUse this when targeting Qt6 or later.",
+    "trDisplayName": "Fragment Shader (Vulkan-compatible)",
+    "trDisplayCategory": "GLSL",
+    "iconText": "frag",
+    "platformIndependent": true,
+    "enabled": "%{JS: isPluginRunning('glsleditor')}",
+
+    "options": { "key": "DefaultSuffix", "value": "%{JS: Util.preferredSuffix('text/x-glsl-frag')}" },
+
+    "pages" :
+    [
+        {
+            "trDisplayName": "Location",
+            "trShortTitle": "Location",
+            "typeId": "File"
+        },
+        {
+            "trDisplayName": "Project Management",
+            "trShortTitle": "Summary",
+            "typeId": "Summary"
+        }
+    ],
+    "generators" :
+    [
+        {
+            "typeId": "File",
+            "data":
+            {
+                "source": "file.frag",
+                "target": "%{JS: Util.fileName(value('TargetPath'), value('DefaultSuffix'))}",
+                "openInEditor": true
+            }
+        }
+    ]
+}
