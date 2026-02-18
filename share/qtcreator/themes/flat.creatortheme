@@ -183,6 +183,13 @@ TerminalAnsi13=d22dde
 TerminalAnsi14=69e2e4
 TerminalAnsi15=e5e5e6
 
+ChatUserMessageBackground=ffe3f2fd
+ChatAgentMessageBackground=ffe8f5e9
+ChatToolCallBackground=fff5f5f5
+ChatPlanBackground=fffff3e0
+ChatThoughtText=ff666666
+ChatStatusText=ff888888
+
 [Flags]
 ComboBoxDrawTextShadow=false
 DerivePaletteFromThemeIfNeeded=true

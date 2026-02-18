@@ -550,6 +550,13 @@ public:
         TerminalAnsi13,
         TerminalAnsi14,
         TerminalAnsi15,
+
+        ChatUserMessageBackground,
+        ChatAgentMessageBackground,
+        ChatToolCallBackground,
+        ChatPlanBackground,
+        ChatThoughtText,
+        ChatStatusText,
     };
 
     enum ImageFile {
