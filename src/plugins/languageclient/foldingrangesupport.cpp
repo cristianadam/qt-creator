@@ -71,6 +71,61 @@ public:
         }
     }
 
+    void foldOrUnfoldInactiveRegions(BaseTextEditor *editor, bool fold)
+    {
+        if (m_client->documentVersion(editor->document()->filePath()) != m_savedRanges.first)
+            return;
+
+        QTC_ASSERT(editor->editorWidget(), return);
+        QTextDocument * const doc = editor->textDocument()->document();
+
+        for (const FoldingRange &r : std::as_const(m_savedRanges.second)) {
+            if (r.kind() != "region")
+                continue;
+
+            // Unfortunately, LSP does not define enough folding range kinds
+            // (see https://github.com/microsoft/language-server-protocol/issues/1779),
+            // so we have to find out heuristically whether this region corresponds
+            // to an inactive one.
+            // The logic is:
+            //   - If all blocks inside the range are ifdefed out AND
+            //   - the block before starts with an "#if" AND
+            //   - the block after starts with an "#else", "#elif" or "#endif",
+            // then the range corresponds to a foldable inactive region.
+            // This will not catch regions where people try to be smart with comments inside
+            // the preprocessor directives, but such people don't deserve happiness anyway.
+
+            const QTextBlock start = doc->findBlockByNumber(r.startLine());
+            const QTextBlock end = doc->findBlockByNumber(r.endLine() + 1);
+            bool allInactive = true;
+            for (QTextBlock b = start.next(); b.isValid() && b != end; b = b.next()) {
+                if (!TextBlockUserData::ifdefedOut(b)) {
+                    allInactive = false;
+                    break;
+                }
+            }
+            if (!allInactive)
+                continue;
+            const QString startText = start.text().simplified();
+            if (!startText.startsWith("#if") && !startText.startsWith("# if")
+                && !startText.startsWith("#el") && !startText.startsWith("# el")) {
+                continue;
+            }
+            const QString endText = end.text().simplified();
+            if (!endText.startsWith("#el") && !endText.startsWith("# el")
+                && !endText.startsWith("#en") && !endText.startsWith("# en")) {
+                continue;
+            }
+
+            for (QTextBlock b = start; b.isValid() && b != end; b = b.next()) {
+                if (fold)
+                    editor->editorWidget()->fold(b);
+                else
+                    editor->editorWidget()->unfold(b);
+            }
+        }
+    }
+
 private:
     void doRequestRanges(TextDocument *doc)
     {
@@ -180,6 +235,11 @@ void FoldingRangeSupport::requestFoldingRanges(TextEditor::TextDocument *doc)
 void FoldingRangeSupport::foldOrUnfoldCommentBlocks(BaseTextEditor *editor, bool fold)
 {
     d->foldOrUnfoldCommentBlocks(editor, fold);
+}
+
+void FoldingRangeSupport::foldOrUnfoldInactiveRegions(TextEditor::BaseTextEditor *editor, bool fold)
+{
+    d->foldOrUnfoldInactiveRegions(editor, fold);
 }
 
 void FoldingRangeSupport::deactivate(TextEditor::TextDocument *doc)

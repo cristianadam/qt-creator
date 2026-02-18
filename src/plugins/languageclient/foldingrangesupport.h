@@ -22,6 +22,7 @@ public:
 
     void requestFoldingRanges(TextEditor::TextDocument *doc);
     void foldOrUnfoldCommentBlocks(TextEditor::BaseTextEditor *editor, bool fold);
+    void foldOrUnfoldInactiveRegions(TextEditor::BaseTextEditor *editor, bool fold);
     void deactivate(TextEditor::TextDocument *doc);
     void refresh();
 

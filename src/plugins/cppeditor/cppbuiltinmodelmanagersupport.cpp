@@ -253,6 +253,14 @@ void BuiltinModelManagerSupport::foldOrUnfoldComments(BaseTextEditor *editor, bo
     }
 }
 
+void BuiltinModelManagerSupport::foldOrUnfoldInactiveRegions(
+    TextEditor::BaseTextEditor *editor, bool fold)
+{
+    Q_UNUSED(editor)
+    Q_UNUSED(fold)
+    MessageManager::writeDisrupting(Tr::tr("Folding inactive code is only available with clangd."));
+}
+
 void BuiltinModelManagerSupport::checkUnused(const Link &link, SearchResult *search,
                                              const LinkHandler &callback)
 {

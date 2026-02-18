@@ -432,6 +432,20 @@ void ClangModelManagerSupport::foldOrUnfoldComments(TextEditor::BaseTextEditor *
         CppModelManager::unfoldComments(CppModelManager::Backend::Builtin);
 }
 
+void ClangModelManagerSupport::foldOrUnfoldInactiveRegions(
+    TextEditor::BaseTextEditor *editor, bool fold)
+{
+    TextEditor::TextDocument * const doc = editor->textDocument();
+    if (!doc)
+        return;
+    if (doc->isFoldingIndentExternallyProvided()) {
+        if (ClangdClient * const client = clientForFile(doc->filePath())) {
+            client->foldOrUnfoldInactiveRegions(editor, fold);
+            return;
+        }
+    }
+}
+
 void ClangModelManagerSupport::checkUnused(const Link &link, SearchResult *search,
                                            const LinkHandler &callback)
 {

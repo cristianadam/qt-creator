@@ -226,6 +226,7 @@ public:
     int completionResultsLimit() const;
 
     void foldOrUnfoldCommentBlocks(TextEditor::BaseTextEditor *editor, bool fold);
+    void foldOrUnfoldInactiveRegions(TextEditor::BaseTextEditor *editor, bool fold);
 
 signals:
     void initialized(const LanguageServerProtocol::ServerCapabilities &capabilities);

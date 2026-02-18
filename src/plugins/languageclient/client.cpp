@@ -1886,6 +1886,11 @@ void Client::foldOrUnfoldCommentBlocks(TextEditor::BaseTextEditor *editor, bool 
     d->m_foldingSupport.foldOrUnfoldCommentBlocks(editor, fold);
 }
 
+void Client::foldOrUnfoldInactiveRegions(TextEditor::BaseTextEditor *editor, bool fold)
+{
+    d->m_foldingSupport.foldOrUnfoldInactiveRegions(editor, fold);
+}
+
 const ServerCapabilities &Client::capabilities() const
 {
     return d->m_serverCapabilities;

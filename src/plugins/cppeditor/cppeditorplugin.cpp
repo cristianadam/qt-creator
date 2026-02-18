@@ -532,6 +532,22 @@ void CppEditorPlugin::addPerFileActions()
     unfoldComments.addToContainers(menus, Constants::G_FILE);
     unfoldComments.addOnTriggered(this, [] { CppModelManager::unfoldComments(); });
 
+    ActionBuilder foldInactiveRegions(this, "CppTools.FoldInactiveRegions");
+    foldInactiveRegions.setText(Tr::tr("Fold All Inactive Code"));
+    foldInactiveRegions.setContext(context);
+    foldInactiveRegions.addToContainers(menus, Constants::G_FILE);
+    foldInactiveRegions.addOnTriggered(this, [] {
+        CppModelManager::foldOrUnfoldInactiveRegions(true);
+    });
+
+    ActionBuilder unfoldInactiveRegions(this, "CppTools.UnfoldInactiveRegions");
+    unfoldInactiveRegions.setText(Tr::tr("Unfold All Inactive Code"));
+    unfoldInactiveRegions.setContext(context);
+    unfoldInactiveRegions.addToContainers(menus, Constants::G_FILE);
+    unfoldInactiveRegions.addOnTriggered(this, [] {
+        CppModelManager::foldOrUnfoldInactiveRegions(false);
+    });
+
     setupCppIncludeHierarchy();
 }
 

@@ -45,6 +45,7 @@ private:
     void findUsages(const CursorInEditor &data) const override;
     void switchHeaderSource(const Utils::FilePath &filePath, bool inNextSplit) override;
     void foldOrUnfoldComments(TextEditor::BaseTextEditor *editor, bool fold) override;
+    void foldOrUnfoldInactiveRegions(TextEditor::BaseTextEditor *editor, bool fold) override;
     void checkUnused(const Utils::Link &link, Core::SearchResult *search,
                      const Utils::LinkHandler &callback) override;
 

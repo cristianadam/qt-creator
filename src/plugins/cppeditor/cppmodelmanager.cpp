@@ -495,6 +495,14 @@ void CppModelManager::unfoldComments(Backend backend)
     }
 }
 
+void CppModelManager::foldOrUnfoldInactiveRegions(bool fold)
+{
+    if (const auto currentEditor = qobject_cast<TextEditor::BaseTextEditor *>(
+            EditorManager::currentEditor())) {
+        modelManagerSupport(Backend::Best)->foldOrUnfoldInactiveRegions(currentEditor, fold);
+    }
+}
+
 class FindUnusedActionsEnabledSwitcher
 {
 public:
