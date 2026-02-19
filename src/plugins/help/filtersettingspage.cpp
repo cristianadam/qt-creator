@@ -47,7 +47,7 @@ public:
             widget->readSettings(LocalHelpManager::filterEngine());
         });
 
-        Utils::installMarkSettingsDirtyTriggerRecursively(this);
+        Utils::installMarkSettingsDirtyTriggerRecursively(widget);
     }
 };
 

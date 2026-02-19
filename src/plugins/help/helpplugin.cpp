@@ -136,7 +136,7 @@ public:
     QPointer<HelpWidget> m_externalWindow;
     QRect m_externalWindowState;
 
-    FilterSettingsPage m_filterSettingsPage{[this] {setupHelpEngineIfNeeded(); }};
+    FilterSettingsPage m_filterSettingsPage{[this] { setupHelpEngineIfNeeded(); }};
     SearchTaskHandler m_searchTaskHandler;
 
     bool m_setupNeeded = true;
