@@ -62,11 +62,15 @@ public:
     Utils::TypedSelectionAspect<StartOption> startOption{this};
     Utils::TypedSelectionAspect<Core::HelpManager::HelpViewerLocation> contextHelpOption{this};
     Utils::FontAspect fallbackFont{this};
+    Utils::TextDisplay errorLabel{this};
+
+private:
+    void apply() final;
 };
 
 HelpSettings &helpSettings();
 
-class LocalHelpManager : public QObject
+class LocalHelpManager final : public QObject
 {
     Q_OBJECT
 
@@ -77,7 +81,7 @@ public:
         QString mimeType;
     };
 
-    LocalHelpManager(QObject *parent = nullptr);
+    LocalHelpManager();
     ~LocalHelpManager() override;
 
     static LocalHelpManager *instance();

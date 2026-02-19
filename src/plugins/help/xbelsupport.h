@@ -13,8 +13,7 @@ QT_END_NAMESPACE
 
 class BookmarkModel;
 
-namespace Help {
-namespace Internal {
+namespace Help::Internal {
 
 class XbelWriter : public QXmlStreamWriter
 {
@@ -50,5 +49,4 @@ private:
     BookmarkModel *listModel;
 };
 
-    }   // Internal
-}   // Help
+} // Help::Internal
