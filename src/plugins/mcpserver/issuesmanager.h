@@ -10,6 +10,8 @@
 // Include for MOC compilation
 #include <projectexplorer/task.h>
 
+#include <mcp/server/mcpserver.h>
+
 namespace Mcp::Internal {
 
 /**
@@ -18,7 +20,7 @@ namespace Mcp::Internal {
  * This class provides a clean interface for accessing and retrieving
  * issues from Qt Creator's Issues panel. It encapsulates the complexity
  * of accessing internal Qt Creator APIs and provides a simple interface
- * for the MCP plugin.
+ * for the Mcp plugin.
  */
 class IssuesManager : public QObject
 {
@@ -45,7 +47,7 @@ public:
      * @brief Retrieves the issues schema from resources
      * @return JSON object containing the schema, or empty object on error
      */
-    static QJsonObject issuesSchema();
+    static Mcp::Schema::Tool::OutputSchema issuesSchema();
 
     /**
      * @brief Tests multiple approaches to access Qt Creator's task data

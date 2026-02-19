@@ -1,0 +1,251 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+
+#include <QCoreApplication>
+#include <QDebug>
+#include <QJsonArray>
+#include <QSocketNotifier>
+#include <QTcpServer>
+#include <QTimer>
+
+#include <server/mcpserver.h>
+
+#include <iostream>
+
+using namespace Utils;
+
+Mcp::Server server(
+    Mcp::Schema::Implementation()
+        .description("A simple Mcp server for testing purposes")
+        .name("test-mcp-server")
+        .title("Test Mcp Server")
+        .version("0.1")
+        .websiteUrl("https://www.qt.io"),
+    true);
+
+static void completion(
+    const Mcp::Schema::CompleteRequestParams &request,
+    const Mcp::Server::CompletionResultCallback &cb)
+{
+    if (std::holds_alternative<Mcp::Schema::ResourceTemplateReference>(request.ref())) {
+        auto resourceTemplateRef = std::get<Mcp::Schema::ResourceTemplateReference>(request.ref());
+        qDebug() << "Received completion request for resource template:"
+                 << resourceTemplateRef.uri();
+
+        if (resourceTemplateRef.uri().startsWith("test://")) {
+            cb(Mcp::Schema::CompleteResult().completion(
+                Mcp::Schema::CompleteResult::Completion().addValue(
+                    "Completion result for test resource template: " + resourceTemplateRef.uri())));
+            return;
+        }
+        if (resourceTemplateRef.uri().startsWith("file://")) {
+            QString actual = resourceTemplateRef.uri();
+            actual.replace("{" + request.argument().name() + "}", request.argument().value());
+
+            if (QString("file:///current_time").startsWith(actual)) {
+                cb(Mcp::Schema::CompleteResult().completion(
+                    Mcp::Schema::CompleteResult::Completion().addValue("current_time")));
+                return;
+            }
+        }
+
+        cb(Mcp::Schema::CompleteResult());
+        return;
+    }
+
+    cb(Mcp::Schema::CompleteResult().completion(
+        Mcp::Schema::CompleteResult::Completion().addValue(
+            "Completion result for non-resource template reference")));
+}
+
+static Result<Mcp::Schema::CallToolResult> echoTool(const Mcp::Schema::CallToolRequestParams &params)
+{
+    if (!params._arguments || !params._arguments->contains("message")
+        || !(*params._arguments)["message"].isString()) {
+        return ResultError("Invalid arguments for echo tool: missing 'message' string");
+    }
+
+    //qDebug() << "Echo tool called with params:" << params._arguments;
+
+    return Mcp::Schema::CallToolResult()
+        .isError(false)
+        .addStructuredContent("echoedMessage", params.arguments()->value("message"));
+}
+
+static void asyncEchoTool(
+    const Mcp::Schema::CallToolRequestParams &params,
+    const Mcp::Server::AsyncToolResultCallback &callback)
+{
+    if (!params.arguments() || !params.arguments()->contains("message")
+        || !(*params.arguments())["message"].isString()) {
+        callback(ResultError("Invalid arguments for async echo tool: missing 'message' string"));
+        return;
+    }
+
+    //qDebug() << "Async echo tool called with params:" << params._arguments;
+    qDebug() << "Progress token:"
+             << Mcp::Schema::toJsonValue(params._meta()->progressToken().value_or("null"));
+
+    QJsonValue progressToken;
+    if (params._meta() && params._meta()->progressToken()) {
+        progressToken = Mcp::Schema::toJsonValue(*params._meta()->progressToken());
+    }
+
+    // Simulate some asynchronous work with a single-shot timer
+    QTimer *t = new QTimer();
+    t->setSingleShot(false);
+    t->setInterval(1000);
+    t->start();
+    QObject::connect(
+        t,
+        &QTimer::timeout,
+        t,
+        [progressToken, callback, msg = params.arguments()->value("message"), t, count = 0]() mutable {
+            if (count == 5) {
+                t->stop();
+                t->deleteLater();
+                qDebug() << "Async echo tool completed, sending final result";
+                callback(
+                    Mcp::Schema::CallToolResult()
+                        .isError(false)
+                        .addStructuredContent("echoedMessage", msg));
+            } else if (!progressToken.isNull()) {
+                qDebug() << "Sending progress notification with token:" << progressToken;
+                server.sendNotification(
+                    Mcp::Schema::ProgressNotification().params(
+                        Mcp::Schema::ProgressNotificationParams()
+                            .progress(count)
+                            .total(5)
+                            .message("reticulating splines ...")
+                            .progressToken(*Mcp::Schema::fromJson<Mcp::Schema::ProgressToken>(
+                                progressToken))));
+            }
+            count++;
+        });
+}
+
+int main(int argc, char *argv[])
+{
+    QCoreApplication app(argc, argv);
+
+    QTcpServer tcpServer;
+
+    server.setCompletionCallback(completion);
+
+    server.addTool(
+        Mcp::Schema::Tool()
+            .name("echo")
+            .description("A simple tool that echoes back the input message.")
+            .title("Echo Tool")
+            .inputSchema(
+                Mcp::Schema::Tool::InputSchema()
+                    .addProperty("message", QJsonObject{{"type", "string"}})
+                    .required(QStringList{"message"}))
+            .outputSchema(
+                Mcp::Schema::Tool::OutputSchema()
+                    .addProperty("echoedMessage", QJsonObject{{"type", "string"}})
+                    .required(QStringList{"echoedMessage"})),
+        echoTool);
+
+    server.addTool(
+        Mcp::Schema::Tool()
+            .name("async-echo")
+            .description("An asynchronous tool that echoes back the input message after a delay.")
+            .title("Async Echo Tool")
+            .inputSchema(
+                Mcp::Schema::Tool::InputSchema()
+                    .addProperty("message", QJsonObject{{"type", "string"}})
+                    .required(QStringList{"message"}))
+            .outputSchema(
+                Mcp::Schema::Tool::OutputSchema()
+                    .addProperty("echoedMessage", QJsonObject{{"type", "string"}})
+                    .required(QStringList{"echoedMessage"})),
+        asyncEchoTool);
+
+    server.addPrompt(
+        Mcp::Schema::Prompt()
+            .name("code_review")
+            .description("A prompt for reviewing a C++ code snippet and providing feedback.")
+            .title("Code Review Prompt")
+            .addArgument(
+                Mcp::Schema::PromptArgument()
+                    .name("codeSnippet")
+                    .description("A snippet of code to review")
+                    .required(true)
+                    .title("Code Snippet")),
+        [](const Mcp::Server::PromptArguments &args) -> QList<Mcp::Schema::PromptMessage> {
+            return {{
+                Mcp::Schema::PromptMessage().content(
+                    Mcp::Schema::TextContent().text(
+                        QString("Please review this C++ code:\n%1").arg(args["codeSnippet"]))),
+            }};
+        });
+
+    server.addResourceTemplate(
+        Mcp::Schema::ResourceTemplate()
+            .name("file")
+            .description("A resource template for file contents")
+            .uriTemplate("file:///{filename}")
+            .mimeType("text/plain"));
+
+    server.addResourceTemplate(
+        Mcp::Schema::ResourceTemplate()
+            .name("test")
+            .description("Test files")
+            .uriTemplate("test:///{filename}")
+            .mimeType("text/plain"));
+
+    server.addResource(
+        Mcp::Schema::Resource()
+            .name("current_time")
+            .description("A resource that returns the current server time.")
+            .uri("file:///current_time")
+            .title("Current Time Resource"),
+        [](const Mcp::Schema::ReadResourceRequestParams &)
+            -> Result<Mcp::Schema::ReadResourceResult> {
+            return Mcp::Schema::ReadResourceResult().addContent(
+                Mcp::Schema::TextResourceContents()
+                    .text(QDateTime::currentDateTime().toString())
+                    .uri("file:///current_time")
+                    .mimeType("text/plain"));
+        });
+
+    if (app.arguments().contains("--stdio")) {
+        qDebug() << "Binding to stdio";
+        auto bindResult = server.bindIO([](const QByteArray &data) {
+            // Write received data to stdout (in a real application, you would likely want to handle this differently)
+            std::cout << data.toStdString() << std::endl;
+        });
+        if (!bindResult) {
+            qWarning() << "Failed to bind to stdio:" << bindResult.error();
+            return -1;
+        }
+
+        auto inHandler = bindResult.value();
+        QSocketNotifier *stdinNotifier
+            = new QSocketNotifier(fileno(stdin), QSocketNotifier::Read, &app);
+
+        QObject::connect(stdinNotifier, &QSocketNotifier::activated, [&stdinNotifier, inHandler](int) {
+            QTextStream stdinStream(stdin);
+            QString line = stdinStream.readLine();
+            qDebug() << "Received line on stdin:" << line;
+            if (line.isNull()) {
+                // EOF reached, stop the server
+                qDebug() << "EOF on stdin, stopping server.";
+                stdinNotifier->setEnabled(false);
+                return;
+            }
+            inHandler(line.toUtf8());
+        });
+    } else {
+        if (!tcpServer.listen(QHostAddress::LocalHost, 8249) || !server.bind(&tcpServer)) {
+            qWarning() << QCoreApplication::translate(
+                "QHttpServerExample", "Server failed to listen on a port.");
+            return -1;
+        }
+
+        qDebug() << "Listening on" << tcpServer.serverAddress() << ":" << tcpServer.serverPort();
+    }
+
+    return app.exec();
+}

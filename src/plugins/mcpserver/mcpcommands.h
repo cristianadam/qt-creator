@@ -3,6 +3,7 @@
 #pragma once
 
 #include "issuesmanager.h"
+#include <mcp/server/mcpserver.h>
 
 #include <utils/result.h>
 
@@ -21,9 +22,11 @@ class McpCommands : public QObject
 public:
     explicit McpCommands(QObject *parent = nullptr);
 
+    static void registerCommands(Mcp::Server &server);
+
     using ResponseCallback = std::function<void(const QJsonObject &response)>;
 
-    // Core MCP commands
+    // Core Mcp commands
     QString stopDebug();
 
     QStringList listProjects();
@@ -62,7 +65,7 @@ public:
         bool caseSensitive,
         const ResponseCallback &callback);
 
-    static QJsonObject searchResultsSchema();
+    static Mcp::Schema::Tool::OutputSchema searchResultsSchema();
 
     void replaceInFile(
         const QString &path,

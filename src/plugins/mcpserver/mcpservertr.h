@@ -9,7 +9,7 @@ namespace Mcp {
 
 struct Tr
 {
-    Q_DECLARE_TR_FUNCTIONS(QtC::MCP)
+    Q_DECLARE_TR_FUNCTIONS(QtC::Mcp)
 };
 
 } // namespace Mcp

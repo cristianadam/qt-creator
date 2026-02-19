@@ -23,8 +23,7 @@
 
 Q_LOGGING_CATEGORY(mcpIssues, "qtc.mcpserver.issues", QtWarningMsg)
 
-namespace Mcp {
-namespace Internal {
+namespace Mcp::Internal {
 
 IssuesManager::IssuesManager(QObject *parent)
     : QObject(parent)
@@ -43,14 +42,14 @@ QJsonObject IssuesManager::getCurrentIssues(const Utils::FilePath &path) const
     return getCurrentIssues(Utils::equal(&ProjectExplorer::Task::file, path));
 }
 
-QJsonObject IssuesManager::issuesSchema()
+Mcp::Schema::Tool::OutputSchema IssuesManager::issuesSchema()
 {
-    static QJsonObject cachedSchema = [] {
+    static Mcp::Schema::Tool::OutputSchema cachedSchema = [] {
         QFile schemaFile(":/mcpserver/schemas/issues-schema.json");
         if (!schemaFile.open(QIODevice::ReadOnly)) {
             qCWarning(mcpIssues) << "Failed to open schemas/issues-schema.json from resources:"
                                  << schemaFile.errorString();
-            return QJsonObject();
+            return Mcp::Schema::Tool::OutputSchema{};
         }
 
         QJsonParseError parseError;
@@ -60,10 +59,18 @@ QJsonObject IssuesManager::issuesSchema()
         if (parseError.error != QJsonParseError::NoError) {
             qCWarning(mcpIssues) << "Failed to parse issues-schema.json:"
                                  << parseError.errorString();
-            return QJsonObject();
+            return Mcp::Schema::Tool::OutputSchema{};
         }
 
-        return doc.object();
+        QJsonObject obj = doc.object();
+        Mcp::Schema::Tool::OutputSchema schema;
+        if (obj.contains("required") && obj["required"].isArray()) {
+            QStringList req;
+            for (const QJsonValue &v : obj["required"].toArray())
+                req.append(v.toString());
+            schema._required = req;
+        }
+        return schema;
     }();
     return cachedSchema;
 }
@@ -351,5 +358,4 @@ QString IssuesManager::formatTask(
     return formatted;
 }
 
-} // namespace Internal
-} // namespace Mcp
+} // namespace Mcp::Internal

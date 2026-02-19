@@ -1,18 +1,14 @@
 add_qtc_plugin(mcpserver
+  CONDITION TARGET McpServerLib
   PLUGIN_DEPENDS
-    QtCreator::Core
-    QtCreator::ProjectExplorer
+    Core
+    ProjectExplorer
   DEPENDS
-   Qt::Widgets
-   Qt::Network
-   QtCreator::ExtensionSystem
-   QtCreator::Utils
+   ExtensionSystem
+   Utils
+   McpServerLib
   SOURCES
-    httpparser.cpp httpparser.h
-    httpresponse.cpp httpresponse.h
     issuesmanager.cpp issuesmanager.h
-    mcpserver.cpp mcpserver.h
-    mcpservertest.cpp mcpservertest.h
     mcpcommands.cpp mcpcommands.h
     mcpserverplugin.cpp
     mcpserverconstants.h

@@ -33,6 +33,8 @@ endif()
 
 add_subdirectory(gocmdbridge)
 
+add_subdirectory(mcp)
+
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/qlitehtml/src/CMakeLists.txt)
   option(BUILD_LIBRARY_QLITEHTML "Build library qlitehtml." ${BUILD_LIBRARIES_BY_DEFAULT})
   set(QLITEHTML_VERSION_COMPAT ${IDE_VERSION_COMPAT} CACHE STRING "")

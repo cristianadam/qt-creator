@@ -1,0 +1,80 @@
+### Initialize MCP Client
+
+POST http://127.0.0.1:8249 HTTP/1.1
+Accept: application/json, text/event-stream
+Content-Type: application/json
+connection: keep-alive
+
+{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+        "protocolVersion": "2025-11-25",
+        "capabilities": {
+            "roots": {
+                "listChanged": true
+            },
+            "sampling": {},
+            "elicitation": {
+                "form": {},
+                "url": {}
+            },
+            "tasks": {
+                "list": {},
+                "cancel": {},
+                "requests": {
+                    "sampling": {
+                        "createMessage": {}
+                    },
+                    "elicitation": {
+                        "create": {}
+                    }
+                }
+            },
+            "extensions": {
+                "io.modelcontextprotocol/ui": {
+                    "mimeTypes": [
+                        "text/html;profile=mcp-app"
+                    ]
+                }
+            }
+        },
+        "clientInfo": {
+            "name": "This is just a test",
+            "version": "1.0.0"
+        }
+    }
+}
+
+### List available Tools
+
+POST http://127.0.0.1:8249 HTTP/1.1
+Accept: application/json, text/event-stream
+Content-Type: application/json
+connection: keep-alive
+
+{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}
+
+### Call Async Tool
+# Run curl to see progress events:
+# curl -v --header "Accept: text/event-stream" http://127.0.0.1:8249
+
+POST http://127.0.0.1:8249 HTTP/1.1
+Accept: application/json, text/event-stream
+Content-Type: application/json
+
+ {
+    "jsonrpc":"2.0",
+    "id":4,
+    "method":"tools/call",
+    "params": {
+        "name":"async-echo",
+        "arguments": {
+            "message" : "Hello from GitHub Copilot! Async echo test."
+        },
+        "_meta" : {
+            "progressToken":"875ec7d4-4e05-4e48-a5f8-d55fccdfd786"
+        }
+    }
+}

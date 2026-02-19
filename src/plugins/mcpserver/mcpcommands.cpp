@@ -19,6 +19,7 @@
 #include <projectexplorer/editorconfiguration.h>
 #include <projectexplorer/buildconfiguration.h>
 #include <projectexplorer/buildmanager.h>
+#include <projectexplorer/editorconfiguration.h>
 #include <projectexplorer/project.h>
 #include <projectexplorer/projectmanager.h>
 #include <projectexplorer/projectnodes.h>
@@ -55,14 +56,14 @@ McpCommands::McpCommands(QObject *parent)
     : QObject(parent)
 {}
 
-QJsonObject McpCommands::searchResultsSchema()
+Mcp::Schema::Tool::OutputSchema McpCommands::searchResultsSchema()
 {
-    static QJsonObject cachedSchema = [] {
+    static Mcp::Schema::Tool::OutputSchema cachedSchema = [] {
         QFile schemaFile(":/mcpserver/schemas/search-results-schema.json");
         if (!schemaFile.open(QIODevice::ReadOnly)) {
             qCWarning(mcpCommands) << "Failed to open schemas/search-results-schema.json from resources:"
                                    << schemaFile.errorString();
-            return QJsonObject();
+            return Mcp::Schema::Tool::OutputSchema{};
         }
 
         QJsonParseError parseError;
@@ -70,10 +71,20 @@ QJsonObject McpCommands::searchResultsSchema()
         if (parseError.error != QJsonParseError::NoError) {
             qCWarning(mcpCommands) << "Failed to parse search-results-schema.json:"
                                    << parseError.errorString();
-            return QJsonObject();
+            return Mcp::Schema::Tool::OutputSchema{};
         }
 
-        return doc.object();
+        QJsonObject obj = doc.object();
+        Mcp::Schema::Tool::OutputSchema schema;
+        //if (obj.contains("properties"))
+        //    schema._properties = obj["properties"].toObject();
+        if (obj.contains("required") && obj["required"].isArray()) {
+            QStringList req;
+            for (const QJsonValue &v : obj["required"].toArray())
+                req.append(v.toString());
+            schema._required = req;
+        }
+        return schema;
     }();
 
     return cachedSchema;
@@ -182,7 +193,6 @@ QString McpCommands::getFilePlainText(const QString &path)
         qCDebug(mcpCommands) << "Empty file path provided";
         return QString();
     }
-
 
     FilePath filePath = FilePath::fromUserInput(path);
 
@@ -1106,4 +1116,931 @@ QMap<QString, QSet<QString>> McpCommands::knownRepositoriesInProject(const QStri
 
 // handleSessionLoadRequest method removed - using direct session loading instead
 
+static bool triggerCommand(const QString toolName, const Utils::Id commandId)
+{
+    auto error = [toolName](const QString &msg) {
+        qDebug() << "Cannot run tool " << toolName << ": " << msg;
+        return false;
+    };
+    Core::Command *command = Core::ActionManager::command(commandId);
+    if (!command)
+        return error("Cannot find command with id" + commandId.toString());
+    QAction *action = command->action();
+    if (!action)
+        return error("Command with id" + commandId.toString() + "has no action assigned");
+    if (!action->isEnabled())
+        return error("Action for Command with id" + commandId.toString() + "is not enabled");
+    action->trigger();
+    return true;
+}
+
+static void initializeToolsForCommands(Mcp::Server &server)
+{
+    auto addToolForCommand = [&server](const QString &name, const Utils::Id commandId) {
+        Core::Command *command = Core::ActionManager::command(commandId);
+        if (!command)
+            return;
+        QAction *action = command->action();
+        QTC_ASSERT(action, return);
+
+        const QString title = action->text();
+        const QString description = command->description();
+
+        using namespace Mcp::Schema;
+
+        server.addTool(
+            Tool{}
+                .name(name)
+                .title(title)
+                .description(description)
+                .outputSchema(
+                    Tool::OutputSchema{}
+                        .addProperty("success", QJsonObject{{"type", "boolean"}})
+                        .addRequired("success")),
+            [commandId, name](const CallToolRequestParams &) -> Utils::Result<CallToolResult> {
+                const bool ok = triggerCommand(name, commandId);
+                qDebug() << "Tool" << name << "execution result:" << (ok ? "success" : "failure");
+                return CallToolResult{}.isError(!ok).structuredContent(QJsonObject{{"success", ok}});
+            });
+    };
+
+    addToolForCommand("run_project", ProjectExplorer::Constants::RUN);
+    addToolForCommand("build", ProjectExplorer::Constants::BUILD);
+    addToolForCommand("clean_project", ProjectExplorer::Constants::CLEAN);
+    addToolForCommand("debug", Debugger::Constants::DEBUGGER_START);
+}
+
+void McpCommands::registerCommands(Mcp::Server &server)
+{
+    using namespace Mcp::Schema;
+
+    initializeToolsForCommands(server);
+
+    static McpCommands commands;
+
+    using SimplifiedCallback = std::function<QJsonObject(const QJsonObject &)>;
+
+    static const auto wrap = [](const SimplifiedCallback &cb) {
+        return [cb](const CallToolRequestParams &params) -> Utils::Result<CallToolResult> {
+            return CallToolResult{}.structuredContent(cb(params.argumentsAsObject())).isError(false);
+        };
+    };
+
+    using Callback = std::function<void(const QJsonObject &response)>;
+    using SimplifiedAsyncCallback = std::function<void(const QJsonObject &, const Callback &)>;
+    static const auto wrapAsync =
+        [](SimplifiedAsyncCallback asyncFunc) -> Mcp::Server::AsyncToolCallback {
+        return [asyncFunc](
+                   const CallToolRequestParams &params,
+                   const Mcp::Server::AsyncToolResultCallback &callback) {
+            asyncFunc(params.argumentsAsObject(), [callback](QJsonObject result) {
+                callback(CallToolResult{}.isError(false).structuredContent(result));
+            });
+        };
+    };
+
+    server.addTool(
+        Tool{}
+            .name("get_build_status")
+            .title("Get current build status")
+            .description("Get current build progress and status")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("result", QJsonObject{{"type", "string"}})
+                    .addRequired("result")),
+        wrap([](const QJsonObject &) {
+            return QJsonObject{{"result", commands.getBuildStatus()}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("open_file")
+            .title("Open a file in Qt Creator")
+            .description("Open a file in Qt Creator")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "path",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"format", "uri"},
+                            {"description", "Absolute path of the file to open"}})
+                    .addRequired("path"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("success", QJsonObject{{"type", "boolean"}})
+                    .addRequired("success")),
+        wrap([](const QJsonObject &p) {
+            const QString path = p.value("path").toString();
+            bool ok = commands.openFile(path);
+            return QJsonObject{{"success", ok}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("file_plain_text")
+            .title("file plain text")
+            .description("Returns the content of the file as plain text")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "path",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"format", "uri"},
+                            {"description", "Absolute path of the file"}})
+                    .addRequired("path"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("text", QJsonObject{{"type", "string"}})
+                    .addRequired("text")),
+        wrap([](const QJsonObject &p) {
+            const QString path = p.value("path").toString();
+            const QString text = commands.getFilePlainText(path);
+            return QJsonObject{{"text", text}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("set_file_plain_text")
+            .title("set file plain text")
+            .description(
+                "overrided the content of the file with the provided plain text. If the "
+                "file is currently open it is not saved!")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "path",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"format", "uri"},
+                            {"description", "Absolute path of the file"}})
+                    .addProperty(
+                        "plainText",
+                        QJsonObject{
+                            {"type", "string"}, {"description", "text to write into the file"}})
+                    .addRequired("path"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("success", QJsonObject{{"type", "boolean"}})
+                    .addRequired("success")),
+        wrap([](const QJsonObject &p) {
+            const QString path = p.value("path").toString();
+            const QString text = p.value("plainText").toString();
+            bool ok = commands.setFilePlainText(path, text);
+            return QJsonObject{{"success", ok}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("save_file")
+            .title("Save a file in Qt Creator")
+            .description("Save a file in Qt Creator")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "path",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"format", "uri"},
+                            {"description", "Absolute path of the file to save"}})
+                    .addRequired("path"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("success", QJsonObject{{"type", "boolean"}})
+                    .addRequired("success")),
+        wrap([](const QJsonObject &p) {
+            const QString path = p.value("path").toString();
+            bool ok = commands.saveFile(path);
+            return QJsonObject{{"success", ok}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("close_file")
+            .title("Close a file in Qt Creator")
+            .description("Close a file in Qt Creator")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "path",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"format", "uri"},
+                            {"description", "Absolute path of the file to close"}})
+                    .addRequired("path"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("success", QJsonObject{{"type", "boolean"}})
+                    .addRequired("success")),
+        wrap([](const QJsonObject &p) {
+            const QString path = p.value("path").toString();
+            bool ok = commands.closeFile(path);
+            return QJsonObject{{"success", ok}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("find_files_in_projects")
+            .title("Find files in projects")
+            .description("Find all files matching the pattern in all open projects")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "pattern",
+                        QJsonObject{
+                            {"type", "string"}, {"description", "Pattern for finding the file"}})
+                    .addProperty(
+                        "regex",
+                        QJsonObject{
+                            {"type", "boolean"}, {"description", "Whether the pattern is a regex"}})
+                    .addRequired("pattern"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty(
+                        "files",
+                        QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}}})
+                    .addRequired("files")),
+        wrap([](const QJsonObject &p) {
+            const QString pattern = p.value("pattern").toString();
+            const bool isRegex = p.value("regex").toBool();
+            const QStringList files = commands.findFilesInProjects(pattern, isRegex);
+            return QJsonObject{{"files", QJsonArray::fromStringList(files)}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("find_files_in_project")
+            .title("Find files in project")
+            .description("Find all files matching the pattern in a given project")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "name",
+                        QJsonObject{{"type", "string"}, {"description", "name of the project"}})
+                    .addProperty(
+                        "pattern",
+                        QJsonObject{
+                            {"type", "string"}, {"description", "Pattern for finding the file"}})
+                    .addProperty(
+                        "regex",
+                        QJsonObject{
+                            {"type", "boolean"}, {"description", "Whether the pattern is a regex"}})
+                    .addRequired("name, pattern"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty(
+                        "files",
+                        QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}}})
+                    .addRequired("files")),
+        wrap([](const QJsonObject &p) {
+            const QString name = p.value("name").toString();
+            const QString pattern = p.value("pattern").toString();
+            const bool isRegex = p.value("regex").toBool();
+            const QStringList files = commands.findFilesInProject(name, pattern, isRegex);
+            return QJsonObject{{"files", QJsonArray::fromStringList(files)}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("search_in_file")
+            .title("Search for pattern in a single file")
+            .description(
+                "Search for a text pattern in a single file and return all matches with "
+                "line, column, and matched text")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "path",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"format", "uri"},
+                            {"description", "Absolute path of the file to search"}})
+                    .addProperty(
+                        "pattern",
+                        QJsonObject{{"type", "string"}, {"description", "Text pattern to search for"}})
+                    .addProperty(
+                        "regex",
+                        QJsonObject{
+                            {"type", "boolean"},
+                            {"description", "Whether the pattern is a regular expression"}})
+                    .addProperty(
+                        "caseSensitive",
+                        QJsonObject{
+                            {"type", "boolean"},
+                            {"description", "Whether the search should be case sensitive"}})
+                    .addRequired("path")
+                    .addRequired("pattern"))
+            .outputSchema(McpCommands::searchResultsSchema()),
+        wrapAsync([](const QJsonObject &p, const Callback &callback) {
+            const QString path = p.value("path").toString();
+            const QString pattern = p.value("pattern").toString();
+            const bool isRegex = p.value("regex").toBool(false);
+            const bool caseSensitive = p.value("caseSensitive").toBool(false);
+            commands.searchInFile(path, pattern, isRegex, caseSensitive, callback);
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("search_in_files")
+            .title("Search for pattern in project files")
+            .description(
+                "Search for a text pattern in files matching a file pattern within a "
+                "project (or all projects) and return all matches")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "filePattern",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description",
+                             "File pattern to filter which files to search (e.g., '*.cpp', "
+                             "'*.h')"}})
+                    .addProperty(
+                        "projectName",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description",
+                             "Optional: name of the project to search in (searches all projects if "
+                             "not specified)"}})
+                    .addProperty(
+                        "pattern",
+                        QJsonObject{{"type", "string"}, {"description", "Text pattern to search for"}})
+                    .addProperty(
+                        "regex",
+                        QJsonObject{
+                            {"type", "boolean"},
+                            {"description", "Whether the pattern is a regular expression"}})
+                    .addProperty(
+                        "caseSensitive",
+                        QJsonObject{
+                            {"type", "boolean"},
+                            {"description", "Whether the search should be case sensitive"}})
+                    .addRequired("filePattern")
+                    .addRequired("pattern"))
+            .outputSchema(McpCommands::searchResultsSchema()),
+        wrapAsync([](const QJsonObject &p, const Callback &callback) {
+            const QString filePattern = p.value("filePattern").toString();
+            const QString pattern = p.value("pattern").toString();
+            const bool isRegex = p.value("regex").toBool(false);
+            const bool caseSensitive = p.value("caseSensitive").toBool(false);
+            const std::optional<QString> projectName = p.contains("projectName")
+                                                           ? std::optional<QString>(
+                                                                 p.value("projectName").toString())
+                                                           : std::nullopt;
+            commands
+                .searchInFiles(filePattern, projectName, pattern, isRegex, caseSensitive, callback);
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("search_in_directory")
+            .title("Search for pattern in a directory")
+            .description(
+                "Search for a text pattern recursively in all files within a directory "
+                "and return all matches")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "directory",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"format", "uri"},
+                            {"description", "Absolute path of the directory to search in"}})
+                    .addProperty(
+                        "pattern",
+                        QJsonObject{{"type", "string"}, {"description", "Text pattern to search for"}})
+                    .addProperty(
+                        "regex",
+                        QJsonObject{
+                            {"type", "boolean"},
+                            {"description", "Whether the pattern is a regular expression"}})
+                    .addProperty(
+                        "caseSensitive",
+                        QJsonObject{
+                            {"type", "boolean"},
+                            {"description", "Whether the search should be case sensitive"}})
+                    .addRequired("directory")
+                    .addRequired("pattern"))
+            .outputSchema(McpCommands::searchResultsSchema()),
+        wrapAsync([](const QJsonObject &p, const Callback &callback) {
+            const QString directory = p.value("directory").toString();
+            const QString pattern = p.value("pattern").toString();
+            const bool isRegex = p.value("regex").toBool(false);
+            const bool caseSensitive = p.value("caseSensitive").toBool(false);
+            commands.searchInDirectory(directory, pattern, isRegex, caseSensitive, callback);
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("replace_in_file")
+            .title("Replace pattern in a single file")
+            .description(
+                "Replace all matches of a text pattern in a single file with replacement text")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "path",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"format", "uri"},
+                            {"description", "Absolute path of the file to modify"}})
+                    .addProperty(
+                        "pattern",
+                        QJsonObject{{"type", "string"}, {"description", "Text pattern to search for"}})
+                    .addProperty(
+                        "replacement",
+                        QJsonObject{{"type", "string"}, {"description", "Replacement text"}})
+                    .addProperty(
+                        "regex",
+                        QJsonObject{
+                            {"type", "boolean"},
+                            {"description", "Whether the pattern is a regular expression"}})
+                    .addProperty(
+                        "caseSensitive",
+                        QJsonObject{
+                            {"type", "boolean"},
+                            {"description", "Whether the search should be case sensitive"}})
+                    .addRequired("path")
+                    .addRequired("pattern")
+                    .addRequired("replacement"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("ok", QJsonObject{{"type", "boolean"}})
+                    .addRequired("ok")),
+        wrapAsync([](const QJsonObject &p, const Callback &callback) {
+            const QString path = p.value("path").toString();
+            const QString pattern = p.value("pattern").toString();
+            const QString replacement = p.value("replacement").toString();
+            const bool isRegex = p.value("regex").toBool(false);
+            const bool caseSensitive = p.value("caseSensitive").toBool(false);
+            commands.replaceInFile(path, pattern, replacement, isRegex, caseSensitive, callback);
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("replace_in_files")
+            .title("Replace pattern in project files")
+            .description(
+                "Replace all matches of a text pattern in files matching a file pattern "
+                "within a project (or all projects) with replacement text")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "filePattern",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description",
+                             "File pattern to filter which files to modify (e.g., '*.cpp', "
+                             "'*.h')"}})
+                    .addProperty(
+                        "projectName",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description",
+                             "Optional: name of the project to search in (searches all projects if "
+                             "not specified)"}})
+                    .addProperty(
+                        "pattern",
+                        QJsonObject{{"type", "string"}, {"description", "Text pattern to search for"}})
+                    .addProperty(
+                        "replacement",
+                        QJsonObject{{"type", "string"}, {"description", "Replacement text"}})
+                    .addProperty(
+                        "regex",
+                        QJsonObject{
+                            {"type", "boolean"},
+                            {"description", "Whether the pattern is a regular expression"}})
+                    .addProperty(
+                        "caseSensitive",
+                        QJsonObject{
+                            {"type", "boolean"},
+                            {"description", "Whether the search should be case sensitive"}})
+                    .addRequired("filePattern")
+                    .addRequired("pattern")
+                    .addRequired("replacement"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("ok", QJsonObject{{"type", "boolean"}})
+                    .addRequired("ok")),
+        wrapAsync([](const QJsonObject &p, const Callback &callback) {
+            const QString filePattern = p.value("filePattern").toString();
+            const QString pattern = p.value("pattern").toString();
+            const QString replacement = p.value("replacement").toString();
+            const bool isRegex = p.value("regex").toBool(false);
+            const bool caseSensitive = p.value("caseSensitive").toBool(false);
+            const std::optional<QString> projectName = p.contains("projectName")
+                                                           ? std::optional<QString>(
+                                                                 p.value("projectName").toString())
+                                                           : std::nullopt;
+            commands.replaceInFiles(
+                filePattern, projectName, pattern, replacement, isRegex, caseSensitive, callback);
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("replace_in_directory")
+            .title("Replace pattern in a directory")
+            .description(
+                "Replace all matches of a text pattern recursively in all files within "
+                "a directory with replacement text")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "directory",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"format", "uri"},
+                            {"description", "Absolute path of the directory to search in"}})
+                    .addProperty(
+                        "pattern",
+                        QJsonObject{{"type", "string"}, {"description", "Text pattern to search for"}})
+                    .addProperty(
+                        "replacement",
+                        QJsonObject{{"type", "string"}, {"description", "Replacement text"}})
+                    .addProperty(
+                        "regex",
+                        QJsonObject{
+                            {"type", "boolean"},
+                            {"description", "Whether the pattern is a regular expression"}})
+                    .addProperty(
+                        "caseSensitive",
+                        QJsonObject{
+                            {"type", "boolean"},
+                            {"description", "Whether the search should be case sensitive"}})
+                    .addRequired("directory")
+                    .addRequired("pattern")
+                    .addRequired("replacement"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("ok", QJsonObject{{"type", "boolean"}})
+                    .addRequired("ok")),
+        wrapAsync([](const QJsonObject &p, const Callback &callback) {
+            const QString directory = p.value("directory").toString();
+            const QString pattern = p.value("pattern").toString();
+            const QString replacement = p.value("replacement").toString();
+            const bool isRegex = p.value("regex").toBool(false);
+            const bool caseSensitive = p.value("caseSensitive").toBool(false);
+            commands.replaceInDirectory(
+                directory, pattern, replacement, isRegex, caseSensitive, callback);
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("list_projects")
+            .title("List all available projects")
+            .description("List all available projects")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty(
+                        "projects",
+                        QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}}})
+                    .addRequired("projects")),
+        wrap([](const QJsonObject &) {
+            const QStringList projects = commands.listProjects();
+            QJsonArray arr;
+            for (const QString &pr : projects)
+                arr.append(pr);
+            return QJsonObject{{"projects", arr}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("list_build_configs")
+            .title("List available build configurations")
+            .description("List available build configurations")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty(
+                        "buildConfigs",
+                        QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}}})
+                    .addRequired("buildConfigs")),
+        wrap([](const QJsonObject &) {
+            const QStringList configs = commands.listBuildConfigs();
+            QJsonArray arr;
+            for (const QString &c : configs)
+                arr.append(c);
+            return QJsonObject{{"buildConfigs", arr}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("switch_build_config")
+            .title("Switch to a specific build configuration")
+            .description("Switch to a specific build configuration")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "name",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description", "Name of the build configuration to switch to"}})
+                    .addRequired("name"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("success", QJsonObject{{"type", "boolean"}})
+                    .addRequired("success")),
+        wrap([](const QJsonObject &p) {
+            const QString name = p.value("name").toString();
+            bool ok = commands.switchToBuildConfig(name);
+            return QJsonObject{{"success", ok}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("list_open_files")
+            .title("List currently open files")
+            .description("List currently open files")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty(
+                        "openFiles",
+                        QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}}})
+                    .addRequired("openFiles")),
+        wrap([](const QJsonObject &) {
+            const QStringList files = commands.listOpenFiles();
+            QJsonArray arr;
+            for (const QString &f : files)
+                arr.append(f);
+            return QJsonObject{{"openFiles", arr}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("list_sessions")
+            .title("List available sessions")
+            .description("List available sessions")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty(
+                        "sessions",
+                        QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}}})
+                    .addRequired("sessions")),
+        wrap([](const QJsonObject &) {
+            const QStringList sessions = commands.listSessions();
+            QJsonArray arr;
+            for (const QString &s : sessions)
+                arr.append(s);
+            return QJsonObject{{"sessions", arr}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("load_session")
+            .title("Load a specific session")
+            .description("Load a specific session")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "sessionName",
+                        QJsonObject{
+                            {"type", "string"}, {"description", "Name of the session to load"}})
+                    .addRequired("sessionName"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("success", QJsonObject{{"type", "boolean"}})
+                    .addRequired("success")),
+        wrap([](const QJsonObject &p) {
+            const QString name = p.value("sessionName").toString();
+            bool ok = commands.loadSession(name);
+            return QJsonObject{{"success", ok}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("list_issues")
+            .title("List current issues (warnings and errors)")
+            .description("List current issues (warnings and errors)")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .outputSchema(IssuesManager::issuesSchema()),
+        wrap([](const QJsonObject &) { return commands.listIssues(); }));
+
+    server.addTool(
+        Tool{}
+            .name("list_file_issues")
+            .title("List current issues for file (warnings and errors)")
+            .description("List current issues for file (warnings and errors)")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "path",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"format", "uri"},
+                            {"description", "Absolute path of the file to open"}})
+                    .addRequired("path"))
+            .outputSchema(IssuesManager::issuesSchema()),
+        wrap([](const QJsonObject &p) {
+            const QString path = p.value("path").toString();
+            return commands.listIssues(path);
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("quit")
+            .title("Quit Qt Creator")
+            .description("Quit Qt Creator")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("success", QJsonObject{{"type", "boolean"}})
+                    .addRequired("success")),
+        wrap([](const QJsonObject &) {
+            bool ok = commands.quit();
+            return QJsonObject{{"success", ok}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("get_current_project")
+            .title("Get the currently active project")
+            .description("Get the currently active project")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("project", QJsonObject{{"type", "string"}})
+                    .addRequired("project")),
+        wrap([](const QJsonObject &) {
+            QString proj = commands.getCurrentProject();
+            return QJsonObject{{"project", proj}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("get_current_build_config")
+            .title("Get the currently active build configuration")
+            .description("Get the currently active build configuration")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("buildConfig", QJsonObject{{"type", "string"}})
+                    .addRequired("buildConfig")),
+        wrap([](const QJsonObject &) {
+            QString cfg = commands.getCurrentBuildConfig();
+            return QJsonObject{{"buildConfig", cfg}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("get_current_session")
+            .title("Get the currently active session")
+            .description("Get the currently active session")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("session", QJsonObject{{"type", "string"}})
+                    .addRequired("session")),
+        wrap([](const QJsonObject &) {
+            QString sess = commands.getCurrentSession();
+            return QJsonObject{{"session", sess}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("save_session")
+            .title("Save the current session")
+            .description("Save the current session")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("success", QJsonObject{{"type", "boolean"}})
+                    .addRequired("success")),
+        wrap([](const QJsonObject &) {
+            bool ok = commands.saveSession();
+            return QJsonObject{{"success", ok}};
+        }));
+
+    server.addTool(
+        Tool()
+            .name("known_repositories_in_projects")
+            .title("Get known version control repositories in all projects")
+            .description(
+                "List all known version control repositories (e.g., Git, Subversion) that are "
+                "within the directories of all open projects")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .inputSchema(
+                Tool::InputSchema()
+                    .addProperty(
+                        "name",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description", "Name of the project to query repositories for"}})
+                    .addRequired("name"))
+            .outputSchema(
+                Tool::OutputSchema()
+                    .addProperty(
+                        "repositories",
+                        QJsonObject{
+                            {"type", "object"},
+                            {"description",
+                             "Map of version control system names to lists of repository paths"}})
+                    .addRequired("repositories")),
+        wrap([](const QJsonObject &p) {
+            const QString projectName = p.value("name").toString();
+            const QMap<QString, QSet<QString>> repos = commands.knownRepositoriesInProject(
+                projectName);
+
+            // Convert QMap<QString, QStringList> to QJsonObject
+            QJsonObject reposJson;
+            for (auto it = repos.constBegin(); it != repos.constEnd(); ++it) {
+                reposJson[it.key()] = QJsonArray::fromStringList(Utils::toList(it.value()));
+            }
+
+            return QJsonObject{{"repositories", reposJson}};
+        }));
+
+    server.addTool(
+        Tool()
+            .name("project_dependencies")
+            .title("List project dependencies for all projects")
+            .description("List project dependencies for all projects")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "name",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description", "Name of the project to query dependencies for"}})
+                    .addRequired("name"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty(
+                        "dependencies",
+                        QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}}})
+                    .addRequired("dependencies")),
+        wrap([](const QJsonObject &p) {
+            const Utils::Result<QStringList> projects = commands.projectDependencies(
+                p["name"].toString());
+            QJsonArray arr;
+            for (const QString &pr : projects.value_or(QStringList{})) // TODO: proper error handling
+                arr.append(pr);
+            return QJsonObject{{"dependencies", arr}};
+        }));
+
+    server.addTool(
+        Tool()
+            .name("execute_command")
+            .title("executes the command")
+            .description(
+                "executes the command and returns the exit code as well as standart output and "
+                "error")
+            .inputSchema(
+                Tool::InputSchema()
+                    .addRequired("command")
+                    .addProperty(
+                        "command",
+                        QJsonObject{{"type", "string"}, {"description", "Command to execute"}})
+                    .addProperty(
+                        "arguments",
+                        QJsonObject{
+                            {"type", "string"}, {"description", "Arguments passed to the command"}})
+                    .addProperty(
+                        "workingDir",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description", "Directory in which the command is executed"}}))
+            .outputSchema(
+                Tool::OutputSchema()
+                    .addRequired("exitCode")
+                    .addProperty(
+                        "exitCode",
+                        QJsonObject{{"type", "integer"}, {"description", "Exit code of the command"}})
+                    .addProperty(
+                        "stdout",
+                        QJsonObject{
+                            {"type", "string"}, {"description", "Standard output of the command"}})
+                    .addProperty(
+                        "stderr",
+                        QJsonObject{
+                            {"type", "string"}, {"description", "Standard error of the command"}})),
+        wrapAsync([](const QJsonObject &p, const Callback &callback) {
+            commands.executeCommand(
+                p["command"].toString(),
+                p["arguments"].toString(),
+                p["workingDir"].toString(),
+                callback);
+        }));
+}
 } // namespace Mcp::Internal
