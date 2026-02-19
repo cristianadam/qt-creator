@@ -165,6 +165,11 @@ static void installDirtyTriggerHelper(QObject *object, bool check)
         QObject::connect(ob, &PlainTextEdit::textChanged, action);
         return;
     }
+    if (auto ob = qobject_cast<QAbstractItemModel *>(object)) {
+        QObject::connect(ob, &QAbstractItemModel::rowsInserted, action);
+        QObject::connect(ob, &QAbstractItemModel::rowsRemoved, action);
+        return;
+    }
 
     QTC_CHECK(false);
 }

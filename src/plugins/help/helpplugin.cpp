@@ -136,7 +136,6 @@ public:
     QPointer<HelpWidget> m_externalWindow;
     QRect m_externalWindowState;
 
-    DocSettingsPage m_docSettingsPage;
     FilterSettingsPage m_filterSettingsPage{[this] {setupHelpEngineIfNeeded(); }};
     SearchTaskHandler m_searchTaskHandler;
 
@@ -151,6 +150,8 @@ static HelpManager *m_helpManager = nullptr;
 
 HelpPluginPrivate::HelpPluginPrivate()
 {
+    setupDocSettingsPage();
+
     const QString locale = ICore::userInterfaceLanguage();
     if (!locale.isEmpty()) {
         auto qtr = new QTranslator(this);

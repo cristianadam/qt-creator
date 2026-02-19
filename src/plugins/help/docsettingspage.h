@@ -3,16 +3,8 @@
 
 #pragma once
 
-#include <coreplugin/dialogs/ioptionspage.h>
+namespace Help::Internal {
 
-namespace Help {
-namespace Internal {
+void setupDocSettingsPage();
 
-class DocSettingsPage final : public Core::IOptionsPage
-{
-public:
-    DocSettingsPage();
-};
-
-} // namespace Help
-} // namespace Internal
+} // Help::Internal
