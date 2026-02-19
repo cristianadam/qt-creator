@@ -58,91 +58,91 @@ public:
     void readSettings();
 
 private:
-    QSpinBox *m_spinItemSpacing;
-    QSpinBox *m_spinSnapMargin;
-    QSpinBox *m_spinCanvasHeight;
-    QSpinBox *m_spinCanvasWidth;
-    QCheckBox *m_smoothRendering;
-    QSpinBox *m_spinRootItemInitHeight;
-    QSpinBox *m_spinRootItemInitWidth;
-    QLineEdit *m_styleLineEdit;
+    QSpinBox *itemSpacing;
+    QSpinBox *containerPadding;
+    QSpinBox *canvasHeight;
+    QSpinBox *canvasWidth;
+    QCheckBox *smoothRendering;
+    QSpinBox *rootItemInitHeight;
+    QSpinBox *rootItemInitWidth;
+    QLineEdit *controlsStyle;
     QComboBox *m_controls2StyleComboBox;
-    QCheckBox *m_alwaysSaveSubcomponentsCheckBox;
-    QCheckBox *m_designerWarningsInEditorCheckBox;
-    QCheckBox *m_designerWarningsCheckBox;
-    QCheckBox *m_designerWarningsUiQmlfiles;
+    QCheckBox *alwasySaveInCrumbkeBar;
+    QCheckBox *warnAboutQtQuickDesignerFeaturesInCodeEditor;
+    QCheckBox *warnAboutQtQuickFeaturesInDesigner;
+    QCheckBox *warnAboutQmlFilesInsteadOfUiQmlFiles;
     QRadioButton *m_useQsTrFunctionRadioButton;
     QRadioButton *m_useQsTrIdFunctionRadioButton;
     QRadioButton *m_useQsTranslateFunctionRadioButton;
-    QCheckBox *m_designerAlwaysDesignModeCheckBox;
-    QCheckBox *m_askBeforeDeletingAssetCheckBox;
-    QCheckBox *m_askBeforeDeletingContentLibFileCheckBox;
-    QCheckBox *m_alwaysAutoFormatUICheckBox;
-    QCheckBox *m_featureTimelineEditorCheckBox;
-    QCheckBox *m_featureDockWidgetContentMinSize;
+    QCheckBox *alwaysDesignMode;
+    QCheckBox *askBeforeDeletingAsset;
+    QCheckBox *askBeforeDeletingContentLibFile;
+    QCheckBox *reformatUiQmlFiles;
+    QCheckBox *enableTimeLineView;
+    QCheckBox *enableDockWidgetContentsMinSize;
     QGroupBox *m_debugGroupBox;
-    QCheckBox *m_designerShowDebuggerCheckBox;
-    QCheckBox *m_showPropertyEditorWarningsCheckBox;
-    QComboBox *m_forwardPuppetOutputComboBox;
-    QCheckBox *m_designerEnableDebuggerCheckBox;
-    QCheckBox *m_showWarnExceptionsCheckBox;
-    QComboBox *m_debugPuppetComboBox;
+    QCheckBox *showQtQuickDesignerDebugView;
+    QCheckBox *showPropertyEditorWarnings;
+    QComboBox *forwardPuppetOutput;
+    QCheckBox *enableQtQuickDesignerDebugView;
+    QCheckBox *warnException;
+    QComboBox *debugPuppet;
 };
 
 SettingsPageWidget::SettingsPageWidget()
 {
-    m_spinItemSpacing = new QSpinBox;
-    m_spinItemSpacing->setMaximum(50);
+    itemSpacing = new QSpinBox;
+    itemSpacing->setMaximum(50);
 
-    m_spinSnapMargin = new QSpinBox;
-    m_spinSnapMargin->setMaximum(10);
+    containerPadding = new QSpinBox;
+    containerPadding->setMaximum(10);
 
-    m_spinCanvasHeight = new QSpinBox;
-    m_spinCanvasHeight->setMaximum(100000);
-    m_spinCanvasHeight->setSingleStep(100);
-    m_spinCanvasHeight->setValue(10000);
+    canvasHeight = new QSpinBox;
+    canvasHeight->setMaximum(100000);
+    canvasHeight->setSingleStep(100);
+    canvasHeight->setValue(10000);
 
-    m_spinCanvasWidth = new QSpinBox;
-    m_spinCanvasWidth->setMaximum(100000);
-    m_spinCanvasWidth->setSingleStep(100);
-    m_spinCanvasWidth->setValue(10000);
+    canvasWidth = new QSpinBox;
+    canvasWidth->setMaximum(100000);
+    canvasWidth->setSingleStep(100);
+    canvasWidth->setValue(10000);
 
-    m_smoothRendering = new QCheckBox;
-    m_smoothRendering->setToolTip(Tr::tr("Enable smooth rendering in the 2D view."));
+    smoothRendering = new QCheckBox;
+    smoothRendering->setToolTip(Tr::tr("Enable smooth rendering in the 2D view."));
 
-    m_spinRootItemInitHeight = new QSpinBox;
-    m_spinRootItemInitHeight->setMaximum(100000);
-    m_spinRootItemInitHeight->setValue(480);
+    rootItemInitHeight = new QSpinBox;
+    rootItemInitHeight->setMaximum(100000);
+    rootItemInitHeight->setValue(480);
 
-    m_spinRootItemInitWidth = new QSpinBox;
-    m_spinRootItemInitWidth->setMaximum(100000);
-    m_spinRootItemInitWidth->setValue(640);
+    rootItemInitWidth = new QSpinBox;
+    rootItemInitWidth->setMaximum(100000);
+    rootItemInitWidth->setValue(640);
 
-    m_styleLineEdit = new QLineEdit;
-    m_styleLineEdit->setPlaceholderText(Tr::tr("Default style"));
+    controlsStyle = new QLineEdit;
+    controlsStyle->setPlaceholderText(Tr::tr("Default style"));
 
     auto resetStyle = new QPushButton(Tr::tr("Reset Style"));
 
     m_controls2StyleComboBox = new QComboBox;
     m_controls2StyleComboBox->addItems({ "Default", "Material", "Universal" });
 
-    m_alwaysSaveSubcomponentsCheckBox = new QCheckBox(
+    alwasySaveInCrumbkeBar = new QCheckBox(
         Tr::tr("Always save when leaving subcomponent in bread crumb"));
 
-    m_designerWarningsInEditorCheckBox = new QCheckBox(
+    warnAboutQtQuickDesignerFeaturesInCodeEditor = new QCheckBox(
         Tr::tr("Warn about unsupported features of .ui.qml files in code editor"));
-    m_designerWarningsInEditorCheckBox->setToolTip(
+    warnAboutQtQuickDesignerFeaturesInCodeEditor->setToolTip(
         Tr::tr("Also warns in the code editor about QML features that are not properly "
                "supported by the Qt Quick Designer."));
 
-    m_designerWarningsCheckBox = new QCheckBox(
+    warnAboutQtQuickFeaturesInDesigner = new QCheckBox(
         Tr::tr("Warn about unsupported features in .ui.qml files"));
-    m_designerWarningsCheckBox->setToolTip(Tr::tr(
+    warnAboutQtQuickFeaturesInDesigner->setToolTip(Tr::tr(
         "Warns about QML features that are not properly supported by the Qt Design Studio."));
 
-    m_designerWarningsUiQmlfiles = new QCheckBox(
+    warnAboutQmlFilesInsteadOfUiQmlFiles = new QCheckBox(
         Tr::tr("Warn about using .qml files instead of .ui.qml files"));
-    m_designerWarningsUiQmlfiles->setToolTip(Tr::tr(
+    warnAboutQmlFilesInsteadOfUiQmlFiles->setToolTip(Tr::tr(
         "Qt Quick Designer will propose to open .ui.qml files instead of opening a .qml file."));
 
     m_useQsTrFunctionRadioButton = new QRadioButton(Tr::tr("qsTr()"));
@@ -150,104 +150,104 @@ SettingsPageWidget::SettingsPageWidget()
     m_useQsTrIdFunctionRadioButton = new QRadioButton(Tr::tr("qsTrId()"));
     m_useQsTranslateFunctionRadioButton = new QRadioButton(Tr::tr("qsTranslate()"));
 
-    m_designerAlwaysDesignModeCheckBox = new QCheckBox(
+    alwaysDesignMode = new QCheckBox(
         Tr::tr("Always open ui.qml files in Design mode"));
-    m_askBeforeDeletingAssetCheckBox = new QCheckBox(
+    askBeforeDeletingAsset = new QCheckBox(
         Tr::tr("Ask for confirmation before deleting asset"));
-    m_askBeforeDeletingContentLibFileCheckBox = new QCheckBox(
+    askBeforeDeletingContentLibFile = new QCheckBox(
         Tr::tr("Ask for confirmation before deleting content library files"));
-    m_alwaysAutoFormatUICheckBox = new QCheckBox(
+    reformatUiQmlFiles = new QCheckBox(
         Tr::tr("Always auto-format ui.qml files in Design mode"));
-    m_featureTimelineEditorCheckBox = new QCheckBox(Tr::tr("Enable Timeline editor"));
-    m_featureDockWidgetContentMinSize = new QCheckBox(
+    enableTimeLineView = new QCheckBox(Tr::tr("Enable Timeline editor"));
+    enableDockWidgetContentsMinSize = new QCheckBox(
         Tr::tr("Enable DockWidget content minimum size"));
 
     m_debugGroupBox = new QGroupBox(Tr::tr("Debugging"));
-    m_designerShowDebuggerCheckBox = new QCheckBox(Tr::tr("Show the debugging view"));
-    m_showPropertyEditorWarningsCheckBox = new QCheckBox(Tr::tr("Show property editor warnings"));
+    showQtQuickDesignerDebugView = new QCheckBox(Tr::tr("Show the debugging view"));
+    showPropertyEditorWarnings = new QCheckBox(Tr::tr("Show property editor warnings"));
 
-    m_forwardPuppetOutputComboBox = new QComboBox;
+    forwardPuppetOutput = new QComboBox;
 
-    m_designerEnableDebuggerCheckBox = new QCheckBox(Tr::tr("Enable the debugging view"));
-    m_showWarnExceptionsCheckBox = new QCheckBox(Tr::tr("Show warn exceptions"));
+    enableQtQuickDesignerDebugView = new QCheckBox(Tr::tr("Enable the debugging view"));
+    warnException = new QCheckBox(Tr::tr("Show warn exceptions"));
 
-    m_debugPuppetComboBox = new QComboBox;
+    debugPuppet = new QComboBox;
 
     using namespace Layouting;
 
-    Grid{m_designerShowDebuggerCheckBox,
-         m_showPropertyEditorWarningsCheckBox,
-         Form{Tr::tr("Forward QML Puppet output:"), m_forwardPuppetOutputComboBox},
+    Grid{showQtQuickDesignerDebugView,
+         showPropertyEditorWarnings,
+         Form{Tr::tr("Forward QML Puppet output:"), forwardPuppetOutput},
          br,
-         m_designerEnableDebuggerCheckBox,
-         m_showWarnExceptionsCheckBox,
-         Form{Tr::tr("Debug QML Puppet:"), m_debugPuppetComboBox}}
+         enableQtQuickDesignerDebugView,
+         warnException,
+         Form{Tr::tr("Debug QML Puppet:"), debugPuppet}}
         .attachTo(m_debugGroupBox);
 
     Column{Row{Group{title(Tr::tr("Snapping")),
                      Form{Tr::tr("Parent component padding:"),
-                          m_spinSnapMargin,
+                          containerPadding,
                           br,
                           Tr::tr("Sibling component spacing:"),
-                          m_spinItemSpacing}},
+                          itemSpacing}},
                Group{title(Tr::tr("Canvas")),
                      Form{Tr::tr("Width:"),
-                          m_spinCanvasWidth,
+                          canvasWidth,
                           br,
                           Tr::tr("Height:"),
-                          m_spinCanvasHeight,
+                          canvasHeight,
                           br,
                           Tr::tr("Smooth rendering:"),
-                          m_smoothRendering}},
+                          smoothRendering}},
                Group{title(Tr::tr("Root Component Init Size")),
                      Form{Tr::tr("Width:"),
-                          m_spinRootItemInitWidth,
+                          rootItemInitWidth,
                           br,
                           Tr::tr("Height:"),
-                          m_spinRootItemInitHeight}},
+                          rootItemInitHeight}},
                Group{title(Tr::tr("Styling")),
                      Form{Tr::tr("Controls style:"),
-                          m_styleLineEdit,
+                          controlsStyle,
                           resetStyle,
                           br,
                           Tr::tr("Controls 2 style:"),
                           m_controls2StyleComboBox}}},
-           Group{title(Tr::tr("Subcomponents")), Column{m_alwaysSaveSubcomponentsCheckBox}},
+           Group{title(Tr::tr("Subcomponents")), Column{alwasySaveInCrumbkeBar}},
            Row{Group{title(Tr::tr("Warnings")),
-                     Column{m_designerWarningsCheckBox,
-                            m_designerWarningsInEditorCheckBox,
-                            m_designerWarningsUiQmlfiles}},
+                     Column{warnAboutQtQuickFeaturesInDesigner,
+                            warnAboutQtQuickDesignerFeaturesInCodeEditor,
+                            warnAboutQmlFilesInsteadOfUiQmlFiles}},
                Group{title(Tr::tr("Internationalization")),
                      Column{m_useQsTrFunctionRadioButton,
                             m_useQsTrIdFunctionRadioButton,
                             m_useQsTranslateFunctionRadioButton}}},
            Group{title(Tr::tr("Features")),
-                 Grid{m_designerAlwaysDesignModeCheckBox,
-                      m_alwaysAutoFormatUICheckBox,
+                 Grid{alwaysDesignMode,
+                      reformatUiQmlFiles,
                       br,
-                      m_askBeforeDeletingAssetCheckBox,
-                      m_askBeforeDeletingContentLibFileCheckBox,
+                      askBeforeDeletingAsset,
+                      askBeforeDeletingContentLibFile,
                       br,
-                      m_featureTimelineEditorCheckBox,
+                      enableTimeLineView,
                       br,
-                      m_featureDockWidgetContentMinSize}},
+                      enableDockWidgetContentsMinSize}},
            m_debugGroupBox,
            st}
         .attachTo(this);
 
-    connect(m_designerEnableDebuggerCheckBox, &QCheckBox::toggled, [this](bool checked) {
-        if (checked && ! m_designerShowDebuggerCheckBox->isChecked())
-            m_designerShowDebuggerCheckBox->setChecked(true);
+    connect(enableQtQuickDesignerDebugView, &QCheckBox::toggled, [this](bool checked) {
+        if (checked && ! showQtQuickDesignerDebugView->isChecked())
+            showQtQuickDesignerDebugView->setChecked(true);
         }
     );
     connect(resetStyle, &QPushButton::clicked,
-        m_styleLineEdit, &QLineEdit::clear);
+        controlsStyle, &QLineEdit::clear);
     connect(m_controls2StyleComboBox, &QComboBox::currentTextChanged, [this] {
-        m_styleLineEdit->setText(m_controls2StyleComboBox->currentText());
+        controlsStyle->setText(m_controls2StyleComboBox->currentText());
     });
 
-    m_forwardPuppetOutputComboBox->addItems(puppetModes());
-    m_debugPuppetComboBox->addItems(puppetModes());
+    forwardPuppetOutput->addItems(puppetModes());
+    debugPuppet->addItems(puppetModes());
 
     readSettings();
 
@@ -257,23 +257,23 @@ SettingsPageWidget::SettingsPageWidget()
 QHash<QByteArray, QVariant> SettingsPageWidget::newSettings() const
 {
     QHash<QByteArray, QVariant> settings;
-    settings.insert(DesignerSettingsKey::ItemSpacing, m_spinItemSpacing->value());
-    settings.insert(DesignerSettingsKey::ContainerPadding, m_spinSnapMargin->value());
-    settings.insert(DesignerSettingsKey::CanvasWidth, m_spinCanvasWidth->value());
-    settings.insert(DesignerSettingsKey::CanvasHeight, m_spinCanvasHeight->value());
-    settings.insert(DesignerSettingsKey::RootElementInitWidth, m_spinRootItemInitWidth->value());
-    settings.insert(DesignerSettingsKey::RootElementInitHeight, m_spinRootItemInitHeight->value());
+    settings.insert(DesignerSettingsKey::ItemSpacing, itemSpacing->value());
+    settings.insert(DesignerSettingsKey::ContainerPadding, containerPadding->value());
+    settings.insert(DesignerSettingsKey::CanvasWidth, canvasWidth->value());
+    settings.insert(DesignerSettingsKey::CanvasHeight, canvasHeight->value());
+    settings.insert(DesignerSettingsKey::RootElementInitWidth, rootItemInitWidth->value());
+    settings.insert(DesignerSettingsKey::RootElementInitHeight, rootItemInitHeight->value());
     settings.insert(DesignerSettingsKey::WarnAboutQtQuickFeaturesInDesigner,
-                    m_designerWarningsCheckBox->isChecked());
+                    warnAboutQtQuickFeaturesInDesigner->isChecked());
     settings.insert(DesignerSettingsKey::WarnAboutQmlFilesInsteadOfUiQmlFiles,
-                    m_designerWarningsUiQmlfiles->isChecked());
+                    warnAboutQmlFilesInsteadOfUiQmlFiles->isChecked());
 
     settings.insert(DesignerSettingsKey::WarnAboutQtQuickDesignerFeaturesInCodeEditor,
-        m_designerWarningsInEditorCheckBox->isChecked());
+        warnAboutQtQuickDesignerFeaturesInCodeEditor->isChecked());
     settings.insert(DesignerSettingsKey::ShowQtQuickDesignerDebugView,
-        m_designerShowDebuggerCheckBox->isChecked());
+        showQtQuickDesignerDebugView->isChecked());
     settings.insert(DesignerSettingsKey::EnableQtQuickDesignerDebugView,
-        m_designerEnableDebuggerCheckBox->isChecked());
+        enableQtQuickDesignerDebugView->isChecked());
 
     int typeOfQsTrFunction;
 
@@ -287,32 +287,32 @@ QHash<QByteArray, QVariant> SettingsPageWidget::newSettings() const
         typeOfQsTrFunction = 0;
 
     settings.insert(DesignerSettingsKey::TypeOfQsTrFunction, typeOfQsTrFunction);
-    settings.insert(DesignerSettingsKey::ControlsStyle, m_styleLineEdit->text());
+    settings.insert(DesignerSettingsKey::ControlsStyle, controlsStyle->text());
     settings.insert(DesignerSettingsKey::ForwardPuppetOutput,
-        m_forwardPuppetOutputComboBox->currentText());
+        forwardPuppetOutput->currentText());
     settings.insert(DesignerSettingsKey::DebugPuppet,
-        m_debugPuppetComboBox->currentText());
+        debugPuppet->currentText());
 
     settings.insert(DesignerSettingsKey::AlwaysSaveInCrumbleBar,
-        m_alwaysSaveSubcomponentsCheckBox->isChecked());
+        alwasySaveInCrumbkeBar->isChecked());
     settings.insert(DesignerSettingsKey::ShowPropertyEditorWarnings,
-        m_showPropertyEditorWarningsCheckBox->isChecked());
+        showPropertyEditorWarnings->isChecked());
     settings.insert(DesignerSettingsKey::WarnException,
-        m_showWarnExceptionsCheckBox->isChecked());
+        warnException->isChecked());
     settings.insert(DesignerSettingsKey::EnableTimelineView,
-                    m_featureTimelineEditorCheckBox->isChecked());
+                    enableTimeLineView->isChecked());
     settings.insert(DesignerSettingsKey::EnableDockWidgetContentMinSize,
-                    m_featureDockWidgetContentMinSize->isChecked());
+                    enableDockWidgetContentsMinSize->isChecked());
     settings.insert(DesignerSettingsKey::AlwaysDesignMode,
-                    m_designerAlwaysDesignModeCheckBox->isChecked());
+                    alwaysDesignMode->isChecked());
     settings.insert(DesignerSettingsKey::AskBeforeDeletingAsset,
-                    m_askBeforeDeletingAssetCheckBox->isChecked());
+                    askBeforeDeletingAsset->isChecked());
     settings.insert(DesignerSettingsKey::AskBeforeDeletingContentLibFile,
-                    m_askBeforeDeletingContentLibFileCheckBox->isChecked());
-    settings.insert(DesignerSettingsKey::SmoothRendering, m_smoothRendering->isChecked());
+                    askBeforeDeletingContentLibFile->isChecked());
+    settings.insert(DesignerSettingsKey::SmoothRendering, smoothRendering->isChecked());
 
     settings.insert(DesignerSettingsKey::ReformatUiQmlFiles,
-                    m_alwaysAutoFormatUICheckBox->isChecked());
+                    reformatUiQmlFiles->isChecked());
 
     return settings;
 }
@@ -320,26 +320,26 @@ QHash<QByteArray, QVariant> SettingsPageWidget::newSettings() const
 void SettingsPageWidget::readSettings()
 {
     const DesignerSettings &settings = designerSettings();
-    m_spinItemSpacing->setValue(settings.value(DesignerSettingsKey::ItemSpacing).toInt());
-    m_spinSnapMargin->setValue(settings.value(
+    itemSpacing->setValue(settings.value(DesignerSettingsKey::ItemSpacing).toInt());
+    containerPadding->setValue(settings.value(
         DesignerSettingsKey::ContainerPadding).toInt());
-    m_spinCanvasWidth->setValue(settings.value(
+    canvasWidth->setValue(settings.value(
         DesignerSettingsKey::CanvasWidth).toInt());
-    m_spinCanvasHeight->setValue(settings.value(
+    canvasHeight->setValue(settings.value(
         DesignerSettingsKey::CanvasHeight).toInt());
-    m_spinRootItemInitWidth->setValue(settings.value(
+    rootItemInitWidth->setValue(settings.value(
         DesignerSettingsKey::RootElementInitWidth).toInt());
-    m_spinRootItemInitHeight->setValue(settings.value(
+    rootItemInitHeight->setValue(settings.value(
         DesignerSettingsKey::RootElementInitHeight).toInt());
-    m_designerWarningsCheckBox->setChecked(settings.value(
+    warnAboutQtQuickFeaturesInDesigner->setChecked(settings.value(
         DesignerSettingsKey::WarnAboutQtQuickFeaturesInDesigner).toBool());
-    m_designerWarningsUiQmlfiles->setChecked(settings.value(
+    warnAboutQmlFilesInsteadOfUiQmlFiles->setChecked(settings.value(
         DesignerSettingsKey::WarnAboutQmlFilesInsteadOfUiQmlFiles).toBool());
-    m_designerWarningsInEditorCheckBox->setChecked(settings.value(
+    warnAboutQtQuickDesignerFeaturesInCodeEditor->setChecked(settings.value(
         DesignerSettingsKey::WarnAboutQtQuickDesignerFeaturesInCodeEditor).toBool());
-    m_designerShowDebuggerCheckBox->setChecked(settings.value(
+    showQtQuickDesignerDebugView->setChecked(settings.value(
         DesignerSettingsKey::ShowQtQuickDesignerDebugView).toBool());
-    m_designerEnableDebuggerCheckBox->setChecked(settings.value(
+    enableQtQuickDesignerDebugView->setChecked(settings.value(
         DesignerSettingsKey::EnableQtQuickDesignerDebugView).toBool());
     m_useQsTrFunctionRadioButton->setChecked(settings.value(
         DesignerSettingsKey::TypeOfQsTrFunction).toInt() == 0);
@@ -347,41 +347,41 @@ void SettingsPageWidget::readSettings()
         DesignerSettingsKey::TypeOfQsTrFunction).toInt() == 1);
     m_useQsTranslateFunctionRadioButton->setChecked(settings.value(
         DesignerSettingsKey::TypeOfQsTrFunction).toInt() == 2);
-    m_styleLineEdit->setText(settings.value(
+    controlsStyle->setText(settings.value(
         DesignerSettingsKey::ControlsStyle).toString());
 
-    m_forwardPuppetOutputComboBox->setCurrentText(settings.value(
+    forwardPuppetOutput->setCurrentText(settings.value(
         DesignerSettingsKey::ForwardPuppetOutput).toString());
-    m_debugPuppetComboBox->setCurrentText(settings.value(
+    debugPuppet->setCurrentText(settings.value(
         DesignerSettingsKey::DebugPuppet).toString());
 
-    m_alwaysSaveSubcomponentsCheckBox->setChecked(settings.value(
+    alwasySaveInCrumbkeBar->setChecked(settings.value(
         DesignerSettingsKey::AlwaysSaveInCrumbleBar).toBool());
-    m_showPropertyEditorWarningsCheckBox->setChecked(settings.value(
+    showPropertyEditorWarnings->setChecked(settings.value(
         DesignerSettingsKey::ShowPropertyEditorWarnings).toBool());
-    m_showWarnExceptionsCheckBox->setChecked(settings.value(
+    warnException->setChecked(settings.value(
         DesignerSettingsKey::WarnException).toBool());
 
-    m_controls2StyleComboBox->setCurrentText(m_styleLineEdit->text());
+    m_controls2StyleComboBox->setCurrentText(controlsStyle->text());
 
-    m_designerAlwaysDesignModeCheckBox->setChecked(settings.value(
+    alwaysDesignMode->setChecked(settings.value(
         DesignerSettingsKey::AlwaysDesignMode).toBool());
-    m_featureTimelineEditorCheckBox->setChecked(settings.value(
+    enableTimeLineView->setChecked(settings.value(
         DesignerSettingsKey::EnableTimelineView).toBool());
-    m_featureDockWidgetContentMinSize->setChecked(
+    enableDockWidgetContentsMinSize->setChecked(
         settings.value(DesignerSettingsKey::EnableDockWidgetContentMinSize).toBool());
 
-    m_askBeforeDeletingAssetCheckBox->setChecked(
+    askBeforeDeletingAsset->setChecked(
         settings.value(DesignerSettingsKey::AskBeforeDeletingAsset).toBool());
-    m_askBeforeDeletingContentLibFileCheckBox->setChecked(
+    askBeforeDeletingContentLibFile->setChecked(
         settings.value(DesignerSettingsKey::AskBeforeDeletingContentLibFile).toBool());
 
     m_debugGroupBox->setVisible(true);
-    m_featureTimelineEditorCheckBox->setVisible(false);
-    m_featureDockWidgetContentMinSize->setVisible(false);
-    m_smoothRendering->setChecked(settings.value(DesignerSettingsKey::SmoothRendering).toBool());
+    enableTimeLineView->setVisible(false);
+    enableDockWidgetContentsMinSize->setVisible(false);
+    smoothRendering->setChecked(settings.value(DesignerSettingsKey::SmoothRendering).toBool());
 
-    m_alwaysAutoFormatUICheckBox->setChecked(
+    reformatUiQmlFiles->setChecked(
         settings.value(DesignerSettingsKey::ReformatUiQmlFiles).toBool());
 }
 
