@@ -594,7 +594,6 @@ void SubversionPluginPrivate::revertAll()
         return;
     // NoteL: Svn "revert ." doesn not work.
     CommandLine args{settings().binaryPath(), {"revert"}};
-    args << SubversionClient::AddAuthOptions();
     args << "--recursive" << state.topLevel().toUrlishString();
     const auto revertResponse = runSvn(state.topLevel(), args, RunFlags::ShowStdOut);
     if (revertResponse.result() != ProcessResult::FinishedWithSuccess) {
@@ -611,7 +610,6 @@ void SubversionPluginPrivate::revertCurrentFile()
     QTC_ASSERT(state.hasFile(), return);
 
     CommandLine diffArgs{settings().binaryPath(), {"diff"}};
-    diffArgs << SubversionClient::AddAuthOptions();
     diffArgs << SubversionClient::escapeFile(state.relativeCurrentFile());
 
     const auto diffResponse = runSvn(state.currentFileTopLevel(), diffArgs);
@@ -629,7 +627,6 @@ void SubversionPluginPrivate::revertCurrentFile()
 
     // revert
     CommandLine args{settings().binaryPath(), {"revert"}};
-    args << SubversionClient::AddAuthOptions();
     args << SubversionClient::escapeFile(state.relativeCurrentFile());
 
     const auto revertResponse = runSvn(state.currentFileTopLevel(), args, RunFlags::ShowStdOut);
@@ -955,7 +952,7 @@ bool SubversionPluginPrivate::vcsAdd(const FilePath &workingDir, const QString &
 {
     const QString file = QDir::toNativeSeparators(SubversionClient::escapeFile(rawFileName));
     CommandLine args{settings().binaryPath()};
-    args << "add" << SubversionClient::AddAuthOptions() << "--parents" << file;
+    args << "add" << "--parents" << file;
     return runSvn(workingDir, args, RunFlags::ShowStdOut).result()
             == ProcessResult::FinishedWithSuccess;
 }
@@ -965,7 +962,7 @@ bool SubversionPluginPrivate::vcsDelete(const FilePath &workingDir, const QStrin
     const QString file = QDir::toNativeSeparators(SubversionClient::escapeFile(rawFileName));
 
     CommandLine args{settings().binaryPath()};
-    args << "delete" << SubversionClient::AddAuthOptions() << "--force" << file;
+    args << "delete" << "--force" << file;
 
     return runSvn(workingDir, args, RunFlags::ShowStdOut).result()
             == ProcessResult::FinishedWithSuccess;
@@ -974,8 +971,7 @@ bool SubversionPluginPrivate::vcsDelete(const FilePath &workingDir, const QStrin
 bool SubversionPluginPrivate::vcsMove(const FilePath &workingDir, const QString &from, const QString &to)
 {
     CommandLine args{settings().binaryPath(), {"move"}};
-    args << SubversionClient::AddAuthOptions()
-         << QDir::toNativeSeparators(SubversionClient::escapeFile(from))
+    args << QDir::toNativeSeparators(SubversionClient::escapeFile(from))
          << QDir::toNativeSeparators(SubversionClient::escapeFile(to));
     return runSvn(workingDir, args, RunFlags::ShowStdOut).result()
             == ProcessResult::FinishedWithSuccess;
