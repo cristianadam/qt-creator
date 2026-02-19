@@ -6,7 +6,6 @@
 #include "bookmarkmanager.h"
 #include "docsettingspage.h"
 #include "filtersettingspage.h"
-#include "generalsettingspage.h"
 #include "helpconstants.h"
 #include "helpfindsupport.h"
 #include "helpicons.h"
@@ -140,7 +139,6 @@ public:
     DocSettingsPage m_docSettingsPage;
     FilterSettingsPage m_filterSettingsPage{[this] {setupHelpEngineIfNeeded(); }};
     SearchTaskHandler m_searchTaskHandler;
-    GeneralSettingsPage m_generalSettingsPage;
 
     bool m_setupNeeded = true;
     LocalHelpManager m_localHelpManager;

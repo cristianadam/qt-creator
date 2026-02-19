@@ -6,7 +6,6 @@ add_qtc_plugin(Help
   SOURCES
     docsettingspage.cpp docsettingspage.h
     filtersettingspage.cpp filtersettingspage.h
-    generalsettingspage.cpp generalsettingspage.h
     helpconstants.h
     helpfindsupport.cpp helpfindsupport.h
     helpindexfilter.cpp helpindexfilter.h
