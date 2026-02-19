@@ -191,6 +191,38 @@
     To use JavaScript and image files in the application, copy them to the
     project folder.
 
+    \section1 Specify Qt Quick UI Prototype run settings
+
+    To specify settings for running applications on the \l {Managing kits}{Run device} that
+    you select for a kit, go to \uicontrol Projects > \uicontrol {Run Settings}.
+
+    \note Select the \uicontrol Desktop device type for the \l{Managing kits}{Run device}
+    in the kit.
+
+    \image {qtquick-ui-prototype-run-settings.webp} {Run Settings for a Qt Quick UI Prototype project}
+
+    The following table summarizes the settings for running Qt Quick UI Prototype
+    projects (\c .qmlproject).
+
+    \table
+    \header
+        \li Setting
+        \li Value
+    \row
+        \li \uicontrol {Override device QML Viewer}
+        \li \QQV to use.
+    \row
+        \li \uicontrol {Command line arguments}
+        \li Arguments to pass to the executable.
+    \row
+        \li \uicontrol {Main QML file}
+        \li File to start \QQV with.
+    \row
+        \li \uicontrol {X11 forwarding}
+        \li Select \uicontrol Enable to show a remotely running X11 client on a
+            local display.
+    \endtable
+
     \sa {Design Qt Quick UIs}{How to: Design Qt Quick UIs},
    {Manage kits}{How to: Manage kits}, {Creating projects},
     {Designing Qt Quick UIs}, {Qt Quick UI design},
