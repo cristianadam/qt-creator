@@ -127,6 +127,8 @@ TargetSetupPage::TargetSetupPage(QWidget *parent)
     setSizePolicy(policy);
 
     setProperty(SHORT_TITLE_PROPERTY, Tr::tr("Kits"));
+
+    qDebug() << "TargetSetupPage ctor";
 }
 
 void TargetSetupPage::initializePage()
@@ -137,6 +139,7 @@ void TargetSetupPage::initializePage()
         connect(KitManager::instance(), &KitManager::kitsLoaded,
                 d->guard, [this] { d->doInitializePage(); });
     }
+    qDebug() << "TargetSetupPage initialize page";
 }
 
 void TargetSetupPage::setTasksGenerator(const TasksGenerator &tasksGenerator)
@@ -156,6 +159,7 @@ QList<Id> TargetSetupPage::selectedKits() const
 
 TargetSetupPage::~TargetSetupPage()
 {
+    qDebug() << "TargetSetupPage dtor";
     delete d->guard;
     d->reset();
     delete d->spacer;
