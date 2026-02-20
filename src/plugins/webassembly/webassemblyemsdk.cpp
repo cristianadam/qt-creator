@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "webassemblyemsdk.h"
+#include "webassemblytr.h"
 
 #include "webassemblyconstants.h"
 
@@ -89,42 +90,57 @@ void parseEmSdkEnvOutputAndAddToEnv(const QString &output, Environment &env)
         env.appendOrSetPath(FilePath::fromUserInput(emsdkPython).parentDir());
 }
 
-bool isValid(const FilePath &sdkRoot)
-{
-    return !version(sdkRoot).isNull();
-}
-
 void addToEnvironment(const FilePath &sdkRoot, Environment &env)
 {
     if (sdkRoot.exists())
         parseEmSdkEnvOutputAndAddToEnv(emSdkEnvOutput(sdkRoot), env);
 }
 
-QVersionNumber version(const FilePath &sdkRoot)
+Result<QVersionNumber> version(const FilePath &sdkRoot)
 {
     const FilePath tsFile = timeStampFile(sdkRoot); // ts == Timestamp
-    if (!tsFile.exists())
-        return {};
+    if (!tsFile.exists()) {
+        return ResultError(
+            Tr::tr("\"%1\" config file does not exist in \"%2\"")
+                .arg(Constants::WEBASSEMBLY_EMSDK_CONFIG_FILE)
+                .arg(sdkRoot.toUserOutput()));
+    }
+
     const QDateTime ts = tsFile.lastModified();
 
     namespace DB = SettingsDatabase;
     if (DB::value(emSdkVersionTSKey).toDateTime() == ts
         && FilePath::fromVariant(DB::value(emSdkVersionTSFileKey)) == tsFile
         && DB::contains(emSdkVersionKey)) {
-        return QVersionNumber::fromString(DB::value(emSdkVersionKey).toString());
+        QVersionNumber version = QVersionNumber::fromString(DB::value(emSdkVersionKey).toString());
+        if (version.isNull())
+            return ResultError(Tr::tr("Cached emsdk version is invalid"));
+        return version;
     }
 
     Environment env = sdkRoot.deviceEnvironment();
     addToEnvironment(sdkRoot, env);
     QLatin1String scriptFile{sdkRoot.osType() == OsType::OsTypeWindows ? "emcc.bat" : "emcc"};
     FilePath script = sdkRoot.withNewPath(scriptFile).searchInDirectories(env.path());
+    if (!script.exists())
+        return ResultError(Tr::tr("Failed to locate %1").arg(scriptFile));
     const CommandLine command(script, {"-dumpversion"});
     Process emcc;
     emcc.setCommand(command);
     emcc.setEnvironment(env);
     emcc.runBlocking();
+
+    if (emcc.result() != ProcessResult::FinishedWithSuccess || emcc.exitCode() != 0) {
+        return ResultError(
+            Tr::tr("Failed to run %1:\n%2").arg(script.toUserOutput(), emcc.verboseExitMessage()));
+    }
+
     const QString versionStr = emcc.cleanedStdOut();
     const QVersionNumber result = QVersionNumber::fromString(versionStr);
+
+    if (result.isNull())
+        return ResultError(Tr::tr("Failed to parse emsdk version from output: %1").arg(versionStr));
+
     DB::setValue(emSdkVersionTSFileKey, tsFile.toVariant());
     DB::setValue(emSdkVersionTSKey, ts);
     DB::setValue(emSdkVersionKey, result.toString());

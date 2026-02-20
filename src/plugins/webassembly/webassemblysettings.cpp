@@ -77,9 +77,9 @@ WebAssemblySettings::WebAssemblySettings()
         m_statusIsEmsdkDir = new InfoLabel(Tr::tr("The chosen directory is an emsdk location."));
         m_statusSdkInstalled = new InfoLabel(Tr::tr("An SDK is installed."));
         m_statusSdkActivated = new InfoLabel(Tr::tr("An SDK is activated."));
-        m_statusSdkInvalid = new InfoLabel(Tr::tr("The activated SDK is not usable by %1.")
-                                               .arg(QGuiApplication::applicationDisplayName()),
-                                           InfoLabel::NotOk);
+        m_statusSdkInvalid = new InfoLabel({}, InfoLabel::NotOk);
+        m_statusSdkInvalid->setWordWrap(true);
+        m_statusSdkInvalid->setElideMode(Qt::ElideNone);
 
         m_emSdkVersionDisplay = new InfoLabel;
         m_emSdkVersionDisplay->setElideMode(Qt::ElideNone);
@@ -160,17 +160,19 @@ void WebAssemblySettings::updateStatus()
     WebAssemblyEmSdk::clearCaches();
 
     const Utils::FilePath newEmSdk = emSdk.pathChooser()->filePath();
-    const bool sdkValid = newEmSdk.exists() && WebAssemblyEmSdk::isValid(newEmSdk);
+    const auto version = WebAssemblyEmSdk::version(newEmSdk);
+    const bool sdkValid = newEmSdk.exists() && version;
 
     m_statusIsEmsdkDir->setVisible(!sdkValid);
     m_statusSdkInstalled->setVisible(!sdkValid);
     m_statusSdkActivated->setVisible(!sdkValid);
     m_statusSdkInvalid->setVisible(!sdkValid);
+    m_statusSdkInvalid->setText(version.has_value() ? QString() : version.error());
     m_emSdkVersionDisplay->setVisible(sdkValid);
     m_emSdkEnvDisplay->setEnabled(sdkValid);
 
-    if (sdkValid) {
-        const QVersionNumber sdkVersion = WebAssemblyEmSdk::version(newEmSdk);
+    if (sdkValid && version) {
+        const QVersionNumber sdkVersion = *version;
         const QVersionNumber minVersion = minimumSupportedEmSdkVersion();
         const bool versionTooLow = sdkVersion < minVersion;
         m_emSdkVersionDisplay->setType(versionTooLow ? InfoLabel::NotOk : InfoLabel::Ok);

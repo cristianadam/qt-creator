@@ -5,6 +5,8 @@
 
 #include <QVersionNumber>
 
+#include <utils/result.h>
+
 namespace Utils {
 class Environment;
 class FilePath;
@@ -12,10 +14,9 @@ class FilePath;
 
 namespace WebAssembly::Internal::WebAssemblyEmSdk {
 
-bool isValid(const Utils::FilePath &sdkRoot);
 void parseEmSdkEnvOutputAndAddToEnv(const QString &output, Utils::Environment &env);
 void addToEnvironment(const Utils::FilePath &sdkRoot, Utils::Environment &env);
-QVersionNumber version(const Utils::FilePath &sdkRoot);
+Utils::Result<QVersionNumber> version(const Utils::FilePath &sdkRoot);
 void clearCaches();
 
 } // WebAssembly::Internal::WebAssemblyEmSdk

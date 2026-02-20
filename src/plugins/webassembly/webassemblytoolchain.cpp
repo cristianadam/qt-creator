@@ -109,7 +109,7 @@ public:
 static Toolchains doAutoDetect(const ToolchainDetector &detector)
 {
     const FilePath sdk = settings().emSdk();
-    if (!WebAssemblyEmSdk::isValid(sdk))
+    if (!WebAssemblyEmSdk::version(sdk))
         return {};
 
     if (detector.device
