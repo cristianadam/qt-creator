@@ -1,3 +1,4 @@
+/* config_mingw.h. This file was originally created by cmake and then stored in the source. */
 /* config.h.  Generated from build/cmake/config.h.in by cmake configure */
 #define __LIBARCHIVE_CONFIG_H_INCLUDED 1
 
@@ -334,16 +335,16 @@ typedef uint64_t uintmax_t;
 /* #undef ARCHIVE_XATTR_LINUX */
 
 /* Version number of bsdcpio */
-#define BSDCPIO_VERSION_STRING "3.7.7"
+#define BSDCPIO_VERSION_STRING "3.8.5"
 
 /* Version number of bsdtar */
-#define BSDTAR_VERSION_STRING "3.7.7"
+#define BSDTAR_VERSION_STRING "3.8.5"
 
 /* Version number of bsdcat */
-#define BSDCAT_VERSION_STRING "3.7.7"
+#define BSDCAT_VERSION_STRING "3.8.5"
 
 /* Version number of bsdunzip */
-#define BSDUNZIP_VERSION_STRING "3.7.7"
+#define BSDUNZIP_VERSION_STRING "3.8.5"
 
 /* Define to 1 if you have the `acl_create_entry' function. */
 /* #undef HAVE_ACL_CREATE_ENTRY */
@@ -394,7 +395,7 @@ typedef uint64_t uintmax_t;
 /* #undef HAVE_BSDXML_H */
 
 /* Define to 1 if you have the <bzlib.h> header file. */
-#define HAVE_BZLIB_H 1
+/* #undef HAVE_BZLIB_H */
 
 /* Define to 1 if you have the `chflags' function. */
 /* #undef HAVE_CHFLAGS */
@@ -404,6 +405,12 @@ typedef uint64_t uintmax_t;
 
 /* Define to 1 if you have the `chroot' function. */
 /* #undef HAVE_CHROOT */
+
+/* Define to 1 if you have the `closefrom' function. */
+/* #undef HAVE_CLOSEFROM */
+
+/* Define to 1 if you have the `close_range' function. */
+/* #undef HAVE_CLOSE_RANGE */
 
 /* Define to 1 if you have the <copyfile.h> header file. */
 /* #undef HAVE_COPYFILE_H */
@@ -709,7 +716,7 @@ typedef uint64_t uintmax_t;
 /* #undef HAVE_LIBBSDXML */
 
 /* Define to 1 if you have the `bz2' library (-lbz2). */
-#define HAVE_LIBBZ2 1
+/* #undef HAVE_LIBBZ2 */
 
 /* Define to 1 if you have the `b2' library (-lb2). */
 /* #undef HAVE_LIBB2 */
@@ -729,14 +736,14 @@ typedef uint64_t uintmax_t;
 /* Define to 1 if you have the `gcc' library (-lgcc). */
 /* #undef HAVE_LIBGCC */
 
+/* Define to 1 if you have the `iconv' library (-liconv). */
+/* #undef HAVE_LIBICONV */
+
 /* Define to 1 if you have the `lz4' library (-llz4). */
 /* #undef HAVE_LIBLZ4 */
 
 /* Define to 1 if you have the `lzma' library (-llzma). */
-#define HAVE_LIBLZMA 1
-
-/* Define to 1 if you have the `lzmadec' library (-llzmadec). */
-/* #undef HAVE_LIBLZMADEC */
+/* #undef HAVE_LIBLZMA */
 
 /* Define to 1 if you have the `lzo2' library (-llzo2). */
 /* #undef HAVE_LIBLZO2 */
@@ -768,14 +775,20 @@ typedef uint64_t uintmax_t;
 /* Define to 1 if you have the <libxml/xmlwriter.h> header file. */
 /* #undef HAVE_LIBXML_XMLWRITER_H */
 
+/* Define to 1 if you have the <libxml/xmlversion.h> header file. */
+/* #undef HAVE_LIBXML_XMLVERSION_H */
+
 /* Define to 1 if you have the `z' library (-lz). */
-#define HAVE_LIBZ 1
+/* #undef HAVE_LIBZ */
 
 /* Define to 1 if you have the `zstd' library (-lzstd). */
 /* #undef HAVE_LIBZSTD */
 
 /* Define to 1 if you have the ZSTD_compressStream function. */
 /* #undef HAVE_ZSTD_compressStream */
+
+/* Define to 1 if you have the ZSTD_minCLevel function. */
+/* #undef HAVE_ZSTD_minCLevel */
 
 /* Define to 1 if you have the <limits.h> header file. */
 #define HAVE_LIMITS_H 1
@@ -847,11 +860,8 @@ typedef uint64_t uintmax_t;
 /* Define to 1 if you have the <lz4.h> header file. */
 /* #undef HAVE_LZ4_H */
 
-/* Define to 1 if you have the <lzmadec.h> header file. */
-/* #undef HAVE_LZMADEC_H */
-
 /* Define to 1 if you have the <lzma.h> header file. */
-#define HAVE_LZMA_H 1
+/* #undef HAVE_LZMA_H */
 
 /* Define to 1 if you have a working `lzma_stream_encoder_mt' function. */
 /* #undef HAVE_LZMA_STREAM_ENCODER_MT */
@@ -870,6 +880,9 @@ typedef uint64_t uintmax_t;
 
 /* Define to 1 if you have the <mbedtls/pkcs5.h> header file. */
 /* #undef HAVE_MBEDTLS_PKCS5_H */
+
+/* Define to 1 if you have the <mbedtls/pkcs5.h> header file. */
+/* #undef HAVE_MBEDTLS_VERSION_H */
 
 /* Define to 1 if you have the `mbrtowc' function. */
 #define HAVE_MBRTOWC 1
@@ -916,6 +929,9 @@ typedef uint64_t uintmax_t;
 /* Define to 1 if you have the <nettle/sha.h> header file. */
 /* #undef HAVE_NETTLE_SHA_H */
 
+/* Define to 1 if you have the <nettle/version.h> header file. */
+/* #undef HAVE_NETTLE_VERSION_H */
+
 /* Define to 1 if you have the `nl_langinfo' function. */
 /* #undef HAVE_NL_LANGINFO */
 
@@ -924,6 +940,9 @@ typedef uint64_t uintmax_t;
 
 /* Define to 1 if you have the <openssl/evp.h> header file. */
 /* #undef HAVE_OPENSSL_EVP_H */
+
+/* Define to 1 if you have the <openssl/opensslv.h> header file. */
+/* #undef HAVE_OPENSSL_OPENSSLV_H */
 
 /* Define to 1 if you have the <paths.h> header file. */
 /* #undef HAVE_PATHS_H */
@@ -957,9 +976,6 @@ typedef uint64_t uintmax_t;
 
 /* Define to 1 if you have the <pwd.h> header file. */
 /* #undef HAVE_PWD_H */
-
-/* Define to 1 if you have the `readdir_r' function. */
-/* #undef HAVE_READDIR_R */
 
 /* Define to 1 if you have the `readlink' function. */
 /* #undef HAVE_READLINK */
@@ -1147,7 +1163,6 @@ typedef uint64_t uintmax_t;
 /* Define to 1 if you have the <sys/stat.h> header file. */
 #define HAVE_SYS_STAT_H 1
 
-
 /* Define to 1 if you have the <sys/sysmacros.h> header file. */
 /* #undef HAVE_SYS_SYSMACROS_H */
 
@@ -1171,6 +1186,12 @@ typedef uint64_t uintmax_t;
 
 /* Define to 1 if you have the <sys/xattr.h> header file. */
 /* #undef HAVE_SYS_XATTR_H */
+
+/* Define to 1 if you have the `tcgetattr' function. */
+/* #undef HAVE_TCGETATTR */
+
+/* Define to 1 if you have the `tcsetattr' function. */
+/* #undef HAVE_TCSETATTR */
 
 /* Define to 1 if you have the `timegm' function. */
 /* #undef HAVE_TIMEGM */
@@ -1265,8 +1286,11 @@ typedef uint64_t uintmax_t;
 /* Define to 1 if you have a working FS_IOC_GETFLAGS */
 /* #undef HAVE_WORKING_FS_IOC_GETFLAGS */
 
+/* Define to 1 if you have the Windows `xmllite' library (-lxmllite). */
+#define HAVE_XMLLITE_H 1
+
 /* Define to 1 if you have the <zlib.h> header file. */
-#define HAVE_ZLIB_H 1
+/* #undef HAVE_ZLIB_H */
 
 /* Define to 1 if you have the <zstd.h> header file. */
 /* #undef HAVE_ZSTD_H */
@@ -1290,13 +1314,13 @@ typedef uint64_t uintmax_t;
 #define HAVE__MKGMTIME 1
 
 /* Define as const if the declaration of iconv() needs const. */
-#define ICONV_CONST
+#define ICONV_CONST 
 
 /* Version number of libarchive as a single integer */
-#define LIBARCHIVE_VERSION_NUMBER "3007007"
+#define LIBARCHIVE_VERSION_NUMBER "3008005"
 
 /* Version number of libarchive */
-#define LIBARCHIVE_VERSION_STRING "3.7.7"
+#define LIBARCHIVE_VERSION_STRING "3.8.5"
 
 /* Define to 1 if `lstat' dereferences a symlink specified with a trailing
    slash. */
@@ -1321,6 +1345,15 @@ typedef uint64_t uintmax_t;
 
 /* Define to 1 if you can safely include both <sys/time.h> and <time.h>. */
 /* #undef TIME_WITH_SYS_TIME */
+
+/* Version number of package */
+/* #undef LIBATTR_PKGCONFIG_VERSION */
+
+/* Version number of package */
+/* #undef LIBACL_PKGCONFIG_VERSION */
+
+/* Version number of package */
+/* #undef LIBRICHACL_PKGCONFIG_VERSION */
 
 /*
  * Some platform requires a macro to use extension functions.
@@ -1350,7 +1383,7 @@ typedef uint64_t uintmax_t;
 #endif /* SAFE_TO_DEFINE_EXTENSIONS */
 
 /* Version number of package */
-#define VERSION "3.7.7"
+#define VERSION "3.8.5"
 
 /* Number of bits in a file offset, on hosts where this is settable. */
 #define _FILE_OFFSET_BITS 64
