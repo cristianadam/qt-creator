@@ -2566,7 +2566,7 @@ void ProjectExplorerPluginPrivate::executeRunConfiguration(RunConfiguration *run
                                       ? Tasks()
                                       : runConfiguration->checkForIssues();
     if (!runConfigIssues.isEmpty()) {
-        for (const Task &t : runConfigIssues)
+        for (const Task &t : std::as_const(runConfigIssues))
             TaskHub::addTask(t);
         // TODO: Insert an extra task with a "link" to the run settings page?
         TaskHub::requestPopup();
