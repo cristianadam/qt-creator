@@ -2005,15 +2005,10 @@ void FontFamilyAspect::addToLayoutImpl(Layouting::Layout &parent)
     fontComboBox->setCurrentFont(QFontInfo(QFont(value())).family());
     parent.addItem(fontComboBox);
 
-    connect(fontComboBox, &QFontComboBox::currentTextChanged, this, [fontComboBox, this] {
-        const QString val = fontComboBox->currentFont().family();
-        d->m_undoable.set(undoStack(), val);
-        updateStorage(m_volatileValue, val);
+    connect(fontComboBox, &QFontComboBox::currentTextChanged, this, [this](const QString &text) {
+        d->m_undoable.set(undoStack(), text);
+        updateStorage(m_volatileValue, text);
         emit volatileValueChanged();
-    });
-
-    connect(&d->m_undoable.m_signal, &UndoSignaller::changed, fontComboBox, [fontComboBox, this] {
-        fontComboBox->setCurrentFont(d->m_undoable.get());
     });
 }
 
@@ -2039,13 +2034,23 @@ bool FontFamilyAspect::valueToVolatileValue()
 
 bool FontFamilyAspect::volatileValueToValue()
 {
-    return updateStorage(m_value, m_volatileValue);
+    const QString fontFamily = QFontInfo(QFont(m_volatileValue)).family();
+    return updateStorage(m_value, fontFamily);
 }
 
 bool FontFamilyAspect::isDirty() const
 {
+    if (TypedAspect::isDirty())
+        return true;
     const QString resolved = QFontInfo(QFont(m_value)).family();
-    return resolved != m_volatileValue;
+    const QString resolvedVolatile = QFontInfo(QFont(m_volatileValue)).family();
+    return resolved != resolvedVolatile;
+}
+
+void FontFamilyAspect::setDefaultValue(const QString &font)
+{
+    const QString fontFamily = QFontInfo(QFont(font)).family();
+    TypedAspect::setDefaultValue(font);
 }
 
 // !internal

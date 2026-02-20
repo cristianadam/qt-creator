@@ -558,6 +558,8 @@ public:
     void addToLayoutImpl(Layouting::Layout &parent) override;
     void setFontFilters(QFontComboBox::FontFilters fontFilters);
 
+    void setDefaultValue(const QString &font);
+
 private:
     void volatileValueToGui() override;
     bool guiToVolatileValue() override;
