@@ -4,6 +4,7 @@
 #include "selectabletexteditorwidget.h"
 
 #include <texteditor/displaysettings.h>
+#include <texteditor/tabsettings.h>
 #include <texteditor/textdocument.h>
 #include <texteditor/textdocumentlayout.h>
 #include <texteditor/texteditorsettings.h>
@@ -20,6 +21,14 @@ SelectableTextEditorWidget::SelectableTextEditorWidget(Utils::Id id, QWidget *pa
 {
     setFrameStyle(QFrame::NoFrame);
     setupFallBackEditor(id);
+
+    auto disableTabAutodetection = [this] {
+        TabSettings tabSettings = textDocument()->tabSettings();
+        tabSettings.m_autoDetect = false;
+        textDocument()->setTabSettings(tabSettings);
+    };
+    disableTabAutodetection();
+    connect(textDocument(), &TextDocument::tabSettingsChanged, this, disableTabAutodetection);
 
     setReadOnly(true);
 
