@@ -25,12 +25,6 @@ public:
     int effectiveIndexerFileSizeLimitInMb() const;
     UsePrecompiledHeaders usePrecompiledHeaders() const;
 
-    Utils::Store toMap() const;
-    void fromMap(const Utils::Store &store);
-
-    void toSettings(Utils::QtcSettings *s) const;
-    void fromSettings(Utils::QtcSettings *s);
-
     QString ignorePattern;
     PchUsage pchUsage = PchUsage::PchUse_BuildSystem;
     int indexerFileSizeLimitInMb = 5;
@@ -64,7 +58,7 @@ public:
     static void setSettingsForProject(ProjectExplorer::Project *project,
                                       const CppCodeModelSettingsData &settings);
 
-    static const CppCodeModelSettings &global() { return globalInstance(); }
+    static CppCodeModelSettings &global();
     static void setGlobal(const CppCodeModelSettingsData &settings);
 
     static PchUsage pchUsageForProject(const ProjectExplorer::Project *project);
@@ -76,14 +70,19 @@ public:
     static bool isInteractiveFollowSymbol();
     static void setInteractiveFollowSymbol(bool interactive);
 
-    const CppCodeModelSettingsData &data() const { return m_data; }
-    void setData(const CppCodeModelSettingsData &data) { m_data = data; }
+    CppCodeModelSettingsData data() const;
+    void setData(const CppCodeModelSettingsData &data);
+
+    Utils::StringAspect ignorePattern{this};
+    Utils::BoolAspect ignorePch{this};
+    Utils::IntegerAspect indexerFileSizeLimitInMb{this};
+    Utils::BoolAspect interpretAmbiguousHeadersAsC{this};
+    Utils::BoolAspect skipIndexingBigFiles{this};
+    Utils::BoolAspect useBuiltinPreprocessor{this};
+    Utils::BoolAspect ignoreFiles{this};
+    Utils::BoolAspect enableIndexing{this};
 
 private:
-    CppCodeModelSettings(Utils::QtcSettings *s) { m_data.fromSettings(s); }
-    static CppCodeModelSettings &globalInstance();
-
-    CppCodeModelSettingsData m_data;
     bool m_categorizeFindReferences = false;
     bool interactiveFollowSymbol = true;
 };

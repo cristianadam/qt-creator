@@ -95,13 +95,6 @@ static ProjectExplorer::HeaderPaths getHeaderPaths(
     return ProjectExplorer::HeaderPaths(uniqueHeaderPaths.cbegin(), uniqueHeaderPaths.cend());
 }
 
-static CppCodeModelSettingsData fromStore(const Store &s)
-{
-    CppCodeModelSettingsData d;
-    d.fromMap(s);
-    return d;
-}
-
 ProjectInfo::ProjectInfo(const ProjectExplorer::ProjectUpdateInfo &updateInfo,
                          const QList<ProjectPart::ConstPtr> &projectParts)
     : m_projectParts(projectParts),
@@ -111,7 +104,7 @@ ProjectInfo::ProjectInfo(const ProjectExplorer::ProjectUpdateInfo &updateInfo,
       m_headerPaths(getHeaderPaths(projectParts)),
       m_sourceFiles(getSourceFiles(projectParts)),
       m_defines(getDefines(projectParts)),
-      m_settings(fromStore(updateInfo.cppSettings))
+      m_settings(updateInfo.cppSettings.value<CppCodeModelSettingsData>())
 {
 }
 

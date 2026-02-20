@@ -169,13 +169,13 @@ public:
     Utils::FilePath buildRoot;
     RawProjectParts rawProjectParts;
     RppGenerator rppGenerator;
-    Utils::Store cppSettings;
+    QVariant cppSettings;
 
     ToolchainInfo cToolchainInfo;
     ToolchainInfo cxxToolchainInfo;
 };
 
-using CppSettingsRetriever = std::function<Utils::Store(const Project *)>;
+using CppSettingsRetriever = std::function<QVariant(const Project *)>;
 void PROJECTEXPLORER_EXPORT provideCppSettingsRetriever(const CppSettingsRetriever &retriever);
 
 } // namespace ProjectExplorer
