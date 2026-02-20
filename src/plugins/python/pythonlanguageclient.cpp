@@ -239,8 +239,12 @@ void PyLSClient::openDocument(TextDocument *document)
 
 void PyLSClient::buildConfigurationClosed(BuildConfiguration *bc)
 {
-    for (ExtraCompiler *compiler : m_extraCompilers)
-        closeExtraCompiler(compiler, compiler->targets().first());
+    if (auto *step = bc->buildSteps()->firstOfType<PySideBuildStep>()) {
+        for (ExtraCompiler *compiler : step->extraCompilers()) {
+            if (m_extraCompilers.removeAll(compiler))
+                closeExtraCompiler(compiler, compiler->targets().first());
+        }
+    }
     Client::buildConfigurationClosed(bc);
 }
 
