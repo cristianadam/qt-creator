@@ -112,40 +112,12 @@ Rectangle {
             tooltip: qsTr("Switch to Welcome Mode.")
         }
 
-        SplitButton {
-            id: splitButton
-            style: StudioTheme.Values.toolbarButtonStyle
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.left: home.right
-            anchors.leftMargin: 10
-            width: 170
-
-            runTarget: backend?.runTargetIndex
-            runManagerState: backend?.runManagerState
-            runManagerProgress: backend?.runManagerProgress
-            runManagerError: backend?.runManagerError
-
-            onClicked: backend.toggleRunning()
-            onCancelClicked: backend.cancelRunning()
-            onRunTargetSelected: function(targetName) { backend.selectRunTarget(targetName) }
-            onOpenRunTargets: backend.openDeviceManager()
-
-            TapHandler {
-                enabled: backend.runTargetType === RunManager.LivePreview
-                acceptedButtons: Qt.RightButton
-                onTapped: {
-                    var p = splitButton.mapToGlobal(0, 0)
-                    backend.showZoomMenu(p.x, p.y)
-                }
-            }
-        }
-
         StudioControls.TopLevelComboBox {
             id: currentFile
             style: StudioTheme.Values.toolbarStyle
             width: 320 - ((root.width > root.mediumBreakpoint) ? 0 : (root.mediumBreakpoint - root.width))
             anchors.verticalCenter: parent.verticalCenter
-            anchors.left: splitButton.right
+            anchors.left: home.right
             anchors.leftMargin: 10
             closeButtonVisible: true
             model: backend.documentModel

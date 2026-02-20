@@ -729,26 +729,6 @@ extend_qtc_plugin(QmlDesigner
     messagemodel.h
 )
 
-extend_qtc_plugin(QmlDesigner
-  SOURCES_PREFIX components/devicesharing
-  DEPENDS
-    QtCreator::QrCodeGenerator
-  SOURCES
-    device.cpp device.h
-    deviceinfo.cpp deviceinfo.h
-    devicemanager.cpp devicemanager.h
-    devicemanagermodel.cpp devicemanagermodel.h
-    devicemanagerwidget.cpp devicemanagerwidget.h
-    websocketmock.h
-)
-
-extend_qtc_plugin(QmlDesigner
-  SOURCES_PREFIX components/runmanager
-  SOURCES
-    runmanager.cpp
-    runmanager.h
-)
-
 add_qtc_plugin(componentsplugin
   PLUGIN_CLASS ComponentsPlugin
   CONDITION TARGET QmlDesigner

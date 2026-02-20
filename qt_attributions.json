@@ -557,20 +557,6 @@
         "Copyright": "Copyright 2000-2023 Kitware, Inc. and Contributors"
     },
     {
-        "Id": "qtqrcodegenerator",
-        "Name": "Qt QR Code Generator Library",
-        "QDocModule": "qtcreator",
-        "QtParts": ["tools"],
-        "QtUsage": "Used by QmlDesigner to create a QR code for Design Viewer integration.",
-        "Path": "@SOURCE_DIR@/src/libs/3rdparty/qrcodegen",
-        "Description": "Qt QR Code Generator is a simple C++ class that uses the qrcodegen library to generate QR codes from QStrings in Qt applications.",
-        "Homepage": "https://github.com/alex-spataru/Qt-QrCodeGenerator",
-        "PURL": "pkg:github/alex-spataru/Qt-QrCodeGenerator",
-        "License": "MIT License",
-        "LicenseFile": "@SOURCE_DIR@/src/libs/3rdparty/qrcodegen/LICENSE",
-        "Copyright": "Copyright (c) 2023 Alex Spataru"
-    },
-    {
         "Id": "vitaut-rstparser",
         "Name": "RSTParser",
         "QDocModule": "qtcreator",

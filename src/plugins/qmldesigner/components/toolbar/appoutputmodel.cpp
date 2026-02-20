@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0+ OR GPL-3.0 WITH Qt-GPL-exception-1.0
 #include "appoutputmodel.h"
 
-#include <devicesharing/devicemanager.h>
 #include <projectexplorer/projectexplorer.h>
 #include <qmldesignerplugin.h>
 
@@ -200,32 +199,6 @@ void AppOutputParentModel::setupRunControls()
                             int row = static_cast<int>(m_runs.size()) - 1;
                             emit messageAdded(row, out.trimmed(), colorFromFormat(format));
                         });
-            });
-
-    auto &deviceManager = QmlDesigner::QmlDesignerPlugin::instance()->deviceManager();
-
-    connect(&deviceManager,
-            &QmlDesigner::DeviceShare::DeviceManager::projectStarting,
-            [this, &deviceManager](const QString &deviceId) {
-                const QString alias = deviceManager.deviceSettings(deviceId)->alias();
-                initializeRuns("Project starting on device " + alias);
-            });
-
-    connect(&deviceManager,
-            &QmlDesigner::DeviceShare::DeviceManager::projectLogsReceived,
-            [this](const QString &, const QString &logs) {
-                if (m_runs.empty())
-                    initializeRuns();
-
-                int row = static_cast<int>(m_runs.size()) - 1;
-                if (logs.startsWith("Debug:"))
-                    emit messageAdded(row, logs.trimmed(), m_messageColor);
-                else if (logs.startsWith("Error:"))
-                    emit messageAdded(row, logs.trimmed(), m_errorColor);
-                else if (logs.startsWith("Warning:"))
-                    emit messageAdded(row, logs.trimmed(), m_warningColor);
-                else if (logs.startsWith("Critical:"))
-                    emit messageAdded(row, logs.trimmed(), m_errorColor);
             });
 }
 

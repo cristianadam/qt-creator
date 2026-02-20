@@ -42,28 +42,6 @@ public:
     QVariant data(const QModelIndex &index, int role = DisplayNameRole) const override;
 };
 
-class RunManagerModel : public QAbstractListModel
-{
-    Q_OBJECT
-
-public:
-    enum RunManagerRoles {
-        DisplayNameRole = Qt::DisplayRole,
-        TargetNameRole = Qt::UserRole,
-        Enabled
-    };
-    Q_ENUM(RunManagerRoles)
-
-    explicit RunManagerModel(QObject *parent = nullptr);
-
-    int rowCount(const QModelIndex &parent = QModelIndex()) const override;
-    QHash<int, QByteArray> roleNames() const override;
-    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
-
-private:
-    void reset();
-};
-
 class ActionSubscriber : public QObject
 {
     Q_OBJECT
@@ -122,12 +100,6 @@ class ToolBarBackend : public QObject
     Q_PROPERTY(bool projectOpened READ projectOpened NOTIFY projectOpenedChanged)
     Q_PROPERTY(bool isDocumentDirty READ isDocumentDirty NOTIFY isDocumentDirtyChanged)
 
-    Q_PROPERTY(int runTargetIndex READ runTargetIndex NOTIFY runTargetIndexChanged)
-    Q_PROPERTY(int runTargetType READ runTargetType NOTIFY runTargetTypeChanged)
-    Q_PROPERTY(int runManagerState READ runManagerState NOTIFY runManagerStateChanged)
-    Q_PROPERTY(int runManagerProgress READ runManagerProgress NOTIFY runManagerProgressChanged)
-    Q_PROPERTY(QString runManagerError READ runManagerError NOTIFY runManagerErrorChanged)
-
 public:
     ToolBarBackend();
     static void registerDeclarativeType();
@@ -147,11 +119,6 @@ public:
     Q_INVOKABLE void showZoomMenu(int x, int y);
     Q_INVOKABLE void setCurrentStyle(int index);
     Q_INVOKABLE void setCurrentKit(int index);
-
-    Q_INVOKABLE void openDeviceManager();
-    Q_INVOKABLE void selectRunTarget(const QString &targetName);
-    Q_INVOKABLE void toggleRunning();
-    Q_INVOKABLE void cancelRunning();
 
     bool canGoBack() const;
     bool canGoForward() const;
@@ -183,12 +150,6 @@ public:
 
     bool isDocumentDirty() const;
 
-    int runTargetIndex() const;
-    int runTargetType() const;
-    int runManagerState() const;
-    int runManagerProgress() const;
-    QString runManagerError() const;
-
     static void launchGlobalAnnotations();
 
 signals:
@@ -209,12 +170,6 @@ signals:
     void isMCUsChanged();
     void projectOpenedChanged();
     void isDocumentDirtyChanged();
-
-    void runTargetIndexChanged();
-    void runTargetTypeChanged();
-    void runManagerStateChanged();
-    void runManagerProgressChanged();
-    void runManagerErrorChanged();
 
 private:
     void setupWorkspaces();

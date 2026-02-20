@@ -28,12 +28,10 @@
 #ifndef QDS_USE_PROJECTSTORAGE
 #  include <metainfo.h>
 #endif
-#include <devicesharing/devicemanager.h>
 #include <pathtool/pathtool.h>
 #include <qmljseditor/qmljseditor.h>
 #include <qmljseditor/qmljseditorconstants.h>
 #include <qmljseditor/qmljseditordocument.h>
-#include <runmanager/runmanager.h>
 #include <sourcetool/sourcetool.h>
 #include <texttool/texttool.h>
 #include <timelineeditor/timelineview.h>
@@ -177,8 +175,6 @@ public:
                             projectManager.modulesStorage()};
     DocumentManager documentManager{projectManager, externalDependencies};
     ShortCutManager shortCutManager;
-    DeviceShare::DeviceManager deviceManager;
-    RunManager runManager{deviceManager};
     SettingsPage settingsPage;
     DesignModeWidget mainWidget;
     QtQuickDesignerFactory m_qtQuickDesignerFactory;
@@ -896,20 +892,6 @@ ViewManager &QmlDesignerPlugin::viewManager()
     NanotraceHR::Tracer tracer{"qml designer plugin view manager", category()};
 
     return instance()->d->viewManager;
-}
-
-DeviceShare::DeviceManager &QmlDesignerPlugin::deviceManager()
-{
-    NanotraceHR::Tracer tracer{"qml designer plugin device manager", category()};
-
-    return instance()->d->deviceManager;
-}
-
-RunManager &QmlDesignerPlugin::runManager()
-{
-    NanotraceHR::Tracer tracer{"qml designer plugin run manager", category()};
-
-    return instance()->d->runManager;
 }
 
 DesignerActionManager &QmlDesignerPlugin::designerActionManager()
