@@ -4491,11 +4491,11 @@ bool Parser::lookAtStorageClassSpecifier() const
     case T___THREAD:
         return true;
     case T_THREAD_LOCAL:
-        return _languageFeatures.cxx11Enabled;
     case T_CONSTEXPR:
-        if (_languageFeatures.cxx11Enabled)
-            return true;
-        Q_FALLTHROUGH();
+        return _languageFeatures.cxx11Enabled;
+    case T_CONSTINIT:
+    case T_CONSTEVAL:
+        return _languageFeatures.cxx20Enabled;
     default:
         return false;
     }
