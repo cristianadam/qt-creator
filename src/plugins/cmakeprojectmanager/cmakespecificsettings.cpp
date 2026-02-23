@@ -19,7 +19,6 @@
 #include <utils/layoutbuilder.h>
 
 #include <QGuiApplication>
-#include <QVBoxLayout>
 
 using namespace ProjectExplorer;
 using namespace Utils;
@@ -221,26 +220,24 @@ class CMakeProjectSettingsWidget : public ProjectSettingsWidget
 {
 public:
     explicit CMakeProjectSettingsWidget(Project *project)
-        : m_widget(new QWidget)
-        , m_project(qobject_cast<CMakeProject *>(project))
+        : m_project(qobject_cast<CMakeProject *>(project))
         , m_displayedSettings(project, true)
     {
         setGlobalSettingsId(Constants::Settings::GENERAL_ID);
 
-        // Construct the widget layout from the aspect container
-        const auto layout = new QVBoxLayout(this);
-        layout->setContentsMargins(0, 0, 0, 0);
-        if (auto layouter = m_displayedSettings.layouter())
-            layouter().attachTo(m_widget);
-        layout->addWidget(m_widget);
+        using namespace Layouting;
+        Column {
+            m_displayedSettings,
+            noMargin
+        }.attachTo(this);
 
         setUseGlobalSettings(m_displayedSettings.useGlobalSettings);
-        m_widget->setEnabled(!useGlobalSettings());
+        setEnabled(!useGlobalSettings());
 
         if (m_project) {
             connect(
                 this, &ProjectSettingsWidget::useGlobalSettingsChanged, this, [this](bool useGlobal) {
-                    m_widget->setEnabled(!useGlobal);
+                    setEnabled(!useGlobal);
                     m_displayedSettings.useGlobalSettings = useGlobal;
                     m_displayedSettings.copyFrom(
                         useGlobal ? settings(nullptr) : m_project->settings());
@@ -284,7 +281,6 @@ public:
         });
     }
 
-    QWidget *m_widget = nullptr;
     CMakeProject *m_project = nullptr;
     CMakeSpecificSettings m_displayedSettings;
 };
