@@ -3,8 +3,11 @@
 
 #pragma once
 
-#include <QString>
-#include <QStringList>
+#include <coreplugin/dialogs/ioptionspage.h>
+
+#include <projectexplorer/project.h>
+
+#include <QRegularExpression>
 
 #include <optional>
 #include <vector>
@@ -135,4 +138,42 @@ public:
     bool useAuto = true;
     std::vector<CustomTemplate> customTemplates;
 };
-} // namespace CppEditor
+
+namespace Internal {
+
+class CppQuickFixProjectsSettings : public QObject
+{
+    Q_OBJECT
+public:
+    CppQuickFixProjectsSettings(ProjectExplorer::Project *project);
+    CppQuickFixSettings *getSettings();
+    bool isUsingGlobalSettings() const;
+    const Utils::FilePath &filePathOfSettingsFile() const;
+
+    using CppQuickFixProjectsSettingsPtr = QSharedPointer<CppQuickFixProjectsSettings>;
+    static CppQuickFixProjectsSettingsPtr getSettings(ProjectExplorer::Project *project);
+    static CppQuickFixSettings *getQuickFixSettings(ProjectExplorer::Project *project);
+
+    Utils::FilePath searchForCppQuickFixSettingsFile();
+
+    void useGlobalSettings();
+    [[nodiscard]] bool useCustomSettings();
+    void resetOwnSettingsToGlobal();
+    bool saveOwnSettings();
+
+private:
+    void loadOwnSettingsFromFile();
+
+    ProjectExplorer::Project *m_project;
+    Utils::FilePath m_settingsFile;
+    CppQuickFixSettings m_ownSettings;
+    bool m_useGlobalSettings;
+};
+
+void setupCppQuickFixSettings();
+void setupCppQuickFixProjectPanel();
+
+} // Internal
+} // CppEditor
+
+Q_DECLARE_METATYPE(QSharedPointer<CppEditor::Internal::CppQuickFixProjectsSettings>)

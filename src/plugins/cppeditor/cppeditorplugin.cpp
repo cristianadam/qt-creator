@@ -21,8 +21,7 @@
 #include "cpptoolssettings.h"
 #include "cpptypehierarchy.h"
 #include "quickfixes/cppquickfix.h"
-#include "quickfixes/cppquickfixprojectsettingswidget.h"
-#include "quickfixes/cppquickfixsettingspage.h"
+#include "quickfixes/cppquickfixsettings.h"
 
 #ifdef WITH_TESTS
 #include "compileroptionsbuilder_test.h"

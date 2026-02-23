@@ -109,11 +109,7 @@ add_qtc_plugin(CppEditor
     quickfixes/cppquickfix.cpp quickfixes/cppquickfix.h
     quickfixes/cppquickfixassistant.cpp quickfixes/cppquickfixassistant.h
     quickfixes/cppquickfixhelpers.h quickfixes/cppquickfixhelpers.cpp
-    quickfixes/cppquickfixprojectsettings.cpp quickfixes/cppquickfixprojectsettings.h
-    quickfixes/cppquickfixprojectsettingswidget.cpp quickfixes/cppquickfixprojectsettingswidget.h
     quickfixes/cppquickfixsettings.cpp quickfixes/cppquickfixsettings.h
-    quickfixes/cppquickfixsettingspage.cpp quickfixes/cppquickfixsettingspage.h
-    quickfixes/cppquickfixsettingswidget.cpp quickfixes/cppquickfixsettingswidget.h
     quickfixes/convertfromandtopointer.cpp quickfixes/convertfromandtopointer.h
     quickfixes/createdeclarationfromuse.cpp quickfixes/createdeclarationfromuse.h
     quickfixes/extractfunction.cpp quickfixes/extractfunction.h
@@ -135,8 +131,6 @@ add_qtc_plugin(CppEditor
     symbolsfindfilter.cpp symbolsfindfilter.h
     typehierarchybuilder.cpp typehierarchybuilder.h
     wrappablelineedit.cpp wrappablelineedit.h
-   EXPLICIT_MOC
-     quickfixes/cppquickfixsettingswidget.h
 )
 
 extend_qtc_plugin(CppEditor

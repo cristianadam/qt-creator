@@ -11,7 +11,7 @@
 #include "../symbolfinder.h"
 #include "cppquickfix.h"
 #include "cppquickfixhelpers.h"
-#include "cppquickfixprojectsettings.h"
+#include "cppquickfixsettings.h"
 
 #include <coreplugin/icore.h>
 #include <cplusplus/Overview.h>

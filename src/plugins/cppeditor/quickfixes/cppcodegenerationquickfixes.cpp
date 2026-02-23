@@ -9,7 +9,6 @@
 #include "../insertionpointlocator.h"
 #include "cppquickfix.h"
 #include "cppquickfixhelpers.h"
-#include "cppquickfixprojectsettings.h"
 #include "cppquickfixsettings.h"
 
 #include <cplusplus/Overview.h>

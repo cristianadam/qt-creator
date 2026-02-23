@@ -8,7 +8,7 @@
 #include "../cppeditorwidget.h"
 #include "../cpprefactoringchanges.h"
 #include "cppquickfix.h"
-#include "cppquickfixprojectsettings.h"
+#include "cppquickfixsettings.h"
 
 #include <cplusplus/CppRewriter.h>
 #include <cplusplus/Overview.h>
