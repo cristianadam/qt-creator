@@ -157,15 +157,6 @@ void TextEditorPlugin::initialize()
 
 void TextEditorPlugin::extensionsInitialized()
 {
-    connect(FolderNavigationWidgetFactory::instance(),
-            &FolderNavigationWidgetFactory::aboutToShowContextMenu,
-            this, [](QMenu *menu, const FilePath &filePath, bool isDir) {
-                if (!isDir && Core::DiffService::instance()) {
-                    menu->addAction(TextDocument::createDiffAgainstCurrentFileAction(
-                        menu, [filePath] { return filePath; }));
-                }
-            });
-
     connect(&textEditorSettings(), &TextEditorSettings::fontSettingsChanged,
             this, &TextEditorPlugin::updateSearchResultsFont);
 

@@ -1691,7 +1691,7 @@ Result<> ProjectExplorerPlugin::initialize(const QStringList &arguments)
     mfileContextMenu->addAction(cmd, Constants::G_FILE_OTHER);
 
     // diff file action
-    dd->m_diffFileAction = TextEditor::TextDocument::createDiffAgainstCurrentFileAction(
+    dd->m_diffFileAction = EditorManager::createDiffAgainstCurrentFileAction(
         this, &ProjectTree::currentFilePath);
     cmd = ActionManager::registerAction(dd->m_diffFileAction, Constants::DIFFFILE, projectTreeContext);
     mfileContextMenu->addAction(cmd, Constants::G_FILE_OTHER);

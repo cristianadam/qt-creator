@@ -397,24 +397,6 @@ void TextDocument::setFontSettings(const FontSettings &fontSettings)
     }
 }
 
-QAction *TextDocument::createDiffAgainstCurrentFileAction(
-    QObject *parent, const std::function<Utils::FilePath()> &filePath)
-{
-    const auto diffAgainstCurrentFile = [filePath]() {
-        if (auto diffService = DiffService::instance()) {
-            if (auto textDocument = TextEditor::TextDocument::currentTextDocument()) {
-                const FilePath leftFilePath = textDocument->filePath();
-                const FilePath rightFilePath = filePath();
-                if (!leftFilePath.isEmpty() && !rightFilePath.isEmpty())
-                    diffService->diffFiles(leftFilePath, rightFilePath);
-            }
-        }
-    };
-    auto diffAction = new QAction(Tr::tr("Diff Against Current File"), parent);
-    QObject::connect(diffAction, &QAction::triggered, parent, diffAgainstCurrentFile);
-    return diffAction;
-}
-
 void TextDocument::setFoldingIndentExternallyProvided(bool ext)
 {
     d->m_externalFoldingIndent = ext;

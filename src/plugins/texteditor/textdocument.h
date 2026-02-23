@@ -146,9 +146,6 @@ public:
     void setTabSettings(const TextEditor::TabSettings &tabSettings);
     void setFontSettings(const TextEditor::FontSettings &fontSettings);
 
-    static QAction *createDiffAgainstCurrentFileAction(QObject *parent,
-        const std::function<Utils::FilePath()> &filePath);
-
     void setFoldingIndentExternallyProvided(bool ext);
     bool isFoldingIndentExternallyProvided() const;
 

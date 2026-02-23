@@ -3205,6 +3205,22 @@ void EditorManager::addNativeDirAndOpenWithActions(QMenu *contextMenu, DocumentM
     EditorManagerPrivate::addNativeDirAndOpenWithActions(contextMenu, filePathFor(entry));
 }
 
+QAction *EditorManager::createDiffAgainstCurrentFileAction(
+    QObject *parent, const std::function<Utils::FilePath()> &filePath)
+{
+    const auto diffAgainstCurrentFile = [filePath]() {
+        const FilePath leftFilePath = filePath();
+        const FilePath rightFilePath = EditorManager::currentDocument()->filePath();
+        if (leftFilePath.isEmpty() || rightFilePath.isEmpty())
+            return;
+        if (auto diffService = DiffService::instance())
+            diffService->diffFiles(leftFilePath, rightFilePath);
+    };
+    auto diffAction = new QAction(Tr::tr("Diff Against Current File"), parent);
+    QObject::connect(diffAction, &QAction::triggered, parent, diffAgainstCurrentFile);
+    return diffAction;
+}
+
 void EditorManagerPrivate::addNativeDirAndOpenWithActions(
     QMenu *contextMenu, const FilePath &filePath, EditorView *view)
 {
@@ -3230,6 +3246,11 @@ void EditorManagerPrivate::addNativeDirAndOpenWithActions(
     addMenuAction(contextMenu, FileUtils::msgFindInDirectory(), enabled, m_instance, [filePath] {
         emit m_instance->findOnFileSystemRequest(filePath);
     });
+
+    // Diff Against Current File
+    contextMenu->addAction(EditorManager::createDiffAgainstCurrentFileAction(d, [filePath] {
+        return filePath;
+    }));
 
     // Version Control
     FilePath topLevel;
