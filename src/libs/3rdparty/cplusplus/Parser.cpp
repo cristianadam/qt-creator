@@ -3717,6 +3717,12 @@ bool Parser::parseFoldExpression(ExpressionAST *&node)
 bool Parser::parseStatement(StatementAST *&node, bool blockLabeledStatement)
 {
     DEBUG_THIS_RULE();
+
+    if (_languageFeatures.cxx20Enabled) {
+        SpecifierListAST *attrs;
+        parseAttributeSpecifier(attrs);
+    }
+
     switch (LA()) {
     case T_WHILE:
         return parseWhileStatement(node);
