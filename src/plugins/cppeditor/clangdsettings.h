@@ -6,6 +6,7 @@
 #include "clangdiagnosticconfig.h"
 #include "cppeditor_global.h"
 
+#include <utils/aspects.h>
 #include <utils/filepath.h>
 #include <utils/store.h>
 
@@ -21,9 +22,8 @@ namespace CppEditor {
 class ClangDiagnosticConfigsModel;
 
 // TODO: Can we move this to ClangCodeModel?
-class CPPEDITOR_EXPORT ClangdSettings : public QObject
+class CPPEDITOR_EXPORT ClangdSettings : public Utils::AspectContainer
 {
-    Q_OBJECT
 public:
     enum class IndexingPriority { Off, Background, Normal, Low, };
     enum class HeaderSourceSwitchMode { BuiltinOnly, ClangdOnly, Both };
@@ -135,9 +135,6 @@ public:
 #ifdef WITH_TESTS
     static void setClangdFilePath(const Utils::FilePath &filePath);
 #endif
-
-signals:
-    void changed();
 
 private:
     ClangdSettings();
