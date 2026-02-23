@@ -2050,7 +2050,7 @@ bool FontFamilyAspect::isDirty() const
 void FontFamilyAspect::setDefaultValue(const QString &font)
 {
     const QString fontFamily = QFontInfo(QFont(font)).family();
-    TypedAspect::setDefaultValue(font);
+    TypedAspect::setDefaultValue(fontFamily);
 }
 
 // !internal
