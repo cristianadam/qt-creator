@@ -1263,18 +1263,18 @@ Result<> ProjectExplorerPlugin::initialize(const QStringList &arguments)
 
     // Open Terminal actions
     dd->m_openTerminalHereSysEnv = new QAction(Tr::tr("System Environment"), this);
-    cmd = ActionManager::registerAction(dd->m_openTerminalHereSysEnv, Constants::OPENTERMINALHERE,
-                                        projectTreeContext);
+    ActionManager::registerAction(dd->m_openTerminalHereSysEnv, Constants::OPENTERMINALHERE,
+                                  projectTreeContext);
     dd->m_openTerminalMenu->addAction(dd->m_openTerminalHereSysEnv);
     dd->m_openTerminalHereBuildEnv = new QAction(Tr::tr("Build Environment"), this);
     dd->m_openTerminalHereRunEnv = new QAction(Tr::tr("Run Environment"), this);
-    cmd = ActionManager::registerAction(dd->m_openTerminalHereBuildEnv,
-                                        "ProjectExplorer.OpenTerminalHereBuildEnv",
-                                        projectTreeContext);
+    ActionManager::registerAction(dd->m_openTerminalHereBuildEnv,
+                                  "ProjectExplorer.OpenTerminalHereBuildEnv",
+                                  projectTreeContext);
     dd->m_openTerminalMenu->addAction(dd->m_openTerminalHereBuildEnv);
-    cmd = ActionManager::registerAction(dd->m_openTerminalHereRunEnv,
-                                        "ProjectExplorer.OpenTerminalHereRunEnv",
-                                        projectTreeContext);
+    ActionManager::registerAction(dd->m_openTerminalHereRunEnv,
+                                  "ProjectExplorer.OpenTerminalHereRunEnv",
+                                  projectTreeContext);
     dd->m_openTerminalMenu->addAction(dd->m_openTerminalHereRunEnv);
 
     // VCS file submenu
