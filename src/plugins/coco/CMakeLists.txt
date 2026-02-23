@@ -13,8 +13,6 @@ add_qtc_plugin(Coco
     cmakemodificationfile.h
     cocobuildstep.cpp
     cocobuildstep.h
-    cococmakesettings.cpp
-    cococmakesettings.h
     cococommon.cpp
     cococommon.h
     cocolanguageclient.cpp
@@ -27,8 +25,6 @@ add_qtc_plugin(Coco
     cocoprojectsettingswidget.h
     cocoprojectwidget.cpp
     cocoprojectwidget.h
-    cocoqmakesettings.cpp
-    cocoqmakesettings.h
     cocotr.h
     files/cocoplugin-clang.cmake
     files/cocoplugin-gcc.cmake
