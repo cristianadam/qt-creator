@@ -51,7 +51,6 @@ public:
     void searchInFiles(
         const QString &filePattern,
         const std::optional<QString> &projectName,
-        const QString &path,
         const QString &pattern,
         bool regex,
         bool caseSensitive,
@@ -75,7 +74,6 @@ public:
     void replaceInFiles(
         const QString &filePattern,
         const std::optional<QString> &projectName,
-        const QString &path,
         const QString &pattern,
         const QString &replacement,
         bool regex,

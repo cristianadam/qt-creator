@@ -433,7 +433,7 @@ McpServer::McpServer(QObject *parent)
                 ? std::optional<QString>(p.value("projectName").toString())
                 : std::nullopt;
             m_commands.searchInFiles(
-                filePattern, projectName, "", pattern, isRegex, caseSensitive, callback);
+                filePattern, projectName, pattern, isRegex, caseSensitive, callback);
         });
 
     addTool(
@@ -569,7 +569,7 @@ McpServer::McpServer(QObject *parent)
                 ? std::optional<QString>(p.value("projectName").toString())
                 : std::nullopt;
             m_commands.replaceInFiles(
-                filePattern, projectName, "", pattern, replacement, isRegex, caseSensitive, callback);
+                filePattern, projectName, pattern, replacement, isRegex, caseSensitive, callback);
         });
 
     addTool(

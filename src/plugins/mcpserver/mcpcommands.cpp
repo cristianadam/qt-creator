@@ -422,14 +422,11 @@ void McpCommands::searchInFile(
 void McpCommands::searchInFiles(
     const QString &filePattern,
     const std::optional<QString> &projectName,
-    const QString &path,
     const QString &pattern,
     bool regex,
     bool caseSensitive,
     const ResponseCallback &callback)
 {
-    Q_UNUSED(path);
-
     const QList<Project *> projects = projectName ? projectsForName(*projectName)
                                                   : ProjectManager::projects();
 
@@ -568,16 +565,13 @@ void McpCommands::replaceInFile(
 void McpCommands::replaceInFiles(
     const QString &filePattern,
     const std::optional<QString> &projectName,
-    const QString &path,
     const QString &pattern,
     const QString &replacement,
     bool regex,
     bool caseSensitive,
     const ResponseCallback &callback)
 {
-    Q_UNUSED(path);
-
-     const QList<Project *> projects = projectName ? projectsForName(*projectName)
+    const QList<Project *> projects = projectName ? projectsForName(*projectName)
                                                   : ProjectManager::projects();
 
     const FilterFilesFunction filterFiles
