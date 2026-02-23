@@ -2490,8 +2490,7 @@ OpenProjectResult ProjectExplorerPlugin::openProjects(const FilePaths &filePaths
             }
         } else {
             appendError(errorString, Tr::tr("Failed opening project \"%1\": No plugin can open project type \"%2\".")
-                        .arg(filePath.toUserOutput())
-                        .arg(mt.name()));
+                        .arg(filePath.toUserOutput(), mt.name()));
         }
         if (filePaths.size() > 1)
             SessionManager::sessionLoadingProgress();
@@ -3746,7 +3745,7 @@ void ProjectExplorerPluginPrivate::updateLocationSubMenus()
         const FilePath path = li.path;
         QString displayName = fn->filePath() == li.path
                                   ? li.displayName
-                                  : Tr::tr("%1 in %2").arg(li.displayName).arg(li.path.toUserOutput());
+                                  : Tr::tr("%1 in %2").arg(li.displayName, li.path.toUserOutput());
         auto *action = new QAction(displayName, nullptr);
         connect(action, &QAction::triggered, this, [line, path] {
             EditorManager::openEditorAt(Link(path, line), {}, EditorManager::AllowExternalEditor);
