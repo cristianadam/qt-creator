@@ -315,14 +315,12 @@ void BehaviorSettingsWidget::setActive(bool active)
 
 void BehaviorSettingsWidget::setAssignedEncoding(const Utils::TextEncoding &encoding)
 {
-    const QString codecName = Core::ICore::settings()->value(
-                Core::Constants::SETTINGS_DEFAULTTEXTENCODING).toString();
-    d->encodingBox->setAssignedEncoding(encoding, codecName);
+    d->encodingBox->setAssignedEncoding(encoding);
 }
 
-QByteArray BehaviorSettingsWidget::assignedCodecName() const
+Utils::TextEncoding BehaviorSettingsWidget::currentEncoding() const
 {
-    return d->encodingBox->assignedCodecName();
+    return d->encodingBox->currentEncoding();
 }
 
 void BehaviorSettingsWidget::setCodeStyle(ICodeStylePreferences *preferences)

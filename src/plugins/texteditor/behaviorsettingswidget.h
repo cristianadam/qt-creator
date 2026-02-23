@@ -31,7 +31,7 @@ public:
     void setActive(bool active);
 
     void setAssignedEncoding(const Utils::TextEncoding &encoding);
-    QByteArray assignedCodecName() const;
+    Utils::TextEncoding currentEncoding() const;
 
     void setCodeStyle(ICodeStylePreferences *preferences);
 
