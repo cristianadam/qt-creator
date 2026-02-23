@@ -98,7 +98,7 @@ CodecSelector::CodecSelector(BaseTextDocument *doc)
             currentIndex = encodingNames.size();
         encodingNames << encoding.fullDisplayName();
     }
-    m_listWidget->addItems(QStringList(encodingNames.begin(), encodingNames.end()));
+    m_listWidget->addItems(encodingNames);
     if (currentIndex >= 0)
         m_listWidget->setCurrentRow(currentIndex);
 
