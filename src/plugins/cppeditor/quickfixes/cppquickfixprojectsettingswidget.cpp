@@ -55,7 +55,7 @@ CppQuickFixProjectSettingsWidget::CppQuickFixProjectSettingsWidget(Project *proj
     connect(this, &ProjectSettingsWidget::useGlobalSettingsChanged,
             this, &CppQuickFixProjectSettingsWidget::currentItemChanged);
     setUseGlobalSettings(m_projectSettings->isUsingGlobalSettings());
-    currentItemChanged(m_projectSettings->useCustomSettings());
+    currentItemChanged(m_projectSettings->isUsingGlobalSettings());
 
     connect(m_pushButton, &QAbstractButton::clicked,
             this, &CppQuickFixProjectSettingsWidget::buttonCustomClicked);
@@ -88,6 +88,7 @@ void CppQuickFixProjectSettingsWidget::currentItemChanged(bool useGlobalSettings
         m_projectSettings->saveOwnSettings();
     }
     m_settingsWidget->loadSettings(m_projectSettings->getSettings());
+    m_settingsWidget->setEnabled(!useGlobalSettings);
 }
 
 void CppQuickFixProjectSettingsWidget::buttonCustomClicked()
