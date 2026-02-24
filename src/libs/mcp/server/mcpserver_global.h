@@ -5,9 +5,9 @@
 
 #include <qglobal.h>
 
-#if defined(MCPSERVER_LIBRARY)
+#if defined(MCPSERVERLIB_LIBRARY)
 #define MCPSERVER_EXPORT Q_DECL_EXPORT
-#elif defined(MCPSERVER_STATIC_LIBRARY)
+#elif defined(MCPSERVERLIB_STATIC_LIBRARY)
 #define MCPSERVER_EXPORT
 #else
 #define MCPSERVER_EXPORT Q_DECL_IMPORT
