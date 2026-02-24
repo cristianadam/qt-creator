@@ -75,11 +75,11 @@ QWidget *dialogParent()
 
 const char IGNORE_FOR_DIRTY_HOOK[] = "qtcIgnoreForDirtyHook";
 
-bool setIgnoreForDirtyHook(QWidget *widget, bool ignore)
+bool setIgnoreForDirtyHook(QObject *object, bool ignore)
 {
-    const bool prev = widget->property(IGNORE_FOR_DIRTY_HOOK).toBool();
+    const bool prev = object->property(IGNORE_FOR_DIRTY_HOOK).toBool();
     if (prev != ignore)
-        widget->setProperty(IGNORE_FOR_DIRTY_HOOK, ignore);
+        object->setProperty(IGNORE_FOR_DIRTY_HOOK, ignore);
     return prev;
 }
 
@@ -129,39 +129,39 @@ void checkSettingsDirty()
     s_checkSettingDirtyHook();
 }
 
-static void installDirtyTriggerHelper(QWidget *widget, bool check)
+static void installDirtyTriggerHelper(QObject *object, bool check)
 {
-    QTC_ASSERT(widget, return);
+    QTC_ASSERT(object, return);
 
     const auto action = check ? checkSettingsDirty : markSettingsDirty;
 
     // Keep this before QAbstractButton
-    if (auto ob = qobject_cast<QtColorButton *>(widget)) {
+    if (auto ob = qobject_cast<QtColorButton *>(object)) {
         QObject::connect(ob, &QtColorButton::colorChanged, action);
         return;
     }
-    if (auto ob = qobject_cast<QAbstractButton *>(widget)) {
+    if (auto ob = qobject_cast<QAbstractButton *>(object)) {
         QObject::connect(ob, &QAbstractButton::pressed, action);
         return;
     }
-    if (auto ob = qobject_cast<QLineEdit *>(widget)) {
+    if (auto ob = qobject_cast<QLineEdit *>(object)) {
         QObject::connect(ob, &QLineEdit::textChanged, action);
         return;
     }
-    if (auto ob = qobject_cast<QComboBox *>(widget)) {
+    if (auto ob = qobject_cast<QComboBox *>(object)) {
         QObject::connect(ob, &QComboBox::currentIndexChanged, action);
         QObject::connect(ob, &QComboBox::currentTextChanged, action);
         return;
     }
-    if (auto ob = qobject_cast<QSpinBox *>(widget)) {
+    if (auto ob = qobject_cast<QSpinBox *>(object)) {
         QObject::connect(ob, &QSpinBox::valueChanged, action);
         return;
     }
-    if (auto ob = qobject_cast<QPlainTextEdit *>(widget)) {
+    if (auto ob = qobject_cast<QPlainTextEdit *>(object)) {
         QObject::connect(ob, &QPlainTextEdit::textChanged, action);
         return;
     }
-    if (auto ob = qobject_cast<PlainTextEdit *>(widget)) {
+    if (auto ob = qobject_cast<PlainTextEdit *>(object)) {
         QObject::connect(ob, &PlainTextEdit::textChanged, action);
         return;
     }
@@ -169,14 +169,14 @@ static void installDirtyTriggerHelper(QWidget *widget, bool check)
     QTC_CHECK(false);
 }
 
-void installMarkSettingsDirtyTrigger(QWidget *widget)
+void installMarkSettingsDirtyTrigger(QObject *object)
 {
-    installDirtyTriggerHelper(widget, false);
+    installDirtyTriggerHelper(object, false);
 }
 
-void installCheckSettingsDirtyTrigger(QWidget *widget)
+void installCheckSettingsDirtyTrigger(QObject *object)
 {
-    installDirtyTriggerHelper(widget, true);
+    installDirtyTriggerHelper(object, true);
 }
 
 bool suppressSettingsDirtyTrigger(bool suppress)
@@ -186,21 +186,21 @@ bool suppressSettingsDirtyTrigger(bool suppress)
     return prev;
 }
 
-void installMarkSettingsDirtyTriggerRecursively(QWidget *widget)
+void installMarkSettingsDirtyTriggerRecursively(QObject *object)
 {
-    QTC_ASSERT(widget, return);
+    QTC_ASSERT(object, return);
 
-    if (isIgnoredForDirtyHook(widget))
+    if (isIgnoredForDirtyHook(object))
         return;
 
-    QList<QWidget *> children = {widget};
+    QList<QObject *> children = {object};
 
     while (!children.isEmpty()) {
-        QWidget *child = children.takeLast();
+        QObject *child = children.takeLast();
         if (isIgnoredForDirtyHook(child))
             continue;
 
-        children += child->findChildren<QWidget *>(Qt::FindDirectChildrenOnly);
+        children += child->findChildren<QObject *>(Qt::FindDirectChildrenOnly);
 
         if (child->metaObject() == &QWidget::staticMetaObject)
             continue;

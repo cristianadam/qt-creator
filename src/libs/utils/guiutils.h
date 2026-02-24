@@ -20,7 +20,7 @@ QTCREATOR_UTILS_EXPORT QWidget *dialogParent();
 QTCREATOR_UTILS_EXPORT void setDialogParentGetter(QWidget *(*getter)());
 
 // returns previous value
-QTCREATOR_UTILS_EXPORT bool setIgnoreForDirtyHook(QWidget *widget, bool ignore = true);
+QTCREATOR_UTILS_EXPORT bool setIgnoreForDirtyHook(QObject *object, bool ignore = true);
 QTCREATOR_UTILS_EXPORT bool isIgnoredForDirtyHook(const QObject *object);
 
 QTCREATOR_UTILS_EXPORT void markSettingsDirty();
@@ -40,10 +40,10 @@ private:
     const bool m_prev;
 };
 
-QTCREATOR_UTILS_EXPORT void installCheckSettingsDirtyTrigger(QWidget *widget);
+QTCREATOR_UTILS_EXPORT void installCheckSettingsDirtyTrigger(QObject *object);
 
-QTCREATOR_UTILS_EXPORT void installMarkSettingsDirtyTrigger(QWidget *widget);
-QTCREATOR_UTILS_EXPORT void installMarkSettingsDirtyTriggerRecursively(QWidget *widget); // Avoid.
+QTCREATOR_UTILS_EXPORT void installMarkSettingsDirtyTrigger(QObject *object);
+QTCREATOR_UTILS_EXPORT void installMarkSettingsDirtyTriggerRecursively(QObject *object); // Avoid.
 
 namespace Internal {
 QTCREATOR_UTILS_EXPORT void setMarkSettingsDirtyHook(const std::function<void (bool)> &hook);
