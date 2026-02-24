@@ -1,8 +1,13 @@
 add_qtc_library(qtkeychain
   DEPENDS Qt::Core
+  SOURCES_PREFIX qtkeychain
   SOURCES
-    keychain.cpp keychain.h
+    keychain.cpp
+    keychain.h
+    keychain_p.h
     qkeychain_export.h
+  PUBLIC_INCLUDES
+    ${CMAKE_CURRENT_LIST_DIR}
   PROPERTIES
     QT_COMPILE_OPTIONS_DISABLE_WARNINGS ON
   SBOM_ARGS
@@ -17,7 +22,11 @@ add_qtc_library(qtkeychain
 if (WIN32)
   option(USE_CREDENTIAL_STORE "Build with windows CredentialStore support" ON)
 
-  extend_qtc_library(qtkeychain SOURCES keychain_win.cpp)
+  extend_qtc_library(qtkeychain
+    SOURCES_PREFIX qtkeychain
+    SOURCES keychain_win.cpp
+    DEPENDS crypt32
+  )
 
   extend_qtc_library(qtkeychain
     CONDITION USE_CREDENTIAL_STORE
@@ -26,13 +35,14 @@ if (WIN32)
   )
   extend_qtc_library(qtkeychain
     CONDITION NOT USE_CREDENTIAL_STORE
+    SOURCES_PREFIX qtkeychain
     SOURCES plaintextstore.cpp
-    DEPENDS crypt32
   )
 endif()
 
 extend_qtc_library(qtkeychain
   CONDITION APPLE
+  SOURCES_PREFIX qtkeychain
   SOURCES keychain_apple.mm
   DEPENDS ${FWFoundation} ${FWSecurity}
 )
@@ -57,7 +67,9 @@ if (UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
     endif()
 
   qt6_add_dbus_interface(dbus_SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/org.kde.KWallet.xml kwallet_interface KWalletInterface)
+    ${CMAKE_CURRENT_SOURCE_DIR}/qtkeychain/org.kde.KWallet.xml
+    qtkeychain/kwallet_interface KWalletInterface
+  )
 
   extend_qtc_library(qtkeychain
     CONDITION TARGET Qt::DBus
@@ -65,9 +77,10 @@ if (UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
     DEFINES KEYCHAIN_DBUS=1
     DEPENDS Qt::DBus
     SOURCES
-      keychain_unix.cpp
-      libsecret.cpp
-      plaintextstore.cpp
+      qtkeychain/keychain_unix.cpp
+      qtkeychain/libsecret.cpp
+      qtkeychain/plaintextstore.cpp
       ${dbus_SOURCES}
+    INCLUDES ${CMAKE_CURRENT_BINARY_DIR}/qtkeychain
     )
 endif()

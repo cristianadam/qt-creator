@@ -1,13 +1,8 @@
 #if defined(HAVE_LIBSECRET)
-
-#undef signals
 #include <libsecret/secret.h>
-#define signals
-
 #endif
 
 #include "libsecret_p.h"
-
 
 #include <QLibrary>
 

@@ -589,14 +589,17 @@
         "Name": "QtKeychain",
         "QDocModule": "qtcreator",
         "QtParts": ["tools"],
-        "QtUsage": "Used by the Axivion support to securely store and retrieve credentials.",
+        "QtUsage": "Used to securely store and retrieve credentials via SecretAspect and CredentialQuery.",
         "Path": "@SOURCE_DIR@/src/libs/3rdparty/qtkeychain",
         "Description": "QtKeychain is a Qt API to store passwords and other secret data securely.",
         "Homepage": "https://github.com/frankosterfeld/qtkeychain",
         "PURL": "pkg:github/frankosterfeld/qtkeychain",
         "License": "BSD 3-Clause \"New\" or \"Revised\" License",
         "LicenseFile": "@SOURCE_DIR@/src/libs/3rdparty/qtkeychain/COPYING",
-        "Copyright": "Copyright (C) 2011-2015 Frank Osterfeld, Copyright (C) 2016 Mathias Hasselmann"
+        "Copyright": "Copyright (C) 2011-2015 Frank Osterfeld, Copyright (C) 2016 Mathias Hasselmann",
+        "Version": "0.15.0",
+        "DownloadLocation": "https://github.com/frankosterfeld/qtkeychain/tree/0.15.0",
+        "SecurityCritical": true
     },
     {
         "Id": "pyprof2calltree",

@@ -4,13 +4,13 @@
 <context>
     <name>QKeychain::DeletePasswordJobPrivate</name>
     <message>
-        <location filename="../keychain_unix.cpp" line="585"/>
-        <location filename="../keychain_unix.cpp" line="593"/>
+        <location filename="../keychain_unix.cpp" line="548"/>
+        <location filename="../keychain_unix.cpp" line="556"/>
         <source>Unknown error</source>
         <translation>Неизвестная ошибка</translation>
     </message>
     <message>
-        <location filename="../keychain_unix.cpp" line="614"/>
+        <location filename="../keychain_unix.cpp" line="574"/>
         <source>Could not open wallet: %1; %2</source>
         <translation>Не удалось открыть бумажник: %1; %2</translation>
     </message>
@@ -24,20 +24,16 @@
         <source>Could not decrypt data</source>
         <translation>Не удалось расшифровать данные</translation>
     </message>
-    <message>
-        <source>Password not found</source>
-        <translation type="obsolete">Пароль не найден</translation>
-    </message>
 </context>
 <context>
     <name>QKeychain::JobPrivate</name>
     <message>
-        <location filename="../keychain_unix.cpp" line="295"/>
+        <location filename="../keychain_unix.cpp" line="265"/>
         <source>Unknown error</source>
         <translation>Неизвестная ошибка</translation>
     </message>
     <message>
-        <location filename="../keychain_unix.cpp" line="542"/>
+        <location filename="../keychain_unix.cpp" line="509"/>
         <source>Access to keychain denied</source>
         <translation>Доступ к связке ключей запрещён</translation>
     </message>
@@ -73,48 +69,53 @@
 <context>
     <name>QKeychain::ReadPasswordJobPrivate</name>
     <message>
-        <location filename="../keychain_unix.cpp" line="205"/>
+        <location filename="../keychain_mac.cpp" line="75"/>
+        <source>Password not found</source>
+        <translation>Пароль не найден</translation>
+    </message>
+    <message>
+        <location filename="../keychain_unix.cpp" line="178"/>
         <source>D-Bus is not running</source>
         <translation>D-Bus не запущен</translation>
     </message>
     <message>
-        <location filename="../keychain_unix.cpp" line="214"/>
-        <location filename="../keychain_unix.cpp" line="224"/>
+        <location filename="../keychain_unix.cpp" line="187"/>
+        <location filename="../keychain_unix.cpp" line="197"/>
         <source>Unknown error</source>
         <translation>Неизвестная ошибка</translation>
     </message>
     <message>
-        <location filename="../keychain_unix.cpp" line="316"/>
+        <location filename="../keychain_unix.cpp" line="286"/>
         <source>No keychain service available</source>
         <translation>Служба связки ключей недоступна</translation>
     </message>
     <message>
-        <location filename="../keychain_unix.cpp" line="318"/>
+        <location filename="../keychain_unix.cpp" line="288"/>
         <source>Could not open wallet: %1; %2</source>
         <translation>Не удалось открыть кошелёк: %1; %2</translation>
     </message>
     <message>
-        <location filename="../keychain_unix.cpp" line="363"/>
+        <location filename="../keychain_unix.cpp" line="333"/>
         <source>Access to keychain denied</source>
         <translation>Доступ к связке ключей запрещён</translation>
     </message>
     <message>
-        <location filename="../keychain_unix.cpp" line="384"/>
+        <location filename="../keychain_unix.cpp" line="354"/>
         <source>Could not determine data type: %1; %2</source>
         <translation>Не удалось определить тип данных: %1; %2</translation>
     </message>
     <message>
-        <location filename="../keychain_unix.cpp" line="393"/>
+        <location filename="../keychain_unix.cpp" line="363"/>
         <source>Entry not found</source>
         <translation>Запись не найдена</translation>
     </message>
     <message>
-        <location filename="../keychain_unix.cpp" line="402"/>
+        <location filename="../keychain_unix.cpp" line="372"/>
         <source>Unsupported entry type &apos;Map&apos;</source>
         <translation>Неподдерживаемый тип записи &apos;Map&apos;</translation>
     </message>
     <message>
-        <location filename="../keychain_unix.cpp" line="405"/>
+        <location filename="../keychain_unix.cpp" line="375"/>
         <source>Unknown kwallet entry type &apos;%1&apos;</source>
         <translation>Неизвестный тип записи kwallet &apos;%1&apos;</translation>
     </message>
@@ -133,18 +134,18 @@
 <context>
     <name>QKeychain::WritePasswordJobPrivate</name>
     <message>
-        <location filename="../keychain_unix.cpp" line="445"/>
+        <location filename="../keychain_unix.cpp" line="415"/>
         <source>D-Bus is not running</source>
         <translation>D-Bus не запущен</translation>
     </message>
     <message>
-        <location filename="../keychain_unix.cpp" line="455"/>
-        <location filename="../keychain_unix.cpp" line="482"/>
+        <location filename="../keychain_unix.cpp" line="425"/>
+        <location filename="../keychain_unix.cpp" line="452"/>
         <source>Unknown error</source>
         <translation>Неизвестная ошибка</translation>
     </message>
     <message>
-        <location filename="../keychain_unix.cpp" line="501"/>
+        <location filename="../keychain_unix.cpp" line="468"/>
         <source>Could not open wallet: %1; %2</source>
         <translation>Не удалось открыть кошелёк: %1; %2</translation>
     </message>
@@ -168,65 +169,71 @@
         <source>Encryption failed</source>
         <translation>Шифрование не удалось</translation>
     </message>
-    <message>
-        <source>Password not found</source>
-        <translation type="obsolete">Пароль не найден</translation>
-    </message>
 </context>
 <context>
     <name>QObject</name>
     <message>
-        <location filename="../keychain_unix.cpp" line="255"/>
+        <location filename="../keychain_mac.cpp" line="31"/>
+        <source>OS X Keychain error (OSStatus %1)</source>
+        <translation>Ошибка связки ключей OS X (OSStatus %1)</translation>
+    </message>
+    <message>
+        <location filename="../keychain_mac.cpp" line="32"/>
+        <source>%1 (OSStatus %2)</source>
+        <translation>%1 (OSStatus %2)</translation>
+    </message>
+    <message>
+        <location filename="../keychain_unix.cpp" line="225"/>
         <source>Access to keychain denied</source>
         <translation>Доступ к связке ключей запрещён</translation>
     </message>
     <message>
-        <location filename="../keychain_unix.cpp" line="257"/>
+        <location filename="../keychain_unix.cpp" line="227"/>
         <source>No keyring daemon</source>
         <translation>Нет демона связки ключей</translation>
     </message>
     <message>
-        <location filename="../keychain_unix.cpp" line="259"/>
+        <location filename="../keychain_unix.cpp" line="229"/>
         <source>Already unlocked</source>
         <translation>Уже разблокировано</translation>
     </message>
     <message>
-        <location filename="../keychain_unix.cpp" line="261"/>
+        <location filename="../keychain_unix.cpp" line="231"/>
         <source>No such keyring</source>
         <translation>Связка ключей не найдена</translation>
     </message>
     <message>
-        <location filename="../keychain_unix.cpp" line="263"/>
+        <location filename="../keychain_unix.cpp" line="233"/>
         <source>Bad arguments</source>
         <translation>Неверные аргументы</translation>
     </message>
     <message>
-        <location filename="../keychain_unix.cpp" line="265"/>
+        <location filename="../keychain_unix.cpp" line="235"/>
         <source>I/O error</source>
         <translation>Ошибка ввода/вывода</translation>
     </message>
     <message>
-        <location filename="../keychain_unix.cpp" line="267"/>
+        <location filename="../keychain_unix.cpp" line="237"/>
         <source>Cancelled</source>
         <translation>Отменено</translation>
     </message>
     <message>
-        <location filename="../keychain_unix.cpp" line="269"/>
+        <location filename="../keychain_unix.cpp" line="239"/>
         <source>Keyring already exists</source>
         <translation>Связка ключей уже существует</translation>
     </message>
     <message>
-        <location filename="../keychain_unix.cpp" line="271"/>
+        <location filename="../keychain_unix.cpp" line="241"/>
         <source>No match</source>
         <translation>Нет совпадений</translation>
     </message>
     <message>
-        <location filename="../keychain_unix.cpp" line="276"/>
+        <location filename="../keychain_unix.cpp" line="246"/>
         <source>Unknown error</source>
         <translation>Неизвестная ошибка</translation>
     </message>
     <message>
-        <location filename="../libsecret.cpp" line="119"/>
+        <location filename="../libsecret.cpp" line="120"/>
         <source>Entry not found</source>
         <translation>Запись не найдена</translation>
     </message>

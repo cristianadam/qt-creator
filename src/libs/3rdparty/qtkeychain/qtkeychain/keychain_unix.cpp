@@ -203,6 +203,7 @@ void ReadPasswordJobPrivate::scheduledStart() {
             q->emitFinishedWithError( OtherError, tr("Unknown error") );
         }
     } break;
+
     case Backend_Kwallet4:
         kwalletReadPasswordScheduledStartImpl(KWALLET4_DBUS_IFACE, KWALLET4_DBUS_PATH, this);
         break;
@@ -219,6 +220,10 @@ void JobPrivate::kwalletWalletFound(QDBusPendingCallWatcher *watcher)
 {
     watcher->deleteLater();
     const QDBusPendingReply<QString> reply = *watcher;
+    // Don't timeout after 25s, but 24 days
+    // This allows to wait for user to unlock wallet, e.g. at Plasma startup
+    iface->setTimeout(0x7FFFFFFF);
+
     const QDBusPendingReply<int> pendingReply = iface->open( reply.value(), 0, q->service() );
     QDBusPendingCallWatcher* pendingWatcher = new QDBusPendingCallWatcher( pendingReply, this );
     connect( pendingWatcher, SIGNAL(finished(QDBusPendingCallWatcher*)),
@@ -267,7 +272,7 @@ void ReadPasswordJobPrivate::kwalletOpenFinished( QDBusPendingCallWatcher* watch
         q->emitFinished();
 
 
-        WritePasswordJob* j = new WritePasswordJob( q->service(), 0 );
+        WritePasswordJob* j = new WritePasswordJob( q->service(), nullptr );
         j->setSettings( q->settings() );
         j->setKey( key );
         j->setAutoDelete( true );
@@ -486,7 +491,7 @@ void DeletePasswordJobPrivate::scheduledStart() {
 }
 
 void DeletePasswordJobPrivate::fallbackOnError(const QDBusError &err) {
-    QScopedPointer<QSettings> local( !q->settings() ? new QSettings( q->service() ) : 0 );
+    QScopedPointer<QSettings> local( !q->settings() ? new QSettings( q->service() ) : nullptr );
     QSettings* actual = q->settings() ? q->settings() : local.data();
 
     if ( !q->insecureFallback() ) {

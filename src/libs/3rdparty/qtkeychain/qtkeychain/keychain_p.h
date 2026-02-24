@@ -53,9 +53,6 @@ public:
     org::kde::KWallet* iface;
     int walletHandle;
 
-    static void gnomeKeyring_readCb( int result, const char* string, JobPrivate* data );
-    static void gnomeKeyring_writeCb( int result, JobPrivate* self );
-
     virtual void fallbackOnError(const QDBusError& err) = 0;
 
 protected Q_SLOTS:

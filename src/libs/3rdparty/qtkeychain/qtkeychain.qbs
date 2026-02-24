@@ -11,17 +11,15 @@ QtcLibrary {
     Depends { name: "Qt.dbus"; condition: useDBus }
     Depends { id: libsecret; name: "libsecret-1"; required: false }
 
+    useNonGuiPchFile: false
+    useGuiPchFile: false
+
     Properties { cpp.defines: base.concat(["QTKEYCHAIN_LIBRARY"]) }
 
     Properties {
         condition: useWinCredentialsStore
         cpp.defines: "USE_CREDENTIAL_STORE=1"
-        cpp.dynamicLibraries: ["advapi32"]
-    }
-
-    Properties {
-        condition: qbs.targetOS.contains("windows") && !useWinCredentialsStore
-        cpp.dynamicLibraries: ["crypt32"]
+        cpp.dynamicLibraries: ["advapi32", "crypt32"]
     }
 
     Properties {
@@ -45,16 +43,21 @@ QtcLibrary {
     }
     Properties { qbsModuleProviders: undefined }
 
-    files: [
-        "keychain.cpp",
-        "keychain.h",
-        "keychain_p.h",
-        "qkeychain_export.h",
-    ]
+    Group {
+        name: "qtkeychain general files"
+        prefix: "qtkeychain/"
+        files: [
+            "keychain.cpp",
+            "keychain.h",
+            "keychain_p.h",
+            "qkeychain_export.h",
+        ]
+    }
 
     Group {
         name: "qtkeychain Windows files"
         condition: qbs.targetOS.contains("windows")
+        prefix: "qtkeychain/"
         files: [
             "keychain_win.cpp",
             "plaintextstore_p.h",
@@ -63,6 +66,7 @@ QtcLibrary {
         Group {
             name: "qtkeychain Windows no credentials store"
             condition: !product.useWinCredentialsStore
+            prefix: "qtkeychain/"
             files: [ "plaintextstore.cpp" ]
         }
     }
@@ -70,6 +74,7 @@ QtcLibrary {
     Group {
         name: "qtkeychain macOS files"
         condition: qbs.targetOS.contains("macos")
+        prefix: "qtkeychain/"
         files: [ "keychain_apple.mm" ]
     }
 
@@ -80,6 +85,7 @@ QtcLibrary {
         Group {
             name: "dbus sources"
             fileTags: "qt.dbus.interface"
+            prefix: "qtkeychain/"
             files: ["org.kde.KWallet.xml"]
         }
 
@@ -88,6 +94,7 @@ QtcLibrary {
             cpp.cxxFlags: outer.concat([
                 "-Wno-cast-function-type", "-Wno-missing-field-initializers",
                 "-Wno-ignored-attributes"])
+            prefix: "qtkeychain/"
             files: [
                 "keychain_unix.cpp",
                 "libsecret.cpp",
@@ -105,6 +112,6 @@ QtcLibrary {
 
     Export {
         Depends { name: "cpp" }
-        cpp.includePaths: project.ide_source_tree + "/src/libs/3rdparty/"
+        cpp.includePaths: project.ide_source_tree + "/src/libs/3rdparty/qtkeychain"
     }
 }
