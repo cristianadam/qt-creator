@@ -108,6 +108,7 @@ public:
     IndexingPriority indexingPriority() const { return m_data.indexingPriority; }
     Utils::FilePath projectIndexPath(const Utils::MacroExpander &expander) const;
     Utils::FilePath sessionIndexPath(const Utils::MacroExpander &expander) const;
+    bool useExternalCompilationDb() const { return false; }
     HeaderSourceSwitchMode headerSourceSwitchMode() const { return m_data.headerSourceSwitchMode; }
     CompletionRankingModel completionRankingModel() const { return m_data.completionRankingModel; }
     bool autoIncludeHeaders() const { return m_data.autoIncludeHeaders; }

@@ -569,6 +569,9 @@ void ClangModelManagerSupport::updateLanguageClient(Project *project)
     if (jsonDbDir.isEmpty())
         return;
 
+    if (settings.useExternalCompilationDb())
+        return doUpdateLanguageClient(project, projectInfo, jsonDbDir);
+
     const FilePath includeDir = settings.clangdIncludePath(project ? project->activeKit() : nullptr);
     const auto onSetup = [this, projectInfo, jsonDbDir, project, includeDir](
                              Async<GenerateCompilationDbResult> &task) {
@@ -603,6 +606,12 @@ void ClangModelManagerSupport::doUpdateLanguageClient(
     const CppEditor::ProjectInfoList &projectInfo,
     const Utils::FilePath &jsonDbDir)
 {
+    if (!jsonDbDir.pathAppended("compile_commands.json").exists()) {
+        MessageManager::writeDisrupting(
+            Tr::tr("Cannot use clangd: No compilation database in \"%1\".")
+                .arg(jsonDbDir.toUserOutput()));
+        return;
+    }
     if (!isProjectDataUpToDate(project, projectInfo, jsonDbDir))
         return;
     Id previousId;
