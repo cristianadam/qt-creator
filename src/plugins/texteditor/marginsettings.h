@@ -5,33 +5,41 @@
 
 #include "texteditor_global.h"
 
+#include <utils/aspects.h>
 #include <utils/store.h>
 
 namespace TextEditor {
 
-class TEXTEDITOR_EXPORT MarginSettings
+class TEXTEDITOR_EXPORT MarginSettingsData
+{
+public:
+    MarginSettingsData() = default;
+
+    friend bool operator==(const MarginSettingsData &one, const MarginSettingsData &two) = default;
+    friend bool operator!=(const MarginSettingsData &one, const MarginSettingsData &two) = default;
+
+    bool m_showMargin = false;
+    bool m_tintMarginArea = true;
+    bool m_useIndenter = false;
+    int m_marginColumn = 80;
+    int m_centerEditorContentWidthPercent = 100;
+};
+
+class TEXTEDITOR_EXPORT MarginSettings : public Utils::AspectContainer
 {
 public:
     MarginSettings();
 
-    void toSettings(Utils::QtcSettings *s) const;
-    void fromSettings(Utils::QtcSettings *s);
+    MarginSettingsData data() const;
+    void setData(const MarginSettingsData &data);
 
-    Utils::Store toMap() const;
-    void fromMap(const Utils::Store &map);
-
-    bool equals(const MarginSettings &other) const;
-
-    friend bool operator==(const MarginSettings &one, const MarginSettings &two)
-    { return one.equals(two); }
-    friend bool operator!=(const MarginSettings &one, const MarginSettings &two)
-    { return !one.equals(two); }
-
-    bool m_showMargin;
-    bool m_tintMarginArea;
-    bool m_useIndenter;
-    int m_marginColumn;
-    int m_centerEditorContentWidthPercent;
+    Utils::BoolAspect showMargin{this};
+    Utils::BoolAspect tintMarginArea{this};
+    Utils::BoolAspect useIndenter{this};
+    Utils::IntegerAspect marginColumn{this};
+    Utils::IntegerAspect centerEditorContentWidthPercent{this};
 };
+
+TEXTEDITOR_EXPORT MarginSettings &marginSettings();
 
 } // namespace TextEditor

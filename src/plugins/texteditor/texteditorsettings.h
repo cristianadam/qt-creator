@@ -23,7 +23,7 @@ class FontSettings;
 class TypingSettings;
 class StorageSettings;
 class BehaviorSettings;
-class MarginSettings;
+class MarginSettingsData;
 class DisplaySettings;
 class CompletionSettings;
 class ExtraEncodingSettings;
@@ -48,7 +48,6 @@ public:
     static TextEditorSettings *instance();
 
     static const FontSettings &fontSettings();
-    static const MarginSettings &marginSettings();
     static const DisplaySettings &displaySettings();
     static const CompletionSettings &completionSettings();
 
@@ -78,14 +77,13 @@ public:
     static int decreaseFontZoom();
     static int increaseFontZoom(int step);
     static void resetFontZoom();
-    static void setEditorContentWidth(int width);
 
 signals:
     void fontSettingsChanged(const TextEditor::FontSettings &);
     void typingSettingsChanged(const TextEditor::TypingSettings &);
     void storageSettingsChanged(const TextEditor::StorageSettings &);
     void behaviorSettingsChanged(const TextEditor::BehaviorSettings &);
-    void marginSettingsChanged(const TextEditor::MarginSettings &);
+    void marginSettingsChanged(const TextEditor::MarginSettingsData &);
     void displaySettingsChanged(const TextEditor::DisplaySettings &);
     void completionSettingsChanged(const TextEditor::CompletionSettings &);
     void extraEncodingSettingsChanged(const TextEditor::ExtraEncodingSettings &);

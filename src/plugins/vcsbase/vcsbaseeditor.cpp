@@ -1090,7 +1090,7 @@ void VcsBaseEditorWidget::keyPressEvent(QKeyEvent *e)
     TextEditorWidget::keyPressEvent(e);
 }
 
-void VcsBaseEditorWidget::setMarginSettings(const TextEditor::MarginSettings &ms)
+void VcsBaseEditorWidget::setMarginSettings(const TextEditor::MarginSettingsData &ms)
 {
     Q_UNUSED(ms)
     TextEditorWidget::setMarginSettings({});

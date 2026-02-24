@@ -12,6 +12,7 @@
 #include <coreplugin/coreconstants.h>
 #include <coreplugin/icore.h>
 #include <coreplugin/statusbarmanager.h>
+
 #include <texteditor/marginsettings.h>
 #include <texteditor/texteditorsettings.h>
 
@@ -68,8 +69,7 @@ void ZenModePlugin::readUserSettings()
 
     m_userSettings.modesSidebarState = activeModeSidebar();
 
-    m_userSettings.editorContentWidth =
-            TextEditor::TextEditorSettings::marginSettings().m_centerEditorContentWidthPercent;
+    m_userSettings.editorContentWidth = TextEditor::marginSettings().centerEditorContentWidthPercent();
 }
 
 void ZenModePlugin::restoreUserSettings()
@@ -91,7 +91,7 @@ void ZenModePlugin::restoreUserSettings()
             action->trigger();
     }
 
-    TextEditor::TextEditorSettings::setEditorContentWidth(m_userSettings.editorContentWidth);
+    TextEditor::marginSettings().centerEditorContentWidthPercent.setValue(m_userSettings.editorContentWidth);
 }
 
 void ZenModePlugin::extensionsInitialized()
@@ -104,7 +104,7 @@ void ZenModePlugin::extensionsInitialized()
     auto userEditorContentWidth = [this] {
         if (!(m_zenModeActive || m_distractionFreeModeActive))
             m_userSettings.editorContentWidth =
-                TextEditor::TextEditorSettings::marginSettings().m_centerEditorContentWidthPercent;
+                TextEditor::marginSettings().centerEditorContentWidthPercent();
     };
 
     QObject::connect(TextEditor::TextEditorSettings::instance(),
@@ -273,9 +273,9 @@ void ZenModePlugin::updateStateIcons()
 void ZenModePlugin::updateContentEditorWidth()
 {
     if (m_zenModeActive || m_distractionFreeModeActive) {
-        TextEditor::TextEditorSettings::setEditorContentWidth(settings().contentWidth.value());
+        TextEditor::marginSettings().centerEditorContentWidthPercent.setValue(settings().contentWidth.value());
     } else {
-        TextEditor::TextEditorSettings::setEditorContentWidth(m_userSettings.editorContentWidth);
+        TextEditor::marginSettings().centerEditorContentWidthPercent.setValue(m_userSettings.editorContentWidth);
     }
 }
 

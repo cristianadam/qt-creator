@@ -948,7 +948,7 @@ public:
     Id m_tabSettingsId;
     DisplaySettings m_displaySettings;
     bool m_annotationsrRight = true;
-    MarginSettings m_marginSettings;
+    MarginSettingsData m_marginSettings;
     // apply when making visible the first time, for the split case
     bool m_fontSettingsNeedsApply = true;
     bool m_wasNotYetShown = true;
@@ -1662,7 +1662,7 @@ void TextEditorWidgetPrivate::setDocument(const QSharedPointer<TextDocument> &do
     q->setTypingSettings(globalTypingSettings());
     q->setStorageSettings(globalStorageSettings());
     q->setBehaviorSettings(globalBehaviorSettings());
-    q->setMarginSettings(TextEditorSettings::marginSettings());
+    q->setMarginSettings(marginSettings().data());
     q->setDisplaySettings(TextEditorSettings::displaySettings());
     q->setCompletionSettings(TextEditorSettings::completionSettings());
     q->setExtraEncodingSettings(globalExtraEncodingSettings());
@@ -7945,7 +7945,7 @@ const DisplaySettings &TextEditorWidget::displaySettings() const
     return d->m_displaySettings;
 }
 
-const MarginSettings &TextEditorWidget::marginSettings() const
+const MarginSettingsData &TextEditorWidget::marginSettings() const
 {
     return d->m_marginSettings;
 }
@@ -9431,7 +9431,7 @@ void TextEditorWidget::setDisplaySettings(const DisplaySettings &ds)
     extraArea()->update();
 }
 
-void TextEditorWidget::setMarginSettings(const MarginSettings &ms)
+void TextEditorWidget::setMarginSettings(const MarginSettingsData &ms)
 {
     d->m_marginSettings = ms;
     updateVisualWrapColumn();

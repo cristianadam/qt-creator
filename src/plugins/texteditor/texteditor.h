@@ -77,7 +77,7 @@ class CompletionSettings;
 class DisplaySettings;
 class ExtraEncodingSettings;
 class FontSettings;
-class MarginSettings;
+class MarginSettingsData;
 class StorageSettings;
 class TypingSettings;
 
@@ -321,7 +321,7 @@ public:
     Utils::Id languageSettingsId() const;
 
     const DisplaySettings &displaySettings() const;
-    const MarginSettings &marginSettings() const;
+    const MarginSettingsData &marginSettings() const;
     const BehaviorSettings &behaviorSettings() const;
 
     void ensureCursorVisible();
@@ -374,7 +374,7 @@ public:
     virtual void encourageApply();
 
     virtual void setDisplaySettings(const TextEditor::DisplaySettings &);
-    virtual void setMarginSettings(const TextEditor::MarginSettings &);
+    virtual void setMarginSettings(const TextEditor::MarginSettingsData &);
     void setBehaviorSettings(const TextEditor::BehaviorSettings &);
     void setTypingSettings(const TextEditor::TypingSettings &);
     void setStorageSettings(const TextEditor::StorageSettings &);

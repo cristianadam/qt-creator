@@ -8,7 +8,6 @@
 namespace TextEditor {
 
 class DisplaySettings;
-class MarginSettings;
 class DisplaySettingsPagePrivate;
 
 class DisplaySettingsPage : public Core::IOptionsPage
@@ -18,8 +17,6 @@ public:
     ~DisplaySettingsPage() override;
 
     const DisplaySettings &displaySettings() const;
-    const MarginSettings &marginSettings() const;
-    void setEditorContentWidth(int width);
 
 private:
     DisplaySettingsPagePrivate *d;

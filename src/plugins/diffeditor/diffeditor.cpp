@@ -301,7 +301,7 @@ signals:
 
 protected:
     void setDisplaySettings(const DisplaySettings &ds) final;
-    void setMarginSettings(const MarginSettings &ms) final;
+    void setMarginSettings(const MarginSettingsData &ms) final;
     void applyFontSettings() final;
 };
 
@@ -345,7 +345,7 @@ void DescriptionEditorWidget::setDisplaySettings(const DisplaySettings &ds)
     TextEditorWidget::setDisplaySettings(settings);
 }
 
-void DescriptionEditorWidget::setMarginSettings(const MarginSettings &ms)
+void DescriptionEditorWidget::setMarginSettings(const MarginSettingsData &ms)
 {
     Q_UNUSED(ms)
     TextEditorWidget::setMarginSettings({});

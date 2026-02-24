@@ -30,13 +30,11 @@ public:
     DisplaySettingsPagePrivate();
 
     DisplaySettings m_displaySettings;
-    MarginSettings m_marginSettings;
 };
 
 DisplaySettingsPagePrivate::DisplaySettingsPagePrivate()
 {
     m_displaySettings.fromSettings(Core::ICore::settings());
-    m_marginSettings.fromSettings(Core::ICore::settings());
 }
 
 class DisplaySettingsWidget final : public Core::IOptionsPageWidget
@@ -66,29 +64,6 @@ public:
         connect(enableTextWrappingHintLabel, &QLabel::linkActivated, [] {
             Core::ICore::showSettings(Constants::TEXT_EDITOR_FONT_SETTINGS); } );
 
-        showWrapColumn = new QCheckBox(Tr::tr("Display right &margin after column:"));
-        tintMarginArea = new QCheckBox(Tr::tr("Tint whole margin area"));
-
-        auto centeredEditorContentWidthLabel = new QLabel(Tr::tr("Editor content width"));
-        centeredEditorContentWidthLabel->setToolTip(
-            Tr::tr("100% means that whole width of editor window is used to display text"
-            " content (default).<br>50% means that half of editor width is used to display"
-            " text content.<br>Remaining 50% is divided as left and right margins while"
-            " centering content"));
-        centeredEditorContentWidth = new QSpinBox;
-        centeredEditorContentWidth->setMinimum(50);
-        centeredEditorContentWidth->setMaximum(100);
-        centeredEditorContentWidth->setSuffix("%");
-
-        wrapColumn = new QSpinBox;
-        wrapColumn->setMaximum(999);
-
-        connect(showWrapColumn, &QAbstractButton::toggled, wrapColumn, &QWidget::setEnabled);
-        connect(showWrapColumn, &QAbstractButton::toggled, tintMarginArea, &QWidget::setEnabled);
-
-        useIndenter = new QCheckBox(Tr::tr("Use context-specific margin"));
-        useIndenter->setToolTip(Tr::tr("If available, use a different margin. "
-           "For example, the ColumnLimit from the ClangFormat plugin."));
 
         animateMatchingParentheses = new QCheckBox(Tr::tr("&Animate matching parentheses"));
         scrollBarHighlights = new QCheckBox(Tr::tr("Highlight search results on the scrollbar"));
@@ -134,13 +109,14 @@ public:
             betweenLines,
         }.attachTo(displayAnnotations);
 
+        MarginSettings &m = marginSettings();
         Column {
             Group {
                 title(Tr::tr("Margin")),
                 Column {
-                    Row { showWrapColumn, wrapColumn, st },
-                    Row { useIndenter, tintMarginArea, st },
-                    Row { centeredEditorContentWidthLabel, centeredEditorContentWidth, st }
+                    Row { m.showMargin, m.marginColumn, st },
+                    Row { m.useIndenter, m.tintMarginArea, st },
+                    Row { m.centerEditorContentWidthPercent, st }
                 }
             },
             Group {
@@ -190,19 +166,14 @@ public:
 
     void apply() final;
 
-    void settingsFromUI(DisplaySettings &displaySettings, MarginSettings &marginSettings) const;
+    void settingsFromUI(DisplaySettings &displaySettings) const;
     void settingsToUI();
-    void setDisplaySettings(const DisplaySettings &, const MarginSettings &newMarginSettings);
+    void setDisplaySettings(const DisplaySettings &);
 
     DisplaySettingsPagePrivate *m_data = nullptr;
 
     QCheckBox *enableTextWrapping;
     QLabel *enableTextWrappingHintLabel;
-    QSpinBox *centeredEditorContentWidth;
-    QCheckBox *showWrapColumn;
-    QCheckBox *tintMarginArea;
-    QSpinBox *wrapColumn;
-    QCheckBox *useIndenter;
     QCheckBox *animateMatchingParentheses;
     QCheckBox *scrollBarHighlights;
     QCheckBox *displayLineNumbers;
@@ -231,25 +202,19 @@ public:
 
 void DisplaySettingsWidget::apply()
 {
-    DisplaySettings newDisplaySettings;
-    MarginSettings newMarginSettings;
+    marginSettings().apply();
 
-    settingsFromUI(newDisplaySettings, newMarginSettings);
-    setDisplaySettings(newDisplaySettings, newMarginSettings);
+    DisplaySettings newDisplaySettings;
+    settingsFromUI(newDisplaySettings);
+    setDisplaySettings(newDisplaySettings);
 }
 
-void DisplaySettingsWidget::settingsFromUI(DisplaySettings &displaySettings,
-                                           MarginSettings &marginSettings) const
+void DisplaySettingsWidget::settingsFromUI(DisplaySettings &displaySettings) const
 {
     displaySettings.m_displayLineNumbers = displayLineNumbers->isChecked();
     displaySettings.m_textWrapping = enableTextWrapping->isChecked();
     if (TextEditorSettings::fontSettings().relativeLineSpacing() != 100)
         displaySettings.m_textWrapping = false;
-    marginSettings.m_showMargin = showWrapColumn->isChecked();
-    marginSettings.m_tintMarginArea = tintMarginArea->isChecked();
-    marginSettings.m_useIndenter = useIndenter->isChecked();
-    marginSettings.m_marginColumn = wrapColumn->value();
-    marginSettings.m_centerEditorContentWidthPercent = centeredEditorContentWidth->value();
     displaySettings.m_visualizeWhitespace = visualizeWhitespace->isChecked();
     displaySettings.m_visualizeIndent = visualizeIndent->isChecked();
     displaySettings.m_displayFoldingMarkers = displayFoldingMarkers->isChecked();
@@ -282,16 +247,9 @@ void DisplaySettingsWidget::settingsFromUI(DisplaySettings &displaySettings,
 void DisplaySettingsWidget::settingsToUI()
 {
     const DisplaySettings &displaySettings = m_data->m_displaySettings;
-    const MarginSettings &marginSettings = m_data->m_marginSettings;
+
     displayLineNumbers->setChecked(displaySettings.m_displayLineNumbers);
     enableTextWrapping->setChecked(displaySettings.m_textWrapping);
-    showWrapColumn->setChecked(marginSettings.m_showMargin);
-    tintMarginArea->setChecked(marginSettings.m_tintMarginArea);
-    tintMarginArea->setEnabled(marginSettings.m_showMargin);
-    useIndenter->setChecked(marginSettings.m_useIndenter);
-    wrapColumn->setValue(marginSettings.m_marginColumn);
-    wrapColumn->setEnabled(marginSettings.m_showMargin);
-    centeredEditorContentWidth->setValue(marginSettings.m_centerEditorContentWidthPercent);
     visualizeWhitespace->setChecked(displaySettings.m_visualizeWhitespace);
     visualizeIndent->setChecked(displaySettings.m_visualizeIndent);
     displayFoldingMarkers->setChecked(displaySettings.m_displayFoldingMarkers);
@@ -324,32 +282,13 @@ const DisplaySettings &DisplaySettingsPage::displaySettings() const
     return d->m_displaySettings;
 }
 
-const MarginSettings &DisplaySettingsPage::marginSettings() const
-{
-    return d->m_marginSettings;
-}
-
-void DisplaySettingsPage::setEditorContentWidth(int width)
-{
-    d->m_marginSettings.m_centerEditorContentWidthPercent = std::clamp(width, 50, 100);
-    emit TextEditorSettings::instance()->marginSettingsChanged(marginSettings());
-}
-
-void DisplaySettingsWidget::setDisplaySettings(const DisplaySettings &newDisplaySettings,
-                                               const MarginSettings &newMarginSettings)
+void DisplaySettingsWidget::setDisplaySettings(const DisplaySettings &newDisplaySettings)
 {
     if (newDisplaySettings != m_data->m_displaySettings) {
         m_data->m_displaySettings = newDisplaySettings;
         m_data->m_displaySettings.toSettings(Core::ICore::settings());
 
         emit TextEditorSettings::instance()->displaySettingsChanged(newDisplaySettings);
-    }
-
-    if (newMarginSettings != m_data->m_marginSettings) {
-        m_data->m_marginSettings = newMarginSettings;
-        m_data->m_marginSettings.toSettings(Core::ICore::settings());
-
-        emit TextEditorSettings::instance()->marginSettingsChanged(newMarginSettings);
     }
 }
 

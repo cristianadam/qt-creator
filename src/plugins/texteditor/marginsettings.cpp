@@ -3,82 +3,80 @@
 
 #include "marginsettings.h"
 
+#include "texteditorsettings.h"
+#include "texteditortr.h"
+
 #include <utils/qtcsettings.h>
 
 using namespace Utils;
 
 namespace TextEditor {
 
-const char showWrapColumnKey[] = "ShowMargin";
-const char wrapColumnKey[] = "MarginColumn";
-const char groupPostfix[] = "textMarginSettings";
-const char useIndenterColumnKey[] = "UseIndenter";
-const char tintMarginAreaColumnKey[] = "tintMarginArea";
-const char centeredEditorContentWidthPercent[] = "centeredEditorContentWidthPercent";
+MarginSettings &marginSettings()
+{
+    static MarginSettings theMarginSettings;
+    return theMarginSettings;
+}
 
 MarginSettings::MarginSettings()
-    : m_showMargin(false)
-    , m_tintMarginArea(true)
-    , m_useIndenter(false)
-    , m_marginColumn(80)
-    , m_centerEditorContentWidthPercent(100)
 {
+    setAutoApply(false);
+
+    setSettingsGroup("textMarginSettings");
+
+    showMargin.setSettingsKey("ShowMargin");
+    showMargin.setDefaultValue(false);
+    showMargin.setLabelText(Tr::tr("Display right &margin after column:"));
+
+    tintMarginArea.setSettingsKey("tintMarginArea");
+    tintMarginArea.setDefaultValue(true);
+    tintMarginArea.setLabelText(Tr::tr("Tint whole margin area"));
+
+    useIndenter.setSettingsKey("UseIndenter");
+    useIndenter.setDefaultValue(false);
+    useIndenter.setLabelText(Tr::tr("Use context-specific margin"));
+    useIndenter.setToolTip(Tr::tr("If available, use a different margin. "
+                                  "For example, the ColumnLimit from the ClangFormat plugin."));
+
+    marginColumn.setSettingsKey("MarginColumn");
+    marginColumn.setDefaultValue(80);
+    marginColumn.setRange(0, 999);
+
+    centerEditorContentWidthPercent.setSettingsKey("centeredEditorContentWidthPercent");
+    centerEditorContentWidthPercent.setRange(50, 100);
+    centerEditorContentWidthPercent.setDefaultValue(100);
+    centerEditorContentWidthPercent.setSuffix("%");
+    centerEditorContentWidthPercent.setLabelText(Tr::tr("Editor content width"));
+    centerEditorContentWidthPercent.setToolTip(
+            Tr::tr("100% means that whole width of editor window is used to display text"
+            " content (default).<br>50% means that half of editor width is used to display"
+            " text content.<br>Remaining 50% is divided as left and right margins while"
+            " centering content"));
+
+    readSettings();
+
+    marginColumn.setEnabler(&showMargin);
+    tintMarginArea.setEnabler(&showMargin);
 }
 
-void MarginSettings::toSettings(QtcSettings *s) const
+MarginSettingsData MarginSettings::data() const
 {
-    s->beginGroup(groupPostfix);
-    s->setValue(showWrapColumnKey, m_showMargin);
-    s->setValue(tintMarginAreaColumnKey, m_tintMarginArea);
-    s->setValue(useIndenterColumnKey, m_useIndenter);
-    s->setValue(wrapColumnKey, m_marginColumn);
-    s->setValue(centeredEditorContentWidthPercent, m_centerEditorContentWidthPercent);
-    s->endGroup();
+    MarginSettingsData d;
+    d.m_showMargin = showMargin();
+    d.m_tintMarginArea = tintMarginArea();
+    d.m_useIndenter = useIndenter();
+    d.m_marginColumn = marginColumn();
+    d.m_centerEditorContentWidthPercent = centerEditorContentWidthPercent();
+    return d;
 }
 
-void MarginSettings::fromSettings(QtcSettings *s)
+void MarginSettings::setData(const MarginSettingsData &data)
 {
-    s->beginGroup(groupPostfix);
-    *this = MarginSettings(); // Assign defaults
-
-    m_showMargin = s->value(showWrapColumnKey, m_showMargin).toBool();
-    m_tintMarginArea = s->value(tintMarginAreaColumnKey, m_tintMarginArea).toBool();
-    m_useIndenter = s->value(useIndenterColumnKey, m_useIndenter).toBool();
-    m_marginColumn = s->value(wrapColumnKey, m_marginColumn).toInt();
-    m_centerEditorContentWidthPercent = s->value(centeredEditorContentWidthPercent,
-                                                 m_centerEditorContentWidthPercent).toInt();
-    s->endGroup();
-}
-
-Store MarginSettings::toMap() const
-{
-    return {
-        {tintMarginAreaColumnKey, m_tintMarginArea},
-        {showWrapColumnKey, m_showMargin},
-        {useIndenterColumnKey, m_useIndenter},
-        {wrapColumnKey, m_marginColumn},
-        {centeredEditorContentWidthPercent, m_centerEditorContentWidthPercent}
-    };
-}
-
-void MarginSettings::fromMap(const Store &map)
-{
-    m_showMargin = map.value(showWrapColumnKey, m_showMargin).toBool();
-    m_tintMarginArea = map.value(tintMarginAreaColumnKey, m_tintMarginArea).toBool();
-    m_useIndenter = map.value(useIndenterColumnKey, m_useIndenter).toBool();
-    m_marginColumn = map.value(wrapColumnKey, m_marginColumn).toInt();
-    m_centerEditorContentWidthPercent = map.value(centeredEditorContentWidthPercent,
-                                                  m_centerEditorContentWidthPercent).toInt();
-}
-
-bool MarginSettings::equals(const MarginSettings &other) const
-{
-    return m_showMargin == other.m_showMargin
-        && m_tintMarginArea == other.m_tintMarginArea
-        && m_useIndenter == other.m_useIndenter
-        && m_marginColumn == other.m_marginColumn
-        && m_centerEditorContentWidthPercent == other.m_centerEditorContentWidthPercent
-        ;
+    showMargin.setValue(data.m_showMargin);
+    tintMarginArea.setValue(data.m_tintMarginArea);
+    useIndenter.setValue(data.m_useIndenter);
+    marginColumn.setValue(data.m_marginColumn);
+    centerEditorContentWidthPercent.setValue(data.m_centerEditorContentWidthPercent);
 }
 
 } // TextEditor

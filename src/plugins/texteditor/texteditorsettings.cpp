@@ -465,11 +465,6 @@ const FontSettings &TextEditorSettings::fontSettings()
     return d->m_fontSettings;
 }
 
-const MarginSettings &TextEditorSettings::marginSettings()
-{
-    return d->m_displaySettingsPage.marginSettings();
-}
-
 const DisplaySettings &TextEditorSettings::displaySettings()
 {
     return d->m_displaySettingsPage.displaySettings();
@@ -599,11 +594,6 @@ int TextEditorSettings::increaseFontZoom(int step)
 void TextEditorSettings::resetFontZoom()
 {
     setFontZoom(100);
-}
-
-void TextEditorSettings::setEditorContentWidth(int width)
-{
-    d->m_displaySettingsPage.setEditorContentWidth(width);
 }
 
 TextEditorSettings &Internal::textEditorSettings()
