@@ -408,7 +408,6 @@ The end.
             FilePath::fromUserInput(QDir::homePath()),
             [](const FilePath &path, const FilePathInfo &) {
                 qDebug() << path;
-                //qDebug() << path.toString() << info.lastModified;
                 return IterationPolicy::Continue;
             },
             FileFilter({}, QDir::AllEntries, QDirIterator::NoIteratorFlags));
@@ -421,6 +420,29 @@ The end.
                 return IterationPolicy::Continue;
             },
             FileFilter({}, QDir::AllEntries, QDirIterator::NoIteratorFlags));
+
+        // We had a bug where symlinks were filtered by the name of their target
+        // instead of the name of the link itself. Test that this is not the case.
+        const FilePath testDir = TemporaryDirectory::masterDirectoryFilePath()
+                                 / "test-find-symlink-names";
+        QVERIFY_RESULT(testDir.ensureWritableDir());
+
+        const FilePath original = testDir / "original-file.txt";
+        original.writeFileContents("Hello World");
+
+        QVERIFY_RESULT((original).createSymLink(testDir / "link.txt"));
+
+        QStringList results;
+
+        fileAccess.iterateDirectory(
+            testDir,
+            [&results](const FilePath &path, const FilePathInfo &) {
+                results << path.fileName();
+                return IterationPolicy::Continue;
+            },
+            FileFilter{{"original*"}, QDir::AllEntries});
+
+        QCOMPARE(results, QStringList{"original-file.txt"});
     }
 
     void testBridge()
