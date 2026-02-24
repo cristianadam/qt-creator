@@ -2063,7 +2063,7 @@ void GitPluginPrivate::vcsFillFileActionMenu(QMenu *menu,
                          "<p>Note: The deletion cannot be undone.</p>"));
         menu->addSeparator();
         const char message[] = "Add to gitignore \"%1\"";
-        addAction(Tr::tr(message).arg("/" + relativePath.path()), IVersionControl::FileAddGitignore);
+        addAction(Tr::tr(message).arg("/" + relativePath.path()), IVersionControl::FileIgnore);
         const std::optional<Utils::FilePath> path = relativePath.tailRemoved(relativePath.fileName());
         if (!path.has_value())
             return;
@@ -2076,12 +2076,12 @@ void GitPluginPrivate::vcsFillFileActionMenu(QMenu *menu,
         const Utils::FilePath suffixMask = path->stringAppended("*." + suffix);
         QAction *act0 = menu->addAction(Tr::tr(message).arg("/" + suffixMask.path()));
         connect(act0, &QAction::triggered, this, [=, this] {
-            vcsFileAction(topLevel, suffixMask, IVersionControl::FileAddGitignore);
+            vcsFileAction(topLevel, suffixMask, IVersionControl::FileIgnore);
         });
         const Utils::FilePath nameMask = path->stringAppended(baseName + ".*");
         QAction *act1 = menu->addAction(Tr::tr(message).arg("/" + nameMask.path()));
         connect(act1, &QAction::triggered, this, [=, this] {
-            vcsFileAction(topLevel, nameMask, IVersionControl::FileAddGitignore);
+            vcsFileAction(topLevel, nameMask, IVersionControl::FileIgnore);
         });
         break;
     }
@@ -2171,7 +2171,7 @@ bool GitPluginPrivate::vcsFileAction(const FilePath &topLevel, const FilePath &f
         return true;
     }
 
-    case FileAddGitignore:
+    case FileIgnore:
         addToGitignore(topLevel, filePath);
         return true;
 

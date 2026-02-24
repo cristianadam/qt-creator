@@ -172,7 +172,7 @@ public:
         FileUnstageAdded,
         FileRevertRenaming,
         FileRemove,
-        FileAddGitignore,
+        FileIgnore,
         FileMergeTool,
         FileMergeDiffIncoming,
         FileMergeResolved,

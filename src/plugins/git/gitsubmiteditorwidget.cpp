@@ -369,7 +369,7 @@ void GitSubmitEditorWidget::addFileContextMenuActions(QMenu *menu, const QModelI
                          "<p>Note: The deletion cannot be undone.</p>"));
         menu->addSeparator();
         const char message[] = "Add to gitignore \"%1\"";
-        addAction(Tr::tr(message).arg("/" + filePath.path()), IVersionControl::FileAddGitignore);
+        addAction(Tr::tr(message).arg("/" + filePath.path()), IVersionControl::FileIgnore);
         const std::optional<Utils::FilePath> path = filePath.tailRemoved(filePath.fileName());
         if (!path.has_value())
             return;
@@ -382,12 +382,12 @@ void GitSubmitEditorWidget::addFileContextMenuActions(QMenu *menu, const QModelI
         const Utils::FilePath suffixMask = path->stringAppended("*." + suffix);
         QAction *act0 = menu->addAction(Tr::tr(message).arg("/" + suffixMask.path()));
         connect(act0, &QAction::triggered, this, [suffixMask, this] {
-            emit fileActionRequested(suffixMask, IVersionControl::FileAddGitignore);
+            emit fileActionRequested(suffixMask, IVersionControl::FileIgnore);
         });
         const Utils::FilePath nameMask = path->stringAppended(baseName + ".*");
         QAction *act1 = menu->addAction(Tr::tr(message).arg("/" + nameMask.path()));
         connect(act1, &QAction::triggered, this, [nameMask, this] {
-            emit fileActionRequested(nameMask, IVersionControl::FileAddGitignore);
+            emit fileActionRequested(nameMask, IVersionControl::FileIgnore);
         });
     }
 }
