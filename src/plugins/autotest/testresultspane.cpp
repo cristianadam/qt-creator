@@ -826,6 +826,11 @@ bool TestResultsPane::expandIntermediate() const
     return !m_pendingRunner.isRunning() && m_expandCollapse->isChecked();
 }
 
+void TestResultsPane::aboutToShutdown()
+{
+    m_pendingRunner.cancel();
+}
+
 struct ExpandedRows
 {
     int row;
