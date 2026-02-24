@@ -44,7 +44,6 @@ public:
     FontSettingsPage m_fontSettingsPage{&m_fontSettings, initialFormats()};
     BehaviorSettingsPage m_behaviorSettingsPage;
     DisplaySettingsPage m_displaySettingsPage;
-    HighlighterSettingsPage m_highlighterSettingsPage;
     SnippetsSettingsPage m_snippetsSettingsPage;
     CompletionSettingsPage m_completionSettingsPage;
     CommentsSettingsPage m_commentsSettingsPage;
@@ -479,11 +478,6 @@ const DisplaySettings &TextEditorSettings::displaySettings()
 const CompletionSettings &TextEditorSettings::completionSettings()
 {
     return d->m_completionSettingsPage.completionSettings();
-}
-
-const HighlighterSettingsData &TextEditorSettings::highlighterSettings()
-{
-    return d->m_highlighterSettingsPage.highlighterSettings();
 }
 
 void TextEditorSettings::setCommentsSettingsRetriever(

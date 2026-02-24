@@ -42,7 +42,7 @@ static KSyntaxHighlighting::Repository *highlightRepository()
     if (!repository) {
         repository = new KSyntaxHighlighting::Repository();
         repository->addCustomSearchPath(
-            TextEditorSettings::highlighterSettings().definitionFilesPath().toUrlishString());
+            highlighterSettings().definitionFilesPath().toFSPathString());
         const FilePath dir = Core::ICore::resourcePath("generic-highlighter/syntax");
         if (dir.exists())
             repository->addCustomSearchPath(dir.parentDir().path());
