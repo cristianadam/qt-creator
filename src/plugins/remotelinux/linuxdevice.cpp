@@ -1583,7 +1583,8 @@ QString LinuxDevice::deviceStateToString() const
 
 bool LinuxDevice::isDisconnected() const
 {
-    return deviceState() == IDevice::DeviceDisconnected;
+    const auto state = deviceState();
+    return state == IDevice::DeviceDisconnected || state == IDevice::DeviceStateUnknown;
 }
 
 void LinuxDevice::tryToConnect(const Continuation<> &cont) const
