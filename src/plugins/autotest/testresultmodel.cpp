@@ -328,16 +328,14 @@ void TestResultItem::updateResult(bool &changed, ResultType addedChildType,
 TestResultItem *TestResultItem::intermediateFor(const TestResultItem *item) const
 {
     QTC_ASSERT(item, return nullptr);
+    if (!hasChildren())
+        return nullptr;
+    TestResultItem *child = static_cast<TestResultItem *>(lastChild());
+    const TestResult testResult = child->testResult();
+    if (testResult.result() != ResultType::TestStart)
+        return nullptr;
     const TestResult otherResult = item->testResult();
-    for (int row = childCount() - 1; row >= 0; --row) {
-        TestResultItem *child = childAt(row);
-        const TestResult testResult = child->testResult();
-        if (testResult.result() != ResultType::TestStart)
-            continue;
-        if (testResult.isIntermediateFor(otherResult))
-            return child;
-    }
-    return nullptr;
+    return testResult.isIntermediateFor(otherResult) ? child : nullptr;
 }
 
 TestResultItem *TestResultItem::createAndAddIntermediateFor(const TestResultItem *child)

@@ -2062,7 +2062,7 @@ void TextEditorWidgetPrivate::clearCurrentSuggestion()
 void TextEditorWidgetPrivate::updateSuggestionActions()
 {
     const bool hasSuggestion = m_suggestionBlock.isValid();
-    for (QAction *action : m_suggestionActions)
+    for (QAction *action : std::as_const(m_suggestionActions))
         action->setEnabled(hasSuggestion);
 }
 
@@ -5852,7 +5852,7 @@ void TextEditorWidgetPrivate::paintLineHighlight(const PaintEventData &data, QPa
             = m_document->fontSettings().toTextCharFormat(C_CURRENT_LINE).background().color();
         color.setAlpha(128);
         QSet<int> seenLines;
-        for (const QTextCursor &cursor : cursorsForBlock) {
+        for (const QTextCursor &cursor : std::as_const(cursorsForBlock)) {
             QTextLine line = data.block.layout()->lineForTextPosition(cursor.positionInBlock());
             if (!Utils::insert(seenLines, line.lineNumber()))
                 continue;

@@ -42,9 +42,14 @@ MinimapOverlay::MinimapOverlay(PlainTextEdit *editor)
         this,
         &MinimapOverlay::onDocumentChanged);
 
+    // Minimap is outside the editor's viewport and needs a repaint when the editor is painted
+    connect(editor, &PlainTextEdit::updateRequest, this, [this] { update(); }, Qt::QueuedConnection);
+
     m_updateTimer.setSingleShot(true);
     m_updateTimer.setInterval(30);
     connect(&m_updateTimer, &QTimer::timeout, this, &MinimapOverlay::updateImage);
+
+    setAutoFillBackground(true);
 
     scheduleUpdate();
 }
@@ -73,7 +78,7 @@ void MinimapOverlay::paintMinimap(QPainter *painter) const
         int srcY = qRound(scrollFraction * (m_minimap.height() - geo.height()));
         const QRect srcRect(0, srcY, geo.width(), geo.height());
 
-        painter->drawImage(geo, m_minimap, srcRect);
+        painter->drawImage(geo.topLeft(), m_minimap.copy(srcRect));
     } else {
         painter->drawImage(geo.topLeft(), m_minimap);
     }
@@ -257,6 +262,7 @@ void MinimapOverlay::updateImage()
     }
 
     m_minimap = img;
+    update();
 }
 
 
@@ -375,8 +381,6 @@ void MinimapOverlay::wheelEvent(QWheelEvent *event)
 
     QApplication::sendEvent(m_vScroll, &forwarded);
     event->accept();
-
-    QMetaObject::invokeMethod(this, QOverload<>::of(&QWidget::update), Qt::QueuedConnection);
 }
 
 void MinimapOverlay::paintEvent(QPaintEvent *paintEvent)
@@ -410,18 +414,9 @@ bool MinimapOverlay::eventFilter(QObject *object, QEvent *event)
     case QEvent::Hide:
         hide();
         break;
-    case QEvent::MouseMove:
-    case QEvent::Wheel:
-    case QEvent::MouseButtonPress:
-    case QEvent::MouseButtonRelease:
-        break;
     default:
         break;
     }
-
-    // Minimap is outside the editor's viewport and needs a repaint when the editor is painted
-    if (event->type() == QEvent::Paint)
-        QMetaObject::invokeMethod(this, QOverload<>::of(&QWidget::update), Qt::QueuedConnection);
 
     return QWidget::eventFilter(object, event);
 }

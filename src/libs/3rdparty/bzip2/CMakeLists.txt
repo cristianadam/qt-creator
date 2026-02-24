@@ -18,7 +18,7 @@ if (MSVC)
   target_compile_options(qtcBZip2 PUBLIC /wd4244 /wd4267 /wd4996)
 else()
   # Disable warnings
-  if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     target_compile_options(qtcBZip2 PRIVATE "-Wno-unused-parameter")
   elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(qtcBZip2 PRIVATE "-Wimplicit-fallthrough=0" "-Wno-unused-parameter")

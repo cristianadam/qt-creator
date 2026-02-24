@@ -162,7 +162,7 @@ signals:
     void contentsChangedWithPosition(int position, int charsRemoved, int charsAdded);
     void tabSettingsChanged();
     void fontSettingsChanged();
-    void markRemoved(TextMark *mark);
+    void markRemoved(TextEditor::TextMark *mark);
 
 protected:
     virtual void applyFontSettings();

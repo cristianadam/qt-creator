@@ -3717,6 +3717,12 @@ bool Parser::parseFoldExpression(ExpressionAST *&node)
 bool Parser::parseStatement(StatementAST *&node, bool blockLabeledStatement)
 {
     DEBUG_THIS_RULE();
+
+    if (_languageFeatures.cxx20Enabled) {
+        SpecifierListAST *attrs;
+        parseAttributeSpecifier(attrs);
+    }
+
     switch (LA()) {
     case T_WHILE:
         return parseWhileStatement(node);
@@ -4485,11 +4491,11 @@ bool Parser::lookAtStorageClassSpecifier() const
     case T___THREAD:
         return true;
     case T_THREAD_LOCAL:
-        return _languageFeatures.cxx11Enabled;
     case T_CONSTEXPR:
-        if (_languageFeatures.cxx11Enabled)
-            return true;
-        Q_FALLTHROUGH();
+        return _languageFeatures.cxx11Enabled;
+    case T_CONSTINIT:
+    case T_CONSTEVAL:
+        return _languageFeatures.cxx20Enabled;
     default:
         return false;
     }

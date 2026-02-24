@@ -77,7 +77,7 @@ WebAssemblySettings::WebAssemblySettings()
         m_statusIsEmsdkDir = new InfoLabel(Tr::tr("The chosen directory is an emsdk location."));
         m_statusSdkInstalled = new InfoLabel(Tr::tr("An SDK is installed."));
         m_statusSdkActivated = new InfoLabel(Tr::tr("An SDK is activated."));
-        m_statusSdkInvalid = new InfoLabel({}, InfoLabel::NotOk);
+        m_statusSdkInvalid = new InfoLabel({}, InfoLabel::Error);
         m_statusSdkInvalid->setWordWrap(true);
         m_statusSdkInvalid->setElideMode(Qt::ElideNone);
 

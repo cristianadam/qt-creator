@@ -84,6 +84,8 @@ public:
 
     bool expandIntermediate() const;
 
+    void aboutToShutdown();
+
 private:
     void addTestResult(const TestResult &result);
     void handleNextBuffered();

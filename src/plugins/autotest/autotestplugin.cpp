@@ -591,6 +591,7 @@ public:
     ShutdownFlag aboutToShutdown() final
     {
         dd->m_testCodeParser.aboutToShutdown(true);
+        dd->m_resultsPane->aboutToShutdown();
         disconnect(dd->m_testTreeModelConnection);
         return SynchronousShutdown;
     }
