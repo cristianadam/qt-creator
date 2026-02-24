@@ -131,7 +131,7 @@ func processFind(cmd command, out chan<- []byte) {
 		if len(cmd.Find.NameFilters) > 0 {
 			hasMatch = false
 			for _, filter := range cmd.Find.NameFilters {
-				match, _ := filepath.Match(filter, info.Name());
+				match, _ := filepath.Match(filter, path);
 				if match {
 					hasMatch = true
 					break
@@ -142,7 +142,6 @@ func processFind(cmd command, out chan<- []byte) {
 		if !hasMatch {
 			return skipdir
 		}
-
 
 		result, err := cbor.Marshal(finddata{
 			Type:    "finddata",
