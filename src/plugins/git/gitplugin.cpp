@@ -1388,30 +1388,7 @@ void GitPluginPrivate::gitkForCurrentFolder()
 {
     const VcsBasePluginState state = currentState();
     QTC_ASSERT(state.hasFile(), return);
-
-    /*
-     *  entire lower part of the code can be easily replaced with one line:
-     *
-     *  gitClient().launchGitK(dir.currentFileDirectory(), ".");
-     *
-     *  However, there is a bug in gitk in version 1.7.9.5, and if you run above
-     *  command, there will be no documents listed in lower right section.
-     *
-     *  This is why I use lower combination in order to avoid this problems in gitk.
-     *
-     *  Git version 1.7.10.4 does not have this issue, and it can easily use
-     *  one line command mentioned above.
-     *
-     */
-    QDir dir(state.currentFileDirectory().toUrlishString());
-    if (QFileInfo(dir,".git").exists() || dir.cd(".git")) {
-        gitClient().launchGitK(state.currentFileDirectory());
-    } else {
-        QString folderName = dir.absolutePath();
-        dir.cdUp();
-        folderName = folderName.remove(0, dir.absolutePath().size() + 1);
-        gitClient().launchGitK(FilePath::fromString(dir.absolutePath()), folderName);
-    }
+    gitClient().launchGitK(state.currentFileDirectory(), ".");
 }
 
 void GitPluginPrivate::gitGui()
