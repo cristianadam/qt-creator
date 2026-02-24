@@ -431,7 +431,9 @@ void setupResources(QObject *guard, Mcp::Server &server, QParallelTaskTreeRunner
                 task.setConcurrentCallData(
                     [](const FilePath &base) -> FilePaths {
                         FilePath searchDir = base;
+                        QString start = "";
                         if (!searchDir.exists()) {
+                            start = searchDir.fileName();
                             searchDir = searchDir.parentDir();
                         }
                         qCDebug(mcpPlugin) << "Searching in:" << searchDir;
@@ -439,13 +441,15 @@ void setupResources(QObject *guard, Mcp::Server &server, QParallelTaskTreeRunner
                             qCWarning(mcpPlugin) << "Search directory does not exist:" << searchDir;
                             return {};
                         }
-                        return searchDir.dirEntries(QDir::AllEntries | QDir::NoDotAndDotDot);
+                        auto patterns = start.isEmpty() ? QStringList{} : QStringList{start + "*"};
+                        return searchDir.dirEntries(
+                            {patterns, QDir::AllEntries | QDir::NoDotAndDotDot});
                     },
                     FilePath::fromUserInput(actual));
             };
 
             const auto onDone = [cb, anchorDir](const Async<FilePaths> &task) {
-                const FilePaths paths = task.result();
+                const FilePaths paths = task.result().mid(0, 100); // Limit to first 100 results
                 qCDebug(mcpPlugin) << "Completion search found" << paths.size() << "results";
                 Mcp::Schema::CompleteResult::Completion completions;
                 for (const FilePath &path : paths) {
