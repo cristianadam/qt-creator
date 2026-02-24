@@ -7,7 +7,7 @@
 
 namespace TextEditor {
 
-class HighlighterSettings;
+class HighlighterSettingsData;
 
 class HighlighterSettingsPage final : public Core::IOptionsPage
 {
@@ -15,7 +15,7 @@ public:
     HighlighterSettingsPage();
     ~HighlighterSettingsPage() override;
 
-    const HighlighterSettings &highlighterSettings() const;
+    const HighlighterSettingsData &highlighterSettings() const;
 
 private:
     class HighlighterSettingsPagePrivate *d;

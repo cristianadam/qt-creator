@@ -481,7 +481,7 @@ const CompletionSettings &TextEditorSettings::completionSettings()
     return d->m_completionSettingsPage.completionSettings();
 }
 
-const HighlighterSettings &TextEditorSettings::highlighterSettings()
+const HighlighterSettingsData &TextEditorSettings::highlighterSettings()
 {
     return d->m_highlighterSettingsPage.highlighterSettings();
 }

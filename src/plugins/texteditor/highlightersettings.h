@@ -17,10 +17,10 @@ class QtcSettings;
 
 namespace TextEditor {
 
-class HighlighterSettings
+class HighlighterSettingsData final
 {
 public:
-    HighlighterSettings() = default;
+    HighlighterSettingsData() = default;
 
     void toSettings(const Utils::Key &category, Utils::QtcSettings *s) const;
     void fromSettings(const Utils::Key &category, Utils::QtcSettings *s);
@@ -32,12 +32,12 @@ public:
     QString ignoredFilesPatterns() const;
     bool isIgnoredFilePattern(const QString &fileName) const;
 
-    bool equals(const HighlighterSettings &highlighterSettings) const;
+    bool equals(const HighlighterSettingsData &highlighterSettings) const;
 
-    friend bool operator==(const HighlighterSettings &a, const HighlighterSettings &b)
+    friend bool operator==(const HighlighterSettingsData &a, const HighlighterSettingsData &b)
     { return a.equals(b); }
 
-    friend bool operator!=(const HighlighterSettings &a, const HighlighterSettings &b)
+    friend bool operator!=(const HighlighterSettingsData &a, const HighlighterSettingsData &b)
     { return !a.equals(b); }
 
 private:

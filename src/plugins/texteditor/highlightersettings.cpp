@@ -23,7 +23,7 @@ static Key groupSpecifier(const Key &postFix, const Key &category)
     return Key(category + postFix);
 }
 
-void HighlighterSettings::toSettings(const Key &category, QtcSettings *s) const
+void HighlighterSettingsData::toSettings(const Key &category, QtcSettings *s) const
 {
     const Key group = groupSpecifier(Constants::HIGHLIGHTER_SETTINGS_CATEGORY, category);
     s->beginGroup(group);
@@ -32,7 +32,7 @@ void HighlighterSettings::toSettings(const Key &category, QtcSettings *s) const
     s->endGroup();
 }
 
-void HighlighterSettings::fromSettings(const Key &category, QtcSettings *s)
+void HighlighterSettingsData::fromSettings(const Key &category, QtcSettings *s)
 {
     const Key group = groupSpecifier(Constants::HIGHLIGHTER_SETTINGS_CATEGORY, category);
     s->beginGroup(group);
@@ -48,17 +48,17 @@ void HighlighterSettings::fromSettings(const Key &category, QtcSettings *s)
     s->endGroup();
 }
 
-void HighlighterSettings::setIgnoredFilesPatterns(const QString &patterns)
+void HighlighterSettingsData::setIgnoredFilesPatterns(const QString &patterns)
 {
     setExpressionsFromList(patterns.split(',', Qt::SkipEmptyParts));
 }
 
-QString HighlighterSettings::ignoredFilesPatterns() const
+QString HighlighterSettingsData::ignoredFilesPatterns() const
 {
     return listFromExpressions().join(',');
 }
 
-void HighlighterSettings::assignDefaultIgnoredPatterns()
+void HighlighterSettingsData::assignDefaultIgnoredPatterns()
 {
     setExpressionsFromList({"*.txt",
                             "LICENSE*",
@@ -69,14 +69,14 @@ void HighlighterSettings::assignDefaultIgnoredPatterns()
                             "qmldir"});
 }
 
-void HighlighterSettings::assignDefaultDefinitionsPath()
+void HighlighterSettingsData::assignDefaultDefinitionsPath()
 {
     const FilePath path = Core::ICore::userResourcePath("generic-highlighter");
     if (path.exists() || path.ensureWritableDir())
         m_definitionFilesPath = path;
 }
 
-bool HighlighterSettings::isIgnoredFilePattern(const QString &fileName) const
+bool HighlighterSettingsData::isIgnoredFilePattern(const QString &fileName) const
 {
     for (const QRegularExpression &regExp : m_ignoredFiles)
         if (fileName.indexOf(regExp) != -1)
@@ -85,13 +85,13 @@ bool HighlighterSettings::isIgnoredFilePattern(const QString &fileName) const
     return false;
 }
 
-bool HighlighterSettings::equals(const HighlighterSettings &highlighterSettings) const
+bool HighlighterSettingsData::equals(const HighlighterSettingsData &highlighterSettings) const
 {
     return m_definitionFilesPath == highlighterSettings.m_definitionFilesPath &&
            m_ignoredFiles == highlighterSettings.m_ignoredFiles;
 }
 
-void HighlighterSettings::setExpressionsFromList(const QStringList &patterns)
+void HighlighterSettingsData::setExpressionsFromList(const QStringList &patterns)
 {
     m_ignoredFiles.clear();
     QRegularExpression regExp;
@@ -102,7 +102,7 @@ void HighlighterSettings::setExpressionsFromList(const QStringList &patterns)
     }
 }
 
-QStringList HighlighterSettings::listFromExpressions() const
+QStringList HighlighterSettingsData::listFromExpressions() const
 {
     QStringList patterns;
     for (const QRegularExpression &regExp : m_ignoredFiles)

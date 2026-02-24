@@ -40,7 +40,7 @@ public:
     bool m_initialized = false;
     const Key m_settingsPrefix{"Text"};
 
-    HighlighterSettings m_settings;
+    HighlighterSettingsData m_settings;
 
     QPointer<HighlighterSettingsPageWidget> m_widget;
 };
@@ -155,7 +155,7 @@ HighlighterSettingsPage::~HighlighterSettingsPage()
     delete d;
 }
 
-const HighlighterSettings &HighlighterSettingsPage::highlighterSettings() const
+const HighlighterSettingsData &HighlighterSettingsPage::highlighterSettings() const
 {
     d->ensureInitialized();
     return d->m_settings;

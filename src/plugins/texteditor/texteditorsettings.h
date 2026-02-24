@@ -26,7 +26,7 @@ class BehaviorSettings;
 class MarginSettings;
 class DisplaySettings;
 class CompletionSettings;
-class HighlighterSettings;
+class HighlighterSettingsData;
 class ExtraEncodingSettings;
 class ICodeStylePreferences;
 class ICodeStylePreferencesFactory;
@@ -52,7 +52,7 @@ public:
     static const MarginSettings &marginSettings();
     static const DisplaySettings &displaySettings();
     static const CompletionSettings &completionSettings();
-    static const HighlighterSettings &highlighterSettings();
+    static const HighlighterSettingsData &highlighterSettings();
 
     static void setCommentsSettingsRetriever(
         const std::function<CommentsSettings::Data(const Utils::FilePath &)> &);
