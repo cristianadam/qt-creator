@@ -16,6 +16,8 @@ QtcPlugin {
         "abstractremotelinuxdeploystep.h",
         "deploymenttimeinfo.cpp",
         "deploymenttimeinfo.h",
+        "connectdevicestep.cpp",
+        "connectdevicestep.h",
         "customcommanddeploystep.cpp",
         "customcommanddeploystep.h",
         "genericdeploystep.cpp",

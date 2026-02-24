@@ -114,6 +114,7 @@ public:
             return prj->deploymentKnowledge() == DeploymentKnowledge::Bad
                    && prj->hasMakeInstallEquivalent();
         });
+        addInitialStep(RemoteLinux::Constants::ConnectStepId);
         addInitialStep(Qdb::Constants::QdbStopApplicationStepId);
 #ifdef Q_OS_WIN
         addInitialStep(RemoteLinux::Constants::DirectUploadStepId);

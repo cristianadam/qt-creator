@@ -3,6 +3,7 @@
 
 #include "remotelinuxdeploysupport.h"
 
+#include "connectdevicestep.h"
 #include "genericdeploystep.h"
 #include "genericdirectuploadstep.h"
 #include "makeinstallstep.h"
@@ -46,8 +47,10 @@ public:
         setupGenericDirectUploadStep();
         setupGenericDeployStep();
         setupMakeInstallStep();
+        setupConnectDeviceStep();
 
         addInitialStep(Constants::MakeInstallStepId, needsMakeInstall);
+        addInitialStep(Constants::ConnectStepId);
         addInitialStep(Constants::KillAppStepId);
         addInitialStep(Constants::GenericDeployStepId);
     }

@@ -10,6 +10,7 @@ const char GenericLinuxOsType[] = "GenericLinuxOsType";
 
 const char DeployToGenericLinux[] = "DeployToGenericLinux";
 
+const char ConnectStepId[] = "RemoteLinux.ConnectStep";
 const char DirectUploadStepId[] = "RemoteLinux.DirectUploadStep";
 const char MakeInstallStepId[] = "RemoteLinux.MakeInstall";
 const char TarPackageCreationStepId[]  = "MaemoTarPackageCreationStep";
