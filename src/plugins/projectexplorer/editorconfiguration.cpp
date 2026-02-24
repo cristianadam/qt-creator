@@ -53,14 +53,15 @@ struct EditorConfigurationPrivate
     BehaviorSettings m_behaviorSettings;
     bool m_useGlobal = true;
     ExtraEncodingSettings m_extraEncodingSettings;
-    MarginSettingsData m_marginSettings;
     TextEncoding m_textEncoding;
 
     QMap<Utils::Id, ICodeStylePreferences *> m_languageCodeStylePreferences;
     QList<Core::IEditor *> m_editors;
 };
 
-EditorConfiguration::EditorConfiguration() : d(std::make_unique<EditorConfigurationPrivate>())
+EditorConfiguration::EditorConfiguration()
+    : marginSettings(kPrefix)
+    , d(std::make_unique<EditorConfigurationPrivate>())
 {
     const QMap<Utils::Id, ICodeStylePreferences *> languageCodeStylePreferences = TextEditorSettings::codeStyles();
     for (auto itCodeStyle = languageCodeStylePreferences.cbegin(), end = languageCodeStylePreferences.cend();
@@ -109,7 +110,7 @@ void EditorConfiguration::cloneGlobalSettings()
     setStorageSettings(globalStorageSettings());
     setBehaviorSettings(globalBehaviorSettings());
     setExtraEncodingSettings(globalExtraEncodingSettings());
-    setMarginSettings(marginSettings());
+    marginSettings.setData(TextEditor::marginSettings().data());
     d->m_textEncoding = Core::EditorManager::defaultTextEncoding();
 }
 
@@ -136,11 +137,6 @@ const BehaviorSettings &EditorConfiguration::behaviorSettings() const
 const ExtraEncodingSettings &EditorConfiguration::extraEncodingSettings() const
 {
     return d->m_extraEncodingSettings;
-}
-
-const MarginSettingsData &EditorConfiguration::marginSettings() const
-{
-    return d->m_marginSettings;
 }
 
 ICodeStylePreferences *EditorConfiguration::codeStyle() const
@@ -194,10 +190,7 @@ Store EditorConfiguration::toMap() const
     toMapWithPrefix(&map, d->m_behaviorSettings.toMap());
     toMapWithPrefix(&map, d->m_extraEncodingSettings.toMap());
 
-    MarginSettings m;
-    m.setData(d->m_marginSettings);
-    m.setSettingsGroup(kPrefix.toByteArray() + m.settingsGroups().front());
-    m.toMap(inner);
+    marginSettings.toMap(map);
 
     return map;
 }
@@ -233,11 +226,7 @@ void EditorConfiguration::fromMap(const Store &map)
     d->m_storageSettings.fromMap(submap);
     d->m_behaviorSettings.fromMap(submap);
     d->m_extraEncodingSettings.fromMap(submap);
-
-    MarginSettings m;
-    m.setSettingsGroup(kPrefix.toByteArray() + m.settingsGroups().front());
-    m.fromMap(submap);
-    d->m_marginSettings = m.data();
+    marginSettings.fromMap(map);
 
     setUseGlobalSettings(map.value(kUseGlobal, d->m_useGlobal).toBool());
 }
@@ -287,8 +276,6 @@ template<typename New, typename Old>
 static void switchSettings_helper(const New *newSender, const Old *oldSender,
                                   TextEditorWidget *widget)
 {
-    QObject::disconnect(oldSender, &Old::marginSettingsChanged,
-                        widget, &TextEditorWidget::setMarginSettings);
     QObject::disconnect(oldSender, &Old::typingSettingsChanged,
                         widget, &TextEditorWidget::setTypingSettings);
     QObject::disconnect(oldSender, &Old::storageSettingsChanged,
@@ -298,8 +285,6 @@ static void switchSettings_helper(const New *newSender, const Old *oldSender,
     QObject::disconnect(oldSender, &Old::extraEncodingSettingsChanged,
                         widget, &TextEditorWidget::setExtraEncodingSettings);
 
-    QObject::connect(newSender, &New::marginSettingsChanged,
-                     widget, &TextEditorWidget::setMarginSettings);
     QObject::connect(newSender, &New::typingSettingsChanged,
                      widget, &TextEditorWidget::setTypingSettings);
     QObject::connect(newSender, &New::storageSettingsChanged,
@@ -320,7 +305,7 @@ void EditorConfiguration::switchSettings(TextEditorWidget *widget) const
         widget->setExtraEncodingSettings(globalExtraEncodingSettings());
         switchSettings_helper(TextEditorSettings::instance(), this, widget);
     } else {
-        widget->setMarginSettings(marginSettings());
+        widget->setMarginSettings(marginSettings.data());
         widget->setTypingSettings(typingSettings());
         widget->setStorageSettings(storageSettings());
         widget->setBehaviorSettings(behaviorSettings());
@@ -353,49 +338,9 @@ void EditorConfiguration::setExtraEncodingSettings(const ExtraEncodingSettings &
     emit extraEncodingSettingsChanged(d->m_extraEncodingSettings);
 }
 
-void EditorConfiguration::setMarginSettings(const MarginSettingsData &settings)
-{
-    if (d->m_marginSettings != settings) {
-        d->m_marginSettings = settings;
-        emit marginSettingsChanged(d->m_marginSettings);
-    }
-}
-
 void EditorConfiguration::setTextEncoding(const TextEncoding &textEncoding)
 {
     d->m_textEncoding = textEncoding;
-}
-
-void EditorConfiguration::setShowWrapColumn(bool onoff)
-{
-    if (d->m_marginSettings.m_showMargin != onoff) {
-        d->m_marginSettings.m_showMargin = onoff;
-        emit marginSettingsChanged(d->m_marginSettings);
-    }
-}
-
-void EditorConfiguration::setTintMarginArea(bool onoff)
-{
-    if (d->m_marginSettings.m_tintMarginArea != onoff) {
-        d->m_marginSettings.m_tintMarginArea = onoff;
-        emit marginSettingsChanged(d->m_marginSettings);
-    }
-}
-
-void EditorConfiguration::setUseIndenter(bool onoff)
-{
-    if (d->m_marginSettings.m_useIndenter != onoff) {
-        d->m_marginSettings.m_useIndenter = onoff;
-        emit marginSettingsChanged(d->m_marginSettings);
-    }
-}
-
-void EditorConfiguration::setWrapColumn(int column)
-{
-    if (d->m_marginSettings.m_marginColumn != column) {
-        d->m_marginSettings.m_marginColumn = column;
-        emit marginSettingsChanged(d->m_marginSettings);
-    }
 }
 
 void EditorConfiguration::slotAboutToRemoveProject(Project *project)

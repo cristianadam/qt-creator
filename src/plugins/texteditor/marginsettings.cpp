@@ -18,31 +18,32 @@ MarginSettings &marginSettings()
     return theMarginSettings;
 }
 
-MarginSettings::MarginSettings()
+MarginSettings::MarginSettings(const Key &keyPrefix)
 {
-    setAutoApply(false);
+    const bool isGlobal = keyPrefix.isEmpty();
+    setAutoApply(!isGlobal);
 
     setSettingsGroup("textMarginSettings");
 
-    showMargin.setSettingsKey("ShowMargin");
+    showMargin.setSettingsKey(keyPrefix + "ShowMargin");
     showMargin.setDefaultValue(false);
     showMargin.setLabelText(Tr::tr("Display right &margin after column:"));
 
-    tintMarginArea.setSettingsKey("tintMarginArea");
+    tintMarginArea.setSettingsKey(keyPrefix + "tintMarginArea");
     tintMarginArea.setDefaultValue(true);
     tintMarginArea.setLabelText(Tr::tr("Tint whole margin area"));
 
-    useIndenter.setSettingsKey("UseIndenter");
+    useIndenter.setSettingsKey(keyPrefix + "UseIndenter");
     useIndenter.setDefaultValue(false);
     useIndenter.setLabelText(Tr::tr("Use context-specific margin"));
     useIndenter.setToolTip(Tr::tr("If available, use a different margin. "
                                   "For example, the ColumnLimit from the ClangFormat plugin."));
 
-    marginColumn.setSettingsKey("MarginColumn");
+    marginColumn.setSettingsKey(keyPrefix + "MarginColumn");
     marginColumn.setDefaultValue(80);
     marginColumn.setRange(0, 999);
 
-    centerEditorContentWidthPercent.setSettingsKey("centeredEditorContentWidthPercent");
+    centerEditorContentWidthPercent.setSettingsKey(keyPrefix + "centeredEditorContentWidthPercent");
     centerEditorContentWidthPercent.setRange(50, 100);
     centerEditorContentWidthPercent.setDefaultValue(100);
     centerEditorContentWidthPercent.setSuffix("%");
@@ -53,7 +54,8 @@ MarginSettings::MarginSettings()
             " text content.<br>Remaining 50% is divided as left and right margins while"
             " centering content"));
 
-    readSettings();
+    if (isGlobal)
+        readSettings();
 
     marginColumn.setEnabler(&showMargin);
     tintMarginArea.setEnabler(&showMargin);

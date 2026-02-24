@@ -12,6 +12,8 @@
 
 #include <memory>
 
+#include <texteditor/marginsettings.h>
+
 namespace TextEditor {
 class BaseTextEditor;
 class TextEditorWidget;
@@ -22,7 +24,6 @@ class TypingSettings;
 class StorageSettings;
 class BehaviorSettings;
 class ExtraEncodingSettings;
-class MarginSettingsData;
 } // namespace TextEditor
 
 namespace Core { class IEditor; }
@@ -56,7 +57,7 @@ public:
     const TextEditor::StorageSettings &storageSettings() const;
     const TextEditor::BehaviorSettings &behaviorSettings() const;
     const TextEditor::ExtraEncodingSettings &extraEncodingSettings() const;
-    const TextEditor::MarginSettingsData &marginSettings() const;
+    TextEditor::MarginSettings marginSettings;
 
     TextEditor::ICodeStylePreferences *codeStyle() const;
     TextEditor::ICodeStylePreferences *codeStyle(Utils::Id languageId) const;
@@ -72,12 +73,6 @@ public:
     void setStorageSettings(const TextEditor::StorageSettings &settings);
     void setBehaviorSettings(const TextEditor::BehaviorSettings &settings);
     void setExtraEncodingSettings(const TextEditor::ExtraEncodingSettings &settings);
-    void setMarginSettings(const TextEditor::MarginSettingsData &settings);
-
-    void setShowWrapColumn(bool onoff);
-    void setTintMarginArea(bool onoff);
-    void setUseIndenter(bool onoff);
-    void setWrapColumn(int column);
 
     void setTextEncoding(const Utils::TextEncoding &textEncoding);
 
@@ -88,7 +83,6 @@ signals:
     void storageSettingsChanged(const TextEditor::StorageSettings &);
     void behaviorSettingsChanged(const TextEditor::BehaviorSettings &);
     void extraEncodingSettingsChanged(const TextEditor::ExtraEncodingSettings &);
-    void marginSettingsChanged(const TextEditor::MarginSettingsData &);
 
 private:
     void switchSettings(TextEditor::TextEditorWidget *baseTextEditor) const;
