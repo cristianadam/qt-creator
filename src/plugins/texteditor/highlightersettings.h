@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <coreplugin/dialogs/ioptionspage.h>
+
 #include <utils/filepath.h>
 
 #include <QString>
@@ -49,6 +51,19 @@ private:
 
     Utils::FilePath m_definitionFilesPath;
     QList<QRegularExpression> m_ignoredFiles;
+};
+
+
+class HighlighterSettingsPage final : public Core::IOptionsPage
+{
+public:
+    HighlighterSettingsPage();
+    ~HighlighterSettingsPage() override;
+
+    const HighlighterSettingsData &highlighterSettings() const;
+
+private:
+    class HighlighterSettingsPagePrivate *d;
 };
 
 } // namespace TextEditor

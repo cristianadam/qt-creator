@@ -12,7 +12,7 @@
 #include "displaysettingspage.h"
 #include "fontsettings.h"
 #include "fontsettingspage.h"
-#include "highlightersettingspage.h"
+#include "highlightersettings.h"
 #include "icodestylepreferences.h"
 #include "icodestylepreferencesfactory.h"
 #include "marginsettings.h"
