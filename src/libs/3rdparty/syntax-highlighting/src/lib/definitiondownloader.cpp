@@ -169,8 +169,8 @@ DefinitionDownloader::~DefinitionDownloader()
 
 void DefinitionDownloader::start()
 {
-    // TODO Uses hardcoded version for now because the kate-editor is not up-to-date
-    const QString url = QLatin1String("https://www.kate-editor.org/syntax/update-6.20.xml");
+    const QString url = QLatin1String("https://www.kate-editor.org/syntax/update-") + QString::number(KSYNTAXHIGHLIGHTING_VERSION_MAJOR) + QLatin1Char('.')
+        + QString::number(KSYNTAXHIGHLIGHTING_VERSION_MINOR) + QLatin1String(".xml");
     auto req = QNetworkRequest(QUrl(url));
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     auto reply = d->nam->get(req);
