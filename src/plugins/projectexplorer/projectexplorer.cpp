@@ -1264,18 +1264,18 @@ Result<> ProjectExplorerPlugin::initialize(const QStringList &arguments)
 
     // Open Terminal actions
     dd->m_openTerminalHereSysEnv = new QAction(Tr::tr("System Environment"), this);
-    cmd = ActionManager::registerAction(dd->m_openTerminalHereSysEnv, Constants::OPENTERMINALHERE,
-                                        projectTreeContext);
+    ActionManager::registerAction(dd->m_openTerminalHereSysEnv, Constants::OPENTERMINALHERE,
+                                  projectTreeContext);
     dd->m_openTerminalMenu->addAction(dd->m_openTerminalHereSysEnv);
     dd->m_openTerminalHereBuildEnv = new QAction(Tr::tr("Build Environment"), this);
     dd->m_openTerminalHereRunEnv = new QAction(Tr::tr("Run Environment"), this);
-    cmd = ActionManager::registerAction(dd->m_openTerminalHereBuildEnv,
-                                        "ProjectExplorer.OpenTerminalHereBuildEnv",
-                                        projectTreeContext);
+    ActionManager::registerAction(dd->m_openTerminalHereBuildEnv,
+                                  "ProjectExplorer.OpenTerminalHereBuildEnv",
+                                  projectTreeContext);
     dd->m_openTerminalMenu->addAction(dd->m_openTerminalHereBuildEnv);
-    cmd = ActionManager::registerAction(dd->m_openTerminalHereRunEnv,
-                                        "ProjectExplorer.OpenTerminalHereRunEnv",
-                                        projectTreeContext);
+    ActionManager::registerAction(dd->m_openTerminalHereRunEnv,
+                                  "ProjectExplorer.OpenTerminalHereRunEnv",
+                                  projectTreeContext);
     dd->m_openTerminalMenu->addAction(dd->m_openTerminalHereRunEnv);
 
     // VCS file submenu
@@ -2491,8 +2491,7 @@ OpenProjectResult ProjectExplorerPlugin::openProjects(const FilePaths &filePaths
             }
         } else {
             appendError(errorString, Tr::tr("Failed opening project \"%1\": No plugin can open project type \"%2\".")
-                        .arg(filePath.toUserOutput())
-                        .arg(mt.name()));
+                        .arg(filePath.toUserOutput(), mt.name()));
         }
         if (filePaths.size() > 1)
             SessionManager::sessionLoadingProgress();
@@ -2588,7 +2587,7 @@ void ProjectExplorerPluginPrivate::executeRunConfigurationPhase2
         runConfigIssues << runConfiguration->checkForIssues();
 
     if (!runConfigIssues.isEmpty()) {
-        for (const Task &t : runConfigIssues)
+        for (const Task &t : std::as_const(runConfigIssues))
             TaskHub::addTask(t);
         // TODO: Insert an extra task with a "link" to the run settings page?
         TaskHub::requestPopup();
@@ -3116,7 +3115,8 @@ void ProjectExplorerPluginPrivate::updateDocumentOpenerMimeTypes()
 QStringList ProjectExplorerPluginPrivate::projectMimeTypes()
 {
     auto projectMimeTypes = Utils::toSet(dd->m_projectCreators.keys());
-    for (auto pluginMimeTypes : dd->unloadedPluginProjectMimeTypes())
+    const QList<PluginProjectMimeType> unloadedTypes = dd->unloadedPluginProjectMimeTypes();
+    for (auto &pluginMimeTypes : unloadedTypes)
         projectMimeTypes.insert(pluginMimeTypes.mimeType);
     return Utils::toList(projectMimeTypes);
 }
@@ -3768,7 +3768,7 @@ void ProjectExplorerPluginPrivate::updateLocationSubMenus()
         const FilePath path = li.path;
         QString displayName = fn->filePath() == li.path
                                   ? li.displayName
-                                  : Tr::tr("%1 in %2").arg(li.displayName).arg(li.path.toUserOutput());
+                                  : Tr::tr("%1 in %2").arg(li.displayName, li.path.toUserOutput());
         auto *action = new QAction(displayName, nullptr);
         connect(action, &QAction::triggered, this, [line, path] {
             EditorManager::openEditorAt(Link(path, line), {}, EditorManager::AllowExternalEditor);

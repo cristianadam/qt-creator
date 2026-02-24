@@ -109,9 +109,15 @@ void setCheckSettingsDirtyHook(const std::function<void ()> &hook)
 
 void markSettingsDirty()
 {
-    QTC_ASSERT(s_markSettingDirtyHook, return);
+    // This can happen if per-project settings are opened before
+    // the settings mode was entered. The hook is not installed at
+    // that time, and it's ok to do nothing.
+    if (!s_markSettingDirtyHook)
+        return;
+
     if (s_suppressSettingsDirtyTrigger)
         return;
+
     s_markSettingDirtyHook(true);
 }
 

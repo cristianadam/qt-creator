@@ -696,7 +696,9 @@
         "Version": "1.0.8",
         "License": "bzip2 and libbzip2 License v1.0.6",
         "LicenseFile": "@SOURCE_DIR@/src/libs/3rdparty/bzip2/LICENSE",
-        "Copyright": "copyright (C) 1996-2019 Julian R Seward."
+        "Copyright": "copyright (C) 1996-2019 Julian R Seward.",
+        "DownloadLocation": "https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz",
+        "SecurityCritical": true
     },
     {
         "Id": "xz",
@@ -707,10 +709,12 @@
         "Path": "@SOURCE_DIR@/src/libs/3rdparty/xz",
         "Description": "XZ is a lossless data-compression library.",
         "Homepage": "https://tukaani.org/xz/",
-        "Version": "5.6.3",
+        "Version": "5.8.2",
         "License": "BSD Zero Clause License (0BSD)",
         "LicenseFile": "@SOURCE_DIR@/src/libs/3rdparty/xz/COPYING",
-        "Copyright": "Copyright (C) The XZ Utils authors and contributors"
+        "Copyright": "Copyright (C) The XZ Utils authors and contributors",
+        "DownloadLocation": "https://github.com/tukaani-project/xz/tree/v5.8.2",
+        "SecurityCritical": true
     },
     {
         "Id": "libarchive",

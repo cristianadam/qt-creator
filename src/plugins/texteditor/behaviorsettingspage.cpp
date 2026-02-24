@@ -159,8 +159,8 @@ void BehaviorSettingsWidgetImpl::apply()
     updateGlobalExtraEncodingSettings(newExtraEncodingSettings);
 
     QtcSettings *s = Core::ICore::settings();
-    s->setValue(Core::Constants::SETTINGS_DEFAULTTEXTENCODING,
-                d->m_behaviorWidget->assignedCodecName());
+    if (const TextEncoding encoding = d->m_behaviorWidget->currentEncoding(); encoding.isValid())
+        s->setValue(Core::Constants::SETTINGS_DEFAULTTEXTENCODING, encoding.name());
     s->setValue(Core::Constants::SETTINGS_DEFAULT_LINE_TERMINATOR,
                 d->m_behaviorWidget->assignedLineEnding());
 }

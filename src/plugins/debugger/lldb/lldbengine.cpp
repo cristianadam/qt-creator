@@ -210,6 +210,9 @@ void LldbEngine::setupEngine()
         m_lldbProc.setRunAsUser(runParameters().runAsUser());
     }
 
+    if (runParameters().useTerminal() && lldbCmd.osType() == Utils::OsTypeWindows)
+        environment.set("QT_WIN_DEBUG_CONSOLE", "attach");
+
     m_lldbProc.setEnvironment(environment);
 
     if (runParameters().debugger().workingDirectory.isDir())

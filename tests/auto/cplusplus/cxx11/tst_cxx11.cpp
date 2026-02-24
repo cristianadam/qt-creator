@@ -199,6 +199,8 @@ void tst_cxx11::parse_data()
     QTest::newRow("templatetemplate.2") << 2017;
     QTest::newRow("notatemplate") << 2011;
     QTest::newRow("binaryExprAsTemplateArg") << 2011;
+    QTest::newRow("statementAttributes") << 2020;
+    QTest::newRow("constinitconsteval") << 2020;
 }
 
 void tst_cxx11::parse()

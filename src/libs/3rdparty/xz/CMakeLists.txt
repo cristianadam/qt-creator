@@ -13,6 +13,7 @@ add_qtc_library(qtcXz STATIC
     src/liblzma/check/crc32_table.c
     src/liblzma/check/crc64_fast.c
     src/liblzma/check/crc64_table.c
+    src/liblzma/check/crc_clmul_consts_gen.c
     src/liblzma/check/sha256.c
     src/liblzma/common/alone_decoder.c
     src/liblzma/common/alone_encoder.c

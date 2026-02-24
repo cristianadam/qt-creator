@@ -20,8 +20,7 @@ public:
 
     void prependNone();
     Utils::TextEncoding currentEncoding() const;
-    void setAssignedEncoding(const Utils::TextEncoding &encoding, const QString &name = {});
-    QByteArray assignedCodecName() const;
+    void setAssignedEncoding(const Utils::TextEncoding &encoding);
 
 signals:
     void encodingChanged(const Utils::TextEncoding &encoding);
