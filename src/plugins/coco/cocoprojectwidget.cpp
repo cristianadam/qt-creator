@@ -54,29 +54,38 @@ CocoProjectWidget::CocoProjectWidget(Project *project, BuildConfiguration *build
     bold.setBold(true);
     m_saveButton.setFont(bold);
 
-    m_coverageGroupbox
-        = {groupChecker(m_coverageGroupBoxEnabled.groupChecker()),
-           Column{
-               Row{Tr::tr("CoverageScanner options:"), st, docLink},
-               m_optionEdit,
-               Row{PushButton{
-                       text(Tr::tr("Exclude File...")),
-                       onClicked(this, [this] { onExcludeFileButtonClicked(); })},
-                   PushButton{
-                       text(Tr::tr("Exclude Directory...")),
-                       onClicked(this, [this] { onExcludeDirButtonClicked(); })},
-                   m_tweaksButton,
-                   st},
-               m_tweaksDescriptionLabel,
-               m_tweaksEdit,
-               Row{Tr::tr("These settings are stored in"), m_fileNameLabel, st},
-               Group{title(Tr::tr("Changed Build Settings")), Column{m_changesText}}}};
+    m_coverageGroupbox = {
+        groupChecker(m_coverageGroupBoxEnabled.groupChecker()),
+        Column {
+            Row {Tr::tr("CoverageScanner options:"), st, docLink },
+            m_optionEdit,
+            Row {
+                PushButton {
+                    text(Tr::tr("Exclude File...")),
+                    onClicked(this, [this] { onExcludeFileButtonClicked(); })
+                },
+                PushButton {
+                    text(Tr::tr("Exclude Directory...")),
+                    onClicked(this, [this] { onExcludeDirButtonClicked(); })
+                },
+                m_tweaksButton,
+                st
+            },
+            m_tweaksDescriptionLabel,
+            m_tweaksEdit,
+            Row { Tr::tr("These settings are stored in"), m_fileNameLabel, st },
+            Group {
+                title(Tr::tr("Changed Build Settings")),
+                Column { m_changesText }
+            }
+        }
+    };
 
-    Column{
+    Column {
         m_configerrorLabel,
         m_coverageGroupbox,
-        Row{m_messageLabel, st, &m_revertButton, &m_saveButton}}
-        .attachTo(this);
+        Row { m_messageLabel, st, &m_revertButton, &m_saveButton }
+    }.attachTo(this);
 
     m_buildSettings = BuildSettings::createdFor(buildConfig);
     m_buildSettings->connectToProject(this);
