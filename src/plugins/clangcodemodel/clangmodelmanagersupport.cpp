@@ -581,117 +581,123 @@ void ClangModelManagerSupport::updateLanguageClient(Project *project)
 
     const auto onDone = [this, project, projectInfo, jsonDbDir](
                             const Async<GenerateCompilationDbResult> &task) {
-        if (!isProjectDataUpToDate(project, projectInfo, jsonDbDir))
-            return;
         if (!task.isResultAvailable()) {
             MessageManager::writeDisrupting(
                 Tr::tr("Cannot use clangd: Generating compilation database canceled."));
             return;
         }
-        const GenerateCompilationDbResult result = task.result();
-        if (!result) {
+        if (const GenerateCompilationDbResult result = task.result(); !result) {
             MessageManager::writeDisrupting(Tr::tr("Cannot use clangd: "
                 "Failed to generate compilation database:\n%1").arg(result.error()));
             return;
         }
-        Id previousId;
-        if (Client * const oldClient = clientForProject(project)) {
-            previousId = oldClient->id();
-            LanguageClientManager::shutdownClient(oldClient);
-        }
+        doUpdateLanguageClient(project, projectInfo, jsonDbDir);
+    };
+    m_taskTreeRunner.start({
+        AsyncTask<GenerateCompilationDbResult>(onSetup, onDone)
+    });
+}
 
-        if (project && !project->activeBuildConfiguration())
+void ClangModelManagerSupport::doUpdateLanguageClient(
+    ProjectExplorer::Project *project,
+    const CppEditor::ProjectInfoList &projectInfo,
+    const Utils::FilePath &jsonDbDir)
+{
+    if (!isProjectDataUpToDate(project, projectInfo, jsonDbDir))
+        return;
+    Id previousId;
+    if (Client * const oldClient = clientForProject(project)) {
+        previousId = oldClient->id();
+        LanguageClientManager::shutdownClient(oldClient);
+    }
+
+    if (project && !project->activeBuildConfiguration())
+        return;
+
+    BuildConfiguration *bc = project ? project->activeBuildConfiguration() : nullptr;
+    ClangdClient * const client = new ClangdClient(bc, jsonDbDir, previousId);
+    connect(client, &Client::shadowDocumentSwitched, this, [](const FilePath &fp) {
+        ClangdClient::handleUiHeaderChange(fp.fileName());
+    });
+    connect(CppModelManager::instance(),
+            &CppModelManager::projectPartsUpdated,
+            client,
+            [client] { updateParserConfig(client); });
+    connect(client, &Client::initialized, this, [this, client, project, projectInfo, jsonDbDir] {
+        if (!isProjectDataUpToDate(project, projectInfo, jsonDbDir))
             return;
 
-        BuildConfiguration *bc = project ? project->activeBuildConfiguration() : nullptr;
-        ClangdClient * const client = new ClangdClient(bc, jsonDbDir, previousId);
-        connect(client, &Client::shadowDocumentSwitched, this, [](const FilePath &fp) {
-            ClangdClient::handleUiHeaderChange(fp.fileName());
-        });
-        connect(CppModelManager::instance(),
-                &CppModelManager::projectPartsUpdated,
-                client,
-                [client] { updateParserConfig(client); });
-        connect(client, &Client::initialized, this, [this, client, project, projectInfo, jsonDbDir] {
-            if (!isProjectDataUpToDate(project, projectInfo, jsonDbDir))
-                return;
-            using namespace ProjectExplorer;
-
-            // Acquaint the client with all open C++ documents for this project or session.
-            const ClangdSettings settings(ClangdProjectSettings(project).settings());
-            bool hasDocuments = false;
-            for (TextEditor::TextDocument * const doc : allCppDocuments()) {
-                Client * const currentClient = LanguageClientManager::clientForDocument(doc);
-                if (currentClient == client) {
-                    hasDocuments = true;
-                    continue;
-                }
-                if (!settings.sizeIsOkay(doc->filePath()))
-                    continue;
-                if (!project) {
-                    if (currentClient)
-                        currentClient->closeDocument(doc);
-                    LanguageClientManager::openDocumentWithClient(doc, client);
-                    hasDocuments = true;
-                    continue;
-                }
-                const Project * const docProject = ProjectManager::projectForFile(doc->filePath());
-                const BuildConfiguration *currentBc = currentClient ? currentClient->buildConfiguration() : nullptr;
-                Project *currentProject = currentBc ? currentBc->project() : nullptr;
-                if (currentProject != project && currentProject == docProject)
-                    continue;
-
-                if (docProject != project
-                        && (docProject || !ProjectFile::isHeader(doc->filePath()))) {
-                    continue;
-                }
+        // Acquaint the client with all open C++ documents for this project or session.
+        const ClangdSettings settings(ClangdProjectSettings(project).settings());
+        bool hasDocuments = false;
+        for (TextEditor::TextDocument * const doc : allCppDocuments()) {
+            Client * const currentClient = LanguageClientManager::clientForDocument(doc);
+            if (currentClient == client) {
+                hasDocuments = true;
+                continue;
+            }
+            if (!settings.sizeIsOkay(doc->filePath()))
+                continue;
+            if (!project) {
                 if (currentClient)
                     currentClient->closeDocument(doc);
                 LanguageClientManager::openDocumentWithClient(doc, client);
                 hasDocuments = true;
+                continue;
             }
+            const Project * const docProject = ProjectManager::projectForFile(doc->filePath());
+            const BuildConfiguration *currentBc = currentClient ? currentClient->buildConfiguration() : nullptr;
+            Project *currentProject = currentBc ? currentBc->project() : nullptr;
+            if (currentProject != project && currentProject == docProject)
+                continue;
 
-            for (auto it = m_potentialShadowDocuments.begin();
-                 it != m_potentialShadowDocuments.end(); ++it) {
-                if (!fileIsProjectBuildArtifact(client, it.key()))
-                    continue;
-                if (it.value().isEmpty())
-                    client->removeShadowDocument(it.key());
-                else
-                    client->setShadowDocument(it.key(), it.value());
-                ClangdClient::handleUiHeaderChange(it.key().fileName());
+            if (docProject != project
+                && (docProject || !ProjectFile::isHeader(doc->filePath()))) {
+                continue;
             }
+            if (currentClient)
+                currentClient->closeDocument(doc);
+            LanguageClientManager::openDocumentWithClient(doc, client);
+            hasDocuments = true;
+        }
 
-            updateParserConfig(client);
+        for (auto it = m_potentialShadowDocuments.begin();
+             it != m_potentialShadowDocuments.end(); ++it) {
+            if (!fileIsProjectBuildArtifact(client, it.key()))
+                continue;
+            if (it.value().isEmpty())
+                client->removeShadowDocument(it.key());
+            else
+                client->setShadowDocument(it.key(), it.value());
+            ClangdClient::handleUiHeaderChange(it.key().fileName());
+        }
 
-            if (hasDocuments)
-                return;
+        updateParserConfig(client);
 
-            // clangd oddity: Background indexing only starts after opening a random file.
-            // TODO: changes to the compilation db do not seem to trigger re-indexing.
-            //       How to force it?
-            ProjectNode *rootNode = nullptr;
-            if (project)
-                rootNode = project->rootProjectNode();
-            else if (ProjectManager::startupProject())
-                rootNode = ProjectManager::startupProject()->rootProjectNode();
-            if (!rootNode)
-                return;
-            const Node * const cxxNode = rootNode->findNode([](Node *n) {
-                const FileNode * const fileNode = n->asFileNode();
-                return fileNode && (fileNode->fileType() == FileType::Source
-                                    || fileNode->fileType() == FileType::Header)
-                    && fileNode->filePath().exists();
-            });
-            if (!cxxNode)
-                return;
+        if (hasDocuments)
+            return;
 
-            client->openExtraFile(cxxNode->filePath());
-            client->closeExtraFile(cxxNode->filePath());
+        // clangd oddity: Background indexing only starts after opening a random file.
+        // TODO: changes to the compilation db do not seem to trigger re-indexing.
+        //       How to force it?
+        ProjectNode *rootNode = nullptr;
+        if (project)
+            rootNode = project->rootProjectNode();
+        else if (ProjectManager::startupProject())
+            rootNode = ProjectManager::startupProject()->rootProjectNode();
+        if (!rootNode)
+            return;
+        const Node * const cxxNode = rootNode->findNode([](Node *n) {
+            const FileNode * const fileNode = n->asFileNode();
+            return fileNode && (fileNode->fileType() == FileType::Source
+                                || fileNode->fileType() == FileType::Header)
+                   && fileNode->filePath().exists();
         });
-    };
-    m_taskTreeRunner.start({
-        AsyncTask<GenerateCompilationDbResult>(onSetup, onDone)
+        if (!cxxNode)
+            return;
+
+        client->openExtraFile(cxxNode->filePath());
+        client->closeExtraFile(cxxNode->filePath());
     });
 }
 

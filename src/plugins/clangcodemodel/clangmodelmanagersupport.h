@@ -96,6 +96,10 @@ private:
     void connectToWidgetsMarkContextMenuRequested(QWidget *editorWidget);
 
     void updateLanguageClient(ProjectExplorer::Project *project);
+    void doUpdateLanguageClient(
+        ProjectExplorer::Project *project,
+        const CppEditor::ProjectInfoList &projectInfo,
+        const Utils::FilePath &jsonDbDir);
     void claimNonProjectSources(ClangdClient *client);
     void watchForExternalChanges();
     void watchForInternalChanges();
