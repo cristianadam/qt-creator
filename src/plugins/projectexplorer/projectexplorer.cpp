@@ -3093,7 +3093,8 @@ void ProjectExplorerPluginPrivate::updateDocumentOpenerMimeTypes()
 QStringList ProjectExplorerPluginPrivate::projectMimeTypes()
 {
     auto projectMimeTypes = Utils::toSet(dd->m_projectCreators.keys());
-    for (auto pluginMimeTypes : dd->unloadedPluginProjectMimeTypes())
+    const QList<PluginProjectMimeType> unloadedTypes = dd->unloadedPluginProjectMimeTypes();
+    for (auto &pluginMimeTypes : unloadedTypes)
         projectMimeTypes.insert(pluginMimeTypes.mimeType);
     return Utils::toList(projectMimeTypes);
 }
