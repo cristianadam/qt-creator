@@ -3,7 +3,6 @@
 
 #include "highlightersettings.h"
 
-#include "highlighter.h"
 #include "highlighterhelper.h"
 #include "highlightersettings.h"
 #include "texteditorconstants.h"
@@ -16,7 +15,6 @@
 #include <utils/pathchooser.h>
 #include <utils/qtcsettings.h>
 
-#include <QDir>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPointer>
@@ -29,26 +27,21 @@ namespace TextEditor {
 const char kDefinitionFilesPath[] = "UserDefinitionFilesPath";
 const char kIgnoredFilesPatterns[] = "IgnoredFilesPatterns";
 
-static Key groupSpecifier(const Key &postFix, const Key &category)
-{
-    if (category.isEmpty())
-        return postFix;
-    return Key(category + postFix);
-}
+const Key kSettingsGroup{Key("Text") + Key(Constants::HIGHLIGHTER_SETTINGS_CATEGORY)};
 
-void HighlighterSettingsData::toSettings(const Key &category, QtcSettings *s) const
+void HighlighterSettingsData::toSettings() const
 {
-    const Key group = groupSpecifier(Constants::HIGHLIGHTER_SETTINGS_CATEGORY, category);
-    s->beginGroup(group);
+    QtcSettings *s = Core::ICore::settings();
+    s->beginGroup(kSettingsGroup);
     s->setValue(kDefinitionFilesPath, m_definitionFilesPath.toSettings());
     s->setValue(kIgnoredFilesPatterns, ignoredFilesPatterns());
     s->endGroup();
 }
 
-void HighlighterSettingsData::fromSettings(const Key &category, QtcSettings *s)
+void HighlighterSettingsData::fromSettings()
 {
-    const Key group = groupSpecifier(Constants::HIGHLIGHTER_SETTINGS_CATEGORY, category);
-    s->beginGroup(group);
+    QtcSettings *s = Core::ICore::settings();
+    s->beginGroup(kSettingsGroup);
     m_definitionFilesPath = FilePath::fromSettings(s->value(kDefinitionFilesPath));
     if (!s->contains(kDefinitionFilesPath))
         assignDefaultDefinitionsPath();
@@ -133,11 +126,10 @@ public:
         if (m_initialized)
             return;
         m_initialized = true;
-        m_settings.fromSettings(m_settingsPrefix, Core::ICore::settings());
+        m_settings.fromSettings();
     }
 
     bool m_initialized = false;
-    const Key m_settingsPrefix{"Text"};
 
     HighlighterSettingsData m_settings;
 
@@ -229,7 +221,7 @@ public:
         if (changed) {
             d->m_settings.setDefinitionFilesPath(m_definitionFilesPath->filePath());
             d->m_settings.setIgnoredFilesPatterns(m_ignoreEdit->text());
-            d->m_settings.toSettings(d->m_settingsPrefix, Core::ICore::settings());
+            d->m_settings.toSettings();
         }
     }
 

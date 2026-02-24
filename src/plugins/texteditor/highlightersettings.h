@@ -12,11 +12,6 @@
 #include <QList>
 #include <QRegularExpression>
 
-namespace Utils {
-class Key;
-class QtcSettings;
-} // Utils
-
 namespace TextEditor {
 
 class HighlighterSettingsData final
@@ -24,8 +19,8 @@ class HighlighterSettingsData final
 public:
     HighlighterSettingsData() = default;
 
-    void toSettings(const Utils::Key &category, Utils::QtcSettings *s) const;
-    void fromSettings(const Utils::Key &category, Utils::QtcSettings *s);
+    void toSettings() const;
+    void fromSettings();
 
     void setDefinitionFilesPath(const Utils::FilePath &path) { m_definitionFilesPath = path; }
     const Utils::FilePath &definitionFilesPath() const { return m_definitionFilesPath; }
