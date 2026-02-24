@@ -103,6 +103,12 @@ void MinimapOverlay::scheduleUpdate()
         m_updateTimer.start();
 }
 
+void MinimapOverlay::setOverrideBlockColorFunction(const std::function<std::optional<QColor> (const QTextBlock &)> &func)
+{
+    m_overrideBlockColor = std::move(func);
+    scheduleUpdate();
+}
+
 void MinimapOverlay::onDocumentChanged()
 {
     scheduleUpdate();
@@ -195,19 +201,24 @@ void MinimapOverlay::updateImage()
             continue;
 
         const QTextLayout *layout = block.layout();
-        QVector<QTextLayout::FormatRange> formats = layout->formats();
-        std::sort(
-            formats.begin(),
-            formats.end(),
-            [](const QTextLayout::FormatRange &a, const QTextLayout::FormatRange &b) {
-                return a.start < b.start;
-            });
+        std::optional<QColor> overrideColor = m_overrideBlockColor ? m_overrideBlockColor(block)
+                                                                   : std::nullopt;
+        QColor curFg = overrideColor.value_or(defaultTextColor);
+        QVector<QTextLayout::FormatRange> formats;
+        if (!overrideColor.has_value()) {
+            formats = layout->formats();
+            std::sort(
+                formats.begin(),
+                formats.end(),
+                [](const QTextLayout::FormatRange &a, const QTextLayout::FormatRange &b) {
+                    return a.start < b.start;
+                });
+        }
 
         const QString text = block.text();
 
         int formatIndex = 0;
         int currentFormatEnd = formats.isEmpty() ? block.length() : formats.first().start;
-        QColor curFg = defaultTextColor;
 
         int dstX = 0;
         for (int i = 0; i < text.length() && dstX < imageWidth; ++i) {
