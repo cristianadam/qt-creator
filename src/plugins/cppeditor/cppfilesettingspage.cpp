@@ -410,7 +410,7 @@ QString CppFileSettings::licenseTemplate() const
 
 QString CppFileSettings::headerGuard(const FilePath &headerFilePath) const
 {
-    return HeaderGuardExpander(headerFilePath).expand(headerGuardTemplate());
+    return HeaderGuardExpander(headerFilePath).expand(headerGuardTemplate.value());
 }
 
 // CppFileSettingsPage
