@@ -88,11 +88,8 @@ HighlighterSettings::HighlighterSettings()
                         PushButton {
                             text(Tr::tr("Download Definitions")),
                             Layouting::toolTip(Tr::tr("Download missing and update existing syntax definition files.")),
-                            onClicked(updateStatus, [label = QPointer<QLabel>(updateStatus)] {
-                                HighlighterHelper::downloadDefinitions([label] {
-                                    if (label)
-                                        label->setText(Tr::tr("Download finished"));
-                                });
+                            onClicked(updateStatus, [label = QPointer(updateStatus)] {
+                                HighlighterHelper::downloadDefinitions(label);
                             })
                         },
                         updateStatus,

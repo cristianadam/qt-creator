@@ -198,25 +198,36 @@ void addCustomHighlighterPath(const FilePath &path)
     highlightRepository()->addCustomSearchPath(path.toUrlishString());
 }
 
-void downloadDefinitions(std::function<void()> callback)
+void downloadDefinitions(const QPointer<QLabel> &logger)
 {
-    auto downloader = new KSyntaxHighlighting::DefinitionDownloader(highlightRepository());
-    QObject::connect(downloader,
-                     &KSyntaxHighlighting::DefinitionDownloader::done,
-                     [downloader, callback]() {
-                         Core::MessageManager::writeFlashing(Tr::tr("Highlighter updates: done"));
-                         downloader->deleteLater();
-                         reload();
-                         if (callback)
-                             callback();
-                     });
-    QObject::connect(downloader,
-                     &KSyntaxHighlighting::DefinitionDownloader::informationMessage,
-                     [](const QString &message) {
-                         Core::MessageManager::writeSilently(Tr::tr("Highlighter updates:") + ' '
-                                                             + message);
-                     });
-    Core::MessageManager::writeDisrupting(Tr::tr("Highlighter updates: starting"));
+    using namespace KSyntaxHighlighting;
+
+    auto downloader = new DefinitionDownloader(highlightRepository());
+
+    QObject::connect(downloader, &DefinitionDownloader::done, [downloader, logger] {
+        const QString msg = Tr::tr("Highlighter updates: done");
+        if (logger)
+            logger->setText(msg);
+        else
+            Core::MessageManager::writeFlashing(msg);
+        downloader->deleteLater();
+        reload();
+    });
+
+    QObject::connect(downloader, &DefinitionDownloader::informationMessage, [logger](const QString &message) {
+        const QString msg = Tr::tr("Highlighter updates:") + ' ' + message;
+        if (logger)
+            logger->setText(msg);
+        else
+            Core::MessageManager::writeSilently(msg);
+    });
+
+    const QString msg = Tr::tr("Highlighter updates: starting");
+    if (logger)
+        logger->setText(msg);
+    else
+        Core::MessageManager::writeDisrupting(msg);
+
     downloader->start();
 }
 

@@ -6,6 +6,8 @@
 #include <KSyntaxHighlighting/Definition>
 
 #include <QFuture>
+#include <QLabel>
+#include <QPointer>
 #include <QTextDocument>
 
 namespace Utils { class FilePath; }
@@ -28,7 +30,7 @@ void rememberDefinitionForDocument(const Definition &definition, const TextDocum
 void clearDefinitionForDocumentCache();
 
 void addCustomHighlighterPath(const Utils::FilePath &path);
-void downloadDefinitions(std::function<void()> callback = nullptr);
+void downloadDefinitions(const QPointer<QLabel> &logger = {});
 void reload();
 
 void handleShutdown();
