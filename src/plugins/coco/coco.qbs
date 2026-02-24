@@ -27,8 +27,6 @@ QtcPlugin {
         "cocoplugin.qrc",
         "cocoplugin_global.h",
         "cocopluginconstants.h",
-        "cocoprojectsettingswidget.cpp",
-        "cocoprojectsettingswidget.h",
         "cocoprojectwidget.cpp",
         "cocoprojectwidget.h",
         "cocotr.h",

@@ -4,7 +4,7 @@
 #include "cocobuildstep.h"
 #include "cocolanguageclient.h"
 #include "cocopluginconstants.h"
-#include "cocoprojectsettingswidget.h"
+#include "cocoprojectwidget.h"
 #include "cocotr.h"
 #include "globalsettings.h"
 

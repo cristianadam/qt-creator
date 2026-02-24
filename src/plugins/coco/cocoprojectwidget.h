@@ -76,4 +76,6 @@ private:
     QString m_buildConfigurationName;
 };
 
+void setupCocoProjectPanel();
+
 } // namespace Coco::Internal
