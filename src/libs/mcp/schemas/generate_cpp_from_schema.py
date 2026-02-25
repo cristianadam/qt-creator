@@ -602,6 +602,24 @@ def _toJsonValue_visit_lines(alias):
         "",
     ]
 
+def _nullable_type(spec):
+    """Handle type: [T, "null"] (nullable scalar) in JSON Schema.
+
+    Returns (base_json_type_str, is_nullable):
+      - is_nullable=True  means the value can be JSON null (map to std::optional<T>)
+      - base_json_type_str is the single non-null type string, or None if unresolvable
+    For plain string types or non-list types returns (None, False).
+    """
+    t = spec.get("type")
+    if not isinstance(t, list):
+        return None, False
+    non_null = [x for x in t if x != "null"]
+    has_null = "null" in t
+    if len(non_null) == 1:
+        return non_null[0], has_null
+    # Multiple non-null types or empty non-null list — not a simple nullable scalar
+    return None, has_null
+
 def nested_short_name(parent_name, child_name):
     """Strip parent name prefix from a nested child name for cleaner C++ declarations.
 
@@ -869,8 +887,9 @@ def parse_struct(name, props, types, required=None, description='', nested_child
         elif is_const_string(spec):
             pass  # const string fields are not stored in the struct
         else:
-            t = spec.get("type", "string")
-            decl_type = f"std::optional<{cpp_type(t)}>" if is_optional else cpp_type(t)
+            base_t, is_nullable = _nullable_type(spec)
+            t = base_t if base_t else spec.get("type", "string")
+            decl_type = f"std::optional<{cpp_type(t)}>" if (is_optional or is_nullable) else cpp_type(t)
             lines.extend(pre_lines)
             lines.append(f"    {decl_type} _{prop};{inline_comment}")
         if not is_const_string(spec):
@@ -924,7 +943,10 @@ def parse_struct(name, props, types, required=None, description='', nested_child
             val_type = is_typed_map(spec)
             inner_type = f"QMap<QString, {val_type}>"
         else:
-            inner_type = cpp_type(spec.get("type", "string"))
+            base_t, is_nullable = _nullable_type(spec)
+            inner_type = cpp_type(base_t if base_t else spec.get("type", "string"))
+            if is_nullable:
+                inner_type = f"std::optional<{inner_type}>"
         lines.append(f"    {name}& {prop_name}({inner_type} v) {{ _{prop} = std::move(v); return *this; }}")
         # For open-map fields emit a per-key adder and a QJsonObject merger
         if is_open_map(spec):
@@ -1148,7 +1170,8 @@ def parse_struct(name, props, types, required=None, description='', nested_child
             fj_lines.append(f"    if (obj.value(\"{prop}\").toString() != \"{const_value}\")")
             fj_lines.append(f"        co_return Utils::ResultError(\"Field '{prop}' must be '{const_value}', got: \" + obj.value(\"{prop}\").toString());")
         else:
-            t = spec.get("type", "string")
+            base_t, is_nullable = _nullable_type(spec)
+            t = base_t if base_t else spec.get("type", "string")
             ct = cpp_type(t)
             _scalar_expr = _json_extract_expr(ct, f'obj.value("{prop}")')
             if is_optional:
@@ -1156,7 +1179,15 @@ def parse_struct(name, props, types, required=None, description='', nested_child
                 indent = "        "
             else:
                 indent = "    "
-            if _scalar_expr:
+            if is_nullable:
+                # Value is present (required) but may be JSON null — only assign when non-null
+                fj_lines.append(f"{indent}if (!obj[\"{prop}\"].isNull()) {{")
+                if _scalar_expr:
+                    fj_lines.append(f"{indent}    result._{prop} = {_scalar_expr};")
+                else:
+                    fj_lines.append(f"{indent}    // Unknown property type: {ct}")
+                fj_lines.append(f"{indent}}}")
+            elif _scalar_expr:
                 fj_lines.append(f"{indent}result._{prop} = {_scalar_expr};")
             else:
                 fj_lines.append(f"{indent}// Unknown property type: {ct}")
@@ -1280,9 +1311,16 @@ def parse_struct(name, props, types, required=None, description='', nested_child
             const_value = spec["const"]
             init_entries.append((prop, f"QString(\"{const_value}\")"))
         else:
+            _, is_nullable = _nullable_type(spec)
             if is_optional:
                 post_lines.append(f"    if (data._{prop}.has_value())")
                 post_lines.append(f"        obj.insert(\"{prop}\", *data._{prop});")
+            elif is_nullable:
+                # Required but nullable: always emit the key; use QJsonValue::Null when empty
+                post_lines.append(f"    if (data._{prop}.has_value())")
+                post_lines.append(f"        obj.insert(\"{prop}\", *data._{prop});")
+                post_lines.append(f"    else")
+                post_lines.append(f"        obj.insert(\"{prop}\", QJsonValue::Null);")
             else:
                 init_entries.append((prop, f"data._{prop}"))
 

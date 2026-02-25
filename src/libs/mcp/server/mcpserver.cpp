@@ -28,11 +28,13 @@ using QHttpServerResponder = MiniHttp::HttpResponder;
 using QHttpServerResponse = MiniHttp::HttpResponse;
 #endif
 
-Q_LOGGING_CATEGORY(mcpServerLog, "mcp.server", QtWarningMsg)
+Q_LOGGING_CATEGORY(mcpServerLog, "mcp.server", QtDebugMsg)
 
 using namespace Utils;
 
 namespace Mcp {
+
+static constexpr int s_maxPageSize = 100;
 
 enum ErrorCodes {
     // Defined by JSON RPC
@@ -150,6 +152,18 @@ public:
                     });
                 return;
             }
+        } else if (std::holds_alternative<Schema::GetTaskRequest>(request)) {
+            onGetTask(id, std::get<Schema::GetTaskRequest>(request), responder);
+            return;
+        } else if (std::holds_alternative<Schema::ListTasksRequest>(request)) {
+            onListTasks(id, std::get<Schema::ListTasksRequest>(request), responder);
+            return;
+        } else if (std::holds_alternative<Schema::CancelTaskRequest>(request)) {
+            onCancelTask(id, std::get<Schema::CancelTaskRequest>(request), responder);
+            return;
+        } else if (std::holds_alternative<Schema::GetTaskPayloadRequest>(request)) {
+            onGetTaskPayload(id, std::get<Schema::GetTaskPayloadRequest>(request), responder);
+            return;
         }
 
         responder.write(QJsonDocument(
@@ -179,10 +193,21 @@ public:
             return;
         }
 
+        qCDebug(mcpServerLog).noquote()
+            << "Client initialized with protocol version" << Schema::toJson(request.params());
+
         auto caps = Schema::ServerCapabilities()
                         .prompts(Schema::ServerCapabilities::Prompts{}.listChanged(true))
                         .tools(Schema::ServerCapabilities::Tools().listChanged(true))
-                        .resources(Schema::ServerCapabilities::Resources{}.listChanged(true));
+                        .resources(Schema::ServerCapabilities::Resources{}.listChanged(true))
+                        .tasks(
+                            Schema::ServerCapabilities::Tasks()
+                                .list(QJsonObject{})
+                                .cancel(QJsonObject{})
+                                .requests(
+                                    Schema::ServerCapabilities::Tasks::Requests().tools(
+                                        Schema::ServerCapabilities::Tasks::Requests::Tools().call(
+                                            QJsonObject{}))));
 
         if (m_completionCallback)
             caps = caps.completions(QJsonObject());
@@ -193,6 +218,151 @@ public:
                               .capabilities(caps);
 
         responder.write(QJsonDocument(makeResponse(id, initResult)));
+    }
+
+    void onGetTaskPayload(
+        Schema::RequestId id,
+        const Schema::GetTaskPayloadRequest &request,
+        const Responder &responder)
+    {
+        auto it = m_tasks.find(request.params().taskId());
+        if (it == m_tasks.end()) {
+            responder.write(QJsonDocument(
+                Schema::toJson(
+                    Schema::JSONRPCErrorResponse()
+                        .error(
+                            Schema::Error()
+                                .code(InvalidParams)
+                                .message(QString("Task with ID \"%1\" not found")
+                                             .arg(request._params._taskId)))
+                        .id(id))));
+            return;
+        }
+
+        Result<Schema::CallToolResult> r = it->callbacks.result();
+
+        if (!r) {
+            responder.write(QJsonDocument(
+                Schema::toJson(
+                    Schema::JSONRPCErrorResponse()
+                        .error(
+                            Schema::Error()
+                                .code(InternalError)
+                                .message(QString("Unknown Error: %1").arg(r.error())))
+                        .id(id))));
+            return;
+        }
+
+        Schema::CallToolResult result = *r;
+        result.add_meta(
+            "io.modelcontextprotocol/related-task",
+            toJson(Schema::RelatedTaskMetadata().taskId(request.params().taskId())));
+
+        responder.write(QJsonDocument(makeResponse(id, result)));
+    }
+
+    void onCancelTask(
+        Schema::RequestId id, const Schema::CancelTaskRequest &request, const Responder &responder)
+    {
+        auto it = m_tasks.find(request.params().taskId());
+        if (it == m_tasks.end()) {
+            responder.write(QJsonDocument(
+                Schema::toJson(
+                    Schema::JSONRPCErrorResponse()
+                        .error(
+                            Schema::Error()
+                                .code(InvalidParams)
+                                .message(QString("Task with ID \"%1\" not found")
+                                             .arg(request._params._taskId)))
+                        .id(id))));
+            return;
+        }
+
+        if (!it->callbacks.cancelTask) {
+            responder.write(QJsonDocument(
+                Schema::toJson(
+                    Schema::JSONRPCErrorResponse()
+                        .error(
+                            Schema::Error()
+                                .code(InvalidParams)
+                                .message(QString("Task with ID \"%1\" cannot be cancelled")
+                                             .arg(request._params._taskId)))
+                        .id(id))));
+            return;
+        }
+
+        (*it->callbacks.cancelTask)();
+        it->task.status(Schema::TaskStatus::cancelled);
+
+        auto result = Mcp::Schema::CancelTaskResult()
+                          .taskId(request.params().taskId())
+                          .status(it->task.status())
+                          .createdAt(it->task.createdAt())
+                          .lastUpdatedAt(it->task.lastUpdatedAt())
+                          .ttl(it->task.ttl());
+
+        if (it->task.pollInterval())
+            result.pollInterval(*it->task.pollInterval());
+        if (it->task.statusMessage())
+            result.statusMessage(*it->task.statusMessage());
+
+        responder.write(QJsonDocument(makeResponse(id, result)));
+    }
+
+    void onListTasks(
+        Schema::RequestId id, const Schema::ListTasksRequest &request, const Responder &responder)
+    {
+        Schema::ListTasksResult result;
+        // Cursor
+        auto it = m_tasks.begin();
+        if (request._params && request._params->_cursor)
+            it = m_tasks.find(*request._params->_cursor);
+
+        // Pagination
+        int count = 0;
+        for (; it != m_tasks.end() && count < s_maxPageSize; ++it, ++count) {
+            result._tasks.append(it.value().task);
+        }
+        if (it != m_tasks.end())
+            result._nextCursor = it.key();
+
+        responder.write(QJsonDocument(makeResponse(id, result)));
+    }
+
+    void onGetTask(
+        Schema::RequestId id, const Schema::GetTaskRequest &request, const Responder &responder)
+    {
+        auto it = m_tasks.find(request._params._taskId);
+        if (it == m_tasks.end()) {
+            responder.write(QJsonDocument(
+                Schema::toJson(
+                    Schema::JSONRPCErrorResponse()
+                        .error(
+                            Schema::Error()
+                                .code(InvalidParams)
+                                .message(QString("Task with ID \"%1\" not found")
+                                             .arg(request._params._taskId)))
+                        .id(id))));
+            return;
+        }
+
+        // Update task information
+        it->callbacks.updateTask(it->task);
+        it->task.lastUpdatedAt(QDateTime::currentDateTime().toString());
+
+        auto result = Mcp::Schema::GetTaskResult()
+                          .taskId(request.params().taskId())
+                          .status(it->task.status())
+                          .createdAt(it->task.createdAt())
+                          .lastUpdatedAt(it->task.lastUpdatedAt())
+                          .ttl(it->task.ttl());
+
+        if (it->task.pollInterval())
+            result.pollInterval(*it->task.pollInterval());
+        if (it->task.statusMessage())
+            result.statusMessage(*it->task.statusMessage());
+
+        responder.write(QJsonDocument(makeResponse(id, result)));
     }
 
     void onToolCall(
@@ -219,7 +389,20 @@ public:
         if (std::holds_alternative<Server::ToolCallback>(toolIt->callback)) {
             const auto cb = std::get<Server::ToolCallback>(toolIt->callback);
 
-            Result<Schema::CallToolResult> r = cb(request._params);
+            if (request.params().task().has_value()) {
+                qCWarning(mcpServerLog) << "Received call for tool" << request._params._name
+                                        << "with task parameters, but tool does not support tasks";
+                responder.write(QJsonDocument(toJson(
+                    Schema::JSONRPCErrorResponse()
+                        .error(
+                            Schema::Error()
+                                .code(InvalidParams)
+                                .message("Tool does not support tasks: " + request._params._name))
+                        .id(id))));
+                return;
+            }
+
+            Result<Schema::CallToolResult> r = cb(request.params());
 
             if (!r) {
                 responder.write(QJsonDocument(makeResponse(
@@ -230,6 +413,60 @@ public:
             }
 
             responder.write(QJsonDocument(makeResponse(id, *r)));
+            return;
+        } else if (std::holds_alternative<Server::TaskToolCallback>(toolIt->callback)) {
+            const auto cb = std::get<Server::TaskToolCallback>(toolIt->callback);
+
+            if (!request.params().task().has_value()) {
+                qCWarning(mcpServerLog) << "Received call for tool" << request._params._name
+                                        << "without task parameters, but tool requires tasks";
+                responder.write(QJsonDocument(toJson(
+                    Schema::JSONRPCErrorResponse()
+                        .error(
+                            Schema::Error()
+                                .code(InvalidParams)
+                                .message("Tool requires tasks: " + request._params._name))
+                        .id(id))));
+                return;
+            }
+
+            Result<Server::TaskCallbacks> r = cb(request.params());
+
+            if (!r) {
+                responder.write(QJsonDocument(makeResponse(
+                    id,
+                    Schema::CallToolResult().isError(true).content(
+                        {Schema::TextContent().text(r.error())}))));
+                return;
+            }
+
+            auto taskId = QUuid::createUuid().toString();
+            auto task = Schema::Task()
+                            .taskId(taskId)
+                            .status(Schema::TaskStatus::working)
+                            .pollInterval(r->pollingIntervalMs)
+                            .createdAt(QDateTime::currentDateTime().toString())
+                            .lastUpdatedAt(QDateTime::currentDateTime().toString());
+
+            m_tasks.insert(taskId, TaskAndCallbacks{task, {r->updateTask, r->result, r->cancelTask}});
+
+            QJsonObject json = Schema::toJson(Schema::JSONRPCResultResponse().id(id));
+            json["result"] = Schema::toJson(Schema::CreateTaskResult().task(task));
+
+            responder.write(QJsonDocument(json));
+            return;
+        }
+
+        if (request.params().task().has_value()) {
+            qCWarning(mcpServerLog) << "Received call for tool" << request._params._name
+                                    << "with task parameters, but tool does not support tasks";
+            responder.write(QJsonDocument(toJson(
+                Schema::JSONRPCErrorResponse()
+                    .error(
+                        Schema::Error()
+                            .code(InvalidParams)
+                            .message("Tool does not support tasks: " + request._params._name))
+                    .id(id))));
             return;
         }
 
@@ -254,10 +491,9 @@ public:
         if (request._params && request._params->_cursor)
             it = m_tools.find(*request._params->_cursor);
 
-        static const int pageSize = 20;
         Schema::ListToolsResult result;
         int count = 0;
-        for (; it != m_tools.end() && count < pageSize; ++it, ++count) {
+        for (; it != m_tools.end() && count < s_maxPageSize; ++it, ++count) {
             result._tools.append(it.value().tool);
         }
         if (it != m_tools.end())
@@ -273,10 +509,9 @@ public:
         if (request._params && request._params->_cursor)
             it = m_prompts.find(*request._params->_cursor);
 
-        static const int pageSize = 20;
         Schema::ListPromptsResult result;
         int count = 0;
-        for (; it != m_prompts.end() && count < pageSize; ++it, ++count) {
+        for (; it != m_prompts.end() && count < s_maxPageSize; ++it, ++count) {
             result._prompts.append(it->prompt);
         }
         if (it != m_prompts.end())
@@ -294,10 +529,9 @@ public:
         if (request._params && request._params->_cursor)
             it = m_resources.find(*request._params->_cursor);
 
-        static const int pageSize = 20;
         Schema::ListResourcesResult result;
         int count = 0;
-        for (; it != m_resources.end() && count < pageSize; ++it, ++count) {
+        for (; it != m_resources.end() && count < s_maxPageSize; ++it, ++count) {
             result._resources.append(it.value().resource);
         }
         if (it != m_resources.end())
@@ -354,10 +588,9 @@ public:
         if (request._params && request._params->_cursor)
             it = m_resourceTemplates.find(*request._params->_cursor);
 
-        static const int pageSize = 20;
         Schema::ListResourceTemplatesResult result;
         int count = 0;
-        for (; it != m_resourceTemplates.end() && count < pageSize; ++it, ++count) {
+        for (; it != m_resourceTemplates.end() && count < s_maxPageSize; ++it, ++count) {
             result._resourceTemplates.append(it.value());
         }
         if (it != m_resourceTemplates.end())
@@ -425,7 +658,8 @@ public:
     struct ToolAndCallback
     {
         Schema::Tool tool;
-        std::variant<Server::ToolCallback, Server::AsyncToolCallback> callback;
+        std::variant<Server::ToolCallback, Server::AsyncToolCallback, Server::TaskToolCallback>
+            callback;
     };
     QMap<QString, ToolAndCallback> m_tools;
 
@@ -450,6 +684,14 @@ public:
     std::function<void(QByteArray)> m_ioOutputHandler;
 
     Server::CompletionCallback m_completionCallback;
+
+    struct TaskAndCallbacks
+    {
+        Schema::Task task;
+        Server::TaskCallbacks callbacks;
+    };
+
+    QMap<QString, TaskAndCallbacks> m_tasks;
 };
 
 Server::Server(Schema::Implementation serverInfo, bool enableSSETestRoute)
@@ -593,6 +835,18 @@ void Server::addTool(const Schema::Tool &tool, const ToolCallback &callback)
 
 void Server::addTool(const Schema::Tool &tool, const AsyncToolCallback &callback)
 {
+    d->m_tools.insert(tool._name, ServerPrivate::ToolAndCallback{tool, callback});
+    sendNotification(Schema::ToolListChangedNotification{});
+}
+
+void Server::addTool(const Schema::Tool &tool, const TaskToolCallback &callback)
+{
+    if (tool.execution()->taskSupport() != Schema::ToolExecution::TaskSupport::required) {
+        qCWarning(mcpServerLog)
+            << "Attempted to add tool with TaskToolCallback but task support is not required:"
+            << tool._name;
+    }
+
     d->m_tools.insert(tool._name, ServerPrivate::ToolAndCallback{tool, callback});
     sendNotification(Schema::ToolListChangedNotification{});
 }

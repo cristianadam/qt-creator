@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QCoreApplication>
+#include <QDeadlineTimer>
 #include <QDebug>
 #include <QJsonArray>
 #include <QSocketNotifier>
@@ -146,6 +147,71 @@ int main(int argc, char *argv[])
                     .addProperty("echoedMessage", QJsonObject{{"type", "string"}})
                     .required(QStringList{"echoedMessage"})),
         echoTool);
+
+    server.addTool(
+        Mcp::Schema::Tool()
+            .name("task_echo")
+            .description(
+                "A tool that creates a task which echoes back the input message after a delay.")
+            .title("Task Echo Tool")
+            .execution(
+                Mcp::Schema::ToolExecution().taskSupport(
+                    Mcp::Schema::ToolExecution::TaskSupport::required))
+            .inputSchema(
+                Mcp::Schema::Tool::InputSchema()
+                    .addProperty("message", QJsonObject{{"type", "string"}})
+                    .required(QStringList{"message"}))
+            .outputSchema(
+                Mcp::Schema::Tool::OutputSchema{}
+                    .addProperty("echoedMessage", QJsonObject{{"type", "string"}})
+                    .required(QStringList{"echoedMessage"})),
+        [](const Mcp::Schema::CallToolRequestParams &params) -> Result<Mcp::Server::TaskCallbacks> {
+            if (!params.arguments() || !params.arguments()->contains("message")
+                || !(*params.arguments())["message"].isString()) {
+                return ResultError("Invalid arguments for task echo tool: missing 'message' string");
+            }
+
+            QString taskId = QUuid::createUuid().toString();
+            QString message = (*params.arguments())["message"].toString();
+
+            using namespace std::literals::chrono_literals;
+            struct TaskData
+            {
+                QDeadlineTimer timer{10s};
+                bool cancelled{false};
+            };
+
+            std::shared_ptr<TaskData> taskData = std::make_shared<TaskData>();
+
+            Mcp::Server::TaskCallbacks callbacks
+                = {// Update
+                   [taskData](Mcp::Schema::Task &task) {
+                       if (taskData->timer.hasExpired()) {
+                           task.status(Mcp::Schema::TaskStatus::completed);
+                           task.statusMessage("Task is done.");
+                           return;
+                       }
+                       if (taskData->cancelled) {
+                           task.status(Mcp::Schema::TaskStatus::cancelled);
+                           task.statusMessage("Task is cancelled");
+                           return;
+                       }
+
+                       task.statusMessage(QString("Time remaining: %1 seconds")
+                                              .arg(taskData->timer.remainingTime() / 1000));
+                   },
+                   // Result
+                   [message]() -> Result<Mcp::Schema::CallToolResult> {
+                       return Mcp::Schema::CallToolResult()
+                           .isError(false)
+                           .addStructuredContent("echoedMessage", message);
+                   },
+                   // Cancel
+                   [taskData]() { taskData->cancelled = true; },
+                   500};
+
+            return callbacks;
+        });
 
     server.addTool(
         Mcp::Schema::Tool()
