@@ -383,7 +383,7 @@ void BehaviorSettingsWidget::updateConstrainTooltipsBoxTooltip() const
     }
 }
 
-void BehaviorSettingsWidget::setAssignedBehaviorSettings(const BehaviorSettings &behaviorSettings)
+void BehaviorSettingsWidget::setAssignedBehaviorSettings(const BehaviorSettingsData &behaviorSettings)
 {
     d->mouseHiding->setChecked(behaviorSettings.m_mouseHiding);
     d->mouseNavigation->setChecked(behaviorSettings.m_mouseNavigation);
@@ -395,7 +395,7 @@ void BehaviorSettingsWidget::setAssignedBehaviorSettings(const BehaviorSettings 
     updateConstrainTooltipsBoxTooltip();
 }
 
-void BehaviorSettingsWidget::assignedBehaviorSettings(BehaviorSettings *behaviorSettings) const
+void BehaviorSettingsWidget::assignedBehaviorSettings(BehaviorSettingsData *behaviorSettings) const
 {
     behaviorSettings->m_mouseHiding = d->mouseHiding->isChecked();
     behaviorSettings->m_mouseNavigation = d->mouseNavigation->isChecked();
@@ -458,7 +458,7 @@ void BehaviorSettingsWidget::slotStorageSettingsChanged()
 
 void BehaviorSettingsWidget::slotBehaviorSettingsChanged()
 {
-    BehaviorSettings settings;
+    BehaviorSettingsData settings;
     assignedBehaviorSettings(&settings);
     updateConstrainTooltipsBoxTooltip();
     emit behaviorSettingsChanged(settings);

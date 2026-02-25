@@ -716,7 +716,7 @@ void AppOutputPane::createNewOutputWindow(RunControl *rc)
 
     auto updateBehaviorSettings = [ow] {
         ow->setWheelZoomEnabled(
-                    TextEditor::globalBehaviorSettings().m_scrollWheelZooming);
+                    TextEditor::globalBehaviorSettings().scrollWheelZooming());
     };
 
     updateFontSettings();

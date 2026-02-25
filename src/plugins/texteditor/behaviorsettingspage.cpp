@@ -99,7 +99,7 @@ public:
 
         d->m_behaviorWidget->setAssignedTypingSettings(globalTypingSettings());
         d->m_behaviorWidget->setAssignedStorageSettings(globalStorageSettings());
-        d->m_behaviorWidget->setAssignedBehaviorSettings(globalBehaviorSettings());
+        d->m_behaviorWidget->setAssignedBehaviorSettings(globalBehaviorSettings().data());
         d->m_behaviorWidget->setAssignedExtraEncodingSettings(globalExtraEncodingSettings());
         d->m_behaviorWidget->setAssignedEncoding(Core::EditorManager::defaultTextEncoding());
         d->m_behaviorWidget->setAssignedLineEnding(Core::EditorManager::defaultLineEnding());
@@ -135,7 +135,7 @@ void BehaviorSettingsWidgetImpl::apply()
 
     TypingSettings newTypingSettings;
     StorageSettings newStorageSettings;
-    BehaviorSettings newBehaviorSettings;
+    BehaviorSettingsData newBehaviorSettings;
     ExtraEncodingSettings newExtraEncodingSettings;
 
     d->m_behaviorWidget->assignedTypingSettings(&newTypingSettings);

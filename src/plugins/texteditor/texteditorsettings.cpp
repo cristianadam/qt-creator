@@ -441,13 +441,13 @@ TextEditorSettings::TextEditorSettings()
     connect(this, &TextEditorSettings::fontSettingsChanged,
             this, updateGeneralMessagesFontSettings);
     updateGeneralMessagesFontSettings();
-    auto updateBehaviorSettings = [](const BehaviorSettings &bs) {
+    auto updateBehaviorSettings = [](const BehaviorSettingsData &bs) {
         Core::MessageManager::setWheelZoomEnabled(bs.m_scrollWheelZooming);
         FancyLineEdit::setCamelCaseNavigationEnabled(bs.m_camelCaseNavigation);
     };
     connect(this, &TextEditorSettings::behaviorSettingsChanged,
             this, updateBehaviorSettings);
-    updateBehaviorSettings(globalBehaviorSettings());
+    updateBehaviorSettings(globalBehaviorSettings().data());
 }
 
 TextEditorSettings::~TextEditorSettings()

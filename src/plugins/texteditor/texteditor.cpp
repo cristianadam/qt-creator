@@ -952,7 +952,7 @@ public:
     // apply when making visible the first time, for the split case
     bool m_fontSettingsNeedsApply = true;
     bool m_wasNotYetShown = true;
-    BehaviorSettings m_behaviorSettings;
+    BehaviorSettingsData m_behaviorSettings;
 
     int extraAreaSelectionAnchorBlockNumber = -1;
     int extraAreaToggleMarkBlockNumber = -1;
@@ -1672,7 +1672,7 @@ void TextEditorWidgetPrivate::setDocument(const QSharedPointer<TextDocument> &do
 
     q->setTypingSettings(globalTypingSettings());
     q->setStorageSettings(globalStorageSettings());
-    q->setBehaviorSettings(globalBehaviorSettings());
+    q->setBehaviorSettings(globalBehaviorSettings().data());
     q->setMarginSettings(marginSettings().data());
     q->setDisplaySettings(TextEditorSettings::displaySettings());
     q->setCompletionSettings(TextEditorSettings::completionSettings());
@@ -7961,7 +7961,7 @@ const MarginSettingsData &TextEditorWidget::marginSettings() const
     return d->m_marginSettings;
 }
 
-const BehaviorSettings &TextEditorWidget::behaviorSettings() const
+const BehaviorSettingsData &TextEditorWidget::behaviorSettings() const
 {
     return d->m_behaviorSettings;
 }
@@ -9452,7 +9452,7 @@ void TextEditorWidget::setMarginSettings(const MarginSettingsData &ms)
     d->updateCenteringContentMargins();
 }
 
-void TextEditorWidget::setBehaviorSettings(const BehaviorSettings &bs)
+void TextEditorWidget::setBehaviorSettings(const BehaviorSettingsData &bs)
 {
     d->m_behaviorSettings = bs;
 }
