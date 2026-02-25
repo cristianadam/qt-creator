@@ -1414,6 +1414,16 @@ static QLayout *createSeparatorLayout()
     return layout;
 }
 
+static QLabel *createAnnotationSettingsLink()
+{
+    auto label = new QLabel("<small><i><a href>Annotation Settings</a></i></small>");
+    QObject::connect(label, &QLabel::linkActivated, []() {
+        Utils::ToolTip::hideImmediately();
+        Core::ICore::showSettings(Constants::TEXT_EDITOR_DISPLAY_SETTINGS);
+    });
+    return label;
+}
+
 void TextEditorWidgetPrivate::showTextMarksToolTip(const QPoint &pos,
                                                    const TextMarks &marks,
                                                    const TextMark *mainTextMark) const
@@ -1442,7 +1452,7 @@ void TextEditorWidgetPrivate::showTextMarksToolTip(const QPoint &pos,
             mark->addToToolTipLayout(layout);
     }
 
-    layout->addWidget(DisplaySettings::createAnnotationSettingsLink(),
+    layout->addWidget(createAnnotationSettingsLink(),
                       layout->rowCount(), 0, 1, -1, Qt::AlignRight);
     ToolTip::show(pos, layout, q);
 }

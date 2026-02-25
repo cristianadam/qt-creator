@@ -7,14 +7,6 @@
 
 #include <utils/aspects.h>
 
-#include <QMetaType>
-
-QT_BEGIN_NAMESPACE
-class QLabel;
-QT_END_NAMESPACE
-
-namespace Utils { class QtcSettings; }
-
 namespace TextEditor {
 
 enum class AnnotationAlignment
@@ -91,8 +83,6 @@ public:
     Utils::BoolAspect displayMinimap{this};
 
     DisplaySettingsData data() const;
-
-    static QLabel *createAnnotationSettingsLink();
 };
 
 TEXTEDITOR_EXPORT DisplaySettings &displaySettings();
