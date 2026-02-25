@@ -386,7 +386,7 @@
         \li Open view contents in an editor
         \li Open memory editor
         \li Set data breakpoints
-        \li Use \l{Debugging Helpers}{debugging helpers}
+        \li Use \l{Debugging helpers}{debugging helpers}
         \li Show and hide tooltips in the view when debugging
         \li Dereference pointers automatically
         \li Sort members of classes and structs alphabetically

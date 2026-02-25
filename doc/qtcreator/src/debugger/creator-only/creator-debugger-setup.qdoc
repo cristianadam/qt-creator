@@ -14,7 +14,7 @@
 
     \ingroup creator-reference-debugger
 
-    \title Supported Debuggers
+    \title Supported debuggers
 
     \brief Summary of supported debugger versions.
 
@@ -62,7 +62,7 @@
     setup fails if the debugger is not installed on the computer or
     if \QC does not support the installed version.
 
-    \section1 GDB Versions
+    \section1 GDB versions
 
     Use GDB 7.5, or later, with the Python scripting extension and Python version
     3.7, or later.
@@ -80,7 +80,7 @@
 
     Builds of GDB shipped with Xcode on \macos are no longer supported.
 
-    \section1 Debugging Tools for Windows
+    \section1 Debugging tools for Windows
 
     \QC supports all versions of CDB targeting platforms that Qt supports.
 
@@ -105,7 +105,7 @@
     the required files in
     \c{"%ProgramFiles%\Debugging Tools for Windows"}.
 
-    \section1 Debugging Tools for \macos
+    \section1 Debugging tools for \macos
 
     The Qt binary distribution has both debug and release
     variants of the libraries. However, you have to explicitly tell the
@@ -121,7 +121,8 @@
     For more detailed information about debugging on \macos,
     see: \l{http://developer.apple.com/library/mac/#technotes/tn2124/_index.html#//apple_ref/doc/uid/DTS10003391}
     {Mac OS X Debugging Magic}.
-    \section1 LLDB Versions
+
+    \section1 LLDB versions
 
     The LLDB debugger has similar functionality to the GDB debugger. LLDB
     is the default debugger in Xcode on \macos for C++ on the desktop.
@@ -136,7 +137,7 @@
 
     On Linux, the minimum supported version is LLDB 3.8.
 
-    \section1 PDB Versions
+    \section1 PDB versions
 
     \l{https://docs.python.org/3/library/pdb.html}{PDB} is a source code debugger
     for Python applications. You can use the PDB version installed with Python to
