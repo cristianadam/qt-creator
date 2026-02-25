@@ -423,6 +423,8 @@ void ProjectTreeWidget::setAutoSynchronization(bool sync)
 
 void ProjectTreeWidget::expandNodeRecursively(const QModelIndex &index)
 {
+    if (!index.model())
+        return;
     const int rc = index.model()->rowCount(index);
     for (int i = 0; i < rc; ++i)
         expandNodeRecursively(index.model()->index(i, index.column(), index));

@@ -10,6 +10,7 @@
 QT_BEGIN_NAMESPACE
 class QAbstractScrollArea;
 class QScrollBar;
+class QTextBlock;
 QT_END_NAMESPACE
 
 namespace Core {
@@ -26,9 +27,13 @@ public:
     QAbstractScrollArea *scrollArea() const;
     void setScrollArea(QAbstractScrollArea *scrollArea);
 
+    void setOverrideBlockColorFunction(
+        const std::function<std::optional<QColor>(const QTextBlock &)> &func);
+
 private:
     QAbstractScrollArea *m_scrollArea = nullptr;
     QPointer<MinimapOverlay> m_minimap;
+    std::function<std::optional<QColor> (const QTextBlock &)> m_overrideBlockColor;
 };
 
 } // namespace Core

@@ -13,6 +13,7 @@ class QMouseEvent;
 class QTextDocument;
 class QScrollBar;
 class QStyleOptionComplex;
+class QTextBlock;
 class QWheelEvent;
 QT_END_NAMESPACE
 
@@ -30,6 +31,9 @@ public:
 
     void paintMinimap(QPainter *painter) const;
     void scheduleUpdate();
+
+    void setOverrideBlockColorFunction(
+        const std::function<std::optional<QColor>(const QTextBlock &)> &func);
 
 protected:
     void paintEvent(QPaintEvent *paintEvent) override;
@@ -70,6 +74,8 @@ private:
 
     QImage m_minimap;
     QTimer m_updateTimer;
+
+    std::function<std::optional<QColor>(const QTextBlock&)> m_overrideBlockColor;
 };
 
 } // namespace Core

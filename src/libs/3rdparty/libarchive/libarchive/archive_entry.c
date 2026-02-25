@@ -257,7 +257,7 @@ archive_entry_new2(struct archive *a)
  * Functions for reading fields from an archive_entry.
  */
 
-time_t
+__LA_TIME_T
 archive_entry_atime(struct archive_entry *entry)
 {
 	return (entry->ae_stat.aest_atime);
@@ -275,7 +275,7 @@ archive_entry_atime_is_set(struct archive_entry *entry)
 	return (entry->ae_set & AE_SET_ATIME);
 }
 
-time_t
+__LA_TIME_T
 archive_entry_birthtime(struct archive_entry *entry)
 {
 	return (entry->ae_stat.aest_birthtime);
@@ -293,7 +293,7 @@ archive_entry_birthtime_is_set(struct archive_entry *entry)
 	return (entry->ae_set & AE_SET_BIRTHTIME);
 }
 
-time_t
+__LA_TIME_T
 archive_entry_ctime(struct archive_entry *entry)
 {
 	return (entry->ae_stat.aest_ctime);
@@ -311,7 +311,7 @@ archive_entry_ctime_nsec(struct archive_entry *entry)
 	return (entry->ae_stat.aest_ctime_nsec);
 }
 
-dev_t
+__LA_DEV_T
 archive_entry_dev(struct archive_entry *entry)
 {
 	if (entry->ae_stat.aest_dev_is_broken_down)
@@ -327,7 +327,7 @@ archive_entry_dev_is_set(struct archive_entry *entry)
 	return (entry->ae_set & AE_SET_DEV);
 }
 
-dev_t
+__LA_DEV_T
 archive_entry_devmajor(struct archive_entry *entry)
 {
 	if (entry->ae_stat.aest_dev_is_broken_down)
@@ -336,7 +336,7 @@ archive_entry_devmajor(struct archive_entry *entry)
 		return major(entry->ae_stat.aest_dev);
 }
 
-dev_t
+__LA_DEV_T
 archive_entry_devminor(struct archive_entry *entry)
 {
 	if (entry->ae_stat.aest_dev_is_broken_down)
@@ -550,7 +550,7 @@ archive_entry_mode(struct archive_entry *entry)
 	return (entry->acl.mode);
 }
 
-time_t
+__LA_TIME_T
 archive_entry_mtime(struct archive_entry *entry)
 {
 	return (entry->ae_stat.aest_mtime);
@@ -649,7 +649,7 @@ archive_entry_rdev_is_set(struct archive_entry *entry)
 	return (entry->ae_set & AE_SET_RDEV);
 }
 
-dev_t
+__LA_DEV_T
 archive_entry_rdev(struct archive_entry *entry)
 {
 	if (archive_entry_rdev_is_set(entry)) {
@@ -663,7 +663,7 @@ archive_entry_rdev(struct archive_entry *entry)
 	}
 }
 
-dev_t
+__LA_DEV_T
 archive_entry_rdevmajor(struct archive_entry *entry)
 {
 	if (archive_entry_rdev_is_set(entry)) {
@@ -676,7 +676,7 @@ archive_entry_rdevmajor(struct archive_entry *entry)
 	}
 }
 
-dev_t
+__LA_DEV_T
 archive_entry_rdevminor(struct archive_entry *entry)
 {
 	if (archive_entry_rdev_is_set(entry)) {
@@ -966,7 +966,9 @@ void
 archive_entry_set_ino(struct archive_entry *entry, la_int64_t ino)
 {
 	if (ino < 0) {
-		ino = 0;
+		entry->stat_valid = 0;
+		entry->ae_set &= ~AE_SET_INO;
+		return;
 	}
 	entry->stat_valid = 0;
 	entry->ae_set |= AE_SET_INO;
@@ -977,7 +979,9 @@ void
 archive_entry_set_ino64(struct archive_entry *entry, la_int64_t ino)
 {
 	if (ino < 0) {
-		ino = 0;
+		entry->stat_valid = 0;
+		entry->ae_set &= ~AE_SET_INO;
+		return;
 	}
 	entry->stat_valid = 0;
 	entry->ae_set |= AE_SET_INO;
@@ -1070,7 +1074,7 @@ _archive_entry_copy_hardlink_l(struct archive_entry *entry,
 }
 
 void
-archive_entry_set_atime(struct archive_entry *entry, time_t t, long ns)
+archive_entry_set_atime(struct archive_entry *entry, __LA_TIME_T t, long ns)
 {
 	FIX_NS(t, ns);
 	entry->stat_valid = 0;
@@ -1087,7 +1091,7 @@ archive_entry_unset_atime(struct archive_entry *entry)
 }
 
 void
-archive_entry_set_birthtime(struct archive_entry *entry, time_t t, long ns)
+archive_entry_set_birthtime(struct archive_entry *entry, __LA_TIME_T t, long ns)
 {
 	FIX_NS(t, ns);
 	entry->stat_valid = 0;
@@ -1104,7 +1108,7 @@ archive_entry_unset_birthtime(struct archive_entry *entry)
 }
 
 void
-archive_entry_set_ctime(struct archive_entry *entry, time_t t, long ns)
+archive_entry_set_ctime(struct archive_entry *entry, __LA_TIME_T t, long ns)
 {
 	FIX_NS(t, ns);
 	entry->stat_valid = 0;
@@ -1121,7 +1125,7 @@ archive_entry_unset_ctime(struct archive_entry *entry)
 }
 
 void
-archive_entry_set_dev(struct archive_entry *entry, dev_t d)
+archive_entry_set_dev(struct archive_entry *entry, __LA_DEV_T d)
 {
 	entry->stat_valid = 0;
 	entry->ae_set |= AE_SET_DEV;
@@ -1130,7 +1134,7 @@ archive_entry_set_dev(struct archive_entry *entry, dev_t d)
 }
 
 void
-archive_entry_set_devmajor(struct archive_entry *entry, dev_t m)
+archive_entry_set_devmajor(struct archive_entry *entry, __LA_DEV_T m)
 {
 	entry->stat_valid = 0;
 	entry->ae_set |= AE_SET_DEV;
@@ -1139,7 +1143,7 @@ archive_entry_set_devmajor(struct archive_entry *entry, dev_t m)
 }
 
 void
-archive_entry_set_devminor(struct archive_entry *entry, dev_t m)
+archive_entry_set_devminor(struct archive_entry *entry, __LA_DEV_T m)
 {
 	entry->stat_valid = 0;
 	entry->ae_set |= AE_SET_DEV;
@@ -1225,7 +1229,7 @@ archive_entry_set_mode(struct archive_entry *entry, mode_t m)
 }
 
 void
-archive_entry_set_mtime(struct archive_entry *entry, time_t t, long ns)
+archive_entry_set_mtime(struct archive_entry *entry, __LA_TIME_T t, long ns)
 {
 	FIX_NS(t, ns);
 	entry->stat_valid = 0;
@@ -1301,7 +1305,7 @@ archive_entry_set_perm(struct archive_entry *entry, mode_t p)
 }
 
 void
-archive_entry_set_rdev(struct archive_entry *entry, dev_t m)
+archive_entry_set_rdev(struct archive_entry *entry, __LA_DEV_T m)
 {
 	entry->stat_valid = 0;
 	entry->ae_stat.aest_rdev = m;
@@ -1312,7 +1316,7 @@ archive_entry_set_rdev(struct archive_entry *entry, dev_t m)
 }
 
 void
-archive_entry_set_rdevmajor(struct archive_entry *entry, dev_t m)
+archive_entry_set_rdevmajor(struct archive_entry *entry, __LA_DEV_T m)
 {
 	entry->stat_valid = 0;
 	entry->ae_stat.aest_rdev_is_broken_down = 1;
@@ -1322,7 +1326,7 @@ archive_entry_set_rdevmajor(struct archive_entry *entry, dev_t m)
 }
 
 void
-archive_entry_set_rdevminor(struct archive_entry *entry, dev_t m)
+archive_entry_set_rdevminor(struct archive_entry *entry, __LA_DEV_T m)
 {
 	entry->stat_valid = 0;
 	entry->ae_stat.aest_rdev_is_broken_down = 1;
@@ -1585,21 +1589,27 @@ archive_entry_set_digest(struct archive_entry *entry, int type,
 	switch (type) {
 	case ARCHIVE_ENTRY_DIGEST_MD5:
 		copy_digest(entry, md5, digest);
+		entry->mset_digest |= AE_MSET_DIGEST_MD5;
 		break;
 	case ARCHIVE_ENTRY_DIGEST_RMD160:
 		copy_digest(entry, rmd160, digest);
+		entry->mset_digest |= AE_MSET_DIGEST_RMD160;
 		break;
 	case ARCHIVE_ENTRY_DIGEST_SHA1:
 		copy_digest(entry, sha1, digest);
+		entry->mset_digest |= AE_MSET_DIGEST_SHA1;
 		break;
 	case ARCHIVE_ENTRY_DIGEST_SHA256:
 		copy_digest(entry, sha256, digest);
+		entry->mset_digest |= AE_MSET_DIGEST_SHA256;
 		break;
 	case ARCHIVE_ENTRY_DIGEST_SHA384:
 		copy_digest(entry, sha384, digest);
+		entry->mset_digest |= AE_MSET_DIGEST_SHA384;
 		break;
 	case ARCHIVE_ENTRY_DIGEST_SHA512:
 		copy_digest(entry, sha512, digest);
+		entry->mset_digest |= AE_MSET_DIGEST_SHA512;
 		break;
 	default:
 		return ARCHIVE_WARN;

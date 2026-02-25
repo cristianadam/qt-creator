@@ -1512,8 +1512,19 @@ void TextEditorWidgetPrivate::setupScrollBar()
     }
 
     if (m_displaySettings.m_displayMinimap) {
-        if (!m_minimapController)
+        if (!m_minimapController) {
             m_minimapController = new MinimapController();
+            m_minimapController->setOverrideBlockColorFunction(
+                [this](const QTextBlock &block) -> std::optional<QColor> {
+                    if (TextBlockUserData::ifdefedOut(block)) {
+                        return m_document->fontSettings()
+                            .toTextCharFormat(C_DISABLED_CODE)
+                            .foreground()
+                            .color();
+                    }
+                    return std::nullopt;
+                });
+        }
 
         m_minimapController->setScrollArea(q);
     } else if (m_minimapController) {
