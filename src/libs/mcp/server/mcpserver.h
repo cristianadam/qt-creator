@@ -41,6 +41,22 @@ public:
         = std::function<void(const Schema::CallToolRequestParams &, const AsyncToolResultCallback &)>;
     void addTool(const Schema::Tool &tool, const AsyncToolCallback &callback);
 
+    using UpdateTaskCallback = std::function<void(Schema::Task &)>;
+    using TaskResultCallback = std::function<Utils::Result<Schema::CallToolResult>()>;
+    using CancelTaskCallback = std::function<void()>;
+
+    struct TaskCallbacks
+    {
+        UpdateTaskCallback updateTask;
+        TaskResultCallback result;
+        std::optional<CancelTaskCallback> cancelTask;
+        int pollingIntervalMs{1000};
+    };
+
+    using TaskToolCallback
+        = std::function<Utils::Result<TaskCallbacks>(const Schema::CallToolRequestParams &)>;
+    void addTool(const Schema::Tool &tool, const TaskToolCallback &callback);
+
     void removeTool(const QString &toolName);
 
     // Prompts

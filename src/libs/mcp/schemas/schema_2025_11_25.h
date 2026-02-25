@@ -1348,7 +1348,7 @@ struct Task {
      */
     std::optional<QString> _statusMessage;
     QString _taskId;  //!< The task identifier.
-    int _ttl;  //!< Actual retention duration from creation in milliseconds, null for unlimited.
+    std::optional<int> _ttl;  //!< Actual retention duration from creation in milliseconds, null for unlimited.
 
     Task& createdAt(QString v) { _createdAt = std::move(v); return *this; }
     Task& lastUpdatedAt(QString v) { _lastUpdatedAt = std::move(v); return *this; }
@@ -1356,7 +1356,7 @@ struct Task {
     Task& status(TaskStatus v) { _status = std::move(v); return *this; }
     Task& statusMessage(QString v) { _statusMessage = std::move(v); return *this; }
     Task& taskId(QString v) { _taskId = std::move(v); return *this; }
-    Task& ttl(int v) { _ttl = std::move(v); return *this; }
+    Task& ttl(std::optional<int> v) { _ttl = std::move(v); return *this; }
 
     const QString& createdAt() const { return _createdAt; }
     const QString& lastUpdatedAt() const { return _lastUpdatedAt; }
@@ -1364,7 +1364,7 @@ struct Task {
     const TaskStatus& status() const { return _status; }
     const std::optional<QString>& statusMessage() const { return _statusMessage; }
     const QString& taskId() const { return _taskId; }
-    const int& ttl() const { return _ttl; }
+    const std::optional<int>& ttl() const { return _ttl; }
 };
 
 template<>
@@ -1392,7 +1392,9 @@ inline Utils::Result<Task> fromJson<Task>(const QJsonValue &val) {
     if (obj.contains("statusMessage"))
         result._statusMessage = obj.value("statusMessage").toString();
     result._taskId = obj.value("taskId").toString();
-    result._ttl = obj.value("ttl").toInt();
+    if (!obj["ttl"].isNull()) {
+        result._ttl = obj.value("ttl").toInt();
+    }
     co_return result;
 }
 
@@ -1401,13 +1403,16 @@ inline QJsonObject toJson(const Task &data) {
         {"createdAt", data._createdAt},
         {"lastUpdatedAt", data._lastUpdatedAt},
         {"status", toJsonValue(data._status)},
-        {"taskId", data._taskId},
-        {"ttl", data._ttl}
+        {"taskId", data._taskId}
     };
     if (data._pollInterval.has_value())
         obj.insert("pollInterval", *data._pollInterval);
     if (data._statusMessage.has_value())
         obj.insert("statusMessage", *data._statusMessage);
+    if (data._ttl.has_value())
+        obj.insert("ttl", *data._ttl);
+    else
+        obj.insert("ttl", QJsonValue::Null);
     return obj;
 }
 
@@ -1427,7 +1432,7 @@ struct CancelTaskResult {
      */
     std::optional<QString> _statusMessage;
     QString _taskId;  //!< The task identifier.
-    int _ttl;  //!< Actual retention duration from creation in milliseconds, null for unlimited.
+    std::optional<int> _ttl;  //!< Actual retention duration from creation in milliseconds, null for unlimited.
 
     CancelTaskResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
     CancelTaskResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
@@ -1438,7 +1443,7 @@ struct CancelTaskResult {
     CancelTaskResult& status(TaskStatus v) { _status = std::move(v); return *this; }
     CancelTaskResult& statusMessage(QString v) { _statusMessage = std::move(v); return *this; }
     CancelTaskResult& taskId(QString v) { _taskId = std::move(v); return *this; }
-    CancelTaskResult& ttl(int v) { _ttl = std::move(v); return *this; }
+    CancelTaskResult& ttl(std::optional<int> v) { _ttl = std::move(v); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
     QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
@@ -1448,7 +1453,7 @@ struct CancelTaskResult {
     const TaskStatus& status() const { return _status; }
     const std::optional<QString>& statusMessage() const { return _statusMessage; }
     const QString& taskId() const { return _taskId; }
-    const int& ttl() const { return _ttl; }
+    const std::optional<int>& ttl() const { return _ttl; }
 };
 
 template<>
@@ -1483,7 +1488,9 @@ inline Utils::Result<CancelTaskResult> fromJson<CancelTaskResult>(const QJsonVal
     if (obj.contains("statusMessage"))
         result._statusMessage = obj.value("statusMessage").toString();
     result._taskId = obj.value("taskId").toString();
-    result._ttl = obj.value("ttl").toInt();
+    if (!obj["ttl"].isNull()) {
+        result._ttl = obj.value("ttl").toInt();
+    }
     co_return result;
 }
 
@@ -1492,8 +1499,7 @@ inline QJsonObject toJson(const CancelTaskResult &data) {
         {"createdAt", data._createdAt},
         {"lastUpdatedAt", data._lastUpdatedAt},
         {"status", toJsonValue(data._status)},
-        {"taskId", data._taskId},
-        {"ttl", data._ttl}
+        {"taskId", data._taskId}
     };
     if (data.__meta.has_value()) {
         QJsonObject map__meta;
@@ -1505,6 +1511,10 @@ inline QJsonObject toJson(const CancelTaskResult &data) {
         obj.insert("pollInterval", *data._pollInterval);
     if (data._statusMessage.has_value())
         obj.insert("statusMessage", *data._statusMessage);
+    if (data._ttl.has_value())
+        obj.insert("ttl", *data._ttl);
+    else
+        obj.insert("ttl", QJsonValue::Null);
     return obj;
 }
 
@@ -2252,7 +2262,7 @@ struct TaskStatusNotificationParams {
      */
     std::optional<QString> _statusMessage;
     QString _taskId;  //!< The task identifier.
-    int _ttl;  //!< Actual retention duration from creation in milliseconds, null for unlimited.
+    std::optional<int> _ttl;  //!< Actual retention duration from creation in milliseconds, null for unlimited.
 
     TaskStatusNotificationParams& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
     TaskStatusNotificationParams& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
@@ -2263,7 +2273,7 @@ struct TaskStatusNotificationParams {
     TaskStatusNotificationParams& status(TaskStatus v) { _status = std::move(v); return *this; }
     TaskStatusNotificationParams& statusMessage(QString v) { _statusMessage = std::move(v); return *this; }
     TaskStatusNotificationParams& taskId(QString v) { _taskId = std::move(v); return *this; }
-    TaskStatusNotificationParams& ttl(int v) { _ttl = std::move(v); return *this; }
+    TaskStatusNotificationParams& ttl(std::optional<int> v) { _ttl = std::move(v); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
     QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
@@ -2273,7 +2283,7 @@ struct TaskStatusNotificationParams {
     const TaskStatus& status() const { return _status; }
     const std::optional<QString>& statusMessage() const { return _statusMessage; }
     const QString& taskId() const { return _taskId; }
-    const int& ttl() const { return _ttl; }
+    const std::optional<int>& ttl() const { return _ttl; }
 };
 
 template<>
@@ -2308,7 +2318,9 @@ inline Utils::Result<TaskStatusNotificationParams> fromJson<TaskStatusNotificati
     if (obj.contains("statusMessage"))
         result._statusMessage = obj.value("statusMessage").toString();
     result._taskId = obj.value("taskId").toString();
-    result._ttl = obj.value("ttl").toInt();
+    if (!obj["ttl"].isNull()) {
+        result._ttl = obj.value("ttl").toInt();
+    }
     co_return result;
 }
 
@@ -2317,8 +2329,7 @@ inline QJsonObject toJson(const TaskStatusNotificationParams &data) {
         {"createdAt", data._createdAt},
         {"lastUpdatedAt", data._lastUpdatedAt},
         {"status", toJsonValue(data._status)},
-        {"taskId", data._taskId},
-        {"ttl", data._ttl}
+        {"taskId", data._taskId}
     };
     if (data.__meta.has_value()) {
         QJsonObject map__meta;
@@ -2330,6 +2341,10 @@ inline QJsonObject toJson(const TaskStatusNotificationParams &data) {
         obj.insert("pollInterval", *data._pollInterval);
     if (data._statusMessage.has_value())
         obj.insert("statusMessage", *data._statusMessage);
+    if (data._ttl.has_value())
+        obj.insert("ttl", *data._ttl);
+    else
+        obj.insert("ttl", QJsonValue::Null);
     return obj;
 }
 
@@ -4693,7 +4708,7 @@ struct GetTaskResult {
      */
     std::optional<QString> _statusMessage;
     QString _taskId;  //!< The task identifier.
-    int _ttl;  //!< Actual retention duration from creation in milliseconds, null for unlimited.
+    std::optional<int> _ttl;  //!< Actual retention duration from creation in milliseconds, null for unlimited.
 
     GetTaskResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
     GetTaskResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
@@ -4704,7 +4719,7 @@ struct GetTaskResult {
     GetTaskResult& status(TaskStatus v) { _status = std::move(v); return *this; }
     GetTaskResult& statusMessage(QString v) { _statusMessage = std::move(v); return *this; }
     GetTaskResult& taskId(QString v) { _taskId = std::move(v); return *this; }
-    GetTaskResult& ttl(int v) { _ttl = std::move(v); return *this; }
+    GetTaskResult& ttl(std::optional<int> v) { _ttl = std::move(v); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
     QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
@@ -4714,7 +4729,7 @@ struct GetTaskResult {
     const TaskStatus& status() const { return _status; }
     const std::optional<QString>& statusMessage() const { return _statusMessage; }
     const QString& taskId() const { return _taskId; }
-    const int& ttl() const { return _ttl; }
+    const std::optional<int>& ttl() const { return _ttl; }
 };
 
 template<>
@@ -4749,7 +4764,9 @@ inline Utils::Result<GetTaskResult> fromJson<GetTaskResult>(const QJsonValue &va
     if (obj.contains("statusMessage"))
         result._statusMessage = obj.value("statusMessage").toString();
     result._taskId = obj.value("taskId").toString();
-    result._ttl = obj.value("ttl").toInt();
+    if (!obj["ttl"].isNull()) {
+        result._ttl = obj.value("ttl").toInt();
+    }
     co_return result;
 }
 
@@ -4758,8 +4775,7 @@ inline QJsonObject toJson(const GetTaskResult &data) {
         {"createdAt", data._createdAt},
         {"lastUpdatedAt", data._lastUpdatedAt},
         {"status", toJsonValue(data._status)},
-        {"taskId", data._taskId},
-        {"ttl", data._ttl}
+        {"taskId", data._taskId}
     };
     if (data.__meta.has_value()) {
         QJsonObject map__meta;
@@ -4771,6 +4787,10 @@ inline QJsonObject toJson(const GetTaskResult &data) {
         obj.insert("pollInterval", *data._pollInterval);
     if (data._statusMessage.has_value())
         obj.insert("statusMessage", *data._statusMessage);
+    if (data._ttl.has_value())
+        obj.insert("ttl", *data._ttl);
+    else
+        obj.insert("ttl", QJsonValue::Null);
     return obj;
 }
 
