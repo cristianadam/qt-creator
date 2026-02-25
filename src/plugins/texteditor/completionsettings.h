@@ -5,6 +5,8 @@
 
 #include "texteditor_global.h"
 
+#include <coreplugin/dialogs/ioptionspage.h>
+
 namespace Utils { class QtcSettings; }
 namespace TextEditor {
 
@@ -51,5 +53,9 @@ public:
     bool m_autoRemove = true;
     bool m_overwriteClosingChars = false;
 };
+
+TEXTEDITOR_EXPORT CompletionSettings &completionSettings();
+
+namespace Internal { void setupCompletionSettings(); }
 
 } // namespace TextEditor

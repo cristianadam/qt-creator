@@ -368,8 +368,7 @@ void QmlJSAssistProposalItem::applyContextualContent(TextEditorWidget *editorWid
     QString content = text();
     int cursorOffset = 0;
 
-    const bool autoInsertBrackets =
-        TextEditorSettings::completionSettings().m_autoInsertBrackets;
+    const bool autoInsertBrackets = completionSettings().m_autoInsertBrackets;
 
     if (autoInsertBrackets && data().canConvert<CompleteFunctionCall>()) {
         CompleteFunctionCall function = data().value<CompleteFunctionCall>();
@@ -867,7 +866,7 @@ bool QmlJSCompletionAssistProcessor::acceptsIdleEditor() const
             ++startPos;
 
             const QString &word = interface()->textAt(startPos, cursorPos - startPos);
-            if (word.size() >= TextEditorSettings::completionSettings().m_characterThreshold
+            if (word.size() >= completionSettings().m_characterThreshold
                     && isIdentifierChar(word.at(0), true)) {
                 for (int i = 1; i < word.size(); ++i) {
                     if (!isIdentifierChar(word.at(i)))

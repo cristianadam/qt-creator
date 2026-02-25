@@ -368,7 +368,6 @@ void ClangdCompletionItem::apply(TextEditorWidget *editorWidget,
     const int firstParenOffset = rawInsertText.indexOf('(');
     const int lastParenOffset = rawInsertText.lastIndexOf(')');
     const QString detail = item.detail().value_or(QString());
-    const CompletionSettings &completionSettings = TextEditorSettings::completionSettings();
     QString textToBeInserted = rawInsertText.left(firstParenOffset);
     QString extraCharacters;
     int extraLength = 0;
@@ -378,7 +377,7 @@ void ClangdCompletionItem::apply(TextEditorWidget *editorWidget,
     const QTextDocument * const doc = editorWidget->document();
     const Range range = edit->range();
     const int rangeStart = range.start().toPositionInDocument(doc);
-    if (isFunctionLike && completionSettings.m_autoInsertBrackets) {
+    if (isFunctionLike && completionSettings().m_autoInsertBrackets) {
         // If the user typed the opening parenthesis, they'll likely also type the closing one,
         // in which case it would be annoying if we put the cursor after the already automatically
         // inserted closing parenthesis.
@@ -398,7 +397,7 @@ void ClangdCompletionItem::apply(TextEditorWidget *editorWidget,
         if (!abandonParen && !isMacroCall && matchPreviousWord(editorWidget, cursor, detail))
             abandonParen = true; // function definition
         if (!abandonParen) {
-            if (completionSettings.m_spaceAfterFunctionName)
+            if (completionSettings().m_spaceAfterFunctionName)
                 extraCharacters += ' ';
             extraCharacters += '(';
             if (typedChar == '(')

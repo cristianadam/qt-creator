@@ -102,7 +102,7 @@ CodeAssistantPrivate::CodeAssistantPrivate(CodeAssistant *assistant, TextEditorW
     connect(&m_automaticProposalTimer, &QTimer::timeout,
             this, &CodeAssistantPrivate::automaticProposalTimeout);
 
-    updateFromCompletionSettings(TextEditorSettings::completionSettings());
+    updateFromCompletionSettings(completionSettings());
     connect(TextEditorSettings::instance(), &TextEditorSettings::completionSettingsChanged,
             this, &CodeAssistantPrivate::updateFromCompletionSettings);
 

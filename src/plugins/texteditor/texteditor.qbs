@@ -65,8 +65,6 @@ Project {
             "commentssettings.h",
             "completionsettings.cpp",
             "completionsettings.h",
-            "completionsettingspage.cpp",
-            "completionsettingspage.h",
             "displaysettings.cpp",
             "displaysettings.h",
             "extraencodingsettings.cpp",

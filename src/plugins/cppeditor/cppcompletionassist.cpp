@@ -208,8 +208,7 @@ void CppAssistProposalItem::applyContextualContent(TextEditorWidget *editorWidge
     } else {
         toInsert = text();
 
-        const CompletionSettings &completionSettings = TextEditorSettings::completionSettings();
-        const bool autoInsertBrackets = completionSettings.m_autoInsertBrackets;
+        const bool autoInsertBrackets = completionSettings().m_autoInsertBrackets;
 
         if (autoInsertBrackets && symbol && symbol->type()) {
             if (Function *function = symbol->type()->asFunctionType()) {
@@ -233,7 +232,7 @@ void CppAssistProposalItem::applyContextualContent(TextEditorWidget *editorWidge
                     // inserted closing parenthesis.
                     const bool skipClosingParenthesis = m_typedChar != QLatin1Char('(');
 
-                    if (completionSettings.m_spaceAfterFunctionName)
+                    if (completionSettings().m_spaceAfterFunctionName)
                         extraChars += QLatin1Char(' ');
                     extraChars += QLatin1Char('(');
                     if (m_typedChar == QLatin1Char('('))
@@ -828,7 +827,7 @@ bool InternalCppCompletionAssistProcessor::accepts()
 
         if (!isValidIdentifierChar(characterUnderCursor)) {
             const int startOfName = findStartOfName(pos);
-            if (pos - startOfName >= TextEditorSettings::completionSettings().m_characterThreshold) {
+            if (pos - startOfName >= completionSettings().m_characterThreshold) {
                 const QChar firstCharacter = interface()->characterAt(startOfName);
                 if (isValidFirstIdentifierChar(firstCharacter)) {
                     return !isInCommentOrString(interface(),

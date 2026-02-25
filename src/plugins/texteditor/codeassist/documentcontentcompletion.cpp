@@ -68,7 +68,7 @@ IAssistProposal *DocumentContentCompletionProcessor::performAsync()
     if (interface()->reason() == IdleEditor) {
         QChar characterUnderCursor = interface()->characterAt(interface()->position());
         if (characterUnderCursor.isLetterOrNumber()
-                || length < TextEditorSettings::completionSettings().m_characterThreshold) {
+                || length < completionSettings().m_characterThreshold) {
             return nullptr;
         }
     }

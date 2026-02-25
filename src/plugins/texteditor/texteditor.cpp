@@ -1675,7 +1675,7 @@ void TextEditorWidgetPrivate::setDocument(const QSharedPointer<TextDocument> &do
     q->setBehaviorSettings(globalBehaviorSettings().data());
     q->setMarginSettings(marginSettings().data());
     q->setDisplaySettings(displaySettings());
-    q->setCompletionSettings(TextEditorSettings::completionSettings());
+    q->setCompletionSettings(completionSettings());
     q->setExtraEncodingSettings(globalExtraEncodingSettings().data());
     q->textDocument()->setCodeStyle(TextEditorSettings::codeStyle(m_tabSettingsId));
 

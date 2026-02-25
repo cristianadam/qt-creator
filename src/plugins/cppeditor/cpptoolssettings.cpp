@@ -12,7 +12,7 @@
 
 #include <extensionsystem/pluginmanager.h>
 
-#include <texteditor/completionsettingspage.h>
+#include <texteditor/completionsettings.h>
 #include <texteditor/codestylepool.h>
 #include <texteditor/tabsettings.h>
 #include <texteditor/texteditorsettings.h>

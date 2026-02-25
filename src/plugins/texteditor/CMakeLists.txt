@@ -58,7 +58,6 @@ add_qtc_plugin(TextEditor
     command.cpp command.h
     commentssettings.cpp commentssettings.h
     completionsettings.cpp completionsettings.h
-    completionsettingspage.cpp completionsettingspage.h
     displaysettings.cpp displaysettings.h
     extraencodingsettings.cpp extraencodingsettings.h
     findincurrentfile.cpp findincurrentfile.h
