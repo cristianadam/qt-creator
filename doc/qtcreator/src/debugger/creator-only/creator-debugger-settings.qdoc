@@ -45,7 +45,7 @@
 
     When using CDB as backend, you can specify that the debugger should break on
     specific events, such as C++ exceptions, thread creation or exit, loading or
-    unloading \l{Viewing Modules}{application modules}, or particular output by
+    unloading \l{Viewing modules}{application modules}, or particular output by
     selecting preferences in \uicontrol CDB > \uicontrol {Break on}. To disable
     first-chance break on access violation exceptions, select
     \uicontrol {Ignore first chance access violations}.
@@ -58,7 +58,7 @@
     \l{http://sourceware.org/gdb/onlinedocs/gdb/Breakpoints.html#Breakpoints}
     {Breakpoints, Watchpoints, and Catchpoints} in GDB documentation.
 
-    \section1 Source Paths Mapping
+    \section1 Source paths mapping
 
     To enable the debugger to step into the code and display the source code
     when using a copy of the source tree at a location different from the one
@@ -152,7 +152,7 @@
             packages.
     \endtable
 
-    \section1 Executing Additional Commands
+    \section1 Executing additional commands
 
     To execute GDB commands after GDB has been started, but before the debugged
     application is started or attached, and before the debugging helpers are
@@ -169,7 +169,7 @@
     To execute arbitrary Python scripts, use
     \c {python execfile('/path/to/script.py')}.
 
-    \section1 Extended GDB Preferences
+    \section1 Extended GDB preferences
 
     The preferences in the \uicontrol Extended group give access to advanced
     or experimental functions of GDB.
@@ -276,7 +276,7 @@
         \li \uicontrol {Break On}
         \li Whether the debugger should break on C++ exceptions, on thread
             creation or exit, on loading or unloading the specified
-            \l{Viewing Modules}{application modules}, or on the specified output.
+            \l{Viewing modules}{application modules}, or on the specified output.
     \row
         \li \uicontrol {Add Exceptions to Issues View}
         \li Shows information about first-chance and second-chance exceptions

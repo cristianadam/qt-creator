@@ -44,7 +44,7 @@
                     The 32-bit version can only debug 32-bit executables, whereas
                     the 64-bit version can debug both 64-bit and 32-bit
                     executables. For more information, see
-                    \l {Debugging Tools for Windows}.
+                    \l {Debugging tools for Windows}.
 
                 \li For GDB, specify the path to the GDB executable. The
                     executable must be built with Python scripting support
@@ -74,6 +74,6 @@
     The debugger disappears from the list when you select \uicontrol Apply.
     Until then, you can cancel the deletion by clicking \uicontrol Restore.
 
-    \sa {Debugging}, {Debuggers}, {Supported Debuggers},
-    {Troubleshooting Debugger}
+    \sa {Debugging}, {Debuggers}, {Supported debuggers},
+    {Troubleshooting debugger}
 */

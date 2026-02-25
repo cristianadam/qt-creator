@@ -68,7 +68,7 @@
     Optionally, you can set up the Microsoft Symbol Server if you need
     symbol information from Microsoft modules that is not found locally.
 
-    For more information, see \l{Supported Debuggers} and \l{CDB Paths}.
+    For more information, see \l{Supported debuggers} and \l{CDB Paths}.
 
     \section1 Launching the debugger
 
@@ -143,8 +143,8 @@
 
         \li Examines \l{Evaluating expressions}{expressions}.
 
-        \li Updates the \l{Viewing and Editing Register State}{Registers},
-            \l{Viewing Modules}{Modules}, and \l{Viewing Disassembled Code}
+        \li Updates the \l{Viewing and editing register state}{Registers},
+            \l{Viewing modules}{Modules}, and \l{Viewing disassembled code}
             {Disassembler} views if you are debugging C++ based applications.
 
     \endlist
@@ -192,7 +192,7 @@
 
     To show complex structures, such as \c QObjects or associative containers,
     in a clear and concise manner, \QC uses Python scripts that are called
-    \l{Debugging Helpers}{debugging helpers}.
+    \l{Debugging helpers}{debugging helpers}.
 
     \QC ships with debugging helpers for more than 200 of the most popular Qt
     classes, standard C++ containers, and smart pointers, covering the usual
@@ -809,15 +809,15 @@
     \row
         \li Threads
         \li Switch between threads.
-        \li \l {Viewing Threads}
+        \li \l {Viewing threads}
     \row
         \li Modules
         \li View information about modules included in the application.
-        \li \l {Viewing Modules}
+        \li \l {Viewing modules}
     \row
         \li Source Files
         \li View a list of source files included in the project.
-        \li \l {Viewing Source Files}
+        \li \l {Viewing source files}
     \row
         \li Locals
         \li View information about the parameters of the function in the topmost
@@ -831,7 +831,7 @@
         \li Registers
         \li View the current state of the CPU registers to examine the
             application at the machine level.
-        \li \l {Viewing and Editing Register State}
+        \li \l {Viewing and editing register state}
     \row
         \li Peripheral Registers
         \li View the current state of peripheral registers.
@@ -845,13 +845,13 @@
             The log view acts as a console, so you can send the contents
             of the line under the text cursor in the log directly to the
             debugger.
-        \li \l{Troubleshooting Debugger}
+        \li \l{Troubleshooting debugger}
 
             \l {Debugger Log}
      \row
         \li Disassembler
         \li View disassembled code for the current function.
-        \li \l {Viewing Disassembled Code}
+        \li \l {Viewing disassembled code}
      \row
         \li Editor
         \li Open the current source file in the text editor for changing it.
@@ -966,11 +966,11 @@
 
     To show complex structures, such as \c QObjects or associative containers,
     in a clear and concise manner, \QC uses Python scripts that are called
-    \l{Debugging Helpers}{debugging helpers}.
+    \l{Debugging helpers}{debugging helpers}.
 
     In addition to the generic IDE functionality of the
     \l {Viewing call stack trace}{Stack}, \uicontrol {Locals},
-    \uicontrol {Expressions}, \l {Viewing and Editing Register State}{Registers},
+    \uicontrol {Expressions}, \l {Viewing and editing register state}{Registers},
     and other views, \QC makes debugging Qt-based applications easy. The debugger
     plugin understands the internal layout of several Qt classes, for example,
     QString, the Qt containers, and most importantly QObject (and classes derived
@@ -1094,7 +1094,7 @@
     In the \uicontrol {Locals} or the \uicontrol {Expressions} view, select
     \uicontrol {Change Value Display Format} in the context menu to change the
     value display format. The available options depend on the type of the
-    current items, and are provided by \l{Debugging Helpers}{debugging helpers}.
+    current items, and are provided by \l{Debugging helpers}{debugging helpers}.
 
     To force a plain C-like display of structures, go to \preferences >
     \uicontrol Debugger > \uicontrol {Locals & Expressions}, and then clear
@@ -1185,7 +1185,7 @@
 
     \ingroup creator-reference-debugger
 
-    \title Viewing Threads
+    \title Viewing threads
 
     \brief View the threads currently active in a multi-threaded application.
 
@@ -1217,7 +1217,7 @@
 
     \ingroup creator-reference-debugger
 
-    \title Viewing Modules
+    \title Viewing modules
 
     \brief View information about the modules included in a debugged application.
 
@@ -1265,7 +1265,7 @@
     By default, the \uicontrol Modules view is hidden. To show it, select it in
     \uicontrol Views on the debugger toolbar.
 
-    \section1 Breaking on Loading Modules in CDB
+    \section1 Breaking on loading modules in CDB
 
     When using CDB as debug backend, you can specify that the debugger should
     break when application modules are loaded or unloaded. To enable breaking
@@ -1285,7 +1285,7 @@
 
     \ingroup creator-reference-debugger
 
-    \title Viewing Source Files
+    \title Viewing source files
 
     \brief View source files included in a debugged project.
 
@@ -1307,7 +1307,7 @@
     By default, the \uicontrol {Source Files} view is hidden. To show it, select
     it in \uicontrol Views on the debugger toolbar.
 
-    \section1 External Sources
+    \section1 External sources
 
     To enable the debugger to step into the code and display the source code
     when using a copy of the source tree at a location different from the one
@@ -1316,7 +1316,7 @@
 
     \image {qtcreator-preferences-debugger-general.webp} {General tab in Debugger preferences}
 
-    For more information, see \l{Source Paths Mapping}.
+    For more information, see \l{Source paths mapping}.
 
     \sa {Debug}{How to: Debug}, {Debugging}, {Debuggers}
 */
@@ -1327,7 +1327,7 @@
 
     \ingroup creator-reference-debugger
 
-    \title Viewing and Editing Register State
+    \title Viewing and editing register state
 
     \brief View the current state of general-purpose and special-purpose CPU
     registers.
@@ -1355,8 +1355,8 @@
 
     \list
         \li Reload register list.
-        \li Open \l {Examining Memory}{Memory Editor} at the selected value.
-        \li Open the \l {Viewing Disassembled Code}{Disassembler} view.
+        \li Open \l {Examining memory}{Memory Editor} at the selected value.
+        \li Open the \l {Viewing disassembled code}{Disassembler} view.
         \li Display a value in hexadecimal, decimal, octal, or binary format.
         \li Set \l{Debuggers}{debugger preferences}.
     \endlist
@@ -1364,7 +1364,7 @@
     By default, the \uicontrol Registers view is hidden. To show it, select it in
     \uicontrol Views on the debugger toolbar.
 
-    \section1 Examining Memory
+    \section1 Examining memory
 
     You can examine memory in many formats, independently of the application's
     data types.
@@ -1455,12 +1455,12 @@
         \li Clear log contents.
         \li Save log contents as a file.
         \li Log time stamps.
-        \li Reload debugging helpers after \l{Adding Custom Debugging Helpers}
+        \li Reload debugging helpers after \l{Adding custom debugging helpers}
             {adding custom debugging helpers}.
         \li Set \l{Debuggers}{debugger preferences}.
     \endlist
 
-    \section1 Directly Interacting with Debuggers
+    \section1 Directly interacting with debuggers
 
     You can use the left pane of the \uicontrol {Debugger Log} view to directly
     interact with the command line of the debugger.
@@ -1484,7 +1484,7 @@
 
     \ingroup creator-reference-debugger
 
-    \title Viewing Disassembled Code
+    \title Viewing disassembled code
 
     \brief View disassembled code for the current function.
 
@@ -1509,12 +1509,12 @@
         \li Select
             \inlineimage {icons/debugger_singleinstructionmode.png} {Operate by Instruction}
             (\uicontrol {Operate by Instruction}) on the debugger toolbar.
-        \li In the \l {Viewing and Editing Register State}{Registers} view,
+        \li In the \l {Viewing and editing register state}{Registers} view,
             select a value, and then select \uicontrol {Open Disassembler at <value>}
             in the context menu.
     \endlist
 
-    \section1 Starting Disassembler
+    \section1 Starting disassembler
 
     To start a disassembler from the \uicontrol Registers view, select
     \uicontrol {Open Disassembler} and set the disassembler address:
@@ -1530,7 +1530,7 @@
 
     \ingroup creator-reference-debugger
 
-    \title Debugging Helpers
+    \title Debugging helpers
 
     \brief Load, customize, and add debugging helpers.
 
@@ -1555,7 +1555,7 @@
 
     \image {qtcreator-preferences-debugger-gdb.webp} {GDB tab in Debugger preferences}
 
-    \section1 Customizing Built-In Debugging Helpers
+    \section1 Customizing built-in debugging helpers
 
     You can have commands executed after built-in debugging helpers have
     been loaded and fully initialized. To load additional debugging helpers or
@@ -1584,7 +1584,7 @@
     during debugging, go to \preferences > \uicontrol Debugger > \uicontrol GDB >
     \uicontrol {Show a message box when receiving a signal}.
 
-    \section1 Adding Custom Debugging Helpers
+    \section1 Adding custom debugging helpers
 
     To add debugging helpers for your own types, no compilation is required,
     just adding a few lines of Python. The scripts can address multiple versions
@@ -1636,7 +1636,7 @@
     \uicontrol {Reload Debugging Helpers} from the context menu of the
     \l {Debugger Log} view.
 
-    \section1 Debugging Helper Overview
+    \section1 Debugging helper overview
 
     The implementation of a debugging helper typically consists of a single
     Python function, which needs to be named \c{qdump__NS__Foo}, where
@@ -1724,7 +1724,7 @@
         d.putArrayData(base, size, typeobj)
     \endcode
 
-    \section1 Debugging Helper Implementation
+    \section1 Debugging helper implementation
 
     A debugging helper creates a description of the displayed data item
     in a format that is similar to GDB/MI and JSON.
@@ -1778,7 +1778,7 @@
     members specified in \c qtcreator\share\qtcreator\debugger\dumper.py.
 
 
-    \section2 Dumper Class
+    \section2 Dumper class
 
     The \c Dumper class has generic bookkeeping, low-level, and convenience
     functions:
@@ -1944,7 +1944,7 @@
 
     \endlist
 
-    \section2 Dumper.Type Class
+    \section2 Dumper.Type class
 
     The \c{Dumper.Type} class describes the type of a piece of data, typically
     a C++ class or struct, a pointer to a struct, or a primitive type, such as
@@ -1999,7 +1999,7 @@
     \endlist
 
 
-    \section2 Dumper.Field Class
+    \section2 Dumper.Field class
 
     The \c{Dumper.Field} class describes a base class or a data member of a type
     object:
@@ -2022,7 +2022,7 @@
     \endlist
 
 
-    \section2 Dumper.Value Class
+    \section2 Dumper.Value class
 
     The \c{Dumper.Value} class describes a piece of data, such as instances of
     C++ classes or primitive data types. It can also be used to describe
@@ -2084,7 +2084,7 @@
 
     \endlist
 
-    \section2 Children and SubItem Class
+    \section2 Children and SubItem class
 
     The attempt to create child items might lead to errors if data is
     uninitialized or corrupted. To gracefully recover in such situations, use
@@ -2134,14 +2134,14 @@
 
     \ingroup creator-reference-debugger
 
-    \title Troubleshooting Debugger
+    \title Troubleshooting debugger
 
     \brief Solve problems that you might encounter while debugging.
 
     This section lists some typical problems that you might encounter while
     debugging and solutions to them.
 
-    \section1 Cannot Launch Debugger
+    \section1 Cannot launch debugger
 
     Some anti-virus applications do not allow debuggers to retrieve data. For
     example, on Windows, launching the debugger might fail with the following
@@ -2160,7 +2160,7 @@
     debugger from launching. Stop all running processes and then relaunch the
     debugger.
 
-    \section1 Debugger Does Not Hit Breakpoints
+    \section1 Debugger does not hit breakpoints
 
     You might have created a release build that does not have debug
     information. A GNU Compiler Collection (GCC) debug build has the \c {-g}
@@ -2168,7 +2168,7 @@
     the \l {Compile Output}. If it is not, adjust your build
     settings in the \uicontrol Projects mode.
 
-    \section1 Debugger Does Not Work
+    \section1 Debugger does not work
 
     If the debugger does not work properly, try the following:
 
@@ -2180,7 +2180,7 @@
             check that the \l {Running applications}{build and run kit selector}
             picked a runnable target and you can run the application.
 
-        \li Make sure the debugger is \l{Supported Debuggers}{set up properly}.
+        \li Make sure the debugger is \l{Supported debuggers}{set up properly}.
 
         \li In the \uicontrol Debug mode, go to \uicontrol View >
             \uicontrol Views > \uicontrol {Debugger Log} to open the
@@ -2195,7 +2195,7 @@
 
     \endlist
 
-    \section1 Pointer Variable Members Are Not Displayed Directly
+    \section1 Pointer variable members are not displayed directly
 
     When you use the \uicontrol Locals and \uicontrol Expressions views to inspect a
     pointer variable and expand the variable tree item, another tree item level
@@ -2206,19 +2206,19 @@
     If you cannot view variables at all, check that you selected a \e debug build
     configuration.
 
-    \section1 Structure Members Are Not Sorted According to Structure Layout
+    \section1 Structure members are not sorted according to structure layout
 
     By default, structure members are displayed in alphabetic order. To inspect
     the real layout in memory, clear
     \uicontrol {Sort Members of Classes and Structs Alphabetically} in the
     context menu in the \uicontrol Locals and \uicontrol Expressions views.
 
-    \section1 Built-in Debugger Is Slow During Startup and Runtime
+    \section1 Built-in debugger is slow during startup and runtime
 
     Slowness that is related to the loading of debug information is hard to
     avoid. The following sections describe some possible solutions.
 
-    \section2 Caching GDB Symbol Index
+    \section2 Caching GDB symbol index
 
     When using GDB as backend, you can automatically save a copy of
     its symbol index in a cache on disk and retrieve it from there
@@ -2227,7 +2227,7 @@
 
     \image {qtcreator-preferences-debugger-gdb.webp} {GDB tab in Debugger preferences}
 
-    \section2 Minimizing Number of Breakpoints
+    \section2 Minimizing number of breakpoints
 
     Some debugging slowness stems from maintaining breakpoints inside
     the debugger (under some circumstances all breakpoints need to be inserted
@@ -2235,11 +2235,11 @@
     each step. We recommend that you minimize the number of breakpoints and
     watched expressions.
 
-    \section2 Cleaning Builds
+    \section2 Cleaning builds
 
     If out-of-date \c .pdb files make debugging slower, try a clean build.
 
-    \section2 Disabling Incremental Linking
+    \section2 Disabling incremental linking
 
     Incremental linking can affect debugging. If the \l {Debugger Log} view shows
     the \e {Unable to verify checksum of module} message, disable incremental
@@ -2259,7 +2259,7 @@
     QMAKE_LFLAGS_DEBUG += /INCREMENTAL:NO
     \endcode
 
-     \section1 Debugger Cannot Attach to Running Process on Linux
+    \section1 Debugger cannot attach to running process on Linux
 
     GDB uses \c ptrace to attach to running processes. Some Linux distributions
     do not allow this, which stops all attempts to either directly attach to an
