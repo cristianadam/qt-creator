@@ -1,5 +1,0 @@
-<RCC>
-    <qresource prefix="/AiAssistant">
-        <file>images/ai.png</file>
-    </qresource>
-</RCC>
