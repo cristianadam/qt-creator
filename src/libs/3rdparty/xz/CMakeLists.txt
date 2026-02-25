@@ -10,9 +10,7 @@ add_qtc_library(qtcXz STATIC
     src/common/tuklib_cpucores.c
     src/liblzma/check/check.c
     src/liblzma/check/crc32_fast.c
-    src/liblzma/check/crc32_table.c
     src/liblzma/check/crc64_fast.c
-    src/liblzma/check/crc64_table.c
     src/liblzma/check/crc_clmul_consts_gen.c
     src/liblzma/check/sha256.c
     src/liblzma/common/alone_decoder.c
