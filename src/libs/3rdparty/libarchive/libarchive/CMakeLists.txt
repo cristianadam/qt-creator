@@ -38,8 +38,6 @@ SET(libarchive_SOURCES
   archive_entry_stat.c
   archive_entry_strmode.c
   archive_entry_xattr.c
-  archive_getdate.c
-  archive_getdate.h
   archive_hmac.c
   archive_hmac_private.h
   archive_match.c
@@ -49,10 +47,12 @@ SET(libarchive_SOURCES
   archive_options_private.h
   archive_pack_dev.h
   archive_pack_dev.c
+  archive_parse_date.c
   archive_pathmatch.c
   archive_pathmatch.h
   archive_platform.h
   archive_platform_acl.h
+  archive_platform_stat.h
   archive_platform_xattr.h
   archive_ppmd_private.h
   archive_ppmd8.c
@@ -117,6 +117,8 @@ SET(libarchive_SOURCES
   archive_string.h
   archive_string_composition.h
   archive_string_sprintf.c
+  archive_time.c
+  archive_time_private.h
   archive_util.c
   archive_version_details.c
   archive_virtual.c
@@ -246,7 +248,7 @@ IF(BUILD_SHARED_LIBS)
   ADD_LIBRARY(archive SHARED ${libarchive_SOURCES} ${include_HEADERS})
   TARGET_INCLUDE_DIRECTORIES(archive PUBLIC .)
   TARGET_LINK_LIBRARIES(archive ${ADDITIONAL_LIBS})
-  SET_TARGET_PROPERTIES(archive PROPERTIES 
+  SET_TARGET_PROPERTIES(archive PROPERTIES
                         VERSION ${SOVERSION_FULL}
                         SOVERSION ${SOVERSION}
                         MACHO_COMPATIBILITY_VERSION ${MACHO_COMPATIBILITY_VERSION}

@@ -8,8 +8,12 @@ endif()
 
 add_subdirectory(libarchive)
 
-# To generate these files, use the CMakeLists.original.txt file, and copy the generated config.h
-# from your build directories to the respective config_*.h file.
+# To generate these files, log into build VMs (make sure to use the "oldest"
+# supported Linux version), configure upstream libarchive with
+# cmake -C <qtc>/src/libs/3rdparty/libarchive/configure_libarchive.cmake
+# (use `-G "MinGW Makefiles"` and make sure it is in PATH to configure for MinGW)
+# and copy the generated config.h from the build directory to the respective
+# config_*.h file.
 if(APPLE)
   set(PLATFORM_CONFIG_H "config_mac.h")
 elseif(MINGW)

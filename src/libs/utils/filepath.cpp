@@ -2754,13 +2754,14 @@ FilePath FilePath::canonicalPath() const
                 FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS,
                 nullptr);
     if (fileHandle != INVALID_HANDLE_VALUE) {
-        std::unique_ptr<TCHAR[]> normalizedPath(new TCHAR[MAX_PATH]);
+        const auto initialBufLen = MAX_PATH + 10;
+        std::unique_ptr<TCHAR[]> normalizedPath(new TCHAR[initialBufLen]);
         auto length = GetFinalPathNameByHandleW(
                     fileHandle,
                     normalizedPath.get(),
-                    MAX_PATH,
+                    initialBufLen,
                     FILE_NAME_NORMALIZED);
-        if (length > MAX_PATH) {
+        if (length > initialBufLen) {
             normalizedPath.reset(new TCHAR[length]);
             length = GetFinalPathNameByHandleW(
                 fileHandle,

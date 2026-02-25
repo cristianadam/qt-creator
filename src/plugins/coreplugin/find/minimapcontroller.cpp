@@ -48,7 +48,16 @@ void MinimapController::setScrollArea(QAbstractScrollArea *scrollArea)
         PlainTextEdit *editor = qobject_cast<PlainTextEdit *>(scrollArea);
         m_minimap = new MinimapOverlay(editor);
         m_minimap->scheduleUpdate();
+        if (m_overrideBlockColor)
+            m_minimap->setOverrideBlockColorFunction(m_overrideBlockColor);
     }
+}
+
+void MinimapController::setOverrideBlockColorFunction(const std::function<std::optional<QColor> (const QTextBlock &)> &func)
+{
+    m_overrideBlockColor = func;
+    if (m_minimap)
+        m_minimap->setOverrideBlockColorFunction(func);
 }
 
 } // namespace Core

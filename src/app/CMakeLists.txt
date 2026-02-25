@@ -119,8 +119,18 @@ if (APPLE)
       MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/app-Info.plist"
   )
   # icon
-  set(USE_XCODE_26_FOR_APPICON OFF)  # switch to ON to disable legacy mode
-  if(USE_XCODE_26_FOR_APPICON)
+  ## Roughly check for Xcode 26 tools for the default icon generation method
+  if(${CMAKE_C_COMPILER_ID} STREQUAL "AppleClang"
+      AND ${CMAKE_C_COMPILER_VERSION} VERSION_GREATER_EQUAL 17.0.0.17000319)
+    set(QTC_USE_XCODE_26_FOR_APPICON_DEFAULT ON)
+  else()
+    set(QTC_USE_XCODE_26_FOR_APPICON_DEFAULT OFF)
+  endif()
+  option(QTC_USE_XCODE_26_FOR_APPICON
+    "Use Xcode 26 tools to generate the app icon from Icon Composer"
+    ${QTC_USE_XCODE_26_FOR_APPICON_DEFAULT}
+  ) # switch to ON to disable legacy mode
+  if(QTC_USE_XCODE_26_FOR_APPICON)
     set(QTCREATOR_APP_ICON "${CMAKE_CURRENT_BINARY_DIR}/qtcreator.icns")
     set(QTCREATOR_ACTOOL_APP_ICON_OUTPUT "${QTCREATOR_APP_ICON}")
     set(QTCREATOR_APP_ICON_ASSET "${IDE_ICON_PATH}/macos/qtcreator.icon")
