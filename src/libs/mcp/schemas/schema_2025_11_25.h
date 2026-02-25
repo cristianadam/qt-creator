@@ -326,6 +326,25 @@ inline QJsonObject toJson(const BooleanSchema &data) {
     return obj;
 }
 
+/** A progress token, used to associate progress notifications with the original request. */
+using ProgressToken = std::variant<QString, int>;
+
+template<>
+inline Utils::Result<ProgressToken> fromJson<ProgressToken>(const QJsonValue &val) {
+    if (val.isString()) {
+        return ProgressToken(val.toString());
+    }
+    if (val.isDouble()) {
+        return ProgressToken(val.toInt());
+    }
+    return Utils::ResultError("Invalid ProgressToken");
+}
+
+inline QJsonValue toJsonValue(const ProgressToken &val) {
+    return std::visit([](const auto &v) -> QJsonValue {
+        return QVariant::fromValue(v).toJsonValue();
+    }, val);
+}
 /**
  * Metadata for augmenting a request with task execution.
  * Include this in the `task` field of the request parameters.
@@ -356,25 +375,6 @@ inline QJsonObject toJson(const TaskMetadata &data) {
     return obj;
 }
 
-/** A progress token, used to associate progress notifications with the original request. */
-using ProgressToken = std::variant<QString, int>;
-
-template<>
-inline Utils::Result<ProgressToken> fromJson<ProgressToken>(const QJsonValue &val) {
-    if (val.isString()) {
-        return ProgressToken(val.toString());
-    }
-    if (val.isDouble()) {
-        return ProgressToken(val.toInt());
-    }
-    return Utils::ResultError("Invalid ProgressToken");
-}
-
-inline QJsonValue toJsonValue(const ProgressToken &val) {
-    return std::visit([](const auto &v) -> QJsonValue {
-        return QVariant::fromValue(v).toJsonValue();
-    }, val);
-}
 /** Parameters for a `tools/call` request. */
 struct CallToolRequestParams {
     /**
@@ -521,8 +521,235 @@ inline QJsonObject toJson(const CallToolRequest &data) {
     return obj;
 }
 
+struct TextResourceContents {
+    std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+    std::optional<QString> _mimeType;  //!< The MIME type of this resource, if known.
+    QString _text;  //!< The text of the item. This must only be set if the item can actually be represented as text (not binary data).
+    QString _uri;  //!< The URI of this resource.
+
+    TextResourceContents& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    TextResourceContents& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
+    TextResourceContents& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
+    TextResourceContents& mimeType(QString v) { _mimeType = std::move(v); return *this; }
+    TextResourceContents& text(QString v) { _text = std::move(v); return *this; }
+    TextResourceContents& uri(QString v) { _uri = std::move(v); return *this; }
+
+    const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
+    QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
+    const std::optional<QString>& mimeType() const { return _mimeType; }
+    const QString& text() const { return _text; }
+    const QString& uri() const { return _uri; }
+};
+
+template<>
+inline Utils::Result<TextResourceContents> fromJson<TextResourceContents>(const QJsonValue &val) {
+    if (!val.isObject())
+        return Utils::ResultError("Expected JSON object for TextResourceContents");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("text"))
+        return Utils::ResultError("Missing required field: text");
+    if (!obj.contains("uri"))
+        return Utils::ResultError("Missing required field: uri");
+    TextResourceContents result;
+    if (obj.contains("_meta") && obj["_meta"].isObject()) {
+        const QJsonObject mapObj__meta = obj["_meta"].toObject();
+        QMap<QString, QJsonValue> map__meta;
+        for (auto it = mapObj__meta.constBegin(); it != mapObj__meta.constEnd(); ++it)
+            map__meta.insert(it.key(), it.value());
+        result.__meta = map__meta;
+    }
+    if (obj.contains("mimeType"))
+        result._mimeType = obj.value("mimeType").toString();
+    result._text = obj.value("text").toString();
+    result._uri = obj.value("uri").toString();
+    return result;
+}
+
+inline QJsonObject toJson(const TextResourceContents &data) {
+    QJsonObject obj{
+        {"text", data._text},
+        {"uri", data._uri}
+    };
+    if (data.__meta.has_value()) {
+        QJsonObject map__meta;
+        for (auto it = data.__meta->constBegin(); it != data.__meta->constEnd(); ++it)
+            map__meta.insert(it.key(), it.value());
+        obj.insert("_meta", map__meta);
+    }
+    if (data._mimeType.has_value())
+        obj.insert("mimeType", *data._mimeType);
+    return obj;
+}
+
+using EmbeddedResourceResource = std::variant<TextResourceContents, BlobResourceContents>;
+
+template<>
+inline Utils::Result<EmbeddedResourceResource> fromJson<EmbeddedResourceResource>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Invalid EmbeddedResourceResource: expected object");
+    const QJsonObject obj = val.toObject();
+    if (obj.contains("text"))
+        co_return EmbeddedResourceResource(co_await fromJson<TextResourceContents>(val));
+    if (obj.contains("blob"))
+        co_return EmbeddedResourceResource(co_await fromJson<BlobResourceContents>(val));
+    co_return Utils::ResultError("Invalid EmbeddedResourceResource");
+}
+
+inline QJsonValue toJsonValue(const EmbeddedResourceResource &val) {
+    return std::visit([](const auto &v) -> QJsonValue {
+        using T = std::decay_t<decltype(v)>;
+        if constexpr (std::is_same_v<T, QJsonObject>) {
+            return v;
+        } else {
+            return toJson(v);
+        }
+    }, val);
+}
+/**
+ * The contents of a resource, embedded into a prompt or tool call result.
+ *
+ * It is up to the client how best to render embedded resources for the benefit
+ * of the LLM and/or the user.
+ */
+struct EmbeddedResource {
+    std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+    std::optional<Annotations> _annotations;  //!< Optional annotations for the client.
+    EmbeddedResourceResource _resource;
+
+    EmbeddedResource& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    EmbeddedResource& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
+    EmbeddedResource& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
+    EmbeddedResource& annotations(Annotations v) { _annotations = std::move(v); return *this; }
+    EmbeddedResource& resource(EmbeddedResourceResource v) { _resource = std::move(v); return *this; }
+
+    const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
+    QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
+    const std::optional<Annotations>& annotations() const { return _annotations; }
+    const EmbeddedResourceResource& resource() const { return _resource; }
+};
+
+template<>
+inline Utils::Result<EmbeddedResource> fromJson<EmbeddedResource>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for EmbeddedResource");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("resource"))
+        co_return Utils::ResultError("Missing required field: resource");
+    if (!obj.contains("type"))
+        co_return Utils::ResultError("Missing required field: type");
+    EmbeddedResource result;
+    if (obj.contains("_meta") && obj["_meta"].isObject()) {
+        const QJsonObject mapObj__meta = obj["_meta"].toObject();
+        QMap<QString, QJsonValue> map__meta;
+        for (auto it = mapObj__meta.constBegin(); it != mapObj__meta.constEnd(); ++it)
+            map__meta.insert(it.key(), it.value());
+        result.__meta = map__meta;
+    }
+    if (obj.contains("annotations") && obj["annotations"].isObject())
+        result._annotations = co_await fromJson<Annotations>(obj["annotations"]);
+    if (obj.contains("resource"))
+        result._resource = co_await fromJson<EmbeddedResourceResource>(obj["resource"]);
+    if (obj.value("type").toString() != "resource")
+        co_return Utils::ResultError("Field 'type' must be 'resource', got: " + obj.value("type").toString());
+    co_return result;
+}
+
+inline QJsonObject toJson(const EmbeddedResource &data) {
+    QJsonObject obj{
+        {"resource", toJsonValue(data._resource)},
+        {"type", QString("resource")}
+    };
+    if (data.__meta.has_value()) {
+        QJsonObject map__meta;
+        for (auto it = data.__meta->constBegin(); it != data.__meta->constEnd(); ++it)
+            map__meta.insert(it.key(), it.value());
+        obj.insert("_meta", map__meta);
+    }
+    if (data._annotations.has_value())
+        obj.insert("annotations", toJson(*data._annotations));
+    return obj;
+}
+
+/** An image provided to or from an LLM. */
+struct ImageContent {
+    std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+    std::optional<Annotations> _annotations;  //!< Optional annotations for the client.
+    QString _data;  //!< The base64-encoded image data.
+    QString _mimeType;  //!< The MIME type of the image. Different providers may support different image types.
+
+    ImageContent& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    ImageContent& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
+    ImageContent& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
+    ImageContent& annotations(Annotations v) { _annotations = std::move(v); return *this; }
+    ImageContent& data(QString v) { _data = std::move(v); return *this; }
+    ImageContent& mimeType(QString v) { _mimeType = std::move(v); return *this; }
+
+    const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
+    QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
+    const std::optional<Annotations>& annotations() const { return _annotations; }
+    const QString& data() const { return _data; }
+    const QString& mimeType() const { return _mimeType; }
+};
+
+template<>
+inline Utils::Result<ImageContent> fromJson<ImageContent>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for ImageContent");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("data"))
+        co_return Utils::ResultError("Missing required field: data");
+    if (!obj.contains("mimeType"))
+        co_return Utils::ResultError("Missing required field: mimeType");
+    if (!obj.contains("type"))
+        co_return Utils::ResultError("Missing required field: type");
+    ImageContent result;
+    if (obj.contains("_meta") && obj["_meta"].isObject()) {
+        const QJsonObject mapObj__meta = obj["_meta"].toObject();
+        QMap<QString, QJsonValue> map__meta;
+        for (auto it = mapObj__meta.constBegin(); it != mapObj__meta.constEnd(); ++it)
+            map__meta.insert(it.key(), it.value());
+        result.__meta = map__meta;
+    }
+    if (obj.contains("annotations") && obj["annotations"].isObject())
+        result._annotations = co_await fromJson<Annotations>(obj["annotations"]);
+    result._data = obj.value("data").toString();
+    result._mimeType = obj.value("mimeType").toString();
+    if (obj.value("type").toString() != "image")
+        co_return Utils::ResultError("Field 'type' must be 'image', got: " + obj.value("type").toString());
+    co_return result;
+}
+
+inline QJsonObject toJson(const ImageContent &data) {
+    QJsonObject obj{
+        {"data", data._data},
+        {"mimeType", data._mimeType},
+        {"type", QString("image")}
+    };
+    if (data.__meta.has_value()) {
+        QJsonObject map__meta;
+        for (auto it = data.__meta->constBegin(); it != data.__meta->constEnd(); ++it)
+            map__meta.insert(it.key(), it.value());
+        obj.insert("_meta", map__meta);
+    }
+    if (data._annotations.has_value())
+        obj.insert("annotations", toJson(*data._annotations));
+    return obj;
+}
+
 /** An optionally-sized icon that can be displayed in a user interface. */
 struct Icon {
+    /**
+     * Optional specifier for the theme this icon is designed for. `light` indicates
+     * the icon is designed to be used with a light background, and `dark` indicates
+     * the icon is designed to be used with a dark background.
+     *
+     * If not provided, the client should assume the icon can be used with any theme.
+     */
+    enum class Theme {
+        dark,
+        light
+    };
+
     /**
      * Optional MIME type override if the source MIME type is missing or generic.
      * For example: `"image/png"`, `"image/jpeg"`, or `"image/svg+xml"`.
@@ -546,34 +773,47 @@ struct Icon {
      * executable JavaScript.
      */
     QString _src;
-    /**
-     * Optional specifier for the theme this icon is designed for. `light` indicates
-     * the icon is designed to be used with a light background, and `dark` indicates
-     * the icon is designed to be used with a dark background.
-     *
-     * If not provided, the client should assume the icon can be used with any theme.
-     */
-    std::optional<QString> _theme;
+    std::optional<Theme> _theme;
 
     Icon& mimeType(QString v) { _mimeType = std::move(v); return *this; }
     Icon& sizes(QStringList v) { _sizes = std::move(v); return *this; }
     Icon& addSize(QString v) { if (!_sizes) _sizes = QStringList{}; (*_sizes).append(std::move(v)); return *this; }
     Icon& src(QString v) { _src = std::move(v); return *this; }
-    Icon& theme(QString v) { _theme = std::move(v); return *this; }
+    Icon& theme(Theme v) { _theme = std::move(v); return *this; }
 
     const std::optional<QString>& mimeType() const { return _mimeType; }
     const std::optional<QStringList>& sizes() const { return _sizes; }
     const QString& src() const { return _src; }
-    const std::optional<QString>& theme() const { return _theme; }
+    const std::optional<Theme>& theme() const { return _theme; }
 };
+
+inline QString toString(const Icon::Theme &v) {
+    switch(v) {
+        case Icon::Theme::dark: return "dark";
+        case Icon::Theme::light: return "light";
+    }
+    return {};
+}
+
+template<>
+inline Utils::Result<Icon::Theme> fromJson<Icon::Theme>(const QJsonValue &val) {
+    const QString str = val.toString();
+    if (str == "dark") return Icon::Theme::dark;
+    if (str == "light") return Icon::Theme::light;
+    return Utils::ResultError("Invalid Icon::Theme value: " + str);
+}
+
+inline QJsonValue toJsonValue(const Icon::Theme &v) {
+    return toString(v);
+}
 
 template<>
 inline Utils::Result<Icon> fromJson<Icon>(const QJsonValue &val) {
     if (!val.isObject())
-        return Utils::ResultError("Expected JSON object for Icon");
+        co_return Utils::ResultError("Expected JSON object for Icon");
     const QJsonObject obj = val.toObject();
     if (!obj.contains("src"))
-        return Utils::ResultError("Missing required field: src");
+        co_return Utils::ResultError("Missing required field: src");
     Icon result;
     if (obj.contains("mimeType"))
         result._mimeType = obj.value("mimeType").toString();
@@ -586,9 +826,9 @@ inline Utils::Result<Icon> fromJson<Icon>(const QJsonValue &val) {
         result._sizes = list_sizes;
     }
     result._src = obj.value("src").toString();
-    if (obj.contains("theme"))
-        result._theme = obj.value("theme").toString();
-    return result;
+    if (obj.contains("theme") && obj["theme"].isString())
+        result._theme = co_await fromJson<Icon::Theme>(obj["theme"]);
+    co_return result;
 }
 
 inline QJsonObject toJson(const Icon &data) {
@@ -601,7 +841,7 @@ inline QJsonObject toJson(const Icon &data) {
         obj.insert("sizes", arr_sizes);
     }
     if (data._theme.has_value())
-        obj.insert("theme", *data._theme);
+        obj.insert("theme", toJsonValue(*data._theme));
     return obj;
 }
 
@@ -808,221 +1048,6 @@ inline QJsonObject toJson(const TextContent &data) {
     return obj;
 }
 
-/** An image provided to or from an LLM. */
-struct ImageContent {
-    std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-    std::optional<Annotations> _annotations;  //!< Optional annotations for the client.
-    QString _data;  //!< The base64-encoded image data.
-    QString _mimeType;  //!< The MIME type of the image. Different providers may support different image types.
-
-    ImageContent& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
-    ImageContent& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
-    ImageContent& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    ImageContent& annotations(Annotations v) { _annotations = std::move(v); return *this; }
-    ImageContent& data(QString v) { _data = std::move(v); return *this; }
-    ImageContent& mimeType(QString v) { _mimeType = std::move(v); return *this; }
-
-    const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
-    QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
-    const std::optional<Annotations>& annotations() const { return _annotations; }
-    const QString& data() const { return _data; }
-    const QString& mimeType() const { return _mimeType; }
-};
-
-template<>
-inline Utils::Result<ImageContent> fromJson<ImageContent>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for ImageContent");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("data"))
-        co_return Utils::ResultError("Missing required field: data");
-    if (!obj.contains("mimeType"))
-        co_return Utils::ResultError("Missing required field: mimeType");
-    if (!obj.contains("type"))
-        co_return Utils::ResultError("Missing required field: type");
-    ImageContent result;
-    if (obj.contains("_meta") && obj["_meta"].isObject()) {
-        const QJsonObject mapObj__meta = obj["_meta"].toObject();
-        QMap<QString, QJsonValue> map__meta;
-        for (auto it = mapObj__meta.constBegin(); it != mapObj__meta.constEnd(); ++it)
-            map__meta.insert(it.key(), it.value());
-        result.__meta = map__meta;
-    }
-    if (obj.contains("annotations") && obj["annotations"].isObject())
-        result._annotations = co_await fromJson<Annotations>(obj["annotations"]);
-    result._data = obj.value("data").toString();
-    result._mimeType = obj.value("mimeType").toString();
-    if (obj.value("type").toString() != "image")
-        co_return Utils::ResultError("Field 'type' must be 'image', got: " + obj.value("type").toString());
-    co_return result;
-}
-
-inline QJsonObject toJson(const ImageContent &data) {
-    QJsonObject obj{
-        {"data", data._data},
-        {"mimeType", data._mimeType},
-        {"type", QString("image")}
-    };
-    if (data.__meta.has_value()) {
-        QJsonObject map__meta;
-        for (auto it = data.__meta->constBegin(); it != data.__meta->constEnd(); ++it)
-            map__meta.insert(it.key(), it.value());
-        obj.insert("_meta", map__meta);
-    }
-    if (data._annotations.has_value())
-        obj.insert("annotations", toJson(*data._annotations));
-    return obj;
-}
-
-struct TextResourceContents {
-    std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-    std::optional<QString> _mimeType;  //!< The MIME type of this resource, if known.
-    QString _text;  //!< The text of the item. This must only be set if the item can actually be represented as text (not binary data).
-    QString _uri;  //!< The URI of this resource.
-
-    TextResourceContents& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
-    TextResourceContents& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
-    TextResourceContents& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    TextResourceContents& mimeType(QString v) { _mimeType = std::move(v); return *this; }
-    TextResourceContents& text(QString v) { _text = std::move(v); return *this; }
-    TextResourceContents& uri(QString v) { _uri = std::move(v); return *this; }
-
-    const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
-    QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
-    const std::optional<QString>& mimeType() const { return _mimeType; }
-    const QString& text() const { return _text; }
-    const QString& uri() const { return _uri; }
-};
-
-template<>
-inline Utils::Result<TextResourceContents> fromJson<TextResourceContents>(const QJsonValue &val) {
-    if (!val.isObject())
-        return Utils::ResultError("Expected JSON object for TextResourceContents");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("text"))
-        return Utils::ResultError("Missing required field: text");
-    if (!obj.contains("uri"))
-        return Utils::ResultError("Missing required field: uri");
-    TextResourceContents result;
-    if (obj.contains("_meta") && obj["_meta"].isObject()) {
-        const QJsonObject mapObj__meta = obj["_meta"].toObject();
-        QMap<QString, QJsonValue> map__meta;
-        for (auto it = mapObj__meta.constBegin(); it != mapObj__meta.constEnd(); ++it)
-            map__meta.insert(it.key(), it.value());
-        result.__meta = map__meta;
-    }
-    if (obj.contains("mimeType"))
-        result._mimeType = obj.value("mimeType").toString();
-    result._text = obj.value("text").toString();
-    result._uri = obj.value("uri").toString();
-    return result;
-}
-
-inline QJsonObject toJson(const TextResourceContents &data) {
-    QJsonObject obj{
-        {"text", data._text},
-        {"uri", data._uri}
-    };
-    if (data.__meta.has_value()) {
-        QJsonObject map__meta;
-        for (auto it = data.__meta->constBegin(); it != data.__meta->constEnd(); ++it)
-            map__meta.insert(it.key(), it.value());
-        obj.insert("_meta", map__meta);
-    }
-    if (data._mimeType.has_value())
-        obj.insert("mimeType", *data._mimeType);
-    return obj;
-}
-
-using EmbeddedResourceResource = std::variant<TextResourceContents, BlobResourceContents>;
-
-template<>
-inline Utils::Result<EmbeddedResourceResource> fromJson<EmbeddedResourceResource>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Invalid EmbeddedResourceResource: expected object");
-    const QJsonObject obj = val.toObject();
-    if (obj.contains("text"))
-        co_return EmbeddedResourceResource(co_await fromJson<TextResourceContents>(val));
-    if (obj.contains("blob"))
-        co_return EmbeddedResourceResource(co_await fromJson<BlobResourceContents>(val));
-    co_return Utils::ResultError("Invalid EmbeddedResourceResource");
-}
-
-inline QJsonValue toJsonValue(const EmbeddedResourceResource &val) {
-    return std::visit([](const auto &v) -> QJsonValue {
-        using T = std::decay_t<decltype(v)>;
-        if constexpr (std::is_same_v<T, QJsonObject>) {
-            return v;
-        } else {
-            return toJson(v);
-        }
-    }, val);
-}
-/**
- * The contents of a resource, embedded into a prompt or tool call result.
- *
- * It is up to the client how best to render embedded resources for the benefit
- * of the LLM and/or the user.
- */
-struct EmbeddedResource {
-    std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-    std::optional<Annotations> _annotations;  //!< Optional annotations for the client.
-    EmbeddedResourceResource _resource;
-
-    EmbeddedResource& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
-    EmbeddedResource& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
-    EmbeddedResource& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    EmbeddedResource& annotations(Annotations v) { _annotations = std::move(v); return *this; }
-    EmbeddedResource& resource(EmbeddedResourceResource v) { _resource = std::move(v); return *this; }
-
-    const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
-    QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
-    const std::optional<Annotations>& annotations() const { return _annotations; }
-    const EmbeddedResourceResource& resource() const { return _resource; }
-};
-
-template<>
-inline Utils::Result<EmbeddedResource> fromJson<EmbeddedResource>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for EmbeddedResource");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("resource"))
-        co_return Utils::ResultError("Missing required field: resource");
-    if (!obj.contains("type"))
-        co_return Utils::ResultError("Missing required field: type");
-    EmbeddedResource result;
-    if (obj.contains("_meta") && obj["_meta"].isObject()) {
-        const QJsonObject mapObj__meta = obj["_meta"].toObject();
-        QMap<QString, QJsonValue> map__meta;
-        for (auto it = mapObj__meta.constBegin(); it != mapObj__meta.constEnd(); ++it)
-            map__meta.insert(it.key(), it.value());
-        result.__meta = map__meta;
-    }
-    if (obj.contains("annotations") && obj["annotations"].isObject())
-        result._annotations = co_await fromJson<Annotations>(obj["annotations"]);
-    if (obj.contains("resource"))
-        result._resource = co_await fromJson<EmbeddedResourceResource>(obj["resource"]);
-    if (obj.value("type").toString() != "resource")
-        co_return Utils::ResultError("Field 'type' must be 'resource', got: " + obj.value("type").toString());
-    co_return result;
-}
-
-inline QJsonObject toJson(const EmbeddedResource &data) {
-    QJsonObject obj{
-        {"resource", toJsonValue(data._resource)},
-        {"type", QString("resource")}
-    };
-    if (data.__meta.has_value()) {
-        QJsonObject map__meta;
-        for (auto it = data.__meta->constBegin(); it != data.__meta->constEnd(); ++it)
-            map__meta.insert(it.key(), it.value());
-        obj.insert("_meta", map__meta);
-    }
-    if (data._annotations.has_value())
-        obj.insert("annotations", toJson(*data._annotations));
-    return obj;
-}
-
 using ContentBlock = std::variant<TextContent, ImageContent, AudioContent, ResourceLink, EmbeddedResource>;
 
 template<>
@@ -1080,13 +1105,13 @@ struct CallToolResult {
      * If not set, this is assumed to be false (the call was successful).
      *
      * Any errors that originate from the tool SHOULD be reported inside the result
-     * object, with `isError` set to true, _not_ as an Mcp protocol-level error
+     * object, with `isError` set to true, _not_ as an MCP protocol-level error
      * response. Otherwise, the LLM would not be able to see that an error occurred
      * and self-correct.
      *
      * However, any errors in _finding_ the tool, an error indicating that the
      * server does not support tool calls, or any other exceptional conditions,
-     * should be reported as an Mcp error response.
+     * should be reported as an MCP error response.
      */
     std::optional<bool> _isError;
     std::optional<QMap<QString, QJsonValue>> _structuredContent;  //!< An optional JSON object that represents the structured result of the tool call.
@@ -1236,6 +1261,44 @@ inline QJsonObject toJson(const CancelTaskRequest &data) {
     return obj;
 }
 
+struct Result {
+    std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+
+    Result& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    Result& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
+    Result& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
+
+    const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
+    QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
+};
+
+template<>
+inline Utils::Result<Result> fromJson<Result>(const QJsonValue &val) {
+    if (!val.isObject())
+        return Utils::ResultError("Expected JSON object for Result");
+    const QJsonObject obj = val.toObject();
+    Result result;
+    if (obj.contains("_meta") && obj["_meta"].isObject()) {
+        const QJsonObject mapObj__meta = obj["_meta"].toObject();
+        QMap<QString, QJsonValue> map__meta;
+        for (auto it = mapObj__meta.constBegin(); it != mapObj__meta.constEnd(); ++it)
+            map__meta.insert(it.key(), it.value());
+        result.__meta = map__meta;
+    }
+    return result;
+}
+
+inline QJsonObject toJson(const Result &data) {
+    QJsonObject obj;
+    if (data.__meta.has_value()) {
+        QJsonObject map__meta;
+        for (auto it = data.__meta->constBegin(); it != data.__meta->constEnd(); ++it)
+            map__meta.insert(it.key(), it.value());
+        obj.insert("_meta", map__meta);
+    }
+    return obj;
+}
+
 /** The status of a task. */
 enum class TaskStatus {
     cancelled,
@@ -1345,44 +1408,6 @@ inline QJsonObject toJson(const Task &data) {
         obj.insert("pollInterval", *data._pollInterval);
     if (data._statusMessage.has_value())
         obj.insert("statusMessage", *data._statusMessage);
-    return obj;
-}
-
-struct Result {
-    std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-
-    Result& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
-    Result& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
-    Result& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-
-    const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
-    QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
-};
-
-template<>
-inline Utils::Result<Result> fromJson<Result>(const QJsonValue &val) {
-    if (!val.isObject())
-        return Utils::ResultError("Expected JSON object for Result");
-    const QJsonObject obj = val.toObject();
-    Result result;
-    if (obj.contains("_meta") && obj["_meta"].isObject()) {
-        const QJsonObject mapObj__meta = obj["_meta"].toObject();
-        QMap<QString, QJsonValue> map__meta;
-        for (auto it = mapObj__meta.constBegin(); it != mapObj__meta.constEnd(); ++it)
-            map__meta.insert(it.key(), it.value());
-        result.__meta = map__meta;
-    }
-    return result;
-}
-
-inline QJsonObject toJson(const Result &data) {
-    QJsonObject obj;
-    if (data.__meta.has_value()) {
-        QJsonObject map__meta;
-        for (auto it = data.__meta->constBegin(); it != data.__meta->constEnd(); ++it)
-            map__meta.insert(it.key(), it.value());
-        obj.insert("_meta", map__meta);
-    }
     return obj;
 }
 
@@ -2021,144 +2046,6 @@ inline QJsonObject toJson(const NotificationParams &data) {
     return obj;
 }
 
-/** Parameters for a `notifications/tasks/status` notification. */
-struct TaskStatusNotificationParams {
-    std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-    QString _createdAt;  //!< ISO 8601 timestamp when the task was created.
-    QString _lastUpdatedAt;  //!< ISO 8601 timestamp when the task was last updated.
-    std::optional<int> _pollInterval;  //!< Suggested polling interval in milliseconds.
-    TaskStatus _status;  //!< Current task state.
-    /**
-     * Optional human-readable message describing the current task state.
-     * This can provide context for any status, including:
-     * - Reasons for "cancelled" status
-     * - Summaries for "completed" status
-     * - Diagnostic information for "failed" status (e.g., error details, what went wrong)
-     */
-    std::optional<QString> _statusMessage;
-    QString _taskId;  //!< The task identifier.
-    int _ttl;  //!< Actual retention duration from creation in milliseconds, null for unlimited.
-
-    TaskStatusNotificationParams& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
-    TaskStatusNotificationParams& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
-    TaskStatusNotificationParams& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    TaskStatusNotificationParams& createdAt(QString v) { _createdAt = std::move(v); return *this; }
-    TaskStatusNotificationParams& lastUpdatedAt(QString v) { _lastUpdatedAt = std::move(v); return *this; }
-    TaskStatusNotificationParams& pollInterval(int v) { _pollInterval = std::move(v); return *this; }
-    TaskStatusNotificationParams& status(TaskStatus v) { _status = std::move(v); return *this; }
-    TaskStatusNotificationParams& statusMessage(QString v) { _statusMessage = std::move(v); return *this; }
-    TaskStatusNotificationParams& taskId(QString v) { _taskId = std::move(v); return *this; }
-    TaskStatusNotificationParams& ttl(int v) { _ttl = std::move(v); return *this; }
-
-    const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
-    QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
-    const QString& createdAt() const { return _createdAt; }
-    const QString& lastUpdatedAt() const { return _lastUpdatedAt; }
-    const std::optional<int>& pollInterval() const { return _pollInterval; }
-    const TaskStatus& status() const { return _status; }
-    const std::optional<QString>& statusMessage() const { return _statusMessage; }
-    const QString& taskId() const { return _taskId; }
-    const int& ttl() const { return _ttl; }
-};
-
-template<>
-inline Utils::Result<TaskStatusNotificationParams> fromJson<TaskStatusNotificationParams>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for TaskStatusNotificationParams");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("createdAt"))
-        co_return Utils::ResultError("Missing required field: createdAt");
-    if (!obj.contains("lastUpdatedAt"))
-        co_return Utils::ResultError("Missing required field: lastUpdatedAt");
-    if (!obj.contains("status"))
-        co_return Utils::ResultError("Missing required field: status");
-    if (!obj.contains("taskId"))
-        co_return Utils::ResultError("Missing required field: taskId");
-    if (!obj.contains("ttl"))
-        co_return Utils::ResultError("Missing required field: ttl");
-    TaskStatusNotificationParams result;
-    if (obj.contains("_meta") && obj["_meta"].isObject()) {
-        const QJsonObject mapObj__meta = obj["_meta"].toObject();
-        QMap<QString, QJsonValue> map__meta;
-        for (auto it = mapObj__meta.constBegin(); it != mapObj__meta.constEnd(); ++it)
-            map__meta.insert(it.key(), it.value());
-        result.__meta = map__meta;
-    }
-    result._createdAt = obj.value("createdAt").toString();
-    result._lastUpdatedAt = obj.value("lastUpdatedAt").toString();
-    if (obj.contains("pollInterval"))
-        result._pollInterval = obj.value("pollInterval").toInt();
-    if (obj.contains("status") && obj["status"].isString())
-        result._status = co_await fromJson<TaskStatus>(obj["status"]);
-    if (obj.contains("statusMessage"))
-        result._statusMessage = obj.value("statusMessage").toString();
-    result._taskId = obj.value("taskId").toString();
-    result._ttl = obj.value("ttl").toInt();
-    co_return result;
-}
-
-inline QJsonObject toJson(const TaskStatusNotificationParams &data) {
-    QJsonObject obj{
-        {"createdAt", data._createdAt},
-        {"lastUpdatedAt", data._lastUpdatedAt},
-        {"status", toJsonValue(data._status)},
-        {"taskId", data._taskId},
-        {"ttl", data._ttl}
-    };
-    if (data.__meta.has_value()) {
-        QJsonObject map__meta;
-        for (auto it = data.__meta->constBegin(); it != data.__meta->constEnd(); ++it)
-            map__meta.insert(it.key(), it.value());
-        obj.insert("_meta", map__meta);
-    }
-    if (data._pollInterval.has_value())
-        obj.insert("pollInterval", *data._pollInterval);
-    if (data._statusMessage.has_value())
-        obj.insert("statusMessage", *data._statusMessage);
-    return obj;
-}
-
-/**
- * An optional notification from the receiver to the requestor, informing them that a task's status has changed. Receivers are not required to send these notifications.
- */
-struct TaskStatusNotification {
-    TaskStatusNotificationParams _params;
-
-    TaskStatusNotification& params(TaskStatusNotificationParams v) { _params = std::move(v); return *this; }
-
-    const TaskStatusNotificationParams& params() const { return _params; }
-};
-
-template<>
-inline Utils::Result<TaskStatusNotification> fromJson<TaskStatusNotification>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for TaskStatusNotification");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("jsonrpc"))
-        co_return Utils::ResultError("Missing required field: jsonrpc");
-    if (!obj.contains("method"))
-        co_return Utils::ResultError("Missing required field: method");
-    if (!obj.contains("params"))
-        co_return Utils::ResultError("Missing required field: params");
-    TaskStatusNotification result;
-    if (obj.value("jsonrpc").toString() != "2.0")
-        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
-    if (obj.value("method").toString() != "notifications/tasks/status")
-        co_return Utils::ResultError("Field 'method' must be 'notifications/tasks/status', got: " + obj.value("method").toString());
-    if (obj.contains("params") && obj["params"].isObject())
-        result._params = co_await fromJson<TaskStatusNotificationParams>(obj["params"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const TaskStatusNotification &data) {
-    QJsonObject obj{
-        {"jsonrpc", QString("2.0")},
-        {"method", QString("notifications/tasks/status")},
-        {"params", toJson(data._params)}
-    };
-    return obj;
-}
-
 /** This notification is sent from the client to the server after initialization has finished. */
 struct InitializedNotification {
     std::optional<NotificationParams> _params;
@@ -2349,6 +2236,144 @@ inline QJsonObject toJson(const RootsListChangedNotification &data) {
     return obj;
 }
 
+/** Parameters for a `notifications/tasks/status` notification. */
+struct TaskStatusNotificationParams {
+    std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+    QString _createdAt;  //!< ISO 8601 timestamp when the task was created.
+    QString _lastUpdatedAt;  //!< ISO 8601 timestamp when the task was last updated.
+    std::optional<int> _pollInterval;  //!< Suggested polling interval in milliseconds.
+    TaskStatus _status;  //!< Current task state.
+    /**
+     * Optional human-readable message describing the current task state.
+     * This can provide context for any status, including:
+     * - Reasons for "cancelled" status
+     * - Summaries for "completed" status
+     * - Diagnostic information for "failed" status (e.g., error details, what went wrong)
+     */
+    std::optional<QString> _statusMessage;
+    QString _taskId;  //!< The task identifier.
+    int _ttl;  //!< Actual retention duration from creation in milliseconds, null for unlimited.
+
+    TaskStatusNotificationParams& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    TaskStatusNotificationParams& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
+    TaskStatusNotificationParams& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
+    TaskStatusNotificationParams& createdAt(QString v) { _createdAt = std::move(v); return *this; }
+    TaskStatusNotificationParams& lastUpdatedAt(QString v) { _lastUpdatedAt = std::move(v); return *this; }
+    TaskStatusNotificationParams& pollInterval(int v) { _pollInterval = std::move(v); return *this; }
+    TaskStatusNotificationParams& status(TaskStatus v) { _status = std::move(v); return *this; }
+    TaskStatusNotificationParams& statusMessage(QString v) { _statusMessage = std::move(v); return *this; }
+    TaskStatusNotificationParams& taskId(QString v) { _taskId = std::move(v); return *this; }
+    TaskStatusNotificationParams& ttl(int v) { _ttl = std::move(v); return *this; }
+
+    const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
+    QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
+    const QString& createdAt() const { return _createdAt; }
+    const QString& lastUpdatedAt() const { return _lastUpdatedAt; }
+    const std::optional<int>& pollInterval() const { return _pollInterval; }
+    const TaskStatus& status() const { return _status; }
+    const std::optional<QString>& statusMessage() const { return _statusMessage; }
+    const QString& taskId() const { return _taskId; }
+    const int& ttl() const { return _ttl; }
+};
+
+template<>
+inline Utils::Result<TaskStatusNotificationParams> fromJson<TaskStatusNotificationParams>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for TaskStatusNotificationParams");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("createdAt"))
+        co_return Utils::ResultError("Missing required field: createdAt");
+    if (!obj.contains("lastUpdatedAt"))
+        co_return Utils::ResultError("Missing required field: lastUpdatedAt");
+    if (!obj.contains("status"))
+        co_return Utils::ResultError("Missing required field: status");
+    if (!obj.contains("taskId"))
+        co_return Utils::ResultError("Missing required field: taskId");
+    if (!obj.contains("ttl"))
+        co_return Utils::ResultError("Missing required field: ttl");
+    TaskStatusNotificationParams result;
+    if (obj.contains("_meta") && obj["_meta"].isObject()) {
+        const QJsonObject mapObj__meta = obj["_meta"].toObject();
+        QMap<QString, QJsonValue> map__meta;
+        for (auto it = mapObj__meta.constBegin(); it != mapObj__meta.constEnd(); ++it)
+            map__meta.insert(it.key(), it.value());
+        result.__meta = map__meta;
+    }
+    result._createdAt = obj.value("createdAt").toString();
+    result._lastUpdatedAt = obj.value("lastUpdatedAt").toString();
+    if (obj.contains("pollInterval"))
+        result._pollInterval = obj.value("pollInterval").toInt();
+    if (obj.contains("status") && obj["status"].isString())
+        result._status = co_await fromJson<TaskStatus>(obj["status"]);
+    if (obj.contains("statusMessage"))
+        result._statusMessage = obj.value("statusMessage").toString();
+    result._taskId = obj.value("taskId").toString();
+    result._ttl = obj.value("ttl").toInt();
+    co_return result;
+}
+
+inline QJsonObject toJson(const TaskStatusNotificationParams &data) {
+    QJsonObject obj{
+        {"createdAt", data._createdAt},
+        {"lastUpdatedAt", data._lastUpdatedAt},
+        {"status", toJsonValue(data._status)},
+        {"taskId", data._taskId},
+        {"ttl", data._ttl}
+    };
+    if (data.__meta.has_value()) {
+        QJsonObject map__meta;
+        for (auto it = data.__meta->constBegin(); it != data.__meta->constEnd(); ++it)
+            map__meta.insert(it.key(), it.value());
+        obj.insert("_meta", map__meta);
+    }
+    if (data._pollInterval.has_value())
+        obj.insert("pollInterval", *data._pollInterval);
+    if (data._statusMessage.has_value())
+        obj.insert("statusMessage", *data._statusMessage);
+    return obj;
+}
+
+/**
+ * An optional notification from the receiver to the requestor, informing them that a task's status has changed. Receivers are not required to send these notifications.
+ */
+struct TaskStatusNotification {
+    TaskStatusNotificationParams _params;
+
+    TaskStatusNotification& params(TaskStatusNotificationParams v) { _params = std::move(v); return *this; }
+
+    const TaskStatusNotificationParams& params() const { return _params; }
+};
+
+template<>
+inline Utils::Result<TaskStatusNotification> fromJson<TaskStatusNotification>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for TaskStatusNotification");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("jsonrpc"))
+        co_return Utils::ResultError("Missing required field: jsonrpc");
+    if (!obj.contains("method"))
+        co_return Utils::ResultError("Missing required field: method");
+    if (!obj.contains("params"))
+        co_return Utils::ResultError("Missing required field: params");
+    TaskStatusNotification result;
+    if (obj.value("jsonrpc").toString() != "2.0")
+        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
+    if (obj.value("method").toString() != "notifications/tasks/status")
+        co_return Utils::ResultError("Field 'method' must be 'notifications/tasks/status', got: " + obj.value("method").toString());
+    if (obj.contains("params") && obj["params"].isObject())
+        result._params = co_await fromJson<TaskStatusNotificationParams>(obj["params"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const TaskStatusNotification &data) {
+    QJsonObject obj{
+        {"jsonrpc", QString("2.0")},
+        {"method", QString("notifications/tasks/status")},
+        {"params", toJson(data._params)}
+    };
+    return obj;
+}
+
 using ClientNotification = std::variant<CancelledNotification, InitializedNotification, ProgressNotification, TaskStatusNotification, RootsListChangedNotification>;
 
 template<>
@@ -2396,1348 +2421,6 @@ inline QString dispatchValue(const ClientNotification &val) {
         return {};
     }, val);
 }
-/** Common parameters for paginated requests. */
-struct PaginatedRequestParams {
-    /**
-     * See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-     */
-    struct Meta {
-        std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
-
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
-
-        const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
-    };
-
-    std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-    /**
-     * An opaque token representing the current pagination position.
-     * If provided, the server should return results starting after this cursor.
-     */
-    std::optional<QString> _cursor;
-
-    PaginatedRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
-    PaginatedRequestParams& cursor(QString v) { _cursor = std::move(v); return *this; }
-
-    const std::optional<Meta>& _meta() const { return __meta; }
-    const std::optional<QString>& cursor() const { return _cursor; }
-};
-
-template<>
-inline Utils::Result<PaginatedRequestParams::Meta> fromJson<PaginatedRequestParams::Meta>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for Meta");
-    const QJsonObject obj = val.toObject();
-    PaginatedRequestParams::Meta result;
-    if (obj.contains("progressToken"))
-        result._progressToken = co_await fromJson<ProgressToken>(obj["progressToken"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const PaginatedRequestParams::Meta &data) {
-    QJsonObject obj;
-    if (data._progressToken.has_value())
-        obj.insert("progressToken", toJsonValue(*data._progressToken));
-    return obj;
-}
-
-template<>
-inline Utils::Result<PaginatedRequestParams> fromJson<PaginatedRequestParams>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for PaginatedRequestParams");
-    const QJsonObject obj = val.toObject();
-    PaginatedRequestParams result;
-    if (obj.contains("_meta") && obj["_meta"].isObject())
-        result.__meta = co_await fromJson<PaginatedRequestParams::Meta>(obj["_meta"]);
-    if (obj.contains("cursor"))
-        result._cursor = obj.value("cursor").toString();
-    co_return result;
-}
-
-inline QJsonObject toJson(const PaginatedRequestParams &data) {
-    QJsonObject obj;
-    if (data.__meta.has_value())
-        obj.insert("_meta", toJson(*data.__meta));
-    if (data._cursor.has_value())
-        obj.insert("cursor", *data._cursor);
-    return obj;
-}
-
-/** Sent from the client to request a list of resources the server has. */
-struct ListResourcesRequest {
-    RequestId _id;
-    std::optional<PaginatedRequestParams> _params;
-
-    ListResourcesRequest& id(RequestId v) { _id = std::move(v); return *this; }
-    ListResourcesRequest& params(PaginatedRequestParams v) { _params = std::move(v); return *this; }
-
-    const RequestId& id() const { return _id; }
-    const std::optional<PaginatedRequestParams>& params() const { return _params; }
-};
-
-template<>
-inline Utils::Result<ListResourcesRequest> fromJson<ListResourcesRequest>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for ListResourcesRequest");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("id"))
-        co_return Utils::ResultError("Missing required field: id");
-    if (!obj.contains("jsonrpc"))
-        co_return Utils::ResultError("Missing required field: jsonrpc");
-    if (!obj.contains("method"))
-        co_return Utils::ResultError("Missing required field: method");
-    ListResourcesRequest result;
-    if (obj.contains("id"))
-        result._id = co_await fromJson<RequestId>(obj["id"]);
-    if (obj.value("jsonrpc").toString() != "2.0")
-        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
-    if (obj.value("method").toString() != "resources/list")
-        co_return Utils::ResultError("Field 'method' must be 'resources/list', got: " + obj.value("method").toString());
-    if (obj.contains("params") && obj["params"].isObject())
-        result._params = co_await fromJson<PaginatedRequestParams>(obj["params"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const ListResourcesRequest &data) {
-    QJsonObject obj{
-        {"id", toJsonValue(data._id)},
-        {"jsonrpc", QString("2.0")},
-        {"method", QString("resources/list")}
-    };
-    if (data._params.has_value())
-        obj.insert("params", toJson(*data._params));
-    return obj;
-}
-
-/** A request to retrieve the state of a task. */
-struct GetTaskRequest {
-    struct Params {
-        QString _taskId;  //!< The task identifier to query.
-
-        Params& taskId(QString v) { _taskId = std::move(v); return *this; }
-
-        const QString& taskId() const { return _taskId; }
-    };
-
-    RequestId _id;
-    Params _params;
-
-    GetTaskRequest& id(RequestId v) { _id = std::move(v); return *this; }
-    GetTaskRequest& params(Params v) { _params = std::move(v); return *this; }
-
-    const RequestId& id() const { return _id; }
-    const Params& params() const { return _params; }
-};
-
-template<>
-inline Utils::Result<GetTaskRequest::Params> fromJson<GetTaskRequest::Params>(const QJsonValue &val) {
-    if (!val.isObject())
-        return Utils::ResultError("Expected JSON object for Params");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("taskId"))
-        return Utils::ResultError("Missing required field: taskId");
-    GetTaskRequest::Params result;
-    result._taskId = obj.value("taskId").toString();
-    return result;
-}
-
-inline QJsonObject toJson(const GetTaskRequest::Params &data) {
-    QJsonObject obj{{"taskId", data._taskId}};
-    return obj;
-}
-
-template<>
-inline Utils::Result<GetTaskRequest> fromJson<GetTaskRequest>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for GetTaskRequest");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("id"))
-        co_return Utils::ResultError("Missing required field: id");
-    if (!obj.contains("jsonrpc"))
-        co_return Utils::ResultError("Missing required field: jsonrpc");
-    if (!obj.contains("method"))
-        co_return Utils::ResultError("Missing required field: method");
-    if (!obj.contains("params"))
-        co_return Utils::ResultError("Missing required field: params");
-    GetTaskRequest result;
-    if (obj.contains("id"))
-        result._id = co_await fromJson<RequestId>(obj["id"]);
-    if (obj.value("jsonrpc").toString() != "2.0")
-        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
-    if (obj.value("method").toString() != "tasks/get")
-        co_return Utils::ResultError("Field 'method' must be 'tasks/get', got: " + obj.value("method").toString());
-    if (obj.contains("params") && obj["params"].isObject())
-        result._params = co_await fromJson<GetTaskRequest::Params>(obj["params"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const GetTaskRequest &data) {
-    QJsonObject obj{
-        {"id", toJsonValue(data._id)},
-        {"jsonrpc", QString("2.0")},
-        {"method", QString("tasks/get")},
-        {"params", toJson(data._params)}
-    };
-    return obj;
-}
-
-/** A request to retrieve the result of a completed task. */
-struct GetTaskPayloadRequest {
-    struct Params {
-        QString _taskId;  //!< The task identifier to retrieve results for.
-
-        Params& taskId(QString v) { _taskId = std::move(v); return *this; }
-
-        const QString& taskId() const { return _taskId; }
-    };
-
-    RequestId _id;
-    Params _params;
-
-    GetTaskPayloadRequest& id(RequestId v) { _id = std::move(v); return *this; }
-    GetTaskPayloadRequest& params(Params v) { _params = std::move(v); return *this; }
-
-    const RequestId& id() const { return _id; }
-    const Params& params() const { return _params; }
-};
-
-template<>
-inline Utils::Result<GetTaskPayloadRequest::Params> fromJson<GetTaskPayloadRequest::Params>(const QJsonValue &val) {
-    if (!val.isObject())
-        return Utils::ResultError("Expected JSON object for Params");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("taskId"))
-        return Utils::ResultError("Missing required field: taskId");
-    GetTaskPayloadRequest::Params result;
-    result._taskId = obj.value("taskId").toString();
-    return result;
-}
-
-inline QJsonObject toJson(const GetTaskPayloadRequest::Params &data) {
-    QJsonObject obj{{"taskId", data._taskId}};
-    return obj;
-}
-
-template<>
-inline Utils::Result<GetTaskPayloadRequest> fromJson<GetTaskPayloadRequest>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for GetTaskPayloadRequest");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("id"))
-        co_return Utils::ResultError("Missing required field: id");
-    if (!obj.contains("jsonrpc"))
-        co_return Utils::ResultError("Missing required field: jsonrpc");
-    if (!obj.contains("method"))
-        co_return Utils::ResultError("Missing required field: method");
-    if (!obj.contains("params"))
-        co_return Utils::ResultError("Missing required field: params");
-    GetTaskPayloadRequest result;
-    if (obj.contains("id"))
-        result._id = co_await fromJson<RequestId>(obj["id"]);
-    if (obj.value("jsonrpc").toString() != "2.0")
-        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
-    if (obj.value("method").toString() != "tasks/result")
-        co_return Utils::ResultError("Field 'method' must be 'tasks/result', got: " + obj.value("method").toString());
-    if (obj.contains("params") && obj["params"].isObject())
-        result._params = co_await fromJson<GetTaskPayloadRequest::Params>(obj["params"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const GetTaskPayloadRequest &data) {
-    QJsonObject obj{
-        {"id", toJsonValue(data._id)},
-        {"jsonrpc", QString("2.0")},
-        {"method", QString("tasks/result")},
-        {"params", toJson(data._params)}
-    };
-    return obj;
-}
-
-/** Sent from the client to request a list of resource templates the server has. */
-struct ListResourceTemplatesRequest {
-    RequestId _id;
-    std::optional<PaginatedRequestParams> _params;
-
-    ListResourceTemplatesRequest& id(RequestId v) { _id = std::move(v); return *this; }
-    ListResourceTemplatesRequest& params(PaginatedRequestParams v) { _params = std::move(v); return *this; }
-
-    const RequestId& id() const { return _id; }
-    const std::optional<PaginatedRequestParams>& params() const { return _params; }
-};
-
-template<>
-inline Utils::Result<ListResourceTemplatesRequest> fromJson<ListResourceTemplatesRequest>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for ListResourceTemplatesRequest");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("id"))
-        co_return Utils::ResultError("Missing required field: id");
-    if (!obj.contains("jsonrpc"))
-        co_return Utils::ResultError("Missing required field: jsonrpc");
-    if (!obj.contains("method"))
-        co_return Utils::ResultError("Missing required field: method");
-    ListResourceTemplatesRequest result;
-    if (obj.contains("id"))
-        result._id = co_await fromJson<RequestId>(obj["id"]);
-    if (obj.value("jsonrpc").toString() != "2.0")
-        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
-    if (obj.value("method").toString() != "resources/templates/list")
-        co_return Utils::ResultError("Field 'method' must be 'resources/templates/list', got: " + obj.value("method").toString());
-    if (obj.contains("params") && obj["params"].isObject())
-        result._params = co_await fromJson<PaginatedRequestParams>(obj["params"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const ListResourceTemplatesRequest &data) {
-    QJsonObject obj{
-        {"id", toJsonValue(data._id)},
-        {"jsonrpc", QString("2.0")},
-        {"method", QString("resources/templates/list")}
-    };
-    if (data._params.has_value())
-        obj.insert("params", toJson(*data._params));
-    return obj;
-}
-
-/** Parameters for a `resources/read` request. */
-struct ReadResourceRequestParams {
-    /**
-     * See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-     */
-    struct Meta {
-        std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
-
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
-
-        const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
-    };
-
-    std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-    QString _uri;  //!< The URI of the resource. The URI can use any protocol; it is up to the server how to interpret it.
-
-    ReadResourceRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
-    ReadResourceRequestParams& uri(QString v) { _uri = std::move(v); return *this; }
-
-    const std::optional<Meta>& _meta() const { return __meta; }
-    const QString& uri() const { return _uri; }
-};
-
-template<>
-inline Utils::Result<ReadResourceRequestParams::Meta> fromJson<ReadResourceRequestParams::Meta>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for Meta");
-    const QJsonObject obj = val.toObject();
-    ReadResourceRequestParams::Meta result;
-    if (obj.contains("progressToken"))
-        result._progressToken = co_await fromJson<ProgressToken>(obj["progressToken"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const ReadResourceRequestParams::Meta &data) {
-    QJsonObject obj;
-    if (data._progressToken.has_value())
-        obj.insert("progressToken", toJsonValue(*data._progressToken));
-    return obj;
-}
-
-template<>
-inline Utils::Result<ReadResourceRequestParams> fromJson<ReadResourceRequestParams>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for ReadResourceRequestParams");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("uri"))
-        co_return Utils::ResultError("Missing required field: uri");
-    ReadResourceRequestParams result;
-    if (obj.contains("_meta") && obj["_meta"].isObject())
-        result.__meta = co_await fromJson<ReadResourceRequestParams::Meta>(obj["_meta"]);
-    result._uri = obj.value("uri").toString();
-    co_return result;
-}
-
-inline QJsonObject toJson(const ReadResourceRequestParams &data) {
-    QJsonObject obj{{"uri", data._uri}};
-    if (data.__meta.has_value())
-        obj.insert("_meta", toJson(*data.__meta));
-    return obj;
-}
-
-/** Sent from the client to the server, to read a specific resource URI. */
-struct ReadResourceRequest {
-    RequestId _id;
-    ReadResourceRequestParams _params;
-
-    ReadResourceRequest& id(RequestId v) { _id = std::move(v); return *this; }
-    ReadResourceRequest& params(ReadResourceRequestParams v) { _params = std::move(v); return *this; }
-
-    const RequestId& id() const { return _id; }
-    const ReadResourceRequestParams& params() const { return _params; }
-};
-
-template<>
-inline Utils::Result<ReadResourceRequest> fromJson<ReadResourceRequest>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for ReadResourceRequest");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("id"))
-        co_return Utils::ResultError("Missing required field: id");
-    if (!obj.contains("jsonrpc"))
-        co_return Utils::ResultError("Missing required field: jsonrpc");
-    if (!obj.contains("method"))
-        co_return Utils::ResultError("Missing required field: method");
-    if (!obj.contains("params"))
-        co_return Utils::ResultError("Missing required field: params");
-    ReadResourceRequest result;
-    if (obj.contains("id"))
-        result._id = co_await fromJson<RequestId>(obj["id"]);
-    if (obj.value("jsonrpc").toString() != "2.0")
-        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
-    if (obj.value("method").toString() != "resources/read")
-        co_return Utils::ResultError("Field 'method' must be 'resources/read', got: " + obj.value("method").toString());
-    if (obj.contains("params") && obj["params"].isObject())
-        result._params = co_await fromJson<ReadResourceRequestParams>(obj["params"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const ReadResourceRequest &data) {
-    QJsonObject obj{
-        {"id", toJsonValue(data._id)},
-        {"jsonrpc", QString("2.0")},
-        {"method", QString("resources/read")},
-        {"params", toJson(data._params)}
-    };
-    return obj;
-}
-
-/** Describes the Mcp implementation. */
-struct Implementation {
-    /**
-     * An optional human-readable description of what this implementation does.
-     *
-     * This can be used by clients or servers to provide context about their purpose
-     * and capabilities. For example, a server might describe the types of resources
-     * or tools it provides, while a client might describe its intended use case.
-     */
-    std::optional<QString> _description;
-    /**
-     * Optional set of sized icons that the client can display in a user interface.
-     *
-     * Clients that support rendering icons MUST support at least the following MIME types:
-     * - `image/png` - PNG images (safe, universal compatibility)
-     * - `image/jpeg` (and `image/jpg`) - JPEG images (safe, universal compatibility)
-     *
-     * Clients that support rendering icons SHOULD also support:
-     * - `image/svg+xml` - SVG images (scalable but requires security precautions)
-     * - `image/webp` - WebP images (modern, efficient format)
-     */
-    std::optional<QList<Icon>> _icons;
-    QString _name;  //!< Intended for programmatic or logical use, but used as a display name in past specs or fallback (if title isn't present).
-    /**
-     * Intended for UI and end-user contexts — optimized to be human-readable and easily understood,
-     * even by those unfamiliar with domain-specific terminology.
-     *
-     * If not provided, the name should be used for display (except for Tool,
-     * where `annotations.title` should be given precedence over using `name`,
-     * if present).
-     */
-    std::optional<QString> _title;
-    QString _version;
-    std::optional<QString> _websiteUrl;  //!< An optional URL of the website for this implementation.
-
-    Implementation& description(QString v) { _description = std::move(v); return *this; }
-    Implementation& icons(QList<Icon> v) { _icons = std::move(v); return *this; }
-    Implementation& addIcon(Icon v) { if (!_icons) _icons = QList<Icon>{}; (*_icons).append(std::move(v)); return *this; }
-    Implementation& name(QString v) { _name = std::move(v); return *this; }
-    Implementation& title(QString v) { _title = std::move(v); return *this; }
-    Implementation& version(QString v) { _version = std::move(v); return *this; }
-    Implementation& websiteUrl(QString v) { _websiteUrl = std::move(v); return *this; }
-
-    const std::optional<QString>& description() const { return _description; }
-    const std::optional<QList<Icon>>& icons() const { return _icons; }
-    const QString& name() const { return _name; }
-    const std::optional<QString>& title() const { return _title; }
-    const QString& version() const { return _version; }
-    const std::optional<QString>& websiteUrl() const { return _websiteUrl; }
-};
-
-template<>
-inline Utils::Result<Implementation> fromJson<Implementation>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for Implementation");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("name"))
-        co_return Utils::ResultError("Missing required field: name");
-    if (!obj.contains("version"))
-        co_return Utils::ResultError("Missing required field: version");
-    Implementation result;
-    if (obj.contains("description"))
-        result._description = obj.value("description").toString();
-    if (obj.contains("icons") && obj["icons"].isArray()) {
-        QJsonArray arr = obj["icons"].toArray();
-        QList<Icon> list_icons;
-        for (const QJsonValue &v : arr) {
-            list_icons.append(co_await fromJson<Icon>(v));
-        }
-        result._icons = list_icons;
-    }
-    result._name = obj.value("name").toString();
-    if (obj.contains("title"))
-        result._title = obj.value("title").toString();
-    result._version = obj.value("version").toString();
-    if (obj.contains("websiteUrl"))
-        result._websiteUrl = obj.value("websiteUrl").toString();
-    co_return result;
-}
-
-inline QJsonObject toJson(const Implementation &data) {
-    QJsonObject obj{
-        {"name", data._name},
-        {"version", data._version}
-    };
-    if (data._description.has_value())
-        obj.insert("description", *data._description);
-    if (data._icons.has_value()) {
-        QJsonArray arr_icons;
-        for (const auto &v : *data._icons) arr_icons.append(toJson(v));
-        obj.insert("icons", arr_icons);
-    }
-    if (data._title.has_value())
-        obj.insert("title", *data._title);
-    if (data._websiteUrl.has_value())
-        obj.insert("websiteUrl", *data._websiteUrl);
-    return obj;
-}
-
-/** Parameters for an `initialize` request. */
-struct InitializeRequestParams {
-    /**
-     * See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-     */
-    struct Meta {
-        std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
-
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
-
-        const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
-    };
-
-    std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-    ClientCapabilities _capabilities;
-    Implementation _clientInfo;
-    QString _protocolVersion;  //!< The latest version of the Model Context Protocol that the client supports. The client MAY decide to support older versions as well.
-
-    InitializeRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
-    InitializeRequestParams& capabilities(ClientCapabilities v) { _capabilities = std::move(v); return *this; }
-    InitializeRequestParams& clientInfo(Implementation v) { _clientInfo = std::move(v); return *this; }
-    InitializeRequestParams& protocolVersion(QString v) { _protocolVersion = std::move(v); return *this; }
-
-    const std::optional<Meta>& _meta() const { return __meta; }
-    const ClientCapabilities& capabilities() const { return _capabilities; }
-    const Implementation& clientInfo() const { return _clientInfo; }
-    const QString& protocolVersion() const { return _protocolVersion; }
-};
-
-template<>
-inline Utils::Result<InitializeRequestParams::Meta> fromJson<InitializeRequestParams::Meta>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for Meta");
-    const QJsonObject obj = val.toObject();
-    InitializeRequestParams::Meta result;
-    if (obj.contains("progressToken"))
-        result._progressToken = co_await fromJson<ProgressToken>(obj["progressToken"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const InitializeRequestParams::Meta &data) {
-    QJsonObject obj;
-    if (data._progressToken.has_value())
-        obj.insert("progressToken", toJsonValue(*data._progressToken));
-    return obj;
-}
-
-template<>
-inline Utils::Result<InitializeRequestParams> fromJson<InitializeRequestParams>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for InitializeRequestParams");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("capabilities"))
-        co_return Utils::ResultError("Missing required field: capabilities");
-    if (!obj.contains("clientInfo"))
-        co_return Utils::ResultError("Missing required field: clientInfo");
-    if (!obj.contains("protocolVersion"))
-        co_return Utils::ResultError("Missing required field: protocolVersion");
-    InitializeRequestParams result;
-    if (obj.contains("_meta") && obj["_meta"].isObject())
-        result.__meta = co_await fromJson<InitializeRequestParams::Meta>(obj["_meta"]);
-    if (obj.contains("capabilities") && obj["capabilities"].isObject())
-        result._capabilities = co_await fromJson<ClientCapabilities>(obj["capabilities"]);
-    if (obj.contains("clientInfo") && obj["clientInfo"].isObject())
-        result._clientInfo = co_await fromJson<Implementation>(obj["clientInfo"]);
-    result._protocolVersion = obj.value("protocolVersion").toString();
-    co_return result;
-}
-
-inline QJsonObject toJson(const InitializeRequestParams &data) {
-    QJsonObject obj{
-        {"capabilities", toJson(data._capabilities)},
-        {"clientInfo", toJson(data._clientInfo)},
-        {"protocolVersion", data._protocolVersion}
-    };
-    if (data.__meta.has_value())
-        obj.insert("_meta", toJson(*data.__meta));
-    return obj;
-}
-
-/**
- * This request is sent from the client to the server when it first connects, asking it to begin initialization.
- */
-struct InitializeRequest {
-    RequestId _id;
-    InitializeRequestParams _params;
-
-    InitializeRequest& id(RequestId v) { _id = std::move(v); return *this; }
-    InitializeRequest& params(InitializeRequestParams v) { _params = std::move(v); return *this; }
-
-    const RequestId& id() const { return _id; }
-    const InitializeRequestParams& params() const { return _params; }
-};
-
-template<>
-inline Utils::Result<InitializeRequest> fromJson<InitializeRequest>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for InitializeRequest");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("id"))
-        co_return Utils::ResultError("Missing required field: id");
-    if (!obj.contains("jsonrpc"))
-        co_return Utils::ResultError("Missing required field: jsonrpc");
-    if (!obj.contains("method"))
-        co_return Utils::ResultError("Missing required field: method");
-    if (!obj.contains("params"))
-        co_return Utils::ResultError("Missing required field: params");
-    InitializeRequest result;
-    if (obj.contains("id"))
-        result._id = co_await fromJson<RequestId>(obj["id"]);
-    if (obj.value("jsonrpc").toString() != "2.0")
-        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
-    if (obj.value("method").toString() != "initialize")
-        co_return Utils::ResultError("Field 'method' must be 'initialize', got: " + obj.value("method").toString());
-    if (obj.contains("params") && obj["params"].isObject())
-        result._params = co_await fromJson<InitializeRequestParams>(obj["params"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const InitializeRequest &data) {
-    QJsonObject obj{
-        {"id", toJsonValue(data._id)},
-        {"jsonrpc", QString("2.0")},
-        {"method", QString("initialize")},
-        {"params", toJson(data._params)}
-    };
-    return obj;
-}
-
-/** Sent from the client to request a list of prompts and prompt templates the server has. */
-struct ListPromptsRequest {
-    RequestId _id;
-    std::optional<PaginatedRequestParams> _params;
-
-    ListPromptsRequest& id(RequestId v) { _id = std::move(v); return *this; }
-    ListPromptsRequest& params(PaginatedRequestParams v) { _params = std::move(v); return *this; }
-
-    const RequestId& id() const { return _id; }
-    const std::optional<PaginatedRequestParams>& params() const { return _params; }
-};
-
-template<>
-inline Utils::Result<ListPromptsRequest> fromJson<ListPromptsRequest>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for ListPromptsRequest");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("id"))
-        co_return Utils::ResultError("Missing required field: id");
-    if (!obj.contains("jsonrpc"))
-        co_return Utils::ResultError("Missing required field: jsonrpc");
-    if (!obj.contains("method"))
-        co_return Utils::ResultError("Missing required field: method");
-    ListPromptsRequest result;
-    if (obj.contains("id"))
-        result._id = co_await fromJson<RequestId>(obj["id"]);
-    if (obj.value("jsonrpc").toString() != "2.0")
-        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
-    if (obj.value("method").toString() != "prompts/list")
-        co_return Utils::ResultError("Field 'method' must be 'prompts/list', got: " + obj.value("method").toString());
-    if (obj.contains("params") && obj["params"].isObject())
-        result._params = co_await fromJson<PaginatedRequestParams>(obj["params"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const ListPromptsRequest &data) {
-    QJsonObject obj{
-        {"id", toJsonValue(data._id)},
-        {"jsonrpc", QString("2.0")},
-        {"method", QString("prompts/list")}
-    };
-    if (data._params.has_value())
-        obj.insert("params", toJson(*data._params));
-    return obj;
-}
-
-/**
- * The severity of a log message.
- *
- * These map to syslog message severities, as specified in RFC-5424:
- * https://datatracker.ietf.org/doc/html/rfc5424#section-6.2.1
- */
-enum class LoggingLevel {
-    alert,
-    critical,
-    debug,
-    emergency,
-    error,
-    info,
-    notice,
-    warning
-};
-
-inline QString toString(LoggingLevel v) {
-    switch(v) {
-        case LoggingLevel::alert: return "alert";
-        case LoggingLevel::critical: return "critical";
-        case LoggingLevel::debug: return "debug";
-        case LoggingLevel::emergency: return "emergency";
-        case LoggingLevel::error: return "error";
-        case LoggingLevel::info: return "info";
-        case LoggingLevel::notice: return "notice";
-        case LoggingLevel::warning: return "warning";
-    }
-    return {};
-}
-
-template<>
-inline Utils::Result<LoggingLevel> fromJson<LoggingLevel>(const QJsonValue &val) {
-    const QString str = val.toString();
-    if (str == "alert") return LoggingLevel::alert;
-    if (str == "critical") return LoggingLevel::critical;
-    if (str == "debug") return LoggingLevel::debug;
-    if (str == "emergency") return LoggingLevel::emergency;
-    if (str == "error") return LoggingLevel::error;
-    if (str == "info") return LoggingLevel::info;
-    if (str == "notice") return LoggingLevel::notice;
-    if (str == "warning") return LoggingLevel::warning;
-    return Utils::ResultError("Invalid LoggingLevel value: " + str);
-}
-
-inline QJsonValue toJsonValue(const LoggingLevel &v) {
-    return toString(v);
-}
-/** Parameters for a `logging/setLevel` request. */
-struct SetLevelRequestParams {
-    /**
-     * See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-     */
-    struct Meta {
-        std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
-
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
-
-        const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
-    };
-
-    std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-    LoggingLevel _level;  //!< The level of logging that the client wants to receive from the server. The server should send all logs at this level and higher (i.e., more severe) to the client as notifications/message.
-
-    SetLevelRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
-    SetLevelRequestParams& level(LoggingLevel v) { _level = std::move(v); return *this; }
-
-    const std::optional<Meta>& _meta() const { return __meta; }
-    const LoggingLevel& level() const { return _level; }
-};
-
-template<>
-inline Utils::Result<SetLevelRequestParams::Meta> fromJson<SetLevelRequestParams::Meta>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for Meta");
-    const QJsonObject obj = val.toObject();
-    SetLevelRequestParams::Meta result;
-    if (obj.contains("progressToken"))
-        result._progressToken = co_await fromJson<ProgressToken>(obj["progressToken"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const SetLevelRequestParams::Meta &data) {
-    QJsonObject obj;
-    if (data._progressToken.has_value())
-        obj.insert("progressToken", toJsonValue(*data._progressToken));
-    return obj;
-}
-
-template<>
-inline Utils::Result<SetLevelRequestParams> fromJson<SetLevelRequestParams>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for SetLevelRequestParams");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("level"))
-        co_return Utils::ResultError("Missing required field: level");
-    SetLevelRequestParams result;
-    if (obj.contains("_meta") && obj["_meta"].isObject())
-        result.__meta = co_await fromJson<SetLevelRequestParams::Meta>(obj["_meta"]);
-    if (obj.contains("level") && obj["level"].isString())
-        result._level = co_await fromJson<LoggingLevel>(obj["level"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const SetLevelRequestParams &data) {
-    QJsonObject obj{{"level", toJsonValue(data._level)}};
-    if (data.__meta.has_value())
-        obj.insert("_meta", toJson(*data.__meta));
-    return obj;
-}
-
-/** A request from the client to the server, to enable or adjust logging. */
-struct SetLevelRequest {
-    RequestId _id;
-    SetLevelRequestParams _params;
-
-    SetLevelRequest& id(RequestId v) { _id = std::move(v); return *this; }
-    SetLevelRequest& params(SetLevelRequestParams v) { _params = std::move(v); return *this; }
-
-    const RequestId& id() const { return _id; }
-    const SetLevelRequestParams& params() const { return _params; }
-};
-
-template<>
-inline Utils::Result<SetLevelRequest> fromJson<SetLevelRequest>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for SetLevelRequest");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("id"))
-        co_return Utils::ResultError("Missing required field: id");
-    if (!obj.contains("jsonrpc"))
-        co_return Utils::ResultError("Missing required field: jsonrpc");
-    if (!obj.contains("method"))
-        co_return Utils::ResultError("Missing required field: method");
-    if (!obj.contains("params"))
-        co_return Utils::ResultError("Missing required field: params");
-    SetLevelRequest result;
-    if (obj.contains("id"))
-        result._id = co_await fromJson<RequestId>(obj["id"]);
-    if (obj.value("jsonrpc").toString() != "2.0")
-        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
-    if (obj.value("method").toString() != "logging/setLevel")
-        co_return Utils::ResultError("Field 'method' must be 'logging/setLevel', got: " + obj.value("method").toString());
-    if (obj.contains("params") && obj["params"].isObject())
-        result._params = co_await fromJson<SetLevelRequestParams>(obj["params"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const SetLevelRequest &data) {
-    QJsonObject obj{
-        {"id", toJsonValue(data._id)},
-        {"jsonrpc", QString("2.0")},
-        {"method", QString("logging/setLevel")},
-        {"params", toJson(data._params)}
-    };
-    return obj;
-}
-
-/** Parameters for a `resources/subscribe` request. */
-struct SubscribeRequestParams {
-    /**
-     * See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-     */
-    struct Meta {
-        std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
-
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
-
-        const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
-    };
-
-    std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-    QString _uri;  //!< The URI of the resource. The URI can use any protocol; it is up to the server how to interpret it.
-
-    SubscribeRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
-    SubscribeRequestParams& uri(QString v) { _uri = std::move(v); return *this; }
-
-    const std::optional<Meta>& _meta() const { return __meta; }
-    const QString& uri() const { return _uri; }
-};
-
-template<>
-inline Utils::Result<SubscribeRequestParams::Meta> fromJson<SubscribeRequestParams::Meta>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for Meta");
-    const QJsonObject obj = val.toObject();
-    SubscribeRequestParams::Meta result;
-    if (obj.contains("progressToken"))
-        result._progressToken = co_await fromJson<ProgressToken>(obj["progressToken"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const SubscribeRequestParams::Meta &data) {
-    QJsonObject obj;
-    if (data._progressToken.has_value())
-        obj.insert("progressToken", toJsonValue(*data._progressToken));
-    return obj;
-}
-
-template<>
-inline Utils::Result<SubscribeRequestParams> fromJson<SubscribeRequestParams>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for SubscribeRequestParams");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("uri"))
-        co_return Utils::ResultError("Missing required field: uri");
-    SubscribeRequestParams result;
-    if (obj.contains("_meta") && obj["_meta"].isObject())
-        result.__meta = co_await fromJson<SubscribeRequestParams::Meta>(obj["_meta"]);
-    result._uri = obj.value("uri").toString();
-    co_return result;
-}
-
-inline QJsonObject toJson(const SubscribeRequestParams &data) {
-    QJsonObject obj{{"uri", data._uri}};
-    if (data.__meta.has_value())
-        obj.insert("_meta", toJson(*data.__meta));
-    return obj;
-}
-
-/**
- * Sent from the client to request resources/updated notifications from the server whenever a particular resource changes.
- */
-struct SubscribeRequest {
-    RequestId _id;
-    SubscribeRequestParams _params;
-
-    SubscribeRequest& id(RequestId v) { _id = std::move(v); return *this; }
-    SubscribeRequest& params(SubscribeRequestParams v) { _params = std::move(v); return *this; }
-
-    const RequestId& id() const { return _id; }
-    const SubscribeRequestParams& params() const { return _params; }
-};
-
-template<>
-inline Utils::Result<SubscribeRequest> fromJson<SubscribeRequest>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for SubscribeRequest");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("id"))
-        co_return Utils::ResultError("Missing required field: id");
-    if (!obj.contains("jsonrpc"))
-        co_return Utils::ResultError("Missing required field: jsonrpc");
-    if (!obj.contains("method"))
-        co_return Utils::ResultError("Missing required field: method");
-    if (!obj.contains("params"))
-        co_return Utils::ResultError("Missing required field: params");
-    SubscribeRequest result;
-    if (obj.contains("id"))
-        result._id = co_await fromJson<RequestId>(obj["id"]);
-    if (obj.value("jsonrpc").toString() != "2.0")
-        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
-    if (obj.value("method").toString() != "resources/subscribe")
-        co_return Utils::ResultError("Field 'method' must be 'resources/subscribe', got: " + obj.value("method").toString());
-    if (obj.contains("params") && obj["params"].isObject())
-        result._params = co_await fromJson<SubscribeRequestParams>(obj["params"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const SubscribeRequest &data) {
-    QJsonObject obj{
-        {"id", toJsonValue(data._id)},
-        {"jsonrpc", QString("2.0")},
-        {"method", QString("resources/subscribe")},
-        {"params", toJson(data._params)}
-    };
-    return obj;
-}
-
-/** Common params for any request. */
-struct RequestParams {
-    /**
-     * See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-     */
-    struct Meta {
-        std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
-
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
-
-        const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
-    };
-
-    std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-
-    RequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
-
-    const std::optional<Meta>& _meta() const { return __meta; }
-};
-
-template<>
-inline Utils::Result<RequestParams::Meta> fromJson<RequestParams::Meta>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for Meta");
-    const QJsonObject obj = val.toObject();
-    RequestParams::Meta result;
-    if (obj.contains("progressToken"))
-        result._progressToken = co_await fromJson<ProgressToken>(obj["progressToken"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const RequestParams::Meta &data) {
-    QJsonObject obj;
-    if (data._progressToken.has_value())
-        obj.insert("progressToken", toJsonValue(*data._progressToken));
-    return obj;
-}
-
-template<>
-inline Utils::Result<RequestParams> fromJson<RequestParams>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for RequestParams");
-    const QJsonObject obj = val.toObject();
-    RequestParams result;
-    if (obj.contains("_meta") && obj["_meta"].isObject())
-        result.__meta = co_await fromJson<RequestParams::Meta>(obj["_meta"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const RequestParams &data) {
-    QJsonObject obj;
-    if (data.__meta.has_value())
-        obj.insert("_meta", toJson(*data.__meta));
-    return obj;
-}
-
-/**
- * A ping, issued by either the server or the client, to check that the other party is still alive. The receiver must promptly respond, or else may be disconnected.
- */
-struct PingRequest {
-    RequestId _id;
-    std::optional<RequestParams> _params;
-
-    PingRequest& id(RequestId v) { _id = std::move(v); return *this; }
-    PingRequest& params(RequestParams v) { _params = std::move(v); return *this; }
-
-    const RequestId& id() const { return _id; }
-    const std::optional<RequestParams>& params() const { return _params; }
-};
-
-template<>
-inline Utils::Result<PingRequest> fromJson<PingRequest>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for PingRequest");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("id"))
-        co_return Utils::ResultError("Missing required field: id");
-    if (!obj.contains("jsonrpc"))
-        co_return Utils::ResultError("Missing required field: jsonrpc");
-    if (!obj.contains("method"))
-        co_return Utils::ResultError("Missing required field: method");
-    PingRequest result;
-    if (obj.contains("id"))
-        result._id = co_await fromJson<RequestId>(obj["id"]);
-    if (obj.value("jsonrpc").toString() != "2.0")
-        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
-    if (obj.value("method").toString() != "ping")
-        co_return Utils::ResultError("Field 'method' must be 'ping', got: " + obj.value("method").toString());
-    if (obj.contains("params") && obj["params"].isObject())
-        result._params = co_await fromJson<RequestParams>(obj["params"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const PingRequest &data) {
-    QJsonObject obj{
-        {"id", toJsonValue(data._id)},
-        {"jsonrpc", QString("2.0")},
-        {"method", QString("ping")}
-    };
-    if (data._params.has_value())
-        obj.insert("params", toJson(*data._params));
-    return obj;
-}
-
-/** Parameters for a `resources/unsubscribe` request. */
-struct UnsubscribeRequestParams {
-    /**
-     * See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-     */
-    struct Meta {
-        std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
-
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
-
-        const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
-    };
-
-    std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-    QString _uri;  //!< The URI of the resource. The URI can use any protocol; it is up to the server how to interpret it.
-
-    UnsubscribeRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
-    UnsubscribeRequestParams& uri(QString v) { _uri = std::move(v); return *this; }
-
-    const std::optional<Meta>& _meta() const { return __meta; }
-    const QString& uri() const { return _uri; }
-};
-
-template<>
-inline Utils::Result<UnsubscribeRequestParams::Meta> fromJson<UnsubscribeRequestParams::Meta>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for Meta");
-    const QJsonObject obj = val.toObject();
-    UnsubscribeRequestParams::Meta result;
-    if (obj.contains("progressToken"))
-        result._progressToken = co_await fromJson<ProgressToken>(obj["progressToken"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const UnsubscribeRequestParams::Meta &data) {
-    QJsonObject obj;
-    if (data._progressToken.has_value())
-        obj.insert("progressToken", toJsonValue(*data._progressToken));
-    return obj;
-}
-
-template<>
-inline Utils::Result<UnsubscribeRequestParams> fromJson<UnsubscribeRequestParams>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for UnsubscribeRequestParams");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("uri"))
-        co_return Utils::ResultError("Missing required field: uri");
-    UnsubscribeRequestParams result;
-    if (obj.contains("_meta") && obj["_meta"].isObject())
-        result.__meta = co_await fromJson<UnsubscribeRequestParams::Meta>(obj["_meta"]);
-    result._uri = obj.value("uri").toString();
-    co_return result;
-}
-
-inline QJsonObject toJson(const UnsubscribeRequestParams &data) {
-    QJsonObject obj{{"uri", data._uri}};
-    if (data.__meta.has_value())
-        obj.insert("_meta", toJson(*data.__meta));
-    return obj;
-}
-
-/**
- * Sent from the client to request cancellation of resources/updated notifications from the server. This should follow a previous resources/subscribe request.
- */
-struct UnsubscribeRequest {
-    RequestId _id;
-    UnsubscribeRequestParams _params;
-
-    UnsubscribeRequest& id(RequestId v) { _id = std::move(v); return *this; }
-    UnsubscribeRequest& params(UnsubscribeRequestParams v) { _params = std::move(v); return *this; }
-
-    const RequestId& id() const { return _id; }
-    const UnsubscribeRequestParams& params() const { return _params; }
-};
-
-template<>
-inline Utils::Result<UnsubscribeRequest> fromJson<UnsubscribeRequest>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for UnsubscribeRequest");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("id"))
-        co_return Utils::ResultError("Missing required field: id");
-    if (!obj.contains("jsonrpc"))
-        co_return Utils::ResultError("Missing required field: jsonrpc");
-    if (!obj.contains("method"))
-        co_return Utils::ResultError("Missing required field: method");
-    if (!obj.contains("params"))
-        co_return Utils::ResultError("Missing required field: params");
-    UnsubscribeRequest result;
-    if (obj.contains("id"))
-        result._id = co_await fromJson<RequestId>(obj["id"]);
-    if (obj.value("jsonrpc").toString() != "2.0")
-        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
-    if (obj.value("method").toString() != "resources/unsubscribe")
-        co_return Utils::ResultError("Field 'method' must be 'resources/unsubscribe', got: " + obj.value("method").toString());
-    if (obj.contains("params") && obj["params"].isObject())
-        result._params = co_await fromJson<UnsubscribeRequestParams>(obj["params"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const UnsubscribeRequest &data) {
-    QJsonObject obj{
-        {"id", toJsonValue(data._id)},
-        {"jsonrpc", QString("2.0")},
-        {"method", QString("resources/unsubscribe")},
-        {"params", toJson(data._params)}
-    };
-    return obj;
-}
-
-/** A request to retrieve a list of tasks. */
-struct ListTasksRequest {
-    RequestId _id;
-    std::optional<PaginatedRequestParams> _params;
-
-    ListTasksRequest& id(RequestId v) { _id = std::move(v); return *this; }
-    ListTasksRequest& params(PaginatedRequestParams v) { _params = std::move(v); return *this; }
-
-    const RequestId& id() const { return _id; }
-    const std::optional<PaginatedRequestParams>& params() const { return _params; }
-};
-
-template<>
-inline Utils::Result<ListTasksRequest> fromJson<ListTasksRequest>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for ListTasksRequest");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("id"))
-        co_return Utils::ResultError("Missing required field: id");
-    if (!obj.contains("jsonrpc"))
-        co_return Utils::ResultError("Missing required field: jsonrpc");
-    if (!obj.contains("method"))
-        co_return Utils::ResultError("Missing required field: method");
-    ListTasksRequest result;
-    if (obj.contains("id"))
-        result._id = co_await fromJson<RequestId>(obj["id"]);
-    if (obj.value("jsonrpc").toString() != "2.0")
-        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
-    if (obj.value("method").toString() != "tasks/list")
-        co_return Utils::ResultError("Field 'method' must be 'tasks/list', got: " + obj.value("method").toString());
-    if (obj.contains("params") && obj["params"].isObject())
-        result._params = co_await fromJson<PaginatedRequestParams>(obj["params"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const ListTasksRequest &data) {
-    QJsonObject obj{
-        {"id", toJsonValue(data._id)},
-        {"jsonrpc", QString("2.0")},
-        {"method", QString("tasks/list")}
-    };
-    if (data._params.has_value())
-        obj.insert("params", toJson(*data._params));
-    return obj;
-}
-
-/** Parameters for a `prompts/get` request. */
-struct GetPromptRequestParams {
-    /**
-     * See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-     */
-    struct Meta {
-        std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
-
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
-
-        const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
-    };
-
-    std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-    std::optional<QMap<QString, QString>> _arguments;  //!< Arguments to use for templating the prompt.
-    QString _name;  //!< The name of the prompt or prompt template.
-
-    GetPromptRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
-    GetPromptRequestParams& arguments(QMap<QString, QString> v) { _arguments = std::move(v); return *this; }
-    GetPromptRequestParams& addArgument(const QString &key, QString v) { if (!_arguments) _arguments = QMap<QString, QString>{}; (*_arguments)[key] = std::move(v); return *this; }
-    GetPromptRequestParams& name(QString v) { _name = std::move(v); return *this; }
-
-    const std::optional<Meta>& _meta() const { return __meta; }
-    const std::optional<QMap<QString, QString>>& arguments() const { return _arguments; }
-    const QString& name() const { return _name; }
-};
-
-template<>
-inline Utils::Result<GetPromptRequestParams::Meta> fromJson<GetPromptRequestParams::Meta>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for Meta");
-    const QJsonObject obj = val.toObject();
-    GetPromptRequestParams::Meta result;
-    if (obj.contains("progressToken"))
-        result._progressToken = co_await fromJson<ProgressToken>(obj["progressToken"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const GetPromptRequestParams::Meta &data) {
-    QJsonObject obj;
-    if (data._progressToken.has_value())
-        obj.insert("progressToken", toJsonValue(*data._progressToken));
-    return obj;
-}
-
-template<>
-inline Utils::Result<GetPromptRequestParams> fromJson<GetPromptRequestParams>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for GetPromptRequestParams");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("name"))
-        co_return Utils::ResultError("Missing required field: name");
-    GetPromptRequestParams result;
-    if (obj.contains("_meta") && obj["_meta"].isObject())
-        result.__meta = co_await fromJson<GetPromptRequestParams::Meta>(obj["_meta"]);
-    if (obj.contains("arguments") && obj["arguments"].isObject()) {
-        const QJsonObject mapObj_arguments = obj["arguments"].toObject();
-        QMap<QString, QString> map_arguments;
-        for (auto it = mapObj_arguments.constBegin(); it != mapObj_arguments.constEnd(); ++it)
-            map_arguments.insert(it.key(), it.value().toString());
-        result._arguments = map_arguments;
-    }
-    result._name = obj.value("name").toString();
-    co_return result;
-}
-
-inline QJsonObject toJson(const GetPromptRequestParams &data) {
-    QJsonObject obj{{"name", data._name}};
-    if (data.__meta.has_value())
-        obj.insert("_meta", toJson(*data.__meta));
-    if (data._arguments.has_value()) {
-        QJsonObject map_arguments;
-        for (auto it = data._arguments->constBegin(); it != data._arguments->constEnd(); ++it)
-            map_arguments.insert(it.key(), QJsonValue(it.value()));
-        obj.insert("arguments", map_arguments);
-    }
-    return obj;
-}
-
-/** Used by the client to get a prompt provided by the server. */
-struct GetPromptRequest {
-    RequestId _id;
-    GetPromptRequestParams _params;
-
-    GetPromptRequest& id(RequestId v) { _id = std::move(v); return *this; }
-    GetPromptRequest& params(GetPromptRequestParams v) { _params = std::move(v); return *this; }
-
-    const RequestId& id() const { return _id; }
-    const GetPromptRequestParams& params() const { return _params; }
-};
-
-template<>
-inline Utils::Result<GetPromptRequest> fromJson<GetPromptRequest>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for GetPromptRequest");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("id"))
-        co_return Utils::ResultError("Missing required field: id");
-    if (!obj.contains("jsonrpc"))
-        co_return Utils::ResultError("Missing required field: jsonrpc");
-    if (!obj.contains("method"))
-        co_return Utils::ResultError("Missing required field: method");
-    if (!obj.contains("params"))
-        co_return Utils::ResultError("Missing required field: params");
-    GetPromptRequest result;
-    if (obj.contains("id"))
-        result._id = co_await fromJson<RequestId>(obj["id"]);
-    if (obj.value("jsonrpc").toString() != "2.0")
-        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
-    if (obj.value("method").toString() != "prompts/get")
-        co_return Utils::ResultError("Field 'method' must be 'prompts/get', got: " + obj.value("method").toString());
-    if (obj.contains("params") && obj["params"].isObject())
-        result._params = co_await fromJson<GetPromptRequestParams>(obj["params"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const GetPromptRequest &data) {
-    QJsonObject obj{
-        {"id", toJsonValue(data._id)},
-        {"jsonrpc", QString("2.0")},
-        {"method", QString("prompts/get")},
-        {"params", toJson(data._params)}
-    };
-    return obj;
-}
-
 /** Identifies a prompt. */
 struct PromptReference {
     QString _name;  //!< Intended for programmatic or logical use, but used as a display name in past specs or fallback (if title isn't present).
@@ -4042,6 +2725,755 @@ inline QJsonObject toJson(const CompleteRequest &data) {
     return obj;
 }
 
+/** Parameters for a `prompts/get` request. */
+struct GetPromptRequestParams {
+    /**
+     * See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+     */
+    struct Meta {
+        std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
+
+        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+
+        const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
+    };
+
+    std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+    std::optional<QMap<QString, QString>> _arguments;  //!< Arguments to use for templating the prompt.
+    QString _name;  //!< The name of the prompt or prompt template.
+
+    GetPromptRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
+    GetPromptRequestParams& arguments(QMap<QString, QString> v) { _arguments = std::move(v); return *this; }
+    GetPromptRequestParams& addArgument(const QString &key, QString v) { if (!_arguments) _arguments = QMap<QString, QString>{}; (*_arguments)[key] = std::move(v); return *this; }
+    GetPromptRequestParams& name(QString v) { _name = std::move(v); return *this; }
+
+    const std::optional<Meta>& _meta() const { return __meta; }
+    const std::optional<QMap<QString, QString>>& arguments() const { return _arguments; }
+    const QString& name() const { return _name; }
+};
+
+template<>
+inline Utils::Result<GetPromptRequestParams::Meta> fromJson<GetPromptRequestParams::Meta>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for Meta");
+    const QJsonObject obj = val.toObject();
+    GetPromptRequestParams::Meta result;
+    if (obj.contains("progressToken"))
+        result._progressToken = co_await fromJson<ProgressToken>(obj["progressToken"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const GetPromptRequestParams::Meta &data) {
+    QJsonObject obj;
+    if (data._progressToken.has_value())
+        obj.insert("progressToken", toJsonValue(*data._progressToken));
+    return obj;
+}
+
+template<>
+inline Utils::Result<GetPromptRequestParams> fromJson<GetPromptRequestParams>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for GetPromptRequestParams");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("name"))
+        co_return Utils::ResultError("Missing required field: name");
+    GetPromptRequestParams result;
+    if (obj.contains("_meta") && obj["_meta"].isObject())
+        result.__meta = co_await fromJson<GetPromptRequestParams::Meta>(obj["_meta"]);
+    if (obj.contains("arguments") && obj["arguments"].isObject()) {
+        const QJsonObject mapObj_arguments = obj["arguments"].toObject();
+        QMap<QString, QString> map_arguments;
+        for (auto it = mapObj_arguments.constBegin(); it != mapObj_arguments.constEnd(); ++it)
+            map_arguments.insert(it.key(), it.value().toString());
+        result._arguments = map_arguments;
+    }
+    result._name = obj.value("name").toString();
+    co_return result;
+}
+
+inline QJsonObject toJson(const GetPromptRequestParams &data) {
+    QJsonObject obj{{"name", data._name}};
+    if (data.__meta.has_value())
+        obj.insert("_meta", toJson(*data.__meta));
+    if (data._arguments.has_value()) {
+        QJsonObject map_arguments;
+        for (auto it = data._arguments->constBegin(); it != data._arguments->constEnd(); ++it)
+            map_arguments.insert(it.key(), QJsonValue(it.value()));
+        obj.insert("arguments", map_arguments);
+    }
+    return obj;
+}
+
+/** Used by the client to get a prompt provided by the server. */
+struct GetPromptRequest {
+    RequestId _id;
+    GetPromptRequestParams _params;
+
+    GetPromptRequest& id(RequestId v) { _id = std::move(v); return *this; }
+    GetPromptRequest& params(GetPromptRequestParams v) { _params = std::move(v); return *this; }
+
+    const RequestId& id() const { return _id; }
+    const GetPromptRequestParams& params() const { return _params; }
+};
+
+template<>
+inline Utils::Result<GetPromptRequest> fromJson<GetPromptRequest>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for GetPromptRequest");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("id"))
+        co_return Utils::ResultError("Missing required field: id");
+    if (!obj.contains("jsonrpc"))
+        co_return Utils::ResultError("Missing required field: jsonrpc");
+    if (!obj.contains("method"))
+        co_return Utils::ResultError("Missing required field: method");
+    if (!obj.contains("params"))
+        co_return Utils::ResultError("Missing required field: params");
+    GetPromptRequest result;
+    if (obj.contains("id"))
+        result._id = co_await fromJson<RequestId>(obj["id"]);
+    if (obj.value("jsonrpc").toString() != "2.0")
+        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
+    if (obj.value("method").toString() != "prompts/get")
+        co_return Utils::ResultError("Field 'method' must be 'prompts/get', got: " + obj.value("method").toString());
+    if (obj.contains("params") && obj["params"].isObject())
+        result._params = co_await fromJson<GetPromptRequestParams>(obj["params"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const GetPromptRequest &data) {
+    QJsonObject obj{
+        {"id", toJsonValue(data._id)},
+        {"jsonrpc", QString("2.0")},
+        {"method", QString("prompts/get")},
+        {"params", toJson(data._params)}
+    };
+    return obj;
+}
+
+/** A request to retrieve the result of a completed task. */
+struct GetTaskPayloadRequest {
+    struct Params {
+        QString _taskId;  //!< The task identifier to retrieve results for.
+
+        Params& taskId(QString v) { _taskId = std::move(v); return *this; }
+
+        const QString& taskId() const { return _taskId; }
+    };
+
+    RequestId _id;
+    Params _params;
+
+    GetTaskPayloadRequest& id(RequestId v) { _id = std::move(v); return *this; }
+    GetTaskPayloadRequest& params(Params v) { _params = std::move(v); return *this; }
+
+    const RequestId& id() const { return _id; }
+    const Params& params() const { return _params; }
+};
+
+template<>
+inline Utils::Result<GetTaskPayloadRequest::Params> fromJson<GetTaskPayloadRequest::Params>(const QJsonValue &val) {
+    if (!val.isObject())
+        return Utils::ResultError("Expected JSON object for Params");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("taskId"))
+        return Utils::ResultError("Missing required field: taskId");
+    GetTaskPayloadRequest::Params result;
+    result._taskId = obj.value("taskId").toString();
+    return result;
+}
+
+inline QJsonObject toJson(const GetTaskPayloadRequest::Params &data) {
+    QJsonObject obj{{"taskId", data._taskId}};
+    return obj;
+}
+
+template<>
+inline Utils::Result<GetTaskPayloadRequest> fromJson<GetTaskPayloadRequest>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for GetTaskPayloadRequest");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("id"))
+        co_return Utils::ResultError("Missing required field: id");
+    if (!obj.contains("jsonrpc"))
+        co_return Utils::ResultError("Missing required field: jsonrpc");
+    if (!obj.contains("method"))
+        co_return Utils::ResultError("Missing required field: method");
+    if (!obj.contains("params"))
+        co_return Utils::ResultError("Missing required field: params");
+    GetTaskPayloadRequest result;
+    if (obj.contains("id"))
+        result._id = co_await fromJson<RequestId>(obj["id"]);
+    if (obj.value("jsonrpc").toString() != "2.0")
+        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
+    if (obj.value("method").toString() != "tasks/result")
+        co_return Utils::ResultError("Field 'method' must be 'tasks/result', got: " + obj.value("method").toString());
+    if (obj.contains("params") && obj["params"].isObject())
+        result._params = co_await fromJson<GetTaskPayloadRequest::Params>(obj["params"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const GetTaskPayloadRequest &data) {
+    QJsonObject obj{
+        {"id", toJsonValue(data._id)},
+        {"jsonrpc", QString("2.0")},
+        {"method", QString("tasks/result")},
+        {"params", toJson(data._params)}
+    };
+    return obj;
+}
+
+/** A request to retrieve the state of a task. */
+struct GetTaskRequest {
+    struct Params {
+        QString _taskId;  //!< The task identifier to query.
+
+        Params& taskId(QString v) { _taskId = std::move(v); return *this; }
+
+        const QString& taskId() const { return _taskId; }
+    };
+
+    RequestId _id;
+    Params _params;
+
+    GetTaskRequest& id(RequestId v) { _id = std::move(v); return *this; }
+    GetTaskRequest& params(Params v) { _params = std::move(v); return *this; }
+
+    const RequestId& id() const { return _id; }
+    const Params& params() const { return _params; }
+};
+
+template<>
+inline Utils::Result<GetTaskRequest::Params> fromJson<GetTaskRequest::Params>(const QJsonValue &val) {
+    if (!val.isObject())
+        return Utils::ResultError("Expected JSON object for Params");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("taskId"))
+        return Utils::ResultError("Missing required field: taskId");
+    GetTaskRequest::Params result;
+    result._taskId = obj.value("taskId").toString();
+    return result;
+}
+
+inline QJsonObject toJson(const GetTaskRequest::Params &data) {
+    QJsonObject obj{{"taskId", data._taskId}};
+    return obj;
+}
+
+template<>
+inline Utils::Result<GetTaskRequest> fromJson<GetTaskRequest>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for GetTaskRequest");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("id"))
+        co_return Utils::ResultError("Missing required field: id");
+    if (!obj.contains("jsonrpc"))
+        co_return Utils::ResultError("Missing required field: jsonrpc");
+    if (!obj.contains("method"))
+        co_return Utils::ResultError("Missing required field: method");
+    if (!obj.contains("params"))
+        co_return Utils::ResultError("Missing required field: params");
+    GetTaskRequest result;
+    if (obj.contains("id"))
+        result._id = co_await fromJson<RequestId>(obj["id"]);
+    if (obj.value("jsonrpc").toString() != "2.0")
+        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
+    if (obj.value("method").toString() != "tasks/get")
+        co_return Utils::ResultError("Field 'method' must be 'tasks/get', got: " + obj.value("method").toString());
+    if (obj.contains("params") && obj["params"].isObject())
+        result._params = co_await fromJson<GetTaskRequest::Params>(obj["params"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const GetTaskRequest &data) {
+    QJsonObject obj{
+        {"id", toJsonValue(data._id)},
+        {"jsonrpc", QString("2.0")},
+        {"method", QString("tasks/get")},
+        {"params", toJson(data._params)}
+    };
+    return obj;
+}
+
+/** Describes the MCP implementation. */
+struct Implementation {
+    /**
+     * An optional human-readable description of what this implementation does.
+     *
+     * This can be used by clients or servers to provide context about their purpose
+     * and capabilities. For example, a server might describe the types of resources
+     * or tools it provides, while a client might describe its intended use case.
+     */
+    std::optional<QString> _description;
+    /**
+     * Optional set of sized icons that the client can display in a user interface.
+     *
+     * Clients that support rendering icons MUST support at least the following MIME types:
+     * - `image/png` - PNG images (safe, universal compatibility)
+     * - `image/jpeg` (and `image/jpg`) - JPEG images (safe, universal compatibility)
+     *
+     * Clients that support rendering icons SHOULD also support:
+     * - `image/svg+xml` - SVG images (scalable but requires security precautions)
+     * - `image/webp` - WebP images (modern, efficient format)
+     */
+    std::optional<QList<Icon>> _icons;
+    QString _name;  //!< Intended for programmatic or logical use, but used as a display name in past specs or fallback (if title isn't present).
+    /**
+     * Intended for UI and end-user contexts — optimized to be human-readable and easily understood,
+     * even by those unfamiliar with domain-specific terminology.
+     *
+     * If not provided, the name should be used for display (except for Tool,
+     * where `annotations.title` should be given precedence over using `name`,
+     * if present).
+     */
+    std::optional<QString> _title;
+    QString _version;
+    std::optional<QString> _websiteUrl;  //!< An optional URL of the website for this implementation.
+
+    Implementation& description(QString v) { _description = std::move(v); return *this; }
+    Implementation& icons(QList<Icon> v) { _icons = std::move(v); return *this; }
+    Implementation& addIcon(Icon v) { if (!_icons) _icons = QList<Icon>{}; (*_icons).append(std::move(v)); return *this; }
+    Implementation& name(QString v) { _name = std::move(v); return *this; }
+    Implementation& title(QString v) { _title = std::move(v); return *this; }
+    Implementation& version(QString v) { _version = std::move(v); return *this; }
+    Implementation& websiteUrl(QString v) { _websiteUrl = std::move(v); return *this; }
+
+    const std::optional<QString>& description() const { return _description; }
+    const std::optional<QList<Icon>>& icons() const { return _icons; }
+    const QString& name() const { return _name; }
+    const std::optional<QString>& title() const { return _title; }
+    const QString& version() const { return _version; }
+    const std::optional<QString>& websiteUrl() const { return _websiteUrl; }
+};
+
+template<>
+inline Utils::Result<Implementation> fromJson<Implementation>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for Implementation");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("name"))
+        co_return Utils::ResultError("Missing required field: name");
+    if (!obj.contains("version"))
+        co_return Utils::ResultError("Missing required field: version");
+    Implementation result;
+    if (obj.contains("description"))
+        result._description = obj.value("description").toString();
+    if (obj.contains("icons") && obj["icons"].isArray()) {
+        QJsonArray arr = obj["icons"].toArray();
+        QList<Icon> list_icons;
+        for (const QJsonValue &v : arr) {
+            list_icons.append(co_await fromJson<Icon>(v));
+        }
+        result._icons = list_icons;
+    }
+    result._name = obj.value("name").toString();
+    if (obj.contains("title"))
+        result._title = obj.value("title").toString();
+    result._version = obj.value("version").toString();
+    if (obj.contains("websiteUrl"))
+        result._websiteUrl = obj.value("websiteUrl").toString();
+    co_return result;
+}
+
+inline QJsonObject toJson(const Implementation &data) {
+    QJsonObject obj{
+        {"name", data._name},
+        {"version", data._version}
+    };
+    if (data._description.has_value())
+        obj.insert("description", *data._description);
+    if (data._icons.has_value()) {
+        QJsonArray arr_icons;
+        for (const auto &v : *data._icons) arr_icons.append(toJson(v));
+        obj.insert("icons", arr_icons);
+    }
+    if (data._title.has_value())
+        obj.insert("title", *data._title);
+    if (data._websiteUrl.has_value())
+        obj.insert("websiteUrl", *data._websiteUrl);
+    return obj;
+}
+
+/** Parameters for an `initialize` request. */
+struct InitializeRequestParams {
+    /**
+     * See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+     */
+    struct Meta {
+        std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
+
+        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+
+        const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
+    };
+
+    std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+    ClientCapabilities _capabilities;
+    Implementation _clientInfo;
+    QString _protocolVersion;  //!< The latest version of the Model Context Protocol that the client supports. The client MAY decide to support older versions as well.
+
+    InitializeRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
+    InitializeRequestParams& capabilities(ClientCapabilities v) { _capabilities = std::move(v); return *this; }
+    InitializeRequestParams& clientInfo(Implementation v) { _clientInfo = std::move(v); return *this; }
+    InitializeRequestParams& protocolVersion(QString v) { _protocolVersion = std::move(v); return *this; }
+
+    const std::optional<Meta>& _meta() const { return __meta; }
+    const ClientCapabilities& capabilities() const { return _capabilities; }
+    const Implementation& clientInfo() const { return _clientInfo; }
+    const QString& protocolVersion() const { return _protocolVersion; }
+};
+
+template<>
+inline Utils::Result<InitializeRequestParams::Meta> fromJson<InitializeRequestParams::Meta>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for Meta");
+    const QJsonObject obj = val.toObject();
+    InitializeRequestParams::Meta result;
+    if (obj.contains("progressToken"))
+        result._progressToken = co_await fromJson<ProgressToken>(obj["progressToken"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const InitializeRequestParams::Meta &data) {
+    QJsonObject obj;
+    if (data._progressToken.has_value())
+        obj.insert("progressToken", toJsonValue(*data._progressToken));
+    return obj;
+}
+
+template<>
+inline Utils::Result<InitializeRequestParams> fromJson<InitializeRequestParams>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for InitializeRequestParams");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("capabilities"))
+        co_return Utils::ResultError("Missing required field: capabilities");
+    if (!obj.contains("clientInfo"))
+        co_return Utils::ResultError("Missing required field: clientInfo");
+    if (!obj.contains("protocolVersion"))
+        co_return Utils::ResultError("Missing required field: protocolVersion");
+    InitializeRequestParams result;
+    if (obj.contains("_meta") && obj["_meta"].isObject())
+        result.__meta = co_await fromJson<InitializeRequestParams::Meta>(obj["_meta"]);
+    if (obj.contains("capabilities") && obj["capabilities"].isObject())
+        result._capabilities = co_await fromJson<ClientCapabilities>(obj["capabilities"]);
+    if (obj.contains("clientInfo") && obj["clientInfo"].isObject())
+        result._clientInfo = co_await fromJson<Implementation>(obj["clientInfo"]);
+    result._protocolVersion = obj.value("protocolVersion").toString();
+    co_return result;
+}
+
+inline QJsonObject toJson(const InitializeRequestParams &data) {
+    QJsonObject obj{
+        {"capabilities", toJson(data._capabilities)},
+        {"clientInfo", toJson(data._clientInfo)},
+        {"protocolVersion", data._protocolVersion}
+    };
+    if (data.__meta.has_value())
+        obj.insert("_meta", toJson(*data.__meta));
+    return obj;
+}
+
+/**
+ * This request is sent from the client to the server when it first connects, asking it to begin initialization.
+ */
+struct InitializeRequest {
+    RequestId _id;
+    InitializeRequestParams _params;
+
+    InitializeRequest& id(RequestId v) { _id = std::move(v); return *this; }
+    InitializeRequest& params(InitializeRequestParams v) { _params = std::move(v); return *this; }
+
+    const RequestId& id() const { return _id; }
+    const InitializeRequestParams& params() const { return _params; }
+};
+
+template<>
+inline Utils::Result<InitializeRequest> fromJson<InitializeRequest>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for InitializeRequest");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("id"))
+        co_return Utils::ResultError("Missing required field: id");
+    if (!obj.contains("jsonrpc"))
+        co_return Utils::ResultError("Missing required field: jsonrpc");
+    if (!obj.contains("method"))
+        co_return Utils::ResultError("Missing required field: method");
+    if (!obj.contains("params"))
+        co_return Utils::ResultError("Missing required field: params");
+    InitializeRequest result;
+    if (obj.contains("id"))
+        result._id = co_await fromJson<RequestId>(obj["id"]);
+    if (obj.value("jsonrpc").toString() != "2.0")
+        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
+    if (obj.value("method").toString() != "initialize")
+        co_return Utils::ResultError("Field 'method' must be 'initialize', got: " + obj.value("method").toString());
+    if (obj.contains("params") && obj["params"].isObject())
+        result._params = co_await fromJson<InitializeRequestParams>(obj["params"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const InitializeRequest &data) {
+    QJsonObject obj{
+        {"id", toJsonValue(data._id)},
+        {"jsonrpc", QString("2.0")},
+        {"method", QString("initialize")},
+        {"params", toJson(data._params)}
+    };
+    return obj;
+}
+
+/** Common parameters for paginated requests. */
+struct PaginatedRequestParams {
+    /**
+     * See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+     */
+    struct Meta {
+        std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
+
+        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+
+        const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
+    };
+
+    std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+    /**
+     * An opaque token representing the current pagination position.
+     * If provided, the server should return results starting after this cursor.
+     */
+    std::optional<QString> _cursor;
+
+    PaginatedRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
+    PaginatedRequestParams& cursor(QString v) { _cursor = std::move(v); return *this; }
+
+    const std::optional<Meta>& _meta() const { return __meta; }
+    const std::optional<QString>& cursor() const { return _cursor; }
+};
+
+template<>
+inline Utils::Result<PaginatedRequestParams::Meta> fromJson<PaginatedRequestParams::Meta>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for Meta");
+    const QJsonObject obj = val.toObject();
+    PaginatedRequestParams::Meta result;
+    if (obj.contains("progressToken"))
+        result._progressToken = co_await fromJson<ProgressToken>(obj["progressToken"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const PaginatedRequestParams::Meta &data) {
+    QJsonObject obj;
+    if (data._progressToken.has_value())
+        obj.insert("progressToken", toJsonValue(*data._progressToken));
+    return obj;
+}
+
+template<>
+inline Utils::Result<PaginatedRequestParams> fromJson<PaginatedRequestParams>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for PaginatedRequestParams");
+    const QJsonObject obj = val.toObject();
+    PaginatedRequestParams result;
+    if (obj.contains("_meta") && obj["_meta"].isObject())
+        result.__meta = co_await fromJson<PaginatedRequestParams::Meta>(obj["_meta"]);
+    if (obj.contains("cursor"))
+        result._cursor = obj.value("cursor").toString();
+    co_return result;
+}
+
+inline QJsonObject toJson(const PaginatedRequestParams &data) {
+    QJsonObject obj;
+    if (data.__meta.has_value())
+        obj.insert("_meta", toJson(*data.__meta));
+    if (data._cursor.has_value())
+        obj.insert("cursor", *data._cursor);
+    return obj;
+}
+
+/** Sent from the client to request a list of prompts and prompt templates the server has. */
+struct ListPromptsRequest {
+    RequestId _id;
+    std::optional<PaginatedRequestParams> _params;
+
+    ListPromptsRequest& id(RequestId v) { _id = std::move(v); return *this; }
+    ListPromptsRequest& params(PaginatedRequestParams v) { _params = std::move(v); return *this; }
+
+    const RequestId& id() const { return _id; }
+    const std::optional<PaginatedRequestParams>& params() const { return _params; }
+};
+
+template<>
+inline Utils::Result<ListPromptsRequest> fromJson<ListPromptsRequest>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for ListPromptsRequest");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("id"))
+        co_return Utils::ResultError("Missing required field: id");
+    if (!obj.contains("jsonrpc"))
+        co_return Utils::ResultError("Missing required field: jsonrpc");
+    if (!obj.contains("method"))
+        co_return Utils::ResultError("Missing required field: method");
+    ListPromptsRequest result;
+    if (obj.contains("id"))
+        result._id = co_await fromJson<RequestId>(obj["id"]);
+    if (obj.value("jsonrpc").toString() != "2.0")
+        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
+    if (obj.value("method").toString() != "prompts/list")
+        co_return Utils::ResultError("Field 'method' must be 'prompts/list', got: " + obj.value("method").toString());
+    if (obj.contains("params") && obj["params"].isObject())
+        result._params = co_await fromJson<PaginatedRequestParams>(obj["params"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const ListPromptsRequest &data) {
+    QJsonObject obj{
+        {"id", toJsonValue(data._id)},
+        {"jsonrpc", QString("2.0")},
+        {"method", QString("prompts/list")}
+    };
+    if (data._params.has_value())
+        obj.insert("params", toJson(*data._params));
+    return obj;
+}
+
+/** Sent from the client to request a list of resource templates the server has. */
+struct ListResourceTemplatesRequest {
+    RequestId _id;
+    std::optional<PaginatedRequestParams> _params;
+
+    ListResourceTemplatesRequest& id(RequestId v) { _id = std::move(v); return *this; }
+    ListResourceTemplatesRequest& params(PaginatedRequestParams v) { _params = std::move(v); return *this; }
+
+    const RequestId& id() const { return _id; }
+    const std::optional<PaginatedRequestParams>& params() const { return _params; }
+};
+
+template<>
+inline Utils::Result<ListResourceTemplatesRequest> fromJson<ListResourceTemplatesRequest>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for ListResourceTemplatesRequest");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("id"))
+        co_return Utils::ResultError("Missing required field: id");
+    if (!obj.contains("jsonrpc"))
+        co_return Utils::ResultError("Missing required field: jsonrpc");
+    if (!obj.contains("method"))
+        co_return Utils::ResultError("Missing required field: method");
+    ListResourceTemplatesRequest result;
+    if (obj.contains("id"))
+        result._id = co_await fromJson<RequestId>(obj["id"]);
+    if (obj.value("jsonrpc").toString() != "2.0")
+        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
+    if (obj.value("method").toString() != "resources/templates/list")
+        co_return Utils::ResultError("Field 'method' must be 'resources/templates/list', got: " + obj.value("method").toString());
+    if (obj.contains("params") && obj["params"].isObject())
+        result._params = co_await fromJson<PaginatedRequestParams>(obj["params"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const ListResourceTemplatesRequest &data) {
+    QJsonObject obj{
+        {"id", toJsonValue(data._id)},
+        {"jsonrpc", QString("2.0")},
+        {"method", QString("resources/templates/list")}
+    };
+    if (data._params.has_value())
+        obj.insert("params", toJson(*data._params));
+    return obj;
+}
+
+/** Sent from the client to request a list of resources the server has. */
+struct ListResourcesRequest {
+    RequestId _id;
+    std::optional<PaginatedRequestParams> _params;
+
+    ListResourcesRequest& id(RequestId v) { _id = std::move(v); return *this; }
+    ListResourcesRequest& params(PaginatedRequestParams v) { _params = std::move(v); return *this; }
+
+    const RequestId& id() const { return _id; }
+    const std::optional<PaginatedRequestParams>& params() const { return _params; }
+};
+
+template<>
+inline Utils::Result<ListResourcesRequest> fromJson<ListResourcesRequest>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for ListResourcesRequest");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("id"))
+        co_return Utils::ResultError("Missing required field: id");
+    if (!obj.contains("jsonrpc"))
+        co_return Utils::ResultError("Missing required field: jsonrpc");
+    if (!obj.contains("method"))
+        co_return Utils::ResultError("Missing required field: method");
+    ListResourcesRequest result;
+    if (obj.contains("id"))
+        result._id = co_await fromJson<RequestId>(obj["id"]);
+    if (obj.value("jsonrpc").toString() != "2.0")
+        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
+    if (obj.value("method").toString() != "resources/list")
+        co_return Utils::ResultError("Field 'method' must be 'resources/list', got: " + obj.value("method").toString());
+    if (obj.contains("params") && obj["params"].isObject())
+        result._params = co_await fromJson<PaginatedRequestParams>(obj["params"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const ListResourcesRequest &data) {
+    QJsonObject obj{
+        {"id", toJsonValue(data._id)},
+        {"jsonrpc", QString("2.0")},
+        {"method", QString("resources/list")}
+    };
+    if (data._params.has_value())
+        obj.insert("params", toJson(*data._params));
+    return obj;
+}
+
+/** A request to retrieve a list of tasks. */
+struct ListTasksRequest {
+    RequestId _id;
+    std::optional<PaginatedRequestParams> _params;
+
+    ListTasksRequest& id(RequestId v) { _id = std::move(v); return *this; }
+    ListTasksRequest& params(PaginatedRequestParams v) { _params = std::move(v); return *this; }
+
+    const RequestId& id() const { return _id; }
+    const std::optional<PaginatedRequestParams>& params() const { return _params; }
+};
+
+template<>
+inline Utils::Result<ListTasksRequest> fromJson<ListTasksRequest>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for ListTasksRequest");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("id"))
+        co_return Utils::ResultError("Missing required field: id");
+    if (!obj.contains("jsonrpc"))
+        co_return Utils::ResultError("Missing required field: jsonrpc");
+    if (!obj.contains("method"))
+        co_return Utils::ResultError("Missing required field: method");
+    ListTasksRequest result;
+    if (obj.contains("id"))
+        result._id = co_await fromJson<RequestId>(obj["id"]);
+    if (obj.value("jsonrpc").toString() != "2.0")
+        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
+    if (obj.value("method").toString() != "tasks/list")
+        co_return Utils::ResultError("Field 'method' must be 'tasks/list', got: " + obj.value("method").toString());
+    if (obj.contains("params") && obj["params"].isObject())
+        result._params = co_await fromJson<PaginatedRequestParams>(obj["params"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const ListTasksRequest &data) {
+    QJsonObject obj{
+        {"id", toJsonValue(data._id)},
+        {"jsonrpc", QString("2.0")},
+        {"method", QString("tasks/list")}
+    };
+    if (data._params.has_value())
+        obj.insert("params", toJson(*data._params));
+    return obj;
+}
+
 /** Sent from the client to request a list of tools the server has. */
 struct ListToolsRequest {
     RequestId _id;
@@ -4085,6 +3517,599 @@ inline QJsonObject toJson(const ListToolsRequest &data) {
     };
     if (data._params.has_value())
         obj.insert("params", toJson(*data._params));
+    return obj;
+}
+
+/** Common params for any request. */
+struct RequestParams {
+    /**
+     * See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+     */
+    struct Meta {
+        std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
+
+        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+
+        const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
+    };
+
+    std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+
+    RequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
+
+    const std::optional<Meta>& _meta() const { return __meta; }
+};
+
+template<>
+inline Utils::Result<RequestParams::Meta> fromJson<RequestParams::Meta>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for Meta");
+    const QJsonObject obj = val.toObject();
+    RequestParams::Meta result;
+    if (obj.contains("progressToken"))
+        result._progressToken = co_await fromJson<ProgressToken>(obj["progressToken"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const RequestParams::Meta &data) {
+    QJsonObject obj;
+    if (data._progressToken.has_value())
+        obj.insert("progressToken", toJsonValue(*data._progressToken));
+    return obj;
+}
+
+template<>
+inline Utils::Result<RequestParams> fromJson<RequestParams>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for RequestParams");
+    const QJsonObject obj = val.toObject();
+    RequestParams result;
+    if (obj.contains("_meta") && obj["_meta"].isObject())
+        result.__meta = co_await fromJson<RequestParams::Meta>(obj["_meta"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const RequestParams &data) {
+    QJsonObject obj;
+    if (data.__meta.has_value())
+        obj.insert("_meta", toJson(*data.__meta));
+    return obj;
+}
+
+/**
+ * A ping, issued by either the server or the client, to check that the other party is still alive. The receiver must promptly respond, or else may be disconnected.
+ */
+struct PingRequest {
+    RequestId _id;
+    std::optional<RequestParams> _params;
+
+    PingRequest& id(RequestId v) { _id = std::move(v); return *this; }
+    PingRequest& params(RequestParams v) { _params = std::move(v); return *this; }
+
+    const RequestId& id() const { return _id; }
+    const std::optional<RequestParams>& params() const { return _params; }
+};
+
+template<>
+inline Utils::Result<PingRequest> fromJson<PingRequest>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for PingRequest");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("id"))
+        co_return Utils::ResultError("Missing required field: id");
+    if (!obj.contains("jsonrpc"))
+        co_return Utils::ResultError("Missing required field: jsonrpc");
+    if (!obj.contains("method"))
+        co_return Utils::ResultError("Missing required field: method");
+    PingRequest result;
+    if (obj.contains("id"))
+        result._id = co_await fromJson<RequestId>(obj["id"]);
+    if (obj.value("jsonrpc").toString() != "2.0")
+        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
+    if (obj.value("method").toString() != "ping")
+        co_return Utils::ResultError("Field 'method' must be 'ping', got: " + obj.value("method").toString());
+    if (obj.contains("params") && obj["params"].isObject())
+        result._params = co_await fromJson<RequestParams>(obj["params"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const PingRequest &data) {
+    QJsonObject obj{
+        {"id", toJsonValue(data._id)},
+        {"jsonrpc", QString("2.0")},
+        {"method", QString("ping")}
+    };
+    if (data._params.has_value())
+        obj.insert("params", toJson(*data._params));
+    return obj;
+}
+
+/** Parameters for a `resources/read` request. */
+struct ReadResourceRequestParams {
+    /**
+     * See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+     */
+    struct Meta {
+        std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
+
+        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+
+        const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
+    };
+
+    std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+    QString _uri;  //!< The URI of the resource. The URI can use any protocol; it is up to the server how to interpret it.
+
+    ReadResourceRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
+    ReadResourceRequestParams& uri(QString v) { _uri = std::move(v); return *this; }
+
+    const std::optional<Meta>& _meta() const { return __meta; }
+    const QString& uri() const { return _uri; }
+};
+
+template<>
+inline Utils::Result<ReadResourceRequestParams::Meta> fromJson<ReadResourceRequestParams::Meta>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for Meta");
+    const QJsonObject obj = val.toObject();
+    ReadResourceRequestParams::Meta result;
+    if (obj.contains("progressToken"))
+        result._progressToken = co_await fromJson<ProgressToken>(obj["progressToken"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const ReadResourceRequestParams::Meta &data) {
+    QJsonObject obj;
+    if (data._progressToken.has_value())
+        obj.insert("progressToken", toJsonValue(*data._progressToken));
+    return obj;
+}
+
+template<>
+inline Utils::Result<ReadResourceRequestParams> fromJson<ReadResourceRequestParams>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for ReadResourceRequestParams");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("uri"))
+        co_return Utils::ResultError("Missing required field: uri");
+    ReadResourceRequestParams result;
+    if (obj.contains("_meta") && obj["_meta"].isObject())
+        result.__meta = co_await fromJson<ReadResourceRequestParams::Meta>(obj["_meta"]);
+    result._uri = obj.value("uri").toString();
+    co_return result;
+}
+
+inline QJsonObject toJson(const ReadResourceRequestParams &data) {
+    QJsonObject obj{{"uri", data._uri}};
+    if (data.__meta.has_value())
+        obj.insert("_meta", toJson(*data.__meta));
+    return obj;
+}
+
+/** Sent from the client to the server, to read a specific resource URI. */
+struct ReadResourceRequest {
+    RequestId _id;
+    ReadResourceRequestParams _params;
+
+    ReadResourceRequest& id(RequestId v) { _id = std::move(v); return *this; }
+    ReadResourceRequest& params(ReadResourceRequestParams v) { _params = std::move(v); return *this; }
+
+    const RequestId& id() const { return _id; }
+    const ReadResourceRequestParams& params() const { return _params; }
+};
+
+template<>
+inline Utils::Result<ReadResourceRequest> fromJson<ReadResourceRequest>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for ReadResourceRequest");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("id"))
+        co_return Utils::ResultError("Missing required field: id");
+    if (!obj.contains("jsonrpc"))
+        co_return Utils::ResultError("Missing required field: jsonrpc");
+    if (!obj.contains("method"))
+        co_return Utils::ResultError("Missing required field: method");
+    if (!obj.contains("params"))
+        co_return Utils::ResultError("Missing required field: params");
+    ReadResourceRequest result;
+    if (obj.contains("id"))
+        result._id = co_await fromJson<RequestId>(obj["id"]);
+    if (obj.value("jsonrpc").toString() != "2.0")
+        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
+    if (obj.value("method").toString() != "resources/read")
+        co_return Utils::ResultError("Field 'method' must be 'resources/read', got: " + obj.value("method").toString());
+    if (obj.contains("params") && obj["params"].isObject())
+        result._params = co_await fromJson<ReadResourceRequestParams>(obj["params"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const ReadResourceRequest &data) {
+    QJsonObject obj{
+        {"id", toJsonValue(data._id)},
+        {"jsonrpc", QString("2.0")},
+        {"method", QString("resources/read")},
+        {"params", toJson(data._params)}
+    };
+    return obj;
+}
+
+/**
+ * The severity of a log message.
+ *
+ * These map to syslog message severities, as specified in RFC-5424:
+ * https://datatracker.ietf.org/doc/html/rfc5424#section-6.2.1
+ */
+enum class LoggingLevel {
+    alert,
+    critical,
+    debug,
+    emergency,
+    error,
+    info,
+    notice,
+    warning
+};
+
+inline QString toString(LoggingLevel v) {
+    switch(v) {
+        case LoggingLevel::alert: return "alert";
+        case LoggingLevel::critical: return "critical";
+        case LoggingLevel::debug: return "debug";
+        case LoggingLevel::emergency: return "emergency";
+        case LoggingLevel::error: return "error";
+        case LoggingLevel::info: return "info";
+        case LoggingLevel::notice: return "notice";
+        case LoggingLevel::warning: return "warning";
+    }
+    return {};
+}
+
+template<>
+inline Utils::Result<LoggingLevel> fromJson<LoggingLevel>(const QJsonValue &val) {
+    const QString str = val.toString();
+    if (str == "alert") return LoggingLevel::alert;
+    if (str == "critical") return LoggingLevel::critical;
+    if (str == "debug") return LoggingLevel::debug;
+    if (str == "emergency") return LoggingLevel::emergency;
+    if (str == "error") return LoggingLevel::error;
+    if (str == "info") return LoggingLevel::info;
+    if (str == "notice") return LoggingLevel::notice;
+    if (str == "warning") return LoggingLevel::warning;
+    return Utils::ResultError("Invalid LoggingLevel value: " + str);
+}
+
+inline QJsonValue toJsonValue(const LoggingLevel &v) {
+    return toString(v);
+}
+/** Parameters for a `logging/setLevel` request. */
+struct SetLevelRequestParams {
+    /**
+     * See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+     */
+    struct Meta {
+        std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
+
+        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+
+        const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
+    };
+
+    std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+    LoggingLevel _level;  //!< The level of logging that the client wants to receive from the server. The server should send all logs at this level and higher (i.e., more severe) to the client as notifications/message.
+
+    SetLevelRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
+    SetLevelRequestParams& level(LoggingLevel v) { _level = std::move(v); return *this; }
+
+    const std::optional<Meta>& _meta() const { return __meta; }
+    const LoggingLevel& level() const { return _level; }
+};
+
+template<>
+inline Utils::Result<SetLevelRequestParams::Meta> fromJson<SetLevelRequestParams::Meta>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for Meta");
+    const QJsonObject obj = val.toObject();
+    SetLevelRequestParams::Meta result;
+    if (obj.contains("progressToken"))
+        result._progressToken = co_await fromJson<ProgressToken>(obj["progressToken"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const SetLevelRequestParams::Meta &data) {
+    QJsonObject obj;
+    if (data._progressToken.has_value())
+        obj.insert("progressToken", toJsonValue(*data._progressToken));
+    return obj;
+}
+
+template<>
+inline Utils::Result<SetLevelRequestParams> fromJson<SetLevelRequestParams>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for SetLevelRequestParams");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("level"))
+        co_return Utils::ResultError("Missing required field: level");
+    SetLevelRequestParams result;
+    if (obj.contains("_meta") && obj["_meta"].isObject())
+        result.__meta = co_await fromJson<SetLevelRequestParams::Meta>(obj["_meta"]);
+    if (obj.contains("level") && obj["level"].isString())
+        result._level = co_await fromJson<LoggingLevel>(obj["level"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const SetLevelRequestParams &data) {
+    QJsonObject obj{{"level", toJsonValue(data._level)}};
+    if (data.__meta.has_value())
+        obj.insert("_meta", toJson(*data.__meta));
+    return obj;
+}
+
+/** A request from the client to the server, to enable or adjust logging. */
+struct SetLevelRequest {
+    RequestId _id;
+    SetLevelRequestParams _params;
+
+    SetLevelRequest& id(RequestId v) { _id = std::move(v); return *this; }
+    SetLevelRequest& params(SetLevelRequestParams v) { _params = std::move(v); return *this; }
+
+    const RequestId& id() const { return _id; }
+    const SetLevelRequestParams& params() const { return _params; }
+};
+
+template<>
+inline Utils::Result<SetLevelRequest> fromJson<SetLevelRequest>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for SetLevelRequest");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("id"))
+        co_return Utils::ResultError("Missing required field: id");
+    if (!obj.contains("jsonrpc"))
+        co_return Utils::ResultError("Missing required field: jsonrpc");
+    if (!obj.contains("method"))
+        co_return Utils::ResultError("Missing required field: method");
+    if (!obj.contains("params"))
+        co_return Utils::ResultError("Missing required field: params");
+    SetLevelRequest result;
+    if (obj.contains("id"))
+        result._id = co_await fromJson<RequestId>(obj["id"]);
+    if (obj.value("jsonrpc").toString() != "2.0")
+        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
+    if (obj.value("method").toString() != "logging/setLevel")
+        co_return Utils::ResultError("Field 'method' must be 'logging/setLevel', got: " + obj.value("method").toString());
+    if (obj.contains("params") && obj["params"].isObject())
+        result._params = co_await fromJson<SetLevelRequestParams>(obj["params"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const SetLevelRequest &data) {
+    QJsonObject obj{
+        {"id", toJsonValue(data._id)},
+        {"jsonrpc", QString("2.0")},
+        {"method", QString("logging/setLevel")},
+        {"params", toJson(data._params)}
+    };
+    return obj;
+}
+
+/** Parameters for a `resources/subscribe` request. */
+struct SubscribeRequestParams {
+    /**
+     * See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+     */
+    struct Meta {
+        std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
+
+        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+
+        const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
+    };
+
+    std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+    QString _uri;  //!< The URI of the resource. The URI can use any protocol; it is up to the server how to interpret it.
+
+    SubscribeRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
+    SubscribeRequestParams& uri(QString v) { _uri = std::move(v); return *this; }
+
+    const std::optional<Meta>& _meta() const { return __meta; }
+    const QString& uri() const { return _uri; }
+};
+
+template<>
+inline Utils::Result<SubscribeRequestParams::Meta> fromJson<SubscribeRequestParams::Meta>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for Meta");
+    const QJsonObject obj = val.toObject();
+    SubscribeRequestParams::Meta result;
+    if (obj.contains("progressToken"))
+        result._progressToken = co_await fromJson<ProgressToken>(obj["progressToken"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const SubscribeRequestParams::Meta &data) {
+    QJsonObject obj;
+    if (data._progressToken.has_value())
+        obj.insert("progressToken", toJsonValue(*data._progressToken));
+    return obj;
+}
+
+template<>
+inline Utils::Result<SubscribeRequestParams> fromJson<SubscribeRequestParams>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for SubscribeRequestParams");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("uri"))
+        co_return Utils::ResultError("Missing required field: uri");
+    SubscribeRequestParams result;
+    if (obj.contains("_meta") && obj["_meta"].isObject())
+        result.__meta = co_await fromJson<SubscribeRequestParams::Meta>(obj["_meta"]);
+    result._uri = obj.value("uri").toString();
+    co_return result;
+}
+
+inline QJsonObject toJson(const SubscribeRequestParams &data) {
+    QJsonObject obj{{"uri", data._uri}};
+    if (data.__meta.has_value())
+        obj.insert("_meta", toJson(*data.__meta));
+    return obj;
+}
+
+/**
+ * Sent from the client to request resources/updated notifications from the server whenever a particular resource changes.
+ */
+struct SubscribeRequest {
+    RequestId _id;
+    SubscribeRequestParams _params;
+
+    SubscribeRequest& id(RequestId v) { _id = std::move(v); return *this; }
+    SubscribeRequest& params(SubscribeRequestParams v) { _params = std::move(v); return *this; }
+
+    const RequestId& id() const { return _id; }
+    const SubscribeRequestParams& params() const { return _params; }
+};
+
+template<>
+inline Utils::Result<SubscribeRequest> fromJson<SubscribeRequest>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for SubscribeRequest");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("id"))
+        co_return Utils::ResultError("Missing required field: id");
+    if (!obj.contains("jsonrpc"))
+        co_return Utils::ResultError("Missing required field: jsonrpc");
+    if (!obj.contains("method"))
+        co_return Utils::ResultError("Missing required field: method");
+    if (!obj.contains("params"))
+        co_return Utils::ResultError("Missing required field: params");
+    SubscribeRequest result;
+    if (obj.contains("id"))
+        result._id = co_await fromJson<RequestId>(obj["id"]);
+    if (obj.value("jsonrpc").toString() != "2.0")
+        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
+    if (obj.value("method").toString() != "resources/subscribe")
+        co_return Utils::ResultError("Field 'method' must be 'resources/subscribe', got: " + obj.value("method").toString());
+    if (obj.contains("params") && obj["params"].isObject())
+        result._params = co_await fromJson<SubscribeRequestParams>(obj["params"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const SubscribeRequest &data) {
+    QJsonObject obj{
+        {"id", toJsonValue(data._id)},
+        {"jsonrpc", QString("2.0")},
+        {"method", QString("resources/subscribe")},
+        {"params", toJson(data._params)}
+    };
+    return obj;
+}
+
+/** Parameters for a `resources/unsubscribe` request. */
+struct UnsubscribeRequestParams {
+    /**
+     * See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+     */
+    struct Meta {
+        std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
+
+        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+
+        const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
+    };
+
+    std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+    QString _uri;  //!< The URI of the resource. The URI can use any protocol; it is up to the server how to interpret it.
+
+    UnsubscribeRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
+    UnsubscribeRequestParams& uri(QString v) { _uri = std::move(v); return *this; }
+
+    const std::optional<Meta>& _meta() const { return __meta; }
+    const QString& uri() const { return _uri; }
+};
+
+template<>
+inline Utils::Result<UnsubscribeRequestParams::Meta> fromJson<UnsubscribeRequestParams::Meta>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for Meta");
+    const QJsonObject obj = val.toObject();
+    UnsubscribeRequestParams::Meta result;
+    if (obj.contains("progressToken"))
+        result._progressToken = co_await fromJson<ProgressToken>(obj["progressToken"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const UnsubscribeRequestParams::Meta &data) {
+    QJsonObject obj;
+    if (data._progressToken.has_value())
+        obj.insert("progressToken", toJsonValue(*data._progressToken));
+    return obj;
+}
+
+template<>
+inline Utils::Result<UnsubscribeRequestParams> fromJson<UnsubscribeRequestParams>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for UnsubscribeRequestParams");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("uri"))
+        co_return Utils::ResultError("Missing required field: uri");
+    UnsubscribeRequestParams result;
+    if (obj.contains("_meta") && obj["_meta"].isObject())
+        result.__meta = co_await fromJson<UnsubscribeRequestParams::Meta>(obj["_meta"]);
+    result._uri = obj.value("uri").toString();
+    co_return result;
+}
+
+inline QJsonObject toJson(const UnsubscribeRequestParams &data) {
+    QJsonObject obj{{"uri", data._uri}};
+    if (data.__meta.has_value())
+        obj.insert("_meta", toJson(*data.__meta));
+    return obj;
+}
+
+/**
+ * Sent from the client to request cancellation of resources/updated notifications from the server. This should follow a previous resources/subscribe request.
+ */
+struct UnsubscribeRequest {
+    RequestId _id;
+    UnsubscribeRequestParams _params;
+
+    UnsubscribeRequest& id(RequestId v) { _id = std::move(v); return *this; }
+    UnsubscribeRequest& params(UnsubscribeRequestParams v) { _params = std::move(v); return *this; }
+
+    const RequestId& id() const { return _id; }
+    const UnsubscribeRequestParams& params() const { return _params; }
+};
+
+template<>
+inline Utils::Result<UnsubscribeRequest> fromJson<UnsubscribeRequest>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for UnsubscribeRequest");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("id"))
+        co_return Utils::ResultError("Missing required field: id");
+    if (!obj.contains("jsonrpc"))
+        co_return Utils::ResultError("Missing required field: jsonrpc");
+    if (!obj.contains("method"))
+        co_return Utils::ResultError("Missing required field: method");
+    if (!obj.contains("params"))
+        co_return Utils::ResultError("Missing required field: params");
+    UnsubscribeRequest result;
+    if (obj.contains("id"))
+        result._id = co_await fromJson<RequestId>(obj["id"]);
+    if (obj.value("jsonrpc").toString() != "2.0")
+        co_return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
+    if (obj.value("method").toString() != "resources/unsubscribe")
+        co_return Utils::ResultError("Field 'method' must be 'resources/unsubscribe', got: " + obj.value("method").toString());
+    if (obj.contains("params") && obj["params"].isObject())
+        result._params = co_await fromJson<UnsubscribeRequestParams>(obj["params"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const UnsubscribeRequest &data) {
+    QJsonObject obj{
+        {"id", toJsonValue(data._id)},
+        {"jsonrpc", QString("2.0")},
+        {"method", QString("resources/unsubscribe")},
+        {"params", toJson(data._params)}
+    };
     return obj;
 }
 
@@ -4176,134 +4201,6 @@ inline QString dispatchValue(const ClientRequest &val) {
 inline RequestId id(const ClientRequest &val) {
     return std::visit([](const auto &v) -> RequestId { return v._id; }, val);
 }
-/** The client's response to an elicitation request. */
-struct ElicitResult {
-    std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-    /**
-     * The user action in response to the elicitation.
-     * - "accept": User submitted the form/confirmed the action
-     * - "decline": User explicitly decline the action
-     * - "cancel": User dismissed without making an explicit choice
-     */
-    QString _action;
-    /**
-     * The submitted form data, only present when action is "accept" and mode was "form".
-     * Contains values matching the requested schema.
-     * Omitted for out-of-band mode responses.
-     */
-    std::optional<QJsonObject> _content;
-
-    ElicitResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
-    ElicitResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
-    ElicitResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    ElicitResult& action(QString v) { _action = std::move(v); return *this; }
-    ElicitResult& content(QJsonObject v) { _content = std::move(v); return *this; }
-
-    const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
-    QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
-    const QString& action() const { return _action; }
-    const std::optional<QJsonObject>& content() const { return _content; }
-};
-
-template<>
-inline Utils::Result<ElicitResult> fromJson<ElicitResult>(const QJsonValue &val) {
-    if (!val.isObject())
-        return Utils::ResultError("Expected JSON object for ElicitResult");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("action"))
-        return Utils::ResultError("Missing required field: action");
-    ElicitResult result;
-    if (obj.contains("_meta") && obj["_meta"].isObject()) {
-        const QJsonObject mapObj__meta = obj["_meta"].toObject();
-        QMap<QString, QJsonValue> map__meta;
-        for (auto it = mapObj__meta.constBegin(); it != mapObj__meta.constEnd(); ++it)
-            map__meta.insert(it.key(), it.value());
-        result.__meta = map__meta;
-    }
-    result._action = obj.value("action").toString();
-    if (obj.contains("content"))
-        result._content = obj.value("content").toObject();
-    return result;
-}
-
-inline QJsonObject toJson(const ElicitResult &data) {
-    QJsonObject obj{{"action", data._action}};
-    if (data.__meta.has_value()) {
-        QJsonObject map__meta;
-        for (auto it = data.__meta->constBegin(); it != data.__meta->constEnd(); ++it)
-            map__meta.insert(it.key(), it.value());
-        obj.insert("_meta", map__meta);
-    }
-    if (data._content.has_value())
-        obj.insert("content", *data._content);
-    return obj;
-}
-
-/** The response to a tasks/list request. */
-struct ListTasksResult {
-    std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-    /**
-     * An opaque token representing the pagination position after the last returned result.
-     * If present, there may be more results available.
-     */
-    std::optional<QString> _nextCursor;
-    QList<Task> _tasks;
-
-    ListTasksResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
-    ListTasksResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
-    ListTasksResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    ListTasksResult& nextCursor(QString v) { _nextCursor = std::move(v); return *this; }
-    ListTasksResult& tasks(QList<Task> v) { _tasks = std::move(v); return *this; }
-    ListTasksResult& addTask(Task v) { _tasks.append(std::move(v)); return *this; }
-
-    const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
-    QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
-    const std::optional<QString>& nextCursor() const { return _nextCursor; }
-    const QList<Task>& tasks() const { return _tasks; }
-};
-
-template<>
-inline Utils::Result<ListTasksResult> fromJson<ListTasksResult>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for ListTasksResult");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("tasks"))
-        co_return Utils::ResultError("Missing required field: tasks");
-    ListTasksResult result;
-    if (obj.contains("_meta") && obj["_meta"].isObject()) {
-        const QJsonObject mapObj__meta = obj["_meta"].toObject();
-        QMap<QString, QJsonValue> map__meta;
-        for (auto it = mapObj__meta.constBegin(); it != mapObj__meta.constEnd(); ++it)
-            map__meta.insert(it.key(), it.value());
-        result.__meta = map__meta;
-    }
-    if (obj.contains("nextCursor"))
-        result._nextCursor = obj.value("nextCursor").toString();
-    if (obj.contains("tasks") && obj["tasks"].isArray()) {
-        QJsonArray arr = obj["tasks"].toArray();
-        for (const QJsonValue &v : arr) {
-            result._tasks.append(co_await fromJson<Task>(v));
-        }
-    }
-    co_return result;
-}
-
-inline QJsonObject toJson(const ListTasksResult &data) {
-    QJsonObject obj;
-    if (data.__meta.has_value()) {
-        QJsonObject map__meta;
-        for (auto it = data.__meta->constBegin(); it != data.__meta->constEnd(); ++it)
-            map__meta.insert(it.key(), it.value());
-        obj.insert("_meta", map__meta);
-    }
-    if (data._nextCursor.has_value())
-        obj.insert("nextCursor", *data._nextCursor);
-    QJsonArray arr_tasks;
-    for (const auto &v : data._tasks) arr_tasks.append(toJson(v));
-    obj.insert("tasks", arr_tasks);
-    return obj;
-}
-
 /** The result of a tool use, provided by the user back to the assistant. */
 struct ToolResultContent {
     /**
@@ -4645,6 +4542,141 @@ inline QJsonObject toJson(const CreateMessageResult &data) {
     return obj;
 }
 
+/** The client's response to an elicitation request. */
+struct ElicitResult {
+    /**
+     * The user action in response to the elicitation.
+     * - "accept": User submitted the form/confirmed the action
+     * - "decline": User explicitly decline the action
+     * - "cancel": User dismissed without making an explicit choice
+     */
+    enum class Action {
+        accept,
+        cancel,
+        decline
+    };
+
+    std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+    Action _action;
+    /**
+     * The submitted form data, only present when action is "accept" and mode was "form".
+     * Contains values matching the requested schema.
+     * Omitted for out-of-band mode responses.
+     */
+    std::optional<QJsonObject> _content;
+
+    ElicitResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    ElicitResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
+    ElicitResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
+    ElicitResult& action(Action v) { _action = std::move(v); return *this; }
+    ElicitResult& content(QJsonObject v) { _content = std::move(v); return *this; }
+
+    const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
+    QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
+    const Action& action() const { return _action; }
+    const std::optional<QJsonObject>& content() const { return _content; }
+};
+
+inline QString toString(const ElicitResult::Action &v) {
+    switch(v) {
+        case ElicitResult::Action::accept: return "accept";
+        case ElicitResult::Action::cancel: return "cancel";
+        case ElicitResult::Action::decline: return "decline";
+    }
+    return {};
+}
+
+template<>
+inline Utils::Result<ElicitResult::Action> fromJson<ElicitResult::Action>(const QJsonValue &val) {
+    const QString str = val.toString();
+    if (str == "accept") return ElicitResult::Action::accept;
+    if (str == "cancel") return ElicitResult::Action::cancel;
+    if (str == "decline") return ElicitResult::Action::decline;
+    return Utils::ResultError("Invalid ElicitResult::Action value: " + str);
+}
+
+inline QJsonValue toJsonValue(const ElicitResult::Action &v) {
+    return toString(v);
+}
+
+template<>
+inline Utils::Result<ElicitResult> fromJson<ElicitResult>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for ElicitResult");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("action"))
+        co_return Utils::ResultError("Missing required field: action");
+    ElicitResult result;
+    if (obj.contains("_meta") && obj["_meta"].isObject()) {
+        const QJsonObject mapObj__meta = obj["_meta"].toObject();
+        QMap<QString, QJsonValue> map__meta;
+        for (auto it = mapObj__meta.constBegin(); it != mapObj__meta.constEnd(); ++it)
+            map__meta.insert(it.key(), it.value());
+        result.__meta = map__meta;
+    }
+    if (obj.contains("action") && obj["action"].isString())
+        result._action = co_await fromJson<ElicitResult::Action>(obj["action"]);
+    if (obj.contains("content"))
+        result._content = obj.value("content").toObject();
+    co_return result;
+}
+
+inline QJsonObject toJson(const ElicitResult &data) {
+    QJsonObject obj{{"action", toJsonValue(data._action)}};
+    if (data.__meta.has_value()) {
+        QJsonObject map__meta;
+        for (auto it = data.__meta->constBegin(); it != data.__meta->constEnd(); ++it)
+            map__meta.insert(it.key(), it.value());
+        obj.insert("_meta", map__meta);
+    }
+    if (data._content.has_value())
+        obj.insert("content", *data._content);
+    return obj;
+}
+
+/**
+ * The response to a tasks/result request.
+ * The structure matches the result type of the original request.
+ * For example, a tools/call task would return the CallToolResult structure.
+ */
+struct GetTaskPayloadResult {
+    std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+
+    GetTaskPayloadResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    GetTaskPayloadResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
+    GetTaskPayloadResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
+
+    const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
+    QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
+};
+
+template<>
+inline Utils::Result<GetTaskPayloadResult> fromJson<GetTaskPayloadResult>(const QJsonValue &val) {
+    if (!val.isObject())
+        return Utils::ResultError("Expected JSON object for GetTaskPayloadResult");
+    const QJsonObject obj = val.toObject();
+    GetTaskPayloadResult result;
+    if (obj.contains("_meta") && obj["_meta"].isObject()) {
+        const QJsonObject mapObj__meta = obj["_meta"].toObject();
+        QMap<QString, QJsonValue> map__meta;
+        for (auto it = mapObj__meta.constBegin(); it != mapObj__meta.constEnd(); ++it)
+            map__meta.insert(it.key(), it.value());
+        result.__meta = map__meta;
+    }
+    return result;
+}
+
+inline QJsonObject toJson(const GetTaskPayloadResult &data) {
+    QJsonObject obj;
+    if (data.__meta.has_value()) {
+        QJsonObject map__meta;
+        for (auto it = data.__meta->constBegin(); it != data.__meta->constEnd(); ++it)
+            map__meta.insert(it.key(), it.value());
+        obj.insert("_meta", map__meta);
+    }
+    return obj;
+}
+
 /** The response to a tasks/get request. */
 struct GetTaskResult {
     std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
@@ -4739,49 +4771,6 @@ inline QJsonObject toJson(const GetTaskResult &data) {
         obj.insert("pollInterval", *data._pollInterval);
     if (data._statusMessage.has_value())
         obj.insert("statusMessage", *data._statusMessage);
-    return obj;
-}
-
-/**
- * The response to a tasks/result request.
- * The structure matches the result type of the original request.
- * For example, a tools/call task would return the CallToolResult structure.
- */
-struct GetTaskPayloadResult {
-    std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-
-    GetTaskPayloadResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
-    GetTaskPayloadResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
-    GetTaskPayloadResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-
-    const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
-    QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
-};
-
-template<>
-inline Utils::Result<GetTaskPayloadResult> fromJson<GetTaskPayloadResult>(const QJsonValue &val) {
-    if (!val.isObject())
-        return Utils::ResultError("Expected JSON object for GetTaskPayloadResult");
-    const QJsonObject obj = val.toObject();
-    GetTaskPayloadResult result;
-    if (obj.contains("_meta") && obj["_meta"].isObject()) {
-        const QJsonObject mapObj__meta = obj["_meta"].toObject();
-        QMap<QString, QJsonValue> map__meta;
-        for (auto it = mapObj__meta.constBegin(); it != mapObj__meta.constEnd(); ++it)
-            map__meta.insert(it.key(), it.value());
-        result.__meta = map__meta;
-    }
-    return result;
-}
-
-inline QJsonObject toJson(const GetTaskPayloadResult &data) {
-    QJsonObject obj;
-    if (data.__meta.has_value()) {
-        QJsonObject map__meta;
-        for (auto it = data.__meta->constBegin(); it != data.__meta->constEnd(); ++it)
-            map__meta.insert(it.key(), it.value());
-        obj.insert("_meta", map__meta);
-    }
     return obj;
 }
 
@@ -4902,6 +4891,71 @@ inline QJsonObject toJson(const ListRootsResult &data) {
     QJsonArray arr_roots;
     for (const auto &v : data._roots) arr_roots.append(toJson(v));
     obj.insert("roots", arr_roots);
+    return obj;
+}
+
+/** The response to a tasks/list request. */
+struct ListTasksResult {
+    std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+    /**
+     * An opaque token representing the pagination position after the last returned result.
+     * If present, there may be more results available.
+     */
+    std::optional<QString> _nextCursor;
+    QList<Task> _tasks;
+
+    ListTasksResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    ListTasksResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
+    ListTasksResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
+    ListTasksResult& nextCursor(QString v) { _nextCursor = std::move(v); return *this; }
+    ListTasksResult& tasks(QList<Task> v) { _tasks = std::move(v); return *this; }
+    ListTasksResult& addTask(Task v) { _tasks.append(std::move(v)); return *this; }
+
+    const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
+    QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
+    const std::optional<QString>& nextCursor() const { return _nextCursor; }
+    const QList<Task>& tasks() const { return _tasks; }
+};
+
+template<>
+inline Utils::Result<ListTasksResult> fromJson<ListTasksResult>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for ListTasksResult");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("tasks"))
+        co_return Utils::ResultError("Missing required field: tasks");
+    ListTasksResult result;
+    if (obj.contains("_meta") && obj["_meta"].isObject()) {
+        const QJsonObject mapObj__meta = obj["_meta"].toObject();
+        QMap<QString, QJsonValue> map__meta;
+        for (auto it = mapObj__meta.constBegin(); it != mapObj__meta.constEnd(); ++it)
+            map__meta.insert(it.key(), it.value());
+        result.__meta = map__meta;
+    }
+    if (obj.contains("nextCursor"))
+        result._nextCursor = obj.value("nextCursor").toString();
+    if (obj.contains("tasks") && obj["tasks"].isArray()) {
+        QJsonArray arr = obj["tasks"].toArray();
+        for (const QJsonValue &v : arr) {
+            result._tasks.append(co_await fromJson<Task>(v));
+        }
+    }
+    co_return result;
+}
+
+inline QJsonObject toJson(const ListTasksResult &data) {
+    QJsonObject obj;
+    if (data.__meta.has_value()) {
+        QJsonObject map__meta;
+        for (auto it = data.__meta->constBegin(); it != data.__meta->constEnd(); ++it)
+            map__meta.insert(it.key(), it.value());
+        obj.insert("_meta", map__meta);
+    }
+    if (data._nextCursor.has_value())
+        obj.insert("nextCursor", *data._nextCursor);
+    QJsonArray arr_tasks;
+    for (const auto &v : data._tasks) arr_tasks.append(toJson(v));
+    obj.insert("tasks", arr_tasks);
     return obj;
 }
 
@@ -5184,41 +5238,58 @@ inline QJsonObject toJson(const ModelPreferences &data) {
     return obj;
 }
 
-/** Execution-related properties for a tool. */
-struct ToolExecution {
-    /**
-     * Indicates whether this tool supports task-augmented execution.
-     * This allows clients to handle long-running operations through polling
-     * the task system.
-     *
-     * - "forbidden": Tool does not support task-augmented execution (default when absent)
-     * - "optional": Tool may support task-augmented execution
-     * - "required": Tool requires task-augmented execution
-     *
-     * Default: "forbidden"
-     */
-    std::optional<QString> _taskSupport;
+/** Describes a message issued to or received from an LLM API. */
+struct SamplingMessage {
+    std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+    QString _content;
+    Role _role;
 
-    ToolExecution& taskSupport(QString v) { _taskSupport = std::move(v); return *this; }
+    SamplingMessage& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    SamplingMessage& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
+    SamplingMessage& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
+    SamplingMessage& content(QString v) { _content = std::move(v); return *this; }
+    SamplingMessage& role(Role v) { _role = std::move(v); return *this; }
 
-    const std::optional<QString>& taskSupport() const { return _taskSupport; }
+    const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
+    QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
+    const QString& content() const { return _content; }
+    const Role& role() const { return _role; }
 };
 
 template<>
-inline Utils::Result<ToolExecution> fromJson<ToolExecution>(const QJsonValue &val) {
+inline Utils::Result<SamplingMessage> fromJson<SamplingMessage>(const QJsonValue &val) {
     if (!val.isObject())
-        return Utils::ResultError("Expected JSON object for ToolExecution");
+        co_return Utils::ResultError("Expected JSON object for SamplingMessage");
     const QJsonObject obj = val.toObject();
-    ToolExecution result;
-    if (obj.contains("taskSupport"))
-        result._taskSupport = obj.value("taskSupport").toString();
-    return result;
+    if (!obj.contains("content"))
+        co_return Utils::ResultError("Missing required field: content");
+    if (!obj.contains("role"))
+        co_return Utils::ResultError("Missing required field: role");
+    SamplingMessage result;
+    if (obj.contains("_meta") && obj["_meta"].isObject()) {
+        const QJsonObject mapObj__meta = obj["_meta"].toObject();
+        QMap<QString, QJsonValue> map__meta;
+        for (auto it = mapObj__meta.constBegin(); it != mapObj__meta.constEnd(); ++it)
+            map__meta.insert(it.key(), it.value());
+        result.__meta = map__meta;
+    }
+    result._content = obj.value("content").toString();
+    if (obj.contains("role") && obj["role"].isString())
+        result._role = co_await fromJson<Role>(obj["role"]);
+    co_return result;
 }
 
-inline QJsonObject toJson(const ToolExecution &data) {
-    QJsonObject obj;
-    if (data._taskSupport.has_value())
-        obj.insert("taskSupport", *data._taskSupport);
+inline QJsonObject toJson(const SamplingMessage &data) {
+    QJsonObject obj{
+        {"content", data._content},
+        {"role", toJsonValue(data._role)}
+    };
+    if (data.__meta.has_value()) {
+        QJsonObject map__meta;
+        for (auto it = data.__meta->constBegin(); it != data.__meta->constEnd(); ++it)
+            map__meta.insert(it.key(), it.value());
+        obj.insert("_meta", map__meta);
+    }
     return obj;
 }
 
@@ -5312,6 +5383,72 @@ inline QJsonObject toJson(const ToolAnnotations &data) {
         obj.insert("readOnlyHint", *data._readOnlyHint);
     if (data._title.has_value())
         obj.insert("title", *data._title);
+    return obj;
+}
+
+/** Execution-related properties for a tool. */
+struct ToolExecution {
+    /**
+     * Indicates whether this tool supports task-augmented execution.
+     * This allows clients to handle long-running operations through polling
+     * the task system.
+     *
+     * - "forbidden": Tool does not support task-augmented execution (default when absent)
+     * - "optional": Tool may support task-augmented execution
+     * - "required": Tool requires task-augmented execution
+     *
+     * Default: "forbidden"
+     */
+    enum class TaskSupport {
+        forbidden,
+        optional,
+        required
+    };
+
+    std::optional<TaskSupport> _taskSupport;
+
+    ToolExecution& taskSupport(TaskSupport v) { _taskSupport = std::move(v); return *this; }
+
+    const std::optional<TaskSupport>& taskSupport() const { return _taskSupport; }
+};
+
+inline QString toString(const ToolExecution::TaskSupport &v) {
+    switch(v) {
+        case ToolExecution::TaskSupport::forbidden: return "forbidden";
+        case ToolExecution::TaskSupport::optional: return "optional";
+        case ToolExecution::TaskSupport::required: return "required";
+    }
+    return {};
+}
+
+template<>
+inline Utils::Result<ToolExecution::TaskSupport> fromJson<ToolExecution::TaskSupport>(const QJsonValue &val) {
+    const QString str = val.toString();
+    if (str == "forbidden") return ToolExecution::TaskSupport::forbidden;
+    if (str == "optional") return ToolExecution::TaskSupport::optional;
+    if (str == "required") return ToolExecution::TaskSupport::required;
+    return Utils::ResultError("Invalid ToolExecution::TaskSupport value: " + str);
+}
+
+inline QJsonValue toJsonValue(const ToolExecution::TaskSupport &v) {
+    return toString(v);
+}
+
+template<>
+inline Utils::Result<ToolExecution> fromJson<ToolExecution>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for ToolExecution");
+    const QJsonObject obj = val.toObject();
+    ToolExecution result;
+    if (obj.contains("taskSupport") && obj["taskSupport"].isString())
+        result._taskSupport = co_await fromJson<ToolExecution::TaskSupport>(obj["taskSupport"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const ToolExecution &data) {
+    QJsonObject obj;
+    if (data._taskSupport.has_value())
+        obj.insert("taskSupport", toJsonValue(*data._taskSupport));
     return obj;
 }
 
@@ -5602,83 +5739,56 @@ struct ToolChoice {
      * - "required": Model MUST use at least one tool before completing
      * - "none": Model MUST NOT use any tools
      */
-    std::optional<QString> _mode;
+    enum class Mode {
+        auto_,
+        none,
+        required
+    };
 
-    ToolChoice& mode(QString v) { _mode = std::move(v); return *this; }
+    std::optional<Mode> _mode;
 
-    const std::optional<QString>& mode() const { return _mode; }
+    ToolChoice& mode(Mode v) { _mode = std::move(v); return *this; }
+
+    const std::optional<Mode>& mode() const { return _mode; }
 };
+
+inline QString toString(const ToolChoice::Mode &v) {
+    switch(v) {
+        case ToolChoice::Mode::auto_: return "auto";
+        case ToolChoice::Mode::none: return "none";
+        case ToolChoice::Mode::required: return "required";
+    }
+    return {};
+}
+
+template<>
+inline Utils::Result<ToolChoice::Mode> fromJson<ToolChoice::Mode>(const QJsonValue &val) {
+    const QString str = val.toString();
+    if (str == "auto") return ToolChoice::Mode::auto_;
+    if (str == "none") return ToolChoice::Mode::none;
+    if (str == "required") return ToolChoice::Mode::required;
+    return Utils::ResultError("Invalid ToolChoice::Mode value: " + str);
+}
+
+inline QJsonValue toJsonValue(const ToolChoice::Mode &v) {
+    return toString(v);
+}
 
 template<>
 inline Utils::Result<ToolChoice> fromJson<ToolChoice>(const QJsonValue &val) {
     if (!val.isObject())
-        return Utils::ResultError("Expected JSON object for ToolChoice");
+        co_return Utils::ResultError("Expected JSON object for ToolChoice");
     const QJsonObject obj = val.toObject();
     ToolChoice result;
-    if (obj.contains("mode"))
-        result._mode = obj.value("mode").toString();
-    return result;
+    if (obj.contains("mode") && obj["mode"].isString())
+        result._mode = co_await fromJson<ToolChoice::Mode>(obj["mode"]);
+    co_return result;
 }
 
 inline QJsonObject toJson(const ToolChoice &data) {
     QJsonObject obj;
     if (data._mode.has_value())
-        obj.insert("mode", *data._mode);
-    return obj;
-}
-
-/** Describes a message issued to or received from an LLM API. */
-struct SamplingMessage {
-    std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-    QString _content;
-    Role _role;
-
-    SamplingMessage& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
-    SamplingMessage& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
-    SamplingMessage& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    SamplingMessage& content(QString v) { _content = std::move(v); return *this; }
-    SamplingMessage& role(Role v) { _role = std::move(v); return *this; }
-
-    const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
-    QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
-    const QString& content() const { return _content; }
-    const Role& role() const { return _role; }
-};
-
-template<>
-inline Utils::Result<SamplingMessage> fromJson<SamplingMessage>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for SamplingMessage");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("content"))
-        co_return Utils::ResultError("Missing required field: content");
-    if (!obj.contains("role"))
-        co_return Utils::ResultError("Missing required field: role");
-    SamplingMessage result;
-    if (obj.contains("_meta") && obj["_meta"].isObject()) {
-        const QJsonObject mapObj__meta = obj["_meta"].toObject();
-        QMap<QString, QJsonValue> map__meta;
-        for (auto it = mapObj__meta.constBegin(); it != mapObj__meta.constEnd(); ++it)
-            map__meta.insert(it.key(), it.value());
-        result.__meta = map__meta;
-    }
-    result._content = obj.value("content").toString();
-    if (obj.contains("role") && obj["role"].isString())
-        result._role = co_await fromJson<Role>(obj["role"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const SamplingMessage &data) {
-    QJsonObject obj{
-        {"content", data._content},
-        {"role", toJsonValue(data._role)}
-    };
-    if (data.__meta.has_value()) {
-        QJsonObject map__meta;
-        for (auto it = data.__meta->constBegin(); it != data.__meta->constEnd(); ++it)
-            map__meta.insert(it.key(), it.value());
-        obj.insert("_meta", map__meta);
-    }
+        obj.insert("mode", toJsonValue(*data._mode));
     return obj;
 }
 
@@ -5695,15 +5805,21 @@ struct CreateMessageRequestParams {
         const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
     };
 
-    std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
     /**
-     * A request to include context from one or more Mcp servers (including the caller), to be attached to the prompt.
+     * A request to include context from one or more MCP servers (including the caller), to be attached to the prompt.
      * The client MAY ignore this request.
      *
      * Default is "none". Values "thisServer" and "allServers" are soft-deprecated. Servers SHOULD only use these values if the client
      * declares ClientCapabilities.sampling.context. These values may be removed in future spec releases.
      */
-    std::optional<QString> _includeContext;
+    enum class IncludeContext {
+        allServers,
+        none,
+        thisServer
+    };
+
+    std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+    std::optional<IncludeContext> _includeContext;
     /**
      * The requested maximum number of tokens to sample (to prevent runaway completions).
      *
@@ -5738,7 +5854,7 @@ struct CreateMessageRequestParams {
     std::optional<QList<Tool>> _tools;
 
     CreateMessageRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
-    CreateMessageRequestParams& includeContext(QString v) { _includeContext = std::move(v); return *this; }
+    CreateMessageRequestParams& includeContext(IncludeContext v) { _includeContext = std::move(v); return *this; }
     CreateMessageRequestParams& maxTokens(int v) { _maxTokens = std::move(v); return *this; }
     CreateMessageRequestParams& messages(QList<SamplingMessage> v) { _messages = std::move(v); return *this; }
     CreateMessageRequestParams& addMessage(SamplingMessage v) { _messages.append(std::move(v)); return *this; }
@@ -5756,7 +5872,7 @@ struct CreateMessageRequestParams {
     CreateMessageRequestParams& addTool(Tool v) { if (!_tools) _tools = QList<Tool>{}; (*_tools).append(std::move(v)); return *this; }
 
     const std::optional<Meta>& _meta() const { return __meta; }
-    const std::optional<QString>& includeContext() const { return _includeContext; }
+    const std::optional<IncludeContext>& includeContext() const { return _includeContext; }
     const int& maxTokens() const { return _maxTokens; }
     const QList<SamplingMessage>& messages() const { return _messages; }
     const std::optional<QMap<QString, QJsonValue>>& metadata() const { return _metadata; }
@@ -5788,6 +5904,28 @@ inline QJsonObject toJson(const CreateMessageRequestParams::Meta &data) {
     return obj;
 }
 
+inline QString toString(const CreateMessageRequestParams::IncludeContext &v) {
+    switch(v) {
+        case CreateMessageRequestParams::IncludeContext::allServers: return "allServers";
+        case CreateMessageRequestParams::IncludeContext::none: return "none";
+        case CreateMessageRequestParams::IncludeContext::thisServer: return "thisServer";
+    }
+    return {};
+}
+
+template<>
+inline Utils::Result<CreateMessageRequestParams::IncludeContext> fromJson<CreateMessageRequestParams::IncludeContext>(const QJsonValue &val) {
+    const QString str = val.toString();
+    if (str == "allServers") return CreateMessageRequestParams::IncludeContext::allServers;
+    if (str == "none") return CreateMessageRequestParams::IncludeContext::none;
+    if (str == "thisServer") return CreateMessageRequestParams::IncludeContext::thisServer;
+    return Utils::ResultError("Invalid CreateMessageRequestParams::IncludeContext value: " + str);
+}
+
+inline QJsonValue toJsonValue(const CreateMessageRequestParams::IncludeContext &v) {
+    return toString(v);
+}
+
 template<>
 inline Utils::Result<CreateMessageRequestParams> fromJson<CreateMessageRequestParams>(const QJsonValue &val) {
     if (!val.isObject())
@@ -5800,8 +5938,8 @@ inline Utils::Result<CreateMessageRequestParams> fromJson<CreateMessageRequestPa
     CreateMessageRequestParams result;
     if (obj.contains("_meta") && obj["_meta"].isObject())
         result.__meta = co_await fromJson<CreateMessageRequestParams::Meta>(obj["_meta"]);
-    if (obj.contains("includeContext"))
-        result._includeContext = obj.value("includeContext").toString();
+    if (obj.contains("includeContext") && obj["includeContext"].isString())
+        result._includeContext = co_await fromJson<CreateMessageRequestParams::IncludeContext>(obj["includeContext"]);
     result._maxTokens = obj.value("maxTokens").toInt();
     if (obj.contains("messages") && obj["messages"].isArray()) {
         QJsonArray arr = obj["messages"].toArray();
@@ -5850,7 +5988,7 @@ inline QJsonObject toJson(const CreateMessageRequestParams &data) {
     if (data.__meta.has_value())
         obj.insert("_meta", toJson(*data.__meta));
     if (data._includeContext.has_value())
-        obj.insert("includeContext", *data._includeContext);
+        obj.insert("includeContext", toJsonValue(*data._includeContext));
     QJsonArray arr_messages;
     for (const auto &v : data._messages) arr_messages.append(toJson(v));
     obj.insert("messages", arr_messages);
@@ -5975,108 +6113,6 @@ inline QJsonObject toJson(const CreateTaskResult &data) {
             map__meta.insert(it.key(), it.value());
         obj.insert("_meta", map__meta);
     }
-    return obj;
-}
-
-/** The parameters for a request to elicit information from the user via a URL in the client. */
-struct ElicitRequestURLParams {
-    /**
-     * See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-     */
-    struct Meta {
-        std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
-
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
-
-        const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
-    };
-
-    std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
-    /**
-     * The ID of the elicitation, which must be unique within the context of the server.
-     * The client MUST treat this ID as an opaque value.
-     */
-    QString _elicitationId;
-    QString _message;  //!< The message to present to the user explaining why the interaction is needed.
-    /**
-     * If specified, the caller is requesting task-augmented execution for this request.
-     * The request will return a CreateTaskResult immediately, and the actual result can be
-     * retrieved later via tasks/result.
-     *
-     * Task augmentation is subject to capability negotiation - receivers MUST declare support
-     * for task augmentation of specific request types in their capabilities.
-     */
-    std::optional<TaskMetadata> _task;
-    QString _url;  //!< The URL that the user should navigate to.
-
-    ElicitRequestURLParams& _meta(Meta v) { __meta = std::move(v); return *this; }
-    ElicitRequestURLParams& elicitationId(QString v) { _elicitationId = std::move(v); return *this; }
-    ElicitRequestURLParams& message(QString v) { _message = std::move(v); return *this; }
-    ElicitRequestURLParams& task(TaskMetadata v) { _task = std::move(v); return *this; }
-    ElicitRequestURLParams& url(QString v) { _url = std::move(v); return *this; }
-
-    const std::optional<Meta>& _meta() const { return __meta; }
-    const QString& elicitationId() const { return _elicitationId; }
-    const QString& message() const { return _message; }
-    const std::optional<TaskMetadata>& task() const { return _task; }
-    const QString& url() const { return _url; }
-};
-
-template<>
-inline Utils::Result<ElicitRequestURLParams::Meta> fromJson<ElicitRequestURLParams::Meta>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for Meta");
-    const QJsonObject obj = val.toObject();
-    ElicitRequestURLParams::Meta result;
-    if (obj.contains("progressToken"))
-        result._progressToken = co_await fromJson<ProgressToken>(obj["progressToken"]);
-    co_return result;
-}
-
-inline QJsonObject toJson(const ElicitRequestURLParams::Meta &data) {
-    QJsonObject obj;
-    if (data._progressToken.has_value())
-        obj.insert("progressToken", toJsonValue(*data._progressToken));
-    return obj;
-}
-
-template<>
-inline Utils::Result<ElicitRequestURLParams> fromJson<ElicitRequestURLParams>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for ElicitRequestURLParams");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("elicitationId"))
-        co_return Utils::ResultError("Missing required field: elicitationId");
-    if (!obj.contains("message"))
-        co_return Utils::ResultError("Missing required field: message");
-    if (!obj.contains("mode"))
-        co_return Utils::ResultError("Missing required field: mode");
-    if (!obj.contains("url"))
-        co_return Utils::ResultError("Missing required field: url");
-    ElicitRequestURLParams result;
-    if (obj.contains("_meta") && obj["_meta"].isObject())
-        result.__meta = co_await fromJson<ElicitRequestURLParams::Meta>(obj["_meta"]);
-    result._elicitationId = obj.value("elicitationId").toString();
-    result._message = obj.value("message").toString();
-    if (obj.value("mode").toString() != "url")
-        co_return Utils::ResultError("Field 'mode' must be 'url', got: " + obj.value("mode").toString());
-    if (obj.contains("task") && obj["task"].isObject())
-        result._task = co_await fromJson<TaskMetadata>(obj["task"]);
-    result._url = obj.value("url").toString();
-    co_return result;
-}
-
-inline QJsonObject toJson(const ElicitRequestURLParams &data) {
-    QJsonObject obj{
-        {"elicitationId", data._elicitationId},
-        {"message", data._message},
-        {"mode", QString("url")},
-        {"url", data._url}
-    };
-    if (data.__meta.has_value())
-        obj.insert("_meta", toJson(*data.__meta));
-    if (data._task.has_value())
-        obj.insert("task", toJson(*data._task));
     return obj;
 }
 
@@ -6228,6 +6264,108 @@ inline QJsonObject toJson(const ElicitRequestFormParams &data) {
         {"message", data._message},
         {"mode", QString("form")},
         {"requestedSchema", toJson(data._requestedSchema)}
+    };
+    if (data.__meta.has_value())
+        obj.insert("_meta", toJson(*data.__meta));
+    if (data._task.has_value())
+        obj.insert("task", toJson(*data._task));
+    return obj;
+}
+
+/** The parameters for a request to elicit information from the user via a URL in the client. */
+struct ElicitRequestURLParams {
+    /**
+     * See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+     */
+    struct Meta {
+        std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
+
+        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+
+        const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
+    };
+
+    std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+    /**
+     * The ID of the elicitation, which must be unique within the context of the server.
+     * The client MUST treat this ID as an opaque value.
+     */
+    QString _elicitationId;
+    QString _message;  //!< The message to present to the user explaining why the interaction is needed.
+    /**
+     * If specified, the caller is requesting task-augmented execution for this request.
+     * The request will return a CreateTaskResult immediately, and the actual result can be
+     * retrieved later via tasks/result.
+     *
+     * Task augmentation is subject to capability negotiation - receivers MUST declare support
+     * for task augmentation of specific request types in their capabilities.
+     */
+    std::optional<TaskMetadata> _task;
+    QString _url;  //!< The URL that the user should navigate to.
+
+    ElicitRequestURLParams& _meta(Meta v) { __meta = std::move(v); return *this; }
+    ElicitRequestURLParams& elicitationId(QString v) { _elicitationId = std::move(v); return *this; }
+    ElicitRequestURLParams& message(QString v) { _message = std::move(v); return *this; }
+    ElicitRequestURLParams& task(TaskMetadata v) { _task = std::move(v); return *this; }
+    ElicitRequestURLParams& url(QString v) { _url = std::move(v); return *this; }
+
+    const std::optional<Meta>& _meta() const { return __meta; }
+    const QString& elicitationId() const { return _elicitationId; }
+    const QString& message() const { return _message; }
+    const std::optional<TaskMetadata>& task() const { return _task; }
+    const QString& url() const { return _url; }
+};
+
+template<>
+inline Utils::Result<ElicitRequestURLParams::Meta> fromJson<ElicitRequestURLParams::Meta>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for Meta");
+    const QJsonObject obj = val.toObject();
+    ElicitRequestURLParams::Meta result;
+    if (obj.contains("progressToken"))
+        result._progressToken = co_await fromJson<ProgressToken>(obj["progressToken"]);
+    co_return result;
+}
+
+inline QJsonObject toJson(const ElicitRequestURLParams::Meta &data) {
+    QJsonObject obj;
+    if (data._progressToken.has_value())
+        obj.insert("progressToken", toJsonValue(*data._progressToken));
+    return obj;
+}
+
+template<>
+inline Utils::Result<ElicitRequestURLParams> fromJson<ElicitRequestURLParams>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for ElicitRequestURLParams");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("elicitationId"))
+        co_return Utils::ResultError("Missing required field: elicitationId");
+    if (!obj.contains("message"))
+        co_return Utils::ResultError("Missing required field: message");
+    if (!obj.contains("mode"))
+        co_return Utils::ResultError("Missing required field: mode");
+    if (!obj.contains("url"))
+        co_return Utils::ResultError("Missing required field: url");
+    ElicitRequestURLParams result;
+    if (obj.contains("_meta") && obj["_meta"].isObject())
+        result.__meta = co_await fromJson<ElicitRequestURLParams::Meta>(obj["_meta"]);
+    result._elicitationId = obj.value("elicitationId").toString();
+    result._message = obj.value("message").toString();
+    if (obj.value("mode").toString() != "url")
+        co_return Utils::ResultError("Field 'mode' must be 'url', got: " + obj.value("mode").toString());
+    if (obj.contains("task") && obj["task"].isObject())
+        result._task = co_await fromJson<TaskMetadata>(obj["task"]);
+    result._url = obj.value("url").toString();
+    co_return result;
+}
+
+inline QJsonObject toJson(const ElicitRequestURLParams &data) {
+    QJsonObject obj{
+        {"elicitationId", data._elicitationId},
+        {"message", data._message},
+        {"mode", QString("url")},
+        {"url", data._url}
     };
     if (data.__meta.has_value())
         obj.insert("_meta", toJson(*data.__meta));
@@ -6390,278 +6528,6 @@ inline QJsonObject toJson(const ElicitationCompleteNotification &data) {
         {"method", QString("notifications/elicitation/complete")},
         {"params", toJson(data._params)}
     };
-    return obj;
-}
-
-/** Schema for single-selection enumeration without display titles for options. */
-struct UntitledSingleSelectEnumSchema {
-    std::optional<QString> _default;  //!< Optional default value.
-    std::optional<QString> _description;  //!< Optional description for the enum field.
-    QStringList _enum;  //!< Array of enum values to choose from.
-    std::optional<QString> _title;  //!< Optional title for the enum field.
-
-    UntitledSingleSelectEnumSchema& default_(QString v) { _default = std::move(v); return *this; }
-    UntitledSingleSelectEnumSchema& description(QString v) { _description = std::move(v); return *this; }
-    UntitledSingleSelectEnumSchema& enum_(QStringList v) { _enum = std::move(v); return *this; }
-    UntitledSingleSelectEnumSchema& addEnum(QString v) { _enum.append(std::move(v)); return *this; }
-    UntitledSingleSelectEnumSchema& title(QString v) { _title = std::move(v); return *this; }
-
-    const std::optional<QString>& default_() const { return _default; }
-    const std::optional<QString>& description() const { return _description; }
-    const QStringList& enum_() const { return _enum; }
-    const std::optional<QString>& title() const { return _title; }
-};
-
-template<>
-inline Utils::Result<UntitledSingleSelectEnumSchema> fromJson<UntitledSingleSelectEnumSchema>(const QJsonValue &val) {
-    if (!val.isObject())
-        return Utils::ResultError("Expected JSON object for UntitledSingleSelectEnumSchema");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("enum"))
-        return Utils::ResultError("Missing required field: enum");
-    if (!obj.contains("type"))
-        return Utils::ResultError("Missing required field: type");
-    UntitledSingleSelectEnumSchema result;
-    if (obj.contains("default"))
-        result._default = obj.value("default").toString();
-    if (obj.contains("description"))
-        result._description = obj.value("description").toString();
-    if (obj.contains("enum") && obj["enum"].isArray()) {
-        QJsonArray arr = obj["enum"].toArray();
-        for (const QJsonValue &v : arr) {
-            result._enum.append(v.toString());
-        }
-    }
-    if (obj.contains("title"))
-        result._title = obj.value("title").toString();
-    if (obj.value("type").toString() != "string")
-        return Utils::ResultError("Field 'type' must be 'string', got: " + obj.value("type").toString());
-    return result;
-}
-
-inline QJsonObject toJson(const UntitledSingleSelectEnumSchema &data) {
-    QJsonObject obj{{"type", QString("string")}};
-    if (data._default.has_value())
-        obj.insert("default", *data._default);
-    if (data._description.has_value())
-        obj.insert("description", *data._description);
-    QJsonArray arr_enum_;
-    for (const auto &v : data._enum) arr_enum_.append(v);
-    obj.insert("enum", arr_enum_);
-    if (data._title.has_value())
-        obj.insert("title", *data._title);
-    return obj;
-}
-
-/** Schema for multiple-selection enumeration without display titles for options. */
-struct UntitledMultiSelectEnumSchema {
-    /** Schema for the array items. */
-    struct Items {
-        QStringList _enum;  //!< Array of enum values to choose from.
-
-        Items& enum_(QStringList v) { _enum = std::move(v); return *this; }
-        Items& addEnum(QString v) { _enum.append(std::move(v)); return *this; }
-
-        const QStringList& enum_() const { return _enum; }
-    };
-
-    std::optional<QStringList> _default;  //!< Optional default value.
-    std::optional<QString> _description;  //!< Optional description for the enum field.
-    Items _items;  //!< Schema for the array items.
-    std::optional<int> _maxItems;  //!< Maximum number of items to select.
-    std::optional<int> _minItems;  //!< Minimum number of items to select.
-    std::optional<QString> _title;  //!< Optional title for the enum field.
-
-    UntitledMultiSelectEnumSchema& default_(QStringList v) { _default = std::move(v); return *this; }
-    UntitledMultiSelectEnumSchema& addDefault(QString v) { if (!_default) _default = QStringList{}; (*_default).append(std::move(v)); return *this; }
-    UntitledMultiSelectEnumSchema& description(QString v) { _description = std::move(v); return *this; }
-    UntitledMultiSelectEnumSchema& items(Items v) { _items = std::move(v); return *this; }
-    UntitledMultiSelectEnumSchema& maxItems(int v) { _maxItems = std::move(v); return *this; }
-    UntitledMultiSelectEnumSchema& minItems(int v) { _minItems = std::move(v); return *this; }
-    UntitledMultiSelectEnumSchema& title(QString v) { _title = std::move(v); return *this; }
-
-    const std::optional<QStringList>& default_() const { return _default; }
-    const std::optional<QString>& description() const { return _description; }
-    const Items& items() const { return _items; }
-    const std::optional<int>& maxItems() const { return _maxItems; }
-    const std::optional<int>& minItems() const { return _minItems; }
-    const std::optional<QString>& title() const { return _title; }
-};
-
-template<>
-inline Utils::Result<UntitledMultiSelectEnumSchema::Items> fromJson<UntitledMultiSelectEnumSchema::Items>(const QJsonValue &val) {
-    if (!val.isObject())
-        return Utils::ResultError("Expected JSON object for Items");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("enum"))
-        return Utils::ResultError("Missing required field: enum");
-    if (!obj.contains("type"))
-        return Utils::ResultError("Missing required field: type");
-    UntitledMultiSelectEnumSchema::Items result;
-    if (obj.contains("enum") && obj["enum"].isArray()) {
-        QJsonArray arr = obj["enum"].toArray();
-        for (const QJsonValue &v : arr) {
-            result._enum.append(v.toString());
-        }
-    }
-    if (obj.value("type").toString() != "string")
-        return Utils::ResultError("Field 'type' must be 'string', got: " + obj.value("type").toString());
-    return result;
-}
-
-inline QJsonObject toJson(const UntitledMultiSelectEnumSchema::Items &data) {
-    QJsonObject obj{{"type", QString("string")}};
-    QJsonArray arr_enum_;
-    for (const auto &v : data._enum) arr_enum_.append(v);
-    obj.insert("enum", arr_enum_);
-    return obj;
-}
-
-template<>
-inline Utils::Result<UntitledMultiSelectEnumSchema> fromJson<UntitledMultiSelectEnumSchema>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for UntitledMultiSelectEnumSchema");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("items"))
-        co_return Utils::ResultError("Missing required field: items");
-    if (!obj.contains("type"))
-        co_return Utils::ResultError("Missing required field: type");
-    UntitledMultiSelectEnumSchema result;
-    if (obj.contains("default") && obj["default"].isArray()) {
-        QJsonArray arr = obj["default"].toArray();
-        QStringList list_default_;
-        for (const QJsonValue &v : arr) {
-            list_default_.append(v.toString());
-        }
-        result._default = list_default_;
-    }
-    if (obj.contains("description"))
-        result._description = obj.value("description").toString();
-    if (obj.contains("items") && obj["items"].isObject())
-        result._items = co_await fromJson<UntitledMultiSelectEnumSchema::Items>(obj["items"]);
-    if (obj.contains("maxItems"))
-        result._maxItems = obj.value("maxItems").toInt();
-    if (obj.contains("minItems"))
-        result._minItems = obj.value("minItems").toInt();
-    if (obj.contains("title"))
-        result._title = obj.value("title").toString();
-    if (obj.value("type").toString() != "array")
-        co_return Utils::ResultError("Field 'type' must be 'array', got: " + obj.value("type").toString());
-    co_return result;
-}
-
-inline QJsonObject toJson(const UntitledMultiSelectEnumSchema &data) {
-    QJsonObject obj{
-        {"items", toJson(data._items)},
-        {"type", QString("array")}
-    };
-    if (data._default.has_value()) {
-        QJsonArray arr_default_;
-        for (const auto &v : *data._default) arr_default_.append(v);
-        obj.insert("default", arr_default_);
-    }
-    if (data._description.has_value())
-        obj.insert("description", *data._description);
-    if (data._maxItems.has_value())
-        obj.insert("maxItems", *data._maxItems);
-    if (data._minItems.has_value())
-        obj.insert("minItems", *data._minItems);
-    if (data._title.has_value())
-        obj.insert("title", *data._title);
-    return obj;
-}
-
-/** Schema for single-selection enumeration with display titles for each option. */
-struct TitledSingleSelectEnumSchema {
-    struct OneOfItem {
-        QString _const;  //!< The enum value.
-        QString _title;  //!< Display label for this option.
-
-        OneOfItem& const_(QString v) { _const = std::move(v); return *this; }
-        OneOfItem& title(QString v) { _title = std::move(v); return *this; }
-
-        const QString& const_() const { return _const; }
-        const QString& title() const { return _title; }
-    };
-
-    std::optional<QString> _default;  //!< Optional default value.
-    std::optional<QString> _description;  //!< Optional description for the enum field.
-    QList<OneOfItem> _oneOf;  //!< Array of enum options with values and display labels.
-    std::optional<QString> _title;  //!< Optional title for the enum field.
-
-    TitledSingleSelectEnumSchema& default_(QString v) { _default = std::move(v); return *this; }
-    TitledSingleSelectEnumSchema& description(QString v) { _description = std::move(v); return *this; }
-    TitledSingleSelectEnumSchema& oneOf(QList<OneOfItem> v) { _oneOf = std::move(v); return *this; }
-    TitledSingleSelectEnumSchema& addOneOf(OneOfItem v) { _oneOf.append(std::move(v)); return *this; }
-    TitledSingleSelectEnumSchema& title(QString v) { _title = std::move(v); return *this; }
-
-    const std::optional<QString>& default_() const { return _default; }
-    const std::optional<QString>& description() const { return _description; }
-    const QList<OneOfItem>& oneOf() const { return _oneOf; }
-    const std::optional<QString>& title() const { return _title; }
-};
-
-template<>
-inline Utils::Result<TitledSingleSelectEnumSchema::OneOfItem> fromJson<TitledSingleSelectEnumSchema::OneOfItem>(const QJsonValue &val) {
-    if (!val.isObject())
-        return Utils::ResultError("Expected JSON object for OneOfItem");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("const"))
-        return Utils::ResultError("Missing required field: const");
-    if (!obj.contains("title"))
-        return Utils::ResultError("Missing required field: title");
-    TitledSingleSelectEnumSchema::OneOfItem result;
-    result._const = obj.value("const").toString();
-    result._title = obj.value("title").toString();
-    return result;
-}
-
-inline QJsonObject toJson(const TitledSingleSelectEnumSchema::OneOfItem &data) {
-    QJsonObject obj{
-        {"const", data._const},
-        {"title", data._title}
-    };
-    return obj;
-}
-
-template<>
-inline Utils::Result<TitledSingleSelectEnumSchema> fromJson<TitledSingleSelectEnumSchema>(const QJsonValue &val) {
-    if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for TitledSingleSelectEnumSchema");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("oneOf"))
-        co_return Utils::ResultError("Missing required field: oneOf");
-    if (!obj.contains("type"))
-        co_return Utils::ResultError("Missing required field: type");
-    TitledSingleSelectEnumSchema result;
-    if (obj.contains("default"))
-        result._default = obj.value("default").toString();
-    if (obj.contains("description"))
-        result._description = obj.value("description").toString();
-    if (obj.contains("oneOf") && obj["oneOf"].isArray()) {
-        QJsonArray arr = obj["oneOf"].toArray();
-        for (const QJsonValue &v : arr) {
-            result._oneOf.append(co_await fromJson<TitledSingleSelectEnumSchema::OneOfItem>(v));
-        }
-    }
-    if (obj.contains("title"))
-        result._title = obj.value("title").toString();
-    if (obj.value("type").toString() != "string")
-        co_return Utils::ResultError("Field 'type' must be 'string', got: " + obj.value("type").toString());
-    co_return result;
-}
-
-inline QJsonObject toJson(const TitledSingleSelectEnumSchema &data) {
-    QJsonObject obj{{"type", QString("string")}};
-    if (data._default.has_value())
-        obj.insert("default", *data._default);
-    if (data._description.has_value())
-        obj.insert("description", *data._description);
-    QJsonArray arr_oneOf;
-    for (const auto &v : data._oneOf) arr_oneOf.append(toJson(v));
-    obj.insert("oneOf", arr_oneOf);
-    if (data._title.has_value())
-        obj.insert("title", *data._title);
     return obj;
 }
 
@@ -6897,6 +6763,278 @@ inline QJsonObject toJson(const TitledMultiSelectEnumSchema &data) {
     return obj;
 }
 
+/** Schema for single-selection enumeration with display titles for each option. */
+struct TitledSingleSelectEnumSchema {
+    struct OneOfItem {
+        QString _const;  //!< The enum value.
+        QString _title;  //!< Display label for this option.
+
+        OneOfItem& const_(QString v) { _const = std::move(v); return *this; }
+        OneOfItem& title(QString v) { _title = std::move(v); return *this; }
+
+        const QString& const_() const { return _const; }
+        const QString& title() const { return _title; }
+    };
+
+    std::optional<QString> _default;  //!< Optional default value.
+    std::optional<QString> _description;  //!< Optional description for the enum field.
+    QList<OneOfItem> _oneOf;  //!< Array of enum options with values and display labels.
+    std::optional<QString> _title;  //!< Optional title for the enum field.
+
+    TitledSingleSelectEnumSchema& default_(QString v) { _default = std::move(v); return *this; }
+    TitledSingleSelectEnumSchema& description(QString v) { _description = std::move(v); return *this; }
+    TitledSingleSelectEnumSchema& oneOf(QList<OneOfItem> v) { _oneOf = std::move(v); return *this; }
+    TitledSingleSelectEnumSchema& addOneOf(OneOfItem v) { _oneOf.append(std::move(v)); return *this; }
+    TitledSingleSelectEnumSchema& title(QString v) { _title = std::move(v); return *this; }
+
+    const std::optional<QString>& default_() const { return _default; }
+    const std::optional<QString>& description() const { return _description; }
+    const QList<OneOfItem>& oneOf() const { return _oneOf; }
+    const std::optional<QString>& title() const { return _title; }
+};
+
+template<>
+inline Utils::Result<TitledSingleSelectEnumSchema::OneOfItem> fromJson<TitledSingleSelectEnumSchema::OneOfItem>(const QJsonValue &val) {
+    if (!val.isObject())
+        return Utils::ResultError("Expected JSON object for OneOfItem");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("const"))
+        return Utils::ResultError("Missing required field: const");
+    if (!obj.contains("title"))
+        return Utils::ResultError("Missing required field: title");
+    TitledSingleSelectEnumSchema::OneOfItem result;
+    result._const = obj.value("const").toString();
+    result._title = obj.value("title").toString();
+    return result;
+}
+
+inline QJsonObject toJson(const TitledSingleSelectEnumSchema::OneOfItem &data) {
+    QJsonObject obj{
+        {"const", data._const},
+        {"title", data._title}
+    };
+    return obj;
+}
+
+template<>
+inline Utils::Result<TitledSingleSelectEnumSchema> fromJson<TitledSingleSelectEnumSchema>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for TitledSingleSelectEnumSchema");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("oneOf"))
+        co_return Utils::ResultError("Missing required field: oneOf");
+    if (!obj.contains("type"))
+        co_return Utils::ResultError("Missing required field: type");
+    TitledSingleSelectEnumSchema result;
+    if (obj.contains("default"))
+        result._default = obj.value("default").toString();
+    if (obj.contains("description"))
+        result._description = obj.value("description").toString();
+    if (obj.contains("oneOf") && obj["oneOf"].isArray()) {
+        QJsonArray arr = obj["oneOf"].toArray();
+        for (const QJsonValue &v : arr) {
+            result._oneOf.append(co_await fromJson<TitledSingleSelectEnumSchema::OneOfItem>(v));
+        }
+    }
+    if (obj.contains("title"))
+        result._title = obj.value("title").toString();
+    if (obj.value("type").toString() != "string")
+        co_return Utils::ResultError("Field 'type' must be 'string', got: " + obj.value("type").toString());
+    co_return result;
+}
+
+inline QJsonObject toJson(const TitledSingleSelectEnumSchema &data) {
+    QJsonObject obj{{"type", QString("string")}};
+    if (data._default.has_value())
+        obj.insert("default", *data._default);
+    if (data._description.has_value())
+        obj.insert("description", *data._description);
+    QJsonArray arr_oneOf;
+    for (const auto &v : data._oneOf) arr_oneOf.append(toJson(v));
+    obj.insert("oneOf", arr_oneOf);
+    if (data._title.has_value())
+        obj.insert("title", *data._title);
+    return obj;
+}
+
+/** Schema for multiple-selection enumeration without display titles for options. */
+struct UntitledMultiSelectEnumSchema {
+    /** Schema for the array items. */
+    struct Items {
+        QStringList _enum;  //!< Array of enum values to choose from.
+
+        Items& enum_(QStringList v) { _enum = std::move(v); return *this; }
+        Items& addEnum(QString v) { _enum.append(std::move(v)); return *this; }
+
+        const QStringList& enum_() const { return _enum; }
+    };
+
+    std::optional<QStringList> _default;  //!< Optional default value.
+    std::optional<QString> _description;  //!< Optional description for the enum field.
+    Items _items;  //!< Schema for the array items.
+    std::optional<int> _maxItems;  //!< Maximum number of items to select.
+    std::optional<int> _minItems;  //!< Minimum number of items to select.
+    std::optional<QString> _title;  //!< Optional title for the enum field.
+
+    UntitledMultiSelectEnumSchema& default_(QStringList v) { _default = std::move(v); return *this; }
+    UntitledMultiSelectEnumSchema& addDefault(QString v) { if (!_default) _default = QStringList{}; (*_default).append(std::move(v)); return *this; }
+    UntitledMultiSelectEnumSchema& description(QString v) { _description = std::move(v); return *this; }
+    UntitledMultiSelectEnumSchema& items(Items v) { _items = std::move(v); return *this; }
+    UntitledMultiSelectEnumSchema& maxItems(int v) { _maxItems = std::move(v); return *this; }
+    UntitledMultiSelectEnumSchema& minItems(int v) { _minItems = std::move(v); return *this; }
+    UntitledMultiSelectEnumSchema& title(QString v) { _title = std::move(v); return *this; }
+
+    const std::optional<QStringList>& default_() const { return _default; }
+    const std::optional<QString>& description() const { return _description; }
+    const Items& items() const { return _items; }
+    const std::optional<int>& maxItems() const { return _maxItems; }
+    const std::optional<int>& minItems() const { return _minItems; }
+    const std::optional<QString>& title() const { return _title; }
+};
+
+template<>
+inline Utils::Result<UntitledMultiSelectEnumSchema::Items> fromJson<UntitledMultiSelectEnumSchema::Items>(const QJsonValue &val) {
+    if (!val.isObject())
+        return Utils::ResultError("Expected JSON object for Items");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("enum"))
+        return Utils::ResultError("Missing required field: enum");
+    if (!obj.contains("type"))
+        return Utils::ResultError("Missing required field: type");
+    UntitledMultiSelectEnumSchema::Items result;
+    if (obj.contains("enum") && obj["enum"].isArray()) {
+        QJsonArray arr = obj["enum"].toArray();
+        for (const QJsonValue &v : arr) {
+            result._enum.append(v.toString());
+        }
+    }
+    if (obj.value("type").toString() != "string")
+        return Utils::ResultError("Field 'type' must be 'string', got: " + obj.value("type").toString());
+    return result;
+}
+
+inline QJsonObject toJson(const UntitledMultiSelectEnumSchema::Items &data) {
+    QJsonObject obj{{"type", QString("string")}};
+    QJsonArray arr_enum_;
+    for (const auto &v : data._enum) arr_enum_.append(v);
+    obj.insert("enum", arr_enum_);
+    return obj;
+}
+
+template<>
+inline Utils::Result<UntitledMultiSelectEnumSchema> fromJson<UntitledMultiSelectEnumSchema>(const QJsonValue &val) {
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for UntitledMultiSelectEnumSchema");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("items"))
+        co_return Utils::ResultError("Missing required field: items");
+    if (!obj.contains("type"))
+        co_return Utils::ResultError("Missing required field: type");
+    UntitledMultiSelectEnumSchema result;
+    if (obj.contains("default") && obj["default"].isArray()) {
+        QJsonArray arr = obj["default"].toArray();
+        QStringList list_default_;
+        for (const QJsonValue &v : arr) {
+            list_default_.append(v.toString());
+        }
+        result._default = list_default_;
+    }
+    if (obj.contains("description"))
+        result._description = obj.value("description").toString();
+    if (obj.contains("items") && obj["items"].isObject())
+        result._items = co_await fromJson<UntitledMultiSelectEnumSchema::Items>(obj["items"]);
+    if (obj.contains("maxItems"))
+        result._maxItems = obj.value("maxItems").toInt();
+    if (obj.contains("minItems"))
+        result._minItems = obj.value("minItems").toInt();
+    if (obj.contains("title"))
+        result._title = obj.value("title").toString();
+    if (obj.value("type").toString() != "array")
+        co_return Utils::ResultError("Field 'type' must be 'array', got: " + obj.value("type").toString());
+    co_return result;
+}
+
+inline QJsonObject toJson(const UntitledMultiSelectEnumSchema &data) {
+    QJsonObject obj{
+        {"items", toJson(data._items)},
+        {"type", QString("array")}
+    };
+    if (data._default.has_value()) {
+        QJsonArray arr_default_;
+        for (const auto &v : *data._default) arr_default_.append(v);
+        obj.insert("default", arr_default_);
+    }
+    if (data._description.has_value())
+        obj.insert("description", *data._description);
+    if (data._maxItems.has_value())
+        obj.insert("maxItems", *data._maxItems);
+    if (data._minItems.has_value())
+        obj.insert("minItems", *data._minItems);
+    if (data._title.has_value())
+        obj.insert("title", *data._title);
+    return obj;
+}
+
+/** Schema for single-selection enumeration without display titles for options. */
+struct UntitledSingleSelectEnumSchema {
+    std::optional<QString> _default;  //!< Optional default value.
+    std::optional<QString> _description;  //!< Optional description for the enum field.
+    QStringList _enum;  //!< Array of enum values to choose from.
+    std::optional<QString> _title;  //!< Optional title for the enum field.
+
+    UntitledSingleSelectEnumSchema& default_(QString v) { _default = std::move(v); return *this; }
+    UntitledSingleSelectEnumSchema& description(QString v) { _description = std::move(v); return *this; }
+    UntitledSingleSelectEnumSchema& enum_(QStringList v) { _enum = std::move(v); return *this; }
+    UntitledSingleSelectEnumSchema& addEnum(QString v) { _enum.append(std::move(v)); return *this; }
+    UntitledSingleSelectEnumSchema& title(QString v) { _title = std::move(v); return *this; }
+
+    const std::optional<QString>& default_() const { return _default; }
+    const std::optional<QString>& description() const { return _description; }
+    const QStringList& enum_() const { return _enum; }
+    const std::optional<QString>& title() const { return _title; }
+};
+
+template<>
+inline Utils::Result<UntitledSingleSelectEnumSchema> fromJson<UntitledSingleSelectEnumSchema>(const QJsonValue &val) {
+    if (!val.isObject())
+        return Utils::ResultError("Expected JSON object for UntitledSingleSelectEnumSchema");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("enum"))
+        return Utils::ResultError("Missing required field: enum");
+    if (!obj.contains("type"))
+        return Utils::ResultError("Missing required field: type");
+    UntitledSingleSelectEnumSchema result;
+    if (obj.contains("default"))
+        result._default = obj.value("default").toString();
+    if (obj.contains("description"))
+        result._description = obj.value("description").toString();
+    if (obj.contains("enum") && obj["enum"].isArray()) {
+        QJsonArray arr = obj["enum"].toArray();
+        for (const QJsonValue &v : arr) {
+            result._enum.append(v.toString());
+        }
+    }
+    if (obj.contains("title"))
+        result._title = obj.value("title").toString();
+    if (obj.value("type").toString() != "string")
+        return Utils::ResultError("Field 'type' must be 'string', got: " + obj.value("type").toString());
+    return result;
+}
+
+inline QJsonObject toJson(const UntitledSingleSelectEnumSchema &data) {
+    QJsonObject obj{{"type", QString("string")}};
+    if (data._default.has_value())
+        obj.insert("default", *data._default);
+    if (data._description.has_value())
+        obj.insert("description", *data._description);
+    QJsonArray arr_enum_;
+    for (const auto &v : data._enum) arr_enum_.append(v);
+    obj.insert("enum", arr_enum_);
+    if (data._title.has_value())
+        obj.insert("title", *data._title);
+    return obj;
+}
+
 using EnumSchema = std::variant<UntitledSingleSelectEnumSchema, TitledSingleSelectEnumSchema, UntitledMultiSelectEnumSchema, TitledMultiSelectEnumSchema, LegacyTitledEnumSchema>;
 
 template<>
@@ -6984,7 +7122,7 @@ inline QJsonObject toJson(const Error &data) {
  * Describes a message returned as part of a prompt.
  *
  * This is similar to `SamplingMessage`, but also supports the embedding of
- * resources from the Mcp server.
+ * resources from the MCP server.
  */
 struct PromptMessage {
     ContentBlock _content;
@@ -7571,6 +7709,58 @@ inline QJsonObject toJson(const JSONRPCErrorResponse &data) {
     return obj;
 }
 
+/** A notification which does not expect a response. */
+struct JSONRPCNotification {
+    QString _method;
+    std::optional<QMap<QString, QJsonValue>> _params;
+
+    JSONRPCNotification& method(QString v) { _method = std::move(v); return *this; }
+    JSONRPCNotification& params(QMap<QString, QJsonValue> v) { _params = std::move(v); return *this; }
+    JSONRPCNotification& addParam(const QString &key, QJsonValue v) { if (!_params) _params = QMap<QString, QJsonValue>{}; (*_params)[key] = std::move(v); return *this; }
+    JSONRPCNotification& params(const QJsonObject &obj) { if (!_params) _params = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_params)[it.key()] = it.value(); return *this; }
+
+    const QString& method() const { return _method; }
+    const std::optional<QMap<QString, QJsonValue>>& params() const { return _params; }
+    QJsonObject paramsAsObject() const { if (!_params) return {}; QJsonObject o; for (auto it = _params->constBegin(); it != _params->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
+};
+
+template<>
+inline Utils::Result<JSONRPCNotification> fromJson<JSONRPCNotification>(const QJsonValue &val) {
+    if (!val.isObject())
+        return Utils::ResultError("Expected JSON object for JSONRPCNotification");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("jsonrpc"))
+        return Utils::ResultError("Missing required field: jsonrpc");
+    if (!obj.contains("method"))
+        return Utils::ResultError("Missing required field: method");
+    JSONRPCNotification result;
+    if (obj.value("jsonrpc").toString() != "2.0")
+        return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
+    result._method = obj.value("method").toString();
+    if (obj.contains("params") && obj["params"].isObject()) {
+        const QJsonObject mapObj_params = obj["params"].toObject();
+        QMap<QString, QJsonValue> map_params;
+        for (auto it = mapObj_params.constBegin(); it != mapObj_params.constEnd(); ++it)
+            map_params.insert(it.key(), it.value());
+        result._params = map_params;
+    }
+    return result;
+}
+
+inline QJsonObject toJson(const JSONRPCNotification &data) {
+    QJsonObject obj{
+        {"jsonrpc", QString("2.0")},
+        {"method", data._method}
+    };
+    if (data._params.has_value()) {
+        QJsonObject map_params;
+        for (auto it = data._params->constBegin(); it != data._params->constEnd(); ++it)
+            map_params.insert(it.key(), it.value());
+        obj.insert("params", map_params);
+    }
+    return obj;
+}
+
 /** A request that expects a response. */
 struct JSONRPCRequest {
     RequestId _id;
@@ -7619,58 +7809,6 @@ inline Utils::Result<JSONRPCRequest> fromJson<JSONRPCRequest>(const QJsonValue &
 inline QJsonObject toJson(const JSONRPCRequest &data) {
     QJsonObject obj{
         {"id", toJsonValue(data._id)},
-        {"jsonrpc", QString("2.0")},
-        {"method", data._method}
-    };
-    if (data._params.has_value()) {
-        QJsonObject map_params;
-        for (auto it = data._params->constBegin(); it != data._params->constEnd(); ++it)
-            map_params.insert(it.key(), it.value());
-        obj.insert("params", map_params);
-    }
-    return obj;
-}
-
-/** A notification which does not expect a response. */
-struct JSONRPCNotification {
-    QString _method;
-    std::optional<QMap<QString, QJsonValue>> _params;
-
-    JSONRPCNotification& method(QString v) { _method = std::move(v); return *this; }
-    JSONRPCNotification& params(QMap<QString, QJsonValue> v) { _params = std::move(v); return *this; }
-    JSONRPCNotification& addParam(const QString &key, QJsonValue v) { if (!_params) _params = QMap<QString, QJsonValue>{}; (*_params)[key] = std::move(v); return *this; }
-    JSONRPCNotification& params(const QJsonObject &obj) { if (!_params) _params = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_params)[it.key()] = it.value(); return *this; }
-
-    const QString& method() const { return _method; }
-    const std::optional<QMap<QString, QJsonValue>>& params() const { return _params; }
-    QJsonObject paramsAsObject() const { if (!_params) return {}; QJsonObject o; for (auto it = _params->constBegin(); it != _params->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
-};
-
-template<>
-inline Utils::Result<JSONRPCNotification> fromJson<JSONRPCNotification>(const QJsonValue &val) {
-    if (!val.isObject())
-        return Utils::ResultError("Expected JSON object for JSONRPCNotification");
-    const QJsonObject obj = val.toObject();
-    if (!obj.contains("jsonrpc"))
-        return Utils::ResultError("Missing required field: jsonrpc");
-    if (!obj.contains("method"))
-        return Utils::ResultError("Missing required field: method");
-    JSONRPCNotification result;
-    if (obj.value("jsonrpc").toString() != "2.0")
-        return Utils::ResultError("Field 'jsonrpc' must be '2.0', got: " + obj.value("jsonrpc").toString());
-    result._method = obj.value("method").toString();
-    if (obj.contains("params") && obj["params"].isObject()) {
-        const QJsonObject mapObj_params = obj["params"].toObject();
-        QMap<QString, QJsonValue> map_params;
-        for (auto it = mapObj_params.constBegin(); it != mapObj_params.constEnd(); ++it)
-            map_params.insert(it.key(), it.value());
-        result._params = map_params;
-    }
-    return result;
-}
-
-inline QJsonObject toJson(const JSONRPCNotification &data) {
-    QJsonObject obj{
         {"jsonrpc", QString("2.0")},
         {"method", data._method}
     };
@@ -8707,35 +8845,60 @@ inline QJsonObject toJson(const Notification &data) {
 }
 
 struct NumberSchema {
+    enum class Type {
+        integer,
+        number
+    };
+
     std::optional<int> _default;
     std::optional<QString> _description;
     std::optional<int> _maximum;
     std::optional<int> _minimum;
     std::optional<QString> _title;
-    QString _type;
+    Type _type;
 
     NumberSchema& default_(int v) { _default = std::move(v); return *this; }
     NumberSchema& description(QString v) { _description = std::move(v); return *this; }
     NumberSchema& maximum(int v) { _maximum = std::move(v); return *this; }
     NumberSchema& minimum(int v) { _minimum = std::move(v); return *this; }
     NumberSchema& title(QString v) { _title = std::move(v); return *this; }
-    NumberSchema& type(QString v) { _type = std::move(v); return *this; }
+    NumberSchema& type(Type v) { _type = std::move(v); return *this; }
 
     const std::optional<int>& default_() const { return _default; }
     const std::optional<QString>& description() const { return _description; }
     const std::optional<int>& maximum() const { return _maximum; }
     const std::optional<int>& minimum() const { return _minimum; }
     const std::optional<QString>& title() const { return _title; }
-    const QString& type() const { return _type; }
+    const Type& type() const { return _type; }
 };
+
+inline QString toString(const NumberSchema::Type &v) {
+    switch(v) {
+        case NumberSchema::Type::integer: return "integer";
+        case NumberSchema::Type::number: return "number";
+    }
+    return {};
+}
+
+template<>
+inline Utils::Result<NumberSchema::Type> fromJson<NumberSchema::Type>(const QJsonValue &val) {
+    const QString str = val.toString();
+    if (str == "integer") return NumberSchema::Type::integer;
+    if (str == "number") return NumberSchema::Type::number;
+    return Utils::ResultError("Invalid NumberSchema::Type value: " + str);
+}
+
+inline QJsonValue toJsonValue(const NumberSchema::Type &v) {
+    return toString(v);
+}
 
 template<>
 inline Utils::Result<NumberSchema> fromJson<NumberSchema>(const QJsonValue &val) {
     if (!val.isObject())
-        return Utils::ResultError("Expected JSON object for NumberSchema");
+        co_return Utils::ResultError("Expected JSON object for NumberSchema");
     const QJsonObject obj = val.toObject();
     if (!obj.contains("type"))
-        return Utils::ResultError("Missing required field: type");
+        co_return Utils::ResultError("Missing required field: type");
     NumberSchema result;
     if (obj.contains("default"))
         result._default = obj.value("default").toInt();
@@ -8747,12 +8910,13 @@ inline Utils::Result<NumberSchema> fromJson<NumberSchema>(const QJsonValue &val)
         result._minimum = obj.value("minimum").toInt();
     if (obj.contains("title"))
         result._title = obj.value("title").toString();
-    result._type = obj.value("type").toString();
-    return result;
+    if (obj.contains("type") && obj["type"].isString())
+        result._type = co_await fromJson<NumberSchema::Type>(obj["type"]);
+    co_return result;
 }
 
 inline QJsonObject toJson(const NumberSchema &data) {
-    QJsonObject obj{{"type", data._type}};
+    QJsonObject obj{{"type", toJsonValue(data._type)}};
     if (data._default.has_value())
         obj.insert("default", *data._default);
     if (data._description.has_value())
@@ -8863,42 +9027,73 @@ inline QJsonObject toJson(const PaginatedResult &data) {
 }
 
 struct StringSchema {
+    enum class Format {
+        date,
+        date_time,
+        email,
+        uri
+    };
+
     std::optional<QString> _default;
     std::optional<QString> _description;
-    std::optional<QString> _format;
+    std::optional<Format> _format;
     std::optional<int> _maxLength;
     std::optional<int> _minLength;
     std::optional<QString> _title;
 
     StringSchema& default_(QString v) { _default = std::move(v); return *this; }
     StringSchema& description(QString v) { _description = std::move(v); return *this; }
-    StringSchema& format(QString v) { _format = std::move(v); return *this; }
+    StringSchema& format(Format v) { _format = std::move(v); return *this; }
     StringSchema& maxLength(int v) { _maxLength = std::move(v); return *this; }
     StringSchema& minLength(int v) { _minLength = std::move(v); return *this; }
     StringSchema& title(QString v) { _title = std::move(v); return *this; }
 
     const std::optional<QString>& default_() const { return _default; }
     const std::optional<QString>& description() const { return _description; }
-    const std::optional<QString>& format() const { return _format; }
+    const std::optional<Format>& format() const { return _format; }
     const std::optional<int>& maxLength() const { return _maxLength; }
     const std::optional<int>& minLength() const { return _minLength; }
     const std::optional<QString>& title() const { return _title; }
 };
 
+inline QString toString(const StringSchema::Format &v) {
+    switch(v) {
+        case StringSchema::Format::date: return "date";
+        case StringSchema::Format::date_time: return "date-time";
+        case StringSchema::Format::email: return "email";
+        case StringSchema::Format::uri: return "uri";
+    }
+    return {};
+}
+
+template<>
+inline Utils::Result<StringSchema::Format> fromJson<StringSchema::Format>(const QJsonValue &val) {
+    const QString str = val.toString();
+    if (str == "date") return StringSchema::Format::date;
+    if (str == "date-time") return StringSchema::Format::date_time;
+    if (str == "email") return StringSchema::Format::email;
+    if (str == "uri") return StringSchema::Format::uri;
+    return Utils::ResultError("Invalid StringSchema::Format value: " + str);
+}
+
+inline QJsonValue toJsonValue(const StringSchema::Format &v) {
+    return toString(v);
+}
+
 template<>
 inline Utils::Result<StringSchema> fromJson<StringSchema>(const QJsonValue &val) {
     if (!val.isObject())
-        return Utils::ResultError("Expected JSON object for StringSchema");
+        co_return Utils::ResultError("Expected JSON object for StringSchema");
     const QJsonObject obj = val.toObject();
     if (!obj.contains("type"))
-        return Utils::ResultError("Missing required field: type");
+        co_return Utils::ResultError("Missing required field: type");
     StringSchema result;
     if (obj.contains("default"))
         result._default = obj.value("default").toString();
     if (obj.contains("description"))
         result._description = obj.value("description").toString();
-    if (obj.contains("format"))
-        result._format = obj.value("format").toString();
+    if (obj.contains("format") && obj["format"].isString())
+        result._format = co_await fromJson<StringSchema::Format>(obj["format"]);
     if (obj.contains("maxLength"))
         result._maxLength = obj.value("maxLength").toInt();
     if (obj.contains("minLength"))
@@ -8906,8 +9101,8 @@ inline Utils::Result<StringSchema> fromJson<StringSchema>(const QJsonValue &val)
     if (obj.contains("title"))
         result._title = obj.value("title").toString();
     if (obj.value("type").toString() != "string")
-        return Utils::ResultError("Field 'type' must be 'string', got: " + obj.value("type").toString());
-    return result;
+        co_return Utils::ResultError("Field 'type' must be 'string', got: " + obj.value("type").toString());
+    co_return result;
 }
 
 inline QJsonObject toJson(const StringSchema &data) {
@@ -8917,7 +9112,7 @@ inline QJsonObject toJson(const StringSchema &data) {
     if (data._description.has_value())
         obj.insert("description", *data._description);
     if (data._format.has_value())
-        obj.insert("format", *data._format);
+        obj.insert("format", toJsonValue(*data._format));
     if (data._maxLength.has_value())
         obj.insert("maxLength", *data._maxLength);
     if (data._minLength.has_value())
