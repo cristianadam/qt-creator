@@ -197,7 +197,7 @@ void ClangFormatConfigWidget::initPreview(TextEditor::ICodeStylePreferences *cod
     FilePath fileName = m_project ? m_project->projectFilePath().pathAppended("snippet.cpp")
                                   : Core::ICore::userResourcePath("snippet.cpp");
 
-    TextEditor::DisplaySettings displaySettings = m_preview->displaySettings();
+    TextEditor::DisplaySettingsData displaySettings = m_preview->displaySettings();
     displaySettings.m_visualizeWhitespace = true;
     m_preview->setDisplaySettings(displaySettings);
     m_preview->setPlainText(QLatin1String(CppEditor::Constants::DEFAULT_CODE_STYLE_SNIPPETS[0]));

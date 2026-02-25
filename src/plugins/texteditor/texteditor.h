@@ -74,7 +74,7 @@ class PlainTextEditorFactory;
 
 class BehaviorSettingsData;
 class CompletionSettings;
-class DisplaySettings;
+class DisplaySettingsData;
 class ExtraEncodingSettingsData;
 class FontSettings;
 class MarginSettingsData;
@@ -320,7 +320,7 @@ public:
     void setLanguageSettingsId(Utils::Id settingsId);
     Utils::Id languageSettingsId() const;
 
-    const DisplaySettings &displaySettings() const;
+    const DisplaySettingsData &displaySettings() const;
     const MarginSettingsData &marginSettings() const;
     const BehaviorSettingsData &behaviorSettings() const;
 
@@ -373,7 +373,7 @@ public:
 
     virtual void encourageApply();
 
-    virtual void setDisplaySettings(const TextEditor::DisplaySettings &);
+    virtual void setDisplaySettings(const TextEditor::DisplaySettingsData &);
     virtual void setMarginSettings(const TextEditor::MarginSettingsData &);
     void setBehaviorSettings(const TextEditor::BehaviorSettingsData &);
     void setTypingSettings(const TextEditor::TypingSettings &);

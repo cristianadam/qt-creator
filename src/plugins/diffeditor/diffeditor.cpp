@@ -300,7 +300,7 @@ signals:
     void requestResize();
 
 protected:
-    void setDisplaySettings(const DisplaySettings &ds) final;
+    void setDisplaySettings(const DisplaySettingsData &ds) final;
     void setMarginSettings(const MarginSettingsData &ms) final;
     void applyFontSettings() final;
 };
@@ -310,7 +310,7 @@ DescriptionEditorWidget::DescriptionEditorWidget(QWidget *parent)
 {
     setupFallBackEditor("DiffEditor.DescriptionEditor");
 
-    DisplaySettings settings = displaySettings();
+    DisplaySettingsData settings = displaySettings();
     settings.m_textWrapping = false;
     settings.m_displayLineNumbers = false;
     settings.m_displayFoldingMarkers = false;
@@ -335,9 +335,9 @@ QSize DescriptionEditorWidget::sizeHint() const
     return size;
 }
 
-void DescriptionEditorWidget::setDisplaySettings(const DisplaySettings &ds)
+void DescriptionEditorWidget::setDisplaySettings(const DisplaySettingsData &ds)
 {
-    DisplaySettings settings = displaySettings();
+    DisplaySettingsData settings = displaySettings();
     settings.m_visualizeWhitespace = ds.m_visualizeWhitespace;
     settings.m_scrollBarHighlights = ds.m_scrollBarHighlights;
     settings.m_highlightCurrentLine = ds.m_highlightCurrentLine;

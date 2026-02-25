@@ -47,9 +47,9 @@ void SelectableTextEditorWidget::setSelections(const DiffSelections &selections)
     m_diffSelections = selections;
 }
 
-void SelectableTextEditorWidget::setDisplaySettings(const DisplaySettings &displaySettings)
+void SelectableTextEditorWidget::setDisplaySettings(const DisplaySettingsData &displaySettings)
 {
-    DisplaySettings settings = displaySettings;
+    DisplaySettingsData settings = displaySettings;
     settings.m_textWrapping = false;
     settings.m_displayLineNumbers = true;
     settings.m_markTextChanges = false;

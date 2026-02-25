@@ -4,6 +4,7 @@
 #pragma once
 
 #include "commentssettings.h"
+#include "displaysettings.h"
 #include "texteditor_global.h"
 
 #include <utils/id.h>
@@ -24,7 +25,7 @@ class TypingSettings;
 class StorageSettingsData;
 class BehaviorSettingsData;
 class MarginSettingsData;
-class DisplaySettings;
+class DisplaySettingsData;
 class CompletionSettings;
 class ExtraEncodingSettingsData;
 class ICodeStylePreferences;
@@ -82,7 +83,7 @@ signals:
     void storageSettingsChanged(const TextEditor::StorageSettingsData &);
     void behaviorSettingsChanged(const TextEditor::BehaviorSettingsData &);
     void marginSettingsChanged(const TextEditor::MarginSettingsData &);
-    void displaySettingsChanged(const TextEditor::DisplaySettings &);
+    void displaySettingsChanged(const TextEditor::DisplaySettingsData &);
     void completionSettingsChanged(const TextEditor::CompletionSettings &);
     void extraEncodingSettingsChanged(const TextEditor::ExtraEncodingSettingsData &);
     void commentsSettingsChanged();
