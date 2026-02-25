@@ -146,24 +146,11 @@ QString McpCommands::getVersion()
 
 QString McpCommands::getBuildStatus()
 {
-    QStringList results;
-    results.append("=== BUILD STATUS ===");
-
-    // Check if build is currently running
-    if (BuildManager::isBuilding()) {
-        results.append("Building: 50%");
-        results.append("Status: Build in progress");
-        results.append("Current step: Compiling");
-    } else {
-        results.append("Building: 0%");
-        results.append("Status: Not building");
-    }
-
-    results.append("");
-    results.append("=== BUILD STATUS RESULT ===");
-    results.append("Build status retrieved successfully.");
-
-    return results.join("\n");
+    const auto buildProgress = BuildManager::currentProgress();
+    if (buildProgress)
+        return QString("Building: %1% - %2").arg(buildProgress->first).arg(buildProgress->second);
+    else
+        return "Not building";
 }
 
 bool McpCommands::openFile(const QString &path)
@@ -1154,7 +1141,6 @@ static void initializeToolsForCommands(Mcp::Server &server)
     };
 
     addToolForCommand("run_project", ProjectExplorer::Constants::RUN);
-    addToolForCommand("build", ProjectExplorer::Constants::BUILD);
     addToolForCommand("clean_project", ProjectExplorer::Constants::CLEAN);
     addToolForCommand("debug", Debugger::Constants::DEBUGGER_START);
 }
@@ -1189,6 +1175,60 @@ void McpCommands::registerCommands(Mcp::Server &server)
     };
 
     server.addTool(
+        Schema::Tool()
+            .name("build")
+            .title("Build project")
+            .description(
+                "Builds the chosen project, or the currently active project if no name is provided")
+            .execution(ToolExecution().taskSupport(ToolExecution::TaskSupport::required))
+            .inputSchema(
+                Tool::InputSchema().addProperty(
+                    "projectName",
+                    QJsonObject{{"description", "Name of the project to build"}, {"type", "string"}}))
+            .outputSchema(IssuesManager::issuesSchema())
+            .annotations(
+                Schema::ToolAnnotations()
+                    .destructiveHint(false)
+                    .idempotentHint(true)
+                    .openWorldHint(false)
+                    .readOnlyHint(false)),
+        [](const Mcp::Schema::CallToolRequestParams &params) -> Utils::Result<Server::TaskCallbacks> {
+            const QString projectName = params.arguments()->value("projectName").toString();
+
+            QList<Project *> projects{ProjectManager::startupProject()};
+            if (!projectName.isEmpty())
+                projects = projectsForName(projectName);
+
+            if (projects.isEmpty()) {
+                qCDebug(mcpCommands) << "No project found, cannot build";
+                return ResultError("No project named '" + projectName + "' found");
+            }
+
+            BuildManager::buildProjects(projects, ConfigSelection::Active);
+
+            std::shared_ptr<bool> wasCancelled = std::make_shared<bool>(false);
+
+            Server::TaskCallbacks callbacks{
+                [](Schema::Task &task) {
+                    auto progress = BuildManager::currentProgress();
+                    if (!progress) {
+                        task.status(Schema::TaskStatus::completed);
+                        task.statusMessage("Build finished");
+                        return;
+                    }
+                    task.statusMessage(
+                        QString("%1 (%2%)").arg(progress->second).arg(progress->first));
+                },
+                []() -> Utils::Result<Schema::CallToolResult> {
+                    auto issues = commands.listIssues();
+                    return CallToolResult{}.structuredContent(issues).isError(false);
+                },
+                []() { BuildManager::cancel(); }};
+
+            return callbacks;
+        });
+
+    server.addTool(
         Tool{}
             .name("get_build_status")
             .title("Get current build status")
@@ -1196,10 +1236,10 @@ void McpCommands::registerCommands(Mcp::Server &server)
             .annotations(ToolAnnotations{}.readOnlyHint(true))
             .outputSchema(
                 Tool::OutputSchema{}
-                    .addProperty("result", QJsonObject{{"type", "string"}})
-                    .addRequired("result")),
+                    .addProperty("status", QJsonObject{{"type", "string"}})
+                    .addRequired("status")),
         wrap([](const QJsonObject &) {
-            return QJsonObject{{"result", commands.getBuildStatus()}};
+            return QJsonObject{{"status", commands.getBuildStatus()}};
         }));
 
     server.addTool(
