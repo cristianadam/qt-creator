@@ -41,14 +41,12 @@ struct EditorConfigurationPrivate
 {
     EditorConfigurationPrivate() :
         m_typingSettings(globalTypingSettings()),
-        m_storageSettings(globalStorageSettings()),
         m_extraEncodingSettings(globalExtraEncodingSettings()),
         m_textEncoding(Core::EditorManager::defaultTextEncoding())
     { }
 
     ICodeStylePreferences *m_defaultCodeStyle = nullptr;
     TypingSettings m_typingSettings;
-    StorageSettings m_storageSettings;
     bool m_useGlobal = true;
     ExtraEncodingSettings m_extraEncodingSettings;
     TextEncoding m_textEncoding;
@@ -61,6 +59,9 @@ EditorConfiguration::EditorConfiguration()
     : marginSettings(kPrefix)
     , d(std::make_unique<EditorConfigurationPrivate>())
 {
+    behaviorSettings.setAutoApply(true);
+    storageSettings.setAutoApply(true);
+
     const QMap<Utils::Id, ICodeStylePreferences *> languageCodeStylePreferences = TextEditorSettings::codeStyles();
     for (auto itCodeStyle = languageCodeStylePreferences.cbegin(), end = languageCodeStylePreferences.cend();
             itCodeStyle != end; ++itCodeStyle) {
@@ -105,7 +106,7 @@ void EditorConfiguration::cloneGlobalSettings()
 {
     d->m_defaultCodeStyle->setTabSettings(TextEditorSettings::codeStyle()->tabSettings());
     setTypingSettings(globalTypingSettings());
-    setStorageSettings(globalStorageSettings());
+    setStorageSettings(globalStorageSettings().data());
     setBehaviorSettings(globalBehaviorSettings().data());
     setExtraEncodingSettings(globalExtraEncodingSettings());
     marginSettings.setData(TextEditor::marginSettings().data());
@@ -120,11 +121,6 @@ TextEncoding EditorConfiguration::textEncoding() const
 const TypingSettings &EditorConfiguration::typingSettings() const
 {
     return d->m_typingSettings;
-}
-
-const StorageSettings &EditorConfiguration::storageSettings() const
-{
-    return d->m_storageSettings;
 }
 
 const ExtraEncodingSettings &EditorConfiguration::extraEncodingSettings() const
@@ -177,10 +173,10 @@ Store EditorConfiguration::toMap() const
 
     Store inner;
     d->m_defaultCodeStyle->tabSettings().toMap(inner);
+    storageSettings.toMap(inner);
+    behaviorSettings.toMap(inner);
     toMapWithPrefix(&map, inner);
     toMapWithPrefix(&map, d->m_typingSettings.toMap());
-    toMapWithPrefix(&map, d->m_storageSettings.toMap());
-    behaviorSettings.toMap(inner);
     toMapWithPrefix(&map, d->m_extraEncodingSettings.toMap());
 
     marginSettings.toMap(map);
@@ -216,7 +212,7 @@ void EditorConfiguration::fromMap(const Store &map)
     }
     d->m_defaultCodeStyle->fromMap(submap);
     d->m_typingSettings.fromMap(submap);
-    d->m_storageSettings.fromMap(submap);
+    storageSettings.fromMap(submap);
     behaviorSettings.fromMap(submap);
     d->m_extraEncodingSettings.fromMap(submap);
     marginSettings.fromMap(map);
@@ -293,14 +289,14 @@ void EditorConfiguration::switchSettings(TextEditorWidget *widget) const
     if (d->m_useGlobal) {
         widget->setMarginSettings(TextEditor::marginSettings().data());
         widget->setTypingSettings(globalTypingSettings());
-        widget->setStorageSettings(globalStorageSettings());
+        widget->setStorageSettings(globalStorageSettings().data());
         widget->setBehaviorSettings(globalBehaviorSettings().data());
         widget->setExtraEncodingSettings(globalExtraEncodingSettings());
         switchSettings_helper(TextEditorSettings::instance(), this, widget);
     } else {
         widget->setMarginSettings(marginSettings.data());
         widget->setTypingSettings(typingSettings());
-        widget->setStorageSettings(storageSettings());
+        widget->setStorageSettings(storageSettings.data());
         widget->setBehaviorSettings(behaviorSettings.data());
         widget->setExtraEncodingSettings(extraEncodingSettings());
         switchSettings_helper(this, TextEditorSettings::instance(), widget);
@@ -313,10 +309,10 @@ void EditorConfiguration::setTypingSettings(const TypingSettings &settings)
     emit typingSettingsChanged(d->m_typingSettings);
 }
 
-void EditorConfiguration::setStorageSettings(const StorageSettings &settings)
+void EditorConfiguration::setStorageSettings(const StorageSettingsData &settings)
 {
-    d->m_storageSettings = settings;
-    emit storageSettingsChanged(d->m_storageSettings);
+    storageSettings.setData(settings);
+    emit storageSettingsChanged(storageSettings.data());
 }
 
 void EditorConfiguration::setBehaviorSettings(const BehaviorSettingsData &settings)

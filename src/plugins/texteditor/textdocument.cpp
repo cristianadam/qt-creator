@@ -75,7 +75,7 @@ public:
     FilePath m_defaultPath;
     QString m_suggestedFileName;
     TypingSettings m_typingSettings;
-    StorageSettings m_storageSettings;
+    StorageSettingsData m_storageSettings;
     ICodeStylePreferences *m_codeStylePreferences = nullptr;
     TabSettings m_tabSettings;
     ExtraEncodingSettings m_extraEncodingSettings;
@@ -352,7 +352,7 @@ void TextDocument::setTypingSettings(const TypingSettings &typingSettings)
     d->m_typingSettings = typingSettings;
 }
 
-void TextDocument::setStorageSettings(const StorageSettings &storageSettings)
+void TextDocument::setStorageSettings(const StorageSettingsData &storageSettings)
 {
     d->m_storageSettings = storageSettings;
 }
@@ -362,7 +362,7 @@ const TypingSettings &TextDocument::typingSettings() const
     return d->m_typingSettings;
 }
 
-const StorageSettings &TextDocument::storageSettings() const
+const StorageSettingsData &TextDocument::storageSettings() const
 {
     return d->m_storageSettings;
 }

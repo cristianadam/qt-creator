@@ -32,7 +32,7 @@ class CompletionAssistProvider;
 class ExtraEncodingSettings;
 class FontSettings;
 class IAssistProvider;
-class StorageSettings;
+class StorageSettingsData;
 class SyntaxHighlighter;
 class TabSettings;
 class TextDocumentPrivate;
@@ -62,11 +62,11 @@ public:
     QString blockText(int blockNumber) const;
 
     void setTypingSettings(const TypingSettings &typingSettings);
-    void setStorageSettings(const StorageSettings &storageSettings);
+    void setStorageSettings(const StorageSettingsData &storageSettings);
     void setExtraEncodingSettings(const ExtraEncodingSettings &extraEncodingSettings);
 
     const TypingSettings &typingSettings() const;
-    const StorageSettings &storageSettings() const;
+    const StorageSettingsData &storageSettings() const;
     virtual TabSettings tabSettings() const;
     const ExtraEncodingSettings &extraEncodingSettings() const;
     const FontSettings &fontSettings() const;

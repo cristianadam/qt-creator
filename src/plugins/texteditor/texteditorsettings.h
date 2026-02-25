@@ -21,7 +21,7 @@ namespace TextEditor {
 
 class FontSettings;
 class TypingSettings;
-class StorageSettings;
+class StorageSettingsData;
 class BehaviorSettingsData;
 class MarginSettingsData;
 class DisplaySettings;
@@ -81,7 +81,7 @@ public:
 signals:
     void fontSettingsChanged(const TextEditor::FontSettings &);
     void typingSettingsChanged(const TextEditor::TypingSettings &);
-    void storageSettingsChanged(const TextEditor::StorageSettings &);
+    void storageSettingsChanged(const TextEditor::StorageSettingsData &);
     void behaviorSettingsChanged(const TextEditor::BehaviorSettingsData &);
     void marginSettingsChanged(const TextEditor::MarginSettingsData &);
     void displaySettingsChanged(const TextEditor::DisplaySettings &);
