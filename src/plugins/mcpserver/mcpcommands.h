@@ -11,6 +11,10 @@
 #include <QObject>
 #include <QStringList>
 
+namespace ProjectExplorer {
+class Project;
+}
+
 namespace Mcp::Internal {
 
 class IssuesManager;
@@ -42,8 +46,8 @@ public:
     bool setFilePlainText(const QString &path, const QString &contents);
     bool saveFile(const QString &path);
     bool closeFile(const QString &path);
-    QStringList findFilesInProject(const QString &name, const QString &pattern, bool regex);
-    QStringList findFilesInProjects(const QString &pattern, bool regex);
+    QStringList findFiles(
+        const QList<ProjectExplorer::Project *> &projects, const QRegularExpression &re);
     // TODO: reformat file
     void searchInFile(
         const QString &path,

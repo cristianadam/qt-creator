@@ -317,14 +317,13 @@ bool McpCommands::closeFile(const QString &path)
     return closed;
 }
 
-static QStringList findFiles(
-    const QList<Project *> &projects, const QString &pattern, bool regex)
+QStringList McpCommands::findFiles(
+    const QList<ProjectExplorer::Project *> &projects, const QRegularExpression &re)
 {
     QStringList result;
-    const QRegularExpression r(regex ? pattern : QRegularExpression::escape(pattern));
     for (auto project : projects) {
-        const FilePaths matches = project->files([&r](const Node *n) {
-            return !n->filePath().isEmpty() && r.match(n->filePath().toUserOutput()).hasMatch();
+        const FilePaths matches = project->files([&re](const Node *n) {
+            return !n->filePath().isEmpty() && re.match(n->filePath().fileName()).hasMatch();
         });
         result.append(Utils::transform(matches, &FilePath::toUserOutput));
     }
@@ -334,16 +333,6 @@ static QStringList findFiles(
 static QList<Project *> projectsForName(const QString &name)
 {
     return Utils::filtered(ProjectManager::projects(), Utils::equal(&Project::displayName, name));
-}
-
-QStringList McpCommands::findFilesInProject(const QString &name, const QString &pattern, bool regex)
-{
-    return findFiles(projectsForName(name), pattern, regex);
-}
-
-QStringList McpCommands::findFilesInProjects(const QString &pattern, bool regex)
-{
-    return findFiles(ProjectManager::projects(), pattern, regex);
 }
 
 static FindFlags findFlags(bool regex, bool caseSensitive)
@@ -1348,66 +1337,60 @@ void McpCommands::registerCommands(Mcp::Server &server)
     server.addTool(
         Tool{}
             .name("find_files_in_projects")
-            .title("Find files in projects")
-            .description("Find all files matching the pattern in all open projects")
-            .annotations(ToolAnnotations{}.readOnlyHint(true))
-            .inputSchema(
-                Tool::InputSchema{}
-                    .addProperty(
-                        "pattern",
-                        QJsonObject{
-                            {"type", "string"}, {"description", "Pattern for finding the file"}})
-                    .addProperty(
-                        "regex",
-                        QJsonObject{
-                            {"type", "boolean"}, {"description", "Whether the pattern is a regex"}})
-                    .addRequired("pattern"))
-            .outputSchema(
-                Tool::OutputSchema{}
-                    .addProperty(
-                        "files",
-                        QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}}})
-                    .addRequired("files")),
-        wrap([](const QJsonObject &p) {
-            const QString pattern = p.value("pattern").toString();
-            const bool isRegex = p.value("regex").toBool();
-            const QStringList files = commands.findFilesInProjects(pattern, isRegex);
-            return QJsonObject{{"files", QJsonArray::fromStringList(files)}};
-        }));
-
-    server.addTool(
-        Tool{}
-            .name("find_files_in_project")
             .title("Find files in project")
             .description("Find all files matching the pattern in a given project")
             .annotations(ToolAnnotations{}.readOnlyHint(true))
             .inputSchema(
                 Tool::InputSchema{}
                     .addProperty(
-                        "name",
-                        QJsonObject{{"type", "string"}, {"description", "name of the project"}})
+                        "projectName",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description",
+                             "Name of the project to limit the search to (optional)"}})
                     .addProperty(
                         "pattern",
                         QJsonObject{
-                            {"type", "string"}, {"description", "Pattern for finding the file"}})
+                            {"type", "string"},
+                            {"description",
+                             "Pattern for finding the file, either a glob pattern or a regex"}})
                     .addProperty(
                         "regex",
                         QJsonObject{
-                            {"type", "boolean"}, {"description", "Whether the pattern is a regex"}})
-                    .addRequired("name, pattern"))
+                            {"type", "boolean"},
+                            {"description", "Whether the pattern is a regex (default is false)"}})
+                    .addRequired("pattern"))
             .outputSchema(
                 Tool::OutputSchema{}
                     .addProperty(
                         "files",
-                        QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}}})
+                        QJsonObject{
+                            {"type", "array"},
+                            {"description", "List of file paths matching the pattern"},
+                            {"items", QJsonObject{{"type", "string"}}}})
                     .addRequired("files")),
-        wrap([](const QJsonObject &p) {
-            const QString name = p.value("name").toString();
+        [](const Schema::CallToolRequestParams &params) -> Utils::Result<Schema::CallToolResult> {
+            const QJsonObject &p = params.argumentsAsObject();
+            const QString projectName = p.value("projectName").toString();
             const QString pattern = p.value("pattern").toString();
             const bool isRegex = p.value("regex").toBool();
-            const QStringList files = commands.findFilesInProject(name, pattern, isRegex);
-            return QJsonObject{{"files", QJsonArray::fromStringList(files)}};
-        }));
+
+            QRegularExpression re(
+                isRegex ? pattern : QRegularExpression::wildcardToRegularExpression(pattern));
+            if (!re.isValid()) {
+                qCDebug(mcpCommands) << "Invalid regex pattern:" << pattern;
+                return CallToolResult{}.isError(true).structuredContent(
+                    QJsonObject{{"error", "Invalid regex pattern"}});
+            }
+
+            const QList<Project *> projects = projectName.isEmpty() ? ProjectManager::projects()
+                                                                    : projectsForName(projectName);
+
+            const QStringList files = commands.findFiles(projects, re);
+            return CallToolResult{}
+                .structuredContent(QJsonObject{{"files", QJsonArray::fromStringList(files)}})
+                .isError(false);
+        });
 
     server.addTool(
         Tool{}
