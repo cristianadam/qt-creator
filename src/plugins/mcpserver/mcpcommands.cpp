@@ -832,8 +832,9 @@ void McpCommands::executeCommand(
     connect(process, &Process::done, this, [process, callback]() {
         QJsonObject response;
         response["exitCode"] = process->exitCode();
-        response["output"] = process->readAllStandardOutput();
-        response["errorOutput"] = process->readAllStandardError();
+        response["exitMessage"] = process->verboseExitMessage();
+        response["stdout"] = process->readAllStandardOutput();
+        response["stderr"] = process->readAllStandardError();
         callback(response);
         process->deleteLater();
     });
@@ -2050,6 +2051,12 @@ void McpCommands::registerCommands(Mcp::Server &server)
                     .addProperty(
                         "exitCode",
                         QJsonObject{{"type", "integer"}, {"description", "Exit code of the command"}})
+                    .addProperty(
+                        "exitMessage",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description",
+                             "Verbose exit message of the command, useful for error reporting"}})
                     .addProperty(
                         "stdout",
                         QJsonObject{
