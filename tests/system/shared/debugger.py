@@ -170,9 +170,9 @@ def isMsvcConfig(currentKit):
     switchToBuildOrRunSettingsFor(currentKit, ProjectSettings.BUILD)
 
     waitForObject(":Projects.ProjectNavigationTreeView")
-    bAndRIndex = getQModelIndexStr("text='Build & Run'", ":Projects.ProjectNavigationTreeView")
     wantedKitName = Targets.getStringForTarget(currentKit)
-    wantedKitIndexString = getQModelIndexStr("text='%s'" % wantedKitName, bAndRIndex)
+    wantedKitIndexString = getQModelIndexStr("text='%s'" % wantedKitName,
+                                             ":Projects.ProjectNavigationTreeView")
     if not test.verify(__kitIsActivated__(findObject(wantedKitIndexString)),
                        "Verifying target '%s' is enabled." % wantedKitName):
         raise Exception("Kit '%s' is not activated in the project." % wantedKitName)
