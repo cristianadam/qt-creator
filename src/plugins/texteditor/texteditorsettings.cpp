@@ -7,7 +7,6 @@
 #include "behaviorsettingspage.h"
 #include "commentssettings.h"
 #include "completionsettings.h"
-#include "completionsettingspage.h"
 #include "displaysettings.h"
 #include "fontsettings.h"
 #include "fontsettingspage.h"
@@ -43,7 +42,6 @@ public:
     FontSettingsPage m_fontSettingsPage{&m_fontSettings, initialFormats()};
     BehaviorSettingsPage m_behaviorSettingsPage;
     SnippetsSettingsPage m_snippetsSettingsPage;
-    CompletionSettingsPage m_completionSettingsPage;
     CommentsSettingsPage m_commentsSettingsPage;
 
     QMap<Utils::Id, ICodeStylePreferencesFactory *> m_languageToFactory;
@@ -431,6 +429,7 @@ TextEditorSettings::TextEditorSettings()
 {
     d = new Internal::TextEditorSettingsPrivate;
 
+    setupCompletionSettings();
     setupDisplaySettings();
 
     // Note: default background colors are coming from FormatDescription::background()
@@ -463,11 +462,6 @@ TextEditorSettings *TextEditorSettings::instance()
 const FontSettings &TextEditorSettings::fontSettings()
 {
     return d->m_fontSettings;
-}
-
-const CompletionSettings &TextEditorSettings::completionSettings()
-{
-    return d->m_completionSettingsPage.completionSettings();
 }
 
 void TextEditorSettings::setCommentsSettingsRetriever(

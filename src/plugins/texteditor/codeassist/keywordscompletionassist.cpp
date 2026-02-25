@@ -76,7 +76,7 @@ void KeywordsAssistProposalItem::applyContextualContent(TextEditorWidget *editor
                                                         int basePosition) const
 {
     QTC_ASSERT(editorWidget, return);
-    const CompletionSettings &settings = TextEditorSettings::completionSettings();
+    const CompletionSettings &settings = completionSettings();
 
     int replaceLength = editorWidget->position() - basePosition;
     QString toInsert = text();
@@ -174,7 +174,7 @@ IAssistProposal *KeywordsCompletionAssistProcessor::performAsync()
     if (interface()->reason() == IdleEditor) {
         QChar characterUnderCursor = interface()->characterAt(interface()->position());
         if (characterUnderCursor.isLetterOrNumber() || interface()->position() - startPosition
-                < TextEditorSettings::completionSettings().m_characterThreshold) {
+                < completionSettings().m_characterThreshold) {
             QList<AssistProposalItemInterface *> items;
             if (m_dynamicCompletionFunction)
                 m_dynamicCompletionFunction(interface(), &items, startPosition);
