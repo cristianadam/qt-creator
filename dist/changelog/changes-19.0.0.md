@@ -103,6 +103,11 @@ Changed
   ([QTCREATORBUG-33787](https://bugreports.qt.io/browse/QTCREATORBUG-33787))
   ([Documentation](https://doc-snapshots.qt.io/qtcreator-19.0/creator-how-to-switch-between-modes.html))
 
+Fixed
+
+* That buttons in moved notifications could not be clicked
+  ([QTCREATORBUG-33516](https://bugreports.qt.io/browse/QTCREATORBUG-33516))
+
 Editing
 -------
 
@@ -152,6 +157,10 @@ Fixed
     * The memory footprint of the index
     * Indentation within lambda functions
       ([QTCREATORBUG-15156](https://bugreports.qt.io/browse/QTCREATORBUG-15156))
+    * An issue with `QVariant` default constructors
+      ([QTCREATORBUG-33880](https://bugreports.qt.io/browse/QTCREATORBUG-33880))
+    * Issues with statement attributes, `constinit`, and `consteval`
+      ([QTCREATORBUG-34125](https://bugreports.qt.io/browse/QTCREATORBUG-34125))
 * Clangd
     * Issues with parse contexts for header files
       ([QTCREATORBUG-33642](https://bugreports.qt.io/browse/QTCREATORBUG-33642))
@@ -188,6 +197,7 @@ Fixed
   ([QTCREATORBUG-32418](https://bugreports.qt.io/browse/QTCREATORBUG-32418))
 * `Split Initializer` did not remove unneeded semicolons
   ([QTCREATORBUG-16207](https://bugreports.qt.io/browse/QTCREATORBUG-16207))
+* That Qt Quick Designer unnecessarily listened on a local port
 * qmlls
     * The handling of custom indentation sizes when reformatting
       ([QTCREATORBUG-33712](https://bugreports.qt.io/browse/QTCREATORBUG-33712))
@@ -306,6 +316,12 @@ Fixed
 * That building a single target always built everything if
   `Install into staging directory` was enabled
   ([QTCREATORBUG-33580](https://bugreports.qt.io/browse/QTCREATORBUG-33580))
+* Presets
+    * Issues with Android presets
+      ([QTCREATORBUG-34079](https://bugreports.qt.io/browse/QTCREATORBUG-34079))
+* conan
+    * That it enforced the `CMakeDeps` conan2 generator
+      ([QTCREATORBUG-34015](https://bugreports.qt.io/browse/QTCREATORBUG-34015))
 
 ### qmake
 
