@@ -835,7 +835,7 @@ void BuildManager::startBuildQueue()
 
     d->m_elapsed.start();
 
-    const auto onTaskTreeeDone = [](DoneWith result) {
+    const auto onTaskTreeDone = [](DoneWith result) {
         const bool success = result == DoneWith::Success;
 
         if (!success && d->m_progressFutureInterface)
@@ -857,7 +857,7 @@ void BuildManager::startBuildQueue()
         }
     };
 
-    d->m_taskTreeRunner.start(topLevel, {}, onTaskTreeeDone);
+    d->m_taskTreeRunner.start(topLevel, {}, onTaskTreeDone);
 }
 
 void BuildManager::showBuildResults()
@@ -1059,6 +1059,15 @@ void BuildManager::decrementActiveBuildSteps(BuildStep *bs)
     decrement<Target>(d->m_activeBuildStepsPerTarget, bs->target());
     if (decrement<Project>(d->m_activeBuildSteps, bs->project()))
         emit m_instance->buildStateChanged(bs->project());
+}
+
+std::optional<QPair<int, QString>> BuildManager::currentProgress()
+{
+    if (d->m_futureProgress)
+        return qMakePair(
+            d->m_progressFutureInterface->progressValue(),
+            d->m_progressFutureInterface->progressText());
+    return std::nullopt;
 }
 
 } // namespace ProjectExplorer

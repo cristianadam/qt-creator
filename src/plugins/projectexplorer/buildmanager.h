@@ -66,6 +66,8 @@ public:
 
     static QString displayNameForStepId(Utils::Id stepId);
 
+    static std::optional<QPair<int, QString>> currentProgress();
+
 public slots:
     static void cancel();
     // Shows without focus
