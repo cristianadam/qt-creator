@@ -34,7 +34,7 @@ SelectableTextEditorWidget::SelectableTextEditorWidget(Utils::Id id, QWidget *pa
 
     connect(TextEditorSettings::instance(), &TextEditorSettings::displaySettingsChanged,
             this, &SelectableTextEditorWidget::setDisplaySettings);
-    SelectableTextEditorWidget::setDisplaySettings(TextEditorSettings::displaySettings());
+    SelectableTextEditorWidget::setDisplaySettings(displaySettings());
 
     textDocument()->setCodeStyle(TextEditorSettings::codeStyle());
     setCodeFoldingSupported(true);

@@ -69,8 +69,6 @@ Project {
             "completionsettingspage.h",
             "displaysettings.cpp",
             "displaysettings.h",
-            "displaysettingspage.cpp",
-            "displaysettingspage.h",
             "extraencodingsettings.cpp",
             "extraencodingsettings.h",
             "findincurrentfile.cpp",
