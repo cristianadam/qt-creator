@@ -7,6 +7,7 @@
 
 #include <texteditor/behaviorsettings.h>
 #include <texteditor/marginsettings.h>
+#include <texteditor/storagesettings.h>
 
 #include <utils/id.h>
 #include <utils/store.h>
@@ -24,7 +25,6 @@ class TextDocument;
 class TabSettings;
 class ICodeStylePreferences;
 class TypingSettings;
-class StorageSettings;
 class ExtraEncodingSettings;
 } // namespace TextEditor
 
@@ -56,7 +56,7 @@ public:
     Utils::TextEncoding textEncoding() const;
 
     const TextEditor::TypingSettings &typingSettings() const;
-    const TextEditor::StorageSettings &storageSettings() const;
+    TextEditor::StorageSettings storageSettings;
     TextEditor::BehaviorSettings behaviorSettings;
     const TextEditor::ExtraEncodingSettings &extraEncodingSettings() const;
     TextEditor::MarginSettings marginSettings;
@@ -72,7 +72,7 @@ public:
     void fromMap(const Utils::Store &map);
 
     void setTypingSettings(const TextEditor::TypingSettings &settings);
-    void setStorageSettings(const TextEditor::StorageSettings &settings);
+    void setStorageSettings(const TextEditor::StorageSettingsData &settings);
     void setBehaviorSettings(const TextEditor::BehaviorSettingsData &settings);
     void setExtraEncodingSettings(const TextEditor::ExtraEncodingSettings &settings);
 
@@ -82,7 +82,7 @@ public:
 
 signals:
     void typingSettingsChanged(const TextEditor::TypingSettings &);
-    void storageSettingsChanged(const TextEditor::StorageSettings &);
+    void storageSettingsChanged(const TextEditor::StorageSettingsData &);
     void behaviorSettingsChanged(const TextEditor::BehaviorSettingsData &);
     void extraEncodingSettingsChanged(const TextEditor::ExtraEncodingSettings &);
 

@@ -351,7 +351,7 @@ void BehaviorSettingsWidget::assignedTypingSettings(TypingSettings *typingSettin
         d->commentPosition->currentIndex());
 }
 
-void BehaviorSettingsWidget::setAssignedStorageSettings(const StorageSettings &storageSettings)
+void BehaviorSettingsWidget::setAssignedStorageSettings(const StorageSettingsData &storageSettings)
 {
     d->cleanWhitespace->setChecked(storageSettings.m_cleanWhitespace);
     d->inEntireDocument->setChecked(storageSettings.m_inEntireDocument);
@@ -362,7 +362,7 @@ void BehaviorSettingsWidget::setAssignedStorageSettings(const StorageSettings &s
     d->ignoreFileTypes->setEnabled(d->skipTrailingWhitespace->isChecked());
 }
 
-void BehaviorSettingsWidget::assignedStorageSettings(StorageSettings *storageSettings) const
+void BehaviorSettingsWidget::assignedStorageSettings(StorageSettingsData *storageSettings) const
 {
     storageSettings->m_cleanWhitespace = d->cleanWhitespace->isChecked();
     storageSettings->m_inEntireDocument = d->inEntireDocument->isChecked();
@@ -447,7 +447,7 @@ void BehaviorSettingsWidget::slotTypingSettingsChanged()
 
 void BehaviorSettingsWidget::slotStorageSettingsChanged()
 {
-    StorageSettings settings;
+    StorageSettingsData settings;
     assignedStorageSettings(&settings);
 
     bool ignoreFileTypesEnabled = d->cleanWhitespace->isChecked() && d->skipTrailingWhitespace->isChecked();

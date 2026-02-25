@@ -1671,7 +1671,7 @@ void TextEditorWidgetPrivate::setDocument(const QSharedPointer<TextDocument> &do
         m_document->setTabSettings(tabSettings); // also set through code style ???
 
     q->setTypingSettings(globalTypingSettings());
-    q->setStorageSettings(globalStorageSettings());
+    q->setStorageSettings(globalStorageSettings().data());
     q->setBehaviorSettings(globalBehaviorSettings().data());
     q->setMarginSettings(marginSettings().data());
     q->setDisplaySettings(TextEditorSettings::displaySettings());
@@ -9463,7 +9463,7 @@ void TextEditorWidget::setTypingSettings(const TypingSettings &typingSettings)
     d->setupFromDefinition(d->currentDefinition());
 }
 
-void TextEditorWidget::setStorageSettings(const StorageSettings &storageSettings)
+void TextEditorWidget::setStorageSettings(const StorageSettingsData &storageSettings)
 {
     d->m_document->setStorageSettings(storageSettings);
 }

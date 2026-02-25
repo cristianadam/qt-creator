@@ -105,7 +105,7 @@ void EditorSettingsWidget::settingsToUi(const EditorConfiguration *config)
     m_behaviorSettings->setCodeStyle(config->codeStyle());
     m_behaviorSettings->setAssignedEncoding(config->textEncoding());
     m_behaviorSettings->setAssignedTypingSettings(config->typingSettings());
-    m_behaviorSettings->setAssignedStorageSettings(config->storageSettings());
+    m_behaviorSettings->setAssignedStorageSettings(config->storageSettings.data());
     m_behaviorSettings->setAssignedExtraEncodingSettings(config->extraEncodingSettings());
 }
 

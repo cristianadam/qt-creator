@@ -15,15 +15,9 @@ using namespace Utils;
 
 namespace TextEditor {
 
-static const char cleanWhitespaceKey[] = "cleanWhitespace";
-static const char inEntireDocumentKey[] = "inEntireDocument";
-static const char addFinalNewLineKey[] = "addFinalNewLine";
-static const char cleanIndentationKey[] = "cleanIndentation";
-static const char skipTrailingWhitespaceKey[] = "skipTrailingWhitespace";
-static const char ignoreFileTypesKey[] = "ignoreFileTypes";
-static const char defaultTrailingWhitespaceBlacklist[] = "*.md, *.MD, Makefile";
+const char defaultTrailingWhitespaceBlacklist[] = "*.md, *.MD, Makefile";
 
-StorageSettings::StorageSettings()
+StorageSettingsData::StorageSettingsData()
     : m_ignoreFileTypes(defaultTrailingWhitespaceBlacklist),
       m_cleanWhitespace(true),
       m_inEntireDocument(false),
@@ -33,29 +27,54 @@ StorageSettings::StorageSettings()
 {
 }
 
-Store StorageSettings::toMap() const
+void StorageSettings::setData(const StorageSettingsData &data)
 {
-    return {
-        {cleanWhitespaceKey, m_cleanWhitespace},
-        {inEntireDocumentKey, m_inEntireDocument},
-        {addFinalNewLineKey, m_addFinalNewLine},
-        {cleanIndentationKey, m_cleanIndentation},
-        {skipTrailingWhitespaceKey, m_skipTrailingWhitespace},
-        {ignoreFileTypesKey, m_ignoreFileTypes}
-    };
+    cleanWhitespace.setValue(data.m_cleanWhitespace);
+    inEntireDocument.setValue(data.m_inEntireDocument);
+    addFinalNewLine.setValue(data.m_addFinalNewLine);
+    cleanIndentation.setValue(data.m_cleanIndentation);
+    skipTrailingWhitespace.setValue(data.m_skipTrailingWhitespace);
+    ignoreFileTypes.setValue(data.m_ignoreFileTypes);
 }
 
-void StorageSettings::fromMap(const Store &map)
+StorageSettings::StorageSettings()
 {
-    m_cleanWhitespace = map.value(cleanWhitespaceKey, m_cleanWhitespace).toBool();
-    m_inEntireDocument = map.value(inEntireDocumentKey, m_inEntireDocument).toBool();
-    m_addFinalNewLine = map.value(addFinalNewLineKey, m_addFinalNewLine).toBool();
-    m_cleanIndentation = map.value(cleanIndentationKey, m_cleanIndentation).toBool();
-    m_skipTrailingWhitespace = map.value(skipTrailingWhitespaceKey, m_skipTrailingWhitespace).toBool();
-    m_ignoreFileTypes = map.value(ignoreFileTypesKey, m_ignoreFileTypes).toString();
+    setAutoApply(false);
+
+    setSettingsGroup("textStorageSettings");
+
+    cleanWhitespace.setSettingsKey("cleanWhitespace");
+    cleanWhitespace.setDefaultValue(true);
+
+    inEntireDocument.setSettingsKey("inEntireDocument");
+    inEntireDocument.setDefaultValue(false);
+
+    addFinalNewLine.setSettingsKey("addFinalNewLine");
+    addFinalNewLine.setDefaultValue(false);
+
+    cleanIndentation.setSettingsKey("cleanIndentation");
+    cleanIndentation.setDefaultValue(true);
+
+    skipTrailingWhitespace.setSettingsKey("skipTrailingWhitespace");
+    skipTrailingWhitespace.setDefaultValue(true);
+
+    ignoreFileTypes.setSettingsKey("ignoreFileTypes");
+    ignoreFileTypes.setDefaultValue("*.md, *.MD, Makefile");
 }
 
-bool StorageSettings::removeTrailingWhitespace(const QString &fileName) const
+StorageSettingsData StorageSettings::data() const
+{
+    StorageSettingsData d;
+    d.m_cleanWhitespace = cleanWhitespace();
+    d.m_inEntireDocument = inEntireDocument();
+    d.m_addFinalNewLine = addFinalNewLine();
+    d.m_cleanIndentation = cleanIndentation();
+    d.m_skipTrailingWhitespace = skipTrailingWhitespace();
+    d.m_ignoreFileTypes = ignoreFileTypes();
+    return d;
+}
+
+bool StorageSettingsData::removeTrailingWhitespace(const QString &fileName) const
 {
     // if the user has elected not to trim trailing whitespace altogether, then
     // early out here
@@ -86,7 +105,7 @@ bool StorageSettings::removeTrailingWhitespace(const QString &fileName) const
     return true;
 }
 
-bool StorageSettings::equals(const StorageSettings &ts) const
+bool StorageSettingsData::equals(const StorageSettingsData &ts) const
 {
     return m_addFinalNewLine == ts.m_addFinalNewLine
         && m_cleanWhitespace == ts.m_cleanWhitespace
@@ -102,22 +121,21 @@ StorageSettings &globalStorageSettings()
     return theGlobalStorageSettings;
 }
 
-const char storageGroup[] = "textStorageSettings";
 
-void updateGlobalStorageSettings(const StorageSettings &newStorageSettings)
+void updateGlobalStorageSettings(const StorageSettingsData &newStorageSettings)
 {
-    if (newStorageSettings.equals(globalStorageSettings()))
+    if (newStorageSettings.equals(globalStorageSettings().data()))
         return;
 
-    globalStorageSettings() = newStorageSettings;
-    storeToSettings(storageGroup, Core::ICore::settings(), globalStorageSettings().toMap());
+    globalStorageSettings().setData(newStorageSettings);
+    globalStorageSettings().writeSettings();
 
     emit TextEditorSettings::instance()->storageSettingsChanged(newStorageSettings);
 }
 
 void setupStorageSettings()
 {
-    globalStorageSettings().fromMap(storeFromSettings(storageGroup, Core::ICore::settings()));
+    globalStorageSettings().readSettings();
 }
 
 } // namespace TextEditor

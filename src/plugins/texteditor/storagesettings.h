@@ -5,22 +5,20 @@
 
 #include "texteditor_global.h"
 
+#include <utils/aspects.h>
 #include <utils/store.h>
 
 namespace TextEditor {
 
-class TEXTEDITOR_EXPORT StorageSettings
+class TEXTEDITOR_EXPORT StorageSettingsData
 {
 public:
-    StorageSettings();
-
-    Utils::Store toMap() const;
-    void fromMap(const Utils::Store &map);
+    StorageSettingsData();
 
     // calculated based on boolean setting plus file type blacklist examination
     bool removeTrailingWhitespace(const QString &filePattern) const;
 
-    bool equals(const StorageSettings &ts) const;
+    bool equals(const StorageSettingsData &ts) const;
 
     QString m_ignoreFileTypes;
     bool m_cleanWhitespace;
@@ -30,8 +28,27 @@ public:
     bool m_skipTrailingWhitespace;
 };
 
+class TEXTEDITOR_EXPORT StorageSettings : public Utils::AspectContainer
+{
+public:
+    StorageSettings();
+
+    // calculated based on boolean setting plus file type blacklist examination
+    bool removeTrailingWhitespace(const QString &filePattern) const;
+
+    StorageSettingsData data() const;
+    void setData(const StorageSettingsData &data);
+
+    Utils::StringAspect ignoreFileTypes{this};
+    Utils::BoolAspect cleanWhitespace{this};
+    Utils::BoolAspect inEntireDocument{this};
+    Utils::BoolAspect addFinalNewLine{this};
+    Utils::BoolAspect cleanIndentation{this};
+    Utils::BoolAspect skipTrailingWhitespace{this};
+};
+
 void setupStorageSettings();
-void updateGlobalStorageSettings(const StorageSettings &newStorageSettings);
+void updateGlobalStorageSettings(const StorageSettingsData &newStorageSettings);
 
 TEXTEDITOR_EXPORT StorageSettings &globalStorageSettings();
 

@@ -78,7 +78,7 @@ class DisplaySettings;
 class ExtraEncodingSettings;
 class FontSettings;
 class MarginSettingsData;
-class StorageSettings;
+class StorageSettingsData;
 class TypingSettings;
 
 enum TextMarkRequestKind
@@ -377,7 +377,7 @@ public:
     virtual void setMarginSettings(const TextEditor::MarginSettingsData &);
     void setBehaviorSettings(const TextEditor::BehaviorSettingsData &);
     void setTypingSettings(const TextEditor::TypingSettings &);
-    void setStorageSettings(const TextEditor::StorageSettings &);
+    void setStorageSettings(const TextEditor::StorageSettingsData &);
     void setCompletionSettings(const TextEditor::CompletionSettings &);
     void setExtraEncodingSettings(const TextEditor::ExtraEncodingSettings &);
 

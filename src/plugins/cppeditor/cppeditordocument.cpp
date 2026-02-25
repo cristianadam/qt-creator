@@ -735,7 +735,7 @@ Result<> CppEditorDocument::saveImpl(const FilePath &filePath, SaveOption option
         cursor.endEditBlock();
     }
 
-    TextEditor::StorageSettings settings = storageSettings();
+    TextEditor::StorageSettingsData settings = storageSettings();
     const QScopeGuard cleanup([this, settings] { setStorageSettings(settings); });
     settings.m_cleanWhitespace = false;
     setStorageSettings(settings);

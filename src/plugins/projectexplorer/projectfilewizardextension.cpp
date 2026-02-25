@@ -240,7 +240,7 @@ void ProjectFileWizardExtension::applyCodeStyle(GeneratedFile *file) const
                      QChar::Null,
                      codeStylePrefs->currentTabSettings());
     delete indenter;
-    if (globalStorageSettings().m_cleanWhitespace) {
+    if (globalStorageSettings().cleanWhitespace()) {
         QTextBlock block = doc.firstBlock();
         while (block.isValid()) {
             TabSettings::removeTrailingWhitespace(block);
