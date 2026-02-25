@@ -891,8 +891,9 @@ void HelpWidget::saveState() const
             }
         }
 
-        helpSettings().lastShownPages.setValue(currentPages.join(Constants::ListSeparator));
-        helpSettings().lastSelectedTab.setValue(currentIndex());
+        helpSettings().lastShownPages.setValue(currentPages.join(Constants::ListSeparator),
+                                               Utils::BaseAspect::BeQuiet);
+        helpSettings().lastSelectedTab.setValue(currentIndex(), Utils::BaseAspect::BeQuiet);
         helpSettings().writeSettings();
     }
 }
