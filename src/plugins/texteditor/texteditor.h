@@ -72,7 +72,7 @@ class TextEditorFactory;
 class TextEditorWidget;
 class PlainTextEditorFactory;
 
-class BehaviorSettings;
+class BehaviorSettingsData;
 class CompletionSettings;
 class DisplaySettings;
 class ExtraEncodingSettings;
@@ -322,7 +322,7 @@ public:
 
     const DisplaySettings &displaySettings() const;
     const MarginSettingsData &marginSettings() const;
-    const BehaviorSettings &behaviorSettings() const;
+    const BehaviorSettingsData &behaviorSettings() const;
 
     void ensureCursorVisible();
     void ensureBlockIsUnfolded(QTextBlock block);
@@ -375,7 +375,7 @@ public:
 
     virtual void setDisplaySettings(const TextEditor::DisplaySettings &);
     virtual void setMarginSettings(const TextEditor::MarginSettingsData &);
-    void setBehaviorSettings(const TextEditor::BehaviorSettings &);
+    void setBehaviorSettings(const TextEditor::BehaviorSettingsData &);
     void setTypingSettings(const TextEditor::TypingSettings &);
     void setStorageSettings(const TextEditor::StorageSettings &);
     void setCompletionSettings(const TextEditor::CompletionSettings &);

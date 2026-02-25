@@ -15,7 +15,7 @@ class ICodeStylePreferences;
 class TabSettingsWidget;
 class TypingSettings;
 class StorageSettings;
-class BehaviorSettings;
+class BehaviorSettingsData;
 class ExtraEncodingSettings;
 
 struct BehaviorSettingsWidgetPrivate;
@@ -41,8 +41,8 @@ public:
     void setAssignedStorageSettings(const StorageSettings &storageSettings);
     void assignedStorageSettings(StorageSettings *storageSettings) const;
 
-    void setAssignedBehaviorSettings(const BehaviorSettings &behaviorSettings);
-    void assignedBehaviorSettings(BehaviorSettings *behaviorSettings) const;
+    void setAssignedBehaviorSettings(const BehaviorSettingsData &behaviorSettings);
+    void assignedBehaviorSettings(BehaviorSettingsData *behaviorSettings) const;
 
     void setAssignedExtraEncodingSettings(const ExtraEncodingSettings &encodingSettings);
     void assignedExtraEncodingSettings(ExtraEncodingSettings *encodingSettings) const;
@@ -55,7 +55,7 @@ public:
 signals:
     void typingSettingsChanged(const TextEditor::TypingSettings &settings);
     void storageSettingsChanged(const TextEditor::StorageSettings &settings);
-    void behaviorSettingsChanged(const TextEditor::BehaviorSettings &settings);
+    void behaviorSettingsChanged(const TextEditor::BehaviorSettingsData &settings);
     void extraEncodingSettingsChanged(const TextEditor::ExtraEncodingSettings &settings);
     void textEncodingChanged(const Utils::TextEncoding &encoding);
 

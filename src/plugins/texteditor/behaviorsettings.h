@@ -5,6 +5,7 @@
 
 #include "texteditor_global.h"
 
+#include <utils/aspects.h>
 #include <utils/store.h>
 
 namespace TextEditor {
@@ -13,27 +14,41 @@ namespace TextEditor {
  * Settings that describe how the text editor behaves. This does not include
  * the TabSettings and StorageSettings.
  */
-class TEXTEDITOR_EXPORT BehaviorSettings
+class TEXTEDITOR_EXPORT BehaviorSettingsData
 {
 public:
-    BehaviorSettings();
+    BehaviorSettingsData() = default;
 
-    Utils::Store toMap() const;
-    void fromMap(const Utils::Store &map);
+    bool equals(const BehaviorSettingsData &bs) const;
 
-    bool equals(const BehaviorSettings &bs) const;
+    bool m_mouseHiding = true;
+    bool m_mouseNavigation = true;
+    bool m_scrollWheelZooming = true;
+    bool m_constrainHoverTooltips = false;
+    bool m_camelCaseNavigation = true;
+    bool m_keyboardTooltips = false;
+    bool m_smartSelectionChanging = true;
+};
 
-    bool m_mouseHiding;
-    bool m_mouseNavigation;
-    bool m_scrollWheelZooming;
-    bool m_constrainHoverTooltips;
-    bool m_camelCaseNavigation;
-    bool m_keyboardTooltips;
-    bool m_smartSelectionChanging;
+class TEXTEDITOR_EXPORT BehaviorSettings : public Utils::AspectContainer
+{
+public:
+    explicit BehaviorSettings(const Utils::Key &keyPrefix = {});
+
+    BehaviorSettingsData data() const;
+    void setData(const BehaviorSettingsData &data);
+
+    Utils::BoolAspect mouseHiding{this};
+    Utils::BoolAspect mouseNavigation{this};
+    Utils::BoolAspect scrollWheelZooming{this};
+    Utils::SelectionAspect constrainHoverTooltips{this};
+    Utils::BoolAspect camelCaseNavigation{this};
+    Utils::BoolAspect keyboardTooltips{this};
+    Utils::BoolAspect smartSelectionChanging{this};
 };
 
 void setupBehaviorSettings();
-void updateGlobalBehaviorSettings(const BehaviorSettings &newBehaviorSettings);
+void updateGlobalBehaviorSettings(const BehaviorSettingsData &newBehaviorSettings);
 
 TEXTEDITOR_EXPORT BehaviorSettings &globalBehaviorSettings();
 

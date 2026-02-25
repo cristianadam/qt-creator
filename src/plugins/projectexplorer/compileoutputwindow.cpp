@@ -79,7 +79,7 @@ CompileOutputWindow::CompileOutputWindow(QAction *cancelBuildAction) :
 
     auto updateZoomEnabled = [this] {
         m_outputWindow->setWheelZoomEnabled(
-                    TextEditor::globalBehaviorSettings().m_scrollWheelZooming);
+                    TextEditor::globalBehaviorSettings().scrollWheelZooming());
     };
 
     updateFontSettings();

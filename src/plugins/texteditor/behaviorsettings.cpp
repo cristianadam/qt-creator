@@ -4,57 +4,89 @@
 #include "behaviorsettings.h"
 
 #include "texteditorsettings.h"
+#include "texteditortr.h"
 
-#include <coreplugin/icore.h>
-
-static const char mouseHidingKey[] = "MouseHiding";
-static const char mouseNavigationKey[] = "MouseNavigation";
-static const char scrollWheelZoomingKey[] = "ScrollWheelZooming";
-static const char constrainTooltips[] = "ConstrainTooltips";
-static const char camelCaseNavigationKey[] = "CamelCaseNavigation";
-static const char keyboardTooltips[] = "KeyboardTooltips";
-static const char smartSelectionChanging[] = "SmartSelectionChanging";
+#include <utils/hostosinfo.h>
 
 using namespace Utils;
 
 namespace TextEditor {
 
-BehaviorSettings::BehaviorSettings() :
-    m_mouseHiding(true),
-    m_mouseNavigation(true),
-    m_scrollWheelZooming(true),
-    m_constrainHoverTooltips(false),
-    m_camelCaseNavigation(true),
-    m_keyboardTooltips(false),
-    m_smartSelectionChanging(true)
+BehaviorSettings::BehaviorSettings(const Key &keyPrefix)
 {
+    setSettingsGroup("textBehaviorSettings");
+
+    mouseHiding.setSettingsKey(keyPrefix + "MouseHiding");
+    mouseHiding.setDefaultValue(true);
+    mouseHiding.setVisible(!HostOsInfo::isMacHost());
+
+    mouseNavigation.setSettingsKey(keyPrefix + "MouseNavigation");
+    mouseNavigation.setDefaultValue(true);
+
+    scrollWheelZooming.setSettingsKey(keyPrefix + "ScrollWheelZooming");
+    scrollWheelZooming.setDefaultValue(true);
+
+    constrainHoverTooltips.setSettingsKey(keyPrefix + "ConstrainTooltips");
+    constrainHoverTooltips.setDisplayStyle(SelectionAspect::DisplayStyle::ComboBox);
+    constrainHoverTooltips.setUseDataAsSavedValue();
+    constrainHoverTooltips.setLabelText(Tr::tr("Show help tooltips using the mouse:"));
+    constrainHoverTooltips.addOption({
+        Tr::tr("On Mouseover"),
+        Tr::tr("Displays context-sensitive help or type information on mouseover."),
+        QVariant(false)
+    });
+    constrainHoverTooltips.addOption({
+        Tr::tr("On Shift+Mouseover"),
+        Tr::tr("Displays context-sensitive help or type information on Shift+Mouseover."),
+        QVariant(true)
+    });
+
+    camelCaseNavigation.setSettingsKey(keyPrefix + "CamelCaseNavigation");
+    camelCaseNavigation.setDefaultValue(true);
+
+    keyboardTooltips.setSettingsKey(keyPrefix + "KeyboardTooltips");
+    keyboardTooltips.setDefaultValue(false);
+
+    smartSelectionChanging.setSettingsKey(keyPrefix + "SmartSelectionChanging");
+    smartSelectionChanging.setDefaultValue(true);
+
+    mouseHiding.setLabelText(Tr::tr("Hide mouse cursor while typing"));
+    mouseNavigation.setLabelText(Tr::tr("Enable &mouse navigation"));
+    scrollWheelZooming.setLabelText(Tr::tr("Enable scroll &wheel zooming"));
+    camelCaseNavigation.setLabelText(Tr::tr("Enable built-in camel case &navigation"));
+
+    smartSelectionChanging.setLabelText(Tr::tr("Enable smart selection changing"));
+    smartSelectionChanging.setToolTip(Tr::tr("Using Select Block Up / Down actions will now provide smarter selections."));
+
+    keyboardTooltips.setLabelText(Tr::tr("Show help tooltips using keyboard shortcut (Alt)"));
+    keyboardTooltips.setToolTip(Tr::tr("Pressing Alt displays context-sensitive help or type information as tooltips."));
 }
 
-Store BehaviorSettings::toMap() const
+void BehaviorSettings::setData(const BehaviorSettingsData &data)
 {
-    return {
-        {mouseHidingKey, m_mouseHiding},
-        {mouseNavigationKey, m_mouseNavigation},
-        {scrollWheelZoomingKey, m_scrollWheelZooming},
-        {constrainTooltips, m_constrainHoverTooltips},
-        {camelCaseNavigationKey, m_camelCaseNavigation},
-        {keyboardTooltips, m_keyboardTooltips},
-        {smartSelectionChanging, m_smartSelectionChanging}
-    };
+    mouseHiding.setValue(data.m_mouseHiding);
+    mouseNavigation.setValue(data.m_mouseNavigation);
+    scrollWheelZooming.setValue(data.m_scrollWheelZooming);
+    constrainHoverTooltips.setValue(data.m_constrainHoverTooltips);
+    camelCaseNavigation.setValue(data.m_camelCaseNavigation);
+    keyboardTooltips.setValue(data.m_keyboardTooltips);
+    smartSelectionChanging.setValue(data.m_smartSelectionChanging);
 }
 
-void BehaviorSettings::fromMap(const Store &map)
+BehaviorSettingsData BehaviorSettings::data() const
 {
-    m_mouseHiding = map.value(mouseHidingKey, m_mouseHiding).toBool();
-    m_mouseNavigation = map.value(mouseNavigationKey, m_mouseNavigation).toBool();
-    m_scrollWheelZooming = map.value(scrollWheelZoomingKey, m_scrollWheelZooming).toBool();
-    m_constrainHoverTooltips = map.value(constrainTooltips, m_constrainHoverTooltips).toBool();
-    m_camelCaseNavigation = map.value(camelCaseNavigationKey, m_camelCaseNavigation).toBool();
-    m_keyboardTooltips = map.value(keyboardTooltips, m_keyboardTooltips).toBool();
-    m_smartSelectionChanging = map.value(smartSelectionChanging, m_smartSelectionChanging).toBool();
+    BehaviorSettingsData d;
+    d.m_mouseHiding = mouseHiding();
+    d.m_mouseNavigation = mouseNavigation();
+    d.m_scrollWheelZooming = scrollWheelZooming();
+    d.m_constrainHoverTooltips = constrainHoverTooltips();
+    d.m_camelCaseNavigation = camelCaseNavigation();
+    d.m_keyboardTooltips = keyboardTooltips();
+    d.m_smartSelectionChanging = smartSelectionChanging();
+    return d;
 }
 
-bool BehaviorSettings::equals(const BehaviorSettings &ds) const
+bool BehaviorSettingsData::equals(const BehaviorSettingsData &ds) const
 {
     return m_mouseHiding == ds.m_mouseHiding
         && m_mouseNavigation == ds.m_mouseNavigation
@@ -72,22 +104,20 @@ BehaviorSettings &globalBehaviorSettings()
     return theGlobalBehaviorSettings;
 }
 
-const char behaviorGroup[] = "textBehaviorSettings";
-
-void updateGlobalBehaviorSettings(const BehaviorSettings &newBehaviorSettings)
+void updateGlobalBehaviorSettings(const BehaviorSettingsData &newBehaviorSettings)
 {
-    if (newBehaviorSettings.equals(globalBehaviorSettings()))
+    if (newBehaviorSettings.equals(globalBehaviorSettings().data()))
         return;
 
-    globalBehaviorSettings() = newBehaviorSettings;
-    storeToSettings(behaviorGroup, Core::ICore::settings(), globalBehaviorSettings().toMap());
+    globalBehaviorSettings().setData(newBehaviorSettings);
+    globalBehaviorSettings().writeSettings();
 
     emit TextEditorSettings::instance()->behaviorSettingsChanged(newBehaviorSettings);
 }
 
 void setupBehaviorSettings()
 {
-    globalBehaviorSettings().fromMap(storeFromSettings(behaviorGroup, Core::ICore::settings()));
+    globalBehaviorSettings().readSettings();
 }
 
 } // namespace TextEditor

@@ -42,7 +42,6 @@ struct EditorConfigurationPrivate
     EditorConfigurationPrivate() :
         m_typingSettings(globalTypingSettings()),
         m_storageSettings(globalStorageSettings()),
-        m_behaviorSettings(globalBehaviorSettings()),
         m_extraEncodingSettings(globalExtraEncodingSettings()),
         m_textEncoding(Core::EditorManager::defaultTextEncoding())
     { }
@@ -50,7 +49,6 @@ struct EditorConfigurationPrivate
     ICodeStylePreferences *m_defaultCodeStyle = nullptr;
     TypingSettings m_typingSettings;
     StorageSettings m_storageSettings;
-    BehaviorSettings m_behaviorSettings;
     bool m_useGlobal = true;
     ExtraEncodingSettings m_extraEncodingSettings;
     TextEncoding m_textEncoding;
@@ -108,7 +106,7 @@ void EditorConfiguration::cloneGlobalSettings()
     d->m_defaultCodeStyle->setTabSettings(TextEditorSettings::codeStyle()->tabSettings());
     setTypingSettings(globalTypingSettings());
     setStorageSettings(globalStorageSettings());
-    setBehaviorSettings(globalBehaviorSettings());
+    setBehaviorSettings(globalBehaviorSettings().data());
     setExtraEncodingSettings(globalExtraEncodingSettings());
     marginSettings.setData(TextEditor::marginSettings().data());
     d->m_textEncoding = Core::EditorManager::defaultTextEncoding();
@@ -127,11 +125,6 @@ const TypingSettings &EditorConfiguration::typingSettings() const
 const StorageSettings &EditorConfiguration::storageSettings() const
 {
     return d->m_storageSettings;
-}
-
-const BehaviorSettings &EditorConfiguration::behaviorSettings() const
-{
-    return d->m_behaviorSettings;
 }
 
 const ExtraEncodingSettings &EditorConfiguration::extraEncodingSettings() const
@@ -187,7 +180,7 @@ Store EditorConfiguration::toMap() const
     toMapWithPrefix(&map, inner);
     toMapWithPrefix(&map, d->m_typingSettings.toMap());
     toMapWithPrefix(&map, d->m_storageSettings.toMap());
-    toMapWithPrefix(&map, d->m_behaviorSettings.toMap());
+    behaviorSettings.toMap(inner);
     toMapWithPrefix(&map, d->m_extraEncodingSettings.toMap());
 
     marginSettings.toMap(map);
@@ -224,7 +217,7 @@ void EditorConfiguration::fromMap(const Store &map)
     d->m_defaultCodeStyle->fromMap(submap);
     d->m_typingSettings.fromMap(submap);
     d->m_storageSettings.fromMap(submap);
-    d->m_behaviorSettings.fromMap(submap);
+    behaviorSettings.fromMap(submap);
     d->m_extraEncodingSettings.fromMap(submap);
     marginSettings.fromMap(map);
 
@@ -301,14 +294,14 @@ void EditorConfiguration::switchSettings(TextEditorWidget *widget) const
         widget->setMarginSettings(TextEditor::marginSettings().data());
         widget->setTypingSettings(globalTypingSettings());
         widget->setStorageSettings(globalStorageSettings());
-        widget->setBehaviorSettings(globalBehaviorSettings());
+        widget->setBehaviorSettings(globalBehaviorSettings().data());
         widget->setExtraEncodingSettings(globalExtraEncodingSettings());
         switchSettings_helper(TextEditorSettings::instance(), this, widget);
     } else {
         widget->setMarginSettings(marginSettings.data());
         widget->setTypingSettings(typingSettings());
         widget->setStorageSettings(storageSettings());
-        widget->setBehaviorSettings(behaviorSettings());
+        widget->setBehaviorSettings(behaviorSettings.data());
         widget->setExtraEncodingSettings(extraEncodingSettings());
         switchSettings_helper(this, TextEditorSettings::instance(), widget);
     }
@@ -326,10 +319,10 @@ void EditorConfiguration::setStorageSettings(const StorageSettings &settings)
     emit storageSettingsChanged(d->m_storageSettings);
 }
 
-void EditorConfiguration::setBehaviorSettings(const BehaviorSettings &settings)
+void EditorConfiguration::setBehaviorSettings(const BehaviorSettingsData &settings)
 {
-    d->m_behaviorSettings = settings;
-    emit behaviorSettingsChanged(d->m_behaviorSettings);
+    behaviorSettings.setData(settings);
+    emit behaviorSettingsChanged(behaviorSettings.data());
 }
 
 void EditorConfiguration::setExtraEncodingSettings(const ExtraEncodingSettings &settings)

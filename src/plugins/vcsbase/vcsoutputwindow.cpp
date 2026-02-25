@@ -245,8 +245,7 @@ VcsOutputWindow::VcsOutputWindow()
     m_instance = this;
 
     auto updateBehaviorSettings = [] {
-        d->widget.setWheelZoomEnabled(
-                    TextEditor::globalBehaviorSettings().m_scrollWheelZooming);
+        d->widget.setWheelZoomEnabled(TextEditor::globalBehaviorSettings().scrollWheelZooming());
     };
 
     auto updateFontSettings = [] {
