@@ -9,7 +9,6 @@
 #include "completionsettings.h"
 #include "completionsettingspage.h"
 #include "displaysettings.h"
-#include "displaysettingspage.h"
 #include "fontsettings.h"
 #include "fontsettingspage.h"
 #include "highlightersettings.h"
@@ -43,7 +42,6 @@ public:
     FontSettings m_fontSettings;
     FontSettingsPage m_fontSettingsPage{&m_fontSettings, initialFormats()};
     BehaviorSettingsPage m_behaviorSettingsPage;
-    DisplaySettingsPage m_displaySettingsPage;
     SnippetsSettingsPage m_snippetsSettingsPage;
     CompletionSettingsPage m_completionSettingsPage;
     CommentsSettingsPage m_commentsSettingsPage;
@@ -433,6 +431,8 @@ TextEditorSettings::TextEditorSettings()
 {
     d = new Internal::TextEditorSettingsPrivate;
 
+    setupDisplaySettings();
+
     // Note: default background colors are coming from FormatDescription::background()
 
     auto updateGeneralMessagesFontSettings = []() {
@@ -463,11 +463,6 @@ TextEditorSettings *TextEditorSettings::instance()
 const FontSettings &TextEditorSettings::fontSettings()
 {
     return d->m_fontSettings;
-}
-
-const DisplaySettings &TextEditorSettings::displaySettings()
-{
-    return d->m_displaySettingsPage.displaySettings();
 }
 
 const CompletionSettings &TextEditorSettings::completionSettings()

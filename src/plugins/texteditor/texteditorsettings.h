@@ -48,7 +48,6 @@ public:
     static TextEditorSettings *instance();
 
     static const FontSettings &fontSettings();
-    static const DisplaySettings &displaySettings();
     static const CompletionSettings &completionSettings();
 
     static void setCommentsSettingsRetriever(

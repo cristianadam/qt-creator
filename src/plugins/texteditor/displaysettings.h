@@ -5,7 +5,9 @@
 
 #include "texteditor_global.h"
 
-#include "QMetaType"
+#include <coreplugin/dialogs/ioptionspage.h>
+
+#include <QMetaType>
 
 QT_BEGIN_NAMESPACE
 class QLabel;
@@ -64,6 +66,10 @@ public:
 
     static QLabel *createAnnotationSettingsLink();
 };
+
+TEXTEDITOR_EXPORT DisplaySettings &displaySettings();
+
+namespace Internal { void setupDisplaySettings(); }
 
 } // namespace TextEditor
 
