@@ -16,7 +16,7 @@ class TabSettingsWidget;
 class TypingSettings;
 class StorageSettingsData;
 class BehaviorSettingsData;
-class ExtraEncodingSettings;
+class ExtraEncodingSettingsData;
 
 struct BehaviorSettingsWidgetPrivate;
 
@@ -44,8 +44,8 @@ public:
     void setAssignedBehaviorSettings(const BehaviorSettingsData &behaviorSettings);
     void assignedBehaviorSettings(BehaviorSettingsData *behaviorSettings) const;
 
-    void setAssignedExtraEncodingSettings(const ExtraEncodingSettings &encodingSettings);
-    void assignedExtraEncodingSettings(ExtraEncodingSettings *encodingSettings) const;
+    void setAssignedExtraEncodingSettings(const ExtraEncodingSettingsData &encodingSettings);
+    void assignedExtraEncodingSettings(ExtraEncodingSettingsData *encodingSettings) const;
 
     void setAssignedLineEnding(int lineEnding);
     int assignedLineEnding() const;
@@ -56,7 +56,7 @@ signals:
     void typingSettingsChanged(const TextEditor::TypingSettings &settings);
     void storageSettingsChanged(const TextEditor::StorageSettingsData &settings);
     void behaviorSettingsChanged(const TextEditor::BehaviorSettingsData &settings);
-    void extraEncodingSettingsChanged(const TextEditor::ExtraEncodingSettings &settings);
+    void extraEncodingSettingsChanged(const TextEditor::ExtraEncodingSettingsData &settings);
     void textEncodingChanged(const Utils::TextEncoding &encoding);
 
 private:

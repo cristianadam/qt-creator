@@ -175,7 +175,7 @@ BehaviorSettingsWidget::BehaviorSettingsWidget(QWidget *parent)
 "<p>This setting does <b>not</b> influence the use of UTF-16 and UTF-32 BOMs.</p></body></html>"));
 
     d->defaultLineEndings = new QComboBox;
-    d->defaultLineEndings->addItems(ExtraEncodingSettings::lineTerminationModeNames());
+    d->defaultLineEndings->addItems(ExtraEncodingSettingsData::lineTerminationModeNames());
 
     d->mouseHiding = new QCheckBox(Tr::tr("Hide mouse cursor while typing"));
     d->mouseNavigation = new QCheckBox(Tr::tr("Enable &mouse navigation"));
@@ -407,20 +407,20 @@ void BehaviorSettingsWidget::assignedBehaviorSettings(BehaviorSettingsData *beha
 }
 
 void BehaviorSettingsWidget::setAssignedExtraEncodingSettings(
-    const ExtraEncodingSettings &encodingSettings)
+    const ExtraEncodingSettingsData &encodingSettings)
 {
     d->utf8BomBox->setCurrentIndex(encodingSettings.m_utf8BomSetting);
     d->defaultLineEndings->setCurrentIndex(encodingSettings.m_lineEndingSetting);
 }
 
 void BehaviorSettingsWidget::assignedExtraEncodingSettings(
-    ExtraEncodingSettings *encodingSettings) const
+    ExtraEncodingSettingsData *encodingSettings) const
 {
     encodingSettings->m_utf8BomSetting =
-        (ExtraEncodingSettings::Utf8BomSetting)d->utf8BomBox->currentIndex();
+        (ExtraEncodingSettingsData::Utf8BomSetting)d->utf8BomBox->currentIndex();
 
     encodingSettings->m_lineEndingSetting
-      = (ExtraEncodingSettings::LineEndingSetting)d->defaultLineEndings->currentIndex();
+      = (ExtraEncodingSettingsData::LineEndingSetting)d->defaultLineEndings->currentIndex();
 }
 
 void BehaviorSettingsWidget::setAssignedLineEnding(int lineEnding)
@@ -466,7 +466,7 @@ void BehaviorSettingsWidget::slotBehaviorSettingsChanged()
 
 void BehaviorSettingsWidget::slotExtraEncodingChanged()
 {
-    ExtraEncodingSettings settings;
+    ExtraEncodingSettingsData settings;
     assignedExtraEncodingSettings(&settings);
     emit extraEncodingSettingsChanged(settings);
 }

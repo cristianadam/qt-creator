@@ -6,17 +6,11 @@
 #include "projectexplorer_export.h"
 
 #include <texteditor/behaviorsettings.h>
+#include <texteditor/extraencodingsettings.h>
 #include <texteditor/marginsettings.h>
 #include <texteditor/storagesettings.h>
 
-#include <utils/id.h>
-#include <utils/store.h>
-
-#include <QObject>
-
 #include <memory>
-
-#include <texteditor/marginsettings.h>
 
 namespace TextEditor {
 class BaseTextEditor;
@@ -25,7 +19,6 @@ class TextDocument;
 class TabSettings;
 class ICodeStylePreferences;
 class TypingSettings;
-class ExtraEncodingSettings;
 } // namespace TextEditor
 
 namespace Core { class IEditor; }
@@ -58,7 +51,7 @@ public:
     const TextEditor::TypingSettings &typingSettings() const;
     TextEditor::StorageSettings storageSettings;
     TextEditor::BehaviorSettings behaviorSettings;
-    const TextEditor::ExtraEncodingSettings &extraEncodingSettings() const;
+    TextEditor::ExtraEncodingSettings extraEncodingSettings;
     TextEditor::MarginSettings marginSettings;
 
     TextEditor::ICodeStylePreferences *codeStyle() const;
@@ -74,7 +67,7 @@ public:
     void setTypingSettings(const TextEditor::TypingSettings &settings);
     void setStorageSettings(const TextEditor::StorageSettingsData &settings);
     void setBehaviorSettings(const TextEditor::BehaviorSettingsData &settings);
-    void setExtraEncodingSettings(const TextEditor::ExtraEncodingSettings &settings);
+    void setExtraEncodingSettings(const TextEditor::ExtraEncodingSettingsData &settings);
 
     void setTextEncoding(const Utils::TextEncoding &textEncoding);
 
@@ -84,7 +77,7 @@ signals:
     void typingSettingsChanged(const TextEditor::TypingSettings &);
     void storageSettingsChanged(const TextEditor::StorageSettingsData &);
     void behaviorSettingsChanged(const TextEditor::BehaviorSettingsData &);
-    void extraEncodingSettingsChanged(const TextEditor::ExtraEncodingSettings &);
+    void extraEncodingSettingsChanged(const TextEditor::ExtraEncodingSettingsData &);
 
 private:
     void switchSettings(TextEditor::TextEditorWidget *baseTextEditor) const;

@@ -6,41 +6,40 @@
 #include "texteditortr.h"
 #include "texteditorsettings.h"
 
-#include <coreplugin/icore.h>
-
-// Keep this for compatibility reasons.
-static const char kUtf8BomBehaviorKey[] = "Utf8BomBehavior";
-static const char kLineEndingBehaviorKey[] = "LineEndingBehavior";
-
 using namespace Utils;
 
 namespace TextEditor {
 
-ExtraEncodingSettings::ExtraEncodingSettings() : m_utf8BomSetting(OnlyKeep), m_lineEndingSetting{Unix}
-{}
-
-ExtraEncodingSettings::~ExtraEncodingSettings() = default;
-
-Store ExtraEncodingSettings::toMap() const
+ExtraEncodingSettings::ExtraEncodingSettings()
 {
-    return {
-        {kUtf8BomBehaviorKey, m_utf8BomSetting},
-        {kLineEndingBehaviorKey, m_lineEndingSetting}
-    };
+    setAutoApply(false);
+    setSettingsGroup("textEditorManager");
+
+    utf8BomSetting.setSettingsKey("Utf8BomBehavior");
+
+    lineEndingSetting.setSettingsKey("LineEndingBehavior");
 }
 
-void ExtraEncodingSettings::fromMap(const Store &map)
+ExtraEncodingSettingsData ExtraEncodingSettings::data() const
 {
-    m_utf8BomSetting = (Utf8BomSetting)map.value(kUtf8BomBehaviorKey, m_utf8BomSetting).toInt();
-    m_lineEndingSetting = (LineEndingSetting)map.value(kLineEndingBehaviorKey, m_lineEndingSetting).toInt();
+    ExtraEncodingSettingsData d;
+    d.m_utf8BomSetting = utf8BomSetting();
+    d.m_lineEndingSetting = lineEndingSetting();
+    return d;
 }
 
-bool ExtraEncodingSettings::equals(const ExtraEncodingSettings &s) const
+void ExtraEncodingSettings::setData(const ExtraEncodingSettingsData &data)
+{
+    utf8BomSetting.setValue(data.m_utf8BomSetting);
+    lineEndingSetting.setValue(data.m_lineEndingSetting);
+}
+
+bool ExtraEncodingSettingsData::equals(const ExtraEncodingSettingsData &s) const
 {
     return m_utf8BomSetting == s.m_utf8BomSetting && m_lineEndingSetting == s.m_lineEndingSetting;
 }
 
-QStringList ExtraEncodingSettings::lineTerminationModeNames()
+QStringList ExtraEncodingSettingsData::lineTerminationModeNames()
 {
     return {Tr::tr("Unix (LF)"), Tr::tr("Windows (CRLF)")};
 }
@@ -51,22 +50,20 @@ ExtraEncodingSettings &globalExtraEncodingSettings()
     return theGlobalExtraEncodingSettings;
 }
 
-const char extraEncodingGroup[] = "textEditorManager";
-
-void updateGlobalExtraEncodingSettings(const ExtraEncodingSettings &newExtraEncodingSettings)
+void updateGlobalExtraEncodingSettings(const ExtraEncodingSettingsData &newExtraEncodingSettings)
 {
-    if (newExtraEncodingSettings.equals(globalExtraEncodingSettings()))
+    if (newExtraEncodingSettings.equals(globalExtraEncodingSettings().data()))
         return;
 
-    globalExtraEncodingSettings() = newExtraEncodingSettings;
-    storeToSettings(extraEncodingGroup, Core::ICore::settings(), globalExtraEncodingSettings().toMap());
+    globalExtraEncodingSettings().setData(newExtraEncodingSettings);
+    globalExtraEncodingSettings().writeSettings();
 
     emit TextEditorSettings::instance()->extraEncodingSettingsChanged(newExtraEncodingSettings);
 }
 
 void setupExtraEncodingSettings()
 {
-    globalExtraEncodingSettings().fromMap(storeFromSettings(extraEncodingGroup, Core::ICore::settings()));
+    globalExtraEncodingSettings().readSettings();
 }
 
 } // TextEditor

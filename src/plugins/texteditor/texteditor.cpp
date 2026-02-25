@@ -1676,7 +1676,7 @@ void TextEditorWidgetPrivate::setDocument(const QSharedPointer<TextDocument> &do
     q->setMarginSettings(marginSettings().data());
     q->setDisplaySettings(TextEditorSettings::displaySettings());
     q->setCompletionSettings(TextEditorSettings::completionSettings());
-    q->setExtraEncodingSettings(globalExtraEncodingSettings());
+    q->setExtraEncodingSettings(globalExtraEncodingSettings().data());
     q->textDocument()->setCodeStyle(TextEditorSettings::codeStyle(m_tabSettingsId));
 
     m_blockCount = doc->document()->blockCount();
@@ -9481,7 +9481,7 @@ void TextEditorWidget::setCompletionSettings(const CompletionSettings &completio
     d->m_removeAutoCompletedText = completionSettings.m_autoRemove;
 }
 
-void TextEditorWidget::setExtraEncodingSettings(const ExtraEncodingSettings &extraEncodingSettings)
+void TextEditorWidget::setExtraEncodingSettings(const ExtraEncodingSettingsData &extraEncodingSettings)
 {
     d->m_document->setExtraEncodingSettings(extraEncodingSettings);
 }
