@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -91,7 +92,6 @@ def parse_enum(name, spec):
     if spec.get("type") == "string" and "enum" in spec:
         values = spec["enum"]
         # Use a C++ enum class if all values are valid identifiers, else use QString alias
-        import re
         valid = all(re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', v) for v in values)
         if valid:
             lines = [f"enum class {name} {{"]
@@ -526,6 +526,13 @@ def escape_keyword(name):
                     "throw", "sizeof", "alignof", "decltype", "typeid"}
     return f"{name}_" if name in cpp_keywords else name
 
+def sanitize_identifier(value):
+    """Convert an arbitrary string to a valid C++ identifier, then escape keywords."""
+    ident = re.sub(r'[^A-Za-z0-9_]', '_', value)
+    if ident and ident[0].isdigit():
+        ident = '_' + ident
+    return escape_keyword(ident)
+
 def list_type(item_type, optional=False):
     """Return the C++ list type, using QStringList when item type is QString."""
     inner = "QStringList" if item_type == "QString" else f"QList<{item_type}>"
@@ -564,6 +571,37 @@ def is_open_map(spec):
         return False
     return True
 
+def _json_extract_expr(cpp_t, val_expr):
+    """Return the C++ expression to extract `cpp_t` from QJsonValue `val_expr`.
+    Returns None for unrecognised types.
+    """
+    _map = {
+        "QString":     f"{val_expr}.toString()",
+        "int":         f"{val_expr}.toInt()",
+        "double":      f"{val_expr}.toDouble()",
+        "bool":        f"{val_expr}.toBool()",
+        "QJsonObject": f"{val_expr}.toObject()",
+        "QJsonArray":  f"{val_expr}.toArray()",
+    }
+    return _map.get(cpp_t)
+
+def _toJsonValue_visit_lines(alias):
+    """Return code lines for a toJsonValue(const alias&) using std::visit."""
+    return [
+        "",
+        f"inline QJsonValue toJsonValue(const {alias} &val) {{",
+        "    return std::visit([](const auto &v) -> QJsonValue {",
+        "        using T = std::decay_t<decltype(v)>;",
+        "        if constexpr (std::is_same_v<T, QJsonObject>) {",
+        "            return v;",
+        "        } else {",
+        "            return toJson(v);",
+        "        }",
+        "    }, val);",
+        "}",
+        "",
+    ]
+
 def nested_short_name(parent_name, child_name):
     """Strip parent name prefix from a nested child name for cleaner C++ declarations.
 
@@ -595,6 +633,15 @@ def parse_struct(name, props, types, required=None, description='', nested_child
 
     def is_const_string(spec):
         return spec.get("type") == "string" and "const" in spec
+
+    def is_inline_enum(spec):
+        """Inline string enum: type==string, enum list present, no const, no $ref."""
+        return (
+            spec.get("type") == "string"
+            and "enum" in spec
+            and "const" not in spec
+            and "$ref" not in spec
+        )
 
     def needs_sub_struct(spec):
         """Inline object with non-empty properties and no $ref → generate a named sub-struct."""
@@ -637,6 +684,7 @@ def parse_struct(name, props, types, required=None, description='', nested_child
     array_item_struct_names = {}  # prop_name -> generated sub-struct type name for array items
     array_item_union_names  = {}  # prop_name -> generated union alias type name for anyOf array items
     field_union_names       = {}  # prop_name -> generated union alias type name for anyOf field
+    inline_enum_names       = {}  # prop_name -> nested enum class short name
 
     # Process exclusively-owned nested child types ($defs types only used here)
     child_struct_inserts = []   # indented struct defs placed inside this struct body
@@ -652,21 +700,8 @@ def parse_struct(name, props, types, required=None, description='', nested_child
         short_name = nested_short_name(effective_prefix, child_name)
         nested_short_names[child_name] = short_name
         child_full = parse_struct(short_name, child_props_n, types, child_required_n, child_desc_n, nested_children=grandchildren, children_of=children_of, original_name=child_name)
-        child_pre, child_struct_def, child_serials = _split_parse_struct_output(child_full, short_name)
-        if child_pre.strip():
-            child_preamble_blocks.append(child_pre)
-        if child_struct_def:
-            # Indent the struct definition (including optional doc comment) by 4 spaces
-            indented_lines = [
-                ('    ' + line) if line.strip() else line
-                for line in child_struct_def.rstrip('\n').split('\n')
-            ]
-            child_struct_inserts.append('\n'.join(indented_lines) + '\n')
-        if child_serials.strip():
-            qualified_name = f"{name}::{short_name}"
-            child_serial_blocks.append(
-                _qualify_serializers(child_serials, short_name, qualified_name)
-            )
+        _collect_sub_struct_output(child_full, short_name, name,
+                                   child_preamble_blocks, child_struct_inserts, child_serial_blocks)
 
     for prop, spec in props.items():
         if needs_sub_struct(spec):
@@ -678,14 +713,8 @@ def parse_struct(name, props, types, required=None, description='', nested_child
                                     spec.get("required", []),
                                     spec.get("description", ""),
                                     original_name=sub_name)
-            sub_pre, sub_struct_def, sub_serials = _split_parse_struct_output(sub_code, short_sub_name)
-            if sub_pre.strip():
-                child_preamble_blocks.append(sub_pre)
-            if sub_struct_def:
-                indented = '\n'.join(('    ' + l) if l.strip() else l for l in sub_struct_def.rstrip('\n').split('\n')) + '\n'
-                child_struct_inserts.append(indented)
-            if sub_serials.strip():
-                child_serial_blocks.append(_qualify_serializers(sub_serials, short_sub_name, f"{name}::{short_sub_name}"))
+            _collect_sub_struct_output(sub_code, short_sub_name, name,
+                                       child_preamble_blocks, child_struct_inserts, child_serial_blocks)
             sub_struct_names[prop] = short_sub_name
         elif array_items_need_sub_struct(spec):
             sub_name = name + prop[0].upper() + prop[1:] + "Item"
@@ -697,15 +726,50 @@ def parse_struct(name, props, types, required=None, description='', nested_child
                                     items_spec.get("required", []),
                                     items_spec.get("description", ""),
                                     original_name=sub_name)
-            sub_pre, sub_struct_def, sub_serials = _split_parse_struct_output(sub_code, short_sub_name)
-            if sub_pre.strip():
-                child_preamble_blocks.append(sub_pre)
-            if sub_struct_def:
-                indented = '\n'.join(('    ' + l) if l.strip() else l for l in sub_struct_def.rstrip('\n').split('\n')) + '\n'
-                child_struct_inserts.append(indented)
-            if sub_serials.strip():
-                child_serial_blocks.append(_qualify_serializers(sub_serials, short_sub_name, f"{name}::{short_sub_name}"))
+            _collect_sub_struct_output(sub_code, short_sub_name, name,
+                                       child_preamble_blocks, child_struct_inserts, child_serial_blocks)
             array_item_struct_names[prop] = short_sub_name
+        elif is_inline_enum(spec):
+            enum_class_name = prop[0].upper() + prop[1:]
+            values = spec["enum"]
+            # Generate indented enum class to be inserted into the struct body
+            enum_lines = []
+            if _emit_comments and spec.get("description"):
+                for cl in doc_comment(spec["description"], indent="    ").rstrip("\n").split("\n"):
+                    enum_lines.append(cl)
+            enum_lines.append(f"    enum class {enum_class_name} {{")
+            for v in values:
+                enum_lines.append(f"        {sanitize_identifier(v)},")
+            if enum_lines[-1].endswith(","):
+                enum_lines[-1] = enum_lines[-1].rstrip(",")
+            enum_lines.append("    };")
+            enum_lines.append("")
+            child_struct_inserts.append("\n".join(enum_lines) + "\n")
+            # Generate serializers for the qualified type (emitted after struct closes)
+            qname = f"{name}::{enum_class_name}"
+            ser_lines = []
+            ser_lines.append(f"inline QString toString(const {qname} &v) {{")
+            ser_lines.append("    switch(v) {")
+            for v in values:
+                ser_lines.append(f"        case {qname}::{sanitize_identifier(v)}: return \"{v}\";")
+            ser_lines.append("    }")
+            ser_lines.append("    return {};")
+            ser_lines.append("}")
+            ser_lines.append("")
+            ser_lines.append(f"template<>")
+            ser_lines.append(f"inline Utils::Result<{qname}> fromJson<{qname}>(const QJsonValue &val) {{")
+            ser_lines.append(f"    const QString str = val.toString();")
+            for v in values:
+                ser_lines.append(f"    if (str == \"{v}\") return {qname}::{sanitize_identifier(v)};")
+            ser_lines.append(f"    return Utils::ResultError(\"Invalid {qname} value: \" + str);")
+            ser_lines.append("}")
+            ser_lines.append("")
+            ser_lines.append(f"inline QJsonValue toJsonValue(const {qname} &v) {{")
+            ser_lines.append("    return toString(v);")
+            ser_lines.append("}")
+            ser_lines.append("")
+            child_serial_blocks.append("\n".join(ser_lines))
+            inline_enum_names[prop] = enum_class_name
         else:
             ref_names = array_items_anyof_ref_names(spec)
             if ref_names:
@@ -715,64 +779,7 @@ def parse_struct(name, props, types, required=None, description='', nested_child
                     union_alias = _emitted_variant_sigs[variant_str]
                 else:
                     union_alias = name + prop[0].upper() + prop[1:] + "Item"
-                    union_lines = [f"using {union_alias} = std::variant<{variant_str}>;", ""]
-                    fj = [
-                        f"template<>",
-                        f"inline Utils::Result<{union_alias}> fromJson<{union_alias}>(const QJsonValue &val) {{",
-                    ]
-                    dispatch_field, dispatch_map = find_dispatch_field(ref_names, types) if types else (None, None)
-                    if dispatch_field:
-                        fj.append(f"    if (!val.isObject())")
-                        fj.append(f'        co_return Utils::ResultError("Invalid {union_alias}: expected object");')
-                        fj.append(f"    const QString dispatchValue = val.toObject().value(\"{dispatch_field}\").toString();")
-                        first = True
-                        for ref_name, const_val in dispatch_map.items():
-                            kw = "if" if first else "else if"
-                            first = False
-                            fj.append(f"    {kw} (dispatchValue == \"{const_val}\")")
-                            fj.append(f"        co_return {union_alias}(co_await fromJson<{ref_name}>(val));")
-                        fj.append(f"    co_return Utils::ResultError(\"Invalid {union_alias}: unknown {dispatch_field} \\\"\" + dispatchValue + \"\\\"\");")
-                    else:
-                        presence_map = find_presence_dispatch(ref_names, types) if types else {}
-                        if presence_map:
-                            fj.append(f"    if (!val.isObject())")
-                            fj.append(f'        co_return Utils::ResultError("Invalid {union_alias}: expected object");')
-                            fj.append(f"    const QJsonObject obj = val.toObject();")
-                            for ref_name in ref_names:
-                                if ref_name in presence_map:
-                                    field = presence_map[ref_name]
-                                    fj.append(f"    if (obj.contains(\"{field}\"))")
-                                    fj.append(f"        co_return {union_alias}(co_await fromJson<{ref_name}>(val));")
-                            for ref_name in ref_names:
-                                if ref_name not in presence_map:
-                                    fj.append(f"    {{")
-                                    fj.append(f"        auto result = fromJson<{ref_name}>(val);")
-                                    fj.append(f"        if (result) co_return {union_alias}(*result);")
-                                    fj.append(f"    }}")
-                        else:
-                            for ref_name in ref_names:
-                                fj.append(f"    {{")
-                                fj.append(f"        auto result = fromJson<{ref_name}>(val);")
-                                fj.append(f"        if (result) co_return {union_alias}(*result);")
-                                fj.append(f"    }}")
-                        fj.append(f'    co_return Utils::ResultError("Invalid {union_alias}");')
-                    fj.append("}")
-                    union_lines.extend(use_return_if_no_co_await(fj))
-                    union_lines.extend([
-                        "",
-                        f"inline QJsonValue toJsonValue(const {union_alias} &val) {{",
-                        "    return std::visit([](const auto &v) -> QJsonValue {",
-                        "        using T = std::decay_t<decltype(v)>;",
-                        "        if constexpr (std::is_same_v<T, QJsonObject>) {",
-                        "            return v;",
-                        "        } else {",
-                        "            return toJson(v);",
-                        "        }",
-                        "    }, val);",
-                        "}",
-                        "",
-                    ])
-                    sub_struct_blocks.append("\n".join(union_lines))
+                    sub_struct_blocks.append("\n".join(_build_inline_union_code(union_alias, ref_names, types)))
                     _emitted_variant_sigs[variant_str] = union_alias
                 array_item_union_names[prop] = union_alias
             else:
@@ -784,64 +791,7 @@ def parse_struct(name, props, types, required=None, description='', nested_child
                         union_alias = _emitted_variant_sigs[variant_str]
                     else:
                         union_alias = name + prop[0].upper() + prop[1:]
-                        union_lines = [f"using {union_alias} = std::variant<{variant_str}>;", ""]
-                        fj = [
-                            f"template<>",
-                            f"inline Utils::Result<{union_alias}> fromJson<{union_alias}>(const QJsonValue &val) {{",
-                        ]
-                        dispatch_field, dispatch_map = find_dispatch_field(fref_names, types) if types else (None, None)
-                        if dispatch_field:
-                            fj.append(f"    if (!val.isObject())")
-                            fj.append(f'        co_return Utils::ResultError("Invalid {union_alias}: expected object");')
-                            fj.append(f"    const QString dispatchValue = val.toObject().value(\"{dispatch_field}\").toString();")
-                            first = True
-                            for ref_name, const_val in dispatch_map.items():
-                                kw = "if" if first else "else if"
-                                first = False
-                                fj.append(f"    {kw} (dispatchValue == \"{const_val}\")")
-                                fj.append(f"        co_return {union_alias}(co_await fromJson<{ref_name}>(val));")
-                            fj.append(f"    co_return Utils::ResultError(\"Invalid {union_alias}: unknown {dispatch_field} \\\"\" + dispatchValue + \"\\\"\");")
-                        else:
-                            presence_map = find_presence_dispatch(fref_names, types) if types else {}
-                            if presence_map:
-                                fj.append(f"    if (!val.isObject())")
-                                fj.append(f'        co_return Utils::ResultError("Invalid {union_alias}: expected object");')
-                                fj.append(f"    const QJsonObject obj = val.toObject();")
-                                for ref_name in fref_names:
-                                    if ref_name in presence_map:
-                                        field = presence_map[ref_name]
-                                        fj.append(f"    if (obj.contains(\"{field}\"))")
-                                        fj.append(f"        co_return {union_alias}(co_await fromJson<{ref_name}>(val));")
-                                for ref_name in fref_names:
-                                    if ref_name not in presence_map:
-                                        fj.append(f"    {{")
-                                        fj.append(f"        auto result = fromJson<{ref_name}>(val);")
-                                        fj.append(f"        if (result) co_return {union_alias}(*result);")
-                                        fj.append(f"    }}")
-                            else:
-                                for ref_name in fref_names:
-                                    fj.append(f"    {{")
-                                    fj.append(f"        auto result = fromJson<{ref_name}>(val);")
-                                    fj.append(f"        if (result) co_return {union_alias}(*result);")
-                                    fj.append(f"    }}")
-                            fj.append(f'    co_return Utils::ResultError("Invalid {union_alias}");')
-                        fj.append("}")
-                        union_lines.extend(use_return_if_no_co_await(fj))
-                        union_lines.extend([
-                            "",
-                            f"inline QJsonValue toJsonValue(const {union_alias} &val) {{",
-                            "    return std::visit([](const auto &v) -> QJsonValue {",
-                            "        using T = std::decay_t<decltype(v)>;",
-                            "        if constexpr (std::is_same_v<T, QJsonObject>) {",
-                            "            return v;",
-                            "        } else {",
-                            "            return toJson(v);",
-                            "        }",
-                            "    }, val);",
-                            "}",
-                            "",
-                        ])
-                        sub_struct_blocks.append("\n".join(union_lines))
+                        sub_struct_blocks.append("\n".join(_build_inline_union_code(union_alias, fref_names, types)))
                         _emitted_variant_sigs[variant_str] = union_alias
                     field_union_names[prop] = union_alias
 
@@ -862,7 +812,12 @@ def parse_struct(name, props, types, required=None, description='', nested_child
         else:
             pre_lines = []
             inline_comment = f'  //!< {prop_desc}' if prop_desc else ''
-        if prop in sub_struct_names:
+        if prop in inline_enum_names:
+            t = inline_enum_names[prop]
+            decl_type = f"std::optional<{t}>" if is_optional else t
+            # Doc comment already emitted on the nested enum class; skip it here.
+            lines.append(f"    {decl_type} _{prop};")
+        elif prop in sub_struct_names:
             t = sub_struct_names[prop]
             decl_type = f"std::optional<{t}>" if is_optional else t
             lines.extend(pre_lines)
@@ -941,7 +896,9 @@ def parse_struct(name, props, types, required=None, description='', nested_child
         is_optional = prop not in required
         # Determine inner_type (full collection type) and list_item_type (element type, or None)
         list_item_type = None
-        if prop in sub_struct_names:
+        if prop in inline_enum_names:
+            inner_type = inline_enum_names[prop]
+        elif prop in sub_struct_names:
             inner_type = sub_struct_names[prop]
         elif "$ref" in spec:
             inner_type = ref_type(spec["$ref"])
@@ -1023,6 +980,12 @@ def parse_struct(name, props, types, required=None, description='', nested_child
         prop_name = escape_keyword(prop)
         if is_const_string(spec):
             continue  # no stored member, no getter
+        if prop in inline_enum_names:
+            t = inline_enum_names[prop]
+            is_optional = prop not in required
+            decl_type = f"std::optional<{t}>" if is_optional else t
+            lines.append(f"    const {decl_type}& {prop_name}() const {{ return _{prop}; }}")
+            continue
         ret_type = prop_decl_types.get(prop, "auto")
         lines.append(f"    const {ret_type}& {prop_name}() const {{ return _{prop}; }}")
         # For open-map fields also emit an AsObject() convenience getter
@@ -1062,7 +1025,11 @@ def parse_struct(name, props, types, required=None, description='', nested_child
     for prop, spec in props.items():
         prop_name = escape_keyword(prop)
         is_optional = prop not in required
-        if prop in sub_struct_names:
+        if prop in inline_enum_names:
+            t_fj = f"{name}::{inline_enum_names[prop]}"
+            fj_lines.append(f"    if (obj.contains(\"{prop}\") && obj[\"{prop}\"].isString())")
+            fj_lines.append(f"        result._{prop} = co_await fromJson<{t_fj}>(obj[\"{prop}\"]);")
+        elif prop in sub_struct_names:
             t = sub_struct_names[prop]
             t_fj = f"{name}::{t}"  # inline sub-structs are always nested inside this struct
             fj_lines.append(f"    if (obj.contains(\"{prop}\") && obj[\"{prop}\"].isObject())")
@@ -1138,37 +1105,22 @@ def parse_struct(name, props, types, required=None, description='', nested_child
             fj_lines.append(f"    }}")
         elif spec.get("type") == "array":
             item_type = cpp_type(spec["items"].get("type", "string"))
+            _item_expr = _json_extract_expr(item_type, "v")
             fj_lines.append(f"    if (obj.contains(\"{prop}\") && obj[\"{prop}\"].isArray()) {{")
             fj_lines.append(f"        QJsonArray arr = obj[\"{prop}\"].toArray();")
             if is_optional:
                 fj_lines.append(f"        {list_type(item_type)} list_{prop_name};")
                 fj_lines.append(f"        for (const QJsonValue &v : arr) {{")
-                if item_type == "QString":
-                    fj_lines.append(f"            list_{prop_name}.append(v.toString());")
-                elif item_type == "int":
-                    fj_lines.append(f"            list_{prop_name}.append(v.toInt());")
-                elif item_type == "double":
-                    fj_lines.append(f"            list_{prop_name}.append(v.toDouble());")
-                elif item_type == "bool":
-                    fj_lines.append(f"            list_{prop_name}.append(v.toBool());")
-                elif item_type == "QJsonObject":
-                    fj_lines.append(f"            list_{prop_name}.append(v.toObject());")
+                if _item_expr:
+                    fj_lines.append(f"            list_{prop_name}.append({_item_expr});")
                 else:
                     fj_lines.append(f"            // Unknown array item type: {item_type}")
                 fj_lines.append(f"        }}")
                 fj_lines.append(f"        result._{prop} = list_{prop_name};")
             else:
                 fj_lines.append(f"        for (const QJsonValue &v : arr) {{")
-                if item_type == "QString":
-                    fj_lines.append(f"            result._{prop}.append(v.toString());")
-                elif item_type == "int":
-                    fj_lines.append(f"            result._{prop}.append(v.toInt());")
-                elif item_type == "double":
-                    fj_lines.append(f"            result._{prop}.append(v.toDouble());")
-                elif item_type == "bool":
-                    fj_lines.append(f"            result._{prop}.append(v.toBool());")
-                elif item_type == "QJsonObject":
-                    fj_lines.append(f"            result._{prop}.append(v.toObject());")
+                if _item_expr:
+                    fj_lines.append(f"            result._{prop}.append({_item_expr});")
                 else:
                     fj_lines.append(f"            // Unknown array item type: {item_type}")
                 fj_lines.append(f"        }}")
@@ -1183,14 +1135,7 @@ def parse_struct(name, props, types, required=None, description='', nested_child
             fj_lines.append(f"    }}")
         elif is_typed_map(spec) is not None:
             val_type = is_typed_map(spec)
-            _extract_map = {
-                "QString": "it.value().toString()",
-                "int": "it.value().toInt()",
-                "double": "it.value().toDouble()",
-                "bool": "it.value().toBool()",
-                "QJsonObject": "it.value().toObject()",
-            }
-            extract = _extract_map.get(val_type, "it.value().toString()")
+            extract = _json_extract_expr(val_type, "it.value()") or "it.value().toString()"
             fj_lines.append(f"    if (obj.contains(\"{prop}\") && obj[\"{prop}\"].isObject()) {{")
             fj_lines.append(f"        const QJsonObject mapObj_{prop_name} = obj[\"{prop}\"].toObject();")
             fj_lines.append(f"        QMap<QString, {val_type}> map_{prop_name};")
@@ -1204,37 +1149,17 @@ def parse_struct(name, props, types, required=None, description='', nested_child
             fj_lines.append(f"        co_return Utils::ResultError(\"Field '{prop}' must be '{const_value}', got: \" + obj.value(\"{prop}\").toString());")
         else:
             t = spec.get("type", "string")
+            ct = cpp_type(t)
+            _scalar_expr = _json_extract_expr(ct, f'obj.value("{prop}")')
             if is_optional:
                 fj_lines.append(f"    if (obj.contains(\"{prop}\"))")
-                if cpp_type(t) == "QString":
-                    fj_lines.append(f"        result._{prop} = obj.value(\"{prop}\").toString();")
-                elif cpp_type(t) == "int":
-                    fj_lines.append(f"        result._{prop} = obj.value(\"{prop}\").toInt();")
-                elif cpp_type(t) == "double":
-                    fj_lines.append(f"        result._{prop} = obj.value(\"{prop}\").toDouble();")
-                elif cpp_type(t) == "bool":
-                    fj_lines.append(f"        result._{prop} = obj.value(\"{prop}\").toBool();")
-                elif cpp_type(t) == "QJsonObject":
-                    fj_lines.append(f"        result._{prop} = obj.value(\"{prop}\").toObject();")
-                elif cpp_type(t) == "QJsonArray":
-                    fj_lines.append(f"        result._{prop} = obj.value(\"{prop}\").toArray();")
-                else:
-                    fj_lines.append(f"        // Unknown property type: {cpp_type(t)}")
+                indent = "        "
             else:
-                if cpp_type(t) == "QString":
-                    fj_lines.append(f"    result._{prop} = obj.value(\"{prop}\").toString();")
-                elif cpp_type(t) == "int":
-                    fj_lines.append(f"    result._{prop} = obj.value(\"{prop}\").toInt();")
-                elif cpp_type(t) == "double":
-                    fj_lines.append(f"    result._{prop} = obj.value(\"{prop}\").toDouble();")
-                elif cpp_type(t) == "bool":
-                    fj_lines.append(f"    result._{prop} = obj.value(\"{prop}\").toBool();")
-                elif cpp_type(t) == "QJsonObject":
-                    fj_lines.append(f"    result._{prop} = obj.value(\"{prop}\").toObject();")
-                elif cpp_type(t) == "QJsonArray":
-                    fj_lines.append(f"    result._{prop} = obj.value(\"{prop}\").toArray();")
-                else:
-                    fj_lines.append(f"    // Unknown property type: {cpp_type(t)}")
+                indent = "    "
+            if _scalar_expr:
+                fj_lines.append(f"{indent}result._{prop} = {_scalar_expr};")
+            else:
+                fj_lines.append(f"{indent}// Unknown property type: {ct}")
     fj_lines.append(f"    co_return result;")
     fj_lines.append("}")
     lines.extend(use_return_if_no_co_await(fj_lines))
@@ -1249,7 +1174,13 @@ def parse_struct(name, props, types, required=None, description='', nested_child
     for prop, spec in props.items():
         prop_name = escape_keyword(prop)
         is_optional = prop not in required
-        if prop in sub_struct_names:
+        if prop in inline_enum_names:
+            if is_optional:
+                post_lines.append(f"    if (data._{prop}.has_value())")
+                post_lines.append(f"        obj.insert(\"{prop}\", toJsonValue(*data._{prop}));")
+            else:
+                init_entries.append((prop, f"toJsonValue(data._{prop})"))
+        elif prop in sub_struct_names:
             if is_optional:
                 post_lines.append(f"    if (data._{prop}.has_value())")
                 post_lines.append(f"        obj.insert(\"{prop}\", toJson(*data._{prop}));")
@@ -1389,7 +1320,6 @@ def _split_parse_struct_output(code, name):
     version with a lazy wildcard in an optional group greedily spanned multiple
     /** ... */ blocks, causing incorrect splits.
     """
-    import re
     # Locate `struct Name {` at the start of a line
     struct_pat = re.compile(
         r'^struct\s+' + re.escape(name) + r'\s+\{',
@@ -1455,6 +1385,76 @@ def _qualify_serializers(code, child_name, qualified_name):
     )
     return code
 
+def _build_inline_union_code(union_alias, ref_names, types):
+    """Build code lines for an inline union alias: using decl + fromJson + toJsonValue.
+
+    The resulting lines are intended to be joined with '\n' and appended to
+    sub_struct_blocks.  Callers must also update _emitted_variant_sigs.
+    """
+    variant_str = ", ".join(ref_names)
+    union_lines = [f"using {union_alias} = std::variant<{variant_str}>;", ""]
+    fj = [
+        "template<>",
+        f"inline Utils::Result<{union_alias}> fromJson<{union_alias}>(const QJsonValue &val) {{",
+    ]
+    dispatch_field, dispatch_map = find_dispatch_field(ref_names, types) if types else (None, None)
+    if dispatch_field:
+        fj.append(f"    if (!val.isObject())")
+        fj.append(f'        co_return Utils::ResultError("Invalid {union_alias}: expected object");')
+        fj.append(f"    const QString dispatchValue = val.toObject().value(\"{dispatch_field}\").toString();")
+        first = True
+        for ref_name, const_val in dispatch_map.items():
+            kw = "if" if first else "else if"
+            first = False
+            fj.append(f"    {kw} (dispatchValue == \"{const_val}\")")
+            fj.append(f"        co_return {union_alias}(co_await fromJson<{ref_name}>(val));")
+        fj.append(f"    co_return Utils::ResultError(\"Invalid {union_alias}: unknown {dispatch_field} \\\"\" + dispatchValue + \"\\\"\");")
+    else:
+        presence_map = find_presence_dispatch(ref_names, types) if types else {}
+        if presence_map:
+            fj.append(f"    if (!val.isObject())")
+            fj.append(f'        co_return Utils::ResultError("Invalid {union_alias}: expected object");')
+            fj.append(f"    const QJsonObject obj = val.toObject();")
+            for ref_name in ref_names:
+                if ref_name in presence_map:
+                    field = presence_map[ref_name]
+                    fj.append(f"    if (obj.contains(\"{field}\"))")
+                    fj.append(f"        co_return {union_alias}(co_await fromJson<{ref_name}>(val));")
+            for ref_name in ref_names:
+                if ref_name not in presence_map:
+                    fj.append(f"    {{")
+                    fj.append(f"        auto result = fromJson<{ref_name}>(val);")
+                    fj.append(f"        if (result) co_return {union_alias}(*result);")
+                    fj.append(f"    }}")
+        else:
+            for ref_name in ref_names:
+                fj.append(f"    {{")
+                fj.append(f"        auto result = fromJson<{ref_name}>(val);")
+                fj.append(f"        if (result) co_return {union_alias}(*result);")
+                fj.append(f"    }}")
+        fj.append(f'    co_return Utils::ResultError("Invalid {union_alias}");')
+    fj.append("}")
+    union_lines.extend(use_return_if_no_co_await(fj))
+    union_lines.extend(_toJsonValue_visit_lines(union_alias))
+    return union_lines
+
+def _collect_sub_struct_output(sub_code, short_name, parent_name,
+                               child_preamble_blocks, child_struct_inserts, child_serial_blocks):
+    """Split parse_struct() output and distribute it into the caller's collection lists.
+
+    Handles indentation of the struct definition and qualification of serializer names.
+    """
+    pre, struct_def, serials = _split_parse_struct_output(sub_code, short_name)
+    if pre.strip():
+        child_preamble_blocks.append(pre)
+    if struct_def:
+        indented = '\n'.join(('    ' + l) if l.strip() else l
+                              for l in struct_def.rstrip('\n').split('\n')) + '\n'
+        child_struct_inserts.append(indented)
+    if serials.strip():
+        child_serial_blocks.append(
+            _qualify_serializers(serials, short_name, f"{parent_name}::{short_name}")
+        )
 
 def collect_refs_in_spec(spec):
     """Recursively collect all $ref type names from a schema spec (incl. nested inline objects)."""
@@ -1474,7 +1474,7 @@ def get_type_deps(type_spec):
     return collect_refs_in_spec(type_spec)
 
 def topo_sort_types(types):
-    from collections import defaultdict, deque
+    from collections import defaultdict
     graph = defaultdict(set)
     for name, spec in types.items():
         graph[name] = get_type_deps(spec)
@@ -1484,7 +1484,7 @@ def topo_sort_types(types):
         if n in visited:
             return
         visited.add(n)
-        for dep in graph[n]:
+        for dep in sorted(graph[n]):
             if dep in types:
                 visit(dep)
         order.append(n)
@@ -1595,7 +1595,6 @@ def main():
         elif "properties" in spec:
             code.append(parse_struct(name, spec["properties"], types, spec.get("required", []), spec.get("description", ""), nested_children=nested_ch, children_of=children_of))
     code.append(make_footer(namespace))
-    import re
     output = "\n".join(code)
     # Normalise: collapse any run of 3+ consecutive newlines to exactly two
     # (= one blank line), but preserve the leading copyright/pragma block.
