@@ -79,7 +79,7 @@ def __checkKits__():
                                            qmakePathsInPath)
     qmakePaths = map(os.path.dirname, qmakePaths)
     if platform.system() in ("Microsoft", "Windows"):
-        qmakePaths = map(qmakePaths, str.lower)
+        qmakePaths = map(str.lower, list(qmakePaths))
     qmakePaths = list(qmakePaths)
     foundQt = []
     expectDialog = hasUnsavedSettings()
