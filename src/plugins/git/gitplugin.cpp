@@ -673,7 +673,7 @@ GitPluginPrivate::GitPluginPrivate()
                      "Git.UndoUnstaged", context,
                      true, std::bind(&GitPluginPrivate::undoFileChanges, this, false));
 
-    createFileAction(currentFileMenu, Tr::tr("Undo Uncommitted Changes"), Tr::tr("Undo Uncommitted Changes for \"%1\""),
+    createFileAction(currentFileMenu, Tr::tr("Undo All Changes"), Tr::tr("Undo All Changes for \"%1\""),
                      "Git.Undo", context,
                      true, std::bind(&GitPluginPrivate::undoFileChanges, this, true),
                      QKeySequence(useMacShortcuts ? Tr::tr("Meta+G,Meta+U") : Tr::tr("Alt+G,Alt+U")));

@@ -623,7 +623,7 @@
     and select \uicontrol {Undo Unstaged Changes for <file>}.
 
     To return the current file to the state it was in right after the last
-    commit, select \uicontrol {Undo Uncommitted Changes for <file>}. This reverts
+    commit, select \uicontrol {Undo All Changes for <file>}. This reverts
     all changes, discarding the index.
 
     \section1 Reset changes in the local repository
