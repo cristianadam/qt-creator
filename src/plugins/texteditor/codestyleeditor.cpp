@@ -75,7 +75,7 @@ SnippetEditorWidget *CodeStyleEditor::createPreviewWidget(
     QWidget *parent) const
 {
     auto preview = new SnippetEditorWidget{parent};
-    DisplaySettings displaySettings = preview->displaySettings();
+    DisplaySettingsData displaySettings = preview->displaySettings();
     displaySettings.m_visualizeWhitespace = true;
     preview->setDisplaySettings(displaySettings);
     const QString groupId = snippetProviderGroupId();

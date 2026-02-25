@@ -55,7 +55,7 @@ public:
 
     void setFolded(int blockNumber, bool folded);
 
-    void setDisplaySettings(const DisplaySettings &displaySettings) override;
+    void setDisplaySettings(const DisplaySettingsData &displaySettings) override;
 
     SideDiffData diffData() const { return m_data; }
     void setDiffData(const SideDiffData &data) { m_data = data; }
@@ -165,7 +165,7 @@ void SideDiffEditorWidget::setFolded(int blockNumber, bool folded)
     documentLayout->emitDocumentSizeChanged();
 }
 
-void SideDiffEditorWidget::setDisplaySettings(const DisplaySettings &displaySettings)
+void SideDiffEditorWidget::setDisplaySettings(const DisplaySettingsData &displaySettings)
 {
     SelectableTextEditorWidget::setDisplaySettings(displaySettings);
     emit gotDisplaySettings();

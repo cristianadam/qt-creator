@@ -229,7 +229,7 @@ void QmlJSCodeStylePreferencesWidget::decorateEditor(const FontSettings &fontSet
 
 void QmlJSCodeStylePreferencesWidget::setVisualizeWhitespace(bool on)
 {
-    DisplaySettings displaySettings = m_previewTextEdit->displaySettings();
+    DisplaySettingsData displaySettings = m_previewTextEdit->displaySettings();
     displaySettings.m_visualizeWhitespace = on;
     m_previewTextEdit->setDisplaySettings(displaySettings);
 }

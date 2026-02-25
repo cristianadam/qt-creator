@@ -32,8 +32,9 @@ SelectableTextEditorWidget::SelectableTextEditorWidget(Utils::Id id, QWidget *pa
 
     setReadOnly(true);
 
-    connect(TextEditorSettings::instance(), &TextEditorSettings::displaySettingsChanged,
-            this, &SelectableTextEditorWidget::setDisplaySettings);
+    connect(&TextEditor::displaySettings(), &DisplaySettings::changed, this, [this](){
+        setDisplaySettings(TextEditor::displaySettings().data());
+    });
     SelectableTextEditorWidget::setDisplaySettings(displaySettings());
 
     textDocument()->setCodeStyle(TextEditorSettings::codeStyle());
@@ -47,9 +48,9 @@ void SelectableTextEditorWidget::setSelections(const DiffSelections &selections)
     m_diffSelections = selections;
 }
 
-void SelectableTextEditorWidget::setDisplaySettings(const DisplaySettings &displaySettings)
+void SelectableTextEditorWidget::setDisplaySettings(const DisplaySettingsData &displaySettings)
 {
-    DisplaySettings settings = displaySettings;
+    DisplaySettingsData settings = displaySettings;
     settings.m_textWrapping = false;
     settings.m_displayLineNumbers = true;
     settings.m_markTextChanges = false;

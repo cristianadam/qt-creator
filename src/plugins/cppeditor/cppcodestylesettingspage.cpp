@@ -607,7 +607,7 @@ void CppCodeStylePreferencesWidget::decorateEditors(const FontSettings &fontSett
 void CppCodeStylePreferencesWidget::setVisualizeWhitespace(bool on)
 {
     for (SnippetEditorWidget *editor : std::as_const(d->m_previews)) {
-        DisplaySettings displaySettings = editor->displaySettings();
+        DisplaySettingsData displaySettings = editor->displaySettings();
         displaySettings.m_visualizeWhitespace = on;
         editor->setDisplaySettings(displaySettings);
     }

@@ -946,7 +946,7 @@ public:
     QWidget *m_extraArea = nullptr;
 
     Id m_tabSettingsId;
-    DisplaySettings m_displaySettings;
+    DisplaySettingsData m_displaySettings;
     bool m_annotationsrRight = true;
     MarginSettingsData m_marginSettings;
     // apply when making visible the first time, for the split case
@@ -1349,8 +1349,9 @@ TextEditorWidgetPrivate::TextEditorWidgetPrivate(TextEditorWidget *parent)
             q, &TextEditorWidget::setBehaviorSettings);
     connect(settings, &TextEditorSettings::marginSettingsChanged,
             q, &TextEditorWidget::setMarginSettings);
-    connect(settings, &TextEditorSettings::displaySettingsChanged,
-            q, &TextEditorWidget::setDisplaySettings);
+    connect(&TextEditor::displaySettings(), &DisplaySettings::changed, this, [this](){
+        q->setDisplaySettings(TextEditor::displaySettings().data());
+    });
     connect(settings, &TextEditorSettings::completionSettingsChanged,
             q, &TextEditorWidget::setCompletionSettings);
     connect(settings, &TextEditorSettings::extraEncodingSettingsChanged,
@@ -1674,7 +1675,7 @@ void TextEditorWidgetPrivate::setDocument(const QSharedPointer<TextDocument> &do
     q->setStorageSettings(globalStorageSettings().data());
     q->setBehaviorSettings(globalBehaviorSettings().data());
     q->setMarginSettings(marginSettings().data());
-    q->setDisplaySettings(displaySettings());
+    q->setDisplaySettings(displaySettings().data());
     q->setCompletionSettings(completionSettings());
     q->setExtraEncodingSettings(globalExtraEncodingSettings().data());
     q->textDocument()->setCodeStyle(TextEditorSettings::codeStyle(m_tabSettingsId));
@@ -3576,7 +3577,7 @@ void TextEditorWidget::gotoLine(int line, int column, bool centerLine, bool anim
             cursor.setPosition(pos);
         }
 
-        const DisplaySettings &ds = d->m_displaySettings;
+        const DisplaySettingsData &ds = d->m_displaySettings;
         if (animate && ds.m_animateNavigationWithinFile) {
             QScrollBar *scrollBar = verticalScrollBar();
             const int start = scrollBar->value();
@@ -4538,7 +4539,7 @@ void TextEditorWidgetPrivate::registerActions()
                                       .addOnToggled(
                                           this,
                                           [this](bool checked) {
-                                              DisplaySettings ds = q->displaySettings();
+                                              DisplaySettingsData ds = q->displaySettings();
                                               ds.m_visualizeWhitespace = checked;
                                               q->setDisplaySettings(ds);
                                           })
@@ -4554,7 +4555,7 @@ void TextEditorWidgetPrivate::registerActions()
                                .addOnToggled(
                                    this,
                                    [this](bool checked) {
-                                       DisplaySettings ds = q->displaySettings();
+                                       DisplaySettingsData ds = q->displaySettings();
                                        ds.m_textWrapping = checked;
                                        q->setDisplaySettings(ds);
                                    })
@@ -7951,7 +7952,7 @@ Id TextEditorWidget::languageSettingsId() const
     return d->m_tabSettingsId;
 }
 
-const DisplaySettings &TextEditorWidget::displaySettings() const
+const DisplaySettingsData &TextEditorWidget::displaySettings() const
 {
     return d->m_displaySettings;
 }
@@ -9393,7 +9394,7 @@ void TextEditorWidget::applyFontSettings()
     d->updateHighlights();
 }
 
-void TextEditorWidget::setDisplaySettings(const DisplaySettings &ds)
+void TextEditorWidget::setDisplaySettings(const DisplaySettingsData &ds)
 {
     const TextEditor::FontSettings &fs = TextEditorSettings::fontSettings();
     if (fs.relativeLineSpacing() == 100)

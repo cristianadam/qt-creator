@@ -5,8 +5,6 @@
 
 #include <texteditor/texteditor.h>
 
-namespace TextEditor { class DisplaySettings; }
-
 namespace DiffEditor::Internal {
 
 class DiffSelection
@@ -30,7 +28,7 @@ public:
     ~SelectableTextEditorWidget() override;
     void setSelections(const DiffSelections &selections);
 
-    void setDisplaySettings(const TextEditor::DisplaySettings &displaySettings) override;
+    void setDisplaySettings(const TextEditor::DisplaySettingsData &displaySettings) override;
 
     static DiffSelections polishedSelections(const DiffSelections &selections);
     static void setFoldingIndent(const QTextBlock &block, int indent);

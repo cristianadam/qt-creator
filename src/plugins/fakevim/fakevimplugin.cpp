@@ -234,8 +234,7 @@ public:
                 &m_timerUpdate, start);
         connect(m_editor->document(), &QTextDocument::contentsChanged,
                 &m_timerUpdate, start);
-        connect(TextEditorSettings::instance(), &TextEditorSettings::displaySettingsChanged,
-                &m_timerUpdate, start);
+        connect(&TextEditor::displaySettings(), &DisplaySettings::changed, &m_timerUpdate, start);
         connect(TextEditorSettings::instance(), &TextEditorSettings::fontSettingsChanged,
                 this, &RelativeNumbersColumn::followEditorLayout);
         connect(m_documentLayout, &QAbstractTextDocumentLayout::documentSizeChanged,
