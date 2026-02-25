@@ -631,6 +631,9 @@ void ExternalToolRunner::run()
     // force Qt to log to std streams, if it's not explicitly been set differently
     if (!env.hasKey("QT_LOGGING_TO_CONSOLE"))
         env.set("QT_LOGGING_TO_CONSOLE", "1");
+    if (!env.hasKey("QT_FORCE_STDERR_LOGGING"))
+        env.set("QT_FORCE_STDERR_LOGGING", "1");
+
     m_process->setEnvironment(env);
     const auto write = m_tool->outputHandling() == ExternalTool::ShowInPane
                            ? QOverload<const QString &>::of(MessageManager::writeDisrupting)

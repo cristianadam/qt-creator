@@ -319,8 +319,10 @@ Result<> DebuggerRunParameters::fixupParameters(ProjectExplorer::RunControl *run
     if (isNativeMixedDebugging())
         m_inferior.environment.set("QV4_FORCE_INTERPRETER", "1");
 
-    if (settings().forceLoggingToConsole())
+    if (settings().forceLoggingToConsole()) {
+        m_inferior.environment.set("QT_FORCE_STDERR_LOGGING", "1");
         m_inferior.environment.set("QT_LOGGING_TO_CONSOLE", "1");
+    }
 
     return ResultOk;
 }
