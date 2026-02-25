@@ -15,6 +15,7 @@ Project {
         "gocmdbridge/gocmdbridge.qbs",
         "languageserverprotocol/languageserverprotocol.qbs",
         "languageutils/languageutils.qbs",
+        "mcp/mcp.qbs",
         "modelinglib/modelinglib.qbs",
         "nanotrace/nanotrace.qbs",
         "qmleditorwidgets/qmleditorwidgets.qbs",
