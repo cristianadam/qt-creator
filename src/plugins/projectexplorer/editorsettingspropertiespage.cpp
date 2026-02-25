@@ -106,7 +106,7 @@ void EditorSettingsWidget::settingsToUi(const EditorConfiguration *config)
     m_behaviorSettings->setAssignedEncoding(config->textEncoding());
     m_behaviorSettings->setAssignedTypingSettings(config->typingSettings());
     m_behaviorSettings->setAssignedStorageSettings(config->storageSettings.data());
-    m_behaviorSettings->setAssignedExtraEncodingSettings(config->extraEncodingSettings());
+    m_behaviorSettings->setAssignedExtraEncodingSettings(config->extraEncodingSettings.data());
 }
 
 void EditorSettingsWidget::globalSettingsActivated(bool useGlobal)

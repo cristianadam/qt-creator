@@ -75,7 +75,7 @@ class PlainTextEditorFactory;
 class BehaviorSettingsData;
 class CompletionSettings;
 class DisplaySettings;
-class ExtraEncodingSettings;
+class ExtraEncodingSettingsData;
 class FontSettings;
 class MarginSettingsData;
 class StorageSettingsData;
@@ -379,7 +379,7 @@ public:
     void setTypingSettings(const TextEditor::TypingSettings &);
     void setStorageSettings(const TextEditor::StorageSettingsData &);
     void setCompletionSettings(const TextEditor::CompletionSettings &);
-    void setExtraEncodingSettings(const TextEditor::ExtraEncodingSettings &);
+    void setExtraEncodingSettings(const TextEditor::ExtraEncodingSettingsData &);
 
     void circularPaste();
     void pasteWithoutFormat();

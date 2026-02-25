@@ -29,7 +29,7 @@ QT_END_NAMESPACE
 namespace TextEditor {
 
 class CompletionAssistProvider;
-class ExtraEncodingSettings;
+class ExtraEncodingSettingsData;
 class FontSettings;
 class IAssistProvider;
 class StorageSettingsData;
@@ -63,12 +63,12 @@ public:
 
     void setTypingSettings(const TypingSettings &typingSettings);
     void setStorageSettings(const StorageSettingsData &storageSettings);
-    void setExtraEncodingSettings(const ExtraEncodingSettings &extraEncodingSettings);
+    void setExtraEncodingSettings(const ExtraEncodingSettingsData &extraEncodingSettings);
 
     const TypingSettings &typingSettings() const;
     const StorageSettingsData &storageSettings() const;
     virtual TabSettings tabSettings() const;
-    const ExtraEncodingSettings &extraEncodingSettings() const;
+    const ExtraEncodingSettingsData &extraEncodingSettings() const;
     const FontSettings &fontSettings() const;
 
     void setIndenter(Indenter *indenter);

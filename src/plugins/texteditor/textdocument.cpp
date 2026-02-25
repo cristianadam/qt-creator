@@ -78,7 +78,7 @@ public:
     StorageSettingsData m_storageSettings;
     ICodeStylePreferences *m_codeStylePreferences = nullptr;
     TabSettings m_tabSettings;
-    ExtraEncodingSettings m_extraEncodingSettings;
+    ExtraEncodingSettingsData m_extraEncodingSettings;
     FontSettings m_fontSettings;
     bool m_fontSettingsNeedsApply = false; // for applying font settings delayed till an editor becomes visible
     QTextDocument m_document;
@@ -499,7 +499,7 @@ const FontSettings &TextDocument::fontSettings() const
     return d->m_fontSettings;
 }
 
-void TextDocument::setExtraEncodingSettings(const ExtraEncodingSettings &extraEncodingSettings)
+void TextDocument::setExtraEncodingSettings(const ExtraEncodingSettingsData &extraEncodingSettings)
 {
     d->m_extraEncodingSettings = extraEncodingSettings;
 }
@@ -566,7 +566,7 @@ bool TextDocument::applyChangeSet(const ChangeSet &changeSet)
     return PlainRefactoringFileFactory().file(filePath())->apply(changeSet);
 }
 
-const ExtraEncodingSettings &TextDocument::extraEncodingSettings() const
+const ExtraEncodingSettingsData &TextDocument::extraEncodingSettings() const
 {
     return d->m_extraEncodingSettings;
 }
@@ -664,12 +664,12 @@ Result<> TextDocument::saveImpl(const FilePath &filePath, SaveOption option)
     TextFileFormat saveFormat = format();
     if (saveFormat.encoding().isUtf8() && supportsUtf8Bom()) {
         switch (d->m_extraEncodingSettings.m_utf8BomSetting) {
-        case ExtraEncodingSettings::AlwaysAdd:
+        case ExtraEncodingSettingsData::AlwaysAdd:
             saveFormat.hasUtf8Bom = true;
             break;
-        case ExtraEncodingSettings::OnlyKeep:
+        case ExtraEncodingSettingsData::OnlyKeep:
             break;
-        case ExtraEncodingSettings::AlwaysDelete:
+        case ExtraEncodingSettingsData::AlwaysDelete:
             saveFormat.hasUtf8Bom = false;
             break;
         }
