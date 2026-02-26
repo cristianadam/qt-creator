@@ -15,6 +15,65 @@ namespace Schema = Generated::Schema::_2025_11_25;
 
 class ServerPrivate;
 
+struct ClientRequests
+{
+    using ElicitResultCallback = std::function<void(const Utils::Result<Schema::ElicitResult> &)>;
+    using Elicit
+        = std::function<void(const Schema::ElicitRequestParams &, const ElicitResultCallback &)>;
+
+    using SampleResultCallback
+        = std::function<void(const Utils::Result<Schema::CreateMessageResult> &)>;
+    using Sample = std::function<
+        void(const Schema::CreateMessageRequestParams &, const SampleResultCallback &)>;
+
+    using Notify = std::function<void(const Schema::ServerNotification &)>;
+
+    Elicit elicit;
+    Sample sample;
+    Notify notify;
+};
+
+struct ToolInterface
+{
+    using UpdateTaskCallback = std::function<void(Schema::Task &)>;
+    using TaskResultCallback = std::function<Utils::Result<Schema::CallToolResult>()>;
+    using CancelTaskCallback = std::function<void()>;
+
+    using Finish = std::function<void(const Utils::Result<Schema::CallToolResult> &)>;
+
+    using StartTask = std::function<void(
+        int pollingIntervalMs,
+        UpdateTaskCallback onUpdateTask,
+        TaskResultCallback onResultCallback,
+        std::optional<CancelTaskCallback> onCancelTaskCallback,
+        std::optional<int> ttl)>;
+
+    ClientRequests clientRequests;
+
+    // Send the result via the responder and close the connection.
+    Finish finish;
+
+    // Upgrade the connection to a long-running task. The responder will send a CreateTaskResult to the client and close the connection.
+    StartTask startTask;
+};
+
+/*
+
+ call tool => send reponse
+ call tool =>                                   send response
+        => sendNotification ... => sendNotification ...
+
+call tool => create task => send task response
+ update task => send reponse (progress)
+ update task => send response (done)
+ get task payload => send response (data from task)
+
+call tool => create task => send task response
+ update task => send reponse (progress)
+ cancel task => send response (canceled)
+
+*/
+
 class MCPSERVER_EXPORT Server
 {
 public:
@@ -32,33 +91,18 @@ public:
         std::function<void(QByteArray)> outputHandler);
 
     // Notifications
-    void sendNotification(const Schema::ServerNotification &notification);
+    void sendNotification(
+        const Schema::ServerNotification &notification, const QString &sessionId = {});
 
     // Tools
+
+    using ToolInterfaceCallback = std::function<
+        Utils::Result<>(const Schema::CallToolRequestParams &, const ToolInterface &)>;
+    void addTool(const Schema::Tool &tool, const ToolInterfaceCallback &callback);
+
     using ToolCallback
-        = std::function<Utils::Result<Schema::CallToolResult>(Schema::CallToolRequestParams)>;
+        = std::function<Utils::Result<Schema::CallToolResult>(const Schema::CallToolRequestParams &)>;
     void addTool(const Schema::Tool &tool, const ToolCallback &callback);
-
-    using AsyncToolResultCallback = std::function<void(Utils::Result<Schema::CallToolResult>)>;
-    using AsyncToolCallback
-        = std::function<void(const Schema::CallToolRequestParams &, const AsyncToolResultCallback &)>;
-    void addTool(const Schema::Tool &tool, const AsyncToolCallback &callback);
-
-    using UpdateTaskCallback = std::function<void(Schema::Task &)>;
-    using TaskResultCallback = std::function<Utils::Result<Schema::CallToolResult>()>;
-    using CancelTaskCallback = std::function<void()>;
-
-    struct TaskCallbacks
-    {
-        UpdateTaskCallback updateTask;
-        TaskResultCallback result;
-        std::optional<CancelTaskCallback> cancelTask;
-        int pollingIntervalMs{1000};
-    };
-
-    using TaskToolCallback
-        = std::function<Utils::Result<TaskCallbacks>(const Schema::CallToolRequestParams &)>;
-    void addTool(const Schema::Tool &tool, const TaskToolCallback &callback);
 
     void removeTool(const QString &toolName);
 
@@ -71,8 +115,8 @@ public:
     void removePrompt(const QString &promptName);
 
     // Resources
-    using ResourceCallback
-        = std::function<Utils::Result<Schema::ReadResourceResult>(Schema::ReadResourceRequestParams)>;
+    using ResourceCallback = std::function<Utils::Result<Schema::ReadResourceResult>(
+        const Schema::ReadResourceRequestParams &)>;
 
     void addResource(const Schema::Resource &resource, const ResourceCallback &callback);
     void removeResource(const QString &uri);
@@ -87,7 +131,7 @@ public:
     void setCompletionCallback(const CompletionCallback &callback);
 
 private:
-    std::unique_ptr<ServerPrivate> d;
+    std::shared_ptr<ServerPrivate> d;
 };
 
 } // namespace Mcp

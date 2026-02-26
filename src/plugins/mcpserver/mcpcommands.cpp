@@ -1165,13 +1165,14 @@ void McpCommands::registerCommands(Mcp::Server &server)
     using Callback = std::function<void(const QJsonObject &response)>;
     using SimplifiedAsyncCallback = std::function<void(const QJsonObject &, const Callback &)>;
     static const auto wrapAsync =
-        [](SimplifiedAsyncCallback asyncFunc) -> Mcp::Server::AsyncToolCallback {
+        [](SimplifiedAsyncCallback asyncFunc) -> Mcp::Server::ToolInterfaceCallback {
         return [asyncFunc](
-                   const CallToolRequestParams &params,
-                   const Mcp::Server::AsyncToolResultCallback &callback) {
-            asyncFunc(params.argumentsAsObject(), [callback](QJsonObject result) {
-                callback(CallToolResult{}.isError(false).structuredContent(result));
+                   const Schema::CallToolRequestParams &params,
+                   const ToolInterface &toolInterface) -> Utils::Result<> {
+            asyncFunc(params.argumentsAsObject(), [toolInterface](QJsonObject result) {
+                toolInterface.finish(CallToolResult{}.isError(false).structuredContent(result));
             });
+            return ResultOk;
         };
     };
 
@@ -1193,7 +1194,8 @@ void McpCommands::registerCommands(Mcp::Server &server)
                     .idempotentHint(true)
                     .openWorldHint(false)
                     .readOnlyHint(false)),
-        [](const Mcp::Schema::CallToolRequestParams &params) -> Utils::Result<Server::TaskCallbacks> {
+        [](const Schema::CallToolRequestParams &params,
+           const ToolInterface &toolInterface) -> Utils::Result<> {
             const QString projectName = params.arguments()->value("projectName").toString();
 
             QList<Project *> projects{ProjectManager::startupProject()};
@@ -1209,7 +1211,8 @@ void McpCommands::registerCommands(Mcp::Server &server)
 
             std::shared_ptr<bool> wasCancelled = std::make_shared<bool>(false);
 
-            Server::TaskCallbacks callbacks{
+            toolInterface.startTask(
+                1000,
                 [](Schema::Task &task) {
                     auto progress = BuildManager::currentProgress();
                     if (!progress) {
@@ -1224,9 +1227,10 @@ void McpCommands::registerCommands(Mcp::Server &server)
                     auto issues = commands.listIssues();
                     return CallToolResult{}.structuredContent(issues).isError(false);
                 },
-                []() { BuildManager::cancel(); }};
+                []() { BuildManager::cancel(); },
+                std::nullopt);
 
-            return callbacks;
+            return ResultOk;
         });
 
     server.addTool(

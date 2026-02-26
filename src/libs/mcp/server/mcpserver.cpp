@@ -51,12 +51,15 @@ enum ErrorCodes {
     UnknownErrorCode = -32001,
 };
 
-struct SseStream
+class SseStream : public QObject
 {
+public:
     QHttpServerResponder responder;
+    const QString sessionId;
 
     SseStream(QHttpHeaders headers, QHttpServerResponder &&_responder)
         : responder(std::move(_responder))
+        , sessionId(QString::fromUtf8(headers.value("mcp-session-id")))
     {
         headers.append("Content-type", "text/event-stream");
 
@@ -67,10 +70,13 @@ struct SseStream
 
     ~SseStream() { responder.writeEndChunked({"\n\n"}); }
 
-    bool notify(const QByteArray &data)
+    bool sendData(const QByteArray &data, const QString &sId)
     {
         if (responder.isResponseCanceled())
             return false;
+
+        if (!sId.isEmpty() && sessionId != sId)
+            return true; // Not for this stream
 
         QByteArray event = "data: " + data + "\n\n";
         responder.writeChunk(event);
@@ -80,13 +86,12 @@ struct SseStream
 
 static QJsonObject makeResponse(Schema::RequestId id, const Schema::ServerResult &result)
 {
-    QJsonObject json = Schema::toJson(Schema::JSONRPCResultResponse().id(id));
-    json["result"]
-        = std::visit([](const auto &v) -> QJsonObject { return Schema::toJson(v); }, result);
-    return json;
+    return Schema::toJson(
+        Schema::JSONRPCResultResponse().id(id).result(
+            Schema::Result().additionalProperties(Schema::toJson(result))));
 };
 
-class ServerPrivate
+class ServerPrivate : public std::enable_shared_from_this<ServerPrivate>
 {
     Schema::Implementation serverInfo;
 
@@ -107,7 +112,7 @@ public:
         std::shared_ptr<QHttpServerResponder> httpResponder;
     };
 
-    QHttpHeaders corsHeaders(QUuid sessionId) const
+    QHttpHeaders corsHeaders(const QString &sessionId) const
     {
         QHttpHeaders headers;
 
@@ -123,7 +128,7 @@ public:
         }
 
         if (!sessionId.isNull())
-            headers.append("mcp-session-id", sessionId.toString().toUtf8());
+            headers.append("mcp-session-id", sessionId.toUtf8());
 
         return headers;
     }
@@ -150,11 +155,51 @@ public:
         return {};
     }
 
+    void sendNotification(const Schema::ServerNotification &notification, const QString &sessionId)
+    {
+        auto data = QJsonDocument(toJson(notification)).toJson(QJsonDocument::Compact);
+
+        if (m_ioOutputHandler) {
+            m_ioOutputHandler(data);
+        }
+
+        for (auto it = m_sseStreams.begin(); it != m_sseStreams.end();) {
+            if (!(*it)->sendData(data, sessionId))
+                it = m_sseStreams.erase(it);
+            else
+                ++it;
+        }
+    }
+
+    void sendServerRequest(
+        Schema::ServerRequest request,
+        const QString &sessionId,
+        std::function<void(Schema::JSONRPCResponse)> onResponse = {})
+    {
+        const int requestId = m_serverRequests.isEmpty() ? 1 : (m_serverRequests.lastKey() + 1);
+        std::visit([requestId](auto &r) { r.id(requestId); }, request);
+
+        m_serverRequests[requestId] = onResponse;
+
+        auto data = QJsonDocument(toJson(request)).toJson(QJsonDocument::Compact);
+
+        if (m_ioOutputHandler) {
+            m_ioOutputHandler(data);
+        }
+
+        for (auto it = m_sseStreams.begin(); it != m_sseStreams.end();) {
+            if (!(*it)->sendData(data, sessionId))
+                it = m_sseStreams.erase(it);
+            else
+                ++it;
+        }
+    }
+
     void onRequest(
         Schema::RequestId id,
         const Schema::ClientRequest &request,
         const Responder &responder,
-        QUuid sessionId)
+        QString sessionId)
     {
         qCDebug(mcpServerLog) << "Received JSONRPCRequest:" << Schema::dispatchValue(request);
 
@@ -178,7 +223,7 @@ public:
         }
 
         if (std::holds_alternative<Schema::CallToolRequest>(request)) {
-            onToolCall(id, std::get<Schema::CallToolRequest>(request), responder);
+            onToolCall(id, std::get<Schema::CallToolRequest>(request), responder, sessionId);
             return;
         } else if (std::holds_alternative<Schema::ListToolsRequest>(request)) {
             onToolsList(id, std::get<Schema::ListToolsRequest>(request), responder);
@@ -236,7 +281,7 @@ public:
         Schema::RequestId id,
         const Schema::InitializeRequest &request,
         const Responder &responder,
-        const QUuid &sessionId)
+        const QString &sessionId)
     {
         if (request._params._protocolVersion != "2025-11-25") {
             auto errorResponse = Schema::JSONRPCErrorResponse().id(id).error(
@@ -463,7 +508,10 @@ public:
     }
 
     void onToolCall(
-        Schema::RequestId id, const Schema::CallToolRequest &request, const Responder &responder)
+        Schema::RequestId id,
+        const Schema::CallToolRequest &request,
+        const Responder &responder,
+        const QString sessionId)
     {
         auto toolIt = m_tools.find(request._params._name);
 
@@ -482,6 +530,195 @@ public:
         }
 
         qCDebug(mcpServerLog) << "Running tool" << toolIt.key();
+
+        if (std::holds_alternative<Server::ToolInterfaceCallback>(toolIt->callback)) {
+            const auto cb = std::get<Server::ToolInterfaceCallback>(toolIt->callback);
+
+            std::weak_ptr<ServerPrivate> weak = shared_from_this();
+
+            ToolInterface toolInterface;
+            struct State
+            {
+                bool isTask = false;
+                bool isFinished = false;
+            };
+
+            auto state = std::make_shared<State>();
+
+            toolInterface.clientRequests.notify =
+                [sessionId, weak](const Schema::ServerNotification &notification) {
+                    if (auto d = weak.lock()) {
+                        d->sendNotification(notification, sessionId);
+                    }
+                };
+
+            toolInterface.clientRequests.elicit = [sessionId, weak](
+                                                      const Schema::ElicitRequestParams &params,
+                                                      const ClientRequests::ElicitResultCallback &cb) {
+                const bool wantsTask
+                    = std::visit([](const auto &p) -> bool { return p.task().has_value(); }, params);
+                if (wantsTask) {
+                    qCWarning(mcpServerLog) << "Caller attempted to elicit with task parameters, "
+                                               "which is not yet supported";
+                    cb(Utils::ResultError("Elicit does not support tasks"));
+                    return;
+                }
+
+                if (auto d = weak.lock()) {
+                    d->sendServerRequest(
+                        Schema::ElicitRequest().params(params),
+                        sessionId,
+                        [cb](const Schema::JSONRPCResponse &response) {
+                            Utils::Result<Schema::ElicitResult> r;
+
+                            if (std::holds_alternative<Schema::JSONRPCResultResponse>(response)) {
+                                const auto &jsonRpcResult = std::get<Schema::JSONRPCResultResponse>(
+                                    response);
+
+                                auto elicitResult = Schema::fromJson<Schema::ElicitResult>(
+                                    jsonRpcResult.result().additionalProperties());
+
+                                if (!elicitResult) {
+                                    qCWarning(mcpServerLog)
+                                        << "Failed to parse elicit result from client:"
+                                        << elicitResult.error();
+                                    cb(Utils::ResultError(
+                                        "Failed to parse elicit result from client: "
+                                        + elicitResult.error()));
+                                    return;
+                                }
+
+                                qCDebug(mcpServerLog) << "Received elicit result from client:"
+                                                      << Schema::toJson(jsonRpcResult.result());
+
+                                cb(Utils::Result<Schema::ElicitResult>(elicitResult));
+                                return;
+                            }
+
+                            const auto &error = std::get<Schema::JSONRPCErrorResponse>(response);
+                            qCWarning(mcpServerLog) << "Received elicit error from client:"
+                                                    << Schema::toJson(error.error());
+                            r = Utils::ResultError("Client error: " + error.error().message());
+                            cb(Utils::ResultError("Client error: " + error.error().message()));
+                        });
+                }
+            };
+
+            toolInterface.clientRequests.sample = [sessionId, weak](const Schema::CreateMessageRequestParams &params,
+                                                     const ClientRequests::SampleResultCallback &cb) {
+                const bool wantsTask = params.task().has_value();
+                if (wantsTask) {
+                    qCWarning(mcpServerLog) << "Caller attempted to elicit with task parameters, "
+                                               "which is not yet supported";
+                    cb(Utils::ResultError("Elicit does not support tasks"));
+                    return;
+                }
+
+                if (auto d = weak.lock()) {
+                    d->sendServerRequest(
+                        Schema::CreateMessageRequest().params(params),
+                        sessionId, // sessionId is not needed for samples as they are one-off and not associated with a task
+                        [cb](const Schema::JSONRPCResponse &response) {
+                            Utils::Result<Schema::CreateMessageResult> r;
+
+                            if (std::holds_alternative<Schema::JSONRPCResultResponse>(response)) {
+                                const auto &jsonRpcResult = std::get<Schema::JSONRPCResultResponse>(
+                                    response);
+
+                                auto createMessageResult =
+                                    Schema::fromJson<Schema::CreateMessageResult>(
+                                        jsonRpcResult.result().additionalProperties());
+
+                                if (!createMessageResult) {
+                                    qCWarning(mcpServerLog)
+                                        << "Failed to parse sample result from client:"
+                                        << createMessageResult.error();
+                                    cb(Utils::ResultError(
+                                        "Failed to parse sample result from client: "
+                                        + createMessageResult.error()));
+                                    return;
+                                }
+
+                                qCDebug(mcpServerLog) << "Received sample result from client:"
+                                                      << Schema::toJson(jsonRpcResult.result());
+
+                                cb(Utils::Result<Schema::CreateMessageResult>(createMessageResult));
+                                return;
+                            }
+
+                            const auto &error = std::get<Schema::JSONRPCErrorResponse>(response);
+                            qCWarning(mcpServerLog) << "Received sample error from client:"
+                                                    << Schema::toJson(error.error());
+                            r = Utils::ResultError("Client error: " + error.error().message());
+                            cb(Utils::ResultError("Client error: " + error.error().message()));
+                        });
+                }
+            };
+
+            toolInterface.finish = [state, responder, id](
+                                       const Utils::Result<Schema::CallToolResult> &result) {
+                if (state->isFinished || state->isTask) {
+                    qCWarning(mcpServerLog)
+                        << "Attempted to finish a tool that is already finished or started a task";
+                    return;
+                }
+
+                if (!result) {
+                    responder.write(QJsonDocument(makeResponse(
+                        id,
+                        Schema::CallToolResult().isError(true).content(
+                            {Schema::TextContent().text(result.error())}))));
+                    return;
+                }
+
+                responder.write(QJsonDocument(makeResponse(id, *result)));
+            };
+
+            toolInterface.startTask = [state, responder, weak, id](
+                                          int pollingIntervalMs,
+                                          auto onUpdateTask,
+                                          auto onResultCallback,
+                                          auto onCancelTaskCallback,
+                                          std::optional<int> ttl) {
+                if (state->isFinished || state->isTask) {
+                    qCWarning(mcpServerLog)
+                        << "Attempted to finish a tool that is already finished or started a task";
+                    return;
+                }
+
+                if (auto d = weak.lock()) {
+                    auto taskId = QUuid::createUuid().toString();
+                    auto task = Schema::Task()
+                                    .taskId(taskId)
+                                    .ttl(ttl)
+                                    .status(Schema::TaskStatus::working)
+                                    .pollInterval(pollingIntervalMs)
+                                    .createdAt(QDateTime::currentDateTime().toString())
+                                    .lastUpdatedAt(QDateTime::currentDateTime().toString());
+
+                    d->m_tasks.insert(
+                        taskId,
+                        TaskAndCallbacks{
+                            task, {onUpdateTask, onResultCallback, onCancelTaskCallback}});
+
+                    QJsonObject json = Schema::toJson(
+                        Schema::JSONRPCResultResponse().id(id).result(
+                            Schema::Result().additionalProperties(
+                                Schema::toJson(Schema::CreateTaskResult().task(task)))));
+
+                    responder.write(QJsonDocument(json));
+                }
+            };
+
+            auto r = cb(request.params(), toolInterface);
+            if (!r) {
+                responder.write(QJsonDocument(makeResponse(
+                    id,
+                    Schema::CallToolResult().isError(true).content(
+                        {Schema::TextContent().text(r.error())}))));
+            }
+            return;
+        }
 
         if (std::holds_alternative<Server::ToolCallback>(toolIt->callback)) {
             const auto cb = std::get<Server::ToolCallback>(toolIt->callback);
@@ -511,74 +748,7 @@ public:
 
             responder.write(QJsonDocument(makeResponse(id, *r)));
             return;
-        } else if (std::holds_alternative<Server::TaskToolCallback>(toolIt->callback)) {
-            const auto cb = std::get<Server::TaskToolCallback>(toolIt->callback);
-
-            if (!request.params().task().has_value()) {
-                qCWarning(mcpServerLog) << "Received call for tool" << request._params._name
-                                        << "without task parameters, but tool requires tasks";
-                responder.write(QJsonDocument(toJson(
-                    Schema::JSONRPCErrorResponse()
-                        .error(
-                            Schema::Error()
-                                .code(InvalidParams)
-                                .message("Tool requires tasks: " + request._params._name))
-                        .id(id))));
-                return;
-            }
-
-            Result<Server::TaskCallbacks> r = cb(request.params());
-
-            if (!r) {
-                responder.write(QJsonDocument(makeResponse(
-                    id,
-                    Schema::CallToolResult().isError(true).content(
-                        {Schema::TextContent().text(r.error())}))));
-                return;
-            }
-
-            auto taskId = QUuid::createUuid().toString();
-            auto task = Schema::Task()
-                            .taskId(taskId)
-                            .status(Schema::TaskStatus::working)
-                            .pollInterval(r->pollingIntervalMs)
-                            .createdAt(QDateTime::currentDateTime().toString())
-                            .lastUpdatedAt(QDateTime::currentDateTime().toString());
-
-            m_tasks.insert(taskId, TaskAndCallbacks{task, {r->updateTask, r->result, r->cancelTask}});
-
-            QJsonObject json = Schema::toJson(Schema::JSONRPCResultResponse().id(id));
-            json["result"] = Schema::toJson(Schema::CreateTaskResult().task(task));
-
-            responder.write(QJsonDocument(json));
-            return;
         }
-
-        if (request.params().task().has_value()) {
-            qCWarning(mcpServerLog) << "Received call for tool" << request._params._name
-                                    << "with task parameters, but tool does not support tasks";
-            responder.write(QJsonDocument(toJson(
-                Schema::JSONRPCErrorResponse()
-                    .error(
-                        Schema::Error()
-                            .code(InvalidParams)
-                            .message("Tool does not support tasks: " + request._params._name))
-                    .id(id))));
-            return;
-        }
-
-        Server::AsyncToolCallback cb = std::get<Server::AsyncToolCallback>(toolIt->callback);
-
-        cb(request._params, [responder, id](auto result) mutable {
-            if (!result) {
-                responder.write(QJsonDocument(makeResponse(
-                    id,
-                    Schema::CallToolResult().isError(true).content(
-                        {Schema::TextContent().text(result.error())}))));
-                return;
-            }
-            responder.write(QJsonDocument(makeResponse(id, *result)));
-        });
     }
 
     void onToolsList(
@@ -723,7 +893,7 @@ public:
         responder.write(QJsonDocument(makeResponse(id, result)));
     }
 
-    void onData(const QByteArray &data, const Responder &responder, QUuid sessionId)
+    void onData(const QByteArray &data, const Responder &responder, QString sessionId)
     {
         QJsonParseError parseError;
         QJsonDocument jsonDoc = QJsonDocument::fromJson(data, &parseError);
@@ -748,11 +918,40 @@ public:
             return;
         }
 
+        const auto clientResponse = Schema::fromJson<Schema::JSONRPCResponse>(jsonDoc.object());
+        if (clientResponse) {
+            auto requestId = std::visit(
+                [](const auto &resp) -> std::optional<Schema::RequestId> { return resp.id(); },
+                *clientResponse);
+
+            if (!requestId) {
+                qCWarning(mcpServerLog) << "Received JSONRPC response without ID, rejecting";
+                responder.writeStatus(QHttpServerResponse::StatusCode::BadRequest);
+                return;
+            }
+
+            if (std::holds_alternative<QString>(*requestId)) {
+                qCWarning(mcpServerLog)
+                    << "Received JSONRPC response with non-integer ID, rejecting";
+                responder.writeStatus(QHttpServerResponse::StatusCode::BadRequest);
+                return;
+            }
+
+            int id = std::get<int>(*requestId);
+            auto it = m_serverRequests.find(id);
+            if (it != m_serverRequests.end()) {
+                auto callback = it.value();
+                m_serverRequests.erase(it);
+                callback(*clientResponse);
+                return;
+            }
+        }
+
         responder.writeStatus(QHttpServerResponse::StatusCode::BadRequest);
         return;
     }
 
-    bool validateSession(QUuid sessionId) const
+    bool validateSession(QString sessionId) const
     {
         return !sessionId.isNull() && m_sessions.contains(sessionId);
     }
@@ -760,8 +959,7 @@ public:
     struct ToolAndCallback
     {
         Schema::Tool tool;
-        std::variant<Server::ToolCallback, Server::AsyncToolCallback, Server::TaskToolCallback>
-            callback;
+        std::variant<Server::ToolInterfaceCallback, Server::ToolCallback> callback;
     };
     QMap<QString, ToolAndCallback> m_tools;
 
@@ -787,10 +985,22 @@ public:
 
     Server::CompletionCallback m_completionCallback;
 
+    using UpdateTaskCallback = std::function<void(Schema::Task &)>;
+    using TaskResultCallback = std::function<Utils::Result<Schema::CallToolResult>()>;
+    using CancelTaskCallback = std::function<void()>;
+
+    struct TaskCallbacks
+    {
+        UpdateTaskCallback updateTask;
+        TaskResultCallback result;
+        std::optional<CancelTaskCallback> cancelTask;
+        int pollingIntervalMs{1000};
+    };
+
     struct TaskAndCallbacks
     {
         Schema::Task task;
-        Server::TaskCallbacks callbacks;
+        TaskCallbacks callbacks;
     };
 
     QMap<QString, TaskAndCallbacks> m_tasks;
@@ -801,12 +1011,15 @@ public:
         Schema::Implementation info;
     };
 
-    QMap<QUuid, Client> m_sessions;
+    QMap<QString, Client> m_sessions;
+
+    QMap<int, std::function<void(Schema::JSONRPCResponse)>> m_serverRequests;
+
     bool enableCors = false;
 };
 
 Server::Server(Schema::Implementation serverInfo, bool enableSSETestRoute)
-    : d(std::make_unique<ServerPrivate>(serverInfo))
+    : d(std::make_shared<ServerPrivate>(serverInfo))
 {
     d->m_server.setMissingHandler(
         new QObject(), [](const QHttpServerRequest &request, QHttpServerResponder &responder) {
@@ -820,7 +1033,7 @@ Server::Server(Schema::Implementation serverInfo, bool enableSSETestRoute)
         QHttpServerRequest::Method::Options,
         [this](const QHttpServerRequest &req, QHttpServerResponder &responder) {
             Q_UNUSED(req);
-            auto headers = d->corsHeaders(QUuid());
+            auto headers = d->corsHeaders({});
             responder.write(headers, QHttpServerResponse::StatusCode::Ok);
         });
 
@@ -831,16 +1044,16 @@ Server::Server(Schema::Implementation serverInfo, bool enableSSETestRoute)
             if (!req.headers().contains("mcp-session-id")) {
                 qCWarning(mcpServerLog)
                     << "Received request to delete session without session ID, rejecting";
-                responder.write(d->corsHeaders(QUuid()), QHttpServerResponse::StatusCode::BadRequest);
+                responder.write(d->corsHeaders({}), QHttpServerResponse::StatusCode::BadRequest);
                 return;
             }
 
-            QUuid sessionId = QUuid::fromString(req.headers().value("mcp-session-id"));
+            QString sessionId = QString::fromUtf8(req.headers().value("mcp-session-id"));
             if (!d->validateSession(sessionId)) {
                 qCWarning(mcpServerLog)
                     << "Received request to delete session with invalid session ID,"
                        "rejecting";
-                responder.write(d->corsHeaders(QUuid()), QHttpServerResponse::StatusCode::BadRequest);
+                responder.write(d->corsHeaders({}), QHttpServerResponse::StatusCode::BadRequest);
                 return;
             }
 
@@ -858,7 +1071,7 @@ Server::Server(Schema::Implementation serverInfo, bool enableSSETestRoute)
                     qCDebug(mcpServerLog) << "Received SSE connection with session ID:"
                                           << req.headers().value("mcp-session-id");
                     if (!d->validateSession(
-                            QUuid::fromString(req.headers().value("mcp-session-id")))) {
+                            QString::fromUtf8(req.headers().value("mcp-session-id")))) {
                         qCWarning(mcpServerLog) << "Received SSE connection with invalid session "
                                                    "ID, closing connection";
                         responder.write(QHttpServerResponse::StatusCode::BadRequest);
@@ -868,13 +1081,13 @@ Server::Server(Schema::Implementation serverInfo, bool enableSSETestRoute)
                     qCWarning(mcpServerLog)
                         << "Received SSE connection without session ID, closing connection";
                     responder
-                        .write(d->corsHeaders(QUuid()), QHttpServerResponse::StatusCode::BadRequest);
+                        .write(d->corsHeaders({}), QHttpServerResponse::StatusCode::BadRequest);
                     return;
                 }
 
                 d->m_sseStreams.emplace_back(
                     std::make_unique<SseStream>(
-                        d->corsHeaders(QUuid::fromString(req.headers().value("mcp-session-id"))),
+                        d->corsHeaders(QString::fromUtf8(req.headers().value("mcp-session-id"))),
                         std::move(responder)));
                 return;
             }
@@ -914,7 +1127,7 @@ Server::Server(Schema::Implementation serverInfo, bool enableSSETestRoute)
         "/",
         QHttpServerRequest::Method::Post,
         [this](const QHttpServerRequest &req, QHttpServerResponder &responder) -> void {
-            auto errorHeaders = d->corsHeaders(QUuid());
+            auto errorHeaders = d->corsHeaders({});
             errorHeaders.append("content-type", "text/plain");
 
             Result<void> originValid = d->validateOrigin(req);
@@ -946,9 +1159,9 @@ Server::Server(Schema::Implementation serverInfo, bool enableSSETestRoute)
                 return;
             }
 
-            const QUuid sessionId = req.headers().contains("mcp-session-id")
-                                        ? QUuid(req.headers().value("mcp-session-id"))
-                                        : QUuid::createUuid();
+            const QString sessionId = req.headers().contains("mcp-session-id")
+                                        ? QString::fromUtf8(req.headers().value("mcp-session-id"))
+                                        : QUuid::createUuid().toString();
 
             if (req.headers().contains("mcp-session-id")) {
                 bool validSessionId = !sessionId.isNull();
@@ -1025,44 +1238,22 @@ QList<QTcpServer *> Server::boundTcpServers() const
     return d->m_server.servers();
 }
 
+void Server::addTool(const Schema::Tool &tool, const ToolInterfaceCallback &callback)
+{
+    d->m_tools.insert(tool._name, ServerPrivate::ToolAndCallback{tool, callback});
+    sendNotification(Schema::ToolListChangedNotification{});
+}
+
 void Server::addTool(const Schema::Tool &tool, const ToolCallback &callback)
 {
     d->m_tools.insert(tool._name, ServerPrivate::ToolAndCallback{tool, callback});
     sendNotification(Schema::ToolListChangedNotification{});
 }
 
-void Server::addTool(const Schema::Tool &tool, const AsyncToolCallback &callback)
+void Server::sendNotification(
+    const Schema::ServerNotification &notification, const QString &sessionId)
 {
-    d->m_tools.insert(tool._name, ServerPrivate::ToolAndCallback{tool, callback});
-    sendNotification(Schema::ToolListChangedNotification{});
-}
-
-void Server::addTool(const Schema::Tool &tool, const TaskToolCallback &callback)
-{
-    if (tool.execution()->taskSupport() != Schema::ToolExecution::TaskSupport::required) {
-        qCWarning(mcpServerLog)
-            << "Attempted to add tool with TaskToolCallback but task support is not required:"
-            << tool._name;
-    }
-
-    d->m_tools.insert(tool._name, ServerPrivate::ToolAndCallback{tool, callback});
-    sendNotification(Schema::ToolListChangedNotification{});
-}
-
-void Server::sendNotification(const Schema::ServerNotification &notification)
-{
-    auto data = QJsonDocument(toJson(notification)).toJson(QJsonDocument::Compact);
-
-    if (d->m_ioOutputHandler) {
-        d->m_ioOutputHandler(data);
-    }
-
-    for (auto it = d->m_sseStreams.begin(); it != d->m_sseStreams.end();) {
-        if (!(*it)->notify(data))
-            it = d->m_sseStreams.erase(it);
-        else
-            ++it;
-    }
+    d->sendNotification(notification, sessionId);
 }
 
 Result<std::function<void(QByteArray)>> Server::bindIO(std::function<void(QByteArray)> outputHandler)
@@ -1073,7 +1264,7 @@ Result<std::function<void(QByteArray)>> Server::bindIO(std::function<void(QByteA
         return ResultError("Output handler cannot be null");
     d->m_ioOutputHandler = std::move(outputHandler);
 
-    QUuid sessionId = QUuid::createUuid();
+    QString sessionId = QUuid::createUuid().toString();
     qCDebug(mcpServerLog) << "Assigning session ID" << sessionId << "to IO client";
 
     ServerPrivate::Responder r;

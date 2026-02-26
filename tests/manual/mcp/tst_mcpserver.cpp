@@ -66,14 +66,96 @@ static Result<Mcp::Schema::CallToolResult> echoTool(const Mcp::Schema::CallToolR
         .addStructuredContent("echoedMessage", params.arguments()->value("message"));
 }
 
-static void asyncEchoTool(
-    const Mcp::Schema::CallToolRequestParams &params,
-    const Mcp::Server::AsyncToolResultCallback &callback)
+template<typename T>
+Utils::Result<T> as(const auto &variant)
+{
+    if (!std::holds_alternative<T>(variant))
+        return Utils::ResultError("Variant does not hold the expected type");
+    return std::get<T>(variant);
+}
+
+static Utils::Result<> sampleTool(
+    const Mcp::Schema::CallToolRequestParams &, const Mcp::ToolInterface &toolInterface)
+{
+    toolInterface.clientRequests.sample(
+        Mcp::Schema::CreateMessageRequestParams()
+            .addMessage(
+                Mcp::Schema::SamplingMessage()
+                    .content(
+                        Mcp::Schema::TextContent().text("Write a function that sums two integers."))
+                    .role(Mcp::Schema::Role::assistant))
+            .systemPrompt("You are a helpful assistant that writes C++ code.")
+            .maxTokens(1000)
+            .temperature(7.5),
+        [toolInterface](const Utils::Result<Mcp::Schema::CreateMessageResult> &result) {
+            if (!result) {
+                qDebug().noquote() << "Sample request failed:" << result.error();
+                return;
+            }
+
+            qDebug() << "Received sample input from client:"
+                     << Mcp::Schema::toJsonValue(result->content());
+
+            toolInterface.finish(
+                Mcp::Schema::CallToolResult()
+                    .isError(false)
+                    .addStructuredContent("sampleResponse", QString("Thanks")));
+        });
+
+    return ResultOk;
+}
+
+static Utils::Result<> elicitTool(
+    const Mcp::Schema::CallToolRequestParams &, const Mcp::ToolInterface &toolInterface)
+{
+    toolInterface.clientRequests.elicit(
+        Mcp::Schema::ElicitRequestFormParams()
+            .message("Please provide info")
+            .requestedSchema(
+                Mcp::Schema::ElicitRequestFormParams::RequestedSchema().addProperty(
+                    "name",
+                    Mcp::Schema::StringSchema().title("String").description(
+                        "Your full, legal name"))),
+        [toolInterface](const Utils::Result<Mcp::Schema::ElicitResult> &result) {
+            if (!result) {
+                qDebug() << "Elicit request failed:" << result.error();
+                return;
+            }
+            qDebug() << "Received elicit result from client";
+
+            if (result->action() != Mcp::Schema::ElicitResult::Action::accept) {
+                toolInterface.finish(
+                    Mcp::Schema::CallToolResult()
+                        .isError(true)
+                        .addStructuredContent("elicitResponse", "Client rejected the request"));
+                return;
+            }
+
+            auto nameResult = as<QString>((*result->content())["name"]);
+            if (!nameResult) {
+                toolInterface.finish(
+                    Mcp::Schema::CallToolResult()
+                        .isError(true)
+                        .addStructuredContent("elicitResponse", "Invalid response from client"));
+                return;
+            }
+
+            qDebug() << "Received name from elicit result:" << *nameResult;
+
+            toolInterface.finish(
+                Mcp::Schema::CallToolResult().isError(false).addStructuredContent(
+                    "elicitResponse", QString("Received your response: %1").arg(*nameResult)));
+        });
+
+    return ResultOk;
+}
+
+static Utils::Result<> asyncEchoTool(
+    const Mcp::Schema::CallToolRequestParams &params, const Mcp::ToolInterface &toolInterface)
 {
     if (!params.arguments() || !params.arguments()->contains("message")
         || !(*params.arguments())["message"].isString()) {
-        callback(ResultError("Invalid arguments for async echo tool: missing 'message' string"));
-        return;
+        return ResultError("Invalid arguments for async echo tool: missing 'message' string");
     }
 
     //qDebug() << "Async echo tool called with params:" << params._arguments;
@@ -94,18 +176,22 @@ static void asyncEchoTool(
         t,
         &QTimer::timeout,
         t,
-        [progressToken, callback, msg = params.arguments()->value("message"), t, count = 0]() mutable {
+        [progressToken,
+         toolInterface,
+         msg = params.arguments()->value("message"),
+         t,
+         count = 0]() mutable {
             if (count == 5) {
                 t->stop();
                 t->deleteLater();
                 qDebug() << "Async echo tool completed, sending final result";
-                callback(
+                toolInterface.finish(
                     Mcp::Schema::CallToolResult()
                         .isError(false)
                         .addStructuredContent("echoedMessage", msg));
             } else if (!progressToken.isNull()) {
                 qDebug() << "Sending progress notification with token:" << progressToken;
-                s_server->sendNotification(
+                toolInterface.clientRequests.notify(
                     Mcp::Schema::ProgressNotification().params(
                         Mcp::Schema::ProgressNotificationParams()
                             .progress(count)
@@ -116,6 +202,57 @@ static void asyncEchoTool(
             }
             count++;
         });
+
+    return ResultOk;
+}
+
+static Result<> toolTask(
+    const Mcp::Schema::CallToolRequestParams &params, const Mcp::ToolInterface &toolInterface)
+{
+    if (!params.arguments() || !params.arguments()->contains("message")
+        || !(*params.arguments())["message"].isString()) {
+        return ResultError("Invalid arguments for task echo tool: missing 'message' string");
+    }
+
+    QString taskId = QUuid::createUuid().toString();
+    QString message = (*params.arguments())["message"].toString();
+
+    using namespace std::literals::chrono_literals;
+    struct TaskData
+    {
+        QDeadlineTimer timer{10s};
+        bool cancelled{false};
+    };
+
+    std::shared_ptr<TaskData> taskData = std::make_shared<TaskData>();
+
+    auto update = [taskData](Mcp::Schema::Task &task) {
+        if (taskData->timer.hasExpired()) {
+            task.status(Mcp::Schema::TaskStatus::completed);
+            task.statusMessage("Task is done.");
+            return;
+        }
+        if (taskData->cancelled) {
+            task.status(Mcp::Schema::TaskStatus::cancelled);
+            task.statusMessage("Task is cancelled");
+            return;
+        }
+
+        task.statusMessage(
+            QString("Time remaining: %1 seconds").arg(taskData->timer.remainingTime() / 1000));
+    };
+    // Result
+    auto result = [message]() -> Result<Mcp::Schema::CallToolResult> {
+        return Mcp::Schema::CallToolResult()
+            .isError(false)
+            .addStructuredContent("echoedMessage", message);
+    };
+    // Cancel
+    auto cancel = [taskData]() { taskData->cancelled = true; };
+
+    toolInterface.startTask(1000, update, result, cancel, std::nullopt);
+
+    return ResultOk;
 }
 
 int main(int argc, char *argv[])
@@ -183,53 +320,7 @@ int main(int argc, char *argv[])
                 Mcp::Schema::Tool::OutputSchema{}
                     .addProperty("echoedMessage", QJsonObject{{"type", "string"}})
                     .required(QStringList{"echoedMessage"})),
-        [](const Mcp::Schema::CallToolRequestParams &params) -> Result<Mcp::Server::TaskCallbacks> {
-            if (!params.arguments() || !params.arguments()->contains("message")
-                || !(*params.arguments())["message"].isString()) {
-                return ResultError("Invalid arguments for task echo tool: missing 'message' string");
-            }
-
-            QString taskId = QUuid::createUuid().toString();
-            QString message = (*params.arguments())["message"].toString();
-
-            using namespace std::literals::chrono_literals;
-            struct TaskData
-            {
-                QDeadlineTimer timer{10s};
-                bool cancelled{false};
-            };
-
-            std::shared_ptr<TaskData> taskData = std::make_shared<TaskData>();
-
-            Mcp::Server::TaskCallbacks callbacks
-                = {// Update
-                   [taskData](Mcp::Schema::Task &task) {
-                       if (taskData->timer.hasExpired()) {
-                           task.status(Mcp::Schema::TaskStatus::completed);
-                           task.statusMessage("Task is done.");
-                           return;
-                       }
-                       if (taskData->cancelled) {
-                           task.status(Mcp::Schema::TaskStatus::cancelled);
-                           task.statusMessage("Task is cancelled");
-                           return;
-                       }
-
-                       task.statusMessage(QString("Time remaining: %1 seconds")
-                                              .arg(taskData->timer.remainingTime() / 1000));
-                   },
-                   // Result
-                   [message]() -> Result<Mcp::Schema::CallToolResult> {
-                       return Mcp::Schema::CallToolResult()
-                           .isError(false)
-                           .addStructuredContent("echoedMessage", message);
-                   },
-                   // Cancel
-                   [taskData]() { taskData->cancelled = true; },
-                   500};
-
-            return callbacks;
-        });
+        toolTask);
 
     server.addTool(
         Mcp::Schema::Tool()
@@ -245,6 +336,21 @@ int main(int argc, char *argv[])
                     .addProperty("echoedMessage", QJsonObject{{"type", "string"}})
                     .required(QStringList{"echoedMessage"})),
         asyncEchoTool);
+
+    server.addTool(
+        Mcp::Schema::Tool()
+            .name("elicit_test")
+            .description(
+                "A tool that elicits additional information from the client before executing.")
+            .title("Elicit Test Tool"),
+        elicitTool);
+
+    server.addTool(
+        Mcp::Schema::Tool()
+            .name("sample_test")
+            .description("A tool that samples an LLM from the client.")
+            .title("Sample Test Tool"),
+        sampleTool);
 
     server.addPrompt(
         Mcp::Schema::Prompt()
