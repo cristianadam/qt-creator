@@ -25,6 +25,7 @@ def make_header(namespace: str) -> str:
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QMap>
+#include <QSet>
 #include <QString>
 #include <QVariant>
 
@@ -636,7 +637,7 @@ def nested_short_name(parent_name, child_name):
     return child_name
 
 
-def parse_struct(name, props, types, required=None, description='', nested_children=None, children_of=None, original_name=None):
+def parse_struct(name, props, types, required=None, description='', nested_children=None, children_of=None, original_name=None, has_additional_props=False):
     if required is None:
         required = []
     if nested_children is None:
@@ -895,6 +896,9 @@ def parse_struct(name, props, types, required=None, description='', nested_child
         if not is_const_string(spec):
             prop_decl_types[prop] = decl_type
 
+    if has_additional_props:
+        lines.append(f"    QJsonObject _additionalProperties;  //!< additional properties")
+
     # Builder methods — named after the field (keyword-escaped), return *this by reference.
     lines.append("")
 
@@ -996,6 +1000,10 @@ def parse_struct(name, props, types, required=None, description='', nested_child
                     f"    {name}& {add_name}({list_item_type} v) "
                     f"{{ _{prop}.append(std::move(v)); return *this; }}")
 
+    if has_additional_props:
+        lines.append(f"    {name}& additionalProperties(const QString &key, QJsonValue v) {{ _additionalProperties.insert(key, std::move(v)); return *this; }}")
+        lines.append(f"    {name}& additionalProperties(const QJsonObject &obj) {{ for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) _additionalProperties.insert(it.key(), it.value()); return *this; }}")
+
     # Getter methods — return const ref with explicit type, named after the field (keyword-escaped).
     lines.append("")
     for prop, spec in props.items():
@@ -1025,6 +1033,9 @@ def parse_struct(name, props, types, required=None, description='', nested_child
                     f"    QJsonObject {as_obj_name}() const {{ "
                     f"QJsonObject o; for (auto it = _{prop}.constBegin(); it != _{prop}.constEnd(); ++it) o.insert(it.key(), it.value()); "
                     f"return o; }}")
+
+    if has_additional_props:
+        lines.append(f"    const QJsonObject& additionalProperties() const {{ return _additionalProperties; }}")
 
     lines.append("};\n")
     # Emit serializers for nested child types at namespace scope (before parent serializers)
@@ -1191,6 +1202,16 @@ def parse_struct(name, props, types, required=None, description='', nested_child
                 fj_lines.append(f"{indent}result._{prop} = {_scalar_expr};")
             else:
                 fj_lines.append(f"{indent}// Unknown property type: {ct}")
+    if has_additional_props:
+        known_keys = list(props.keys())
+        fj_lines.append(f"    {{")
+        quoted = ", ".join(f'"{k}"' for k in known_keys)
+        fj_lines.append(f"        const QSet<QString> knownKeys{{{quoted}}};")
+        fj_lines.append(f"        for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {{")
+        fj_lines.append(f"            if (!knownKeys.contains(it.key()))")
+        fj_lines.append(f"                result._additionalProperties.insert(it.key(), it.value());")
+        fj_lines.append(f"        }}")
+        fj_lines.append(f"    }}")
     fj_lines.append(f"    co_return result;")
     fj_lines.append("}")
     lines.extend(use_return_if_no_co_await(fj_lines))
@@ -1339,6 +1360,9 @@ def parse_struct(name, props, types, required=None, description='', nested_child
         lines.append(f"    QJsonObject obj;")
 
     lines.extend(post_lines)
+    if has_additional_props:
+        lines.append(f"    for (auto it = data._additionalProperties.constBegin(); it != data._additionalProperties.constEnd(); ++it)")
+        lines.append(f"        obj.insert(it.key(), it.value());")
     lines.append(f"    return obj;")
     lines.append("}")
     lines.append("")  # blank line after toJson
@@ -1631,7 +1655,8 @@ def main():
             if merged_props:
                 code.append(parse_struct(name, merged_props, types, merged_required, spec.get("description", ""), nested_children=nested_ch, children_of=children_of))
         elif "properties" in spec:
-            code.append(parse_struct(name, spec["properties"], types, spec.get("required", []), spec.get("description", ""), nested_children=nested_ch, children_of=children_of))
+            has_additional_props = spec.get("additionalProperties") in ({}, True)
+            code.append(parse_struct(name, spec["properties"], types, spec.get("required", []), spec.get("description", ""), nested_children=nested_ch, children_of=children_of, has_additional_props=has_additional_props))
     code.append(make_footer(namespace))
     output = "\n".join(code)
     # Normalise: collapse any run of 3+ consecutive newlines to exactly two

@@ -8,6 +8,7 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QMap>
+#include <QSet>
 #include <QString>
 #include <QVariant>
 
@@ -1263,13 +1264,17 @@ inline QJsonObject toJson(const CancelTaskRequest &data) {
 
 struct Result {
     std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+    QJsonObject _additionalProperties;  //!< additional properties
 
     Result& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
     Result& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     Result& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
+    Result& additionalProperties(const QString &key, QJsonValue v) { _additionalProperties.insert(key, std::move(v)); return *this; }
+    Result& additionalProperties(const QJsonObject &obj) { for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) _additionalProperties.insert(it.key(), it.value()); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
     QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
+    const QJsonObject& additionalProperties() const { return _additionalProperties; }
 };
 
 template<>
@@ -1285,6 +1290,13 @@ inline Utils::Result<Result> fromJson<Result>(const QJsonValue &val) {
             map__meta.insert(it.key(), it.value());
         result.__meta = map__meta;
     }
+    {
+        const QSet<QString> knownKeys{"_meta"};
+        for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+            if (!knownKeys.contains(it.key()))
+                result._additionalProperties.insert(it.key(), it.value());
+        }
+    }
     return result;
 }
 
@@ -1296,6 +1308,8 @@ inline QJsonObject toJson(const Result &data) {
             map__meta.insert(it.key(), it.value());
         obj.insert("_meta", map__meta);
     }
+    for (auto it = data._additionalProperties.constBegin(); it != data._additionalProperties.constEnd(); ++it)
+        obj.insert(it.key(), it.value());
     return obj;
 }
 
@@ -4656,13 +4670,17 @@ inline QJsonObject toJson(const ElicitResult &data) {
  */
 struct GetTaskPayloadResult {
     std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
+    QJsonObject _additionalProperties;  //!< additional properties
 
     GetTaskPayloadResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
     GetTaskPayloadResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     GetTaskPayloadResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
+    GetTaskPayloadResult& additionalProperties(const QString &key, QJsonValue v) { _additionalProperties.insert(key, std::move(v)); return *this; }
+    GetTaskPayloadResult& additionalProperties(const QJsonObject &obj) { for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) _additionalProperties.insert(it.key(), it.value()); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
     QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
+    const QJsonObject& additionalProperties() const { return _additionalProperties; }
 };
 
 template<>
@@ -4678,6 +4696,13 @@ inline Utils::Result<GetTaskPayloadResult> fromJson<GetTaskPayloadResult>(const 
             map__meta.insert(it.key(), it.value());
         result.__meta = map__meta;
     }
+    {
+        const QSet<QString> knownKeys{"_meta"};
+        for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+            if (!knownKeys.contains(it.key()))
+                result._additionalProperties.insert(it.key(), it.value());
+        }
+    }
     return result;
 }
 
@@ -4689,6 +4714,8 @@ inline QJsonObject toJson(const GetTaskPayloadResult &data) {
             map__meta.insert(it.key(), it.value());
         obj.insert("_meta", map__meta);
     }
+    for (auto it = data._additionalProperties.constBegin(); it != data._additionalProperties.constEnd(); ++it)
+        obj.insert(it.key(), it.value());
     return obj;
 }
 
