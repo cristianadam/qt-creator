@@ -133,7 +133,6 @@ void FancyTabBar::mouseMoveEvent(QMouseEvent *event)
 
     if (validIndex(m_hoverIndex)) {
         m_tabs[m_hoverIndex]->fadeIn();
-        m_hoverRect = tabRect(visibleIndex);
     }
 }
 
@@ -155,7 +154,6 @@ bool FancyTabBar::event(QEvent *event)
 void FancyTabBar::enterEvent(QEnterEvent *event)
 {
     Q_UNUSED(event)
-    m_hoverRect = QRect();
     m_hoverIndex = -1;
 }
 
@@ -164,7 +162,6 @@ void FancyTabBar::leaveEvent(QEvent *event)
 {
     Q_UNUSED(event)
     m_hoverIndex = -1;
-    m_hoverRect = QRect();
     for (auto tab : std::as_const(m_tabs))
         tab->fadeOut();
 }
