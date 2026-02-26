@@ -111,18 +111,7 @@ void FancyTabBar::paintEvent(QPaintEvent *event)
 // Handle hover events for mouse fade ins
 void FancyTabBar::mouseMoveEvent(QMouseEvent *event)
 {
-    int newHover = -1;
-    int visibleIndex = 0;
-    for (int i = 0; i < count(); ++i) {
-        if (!m_tabs.at(i)->visible)
-            continue;
-        const QRect area = tabRect(visibleIndex);
-        if (area.contains(event->pos())) {
-            newHover = i;
-            break;
-        }
-        ++visibleIndex;
-    }
+    const int newHover = tabAt(event->pos()).index;
     if (newHover == m_hoverIndex)
         return;
 
@@ -200,37 +189,48 @@ int FancyTabBar::visibleIndex(int index) const
     return vIndex;
 }
 
-void FancyTabBar::mousePressEvent(QMouseEvent *event)
+FancyTabBar::TabAtInfo FancyTabBar::tabAt(const QPoint &position) const
 {
-    event->accept();
     int visibleIndex = 0;
     for (int index = 0; index < m_tabs.count(); ++index) {
         if (!m_tabs.at(index)->visible)
             continue;
         const QRect rect = tabRect(visibleIndex);
-        if (rect.contains(event->pos())) {
-            if (isTabEnabled(index) && event->button() == Qt::LeftButton) {
-                if (m_tabs.at(index)->hasMenu
-                    && (!m_iconsOnly && rect.right() - event->pos().x() <= kMenuButtonWidth)) {
-                    // menu arrow clicked
-                    emit menuTriggered(index, event);
-                } else {
-                    if (index != m_currentIndex) {
-                        bool okToSwitch = true;
-                        emit currentAboutToChange(index, &okToSwitch);
-                        if (!okToSwitch)
-                            return;
-                        m_currentIndex = index;
-                        update();
-                        emit currentChanged(m_currentIndex);
-                    }
-                }
-            } else if (event->button() == Qt::RightButton) {
-                emit menuTriggered(index, event);
-            }
-            return;
+        if (rect.contains(position)) {
+            const bool openMenu = m_tabs.at(index)->hasMenu
+                                  && (!m_iconsOnly
+                                      && rect.right() - position.x() <= kMenuButtonWidth);
+            return {index, openMenu};
         }
         ++visibleIndex;
+    }
+    return {-1, false};
+}
+
+void FancyTabBar::mousePressEvent(QMouseEvent *event)
+{
+    event->accept();
+    const TabAtInfo info = tabAt(event->pos());
+    if (info.index >= 0) {
+        if (isTabEnabled(info.index) && event->button() == Qt::LeftButton) {
+            if (info.openMenu) {
+                // menu arrow clicked
+                emit menuTriggered(info.index, event);
+            } else {
+                if (info.index != m_currentIndex) {
+                    bool okToSwitch = true;
+                    emit currentAboutToChange(info.index, &okToSwitch);
+                    if (!okToSwitch)
+                        return;
+                    m_currentIndex = info.index;
+                    update();
+                    emit currentChanged(m_currentIndex);
+                }
+            }
+        } else if (event->button() == Qt::RightButton) {
+            emit menuTriggered(info.index, event);
+        }
+        return;
     }
     // not in a mode button
     if (event->button() == Qt::RightButton)

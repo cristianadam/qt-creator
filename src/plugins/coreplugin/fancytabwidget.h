@@ -115,6 +115,13 @@ signals:
     void menuTriggered(int index, QMouseEvent *event);
 
 private:
+    struct TabAtInfo
+    {
+        int index = -1;
+        bool openMenu = false;
+    };
+    TabAtInfo tabAt(const QPoint &position) const;
+
     int m_hoverIndex = -1;
     int m_currentIndex = -1;
     bool m_iconsOnly = false;
