@@ -15,14 +15,7 @@
 
 using namespace Utils;
 
-Mcp::Server server(
-    Mcp::Schema::Implementation()
-        .description("A simple Mcp server for testing purposes")
-        .name("test-mcp-server")
-        .title("Test Mcp Server")
-        .version("0.1")
-        .websiteUrl("https://www.qt.io"),
-    true);
+Mcp::Server *s_server = nullptr;
 
 static void completion(
     const Mcp::Schema::CompleteRequestParams &request,
@@ -112,7 +105,7 @@ static void asyncEchoTool(
                         .addStructuredContent("echoedMessage", msg));
             } else if (!progressToken.isNull()) {
                 qDebug() << "Sending progress notification with token:" << progressToken;
-                server.sendNotification(
+                s_server->sendNotification(
                     Mcp::Schema::ProgressNotification().params(
                         Mcp::Schema::ProgressNotificationParams()
                             .progress(count)
@@ -128,6 +121,31 @@ static void asyncEchoTool(
 int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
+
+    Mcp::Server server(
+        Mcp::Schema::Implementation()
+            .description("A simple Mcp server for testing purposes")
+            .name("test-mcp-server")
+            .title("Test Mcp Server")
+            .version("0.1")
+            .websiteUrl("https://www.qt.io"),
+        true);
+
+    server.setCorsEnabled(true);
+
+    s_server = &server;
+
+    QTimer *timer = new QTimer();
+    QObject::connect(timer, &QTimer::timeout, []() {
+        static int count = 0;
+        count++;
+        s_server->sendNotification(
+            Mcp::Schema::LoggingMessageNotification().params(
+                Mcp::Schema::LoggingMessageNotificationParams()
+                    .level(Mcp::Schema::LoggingLevel::info)
+                    .data(QString("Just a ping %1").arg(count))));
+    });
+    timer->start(5000);
 
     QTcpServer tcpServer;
 
@@ -286,6 +304,37 @@ int main(int argc, char *argv[])
             qWarning() << "Failed to bind to stdio:" << bindResult.error();
             return -1;
         }
+
+        qInstallMessageHandler(
+            [](QtMsgType type, const QMessageLogContext &ctxt, const QString &msg) {
+                Mcp::Schema::LoggingLevel level;
+                switch (type) {
+                case QtDebugMsg:
+                    level = Mcp::Schema::LoggingLevel::debug;
+                    break;
+                case QtInfoMsg:
+                    level = Mcp::Schema::LoggingLevel::info;
+                    break;
+                case QtWarningMsg:
+                    level = Mcp::Schema::LoggingLevel::warning;
+                    break;
+                case QtCriticalMsg:
+                    level = Mcp::Schema::LoggingLevel::error;
+                    break;
+                case QtFatalMsg:
+                    level = Mcp::Schema::LoggingLevel::error;
+                    break;
+                default:
+                    level = Mcp::Schema::LoggingLevel::info;
+                }
+
+                s_server->sendNotification(
+                    Mcp::Schema::LoggingMessageNotification().params(
+                        Mcp::Schema::LoggingMessageNotificationParams()
+                            .level(level)
+                            .logger(ctxt.category)
+                            .data(msg)));
+            });
 
         auto inHandler = bindResult.value();
         QSocketNotifier *stdinNotifier

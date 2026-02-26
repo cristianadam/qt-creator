@@ -36,6 +36,7 @@ namespace MiniHttp {
 
 enum class StatusCode : int {
     Ok = 200,
+    Accepted = 202,
     NoContent = 204,
     BadRequest = 400,
     NotFound = 404,
@@ -45,6 +46,8 @@ inline QByteArray statusText(StatusCode code)
 {
     switch (code) {
     case StatusCode::Ok:        return "OK";
+    case StatusCode::Accepted:
+        return "Accepted";
     case StatusCode::NoContent: return "No Content";
     case StatusCode::BadRequest: return "Bad Request";
     case StatusCode::NotFound:  return "Not Found";
@@ -55,6 +58,8 @@ inline QByteArray statusText(StatusCode code)
 class HttpHeaders
 {
 public:
+    void append(const QByteArray &name, const QByteArray &value) { set(name, value); }
+
     void set(const QByteArray &name, const QByteArray &value)
     {
         m_map[name.toLower()] = value.trimmed();
@@ -88,7 +93,7 @@ inline QDebug operator<<(QDebug dbg, const HttpHeaders &headers)
 class HttpRequest
 {
 public:
-    enum class Method { Get, Post, Other };
+    enum class Method { Get, Post, Options, Delete, Other };
 
     HttpRequest() = default;
 
@@ -117,6 +122,10 @@ public:
             req.m_method = Method::Get;
         else if (method == "POST")
             req.m_method = Method::Post;
+        else if (method == "OPTIONS")
+            req.m_method = Method::Options;
+        else if (method == "DELETE")
+            req.m_method = Method::Delete;
         else
             req.m_method = Method::Other;
 
@@ -161,6 +170,8 @@ inline QDebug operator<<(QDebug dbg, HttpRequest::Method method)
     switch (method) {
     case HttpRequest::Method::Get:   return dbg << "GET";
     case HttpRequest::Method::Post:  return dbg << "POST";
+    case HttpRequest::Method::Options: return dbg << "OPTIONS";
+    case HttpRequest::Method::Delete: return dbg << "DELETE";
     case HttpRequest::Method::Other: return dbg << "OTHER";
     }
     return dbg << "UNKNOWN";
@@ -213,6 +224,44 @@ public:
         closeSocket();
     }
 
+    void write(const QByteArray &data, const HttpHeaders &headers, StatusCode status)
+    {
+        if (!m_socket)
+            return;
+        QByteArray response;
+        response.reserve(128 + data.size());
+        appendStatusLine(response, status);
+        for (auto it = headers.map().constBegin(); it != headers.map().constEnd(); ++it) {
+            response += it.key();
+            response += ": ";
+            response += it.value();
+            response += "\r\n";
+        }
+        response += "Content-Length: ";
+        response += QByteArray::number(data.size());
+        response += "\r\nConnection: close\r\n\r\n";
+        response += data;
+        writeToSocket(response);
+        closeSocket();
+    }
+
+    void write(const HttpHeaders &headers, StatusCode status)
+    {
+        if (!m_socket)
+            return;
+        QByteArray response;
+        appendStatusLine(response, status);
+        for (auto it = headers.map().constBegin(); it != headers.map().constEnd(); ++it) {
+            response += it.key();
+            response += ": ";
+            response += it.value();
+            response += "\r\n";
+        }
+        response += "Content-Length: 0\r\nConnection: close\r\n\r\n";
+        writeToSocket(response);
+        closeSocket();
+    }
+
     void write(StatusCode status)
     {
         if (!m_socket)
@@ -224,14 +273,18 @@ public:
         closeSocket();
     }
 
-    void writeBeginChunked(const char *contentType, StatusCode status)
+    void writeBeginChunked(const HttpHeaders &headers, StatusCode status)
     {
         if (!m_socket)
             return;
         QByteArray response;
         appendStatusLine(response, status);
-        response += "Content-Type: ";
-        response += contentType;
+        for (auto it = headers.map().constBegin(); it != headers.map().constEnd(); ++it) {
+            response += it.key();
+            response += ": ";
+            response += it.value();
+            response += "\r\n";
+        }
         response += "\r\nTransfer-Encoding: chunked\r\n"
                     "Cache-Control: no-cache\r\n"
                     "Connection: keep-alive\r\n"

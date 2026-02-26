@@ -24,6 +24,9 @@ public:
     bool bind(QTcpServer *server);
     QList<QTcpServer *> boundTcpServers() const;
 
+    // Enable Cross-Origin Resource Sharing, necessary for browser based clients.
+    void setCorsEnabled(bool enabled);
+
     // Manually send / receive JSONRPC messages over custom IO streams instead of HTTP
     Utils::Result<std::function<void(QByteArray)>> bindIO(
         std::function<void(QByteArray)> outputHandler);

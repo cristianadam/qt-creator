@@ -117,6 +117,7 @@ public:
     BoolAspect enabled{this};
     ListenAddressAspect listenAddress{this};
     IntegerAspect port{this};
+    BoolAspect enableCors{this};
 };
 
 class McpServerSettingsPage : public Core::IOptionsPage
@@ -164,6 +165,8 @@ public:
     {
         qCDebug(mcpPlugin) << "(Re)-starting Mcp server...";
         qDeleteAll(m_server.boundTcpServers());
+
+        m_server.setCorsEnabled(settings.enableCors());
 
         if (!settings.enabled()) {
             qCInfo(mcpPlugin) << "Mcp server is disabled in settings, not starting.";
@@ -226,6 +229,15 @@ McpServerPluginSettings::McpServerPluginSettings(McpServerPlugin *plugin)
     port.setRange(1, 65535);
     port.setToolTip(Tr::tr("The port for the Mcp Server to listen on."));
     port.setEnabler(&enabled);
+
+    enableCors.setSettingsKey("EnableCors");
+    enableCors.setEnabler(&enabled);
+    enableCors.setLabel(Tr::tr("CORS:"));
+    enableCors.setToolTip(
+        Tr::tr(
+            "Enable Cross-Origin Resource Sharing (CORS) for the Mcp Server. "
+            "This is necessary if you want to connect to the server from a web application."));
+    enableCors.setDefaultValue(false);
 
     connect(this, &AspectContainer::applied, plugin, [plugin]() { plugin->restartServer(); });
 

@@ -26,9 +26,11 @@ using QHttpServer = MiniHttp::HttpServer;
 using QHttpServerRequest = MiniHttp::HttpRequest;
 using QHttpServerResponder = MiniHttp::HttpResponder;
 using QHttpServerResponse = MiniHttp::HttpResponse;
+using QHttpHeaders = MiniHttp::HttpHeaders;
 #endif
 
-Q_LOGGING_CATEGORY(mcpServerLog, "mcp.server", QtDebugMsg)
+Q_LOGGING_CATEGORY(mcpServerLog, "mcp.server", QtWarningMsg)
+Q_LOGGING_CATEGORY(mcpServerIOLog, "mcp.server.io", QtWarningMsg)
 
 using namespace Utils;
 
@@ -53,10 +55,14 @@ struct SseStream
 {
     QHttpServerResponder responder;
 
-    SseStream(QHttpServerResponder &&_responder)
+    SseStream(QHttpHeaders headers, QHttpServerResponder &&_responder)
         : responder(std::move(_responder))
     {
-        responder.writeBeginChunked("text/event-stream", QHttpServerResponder::StatusCode::Ok);
+        headers.append("Content-type", "text/event-stream");
+
+        qCDebug(mcpServerLog) << "Starting SSE stream for session"
+                              << headers.value("mcp-session-id");
+        responder.writeBeginChunked(headers, QHttpServerResponder::StatusCode::Ok);
     }
 
     ~SseStream() { responder.writeEndChunked({"\n\n"}); }
@@ -101,15 +107,79 @@ public:
         std::shared_ptr<QHttpServerResponder> httpResponder;
     };
 
+    QHttpHeaders corsHeaders(QUuid sessionId) const
+    {
+        QHttpHeaders headers;
+
+        if (enableCors) {
+            headers.append("Access-Control-Allow-Origin", "*");
+            headers.append("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE");
+            headers.append(
+                "access-control-expose-headers",
+                "mcp-session-id, last-event-id, mcp-protocol-version");
+            headers.append(
+                "Access-Control-Allow-Headers",
+                "Content-Type, mcp-session-id, last-event-id, mcp-protocol-version");
+        }
+
+        if (!sessionId.isNull())
+            headers.append("mcp-session-id", sessionId.toString().toUtf8());
+
+        return headers;
+    }
+
+    Result<void> validateOrigin(const QHttpServerRequest &req)
+    {
+        if (!enableCors || !req.headers().contains("Origin"))
+            return {};
+
+        const auto originHeader = req.headers().value("Origin");
+        if (originHeader.isEmpty())
+            return ResultError("Empty origin header");
+
+        const QUrl origin(QString::fromUtf8(originHeader));
+        if (!origin.isValid())
+            return ResultError(
+                QString("Invalid Origin header: %1").arg(QString::fromUtf8(originHeader)));
+
+        // Check origin is localhost.
+        QHostAddress originHost(origin.host());
+        if (origin.host() != "localhost" && !originHost.isLoopback())
+            return ResultError(QString("Origin not allowed: %1").arg(origin.toString()));
+
+        return {};
+    }
+
     void onRequest(
-        Schema::RequestId id, const Schema::ClientRequest &request, const Responder &responder)
+        Schema::RequestId id,
+        const Schema::ClientRequest &request,
+        const Responder &responder,
+        QUuid sessionId)
     {
         qCDebug(mcpServerLog) << "Received JSONRPCRequest:" << Schema::dispatchValue(request);
 
         if (std::holds_alternative<Schema::InitializeRequest>(request)) {
+            if (m_sessions.contains(sessionId)) {
+                qCWarning(mcpServerLog)
+                    << "Received initialize request with already assigned session ID" << sessionId
+                    << ", rejecting";
+                responder.writeStatus(QHttpServerResponder::StatusCode::BadRequest);
+                return;
+            }
+
+            qCDebug(mcpServerLog) << "Assigning session ID" << sessionId << "to new client";
+            m_sessions.insert(sessionId);
             onInitialize(id, std::get<Schema::InitializeRequest>(request), responder);
             return;
-        } else if (std::holds_alternative<Schema::CallToolRequest>(request)) {
+        }
+
+        if (!validateSession(sessionId)) {
+            qCWarning(mcpServerLog) << "Received request without (valid) session ID, rejecting";
+            responder.writeStatus(QHttpServerResponder::StatusCode::BadRequest);
+            return;
+        }
+
+        if (std::holds_alternative<Schema::CallToolRequest>(request)) {
             onToolCall(id, std::get<Schema::CallToolRequest>(request), responder);
             return;
         } else if (std::holds_alternative<Schema::ListToolsRequest>(request)) {
@@ -626,7 +696,7 @@ public:
         responder.write(QJsonDocument(makeResponse(id, result)));
     }
 
-    void onData(const QByteArray &data, const Responder &responder)
+    void onData(const QByteArray &data, const Responder &responder, QUuid sessionId)
     {
         QJsonParseError parseError;
         QJsonDocument jsonDoc = QJsonDocument::fromJson(data, &parseError);
@@ -639,7 +709,7 @@ public:
         const auto request = Schema::fromJson<Schema::JSONRPCRequest>(jsonDoc.object());
         const auto clientRequest = Schema::fromJson<Schema::ClientRequest>(jsonDoc.object());
         if (request && clientRequest) {
-            onRequest(request->_id, *clientRequest, responder);
+            onRequest(request->_id, *clientRequest, responder, sessionId);
             return;
         }
 
@@ -647,12 +717,17 @@ public:
         if (clientNotification) {
             qCDebug(mcpServerLog) << "Received JSONRPCNotification:"
                                   << Schema::dispatchValue(clientNotification.value());
-            responder.writeStatus(QHttpServerResponse::StatusCode::NoContent);
+            responder.writeStatus(QHttpServerResponse::StatusCode::Accepted);
             return;
         }
 
         responder.writeStatus(QHttpServerResponse::StatusCode::BadRequest);
         return;
+    }
+
+    bool validateSession(QUuid sessionId) const
+    {
+        return !sessionId.isNull() && m_sessions.contains(sessionId);
     }
 
     struct ToolAndCallback
@@ -692,6 +767,9 @@ public:
     };
 
     QMap<QString, TaskAndCallbacks> m_tasks;
+
+    QSet<QUuid> m_sessions;
+    bool enableCors = false;
 };
 
 Server::Server(Schema::Implementation serverInfo, bool enableSSETestRoute)
@@ -699,19 +777,47 @@ Server::Server(Schema::Implementation serverInfo, bool enableSSETestRoute)
 {
     d->m_server.setMissingHandler(
         new QObject(), [](const QHttpServerRequest &request, QHttpServerResponder &responder) {
-            qCDebug(mcpServerLog) << request.url() << request.method() << "not found";
-            qCDebug(mcpServerLog) << request.headers();
+            qCDebug(mcpServerIOLog) << request.url() << request.method() << "not found";
+            qCDebug(mcpServerIOLog) << request.headers();
             responder.write(QHttpServerResponse::StatusCode::NotFound);
+        });
+
+    d->m_server.route(
+        "/",
+        QHttpServerRequest::Method::Options,
+        [this](const QHttpServerRequest &req, QHttpServerResponder &responder) {
+            Q_UNUSED(req);
+            auto headers = d->corsHeaders(QUuid());
+            responder.write(headers, QHttpServerResponse::StatusCode::Ok);
         });
 
     d->m_server.route(
         "/",
         QHttpServerRequest::Method::Get,
         [this](const QHttpServerRequest &req, QHttpServerResponder &responder) {
-            qCDebug(mcpServerLog) << "Received request with Accept header:"
-                                  << req.headers().value("Accept");
             if (req.headers().value("accept") == "text/event-stream") {
-                d->m_sseStreams.emplace_back(std::make_unique<SseStream>(std::move(responder)));
+                if (req.headers().contains("mcp-session-id")) {
+                    qCDebug(mcpServerLog) << "Received SSE connection with session ID:"
+                                          << req.headers().value("mcp-session-id");
+                    if (!d->validateSession(
+                            QUuid::fromString(req.headers().value("mcp-session-id")))) {
+                        qCWarning(mcpServerLog) << "Received SSE connection with invalid session "
+                                                   "ID, closing connection";
+                        responder.write(QHttpServerResponse::StatusCode::BadRequest);
+                        return;
+                    }
+                } else {
+                    qCWarning(mcpServerLog)
+                        << "Received SSE connection without session ID, closing connection";
+                    responder
+                        .write(d->corsHeaders(QUuid()), QHttpServerResponse::StatusCode::BadRequest);
+                    return;
+                }
+
+                d->m_sseStreams.emplace_back(
+                    std::make_unique<SseStream>(
+                        d->corsHeaders(QUuid::fromString(req.headers().value("mcp-session-id"))),
+                        std::move(responder)));
                 return;
             }
 
@@ -750,11 +856,16 @@ Server::Server(Schema::Implementation serverInfo, bool enableSSETestRoute)
         "/",
         QHttpServerRequest::Method::Post,
         [this](const QHttpServerRequest &req, QHttpServerResponder &responder) -> void {
-            // We do not allow any origin header, so check that it is not present
-            if (req.headers().contains("Origin")) {
+            auto errorHeaders = d->corsHeaders(QUuid());
+            errorHeaders.append("content-type", "text/plain");
+
+            Result<void> originValid = d->validateOrigin(req);
+            if (!originValid) {
+                qCWarning(mcpServerLog) << "Rejected request with invalid Origin header:"
+                                        << req.headers().value("Origin") << originValid.error();
                 responder.write(
-                    "Origin header not allowed",
-                    "text/plain",
+                    QString("Invalid origin header: %s").arg(originValid.error()).toUtf8(),
+                    errorHeaders,
                     QHttpServerResponse::StatusCode::BadRequest);
                 return;
             }
@@ -763,7 +874,7 @@ Server::Server(Schema::Implementation serverInfo, bool enableSSETestRoute)
             if (!req.headers().contains("Accept")) {
                 responder.write(
                     "Missing Accept header",
-                    "text/plain",
+                    errorHeaders,
                     QHttpServerResponse::StatusCode::BadRequest);
                 return;
             }
@@ -772,46 +883,75 @@ Server::Server(Schema::Implementation serverInfo, bool enableSSETestRoute)
                 && req.headers().value("mcp-protocol-version") != "2025-11-25") {
                 responder.write(
                     "Unsupported Mcp protocol version",
-                    "text/plain",
+                    errorHeaders,
                     QHttpServerResponse::StatusCode::BadRequest);
                 return;
             }
 
-            qCDebug(mcpServerLog).noquote() << "Received request with headers:\n"
-                                            << req.headers() << "\nand body:\n"
-                                            << req.body() << "\nEnd of body";
+            const QUuid sessionId = req.headers().contains("mcp-session-id")
+                                        ? QUuid(req.headers().value("mcp-session-id"))
+                                        : QUuid::createUuid();
+
+            if (req.headers().contains("mcp-session-id")) {
+                bool validSessionId = !sessionId.isNull();
+                if (!validSessionId || !d->validateSession(sessionId)) {
+                    qCWarning(mcpServerLog) << "Received request with invalid session ID:"
+                                            << req.headers().value("mcp-session-id");
+
+                    responder.write(
+                        "Invalid session ID",
+                        errorHeaders,
+                        QHttpServerResponse::StatusCode::BadRequest);
+                    return;
+                }
+            }
+
+            qCDebug(mcpServerIOLog).noquote() << "Received request with headers:\n"
+                                              << req.headers() << "\nand body:\n"
+                                              << req.body() << "\nEnd of body";
 
             QStringList acceptValues = QString::fromUtf8(req.headers().value("Accept")).split(",");
             for (QString &value : acceptValues)
                 value = value.trimmed();
+            acceptValues.sort();
 
-            if (acceptValues.size() != 2 || !acceptValues.contains("application/json")
-                || !acceptValues.contains("text/event-stream")) {
+            const bool streamMode = acceptValues
+                                    == QStringList{"application/json", "text/event-stream"};
+
+            if (!streamMode) {
                 responder.write(
                     "Invalid Accept header",
-                    "text/plain",
+                    errorHeaders,
                     QHttpServerResponse::StatusCode::BadRequest);
                 return;
             }
 
+            auto corsHeaders = d->corsHeaders(sessionId);
             ServerPrivate::Responder r;
             r.httpResponder = std::make_shared<QHttpServerResponder>(std::move(responder));
-            r.write = [r = r.httpResponder](QJsonDocument json) {
+            r.write = [corsHeaders, http = r.httpResponder](QJsonDocument json) {
                 const QByteArray jsonData = json.toJson(QJsonDocument::Compact);
-                qCDebug(mcpServerLog).noquote() << "Writing response:" << jsonData;
-                r->write(jsonData, "application/json", QHttpServerResponse::StatusCode::Ok);
+                qCDebug(mcpServerIOLog).noquote() << "Writing response:" << jsonData;
+
+                auto headers = corsHeaders;
+                headers.append("content-type", "application/json");
+                http->write(jsonData, headers, QHttpServerResponse::StatusCode::Ok);
             };
-            r.writeStatus = [r = r.httpResponder](QHttpServerResponder::StatusCode status) {
-                r->write(status);
+            r.writeStatus = [corsHeaders,
+                             http = r.httpResponder](QHttpServerResponder::StatusCode status) {
+                auto headers = corsHeaders;
+                http->write(headers, status);
             };
-            r.writeData = [r = r.httpResponder](
+            r.writeData = [corsHeaders, http = r.httpResponder](
                               const QByteArray &data,
                               const char *contentType,
                               QHttpServerResponse::StatusCode status) {
-                r->write(data, contentType, status);
+                auto headers = corsHeaders;
+                headers.append("content-type", contentType);
+                http->write(data, headers, status);
             };
 
-            d->onData(req.body(), r);
+            d->onData(req.body(), r, sessionId);
         });
 }
 
@@ -875,32 +1015,33 @@ Result<std::function<void(QByteArray)>> Server::bindIO(std::function<void(QByteA
         return ResultError("Output handler cannot be null");
     d->m_ioOutputHandler = std::move(outputHandler);
 
-    return [this](QByteArray data) {
-        ServerPrivate::Responder
-            r{.write =
-                  [this](QJsonDocument json) {
-                      if (d->m_ioOutputHandler)
-                          d->m_ioOutputHandler(json.toJson(QJsonDocument::Compact));
-                  },
-              .writeStatus =
-                  [](QHttpServerResponder::StatusCode status) {
-                      Q_UNUSED(status);
-                      // We do not use HTTP status codes in IO mode, so ignore this
-                  },
-              .writeData =
-                  [this](
+    QUuid sessionId = QUuid::createUuid();
+    qCDebug(mcpServerLog) << "Assigning session ID" << sessionId << "to IO client";
+
+    ServerPrivate::Responder r;
+    r.write = [this](QJsonDocument json) {
+        if (d->m_ioOutputHandler)
+            d->m_ioOutputHandler(json.toJson(QJsonDocument::Compact));
+    };
+    r.writeStatus = [](QHttpServerResponder::StatusCode status) {
+        Q_UNUSED(status);
+        // We do not use HTTP status codes in IO mode, so ignore this
+    };
+    r.writeData = [this](
                       const QByteArray &data,
                       const char *contentType,
                       QHttpServerResponse::StatusCode status) {
-                      Q_UNUSED(contentType);
-                      Q_UNUSED(status);
-                      Q_ASSERT(
-                          data.contains('\n')
-                          == false); // We use newlines to separate messages, so data cannot contain newlines
-                      if (d->m_ioOutputHandler)
-                          d->m_ioOutputHandler(data);
-                  }};
-        d->onData(data, std::move(r));
+        Q_UNUSED(contentType);
+        Q_UNUSED(status);
+        Q_ASSERT(
+            data.contains('\n')
+            == false); // We use newlines to separate messages, so data cannot contain newlines
+        if (d->m_ioOutputHandler)
+            d->m_ioOutputHandler(data);
+    };
+
+    return [this, sessionId, r = std::move(r)](QByteArray data) mutable {
+        d->onData(data, r, sessionId);
     };
 }
 
@@ -954,6 +1095,11 @@ void Server::setCompletionCallback(const CompletionCallback &callback)
 void Server::setResourceFallbackCallback(const ResourceCallback &callback)
 {
     d->m_resourceFallbackCallback = callback;
+}
+
+void Server::setCorsEnabled(bool enabled)
+{
+    d->enableCors = enabled;
 }
 
 } // namespace Mcp
