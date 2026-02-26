@@ -202,26 +202,8 @@ public:
                 id, std::get<Schema::ListResourceTemplatesRequest>(request), responder);
             return;
         } else if (std::holds_alternative<Schema::CompleteRequest>(request)) {
-            if (m_completionCallback) {
-                m_completionCallback(
-                    std::get<Schema::CompleteRequest>(request).params(),
-                    [responder, id](Result<Schema::CompleteResult> result) mutable {
-                        if (!result) {
-                            responder.write(QJsonDocument(
-                                Schema::toJson(
-                                    Schema::JSONRPCErrorResponse()
-                                        .error(
-                                            Schema::Error()
-                                                .code(InternalError)
-                                                .message(QString("Unknown Error: %1")
-                                                             .arg(result.error())))
-                                        .id(id))));
-                            return;
-                        }
-                        responder.write(QJsonDocument(makeResponse(id, *result)));
-                    });
-                return;
-            }
+            onComplete(id, std::get<Schema::CompleteRequest>(request), responder);
+            return;
         } else if (std::holds_alternative<Schema::GetTaskRequest>(request)) {
             onGetTask(id, std::get<Schema::GetTaskRequest>(request), responder);
             return;
@@ -233,6 +215,9 @@ public:
             return;
         } else if (std::holds_alternative<Schema::GetTaskPayloadRequest>(request)) {
             onGetTaskPayload(id, std::get<Schema::GetTaskPayloadRequest>(request), responder);
+            return;
+        } else if (std::holds_alternative<Schema::PingRequest>(request)) {
+            onPing(id, std::get<Schema::PingRequest>(request), responder);
             return;
         }
 
@@ -288,6 +273,12 @@ public:
                               .capabilities(caps);
 
         responder.write(QJsonDocument(makeResponse(id, initResult)));
+    }
+
+    void onPing(Schema::RequestId id, const Schema::PingRequest &request, const Responder &responder)
+    {
+        Q_UNUSED(request);
+        responder.write(QJsonDocument(Schema::toJson(Schema::JSONRPCResultResponse().id(id))));
     }
 
     void onGetTaskPayload(
@@ -397,6 +388,37 @@ public:
             result._nextCursor = it.key();
 
         responder.write(QJsonDocument(makeResponse(id, result)));
+    }
+
+    void onComplete(
+        Schema::RequestId id, const Schema::CompleteRequest &request, const Responder &responder)
+    {
+        if (!m_completionCallback) {
+            responder.write(QJsonDocument(
+                Schema::toJson(
+                    Schema::JSONRPCErrorResponse()
+                        .error(
+                            Schema::Error().code(MethodNotFound).message("Completion not supported"))
+                        .id(id))));
+            return;
+        }
+
+        const auto onResult = [responder, id](Result<Schema::CompleteResult> result) mutable {
+            if (result) {
+                responder.write(QJsonDocument(makeResponse(id, *result)));
+                return;
+            }
+            responder.write(QJsonDocument(
+                Schema::toJson(
+                    Schema::JSONRPCErrorResponse()
+                        .error(
+                            Schema::Error()
+                                .code(InternalError)
+                                .message(QString("Unknown Error: %1").arg(result.error())))
+                        .id(id))));
+        };
+
+        m_completionCallback(request.params(), onResult);
     }
 
     void onGetTask(
