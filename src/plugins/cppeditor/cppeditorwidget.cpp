@@ -1217,7 +1217,7 @@ void CppEditorWidget::keyPressEvent(QKeyEvent *e)
 
 bool CppEditorWidget::handleStringSplitting(QKeyEvent *e) const
 {
-    if (!completionSettings().m_autoSplitStrings)
+    if (!completionSettings().autoSplitStrings())
         return false;
 
     if (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) {

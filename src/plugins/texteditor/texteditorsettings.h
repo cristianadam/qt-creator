@@ -26,7 +26,7 @@ class StorageSettingsData;
 class BehaviorSettingsData;
 class MarginSettingsData;
 class DisplaySettingsData;
-class CompletionSettings;
+class CompletionSettingsData;
 class ExtraEncodingSettingsData;
 class ICodeStylePreferences;
 class ICodeStylePreferencesFactory;
@@ -84,7 +84,7 @@ signals:
     void behaviorSettingsChanged(const TextEditor::BehaviorSettingsData &);
     void marginSettingsChanged(const TextEditor::MarginSettingsData &);
     void displaySettingsChanged(const TextEditor::DisplaySettingsData &);
-    void completionSettingsChanged(const TextEditor::CompletionSettings &);
+    void completionSettingsChanged(const TextEditor::CompletionSettingsData &);
     void extraEncodingSettingsChanged(const TextEditor::ExtraEncodingSettingsData &);
     void commentsSettingsChanged();
 };
