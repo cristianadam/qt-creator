@@ -458,8 +458,6 @@ void QmlInspectorAgent::verifyAndInsertObjectInTree(const ObjectReference &objec
             return; // recursive
         }
         insertObjectInTree(object, parentId);
-        if (objectDebugId == engineId)
-            updateObjectTree(m_rootContexts[engineId], engineId);
     } else {
         m_objectStack.push(QPair<ObjectReference, int>(object, engineId));
         fetchObject(parentId);
