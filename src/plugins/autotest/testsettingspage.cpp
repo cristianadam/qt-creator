@@ -44,6 +44,28 @@ private:
     void testToolsSettings(NonAspectSettings &settings) const;
     void onFrameworkItemChanged();
 
+    bool isDirty() const
+    {
+        TestSettings &s = Internal::testSettings();
+        if (s.isDirty())
+            return true;
+
+        NonAspectSettings tmp;
+        testSettings(tmp);
+        testToolsSettings(tmp);
+
+        for (const Id id : tmp.frameworksGrouping.keys()) {
+            if (tmp.frameworksGrouping[id] != s.frameworksGrouping[id])
+                return true;
+            if (tmp.frameworks[id] != s.frameworks[id])
+                return true;
+            if (tmp.tools[id] != s.tools[id])
+                return true;
+        }
+
+        return false;
+    }
+
     QTreeWidget *m_frameworkTreeWidget;
     InfoLabel *m_frameworksWarn;
 };
@@ -79,7 +101,6 @@ TestSettingsWidget::TestSettingsWidget()
                        "tests where the executable could not be deduced.")),
         onClicked(this, &clearChoiceCache)
     };
-    setIgnoreForDirtyHook(Tools::access(&resetChoicesButton));
 
     TestSettings &s = Internal::testSettings();
     Group generalGroup {
@@ -156,7 +177,8 @@ TestSettingsWidget::TestSettingsWidget()
 
     setOnCancel([] { Internal::testSettings().cancel(); });
 
-    installMarkSettingsDirtyTriggerRecursively(this);
+    installCheckSettingsDirtyTrigger(m_frameworkTreeWidget->model());
+    Internal::testSettings().addOnVolatileValueChanged(this, checkSettingsDirty);
 }
 
 enum TestBaseInfo
@@ -229,7 +251,7 @@ void TestSettingsWidget::testToolsSettings(NonAspectSettings &settings) const
 
 void TestSettingsWidget::onFrameworkItemChanged()
 {
-    markSettingsDirty();
+    checkSettingsDirty();
     bool atLeastOneEnabled = false;
     int mixed = ITestBase::None;
     if (QAbstractItemModel *model = m_frameworkTreeWidget->model()) {
