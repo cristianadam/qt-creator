@@ -332,6 +332,15 @@ void PermissionsContainerWidget::updateManifestPermissions()
         m_textEditorWidget->textDocument()->reload();
 }
 
+void PermissionsContainerWidget::refresh()
+{
+    if (!m_textEditorWidget)
+        return;
+
+    m_manifestDirectory = manifestDir(m_textEditorWidget, false);
+    loadPermissionsFromManifest();
+}
+
 void PermissionsContainerWidget::loadPermissionsFromManifest()
 {
     if (m_manifestDirectory.isEmpty())

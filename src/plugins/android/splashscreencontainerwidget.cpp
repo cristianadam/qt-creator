@@ -614,6 +614,14 @@ bool SplashScreenContainerWidget::initialize(TextEditor::TextEditorWidget *textE
     return true;
 }
 
+void SplashScreenContainerWidget::refresh()
+{
+    if (!m_textEditorWidget)
+        return;
+    m_manifestDirectory = manifestDir(m_textEditorWidget, false);
+    loadImages();
+}
+
 void SplashScreenContainerWidget::loadImages()
 {
     if (isSplashscreenEnabled()) {

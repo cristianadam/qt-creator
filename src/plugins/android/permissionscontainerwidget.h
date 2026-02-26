@@ -25,6 +25,7 @@ class PermissionsContainerWidget : public QWidget
 public:
     explicit PermissionsContainerWidget(QWidget *parent = nullptr);
     bool initialize(TextEditor::TextEditorWidget *textEditorWidget);
+    void refresh();
 
 signals:
     void permissionsModified();

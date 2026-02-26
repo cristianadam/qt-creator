@@ -49,6 +49,7 @@ class IconContainerWidget : public QWidget
 public:
     explicit IconContainerWidget(QWidget *parent);
     bool initialize(TextEditor::TextEditorWidget *textEditorWidget);
+    void refresh();
 
 signals:
     void iconsModified();

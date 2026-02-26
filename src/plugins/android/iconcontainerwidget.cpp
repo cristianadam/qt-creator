@@ -41,6 +41,7 @@ public:
     void setTargetIconFileName(const QString &name) { m_targetFileName = name; }
     Result<void> saveIcon(const FilePath &manifestDir);
     void loadIcon(const FilePath &manifestDir);
+    void clearDisplay();
     bool hasIcon() const { return m_hasIcon; }
 
 signals:
@@ -174,6 +175,13 @@ void IconWidget::removeIcon()
     clear();
     m_hasIcon = false;
     emit iconRemoved();
+}
+
+void IconWidget::clearDisplay()
+{
+    m_pixmap = QPixmap();
+    clear();
+    m_hasIcon = false;
 }
 
 void IconWidget::loadIcon(const FilePath &manifestDir)
@@ -409,6 +417,13 @@ Utils::FilePath IconContainerWidget::iconFile(const Utils::FilePath &path)
             .arg("(*.png *.jpg *.jpeg *.webp *.svg)")); // TODO: See SplashContainterWidget
 }
 
+void IconContainerWidget::refresh()
+{
+    for (auto &&iconButton : m_iconButtons)
+        iconButton->clearDisplay();
+    loadIcons();
+}
+
 void IconContainerWidget::loadIcons()
 {
     const FilePath currentManifestDir = manifestDir(m_textEditor, false);
@@ -419,6 +434,9 @@ void IconContainerWidget::loadIcons()
         m_hasIcons = false;
         return;
     }
+
+    if (!manifestResult->iconName.isEmpty())
+        m_iconFileName = manifestResult->iconName;
 
     for (auto &&iconButton : m_iconButtons) {
         iconButton->setTargetIconFileName(m_iconFileName + imageSuffix);

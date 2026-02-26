@@ -27,6 +27,7 @@ class SplashScreenContainerWidget : public QStackedWidget
 public:
     explicit SplashScreenContainerWidget(QWidget *parent);
     bool initialize(TextEditor::TextEditorWidget *textEditorWidget);
+    void refresh();
     void loadImages();
     bool hasImages() const;
     bool hasPortraitImages() const;

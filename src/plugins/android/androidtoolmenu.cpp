@@ -29,6 +29,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 
+#include <texteditor/textdocument.h>
 #include <texteditor/texteditor.h>
 
 using namespace ProjectExplorer;
@@ -146,9 +147,32 @@ public:
     class AndroidManifestEditor *manifestEditor() const { return m_manifestEditor; }
 
 private:
+    void refreshAll();
+    void refreshTab(int index);
+
     class AndroidManifestEditor *m_manifestEditor;
     QTabWidget *m_mainTabWidget;
+    PermissionsContainerWidget *m_permissionsContainer = nullptr;
+    IconContainerWidget *m_iconContainer = nullptr;
+    SplashScreenContainerWidget *m_splashContainer = nullptr;
 };
+
+void AndroidIconSplashEditorWidget::refreshAll()
+{
+    m_permissionsContainer->refresh();
+    m_iconContainer->refresh();
+    m_splashContainer->refresh();
+}
+
+void AndroidIconSplashEditorWidget::refreshTab(int index)
+{
+    if (index == PermissionsTab && m_permissionsContainer)
+        m_permissionsContainer->refresh();
+    if (index == IconTab && m_iconContainer)
+        m_iconContainer->refresh();
+    if (index == SplashTab && m_splashContainer)
+        m_splashContainer->refresh();
+}
 
 void AndroidIconSplashEditorWidget::setActiveTab(TabIndex index)
 {
@@ -171,40 +195,48 @@ AndroidIconSplashEditorWidget::AndroidIconSplashEditorWidget(QWidget *parent)
 
     TextEditor::TextEditorWidget *manifestTextEditor = manifestEditorWidget->textEditorWidget();
 
-    auto permissionsContainer = new PermissionsContainerWidget(this);
-    if (!permissionsContainer->initialize(manifestTextEditor))
-        permissionsContainer->setEnabled(false);
+    m_permissionsContainer = new PermissionsContainerWidget(this);
+    if (!m_permissionsContainer->initialize(manifestTextEditor))
+        m_permissionsContainer->setEnabled(false);
 
-    auto splashContainer = new SplashScreenContainerWidget(this);
-    if (!splashContainer->initialize(manifestTextEditor))
-        splashContainer->setEnabled(false);
+    m_splashContainer = new SplashScreenContainerWidget(this);
+    if (!m_splashContainer->initialize(manifestTextEditor))
+        m_splashContainer->setEnabled(false);
 
-    auto iconContainer = new IconContainerWidget(this);
-    if (!iconContainer->initialize(manifestTextEditor))
-        iconContainer->setEnabled(false);
+    m_iconContainer = new IconContainerWidget(this);
+    if (!m_iconContainer->initialize(manifestTextEditor))
+        m_iconContainer->setEnabled(false);
 
     QScrollArea *permissionsScrollArea = new QScrollArea(this);
-    permissionsScrollArea->setWidget(permissionsContainer);
+    permissionsScrollArea->setWidget(m_permissionsContainer);
     permissionsScrollArea->setWidgetResizable(true);
-    permissionsScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    permissionsScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 
     QScrollArea *splashScrollArea = new QScrollArea(this);
-    splashScrollArea->setWidget(splashContainer);
+    splashScrollArea->setWidget(m_splashContainer);
     splashScrollArea->setWidgetResizable(true);
-    splashScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    splashScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 
     QScrollArea *iconScrollArea = new QScrollArea(this);
-    iconScrollArea->setWidget(iconContainer);
+    iconScrollArea->setWidget(m_iconContainer);
     iconScrollArea->setWidgetResizable(true);
-    iconScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    iconScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 
     m_mainTabWidget->addTab(manifestEditorWidget, Tr::tr("XML Source"));
     m_mainTabWidget->addTab(iconScrollArea, Tr::tr("Icon"));
     m_mainTabWidget->addTab(permissionsScrollArea, Tr::tr("Permissions"));
     m_mainTabWidget->addTab(splashScrollArea, Tr::tr("Splash Screen"));
+
+    // Refresh tab widgets when the document is opened or reloaded.
+    TextEditor::TextDocument *textDoc = manifestTextEditor->textDocument();
+    connect(textDoc, &TextEditor::TextDocument::openFinishedSuccessfully,
+            this, &AndroidIconSplashEditorWidget::refreshAll);
+    connect(textDoc, &TextEditor::TextDocument::reloadFinished,
+            this, [this](bool success) { if (success) refreshAll(); });
+    connect(ProjectManager::instance(), &ProjectManager::startupProjectChanged,
+            this, &AndroidIconSplashEditorWidget::refreshAll);
+
+    // Refresh the tab being switched to, so that any edits made in the XML
+    // source tab are reflected when the user navigates to another tab.
+    connect(m_mainTabWidget, &QTabWidget::currentChanged,
+            this, &AndroidIconSplashEditorWidget::refreshTab);
 
     parentLayout->addWidget(m_mainTabWidget, 1);
 }
