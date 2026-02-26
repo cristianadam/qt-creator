@@ -70,6 +70,7 @@ private:
     static void addMode(IMode *mode);
     void currentTabAboutToChange(int index, bool *okToSwitch);
     void currentTabChanged(int index);
+    void moveMode(int fromIndex, int toIndex);
 
     void aboutToShutdown();
 

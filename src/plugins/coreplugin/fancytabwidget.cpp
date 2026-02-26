@@ -13,6 +13,7 @@
 #include <utils/stylehelper.h>
 #include <utils/theme/theme.h>
 
+#include <QApplication>
 #include <QDebug>
 #include <QMouseEvent>
 #include <QPainter>
@@ -106,11 +107,30 @@ void FancyTabBar::paintEvent(QPaintEvent *event)
     // paint active tab last, since it overlaps the neighbors
     if (currentIndex() != -1)
         paintTab(&p, currentIndex(), visibleCurrentIndex, QIcon::On);
+
+    if (m_isDragging && m_dragToIndex >= 0) {
+        QRect accentRect = tabRect(this->visibleIndex(m_dragToIndex));
+        accentRect.setHeight(StyleHelper::HighlightThickness);
+        accentRect.moveTop(accentRect.y() - StyleHelper::HighlightThickness / 2);
+        p.fillRect(accentRect, creatorColor(Theme::FancyToolButtonHighlightColor));
+    }
 }
 
 // Handle hover events for mouse fade ins
 void FancyTabBar::mouseMoveEvent(QMouseEvent *event)
 {
+    if (m_draggedIndex >= 0) {
+        const int prevDragToIndex = m_dragToIndex;
+        if (!m_isDragging) {
+            m_isDragging = (m_dragStartPos - event->pos()).manhattanLength()
+                           > QApplication::startDragDistance();
+        }
+        if (m_isDragging)
+            m_dragToIndex = tabAt(event->pos()).dragToIndex;
+        if (prevDragToIndex != m_dragToIndex)
+            update();
+        return;
+    }
     const int newHover = tabAt(event->pos()).index;
     if (newHover == m_hoverIndex)
         return;
@@ -150,6 +170,7 @@ void FancyTabBar::enterEvent(QEnterEvent *event)
 void FancyTabBar::leaveEvent(QEvent *event)
 {
     Q_UNUSED(event)
+    resetDragging();
     m_hoverIndex = -1;
     for (auto tab : std::as_const(m_tabs))
         tab->fadeOut();
@@ -189,6 +210,15 @@ int FancyTabBar::visibleIndex(int index) const
     return vIndex;
 }
 
+void FancyTabBar::resetDragging()
+{
+    m_draggedIndex = -1;
+    m_dragToIndex = -1;
+    m_dragStartPos = QPoint();
+    m_isDragging = false;
+    update();
+}
+
 FancyTabBar::TabAtInfo FancyTabBar::tabAt(const QPoint &position) const
 {
     int visibleIndex = 0;
@@ -200,15 +230,32 @@ FancyTabBar::TabAtInfo FancyTabBar::tabAt(const QPoint &position) const
             const bool openMenu = m_tabs.at(index)->hasMenu
                                   && (!m_iconsOnly
                                       && rect.right() - position.x() <= kMenuButtonWidth);
-            return {index, openMenu};
+            const int dragToIndex = position.y() <= rect.center().y() ? index : index + 1;
+            return {index, dragToIndex, openMenu};
         }
         ++visibleIndex;
     }
-    return {-1, false};
+    return {-1, -1, false};
 }
 
 void FancyTabBar::mousePressEvent(QMouseEvent *event)
 {
+    const TabAtInfo info = tabAt(event->pos());
+    m_draggedIndex = info.index;
+    m_dragStartPos = event->pos();
+}
+
+void FancyTabBar::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (m_isDragging && m_dragToIndex >= 0) {
+        const int dragToIndexAfterRemoval = m_draggedIndex < m_dragToIndex ? m_dragToIndex - 1
+                                                                           : m_dragToIndex;
+        if (m_draggedIndex != dragToIndexAfterRemoval)
+            emit tabDragged(m_draggedIndex, dragToIndexAfterRemoval);
+        resetDragging();
+        return;
+    }
+    resetDragging();
     event->accept();
     const TabAtInfo info = tabAt(event->pos());
     if (info.index >= 0) {
@@ -377,7 +424,8 @@ void FancyTabBar::paintTab(QPainter *painter, int tabIndex, int visibleIndex,
     }
 
     const qreal fader = tab->fader();
-    if (fader > 0 && !HostOsInfo::isMacHost() && !selected && enabled) {
+    const bool shouldFade = !HostOsInfo::isMacHost() || m_isDragging;
+    if (shouldFade && fader > 0 && !selected && enabled) {
         painter->save();
         painter->setOpacity(fader);
         if (creatorTheme()->flag(Theme::FlatToolBars))
@@ -454,6 +502,25 @@ void FancyTabBar::setTabVisible(int index, bool visible)
 
     m_tabs[index]->visible = visible;
     update();
+}
+
+void FancyTabBar::moveTab(int fromIndex, int toIndex)
+{
+    if (fromIndex == toIndex)
+        return;
+    FancyTab *tab = m_tabs.at(fromIndex);
+    m_tabs.removeAt(fromIndex);
+    m_tabs.insert(toIndex, tab);
+    update();
+    const int previousCurrentIndex = m_currentIndex;
+    if (fromIndex == m_currentIndex)
+        m_currentIndex = toIndex;
+    else if (fromIndex > m_currentIndex && toIndex <= m_currentIndex)
+        ++m_currentIndex;
+    else if (fromIndex < m_currentIndex && toIndex >= m_currentIndex)
+        --m_currentIndex;
+    if (previousCurrentIndex != m_currentIndex)
+        emit currentChanged(m_currentIndex);
 }
 
 class FancyColorButton : public QWidget
@@ -546,6 +613,7 @@ FancyTabWidget::FancyTabWidget(QWidget *parent)
     connect(m_tabBar, &FancyTabBar::currentAboutToChange, this, &FancyTabWidget::currentAboutToShow);
     connect(m_tabBar, &FancyTabBar::currentChanged, this, &FancyTabWidget::showWidget);
     connect(m_tabBar, &FancyTabBar::menuTriggered, this, &FancyTabWidget::menuTriggered);
+    connect(m_tabBar, &FancyTabBar::tabDragged, this, &FancyTabWidget::tabDragged);
 }
 
 void FancyTabWidget::setSelectionWidgetVisible(bool visible)
@@ -568,6 +636,21 @@ void FancyTabWidget::removeTab(int index)
 {
     m_modesStack->removeWidget(m_modesStack->widget(index + 1));
     m_tabBar->removeTab(index);
+}
+
+/*!
+    Moves a tab from \a fromIndex to \a toIndex, where \a toIndex is the index
+    after the tab has been removed.
+*/
+void FancyTabWidget::moveTab(int fromIndex, int toIndex)
+{
+    if (fromIndex == toIndex)
+        return;
+    QWidget *w = m_modesStack->widget(fromIndex + 1);
+    m_modesStack->removeWidget(w);
+    m_modesStack->insertWidget(toIndex + 1, w);
+    m_tabBar->moveTab(fromIndex, toIndex);
+    showWidget(m_tabBar->currentIndex());
 }
 
 void FancyTabWidget::setBackgroundBrush(const QBrush &brush)
