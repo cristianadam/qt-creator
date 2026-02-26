@@ -174,6 +174,7 @@ Project {
         Group {
             name: "Windows-specific"
             condition: qbs.targetOS.contains("windows")
+            product.cpp.dynamicLibraries: "advapi32"
             prefix: "libarchive/"
             files: [
                 "archive_entry_copy_bhfi.c",
