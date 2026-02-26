@@ -25,27 +25,6 @@ CompletionSettings &completionSettings()
     return theCompletionSettings;
 }
 
-bool CompletionSettingsData::equals(const CompletionSettingsData &cs) const
-{
-    return m_caseSensitivity                == cs.m_caseSensitivity
-        && m_completionTrigger              == cs.m_completionTrigger
-        && m_automaticProposalTimeoutInMs   == cs.m_automaticProposalTimeoutInMs
-        && m_characterThreshold             == cs.m_characterThreshold
-        && m_autoInsertBrackets             == cs.m_autoInsertBrackets
-        && m_surroundingAutoBrackets        == cs.m_surroundingAutoBrackets
-        && m_autoInsertQuotes               == cs.m_autoInsertQuotes
-        && m_surroundingAutoQuotes          == cs.m_surroundingAutoQuotes
-        && m_partiallyComplete              == cs.m_partiallyComplete
-        && m_spaceAfterFunctionName         == cs.m_spaceAfterFunctionName
-        && m_autoSplitStrings               == cs.m_autoSplitStrings
-        && m_animateAutoComplete            == cs.m_animateAutoComplete
-        && m_highlightAutoComplete          == cs.m_highlightAutoComplete
-        && m_skipAutoCompletedText          == cs.m_skipAutoCompletedText
-        && m_autoRemove                     == cs.m_autoRemove
-        && m_overwriteClosingChars          == cs.m_overwriteClosingChars
-        ;
-}
-
 CompletionSettings::CompletionSettings()
 {
     setAutoApply(false);
@@ -197,38 +176,6 @@ CompletionSettings::CompletionSettings()
 
     completionTrigger.addOnVolatileValueChanged(this, updateTimeout);
     updateTimeout();
-}
-
-void CompletionSettings::apply()
-{
-    if (isDirty()) {
-        AspectContainer::apply();
-        emit TextEditorSettings::instance()->completionSettingsChanged(data());
-    }
-}
-
-CompletionSettingsData CompletionSettings::data() const
-{
-    CompletionSettingsData d;
-
-    d.m_caseSensitivity =  caseSensitivity();
-    d.m_completionTrigger = completionTrigger();
-    d.m_automaticProposalTimeoutInMs = automaticProposalTimeoutInMs();
-    d.m_characterThreshold = characterThreshold();
-    d.m_autoInsertBrackets = autoInsertBrackets();
-    d.m_surroundingAutoBrackets = surroundingAutoBrackets();
-    d.m_autoInsertQuotes = autoInsertQuotes();
-    d.m_surroundingAutoQuotes = surroundingAutoQuotes();
-    d.m_partiallyComplete = partiallyComplete();
-    d.m_spaceAfterFunctionName = spaceAfterFunctionName();
-    d.m_autoSplitStrings = autoSplitStrings();
-    d.m_animateAutoComplete = animateAutoComplete();
-    d.m_highlightAutoComplete = highlightAutoComplete();
-    d.m_skipAutoCompletedText = skipAutoCompletedText();
-    d.m_autoRemove = autoRemove();
-    d.m_overwriteClosingChars = overwriteClosingChars();
-
-    return d;
 }
 
 namespace Internal {

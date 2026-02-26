@@ -61,7 +61,6 @@ public:
     void startAutomaticProposalTimer();
     void automaticProposalTimeout();
     void clearAbortedPosition();
-    void updateFromCompletionSettings(const TextEditor::CompletionSettingsData &settings);
 
     bool eventFilter(QObject *o, QEvent *e) override;
 
@@ -83,7 +82,6 @@ private:
     TextEditorWidget::SuggestionBlocker m_suggestionBlocker;
     bool m_receivedContentWhileWaiting = false;
     QTimer m_automaticProposalTimer;
-    CompletionSettingsData m_settings;
     int m_abortedBasePosition = -1;
     static const QChar m_null;
     QVariant m_userData;
@@ -102,9 +100,11 @@ CodeAssistantPrivate::CodeAssistantPrivate(CodeAssistant *assistant, TextEditorW
     connect(&m_automaticProposalTimer, &QTimer::timeout,
             this, &CodeAssistantPrivate::automaticProposalTimeout);
 
-    updateFromCompletionSettings(completionSettings().data());
-    connect(TextEditorSettings::instance(), &TextEditorSettings::completionSettingsChanged,
-            this, &CodeAssistantPrivate::updateFromCompletionSettings);
+    auto updateTimeout = [this] {
+        m_automaticProposalTimer.setInterval(completionSettings().automaticProposalTimeoutInMs());
+    };
+    updateTimeout();
+    completionSettings().automaticProposalTimeoutInMs.addOnChanged(this, updateTimeout);
 
     connect(Core::EditorManager::instance(), &Core::EditorManager::currentEditorChanged,
             this, &CodeAssistantPrivate::clearAbortedPosition);
@@ -129,7 +129,7 @@ bool CodeAssistantPrivate::requestActivationCharProposal()
 {
     if (m_editorWidget->multiTextCursor().hasMultipleCursors())
         return false;
-    if (m_assistKind == Completion && m_settings.m_completionTrigger != ManualCompletion) {
+    if (m_assistKind == Completion && completionSettings().completionTrigger() != ManualCompletion) {
         for (CompletionAssistProvider *provider : identifyActivationSequence()) {
             requestProposal(ActivationCharacter, Completion, provider);
             if (isDisplayingProposal() || isWaitingForProposal())
@@ -447,7 +447,7 @@ void CodeAssistantPrivate::setUserData(const QVariant &data)
 
 void CodeAssistantPrivate::startAutomaticProposalTimer()
 {
-    if (m_settings.m_completionTrigger == AutomaticCompletion)
+    if (completionSettings().completionTrigger() == AutomaticCompletion)
         m_automaticProposalTimer.start();
 }
 
@@ -467,13 +467,6 @@ void CodeAssistantPrivate::stopAutomaticProposalTimer()
 {
     if (m_automaticProposalTimer.isActive())
         m_automaticProposalTimer.stop();
-}
-
-void CodeAssistantPrivate::updateFromCompletionSettings(
-        const TextEditor::CompletionSettingsData &settings)
-{
-    m_settings = settings;
-    m_automaticProposalTimer.setInterval(m_settings.m_automaticProposalTimeoutInMs);
 }
 
 void CodeAssistantPrivate::explicitlyAborted()
