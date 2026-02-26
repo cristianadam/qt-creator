@@ -14,13 +14,16 @@
 
 #include <cplusplus/ASTPath.h>
 
-#include <utils/algorithm.h>
 #include <utils/qtcassert.h>
+
+#include <QLoggingCategory>
 
 using namespace CPlusPlus;
 using namespace TextEditor;
 
 namespace CppEditor::Internal {
+
+static Q_LOGGING_CATEGORY(log, "qtc.cppeditor.quickfixes", QtWarningMsg)
 
 // CppQuickFixAssistProvider
 
@@ -153,6 +156,15 @@ QuickFixOperations quickFixOperations(const TextEditor::AssistInterface *interfa
     const auto cppInterface = dynamic_cast<const CppQuickFixInterface *>(interface);
     if (!cppInterface)
         return {};
+
+    const SemanticInfo &info = cppInterface->semanticInfo();
+    qCDebug(log) << "gathering quickfixes";
+    QTC_ASSERT(cppInterface->editor(), return {});
+    qCDebug(log) << "document revision:" << cppInterface->editor()->document()->revision();
+    qCDebug(log) << "semantic info revision:" << info.revision;
+    qCDebug(log) << "semantic info complete:" << info.complete;
+    qCDebug(log) << "semantic info has valid snapshot:" << !info.snapshot.isEmpty();
+
     QuickFixOperations quickFixes;
     for (CppQuickFixFactory *factory : CppQuickFixFactory::cppQuickFixFactories())
         factory->match(*cppInterface, quickFixes);

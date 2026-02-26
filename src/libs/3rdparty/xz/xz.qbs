@@ -81,9 +81,7 @@ StaticLibrary {
         files: [
             "check/check.c",
             "check/crc32_fast.c",
-            "check/crc32_table.c",
             "check/crc64_fast.c",
-            "check/crc64_table.c",
             "check/crc_clmul_consts_gen.c",
             "check/sha256.c",
             "common/alone_decoder.c",

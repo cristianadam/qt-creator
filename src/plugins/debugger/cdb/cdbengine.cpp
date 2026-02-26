@@ -400,6 +400,9 @@ void CdbEngine::setupEngine()
     const QString qtLoggingToConsoleKey = QStringLiteral("QT_LOGGING_TO_CONSOLE");
     if (!sp.useTerminal() && !inferiorEnvironment.hasKey(qtLoggingToConsoleKey))
         inferiorEnvironment.set(qtLoggingToConsoleKey, "0");
+    const QString qtForceStderrLogging = QStringLiteral("QT_FORCE_STDERR_LOGGING");
+    if (!sp.useTerminal() && !inferiorEnvironment.hasKey(qtForceStderrLogging))
+        inferiorEnvironment.set(qtForceStderrLogging, "0");
 
     static const char cdbExtensionPathVariableC[] = "_NT_DEBUGGER_EXTENSION_PATH";
     inferiorEnvironment.prependOrSet(cdbExtensionPathVariableC, extensionFi.absolutePath());
