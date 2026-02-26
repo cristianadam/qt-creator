@@ -167,9 +167,7 @@ public:
                 return;
             }
 
-            qCDebug(mcpServerLog) << "Assigning session ID" << sessionId << "to new client";
-            m_sessions.insert(sessionId);
-            onInitialize(id, std::get<Schema::InitializeRequest>(request), responder);
+            onInitialize(id, std::get<Schema::InitializeRequest>(request), responder, sessionId);
             return;
         }
 
@@ -235,7 +233,10 @@ public:
     }
 
     void onInitialize(
-        Schema::RequestId id, const Schema::InitializeRequest &request, const Responder &responder)
+        Schema::RequestId id,
+        const Schema::InitializeRequest &request,
+        const Responder &responder,
+        const QUuid &sessionId)
     {
         if (request._params._protocolVersion != "2025-11-25") {
             auto errorResponse = Schema::JSONRPCErrorResponse().id(id).error(
@@ -271,6 +272,10 @@ public:
                               .protocolVersion(request._params._protocolVersion)
                               .serverInfo(serverInfo)
                               .capabilities(caps);
+
+        qCDebug(mcpServerLog) << "Assigning session ID" << sessionId << "to new client";
+        m_sessions.insert(
+            sessionId, Client{request.params().capabilities(), request.params().clientInfo()});
 
         responder.write(QJsonDocument(makeResponse(id, initResult)));
     }
@@ -790,7 +795,13 @@ public:
 
     QMap<QString, TaskAndCallbacks> m_tasks;
 
-    QSet<QUuid> m_sessions;
+    struct Client
+    {
+        Schema::ClientCapabilities capabilities;
+        Schema::Implementation info;
+    };
+
+    QMap<QUuid, Client> m_sessions;
     bool enableCors = false;
 };
 
