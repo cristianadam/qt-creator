@@ -115,7 +115,6 @@ signals:
     void menuTriggered(int index, QMouseEvent *event);
 
 private:
-    QRect m_hoverRect;
     int m_hoverIndex = -1;
     int m_currentIndex = -1;
     bool m_iconsOnly = false;
