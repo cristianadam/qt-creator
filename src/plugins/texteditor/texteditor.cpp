@@ -1351,8 +1351,8 @@ TextEditorWidgetPrivate::TextEditorWidgetPrivate(TextEditorWidget *parent)
             q, &TextEditorWidget::setMarginSettings);
     connect(settings, &TextEditorSettings::displaySettingsChanged,
             q, &TextEditorWidget::setDisplaySettings);
-    connect(settings, &TextEditorSettings::completionSettingsChanged,
-            q, &TextEditorWidget::setCompletionSettings);
+    connect(&completionSettings(), &AspectContainer::changed,
+            q, &TextEditorWidget::updateCompletionSettings);
     connect(settings, &TextEditorSettings::extraEncodingSettingsChanged,
             q, &TextEditorWidget::setExtraEncodingSettings);
 
@@ -1685,9 +1685,9 @@ void TextEditorWidgetPrivate::setDocument(const QSharedPointer<TextDocument> &do
     q->setBehaviorSettings(globalBehaviorSettings().data());
     q->setMarginSettings(marginSettings().data());
     q->setDisplaySettings(displaySettings().data());
-    q->setCompletionSettings(completionSettings().data());
     q->setExtraEncodingSettings(globalExtraEncodingSettings().data());
     q->textDocument()->setCodeStyle(TextEditorSettings::codeStyle(m_tabSettingsId));
+    q->updateCompletionSettings();
 
     m_blockCount = doc->document()->blockCount();
 
@@ -9478,17 +9478,18 @@ void TextEditorWidget::setStorageSettings(const StorageSettingsData &storageSett
     d->m_document->setStorageSettings(storageSettings);
 }
 
-void TextEditorWidget::setCompletionSettings(const CompletionSettingsData &completionSettings)
+void TextEditorWidget::updateCompletionSettings()
 {
-    d->m_autoCompleter->setAutoInsertBracketsEnabled(completionSettings.m_autoInsertBrackets);
-    d->m_autoCompleter->setSurroundWithBracketsEnabled(completionSettings.m_surroundingAutoBrackets);
-    d->m_autoCompleter->setAutoInsertQuotesEnabled(completionSettings.m_autoInsertQuotes);
-    d->m_autoCompleter->setSurroundWithQuotesEnabled(completionSettings.m_surroundingAutoQuotes);
-    d->m_autoCompleter->setOverwriteClosingCharsEnabled(completionSettings.m_overwriteClosingChars);
-    d->m_animateAutoComplete = completionSettings.m_animateAutoComplete;
-    d->m_highlightAutoComplete = completionSettings.m_highlightAutoComplete;
-    d->m_skipAutoCompletedText = completionSettings.m_skipAutoCompletedText;
-    d->m_removeAutoCompletedText = completionSettings.m_autoRemove;
+    const CompletionSettings &s = completionSettings();
+    d->m_autoCompleter->setAutoInsertBracketsEnabled(s.autoInsertBrackets());
+    d->m_autoCompleter->setSurroundWithBracketsEnabled(s.surroundingAutoBrackets());
+    d->m_autoCompleter->setAutoInsertQuotesEnabled(s.autoInsertQuotes());
+    d->m_autoCompleter->setSurroundWithQuotesEnabled(s.surroundingAutoQuotes());
+    d->m_autoCompleter->setOverwriteClosingCharsEnabled(s.overwriteClosingChars());
+    d->m_animateAutoComplete = s.animateAutoComplete();
+    d->m_highlightAutoComplete = s.highlightAutoComplete();
+    d->m_skipAutoCompletedText = s.skipAutoCompletedText();
+    d->m_removeAutoCompletedText = s.autoRemove();
 }
 
 void TextEditorWidget::setExtraEncodingSettings(const ExtraEncodingSettingsData &extraEncodingSettings)

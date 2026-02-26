@@ -24,34 +24,6 @@ enum CompletionTrigger {
 /**
  * Settings that describe how the code completion behaves.
  */
-class TEXTEDITOR_EXPORT CompletionSettingsData
-{
-public:
-    CompletionSettingsData() = default;
-
-    bool equals(const CompletionSettingsData &bs) const;
-
-    friend bool operator==(const CompletionSettingsData &t1, const CompletionSettingsData &t2) { return t1.equals(t2); }
-    friend bool operator!=(const CompletionSettingsData &t1, const CompletionSettingsData &t2) { return !t1.equals(t2); }
-
-    CaseSensitivity m_caseSensitivity = CaseInsensitive;
-    CompletionTrigger m_completionTrigger = AutomaticCompletion;
-    int m_automaticProposalTimeoutInMs = 400;
-    int m_characterThreshold = 3;
-    bool m_autoInsertBrackets = true;
-    bool m_surroundingAutoBrackets = true;
-    bool m_autoInsertQuotes = true;
-    bool m_surroundingAutoQuotes = true;
-    bool m_partiallyComplete = true;
-    bool m_spaceAfterFunctionName = false;
-    bool m_autoSplitStrings = true;
-    bool m_animateAutoComplete = true;
-    bool m_highlightAutoComplete = true;
-    bool m_skipAutoCompletedText = true;
-    bool m_autoRemove = true;
-    bool m_overwriteClosingChars = false;
-};
-
 class TEXTEDITOR_EXPORT CompletionSettings : public Utils::AspectContainer
 {
 public:
@@ -73,10 +45,6 @@ public:
     Utils::BoolAspect skipAutoCompletedText{this};
     Utils::BoolAspect autoRemove{this};
     Utils::BoolAspect overwriteClosingChars{this};
-
-    CompletionSettingsData data() const;
-
-    void apply() final;
 };
 
 TEXTEDITOR_EXPORT CompletionSettings &completionSettings();
