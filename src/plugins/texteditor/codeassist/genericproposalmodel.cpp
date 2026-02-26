@@ -181,7 +181,7 @@ bool GenericProposalModel::isPerfectMatch(const QString &prefix) const
     if (prefix.isEmpty())
         return false;
 
-    const CaseSensitivity cs = completionSettings().m_caseSensitivity;
+    const CaseSensitivity cs = completionSettings().caseSensitivity();
     bool hasFullMatch = false;
 
     for (int i = 0; i < size(); ++i) {
@@ -274,7 +274,7 @@ void GenericProposalModel::filter(const QString &prefix)
         return;
 
     const FuzzyMatcher::CaseSensitivity caseSensitivity =
-        convertCaseSensitivity(completionSettings().m_caseSensitivity);
+        convertCaseSensitivity(completionSettings().caseSensitivity());
     const QRegularExpression regExp = FuzzyMatcher::createRegExp(prefix, caseSensitivity);
 
     QElapsedTimer timer;

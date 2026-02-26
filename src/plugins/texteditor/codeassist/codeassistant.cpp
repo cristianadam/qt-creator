@@ -61,7 +61,7 @@ public:
     void startAutomaticProposalTimer();
     void automaticProposalTimeout();
     void clearAbortedPosition();
-    void updateFromCompletionSettings(const TextEditor::CompletionSettings &settings);
+    void updateFromCompletionSettings(const TextEditor::CompletionSettingsData &settings);
 
     bool eventFilter(QObject *o, QEvent *e) override;
 
@@ -83,7 +83,7 @@ private:
     TextEditorWidget::SuggestionBlocker m_suggestionBlocker;
     bool m_receivedContentWhileWaiting = false;
     QTimer m_automaticProposalTimer;
-    CompletionSettings m_settings;
+    CompletionSettingsData m_settings;
     int m_abortedBasePosition = -1;
     static const QChar m_null;
     QVariant m_userData;
@@ -102,7 +102,7 @@ CodeAssistantPrivate::CodeAssistantPrivate(CodeAssistant *assistant, TextEditorW
     connect(&m_automaticProposalTimer, &QTimer::timeout,
             this, &CodeAssistantPrivate::automaticProposalTimeout);
 
-    updateFromCompletionSettings(completionSettings());
+    updateFromCompletionSettings(completionSettings().data());
     connect(TextEditorSettings::instance(), &TextEditorSettings::completionSettingsChanged,
             this, &CodeAssistantPrivate::updateFromCompletionSettings);
 
@@ -470,7 +470,7 @@ void CodeAssistantPrivate::stopAutomaticProposalTimer()
 }
 
 void CodeAssistantPrivate::updateFromCompletionSettings(
-        const TextEditor::CompletionSettings &settings)
+        const TextEditor::CompletionSettingsData &settings)
 {
     m_settings = settings;
     m_automaticProposalTimer.setInterval(m_settings.m_automaticProposalTimeoutInMs);

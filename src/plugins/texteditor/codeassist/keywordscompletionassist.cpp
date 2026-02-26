@@ -76,7 +76,6 @@ void KeywordsAssistProposalItem::applyContextualContent(TextEditorWidget *editor
                                                         int basePosition) const
 {
     QTC_ASSERT(editorWidget, return);
-    const CompletionSettings &settings = completionSettings();
 
     int replaceLength = editorWidget->position() - basePosition;
     QString toInsert = text();
@@ -84,8 +83,8 @@ void KeywordsAssistProposalItem::applyContextualContent(TextEditorWidget *editor
     const QChar characterAtCurrentPosition = editorWidget->characterAt(editorWidget->position());
     bool setAutoCompleteSkipPosition = false;
 
-    if (m_isFunction && settings.m_autoInsertBrackets) {
-        if (settings.m_spaceAfterFunctionName) {
+    if (m_isFunction && completionSettings().autoInsertBrackets()) {
+        if (completionSettings().spaceAfterFunctionName()) {
             if (editorWidget->textAt(editorWidget->position(), 2) == QLatin1String(" (")) {
                 cursorOffset = 2;
             } else if ( characterAtCurrentPosition == QLatin1Char('(')
@@ -174,7 +173,7 @@ IAssistProposal *KeywordsCompletionAssistProcessor::performAsync()
     if (interface()->reason() == IdleEditor) {
         QChar characterUnderCursor = interface()->characterAt(interface()->position());
         if (characterUnderCursor.isLetterOrNumber() || interface()->position() - startPosition
-                < completionSettings().m_characterThreshold) {
+                < completionSettings().characterThreshold()) {
             QList<AssistProposalItemInterface *> items;
             if (m_dynamicCompletionFunction)
                 m_dynamicCompletionFunction(interface(), &items, startPosition);

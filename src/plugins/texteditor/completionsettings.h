@@ -5,9 +5,8 @@
 
 #include "texteditor_global.h"
 
-#include <coreplugin/dialogs/ioptionspage.h>
+#include <utils/aspects.h>
 
-namespace Utils { class QtcSettings; }
 namespace TextEditor {
 
 enum CaseSensitivity {
@@ -25,16 +24,15 @@ enum CompletionTrigger {
 /**
  * Settings that describe how the code completion behaves.
  */
-class TEXTEDITOR_EXPORT CompletionSettings
+class TEXTEDITOR_EXPORT CompletionSettingsData
 {
 public:
-    void toSettings(Utils::QtcSettings *s) const;
-    void fromSettings(Utils::QtcSettings *s);
+    CompletionSettingsData() = default;
 
-    bool equals(const CompletionSettings &bs) const;
+    bool equals(const CompletionSettingsData &bs) const;
 
-    friend bool operator==(const CompletionSettings &t1, const CompletionSettings &t2) { return t1.equals(t2); }
-    friend bool operator!=(const CompletionSettings &t1, const CompletionSettings &t2) { return !t1.equals(t2); }
+    friend bool operator==(const CompletionSettingsData &t1, const CompletionSettingsData &t2) { return t1.equals(t2); }
+    friend bool operator!=(const CompletionSettingsData &t1, const CompletionSettingsData &t2) { return !t1.equals(t2); }
 
     CaseSensitivity m_caseSensitivity = CaseInsensitive;
     CompletionTrigger m_completionTrigger = AutomaticCompletion;
@@ -52,6 +50,33 @@ public:
     bool m_skipAutoCompletedText = true;
     bool m_autoRemove = true;
     bool m_overwriteClosingChars = false;
+};
+
+class TEXTEDITOR_EXPORT CompletionSettings : public Utils::AspectContainer
+{
+public:
+    CompletionSettings();
+
+    Utils::TypedSelectionAspect<CaseSensitivity> caseSensitivity{this};
+    Utils::TypedSelectionAspect<CompletionTrigger> completionTrigger{this};
+    Utils::IntegerAspect automaticProposalTimeoutInMs{this};
+    Utils::IntegerAspect characterThreshold{this};
+    Utils::BoolAspect autoInsertBrackets{this};
+    Utils::BoolAspect surroundingAutoBrackets{this};
+    Utils::BoolAspect autoInsertQuotes{this};
+    Utils::BoolAspect surroundingAutoQuotes{this};
+    Utils::BoolAspect partiallyComplete{this};
+    Utils::BoolAspect spaceAfterFunctionName{this};
+    Utils::BoolAspect autoSplitStrings{this};
+    Utils::BoolAspect animateAutoComplete{this};
+    Utils::BoolAspect highlightAutoComplete{this};
+    Utils::BoolAspect skipAutoCompletedText{this};
+    Utils::BoolAspect autoRemove{this};
+    Utils::BoolAspect overwriteClosingChars{this};
+
+    CompletionSettingsData data() const;
+
+    void apply() final;
 };
 
 TEXTEDITOR_EXPORT CompletionSettings &completionSettings();

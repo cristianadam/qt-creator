@@ -1687,7 +1687,7 @@ void TextEditorWidgetPrivate::setDocument(const QSharedPointer<TextDocument> &do
     q->setBehaviorSettings(globalBehaviorSettings().data());
     q->setMarginSettings(marginSettings().data());
     q->setDisplaySettings(displaySettings().data());
-    q->setCompletionSettings(completionSettings());
+    q->setCompletionSettings(completionSettings().data());
     q->setExtraEncodingSettings(globalExtraEncodingSettings().data());
     q->textDocument()->setCodeStyle(TextEditorSettings::codeStyle(m_tabSettingsId));
 
@@ -9480,7 +9480,7 @@ void TextEditorWidget::setStorageSettings(const StorageSettingsData &storageSett
     d->m_document->setStorageSettings(storageSettings);
 }
 
-void TextEditorWidget::setCompletionSettings(const CompletionSettings &completionSettings)
+void TextEditorWidget::setCompletionSettings(const CompletionSettingsData &completionSettings)
 {
     d->m_autoCompleter->setAutoInsertBracketsEnabled(completionSettings.m_autoInsertBrackets);
     d->m_autoCompleter->setSurroundWithBracketsEnabled(completionSettings.m_surroundingAutoBrackets);
