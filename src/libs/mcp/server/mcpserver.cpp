@@ -826,6 +826,31 @@ Server::Server(Schema::Implementation serverInfo, bool enableSSETestRoute)
 
     d->m_server.route(
         "/",
+        QHttpServerRequest::Method::Delete,
+        [this](const QHttpServerRequest &req, QHttpServerResponder &responder) {
+            if (!req.headers().contains("mcp-session-id")) {
+                qCWarning(mcpServerLog)
+                    << "Received request to delete session without session ID, rejecting";
+                responder.write(d->corsHeaders(QUuid()), QHttpServerResponse::StatusCode::BadRequest);
+                return;
+            }
+
+            QUuid sessionId = QUuid::fromString(req.headers().value("mcp-session-id"));
+            if (!d->validateSession(sessionId)) {
+                qCWarning(mcpServerLog)
+                    << "Received request to delete session with invalid session ID,"
+                       "rejecting";
+                responder.write(d->corsHeaders(QUuid()), QHttpServerResponse::StatusCode::BadRequest);
+                return;
+            }
+
+            qCDebug(mcpServerLog) << "Deleting session" << sessionId;
+            d->m_sessions.remove(sessionId);
+            responder.write(d->corsHeaders(sessionId), QHttpServerResponse::StatusCode::Ok);
+        });
+
+    d->m_server.route(
+        "/",
         QHttpServerRequest::Method::Get,
         [this](const QHttpServerRequest &req, QHttpServerResponder &responder) {
             if (req.headers().value("accept") == "text/event-stream") {
