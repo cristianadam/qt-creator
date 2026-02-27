@@ -49,8 +49,6 @@ QtcPlugin {
         "testrunner.h",
         "testsettings.cpp",
         "testsettings.h",
-        "testsettingspage.cpp",
-        "testsettingspage.h",
         "testtreeitem.cpp",
         "testtreeitem.h",
         "testtreeitemdelegate.cpp",
