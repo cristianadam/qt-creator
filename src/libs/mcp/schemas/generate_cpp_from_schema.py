@@ -1109,7 +1109,8 @@ def parse_struct(name, props, types, required=None, description='', nested_child
             inner_type = cpp_type(base_t if base_t else spec.get("type", "string"))
             if is_nullable:
                 inner_type = f"std::optional<{inner_type}>"
-        lines.append(f"    {name}& {prop_name}({inner_type} v) {{ _{prop} = std::move(v); return *this; }}")
+        setter_type = f"std::optional<{inner_type}>" if is_optional else inner_type
+        lines.append(f"    {name}& {prop_name}({setter_type} v) {{ _{prop} = std::move(v); return *this; }}")
         # For open-map fields emit a per-key adder and a QJsonObject merger
         if is_open_map(spec):
             add_name = singular_add_name(prop)

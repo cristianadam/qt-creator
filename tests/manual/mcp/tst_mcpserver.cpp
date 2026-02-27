@@ -226,20 +226,24 @@ static Result<> toolTask(
 
     std::shared_ptr<TaskData> taskData = std::make_shared<TaskData>();
 
-    auto update = [taskData](Mcp::Schema::Task &task) {
+    auto update = [taskData](Mcp::Schema::Task task) -> Mcp::Schema::Task {
         if (taskData->timer.hasExpired()) {
             task.status(Mcp::Schema::TaskStatus::completed);
             task.statusMessage("Task is done.");
-            return;
+            return task;
         }
         if (taskData->cancelled) {
             task.status(Mcp::Schema::TaskStatus::cancelled);
             task.statusMessage("Task is cancelled");
-            return;
+            return task;
         }
 
-        task.statusMessage(
-            QString("Time remaining: %1 seconds").arg(taskData->timer.remainingTime() / 1000));
+        task.statusMessage(QString("Time remaining: %1 seconds")
+                               .arg(
+                                   std::chrono::duration_cast<std::chrono::seconds>(
+                                       taskData->timer.remainingTimeAsDuration())
+                                       .count()));
+        return task;
     };
     // Result
     auto result = [message]() -> Result<Mcp::Schema::CallToolResult> {
@@ -250,7 +254,7 @@ static Result<> toolTask(
     // Cancel
     auto cancel = [taskData]() { taskData->cancelled = true; };
 
-    toolInterface.startTask(1000, update, result, cancel, std::nullopt);
+    toolInterface.startTask(1000, update, result, cancel, 20s);
 
     return ResultOk;
 }

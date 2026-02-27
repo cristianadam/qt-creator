@@ -71,10 +71,10 @@ struct Annotations {
      */
     std::optional<double> _priority;
 
-    Annotations& audience(QList<Role> v) { _audience = std::move(v); return *this; }
+    Annotations& audience(std::optional<QList<Role>> v) { _audience = std::move(v); return *this; }
     Annotations& addAudience(Role v) { if (!_audience) _audience = QList<Role>{}; (*_audience).append(std::move(v)); return *this; }
-    Annotations& lastModified(QString v) { _lastModified = std::move(v); return *this; }
-    Annotations& priority(double v) { _priority = std::move(v); return *this; }
+    Annotations& lastModified(std::optional<QString> v) { _lastModified = std::move(v); return *this; }
+    Annotations& priority(std::optional<double> v) { _priority = std::move(v); return *this; }
 
     const std::optional<QList<Role>>& audience() const { return _audience; }
     const std::optional<QString>& lastModified() const { return _lastModified; }
@@ -123,10 +123,10 @@ struct AudioContent {
     QString _data;  //!< The base64-encoded audio data.
     QString _mimeType;  //!< The MIME type of the audio. Different providers may support different audio types.
 
-    AudioContent& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    AudioContent& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     AudioContent& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     AudioContent& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    AudioContent& annotations(Annotations v) { _annotations = std::move(v); return *this; }
+    AudioContent& annotations(std::optional<Annotations> v) { _annotations = std::move(v); return *this; }
     AudioContent& data(QString v) { _data = std::move(v); return *this; }
     AudioContent& mimeType(QString v) { _mimeType = std::move(v); return *this; }
 
@@ -196,7 +196,7 @@ struct BaseMetadata {
     std::optional<QString> _title;
 
     BaseMetadata& name(QString v) { _name = std::move(v); return *this; }
-    BaseMetadata& title(QString v) { _title = std::move(v); return *this; }
+    BaseMetadata& title(std::optional<QString> v) { _title = std::move(v); return *this; }
 
     const QString& name() const { return _name; }
     const std::optional<QString>& title() const { return _title; }
@@ -229,11 +229,11 @@ struct BlobResourceContents {
     std::optional<QString> _mimeType;  //!< The MIME type of this resource, if known.
     QString _uri;  //!< The URI of this resource.
 
-    BlobResourceContents& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    BlobResourceContents& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     BlobResourceContents& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     BlobResourceContents& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
     BlobResourceContents& blob(QString v) { _blob = std::move(v); return *this; }
-    BlobResourceContents& mimeType(QString v) { _mimeType = std::move(v); return *this; }
+    BlobResourceContents& mimeType(std::optional<QString> v) { _mimeType = std::move(v); return *this; }
     BlobResourceContents& uri(QString v) { _uri = std::move(v); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
@@ -288,9 +288,9 @@ struct BooleanSchema {
     std::optional<QString> _description;
     std::optional<QString> _title;
 
-    BooleanSchema& default_(bool v) { _default = std::move(v); return *this; }
-    BooleanSchema& description(QString v) { _description = std::move(v); return *this; }
-    BooleanSchema& title(QString v) { _title = std::move(v); return *this; }
+    BooleanSchema& default_(std::optional<bool> v) { _default = std::move(v); return *this; }
+    BooleanSchema& description(std::optional<QString> v) { _description = std::move(v); return *this; }
+    BooleanSchema& title(std::optional<QString> v) { _title = std::move(v); return *this; }
 
     const std::optional<bool>& default_() const { return _default; }
     const std::optional<QString>& description() const { return _description; }
@@ -353,7 +353,7 @@ inline QJsonValue toJsonValue(const ProgressToken &val) {
 struct TaskMetadata {
     std::optional<int> _ttl;  //!< Requested duration in milliseconds to retain task from creation.
 
-    TaskMetadata& ttl(int v) { _ttl = std::move(v); return *this; }
+    TaskMetadata& ttl(std::optional<int> v) { _ttl = std::move(v); return *this; }
 
     const std::optional<int>& ttl() const { return _ttl; }
 };
@@ -384,7 +384,7 @@ struct CallToolRequestParams {
     struct Meta {
         std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
 
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+        Meta& progressToken(std::optional<ProgressToken> v) { _progressToken = std::move(v); return *this; }
 
         const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
     };
@@ -402,12 +402,12 @@ struct CallToolRequestParams {
      */
     std::optional<TaskMetadata> _task;
 
-    CallToolRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
-    CallToolRequestParams& arguments(QMap<QString, QJsonValue> v) { _arguments = std::move(v); return *this; }
+    CallToolRequestParams& _meta(std::optional<Meta> v) { __meta = std::move(v); return *this; }
+    CallToolRequestParams& arguments(std::optional<QMap<QString, QJsonValue>> v) { _arguments = std::move(v); return *this; }
     CallToolRequestParams& addArgument(const QString &key, QJsonValue v) { if (!_arguments) _arguments = QMap<QString, QJsonValue>{}; (*_arguments)[key] = std::move(v); return *this; }
     CallToolRequestParams& arguments(const QJsonObject &obj) { if (!_arguments) _arguments = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_arguments)[it.key()] = it.value(); return *this; }
     CallToolRequestParams& name(QString v) { _name = std::move(v); return *this; }
-    CallToolRequestParams& task(TaskMetadata v) { _task = std::move(v); return *this; }
+    CallToolRequestParams& task(std::optional<TaskMetadata> v) { _task = std::move(v); return *this; }
 
     const std::optional<Meta>& _meta() const { return __meta; }
     const std::optional<QMap<QString, QJsonValue>>& arguments() const { return _arguments; }
@@ -528,10 +528,10 @@ struct TextResourceContents {
     QString _text;  //!< The text of the item. This must only be set if the item can actually be represented as text (not binary data).
     QString _uri;  //!< The URI of this resource.
 
-    TextResourceContents& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    TextResourceContents& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     TextResourceContents& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     TextResourceContents& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    TextResourceContents& mimeType(QString v) { _mimeType = std::move(v); return *this; }
+    TextResourceContents& mimeType(std::optional<QString> v) { _mimeType = std::move(v); return *this; }
     TextResourceContents& text(QString v) { _text = std::move(v); return *this; }
     TextResourceContents& uri(QString v) { _uri = std::move(v); return *this; }
 
@@ -617,10 +617,10 @@ struct EmbeddedResource {
     std::optional<Annotations> _annotations;  //!< Optional annotations for the client.
     EmbeddedResourceResource _resource;
 
-    EmbeddedResource& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    EmbeddedResource& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     EmbeddedResource& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     EmbeddedResource& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    EmbeddedResource& annotations(Annotations v) { _annotations = std::move(v); return *this; }
+    EmbeddedResource& annotations(std::optional<Annotations> v) { _annotations = std::move(v); return *this; }
     EmbeddedResource& resource(EmbeddedResourceResource v) { _resource = std::move(v); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
@@ -678,10 +678,10 @@ struct ImageContent {
     QString _data;  //!< The base64-encoded image data.
     QString _mimeType;  //!< The MIME type of the image. Different providers may support different image types.
 
-    ImageContent& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    ImageContent& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     ImageContent& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     ImageContent& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    ImageContent& annotations(Annotations v) { _annotations = std::move(v); return *this; }
+    ImageContent& annotations(std::optional<Annotations> v) { _annotations = std::move(v); return *this; }
     ImageContent& data(QString v) { _data = std::move(v); return *this; }
     ImageContent& mimeType(QString v) { _mimeType = std::move(v); return *this; }
 
@@ -776,11 +776,11 @@ struct Icon {
     QString _src;
     std::optional<Theme> _theme;
 
-    Icon& mimeType(QString v) { _mimeType = std::move(v); return *this; }
-    Icon& sizes(QStringList v) { _sizes = std::move(v); return *this; }
+    Icon& mimeType(std::optional<QString> v) { _mimeType = std::move(v); return *this; }
+    Icon& sizes(std::optional<QStringList> v) { _sizes = std::move(v); return *this; }
     Icon& addSize(QString v) { if (!_sizes) _sizes = QStringList{}; (*_sizes).append(std::move(v)); return *this; }
     Icon& src(QString v) { _src = std::move(v); return *this; }
-    Icon& theme(Theme v) { _theme = std::move(v); return *this; }
+    Icon& theme(std::optional<Theme> v) { _theme = std::move(v); return *this; }
 
     const std::optional<QString>& mimeType() const { return _mimeType; }
     const std::optional<QStringList>& sizes() const { return _sizes; }
@@ -891,17 +891,17 @@ struct ResourceLink {
     std::optional<QString> _title;
     QString _uri;  //!< The URI of this resource.
 
-    ResourceLink& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    ResourceLink& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     ResourceLink& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     ResourceLink& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    ResourceLink& annotations(Annotations v) { _annotations = std::move(v); return *this; }
-    ResourceLink& description(QString v) { _description = std::move(v); return *this; }
-    ResourceLink& icons(QList<Icon> v) { _icons = std::move(v); return *this; }
+    ResourceLink& annotations(std::optional<Annotations> v) { _annotations = std::move(v); return *this; }
+    ResourceLink& description(std::optional<QString> v) { _description = std::move(v); return *this; }
+    ResourceLink& icons(std::optional<QList<Icon>> v) { _icons = std::move(v); return *this; }
     ResourceLink& addIcon(Icon v) { if (!_icons) _icons = QList<Icon>{}; (*_icons).append(std::move(v)); return *this; }
-    ResourceLink& mimeType(QString v) { _mimeType = std::move(v); return *this; }
+    ResourceLink& mimeType(std::optional<QString> v) { _mimeType = std::move(v); return *this; }
     ResourceLink& name(QString v) { _name = std::move(v); return *this; }
-    ResourceLink& size(int v) { _size = std::move(v); return *this; }
-    ResourceLink& title(QString v) { _title = std::move(v); return *this; }
+    ResourceLink& size(std::optional<int> v) { _size = std::move(v); return *this; }
+    ResourceLink& title(std::optional<QString> v) { _title = std::move(v); return *this; }
     ResourceLink& uri(QString v) { _uri = std::move(v); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
@@ -996,10 +996,10 @@ struct TextContent {
     std::optional<Annotations> _annotations;  //!< Optional annotations for the client.
     QString _text;  //!< The text content of the message.
 
-    TextContent& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    TextContent& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     TextContent& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     TextContent& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    TextContent& annotations(Annotations v) { _annotations = std::move(v); return *this; }
+    TextContent& annotations(std::optional<Annotations> v) { _annotations = std::move(v); return *this; }
     TextContent& text(QString v) { _text = std::move(v); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
@@ -1117,13 +1117,13 @@ struct CallToolResult {
     std::optional<bool> _isError;
     std::optional<QMap<QString, QJsonValue>> _structuredContent;  //!< An optional JSON object that represents the structured result of the tool call.
 
-    CallToolResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    CallToolResult& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     CallToolResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     CallToolResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
     CallToolResult& content(QList<ContentBlock> v) { _content = std::move(v); return *this; }
     CallToolResult& addContent(ContentBlock v) { _content.append(std::move(v)); return *this; }
-    CallToolResult& isError(bool v) { _isError = std::move(v); return *this; }
-    CallToolResult& structuredContent(QMap<QString, QJsonValue> v) { _structuredContent = std::move(v); return *this; }
+    CallToolResult& isError(std::optional<bool> v) { _isError = std::move(v); return *this; }
+    CallToolResult& structuredContent(std::optional<QMap<QString, QJsonValue>> v) { _structuredContent = std::move(v); return *this; }
     CallToolResult& addStructuredContent(const QString &key, QJsonValue v) { if (!_structuredContent) _structuredContent = QMap<QString, QJsonValue>{}; (*_structuredContent)[key] = std::move(v); return *this; }
     CallToolResult& structuredContent(const QJsonObject &obj) { if (!_structuredContent) _structuredContent = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_structuredContent)[it.key()] = it.value(); return *this; }
 
@@ -1266,7 +1266,7 @@ struct Result {
     std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
     QJsonObject _additionalProperties;  //!< additional properties
 
-    Result& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    Result& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     Result& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     Result& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
     Result& additionalProperties(const QString &key, QJsonValue v) { _additionalProperties.insert(key, std::move(v)); return *this; }
@@ -1366,9 +1366,9 @@ struct Task {
 
     Task& createdAt(QString v) { _createdAt = std::move(v); return *this; }
     Task& lastUpdatedAt(QString v) { _lastUpdatedAt = std::move(v); return *this; }
-    Task& pollInterval(int v) { _pollInterval = std::move(v); return *this; }
+    Task& pollInterval(std::optional<int> v) { _pollInterval = std::move(v); return *this; }
     Task& status(TaskStatus v) { _status = std::move(v); return *this; }
-    Task& statusMessage(QString v) { _statusMessage = std::move(v); return *this; }
+    Task& statusMessage(std::optional<QString> v) { _statusMessage = std::move(v); return *this; }
     Task& taskId(QString v) { _taskId = std::move(v); return *this; }
     Task& ttl(std::optional<int> v) { _ttl = std::move(v); return *this; }
 
@@ -1448,14 +1448,14 @@ struct CancelTaskResult {
     QString _taskId;  //!< The task identifier.
     std::optional<int> _ttl;  //!< Actual retention duration from creation in milliseconds, null for unlimited.
 
-    CancelTaskResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    CancelTaskResult& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     CancelTaskResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     CancelTaskResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
     CancelTaskResult& createdAt(QString v) { _createdAt = std::move(v); return *this; }
     CancelTaskResult& lastUpdatedAt(QString v) { _lastUpdatedAt = std::move(v); return *this; }
-    CancelTaskResult& pollInterval(int v) { _pollInterval = std::move(v); return *this; }
+    CancelTaskResult& pollInterval(std::optional<int> v) { _pollInterval = std::move(v); return *this; }
     CancelTaskResult& status(TaskStatus v) { _status = std::move(v); return *this; }
-    CancelTaskResult& statusMessage(QString v) { _statusMessage = std::move(v); return *this; }
+    CancelTaskResult& statusMessage(std::optional<QString> v) { _statusMessage = std::move(v); return *this; }
     CancelTaskResult& taskId(QString v) { _taskId = std::move(v); return *this; }
     CancelTaskResult& ttl(std::optional<int> v) { _ttl = std::move(v); return *this; }
 
@@ -1545,11 +1545,11 @@ struct CancelledNotificationParams {
      */
     std::optional<RequestId> _requestId;
 
-    CancelledNotificationParams& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    CancelledNotificationParams& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     CancelledNotificationParams& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     CancelledNotificationParams& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    CancelledNotificationParams& reason(QString v) { _reason = std::move(v); return *this; }
-    CancelledNotificationParams& requestId(RequestId v) { _requestId = std::move(v); return *this; }
+    CancelledNotificationParams& reason(std::optional<QString> v) { _reason = std::move(v); return *this; }
+    CancelledNotificationParams& requestId(std::optional<RequestId> v) { _requestId = std::move(v); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
     QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
@@ -1650,10 +1650,10 @@ struct ClientCapabilities {
         std::optional<QMap<QString, QJsonValue>> _form;
         std::optional<QMap<QString, QJsonValue>> _url;
 
-        Elicitation& form(QMap<QString, QJsonValue> v) { _form = std::move(v); return *this; }
+        Elicitation& form(std::optional<QMap<QString, QJsonValue>> v) { _form = std::move(v); return *this; }
         Elicitation& addForm(const QString &key, QJsonValue v) { if (!_form) _form = QMap<QString, QJsonValue>{}; (*_form)[key] = std::move(v); return *this; }
         Elicitation& form(const QJsonObject &obj) { if (!_form) _form = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_form)[it.key()] = it.value(); return *this; }
-        Elicitation& url(QMap<QString, QJsonValue> v) { _url = std::move(v); return *this; }
+        Elicitation& url(std::optional<QMap<QString, QJsonValue>> v) { _url = std::move(v); return *this; }
         Elicitation& addUrl(const QString &key, QJsonValue v) { if (!_url) _url = QMap<QString, QJsonValue>{}; (*_url)[key] = std::move(v); return *this; }
         Elicitation& url(const QJsonObject &obj) { if (!_url) _url = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_url)[it.key()] = it.value(); return *this; }
 
@@ -1667,7 +1667,7 @@ struct ClientCapabilities {
     struct Roots {
         std::optional<bool> _listChanged;  //!< Whether the client supports notifications for changes to the roots list.
 
-        Roots& listChanged(bool v) { _listChanged = std::move(v); return *this; }
+        Roots& listChanged(std::optional<bool> v) { _listChanged = std::move(v); return *this; }
 
         const std::optional<bool>& listChanged() const { return _listChanged; }
     };
@@ -1681,10 +1681,10 @@ struct ClientCapabilities {
         std::optional<QMap<QString, QJsonValue>> _context;
         std::optional<QMap<QString, QJsonValue>> _tools;  //!< Whether the client supports tool use via tools and toolChoice parameters.
 
-        Sampling& context(QMap<QString, QJsonValue> v) { _context = std::move(v); return *this; }
+        Sampling& context(std::optional<QMap<QString, QJsonValue>> v) { _context = std::move(v); return *this; }
         Sampling& addContext(const QString &key, QJsonValue v) { if (!_context) _context = QMap<QString, QJsonValue>{}; (*_context)[key] = std::move(v); return *this; }
         Sampling& context(const QJsonObject &obj) { if (!_context) _context = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_context)[it.key()] = it.value(); return *this; }
-        Sampling& tools(QMap<QString, QJsonValue> v) { _tools = std::move(v); return *this; }
+        Sampling& tools(std::optional<QMap<QString, QJsonValue>> v) { _tools = std::move(v); return *this; }
         Sampling& addTool(const QString &key, QJsonValue v) { if (!_tools) _tools = QMap<QString, QJsonValue>{}; (*_tools)[key] = std::move(v); return *this; }
         Sampling& tools(const QJsonObject &obj) { if (!_tools) _tools = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_tools)[it.key()] = it.value(); return *this; }
 
@@ -1702,7 +1702,7 @@ struct ClientCapabilities {
             struct Elicitation {
                 std::optional<QMap<QString, QJsonValue>> _create;  //!< Whether the client supports task-augmented elicitation/create requests.
 
-                Elicitation& create(QMap<QString, QJsonValue> v) { _create = std::move(v); return *this; }
+                Elicitation& create(std::optional<QMap<QString, QJsonValue>> v) { _create = std::move(v); return *this; }
                 Elicitation& addCreate(const QString &key, QJsonValue v) { if (!_create) _create = QMap<QString, QJsonValue>{}; (*_create)[key] = std::move(v); return *this; }
                 Elicitation& create(const QJsonObject &obj) { if (!_create) _create = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_create)[it.key()] = it.value(); return *this; }
 
@@ -1714,7 +1714,7 @@ struct ClientCapabilities {
             struct Sampling {
                 std::optional<QMap<QString, QJsonValue>> _createMessage;  //!< Whether the client supports task-augmented sampling/createMessage requests.
 
-                Sampling& createMessage(QMap<QString, QJsonValue> v) { _createMessage = std::move(v); return *this; }
+                Sampling& createMessage(std::optional<QMap<QString, QJsonValue>> v) { _createMessage = std::move(v); return *this; }
                 Sampling& addCreateMessage(const QString &key, QJsonValue v) { if (!_createMessage) _createMessage = QMap<QString, QJsonValue>{}; (*_createMessage)[key] = std::move(v); return *this; }
                 Sampling& createMessage(const QJsonObject &obj) { if (!_createMessage) _createMessage = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_createMessage)[it.key()] = it.value(); return *this; }
 
@@ -1725,8 +1725,8 @@ struct ClientCapabilities {
             std::optional<Elicitation> _elicitation;  //!< Task support for elicitation-related requests.
             std::optional<Sampling> _sampling;  //!< Task support for sampling-related requests.
 
-            Requests& elicitation(Elicitation v) { _elicitation = std::move(v); return *this; }
-            Requests& sampling(Sampling v) { _sampling = std::move(v); return *this; }
+            Requests& elicitation(std::optional<Elicitation> v) { _elicitation = std::move(v); return *this; }
+            Requests& sampling(std::optional<Sampling> v) { _sampling = std::move(v); return *this; }
 
             const std::optional<Elicitation>& elicitation() const { return _elicitation; }
             const std::optional<Sampling>& sampling() const { return _sampling; }
@@ -1736,13 +1736,13 @@ struct ClientCapabilities {
         std::optional<QMap<QString, QJsonValue>> _list;  //!< Whether this client supports tasks/list.
         std::optional<Requests> _requests;  //!< Specifies which request types can be augmented with tasks.
 
-        Tasks& cancel(QMap<QString, QJsonValue> v) { _cancel = std::move(v); return *this; }
+        Tasks& cancel(std::optional<QMap<QString, QJsonValue>> v) { _cancel = std::move(v); return *this; }
         Tasks& addCancel(const QString &key, QJsonValue v) { if (!_cancel) _cancel = QMap<QString, QJsonValue>{}; (*_cancel)[key] = std::move(v); return *this; }
         Tasks& cancel(const QJsonObject &obj) { if (!_cancel) _cancel = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_cancel)[it.key()] = it.value(); return *this; }
-        Tasks& list(QMap<QString, QJsonValue> v) { _list = std::move(v); return *this; }
+        Tasks& list(std::optional<QMap<QString, QJsonValue>> v) { _list = std::move(v); return *this; }
         Tasks& addList(const QString &key, QJsonValue v) { if (!_list) _list = QMap<QString, QJsonValue>{}; (*_list)[key] = std::move(v); return *this; }
         Tasks& list(const QJsonObject &obj) { if (!_list) _list = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_list)[it.key()] = it.value(); return *this; }
-        Tasks& requests(Requests v) { _requests = std::move(v); return *this; }
+        Tasks& requests(std::optional<Requests> v) { _requests = std::move(v); return *this; }
 
         const std::optional<QMap<QString, QJsonValue>>& cancel() const { return _cancel; }
         QJsonObject cancelAsObject() const { if (!_cancel) return {}; QJsonObject o; for (auto it = _cancel->constBegin(); it != _cancel->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
@@ -1757,12 +1757,12 @@ struct ClientCapabilities {
     std::optional<Sampling> _sampling;  //!< Present if the client supports sampling from an LLM.
     std::optional<Tasks> _tasks;  //!< Present if the client supports task-augmented requests.
 
-    ClientCapabilities& elicitation(Elicitation v) { _elicitation = std::move(v); return *this; }
-    ClientCapabilities& experimental(QMap<QString, QJsonObject> v) { _experimental = std::move(v); return *this; }
+    ClientCapabilities& elicitation(std::optional<Elicitation> v) { _elicitation = std::move(v); return *this; }
+    ClientCapabilities& experimental(std::optional<QMap<QString, QJsonObject>> v) { _experimental = std::move(v); return *this; }
     ClientCapabilities& addExperimental(const QString &key, QJsonObject v) { if (!_experimental) _experimental = QMap<QString, QJsonObject>{}; (*_experimental)[key] = std::move(v); return *this; }
-    ClientCapabilities& roots(Roots v) { _roots = std::move(v); return *this; }
-    ClientCapabilities& sampling(Sampling v) { _sampling = std::move(v); return *this; }
-    ClientCapabilities& tasks(Tasks v) { _tasks = std::move(v); return *this; }
+    ClientCapabilities& roots(std::optional<Roots> v) { _roots = std::move(v); return *this; }
+    ClientCapabilities& sampling(std::optional<Sampling> v) { _sampling = std::move(v); return *this; }
+    ClientCapabilities& tasks(std::optional<Tasks> v) { _tasks = std::move(v); return *this; }
 
     const std::optional<Elicitation>& elicitation() const { return _elicitation; }
     const std::optional<QMap<QString, QJsonObject>>& experimental() const { return _experimental; }
@@ -2035,7 +2035,7 @@ inline QJsonObject toJson(const ClientCapabilities &data) {
 struct NotificationParams {
     std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
 
-    NotificationParams& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    NotificationParams& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     NotificationParams& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     NotificationParams& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
 
@@ -2074,7 +2074,7 @@ inline QJsonObject toJson(const NotificationParams &data) {
 struct InitializedNotification {
     std::optional<NotificationParams> _params;
 
-    InitializedNotification& params(NotificationParams v) { _params = std::move(v); return *this; }
+    InitializedNotification& params(std::optional<NotificationParams> v) { _params = std::move(v); return *this; }
 
     const std::optional<NotificationParams>& params() const { return _params; }
 };
@@ -2116,13 +2116,13 @@ struct ProgressNotificationParams {
     ProgressToken _progressToken;  //!< The progress token which was given in the initial request, used to associate this notification with the request that is proceeding.
     std::optional<double> _total;  //!< Total number of items to process (or total progress required), if known.
 
-    ProgressNotificationParams& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    ProgressNotificationParams& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     ProgressNotificationParams& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     ProgressNotificationParams& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    ProgressNotificationParams& message(QString v) { _message = std::move(v); return *this; }
+    ProgressNotificationParams& message(std::optional<QString> v) { _message = std::move(v); return *this; }
     ProgressNotificationParams& progress(double v) { _progress = std::move(v); return *this; }
     ProgressNotificationParams& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
-    ProgressNotificationParams& total(double v) { _total = std::move(v); return *this; }
+    ProgressNotificationParams& total(std::optional<double> v) { _total = std::move(v); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
     QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
@@ -2226,7 +2226,7 @@ inline QJsonObject toJson(const ProgressNotification &data) {
 struct RootsListChangedNotification {
     std::optional<NotificationParams> _params;
 
-    RootsListChangedNotification& params(NotificationParams v) { _params = std::move(v); return *this; }
+    RootsListChangedNotification& params(std::optional<NotificationParams> v) { _params = std::move(v); return *this; }
 
     const std::optional<NotificationParams>& params() const { return _params; }
 };
@@ -2278,14 +2278,14 @@ struct TaskStatusNotificationParams {
     QString _taskId;  //!< The task identifier.
     std::optional<int> _ttl;  //!< Actual retention duration from creation in milliseconds, null for unlimited.
 
-    TaskStatusNotificationParams& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    TaskStatusNotificationParams& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     TaskStatusNotificationParams& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     TaskStatusNotificationParams& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
     TaskStatusNotificationParams& createdAt(QString v) { _createdAt = std::move(v); return *this; }
     TaskStatusNotificationParams& lastUpdatedAt(QString v) { _lastUpdatedAt = std::move(v); return *this; }
-    TaskStatusNotificationParams& pollInterval(int v) { _pollInterval = std::move(v); return *this; }
+    TaskStatusNotificationParams& pollInterval(std::optional<int> v) { _pollInterval = std::move(v); return *this; }
     TaskStatusNotificationParams& status(TaskStatus v) { _status = std::move(v); return *this; }
-    TaskStatusNotificationParams& statusMessage(QString v) { _statusMessage = std::move(v); return *this; }
+    TaskStatusNotificationParams& statusMessage(std::optional<QString> v) { _statusMessage = std::move(v); return *this; }
     TaskStatusNotificationParams& taskId(QString v) { _taskId = std::move(v); return *this; }
     TaskStatusNotificationParams& ttl(std::optional<int> v) { _ttl = std::move(v); return *this; }
 
@@ -2464,7 +2464,7 @@ struct PromptReference {
     std::optional<QString> _title;
 
     PromptReference& name(QString v) { _name = std::move(v); return *this; }
-    PromptReference& title(QString v) { _title = std::move(v); return *this; }
+    PromptReference& title(std::optional<QString> v) { _title = std::move(v); return *this; }
 
     const QString& name() const { return _name; }
     const std::optional<QString>& title() const { return _title; }
@@ -2563,7 +2563,7 @@ struct CompleteRequestParams {
     struct Meta {
         std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
 
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+        Meta& progressToken(std::optional<ProgressToken> v) { _progressToken = std::move(v); return *this; }
 
         const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
     };
@@ -2584,7 +2584,7 @@ struct CompleteRequestParams {
     struct Context {
         std::optional<QMap<QString, QString>> _arguments;  //!< Previously-resolved variables in a URI template or prompt.
 
-        Context& arguments(QMap<QString, QString> v) { _arguments = std::move(v); return *this; }
+        Context& arguments(std::optional<QMap<QString, QString>> v) { _arguments = std::move(v); return *this; }
         Context& addArgument(const QString &key, QString v) { if (!_arguments) _arguments = QMap<QString, QString>{}; (*_arguments)[key] = std::move(v); return *this; }
 
         const std::optional<QMap<QString, QString>>& arguments() const { return _arguments; }
@@ -2595,9 +2595,9 @@ struct CompleteRequestParams {
     std::optional<Context> _context;  //!< Additional, optional context for completions
     CompleteRequestParamsRef _ref;
 
-    CompleteRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
+    CompleteRequestParams& _meta(std::optional<Meta> v) { __meta = std::move(v); return *this; }
     CompleteRequestParams& argument(Argument v) { _argument = std::move(v); return *this; }
-    CompleteRequestParams& context(Context v) { _context = std::move(v); return *this; }
+    CompleteRequestParams& context(std::optional<Context> v) { _context = std::move(v); return *this; }
     CompleteRequestParams& ref(CompleteRequestParamsRef v) { _ref = std::move(v); return *this; }
 
     const std::optional<Meta>& _meta() const { return __meta; }
@@ -2762,7 +2762,7 @@ struct GetPromptRequestParams {
     struct Meta {
         std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
 
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+        Meta& progressToken(std::optional<ProgressToken> v) { _progressToken = std::move(v); return *this; }
 
         const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
     };
@@ -2771,8 +2771,8 @@ struct GetPromptRequestParams {
     std::optional<QMap<QString, QString>> _arguments;  //!< Arguments to use for templating the prompt.
     QString _name;  //!< The name of the prompt or prompt template.
 
-    GetPromptRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
-    GetPromptRequestParams& arguments(QMap<QString, QString> v) { _arguments = std::move(v); return *this; }
+    GetPromptRequestParams& _meta(std::optional<Meta> v) { __meta = std::move(v); return *this; }
+    GetPromptRequestParams& arguments(std::optional<QMap<QString, QString>> v) { _arguments = std::move(v); return *this; }
     GetPromptRequestParams& addArgument(const QString &key, QString v) { if (!_arguments) _arguments = QMap<QString, QString>{}; (*_arguments)[key] = std::move(v); return *this; }
     GetPromptRequestParams& name(QString v) { _name = std::move(v); return *this; }
 
@@ -3059,13 +3059,13 @@ struct Implementation {
     QString _version;
     std::optional<QString> _websiteUrl;  //!< An optional URL of the website for this implementation.
 
-    Implementation& description(QString v) { _description = std::move(v); return *this; }
-    Implementation& icons(QList<Icon> v) { _icons = std::move(v); return *this; }
+    Implementation& description(std::optional<QString> v) { _description = std::move(v); return *this; }
+    Implementation& icons(std::optional<QList<Icon>> v) { _icons = std::move(v); return *this; }
     Implementation& addIcon(Icon v) { if (!_icons) _icons = QList<Icon>{}; (*_icons).append(std::move(v)); return *this; }
     Implementation& name(QString v) { _name = std::move(v); return *this; }
-    Implementation& title(QString v) { _title = std::move(v); return *this; }
+    Implementation& title(std::optional<QString> v) { _title = std::move(v); return *this; }
     Implementation& version(QString v) { _version = std::move(v); return *this; }
-    Implementation& websiteUrl(QString v) { _websiteUrl = std::move(v); return *this; }
+    Implementation& websiteUrl(std::optional<QString> v) { _websiteUrl = std::move(v); return *this; }
 
     const std::optional<QString>& description() const { return _description; }
     const std::optional<QList<Icon>>& icons() const { return _icons; }
@@ -3131,7 +3131,7 @@ struct InitializeRequestParams {
     struct Meta {
         std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
 
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+        Meta& progressToken(std::optional<ProgressToken> v) { _progressToken = std::move(v); return *this; }
 
         const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
     };
@@ -3141,7 +3141,7 @@ struct InitializeRequestParams {
     Implementation _clientInfo;
     QString _protocolVersion;  //!< The latest version of the Model Context Protocol that the client supports. The client MAY decide to support older versions as well.
 
-    InitializeRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
+    InitializeRequestParams& _meta(std::optional<Meta> v) { __meta = std::move(v); return *this; }
     InitializeRequestParams& capabilities(ClientCapabilities v) { _capabilities = std::move(v); return *this; }
     InitializeRequestParams& clientInfo(Implementation v) { _clientInfo = std::move(v); return *this; }
     InitializeRequestParams& protocolVersion(QString v) { _protocolVersion = std::move(v); return *this; }
@@ -3260,7 +3260,7 @@ struct PaginatedRequestParams {
     struct Meta {
         std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
 
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+        Meta& progressToken(std::optional<ProgressToken> v) { _progressToken = std::move(v); return *this; }
 
         const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
     };
@@ -3272,8 +3272,8 @@ struct PaginatedRequestParams {
      */
     std::optional<QString> _cursor;
 
-    PaginatedRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
-    PaginatedRequestParams& cursor(QString v) { _cursor = std::move(v); return *this; }
+    PaginatedRequestParams& _meta(std::optional<Meta> v) { __meta = std::move(v); return *this; }
+    PaginatedRequestParams& cursor(std::optional<QString> v) { _cursor = std::move(v); return *this; }
 
     const std::optional<Meta>& _meta() const { return __meta; }
     const std::optional<QString>& cursor() const { return _cursor; }
@@ -3325,7 +3325,7 @@ struct ListPromptsRequest {
     std::optional<PaginatedRequestParams> _params;
 
     ListPromptsRequest& id(RequestId v) { _id = std::move(v); return *this; }
-    ListPromptsRequest& params(PaginatedRequestParams v) { _params = std::move(v); return *this; }
+    ListPromptsRequest& params(std::optional<PaginatedRequestParams> v) { _params = std::move(v); return *this; }
 
     const RequestId& id() const { return _id; }
     const std::optional<PaginatedRequestParams>& params() const { return _params; }
@@ -3371,7 +3371,7 @@ struct ListResourceTemplatesRequest {
     std::optional<PaginatedRequestParams> _params;
 
     ListResourceTemplatesRequest& id(RequestId v) { _id = std::move(v); return *this; }
-    ListResourceTemplatesRequest& params(PaginatedRequestParams v) { _params = std::move(v); return *this; }
+    ListResourceTemplatesRequest& params(std::optional<PaginatedRequestParams> v) { _params = std::move(v); return *this; }
 
     const RequestId& id() const { return _id; }
     const std::optional<PaginatedRequestParams>& params() const { return _params; }
@@ -3417,7 +3417,7 @@ struct ListResourcesRequest {
     std::optional<PaginatedRequestParams> _params;
 
     ListResourcesRequest& id(RequestId v) { _id = std::move(v); return *this; }
-    ListResourcesRequest& params(PaginatedRequestParams v) { _params = std::move(v); return *this; }
+    ListResourcesRequest& params(std::optional<PaginatedRequestParams> v) { _params = std::move(v); return *this; }
 
     const RequestId& id() const { return _id; }
     const std::optional<PaginatedRequestParams>& params() const { return _params; }
@@ -3463,7 +3463,7 @@ struct ListTasksRequest {
     std::optional<PaginatedRequestParams> _params;
 
     ListTasksRequest& id(RequestId v) { _id = std::move(v); return *this; }
-    ListTasksRequest& params(PaginatedRequestParams v) { _params = std::move(v); return *this; }
+    ListTasksRequest& params(std::optional<PaginatedRequestParams> v) { _params = std::move(v); return *this; }
 
     const RequestId& id() const { return _id; }
     const std::optional<PaginatedRequestParams>& params() const { return _params; }
@@ -3509,7 +3509,7 @@ struct ListToolsRequest {
     std::optional<PaginatedRequestParams> _params;
 
     ListToolsRequest& id(RequestId v) { _id = std::move(v); return *this; }
-    ListToolsRequest& params(PaginatedRequestParams v) { _params = std::move(v); return *this; }
+    ListToolsRequest& params(std::optional<PaginatedRequestParams> v) { _params = std::move(v); return *this; }
 
     const RequestId& id() const { return _id; }
     const std::optional<PaginatedRequestParams>& params() const { return _params; }
@@ -3557,14 +3557,14 @@ struct RequestParams {
     struct Meta {
         std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
 
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+        Meta& progressToken(std::optional<ProgressToken> v) { _progressToken = std::move(v); return *this; }
 
         const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
     };
 
     std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
 
-    RequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
+    RequestParams& _meta(std::optional<Meta> v) { __meta = std::move(v); return *this; }
 
     const std::optional<Meta>& _meta() const { return __meta; }
 };
@@ -3613,7 +3613,7 @@ struct PingRequest {
     std::optional<RequestParams> _params;
 
     PingRequest& id(RequestId v) { _id = std::move(v); return *this; }
-    PingRequest& params(RequestParams v) { _params = std::move(v); return *this; }
+    PingRequest& params(std::optional<RequestParams> v) { _params = std::move(v); return *this; }
 
     const RequestId& id() const { return _id; }
     const std::optional<RequestParams>& params() const { return _params; }
@@ -3661,7 +3661,7 @@ struct ReadResourceRequestParams {
     struct Meta {
         std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
 
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+        Meta& progressToken(std::optional<ProgressToken> v) { _progressToken = std::move(v); return *this; }
 
         const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
     };
@@ -3669,7 +3669,7 @@ struct ReadResourceRequestParams {
     std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
     QString _uri;  //!< The URI of the resource. The URI can use any protocol; it is up to the server how to interpret it.
 
-    ReadResourceRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
+    ReadResourceRequestParams& _meta(std::optional<Meta> v) { __meta = std::move(v); return *this; }
     ReadResourceRequestParams& uri(QString v) { _uri = std::move(v); return *this; }
 
     const std::optional<Meta>& _meta() const { return __meta; }
@@ -3818,7 +3818,7 @@ struct SetLevelRequestParams {
     struct Meta {
         std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
 
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+        Meta& progressToken(std::optional<ProgressToken> v) { _progressToken = std::move(v); return *this; }
 
         const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
     };
@@ -3826,7 +3826,7 @@ struct SetLevelRequestParams {
     std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
     LoggingLevel _level;  //!< The level of logging that the client wants to receive from the server. The server should send all logs at this level and higher (i.e., more severe) to the client as notifications/message.
 
-    SetLevelRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
+    SetLevelRequestParams& _meta(std::optional<Meta> v) { __meta = std::move(v); return *this; }
     SetLevelRequestParams& level(LoggingLevel v) { _level = std::move(v); return *this; }
 
     const std::optional<Meta>& _meta() const { return __meta; }
@@ -3928,7 +3928,7 @@ struct SubscribeRequestParams {
     struct Meta {
         std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
 
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+        Meta& progressToken(std::optional<ProgressToken> v) { _progressToken = std::move(v); return *this; }
 
         const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
     };
@@ -3936,7 +3936,7 @@ struct SubscribeRequestParams {
     std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
     QString _uri;  //!< The URI of the resource. The URI can use any protocol; it is up to the server how to interpret it.
 
-    SubscribeRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
+    SubscribeRequestParams& _meta(std::optional<Meta> v) { __meta = std::move(v); return *this; }
     SubscribeRequestParams& uri(QString v) { _uri = std::move(v); return *this; }
 
     const std::optional<Meta>& _meta() const { return __meta; }
@@ -4039,7 +4039,7 @@ struct UnsubscribeRequestParams {
     struct Meta {
         std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
 
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+        Meta& progressToken(std::optional<ProgressToken> v) { _progressToken = std::move(v); return *this; }
 
         const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
     };
@@ -4047,7 +4047,7 @@ struct UnsubscribeRequestParams {
     std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
     QString _uri;  //!< The URI of the resource. The URI can use any protocol; it is up to the server how to interpret it.
 
-    UnsubscribeRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
+    UnsubscribeRequestParams& _meta(std::optional<Meta> v) { __meta = std::move(v); return *this; }
     UnsubscribeRequestParams& uri(QString v) { _uri = std::move(v); return *this; }
 
     const std::optional<Meta>& _meta() const { return __meta; }
@@ -4266,13 +4266,13 @@ struct ToolResultContent {
      */
     QString _toolUseId;
 
-    ToolResultContent& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    ToolResultContent& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     ToolResultContent& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     ToolResultContent& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
     ToolResultContent& content(QList<ContentBlock> v) { _content = std::move(v); return *this; }
     ToolResultContent& addContent(ContentBlock v) { _content.append(std::move(v)); return *this; }
-    ToolResultContent& isError(bool v) { _isError = std::move(v); return *this; }
-    ToolResultContent& structuredContent(QMap<QString, QJsonValue> v) { _structuredContent = std::move(v); return *this; }
+    ToolResultContent& isError(std::optional<bool> v) { _isError = std::move(v); return *this; }
+    ToolResultContent& structuredContent(std::optional<QMap<QString, QJsonValue>> v) { _structuredContent = std::move(v); return *this; }
     ToolResultContent& addStructuredContent(const QString &key, QJsonValue v) { if (!_structuredContent) _structuredContent = QMap<QString, QJsonValue>{}; (*_structuredContent)[key] = std::move(v); return *this; }
     ToolResultContent& structuredContent(const QJsonObject &obj) { if (!_structuredContent) _structuredContent = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_structuredContent)[it.key()] = it.value(); return *this; }
     ToolResultContent& toolUseId(QString v) { _toolUseId = std::move(v); return *this; }
@@ -4369,7 +4369,7 @@ struct ToolUseContent {
     QMap<QString, QJsonValue> _input;  //!< The arguments to pass to the tool, conforming to the tool's input schema.
     QString _name;  //!< The name of the tool to call.
 
-    ToolUseContent& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    ToolUseContent& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     ToolUseContent& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     ToolUseContent& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
     ToolUseContent& id(QString v) { _id = std::move(v); return *this; }
@@ -4550,13 +4550,13 @@ struct CreateMessageResult {
      */
     std::optional<QString> _stopReason;
 
-    CreateMessageResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    CreateMessageResult& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     CreateMessageResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     CreateMessageResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
     CreateMessageResult& content(CreateMessageResultContent v) { _content = std::move(v); return *this; }
     CreateMessageResult& model(QString v) { _model = std::move(v); return *this; }
     CreateMessageResult& role(Role v) { _role = std::move(v); return *this; }
-    CreateMessageResult& stopReason(QString v) { _stopReason = std::move(v); return *this; }
+    CreateMessageResult& stopReason(std::optional<QString> v) { _stopReason = std::move(v); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
     QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
@@ -4668,11 +4668,11 @@ struct ElicitResult {
      */
     std::optional<QMap<QString, ElicitResultContentValue>> _content;
 
-    ElicitResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    ElicitResult& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     ElicitResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     ElicitResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
     ElicitResult& action(Action v) { _action = std::move(v); return *this; }
-    ElicitResult& content(QMap<QString, ElicitResultContentValue> v) { _content = std::move(v); return *this; }
+    ElicitResult& content(std::optional<QMap<QString, ElicitResultContentValue>> v) { _content = std::move(v); return *this; }
     ElicitResult& addContent(const QString &key, ElicitResultContentValue v) { if (!_content) _content = QMap<QString, ElicitResultContentValue>{}; (*_content)[key] = std::move(v); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
@@ -4757,7 +4757,7 @@ struct GetTaskPayloadResult {
     std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
     QJsonObject _additionalProperties;  //!< additional properties
 
-    GetTaskPayloadResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    GetTaskPayloadResult& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     GetTaskPayloadResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     GetTaskPayloadResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
     GetTaskPayloadResult& additionalProperties(const QString &key, QJsonValue v) { _additionalProperties.insert(key, std::move(v)); return *this; }
@@ -4822,14 +4822,14 @@ struct GetTaskResult {
     QString _taskId;  //!< The task identifier.
     std::optional<int> _ttl;  //!< Actual retention duration from creation in milliseconds, null for unlimited.
 
-    GetTaskResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    GetTaskResult& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     GetTaskResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     GetTaskResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
     GetTaskResult& createdAt(QString v) { _createdAt = std::move(v); return *this; }
     GetTaskResult& lastUpdatedAt(QString v) { _lastUpdatedAt = std::move(v); return *this; }
-    GetTaskResult& pollInterval(int v) { _pollInterval = std::move(v); return *this; }
+    GetTaskResult& pollInterval(std::optional<int> v) { _pollInterval = std::move(v); return *this; }
     GetTaskResult& status(TaskStatus v) { _status = std::move(v); return *this; }
-    GetTaskResult& statusMessage(QString v) { _statusMessage = std::move(v); return *this; }
+    GetTaskResult& statusMessage(std::optional<QString> v) { _statusMessage = std::move(v); return *this; }
     GetTaskResult& taskId(QString v) { _taskId = std::move(v); return *this; }
     GetTaskResult& ttl(std::optional<int> v) { _ttl = std::move(v); return *this; }
 
@@ -4922,10 +4922,10 @@ struct Root {
      */
     QString _uri;
 
-    Root& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    Root& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     Root& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     Root& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    Root& name(QString v) { _name = std::move(v); return *this; }
+    Root& name(std::optional<QString> v) { _name = std::move(v); return *this; }
     Root& uri(QString v) { _uri = std::move(v); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
@@ -4977,7 +4977,7 @@ struct ListRootsResult {
     std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
     QList<Root> _roots;
 
-    ListRootsResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    ListRootsResult& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     ListRootsResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     ListRootsResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
     ListRootsResult& roots(QList<Root> v) { _roots = std::move(v); return *this; }
@@ -5036,10 +5036,10 @@ struct ListTasksResult {
     std::optional<QString> _nextCursor;
     QList<Task> _tasks;
 
-    ListTasksResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    ListTasksResult& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     ListTasksResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     ListTasksResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    ListTasksResult& nextCursor(QString v) { _nextCursor = std::move(v); return *this; }
+    ListTasksResult& nextCursor(std::optional<QString> v) { _nextCursor = std::move(v); return *this; }
     ListTasksResult& tasks(QList<Task> v) { _tasks = std::move(v); return *this; }
     ListTasksResult& addTask(Task v) { _tasks.append(std::move(v)); return *this; }
 
@@ -5146,8 +5146,8 @@ struct CompleteResult {
         std::optional<int> _total;  //!< The total number of completion options available. This can exceed the number of values actually sent in the response.
         QStringList _values;  //!< An array of completion values. Must not exceed 100 items.
 
-        Completion& hasMore(bool v) { _hasMore = std::move(v); return *this; }
-        Completion& total(int v) { _total = std::move(v); return *this; }
+        Completion& hasMore(std::optional<bool> v) { _hasMore = std::move(v); return *this; }
+        Completion& total(std::optional<int> v) { _total = std::move(v); return *this; }
         Completion& values(QStringList v) { _values = std::move(v); return *this; }
         Completion& addValue(QString v) { _values.append(std::move(v)); return *this; }
 
@@ -5159,7 +5159,7 @@ struct CompleteResult {
     std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
     Completion _completion;
 
-    CompleteResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    CompleteResult& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     CompleteResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     CompleteResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
     CompleteResult& completion(Completion v) { _completion = std::move(v); return *this; }
@@ -5253,7 +5253,7 @@ struct ModelHint {
      */
     std::optional<QString> _name;
 
-    ModelHint& name(QString v) { _name = std::move(v); return *this; }
+    ModelHint& name(std::optional<QString> v) { _name = std::move(v); return *this; }
 
     const std::optional<QString>& name() const { return _name; }
 };
@@ -5319,11 +5319,11 @@ struct ModelPreferences {
      */
     std::optional<double> _speedPriority;
 
-    ModelPreferences& costPriority(double v) { _costPriority = std::move(v); return *this; }
-    ModelPreferences& hints(QList<ModelHint> v) { _hints = std::move(v); return *this; }
+    ModelPreferences& costPriority(std::optional<double> v) { _costPriority = std::move(v); return *this; }
+    ModelPreferences& hints(std::optional<QList<ModelHint>> v) { _hints = std::move(v); return *this; }
     ModelPreferences& addHint(ModelHint v) { if (!_hints) _hints = QList<ModelHint>{}; (*_hints).append(std::move(v)); return *this; }
-    ModelPreferences& intelligencePriority(double v) { _intelligencePriority = std::move(v); return *this; }
-    ModelPreferences& speedPriority(double v) { _speedPriority = std::move(v); return *this; }
+    ModelPreferences& intelligencePriority(std::optional<double> v) { _intelligencePriority = std::move(v); return *this; }
+    ModelPreferences& speedPriority(std::optional<double> v) { _speedPriority = std::move(v); return *this; }
 
     const std::optional<double>& costPriority() const { return _costPriority; }
     const std::optional<QList<ModelHint>>& hints() const { return _hints; }
@@ -5376,7 +5376,7 @@ struct SamplingMessage {
     CreateMessageResultContent _content;
     Role _role;
 
-    SamplingMessage& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    SamplingMessage& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     SamplingMessage& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     SamplingMessage& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
     SamplingMessage& content(CreateMessageResultContent v) { _content = std::move(v); return *this; }
@@ -5472,11 +5472,11 @@ struct ToolAnnotations {
     std::optional<bool> _readOnlyHint;
     std::optional<QString> _title;  //!< A human-readable title for the tool.
 
-    ToolAnnotations& destructiveHint(bool v) { _destructiveHint = std::move(v); return *this; }
-    ToolAnnotations& idempotentHint(bool v) { _idempotentHint = std::move(v); return *this; }
-    ToolAnnotations& openWorldHint(bool v) { _openWorldHint = std::move(v); return *this; }
-    ToolAnnotations& readOnlyHint(bool v) { _readOnlyHint = std::move(v); return *this; }
-    ToolAnnotations& title(QString v) { _title = std::move(v); return *this; }
+    ToolAnnotations& destructiveHint(std::optional<bool> v) { _destructiveHint = std::move(v); return *this; }
+    ToolAnnotations& idempotentHint(std::optional<bool> v) { _idempotentHint = std::move(v); return *this; }
+    ToolAnnotations& openWorldHint(std::optional<bool> v) { _openWorldHint = std::move(v); return *this; }
+    ToolAnnotations& readOnlyHint(std::optional<bool> v) { _readOnlyHint = std::move(v); return *this; }
+    ToolAnnotations& title(std::optional<QString> v) { _title = std::move(v); return *this; }
 
     const std::optional<bool>& destructiveHint() const { return _destructiveHint; }
     const std::optional<bool>& idempotentHint() const { return _idempotentHint; }
@@ -5540,7 +5540,7 @@ struct ToolExecution {
 
     std::optional<TaskSupport> _taskSupport;
 
-    ToolExecution& taskSupport(TaskSupport v) { _taskSupport = std::move(v); return *this; }
+    ToolExecution& taskSupport(std::optional<TaskSupport> v) { _taskSupport = std::move(v); return *this; }
 
     const std::optional<TaskSupport>& taskSupport() const { return _taskSupport; }
 };
@@ -5593,10 +5593,10 @@ struct Tool {
         std::optional<QMap<QString, QJsonObject>> _properties;
         std::optional<QStringList> _required;
 
-        InputSchema& $schema(QString v) { _$schema = std::move(v); return *this; }
-        InputSchema& properties(QMap<QString, QJsonObject> v) { _properties = std::move(v); return *this; }
+        InputSchema& $schema(std::optional<QString> v) { _$schema = std::move(v); return *this; }
+        InputSchema& properties(std::optional<QMap<QString, QJsonObject>> v) { _properties = std::move(v); return *this; }
         InputSchema& addProperty(const QString &key, QJsonObject v) { if (!_properties) _properties = QMap<QString, QJsonObject>{}; (*_properties)[key] = std::move(v); return *this; }
-        InputSchema& required(QStringList v) { _required = std::move(v); return *this; }
+        InputSchema& required(std::optional<QStringList> v) { _required = std::move(v); return *this; }
         InputSchema& addRequired(QString v) { if (!_required) _required = QStringList{}; (*_required).append(std::move(v)); return *this; }
 
         const std::optional<QString>& $schema() const { return _$schema; }
@@ -5616,10 +5616,10 @@ struct Tool {
         std::optional<QMap<QString, QJsonObject>> _properties;
         std::optional<QStringList> _required;
 
-        OutputSchema& $schema(QString v) { _$schema = std::move(v); return *this; }
-        OutputSchema& properties(QMap<QString, QJsonObject> v) { _properties = std::move(v); return *this; }
+        OutputSchema& $schema(std::optional<QString> v) { _$schema = std::move(v); return *this; }
+        OutputSchema& properties(std::optional<QMap<QString, QJsonObject>> v) { _properties = std::move(v); return *this; }
         OutputSchema& addProperty(const QString &key, QJsonObject v) { if (!_properties) _properties = QMap<QString, QJsonObject>{}; (*_properties)[key] = std::move(v); return *this; }
-        OutputSchema& required(QStringList v) { _required = std::move(v); return *this; }
+        OutputSchema& required(std::optional<QStringList> v) { _required = std::move(v); return *this; }
         OutputSchema& addRequired(QString v) { if (!_required) _required = QStringList{}; (*_required).append(std::move(v)); return *this; }
 
         const std::optional<QString>& $schema() const { return _$schema; }
@@ -5673,18 +5673,18 @@ struct Tool {
      */
     std::optional<QString> _title;
 
-    Tool& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    Tool& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     Tool& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     Tool& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    Tool& annotations(ToolAnnotations v) { _annotations = std::move(v); return *this; }
-    Tool& description(QString v) { _description = std::move(v); return *this; }
-    Tool& execution(ToolExecution v) { _execution = std::move(v); return *this; }
-    Tool& icons(QList<Icon> v) { _icons = std::move(v); return *this; }
+    Tool& annotations(std::optional<ToolAnnotations> v) { _annotations = std::move(v); return *this; }
+    Tool& description(std::optional<QString> v) { _description = std::move(v); return *this; }
+    Tool& execution(std::optional<ToolExecution> v) { _execution = std::move(v); return *this; }
+    Tool& icons(std::optional<QList<Icon>> v) { _icons = std::move(v); return *this; }
     Tool& addIcon(Icon v) { if (!_icons) _icons = QList<Icon>{}; (*_icons).append(std::move(v)); return *this; }
     Tool& inputSchema(InputSchema v) { _inputSchema = std::move(v); return *this; }
     Tool& name(QString v) { _name = std::move(v); return *this; }
-    Tool& outputSchema(OutputSchema v) { _outputSchema = std::move(v); return *this; }
-    Tool& title(QString v) { _title = std::move(v); return *this; }
+    Tool& outputSchema(std::optional<OutputSchema> v) { _outputSchema = std::move(v); return *this; }
+    Tool& title(std::optional<QString> v) { _title = std::move(v); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
     QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
@@ -5880,7 +5880,7 @@ struct ToolChoice {
 
     std::optional<Mode> _mode;
 
-    ToolChoice& mode(Mode v) { _mode = std::move(v); return *this; }
+    ToolChoice& mode(std::optional<Mode> v) { _mode = std::move(v); return *this; }
 
     const std::optional<Mode>& mode() const { return _mode; }
 };
@@ -5933,7 +5933,7 @@ struct CreateMessageRequestParams {
     struct Meta {
         std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
 
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+        Meta& progressToken(std::optional<ProgressToken> v) { _progressToken = std::move(v); return *this; }
 
         const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
     };
@@ -5986,22 +5986,22 @@ struct CreateMessageRequestParams {
      */
     std::optional<QList<Tool>> _tools;
 
-    CreateMessageRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
-    CreateMessageRequestParams& includeContext(IncludeContext v) { _includeContext = std::move(v); return *this; }
+    CreateMessageRequestParams& _meta(std::optional<Meta> v) { __meta = std::move(v); return *this; }
+    CreateMessageRequestParams& includeContext(std::optional<IncludeContext> v) { _includeContext = std::move(v); return *this; }
     CreateMessageRequestParams& maxTokens(int v) { _maxTokens = std::move(v); return *this; }
     CreateMessageRequestParams& messages(QList<SamplingMessage> v) { _messages = std::move(v); return *this; }
     CreateMessageRequestParams& addMessage(SamplingMessage v) { _messages.append(std::move(v)); return *this; }
-    CreateMessageRequestParams& metadata(QMap<QString, QJsonValue> v) { _metadata = std::move(v); return *this; }
+    CreateMessageRequestParams& metadata(std::optional<QMap<QString, QJsonValue>> v) { _metadata = std::move(v); return *this; }
     CreateMessageRequestParams& addMetadata(const QString &key, QJsonValue v) { if (!_metadata) _metadata = QMap<QString, QJsonValue>{}; (*_metadata)[key] = std::move(v); return *this; }
     CreateMessageRequestParams& metadata(const QJsonObject &obj) { if (!_metadata) _metadata = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_metadata)[it.key()] = it.value(); return *this; }
-    CreateMessageRequestParams& modelPreferences(ModelPreferences v) { _modelPreferences = std::move(v); return *this; }
-    CreateMessageRequestParams& stopSequences(QStringList v) { _stopSequences = std::move(v); return *this; }
+    CreateMessageRequestParams& modelPreferences(std::optional<ModelPreferences> v) { _modelPreferences = std::move(v); return *this; }
+    CreateMessageRequestParams& stopSequences(std::optional<QStringList> v) { _stopSequences = std::move(v); return *this; }
     CreateMessageRequestParams& addStopSequence(QString v) { if (!_stopSequences) _stopSequences = QStringList{}; (*_stopSequences).append(std::move(v)); return *this; }
-    CreateMessageRequestParams& systemPrompt(QString v) { _systemPrompt = std::move(v); return *this; }
-    CreateMessageRequestParams& task(TaskMetadata v) { _task = std::move(v); return *this; }
-    CreateMessageRequestParams& temperature(double v) { _temperature = std::move(v); return *this; }
-    CreateMessageRequestParams& toolChoice(ToolChoice v) { _toolChoice = std::move(v); return *this; }
-    CreateMessageRequestParams& tools(QList<Tool> v) { _tools = std::move(v); return *this; }
+    CreateMessageRequestParams& systemPrompt(std::optional<QString> v) { _systemPrompt = std::move(v); return *this; }
+    CreateMessageRequestParams& task(std::optional<TaskMetadata> v) { _task = std::move(v); return *this; }
+    CreateMessageRequestParams& temperature(std::optional<double> v) { _temperature = std::move(v); return *this; }
+    CreateMessageRequestParams& toolChoice(std::optional<ToolChoice> v) { _toolChoice = std::move(v); return *this; }
+    CreateMessageRequestParams& tools(std::optional<QList<Tool>> v) { _tools = std::move(v); return *this; }
     CreateMessageRequestParams& addTool(Tool v) { if (!_tools) _tools = QList<Tool>{}; (*_tools).append(std::move(v)); return *this; }
 
     const std::optional<Meta>& _meta() const { return __meta; }
@@ -6208,7 +6208,7 @@ struct CreateTaskResult {
     std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
     Task _task;
 
-    CreateTaskResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    CreateTaskResult& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     CreateTaskResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     CreateTaskResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
     CreateTaskResult& task(Task v) { _task = std::move(v); return *this; }
@@ -6266,13 +6266,13 @@ struct LegacyTitledEnumSchema {
     std::optional<QStringList> _enumNames;
     std::optional<QString> _title;
 
-    LegacyTitledEnumSchema& default_(QString v) { _default = std::move(v); return *this; }
-    LegacyTitledEnumSchema& description(QString v) { _description = std::move(v); return *this; }
+    LegacyTitledEnumSchema& default_(std::optional<QString> v) { _default = std::move(v); return *this; }
+    LegacyTitledEnumSchema& description(std::optional<QString> v) { _description = std::move(v); return *this; }
     LegacyTitledEnumSchema& enum_(QStringList v) { _enum = std::move(v); return *this; }
     LegacyTitledEnumSchema& addEnum(QString v) { _enum.append(std::move(v)); return *this; }
-    LegacyTitledEnumSchema& enumNames(QStringList v) { _enumNames = std::move(v); return *this; }
+    LegacyTitledEnumSchema& enumNames(std::optional<QStringList> v) { _enumNames = std::move(v); return *this; }
     LegacyTitledEnumSchema& addEnumName(QString v) { if (!_enumNames) _enumNames = QStringList{}; (*_enumNames).append(std::move(v)); return *this; }
-    LegacyTitledEnumSchema& title(QString v) { _title = std::move(v); return *this; }
+    LegacyTitledEnumSchema& title(std::optional<QString> v) { _title = std::move(v); return *this; }
 
     const std::optional<QString>& default_() const { return _default; }
     const std::optional<QString>& description() const { return _description; }
@@ -6348,11 +6348,11 @@ struct NumberSchema {
     std::optional<QString> _title;
     Type _type;
 
-    NumberSchema& default_(int v) { _default = std::move(v); return *this; }
-    NumberSchema& description(QString v) { _description = std::move(v); return *this; }
-    NumberSchema& maximum(int v) { _maximum = std::move(v); return *this; }
-    NumberSchema& minimum(int v) { _minimum = std::move(v); return *this; }
-    NumberSchema& title(QString v) { _title = std::move(v); return *this; }
+    NumberSchema& default_(std::optional<int> v) { _default = std::move(v); return *this; }
+    NumberSchema& description(std::optional<QString> v) { _description = std::move(v); return *this; }
+    NumberSchema& maximum(std::optional<int> v) { _maximum = std::move(v); return *this; }
+    NumberSchema& minimum(std::optional<int> v) { _minimum = std::move(v); return *this; }
+    NumberSchema& title(std::optional<QString> v) { _title = std::move(v); return *this; }
     NumberSchema& type(Type v) { _type = std::move(v); return *this; }
 
     const std::optional<int>& default_() const { return _default; }
@@ -6436,12 +6436,12 @@ struct StringSchema {
     std::optional<int> _minLength;
     std::optional<QString> _title;
 
-    StringSchema& default_(QString v) { _default = std::move(v); return *this; }
-    StringSchema& description(QString v) { _description = std::move(v); return *this; }
-    StringSchema& format(Format v) { _format = std::move(v); return *this; }
-    StringSchema& maxLength(int v) { _maxLength = std::move(v); return *this; }
-    StringSchema& minLength(int v) { _minLength = std::move(v); return *this; }
-    StringSchema& title(QString v) { _title = std::move(v); return *this; }
+    StringSchema& default_(std::optional<QString> v) { _default = std::move(v); return *this; }
+    StringSchema& description(std::optional<QString> v) { _description = std::move(v); return *this; }
+    StringSchema& format(std::optional<Format> v) { _format = std::move(v); return *this; }
+    StringSchema& maxLength(std::optional<int> v) { _maxLength = std::move(v); return *this; }
+    StringSchema& minLength(std::optional<int> v) { _minLength = std::move(v); return *this; }
+    StringSchema& title(std::optional<QString> v) { _title = std::move(v); return *this; }
 
     const std::optional<QString>& default_() const { return _default; }
     const std::optional<QString>& description() const { return _description; }
@@ -6547,13 +6547,13 @@ struct TitledMultiSelectEnumSchema {
     std::optional<int> _minItems;  //!< Minimum number of items to select.
     std::optional<QString> _title;  //!< Optional title for the enum field.
 
-    TitledMultiSelectEnumSchema& default_(QStringList v) { _default = std::move(v); return *this; }
+    TitledMultiSelectEnumSchema& default_(std::optional<QStringList> v) { _default = std::move(v); return *this; }
     TitledMultiSelectEnumSchema& addDefault(QString v) { if (!_default) _default = QStringList{}; (*_default).append(std::move(v)); return *this; }
-    TitledMultiSelectEnumSchema& description(QString v) { _description = std::move(v); return *this; }
+    TitledMultiSelectEnumSchema& description(std::optional<QString> v) { _description = std::move(v); return *this; }
     TitledMultiSelectEnumSchema& items(Items v) { _items = std::move(v); return *this; }
-    TitledMultiSelectEnumSchema& maxItems(int v) { _maxItems = std::move(v); return *this; }
-    TitledMultiSelectEnumSchema& minItems(int v) { _minItems = std::move(v); return *this; }
-    TitledMultiSelectEnumSchema& title(QString v) { _title = std::move(v); return *this; }
+    TitledMultiSelectEnumSchema& maxItems(std::optional<int> v) { _maxItems = std::move(v); return *this; }
+    TitledMultiSelectEnumSchema& minItems(std::optional<int> v) { _minItems = std::move(v); return *this; }
+    TitledMultiSelectEnumSchema& title(std::optional<QString> v) { _title = std::move(v); return *this; }
 
     const std::optional<QStringList>& default_() const { return _default; }
     const std::optional<QString>& description() const { return _description; }
@@ -6683,11 +6683,11 @@ struct TitledSingleSelectEnumSchema {
     QList<OneOfItem> _oneOf;  //!< Array of enum options with values and display labels.
     std::optional<QString> _title;  //!< Optional title for the enum field.
 
-    TitledSingleSelectEnumSchema& default_(QString v) { _default = std::move(v); return *this; }
-    TitledSingleSelectEnumSchema& description(QString v) { _description = std::move(v); return *this; }
+    TitledSingleSelectEnumSchema& default_(std::optional<QString> v) { _default = std::move(v); return *this; }
+    TitledSingleSelectEnumSchema& description(std::optional<QString> v) { _description = std::move(v); return *this; }
     TitledSingleSelectEnumSchema& oneOf(QList<OneOfItem> v) { _oneOf = std::move(v); return *this; }
     TitledSingleSelectEnumSchema& addOneOf(OneOfItem v) { _oneOf.append(std::move(v)); return *this; }
-    TitledSingleSelectEnumSchema& title(QString v) { _title = std::move(v); return *this; }
+    TitledSingleSelectEnumSchema& title(std::optional<QString> v) { _title = std::move(v); return *this; }
 
     const std::optional<QString>& default_() const { return _default; }
     const std::optional<QString>& description() const { return _description; }
@@ -6778,13 +6778,13 @@ struct UntitledMultiSelectEnumSchema {
     std::optional<int> _minItems;  //!< Minimum number of items to select.
     std::optional<QString> _title;  //!< Optional title for the enum field.
 
-    UntitledMultiSelectEnumSchema& default_(QStringList v) { _default = std::move(v); return *this; }
+    UntitledMultiSelectEnumSchema& default_(std::optional<QStringList> v) { _default = std::move(v); return *this; }
     UntitledMultiSelectEnumSchema& addDefault(QString v) { if (!_default) _default = QStringList{}; (*_default).append(std::move(v)); return *this; }
-    UntitledMultiSelectEnumSchema& description(QString v) { _description = std::move(v); return *this; }
+    UntitledMultiSelectEnumSchema& description(std::optional<QString> v) { _description = std::move(v); return *this; }
     UntitledMultiSelectEnumSchema& items(Items v) { _items = std::move(v); return *this; }
-    UntitledMultiSelectEnumSchema& maxItems(int v) { _maxItems = std::move(v); return *this; }
-    UntitledMultiSelectEnumSchema& minItems(int v) { _minItems = std::move(v); return *this; }
-    UntitledMultiSelectEnumSchema& title(QString v) { _title = std::move(v); return *this; }
+    UntitledMultiSelectEnumSchema& maxItems(std::optional<int> v) { _maxItems = std::move(v); return *this; }
+    UntitledMultiSelectEnumSchema& minItems(std::optional<int> v) { _minItems = std::move(v); return *this; }
+    UntitledMultiSelectEnumSchema& title(std::optional<QString> v) { _title = std::move(v); return *this; }
 
     const std::optional<QStringList>& default_() const { return _default; }
     const std::optional<QString>& description() const { return _description; }
@@ -6884,11 +6884,11 @@ struct UntitledSingleSelectEnumSchema {
     QStringList _enum;  //!< Array of enum values to choose from.
     std::optional<QString> _title;  //!< Optional title for the enum field.
 
-    UntitledSingleSelectEnumSchema& default_(QString v) { _default = std::move(v); return *this; }
-    UntitledSingleSelectEnumSchema& description(QString v) { _description = std::move(v); return *this; }
+    UntitledSingleSelectEnumSchema& default_(std::optional<QString> v) { _default = std::move(v); return *this; }
+    UntitledSingleSelectEnumSchema& description(std::optional<QString> v) { _description = std::move(v); return *this; }
     UntitledSingleSelectEnumSchema& enum_(QStringList v) { _enum = std::move(v); return *this; }
     UntitledSingleSelectEnumSchema& addEnum(QString v) { _enum.append(std::move(v)); return *this; }
-    UntitledSingleSelectEnumSchema& title(QString v) { _title = std::move(v); return *this; }
+    UntitledSingleSelectEnumSchema& title(std::optional<QString> v) { _title = std::move(v); return *this; }
 
     const std::optional<QString>& default_() const { return _default; }
     const std::optional<QString>& description() const { return _description; }
@@ -7005,7 +7005,7 @@ struct ElicitRequestFormParams {
     struct Meta {
         std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
 
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+        Meta& progressToken(std::optional<ProgressToken> v) { _progressToken = std::move(v); return *this; }
 
         const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
     };
@@ -7019,10 +7019,10 @@ struct ElicitRequestFormParams {
         QMap<QString, PrimitiveSchemaDefinition> _properties;
         std::optional<QStringList> _required;
 
-        RequestedSchema& $schema(QString v) { _$schema = std::move(v); return *this; }
+        RequestedSchema& $schema(std::optional<QString> v) { _$schema = std::move(v); return *this; }
         RequestedSchema& properties(QMap<QString, PrimitiveSchemaDefinition> v) { _properties = std::move(v); return *this; }
         RequestedSchema& addProperty(const QString &key, PrimitiveSchemaDefinition v) { _properties[key] = std::move(v); return *this; }
-        RequestedSchema& required(QStringList v) { _required = std::move(v); return *this; }
+        RequestedSchema& required(std::optional<QStringList> v) { _required = std::move(v); return *this; }
         RequestedSchema& addRequired(QString v) { if (!_required) _required = QStringList{}; (*_required).append(std::move(v)); return *this; }
 
         const std::optional<QString>& $schema() const { return _$schema; }
@@ -7047,10 +7047,10 @@ struct ElicitRequestFormParams {
      */
     std::optional<TaskMetadata> _task;
 
-    ElicitRequestFormParams& _meta(Meta v) { __meta = std::move(v); return *this; }
+    ElicitRequestFormParams& _meta(std::optional<Meta> v) { __meta = std::move(v); return *this; }
     ElicitRequestFormParams& message(QString v) { _message = std::move(v); return *this; }
     ElicitRequestFormParams& requestedSchema(RequestedSchema v) { _requestedSchema = std::move(v); return *this; }
-    ElicitRequestFormParams& task(TaskMetadata v) { _task = std::move(v); return *this; }
+    ElicitRequestFormParams& task(std::optional<TaskMetadata> v) { _task = std::move(v); return *this; }
 
     const std::optional<Meta>& _meta() const { return __meta; }
     const QString& message() const { return _message; }
@@ -7168,7 +7168,7 @@ struct ElicitRequestURLParams {
     struct Meta {
         std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
 
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+        Meta& progressToken(std::optional<ProgressToken> v) { _progressToken = std::move(v); return *this; }
 
         const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
     };
@@ -7191,10 +7191,10 @@ struct ElicitRequestURLParams {
     std::optional<TaskMetadata> _task;
     QString _url;  //!< The URL that the user should navigate to.
 
-    ElicitRequestURLParams& _meta(Meta v) { __meta = std::move(v); return *this; }
+    ElicitRequestURLParams& _meta(std::optional<Meta> v) { __meta = std::move(v); return *this; }
     ElicitRequestURLParams& elicitationId(QString v) { _elicitationId = std::move(v); return *this; }
     ElicitRequestURLParams& message(QString v) { _message = std::move(v); return *this; }
-    ElicitRequestURLParams& task(TaskMetadata v) { _task = std::move(v); return *this; }
+    ElicitRequestURLParams& task(std::optional<TaskMetadata> v) { _task = std::move(v); return *this; }
     ElicitRequestURLParams& url(QString v) { _url = std::move(v); return *this; }
 
     const std::optional<Meta>& _meta() const { return __meta; }
@@ -7469,7 +7469,7 @@ struct Error {
     QString _message;  //!< A short description of the error. The message SHOULD be limited to a concise single sentence.
 
     Error& code(int v) { _code = std::move(v); return *this; }
-    Error& data(QString v) { _data = std::move(v); return *this; }
+    Error& data(std::optional<QString> v) { _data = std::move(v); return *this; }
     Error& message(QString v) { _message = std::move(v); return *this; }
 
     const int& code() const { return _code; }
@@ -7552,10 +7552,10 @@ struct GetPromptResult {
     std::optional<QString> _description;  //!< An optional description for the prompt.
     QList<PromptMessage> _messages;
 
-    GetPromptResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    GetPromptResult& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     GetPromptResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     GetPromptResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    GetPromptResult& description(QString v) { _description = std::move(v); return *this; }
+    GetPromptResult& description(std::optional<QString> v) { _description = std::move(v); return *this; }
     GetPromptResult& messages(QList<PromptMessage> v) { _messages = std::move(v); return *this; }
     GetPromptResult& addMessage(PromptMessage v) { _messages.append(std::move(v)); return *this; }
 
@@ -7622,7 +7622,7 @@ struct Icons {
      */
     std::optional<QList<Icon>> _icons;
 
-    Icons& icons(QList<Icon> v) { _icons = std::move(v); return *this; }
+    Icons& icons(std::optional<QList<Icon>> v) { _icons = std::move(v); return *this; }
     Icons& addIcon(Icon v) { if (!_icons) _icons = QList<Icon>{}; (*_icons).append(std::move(v)); return *this; }
 
     const std::optional<QList<Icon>>& icons() const { return _icons; }
@@ -7663,7 +7663,7 @@ struct ServerCapabilities {
     struct Prompts {
         std::optional<bool> _listChanged;  //!< Whether this server supports notifications for changes to the prompt list.
 
-        Prompts& listChanged(bool v) { _listChanged = std::move(v); return *this; }
+        Prompts& listChanged(std::optional<bool> v) { _listChanged = std::move(v); return *this; }
 
         const std::optional<bool>& listChanged() const { return _listChanged; }
     };
@@ -7673,8 +7673,8 @@ struct ServerCapabilities {
         std::optional<bool> _listChanged;  //!< Whether this server supports notifications for changes to the resource list.
         std::optional<bool> _subscribe;  //!< Whether this server supports subscribing to resource updates.
 
-        Resources& listChanged(bool v) { _listChanged = std::move(v); return *this; }
-        Resources& subscribe(bool v) { _subscribe = std::move(v); return *this; }
+        Resources& listChanged(std::optional<bool> v) { _listChanged = std::move(v); return *this; }
+        Resources& subscribe(std::optional<bool> v) { _subscribe = std::move(v); return *this; }
 
         const std::optional<bool>& listChanged() const { return _listChanged; }
         const std::optional<bool>& subscribe() const { return _subscribe; }
@@ -7688,7 +7688,7 @@ struct ServerCapabilities {
             struct Tools {
                 std::optional<QMap<QString, QJsonValue>> _call;  //!< Whether the server supports task-augmented tools/call requests.
 
-                Tools& call(QMap<QString, QJsonValue> v) { _call = std::move(v); return *this; }
+                Tools& call(std::optional<QMap<QString, QJsonValue>> v) { _call = std::move(v); return *this; }
                 Tools& addCall(const QString &key, QJsonValue v) { if (!_call) _call = QMap<QString, QJsonValue>{}; (*_call)[key] = std::move(v); return *this; }
                 Tools& call(const QJsonObject &obj) { if (!_call) _call = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_call)[it.key()] = it.value(); return *this; }
 
@@ -7698,7 +7698,7 @@ struct ServerCapabilities {
 
             std::optional<Tools> _tools;  //!< Task support for tool-related requests.
 
-            Requests& tools(Tools v) { _tools = std::move(v); return *this; }
+            Requests& tools(std::optional<Tools> v) { _tools = std::move(v); return *this; }
 
             const std::optional<Tools>& tools() const { return _tools; }
         };
@@ -7707,13 +7707,13 @@ struct ServerCapabilities {
         std::optional<QMap<QString, QJsonValue>> _list;  //!< Whether this server supports tasks/list.
         std::optional<Requests> _requests;  //!< Specifies which request types can be augmented with tasks.
 
-        Tasks& cancel(QMap<QString, QJsonValue> v) { _cancel = std::move(v); return *this; }
+        Tasks& cancel(std::optional<QMap<QString, QJsonValue>> v) { _cancel = std::move(v); return *this; }
         Tasks& addCancel(const QString &key, QJsonValue v) { if (!_cancel) _cancel = QMap<QString, QJsonValue>{}; (*_cancel)[key] = std::move(v); return *this; }
         Tasks& cancel(const QJsonObject &obj) { if (!_cancel) _cancel = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_cancel)[it.key()] = it.value(); return *this; }
-        Tasks& list(QMap<QString, QJsonValue> v) { _list = std::move(v); return *this; }
+        Tasks& list(std::optional<QMap<QString, QJsonValue>> v) { _list = std::move(v); return *this; }
         Tasks& addList(const QString &key, QJsonValue v) { if (!_list) _list = QMap<QString, QJsonValue>{}; (*_list)[key] = std::move(v); return *this; }
         Tasks& list(const QJsonObject &obj) { if (!_list) _list = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_list)[it.key()] = it.value(); return *this; }
-        Tasks& requests(Requests v) { _requests = std::move(v); return *this; }
+        Tasks& requests(std::optional<Requests> v) { _requests = std::move(v); return *this; }
 
         const std::optional<QMap<QString, QJsonValue>>& cancel() const { return _cancel; }
         QJsonObject cancelAsObject() const { if (!_cancel) return {}; QJsonObject o; for (auto it = _cancel->constBegin(); it != _cancel->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
@@ -7726,7 +7726,7 @@ struct ServerCapabilities {
     struct Tools {
         std::optional<bool> _listChanged;  //!< Whether this server supports notifications for changes to the tool list.
 
-        Tools& listChanged(bool v) { _listChanged = std::move(v); return *this; }
+        Tools& listChanged(std::optional<bool> v) { _listChanged = std::move(v); return *this; }
 
         const std::optional<bool>& listChanged() const { return _listChanged; }
     };
@@ -7739,18 +7739,18 @@ struct ServerCapabilities {
     std::optional<Tasks> _tasks;  //!< Present if the server supports task-augmented requests.
     std::optional<Tools> _tools;  //!< Present if the server offers any tools to call.
 
-    ServerCapabilities& completions(QMap<QString, QJsonValue> v) { _completions = std::move(v); return *this; }
+    ServerCapabilities& completions(std::optional<QMap<QString, QJsonValue>> v) { _completions = std::move(v); return *this; }
     ServerCapabilities& addCompletion(const QString &key, QJsonValue v) { if (!_completions) _completions = QMap<QString, QJsonValue>{}; (*_completions)[key] = std::move(v); return *this; }
     ServerCapabilities& completions(const QJsonObject &obj) { if (!_completions) _completions = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_completions)[it.key()] = it.value(); return *this; }
-    ServerCapabilities& experimental(QMap<QString, QJsonObject> v) { _experimental = std::move(v); return *this; }
+    ServerCapabilities& experimental(std::optional<QMap<QString, QJsonObject>> v) { _experimental = std::move(v); return *this; }
     ServerCapabilities& addExperimental(const QString &key, QJsonObject v) { if (!_experimental) _experimental = QMap<QString, QJsonObject>{}; (*_experimental)[key] = std::move(v); return *this; }
-    ServerCapabilities& logging(QMap<QString, QJsonValue> v) { _logging = std::move(v); return *this; }
+    ServerCapabilities& logging(std::optional<QMap<QString, QJsonValue>> v) { _logging = std::move(v); return *this; }
     ServerCapabilities& addLogging(const QString &key, QJsonValue v) { if (!_logging) _logging = QMap<QString, QJsonValue>{}; (*_logging)[key] = std::move(v); return *this; }
     ServerCapabilities& logging(const QJsonObject &obj) { if (!_logging) _logging = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_logging)[it.key()] = it.value(); return *this; }
-    ServerCapabilities& prompts(Prompts v) { _prompts = std::move(v); return *this; }
-    ServerCapabilities& resources(Resources v) { _resources = std::move(v); return *this; }
-    ServerCapabilities& tasks(Tasks v) { _tasks = std::move(v); return *this; }
-    ServerCapabilities& tools(Tools v) { _tools = std::move(v); return *this; }
+    ServerCapabilities& prompts(std::optional<Prompts> v) { _prompts = std::move(v); return *this; }
+    ServerCapabilities& resources(std::optional<Resources> v) { _resources = std::move(v); return *this; }
+    ServerCapabilities& tasks(std::optional<Tasks> v) { _tasks = std::move(v); return *this; }
+    ServerCapabilities& tools(std::optional<Tools> v) { _tools = std::move(v); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& completions() const { return _completions; }
     QJsonObject completionsAsObject() const { if (!_completions) return {}; QJsonObject o; for (auto it = _completions->constBegin(); it != _completions->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
@@ -7992,11 +7992,11 @@ struct InitializeResult {
     QString _protocolVersion;  //!< The version of the Model Context Protocol that the server wants to use. This may not match the version that the client requested. If the client cannot support this version, it MUST disconnect.
     Implementation _serverInfo;
 
-    InitializeResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    InitializeResult& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     InitializeResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     InitializeResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
     InitializeResult& capabilities(ServerCapabilities v) { _capabilities = std::move(v); return *this; }
-    InitializeResult& instructions(QString v) { _instructions = std::move(v); return *this; }
+    InitializeResult& instructions(std::optional<QString> v) { _instructions = std::move(v); return *this; }
     InitializeResult& protocolVersion(QString v) { _protocolVersion = std::move(v); return *this; }
     InitializeResult& serverInfo(Implementation v) { _serverInfo = std::move(v); return *this; }
 
@@ -8060,7 +8060,7 @@ struct JSONRPCErrorResponse {
     std::optional<RequestId> _id;
 
     JSONRPCErrorResponse& error(Error v) { _error = std::move(v); return *this; }
-    JSONRPCErrorResponse& id(RequestId v) { _id = std::move(v); return *this; }
+    JSONRPCErrorResponse& id(std::optional<RequestId> v) { _id = std::move(v); return *this; }
 
     const Error& error() const { return _error; }
     const std::optional<RequestId>& id() const { return _id; }
@@ -8101,7 +8101,7 @@ struct JSONRPCNotification {
     std::optional<QMap<QString, QJsonValue>> _params;
 
     JSONRPCNotification& method(QString v) { _method = std::move(v); return *this; }
-    JSONRPCNotification& params(QMap<QString, QJsonValue> v) { _params = std::move(v); return *this; }
+    JSONRPCNotification& params(std::optional<QMap<QString, QJsonValue>> v) { _params = std::move(v); return *this; }
     JSONRPCNotification& addParam(const QString &key, QJsonValue v) { if (!_params) _params = QMap<QString, QJsonValue>{}; (*_params)[key] = std::move(v); return *this; }
     JSONRPCNotification& params(const QJsonObject &obj) { if (!_params) _params = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_params)[it.key()] = it.value(); return *this; }
 
@@ -8155,7 +8155,7 @@ struct JSONRPCRequest {
 
     JSONRPCRequest& id(RequestId v) { _id = std::move(v); return *this; }
     JSONRPCRequest& method(QString v) { _method = std::move(v); return *this; }
-    JSONRPCRequest& params(QMap<QString, QJsonValue> v) { _params = std::move(v); return *this; }
+    JSONRPCRequest& params(std::optional<QMap<QString, QJsonValue>> v) { _params = std::move(v); return *this; }
     JSONRPCRequest& addParam(const QString &key, QJsonValue v) { if (!_params) _params = QMap<QString, QJsonValue>{}; (*_params)[key] = std::move(v); return *this; }
     JSONRPCRequest& params(const QJsonObject &obj) { if (!_params) _params = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_params)[it.key()] = it.value(); return *this; }
 
@@ -8330,10 +8330,10 @@ struct PromptArgument {
      */
     std::optional<QString> _title;
 
-    PromptArgument& description(QString v) { _description = std::move(v); return *this; }
+    PromptArgument& description(std::optional<QString> v) { _description = std::move(v); return *this; }
     PromptArgument& name(QString v) { _name = std::move(v); return *this; }
-    PromptArgument& required(bool v) { _required = std::move(v); return *this; }
-    PromptArgument& title(QString v) { _title = std::move(v); return *this; }
+    PromptArgument& required(std::optional<bool> v) { _required = std::move(v); return *this; }
+    PromptArgument& title(std::optional<QString> v) { _title = std::move(v); return *this; }
 
     const std::optional<QString>& description() const { return _description; }
     const QString& name() const { return _name; }
@@ -8398,16 +8398,16 @@ struct Prompt {
      */
     std::optional<QString> _title;
 
-    Prompt& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    Prompt& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     Prompt& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     Prompt& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    Prompt& arguments(QList<PromptArgument> v) { _arguments = std::move(v); return *this; }
+    Prompt& arguments(std::optional<QList<PromptArgument>> v) { _arguments = std::move(v); return *this; }
     Prompt& addArgument(PromptArgument v) { if (!_arguments) _arguments = QList<PromptArgument>{}; (*_arguments).append(std::move(v)); return *this; }
-    Prompt& description(QString v) { _description = std::move(v); return *this; }
-    Prompt& icons(QList<Icon> v) { _icons = std::move(v); return *this; }
+    Prompt& description(std::optional<QString> v) { _description = std::move(v); return *this; }
+    Prompt& icons(std::optional<QList<Icon>> v) { _icons = std::move(v); return *this; }
     Prompt& addIcon(Icon v) { if (!_icons) _icons = QList<Icon>{}; (*_icons).append(std::move(v)); return *this; }
     Prompt& name(QString v) { _name = std::move(v); return *this; }
-    Prompt& title(QString v) { _title = std::move(v); return *this; }
+    Prompt& title(std::optional<QString> v) { _title = std::move(v); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
     QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
@@ -8492,10 +8492,10 @@ struct ListPromptsResult {
     std::optional<QString> _nextCursor;
     QList<Prompt> _prompts;
 
-    ListPromptsResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    ListPromptsResult& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     ListPromptsResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     ListPromptsResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    ListPromptsResult& nextCursor(QString v) { _nextCursor = std::move(v); return *this; }
+    ListPromptsResult& nextCursor(std::optional<QString> v) { _nextCursor = std::move(v); return *this; }
     ListPromptsResult& prompts(QList<Prompt> v) { _prompts = std::move(v); return *this; }
     ListPromptsResult& addPrompt(Prompt v) { _prompts.append(std::move(v)); return *this; }
 
@@ -8582,16 +8582,16 @@ struct ResourceTemplate {
     std::optional<QString> _title;
     QString _uriTemplate;  //!< A URI template (according to RFC 6570) that can be used to construct resource URIs.
 
-    ResourceTemplate& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    ResourceTemplate& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     ResourceTemplate& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     ResourceTemplate& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    ResourceTemplate& annotations(Annotations v) { _annotations = std::move(v); return *this; }
-    ResourceTemplate& description(QString v) { _description = std::move(v); return *this; }
-    ResourceTemplate& icons(QList<Icon> v) { _icons = std::move(v); return *this; }
+    ResourceTemplate& annotations(std::optional<Annotations> v) { _annotations = std::move(v); return *this; }
+    ResourceTemplate& description(std::optional<QString> v) { _description = std::move(v); return *this; }
+    ResourceTemplate& icons(std::optional<QList<Icon>> v) { _icons = std::move(v); return *this; }
     ResourceTemplate& addIcon(Icon v) { if (!_icons) _icons = QList<Icon>{}; (*_icons).append(std::move(v)); return *this; }
-    ResourceTemplate& mimeType(QString v) { _mimeType = std::move(v); return *this; }
+    ResourceTemplate& mimeType(std::optional<QString> v) { _mimeType = std::move(v); return *this; }
     ResourceTemplate& name(QString v) { _name = std::move(v); return *this; }
-    ResourceTemplate& title(QString v) { _title = std::move(v); return *this; }
+    ResourceTemplate& title(std::optional<QString> v) { _title = std::move(v); return *this; }
     ResourceTemplate& uriTemplate(QString v) { _uriTemplate = std::move(v); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
@@ -8680,10 +8680,10 @@ struct ListResourceTemplatesResult {
     std::optional<QString> _nextCursor;
     QList<ResourceTemplate> _resourceTemplates;
 
-    ListResourceTemplatesResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    ListResourceTemplatesResult& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     ListResourceTemplatesResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     ListResourceTemplatesResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    ListResourceTemplatesResult& nextCursor(QString v) { _nextCursor = std::move(v); return *this; }
+    ListResourceTemplatesResult& nextCursor(std::optional<QString> v) { _nextCursor = std::move(v); return *this; }
     ListResourceTemplatesResult& resourceTemplates(QList<ResourceTemplate> v) { _resourceTemplates = std::move(v); return *this; }
     ListResourceTemplatesResult& addResourceTemplate(ResourceTemplate v) { _resourceTemplates.append(std::move(v)); return *this; }
 
@@ -8776,17 +8776,17 @@ struct Resource {
     std::optional<QString> _title;
     QString _uri;  //!< The URI of this resource.
 
-    Resource& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    Resource& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     Resource& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     Resource& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    Resource& annotations(Annotations v) { _annotations = std::move(v); return *this; }
-    Resource& description(QString v) { _description = std::move(v); return *this; }
-    Resource& icons(QList<Icon> v) { _icons = std::move(v); return *this; }
+    Resource& annotations(std::optional<Annotations> v) { _annotations = std::move(v); return *this; }
+    Resource& description(std::optional<QString> v) { _description = std::move(v); return *this; }
+    Resource& icons(std::optional<QList<Icon>> v) { _icons = std::move(v); return *this; }
     Resource& addIcon(Icon v) { if (!_icons) _icons = QList<Icon>{}; (*_icons).append(std::move(v)); return *this; }
-    Resource& mimeType(QString v) { _mimeType = std::move(v); return *this; }
+    Resource& mimeType(std::optional<QString> v) { _mimeType = std::move(v); return *this; }
     Resource& name(QString v) { _name = std::move(v); return *this; }
-    Resource& size(int v) { _size = std::move(v); return *this; }
-    Resource& title(QString v) { _title = std::move(v); return *this; }
+    Resource& size(std::optional<int> v) { _size = std::move(v); return *this; }
+    Resource& title(std::optional<QString> v) { _title = std::move(v); return *this; }
     Resource& uri(QString v) { _uri = std::move(v); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
@@ -8880,10 +8880,10 @@ struct ListResourcesResult {
     std::optional<QString> _nextCursor;
     QList<Resource> _resources;
 
-    ListResourcesResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    ListResourcesResult& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     ListResourcesResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     ListResourcesResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    ListResourcesResult& nextCursor(QString v) { _nextCursor = std::move(v); return *this; }
+    ListResourcesResult& nextCursor(std::optional<QString> v) { _nextCursor = std::move(v); return *this; }
     ListResourcesResult& resources(QList<Resource> v) { _resources = std::move(v); return *this; }
     ListResourcesResult& addResource(Resource v) { _resources.append(std::move(v)); return *this; }
 
@@ -8949,7 +8949,7 @@ struct ListRootsRequest {
     std::optional<RequestParams> _params;
 
     ListRootsRequest& id(RequestId v) { _id = std::move(v); return *this; }
-    ListRootsRequest& params(RequestParams v) { _params = std::move(v); return *this; }
+    ListRootsRequest& params(std::optional<RequestParams> v) { _params = std::move(v); return *this; }
 
     const RequestId& id() const { return _id; }
     const std::optional<RequestParams>& params() const { return _params; }
@@ -8999,10 +8999,10 @@ struct ListToolsResult {
     std::optional<QString> _nextCursor;
     QList<Tool> _tools;
 
-    ListToolsResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    ListToolsResult& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     ListToolsResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     ListToolsResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    ListToolsResult& nextCursor(QString v) { _nextCursor = std::move(v); return *this; }
+    ListToolsResult& nextCursor(std::optional<QString> v) { _nextCursor = std::move(v); return *this; }
     ListToolsResult& tools(QList<Tool> v) { _tools = std::move(v); return *this; }
     ListToolsResult& addTool(Tool v) { _tools.append(std::move(v)); return *this; }
 
@@ -9061,12 +9061,12 @@ struct LoggingMessageNotificationParams {
     LoggingLevel _level;  //!< The severity of this log message.
     std::optional<QString> _logger;  //!< An optional name of the logger issuing this message.
 
-    LoggingMessageNotificationParams& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    LoggingMessageNotificationParams& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     LoggingMessageNotificationParams& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     LoggingMessageNotificationParams& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
     LoggingMessageNotificationParams& data(QString v) { _data = std::move(v); return *this; }
     LoggingMessageNotificationParams& level(LoggingLevel v) { _level = std::move(v); return *this; }
-    LoggingMessageNotificationParams& logger(QString v) { _logger = std::move(v); return *this; }
+    LoggingMessageNotificationParams& logger(std::optional<QString> v) { _logger = std::move(v); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
     QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
@@ -9191,7 +9191,7 @@ struct Notification {
     std::optional<QMap<QString, QJsonValue>> _params;
 
     Notification& method(QString v) { _method = std::move(v); return *this; }
-    Notification& params(QMap<QString, QJsonValue> v) { _params = std::move(v); return *this; }
+    Notification& params(std::optional<QMap<QString, QJsonValue>> v) { _params = std::move(v); return *this; }
     Notification& addParam(const QString &key, QJsonValue v) { if (!_params) _params = QMap<QString, QJsonValue>{}; (*_params)[key] = std::move(v); return *this; }
     Notification& params(const QJsonObject &obj) { if (!_params) _params = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_params)[it.key()] = it.value(); return *this; }
 
@@ -9237,7 +9237,7 @@ struct PaginatedRequest {
 
     PaginatedRequest& id(RequestId v) { _id = std::move(v); return *this; }
     PaginatedRequest& method(QString v) { _method = std::move(v); return *this; }
-    PaginatedRequest& params(PaginatedRequestParams v) { _params = std::move(v); return *this; }
+    PaginatedRequest& params(std::optional<PaginatedRequestParams> v) { _params = std::move(v); return *this; }
 
     const RequestId& id() const { return _id; }
     const QString& method() const { return _method; }
@@ -9285,10 +9285,10 @@ struct PaginatedResult {
      */
     std::optional<QString> _nextCursor;
 
-    PaginatedResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    PaginatedResult& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     PaginatedResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     PaginatedResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    PaginatedResult& nextCursor(QString v) { _nextCursor = std::move(v); return *this; }
+    PaginatedResult& nextCursor(std::optional<QString> v) { _nextCursor = std::move(v); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
     QJsonObject _metaAsObject() const { if (!__meta) return {}; QJsonObject o; for (auto it = __meta->constBegin(); it != __meta->constEnd(); ++it) o.insert(it.key(), it.value()); return o; }
@@ -9332,7 +9332,7 @@ inline QJsonObject toJson(const PaginatedResult &data) {
 struct PromptListChangedNotification {
     std::optional<NotificationParams> _params;
 
-    PromptListChangedNotification& params(NotificationParams v) { _params = std::move(v); return *this; }
+    PromptListChangedNotification& params(std::optional<NotificationParams> v) { _params = std::move(v); return *this; }
 
     const std::optional<NotificationParams>& params() const { return _params; }
 };
@@ -9371,7 +9371,7 @@ struct ReadResourceResult {
     std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
     QList<EmbeddedResourceResource> _contents;
 
-    ReadResourceResult& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    ReadResourceResult& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     ReadResourceResult& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     ReadResourceResult& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
     ReadResourceResult& contents(QList<EmbeddedResourceResource> v) { _contents = std::move(v); return *this; }
@@ -9454,7 +9454,7 @@ struct Request {
     std::optional<QMap<QString, QJsonValue>> _params;
 
     Request& method(QString v) { _method = std::move(v); return *this; }
-    Request& params(QMap<QString, QJsonValue> v) { _params = std::move(v); return *this; }
+    Request& params(std::optional<QMap<QString, QJsonValue>> v) { _params = std::move(v); return *this; }
     Request& addParam(const QString &key, QJsonValue v) { if (!_params) _params = QMap<QString, QJsonValue>{}; (*_params)[key] = std::move(v); return *this; }
     Request& params(const QJsonObject &obj) { if (!_params) _params = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*_params)[it.key()] = it.value(); return *this; }
 
@@ -9499,10 +9499,10 @@ struct ResourceContents {
     std::optional<QString> _mimeType;  //!< The MIME type of this resource, if known.
     QString _uri;  //!< The URI of this resource.
 
-    ResourceContents& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    ResourceContents& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     ResourceContents& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     ResourceContents& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
-    ResourceContents& mimeType(QString v) { _mimeType = std::move(v); return *this; }
+    ResourceContents& mimeType(std::optional<QString> v) { _mimeType = std::move(v); return *this; }
     ResourceContents& uri(QString v) { _uri = std::move(v); return *this; }
 
     const std::optional<QMap<QString, QJsonValue>>& _meta() const { return __meta; }
@@ -9551,7 +9551,7 @@ inline QJsonObject toJson(const ResourceContents &data) {
 struct ResourceListChangedNotification {
     std::optional<NotificationParams> _params;
 
-    ResourceListChangedNotification& params(NotificationParams v) { _params = std::move(v); return *this; }
+    ResourceListChangedNotification& params(std::optional<NotificationParams> v) { _params = std::move(v); return *this; }
 
     const std::optional<NotificationParams>& params() const { return _params; }
 };
@@ -9593,7 +9593,7 @@ struct ResourceRequestParams {
     struct Meta {
         std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
 
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+        Meta& progressToken(std::optional<ProgressToken> v) { _progressToken = std::move(v); return *this; }
 
         const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
     };
@@ -9601,7 +9601,7 @@ struct ResourceRequestParams {
     std::optional<Meta> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
     QString _uri;  //!< The URI of the resource. The URI can use any protocol; it is up to the server how to interpret it.
 
-    ResourceRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
+    ResourceRequestParams& _meta(std::optional<Meta> v) { __meta = std::move(v); return *this; }
     ResourceRequestParams& uri(QString v) { _uri = std::move(v); return *this; }
 
     const std::optional<Meta>& _meta() const { return __meta; }
@@ -9652,7 +9652,7 @@ struct ResourceUpdatedNotificationParams {
     std::optional<QMap<QString, QJsonValue>> __meta;  //!< See [General fields: `_meta`](/specification/2025-11-25/basic/index#meta) for notes on `_meta` usage.
     QString _uri;  //!< The URI of the resource that has been updated. This might be a sub-resource of the one that the client actually subscribed to.
 
-    ResourceUpdatedNotificationParams& _meta(QMap<QString, QJsonValue> v) { __meta = std::move(v); return *this; }
+    ResourceUpdatedNotificationParams& _meta(std::optional<QMap<QString, QJsonValue>> v) { __meta = std::move(v); return *this; }
     ResourceUpdatedNotificationParams& add_meta(const QString &key, QJsonValue v) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; (*__meta)[key] = std::move(v); return *this; }
     ResourceUpdatedNotificationParams& _meta(const QJsonObject &obj) { if (!__meta) __meta = QMap<QString, QJsonValue>{}; for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) (*__meta)[it.key()] = it.value(); return *this; }
     ResourceUpdatedNotificationParams& uri(QString v) { _uri = std::move(v); return *this; }
@@ -9739,7 +9739,7 @@ inline QJsonObject toJson(const ResourceUpdatedNotification &data) {
 struct ToolListChangedNotification {
     std::optional<NotificationParams> _params;
 
-    ToolListChangedNotification& params(NotificationParams v) { _params = std::move(v); return *this; }
+    ToolListChangedNotification& params(std::optional<NotificationParams> v) { _params = std::move(v); return *this; }
 
     const std::optional<NotificationParams>& params() const { return _params; }
 };
@@ -9989,7 +9989,7 @@ struct TaskAugmentedRequestParams {
     struct Meta {
         std::optional<ProgressToken> _progressToken;  //!< If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress). The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
 
-        Meta& progressToken(ProgressToken v) { _progressToken = std::move(v); return *this; }
+        Meta& progressToken(std::optional<ProgressToken> v) { _progressToken = std::move(v); return *this; }
 
         const std::optional<ProgressToken>& progressToken() const { return _progressToken; }
     };
@@ -10005,8 +10005,8 @@ struct TaskAugmentedRequestParams {
      */
     std::optional<TaskMetadata> _task;
 
-    TaskAugmentedRequestParams& _meta(Meta v) { __meta = std::move(v); return *this; }
-    TaskAugmentedRequestParams& task(TaskMetadata v) { _task = std::move(v); return *this; }
+    TaskAugmentedRequestParams& _meta(std::optional<Meta> v) { __meta = std::move(v); return *this; }
+    TaskAugmentedRequestParams& task(std::optional<TaskMetadata> v) { _task = std::move(v); return *this; }
 
     const std::optional<Meta>& _meta() const { return __meta; }
     const std::optional<TaskMetadata>& task() const { return _task; }
@@ -10060,7 +10060,7 @@ struct URLElicitationRequiredError {
     std::optional<RequestId> _id;
 
     URLElicitationRequiredError& error(QString v) { _error = std::move(v); return *this; }
-    URLElicitationRequiredError& id(RequestId v) { _id = std::move(v); return *this; }
+    URLElicitationRequiredError& id(std::optional<RequestId> v) { _id = std::move(v); return *this; }
 
     const QString& error() const { return _error; }
     const std::optional<RequestId>& id() const { return _id; }

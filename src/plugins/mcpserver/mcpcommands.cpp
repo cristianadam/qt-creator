@@ -1211,24 +1211,28 @@ void McpCommands::registerCommands(Mcp::Server &server)
 
             std::shared_ptr<bool> wasCancelled = std::make_shared<bool>(false);
 
+            using namespace std::chrono_literals;
+
             toolInterface.startTask(
                 1000,
-                [](Schema::Task &task) {
+                [](Schema::Task task) -> Schema::Task {
                     auto progress = BuildManager::currentProgress();
                     if (!progress) {
                         task.status(Schema::TaskStatus::completed);
                         task.statusMessage("Build finished");
-                        return;
+
+                        letTaskDieIn(task, 1min);
+                        return task;
                     }
                     task.statusMessage(
                         QString("%1 (%2%)").arg(progress->second).arg(progress->first));
+                    return task;
                 },
                 []() -> Utils::Result<Schema::CallToolResult> {
                     auto issues = commands.listIssues();
                     return CallToolResult{}.structuredContent(issues).isError(false);
                 },
-                []() { BuildManager::cancel(); },
-                std::nullopt);
+                []() { BuildManager::cancel(); });
 
             return ResultOk;
         });

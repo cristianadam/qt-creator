@@ -33,28 +33,72 @@ struct ClientRequests
     Notify notify;
 };
 
+template<typename T>
+concept IsDuration = requires(T duration)
+{
+    std::chrono::duration_cast<std::chrono::milliseconds>(duration);
+};
+
+template<IsDuration DurationType>
+void letTaskDieIn(Schema::Task &task, DurationType dieIn)
+{
+    using namespace std::chrono_literals;
+    const QDateTime createdAt = QDateTime::fromString(task.createdAt(), Qt::ISODate);
+    const QDateTime now = QDateTime::currentDateTime();
+    const std::chrono::milliseconds ttl = (now - createdAt) + dieIn;
+    task.ttl(ttl.count());
+}
+
 struct ToolInterface
 {
-    using UpdateTaskCallback = std::function<void(Schema::Task &)>;
+    using UpdateTaskCallback = std::function<Schema::Task(Schema::Task)>;
     using TaskResultCallback = std::function<Utils::Result<Schema::CallToolResult>()>;
     using CancelTaskCallback = std::function<void()>;
+    using TaskProgressNotify = std::function<void(Schema::Task)>;
 
     using Finish = std::function<void(const Utils::Result<Schema::CallToolResult> &)>;
 
-    using StartTask = std::function<void(
+    using StartTask = std::function<Utils::Result<TaskProgressNotify>(
         int pollingIntervalMs,
-        UpdateTaskCallback onUpdateTask,
-        TaskResultCallback onResultCallback,
-        std::optional<CancelTaskCallback> onCancelTaskCallback,
-        std::optional<int> ttl)>;
+        const UpdateTaskCallback &onUpdateTask,
+        const TaskResultCallback &onResultCallback,
+        const std::optional<CancelTaskCallback> &onCancelTaskCallback,
+        std::optional<std::chrono::milliseconds> ttl)>;
 
     ClientRequests clientRequests;
+    Schema::ClientCapabilities clientCapabilities;
 
     // Send the result via the responder and close the connection.
     Finish finish;
 
     // Upgrade the connection to a long-running task. The responder will send a CreateTaskResult to the client and close the connection.
-    StartTask startTask;
+    StartTask _startTask;
+
+    template<IsDuration DurationType>
+    Utils::Result<TaskProgressNotify> startTask(
+        int pollingIntervalMs,
+        const UpdateTaskCallback &onUpdateTask,
+        const TaskResultCallback &onResultCallback,
+        const std::optional<CancelTaskCallback> &onCancelTaskCallback,
+        DurationType ttl) const
+    {
+        return _startTask(
+            pollingIntervalMs,
+            onUpdateTask,
+            onResultCallback,
+            onCancelTaskCallback,
+            std::chrono::duration_cast<std::chrono::milliseconds>(ttl));
+    }
+
+    Utils::Result<TaskProgressNotify> startTask(
+        int pollingIntervalMs,
+        const UpdateTaskCallback &onUpdateTask,
+        const TaskResultCallback &onResultCallback,
+        const std::optional<CancelTaskCallback> &onCancelTaskCallback) const
+    {
+        return _startTask(
+            pollingIntervalMs, onUpdateTask, onResultCallback, onCancelTaskCallback, std::nullopt);
+    }
 };
 
 /*
@@ -127,7 +171,8 @@ public:
 
     // Completions
     using CompletionResultCallback = std::function<void(Utils::Result<Schema::CompleteResult>)>;
-    using CompletionCallback = std::function<void(const Schema::CompleteRequestParams &, const CompletionResultCallback &)>;
+    using CompletionCallback = std::function<
+        void(const Schema::CompleteRequestParams &, const CompletionResultCallback &)>;
     void setCompletionCallback(const CompletionCallback &callback);
 
 private:
