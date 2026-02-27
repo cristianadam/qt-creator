@@ -4,13 +4,14 @@
 #include "followsymbol_switchmethoddecldef_test.h"
 
 #include "clangdsettings.h"
-#include "cppcodemodelsettings.h"
-#include "cppeditorwidget.h"
-#include "cppfollowsymbolundercursor.h"
-#include "cppmodelmanager.h"
-#include "cpptoolstestcase.h"
-#include "cppvirtualfunctionassistprovider.h"
-#include "cppvirtualfunctionproposalitem.h"
+
+#include <cppeditor/cppcodemodelsettings.h>
+#include <cppeditor/cppeditorwidget.h>
+#include <cppeditor/cppfollowsymbolundercursor.h>
+#include <cppeditor/cppmodelmanager.h>
+#include <cppeditor/cpptoolstestcase.h>
+#include <cppeditor/cppvirtualfunctionassistprovider.h>
+#include <cppeditor/cppvirtualfunctionproposalitem.h>
 
 #include <projectexplorer/kitmanager.h>
 #include <projectexplorer/projectexplorer.h>
@@ -57,10 +58,15 @@
  */
 
 using namespace CPlusPlus;
+using namespace CppEditor;
+using namespace CppEditor::Internal;
 using namespace TextEditor;
 using namespace Core;
 using namespace ProjectExplorer;
 using namespace Utils;
+
+using CppTestDocument = CppEditor::Internal::Tests::CppTestDocument;
+using TestDocumentPtr = QSharedPointer<CppEditor::Internal::Tests::CppTestDocument>;
 
 class OverrideItem
 {
@@ -102,7 +108,7 @@ QT_END_NAMESPACE
 
 typedef QByteArray _;
 
-namespace CppEditor::Internal::Tests {
+namespace ClangCodeModel::Internal {
 
 /// A fake virtual functions assist provider that runs processor->perform() already in configure()
 class VirtualFunctionTestAssistProvider : public VirtualFunctionAssistProvider
@@ -486,11 +492,11 @@ TestDocumentPtr F2TestCase::testFileWithTargetCursorMarker(const QList<TestDocum
     return TestDocumentPtr();
 }
 
-} // namespace CppEditor::Internal::Tests
+} // namespace ClangCodeModel::Interna;
 
 Q_DECLARE_METATYPE(QList<CppEditor::Internal::Tests::TestDocumentPtr>)
 
-namespace CppEditor::Internal::Tests {
+namespace ClangCodeModel::Internal {
 
 void FollowSymbolTest::initTestCase()
 {
@@ -2090,7 +2096,7 @@ void FollowSymbolTest::testFollowVirtualFunctionCallMultipleDocuments()
     F2TestCase(F2TestCase::FollowSymbolUnderCursorAction, testFiles, finalResults);
 }
 
-} // namespace CppEditor::Internal::Tests
+} // namespace ClangCodeModel::Internal
 
 /*
 Potential test cases improving name lookup.

@@ -83,7 +83,6 @@ add_qtc_plugin(CppEditor
     cppvirtualfunctionassistprovider.cpp cppvirtualfunctionassistprovider.h
     cppvirtualfunctionproposalitem.cpp cppvirtualfunctionproposalitem.h
     cppworkingcopy.cpp cppworkingcopy.h
-    clangdsettings.cpp clangdsettings.h
     cursorineditor.h
     doxygengenerator.cpp doxygengenerator.h
     editordocumenthandle.cpp editordocumenthandle.h
@@ -151,7 +150,6 @@ extend_qtc_plugin(CppEditor
     cpptoolstestcase.cpp cpptoolstestcase.h
     cppuseselections_test.cpp cppuseselections_test.h
     fileandtokenactions_test.cpp fileandtokenactions_test.h
-    followsymbol_switchmethoddecldef_test.cpp followsymbol_switchmethoddecldef_test.h
     modelmanagertesthelper.cpp modelmanagertesthelper.h
     projectinfo_test.cpp projectinfo_test.h
     quickfixes/cppquickfix_test.cpp quickfixes/cppquickfix_test.h

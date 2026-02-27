@@ -1,7 +1,6 @@
 // Copyright (C) 2016 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
-#include "clangdsettings.h"
 #include "cppautocompleter.h"
 #include "cppcodemodelinspectordialog.h"
 #include "cppcodemodelsettings.h"
@@ -38,7 +37,6 @@
 #include "cppsourceprocessor_test.h"
 #include "cppuseselections_test.h"
 #include "fileandtokenactions_test.h"
-#include "followsymbol_switchmethoddecldef_test.h"
 #include "functionutils.h"
 #include "includeutils.h"
 #include "projectinfo_test.h"
@@ -304,11 +302,6 @@ void CppEditorPlugin::extensionsInitialized()
     setupCppQuickFixProjectPanel();
     setupCppFileSettings(*this);
     setupCppCodeModelProjectSettingsPanel();
-
-    if (CppModelManager::isClangCodeModelActive()) {
-        setupClangdProjectSettingsPanel();
-        setupClangdSettingsPage();
-    }
 
     // Add the hover handler factories here instead of in initialize()
     // so that the Clang Code Model has a chance to hook in.
@@ -623,7 +616,6 @@ void CppEditorPlugin::registerTests()
     addTest<Tests::AutoCompleterTest>();
     addTest<Tests::DoxygenTest>();
     addTest<Tests::FileAndTokenActionsTest>();
-    addTest<Tests::FollowSymbolTest>();
     addTest<Tests::IncludeHierarchyTest>();
     addTest<Tests::GlobalRenamingTest>();
     addTest<Tests::SelectionsTest>();

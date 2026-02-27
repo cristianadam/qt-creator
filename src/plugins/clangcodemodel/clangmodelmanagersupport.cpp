@@ -9,6 +9,7 @@
 #include "clangdquickfixes.h"
 #include "clangeditordocumentprocessor.h"
 #include "clangdlocatorfilters.h"
+#include "clangdsettings.h"
 #include "clangutils.h"
 
 #include <coreplugin/documentmanager.h>
@@ -19,7 +20,6 @@
 #include <coreplugin/session.h>
 #include <coreplugin/vcsmanager.h>
 
-#include <cppeditor/clangdsettings.h>
 #include <cppeditor/cppeditorconstants.h>
 #include <cppeditor/cppeditorwidget.h>
 #include <cppeditor/cppmodelmanager.h>

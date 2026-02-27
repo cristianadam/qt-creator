@@ -3,12 +3,13 @@
 
 #include "clangdsettings.h"
 
-#include "clangdiagnosticconfigsmodel.h"
-#include "clangdiagnosticconfigsselectionwidget.h"
-#include "clangdiagnosticconfigswidget.h"
-#include "cppeditorconstants.h"
-#include "cppeditortr.h"
-#include "cpptoolsreuse.h"
+#include "clangcodemodel/clangcodemodeltr.h"
+
+#include <cppeditor/clangdiagnosticconfigsmodel.h>
+#include <cppeditor/clangdiagnosticconfigsselectionwidget.h>
+#include <cppeditor/clangdiagnosticconfigswidget.h>
+#include <cppeditor/cppeditorconstants.h>
+#include <cppeditor/cpptoolsreuse.h>
 
 #include <coreplugin/dialogs/ioptionspage.h>
 #include <coreplugin/editormanager/editormanager.h>
@@ -46,10 +47,11 @@
 
 #include <limits>
 
+using namespace CppEditor;
 using namespace ProjectExplorer;
 using namespace Utils;
 
-namespace CppEditor {
+namespace ClangCodeModel {
 
 static FilePath g_defaultClangdFilePath;
 static FilePath fallbackClangdFilePath()
@@ -59,7 +61,7 @@ static FilePath fallbackClangdFilePath()
     return Environment::systemEnvironment().searchInPath("clangd");
 }
 
-static Id initialClangDiagnosticConfigId() { return Constants::CPP_CLANG_DIAG_CONFIG_BUILDSYSTEM; }
+static Id initialClangDiagnosticConfigId() { return CppEditor::Constants::CPP_CLANG_DIAG_CONFIG_BUILDSYSTEM; }
 
 static Key clangdSettingsKey() { return "ClangdSettings"; }
 static Key useClangdKey() { return "UseClangdV7"; }
@@ -349,7 +351,7 @@ void ClangdSettings::loadSettings()
 
     m_data.fromMap(Utils::storeFromSettings(clangdSettingsKey(), settings));
 
-    settings->beginGroup(Constants::CPPEDITOR_SETTINGSGROUP);
+    settings->beginGroup(CppEditor::Constants::CPPEDITOR_SETTINGSGROUP);
     m_data.customDiagnosticConfigs = diagnosticConfigsFromSettings(settings);
 
     // Pre-8.0 compat
@@ -371,7 +373,7 @@ void ClangdSettings::saveSettings()
                                       settings,
                                       m_data.toMap(),
                                       defaultData.toMap());
-    settings->beginGroup(Constants::CPPEDITOR_SETTINGSGROUP);
+    settings->beginGroup(CppEditor::Constants::CPPEDITOR_SETTINGSGROUP);
     diagnosticConfigsToSettings(settings, m_data.customDiagnosticConfigs);
     settings->endGroup();
 }
@@ -1035,9 +1037,9 @@ class ClangdSettingsPage final : public Core::IOptionsPage
 public:
     ClangdSettingsPage()
     {
-        setId(Constants::CPP_CLANGD_SETTINGS_ID);
+        setId(CppEditor::Constants::CPP_CLANGD_SETTINGS_ID);
         setDisplayName(Tr::tr("Clangd"));
-        setCategory(Constants::CPP_SETTINGS_CATEGORY);
+        setCategory(CppEditor::Constants::CPP_SETTINGS_CATEGORY);
         setWidgetCreator([] { return new ClangdSettingsPageWidget; });
     }
 };
@@ -1053,7 +1055,7 @@ public:
     ClangdProjectSettingsWidget(const ClangdProjectSettings &settings)
         : m_settings(settings), m_widget(settings.settings(), true)
     {
-        setGlobalSettingsId(Constants::CPP_CLANGD_SETTINGS_ID);
+        setGlobalSettingsId(CppEditor::Constants::CPP_CLANGD_SETTINGS_ID);
         const auto layout = new QVBoxLayout(this);
         layout->setContentsMargins(0, 0, 0, 0);
         layout->addWidget(&m_widget);
@@ -1120,10 +1122,8 @@ void setupClangdProjectSettingsPanel()
     static ClangdProjectSettingsPanelFactory theClangdProjectSettingsPanelFactory;
 }
 
-}
+} // namespace Internal
 
-// namespace Internal
-
-} // namespace CppEditor
+} // namespace ClangCodeModel
 
 #include <clangdsettings.moc>

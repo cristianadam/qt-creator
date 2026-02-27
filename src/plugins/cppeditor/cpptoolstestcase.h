@@ -48,7 +48,7 @@ typedef QSharedPointer<CppTestDocument> TestDocumentPtr;
  *   - A '$' character denotes the target text cursor position (for "follow symbol" type of tests)
  *   - For selections, the markers "@{start}" and "@{end}" can be used.
  */
-class CppTestDocument
+class CPPEDITOR_EXPORT CppTestDocument
 {
 public:
     CppTestDocument(const QByteArray &fileName, const QByteArray &source,

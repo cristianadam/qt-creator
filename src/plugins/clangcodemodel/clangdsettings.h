@@ -3,8 +3,7 @@
 
 #pragma once
 
-#include "clangdiagnosticconfig.h"
-#include "cppeditor_global.h"
+#include <cppeditor/clangdiagnosticconfig.h>
 
 #include <utils/aspects.h>
 #include <utils/filepath.h>
@@ -17,11 +16,11 @@ class Project;
 
 namespace Utils { class MacroExpander; }
 
-namespace CppEditor {
-class ClangDiagnosticConfigsModel;
+namespace CppEditor { class ClangDiagnosticConfigsModel; } // FIXME: Move from CppEditor?
 
-// TODO: Can we move this to ClangCodeModel?
-class CPPEDITOR_EXPORT ClangdSettings : public Utils::AspectContainer
+namespace ClangCodeModel {
+
+class ClangdSettings : public Utils::AspectContainer
 {
 public:
     enum class IndexingPriority { Off, Background, Normal, Low, };
@@ -70,7 +69,7 @@ public:
         bool useExternalCompilationDb() const { return false; }
         Utils::FilePath clangdIncludePath(const ProjectExplorer::Kit *kit) const;
         bool sizeIsOkay(const Utils::FilePath &fp) const;
-        ClangDiagnosticConfig diagnosticConfig() const;
+        CppEditor::ClangDiagnosticConfig diagnosticConfig() const;
 
         Utils::FilePath projectIndexPath(const Utils::MacroExpander &expander) const;
         Utils::FilePath sessionIndexPath(const Utils::MacroExpander &expander) const;
@@ -81,7 +80,7 @@ public:
 
         Utils::FilePath executableFilePath;
         QStringList sessionsWithOneClangd;
-        ClangDiagnosticConfigs customDiagnosticConfigs;
+        CppEditor::ClangDiagnosticConfigs customDiagnosticConfigs;
         Utils::Id diagnosticConfigId;
 
         int workerThreadLimit = 0;
@@ -113,8 +112,8 @@ public:
     static bool haveCheckedHardwareRequirements();
 
     static void setDefaultClangdPath(const Utils::FilePath &filePath);
-    static void setCustomDiagnosticConfigs(const ClangDiagnosticConfigs &configs);
-    static ClangDiagnosticConfigsModel diagnosticConfigsModel();
+    static void setCustomDiagnosticConfigs(const CppEditor::ClangDiagnosticConfigs &configs);
+    static CppEditor::ClangDiagnosticConfigsModel diagnosticConfigsModel();
 
     void setData(const Data &data, bool saveAndEmitSignal = true);
     Data data() const { return m_data; }
@@ -134,14 +133,14 @@ private:
     Data m_data;
 };
 
-CPPEDITOR_EXPORT ClangdSettings::Data clangdSettingsForProject(ProjectExplorer::Project *project);
-CPPEDITOR_EXPORT void clangdBlockIndexingForProject(ProjectExplorer::Project *project);
-CPPEDITOR_EXPORT void clangdUnblockIndexingForProject(ProjectExplorer::Project *project);
-CPPEDITOR_EXPORT void clangdDisableDiagnosticsForProject(ProjectExplorer::Project *project, Utils::Id id);
+ClangdSettings::Data clangdSettingsForProject(ProjectExplorer::Project *project);
+void clangdBlockIndexingForProject(ProjectExplorer::Project *project);
+void clangdUnblockIndexingForProject(ProjectExplorer::Project *project);
+void clangdDisableDiagnosticsForProject(ProjectExplorer::Project *project, Utils::Id id);
 
 namespace Internal {
 void setupClangdProjectSettingsPanel();
 void setupClangdSettingsPage();
 }
 
-} // namespace CppEditor
+} // namespace ClangCodeModel

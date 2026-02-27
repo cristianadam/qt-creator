@@ -5,7 +5,7 @@
 
 #include <QObject>
 
-namespace CppEditor::Internal::Tests {
+namespace ClangCodeModel::Internal {
 
 class FollowSymbolTest : public QObject
 {
@@ -47,4 +47,4 @@ private slots:
     void testFollowVirtualFunctionCallMultipleDocuments();
 };
 
-} // namespace CppEditor::Internal::Tests
+} // namespace ClangCodeModel::Internal

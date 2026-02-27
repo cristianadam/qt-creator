@@ -4,12 +4,14 @@
 #include "clangcodemodeltr.h"
 #include "clangconstants.h"
 #include "clangmodelmanagersupport.h"
+#include "clangdsettings.h"
 #include "clangutils.h"
 
 #ifdef WITH_TESTS
 #  include "test/activationsequenceprocessortest.h"
 #  include "test/clangdtests.h"
 #  include "test/clangfixittest.h"
+#  include "test/followsymbol_switchmethoddecldef_test.h"
 #endif
 
 #include <coreplugin/actionmanager/actioncontainer.h>
@@ -80,6 +82,11 @@ void ClangCodeModelPlugin::initialize()
     updateStaleIndexEntries.addToContainer(CppEditor::Constants::M_TOOLS_CPP);
     updateStaleIndexEntries.addToContainer(CppEditor::Constants::M_CONTEXT);
 
+    if (CppModelManager::isClangCodeModelActive()) {
+        setupClangdProjectSettingsPanel();
+        setupClangdSettingsPage();
+    }
+
 #ifdef WITH_TESTS
     addTestCreator(createActivationSequenceProcessorTest);
     addTestCreator(createClangdTestCompletion);
@@ -91,6 +98,7 @@ void ClangCodeModelPlugin::initialize()
     addTestCreator(createClangdTestLocalReferences);
     addTestCreator(createClangdTestTooltips);
     addTestCreator(createClangFixItTest);
+    addTest<FollowSymbolTest>();
 #endif
 }
 

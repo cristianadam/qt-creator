@@ -26,6 +26,7 @@ add_qtc_plugin(ClangCodeModel
     clangdquickfixes.cpp clangdquickfixes.h
     clangdqpropertyhighlighter.cpp clangdqpropertyhighlighter.h
     clangdsemantichighlighting.cpp clangdsemantichighlighting.h
+    clangdsettings.cpp clangdsettings.h
     clangdswitchdecldef.cpp clangdswitchdecldef.h
     clangeditordocumentprocessor.cpp clangeditordocumentprocessor.h
     clangfixitoperation.cpp clangfixitoperation.h
@@ -53,6 +54,7 @@ extend_qtc_plugin(ClangCodeModel
     test/clangdtests.cpp test/clangdtests.h
     test/clangfixittest.cpp test/clangfixittest.h
     test/data/clangtestdata.qrc
+    test/followsymbol_switchmethoddecldef_test.cpp test/followsymbol_switchmethoddecldef_test.h
 )
 
 if(MINGW)

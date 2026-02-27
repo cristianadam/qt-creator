@@ -156,7 +156,7 @@ private:
 
 void setupClangdConfigFile()
 {
-    const FilePath targetConfigFile = CppEditor::ClangdSettings::clangdUserConfigFilePath();
+    const FilePath targetConfigFile = ClangdSettings::clangdUserConfigFilePath();
     const FilePath baseDir = targetConfigFile.parentDir();
     baseDir.ensureWritableDir();
     const Result<QByteArray> contents = targetConfigFile.fileContents();
@@ -173,15 +173,14 @@ void setupClangdConfigFile()
     }
 }
 
-static BaseClientInterface *clientInterface(BuildConfiguration *bc, const Utils::FilePath &jsonDbDir)
+static BaseClientInterface *clientInterface(BuildConfiguration *bc, const FilePath &jsonDbDir)
 {
-    using CppEditor::ClangdSettings;
     QString indexingOption = "--background-index";
-    const ClangdSettings::Data settings = CppEditor::clangdSettingsForProject(bc ? bc->project() : nullptr);
+    const ClangdSettings::Data settings = clangdSettingsForProject(bc ? bc->project() : nullptr);
     const bool indexingEnabled = settings.indexingPriority != ClangdSettings::IndexingPriority::Off;
     if (!indexingEnabled)
         indexingOption += "=0";
-    CppEditor::clangdUnblockIndexingForProject(bc ? bc->project() : nullptr);
+    clangdUnblockIndexingForProject(bc ? bc->project() : nullptr);
     const QString headerInsertionOption = QString("--header-insertion=")
             + (settings.autoIncludeHeaders ? "iwyu" : "never");
     const QString limitResults = QString("--limit-results=%1").arg(settings.completionResults);
@@ -309,7 +308,7 @@ class ClangdClient::Private
 {
 public:
     Private(ClangdClient *q, BuildConfiguration *bc)
-        : q(q), buildConfig(bc), settings(CppEditor::clangdSettingsForProject(bc ? bc->project() : nullptr))
+        : q(q), buildConfig(bc), settings(clangdSettingsForProject(bc ? bc->project() : nullptr))
     {}
 
     void findUsages(TextDocument *document, const QTextCursor &cursor,
@@ -338,7 +337,7 @@ public:
 
     ClangdClient * const q;
     const QPointer<BuildConfiguration> buildConfig;
-    const CppEditor::ClangdSettings::Data settings;
+    const ClangdSettings::Data settings;
     QList<ClangdFollowSymbol *> followSymbolOps;
     ClangdSwitchDeclDef *switchDeclDef = nullptr;
     ClangdFindLocalReferences *findLocalRefs = nullptr;
@@ -461,7 +460,7 @@ ClangdClient::ClangdClient(BuildConfiguration *bc, const Utils::FilePath &jsonDb
     progressManager()->setCancelHandlerForToken(indexingToken(), [this, bc = QPointer(bc)] {
         if (!bc)
             return;
-        CppEditor::clangdBlockIndexingForProject(bc ? bc->project() : nullptr);
+        clangdBlockIndexingForProject(bc ? bc->project() : nullptr);
         progressManager()->endProgressReport(indexingToken());
     });
     setCurrentBuildConfiguration(bc);
@@ -756,7 +755,7 @@ bool ClangdClient::referencesShadowFile(const TextEditor::TextDocument *doc,
 
 bool ClangdClient::fileBelongsToProject(const Utils::FilePath &filePath) const
 {
-    if (CppEditor::ClangdSettings::instance().data().isSessionMode())
+    if (ClangdSettings::instance().data().isSessionMode())
         return ProjectManager::projectForFile(filePath);
 
     return Client::fileBelongsToProject(filePath);
@@ -801,7 +800,7 @@ QVersionNumber ClangdClient::versionNumber() const
     return d->versionNumber.value();
 }
 
-CppEditor::ClangdSettings::Data ClangdClient::settingsData() const { return d->settings; }
+ClangdSettings::Data ClangdClient::settingsData() const { return d->settings; }
 
 void ClangdClient::Private::findUsages(TextDocument *document,
         const QTextCursor &cursor, const QString &searchTerm,

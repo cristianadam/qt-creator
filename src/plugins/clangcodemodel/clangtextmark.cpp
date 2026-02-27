@@ -8,11 +8,11 @@
 #include "clangdclient.h"
 #include "clangdiagnostictooltipwidget.h"
 #include "clangutils.h"
+#include "clangdsettings.h"
 
 #include <coreplugin/icore.h>
 
 #include <cppeditor/clangdiagnosticconfigsmodel.h>
-#include <cppeditor/clangdsettings.h>
 #include <cppeditor/cppeditorconstants.h>
 #include <cppeditor/cpptoolsreuse.h>
 

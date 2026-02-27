@@ -52,6 +52,9 @@ QtcPlugin {
         "clangdquickfixes.h",
         "clangdsemantichighlighting.cpp",
         "clangdsemantichighlighting.h",
+        "clangdsettings.cpp",
+        "clangdsettings.h",
+        "clangdsemantichighlighting.h",
         "clangdswitchdecldef.cpp",
         "clangdswitchdecldef.h",
         "clangeditordocumentprocessor.cpp",
@@ -103,6 +106,8 @@ QtcPlugin {
             "clangfixittest.cpp",
             "clangfixittest.h",
             "data/clangtestdata.qrc",
+            "followsymbol_switchmethoddecldef_test.cpp",
+            "followsymbol_switchmethoddecldef_test.h",
         ]
     }
 
