@@ -5,6 +5,8 @@
 
 #include <utils/aspects.h>
 
+#include <QTreeWidget>
+
 namespace Autotest::Internal {
 
 enum class RunAfterBuildMode
@@ -14,21 +16,42 @@ enum class RunAfterBuildMode
     Selected
 };
 
-class NonAspectSettings
+class FrameworkAspectData
 {
 public:
+    FrameworkAspectData() = default;
+
     QHash<Utils::Id, bool> frameworks;
     QHash<Utils::Id, bool> frameworksGrouping;
     QHash<Utils::Id, bool> tools;
 };
 
-class TestSettings : public Utils::AspectContainer, public NonAspectSettings
+class FrameworksAspect : public Utils::BaseAspect, public FrameworkAspectData
+{
+public:
+    explicit FrameworksAspect(Utils::AspectContainer *container);
+
+private:
+    void apply() final;
+    void cancel() final;
+    bool isDirty() const final;
+
+    void writeSettings() const final;
+    void readSettings() final;
+
+    void addToLayoutImpl(Layouting::Layout &parent) final;
+
+    void populateTreeWidget();
+    void onFrameworkItemChanged();
+
+    QTreeWidget *m_frameworkTreeWidget = nullptr;
+    Utils::InfoLabel *m_frameworksWarn = nullptr;
+};
+
+class TestSettings : public Utils::AspectContainer
 {
 public:
     TestSettings();
-
-    void toSettings() const;
-    void fromSettings();
 
     Utils::IntegerAspect scanThreadLimit{this};
     Utils::BoolAspect useTimeout{this};
@@ -45,6 +68,7 @@ public:
     Utils::BoolAspect popupOnFinish{this};
     Utils::BoolAspect popupOnFail{this};
     Utils::SelectionAspect runAfterBuild{this};
+    FrameworksAspect frameworks{this};
 
     RunAfterBuildMode runAfterBuildMode() const;
 };
