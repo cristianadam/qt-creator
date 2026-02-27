@@ -678,15 +678,24 @@ void VcsManager::updateModifiedFiles(const Utils::FilePath &repository, const Fi
 {
     QTC_ASSERT(d->m_fileStates.contains(repository), return);
 
+    const FileStateHash oldStates = d->m_fileStates.value(repository);
+    const FileStateHash newStates = modifiedFiles;
     QStringList changedFiles;
-    QStringList oldList = d->m_fileStates.value(repository).keys();
-    QStringList newList = modifiedFiles.keys();
-    oldList.sort();
-    newList.sort();
 
-    std::set_symmetric_difference(std::begin(oldList), std::end(oldList),
-                                  std::begin(newList), std::end(newList),
-                                  std::back_inserter(changedFiles));
+    // Files that changed the state or went back to unmodified
+    for (auto it = oldStates.cbegin(); it != oldStates.cend(); ++it) {
+        const QString &file = it.key();
+        const VcsFileState state = it.value();
+
+        if (!newStates.contains(file) || newStates.value(file) != state)
+            changedFiles.append(file);
+    }
+
+    // Files that have new modifications
+    for (auto it = newStates.cbegin(); it != newStates.cend(); ++it) {
+        if (const QString &file = it.key(); !oldStates.contains(file))
+            changedFiles.append(file);
+    }
 
     if (changedFiles.isEmpty())
         return;
