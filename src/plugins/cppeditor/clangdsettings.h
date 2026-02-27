@@ -145,13 +145,15 @@ private:
     Data m_data;
 };
 
+CPPEDITOR_EXPORT ClangdSettings::Data clangdSettingsForProject(ProjectExplorer::Project *project);
+
 class CPPEDITOR_EXPORT ClangdProjectSettings
 {
 public:
     ClangdProjectSettings(ProjectExplorer::Project *project);
-    ClangdProjectSettings(ProjectExplorer::BuildConfiguration *bc);
 
     ClangdSettings::Data settings() const;
+
     void setSettings(const ClangdSettings::Data &data);
     bool useGlobalSettings() const { return m_useGlobalSettings; }
     void setUseGlobalSettings(bool useGlobal);

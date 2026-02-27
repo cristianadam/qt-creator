@@ -395,10 +395,6 @@ ClangdProjectSettings::ClangdProjectSettings(Project *project) : m_project(proje
     loadSettings();
 }
 
-ClangdProjectSettings::ClangdProjectSettings(BuildConfiguration *bc)
-    : ClangdProjectSettings(bc ? bc->project() : nullptr)
-{}
-
 ClangdSettings::Data ClangdProjectSettings::settings() const
 {
     const ClangdSettings::Data globalData = ClangdSettings::instance().data();
@@ -544,6 +540,12 @@ int ClangdSettings::Data::defaultCompletionResults()
     bool ok = false;
     const int userValue = qtcEnvironmentVariableIntValue("QTC_CLANGD_COMPLETION_RESULTS", &ok);
     return ok ? userValue : 100;
+}
+
+ClangdSettings::Data clangdSettingsForProject(ProjectExplorer::Project *project)
+{
+    ClangdProjectSettings projectSettings(project);
+    return projectSettings.settings();
 }
 
 namespace Internal {
@@ -1059,6 +1061,12 @@ private:
     ClangdSettingsWidget m_widget;
 };
 
+ClangdSettings::Data dataForProject(Project *project)
+{
+    ClangdProjectSettings projectSettings(project);
+    return projectSettings.settings();
+}
+
 class ClangdProjectSettingsPanelFactory final : public ProjectPanelFactory
 {
 public:
@@ -1078,6 +1086,7 @@ void setupClangdProjectSettingsPanel()
 }
 
 } // namespace Internal
+
 } // namespace CppEditor
 
 #include <clangdsettings.moc>
