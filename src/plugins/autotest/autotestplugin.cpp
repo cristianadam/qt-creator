@@ -13,7 +13,6 @@
 #include "testprojectsettings.h"
 #include "testresultspane.h"
 #include "testrunner.h"
-#include "testsettingspage.h"
 #include "testtreeitem.h"
 #include "testtreemodel.h"
 
@@ -538,7 +537,7 @@ public:
             Tr::tr("Testing"),
             ":/autotest/images/settingscategory_autotest.png");
 
-        setupTestSettingsPage();
+        setupTestSettings();
 
         dd = new AutotestPluginPrivate;
 #ifdef WITH_TESTS

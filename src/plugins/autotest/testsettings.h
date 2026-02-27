@@ -51,4 +51,6 @@ public:
 
 TestSettings &testSettings();
 
+void setupTestSettings();
+
 } // Autotest::Internal
