@@ -14,7 +14,7 @@
     You might also find answers to your questions in the
     \l{Known Issues} and \l{How To} sections, or the Troubleshooting
     sections for a special area, such as
-    \l{Troubleshooting Debugger}{Debugging}.
+    \l{Troubleshooting debugger}{Debugging}.
 
     \section1 General Questions
 
@@ -142,7 +142,7 @@
     \section1 Debugger Questions
 
     For information on troubleshooting debugger, see
-    \l{Troubleshooting Debugger}.
+    \l{Troubleshooting debugger}.
 
     \b {If I have a choice of GDB versions, which should I use?}
 
@@ -154,7 +154,7 @@
 
     You must use Python version 2.6 or 2.7.
 
-    For more information, see \l{Supported Debuggers}.
+    For more information, see \l{Supported debuggers}.
 
     \b {How do I generate a core file in \QC?}
 

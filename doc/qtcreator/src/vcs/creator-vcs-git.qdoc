@@ -1327,7 +1327,7 @@
             \li Opens the commit \e hash with full description and diff.
     \endtable
 
-    \note Most of these actions have no meaning for uncommmited changes.
+    \note Most of these actions have no meaning for uncommitted changes.
 
     \sa {Use Git}{How to: Use Git}, {Using Git}
 */

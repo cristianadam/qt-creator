@@ -1,4 +1,5 @@
 add_qtc_library(qtkeychain
+  SKIP_PCH
   DEPENDS Qt::Core
   SOURCES_PREFIX qtkeychain
   SOURCES

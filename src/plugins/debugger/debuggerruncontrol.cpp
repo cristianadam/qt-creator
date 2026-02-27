@@ -280,6 +280,13 @@ static ExecutableItem fixupParamsRecipe(const Storage<DebuggerData> &storage)
             return false;
         }
 
+        if (runParameters.useTerminal()) {
+            auto inferior = runParameters.inferior();
+            if (inferior.command.executable().osType() == OsType::OsTypeWindows)
+                inferior.environment.set("QT_WIN_DEBUG_CONSOLE", "attach");
+            runParameters.setInferior(inferior);
+        }
+
         Utils::globalMacroExpander()->registerFileVariables(
             "DebuggedExecutable", Tr::tr("Debugged executable"),
             [exec = runParameters.inferior().command.executable()] { return exec; });
