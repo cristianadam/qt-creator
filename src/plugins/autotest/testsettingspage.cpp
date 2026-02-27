@@ -137,6 +137,7 @@ TestSettingsWidget::TestSettingsWidget()
 
         testSettings(s);
         testToolsSettings(s);
+        s.apply();
         s.toSettings();
 
         for (ITestFramework *framework : TestFrameworkManager::registeredFrameworks()) {

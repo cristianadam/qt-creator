@@ -19,5 +19,6 @@
     ],
     "Description" : "Provides MCP Support for Qt Creator",
     "Url" : "https://www.qt.io",
+    "DocumentationUrl" : "https://doc.qt.io/qtcreator/creator-how-to-mcp-server.html",
     ${IDE_PLUGIN_DEPENDENCIES}
 }

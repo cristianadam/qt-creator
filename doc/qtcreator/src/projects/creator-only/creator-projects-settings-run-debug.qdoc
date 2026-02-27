@@ -26,7 +26,7 @@
     additional settings for debugging C++:
 
     \list
-        \li \l{Adding Custom Debugging Helpers}{Custom debugging helpers}
+        \li \l{Adding custom debugging helpers}{Custom debugging helpers}
         \li \l{GDB}{GDB commands} to execute after GDB
             has started, but before the debugged program is started or
             attached, and before the debugging helpers are initialized
