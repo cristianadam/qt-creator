@@ -107,9 +107,11 @@ void ZenModePlugin::extensionsInitialized()
                 TextEditor::marginSettings().centerEditorContentWidthPercent();
     };
 
-    QObject::connect(TextEditor::TextEditorSettings::instance(),
-                     &TextEditor::TextEditorSettings::marginSettingsChanged,
-                     this, userEditorContentWidth);
+    QObject::connect(
+        &TextEditor::marginSettings(),
+        &TextEditor::MarginSettings::changed,
+        this,
+        userEditorContentWidth);
 
     m_activeModeStyleSheet = "QLabel { color: #2ecc71; "
             "font-weight: bold; font-size: 14px;}";

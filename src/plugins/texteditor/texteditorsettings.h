@@ -82,7 +82,6 @@ signals:
     void typingSettingsChanged(const TextEditor::TypingSettings &);
     void storageSettingsChanged(const TextEditor::StorageSettingsData &);
     void behaviorSettingsChanged(const TextEditor::BehaviorSettingsData &);
-    void marginSettingsChanged(const TextEditor::MarginSettingsData &);
     void completionSettingsChanged(const TextEditor::CompletionSettings &);
     void extraEncodingSettingsChanged(const TextEditor::ExtraEncodingSettingsData &);
     void commentsSettingsChanged();

@@ -1347,8 +1347,9 @@ TextEditorWidgetPrivate::TextEditorWidgetPrivate(TextEditorWidget *parent)
             q, &TextEditorWidget::setStorageSettings);
     connect(settings, &TextEditorSettings::behaviorSettingsChanged,
             q, &TextEditorWidget::setBehaviorSettings);
-    connect(settings, &TextEditorSettings::marginSettingsChanged,
-            q, &TextEditorWidget::setMarginSettings);
+    connect(&TextEditor::marginSettings(), &MarginSettings::changed, this, [this](){
+        q->setMarginSettings(TextEditor::marginSettings().data());
+    });
     connect(&TextEditor::displaySettings(), &DisplaySettings::changed, this, [this](){
         q->setDisplaySettings(TextEditor::displaySettings().data());
     });
