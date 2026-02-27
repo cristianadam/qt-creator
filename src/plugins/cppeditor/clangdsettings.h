@@ -73,6 +73,13 @@ public:
         bool sizeIsOkay(const Utils::FilePath &fp) const;
         ClangDiagnosticConfig diagnosticConfig() const;
 
+        Utils::FilePath projectIndexPath(const Utils::MacroExpander &expander) const;
+        Utils::FilePath sessionIndexPath(const Utils::MacroExpander &expander) const;
+
+        enum class Granularity { Project, Session };
+        Granularity granularity() const;
+        bool isSessionMode() const;
+
         Utils::FilePath executableFilePath;
         QStringList sessionsWithOneClangd;
         ClangDiagnosticConfigs customDiagnosticConfigs;
@@ -109,23 +116,6 @@ public:
     static void setDefaultClangdPath(const Utils::FilePath &filePath);
     static void setCustomDiagnosticConfigs(const ClangDiagnosticConfigs &configs);
     static ClangDiagnosticConfigsModel diagnosticConfigsModel();
-
-    Utils::FilePath projectIndexPath(const Utils::MacroExpander &expander) const;
-    Utils::FilePath sessionIndexPath(const Utils::MacroExpander &expander) const;
-    HeaderSourceSwitchMode headerSourceSwitchMode() const { return m_data.headerSourceSwitchMode; }
-    CompletionRankingModel completionRankingModel() const { return m_data.completionRankingModel; }
-    bool autoIncludeHeaders() const { return m_data.autoIncludeHeaders; }
-    bool updateDependentSources() const { return m_data.updateDependentSources; }
-    int workerThreadLimit() const { return m_data.workerThreadLimit; }
-    int documentUpdateThreshold() const { return m_data.documentUpdateThreshold; }
-    qint64 sizeThresholdInKb() const { return m_data.sizeThresholdInKb; }
-    bool sizeThresholdEnabled() const { return m_data.sizeThresholdEnabled; }
-    int completionResults() const { return m_data.completionResults; }
-    ClangDiagnosticConfigs customDiagnosticConfigs() const;
-    Utils::Id diagnosticConfigId() const;
-
-    enum class Granularity { Project, Session };
-    Granularity granularity() const;
 
     void setData(const Data &data, bool saveAndEmitSignal = true);
     Data data() const { return m_data; }

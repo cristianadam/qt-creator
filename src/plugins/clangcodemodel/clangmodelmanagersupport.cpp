@@ -108,7 +108,7 @@ static Project *fallbackProject()
 
 static bool sessionModeEnabled()
 {
-    return ClangdSettings::instance().granularity() == ClangdSettings::Granularity::Session;
+    return ClangdSettings::instance().data().isSessionMode();
 }
 
 static const QList<TextEditor::TextDocument *> allCppDocuments()
@@ -510,10 +510,9 @@ void ClangModelManagerSupport::connectToWidgetsMarkContextMenuRequested(QWidget 
 static FilePath getJsonDbDir(Project *project)
 {
     if (!project)
-        return ClangdSettings::instance().sessionIndexPath(*globalMacroExpander());
-    if (const BuildConfiguration *const bc = project->activeBuildConfiguration()) {
-        return ClangdSettings(clangdSettingsForProject(project)).projectIndexPath(*bc->macroExpander());
-    }
+        return ClangdSettings::instance().data().sessionIndexPath(*globalMacroExpander());
+    if (const BuildConfiguration *const bc = project->activeBuildConfiguration())
+        return clangdSettingsForProject(project).projectIndexPath(*bc->macroExpander());
     return {};
 }
 

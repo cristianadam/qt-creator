@@ -202,7 +202,7 @@ void ClangdSettings::setDefaultClangdPath(const FilePath &filePath)
 
 void ClangdSettings::setCustomDiagnosticConfigs(const ClangDiagnosticConfigs &configs)
 {
-    if (instance().customDiagnosticConfigs() == configs)
+    if (instance().m_data.customDiagnosticConfigs == configs)
         return;
     instance().m_data.customDiagnosticConfigs = configs;
     instance().saveSettings();
@@ -210,7 +210,7 @@ void ClangdSettings::setCustomDiagnosticConfigs(const ClangDiagnosticConfigs &co
 
 ClangDiagnosticConfigsModel ClangdSettings::diagnosticConfigsModel()
 {
-    const ClangDiagnosticConfigs &customConfigs = instance().customDiagnosticConfigs();
+    const ClangDiagnosticConfigs &customConfigs = instance().m_data.customDiagnosticConfigs;
     ClangDiagnosticConfigsModel model;
     model.addBuiltinConfigs();
     for (const ClangDiagnosticConfig &config : customConfigs)
@@ -234,14 +234,14 @@ FilePath ClangdSettings::Data::clangdFilePath(const Kit *kit) const
     return fallbackClangdFilePath();
 }
 
-FilePath ClangdSettings::projectIndexPath(const MacroExpander &expander) const
+FilePath ClangdSettings::Data::projectIndexPath(const MacroExpander &expander) const
 {
-    return FilePath::fromUserInput(expander.expand(m_data.projectIndexPathTemplate));
+    return FilePath::fromUserInput(expander.expand(projectIndexPathTemplate));
 }
 
-FilePath ClangdSettings::sessionIndexPath(const MacroExpander &expander) const
+FilePath ClangdSettings::Data::sessionIndexPath(const MacroExpander &expander) const
 {
-    return FilePath::fromUserInput(expander.expand(m_data.sessionIndexPathTemplate));
+    return FilePath::fromUserInput(expander.expand(sessionIndexPathTemplate));
 }
 
 bool ClangdSettings::Data::sizeIsOkay(const FilePath &fp) const
@@ -249,26 +249,19 @@ bool ClangdSettings::Data::sizeIsOkay(const FilePath &fp) const
     return !sizeThresholdEnabled || sizeThresholdInKb * 1024 >= fp.fileSize();
 }
 
-ClangDiagnosticConfigs ClangdSettings::customDiagnosticConfigs() const
-{
-    return m_data.customDiagnosticConfigs;
-}
-
-Id ClangdSettings::diagnosticConfigId() const
-{
-    if (!diagnosticConfigsModel().hasConfigWithId(m_data.diagnosticConfigId))
-        return initialClangDiagnosticConfigId();
-    return m_data.diagnosticConfigId;
-}
-
 ClangDiagnosticConfig ClangdSettings::Data::diagnosticConfig() const
 {
     return diagnosticConfigsModel().configWithId(diagnosticConfigId);
 }
 
-ClangdSettings::Granularity ClangdSettings::granularity() const
+bool ClangdSettings::Data::isSessionMode() const
 {
-    if (m_data.sessionsWithOneClangd.contains(Core::SessionManager::activeSession()))
+    return granularity() == Granularity::Session;
+}
+
+ClangdSettings::Data::Granularity ClangdSettings::Data::granularity() const
+{
+    if (sessionsWithOneClangd.contains(Core::SessionManager::activeSession()))
         return Granularity::Session;
     return Granularity::Project;
 }
@@ -582,10 +575,8 @@ private:
     QStringListModel m_sessionsModel;
 };
 
-ClangdSettingsWidget::ClangdSettingsWidget(const ClangdSettings::Data &settingsData,
-                                           bool isForProject)
+ClangdSettingsWidget::ClangdSettingsWidget(const ClangdSettings::Data &data, bool isForProject)
 {
-    const ClangdSettings settings(settingsData);
     const QString indexingToolTip = Tr::tr(
         "<p>If background indexing is enabled, global symbol searches will yield more accurate "
         "results, at the cost of additional CPU load when the project is first opened. The "
@@ -643,26 +634,26 @@ ClangdSettingsWidget::ClangdSettingsWidget(const ClangdSettings::Data &settingsD
         "The maximum number of completion results returned by clangd.");
 
     m_useClangdCheckBox.setText(Tr::tr("Use clangd"));
-    m_useClangdCheckBox.setChecked(settings.data().useGoodClangd(nullptr));
+    m_useClangdCheckBox.setChecked(data.useGoodClangd(nullptr));
     m_clangdChooser.setExpectedKind(Utils::PathChooser::ExistingCommand);
-    m_clangdChooser.setFilePath(settings.data().clangdFilePath(nullptr));
+    m_clangdChooser.setFilePath(data.clangdFilePath(nullptr));
     m_clangdChooser.setAllowPathFromDevice(true);
     m_clangdChooser.setEnabled(m_useClangdCheckBox.isChecked());
     m_clangdChooser.setCommandVersionArguments({"--version"});
     using Priority = ClangdSettings::IndexingPriority;
     for (Priority prio : {Priority::Off, Priority::Background, Priority::Low, Priority::Normal}) {
         m_indexingComboBox.addItem(ClangdSettings::priorityToDisplayString(prio), int(prio));
-        if (prio == settings.data().indexingPriority)
+        if (prio == data.indexingPriority)
             m_indexingComboBox.setCurrentIndex(m_indexingComboBox.count() - 1);
     }
     m_indexingComboBox.setToolTip(indexingToolTip);
-    m_projectIndexPathTemplateLineEdit.setText(settings.data().projectIndexPathTemplate);
-    m_sessionIndexPathTemplateLineEdit.setText(settings.data().sessionIndexPathTemplate);
+    m_projectIndexPathTemplateLineEdit.setText(data.projectIndexPathTemplate);
+    m_sessionIndexPathTemplateLineEdit.setText(data.sessionIndexPathTemplate);
     using SwitchMode = ClangdSettings::HeaderSourceSwitchMode;
     for (SwitchMode mode : {SwitchMode::BuiltinOnly, SwitchMode::ClangdOnly, SwitchMode::Both}) {
         m_headerSourceSwitchComboBox.addItem(
             ClangdSettings::headerSourceSwitchModeToDisplayString(mode), int(mode));
-        if (mode == settings.headerSourceSwitchMode())
+        if (mode == data.headerSourceSwitchMode)
             m_headerSourceSwitchComboBox.setCurrentIndex(
                 m_headerSourceSwitchComboBox.count() - 1);
     }
@@ -671,41 +662,41 @@ ClangdSettingsWidget::ClangdSettingsWidget(const ClangdSettings::Data &settingsD
                                RankingModel::Heuristics}) {
         m_completionRankingModelComboBox.addItem(
             ClangdSettings::rankingModelToDisplayString(model), int(model));
-        if (model == settings.completionRankingModel())
+        if (model == data.completionRankingModel)
             m_completionRankingModelComboBox.setCurrentIndex(
                 m_completionRankingModelComboBox.count() - 1);
     }
     m_completionRankingModelComboBox.setToolTip(completionRankingModelToolTip);
 
     m_autoIncludeHeadersCheckBox.setText(Tr::tr("Insert header files on completion"));
-    m_autoIncludeHeadersCheckBox.setChecked(settings.autoIncludeHeaders());
+    m_autoIncludeHeadersCheckBox.setChecked(data.autoIncludeHeaders);
     m_autoIncludeHeadersCheckBox.setToolTip(autoIncludeToolTip);
     m_updateDependentSourcesCheckBox.setText(Tr::tr("Update dependent sources"));
-    m_updateDependentSourcesCheckBox.setChecked(settings.updateDependentSources());
+    m_updateDependentSourcesCheckBox.setChecked(data.updateDependentSources);
     m_updateDependentSourcesCheckBox.setToolTip(updateDependentSourcesToolTip);
-    m_threadLimitSpinBox.setValue(settings.workerThreadLimit());
+    m_threadLimitSpinBox.setValue(data.workerThreadLimit);
     m_threadLimitSpinBox.setSpecialValueText(Tr::tr("Automatic"));
     m_threadLimitSpinBox.setToolTip(workerThreadsToolTip);
     m_documentUpdateThreshold.setMinimum(50);
     m_documentUpdateThreshold.setMaximum(10000);
-    m_documentUpdateThreshold.setValue(settings.documentUpdateThreshold());
+    m_documentUpdateThreshold.setValue(data.documentUpdateThreshold);
     m_documentUpdateThreshold.setSingleStep(100);
     m_documentUpdateThreshold.setSuffix(" ms");
     m_documentUpdateThreshold.setToolTip(documentUpdateToolTip);
     m_sizeThresholdCheckBox.setText(Tr::tr("Ignore files greater than"));
-    m_sizeThresholdCheckBox.setChecked(settings.sizeThresholdEnabled());
+    m_sizeThresholdCheckBox.setChecked(data.sizeThresholdEnabled);
     m_sizeThresholdCheckBox.setToolTip(sizeThresholdToolTip);
     m_sizeThresholdSpinBox.setMinimum(1);
     m_sizeThresholdSpinBox.setMaximum(std::numeric_limits<int>::max());
     m_sizeThresholdSpinBox.setSuffix(" KB");
-    m_sizeThresholdSpinBox.setValue(settings.sizeThresholdInKb());
+    m_sizeThresholdSpinBox.setValue(data.sizeThresholdInKb);
     m_sizeThresholdSpinBox.setToolTip(sizeThresholdToolTip);
 
     const auto completionResultsLabel = new QLabel(Tr::tr("Completion results:"));
     completionResultsLabel->setToolTip(completionResultToolTip);
     m_completionResults.setMinimum(0);
     m_completionResults.setMaximum(std::numeric_limits<int>::max());
-    m_completionResults.setValue(settings.completionResults());
+    m_completionResults.setValue(data.completionResults);
     m_completionResults.setToolTip(completionResultToolTip);
     m_completionResults.setSpecialValueText(Tr::tr("No limit"));
 
@@ -794,14 +785,14 @@ ClangdSettingsWidget::ClangdSettingsWidget(const ClangdSettings::Data &settingsD
     m_configSelectionWidget = new ClangDiagnosticConfigsSelectionWidget(formLayout);
     m_configSelectionWidget->refresh(
         ClangdSettings::diagnosticConfigsModel(),
-        settings.diagnosticConfigId(),
+        data.diagnosticConfigId,
         [](const ClangDiagnosticConfigs &configs, const Utils::Id &configToSelect) {
             return new CppEditor::ClangDiagnosticConfigsWidget(configs, configToSelect);
         });
 
     layout->addLayout(formLayout);
     if (!isForProject) {
-        m_sessionsModel.setStringList(settingsData.sessionsWithOneClangd);
+        m_sessionsModel.setStringList(data.sessionsWithOneClangd);
         m_sessionsModel.sort(0);
         m_sessionsGroupBox = new QGroupBox(Tr::tr("Sessions with a Single Clangd Instance"));
         const auto sessionsView = new Utils::ListView;
@@ -1024,7 +1015,7 @@ public:
         layout->addWidget(&m_widget);
 
         const auto updateGlobalSettingsCheckBox = [this] {
-            if (ClangdSettings::instance().granularity() == ClangdSettings::Granularity::Session) {
+            if (ClangdSettings::instance().data().isSessionMode()) {
                 setUseGlobalSettingsCheckBoxEnabled(false);
                 setUseGlobalSettings(true);
             } else {
