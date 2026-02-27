@@ -74,6 +74,13 @@ public:
         ClangDiagnosticConfig diagnosticConfig() const;
         Utils::Id diagnosticConfigIdOrDefault() const;
 
+        Utils::FilePath projectIndexPath(const Utils::MacroExpander &expander) const;
+        Utils::FilePath sessionIndexPath(const Utils::MacroExpander &expander) const;
+
+        enum class Granularity { Project, Session };
+        Granularity granularity() const;
+        bool isSessionMode() const;
+
         Utils::FilePath executableFilePath;
         QStringList sessionsWithOneClangd;
         ClangDiagnosticConfigs customDiagnosticConfigs;
@@ -110,13 +117,6 @@ public:
     static void setDefaultClangdPath(const Utils::FilePath &filePath);
     static void setCustomDiagnosticConfigs(const ClangDiagnosticConfigs &configs);
     static ClangDiagnosticConfigsModel diagnosticConfigsModel();
-
-    Utils::FilePath projectIndexPath(const Utils::MacroExpander &expander) const;
-    Utils::FilePath sessionIndexPath(const Utils::MacroExpander &expander) const;
-    ClangDiagnosticConfigs customDiagnosticConfigs() const;
-
-    enum class Granularity { Project, Session };
-    Granularity granularity() const;
 
     void setData(const Data &data, bool saveAndEmitSignal = true);
     Data data() const { return m_data; }

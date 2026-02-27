@@ -203,7 +203,7 @@ void ClangdSettings::setDefaultClangdPath(const FilePath &filePath)
 
 void ClangdSettings::setCustomDiagnosticConfigs(const ClangDiagnosticConfigs &configs)
 {
-    if (instance().customDiagnosticConfigs() == configs)
+    if (instance().m_data.customDiagnosticConfigs == configs)
         return;
     instance().m_data.customDiagnosticConfigs = configs;
     instance().saveSettings();
@@ -211,7 +211,7 @@ void ClangdSettings::setCustomDiagnosticConfigs(const ClangDiagnosticConfigs &co
 
 ClangDiagnosticConfigsModel ClangdSettings::diagnosticConfigsModel()
 {
-    const ClangDiagnosticConfigs &customConfigs = instance().customDiagnosticConfigs();
+    const ClangDiagnosticConfigs &customConfigs = instance().m_data.customDiagnosticConfigs;
     ClangDiagnosticConfigsModel model;
     model.addBuiltinConfigs();
     for (const ClangDiagnosticConfig &config : customConfigs)
@@ -235,24 +235,19 @@ FilePath ClangdSettings::Data::clangdFilePath(const Kit *kit) const
     return fallbackClangdFilePath();
 }
 
-FilePath ClangdSettings::projectIndexPath(const MacroExpander &expander) const
+FilePath ClangdSettings::Data::projectIndexPath(const MacroExpander &expander) const
 {
-    return FilePath::fromUserInput(expander.expand(m_data.projectIndexPathTemplate));
+    return FilePath::fromUserInput(expander.expand(projectIndexPathTemplate));
 }
 
-FilePath ClangdSettings::sessionIndexPath(const MacroExpander &expander) const
+FilePath ClangdSettings::Data::sessionIndexPath(const MacroExpander &expander) const
 {
-    return FilePath::fromUserInput(expander.expand(m_data.sessionIndexPathTemplate));
+    return FilePath::fromUserInput(expander.expand(sessionIndexPathTemplate));
 }
 
 bool ClangdSettings::Data::sizeIsOkay(const FilePath &fp) const
 {
     return !sizeThresholdEnabled || sizeThresholdInKb * 1024 >= fp.fileSize();
-}
-
-ClangDiagnosticConfigs ClangdSettings::customDiagnosticConfigs() const
-{
-    return m_data.customDiagnosticConfigs;
 }
 
 Id ClangdSettings::Data::diagnosticConfigIdOrDefault() const
@@ -267,9 +262,14 @@ ClangDiagnosticConfig ClangdSettings::Data::diagnosticConfig() const
     return diagnosticConfigsModel().configWithId(diagnosticConfigIdOrDefault());
 }
 
-ClangdSettings::Granularity ClangdSettings::granularity() const
+bool ClangdSettings::Data::isSessionMode() const
 {
-    if (m_data.sessionsWithOneClangd.contains(Core::SessionManager::activeSession()))
+    return granularity() == Granularity::Session;
+}
+
+ClangdSettings::Data::Granularity ClangdSettings::Data::granularity() const
+{
+    if (sessionsWithOneClangd.contains(Core::SessionManager::activeSession()))
         return Granularity::Session;
     return Granularity::Project;
 }
@@ -1081,7 +1081,7 @@ public:
         layout->addWidget(&m_widget);
 
         const auto updateGlobalSettingsCheckBox = [this] {
-            if (ClangdSettings::instance().granularity() == ClangdSettings::Granularity::Session) {
+            if (ClangdSettings::instance().data().isSessionMode()) {
                 setUseGlobalSettingsCheckBoxEnabled(false);
                 setUseGlobalSettings(true);
             } else {

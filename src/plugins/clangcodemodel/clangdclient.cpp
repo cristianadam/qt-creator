@@ -757,10 +757,9 @@ bool ClangdClient::referencesShadowFile(const TextEditor::TextDocument *doc,
 
 bool ClangdClient::fileBelongsToProject(const Utils::FilePath &filePath) const
 {
-    if (CppEditor::ClangdSettings::instance().granularity()
-            == CppEditor::ClangdSettings::Granularity::Session) {
+    if (CppEditor::ClangdSettings::instance().data().isSessionMode())
         return ProjectManager::projectForFile(filePath);
-    }
+
     return Client::fileBelongsToProject(filePath);
 }
 
