@@ -16,20 +16,21 @@ enum class RunAfterBuildMode
     Selected
 };
 
-class FrameworkAspectData
-{
-public:
-    FrameworkAspectData() = default;
-
-    QHash<Utils::Id, bool> frameworks;
-    QHash<Utils::Id, bool> frameworksGrouping;
-    QHash<Utils::Id, bool> tools;
-};
-
-class FrameworksAspect : public Utils::BaseAspect, public FrameworkAspectData
+class FrameworksAspect : public Utils::BaseAspect
 {
 public:
     explicit FrameworksAspect(Utils::AspectContainer *container);
+
+    bool framework(Utils::Id id) const;
+    bool frameworkGrouping(Utils::Id id) const;
+    bool tool(Utils::Id id) const;
+
+    struct Data
+    {
+        QHash<Utils::Id, bool> frameworks;
+        QHash<Utils::Id, bool> frameworksGrouping;
+        QHash<Utils::Id, bool> tools;
+    };
 
 private:
     void apply() final;
@@ -46,6 +47,7 @@ private:
 
     QTreeWidget *m_frameworkTreeWidget = nullptr;
     Utils::InfoLabel *m_frameworksWarn = nullptr;
+    Data m_data;
 };
 
 class TestSettings : public Utils::AspectContainer
