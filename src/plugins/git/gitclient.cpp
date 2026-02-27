@@ -4088,7 +4088,7 @@ FilePath GitClient::fileWorkingDirectory(const Utils::FilePath &file)
 }
 
 IEditor *GitClient::openShowEditor(const FilePath &workingDirectory, const QString &ref,
-                                   const FilePath &path, ShowEditor showSetting)
+                                   const FilePath &path, ShowEditor showSetting, int line)
 {
     const FilePath topLevel = VcsManager::findTopLevelForDirectory(workingDirectory);
     const QString topLevelString = topLevel.toUrlishString();
@@ -4109,6 +4109,7 @@ IEditor *GitClient::openShowEditor(const FilePath &workingDirectory, const QStri
     IEditor *editor = EditorManager::openEditorWithContents(Id(), &title, content, documentId,
                                                             EditorManager::DoNotSwitchToDesignMode);
     editor->document()->setTemporary(true);
+    editor->gotoLine(line);
     // FIXME: Check should that be relative
     VcsBase::setSource(editor->document(), path);
     return editor;

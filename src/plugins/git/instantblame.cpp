@@ -102,7 +102,8 @@ bool BlameMark::addToolTipContent(QLayout *target) const
                         << "Showing file: \"" << path << "/" << originalFileName << "\" @ " << hash;
 
                     const auto fileName = FilePath::fromString(originalFileName);
-                    gitClient().openShowEditor(path, hash, fileName);
+                    gitClient().openShowEditor(path, hash, fileName, GitClient::ShowEditor::Always,
+                                               info.originalLine);
                 }
             } else if (link == "logLine") {
                 const VcsBasePluginState state = currentState();

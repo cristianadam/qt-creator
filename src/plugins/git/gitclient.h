@@ -376,7 +376,8 @@ public:
     static Utils::FilePath fileWorkingDirectory(const Utils::FilePath &file);
     enum class ShowEditor { OnlyIfDifferent, Always };
     Core::IEditor *openShowEditor(const Utils::FilePath &workingDirectory, const QString &ref,
-                                  const Utils::FilePath &path, ShowEditor showSetting = ShowEditor::Always);
+                                  const Utils::FilePath &path, ShowEditor showSetting = ShowEditor::Always,
+                                  int line = 1);
 
     Author parseAuthor(const QString &authorInfo);
     Author getAuthor(const Utils::FilePath &workingDirectory);
