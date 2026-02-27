@@ -11,7 +11,6 @@
 #include <utils/store.h>
 
 namespace ProjectExplorer {
-class BuildConfiguration;
 class Kit;
 class Project;
 }
@@ -136,30 +135,9 @@ private:
 };
 
 CPPEDITOR_EXPORT ClangdSettings::Data clangdSettingsForProject(ProjectExplorer::Project *project);
-
-class CPPEDITOR_EXPORT ClangdProjectSettings
-{
-public:
-    ClangdProjectSettings(ProjectExplorer::Project *project);
-
-    ClangdSettings::Data settings() const;
-
-    void setSettings(const ClangdSettings::Data &data);
-    bool useGlobalSettings() const { return m_useGlobalSettings; }
-    void setUseGlobalSettings(bool useGlobal);
-    void setDiagnosticConfigId(Utils::Id configId);
-    void blockIndexing();
-    void unblockIndexing();
-
-private:
-    void loadSettings();
-    void saveSettings();
-
-    ProjectExplorer::Project * const m_project;
-    ClangdSettings::Data m_customSettings;
-    bool m_useGlobalSettings = true;
-    bool m_blockIndexing = false;
-};
+CPPEDITOR_EXPORT void clangdBlockIndexingForProject(ProjectExplorer::Project *project);
+CPPEDITOR_EXPORT void clangdUnblockIndexingForProject(ProjectExplorer::Project *project);
+CPPEDITOR_EXPORT void clangdDisableDiagnosticsForProject(ProjectExplorer::Project *project, Utils::Id id);
 
 namespace Internal {
 void setupClangdProjectSettingsPanel();

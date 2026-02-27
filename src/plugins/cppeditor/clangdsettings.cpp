@@ -383,10 +383,33 @@ void ClangdSettings::setClangdFilePath(const FilePath &filePath)
 }
 #endif
 
-ClangdProjectSettings::ClangdProjectSettings(Project *project) : m_project(project)
+class ClangdProjectSettings
 {
-    loadSettings();
-}
+public:
+    ClangdProjectSettings(ProjectExplorer::Project *project)
+        : m_project(project)
+    {
+        loadSettings();
+    }
+
+    ClangdSettings::Data settings() const;
+
+    void setSettings(const ClangdSettings::Data &data);
+    bool useGlobalSettings() const { return m_useGlobalSettings; }
+    void setUseGlobalSettings(bool useGlobal);
+    void setDiagnosticConfigId(Utils::Id configId);
+    void blockIndexing();
+    void unblockIndexing();
+
+private:
+    void loadSettings();
+    void saveSettings();
+
+    ProjectExplorer::Project * const m_project;
+    ClangdSettings::Data m_customSettings;
+    bool m_useGlobalSettings = true;
+    bool m_blockIndexing = false;
+};
 
 ClangdSettings::Data ClangdProjectSettings::settings() const
 {
@@ -535,10 +558,31 @@ int ClangdSettings::Data::defaultCompletionResults()
     return ok ? userValue : 100;
 }
 
-ClangdSettings::Data clangdSettingsForProject(ProjectExplorer::Project *project)
+ClangdSettings::Data clangdSettingsForProject(Project *project)
 {
     ClangdProjectSettings projectSettings(project);
     return projectSettings.settings();
+}
+
+void clangdBlockIndexingForProject(Project *project)
+{
+    ClangdProjectSettings projectSettings(project);
+    projectSettings.blockIndexing();
+}
+
+void clangdUnblockIndexingForProject(Project *project)
+{
+    ClangdProjectSettings projectSettings(project);
+    projectSettings.unblockIndexing();
+}
+
+void clangdDisableDiagnosticsForProject(Project *project, Id id)
+{
+    ClangdProjectSettings projectSettings(project);
+
+    if (projectSettings.useGlobalSettings())
+        projectSettings.setUseGlobalSettings(false);
+    projectSettings.setDiagnosticConfigId(id);
 }
 
 namespace Internal {
@@ -1076,7 +1120,9 @@ void setupClangdProjectSettingsPanel()
     static ClangdProjectSettingsPanelFactory theClangdProjectSettingsPanelFactory;
 }
 
-} // namespace Internal
+}
+
+// namespace Internal
 
 } // namespace CppEditor
 
