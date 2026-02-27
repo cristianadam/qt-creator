@@ -12,17 +12,10 @@
 #include <utils/theme/theme.h>
 
 #include <QStandardItem>
-#include <QDebug>
 
 using namespace Utils;
 
 namespace VcsBase {
-
-// --------------------------------------------------------------------------
-// Helpers:
-// --------------------------------------------------------------------------
-
-enum { StateColumn = 0, FileColumn = 1 };
 
 static QBrush fileStatusTextForeground(Core::VcsFileState statusHint)
 {
@@ -83,21 +76,20 @@ static QList<QStandardItem *> createFileRow(const FilePath &repositoryRoot,
     return row;
 }
 
-// --------------------------------------------------------------------------
-// SubmitFileModel:
-// --------------------------------------------------------------------------
+enum Column {
+    State = 0,
+    File = 1,
+    Count = 2
+};
 
 /*!
-    \class VcsBase::SubmitFileModel
-
-    \brief The SubmitFileModel class is a 2-column (checkable, state, file name)
+    The SubmitFileModel class is a two column (checkable and state, file name)
     model to be used to list the files in the submit editor.
 
     Provides header items and a convenience function to add files.
  */
-
 SubmitFileModel::SubmitFileModel(QObject *parent) :
-    QStandardItemModel(0, 2, parent)
+    QStandardItemModel(0, Column::Count, parent)
 {
     setHorizontalHeaderLabels({Tr::tr("State"), Tr::tr("File")});
 }
@@ -112,7 +104,9 @@ void SubmitFileModel::setRepositoryRoot(const FilePath &repoRoot)
     m_repositoryRoot = repoRoot;
 }
 
-QList<QStandardItem *> SubmitFileModel::addFile(const QString &fileName, const QString &status, CheckMode checkMode,
+QList<QStandardItem *> SubmitFileModel::addFile(const QString &fileName,
+                                                const QString &status,
+                                                CheckMode checkMode,
                                                 const QVariant &v)
 {
     const Core::VcsFileState statusHint = m_fileStatusQualifier
@@ -135,7 +129,7 @@ QString SubmitFileModel::file(int row) const
 {
     if (row < 0 || row >= rowCount())
         return {};
-    return item(row, FileColumn)->text();
+    return item(row, Column::File)->text();
 }
 
 bool SubmitFileModel::isCheckable(int row) const
@@ -204,10 +198,11 @@ unsigned int SubmitFileModel::filterFiles(const QStringList &filter)
     return rc;
 }
 
-/*! Updates user selections from \a source model.
+/*!
+ * Updates user selections from \a source model.
  *
- *  Assumes that both models are sorted with the same order, and there
- *              are no duplicate entries.
+ * Assumes that both models are sorted with the same order, and there
+ * are no duplicate entries.
  */
 void SubmitFileModel::updateSelections(SubmitFileModel *source)
 {
@@ -239,7 +234,7 @@ void SubmitFileModel::setFileStatusQualifier(FileStatusQualifier &&func)
     const int topLevelRowCount = rowCount();
     const int topLevelColCount = columnCount();
     for (int row = 0; row < topLevelRowCount; ++row) {
-        const QStandardItem *statusItem = item(row, StateColumn);
+        const QStandardItem *statusItem = item(row, Column::State);
         const Core::VcsFileState statusHint = func
                                           ? func(statusItem->text(), statusItem->data())
                                           : Core::VcsFileState::Unknown;

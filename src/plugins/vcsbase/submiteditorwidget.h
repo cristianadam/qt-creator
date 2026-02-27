@@ -29,16 +29,12 @@ public:
     SubmitEditorWidget();
     ~SubmitEditorWidget() override;
 
-    // Register/Unregister actions that are managed by ActionManager with this widget.
-    // The submit action should have Core::Command::CA_UpdateText set as its text will
-    // be updated.
     void registerActions(QAction *editorUndoAction,  QAction *editorRedoAction,
                          QAction *submitAction = nullptr, QAction *diffAction = nullptr);
 
     QString descriptionText() const;
     void setDescriptionText(const QString &text);
 
-    // 'Commit' action enabled despite empty file list
     bool isEmptyFileListEnabled() const;
     void setEmptyFileListEnabled(bool e);
 
@@ -54,7 +50,6 @@ public:
     void setFileModel(SubmitFileModel *model);
     SubmitFileModel *fileModel() const;
 
-    // Files to be included in submit
     QStringList checkedFiles() const;
 
     Utils::CompletingTextEdit *descriptionEdit() const;

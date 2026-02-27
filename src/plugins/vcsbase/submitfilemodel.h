@@ -32,8 +32,8 @@ public:
     void setRepositoryRoot(const Utils::FilePath &repoRoot);
 
     // Convenience to create and add rows containing a file plus status text.
-    QList<QStandardItem *> addFile(const QString &fileName, const QString &status = QString(),
-                                   CheckMode checkMode = Checked, const QVariant &data = QVariant());
+    QList<QStandardItem *> addFile(const QString &fileName, const QString &status = {},
+                                   CheckMode checkMode = Checked, const QVariant &data = {});
 
     QString state(int row) const;
     QString file(int row) const;
