@@ -115,6 +115,8 @@ bool FrameworksAspect::isDirty() const
             return true;
         if (tmp.frameworks[id] != frameworks[id])
             return true;
+    }
+    for (const Id id : tmp.tools.keys()) {
         if (tmp.tools[id] != tools[id])
             return true;
     }
