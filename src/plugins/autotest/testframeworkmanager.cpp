@@ -45,11 +45,11 @@ void activateFrameworksAndToolsFromSettings()
 {
     const Internal::TestSettings &settings = Internal::testSettings();
     for (ITestFramework *framework : std::as_const(testFrameworks())) {
-        framework->setActive(settings.frameworks.frameworks.value(framework->id(), false));
-        framework->setGrouping(settings.frameworks.frameworksGrouping.value(framework->id(), false));
+        framework->setActive(settings.frameworks.framework(framework->id()));
+        framework->setGrouping(settings.frameworks.frameworkGrouping(framework->id()));
     }
     for (ITestTool *testTool : std::as_const(testTools()))
-        testTool->setActive(settings.frameworks.tools.value(testTool->id(), false));
+        testTool->setActive(settings.frameworks.tool(testTool->id()));
 }
 
 const TestFrameworks registeredFrameworks()

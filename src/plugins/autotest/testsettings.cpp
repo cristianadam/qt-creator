@@ -43,12 +43,12 @@ enum TestBaseInfo
     BaseType
 };
 
-static FrameworkAspectData extractData(const QAbstractItemModel *model)
+static FrameworksAspect::Data extractData(const QAbstractItemModel *model)
 {
     QTC_ASSERT(model, return {});
     const int itemCount = TestFrameworkManager::registeredFrameworks().size();
     QTC_ASSERT(itemCount <= model->rowCount(), return {});
-    FrameworkAspectData data;
+    FrameworksAspect::Data data;
 
     for (int row = 0; row < itemCount; ++row) {
         QModelIndex idx = model->index(row, 0);
@@ -74,16 +74,31 @@ FrameworksAspect::FrameworksAspect(AspectContainer *container)
     : BaseAspect(container)
 {}
 
+bool FrameworksAspect::framework(Id id) const
+{
+    return m_data.frameworks.value(id, false);
+}
+
+bool FrameworksAspect::frameworkGrouping(Id id) const
+{
+    return m_data.frameworksGrouping.value(id, false);
+}
+
+bool FrameworksAspect::tool(Id id) const
+{
+    return m_data.tools.value(id, false);
+}
+
 void FrameworksAspect::apply()
 {
-    FrameworkAspectData tmp = Internal::extractData(m_frameworkTreeWidget->model());
+    const Data tmp = Internal::extractData(m_frameworkTreeWidget->model());
 
     const QList<Utils::Id> changedIds = Utils::filtered(tmp.frameworksGrouping.keys(),
        [this, &tmp](Id id) {
-        return tmp.frameworksGrouping[id] != frameworksGrouping[id];
+        return tmp.frameworksGrouping[id] != m_data.frameworksGrouping[id];
     });
 
-    *static_cast<FrameworkAspectData *>(this) = tmp;
+    m_data = tmp;
 
     writeSettings();
 
@@ -108,16 +123,16 @@ void FrameworksAspect::cancel()
 
 bool FrameworksAspect::isDirty() const
 {
-    FrameworkAspectData tmp = Internal::extractData(m_frameworkTreeWidget->model());
+    const Data tmp = Internal::extractData(m_frameworkTreeWidget->model());
 
     for (const Id id : tmp.frameworksGrouping.keys()) {
-        if (tmp.frameworksGrouping[id] != frameworksGrouping[id])
+        if (tmp.frameworksGrouping[id] != m_data.frameworksGrouping[id])
             return true;
-        if (tmp.frameworks[id] != frameworks[id])
+        if (tmp.frameworks[id] != m_data.frameworks[id])
             return true;
     }
     for (const Id id : tmp.tools.keys()) {
-        if (tmp.tools[id] != tools[id])
+        if (tmp.tools[id] != m_data.tools[id])
             return true;
     }
 
@@ -130,13 +145,13 @@ void FrameworksAspect::writeSettings() const
     s.beginGroup(Constants::SETTINGSGROUP);
 
     // store frameworks and their current active and grouping state
-    for (auto it = frameworks.cbegin(); it != frameworks.cend(); ++it) {
+    for (auto it = m_data.frameworks.cbegin(); it != m_data.frameworks.cend(); ++it) {
         const Utils::Id &id = it.key();
         s.setValue(id.toKey(), it.value());
-        s.setValue(id.toKey() + groupSuffix, frameworksGrouping.value(id));
+        s.setValue(id.toKey() + groupSuffix, m_data.frameworksGrouping.value(id));
     }
     // ..and the testtools as well
-    for (auto it = tools.cbegin(); it != tools.cend(); ++it)
+    for (auto it = m_data.tools.cbegin(); it != m_data.tools.cend(); ++it)
         s.setValue(it.key().toKey(), it.value());
     s.endGroup();
 }
@@ -148,22 +163,22 @@ void FrameworksAspect::readSettings()
 
     // try to get settings for registered frameworks
     const TestFrameworks &registered = TestFrameworkManager::registeredFrameworks();
-    frameworks.clear();
-    frameworksGrouping.clear();
+    m_data.frameworks.clear();
+    m_data.frameworksGrouping.clear();
     for (const ITestFramework *framework : registered) {
         // get their active state
         const Id id = framework->id();
         const Key key = id.toKey();
-        frameworks.insert(id, s.value(key, framework->active()).toBool());
+        m_data.frameworks.insert(id, s.value(key, framework->active()).toBool());
         // and whether grouping is enabled
-        frameworksGrouping.insert(id, s.value(key + groupSuffix, framework->grouping()).toBool());
+        m_data.frameworksGrouping.insert(id, s.value(key + groupSuffix, framework->grouping()).toBool());
     }
     // ..and for test tools as well
     const TestTools &registeredTools = TestFrameworkManager::registeredTestTools();
-    tools.clear();
+    m_data.tools.clear();
     for (const ITestTool *testTool : registeredTools) {
         const Id id = testTool->id();
-        tools.insert(id, s.value(id.toKey(), testTool->active()).toBool());
+        m_data.tools.insert(id, s.value(id.toKey(), testTool->active()).toBool());
     }
     s.endGroup();
 }
@@ -207,7 +222,7 @@ void FrameworksAspect::populateTreeWidget()
         const Id id = framework->id();
         auto item = new QTreeWidgetItem(m_frameworkTreeWidget, {framework->displayName()});
         item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable);
-        item->setCheckState(0, frameworks.value(id) ? Qt::Checked : Qt::Unchecked);
+        item->setCheckState(0, m_data.frameworks.value(id) ? Qt::Checked : Qt::Unchecked);
         item->setData(0, BaseId, id.toSetting());
         item->setData(0, BaseType, ITestBase::Framework);
         item->setData(1, Qt::CheckStateRole, framework->grouping() ? Qt::Checked : Qt::Unchecked);
@@ -224,7 +239,7 @@ void FrameworksAspect::populateTreeWidget()
         const Id id = testTool->id();
         auto item = new QTreeWidgetItem(m_frameworkTreeWidget, {testTool->displayName()});
         item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable);
-        item->setCheckState(0, tools.value(id) ? Qt::Checked : Qt::Unchecked);
+        item->setCheckState(0, m_data.tools.value(id) ? Qt::Checked : Qt::Unchecked);
         item->setData(0, BaseId, id.toSetting());
         item->setData(0, BaseType, ITestBase::Tool);
     }
