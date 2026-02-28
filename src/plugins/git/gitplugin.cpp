@@ -2065,6 +2065,7 @@ void GitPluginPrivate::vcsFillFileActionMenu(QMenu *menu,
     case VcsFileState::Added:
         addAction(Tr::tr("Stage \"%1\""), IVersionControl::FileStage);
         addAction(Tr::tr("Unstage \"%1\""), IVersionControl::FileUnstageAdded);
+        addAction(Tr::tr("Mark Untracked \"%1\""), IVersionControl::FileUnstage);
         break;
     case VcsFileState::Modified:
         addAction(Tr::tr("Stage \"%1\""), IVersionControl::FileStage);
