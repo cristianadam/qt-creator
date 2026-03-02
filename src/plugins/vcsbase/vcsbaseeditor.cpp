@@ -871,15 +871,15 @@ void VcsBaseEditorWidget::slotPopulateDiffBrowser()
     for (QTextBlock it = document()->begin(); it != cend; it = it.next(), lineNumber++) {
         const QString text = it.text();
         // Check for a new diff section (not repeating the last filename)
-        if (d->m_diffFilePattern.match(text).capturedStart() == 0) {
-            const QString file = fileNameFromDiffSpecification(it);
-            if (!file.isEmpty() && lastFileName != file) {
-                lastFileName = file;
-                // ignore any headers
-                d->m_entrySections.push_back(d->m_entrySections.empty() ? 0 : lineNumber);
-                entriesComboBox->addItem(FilePath::fromString(file).fileName());
-            }
-        }
+        if (d->m_diffFilePattern.match(text).capturedStart() != 0)
+            continue;
+        const QString file = fileNameFromDiffSpecification(it);
+        if (file.isEmpty() || lastFileName == file)
+            continue;
+        lastFileName = file;
+        // ignore any headers
+        d->m_entrySections.push_back(d->m_entrySections.empty() ? 0 : lineNumber);
+        entriesComboBox->addItem(FilePath::fromString(file).fileName());
     }
 }
 
@@ -896,19 +896,19 @@ void VcsBaseEditorWidget::slotPopulateLogBrowser()
         const QString text = it.text();
         // Check for a new log section (not repeating the last filename)
         const QRegularExpressionMatch match = d->m_logEntryPattern.match(text);
-        if (match.hasMatch()) {
-            d->m_entrySections.push_back(d->m_entrySections.empty() ? 0 : lineNumber);
-            QString entry = match.captured(1);
-            QString subject = revisionSubject(it);
-            if (!subject.isEmpty()) {
-                if (subject.size() > 100) {
-                    subject.truncate(97);
-                    subject.append("...");
-                }
-                entry.append(" - ").append(subject);
+        if (!match.hasMatch())
+            continue;
+        d->m_entrySections.push_back(d->m_entrySections.empty() ? 0 : lineNumber);
+        QString entry = match.captured(1);
+        QString subject = revisionSubject(it);
+        if (!subject.isEmpty()) {
+            if (subject.size() > 100) {
+                subject.truncate(97);
+                subject.append("...");
             }
-            entriesComboBox->addItem(entry);
+            entry.append(" - ").append(subject);
         }
+        entriesComboBox->addItem(entry);
     }
 }
 
@@ -1171,12 +1171,10 @@ void VcsBaseEditorWidget::jumpToChangeFromDiff(QTextCursor cursor)
     }
     for ( ; block.isValid() ; block = block.previous()) {
         const QString line = block.text();
-        if (checkChunkLine(line, &chunkStart)) {
+        if (checkChunkLine(line, &chunkStart))
             break;
-        } else {
-            if (!line.startsWith(deletionIndicator))
-                ++lineCount;
-        }
+        if (!line.startsWith(deletionIndicator))
+            ++lineCount;
     }
 
     if (chunkStart == -1 || lineCount < 0 || !block.isValid())
@@ -1228,13 +1226,10 @@ DiffChunk VcsBaseEditorWidget::diffChunk(QTextCursor cursor) const
         unicode.append('\n');
     for (block = block.next() ; block.isValid() ; block = block.next()) {
         const QString line = block.text();
-        if (checkChunkLine(line, &chunkStart)
-                || d->m_diffFilePattern.match(line).capturedStart() == 0) {
+        if (checkChunkLine(line, &chunkStart) || d->m_diffFilePattern.match(line).capturedStart() == 0)
             break;
-        } else {
-            unicode += line;
-            unicode += '\n';
-        }
+        unicode += line;
+        unicode += '\n';
     }
     const TextEncoding encoding = textDocument()->encoding();
     if (encoding.isValid()) {
