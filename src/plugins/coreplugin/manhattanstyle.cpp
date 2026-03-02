@@ -345,7 +345,6 @@ void ManhattanStyle::polish(QWidget *widget)
         }
     }
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
     // QTCREATORBUG-32549: Design requires distinguishable QPalette::Highlight for QAbstractButton
     if (!isPanelWidget && qobject_cast<QAbstractButton*>(widget)) {
         QPalette pal = widget->palette();
@@ -356,7 +355,6 @@ void ManhattanStyle::polish(QWidget *widget)
             widget->setPalette(pal);
         }
     }
-#endif // >= Qt 6.6.0
 }
 
 void ManhattanStyle::unpolish(QWidget *widget)
