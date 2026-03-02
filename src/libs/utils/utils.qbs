@@ -355,8 +355,6 @@ QtcLibrary {
         "textfileformat.h",
         "textutils.cpp",
         "textutils.h",
-        "threadutils.cpp",
-        "threadutils.h",
         "transientscroll.cpp",
         "transientscroll.h",
         "treemodel.cpp",
