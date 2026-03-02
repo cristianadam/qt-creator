@@ -747,6 +747,42 @@ void McpCommands::getSymbolInformation(
     documentSymbolCache->requestSymbols(uri, Schedule::Delayed);
 }
 
+static void handleRenameResponse(const RenameRequest::Response &response)
+{
+    response.error().value_or(PrepareRenameRequest::Response::Error()).toString();
+}
+
+void McpCommands::renameSymbol(
+    const QString &path,
+    int line,
+    int column,
+    const QString &newName,
+    const ResponseCallback &callback)
+{
+    using namespace LanguageClient;
+
+    const FilePath filePath = FilePath::fromUserInput(path);
+
+    Client *client = LanguageClientManager::clientForFilePath(filePath);
+    if (!client) {
+        callback(QJsonObject{{"success", false}});
+        qCDebug(mcpCommands) << "No language client found for file:" << path;
+        return;
+    }
+
+    TextDocumentPositionParams positionParams;
+    positionParams.textDocument().setUri(client->hostPathToServerUri(filePath));
+    positionParams.position().setLine(line - 1);
+    positionParams.position().setCharacter(column - 1);
+    RenameParams params(positionParams);
+    params.setNewName(newName);
+    RenameRequest request(params);
+    request.setResponseCallback([](const RenameRequest::Response &response) {
+        handleRenameResponse(response);
+    });
+    client->sendMessage(request);
+}
+
 QStringList McpCommands::listProjects()
 {
     QStringList projects;

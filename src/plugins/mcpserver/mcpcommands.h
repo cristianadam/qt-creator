@@ -95,7 +95,12 @@ public:
         int column,
         const ResponseCallback &callback);
     // TODO: get symbol info
-    // TODO: rename symbol
+    void renameSymbol(
+        const QString &path,
+        int line,
+        int column,
+        const QString &newName,
+        const ResponseCallback &callback);
 
     // Additional useful commands
     QString getCurrentProject();
