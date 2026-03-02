@@ -546,6 +546,21 @@ QModelIndex LanguageClientSettingsModel::indexForSetting(BaseSettings *setting) 
 
 // BaseSettings
 
+static QString startupBehaviorString(BaseSettings::StartBehavior behavior)
+{
+    switch (behavior) {
+    case BaseSettings::AlwaysOn:
+        return Tr::tr("Always On");
+    case BaseSettings::RequiresFile:
+        return Tr::tr("Requires an Open File");
+    case BaseSettings::RequiresProject:
+        return Tr::tr("Start Server per Project");
+    default:
+        break;
+    }
+    return {};
+}
+
 BaseSettings::BaseSettings()
 {
     name.setSettingsKey("name");
@@ -564,6 +579,13 @@ BaseSettings::BaseSettings()
     id.setDefaultValue(QUuid::createUuid().toString());
 
     settingsTypeId.setSettingsKey(typeIdKey);
+
+    startBehavior.setSettingsKey(startupBehaviorKey);
+    startBehavior.setDefaultValue(RequiresFile);
+    startBehavior.setDisplayStyle(SelectionAspect::DisplayStyle::ComboBox);
+    startBehavior.setLabelText(Tr::tr("Startup behavior:"));
+    for (int behavior = 0; behavior < BaseSettings::LastSentinel ; ++behavior)
+        startBehavior.addOption(startupBehaviorString(BaseSettings::StartBehavior(behavior)));
 
     showInSettings.setDefaultValue(true);
 
@@ -597,10 +619,6 @@ bool BaseSettings::applyFromSettingsWidget(QWidget *widget)
     AspectContainer::apply();
 
     if (auto settingsWidget = qobject_cast<BaseSettingsWidget *>(widget)) {
-        if (m_startBehavior != settingsWidget->startupBehavior()) {
-            m_startBehavior = settingsWidget->startupBehavior();
-            changed = true;
-        }
         if (initializationOptions.isDirty()) {
             initializationOptions.apply();
             changed = true;
@@ -686,15 +704,12 @@ void BaseSettings::toMap(Store &map) const
 {
     AspectContainer::toMap(map);
     map.insert(enabledKey, m_enabled);
-    map.insert(startupBehaviorKey, m_startBehavior);
 }
 
 void BaseSettings::fromMap(const Store &map)
 {
     AspectContainer::fromMap(map);
     m_enabled = map[enabledKey].toBool();
-    m_startBehavior = BaseSettings::StartBehavior(
-        map.value(startupBehaviorKey, BaseSettings::RequiresFile).toInt());
 }
 
 static LanguageClientSettingsPage &settingsPage()
@@ -899,35 +914,15 @@ public:
     }
 };
 
-static QString startupBehaviorString(BaseSettings::StartBehavior behavior)
-{
-    switch (behavior) {
-    case BaseSettings::AlwaysOn:
-        return Tr::tr("Always On");
-    case BaseSettings::RequiresFile:
-        return Tr::tr("Requires an Open File");
-    case BaseSettings::RequiresProject:
-        return Tr::tr("Start Server per Project");
-    default:
-        break;
-    }
-    return {};
-}
-
 BaseSettingsWidget::BaseSettingsWidget(
     const BaseSettings *settings, QWidget *parent, Layouting::LayoutModifier additionalItems)
     : QWidget(parent)
-    , m_startupBehavior(new QComboBox)
     , m_initializationOptions(new FancyLineEdit(this))
 {
     using namespace Layouting;
 
     auto chooser = new VariableChooser(this);
     chooser->addSupportedWidget(m_initializationOptions);
-
-    for (int behavior = 0; behavior < BaseSettings::LastSentinel ; ++behavior)
-        m_startupBehavior->addItem(startupBehaviorString(BaseSettings::StartBehavior(behavior)));
-    m_startupBehavior->setCurrentIndex(settings->m_startBehavior);
 
     m_initializationOptions->setValidationFunction([](const QString &text) -> Result<> {
             const QString value = globalMacroExpander()->expand(text);
@@ -955,7 +950,7 @@ BaseSettingsWidget::BaseSettingsWidget(
         settings->name, br,
         settings->mimeTypes, br,
         settings->filePatterns, br,
-        Tr::tr("Startup behavior:"), m_startupBehavior, br,
+        settings->startBehavior, br,
         Tr::tr("Initialization options:"), m_initializationOptions, br
     };
 
@@ -964,11 +959,6 @@ BaseSettingsWidget::BaseSettingsWidget(
 
     form.attachTo(this);
     // clang-format on
-}
-
-BaseSettings::StartBehavior BaseSettingsWidget::startupBehavior() const
-{
-    return BaseSettings::StartBehavior(m_startupBehavior->currentIndex());
 }
 
 QString BaseSettingsWidget::initializationOptions() const
@@ -1179,7 +1169,7 @@ public:
         QFormLayout *settingsLayout = nullptr;
         for (auto settings : LanguageClientSettings::pageSettings()) {
 
-            if (settings->m_startBehavior != BaseSettings::RequiresProject)
+            if (settings->startBehavior() != BaseSettings::RequiresProject)
                 continue;
             if (!settingsLayout) {
                 auto group = new QGroupBox(Tr::tr("Project Specific Language Servers"));
