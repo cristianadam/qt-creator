@@ -610,7 +610,9 @@ class ClangdSettingsWidget final : public QWidget
     Q_OBJECT
 
 public:
-    ClangdSettingsWidget(const ClangdSettings::Data &settingsData, bool isForProject);
+    ClangdSettingsWidget() = default;
+
+    void setup(const ClangdSettings::Data &settingsData, bool isForProject);
 
     ClangdSettings::Data settingsData() const;
 
@@ -638,8 +640,7 @@ private:
     QStringListModel m_sessionsModel;
 };
 
-ClangdSettingsWidget::ClangdSettingsWidget(const ClangdSettings::Data &settingsData,
-                                           bool isForProject)
+void ClangdSettingsWidget::setup(const ClangdSettings::Data &settingsData, bool isForProject)
 {
     const QString indexingToolTip = Tr::tr(
         "<p>If background indexing is enabled, global symbol searches will yield more accurate "
@@ -1036,8 +1037,9 @@ ClangdSettings::Data ClangdSettingsWidget::settingsData() const
 class ClangdSettingsPageWidget final : public Core::IOptionsPageWidget
 {
 public:
-    ClangdSettingsPageWidget() : m_widget(ClangdSettings::instance().data(), false)
+    ClangdSettingsPageWidget()
     {
+        m_widget.setup(ClangdSettings::instance().data(), false);
         const auto layout = new QVBoxLayout(this);
         layout->addWidget(&m_widget);
 
@@ -1071,8 +1073,9 @@ class ClangdProjectSettingsWidget : public ProjectSettingsWidget
 {
 public:
     ClangdProjectSettingsWidget(const ClangdProjectSettings &settings)
-        : m_settings(settings), m_widget(settings.settings(), true)
+        : m_settings(settings)
     {
+        m_widget.setup(settings.settings(), true);
         setGlobalSettingsId(Constants::CPP_CLANGD_SETTINGS_ID);
         const auto layout = new QVBoxLayout(this);
         layout->setContentsMargins(0, 0, 0, 0);
