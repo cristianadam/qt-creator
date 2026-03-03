@@ -537,8 +537,31 @@ int ClangdSettings::Data::defaultCompletionResults()
 
 ClangdSettings::Data clangdProjectSettings(Project *project)
 {
-    ClangdProjectSettings projectSettings(project);
-    return projectSettings.settings();
+    ClangdSettings::Data customSettings;
+    bool useGlobalSettings = true;
+
+    if (project) {
+        const Store data = storeFromVariant(project->namedSettings(clangdSettingsKey()));
+        useGlobalSettings = data.value(useGlobalSettingsKey(), true).toBool();
+        if (!useGlobalSettings)
+            customSettings.fromMap(data);
+    }
+
+    ClangdSettings::Data data;
+    if (useGlobalSettings) {
+        data = ClangdSettings::instance().data();
+    } else {
+        data = customSettings;
+        // This property is global by definition.
+        data.sessionsWithOneClangd = ClangdSettings::instance().data().sessionsWithOneClangd;
+        // This list exists only once.
+        data.customDiagnosticConfigs = ClangdSettings::instance().data().customDiagnosticConfigs;
+    }
+
+    if (project && project->property(blockProjectIndexingProperty).toBool())
+        data.indexingPriority = ClangdSettings::IndexingPriority::Off;
+
+    return data;
 }
 
 ClangdSettings::Data clangdProjectSettings(BuildConfiguration *bc)
