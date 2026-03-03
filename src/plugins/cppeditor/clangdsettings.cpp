@@ -392,83 +392,6 @@ void ClangdSettings::setClangdFilePath(const FilePath &filePath)
 }
 #endif
 
-class ClangdProjectSettings
-{
-public:
-    ClangdProjectSettings(ProjectExplorer::Project *project)
-        : m_project(project)
-    {
-        loadSettings();
-    }
-
-    ClangdSettings::Data settings() const;
-
-    void setSettings(const ClangdSettings::Data &data);
-    bool useGlobalSettings() const { return m_useGlobalSettings; }
-    void setUseGlobalSettings(bool useGlobal);
-
-private:
-    void loadSettings();
-    void saveSettings();
-
-    ProjectExplorer::Project * const m_project;
-    ClangdSettings::Data m_customSettings;
-    bool m_useGlobalSettings = true;
-};
-
-ClangdSettings::Data ClangdProjectSettings::settings() const
-{
-    const ClangdSettings::Data globalData = ClangdSettings::instance().data();
-    ClangdSettings::Data data = globalData;
-    if (!m_useGlobalSettings) {
-        data = m_customSettings;
-        // This property is global by definition.
-        data.sessionsWithOneClangd = ClangdSettings::instance().data().sessionsWithOneClangd;
-
-        // This list exists only once.
-        data.customDiagnosticConfigs = ClangdSettings::instance().data().customDiagnosticConfigs;
-    }
-    if (m_project && m_project->property(blockProjectIndexingProperty).toBool())
-        data.indexingPriority = ClangdSettings::IndexingPriority::Off;
-    return data;
-}
-
-void ClangdProjectSettings::setSettings(const ClangdSettings::Data &data)
-{
-    m_customSettings = data;
-    saveSettings();
-    ClangdSettings::setCustomDiagnosticConfigs(data.customDiagnosticConfigs);
-    emit ClangdSettings::instance().changed();
-}
-
-void ClangdProjectSettings::setUseGlobalSettings(bool useGlobal)
-{
-    m_useGlobalSettings = useGlobal;
-    saveSettings();
-    emit ClangdSettings::instance().changed();
-}
-
-void ClangdProjectSettings::loadSettings()
-{
-    if (!m_project)
-        return;
-    const Store data = storeFromVariant(m_project->namedSettings(clangdSettingsKey()));
-    m_useGlobalSettings = data.value(useGlobalSettingsKey(), true).toBool();
-    if (!m_useGlobalSettings)
-        m_customSettings.fromMap(data);
-}
-
-void ClangdProjectSettings::saveSettings()
-{
-    if (!m_project)
-        return;
-    Store data;
-    if (!m_useGlobalSettings)
-        data = m_customSettings.toMap();
-    data.insert(useGlobalSettingsKey(), m_useGlobalSettings);
-    m_project->setNamedSettings(clangdSettingsKey(), variantFromStore(data));
-}
-
 Store ClangdSettings::Data::toMap() const
 {
     Store map;
@@ -1089,10 +1012,13 @@ void setupClangdSettingsPage()
 class ClangdProjectSettingsWidget : public ProjectSettingsWidget
 {
 public:
-    ClangdProjectSettingsWidget(const ClangdProjectSettings &settings)
-        : m_settings(settings)
+    ClangdProjectSettingsWidget(Project *project)
+        : m_project(project)
     {
-        m_widget.setup(settings.settings(), true);
+        loadSettings();
+
+        m_widget.setup(settings(), true);
+
         setGlobalSettingsId(Constants::CPP_CLANGD_SETTINGS_ID);
         const auto layout = new QVBoxLayout(this);
         layout->setContentsMargins(0, 0, 0, 0);
@@ -1104,9 +1030,9 @@ public:
                 setUseGlobalSettings(true);
             } else {
                 setUseGlobalSettingsCheckBoxEnabled(true);
-                setUseGlobalSettings(m_settings.useGlobalSettings());
+                setUseGlobalSettings(m_useGlobalSettings);
             }
-            m_widget.setEnabled(!useGlobalSettings());
+            m_widget.setEnabled(!m_useGlobalSettings);
         };
 
         updateGlobalSettingsCheckBox();
@@ -1116,25 +1042,89 @@ public:
         connect(this, &ProjectSettingsWidget::useGlobalSettingsChanged, this,
                 [this](bool checked) {
                     m_widget.setEnabled(!checked);
-                    m_settings.setUseGlobalSettings(checked);
+                    setUseGlobalSettings(checked);
                     if (!checked)
-                        m_settings.setSettings(m_widget.settingsData());
+                        setSettings(m_widget.settingsData());
                 });
 
         const auto timer = new QTimer(this);
         timer->setSingleShot(true);
         timer->setInterval(5000);
         connect(timer, &QTimer::timeout, this, [this] {
-            m_settings.setSettings(m_widget.settingsData());
+            setSettings(m_widget.settingsData());
         });
         connect(&m_widget, &ClangdSettingsWidget::settingsDataChanged,
                 timer, qOverload<>(&QTimer::start));
     }
 
 private:
-    ClangdProjectSettings m_settings;
     ClangdSettingsWidget m_widget;
+
+    ClangdSettings::Data settings() const;
+
+    void setSettings(const ClangdSettings::Data &data);
+    void setUseGlobalSettings(bool useGlobal);
+
+    void loadSettings();
+    void saveSettings();
+
+    Project * const m_project;
+    ClangdSettings::Data m_customSettings;
+    bool m_useGlobalSettings = true;
 };
+
+ClangdSettings::Data ClangdProjectSettingsWidget::settings() const
+{
+    ClangdSettings::Data data = ClangdSettings::instance().data();
+    if (!m_useGlobalSettings) {
+        data = m_customSettings;
+        // This property is global by definition.
+        data.sessionsWithOneClangd = ClangdSettings::instance().data().sessionsWithOneClangd;
+
+        // This list exists only once.
+        data.customDiagnosticConfigs = ClangdSettings::instance().data().customDiagnosticConfigs;
+    }
+    if (m_project && m_project->property(blockProjectIndexingProperty).toBool())
+        data.indexingPriority = ClangdSettings::IndexingPriority::Off;
+    return data;
+}
+
+void ClangdProjectSettingsWidget::setSettings(const ClangdSettings::Data &data)
+{
+    m_customSettings = data;
+    saveSettings();
+    ClangdSettings::setCustomDiagnosticConfigs(data.customDiagnosticConfigs);
+    emit ClangdSettings::instance().changed();
+}
+
+void ClangdProjectSettingsWidget::setUseGlobalSettings(bool useGlobal)
+{
+    m_useGlobalSettings = useGlobal;
+    saveSettings();
+    emit ClangdSettings::instance().changed();
+}
+
+void ClangdProjectSettingsWidget::loadSettings()
+{
+    if (!m_project)
+        return;
+    const Store data = storeFromVariant(m_project->namedSettings(clangdSettingsKey()));
+    m_useGlobalSettings = data.value(useGlobalSettingsKey(), true).toBool();
+    if (!m_useGlobalSettings)
+        m_customSettings.fromMap(data);
+}
+
+void ClangdProjectSettingsWidget::saveSettings()
+{
+    if (!m_project)
+        return;
+    Store data;
+    if (!m_useGlobalSettings)
+        data = m_customSettings.toMap();
+    data.insert(useGlobalSettingsKey(), m_useGlobalSettings);
+    m_project->setNamedSettings(clangdSettingsKey(), variantFromStore(data));
+}
+
 
 class ClangdProjectSettingsPanelFactory final : public ProjectPanelFactory
 {
