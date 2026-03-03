@@ -82,13 +82,49 @@ jobs:
     - name: Install Python SBOM dependencies
       shell: cmake -P {0}
       run: |
+        if ("${{ runner.os }}" STREQUAL "Windows" AND NOT "x${{ matrix.config.environment_script }}" STREQUAL "x")
+          execute_process(
+            COMMAND "${{ matrix.config.environment_script }}" && set
+            OUTPUT_FILE environment_script_output.txt
+          )
+          file(STRINGS environment_script_output.txt output_lines)
+          foreach(line IN LISTS output_lines)
+            if (line MATCHES "^([a-zA-Z0-9_-]+)=(.*)$")
+              set(ENV{${CMAKE_MATCH_1}} "${CMAKE_MATCH_2}")
+            endif()
+          endforeach()
+        endif()
+
+        message(">>> path is: '$ENV{PATH}'")
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        string(REPLACE "x86" "x64" Python3_EXECUTABLE "${Python3_EXECUTABLE}")
+
+        set(python_pip "${Python3_EXECUTABLE}" "-m" "pip")
+
         execute_process(
-          COMMAND pip install "spdx-tools>=0.8.0 ; python_version >= '3.9'"
+          COMMAND ${python_pip} install --user --break-system-packages
+              "spdx-tools>=0.8.0 ; python_version >= '3.9'"
           RESULT_VARIABLE result
         )
         if (NOT result EQUAL 0)
-          message(FATAL_ERROR "Failed to install Python SBOM dependencies")
+          message(FATAL_ERROR "Failed to install Python SPDX SBOM dependency 'spdx-tools'")
         endif()
+        execute_process(
+          COMMAND ${python_pip} show spdx-tools
+        )
+
+        execute_process(
+          COMMAND ${python_pip} install --user --break-system-packages
+              "cyclonedx-python-lib==11.5.0 ; python_version >= '3.9'"
+          RESULT_VARIABLE result
+        )
+        if (NOT result EQUAL 0)
+          message(FATAL_ERROR
+          "Failed to install Python CycloneDX SBOM dependency 'cyclonedx-python-lib'")
+        endif()
+        execute_process(
+          COMMAND ${python_pip} show cyclonedx-python-lib
+        )
 
     - name: Download Ninja and CMake
       shell: cmake -P {0}
@@ -630,6 +666,7 @@ jobs:
           set(ELFUTILS_OPTION)
         endif()
 
+        message(">>> path is: '$ENV{PATH}'")
         find_package(Python3 REQUIRED COMPONENTS Interpreter)
         string(REPLACE "x86" "x64" Python3_EXECUTABLE "${Python3_EXECUTABLE}")
 
