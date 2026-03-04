@@ -1038,7 +1038,7 @@ PortMapping::PortMapping()
 
     setLayouter([this] {
         using namespace Layouting;
-        return Row{ip, hostPort, containerPort, protocol};
+        return Form{ip, br, hostPort, br, containerPort, br, protocol};
     });
 }
 
@@ -1050,6 +1050,15 @@ PortMappings::PortMappings(AspectContainer *container)
         connect(mapping.get(), &PortMapping::changed, this, &AspectContainer::changed);
         return mapping;
     });
+    setDisplayStyle(AspectList::DisplayStyle::ListViewWithDetails);
+    listViewDisplayCallback = [](PortMapping *portMapping) {
+        const QString ipPart = portMapping->ip().isEmpty() ? QString() : portMapping->ip() + ":";
+        return QString("%1%2:%3/%4")
+            .arg(ipPart)
+            .arg(portMapping->hostPort.volatileValue())
+            .arg(portMapping->containerPort.volatileValue())
+            .arg(portMapping->protocol.volatileValue());
+    };
     setLabelText(Tr::tr("Port mappings:"));
 }
 
