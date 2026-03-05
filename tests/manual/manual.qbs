@@ -9,6 +9,7 @@ Project {
         "debugger/simple/simple.qbs",
         "devcontainer/devcontainer.qbs",
         "fakevim/fakevim.qbs",
+        "nestedmodel/nestedmodel.qbs",
         "pluginview/pluginview.qbs",
         "proparser/testreader.qbs",
         "remotelinux/remotelinux.qbs",
