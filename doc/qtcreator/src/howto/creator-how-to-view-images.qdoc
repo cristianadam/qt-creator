@@ -24,7 +24,7 @@
             - Return images to their original size
         \li \inlineimage {icons/zoom-in.png} {Zoom In}
             - Zoom in and out (\inlineimage {icons/zoom-out.png} {Zoom Out})
-        \li \inlineimage {icons/run_small.png} {Play Animation}
+        \li \imagerunsmall (\uicontrol {Play Animation})
             - Play and pause animated GIF and MNG images
         \li \inlineimage {icons/qtcreator-desktopdevice-button.png} {Switch Background}
             - Show and hide the image background
