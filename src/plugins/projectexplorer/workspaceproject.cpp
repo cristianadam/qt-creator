@@ -44,10 +44,10 @@ Q_LOGGING_CATEGORY(wsp, "qtc.projectexplorer.workspace.project", QtWarningMsg);
 const QLatin1StringView FOLDER_MIMETYPE{"inode/directory"};
 const QLatin1StringView WORKSPACE_MIMETYPE{"text/x-workspace-project"};
 const char WORKSPACE_PROJECT_ID[] = "ProjectExplorer.WorkspaceProject";
-const char WORKSPACE_PROJECT_RUNCONFIG_ID[] = "WorkspaceProject.RunConfiguration:";
 
 const QLatin1StringView PROJECT_NAME_KEY{"project.name"};
 const QLatin1StringView FILES_EXCLUDE_KEY{"files.exclude"};
+const QLatin1StringView TARGETS_KEY{"targets"};
 const char EXCLUDE_ACTION_ID[] = "ProjectExplorer.ExcludeFromWorkspace";
 const char RESCAN_ACTION_ID[] = "ProjectExplorer.RescanWorkspace";
 
@@ -202,7 +202,7 @@ void WorkspaceBuildSystem::reparse(bool force)
 
     QList<BuildTargetInfo> targetInfos;
 
-    const QJsonArray targets = json.value("targets").toArray();
+    const QJsonArray targets = json.value(TARGETS_KEY).toArray();
     int i = 0;
     for (const QJsonValue &target : targets) {
         i++;
@@ -342,6 +342,34 @@ void WorkspaceProject::scan(const FilePath &path)
     }
 }
 
+void WorkspaceProject::addTargetForExecutable(const Utils::FilePath &path)
+{
+    QTC_ASSERT(projectFilePath().exists(), return);
+    if (Result<QJsonObject> json = projectDefinition(projectFilePath())) {
+        const QString executableString = QString("%{ActiveProject:ProjectDirectory}/%1")
+                                                   .arg(path.relativePathFromDir(
+                                                       projectDirectory()));
+
+        QJsonArray targets = (*json)[TARGETS_KEY].toArray();
+        for (const QJsonValue &target : targets) {
+            QTC_ASSERT(target.isObject(), continue);
+            const QJsonObject targetObject = target.toObject();
+            const QString targetExecutableString = targetObject["executable"].toString();
+            if (targetExecutableString == executableString
+                || FilePath::fromUserInput(targetExecutableString).isSameExecutable(path)) {
+                return; // already a target with the same executable so do not add it a second time
+            }
+        }
+
+        QJsonObject target;
+        target["name"] = path.baseName();
+        target["executable"] = executableString;
+        targets << target;
+        json->insert(TARGETS_KEY, targets);
+        saveProjectDefinition(*json);
+    }
+}
+
 void WorkspaceProject::scanNext()
 {
     if (m_scanQueue.isEmpty()) {
@@ -450,7 +478,7 @@ public:
     WorkspaceProjectRunConfigurationFactory()
     {
         registerRunConfiguration<WorkspaceRunConfiguration>(
-            Id(WORKSPACE_PROJECT_RUNCONFIG_ID));
+            Id(Constants::WORKSPACE_PROJECT_RUNCONFIG_ID));
         addSupportedProjectType(WORKSPACE_PROJECT_ID);
     }
 };
@@ -814,7 +842,7 @@ void setupWorkspaceProject(QObject *guard)
         });
 
     static WorkspaceProjectRunConfigurationFactory theRunConfigurationFactory;
-    static ProcessRunnerFactory theRunWorkerFactory{{WORKSPACE_PROJECT_RUNCONFIG_ID}};
+    static ProcessRunnerFactory theRunWorkerFactory{{Constants::WORKSPACE_PROJECT_RUNCONFIG_ID}};
     static WorkspaceBuildConfigurationFactory theBuildConfigurationFactory;
 }
 

@@ -201,6 +201,7 @@ const char QMAKE_RUNCONFIG_ID[] = "Qt4ProjectManager.Qt4RunConfiguration:";
 const char QBS_RUNCONFIG_ID[]   = "Qbs.RunConfiguration:";
 const char CMAKE_RUNCONFIG_ID[] = "CMakeProjectManager.CMakeRunConfiguration.";
 const char CUSTOM_EXECUTABLE_RUNCONFIG_ID[] = "ProjectExplorer.CustomExecutableRunConfiguration";
+const char WORKSPACE_PROJECT_RUNCONFIG_ID[] = "WorkspaceProject.RunConfiguration";
 
 const char STDPROCESS_EXECUTION_TYPE_ID[] = "StdProcessExecutionType";
 

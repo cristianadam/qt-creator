@@ -35,6 +35,8 @@ public:
     const QList<QRegularExpression> &filters() const { return m_filters; }
     void scan(const Utils::FilePath &path);
 
+    void addTargetForExecutable(const Utils::FilePath &path);
+
 private:
     void updateBuildConfigurations();
     void saveProjectDefinition(const QJsonObject &json);

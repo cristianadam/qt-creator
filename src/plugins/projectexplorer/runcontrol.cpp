@@ -109,6 +109,7 @@ void RunWorkerFactory::addSupportForLocalRunConfigs()
     addSupportedRunConfig(ProjectExplorer::Constants::QBS_RUNCONFIG_ID);
     addSupportedRunConfig(ProjectExplorer::Constants::CMAKE_RUNCONFIG_ID);
     addSupportedRunConfig(ProjectExplorer::Constants::CUSTOM_EXECUTABLE_RUNCONFIG_ID);
+    addSupportedRunConfig(ProjectExplorer::Constants::WORKSPACE_PROJECT_RUNCONFIG_ID);
 }
 
 void RunWorkerFactory::cloneProduct(Id exitstingStepId)

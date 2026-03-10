@@ -125,6 +125,7 @@
 #include <utils/async.h>
 #include <utils/checkablemessagebox.h>
 #include <utils/fileutils.h>
+#include <utils/infobar.h>
 #include <utils/macroexpander.h>
 #include <utils/mimeutils.h>
 #include <utils/processinterface.h>
@@ -593,6 +594,8 @@ public:
     QStringList projectMimeTypes();
     void resetUnloadedPluginProjectMimeTypes();
     QList<PluginProjectMimeType> unloadedPluginProjectMimeTypes();
+
+    void editorOpened(IEditor *editor);
 
 public:
     QMenu *m_openWithMenu;
@@ -2056,6 +2059,9 @@ Result<> ProjectExplorerPlugin::initialize(const QStringList &arguments)
 
     setupWorkspaceProject(this);
 
+    connect(EditorManager::instance(), &EditorManager::editorOpened,
+            dd, &ProjectExplorerPluginPrivate::editorOpened);
+
     return ResultOk;
 }
 
@@ -3150,6 +3156,44 @@ QList<PluginProjectMimeType> ProjectExplorerPluginPrivate::unloadedPluginProject
         }
     }
     return *m_unloadedPluginProjectMimeTypes;
+}
+
+void ProjectExplorerPluginPrivate::editorOpened(IEditor *editor)
+{
+    static char setupExecutableWorkspaceId[] = "ProjectExplorer::SetupExecutableWorkspace";
+    if (!editor)
+        return;
+
+    auto doc = editor->document();
+    if (!doc)
+        return;
+
+    const FilePath filePath = doc->filePath();
+    if (filePath.isExecutableFile()) {
+        InfoBar *infoBar = doc->infoBar();
+        if (!infoBar->canInfoBeAdded(setupExecutableWorkspaceId))
+            return;
+
+        if (ProjectManager::projectForFile(filePath))
+            return;
+
+        InfoBarEntry info(
+            setupExecutableWorkspaceId,
+            Tr::tr("Set up executable file '%1' as a project").arg(filePath.toUserOutput()),
+            InfoBarEntry::GlobalSuppression::Enabled);
+
+        info.addCustomButton("Set Up", [doc, filePath]() {
+            doc->infoBar()->removeInfo(setupExecutableWorkspaceId);
+
+            const OpenProjectResult result
+                = ProjectExplorerPlugin::openProject(filePath.parentDir(), false);
+
+            if (auto project = qobject_cast<WorkspaceProject *>(result.project()))
+                project->addTargetForExecutable(filePath);
+        });
+
+        infoBar->addInfo(info);
+    }
 }
 
 void ProjectExplorerPluginPrivate::runProjectContextMenu(RunConfiguration *rc)
