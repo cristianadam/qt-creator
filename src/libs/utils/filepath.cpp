@@ -1888,13 +1888,17 @@ bool FilePath::isChildOf(const FilePath &s) const
     const QStringView sp = s.pathView();
     if (p.size() <= sp.size())
         return false;
-    if (!p.startsWith(sp, caseSensitivity()))
+    if (!p.startsWith(sp, Qt::CaseInsensitive))
         return false;
     // s is root, '/' was already tested in startsWith
     if (sp.endsWith(QLatin1Char('/')))
-        return true;
+        return withNewPath(p.mid(0, sp.size()).toString()) == s;
+
     // s is a directory, next character should be '/' (/tmpdir is NOT a child of /tmp)
-    return sp.isEmpty() || p.at(sp.size()) == QLatin1Char('/');
+    if (p.at(sp.size()) != QLatin1Char('/'))
+        return false;
+
+    return withNewPath(p.mid(0, sp.size()).toString()) == s; //p.at(sp.size()) == QLatin1Char('/');
 }
 
 /*!
@@ -1902,7 +1906,7 @@ bool FilePath::isChildOf(const FilePath &s) const
 */
 bool FilePath::startsWith(const QString &s) const
 {
-    return pathView().startsWith(s, caseSensitivity());
+    return pathView().startsWith(s, Qt::CaseSensitive);
 }
 
 /*!
@@ -1910,7 +1914,7 @@ bool FilePath::startsWith(const QString &s) const
 */
 bool FilePath::endsWith(const QString &s) const
 {
-    return pathView().endsWith(s, caseSensitivity());
+    return pathView().endsWith(s, Qt::CaseSensitive);
 }
 
 /*!
@@ -1918,7 +1922,7 @@ bool FilePath::endsWith(const QString &s) const
 */
 bool FilePath::contains(const QString &s) const
 {
-    return pathView().contains(s, caseSensitivity());
+    return pathView().contains(s, Qt::CaseSensitive);
 }
 
 /*!
@@ -1952,40 +1956,49 @@ FilePath FilePath::relativeChildPath(const FilePath &parent) const
     return res;
 }
 
-static QString calcRelativePath(
-    QStringView absolutePath, QStringView absoluteAnchorPath, Qt::CaseSensitivity caseSensitivity)
+static QString calcRelativePath(const FilePath &absolutePath, const FilePath &absoluteAnchorPath)
 {
     if (absolutePath.isEmpty() || absoluteAnchorPath.isEmpty())
         return QString();
-    // TODO using split() instead of parsing the strings by char index is slow
-    // and needs more memory (but the easiest implementation for now)
-    const QList<QStringView> splits1 = absolutePath.split('/');
-    const QList<QStringView> splits2 = absoluteAnchorPath.split('/');
-    int i = 0;
-    while (i < splits1.count() && i < splits2.count()
-           && splits1.at(i).compare(splits2.at(i), caseSensitivity) == 0) {
-        ++i;
+
+    const auto copy = [](auto &&container) {
+        FilePaths result;
+        std::copy(std::begin(container), std::end(container), inserter(result));
+        return result;
+    };
+
+    FilePaths absPathParents = copy(PathAndParents(absolutePath));
+    FilePaths absAnchorPathParents = copy(PathAndParents(absoluteAnchorPath));
+
+    auto itAbsPath = absPathParents.rbegin();
+    auto itAbsAnchorPath = absAnchorPathParents.rbegin();
+
+    const auto isSame = [&]() {
+        return itAbsPath != std::rend(absPathParents)
+               && itAbsAnchorPath != std::rend(absAnchorPathParents)
+               && *(itAbsPath) == *(itAbsAnchorPath);
+    };
+
+    while (isSame()) {
+        ++itAbsPath;
+        ++itAbsAnchorPath;
     }
+
     QString relativePath;
-    int j = i;
     bool addslash = false;
-    while (j < splits2.count()) {
-        if (!splits2.at(j).isEmpty()) {
-            if (addslash)
-                relativePath += '/';
-            relativePath += u"..";
-            addslash = true;
-        }
-        ++j;
+    while (itAbsAnchorPath != absAnchorPathParents.rend()) {
+        if (addslash)
+            relativePath += '/';
+        relativePath += u"..";
+        addslash = true;
+        ++itAbsAnchorPath;
     }
-    while (i < splits1.count()) {
-        if (!splits1.at(i).isEmpty()) {
-            if (addslash)
-                relativePath += '/';
-            relativePath += splits1.at(i);
-            addslash = true;
-        }
-        ++i;
+    while (itAbsPath != absPathParents.rend()) {
+        if (addslash)
+            relativePath += '/';
+        relativePath += itAbsPath->fileNameView();
+        addslash = true;
+        ++itAbsPath;
     }
     if (relativePath.isEmpty())
         return QString(".");
@@ -2014,8 +2027,7 @@ QString FilePath::relativePathFromDir(const FilePath &anchorDir) const
     const FilePath absPath = absoluteFilePath();
     const FilePath absoluteAnchorPath = anchorDir.absoluteFilePath();
 
-    QString relativeFilePath = calcRelativePath(
-        absPath.pathView(), absoluteAnchorPath.pathView(), absoluteAnchorPath.caseSensitivity());
+    QString relativeFilePath = calcRelativePath(absPath, absoluteAnchorPath);
 
     return relativeFilePath;
 }
@@ -2646,24 +2658,6 @@ bool FilePath::isNewerThan(const QDateTime &timeStamp) const
 }
 
 /*!
-    \brief Returns the caseSensitivity of the path.
-
-    This is currently only based on the Host OS.
-    For device paths, \c Qt::CaseSensitive is always returned.
-*/
-Qt::CaseSensitivity FilePath::caseSensitivity() const
-{
-    if (m_schemeLen == 0)
-        return HostOsInfo::fileNameCaseSensitivity();
-
-    // FIXME: This could or possibly should the target device's file name case sensitivity
-    // into account by diverting to IDevice. However, as this is expensive and we are
-    // in time-critical path here, we go with "good enough" for now:
-    // The first approximation is "most things are case-sensitive".
-    return Qt::CaseSensitive;
-}
-
-/*!
     \brief Returns the separator of path components for this path.
 
     Returns the path separator of the path.
@@ -3171,7 +3165,7 @@ QTCREATOR_UTILS_EXPORT bool operator<(const FilePath &first, const FilePath &sec
             return h < 0;
     }
 
-    const int p = first.pathView().compare(second.pathView(), first.caseSensitivity());
+    const int p = first.pathView().compare(second.pathView(), Qt::CaseSensitive);
     return p < 0;
 }
 
@@ -3194,12 +3188,8 @@ QTCREATOR_UTILS_EXPORT size_t qHash(const FilePath &filePath, uint seed)
 {
     Q_UNUSED(seed)
 
-    if (filePath.m_hash == 0) {
-        if (filePath.caseSensitivity() == Qt::CaseSensitive)
-            filePath.m_hash = qHash(QStringView(filePath.m_data), 0);
-        else
-            filePath.m_hash = qHash(filePath.m_data.toCaseFolded(), 0);
-    }
+    if (filePath.m_hash == 0)
+        filePath.m_hash = qHash(QStringView(filePath.m_data), 0);
 
     return filePath.m_hash;
 }

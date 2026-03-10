@@ -169,7 +169,6 @@ public:
     [[nodiscard]] FilePath operator/(const QString &str) const;
     FilePath &operator/=(const QString &str);
 
-    Qt::CaseSensitivity caseSensitivity() const;
     QChar pathComponentSeparator() const;
     QChar pathListSeparator() const;
 
