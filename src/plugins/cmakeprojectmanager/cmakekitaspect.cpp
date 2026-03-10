@@ -925,7 +925,7 @@ bool CMakeGeneratorKitAspectFactory::isNinjaPresent(const Kit *k) const
 {
     const CMakeConfig config = CMakeConfigurationKitAspect::configuration(k);
     const FilePath makeProgram = config.filePathValueOf("CMAKE_MAKE_PROGRAM");
-    if (makeProgram.baseName().startsWith("ninja", makeProgram.caseSensitivity()))
+    if (makeProgram == makeProgram.withNewFileName("ninja"))
         return true;
 
     if (auto device = BuildDeviceKitAspect::device(k)) {
