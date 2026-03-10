@@ -403,6 +403,12 @@ Result<QByteArray> DeviceFileAccess::fileId(const FilePath &filePath) const
     return notImplementedError("fileId()", filePath);
 }
 
+Result<bool> DeviceFileAccess::isSameFile(const FilePath &lhs, const FilePath &rhs) const
+{
+    QTC_CHECK(false);
+    return notImplementedError("isSameFile()", lhs);
+}
+
 Result<std::optional<FilePath>> DeviceFileAccess::refersToExecutableFile(
     const FilePath &filePath, FilePath::MatchScope matchScope) const
 {
@@ -1308,6 +1314,25 @@ Result<QByteArray> DesktopDeviceFileAccess::fileId(const FilePath &filePath) con
     return result;
 }
 
+Result<bool> DesktopDeviceFileAccess::isSameFile(const FilePath &lhs, const FilePath &rhs) const
+{
+    std::filesystem::path lhsPath = std::filesystem::path((char16_t *) lhs.path().data());
+    std::filesystem::path rhsPath = std::filesystem::path((char16_t *) rhs.path().data());
+    std::error_code ec;
+    bool isSame = std::filesystem::equivalent(lhsPath, rhsPath, ec);
+    if (ec) {
+        const bool isNotSupported = ec.category() == std::generic_category()
+                                    && ec.value() == int(std::errc::not_supported);
+        if (isNotSupported) // Fall back to case sensitive comparision
+            return lhsPath == rhsPath;
+
+        return ResultError(
+            Tr::tr("Failed to determine if \"%1\" and \"%2\" refer to the same file: %3")
+                .arg(lhs.toUserOutput(), rhs.toUserOutput(), QString::fromStdString(ec.message())));
+    }
+    return isSame && !ec;
+}
+
 // UnixDeviceAccess
 
 UnixDeviceFileAccess::~UnixDeviceFileAccess() = default;
@@ -1777,6 +1802,19 @@ Result<QByteArray> UnixDeviceFileAccess::fileId(const FilePath &filePath) const
     if (!res)
         return ResultError(res.error());
     return *res;
+}
+
+Result<bool> UnixDeviceFileAccess::isSameFile(const FilePath &lhs, const FilePath &rhs) const
+{
+    const Result<QByteArray> resLhs = fileId(lhs);
+    if (!resLhs)
+        return ResultError(resLhs.error());
+
+    const Result<QByteArray> resRhs = fileId(rhs);
+    if (!resRhs)
+        return ResultError(resRhs.error());
+
+    return *resLhs == *resRhs;
 }
 
 Result<FilePathInfo> UnixDeviceFileAccess::filePathInfo(const FilePath &filePath) const
