@@ -48,6 +48,7 @@ const char WORKSPACE_PROJECT_ID[] = "ProjectExplorer.WorkspaceProject";
 
 const QLatin1StringView PROJECT_NAME_KEY{"project.name"};
 const QLatin1StringView FILES_EXCLUDE_KEY{"files.exclude"};
+const QLatin1StringView TARGETS_KEY{"targets"};
 const char EXCLUDE_ACTION_ID[] = "ProjectExplorer.ExcludeFromWorkspace";
 const char RESCAN_ACTION_ID[] = "ProjectExplorer.RescanWorkspace";
 
@@ -138,7 +139,7 @@ void WorkspaceBuildSystem::reparse(bool force)
 
     QList<BuildTargetInfo> targetInfos;
 
-    const QJsonArray targets = json.value("targets").toArray();
+    const QJsonArray targets = json.value(TARGETS_KEY).toArray();
     int i = 0;
     for (const QJsonValue &target : targets) {
         i++;
@@ -338,6 +339,31 @@ void WorkspaceProject::scan(const FilePath &path)
     const auto onTreeSetup = [this, path] { m_scanSet.remove(path); };
 
     m_taskTreeRunner.enqueue({AsyncTask<ResultType>(onSetup, onDone)}, onTreeSetup);
+}
+
+void WorkspaceProject::addTargetForExecutable(const Utils::FilePath &path)
+{
+    QTC_ASSERT(projectFilePath().exists(), return);
+    if (Result<QJsonObject> json = projectDefinition(projectFilePath())) {
+        QJsonArray targets = (*json)[TARGETS_KEY].toArray();
+        for (const QJsonValue &target : targets) {
+            QTC_ASSERT(target.isObject(), continue);
+            const QJsonObject targetObject = target.toObject();
+            const FilePath executable = FilePath::fromUserInput(
+                targetObject["executable"].toString());
+
+            if (executable == path) // path is already a target so do not add it a second time
+                return;
+        }
+
+        QJsonObject target;
+        target["name"] = path.baseName();
+        target["executable"] = QString("%{ActiveProject:ProjectDirectory}/%1")
+                                   .arg(path.relativePathFromDir(projectDirectory()));
+        targets << target;
+        json->insert(TARGETS_KEY, targets);
+        saveProjectDefinition(*json);
+    }
 }
 
 bool WorkspaceProject::isFiltered(const FilePath &path, QList<IVersionControl *> versionControls) const
