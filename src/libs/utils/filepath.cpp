@@ -367,16 +367,6 @@ QString FilePath::toUrlishString() const
     return scheme() + "://" + encodedHost() + pathView();
 }
 
-bool FilePath::equals(const FilePath &first, const FilePath &second, Qt::CaseSensitivity cs)
-{
-    if (first.m_hash != 0 && second.m_hash != 0 && first.m_hash != second.m_hash)
-        return false;
-
-    return first.pathView().compare(second.pathView(), cs) == 0
-           && first.host() == second.host()
-           && first.scheme() == second.scheme();
-}
-
 /*!
  * Returns \c true if this file path compares equal to \a other case-sensitively.
  * This is relevant on semi-case sensitive systems like Windows with NTFS.
@@ -384,7 +374,8 @@ bool FilePath::equals(const FilePath &first, const FilePath &second, Qt::CaseSen
  */
 bool FilePath::equalsCaseSensitive(const FilePath &other) const
 {
-    return equals(*this, other, Qt::CaseSensitive);
+    return pathView().compare(other.pathView(), Qt::CaseSensitive) == 0 && host() == other.host()
+           && scheme() == other.scheme();
 }
 
 /*!
