@@ -335,8 +335,6 @@ private:
 
     QTCREATOR_UTILS_EXPORT friend QDebug operator<<(QDebug dbg, const FilePath &c);
 
-    static bool equals(const FilePath &first, const FilePath &second, Qt::CaseSensitivity cs);
-
     // Implementation details. May change.
     friend class ::tst_fileutils;
     void setPath(QStringView path);
