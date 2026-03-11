@@ -24,8 +24,7 @@
 #include <coreplugin/icore.h>
 
 #include <QtTaskTree/QBarrier>
-#include <QtTaskTree/qconditional.h>
-#include <QtTaskTree/QTaskTree>
+#include <QtTaskTree/QConditional>
 #include <QtTaskTree/QSingleTaskTreeRunner>
 
 #include <utils/algorithm.h>

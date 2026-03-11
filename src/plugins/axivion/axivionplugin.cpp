@@ -27,7 +27,7 @@
 #include <projectexplorer/projectmanager.h>
 
 #include <QtTaskTree/QNetworkReplyWrapper>
-#include <QtTaskTree/QAbstractTaskTreeRunner>
+#include <QtTaskTree/QMappedTaskTreeRunner>
 
 #include <texteditor/textdocument.h>
 

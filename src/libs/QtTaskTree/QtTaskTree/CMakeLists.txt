@@ -23,25 +23,27 @@ add_qtc_library(QtTaskTree
 )
 
 set(other_headers
-  QAbstractTaskTreeRunner
   QBarrier
-  QThreadFunction
-  QThreadFunctionBase
+  QConditional
   QCustomTask
   QDefaultTaskAdapter
   QMappedTaskTreeRunner
   QNetworkReplyWrapper
   QParallelTaskTreeRunner
-  QProcessDeleter
+  QProcessTaskDeleter
   QProcessTaskAdapter
   QSequentialTaskTreeRunner
   QSingleTaskTreeRunner
   QStartedBarrier
   QSyncTask
+  QtTaskTree
   QTaskInterface
   QTaskTree
   QTaskTreeTaskAdapter
   QTcpSocketWrapper
+  QThreadFunction
+  QThreadFunctionBase
+  QThreadFunctionTaskAdapter
   QTimeoutTaskAdapter
 )
 foreach(header IN LISTS other_headers)

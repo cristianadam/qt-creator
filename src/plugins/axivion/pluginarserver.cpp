@@ -18,8 +18,9 @@
 #include <utils/qtcprocess.h>
 #include <utils/shutdownguard.h>
 
+#include <QtTaskTree/QConditional>
 #include <QtTaskTree/QNetworkReplyWrapper>
-#include <QtTaskTree/QAbstractTaskTreeRunner>
+#include <QtTaskTree/QMappedTaskTreeRunner>
 
 #include <QHash>
 #include <QJsonArray>
