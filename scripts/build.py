@@ -44,7 +44,7 @@ def get_arguments():
     parser.add_argument('--python-path',
                         help='Path to python libraries for use by cdbextension (Windows)')
 
-    parser.add_argument('--python3', help='File path to python3 executable for generating translations',
+    parser.add_argument('--python3', help='File path to python3 executable for generating translations and SBOMs',
                         default=sys.executable)
 
     parser.add_argument('--no-qtcreator',
@@ -124,6 +124,7 @@ def common_cmake_arguments(args):
 
     if args.python3:
         cmake_args += ['-DPython3_EXECUTABLE=' + args.python3]
+        cmake_args += ['-DQT_SBOM_PYTHON_INTERP=' + args.python3]
     if args.python_path:
         cmake_args += ['-DPython3_ROOT_DIR=' + args.python_path]
 
