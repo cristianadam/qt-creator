@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "permissionscontainerwidget.h"
-#include "androidtoolmenu.h"
 #include "androidtr.h"
 #include "androidmanifestutils.h"
 
@@ -90,7 +89,6 @@ bool PermissionsContainerWidget::initialize(TextEditor::TextEditorWidget *textEd
         return false;
 
     m_textEditorWidget = textEditorWidget;
-    m_manifestDirectory = manifestDir(textEditorWidget, false);
 
     auto mainLayout = new QVBoxLayout(this);
     auto permissionsGroupBox = new QGroupBox(this);
@@ -312,11 +310,10 @@ void PermissionsContainerWidget::defaultPermissionOrFeatureCheckBoxClicked()
 
 void PermissionsContainerWidget::updateManifestPermissions()
 {
-    if (m_manifestDirectory.isEmpty())
-        return;
+    Utils::FilePath manifestPath;
+    manifestPath = m_textEditorWidget->textDocument()->filePath();
 
-    Utils::FilePath manifestPath = m_manifestDirectory / "AndroidManifest.xml";
-    if (!manifestPath.exists())
+    if (manifestPath.isEmpty() || !manifestPath.exists())
         return;
 
     bool includeDefaultPermissions = m_defaultPermissonsCheckBox->isChecked();
@@ -337,16 +334,15 @@ void PermissionsContainerWidget::refresh()
     if (!m_textEditorWidget)
         return;
 
-    m_manifestDirectory = manifestDir(m_textEditorWidget, false);
     loadPermissionsFromManifest();
 }
 
 void PermissionsContainerWidget::loadPermissionsFromManifest()
 {
-    if (m_manifestDirectory.isEmpty())
+    if (!m_textEditorWidget || !m_textEditorWidget->textDocument())
         return;
 
-    Utils::FilePath manifestPath = m_manifestDirectory / "AndroidManifest.xml";
+    Utils::FilePath manifestPath = m_textEditorWidget->textDocument()->filePath();
     if (!manifestPath.exists())
         return;
 

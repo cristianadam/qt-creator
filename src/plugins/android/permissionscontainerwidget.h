@@ -39,7 +39,6 @@ private:
     void loadPermissionsFromManifest();
 
     TextEditor::TextEditorWidget *m_textEditorWidget = nullptr;
-    Utils::FilePath m_manifestDirectory;
 
     QCheckBox *m_defaultPermissonsCheckBox = nullptr;
     QCheckBox *m_defaultFeaturesCheckBox = nullptr;
