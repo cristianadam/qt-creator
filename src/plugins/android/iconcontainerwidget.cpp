@@ -369,7 +369,7 @@ bool Android::Internal::IconContainerWidget::initialize(TextEditor::TextEditorWi
 
     if (m_masterIconButton) {
         connect(m_masterIconButton, &QAbstractButton::clicked, this, [this, handleIconModification]() {
-            const FilePath currentManifestDir = manifestDir(m_textEditor, true);
+            const FilePath currentManifestDir = manifestDirectory();
             if (currentManifestDir.isEmpty() || !currentManifestDir.exists())
                 return;
 
@@ -398,8 +398,7 @@ bool Android::Internal::IconContainerWidget::initialize(TextEditor::TextEditorWi
     }
     if (m_clearIconButton) {
         connect(m_clearIconButton, &QAbstractButton::clicked, this, [this]() {
-            const FilePath currentManifestDir = manifestDir(m_textEditor, true);
-            if (currentManifestDir.exists())
+            if (manifestDirectory().exists())
                 clearAll();
         });
     }
@@ -426,7 +425,7 @@ void IconContainerWidget::refresh()
 
 void IconContainerWidget::loadIcons()
 {
-    const FilePath currentManifestDir = manifestDir(m_textEditor, false);
+    const FilePath currentManifestDir = manifestDirectory();
 
     Utils::FilePath manifestPath = currentManifestDir / "AndroidManifest.xml";
     Result<AndroidManifestParser::ManifestData> manifestResult = AndroidManifestParser::readManifest(manifestPath);
@@ -477,12 +476,19 @@ TextEditor::TextEditorWidget *IconContainerWidget::textEditor() const
     return m_textEditor.data();
 }
 
+FilePath IconContainerWidget::manifestDirectory() const
+{
+    if (!m_textEditor)
+        return FilePath();
+    return m_textEditor->textDocument()->filePath().absolutePath();
+}
+
 Result<void> IconContainerWidget::saveIcons()
 {
     if (!m_textEditor)
         return Utils::ResultError("No text editor available");
 
-    const FilePath currentManifestDir = manifestDir(m_textEditor, false);
+    const FilePath currentManifestDir = manifestDirectory();
     if (currentManifestDir.isEmpty() || !currentManifestDir.exists())
         return Utils::ResultError("Manifest directory not available");
 
@@ -506,7 +512,7 @@ void IconContainerWidget::updateManifestIcon()
     if (!m_textEditor)
         return;
 
-    const FilePath currentManifestDir = manifestDir(m_textEditor, false);
+    const FilePath currentManifestDir = manifestDirectory();
     if (currentManifestDir.isEmpty() || !currentManifestDir.exists())
         return;
 

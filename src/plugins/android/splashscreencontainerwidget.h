@@ -52,7 +52,6 @@ private:
     void clearAll();
 
     TextEditor::TextEditorWidget *m_textEditorWidget = nullptr;
-    Utils::FilePath m_manifestDirectory;
     QList<SplashScreenWidget *> m_imageWidgets;
     QList<SplashScreenWidget *> m_portraitImageWidgets;
     QList<SplashScreenWidget *> m_landscapeImageWidgets;

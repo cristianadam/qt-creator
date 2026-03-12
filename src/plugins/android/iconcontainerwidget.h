@@ -56,6 +56,7 @@ signals:
 
 private:
     TextEditor::TextEditorWidget *textEditor() const;
+    Utils::FilePath manifestDirectory() const;
     static Utils::FilePath iconFile(const Utils::FilePath &path);
     bool hasIcons() const;
     void loadIcons();

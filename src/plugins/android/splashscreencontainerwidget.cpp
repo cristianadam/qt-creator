@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "splashscreencontainerwidget.h"
-#include "androidtoolmenu.h"
 #include "androidtr.h"
 #include "androidmanifestutils.h"
 
@@ -11,10 +10,6 @@
 
 #include <utils/fileutils.h>
 #include <utils/utilsicons.h>
-
-#include <projectexplorer/projectmanager.h>
-#include <projectexplorer/project.h>
-#include <projectexplorer/projectnodes.h>
 
 #include <QCheckBox>
 #include <QColorDialog>
@@ -69,9 +64,6 @@ const int highDpiScalingRatio = 6;
 const int mediumDpiScalingRatio = 4;
 const int lowDpiScalingRatio = 3;
 
-using ProjectExplorer::Project;
-using ProjectExplorer::ProjectManager;
-
 static Q_LOGGING_CATEGORY(androidManifestEditorLog, "qtc.android.splashScreenWidget", QtWarningMsg);
 
 class SplashScreenWidget : public QWidget
@@ -116,7 +108,7 @@ public:
     void setImageFromPath(const FilePath &imagePath, bool resize = true);
     void setImageFileName(const QString &imageFileName);
     void loadImage();
-    FilePath getManifestDirectory();
+    FilePath manifestDirectory() const;
 
 signals:
     void imageChanged();
@@ -141,17 +133,11 @@ private:
     bool m_showImageFullScreen = false;
 };
 
-FilePath SplashScreenWidget::getManifestDirectory()
+FilePath SplashScreenWidget::manifestDirectory() const
 {
-    const QWidget *parentWidget = this->parentWidget();
-
-    while (parentWidget) {
-        const auto *container = qobject_cast<const SplashScreenContainerWidget *>(parentWidget);
-        if (container)
-            return container->manifestDirectory();
-        parentWidget = parentWidget->parentWidget();
-    }
-       return FilePath();
+    if (!m_textEditorWidget)
+        return FilePath();
+    return m_textEditorWidget->textDocument()->filePath().absolutePath();
 }
 
 SplashScreenWidget::SplashScreenWidget(QWidget *parent, const QSize &size, const QSize &screenSize,
@@ -227,7 +213,7 @@ void SplashScreenWidget::setImageFromPath(const FilePath &imagePath, bool resize
 {
     if (!m_textEditorWidget)
         return;
-    const FilePath baseDir = manifestDir(m_textEditorWidget);
+    const FilePath baseDir = manifestDirectory();
     const FilePath targetPath = baseDir / m_imagePath / m_imageFileName;
 
     if (targetPath.isEmpty()) {
@@ -275,7 +261,7 @@ void SplashScreenWidget::selectImage()
 
 void SplashScreenWidget::removeImage()
 {
-    const FilePath baseDir = getManifestDirectory();
+    const FilePath baseDir = manifestDirectory();
     const FilePath targetPath = baseDir / m_imagePath / m_imageFileName;
     if (targetPath.isEmpty()) {
         qCDebug(androidManifestEditorLog) << "Image target path empty, cannot remove image.";
@@ -299,7 +285,7 @@ void SplashScreenWidget::loadImage()
         qCDebug(androidManifestEditorLog) << "Image name not set, cannot load image.";
         return;
     }
-    const FilePath baseDir = getManifestDirectory();
+    const FilePath baseDir = manifestDirectory();
     const FilePath targetPath = baseDir / m_imagePath / m_imageFileName;
     if (targetPath.isEmpty()) {
         qCDebug(androidManifestEditorLog) << "Image target path empty, cannot load image.";
@@ -424,7 +410,6 @@ bool SplashScreenContainerWidget::initialize(TextEditor::TextEditorWidget *textE
 {
     QTC_ASSERT(textEditorWidget, return false);
     m_textEditorWidget = textEditorWidget;
-    m_manifestDirectory = manifestDir(textEditorWidget, false);
 
     const QList<QStringList> imageShowModeMethodsMap = {
         {"center", Tr::tr("Place the object in the center of the screen in both the vertical and horizontal axis,\n"
@@ -618,7 +603,6 @@ void SplashScreenContainerWidget::refresh()
 {
     if (!m_textEditorWidget)
         return;
-    m_manifestDirectory = manifestDir(m_textEditorWidget, false);
     loadImages();
 }
 
@@ -910,9 +894,9 @@ QString SplashScreenContainerWidget::landscapeImageName() const
 
 FilePath SplashScreenContainerWidget::manifestDirectory() const
 {
-    if (m_manifestDirectory.isEmpty() && m_textEditorWidget)
-        return manifestDir(m_textEditorWidget, false);
-    return m_manifestDirectory;
+    if (m_textEditorWidget)
+        return m_textEditorWidget->textDocument()->filePath().absolutePath();
+    return FilePath();
 }
 
 } // namespace Android::Internal
