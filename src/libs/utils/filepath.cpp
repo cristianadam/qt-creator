@@ -3579,18 +3579,75 @@ QStringList FileFilter::asFindArguments(const QString &path) const
     return arguments;
 }
 
+/*
+    This is an optimized version of:
+
+    if (a == b)
+        return 1;
+    else if (a.compare(b, Qt::CaseInsensitive) == 0)
+        return -1;
+    else
+        return 0;
+*/
+static int preCompareStrings(const QStringView &a, const QStringView &b)
+{
+    const qsizetype len = a.size();
+    if (len != b.size())
+        return 0;
+
+    if (len == 0)
+        return 1;
+
+    const QChar *aData = a.constData();
+    const QChar *bData = b.constData();
+
+    const qsizetype byteLen = len * sizeof(char16_t);
+
+    // Single memcmp — libc SIMD handles the common "identical" case fastest
+    if (std::memcmp(aData, bData, byteLen) == 0)
+        return 1;
+
+    // Find first differing char16_t
+    const uint64_t *aw = reinterpret_cast<const uint64_t *>(aData);
+    const uint64_t *bw = reinterpret_cast<const uint64_t *>(bData);
+    const qsizetype wordLen = byteLen / sizeof(uint64_t);
+    qsizetype wi = 0;
+    while (wi < wordLen && aw[wi] == bw[wi])
+        ++wi;
+
+    const qsizetype firstDiffIndex = (wi * sizeof(uint64_t)) / sizeof(char16_t);
+
+    // Inline ASCII case-insensitive comparison for the differing tail as well as the
+    // unchecked parts if the length is not divisible by sizeof(uint64_t)
+    QStringView remainingA(aData + firstDiffIndex, len - firstDiffIndex);
+    QStringView remainingB(bData + firstDiffIndex, len - firstDiffIndex);
+
+    for (; !remainingA.isEmpty(); remainingA = remainingA.mid(1), remainingB = remainingB.mid(1)) {
+        char16_t ca = remainingA.first().unicode();
+        char16_t cb = remainingB.first().unicode();
+        if (ca == cb)
+            continue;
+        // lower case characters between 'A' and 'Z'
+        if (ca >= u'A' && ca <= u'Z')
+            ca += 32;
+        if (cb >= u'A' && cb <= u'Z')
+            cb += 32;
+        if (ca != cb) {
+            return remainingA.compare(remainingB, Qt::CaseInsensitive) == 0 ? -1 : 0;
+        }
+    }
+    return -1;
+}
+
 QTCREATOR_UTILS_EXPORT bool operator==(const FilePath &first, const FilePath &second)
 {
     if (!first.isSameDevice(second))
         return false;
 
-    // Early exit if the paths are exactly the same.
-    if (first.pathView().compare(second.pathView(), Qt::CaseSensitive) == 0)
-        return true;
+    const int equal = preCompareStrings(first.pathView(), second.pathView());
 
-    // Early exit if the paths are not even equal case-insensitively.
-    if (first.pathView().compare(second.pathView(), Qt::CaseInsensitive) != 0)
-        return false;
+    if (equal >= 0)
+        return equal;
 
     return first.isSameFile(second);
 }
