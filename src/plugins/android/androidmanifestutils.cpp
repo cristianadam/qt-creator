@@ -3,6 +3,7 @@
 
 #include "androidmanifestutils.h"
 
+#include <coreplugin/documentmanager.h>
 #include <coreplugin/editormanager/documentmodel.h>
 #include <coreplugin/editormanager/ieditor.h>
 #include <coreplugin/idocument.h>
@@ -60,7 +61,17 @@ static void extractPermissions(const QDomElement &manifest, AndroidManifestParse
 {
     QDomElement permissionElem = manifest.firstChildElement(keyUsesPermission);
     while (!permissionElem.isNull()) {
-        data.permissions << permissionElem.attribute(keyAndroidName);
+        const QString name = permissionElem.attribute(keyAndroidName);
+        if (!name.isEmpty()) {
+            QMap<QString, QString> attributes;
+            const QDomNamedNodeMap attrMap = permissionElem.attributes();
+            for (int i = 0; i < attrMap.count(); ++i) {
+                const QDomAttr attr = attrMap.item(i).toAttr();
+                if (attr.name() != keyAndroidName)
+                    attributes.insert(attr.name(), attr.value());
+            }
+            data.permissions.insert(name, attributes);
+        }
         permissionElem = permissionElem.nextSiblingElement(keyUsesPermission);
     }
 }
@@ -219,6 +230,25 @@ static Result<void> modifyActivityMetaData(QDomDocument &doc, QDomElement &manif
     return {};
 }
 
+static Result<void> saveDocument(const FilePath &manifestPath, const QDomDocument &doc)
+{
+    Core::DocumentManager::expectFileChange(manifestPath);
+    QScopeGuard unexpect([&] { Core::DocumentManager::unexpectFileChange(manifestPath); });
+    QFile file(manifestPath.toFSPathString());
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate))
+        return ResultError(QString("Cannot open manifest file for writing: %1")
+                               .arg(file.errorString()));
+    file.write(doc.toString(4).toUtf8());
+    file.close();
+
+    const QList<Core::IEditor *> editors = Core::DocumentModel::editorsForFilePath(manifestPath);
+    for (Core::IEditor *editor : editors) {
+        if (Core::IDocument *doc = editor->document())
+            doc->reload(Core::IDocument::FlagReload, Core::IDocument::TypeContents);
+    }
+    return {};
+}
+
 Result<void>
 AndroidManifestParser::processAndWriteManifest(const FilePath &manifestPath,
                                                const ModifyParams &instructions)
@@ -242,21 +272,7 @@ AndroidManifestParser::processAndWriteManifest(const FilePath &manifestPath,
             return result;
     }
 
-    QFile file(manifestPath.toFSPathString());
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate))
-        return ResultError(QString("Cannot open manifest file for writing: %1")
-                                      .arg(file.errorString()));
-
-    file.write(doc.toString(4).toUtf8());
-    file.close();
-
-    const QList<Core::IEditor *> editors = Core::DocumentModel::editorsForFilePath(manifestPath);
-    for (Core::IEditor *editor : editors) {
-        if (Core::IDocument *doc = editor->document())
-            doc->reload(Core::IDocument::FlagReload, Core::IDocument::TypeContents);
-    }
-
-    return {};
+    return saveDocument(manifestPath, doc);
 }
 
 Result<void> updateManifestApplicationAttribute(const FilePath &manifestPath,
@@ -323,6 +339,41 @@ Result<void> updateManifestActivityMetaData(const FilePath &manifestPath,
     instructions.activityMetaDataName = metaDataName;
     instructions.activityMetaDataValue = metaDataValue;
     return AndroidManifestParser::processAndWriteManifest(manifestPath, instructions);
+}
+
+Result<void> updateManifestPermissionAttributes(const FilePath &manifestPath,
+                                                const QString &permission,
+                                                const QMap<QString, QString> &attributes)
+{
+    auto docResult = loadManifestDocument(manifestPath);
+    if (!docResult)
+        return ResultError(docResult.error());
+
+    QDomDocument doc = *docResult;
+    QDomElement manifest = doc.documentElement();
+
+    QDomElement permissionElem = manifest.firstChildElement(keyUsesPermission);
+    while (!permissionElem.isNull()) {
+        if (permissionElem.attribute(keyAndroidName) == permission) {
+            const QDomNamedNodeMap attrMap = permissionElem.attributes();
+            QStringList attrNames;
+            for (int i = 0; i < attrMap.count(); ++i)
+                attrNames << attrMap.item(i).toAttr().name();
+            for (const QString &name : std::as_const(attrNames)) {
+                if (name != keyAndroidName)
+                    permissionElem.removeAttribute(name);
+            }
+            for (auto it = attributes.cbegin(); it != attributes.cend(); ++it)
+                permissionElem.setAttribute(it.key(), it.value());
+            break;
+        }
+        permissionElem = permissionElem.nextSiblingElement(keyUsesPermission);
+    }
+
+    if (permissionElem.isNull())
+        return ResultError(QString("Permission '%1' not found in manifest").arg(permission));
+
+    return saveDocument(manifestPath, doc);
 }
 
 } // namespace Android::Internal

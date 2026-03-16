@@ -7,6 +7,7 @@
 
 #include <QWidget>
 #include <QStringList>
+#include <QTreeView>
 
 class QCheckBox;
 class QComboBox;
@@ -33,6 +34,7 @@ signals:
 private:
     void addPermission();
     void removePermission();
+    void editAttributes();
     void updateAddRemovePermissionButtons();
     void defaultPermissionOrFeatureCheckBoxClicked();
     void updateManifestPermissions();
@@ -45,7 +47,8 @@ private:
     QComboBox *m_permissionsComboBox = nullptr;
     QPushButton *m_addPermissionButton = nullptr;
     QPushButton *m_removePermissionButton = nullptr;
-    QListView *m_permissionsListView = nullptr;
+    QPushButton *m_editAttributesButton = nullptr;
+    QTreeView *m_permissionsListView = nullptr;
     PermissionsModel *m_permissionsModel = nullptr;
 };
 
