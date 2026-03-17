@@ -27,13 +27,8 @@ public:
     class PROJECTEXPLORER_EXPORT Result
     {
     public:
-        Result() = default;
-        Result(QList<FileNode *> files, QList<Node *> nodes);
-        QList<FileNode *> takeAllFiles();
-        QList<Node *> takeFirstLevelNodes();
-    private:
-        QList<FileNode *> allFiles;
-        QList<Node *> firstLevelNodes;
+        std::vector<std::unique_ptr<FileNode>> allFiles;
+        std::vector<std::unique_ptr<Node>> firstLevelNodes;
     };
     using Future = QFuture<Result>;
     using FutureWatcher = QFutureWatcher<Result>;
