@@ -341,6 +341,7 @@ static ProcessTask checkDocker(const InstanceConfig &instanceConfig)
         connectProcessToLog(process, instanceConfig, "Check Docker");
         CommandLine cmdLine{instanceConfig.dockerCli, {"system", "df"}};
         process.setCommand(cmdLine);
+        process.setEnvironment(instanceConfig.localEnvironment);
     });
 }
 
@@ -358,6 +359,7 @@ static ProcessTask findContainerId(
              {"--filter", "label=com.docker.compose.project=" + projectName(instanceConfig)},
              {"--filter", "label=com.docker.compose.service=" + composeContainer.service}}};
         process.setCommand(cmdLine);
+        process.setEnvironment(instanceConfig.localEnvironment);
         process.setWorkingDirectory(instanceConfig.workspaceFolder);
     };
 
@@ -380,6 +382,7 @@ static ExecutableItem testBuildKit(const InstanceConfig &instanceConfig, Storage
         [instanceConfig](Process &process) {
             connectProcessToLog(process, instanceConfig, "Fetch BuildKit Info");
             process.setCommand({instanceConfig.dockerCli, {"buildx", "version"}});
+            process.setEnvironment(instanceConfig.localEnvironment);
         },
         [instanceConfig, useBuildKit](const Process &process, DoneWith doneWith) -> DoneResult {
             if (doneWith == DoneWith::Error) {
@@ -409,6 +412,7 @@ static ProcessTask inspectContainerTask(
             {"inspect", {"--type", "container"}, dynamicStringToString(identifier)}};
 
         process.setCommand(inspectCmdLine);
+        process.setEnvironment(instanceConfig.localEnvironment);
         process.setWorkingDirectory(instanceConfig.workspaceFolder);
 
         instanceConfig.logFunction(
@@ -558,6 +562,7 @@ static ProcessTask inspectImageTask(
             {"inspect", {"--type", "image"}, dynamicStringToString(imageName)}};
 
         process.setCommand(inspectCmdLine);
+        process.setEnvironment(instanceConfig.localEnvironment);
         process.setWorkingDirectory(instanceConfig.workspaceFolder);
 
         instanceConfig.logFunction(
@@ -733,6 +738,7 @@ while sleep 1 & wait $!; do :; done
          imageName(instanceConfig),
          cmd}};
     process.setCommand(createCmdLine);
+    process.setEnvironment(instanceConfig.localEnvironment);
     process.setWorkingDirectory(instanceConfig.workspaceFolder);
 
     instanceConfig.logFunction(
@@ -750,6 +756,7 @@ static ProcessTask eventMonitor(const QString &eventType, const InstanceConfig &
                 {"--format", "{{json .}}"}}};
 
         process.setCommand(eventsCmdLine);
+        process.setEnvironment(instanceConfig.localEnvironment);
 
         instanceConfig.logFunction(
             Tr::tr("Waiting for container to start: %1").arg(eventsCmdLine.toUserOutput()));
@@ -838,6 +845,7 @@ static ExecutableItem execInContainerTask(
         }
 
         process.setCommand(execCmdLine);
+        process.setEnvironment(instanceConfig.localEnvironment);
         process.setWorkingDirectory(instanceConfig.workspaceFolder);
 
         instanceConfig.logFunction(
@@ -1007,6 +1015,7 @@ static ProcessTask lifecycleHookTask(
     return ProcessTask([cmdLine, instanceConfig, name](Process &process) {
         connectProcessToLog(process, instanceConfig, name);
         process.setCommand(cmdLine);
+        process.setEnvironment(instanceConfig.localEnvironment);
         process.setWorkingDirectory(instanceConfig.workspaceFolder);
     });
 }
@@ -1167,6 +1176,7 @@ static ExecutableItem containerDoesNotExistTask(const InstanceConfig &instanceCo
                  "--filter",
                  QString("name=%1").arg(containerName(instanceConfig))}};
             process.setCommand(cmdLine);
+            process.setEnvironment(instanceConfig.localEnvironment);
             process.setWorkingDirectory(instanceConfig.workspaceFolder);
         },
         [instanceConfig](const Process &process, DoneWith doneWith) -> DoneResult {
@@ -1203,6 +1213,7 @@ static ExecutableItem containerState(const InstanceConfig &instanceConfig, Stora
                  QString("name=%1").arg(containerName(instanceConfig))}};
 
             process.setCommand(cmdLine);
+            process.setEnvironment(instanceConfig.localEnvironment);
             process.setWorkingDirectory(instanceConfig.workspaceFolder);
         },
         [instanceConfig, state](const Process &process, DoneWith doneWith) -> DoneResult {
@@ -1247,6 +1258,7 @@ static ExecutableItem startContainerRecipe(const InstanceConfig &instanceConfig)
             CommandLine
                 startCmdLine{instanceConfig.dockerCli, {"start", containerName(instanceConfig)}};
             process.setCommand(startCmdLine);
+            process.setEnvironment(instanceConfig.localEnvironment);
             process.setWorkingDirectory(instanceConfig.workspaceFolder);
 
             instanceConfig.logFunction(
@@ -1261,6 +1273,7 @@ static ExecutableItem startContainerRecipe(const InstanceConfig &instanceConfig)
             CommandLine
                 startCmdLine{instanceConfig.dockerCli, {"unpause", containerName(instanceConfig)}};
             process.setCommand(startCmdLine);
+            process.setEnvironment(instanceConfig.localEnvironment);
             process.setWorkingDirectory(instanceConfig.workspaceFolder);
 
             instanceConfig.logFunction(
@@ -1371,6 +1384,7 @@ static Result<Group> prepareContainerRecipe(
              contextPath.nativePath()}};
 
         process.setCommand(buildCmdLine);
+        process.setEnvironment(instanceConfig.localEnvironment);
         process.setWorkingDirectory(instanceConfig.workspaceFolder);
         if (instanceConfig.runProcessesInTerminal)
             process.setTerminalMode(TerminalMode::Run);
@@ -1415,6 +1429,7 @@ static ExecutableItem prepareDockerImageRecipe(
 
         CommandLine pullCmdLine{instanceConfig.dockerCli, {"pull", imageConfig.image}};
         process.setCommand(pullCmdLine);
+        process.setEnvironment(instanceConfig.localEnvironment);
         process.setWorkingDirectory(instanceConfig.workspaceFolder);
 
         instanceConfig.logFunction(
@@ -1427,6 +1442,7 @@ static ExecutableItem prepareDockerImageRecipe(
         CommandLine tagCmdLine{
             instanceConfig.dockerCli, {"tag", imageConfig.image, imageName(instanceConfig)}};
         process.setCommand(tagCmdLine);
+        process.setEnvironment(instanceConfig.localEnvironment);
         process.setWorkingDirectory(instanceConfig.workspaceFolder);
 
         instanceConfig.logFunction(
@@ -1513,6 +1529,7 @@ static Result<Group> prepareContainerRecipe(
              "--detach",
              services.values()}};
         process.setCommand(composeCmdLine);
+        process.setEnvironment(instanceConfig.localEnvironment);
         process.setWorkingDirectory(instanceConfig.configFilePath.parentDir());
 
         instanceConfig.logFunction(
@@ -1564,6 +1581,7 @@ static void setupRemoveContainer(const InstanceConfig &instanceConfig, Process &
 
     CommandLine removeCmdLine{instanceConfig.dockerCli, {"rm", "-f", containerName(instanceConfig)}};
     process.setCommand(removeCmdLine);
+    process.setEnvironment(instanceConfig.localEnvironment);
     process.setWorkingDirectory(instanceConfig.workspaceFolder);
 
     instanceConfig.logFunction(
@@ -1598,6 +1616,7 @@ static Result<Group> downContainerRecipe(
 
         CommandLine removeCmdLine{instanceConfig.dockerCli, {"rmi", imageName(instanceConfig)}};
         process.setCommand(removeCmdLine);
+        process.setEnvironment(instanceConfig.localEnvironment);
         process.setWorkingDirectory(instanceConfig.workspaceFolder);
 
         instanceConfig.logFunction(
@@ -1650,6 +1669,7 @@ static Result<Group> downContainerRecipe(
              composeFilesWithFlag,
              "down"}};
         process.setCommand(composeCmdLine);
+        process.setEnvironment(instanceConfig.localEnvironment);
         process.setWorkingDirectory(instanceConfig.workspaceFolder);
 
         instanceConfig.logFunction(
@@ -1829,6 +1849,7 @@ static WrappedProcessInterface *makeProcessInterface(
 
         Process p;
         p.setCommand(dockerCmd);
+        p.setEnvironment(instanceConfig.localEnvironment);
         p.runBlocking();
     };
 
