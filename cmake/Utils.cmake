@@ -64,6 +64,7 @@ function(create_standalone_install_component component_name)
   set(opt_args)
   set(single_args
     TARGET
+    BUNDLE_PLIST_TEMPLATE
   )
   set(multi_args
     PLUGINS
@@ -73,14 +74,25 @@ function(create_standalone_install_component component_name)
 
   cmake_parse_arguments(_arg "${opt_args}" "${single_args}" "${multi_args}" ${ARGN})
 
+  if (_arg_BUNDLE_PLIST_TEMPLATE)
+    set(create_appbundle YES)
+  else()
+    set(create_appbundle NO)
+  endif()
   if (APPLE)
-    set(library_dest "Frameworks")
-    set(plugin_dest "PlugIns/qtcreator")
-    set(libexec_dest "Resources/libexec")
-    set(resource_dest "Resources")
-    set(qt_library_dest "Frameworks")
-    set(qt_plugin_dest "PlugIns")
-    set(qt_import_dest "Imports/qtquick2")
+    if (create_appbundle)
+      set(base_dir "${_arg_TARGET}.app/Contents")
+    else()
+      set(base_dir ".")
+    endif()
+    set(bin_dest "${base_dir}/MacOS")
+    set(library_dest "${base_dir}/Frameworks")
+    set(plugin_dest "${base_dir}/PlugIns/qtcreator")
+    set(libexec_dest "${base_dir}/Resources/libexec")
+    set(resource_dest "${base_dir}/Resources")
+    set(qt_library_dest "${base_dir}/Frameworks")
+    set(qt_plugin_dest "${base_dir}/PlugIns")
+    set(qt_import_dest "${base_dir}/Imports/qtquick2")
     set(qt_conf [=[[Paths]
 Prefix=../../
 Binaries=MacOS
@@ -88,6 +100,9 @@ Libraries=Frameworks
 Plugins=PlugIns
 Qml2Imports=Imports/qtquick2
 ]=]
+    )
+    set(executable_script "#!/bin/sh"
+      "\$(dirname \"\$0\")/../Resources/libexec/${_arg_TARGET}"
     )
   elseif (WIN32)
     set(library_dest "bin")
@@ -297,6 +312,24 @@ Qml2Imports=qml
     COMPONENT ${component_name}
     EXCLUDE_FROM_ALL
   )
+
+  # set up app bundle
+  if (APPLE AND create_appbundle)
+    set(EXECUTABLE "${_arg_TARGET}.sh")
+    set(TARGET "${_arg_TARGET}")
+    configure_file("${_arg_BUNDLE_PLIST_TEMPLATE}" "${CMAKE_CURRENT_BINARY_DIR}/Info.plist")
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/Info.plist"
+      DESTINATION ${base_dir}
+      COMPONENT ${component_name}
+      EXCLUDE_FROM_ALL
+    )
+    configure_file("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/standalone.sh.in" "${CMAKE_CURRENT_BINARY_DIR}/${EXECUTABLE}")
+    install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/${EXECUTABLE}"
+      DESTINATION ${bin_dest}
+      COMPONENT ${component_name}
+      EXCLUDE_FROM_ALL
+    )
+  endif()
 endfunction()
 
 function(configure_qml_designer Qt6_VERSION)
