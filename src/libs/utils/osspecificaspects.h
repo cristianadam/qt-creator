@@ -15,7 +15,7 @@ namespace Utils {
 // Add more as needed.
 enum OsType { OsTypeWindows, OsTypeLinux, OsTypeMac, OsTypeOtherUnix, OsTypeOther };
 
-enum OsArch { OsArchUnknown, OsArchX86, OsArchAMD64, OsArchItanium, OsArchArm, OsArchArm64 };
+enum OsArch { OsArchUnknown, OsArchX86, OsArchAMD64, OsArchItanium, OsArchArm, OsArchArm64, OsArchLoongArch64 };
 
 QTCREATOR_UTILS_EXPORT QString osTypeToString(OsType osType);
 QTCREATOR_UTILS_EXPORT Utils::Result<OsType> osTypeFromString(const QString &string);
