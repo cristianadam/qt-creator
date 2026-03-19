@@ -205,6 +205,9 @@ static TreeScanner::Result scanForFilesHelper(
     DirectoryScanResult result = scanForFilesImpl(future, directory, dirfilter, factory,
                                                   versionControls);
 
+    if (promise.isCanceled())
+        return {};
+
     TreeScanner::Result finalResult{std::move(result.nodes), {}};
     for (auto &fileNode : finalResult.allFiles)
         finalResult.firstLevelNodes.emplace_back(fileNode->clone());
@@ -229,6 +232,9 @@ static TreeScanner::Result scanForFilesHelper(
         }
     };
     addSubDirectories(std::move(result.subDirectories), nullptr, progressIncrement);
+
+    if (promise.isCanceled())
+        return {};
 
     while (!subDirectories.isEmpty()) {
         using namespace QtTaskTree;
@@ -270,7 +276,10 @@ static TreeScanner::Result scanForFilesHelper(
             HostOsInfo::isLinuxHost() ? ParallelLimit(2) : parallelIdealThreadCountLimit,
             AsyncTask<DirectoryScanResult>(onSetup, onDone)
         };
-        QTaskTree::runBlocking(recipe);
+        QTaskTree::runBlocking(recipe, future);
+
+        if (promise.isCanceled())
+            return {};
     }
 
     Utils::sort(finalResult.allFiles, sortByPath);
