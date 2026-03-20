@@ -5,6 +5,7 @@
 
 #include "qtcassert.h"
 #include "stringutils.h"
+#include "utilstr.h"
 
 #include <QFont>
 #include <QSortFilterProxyModel>
@@ -301,9 +302,16 @@ QVariant GroupedModel::data(const QModelIndex &index, int role) const
             font.setBold(true);
         if (m_removed.at(row))
             font.setStrikeOut(true);
+        if (m_volatileDefaultFlag.at(row))
+            font.setItalic(true);
         return font;
     }
-    return variantData(item, index.column(), role);
+    QVariant result = variantData(item, index.column(), role);
+    if (role == Qt::DisplayRole && index.column() == 0
+            && m_volatileDefaultFlag.at(row) && m_showDefault) {
+        return Tr::tr("%1 (Default)").arg(result.toString());
+    }
+    return result;
 }
 
 QVariant GroupedModel::headerData(int section, Qt::Orientation, int role) const
@@ -339,8 +347,63 @@ bool GroupedModel::isChanged(int row) const
 bool GroupedModel::isDirty(int row) const
 {
     QTC_ASSERT(row >= 0 && row < m_volatileVariants.size(), return false);
-    return m_added.at(row) || m_changed.at(row)
-        || m_volatileVariants.at(row) != m_variants.at(row);
+    if (m_added.at(row) || m_changed.at(row))
+        return true;
+    if (m_defaultAffectsDirty && m_volatileDefaultFlag.at(row) && !m_defaultFlag.at(row))
+        return true;
+    return m_volatileVariants.at(row) != m_variants.at(row);
+}
+
+int GroupedModel::defaultRow() const
+{
+    return m_volatileDefaultFlag.indexOf(true);
+}
+
+bool GroupedModel::isDefault(int row) const
+{
+    return row >= 0 && row < m_volatileDefaultFlag.size() && m_volatileDefaultFlag.at(row);
+}
+
+void GroupedModel::setVolatileDefaultRow(int row)
+{
+    QTC_ASSERT(row >= -1 && (row < 0 || row < m_volatileVariants.size()), return);
+    const int old = defaultRow();
+    if (old == row)
+        return;
+    m_volatileDefaultFlag.fill(false);
+    if (row >= 0)
+        m_volatileDefaultFlag[row] = true;
+    onDefaultRowChanged(old, row);
+    if (old >= 0 && old < m_volatileVariants.size())
+        notifyRowChanged(old);
+    if (row >= 0)
+        notifyRowChanged(row);
+}
+
+void GroupedModel::setDefaultRow(int row)
+{
+    m_volatileDefaultFlag.fill(false);
+    m_defaultFlag.fill(false);
+    if (row >= 0) {
+        m_volatileDefaultFlag[row] = true;
+        m_defaultFlag[row] = true;
+    }
+}
+
+void GroupedModel::setShowDefault(bool on)
+{
+    m_showDefault = on;
+}
+
+void GroupedModel::setDefaultAffectsDirty(bool on)
+{
+    m_defaultAffectsDirty = on;
+}
+
+void GroupedModel::onDefaultRowChanged(int oldRow, int newRow)
+{
+    Q_UNUSED(oldRow)
+    Q_UNUSED(newRow)
 }
 
 void GroupedModel::setChanged(int row, bool changed)
@@ -371,6 +434,7 @@ void GroupedModel::markRemoved(int row)
         m_added.removeAt(row);
         m_removed.removeAt(row);
         m_changed.removeAt(row);
+        m_volatileDefaultFlag.removeAt(row);
         endRemoveRows();
     } else {
         m_removed[row] = !m_removed[row];
@@ -389,16 +453,22 @@ void GroupedModel::removeItem(int row)
     m_added.removeAt(row);
     m_removed.removeAt(row);
     m_changed.removeAt(row);
+    m_volatileDefaultFlag.removeAt(row);
+    m_defaultFlag.removeAt(row);
     endRemoveRows();
 }
 
 void GroupedModel::apply()
 {
     QVariantList committed;
+    QList<bool> newDefault;
     for (int i = 0; i < m_volatileVariants.size(); ++i) {
-        if (!m_removed.at(i))
+        if (!m_removed.at(i)) {
             committed.append(m_volatileVariants.at(i));
+            newDefault.append(m_volatileDefaultFlag.at(i));
+        }
     }
+    m_defaultFlag = newDefault;
     setVariants(committed);
 }
 
@@ -432,6 +502,7 @@ QModelIndex GroupedModel::appendVolatileVariant(const QVariant &item)
     m_added.append(true);
     m_removed.append(false);
     m_changed.append(false);
+    m_volatileDefaultFlag.append(false);
     endInsertRows();
     return mapFromSource(index(row, 0));
 }
@@ -445,6 +516,8 @@ QModelIndex GroupedModel::appendVariant(const QVariant &item)
     m_added.insert(insertPos, false);
     m_removed.insert(insertPos, false);
     m_changed.insert(insertPos, false);
+    m_volatileDefaultFlag.insert(insertPos, false);
+    m_defaultFlag.append(false);
     endInsertRows();
     return index(insertPos, 0);
 }
@@ -457,6 +530,7 @@ void GroupedModel::setVariants(const QVariantList &items)
     m_added = QList<bool>(items.size(), false);
     m_removed = QList<bool>(items.size(), false);
     m_changed = QList<bool>(items.size(), false);
+    m_volatileDefaultFlag = m_defaultFlag;
     endResetModel();
 }
 
