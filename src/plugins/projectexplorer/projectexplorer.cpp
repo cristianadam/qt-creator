@@ -115,6 +115,8 @@
 
 #include <extensionsystem/pluginmanager.h>
 
+#include <nanotrace/nanotrace.h>
+
 #include <texteditor/findinfiles.h>
 #include <texteditor/tabsettings.h>
 #include <texteditor/textdocument.h>
@@ -136,7 +138,7 @@
 #include <utils/tooltip/tooltip.h>
 #include <utils/utilsicons.h>
 
-#include <nanotrace/nanotrace.h>
+#include <QtTaskTree/QSingleTaskTreeRunner>
 
 #include <QAction>
 #include <QActionGroup>
@@ -155,7 +157,6 @@
 #include <QThreadPool>
 #include <QTimer>
 #include <QVBoxLayout>
-#include <QtConcurrentMap>
 
 #include <algorithm>
 #include <functional>
@@ -199,6 +200,7 @@
 using namespace Core;
 using namespace ExtensionSystem;
 using namespace ProjectExplorer::Internal;
+using namespace QtTaskTree;
 using namespace Utils;
 
 namespace ProjectExplorer {
@@ -676,8 +678,7 @@ public:
 
     QHash<QString, std::pair<std::function<Project *(const FilePath &)>, ProjectManager::IssuesGenerator>> m_projectCreators;
     RecentProjectsEntries m_recentProjects; // pair of filename, displayname
-    QFuture<RecentProjectsEntry> m_recentProjectsFuture;
-    QThreadPool m_recentProjectsPool;
+    QSingleTaskTreeRunner m_recentProjectsRunner;
     static const int m_maxRecentProjects = 25;
 
     FilePath m_lastOpenDirectory;
@@ -2297,33 +2298,42 @@ bool ProjectExplorerPluginPrivate::closeAllFilesInProject(const Project *project
     return EditorManager::closeDocuments(openFiles);
 }
 
+static bool fileExists(const FilePath &filePath)
+{
+    return !filePath.isLocal() || filePath.exists();
+}
+
 void ProjectExplorerPluginPrivate::checkRecentProjectsAsync()
 {
-    m_recentProjectsFuture.cancel();
+    const ListIterator iterator(m_recentProjects);
 
-    m_recentProjectsFuture
-        = QtConcurrent::mapped(&m_recentProjectsPool, m_recentProjects, [](RecentProjectsEntry p) {
-              // check if project is available, but avoid querying devices
-              p.exists = !p.filePath.isLocal() || p.filePath.exists();
-              return p;
-          });
-    Utils::futureSynchronizer()->addFuture(m_recentProjectsFuture);
-
-    onResultReady(m_recentProjectsFuture, this, [this](const RecentProjectsEntry &p) {
-        auto it = std::find_if(
-            m_recentProjects.begin(), m_recentProjects.end(), [&p](const RecentProjectsEntry &e) {
-                return p.filePath == e.filePath;
-            });
+    const auto onSetup = [iterator](Async<bool> &task) {
+        task.setConcurrentCallData(fileExists, iterator->filePath);
+    };
+    const auto onDone = [this, iterator](const Async<bool> &task) {
+        const FilePath filePath = iterator->filePath;
+        auto it = std::find_if(m_recentProjects.begin(), m_recentProjects.end(),
+                               [&filePath](const RecentProjectsEntry &e) {
+            return filePath == e.filePath;
+        });
         // nothing to do if it no longer is in the recent projects, or if the state already was
         // correct
         if (it == m_recentProjects.end())
             return;
-        if (it->exists == p.exists)
+        const bool exists = task.result();
+        if (it->exists == exists)
             return;
 
-        *it = p;
+        it->exists = exists;
         emit m_instance->recentProjectsChanged();
-    });
+    };
+
+    const Group recipe = For (iterator) >> Do {
+        parallelIdealThreadCountLimit,
+        AsyncTask<bool>(onSetup, onDone, CallDoneFlag::OnSuccess)
+    };
+
+    m_recentProjectsRunner.start(recipe);
 }
 
 void ProjectExplorerPluginPrivate::savePersistentSettings()
@@ -2348,6 +2358,8 @@ void ProjectExplorerPluginPrivate::savePersistentSettings()
         const QString filePath = it->filePath.toUserOutput();
         filePaths << filePath;
         displayNames << it->displayName;
+        // TODO: m_recentProjectsRunner might be still updating, so it->exists
+        //       might not be up to date...
         existence.insert(filePath, it->exists);
     }
 
@@ -3529,6 +3541,7 @@ void ProjectExplorerPluginPrivate::updateRecentProjectMenu()
 void ProjectExplorerPluginPrivate::clearRecentProjects()
 {
     m_recentProjects.clear();
+    m_recentProjectsRunner.reset();
     emit m_instance->recentProjectsChanged();
 }
 
@@ -4471,8 +4484,6 @@ static RunConfiguration *runConfigurationForDisplayName(const QString &displayNa
         return rc->displayName() == displayName;
     });
 }
-
-using namespace QtTaskTree;
 
 static LocatorMatcherTasks runConfigurationMatchers(const RunAcceptor &acceptor)
 {
