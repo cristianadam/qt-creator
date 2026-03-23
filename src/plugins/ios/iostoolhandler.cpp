@@ -245,7 +245,6 @@ public:
     void stop(int errorCode) override;
 
 private:
-    void installAppOnSimulator();
     void launchAppOnSimulator(const QStringList &extraArgs);
     bool isResponseValid(const SimulatorControl::ResponseData &responseData);
 
@@ -710,28 +709,59 @@ void IosSimulatorToolHandlerPrivate::requestTransferApp(const FilePath &appBundl
         return;
     }
 
-    isTransferringApp(m_bundlePath, m_deviceId, 0, 100, "");
+    GroupItem startTask = nullItem;
 
-    auto onSimulatorStart = [this](const SimulatorControl::Response &response) {
+    if (!SimulatorControl::isSimulatorRunning(m_deviceId)) {
+        const auto onStartSetup = [this](Async<SimulatorControl::Response> &task) {
+            isTransferringApp(m_bundlePath, m_deviceId, 0, 100, "");
+            task.setConcurrentCallData(Internal::startSimulator, m_deviceId);
+        };
+        const auto onStartDone = [this](const Async<SimulatorControl::Response> &task) {
+            if (!task.isResultAvailable())
+                return false; // TODO: emit finished?
+            const SimulatorControl::Response &response = task.result();
+            if (response) {
+                return isResponseValid(*response); // TODO: call didTransferApp() on failure?
+            } else {
+                errorMsg(Tr::tr("Application install on simulator failed. Simulator not running."));
+                if (!response.error().isEmpty())
+                    errorMsg(response.error());
+                didTransferApp(m_bundlePath, m_deviceId, IosToolHandler::Failure);
+                emit q->finished();
+            }
+            return false;
+        };
+
+        startTask = AsyncTask<SimulatorControl::Response>(onStartSetup, onStartDone);
+    }
+
+    const auto onInstallSetup = [this](Async<SimulatorControl::Response> &task) {
+        isTransferringApp(m_bundlePath, m_deviceId, 20, 100, "");
+        task.setConcurrentCallData(Internal::installApp, m_deviceId, m_bundlePath);
+    };
+    const auto onInstallDone = [this](const Async<SimulatorControl::Response> &task) {
+        if (!task.isResultAvailable())
+            return false; // TODO: emit finished?
+        const SimulatorControl::Response &response = task.result();
         if (response) {
             if (!isResponseValid(*response))
-                return;
-
-            installAppOnSimulator();
+                return false;
+            isTransferringApp(m_bundlePath, m_deviceId, 100, 100, "");
+            didTransferApp(m_bundlePath, m_deviceId, IosToolHandler::Success);
+            return true;
         } else {
-            errorMsg(Tr::tr("Application install on simulator failed. Simulator not running."));
-            if (!response.error().isEmpty())
-                errorMsg(response.error());
+            errorMsg(Tr::tr("Application install on simulator failed. %1").arg(response.error()));
             didTransferApp(m_bundlePath, m_deviceId, IosToolHandler::Failure);
-            emit q->finished();
         }
+        emit q->finished();
+        return false;
     };
 
-    if (SimulatorControl::isSimulatorRunning(m_deviceId))
-        installAppOnSimulator();
-    else
-        futureSynchronizer.addFuture(Utils::onResultReady(
-            SimulatorControl::startSimulator(m_deviceId), q, onSimulatorStart));
+    const Group recipe {
+        startTask,
+        AsyncTask<SimulatorControl::Response>(onInstallSetup, onInstallDone)
+    };
+    taskTreeRunner.start(recipe);
 }
 
 void IosSimulatorToolHandlerPrivate::requestRunApp(const FilePath &appBundlePath,
@@ -800,26 +830,6 @@ void IosSimulatorToolHandlerPrivate::stop(int errorCode)
 
     toolExited(errorCode);
     emit q->finished();
-}
-
-void IosSimulatorToolHandlerPrivate::installAppOnSimulator()
-{
-    auto onResponseAppInstall = [this](const SimulatorControl::Response &response) {
-        if (response) {
-            if (!isResponseValid(*response))
-                return;
-            isTransferringApp(m_bundlePath, m_deviceId, 100, 100, "");
-            didTransferApp(m_bundlePath, m_deviceId, IosToolHandler::Success);
-        } else {
-            errorMsg(Tr::tr("Application install on simulator failed. %1").arg(response.error()));
-            didTransferApp(m_bundlePath, m_deviceId, IosToolHandler::Failure);
-        }
-        emit q->finished();
-    };
-
-    isTransferringApp(m_bundlePath, m_deviceId, 20, 100, "");
-    auto installFuture = SimulatorControl::installApp(m_deviceId, m_bundlePath);
-    futureSynchronizer.addFuture(Utils::onResultReady(installFuture, q, onResponseAppInstall));
 }
 
 #ifdef Q_OS_UNIX

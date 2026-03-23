@@ -126,10 +126,6 @@ static bool isAvailable(const QJsonObject &object)
 static SimulatorInfo deviceInfo(const QString &simUdid);
 static QString bundleIdentifier(const Utils::FilePath &bundlePath);
 
-static void startSimulator(QPromise<SimulatorControl::Response> &promise, const QString &simUdid);
-static void installApp(QPromise<SimulatorControl::Response> &promise,
-                       const QString &simUdid,
-                       const Utils::FilePath &bundlePath);
 static void launchApp(QPromise<SimulatorControl::Response> &promise,
                       const QString &simUdid,
                       const QString &bundleIdentifier,
@@ -239,12 +235,6 @@ QString SimulatorControl::bundleIdentifier(const Utils::FilePath &bundlePath)
 QFuture<SimulatorControl::Response> SimulatorControl::startSimulator(const QString &simUdid)
 {
     return Utils::asyncRun(Internal::startSimulator, simUdid);
-}
-
-QFuture<SimulatorControl::Response> SimulatorControl::installApp(const QString &simUdid,
-                                                                 const Utils::FilePath &bundlePath)
-{
-    return Utils::asyncRun(Internal::installApp, simUdid, bundlePath);
 }
 
 QFuture<SimulatorControl::Response> SimulatorControl::launchApp(const QString &simUdid,

@@ -60,7 +60,6 @@ public:
     static QString bundleIdentifier(const Utils::FilePath &bundlePath);
 
     static QFuture<Response> startSimulator(const QString &simUdid);
-    static QFuture<Response> installApp(const QString &simUdid, const Utils::FilePath &bundlePath);
     static QFuture<Response> launchApp(const QString &simUdid,
                                        const QString &bundleIdentifier,
                                        bool waitForDebugger,
@@ -68,6 +67,10 @@ public:
                                        const QString &stdoutPath = {},
                                        const QString &stderrPath = {});
 };
+
+void startSimulator(QPromise<SimulatorControl::Response> &promise, const QString &simUdid);
+void installApp(QPromise<SimulatorControl::Response> &promise, const QString &simUdid,
+                const Utils::FilePath &bundlePath);
 
 } // Ios::Internal
 
