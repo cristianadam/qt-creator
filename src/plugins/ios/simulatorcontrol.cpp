@@ -7,6 +7,7 @@
 
 #include <utils/algorithm.h>
 #include <utils/async.h>
+#include <utils/globaltasktree.h>
 #include <utils/qtcprocess.h>
 #include <utils/qtcassert.h>
 
@@ -126,14 +127,6 @@ static bool isAvailable(const QJsonObject &object)
 static SimulatorInfo deviceInfo(const QString &simUdid);
 static QString bundleIdentifier(const Utils::FilePath &bundlePath);
 
-static void launchApp(QPromise<SimulatorControl::Response> &promise,
-                      const QString &simUdid,
-                      const QString &bundleIdentifier,
-                      bool waitForDebugger,
-                      const QStringList &extraArgs,
-                      const QString &stdoutPath,
-                      const QString &stderrPath);
-
 static QList<SimulatorInfo> s_availableDevices;
 
 QList<SimulatorInfo> SimulatorControl::availableSimulators()
@@ -230,27 +223,6 @@ bool SimulatorControl::isSimulatorRunning(const QString &simUdid)
 QString SimulatorControl::bundleIdentifier(const Utils::FilePath &bundlePath)
 {
     return Internal::bundleIdentifier(bundlePath);
-}
-
-QFuture<SimulatorControl::Response> SimulatorControl::startSimulator(const QString &simUdid)
-{
-    return Utils::asyncRun(Internal::startSimulator, simUdid);
-}
-
-QFuture<SimulatorControl::Response> SimulatorControl::launchApp(const QString &simUdid,
-                                                                const QString &bundleIdentifier,
-                                                                bool waitForDebugger,
-                                                                const QStringList &extraArgs,
-                                                                const QString &stdoutPath,
-                                                                const QString &stderrPath)
-{
-    return Utils::asyncRun(Internal::launchApp,
-                           simUdid,
-                           bundleIdentifier,
-                           waitForDebugger,
-                           extraArgs,
-                           stdoutPath,
-                           stderrPath);
 }
 
 // Static members
