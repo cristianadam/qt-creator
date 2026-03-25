@@ -3597,18 +3597,7 @@ QStringList FileFilter::asFindArguments(const QString &path) const
 
 QTCREATOR_UTILS_EXPORT bool operator==(const FilePath &first, const FilePath &second)
 {
-    if (!first.isSameDevice(second))
-        return false;
-
-    // Early exit if the paths are exactly the same.
-    if (first.pathView().compare(second.pathView(), Qt::CaseSensitive) == 0)
-        return true;
-
-    // Early exit if the paths are not even equal case-insensitively.
-    if (first.pathView().compare(second.pathView(), Qt::CaseInsensitive) != 0)
-        return false;
-
-    return first.isSameFile(second);
+    return FilePath::equals(first, second, first.caseSensitivity());
 }
 
 QTCREATOR_UTILS_EXPORT bool operator!=(const FilePath &first, const FilePath &second)
