@@ -34,7 +34,6 @@
 #include <qtsupport/qtversionfactory.h>
 
 #include <utils/algorithm.h>
-#include <utils/futuresynchronizer.h>
 #include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
 
@@ -385,7 +384,7 @@ void IosConfigurations::updateSimulators()
         dev = IDevice::Ptr(new IosSimulator(devId));
         DeviceManager::addDevice(dev);
     }
-    Utils::futureSynchronizer()->addFuture(SimulatorControl::updateAvailableSimulators(this));
+    SimulatorControl::updateAvailableSimulators();
 }
 
 void IosConfigurations::setDeveloperPath(const FilePath &devPath)

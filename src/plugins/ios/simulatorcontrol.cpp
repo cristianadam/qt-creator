@@ -15,8 +15,6 @@
 #include <CoreFoundation/CoreFoundation.h>
 #endif
 
-#include <memory>
-
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -204,13 +202,16 @@ static QList<SimulatorInfo> getAvailableSimulators()
     return availableDevices;
 }
 
-QFuture<QList<SimulatorInfo>> SimulatorControl::updateAvailableSimulators(QObject *context)
+void SimulatorControl::updateAvailableSimulators(const std::function<void()> &doneHandler)
 {
-    QFuture<QList<SimulatorInfo>> future = Utils::asyncRun(getAvailableSimulators);
-    Utils::onResultReady(future, context, [](const QList<SimulatorInfo> &devices) {
-        s_availableDevices = devices;
-    });
-    return future;
+    const auto onSetup = [](Async<QList<SimulatorInfo>> &task) {
+        task.setConcurrentCallData(getAvailableSimulators);
+    };
+    const auto onDone = [](const Async<QList<SimulatorInfo>> &task) {
+        if (task.isResultAvailable())
+            s_availableDevices = task.result();
+    };
+    GlobalTaskTree::start({AsyncTask<QList<SimulatorInfo>>(onSetup, onDone)}, {}, doneHandler);
 }
 
 bool SimulatorControl::isSimulatorRunning(const QString &simUdid)

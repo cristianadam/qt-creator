@@ -6,9 +6,9 @@
 #include <projectexplorer/abi.h>
 #include <utils/filepath.h>
 
-#include <QObject>
-#include <QFuture>
 #include <QDebug>
+#include <QObject>
+#include <QPromise>
 
 namespace Ios::Internal {
 
@@ -55,7 +55,7 @@ public:
     using Response = Utils::Result<ResponseData>;
 
     static QList<SimulatorInfo> availableSimulators();
-    static QFuture<QList<SimulatorInfo>> updateAvailableSimulators(QObject *context);
+    static void updateAvailableSimulators(const std::function<void()> &doneHandler = {});
     static bool isSimulatorRunning(const QString &simUdid);
     static QString bundleIdentifier(const Utils::FilePath &bundlePath);
 };
