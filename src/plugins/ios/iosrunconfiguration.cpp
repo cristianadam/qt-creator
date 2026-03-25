@@ -22,7 +22,6 @@
 #include <projectexplorer/target.h>
 
 #include <utils/algorithm.h>
-#include <utils/async.h>
 #include <utils/filepath.h>
 #include <utils/layoutbuilder.h>
 #include <utils/qtcprocess.h>
@@ -324,14 +323,14 @@ void IosDeviceTypeAspect::addToLayoutImpl(Layouting::Layout &parent)
             this, &IosDeviceTypeAspect::setDeviceTypeIndex);
     connect(m_updateButton, &QPushButton::clicked, this, [this] {
         m_updateButton->setEnabled(false);
-        Utils::onFinished(
-            QFuture<void>(SimulatorControl::updateAvailableSimulators(this)),
-            this,
-            [this](QFuture<void>) {
-                m_updateButton->setEnabled(true);
-                m_deviceTypeModel.clear();
-                updateValues();
-            });
+        const auto doneHander = [thisPtr = QPointer(this)] {
+            if (!thisPtr)
+                return;
+            thisPtr->m_updateButton->setEnabled(true);
+            thisPtr->m_deviceTypeModel.clear();
+            thisPtr->updateValues();
+        };
+        SimulatorControl::updateAvailableSimulators(doneHander);
     });
 }
 
