@@ -7,9 +7,16 @@
 #include "toolcalldetailwidget.h"
 
 #include <utils/async.h>
+#include <aggregation/aggregate.h>
+
+#include <coreplugin/find/ifindsupport.h>
+
+#include <utils/algorithm.h>
 #include <utils/markdownbrowser.h>
 #include <utils/stylehelper.h>
 #include <utils/theme/theme.h>
+
+#include <limits>
 
 #include <QAbstractTextDocumentLayout>
 #include <QComboBox>
@@ -764,6 +771,207 @@ private:
 };
 
 // ---------------------------------------------------------------------------
+// MessageViewFindSupport searches across all MarkdownBrowser widgets
+// ---------------------------------------------------------------------------
+
+class MessageViewFindSupport : public Core::IFindSupport
+{
+public:
+    explicit MessageViewFindSupport(AcpMessageView *view)
+        : m_view(view)
+    {}
+
+    bool supportsReplace() const override { return false; }
+
+    Utils::FindFlags supportedFindFlags() const override
+    {
+        return Utils::FindCaseSensitively | Utils::FindWholeWords
+               | Utils::FindRegularExpression;
+    }
+
+    void resetIncrementalSearch() override { m_incrementalStart = {nullptr, {}}; }
+
+    void highlightAll(const QString &txt, Utils::FindFlags findFlags) override
+    {
+        if (txt.isEmpty()) {
+            clearHighlights();
+            return;
+        }
+        const QTextDocument::FindFlags flags = toDocFlags(findFlags);
+        QTextCharFormat format;
+        format.setBackground(
+            Utils::creatorColor(Utils::Theme::OutputPanes_SearchResultBackgroundColor));
+        for (auto *browser : browsers()) {
+            QList<QTextEdit::ExtraSelection> selections;
+            int pos = 0;
+            QTextCursor found = findInBrowser(browser, txt, pos, findFlags, flags);
+            while (!found.isNull()) {
+                selections.append({found, format});
+                pos = found.selectionEnd();
+                if (found.position() == found.anchor())
+                    ++pos; // Avoid infinite loop on zero-length matches
+                found = findInBrowser(browser, txt, pos, findFlags, flags);
+            }
+            browser->setExtraSelections(selections);
+        }
+    }
+
+    void clearHighlights() override
+    {
+        for (auto *browser : browsers())
+            browser->setExtraSelections({});
+    }
+
+    QString currentFindString() const override { return {}; }
+    QString completedFindString() const override { return {}; }
+
+    Result findIncremental(const QString &txt, Utils::FindFlags findFlags) override
+    {
+        if (txt.isEmpty()) {
+            clearHighlights();
+            return NotFound;
+        }
+
+        if (m_incrementalStart.first == nullptr) {
+            if (auto *browser = topmostVisibleBrowser()) {
+                QWidget *viewport = m_view->viewport();
+                const int browserTopInViewport = browser->mapTo(viewport, QPoint(0, 0)).y();
+                const QPoint visibleTopInBrowser(0, qMax(0, -browserTopInViewport));
+                m_incrementalStart = {browser, browser->cursorForPosition(visibleTopInBrowser)};
+            }
+        }
+
+        Result result = findText(txt, findFlags, true);
+        highlightAll(result == Found ? txt : QString(), findFlags);
+        return result;
+    }
+
+    Result findStep(const QString &txt, Utils::FindFlags findFlags) override
+    {
+        if (txt.isEmpty())
+            return NotFound;
+        return findText(txt, findFlags, false);
+    }
+
+private:
+    QList<Utils::MarkdownBrowser *> browsers() const
+    {
+        return m_view->findChildren<Utils::MarkdownBrowser *>();
+    }
+
+    Utils::MarkdownBrowser *topmostVisibleBrowser() const
+    {
+        QWidget *viewport = m_view->viewport();
+        const QRect viewportRect = viewport->rect();
+        Utils::MarkdownBrowser *topmost = nullptr;
+        int topmostY = std::numeric_limits<int>::max();
+        for (auto *browser : browsers()) {
+            const QRect browserRect(browser->mapTo(viewport, QPoint(0, 0)), browser->size());
+            if (browserRect.intersects(viewportRect) && browserRect.top() < topmostY) {
+                topmostY = browserRect.top();
+                topmost = browser;
+            }
+        }
+        return topmost;
+    }
+
+    static QRegularExpression searchRegex(const QString &txt, Utils::FindFlags findFlags)
+    {
+        return QRegularExpression(
+            (findFlags & Utils::FindRegularExpression) ? txt : QRegularExpression::escape(txt),
+            (findFlags & Utils::FindCaseSensitively) ? QRegularExpression::NoPatternOption
+                                                     : QRegularExpression::CaseInsensitiveOption);
+    }
+
+    static QTextDocument::FindFlags toDocFlags(Utils::FindFlags findFlags)
+    {
+        QTextDocument::FindFlags flags;
+        if (findFlags & Utils::FindWholeWords)
+            flags |= QTextDocument::FindWholeWords;
+        return flags;
+    }
+
+    QTextCursor findInBrowser(
+        const Utils::MarkdownBrowser *browser,
+        const QString &txt,
+        int startPos,
+        Utils::FindFlags findFlags,
+        QTextDocument::FindFlags docFlags)
+    {
+        if (startPos < 0)
+            startPos = findFlags & Utils::FindBackward ? browser->document()->characterCount() - 1 : 0;
+        return browser->document()->find(searchRegex(txt, findFlags), startPos, docFlags);
+    }
+
+    Result findText(const QString &txt, Utils::FindFlags findFlags, bool incremental)
+    {
+        const QList<Utils::MarkdownBrowser *> allBrowsers = browsers();
+        const int count = allBrowsers.size();
+        if (count == 0)
+            return NotFound;
+
+        const bool backward = findFlags & Utils::FindBackward;
+        QTextDocument::FindFlags docFlags = toDocFlags(findFlags);
+        if (backward)
+            docFlags |= QTextDocument::FindBackward;
+
+        // Determine starting browser and position
+        int startIdx = -1;
+
+        auto findIn = [&](int browserIndex, int startPos = -1) {
+            Utils::MarkdownBrowser *browser = allBrowsers[browserIndex];
+            const QTextCursor found = findInBrowser(browser, txt, startPos, findFlags, docFlags);
+
+            if (found.isNull())
+                return false;
+
+            m_currentResult = {browser, found};
+            browser->setTextCursor(found);
+            browser->ensureCursorVisible();
+            // Scroll the message view to make this browser visible
+            m_view->ensureWidgetVisible(browser);
+            return true;
+        };
+
+        if (incremental && m_incrementalStart.first != nullptr) {
+            if (startIdx = allBrowsers.indexOf(m_incrementalStart.first); startIdx >= 0) {
+                int startPos = backward ? m_incrementalStart.second.selectionEnd()
+                                        : m_incrementalStart.second.selectionStart();
+                if (findIn(startIdx, startPos))
+                    return Found;
+                startIdx = (backward ? startIdx - 1 + count : startIdx + 1) % count;
+            }
+        } else if (!incremental && m_currentResult.first != nullptr) {
+            if (startIdx = allBrowsers.indexOf(m_currentResult.first); startIdx >= 0) {
+                int startPos = backward ? m_currentResult.second.selectionStart()
+                                        : m_currentResult.second.selectionEnd();
+                if (findIn(startIdx, startPos))
+                    return Found;
+                startIdx = (backward ? startIdx - 1 + count : startIdx + 1) % count;
+            }
+        }
+
+
+        if (startIdx < 0)
+            startIdx = backward ? allBrowsers.size() - 1 : 0;
+
+        // Search from current position, then wrap around
+        for (int i = 0; i < count; ++i) {
+            const int idx = backward ? (startIdx - i + count) % count : (startIdx + i) % count;
+            if (findIn(idx))
+                return Found;
+        }
+
+        m_currentResult = {nullptr, QTextCursor()};
+        return NotFound;
+    }
+
+    AcpMessageView *m_view;
+    QPair<Utils::MarkdownBrowser *, QTextCursor> m_currentResult;
+    QPair<Utils::MarkdownBrowser *, QTextCursor> m_incrementalStart;
+};
+
+// ---------------------------------------------------------------------------
 // AcpMessageView
 // ---------------------------------------------------------------------------
 
@@ -781,6 +989,8 @@ AcpMessageView::AcpMessageView(QWidget *parent)
     m_layout->addStretch();
 
     setWidget(m_container);
+
+    Aggregation::aggregate({this, new MessageViewFindSupport(this)});
 
     // Track whether user has scrolled up to suppress auto-scroll
     connect(verticalScrollBar(), &QScrollBar::valueChanged, this, [this](int value) {

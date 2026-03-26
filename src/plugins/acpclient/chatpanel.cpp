@@ -7,6 +7,7 @@
 #include "acpsettings.h"
 #include "chatinputedit.h"
 
+#include <coreplugin/findplaceholder.h>
 #include <utils/elidinglabel.h>
 #include <utils/progressindicator.h>
 #include <utils/styledbar.h>
@@ -138,7 +139,7 @@ ChatPanel::ChatPanel(QWidget *parent)
     m_messageView = new AcpMessageView;
     m_messageView->setDetailedMode(true);
     layout->addWidget(m_messageView, 1);
-
+    layout->addWidget(new Core::FindToolBarPlaceHolder(m_messageView));
     layout->addWidget(toolbar);
 
     // Elapsed time timer
