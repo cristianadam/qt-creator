@@ -61,7 +61,6 @@ QtcPlugin {
             "peripheralregisterhandler.cpp", "peripheralregisterhandler.h",
             "procinterrupt.cpp", "procinterrupt.h",
             "remotedebuggerconfiguration.cpp", "remotedebuggerconfiguration.h",
-            "remotedebuggerconstants.h",
             "remotedebuggerdebugsupport.cpp", "remotedebuggerdebugsupport.h",
             "registerhandler.cpp", "registerhandler.h",
             "sourceagent.cpp", "sourceagent.h",

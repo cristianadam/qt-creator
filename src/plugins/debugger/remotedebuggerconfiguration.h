@@ -3,10 +3,7 @@
 
 #pragma once
 
-#include <projectexplorer/runconfigurationaspects.h>
-
-namespace RemoteDebugger::Internal {
-
+namespace Debugger::Internal {
 
 void setupRemoteDebuggerConfiguration();
 

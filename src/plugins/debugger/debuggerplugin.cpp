@@ -2292,8 +2292,8 @@ Result<> DebuggerPlugin::initialize(const QStringList &arguments)
 
     dd = new DebuggerPluginPrivate(arguments);
 
-    RemoteDebugger::Internal::setupRemoteDebuggerConfiguration();
-    RemoteDebugger::Internal::setupRemoteDebuggerDebugSupport();
+    setupRemoteDebuggerConfiguration();
+    setupRemoteDebuggerDebugSupport();
 
 #ifdef WITH_TESTS
     addTestCreator(createDebuggerTest);

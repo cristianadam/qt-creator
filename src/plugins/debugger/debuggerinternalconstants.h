@@ -57,6 +57,11 @@ const char NO_DEBUG_HEAP[]                    = "_NO_DEBUG_HEAP";
 
 const char DEBUGSERVER_TOOL_ID[]              = "DebugServer";
 
+const char RunConfigId[]                      = "RemoteDebugger.RunConfig";
+const char GdbServerAddressAspectId[]         = "RemoteDebugger.GdbServerAddress";
+const char GdbServerBreakOnMainAspectId[]     = "RemoteDebugger.GdbServerBreakOnMain";
+const char GdbServerExtendedModeAspectId[]    = "RemoteDebugger.GdbServerExtendedMode";
+
 } // namespace Constants
 
 enum ModelRoles

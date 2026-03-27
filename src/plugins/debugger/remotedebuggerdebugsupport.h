@@ -3,7 +3,7 @@
 
 #pragma once
 
-namespace RemoteDebugger::Internal {
+namespace Debugger::Internal {
 
 void setupRemoteDebuggerDebugSupport();
 

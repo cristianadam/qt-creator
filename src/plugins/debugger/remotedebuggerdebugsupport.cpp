@@ -3,7 +3,7 @@
 
 #include "remotedebuggerdebugsupport.h"
 
-#include "remotedebuggerconstants.h"
+#include "debuggerinternalconstants.h"
 #include "debuggertr.h"
 
 #include <debugger/debuggerruncontrol.h>
@@ -22,7 +22,7 @@ using namespace QtTaskTree;
 using namespace Utils;
 using namespace Debugger;
 
-namespace RemoteDebugger::Internal {
+namespace Debugger::Internal {
 
 class RemoteDebuggerWorkerFactory final : public RunWorkerFactory
 {

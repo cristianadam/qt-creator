@@ -3,7 +3,7 @@
 
 #include "remotedebuggerconfiguration.h"
 
-#include "remotedebuggerconstants.h"
+#include "debuggerinternalconstants.h"
 #include "debuggertr.h"
 
 #include <projectexplorer/runconfiguration.h>
@@ -11,11 +11,10 @@
 
 using namespace ProjectExplorer;
 using namespace Utils;
-using namespace Debugger;
 
-namespace RemoteDebugger::Internal {
+namespace Debugger::Internal {
 
-class RemoteDebuggerConfiguration : public RunConfiguration
+class RemoteDebuggerConfiguration final : public RunConfiguration
 {
 public:
     RemoteDebuggerConfiguration(BuildConfiguration *bc, Id id);
@@ -23,7 +22,7 @@ public:
     QString runConfigDefaultDisplayName();
 
 private:
-    Tasks checkForIssues() const override;
+    Tasks checkForIssues() const final;
 
     ExecutableAspect executable{this};
     ArgumentsAspect arguments{this};
@@ -55,7 +54,6 @@ RemoteDebuggerConfiguration::RemoteDebuggerConfiguration(BuildConfiguration *bc,
     gdbServerChannel.setDisplayStyle(StringAspect::LineEditDisplay);
     gdbServerChannel.setDefaultValue("tcp://127.0.0.1:1234");
     gdbServerChannel.setPlaceHolderText(Tr::tr("For example, %1").arg(":1234, /dev/ttyS0, COM1"));
-
 
     breakOnMain.setId(Constants::GdbServerBreakOnMainAspectId);
     breakOnMain.setSettingsKey("RemoteDebugger.BreakOnMain");
@@ -105,4 +103,4 @@ void setupRemoteDebuggerConfiguration()
     static RemoteDebuggerConfigurationFactory theFactory;
 }
 
-} // RemoteDebugger::Internal
+} // Debugger::Internal
