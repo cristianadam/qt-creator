@@ -7,6 +7,7 @@
 
 #include <QAbstractItemModel>
 #include <QFont>
+#include <QRegularExpression>
 #include <QSet>
 #include <QSortFilterProxyModel>
 
@@ -108,12 +109,21 @@ public:
     void setEnabledFiltersFromSetting(const QVariantList &enabled);
     void setSourceModel(QAbstractItemModel *sourceModel) override;
 
+    void updateFilterProperties(const QString &filterText, Qt::CaseSensitivity caseSensitivity,
+                                bool isRegexp, bool isInverted);
+
 protected:
     bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const override;
 
 private:
     TestResultModel *m_sourceModel = nullptr;
     QSet<ResultType> m_enabled;
+    // filter properties
+    QString m_filterText;
+    QRegularExpression m_filterRegex;
+    Qt::CaseSensitivity m_caseSensitivity = Qt::CaseInsensitive;
+    bool m_regex = false;
+    bool m_inverted = false;
 };
 
 } // namespace Autotest::Internal

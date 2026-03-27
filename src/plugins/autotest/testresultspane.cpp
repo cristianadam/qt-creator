@@ -132,7 +132,7 @@ TestResultsPane::TestResultsPane(QObject *parent) :
 
     setupFilterUi("AutoTest.TextOutput.Filter", "Autotest::Internal::TestResultsPane");
     setupContext("AutoTest.TextOutput", m_textOutput);
-    setFilteringEnabled(false);
+    setFilteringEnabled(true);
     setZoomButtonsEnabled(false);
     connect(this, &IOutputPane::zoomInRequested, m_textOutput, &Core::OutputWindow::zoomIn);
     connect(this, &IOutputPane::zoomOutRequested, m_textOutput, &Core::OutputWindow::zoomOut);
@@ -474,8 +474,18 @@ void TestResultsPane::goToPrev()
 
 void TestResultsPane::updateFilter()
 {
-    m_textOutput->updateFilterProperties(filterText(), filterCaseSensitivity(), filterUsesRegexp(),
-                                         filterIsInverted(), beforeContext(), afterContext());
+    const bool displaysText = m_outputWidget->currentIndex() == 1;
+    if (displaysText) {
+        m_textOutput->updateFilterProperties(filterText(), filterCaseSensitivity(),
+                                             filterUsesRegexp(), filterIsInverted(),
+                                             beforeContext(), afterContext());
+    } else {
+        m_filterModel->updateFilterProperties(filterText(), filterCaseSensitivity(),
+                                              filterUsesRegexp(), filterIsInverted());
+        // filtering results in a collapsed tree even if just a leaf node matches
+        if (!filterText().isEmpty() || (m_expandCollapse && m_expandCollapse->isChecked()))
+            m_treeView->expandAll();
+    }
 }
 
 void TestResultsPane::onItemActivated(const QModelIndex &index)
@@ -729,7 +739,7 @@ void TestResultsPane::toggleOutputStyle()
     m_outputWidget->setCurrentIndex(displayText ? 1 : 0);
     m_outputToggleButton->setIcon(displayText ? Icons::VISUAL_DISPLAY.icon()
                                               : Icons::TEXT_DISPLAY.icon());
-    setFilteringEnabled(displayText);
+    updateFilter();
     setZoomButtonsEnabled(displayText);
 }
 

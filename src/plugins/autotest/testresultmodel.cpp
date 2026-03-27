@@ -575,25 +575,53 @@ void TestResultFilterModel::setSourceModel(QAbstractItemModel *sourceModel)
     QSortFilterProxyModel::setSourceModel(sourceModel);
 }
 
+void TestResultFilterModel::updateFilterProperties(const QString &filterText,
+                                                   Qt::CaseSensitivity caseSensitivity,
+                                                   bool isRegexp, bool isInverted)
+{
+    m_filterText = filterText;
+    m_caseSensitivity = caseSensitivity;
+    m_regex = isRegexp;
+    m_inverted = isInverted;
+    if (m_regex) {
+        const QRegularExpression::PatternOptions options  = m_caseSensitivity == Qt::CaseSensitive
+                ? QRegularExpression::NoPatternOption : QRegularExpression::CaseInsensitiveOption;
+        m_filterRegex = QRegularExpression{m_filterText, options};
+    }
+    invalidateFilter();
+}
+
 bool TestResultFilterModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const
 {
     QModelIndex index = m_sourceModel->index(sourceRow, 0, sourceParent);
     if (!index.isValid())
         return false;
 
-    const ResultType resultType = m_sourceModel->testResult(index).result();
-    if (resultType == ResultType::TestStart) {
-        auto item = m_sourceModel->itemForIndex(index);
+    // filter by type
+    const TestResultItem *item = m_sourceModel->itemForIndex(index);
+    const TestResult result = item->testResult();
+    const ResultType resultType = result.result();
+    auto descendentContainsEnabledType = [this](const TestResultItem *item) {
         return item && item->descendantTypesContainsAnyOf(m_enabled);
-    } else if (resultType == ResultType::TestEnd) {
-        auto item = m_sourceModel->itemForIndex(index);
-        if (!item)
+    };
+    if (resultType == ResultType::TestStart) {
+        if (!descendentContainsEnabledType(item))
             return false;
-        auto parent = item->parent();
-        return parent && parent->descendantTypesContainsAnyOf(m_enabled);
+    } else if (resultType == ResultType::TestEnd) {
+        if (!item || !descendentContainsEnabledType(item->parent()))
+            return false;
+    } else if (!m_enabled.contains(resultType)) {
+        return false;
     }
 
-    return m_enabled.contains(resultType);
+    // if not filtered out already perform additional filtering by the filter line edit
+    if (m_filterText.isEmpty())
+        return true;
+
+    const QString text = result.outputString(true);
+    if (m_regex)
+        return m_filterRegex.isValid() && m_filterRegex.match(text).hasMatch() != m_inverted;
+    return text.contains(m_filterText, m_caseSensitivity) != m_inverted;
 }
 
 } // namespace Internal
