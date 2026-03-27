@@ -62,7 +62,8 @@ CocoProjectWidget::CocoProjectWidget(Project *project, BuildConfiguration *build
     Column{
         m_configerrorLabel,
         m_coverageGroupbox,
-        Row{m_messageLabel, st, &m_revertButton, &m_saveButton}}
+        Row{m_messageLabel, st, &m_revertButton, &m_saveButton},
+        st}
         .attachTo(this);
 
     m_buildSettings = BuildSettings::createdFor(buildConfig);
