@@ -66,12 +66,14 @@ private:
     TestTreeModel *m_model;
     TestTreeSortFilterModel m_sortFilterModel;
     TestTreeView *m_view;
+    FancyLineEdit *m_filterLineEdit;
     QToolButton *m_sort;
     QToolButton *m_filterButton;
     QMenu *m_filterMenu;
     bool m_sortAlphabetically;
     Utils::ProgressIndicator *m_progressIndicator;
     QTimer *m_progressTimer;
+    QTimer *m_filterTimer;
     QFrame *m_missingFrameworksWidget;
     ItemDataCache<bool> m_expandedStateCache;
 };
@@ -80,11 +82,19 @@ TestNavigationWidget::TestNavigationWidget()
 {
     setWindowTitle(Tr::tr("Tests"));
     m_model = TestTreeModel::instance();
+    m_sortFilterModel.setRecursiveFilteringEnabled(true);
+    m_sortFilterModel.toggleFilter(TestTreeSortFilterModel::FilterByText);
 
     m_view = new TestTreeView(this);
     m_view->setModel(&m_sortFilterModel);
     m_view->setSortingEnabled(true);
     m_view->setItemDelegate(new TestTreeItemDelegate(this));
+
+    m_filterLineEdit = new FancyLineEdit(this);
+    m_filterLineEdit->setPlaceholderText(Tr::tr("Filter output..."));
+    m_filterLineEdit->setFiltering(true);
+    m_filterLineEdit->setHistoryCompleter("AutoTest.TestTreeFilter");
+    m_filterLineEdit->setAttribute(Qt::WA_MacShowFocusRect, false);
 
     QPalette pal;
     pal.setColor(QPalette::Window, creatorColor(Theme::InfoBarBackground));
@@ -102,6 +112,7 @@ TestNavigationWidget::TestNavigationWidget()
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
     layout->addWidget(m_missingFrameworksWidget);
+    layout->addWidget(m_filterLineEdit);
     layout->addWidget(ItemViewFind::createSearchableWrapper(m_view));
     setLayout(layout);
 
@@ -114,6 +125,10 @@ TestNavigationWidget::TestNavigationWidget()
     m_progressTimer = new QTimer(this);
     m_progressTimer->setSingleShot(true);
     m_progressTimer->setInterval(1000); // don't display indicator if progress takes less than 1s
+
+    m_filterTimer = new QTimer(this);
+    m_filterTimer->setSingleShot(true);
+    m_filterTimer->setInterval(150); // join filter typing events
 
     connect(m_model->parser(), &TestCodeParser::parsingStarted,
             this, &TestNavigationWidget::onParsingStarted);
@@ -134,6 +149,17 @@ TestNavigationWidget::TestNavigationWidget()
     connect(m_progressTimer, &QTimer::timeout, m_progressIndicator, &ProgressIndicator::show);
     connect(m_view, &TestTreeView::expanded, this, &TestNavigationWidget::updateExpandedStateCache);
     connect(m_view, &TestTreeView::collapsed, this, &TestNavigationWidget::updateExpandedStateCache);
+
+    connect(m_filterLineEdit, &FancyLineEdit::textChanged, this, [this]{ m_filterTimer->start(); });
+    connect(m_filterTimer, &QTimer::timeout, this, [this]{
+        const QString text = m_filterLineEdit->text();
+        m_sortFilterModel.updateFilterString(text);
+        if (!text.isEmpty()) {
+            m_view->blockSignals(true);
+            m_view->expandAll();
+            m_view->blockSignals(false);
+        }
+    });
 }
 
 void TestNavigationWidget::contextMenuEvent(QContextMenuEvent *event)
@@ -328,6 +354,14 @@ void TestNavigationWidget::initializeFilterMenu()
     action->setChecked(false);
     action->setData(TestTreeSortFilterModel::ShowTestData);
     m_filterMenu->addAction(action);
+    m_filterMenu->addSeparator();
+    action = new QAction(m_filterMenu);
+    action->setText(Tr::tr("Show Text Filter"));
+    action->setCheckable(true);
+    action->setChecked(true); // TODO setting?
+    action->setData(TestTreeSortFilterModel::FilterByText);
+    m_filterMenu->addAction(action);
+    connect(action, &QAction::toggled, m_filterLineEdit, &FancyLineEdit::setVisible);
 }
 
 void TestNavigationWidget::onRunThisTestTriggered(TestRunMode runMode)

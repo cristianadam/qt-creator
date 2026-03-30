@@ -114,12 +114,14 @@ public:
         Basic,
         ShowInitAndCleanup = 0x01,
         ShowTestData       = 0x02,
-        ShowAll            = ShowInitAndCleanup | ShowTestData
+        ShowAll            = ShowInitAndCleanup | ShowTestData,
+        FilterByText       = 0x04
     };
 
     TestTreeSortFilterModel();
 
     void setSortMode(ITestTreeItem::SortMode sortMode);
+    void updateFilterString(const QString &filterText);
     void toggleFilter(FilterMode filterMode);
     static FilterMode toFilterMode(int f);
 
@@ -129,6 +131,7 @@ private:
     bool lessThan(const QModelIndex &left, const QModelIndex &right) const final;
     bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const final;
 
+    QString m_filterString;
     Autotest::TestTreeItem::SortMode m_sortMode = Autotest::TestTreeItem::Alphabetically;
     FilterMode m_filterMode = Basic;
 };

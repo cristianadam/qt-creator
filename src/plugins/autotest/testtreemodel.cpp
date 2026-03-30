@@ -949,6 +949,12 @@ void TestTreeSortFilterModel::setSortMode(ITestTreeItem::SortMode sortMode)
     invalidate();
 }
 
+void TestTreeSortFilterModel::updateFilterString(const QString &filter)
+{
+    m_filterString = filter;
+    invalidateFilter();
+}
+
 void TestTreeSortFilterModel::toggleFilter(FilterMode filterMode)
 {
     m_filterMode = toFilterMode(m_filterMode ^ filterMode);
@@ -964,6 +970,8 @@ TestTreeSortFilterModel::FilterMode TestTreeSortFilterModel::toFilterMode(int f)
         return TestTreeSortFilterModel::ShowTestData;
     case TestTreeSortFilterModel::ShowAll:
         return TestTreeSortFilterModel::ShowAll;
+    case TestTreeSortFilterModel::FilterByText:
+        return TestTreeSortFilterModel::FilterByText;
     default:
         return TestTreeSortFilterModel::Basic;
     }
@@ -1008,14 +1016,22 @@ bool TestTreeSortFilterModel::filterAcceptsRow(int sourceRow, const QModelIndex 
 
     const ITestTreeItem *item = static_cast<ITestTreeItem *>(index.internalPointer());
 
+    bool accept = true;
     switch (item->type()) {
     case ITestTreeItem::TestDataFunction:
-        return m_filterMode & ShowTestData;
+        accept = m_filterMode & ShowTestData;
     case ITestTreeItem::TestSpecialFunction:
-        return m_filterMode & ShowInitAndCleanup;
+        accept = m_filterMode & ShowInitAndCleanup;
     default:
-        return true;
+        break;
     }
+
+    if (!accept)
+        return false;
+    if ((m_filterMode & FilterByText) == 0)
+        return accept;
+    const QString display = item->data(0, Qt::DisplayRole).toString();
+    return m_filterString.isEmpty() || display.contains(m_filterString, Qt::CaseInsensitive);
 }
 
 } // namespace Autotest
