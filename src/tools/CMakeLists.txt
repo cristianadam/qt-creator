@@ -46,3 +46,4 @@ endif()
 
 add_subdirectory(process_stub)
 add_subdirectory(qmltraceviewer)
+add_subdirectory(dlwrapper)

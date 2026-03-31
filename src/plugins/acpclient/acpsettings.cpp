@@ -11,6 +11,7 @@
 #include <coreplugin/icore.h>
 
 #include <utils/algorithm.h>
+#include <utils/appinfo.h>
 #include <utils/aspects.h>
 #include <utils/async.h>
 #include <utils/co_result.h>
@@ -299,12 +300,47 @@ public:
             iconUrl.setValue(selectedAgent.icon().value_or(QString()));
 
             if (selectedAgent.distribution().binary()) {
-                qWarning()
-                    << "Registry entry has distribution with binary, but launching from binary is "
-                       "not yet supported. Ignoring binary and falling back to command line.";
-                return;
-            }
-            if (selectedAgent.distribution().npx()) {
+                const FilePath stubPath = (appInfo().libexec / "dlwrapper").withExecutableSuffix();
+
+                launchCommand.setValue(stubPath);
+
+                const QMap<QPair<OsType, OsArch>, std::optional<Acp::Registry::binaryTarget>>
+                    platformToBinary{
+                        {qMakePair(OsTypeMac, OsArchArm64),
+                         selectedAgent.distribution().binary()->darwinminusaarch64()},
+                        {qMakePair(OsTypeMac, OsArchAMD64),
+                         selectedAgent.distribution().binary()->darwinminusx86_64()},
+                        {qMakePair(OsTypeLinux, OsArchArm64),
+                         selectedAgent.distribution().binary()->linuxminusaarch64()},
+                        {qMakePair(OsTypeLinux, OsArchAMD64),
+                         selectedAgent.distribution().binary()->linuxminusx86_64()},
+                        {qMakePair(OsTypeWindows, OsArchArm64),
+                         selectedAgent.distribution().binary()->windowsminusaarch64()},
+                        {qMakePair(OsTypeWindows, OsArchAMD64),
+                         selectedAgent.distribution().binary()->windowsminusx86_64()},
+                    };
+                const auto it = platformToBinary.find(
+                    qMakePair(HostOsInfo::hostOs(), HostOsInfo::hostArchitecture()));
+                if (it == platformToBinary.end() || !it.value().has_value()) {
+                    qWarning() << "No suitable binary found for current platform";
+                    return;
+                }
+                const auto binary = it.value().value();
+
+                QStringList envChanges;
+
+                const QMap<QString, QString> env = binary.env().value_or(QMap<QString, QString>{});
+                for (const auto &[key, value] : env.asKeyValueRange())
+                    envChanges.append("--env " + key + "=" + value);
+
+                const QString cmdLine
+                    = (QStringList{binary.cmd()} + binary.args().value_or(QStringList{})).join(" ");
+
+                launchArguments.setValue(QString("--download %1 %2 %3")
+                                             .arg(binary.archive())
+                                             .arg(envChanges.join(" "))
+                                             .arg(cmdLine));
+            } else if (selectedAgent.distribution().npx()) {
                 launchCommand.setValue(FilePath("npx"));
                 launchArguments.setValue(
                     selectedAgent.distribution().npx()->package() + " "
