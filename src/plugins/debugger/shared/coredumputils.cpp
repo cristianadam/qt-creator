@@ -53,7 +53,7 @@ static LastCore findLastCore()
 LastCore getLastCore()
 {
     auto lastCore = findLastCore();
-    if (!lastCore || !lastCore.coreFile.endsWith(".zst")) {
+    if (!lastCore || lastCore.coreFile.suffixView() != u"zst") {
         qWarning("No core was found");
         return {};
     }

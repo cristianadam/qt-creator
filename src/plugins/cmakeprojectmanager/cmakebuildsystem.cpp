@@ -1367,7 +1367,8 @@ FilePaths CMakeBuildSystem::filesGeneratedFrom(const FilePath &sourceFile) const
                 if (!Project::GeneratedFiles(n))
                     return false;
                 const FilePath &filePath = n->filePath();
-                return filePath.endsWith(generatedFileName) && filePath.contains(autogenSignature);
+                return filePath.fileNameView() == generatedFileName
+                       && filePath.contains(autogenSignature);
             });
         }
 
@@ -2639,11 +2640,10 @@ QList<ExtraCompiler *> CMakeBuildSystem::findExtraCompilers()
     for (const FilePath &file : fileList) {
         qCDebug(cmakeBuildSystemLog)
             << "Finding Extra Compilers: Processing" << file.toUserOutput();
-        ExtraCompilerFactory *factory = Utils::findOrDefault(factories,
-                                                             [&file](const ExtraCompilerFactory *f) {
-                                                                 return file.endsWith(
-                                                                     '.' + f->sourceTag());
-                                                             });
+        ExtraCompilerFactory *factory
+            = Utils::findOrDefault(factories, [&file](const ExtraCompilerFactory *f) {
+                  return file.suffixView() == f->sourceTag();
+              });
         QTC_ASSERT(factory, continue);
 
         FilePaths generated = filesGeneratedFrom(file);

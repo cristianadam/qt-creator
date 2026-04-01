@@ -1040,7 +1040,7 @@ void ModelManagerInterface::parseLoop(QSet<FilePath> &scannedPaths,
 
         Dialect language = guessLanguageOfFile(fileName);
         if (language == Dialect::NoLanguage) {
-            if (fileName.endsWith(QLatin1String(".qrc")))
+            if (fileName.suffixView() == u"qrc")
                 modelManager->updateQrcFile(fileName);
             continue;
         }

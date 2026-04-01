@@ -61,8 +61,8 @@ void NimProjectScanner::startScan()
     using ResultType = TreeScanner::Result;
     const auto onSetup = [this](Async<ResultType> &task) {
         const auto filter = [excludedFiles = excludedFiles()](const MimeType &, const FilePath &fp) {
-            return excludedFiles.contains(fp) || fp.endsWith(".nimproject")
-                   || fp.contains(".nimproject.user") || fp.contains(".nimble.user");
+            return excludedFiles.contains(fp) || fp.suffixView() == u"nimproject"
+                   || fp.completeSuffix() == u"nimproject.user" || fp.completeSuffix() == u"nimble.user";
         };
         task.setConcurrentCallData(&TreeScanner::scanForFiles, m_project->projectDirectory(),
                                    filter, QDir::AllEntries | QDir::NoDotAndDotDot,
@@ -75,7 +75,7 @@ void NimProjectScanner::startScan()
         // Collect scanned nodes
         std::vector<std::unique_ptr<FileNode>> nodes = task.takeResult().allFiles;
         for (auto &node : nodes) {
-            if (!node->path().endsWith(".nim") && !node->path().endsWith(".nimble"))
+            if (node->path().suffixView() != u"nim" && node->path().suffixView() != u"nimble")
                 node->setEnabled(false); // Disable files that do not end in .nim
         }
 

@@ -3094,7 +3094,7 @@ void CppDebuggerEngine::validateRunParameters(DebuggerRunParameters &rp)
                 && rp.cppEngineType() == CdbEngineType
                 && rp.startMode() != AttachToRemoteServer) {
             QTC_ASSERT(!rp.symbolFile().isEmpty(), return);
-            if (!rp.symbolFile().exists() && !rp.symbolFile().endsWith(".exe"))
+            if (!rp.symbolFile().exists() && rp.symbolFile().suffixView() != u"exe")
                 rp.setSymbolFile(rp.symbolFile().stringAppended(".exe"));
             QString errorMessage;
             QStringList rc;

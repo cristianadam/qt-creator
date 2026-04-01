@@ -71,7 +71,7 @@ Definitions definitionsForDocument(const TextEditor::TextDocument *document)
     if (definitions.isEmpty()) {
         // check for *.in filename since those are usually used for
         // cmake configure_file input filenames without the .in extension
-        if (filePath.endsWith(".in"))
+        if (filePath.suffixView() == u".in")
             definitions = definitionsForFileName(FilePath::fromString(filePath.completeBaseName()));
         if (filePath.fileName() == "qtquickcontrols2.conf")
             definitions = definitionsForFileName(filePath.stringAppended(".ini"));

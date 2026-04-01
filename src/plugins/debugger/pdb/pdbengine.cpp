@@ -211,7 +211,7 @@ void PdbEngine::selectThread(const Thread &thread)
 
 bool PdbEngine::acceptsBreakpoint(const BreakpointParameters &bp) const
 {
-    return bp.fileName.endsWith(".py");
+    return bp.fileName.suffixView() == u"py";
 }
 
 void PdbEngine::insertBreakpoint(const Breakpoint &bp)

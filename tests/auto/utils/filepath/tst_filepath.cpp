@@ -177,6 +177,9 @@ private slots:
     void fromUrl();
     void fromUrl_data();
 
+    void suffix();
+    void suffix_data();
+
 private:
     QTemporaryDir tempDir;
     QString rootPath;
@@ -2642,6 +2645,26 @@ void tst_filepath::fromUrl()
     QFETCH(FilePath, expected);
 
     QCOMPARE(FilePath::fromUrl(url), expected);
+}
+
+void tst_filepath::suffix_data()
+{
+    QTest::addColumn<QString>("path");
+    QTest::addColumn<QString>("expectedSuffix");
+
+    QTest::newRow("empty") << "" << "";
+    QTest::newRow("no-suffix") << "file" << "";
+    QTest::newRow("simple-suffix") << "file.txt" << "txt";
+    QTest::newRow("multiple-dots") << "archive.tar.gz" << "gz";
+}
+
+void tst_filepath::suffix()
+{
+    QFETCH(QString, path);
+    QFETCH(QString, expectedSuffix);
+
+    FilePath fp = FilePath::fromUserInput(path);
+    QCOMPARE(fp.suffix(), expectedSuffix);
 }
 
 } // Utils

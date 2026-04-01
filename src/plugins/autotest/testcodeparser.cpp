@@ -53,7 +53,7 @@ TestCodeParser::TestCodeParser()
     connect(this, &TestCodeParser::parsingFinished, this, &TestCodeParser::releaseParserInternals);
     connect(EditorManager::instance(), &EditorManager::documentClosed, this, [this](IDocument *doc){
         QTC_ASSERT(doc, return);
-        if (FilePath filePath = doc->filePath(); filePath.endsWith(".qml"))
+        if (FilePath filePath = doc->filePath(); filePath.suffixView() == u"qml")
             m_qmlEditorRev.remove(filePath);
     });
     m_reparseTimer.setSingleShot(true);
@@ -312,7 +312,7 @@ void TestCodeParser::scanForTests(const QSet<FilePath> &filePaths,
     TestTreeModel::instance()->updateCheckStateCache();
     if (isFullParse) {
         // remove qml files as they will be found automatically by the referencing cpp file
-        files = Utils::filtered(files, [](const FilePath &fn) { return !fn.endsWith(".qml"); });
+        files = Utils::filtered(files, [](const FilePath &fn) { return fn.suffixView() != u"qml"; });
         if (!parsers.isEmpty()) {
             for (ITestParser *parser : parsers)
                 parser->framework()->rootNode()->markForRemovalRecursively(true);

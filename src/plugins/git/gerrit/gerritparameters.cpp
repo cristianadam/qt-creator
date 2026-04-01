@@ -50,7 +50,7 @@ static FilePath detectApp(const QString &defaultExe)
 
     // If app was not found, and git bin is Git/usr/bin (Git for Windows),
     // search also in Git/mingw{32,64}/bin
-    if (!gitBinDir.endsWith("/usr/bin"))
+    if (!gitBinDir.pathView().endsWith(u"/usr/bin"))
         return {};
     path = gitBinDir.parentDir().parentDir();
     const FilePaths entries = path.dirEntries({{"mingw*"}});

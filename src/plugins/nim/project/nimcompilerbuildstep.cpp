@@ -85,7 +85,7 @@ QWidget *NimCompilerBuildStep::createConfigWidget()
         targetComboBox->clear();
         const FilePaths files = project()->files(Project::AllFiles);
         for (const FilePath &file : files) {
-            if (file.endsWith(".nim"))
+            if (file.suffixView() == u"nim")
                 targetComboBox->addItem(file.fileName(), file.toVariant());
         }
 
@@ -199,7 +199,7 @@ void NimCompilerBuildStep::updateTargetNimFile()
 
     const FilePaths files = project()->files(Project::AllFiles);
     for (const FilePath &file : files) {
-        if (file.endsWith(".nim")) {
+        if (file.suffixView() == u"nim") {
             m_targetNimFile = file;
             break;
         }

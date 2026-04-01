@@ -24,13 +24,13 @@ namespace ProjectExplorer::TreeScanner {
 
 bool isWellKnownBinary(const FilePath &fn)
 {
-    return fn.endsWith(QLatin1String(".a")) ||
-           fn.endsWith(QLatin1String(".o")) ||
-           fn.endsWith(QLatin1String(".d")) ||
-           fn.endsWith(QLatin1String(".exe")) ||
-           fn.endsWith(QLatin1String(".dll")) ||
-           fn.endsWith(QLatin1String(".obj")) ||
-           fn.endsWith(QLatin1String(".elf"));
+    return fn.suffixView() == u"a" ||
+           fn.suffixView() == u"o" ||
+           fn.suffixView() == u"d" ||
+           fn.suffixView() == u"exe" ||
+           fn.suffixView() == u"dll" ||
+           fn.suffixView() == u"obj" ||
+           fn.suffixView() == u"elf";
 }
 
 using MimeBinaryCache = SynchronizedValue<QHash<QString, bool>>;

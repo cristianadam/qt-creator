@@ -44,12 +44,12 @@ static bool includesGTest(const CPlusPlus::Document::Ptr &doc,
 {
     static const QString gtestH("gtest/gtest.h");
     for (const CPlusPlus::Document::Include &inc : doc->resolvedIncludes()) {
-        if (inc.resolvedFileName().endsWith(gtestH))
+        if (inc.resolvedFileName().pathView().endsWith(gtestH))
             return true;
     }
 
     for (const FilePath &include : snapshot.allIncludesForDocument(doc->filePath())) {
-        if (include.path().endsWith(gtestH))
+        if (include.pathView().endsWith(gtestH))
             return true;
     }
 

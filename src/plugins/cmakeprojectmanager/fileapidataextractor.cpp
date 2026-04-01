@@ -450,7 +450,7 @@ static RawProjectParts generateRawProjectParts(const QFuture<void> &cancelFuture
                 = {{"C", ".h"}, {"CXX", ".hxx"}, {"OBJC", ".objc.h"}, {"OBJCXX", ".objcxx.hxx"}};
 
             if (languageToExtension.contains(ci.language)) {
-                ending = "/cmake_pch" + languageToExtension[ci.language];
+                ending = "cmake_pch" + languageToExtension[ci.language];
                 qtcPchFile = "qtc_cmake_pch" + languageToExtension[ci.language];
             }
 
@@ -548,10 +548,9 @@ static RawProjectParts generateRawProjectParts(const QFuture<void> &cancelFuture
                 return Utils::mimeTypeForFile(path).name();
             });
 
-            FilePath precompiled_header
-                = findOrDefault(t.sources, [&ending](const SourceInfo &si) {
-                                           return si.path.endsWith(ending);
-                                       }).path;
+            FilePath precompiled_header = findOrDefault(t.sources, [&ending](const SourceInfo &si) {
+                                              return si.path.fileNameView() == ending;
+                                          }).path;
             if (!precompiled_header.isEmpty()) {
                 precompiled_header = sourceDirectory.resolvePath(precompiled_header);
 

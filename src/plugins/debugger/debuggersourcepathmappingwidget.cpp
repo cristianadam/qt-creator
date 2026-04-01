@@ -154,10 +154,10 @@ bool SourcePathMappingModel::isNewPlaceHolder(const Mapping &m) const
     const QChar lessThan('<');
     const QChar greaterThan('>');
     return m.first.isEmpty() || m.first.pathView().startsWith(lessThan)
-           || m.first.endsWith(greaterThan)
+           || m.first.pathView().endsWith(greaterThan)
            || m.first.toUrlishString() == m_newSourcePlaceHolder
            || m.second.isEmpty() || m.second.pathView().startsWith(lessThan)
-           || m.second.endsWith(greaterThan)
+           || m.second.pathView().endsWith(greaterThan)
            || m.second.toUrlishString() == m_newTargetPlaceHolder;
 }
 

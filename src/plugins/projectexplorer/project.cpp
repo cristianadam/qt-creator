@@ -1654,7 +1654,7 @@ QmlCodeModelInfo Project::gatherQmlCodeModelInfo(Kit *kit, BuildConfiguration *b
         const FileNode *fn = n->asFileNode();
         return fn && fn->fileType() == FileType::QML
                && Utils::anyOf(extensions, [fp = fn->filePath()](const QString &ext) {
-                      return fp.endsWith(ext);
+                      return fp.suffixView() == ext;
                   });
     });
 

@@ -68,7 +68,7 @@ namespace Utils {
 
 static FilePath appBundleExpandedPath(const FilePath &path)
 {
-    if (path.osType() == OsTypeMac && path.endsWith(".app")) {
+    if (path.osType() == OsTypeMac && path.suffixView() == u"app") {
         // possibly expand to Foo.app/Contents/MacOS/Foo
         if (path.isDir()) {
             const FilePath exePath = path / "Contents/MacOS" / path.completeBaseName();
@@ -525,10 +525,7 @@ void PathChooser::slotBrowse(bool remote)
     window()->raise();
     window()->activateWindow();
 
-    // Delete trailing slashes unless it is "/" only.
     if (!newPath.isEmpty()) {
-        if (newPath.endsWith("/") && newPath.path().size() > 1)
-            newPath = newPath.withNewPath(newPath.path().chopped(1));
         setFilePath(newPath);
         emit d->m_lineEdit->textEdited(newPath.path());
     }

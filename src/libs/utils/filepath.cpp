@@ -2143,14 +2143,6 @@ bool FilePath::isChildOf(const FilePath &s) const
 }
 
 /*!
-   Returns whether \c path() ends with \a s.
-*/
-bool FilePath::endsWith(const QString &s, Qt::CaseSensitivity cs) const
-{
-    return pathView().endsWith(s, cs);
-}
-
-/*!
    Returns whether \c path() contains \a s.
 */
 bool FilePath::contains(const QString &s, Qt::CaseSensitivity cs) const
@@ -3767,7 +3759,7 @@ PathAndParents::iterator &PathAndParents::iterator::operator++()
     const FilePath newParent = current.parentDir();
     if (newParent == current)
         current = FilePath(); // Reached the root, stop iterating.
-    else if (newParent.endsWith("/.."))
+    else if (newParent.fileNameView() == u"..")
         current = FilePath(); // resolving the parentDir failed, stop iterating.
     else
         current = newParent;

@@ -42,7 +42,7 @@ namespace CMakeProjectManager {
 
 static FilePath cmakeListTxtFromFilePath(const FilePath &filepath)
 {
-    if (filepath.endsWith(Constants::CMAKE_CACHE_TXT)) {
+    if (filepath.fileName() == Constants::CMAKE_CACHE_TXT) {
         QString errorMessage;
         const CMakeConfig config = CMakeConfig::fromFile(filepath, &errorMessage);
         const FilePath cmakeListsTxt = config.filePathValueOf("CMAKE_HOME_DIRECTORY")
@@ -76,7 +76,7 @@ CMakeProject::CMakeProject(const FilePath &fileName)
 
     readPresets();
 
-    if (fileName.endsWith(Constants::CMAKE_CACHE_TXT))
+    if (fileName.fileName() == Constants::CMAKE_CACHE_TXT)
         m_buildDirToImport = fileName.parentDir();
 }
 

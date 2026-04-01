@@ -147,7 +147,7 @@ void showHintAboutBuildBeforeAnalysis()
 FilePath fullPath(const FilePath &executable)
 {
     FilePath candidate = executable;
-    const bool hasSuffix = candidate.endsWith(QTC_HOST_EXE_SUFFIX);
+    const bool hasSuffix = candidate.fileName().endsWith(QTC_HOST_EXE_SUFFIX);
 
     if (candidate.isAbsolutePath()) {
         if (!hasSuffix)

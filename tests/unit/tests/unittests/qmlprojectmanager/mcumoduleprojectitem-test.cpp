@@ -275,7 +275,7 @@ TEST_F(McuModuleProjectItem, get_qmlproject_path_from_incomplete_json_object)
 {
     auto path = fromIncompleteJsonObject->qmlProjectPath();
 
-    ASSERT_FALSE(path.endsWith(".qmlproject"));
+    ASSERT_FALSE(path.suffixView() == u"qmlproject");
 }
 
 TEST_F(McuModuleProjectItem, save_qmlproject_from_incomplete_json_object)

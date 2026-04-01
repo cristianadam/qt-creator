@@ -614,7 +614,7 @@ void PluginDumper::runQmlDump(const ModelManagerInterface::ProjectInfo &info,
 
         Process *processPtr = const_cast<Process *>(&process);
         const QString errorMessages = qmlPluginDumpErrorMessage(processPtr);
-        const bool privatePlugin = importPath.endsWith(QLatin1String("private"));
+        const bool privatePlugin = importPath.fileName() == "private";
         if (!privatePlugin)
             ModelManagerInterface::writeWarning(qmldumpErrorMessage(importPath, errorMessages));
 

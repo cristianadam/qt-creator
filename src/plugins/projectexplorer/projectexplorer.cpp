@@ -3529,7 +3529,7 @@ void ProjectExplorerPluginPrivate::updateRecentProjectMenu()
     //projects (ignore sessions, they used to be in this list)
     for (const RecentProjectsEntry &item : projects) {
         const FilePath &filePath = item.filePath;
-        if (filePath.endsWith(QLatin1String(".qws")))
+        if (filePath.suffixView() == u"qws")
             continue;
 
         const QString displayPath =

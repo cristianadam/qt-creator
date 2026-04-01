@@ -288,7 +288,7 @@ void QmlBuildSystem::generateProjectTree()
         newRoot->addNestedNode(std::make_unique<FileNode>(file, fileType));
     }
 
-    if (!projectFilePath().endsWith(Constants::fakeProjectName))
+    if (projectFilePath().fileName() != Constants::fakeProjectName)
         newRoot->addNestedNode(std::make_unique<FileNode>(projectFilePath(), FileType::Project));
 
     setRootProjectNode(std::move(newRoot));
@@ -367,7 +367,7 @@ FilePath QmlBuildSystem::getStartupQmlFileWithFallback() const
     if (!target())
         return {};
 
-    if (projectFilePath().endsWith(Constants::fakeProjectName))
+    if (projectFilePath().fileName() == Constants::fakeProjectName)
         return {};
 
     const auto getFirstFittingFile = [](const FilePaths &files) -> FilePath {
@@ -653,12 +653,12 @@ bool QmlBuildSystem::renameFiles(Node *context,
             if (notRenamed)
                 *notRenamed << oldFilePath;
         };
-        if (oldFilePath.endsWith(mainFile())) {
+        if (oldFilePath.pathView().endsWith(mainFile())) {
             if (!setMainFileInProjectFile(newFilePath))
                 fail();
             continue;
         }
-        if (oldFilePath.endsWith(m_projectItem->mainUiFile())) {
+        if (oldFilePath.pathView().endsWith(m_projectItem->mainUiFile())) {
             if (!setMainUiFileInProjectFile(newFilePath))
                 fail();
             continue;

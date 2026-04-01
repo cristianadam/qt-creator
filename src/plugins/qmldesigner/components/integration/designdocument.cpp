@@ -563,7 +563,7 @@ void DesignDocument::updateQrcFiles()
     if (currentProject) {
         const auto srcFiles = currentProject->files(ProjectExplorer::Project::SourceFiles);
         for (const Utils::FilePath &fileName : srcFiles) {
-            if (fileName.endsWith(".qrc"))
+            if (fileName.suffixView() == u"qrc")
                 QmlJS::ModelManagerInterface::instance()->updateQrcFile(fileName);
         }
     }

@@ -616,13 +616,13 @@ Toolchains KeilToolchainFactory::autoDetect(const ToolchainDetector &detector) c
                                                            .toString()));
         // Fetch the toolchain executable path.
         FilePath compilerPath;
-        if (productPath.endsWith("ARM"))
+        if (productPath.pathView().endsWith(u"ARM"))
             compilerPath = productPath.pathAppended("ARMCC/bin/armcc.exe");
-        else if (productPath.endsWith("C51"))
+        else if (productPath.pathView().endsWith(u"C51"))
             compilerPath = productPath.pathAppended("BIN/c51.exe");
-        else if (productPath.endsWith("C251"))
+        else if (productPath.pathView().endsWith(u"C251"))
             compilerPath = productPath.pathAppended("BIN/c251.exe");
-        else if (productPath.endsWith("C166"))
+        else if (productPath.pathView().endsWith(u"C166"))
             compilerPath = productPath.pathAppended("BIN/c166.exe");
 
         if (compilerPath.exists()) {

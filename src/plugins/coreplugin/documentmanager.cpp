@@ -814,7 +814,7 @@ FilePath DocumentManager::getSaveFileName(const QString &title, const FilePath &
                     caption.remove(QLatin1Char('*'));
                     const QStringList suffixes = caption.split(QLatin1Char(' '));
                     for (const QString &suffix : suffixes)
-                        if (filePath.endsWith(suffix)) {
+                        if (filePath.suffixView() == suffix) {
                             suffixOk = true;
                             break;
                         }

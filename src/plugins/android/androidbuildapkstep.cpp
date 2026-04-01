@@ -1006,7 +1006,7 @@ QtTaskTree::GroupItem AndroidBuildApkStep::runRecipe()
 
                 FilePath androidLibsDir = androidBuildDir / "libs" / abi;
                 for (const FilePath &target : targets) {
-                    if (target.endsWith(targetSuffix)) {
+                    if (target.fileNameView().endsWith(targetSuffix)) {
                         const FilePath destination = androidLibsDir.pathAppended(target.fileName());
                         if (!copyFileIfNewer(target, destination)) {
                             reportWarningOrError(

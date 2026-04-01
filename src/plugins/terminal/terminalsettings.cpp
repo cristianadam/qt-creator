@@ -420,7 +420,7 @@ static Result<> loadVsCodeOrWindows(const FilePath &path)
 
 static Result<> loadColorScheme(const FilePath &path)
 {
-    if (path.endsWith("Xdefaults"))
+    if (path.fileNameView() == u".Xdefaults")
         return loadXdefaults(path);
     else if (path.suffix() == "itermcolors")
         return loadItermColors(path);

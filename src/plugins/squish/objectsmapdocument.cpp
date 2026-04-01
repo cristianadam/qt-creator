@@ -210,7 +210,7 @@ Result<> ObjectsMapDocument::openImpl(const FilePath &fileName, const FilePath &
 
 bool ObjectsMapDocument::writeFile(const FilePath &fileName) const
 {
-    if (fileName.endsWith("objects.map")) {
+    if (fileName.fileNameView() == u"objects.map") {
         FileSaver saver(fileName);
         return saver.write(contents()) && saver.finalize();
     }

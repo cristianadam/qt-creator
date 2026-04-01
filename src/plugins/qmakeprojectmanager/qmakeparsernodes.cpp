@@ -1046,11 +1046,11 @@ QSet<FilePath> QmakePriFile::filterFilesProVariables(FileType fileType, const QS
     QSet<FilePath> result;
     if (fileType == FileType::QML) {
         for (const FilePath &file : files)
-            if (file.endsWith(QLatin1String(".qml")))
+            if (file.suffixView() == u"qml")
                 result << file;
     } else {
         for (const FilePath &file : files)
-            if (!file.endsWith(QLatin1String(".qml")))
+            if (file.suffixView() != u"qml")
                 result << file;
     }
     return result;
@@ -1063,11 +1063,11 @@ QSet<FilePath> QmakePriFile::filterFilesRecursiveEnumerata(FileType fileType, co
         return result;
     if (fileType == FileType::QML) {
         for (const FilePath &file : files)
-            if (file.endsWith(QLatin1String(".qml")))
+            if (file.suffixView() == u"qml")
                 result << file;
     } else {
         for (const FilePath &file : files)
-            if (!file.endsWith(QLatin1String(".qml")))
+            if (file.suffixView() != u"qml")
                 result << file;
     }
     return result;

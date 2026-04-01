@@ -78,8 +78,8 @@ StackFrame StackFrame::parseFrame(const GdbMi &frameMi, const DebuggerRunParamet
     frame.address = frameMi["address"].toAddress();
     frame.context = frameMi["context"].data();
     if (frameMi["language"].data() == "js"
-            || frame.file.endsWith(".js")
-            || frame.file.endsWith(".qml")) {
+            || frame.file.suffixView() == u"js"
+            || frame.file.suffixView() == u"qml") {
         frame.language = QmlLanguage;
         frame.fixQrcFrame(rp);
     }

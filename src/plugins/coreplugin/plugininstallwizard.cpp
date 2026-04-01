@@ -55,9 +55,9 @@ struct Data
 
 static bool hasLibSuffix(const FilePath &path)
 {
-    return (HostOsInfo::isWindowsHost() && path.endsWith(".dll"))
+    return (HostOsInfo::isWindowsHost() && path.suffixView() == u"dll")
            || (HostOsInfo::isLinuxHost() && path.completeSuffix().startsWith("so"))
-           || (HostOsInfo::isMacHost() && path.endsWith(".dylib"));
+           || (HostOsInfo::isMacHost() && path.suffixView() == u"dylib");
 }
 
 namespace Core {

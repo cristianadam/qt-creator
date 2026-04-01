@@ -131,7 +131,7 @@ static QStringList getExtraCodeModelFlags(const RawProjectPart &rpp, const Proje
     for (const HeaderPath &hp : rpp.headerPaths) {
         if (hp.type == HeaderPathType::BuiltIn)
             continue;
-        if (!hp.path.endsWith("/include"))
+        if (hp.path.fileNameView() != u"include")
             continue;
         const FilePath includeDir = hp.path;
         if (!includeDir.pathAppended("cuda.h").exists())

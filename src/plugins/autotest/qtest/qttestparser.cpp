@@ -47,7 +47,7 @@ static bool includesQtTest(const CPlusPlus::Document::Ptr &doc, const CPlusPlus:
         // bad, as there could be much more different approaches
         if (inc.unresolvedFileName() == QString("QtTest")) {
             for (const QString &prefix : expectedHeaderPrefixes) {
-                if (inc.resolvedFileName().endsWith(QString("%1/QtTest").arg(prefix)))
+                if (inc.resolvedFileName().pathView().endsWith(QString("%1/QtTest").arg(prefix)))
                     return true;
             }
         }
@@ -288,8 +288,8 @@ static QtTestCodeLocationList tagLocationsFor(const QtTestParseResult *func,
 static bool isQObject(const CPlusPlus::Document::Ptr &declaringDoc)
 {
     const FilePath file = declaringDoc->filePath();
-    return (HostOsInfo::isMacHost() && file.endsWith("QtCore.framework/Headers/qobject.h"))
-            || file.endsWith("QtCore/qobject.h")  || file.endsWith("kernel/qobject.h");
+    return (HostOsInfo::isMacHost() && file.pathView().endsWith(u"QtCore.framework/Headers/qobject.h"))
+            || file.pathView().endsWith(u"QtCore/qobject.h")  || file.pathView().endsWith(u"kernel/qobject.h");
 }
 
 bool QtTestParser::processDocument(QPromise<TestParseResultPtr> &promise,

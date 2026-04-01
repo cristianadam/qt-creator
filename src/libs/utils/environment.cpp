@@ -685,7 +685,7 @@ EnvironmentItems EnvironmentChanges::itemsFromFile() const
 
     EnvironmentItems theItems;
 
-    if (m_file.endsWith(".sh")) { // TODO: .bat
+    if (m_file.suffixView() == u"sh") { // TODO: .bat
         const Result<Environment> sourcedEnv = m_file.sourcedDeviceEnvironment();
         if (!sourcedEnv) {
             qWarning() << sourcedEnv.error();

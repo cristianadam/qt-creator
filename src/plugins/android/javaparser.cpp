@@ -51,7 +51,7 @@ OutputLineParser::Result JavaParser::handleLine(const QString &line, OutputForma
     }
     if (file.isRelativePath()) {
         for (int i = 0; i < m_fileList.size(); i++)
-            if (m_fileList[i].endsWith(file.path())) {
+            if (m_fileList[i].pathView().endsWith(file.pathView())) {
                 file = m_fileList[i];
                 break;
             }

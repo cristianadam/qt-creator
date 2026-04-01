@@ -226,9 +226,9 @@ HelpSettings::HelpSettings()
             FilePath filePath = FileUtils::getSaveFilePath(Tr::tr("Save File"),
                                                            "untitled.xbel",
                                                            Tr::tr("Files (*.xbel)"));
-            QLatin1String suffix(".xbel");
-            if (!filePath.endsWith(suffix))
-                filePath = filePath.stringAppended(suffix);
+            QLatin1String suffix("xbel");
+            if (filePath.suffixView() != suffix)
+                filePath = filePath.stringAppended("." + suffix);
 
             FileSaver saver(filePath);
             if (!saver.hasError()) {

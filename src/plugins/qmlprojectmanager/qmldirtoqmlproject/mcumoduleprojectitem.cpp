@@ -25,7 +25,7 @@ constexpr auto QMLPROJECT_PATH = "qmlProjectPath"_L1;
 } // namespace Json
 
 namespace QmlProject {
-constexpr auto QMLPROJECT_EXTENSION = ".qmlproject"_L1;
+constexpr auto QMLPROJECT_EXTENSION = "qmlproject"_L1;
 constexpr auto MCU_MODULE = "MCU.Module"_L1;
 constexpr auto URI = "uri"_L1;
 constexpr auto QML_FILES = "QmlFiles"_L1;
@@ -53,7 +53,7 @@ Q_LOGGING_CATEGORY(log, "QmlProjectManager.McuModuleProjectItem", QtCriticalMsg)
 
 bool isValidQmlProjectPath(const Utils::FilePath &path)
 {
-    return path.endsWith(Constants::QmlProject::QMLPROJECT_EXTENSION)
+    return path.suffixView() == Constants::QmlProject::QMLPROJECT_EXTENSION
            && (path.ensureExistingFile() || path.parentDir().isWritableDir());
 }
 
@@ -174,7 +174,7 @@ std::optional<McuModuleProjectItem> McuModuleProjectItem::fromQmldirModule(const
 
     auto filename = moduleName.replace('.', '_');
     auto qmlprojectPath = qmldirParent.resolvePath(
-        Utils::FilePath::fromString(filename + Constants::QmlProject::QMLPROJECT_EXTENSION));
+        Utils::FilePath::fromString(filename + "." + Constants::QmlProject::QMLPROJECT_EXTENSION));
     result.insert(Constants::Json::QMLPROJECT_PATH, qmlprojectPath.toFSPathString());
 
     return McuModuleProjectItem(result);

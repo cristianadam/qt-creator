@@ -46,7 +46,7 @@ struct CompilerArgs
 
 static bool isHeader(const FilePath &file)
 {
-    return file.endsWith(".h") || file.endsWith(".hpp") || file.endsWith(".hxx");
+    return file.suffixView() == u"h" || file.suffixView() == u"hpp" || file.suffixView() == u"hxx";
 }
 
 static bool isSource(const FilePath &file)
@@ -442,9 +442,9 @@ RawProjectParts GNProjectParser::
         bool hasCFiles = false;
         bool hasCppFiles = false;
         for (const auto &src : sourceFiles) {
-            if (src.endsWith(".c"))
+            if (src.suffixView() == u"c")
                 hasCFiles = true;
-            if (src.endsWith(".cpp") || src.endsWith(".cc") || src.endsWith(".cxx") || src.endsWith(".cppm"))
+            if (src.suffixView() == u"cpp" || src.suffixView() == u"cc" || src.suffixView() == u"cxx" || src.suffixView() == u"cppm")
                 hasCppFiles = true;
         }
 

@@ -98,7 +98,7 @@ QmlProject::QmlProject(const Utils::FilePath &fileName)
     setIsEditModePreferred(true);
     setBuildSystemCreator<QmlBuildSystem>();
 
-    if (fileName.endsWith(Constants::fakeProjectName)) {
+    if (fileName.fileName() == Constants::fakeProjectName) {
         auto uiFile = fileName.toUrlishString();
         uiFile.remove(Constants::fakeProjectName);
         auto parentDir = Utils::FilePath::fromString(uiFile).parentDir();

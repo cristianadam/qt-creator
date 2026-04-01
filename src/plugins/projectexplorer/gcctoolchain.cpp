@@ -947,9 +947,9 @@ QStringList GccToolchain::suggestedMkspecList() const
     if (abi.os() == Abi::DarwinOS) {
         QString v = version();
         // prefer versioned g++ on macOS. This is required to enable building for older macOS versions
-        if (v.startsWith("4.0") && compilerCommand().endsWith("-4.0"))
+        if (v.startsWith("4.0") && compilerCommand().fileNameView().endsWith(u"-4.0"))
             return {"macx-g++40"};
-        if (v.startsWith("4.2") && compilerCommand().endsWith("-4.2"))
+        if (v.startsWith("4.2") && compilerCommand().fileNameView().endsWith(u"-4.2"))
             return {"macx-g++42"};
         return {"macx-g++"};
     }

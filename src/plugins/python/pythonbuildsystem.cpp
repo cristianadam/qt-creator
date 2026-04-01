@@ -144,13 +144,13 @@ bool PythonBuildSystem::supportsAction(Node *context, ProjectAction action, cons
 
 static FileType getFileType(const FilePath &f)
 {
-    if (f.endsWith(".py"))
+    if (f.suffixView() == u"py")
         return FileType::Source;
-    if (f.endsWith(".qrc"))
+    if (f.suffixView() == u"qrc")
         return FileType::Resource;
-    if (f.endsWith(".ui"))
+    if (f.suffixView() == u"ui")
         return FileType::Form;
-    if (f.endsWith(".qml") || f.endsWith(".js"))
+    if (f.suffixView() == u"qml" || f.suffixView() == u"js")
         return FileType::QML;
     return Node::fileTypeForFileName(f);
 }
@@ -248,7 +248,7 @@ bool PythonBuildSystem::save()
             return false;
         }
         newContents = newPyProjectToml->toUtf8();
-    } else if (filePath.endsWith(".pyproject")) {
+    } else if (filePath.suffixView() == u"pyproject") {
         // *.pyproject project file
         Result<QByteArray> contents = filePath.fileContents();
         if (!contents) {
@@ -359,7 +359,7 @@ void PythonBuildSystem::parse()
 
     const FilePath filePath = projectFilePath();
     QString errorMessage;
-    if (filePath.endsWith(".pyproject")) {
+    if (filePath.suffixView() == u"pyproject") {
         // The PySide .pyproject file is JSON based
         files = readLinesJson(filePath, &errorMessage);
         if (!errorMessage.isEmpty()) {
@@ -369,7 +369,7 @@ void PythonBuildSystem::parse()
         qmlImportPaths = readImportPathsJson(filePath, &errorMessage);
         if (!errorMessage.isEmpty())
             addError(errorMessage);
-    } else if (filePath.endsWith(".pyqtc")) {
+    } else if (filePath.suffixView() == u"pyqtc") {
         // To keep compatibility with PyQt we keep the compatibility with plain
         // text files as project files.
         files = readLines(filePath);

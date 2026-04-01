@@ -543,7 +543,7 @@ IAssistProposal *QmlJSCompletionAssistProcessor::performAsync()
     const Document::Ptr document = semanticInfo.document;
 
     bool isQmlFile = false;
-    if (interface()->filePath().endsWith(".qml"))
+    if (interface()->filePath().suffixView() == u"qml")
         isQmlFile = true;
 
     const QList<AST::Node *> path = semanticInfo.rangePath(interface()->position());

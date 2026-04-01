@@ -158,7 +158,7 @@ ExportWidget::ExportWidget(QWidget *parent)
                                      [&selectedFilter] (const Format &fp) {
                                          return fp.fileDialogFilter() == selectedFilter;
                                      });
-            if (!file.endsWith(m_currentFormat.fileExtension))
+            if (file.suffixView() != m_currentFormat.fileExtension.mid(1))
                 file = file.stringAppended(m_currentFormat.fileExtension);
             m_outputClipInfo.file = file;
             lastDir.setValue(file.parentDir());

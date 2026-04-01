@@ -616,7 +616,7 @@ void QmlProfilerTool::showSaveDialog()
                 globalSettings().lastTraceFile(),
                 fileDialogTraceFilesFilter());
     if (!filePath.isEmpty()) {
-        if (!filePath.endsWith(zFile) && !filePath.endsWith(tFile))
+        if (filePath.suffix() != zFile.mid(1) && filePath.suffix() != tFile.mid(1))
             filePath = filePath.stringAppended(zFile);
         saveLastTraceFile(filePath);
         Debugger::enableMainWindow(false);

@@ -224,10 +224,10 @@ GenericBuildSystem::GenericBuildSystem(BuildConfiguration *bc)
     m_cppCodeModelUpdater = ProjectUpdaterFactory::createCppProjectUpdater();
 
     connect(bc->project(), &Project::projectFileIsDirty, this, [this](const FilePath &p) {
-        if (p.endsWith(".files"))
+        if (p.suffixView() == u"files")
             refresh(Files);
-        else if (p.endsWith(".includes") || p.endsWith(".config") || p.endsWith(".cxxflags")
-                 || p.endsWith(".cflags"))
+        else if (p.suffixView() == u"includes" || p.suffixView() == u"config" || p.suffixView() == u"cxxflags"
+                 || p.suffixView() == u"cflags")
             refresh(Configuration);
         else
             refresh(Everything);
@@ -489,7 +489,7 @@ void GenericBuildSystem::refresh(RefreshOptions options)
         std::vector<std::unique_ptr<FileNode>> fileNodes;
         for (const SourceFile &f : std::as_const(m_files)) {
             FileType fileType = FileType::Source; // ### FIXME
-            if (f.first.endsWith(".qrc"))
+            if (f.first.suffixView() == u"qrc")
                 fileType = FileType::Resource;
             fileNodes.emplace_back(std::make_unique<FileNode>(f.first, fileType));
         }

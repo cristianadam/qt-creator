@@ -20,9 +20,9 @@ namespace Utils {
 bool BuildableHelperLibrary::isQtChooser(const FilePath &filePath)
 {
     if (filePath.isSymLink())
-        return filePath.symLinkTarget().endsWith("/qtchooser");
+        return filePath.symLinkTarget().fileNameView() == u"qtchooser";
 
-    return filePath.endsWith("/qtchooser");
+    return filePath.fileNameView() == u"qtchooser";
 }
 
 FilePath BuildableHelperLibrary::qtChooserToQmakePath(const FilePath &qtChooser)

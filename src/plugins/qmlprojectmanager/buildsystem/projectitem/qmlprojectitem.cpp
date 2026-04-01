@@ -34,7 +34,7 @@ QmlProjectItem::QmlProjectItem(const Utils::FilePath &filePath, const bool skipR
 
 bool QmlProjectItem::initProjectObject()
 {
-    if (m_projectFile.endsWith(Constants::fakeProjectName)) {
+    if (m_projectFile.fileName() == Constants::fakeProjectName) {
         auto uiFile = m_projectFile.toUrlishString();
         uiFile.remove(Constants::fakeProjectName);
 

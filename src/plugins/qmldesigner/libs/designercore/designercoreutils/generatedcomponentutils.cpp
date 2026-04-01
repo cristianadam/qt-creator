@@ -44,7 +44,7 @@ bool couldBeProjectModule(const Utils::FilePath &path, const QString &projectNam
                 return lineData == expectedLine;
         }
     }
-    if (path.endsWith(projectName))
+    if (path.fileNameView() == projectName)
         return true;
 
     return false;
@@ -79,7 +79,7 @@ Utils::FilePath GeneratedComponentUtils::composedEffectsBasePath() const
         return {};
 
     QString effectsImportPath;
-    if (basePath.endsWith(oldAssetImportFolder))
+    if (basePath.fileNameView() == oldAssetImportFolder)
         effectsImportPath = oldEffectFolder;
     else
         effectsImportPath = composedEffectType;
@@ -103,7 +103,7 @@ Utils::FilePath GeneratedComponentUtils::componentBundlesBasePath() const
     if (basePath.isEmpty())
         return {};
 
-    if (basePath.endsWith(generatedComponentsFolder))
+    if (basePath.fileNameView() == generatedComponentsFolder)
         return basePath.resolvePath(componentBundlesType);
 
     return basePath.resolvePath(oldComponentBundleType);
@@ -117,7 +117,7 @@ Utils::FilePath GeneratedComponentUtils::import3dBasePath() const
         return {};
 
     Utils::FilePath import3dPath;
-    if (basePath.endsWith(oldAssetImportFolder))
+    if (basePath.fileNameView() == oldAssetImportFolder)
         return basePath.resolvePath(Constants::oldQuick3dAssetsFolder);
 
     return basePath.resolvePath(Constants::quick3DComponentsFolder);
@@ -130,7 +130,7 @@ Utils::FilePath GeneratedComponentUtils::materialBundlePath() const
     if (basePath.isEmpty())
         return {};
 
-    if (basePath.endsWith(Constants::quick3DComponentsFolder))
+    if (basePath.fileNameView() == Constants::quick3DComponentsFolder)
         return basePath.resolvePath(oldComponentBundlesMaterialBundleType);
 
     return basePath.resolvePath(componentBundlesMaterialBundleType);
@@ -143,7 +143,7 @@ Utils::FilePath GeneratedComponentUtils::effectBundlePath() const
     if (basePath.isEmpty())
         return {};
 
-    if (basePath.endsWith(Constants::quick3DComponentsFolder))
+    if (basePath.fileNameView() == Constants::quick3DComponentsFolder)
         return basePath.resolvePath(oldComponentBundlesEffectBundleType);
 
     return basePath.resolvePath(componentBundlesEffectBundleType);
@@ -227,7 +227,7 @@ bool GeneratedComponentUtils::isGeneratedPath(const QString &path) const
 QString GeneratedComponentUtils::generatedComponentTypePrefix() const
 {
     Utils::FilePath basePath = generatedComponentsPath();
-    if (basePath.isEmpty() || basePath.endsWith(oldAssetImportFolder))
+    if (basePath.isEmpty() || basePath.fileNameView() == oldAssetImportFolder)
         return {};
 
     return generatedComponentsFolder;

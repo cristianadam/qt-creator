@@ -872,7 +872,7 @@ void QmlJSEditorWidget::findLinkAt(const QTextCursor &cursor,
                 if (!fileNode)
                     return false;
                 Utils::FilePath filePath = n->filePath();
-                return filePath.endsWith(fileName.toUserOutput());
+                return filePath.pathView().endsWith(fileName.toUserOutput());
             });
         if (nodeForPath) {
             link.targetFilePath = nodeForPath->filePath();

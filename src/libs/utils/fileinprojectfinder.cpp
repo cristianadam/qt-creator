@@ -526,7 +526,9 @@ FilePaths FileInProjectFinder::QrcUrlFinder::find(const QUrl &fileUrl) const
 
 void FileInProjectFinder::QrcUrlFinder::setProjectFiles(const FilePaths &projectFiles)
 {
-    m_allQrcFiles = filtered(projectFiles, [](const FilePath &f) { return f.endsWith(".qrc"); });
+    m_allQrcFiles = filtered(projectFiles, [](const FilePath &f) {
+        return f.suffixView() == u"qrc";
+    });
     m_fileCache.clear();
     m_parserCache.clear();
 }

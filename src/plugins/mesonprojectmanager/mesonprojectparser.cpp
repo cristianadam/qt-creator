@@ -56,18 +56,18 @@ struct TargetFiles
 
 static bool isHeader(const Utils::FilePath &file)
 {
-    return file.endsWith(".h")
-           || file.endsWith(".hpp")
-           || file.endsWith(".hxx");
+    return file.suffixView() == u"h"
+           || file.suffixView() == u"hpp"
+           || file.suffixView() == u"hxx";
 }
 
 static bool isSource(const Utils::FilePath &file)
 {
-    return file.endsWith(".c")
-           || file.endsWith(".cpp")
-           || file.endsWith(".cxx")
-           || file.endsWith(".cc")
-           || file.endsWith(".C");
+    return file.suffixView() == u"c"
+           || file.suffixView() == u"cpp"
+           || file.suffixView() == u"cxx"
+           || file.suffixView() == u"cc"
+           || file.suffixView() == u"C";
 }
 
 static std::unique_ptr<VirtualFolderNode> createVFolder(const FilePath &basePath,
@@ -160,13 +160,13 @@ static void filterFile(const Utils::FilePath &file, const Utils::FilePath &targe
         targetFiles.headers << file;
     else if (isSource(file))
         targetFiles.c_cpp_sources << file;
-    else if (file.endsWith(".py"))
+    else if (file.suffixView() == u"py")
         targetFiles.py_sources << file;
-    else if (file.endsWith(".ui"))
+    else if (file.suffixView() == u"ui")
         targetFiles.ui_files << file;
-    else if (file.endsWith(".qrc"))
+    else if (file.suffixView() == u"qrc")
         targetFiles.qrc_files << file;
-    else if (file.endsWith(".qml"))
+    else if (file.suffixView() == u"qml")
         targetFiles.qml_files << file;
     else if (file.isChildOf(targetPath))
         targetFiles.local_others << file;

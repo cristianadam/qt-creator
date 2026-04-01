@@ -303,7 +303,7 @@ public:
             if (const ProjectExplorer::Project *project
                 = ProjectExplorer::ProjectTree::currentProject()) {
                 const FilePaths astyleRcfiles = project->files(
-                    [](const ProjectExplorer::Node *n) { return n->filePath().endsWith(".astylerc"); });
+                    [](const ProjectExplorer::Node *n) { return n->filePath().suffixView() == u"astylerc"; });
                 for (const FilePath &file : astyleRcfiles) {
                     if (file.isReadableFile())
                         return file;

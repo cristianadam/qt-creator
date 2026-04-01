@@ -72,7 +72,7 @@ static bool runPatchHelper(const QByteArray &input, const FilePath &workingDirec
     QStringList args;
     // Add argument 'apply' when git is used as patch command since git 2.5/Windows
     // no longer ships patch.exe.
-    if (patch.endsWith("git") || patch.endsWith("git.exe"))
+    if (patch.fileNameView() == u"git" || patch.fileNameView() == u"git.exe")
         args << "apply";
 
     if (strip >= 0)

@@ -646,7 +646,7 @@ void DebuggerToolTip::updateTooltip()
 
     // FIXME: The engine should decide on whether it likes
     // the context.
-    const bool sameFrame = context.matchesFrame(frame) || context.fileName.endsWith(".py");
+    const bool sameFrame = context.matchesFrame(frame) || context.fileName.suffixView() == u"py";
 
     if (state == PendingUnshown) {
         setState(PendingShown);

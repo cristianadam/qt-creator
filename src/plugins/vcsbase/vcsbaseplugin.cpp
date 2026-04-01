@@ -249,8 +249,8 @@ void StateListener::slotStateChanged()
     if (!state.currentFile.isEmpty()) {
         if (state.currentFile.exists()) {
             // Quick check: Does it look like a patch?
-            const bool isPatch = state.currentFile.endsWith(".patch")
-                    || state.currentFile.endsWith(".diff");
+            const bool isPatch = state.currentFile.suffixView() == u"patch"
+                    || state.currentFile.suffixView() == u"diff";
             if (isPatch) {
                 // Patch: Figure out a name to display. If it is a temp file, it could be
                 // Codepaster. Use the display name of the editor.

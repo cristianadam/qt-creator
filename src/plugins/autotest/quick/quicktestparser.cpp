@@ -58,7 +58,7 @@ static bool includesQtQuickTest(const CPlusPlus::Document::Ptr &doc,
     for (const CPlusPlus::Document::Include &inc : includes) {
         if (inc.unresolvedFileName() == "QtQuickTest/quicktest.h") {
             for (const QString &prefix : expectedHeaderPrefixes) {
-                if (inc.resolvedFileName().endsWith(
+                if (inc.resolvedFileName().pathView().endsWith(
                             QString("%1/quicktest.h").arg(prefix))) {
                     return true;
                 }
@@ -397,7 +397,7 @@ void QuickTestParser::release()
 bool QuickTestParser::processDocument(QPromise<TestParseResultPtr> &promise,
                                       const FilePath &fileName)
 {
-    if (fileName.endsWith(".qml")) {
+    if (fileName.suffixView() == u"qml") {
         const FilePath &proFile = m_proFilesForQmlFiles.value(fileName);
         if (proFile.isEmpty())
             return false;

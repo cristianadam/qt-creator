@@ -500,8 +500,8 @@ UpgradingSettingsAccessor::validateVersionRange(const RestoreData &data) const
         return result;
     }
 
-    if (result.path != baseFilePath() && !result.path.endsWith(".shared")
-            && version < currentVersion()) {
+    if (result.path != baseFilePath() && result.path.suffixView() != u"shared"
+        && version < currentVersion()) {
         Issue i(Tr::tr("Using Old Settings"),
                 Tr::tr("<p>The versioned backup \"%1\" of the settings "
                        "file is used, because the non-versioned file was "

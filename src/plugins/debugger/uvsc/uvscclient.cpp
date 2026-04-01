@@ -978,9 +978,9 @@ bool UvscClient::setProjectSources(const FilePath &sourceDirectory,
     for (const FilePath &sourceFile : sourceFiles) {
         if (sourceFile.isDir())
             continue;
-        if (sourceFile.endsWith(".cpp") || sourceFile.endsWith(".hpp")
-                || sourceFile.endsWith(".c") || sourceFile.endsWith(".h")
-                || sourceFile.endsWith(".s")) {
+        if (sourceFile.suffixView() == u"cpp" || sourceFile.suffixView() == u"hpp"
+                || sourceFile.suffixView() == u"c" || sourceFile.suffixView() == u"h"
+                || sourceFile.suffixView() == u"s") {
             const FilePath parentDir = sourceFile.parentDir();
             QString groupName = parentDir.relativeChildPath(
                         sourceDirectory).toUrlishString();

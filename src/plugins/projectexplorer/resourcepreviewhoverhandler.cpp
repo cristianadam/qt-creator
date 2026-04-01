@@ -126,7 +126,7 @@ static QString findResourceInProject(const QString &resName)
 
     if (const Project *project = ProjectTree::currentProject()) {
         const FilePaths files = project->files(
-            [](const Node *n) { return n->filePath().endsWith(".qrc"); });
+            [](const Node *n) { return n->filePath().suffixView() == u"qrc"; });
         for (const FilePath &file : files) {
             const QFileInfo fi = file.toFileInfo();
             if (!fi.isReadable())

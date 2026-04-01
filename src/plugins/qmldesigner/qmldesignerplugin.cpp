@@ -350,7 +350,7 @@ static QStringList allUiQmlFilesforCurrentProject(const Utils::FilePath &fileNam
     if (currentProject) {
         const Utils::FilePaths fileNames = currentProject->files(ProjectExplorer::Project::SourceFiles);
         for (const Utils::FilePath &fileName : fileNames) {
-            if (fileName.endsWith(".ui.qml"))
+            if (fileName.suffixView() == u"ui.qml")
                 list.append(fileName.toUrlishString());
         }
     }
@@ -467,7 +467,7 @@ static bool checkUiQMLNagScreen(const Utils::FilePath &fileName)
 {
     const QStringList allUiQmlFiles = allUiQmlFilesforCurrentProject(fileName);
     static bool doOnce = true;
-    if (doOnce && warningsForQmlFilesInsteadOfUiQmlEnabled() && !fileName.endsWith(".ui.qml")
+    if (doOnce && warningsForQmlFilesInsteadOfUiQmlEnabled() && fileName.suffixView() != u"ui.qml"
         && !allUiQmlFiles.isEmpty()) {
         OpenUiQmlFileDialog dialog(Core::ICore::dialogParent());
         dialog.setUiQmlFiles(projectPath(fileName), allUiQmlFiles);

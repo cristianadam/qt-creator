@@ -129,7 +129,7 @@ static ExecutableItem coreFileRecipe(const Storage<DebuggerData> &storage)
 
     const auto onSetup = [storage, fileStorage](Process &process) {
         const FilePath coreFile = storage->runParameters.coreFile();
-        if (!coreFile.endsWith(".gz") && !coreFile.endsWith(".lzo"))
+        if (coreFile.suffixView() != u"gz" && coreFile.suffixView() != u"lzo")
             return SetupResult::StopWithSuccess;
 
         {
@@ -142,7 +142,7 @@ static ExecutableItem coreFileRecipe(const Storage<DebuggerData> &storage)
         const QString msg = Tr::tr("Unpacking core file to %1");
         storage->runControl->postMessage(msg.arg(storage->tempCoreFile.toUserOutput()), LogMessageFormat);
 
-        if (coreFile.endsWith(".lzo")) {
+        if (coreFile.suffixView() == u"lzo") {
             process.setCommand({"lzop", {"-o", storage->tempCoreFile.path(), "-x", coreFile.path()}});
         } else { // ".gz"
             tempCoreFile->setFileName(storage->tempCoreFile.path());
@@ -304,7 +304,7 @@ static ExecutableItem fixupParamsRecipe(const Storage<DebuggerData> &storage)
             if (auto mainScriptAspect = runControl->aspectData<MainScriptAspect>()) {
                 const FilePath mainScript = mainScriptAspect->filePath;
                 const FilePath interpreter = interpreterAspect->filePath;
-                if (!interpreter.isEmpty() && mainScript.endsWith(".py")) {
+                if (!interpreter.isEmpty() && mainScript.suffixView() == u"py") {
                     runParameters.setMainScript(mainScript);
                     runParameters.setInterpreter(interpreter);
                 }

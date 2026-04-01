@@ -56,8 +56,8 @@ void RawProjectPart::setMimeTypeGetter(const GetMimeType &getMimeType)
 
 HeaderPath RawProjectPart::frameworkDetectionHeuristic(const HeaderPath &header)
 {
-    QTC_CHECK(!header.path.endsWith("/"));
-    if (header.path.endsWith(".framework"))
+    QTC_CHECK(!header.path.pathView().endsWith(u'/'));
+    if (header.path.suffixView() == u"framework")
         return HeaderPath::makeFramework(header.path.parentDir());
     return header;
 }

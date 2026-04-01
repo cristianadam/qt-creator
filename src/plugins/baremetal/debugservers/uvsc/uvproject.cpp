@@ -72,7 +72,7 @@ static void extractAllFiles(ProjectExplorer::Project *project, QStringList &incl
                 headers.push_back(file.path);
             else if (file.isSource() && !sources.contains(file.path))
                 sources.push_back(file.path);
-            else if (file.path.endsWith(".s") && !assemblers.contains(file.path))
+            else if (file.path.suffixView() == u"s" && !assemblers.contains(file.path))
                 assemblers.push_back(file.path);
         }
         for (const HeaderPath &include : std::as_const(part->headerPaths)) {

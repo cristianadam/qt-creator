@@ -328,7 +328,7 @@ FilePath buildDirectory(const BuildConfiguration *bc)
         // Return the main build dir and not the android libs dir
         const QString libsDir = QString(Constants::ANDROID_BUILD_DIRECTORY) + "/libs";
         FilePath parentDuildDir = buildDir.parentDir();
-        if (parentDuildDir.endsWith(libsDir) || libsDir.endsWith(libsDir + "/"))
+        if (parentDuildDir.pathView().endsWith(libsDir))
             return parentDuildDir.parentDir().parentDir();
     } else {
         // Qt6 + CMake: Very cautios hack to work around QTCREATORBUG-26479 for simple projects
