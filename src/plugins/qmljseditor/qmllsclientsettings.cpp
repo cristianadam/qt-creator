@@ -58,6 +58,9 @@ constexpr char enableCMakeBuildsKey[] = "enableCMakeBuilds";
 constexpr char ignoreMinimumQmllsVersionKey[] = "ignoreMinimumQmllsVersion";
 constexpr char useQmllsSemanticHighlightingKey[] = "enableQmllsSemanticHighlighting";
 constexpr char executableKey[] = "executable";
+constexpr char extraArgumentsKey[] = "extraArguments";
+constexpr char extraArgumentsSelectionKey[] = "extraArgumentsSelection";
+constexpr char qmllsProjectSettingsKey[] = "QmllsProjectSettings";
 
 QmllsClientSettings *qmllsSettings()
 {
@@ -209,6 +212,11 @@ QmllsClientSettings::QmllsClientSettings()
     executable.setSettingsKey(executableKey);
     executable.setExpectedKind(Utils::PathChooser::File);
     executable.setHistoryCompleter("Qmlls.Executable.History");
+
+    extraArguments.setLabelText(Tr::tr("Extra arguments:"));
+    extraArguments.setSettingsKey(extraArgumentsKey);
+    extraArguments.setHistoryCompleter("Qmlls.ExtraArguments.History");
+    extraArguments.setDisplayStyle(StringAspect::DisplayStyle::LineEditDisplay);
 }
 
 // Estimates the version of qmlls to avoid passing unknown options to qmlls in
@@ -273,6 +281,54 @@ static std::pair<FilePath, QVersionNumber> evaluateQmlls(const QtVersion *qtVers
     QTC_ASSERT(false, return {});
 }
 
+class QmllsClientProjectSettings : public AspectContainer
+{
+public:
+    enum OverrideSelection { UseGlobalSettings, IgnoreGlobalSettings, ExtendGlobalSettings };
+
+    QmllsClientProjectSettings(ProjectExplorer::Project *project);
+
+    void save(ProjectExplorer::Project *project);
+
+    StringAspect extraArguments{this};
+    TypedSelectionAspect<OverrideSelection> extraArgumentsSelection{this};
+};
+
+QmllsClientProjectSettings::QmllsClientProjectSettings(ProjectExplorer::Project *project)
+{
+    extraArguments.setLabelText(Tr::tr("Extra arguments:"));
+    extraArguments.setHistoryCompleter("Qmlls.ExtraArguments.History");
+    extraArguments.setDisplayStyle(StringAspect::DisplayStyle::LineEditDisplay);
+    extraArguments.setSettingsKey(extraArgumentsKey);
+
+    extraArgumentsSelection.setSettingsKey(extraArgumentsSelectionKey);
+    extraArgumentsSelection.addOption(Tr::tr("Use Global Settings"));
+    extraArgumentsSelection.addOption(Tr::tr("Override Global Settings"));
+    extraArgumentsSelection.addOption(Tr::tr("Extend Global Settings"));
+    extraArgumentsSelection.setDisplayStyle(SelectionAspect::DisplayStyle::ComboBox);
+    extraArgumentsSelection.setDefaultValue(UseGlobalSettings);
+
+    auto updateExtraArgumentEnabledState = [this] {
+        extraArguments.setEnabled(extraArgumentsSelection.volatileValue() != UseGlobalSettings);
+    };
+    updateExtraArgumentEnabledState();
+    extraArgumentsSelection.addOnVolatileValueChanged(this, updateExtraArgumentEnabledState);
+
+    Store map = storeFromVariant(project->namedSettings(qmllsProjectSettingsKey));
+    fromMap(map);
+
+    addOnChanged(this, [this, project] { save(project); });
+}
+
+void QmllsClientProjectSettings::save(ProjectExplorer::Project *project)
+{
+    Store map;
+    toMap(map);
+    project->setNamedSettings(qmllsProjectSettingsKey, variantFromStore(map));
+
+    LanguageClientManager::applySettings(qmllsSettings());
+}
+
 static CommandLine commandLineForQmlls(BuildConfiguration *bc)
 {
     const QtVersion *qtVersion = QtKitAspect::qtVersion(bc->kit());
@@ -281,6 +337,21 @@ static CommandLine commandLineForQmlls(BuildConfiguration *bc)
     auto [executable, version] = evaluateQmlls(qtVersion);
 
     CommandLine result{executable, {}};
+
+    const QmllsClientProjectSettings projectSettings(bc->project());
+    const QmllsClientProjectSettings::OverrideSelection projectArgumentSelection
+        = projectSettings.extraArgumentsSelection();
+    if (projectArgumentSelection != QmllsClientProjectSettings::IgnoreGlobalSettings) {
+        result.addArgs(
+            ProcessArgs::splitArgs(
+                bc->macroExpander()->expand(qmllsSettings()->extraArguments()),
+                executable.osType()));
+    }
+    if (projectArgumentSelection != QmllsClientProjectSettings::UseGlobalSettings) {
+        result.addArgs(
+            ProcessArgs::splitArgs(
+                bc->macroExpander()->expand(projectSettings.extraArguments()), executable.osType()));
+    }
 
     const QString buildDirectory = bc->buildDirectory().path();
     if (!buildDirectory.isEmpty())
@@ -311,6 +382,25 @@ static CommandLine commandLineForQmlls(BuildConfiguration *bc)
         result.addArg("--no-cmake-calls");
 
     return result;
+}
+
+void QmllsClientSettings::attachProjectSpecificSettingsToLayout(
+    Project *project, QLayout *parent) const
+{
+    auto projectSettings = new QmllsClientProjectSettings{project};
+
+    using namespace Layouting;
+    // clang-format off
+    Layouting::Group group{
+        title(Tr::tr("QML Language Server Settings")),
+        Column {
+            Row {
+                projectSettings->extraArgumentsSelection, projectSettings->extraArguments,
+            }
+        }
+    };
+    // clang-format on
+    parent->addWidget(group.emerge());
 }
 
 bool QmllsClientSettings::isValidOnBuildConfiguration(BuildConfiguration *bc) const
@@ -669,6 +759,7 @@ public:
                     settings->useQmllsSemanticHighlighting, br,
                     settings->generateQmllsIniFiles, br,
                     settings->enableCMakeBuilds, br,
+                    settings->extraArguments, br,
                 }
             },
             Layouting::Group {

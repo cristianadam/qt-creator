@@ -91,6 +91,8 @@ public:
     virtual BaseSettings *create() const = 0;
     virtual bool isValid() const;
     virtual bool isValidOnBuildConfiguration(ProjectExplorer::BuildConfiguration *bc) const;
+    virtual void attachProjectSpecificSettingsToLayout(ProjectExplorer::Project *, QLayout *) const
+    {}
     Client *createClient() const;
     Client *createClient(ProjectExplorer::BuildConfiguration *bc) const;
     bool isEnabledOnProject(ProjectExplorer::Project *project) const;

@@ -1174,6 +1174,12 @@ public:
             &TextDocument::contentsChanged,
             this,
             [this, editor] { m_settings.setJson(editor->document()->contents()); });
+
+        for (auto settings : LanguageClientSettings::pageSettings()) {
+            if (settings->startBehavior() != BaseSettings::RequiresProject)
+                continue;
+            settings->attachProjectSpecificSettingsToLayout(project, layout);
+        }
     }
 
 private:

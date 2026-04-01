@@ -26,6 +26,8 @@ public:
     void fromMap(const Utils::Store &map) override;
 
     bool isValidOnBuildConfiguration(ProjectExplorer::BuildConfiguration *bc) const override;
+    void attachProjectSpecificSettingsToLayout(
+        ProjectExplorer::Project *project, QLayout *parent) const override;
 
     // helpers:
     bool isEnabledOnProjectFile(const Utils::FilePath &file) const;
@@ -39,6 +41,7 @@ public:
     Utils::BoolAspect generateQmllsIniFiles{this};
     Utils::BoolAspect enableCMakeBuilds{this};
     Utils::FilePathAspect executable{this};
+    Utils::StringAspect extraArguments{this};
 
 protected:
     LanguageClient::BaseClientInterface *createInterface(
