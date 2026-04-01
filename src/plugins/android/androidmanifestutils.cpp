@@ -147,6 +147,9 @@ static void modifyPermissions(QDomDocument &doc, QDomElement &manifest,
         }
     }
 
+    bool hasPermissionsComment = false;
+    bool hasFeaturesComment = false;
+
     QDomNodeList children = manifest.childNodes();
     for (int i = children.size() - 1; i >= 0; --i) {
         QDomNode child = children.at(i);
@@ -157,11 +160,30 @@ static void modifyPermissions(QDomDocument &doc, QDomElement &manifest,
             if (commentText == QLatin1String("%%INSERT_PERMISSIONS")) {
                 if (!instructions.writeDefaultPermissionsComment)
                     manifest.removeChild(child);
+                else
+                    hasPermissionsComment = true;
             } else if (commentText == QLatin1String("%%INSERT_FEATURES")) {
                 if (!instructions.writeDefaultFeaturesComment)
                     manifest.removeChild(child);
+                else
+                    hasFeaturesComment = true;
             }
         }
+    }
+
+    if (instructions.writeDefaultPermissionsComment && !hasPermissionsComment) {
+        QDomComment permComment = doc.createComment(QLatin1String("%%INSERT_PERMISSIONS"));
+        if (!applicationElement.isNull())
+            manifest.insertBefore(permComment, applicationElement);
+        else
+            manifest.appendChild(permComment);
+    }
+    if (instructions.writeDefaultFeaturesComment && !hasFeaturesComment) {
+        QDomComment featComment = doc.createComment(QLatin1String("%%INSERT_FEATURES"));
+        if (!applicationElement.isNull())
+            manifest.insertBefore(featComment, applicationElement);
+        else
+            manifest.appendChild(featComment);
     }
 }
 
