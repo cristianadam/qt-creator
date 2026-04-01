@@ -217,7 +217,7 @@ FilePath FilePath::fromUrl(const QUrl &url)
 {
     FilePath result;
     if (url.isLocalFile())
-        return FilePath::fromString(url.toLocalFile());
+        return FilePath::fromString(doCleanPath(url.toLocalFile()));
     return FilePath::fromParts(url.scheme(), url.host(), url.path());
 }
 

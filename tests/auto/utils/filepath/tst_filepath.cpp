@@ -174,6 +174,9 @@ private slots:
     void toUrl();
     void toUrl_data();
 
+    void fromUrl();
+    void fromUrl_data();
+
 private:
     QTemporaryDir tempDir;
     QString rootPath;
@@ -2614,6 +2617,31 @@ void tst_filepath::toUrl()
     QFETCH(QUrl, expected);
 
     QCOMPARE(path.toUrl(), expected);
+}
+
+void tst_filepath::fromUrl_data()
+{
+    QTest::addColumn<QUrl>("url");
+    QTest::addColumn<FilePath>("expected");
+
+    QTest::newRow("local") << QUrl("file:///a/b/c") << FilePath::fromString("/a/b/c");
+    QTest::newRow("remote") << QUrl("device://host/a/b/c")
+                            << FilePath::fromParts(u"device", u"host", u"/a/b/c");
+
+    QTest::newRow("with-port") << QUrl("ssh://host:1234/a/b/c")
+                               << FilePath::fromParts(u"ssh", u"host:1234", u"/a/b/c");
+
+    QTest::newRow("local-with-scheme") << QUrl("file:///a/b/c") << FilePath::fromString("/a/b/c");
+    QTest::newRow("local-with-scheme-directory-trailing-slash")
+        << QUrl("file:///a/b/c/") << FilePath::fromString("/a/b/c");
+}
+
+void tst_filepath::fromUrl()
+{
+    QFETCH(QUrl, url);
+    QFETCH(FilePath, expected);
+
+    QCOMPARE(FilePath::fromUrl(url), expected);
 }
 
 } // Utils
