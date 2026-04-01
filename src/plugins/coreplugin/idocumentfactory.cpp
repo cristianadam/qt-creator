@@ -15,6 +15,16 @@ static QList<IDocumentFactory *> g_documentFactories;
     \inmodule QtCreator
 
     \brief The IDocumentFactory class is used to open files that are not opened in an editor.
+
+    When users open a document, the document factory responsible for the corresponding MIME type is determined by checking the \l mimeTypes() of the factories.
+
+    Document factories that are \l {isProjectFactory()} {project factories} are not
+    considered if the user specifically requests to open a file.
+
+    \sa setMimeTypes()
+    \sa addMimeType()
+    \sa setIsProjectFactory()
+    \sa setOpener()
 */
 
 /*!
@@ -30,6 +40,9 @@ static QList<IDocumentFactory *> g_documentFactories;
 /*!
     \fn IDocumentFactory::isProjectFactory() const
     \brief Returns whether this factory is used to open projects.
+
+    Defaults to \c false.
+
     \sa setIsProjectFactory()
 */
 
@@ -58,16 +71,33 @@ static QList<IDocumentFactory *> g_documentFactories;
     \fn IDocumentFactory::allDocumentFactories()
 */
 
+/*!
+    \fn IDocumentFactory::mimeTypes() const
+    \brief Returns the list of mime types that this factory can open.
+
+    \sa setMimeTypes()
+    \sa addMimeType()
+*/
+
+/*!
+    Creates a new document factory.
+*/
 IDocumentFactory::IDocumentFactory()
 {
     g_documentFactories.append(this);
 }
 
+/*!
+    \internal
+*/
 IDocumentFactory::~IDocumentFactory()
 {
     g_documentFactories.removeOne(this);
 }
 
+/*!
+    \internal
+*/
 const QList<IDocumentFactory *> IDocumentFactory::allDocumentFactories()
 {
     return g_documentFactories;
