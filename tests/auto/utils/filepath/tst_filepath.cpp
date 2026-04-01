@@ -220,7 +220,6 @@ void tst_filepath::initTestCase()
         return true;
     };
 
-    hooky.osType = [](const FilePath &) { return OsTypeLinux; };
     hooky.fileAccess = [](const FilePath &path) -> Utils::Result<DeviceFileAccessPtr> {
         static std::shared_ptr<TestDFA> dfaCase = std::make_shared<TestDFA>(Qt::CaseSensitive);
         static std::shared_ptr<TestDFA> dfaNoCase = std::make_shared<TestDFA>(Qt::CaseInsensitive);
