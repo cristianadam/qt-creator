@@ -57,20 +57,32 @@ static void extractPlaceholderTags(const QDomElement &manifest, AndroidManifestP
     }
 }
 
+static QMap<QString, QString> getExtraAttributes(const QDomElement &elem)
+{
+    QMap<QString, QString> attributes;
+    const QDomNamedNodeMap attrMap = elem.attributes();
+    for (int i = 0; i < attrMap.count(); ++i) {
+        const QDomAttr attr = attrMap.item(i).toAttr();
+        if (attr.name() != keyAndroidName)
+            attributes.insert(attr.name(), attr.value());
+    }
+    return attributes;
+}
+
 static void extractPermissions(const QDomElement &manifest, AndroidManifestParser::ManifestData &data)
 {
     QDomElement permissionElem = manifest.firstChildElement(keyUsesPermission);
     while (!permissionElem.isNull()) {
         const QString name = permissionElem.attribute(keyAndroidName);
         if (!name.isEmpty()) {
-            QMap<QString, QString> attributes;
-            const QDomNamedNodeMap attrMap = permissionElem.attributes();
-            for (int i = 0; i < attrMap.count(); ++i) {
-                const QDomAttr attr = attrMap.item(i).toAttr();
-                if (attr.name() != keyAndroidName)
-                    attributes.insert(attr.name(), attr.value());
+            const QMap<QString, QString> attributes = getExtraAttributes(permissionElem);
+            // if the same permission appears twice, preference the one with attributes
+            auto existingIt = data.permissions.find(name);
+            if (existingIt == data.permissions.end()) {
+                data.permissions.insert(name, attributes);
+            } else if (existingIt.value().isEmpty() && !attributes.isEmpty()) {
+                existingIt.value() = attributes;
             }
-            data.permissions.insert(name, attributes);
         }
         permissionElem = permissionElem.nextSiblingElement(keyUsesPermission);
     }
@@ -122,11 +134,17 @@ static void modifyApplicationAttributes(QDomElement &manifest,
     }
 }
 
+static bool hasExtraAttributes(const QDomElement &elem)
+{
+    return !getExtraAttributes(elem).isEmpty();
+}
+
 static void modifyPermissions(QDomDocument &doc, QDomElement &manifest,
                               const AndroidManifestParser::ModifyParams &instructions)
 {
     QSet<QString> permissionsToAdd = instructions.permissionsToKeep;
     QDomElement lastPermissionElem;
+    QMap<QString, QDomElement> keptElements;
 
     QDomElement permissionElem = manifest.firstChildElement(keyUsesPermission);
     while (!permissionElem.isNull()) {
@@ -135,7 +153,19 @@ static void modifyPermissions(QDomDocument &doc, QDomElement &manifest,
 
         if (instructions.permissionsToKeep.contains(permissionName)) {
             permissionsToAdd.remove(permissionName);
-            lastPermissionElem = permissionElem;
+
+            auto keptIt = keptElements.find(permissionName);
+            if (keptIt == keptElements.end()) {
+                keptElements.insert(permissionName, permissionElem);
+                lastPermissionElem = permissionElem;
+            } else if (hasExtraAttributes(permissionElem) && !hasExtraAttributes(keptIt.value())) {
+                // Prefer the duplicate that has attributes
+                manifest.removeChild(keptIt.value());
+                keptIt.value() = permissionElem;
+                lastPermissionElem = permissionElem;
+            } else {
+                manifest.removeChild(permissionElem);
+            }
         } else {
             manifest.removeChild(permissionElem);
         }
