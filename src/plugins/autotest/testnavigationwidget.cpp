@@ -10,6 +10,7 @@
 #include "testcodeparser.h"
 #include "testframeworkmanager.h"
 #include "testrunner.h"
+#include "testsettings.h"
 #include "testtreeitem.h"
 #include "testtreeitemdelegate.h"
 #include "testtreemodel.h"
@@ -95,6 +96,8 @@ TestNavigationWidget::TestNavigationWidget()
     m_filterLineEdit->setFiltering(true);
     m_filterLineEdit->setHistoryCompleter("AutoTest.TestTreeFilter");
     m_filterLineEdit->setAttribute(Qt::WA_MacShowFocusRect, false);
+    if (!testSettings().showTreeFilterTextInput())
+        m_filterLineEdit->setVisible(false);
 
     QPalette pal;
     pal.setColor(QPalette::Window, creatorColor(Theme::InfoBarBackground));
@@ -358,10 +361,14 @@ void TestNavigationWidget::initializeFilterMenu()
     action = new QAction(m_filterMenu);
     action->setText(Tr::tr("Show Text Filter"));
     action->setCheckable(true);
-    action->setChecked(true); // TODO setting?
+    action->setChecked(testSettings().showTreeFilterTextInput());
     action->setData(TestTreeSortFilterModel::FilterByText);
     m_filterMenu->addAction(action);
-    connect(action, &QAction::toggled, m_filterLineEdit, &FancyLineEdit::setVisible);
+    connect(action, &QAction::toggled, m_filterLineEdit, [this](bool checked) {
+        m_filterLineEdit->setVisible(checked);
+        testSettings().showTreeFilterTextInput.setValue(checked);
+        testSettings().writeSettings();
+    });
 }
 
 void TestNavigationWidget::onRunThisTestTriggered(TestRunMode runMode)

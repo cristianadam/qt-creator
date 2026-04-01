@@ -69,6 +69,7 @@ public:
     Utils::BoolAspect popupOnStart{this};
     Utils::BoolAspect popupOnFinish{this};
     Utils::BoolAspect popupOnFail{this};
+    Utils::BoolAspect showTreeFilterTextInput{this};
     Utils::SelectionAspect runAfterBuild{this};
     FrameworksAspect frameworks{this};
 

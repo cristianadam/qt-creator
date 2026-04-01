@@ -358,6 +358,10 @@ TestSettings::TestSettings()
     popupOnFail.setToolTip(Tr::tr("Displays test results only if the test run contains "
                                   "failed, fatal or unexpectedly passed tests."));
 
+    // UI not in settings page, but inside the filter menu of the navigation widget
+    showTreeFilterTextInput.setSettingsKey("ShowTreeFilter");
+    showTreeFilterTextInput.setDefaultValue(true);
+
     runAfterBuild.setSettingsKey("RunAfterBuild");
     runAfterBuild.setDisplayStyle(Utils::SelectionAspect::DisplayStyle::ComboBox);
     runAfterBuild.setToolTip(Tr::tr("Runs chosen tests automatically if a build succeeded."));
