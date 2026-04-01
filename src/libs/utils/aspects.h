@@ -245,7 +245,7 @@ protected:
     void addMacroExpansion(QWidget *w);
 
     QLabel *createLabel();
-    void addLabeledItem(Layouting::Layout &parent, QWidget *widget);
+    QLabel *addLabeledItem(Layouting::Layout &parent, QWidget *widget);
     void addLabeledItems(Layouting::Layout &parent, const QList<QWidget *> &widgets);
 
     void setDataCreatorHelper(const DataCreator &creator) const;
@@ -690,7 +690,7 @@ private:
 };
 
 enum class UncheckedSemantics { Disabled, ReadOnly };
-enum class CheckBoxPlacement { Top, Right };
+enum class CheckBoxPlacement { Top, Right, Left };
 
 class QTCREATOR_UTILS_EXPORT StringAspect : public TypedAspect<QString>
 {

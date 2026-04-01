@@ -1089,12 +1089,13 @@ static QString defaultDisplay()
 X11ForwardingAspect::X11ForwardingAspect(AspectContainer *container)
     : StringAspect(container)
 {
-    setLabelText(Tr::tr("X11 Forwarding:"));
     setDisplayStyle(LineEditDisplay);
     setId("X11ForwardingAspect");
     setSettingsKey("RunConfiguration.X11Forwarding");
-    makeCheckable(CheckBoxPlacement::Right, Tr::tr("Enable"), "RunConfiguration.UseX11Forwarding");
+    makeCheckable(
+        CheckBoxPlacement::Left, Tr::tr("Use X11 forwarding:"), "RunConfiguration.UseX11Forwarding");
     setValue(defaultDisplay());
+    setLabelText("DISPLAY=");
 
     addDataExtractor(this, &X11ForwardingAspect::display, &Data::display);
 }

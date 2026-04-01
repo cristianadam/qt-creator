@@ -297,15 +297,16 @@ QLabel *BaseAspect::createLabel()
     return label;
 }
 
-void BaseAspect::addLabeledItem(Layout &parent, QWidget *widget)
+QLabel *BaseAspect::addLabeledItem(Layout &parent, QWidget *widget)
 {
     if (QLabel *l = createLabel()) {
         l->setBuddy(widget);
         parent.addItem(l);
         parent.addItem(Span(std::max(d->m_spanX - 1, 1), widget));
-    } else {
-        parent.addItem(widget);
+        return l;
     }
+    parent.addItem(widget);
+    return {};
 }
 
 void BaseAspect::addLabeledItems(Layouting::Layout &parent, const QList<QWidget *> &widgets)
@@ -869,6 +870,15 @@ public:
     QPointer<QListWidget> m_listView;
 };
 
+template<class Widget>
+void setReadOnly(Widget *w, bool readOnly)
+{
+    w->setReadOnly(readOnly);
+}
+template<>
+void setReadOnly<QLabel>(QLabel *, bool)
+{}
+
 class CheckableAspectImplementation
 {
 public:
@@ -897,7 +907,7 @@ public:
         if (m_uncheckedSemantics == UncheckedSemantics::Disabled)
             w->setEnabled(enabled && aspect->isEnabled());
         else
-            w->setReadOnly(!enabled || aspect->isReadOnly());
+            setReadOnly(w, !enabled || aspect->isReadOnly());
     }
 
     void setUncheckedSemantics(UncheckedSemantics semantics)
@@ -948,9 +958,13 @@ public:
 
     void addToLayoutFirst(Layout &parent)
     {
-        if (m_checked && m_checkBoxPlacement == CheckBoxPlacement::Top) {
-            m_checked->addToLayoutImpl(parent);
-            parent.flush();
+        if (m_checked) {
+            if (m_checkBoxPlacement == CheckBoxPlacement::Top) {
+                m_checked->addToLayoutImpl(parent);
+                parent.flush();
+            } else if (m_checkBoxPlacement == CheckBoxPlacement::Left) {
+                m_checked->addToLayoutImpl(parent);
+            }
         }
     }
 
@@ -1283,18 +1297,29 @@ void StringAspect::addToLayoutImpl(Layout &parent)
         lineEditDisplay->setReadOnly(isReadOnly());
         lineEditDisplay->setValidatePlaceHolder(d->m_validatePlaceHolder);
 
+        QLabel *label = addLabeledItem(parent, lineEditDisplay);
+
         d->m_checkerImpl.updateWidgetFromCheckStatus(this, lineEditDisplay);
+        if (label)
+            d->m_checkerImpl.updateWidgetFromCheckStatus(this, label);
 
         if (d->m_checkerImpl.m_checked.get()) {
-            connect(d->m_checkerImpl.m_checked.get(),
+            connect(
+                d->m_checkerImpl.m_checked.get(),
+                &BoolAspect::volatileValueChanged,
+                lineEditDisplay,
+                [this, lineEditDisplay] {
+                    d->m_checkerImpl.updateWidgetFromCheckStatus(this, lineEditDisplay);
+                });
+            if (label) {
+                connect(
+                    d->m_checkerImpl.m_checked.get(),
                     &BoolAspect::volatileValueChanged,
-                    lineEditDisplay,
-                    [this, lineEditDisplay] {
-                        d->m_checkerImpl.updateWidgetFromCheckStatus(this, lineEditDisplay);
-                    });
+                    label,
+                    [this, label] { d->m_checkerImpl.updateWidgetFromCheckStatus(this, label); });
+            }
         }
 
-        addLabeledItem(parent, lineEditDisplay);
         if (d->m_useResetButton) {
             auto resetButton = createSubWidget<QPushButton>(Tr::tr("Reset"));
             resetButton->setEnabled(lineEditDisplay->text() != defaultValue());
@@ -1359,7 +1384,10 @@ void StringAspect::addToLayoutImpl(Layout &parent)
         textEditDisplay->setTextInteractionFlags(Qt::TextEditorInteraction);
         textEditDisplay->setText(displayedString);
         textEditDisplay->setReadOnly(isReadOnly());
+        QLabel *label = addLabeledItem(parent, textEditDisplay);
         d->m_checkerImpl.updateWidgetFromCheckStatus(this, textEditDisplay);
+        if (label)
+            d->m_checkerImpl.updateWidgetFromCheckStatus(this, label);
 
         if (d->m_checkerImpl.m_checked) {
             connect(d->m_checkerImpl.m_checked.get(),
@@ -1368,9 +1396,15 @@ void StringAspect::addToLayoutImpl(Layout &parent)
                     [this, textEditDisplay] {
                         d->m_checkerImpl.updateWidgetFromCheckStatus(this, textEditDisplay);
                     });
+            if (label) {
+                connect(
+                    d->m_checkerImpl.m_checked.get(),
+                    &BoolAspect::volatileValueChanged,
+                    label,
+                    [this, label] { d->m_checkerImpl.updateWidgetFromCheckStatus(this, label); });
+            }
         }
 
-        addLabeledItem(parent, textEditDisplay);
         volatileValueToGui();
         connect(this,
                 &StringAspect::acceptRichTextChanged,
@@ -4459,7 +4493,7 @@ void StringSelectionAspect::addToLayoutImpl(Layouting::Layout &parent)
     if (m_selectionModel->currentIndex().isValid())
         comboBox->setCurrentIndex(m_selectionModel->currentIndex().row());
 
-    return addLabeledItem(parent, comboBox);
+    addLabeledItem(parent, comboBox);
 }
 
 
