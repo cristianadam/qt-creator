@@ -594,11 +594,15 @@ void ToolChainOptionsWidget::redetectToolchains()
             devices << DeviceManager::deviceAt(i);
     }
     for (const IDeviceConstPtr &device : std::as_const(devices)) {
+        const DetectionSource detectionSource = device->id() == Constants::DESKTOP_DEVICE_ID
+                                                    ? DetectionSource::FromSystem
+                                                    : DetectionSource::Manual;
         for (ToolchainFactory *f : ToolchainFactory::allToolchainFactories()) {
             const ToolchainDetector detector(knownTcs, device, device->toolSearchPaths());
             for (Toolchain * const tc : f->autoDetect(detector)) {
                 if (knownTcs.contains(tc))
                     continue;
+                tc->setDetectionSource(detectionSource);
                 knownTcs << tc;
                 const auto matchItem = [&](const ItemToCheck &item) {
                     return Utils::contains(item.first->bundle->toolchains(), [&](Toolchain *btc) {

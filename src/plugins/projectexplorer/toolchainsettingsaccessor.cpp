@@ -73,6 +73,10 @@ static Toolchains autoDetectToolchains(const ToolchainDetector &detector)
         qCDebug(Log) << f->displayName() << "auto detection took: " << et.elapsed() << "ms";
     }
 
+    // We only use this for Desktop, so "FromSystem" detection is fine
+    for (Toolchain *tc : result)
+        tc->setDetectionSource(DetectionSource::FromSystem);
+
     // Remove invalid toolchains that might have sneaked in.
     return Utils::filtered(result, [](const Toolchain *tc) { return tc->isValid(); });
 }
