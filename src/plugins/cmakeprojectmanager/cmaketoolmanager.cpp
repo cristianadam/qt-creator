@@ -325,7 +325,10 @@ std::vector<std::unique_ptr<CMakeTool>> CMakeToolManager::autoDetectCMakeTools(
 
     std::vector<std::unique_ptr<CMakeTool>> found;
     for (const FilePath &command : std::as_const(suspects)) {
-        auto item = std::make_unique<CMakeTool>(DetectionSource::FromSystem, CMakeTool::createId());
+        // Consider remote tools as manual, like we want for the "Auto-detect" button in the settings
+        const DetectionSource detectionSource = command.isLocal() ? DetectionSource::FromSystem
+                                                                  : DetectionSource::Manual;
+        auto item = std::make_unique<CMakeTool>(detectionSource, CMakeTool::createId());
         item->setFilePath(command);
         item->setDisplayName(Tr::tr("System CMake at %1").arg(command.toUserOutput()));
 
