@@ -222,6 +222,8 @@ void tst_filepath::initTestCase()
     hooky.isSameDevice = [](const FilePath &lhs, const FilePath &rhs) {
         if (lhs.scheme() != rhs.scheme())
             return false;
+        if (lhs.host() != rhs.host())
+            return false;
         return true;
     };
 
@@ -435,6 +437,20 @@ void tst_filepath::isChildOf_data()
                               << "/tmp/dir" << true;
     QTest::newRow("relative/path") << "relative"
                                    << "relative/path" << true;
+    QTest::newRow("relative-vs-absolute") << "relative"
+                                          << "/relative/path" << false;
+    QTest::newRow("absolute-vs-relative") << "/relative"
+                                          << "relative/path" << false;
+    QTest::newRow("relative-complex-path") << "relative/path/complex"
+                                           << "relative/path/complex/a/B/c" << true;
+    QTest::newRow("relative-with-dots") << "relative"
+                                        << "x/../relative/path" << true;
+    QTest::newRow("absolute-relative-with-dots") << "/relative"
+                                                 << "x/../relative/path" << false;
+    QTest::newRow("nocase") << "nocase://x/nocase/a"
+                            << "nocase://x/nocase/A/b" << true;
+    QTest::newRow("case") << "case://x/case/a"
+                          << "case://x/case/A/b" << false;
     QTest::newRow("/tmpdir") << "/tmp"
                              << "/tmpdir" << false;
     QTest::newRow("same-0") << "/tmp/dir"
@@ -462,6 +478,36 @@ void tst_filepath::isChildOf_data()
 
     QTest::newRow("qrc") << ":/foo/bar"
                          << ":/foo/bar/blah" << true;
+    QTest::newRow("parent-trailing-slash") << "/tmp/dir/"
+                                           << "/tmp/dir/child" << true;
+    QTest::newRow("both-empty") << ""
+                                << "" << false;
+    QTest::newRow("empty-child") << "/tmp"
+                                 << "" << false;
+    QTest::newRow("dots-resolve-to-parent") << "/a/b"
+                                            << "/a/b/c/.." << false;
+    QTest::newRow("child-with-intermediate-dots") << "/a/b"
+                                                  << "/a/b/c/../d" << true;
+    QTest::newRow("deeply-nested") << "/a/b/c/d/e"
+                                   << "/a/b/c/d/e/f/g/h" << true;
+    QTest::newRow("different-schemes") << "case://x/foo"
+                                       << "nocase://x/foo/bar" << false;
+    QTest::newRow("different-hosts") << "case://x/foo"
+                                     << "case://y/foo/bar" << false;
+    QTest::newRow("double-slash-child") << "/tmp"
+                                        << "/tmp//dir" << true;
+    QTest::newRow("single-relative-dir") << "a"
+                                         << "a/b" << true;
+    QTest::newRow("nocase-trailing-slash") << "nocase://x/A/"
+                                           << "nocase://x/a/B" << true;
+    QTest::newRow("same-with-trailing-slash-only") << "/tmp/dir"
+                                                   << "/tmp/dir/" << false;
+    QTest::newRow("different-drives") << "C:/"
+                                      << "D:/data" << false;
+    QTest::newRow("qrc-not-child") << ":/foo/bar"
+                                   << ":/foo/barbaz" << false;
+    QTest::newRow("root-of-root") << "/"
+                                  << "/" << false;
 }
 
 void tst_filepath::isChildOf()
@@ -2638,7 +2684,7 @@ void tst_filepath::fromUrl_data()
         << QUrl("file:///a/b/c/") << FilePath::fromString("/a/b/c");
 
     QTest::newRow("expl") << QUrl("ssh://bolle:bommel@host:1234/a/b/c")
-                          << FilePath::fromParts(u"ssh", u":1234", u"/a/b/c");
+                          << FilePath::fromParts(u"ssh", u"bolle:bommel@host:1234", u"/a/b/c");
 }
 
 void tst_filepath::fromUrl()
