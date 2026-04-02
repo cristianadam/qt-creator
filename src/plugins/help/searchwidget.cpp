@@ -9,6 +9,7 @@
 
 #include <coreplugin/coreconstants.h>
 #include <coreplugin/icore.h>
+#include <coreplugin/progressmanager/futureprogress.h>
 #include <coreplugin/progressmanager/progressmanager.h>
 
 #include <utils/progressindicator.h>
@@ -31,6 +32,8 @@
 #include <QStringList>
 #include <QTextBrowser>
 #include <QToolButton>
+
+using namespace Core;
 
 namespace Help::Internal {
 
@@ -125,18 +128,16 @@ void SearchWidget::searchingFinished(int hits)
 
 void SearchWidget::indexingStarted()
 {
-    Q_ASSERT(!m_progress);
-    m_progress = new QFutureInterface<void>();
-    Core::ProgressManager::addTask(m_progress->future(),
-                                   Tr::tr("Indexing Documentation"),
-                                   "Help.Indexer");
-    m_progress->setProgressRange(0, 2);
-    m_progress->setProgressValueAndText(1, Tr::tr("Indexing Documentation"));
-    m_progress->reportStarted();
-
-    connect(&m_watcher, &QFutureWatcherBase::canceled,
+    m_progress = QFutureInterface<void>();
+    FutureProgress *progress = ProgressManager::addTask(m_progress.future(),
+                                                        Tr::tr("Indexing Documentation"),
+                                                        "Help.Indexer");
+    connect(progress, &FutureProgress::canceled,
             searchEngine, &QHelpSearchEngine::cancelIndexing);
-    m_watcher.setFuture(m_progress->future());
+
+    m_progress.setProgressRange(0, 2);
+    m_progress.setProgressValueAndText(1, Tr::tr("Indexing Documentation"));
+    m_progress.reportStarted();
 
     m_queryWidget->hide();
     m_indexingDocumentationLabel->show();
@@ -145,11 +146,7 @@ void SearchWidget::indexingStarted()
 
 void SearchWidget::indexingFinished()
 {
-    m_progress->reportFinished();
-
-    delete m_progress;
-    m_progress = nullptr;
-
+    m_progress.reportFinished();
     m_queryWidget->show();
     m_indexingDocumentationLabel->hide();
     m_indexingIndicator->hide();
