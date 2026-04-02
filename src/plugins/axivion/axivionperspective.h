@@ -5,6 +5,8 @@
 
 #include <QObject>
 
+#include <utils/outputformat.h>
+
 namespace Utils { class FilePath; }
 
 namespace Axivion::Internal {
@@ -18,6 +20,12 @@ void updateIssueDetails(const QString &html, const QString &projectName);
 void updateNamedFilters();
 void updateLocalBuildStateFor(const QString &projectName, const QString &state, int percent);
 void updateSfaStateFor(const Utils::FilePath &fileName, const QString &state, int percent);
+void appendLocalBuildOutputFor(const QString &projectName, const QString &output,
+                               Utils::OutputFormat format);
+void appendSfaOutputFor(const Utils::FilePath &fileName, const QString &output,
+                        Utils::OutputFormat format);
+void resetLocalBuildConsole(const QString &projectName);
+void resetSfaConsole(const Utils::FilePath &fileName);
 
 void leaveOrEnterDashboardMode(bool byLocalBuildButton);
 bool currentIssueHasValidPathMapping();

@@ -109,6 +109,7 @@ private:
 
     QHash<QString, LocalBuildInfo> m_localBuildInfos;
     QMappedTaskTreeRunner<QString> m_localBuildInfosRunner;
+    QSet<QString> m_canceledRuns;
 
     QSingleTaskTreeRunner m_shutdownRunner;
     FilePath m_lastBauhausFromDB;
@@ -445,6 +446,8 @@ public:
 
 void LocalBuild::handleLocalBuildOutputFor(const QString &projectName, const QString &line)
 {
+    appendLocalBuildOutputFor(projectName, line, OutputFormat::StdErrFormat);
+
     static const QRegularExpression buildStateRegex(
                 R"(^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} - (?<type>[a-z ]{4}) - (.+) - (?<text>.+)$)");
     QTC_ASSERT(hasRunningBuildFor(projectName), return);
@@ -565,8 +568,11 @@ bool LocalBuild::startLocalBuildFor(const QString &projectName)
         process.setEnvironment(env);
         process.setUseCtrlCStub(true);
 
-        process.setStdErrCallback([this, projectName](const QString &line) {
+        process.setStdErrLineCallback([this, projectName](const QString &line) {
             handleLocalBuildOutputFor(projectName, line);
+        });
+        process.setStdOutLineCallback([projectName](const QString &line) {
+            appendLocalBuildOutputFor(projectName, line, OutputFormat::StdOutFormat);
         });
     };
 
@@ -578,15 +584,33 @@ bool LocalBuild::startLocalBuildFor(const QString &projectName)
                 qCDebug(localBuildLog) << "removed passfile: " << createdPassFile;
             }
         }
-        const QString state = process.result() == ProcessResult::FinishedWithSuccess
-                ? Tr::tr("Finished") : Tr::tr("Failed");
-        m_localBuildInfos.insert(projectName, {LocalBuildState::Finished, process.cleanedStdOut(),
-                                               process.cleanedStdErr()});
+        QString state;
+        QString text;
+        if (process.result() == ProcessResult::FinishedWithSuccess) {
+            state = Tr::tr("Finished");
+            text = Tr::tr("Local build finished successfully.");
+        } else if (m_canceledRuns.remove(projectName)) {
+            state = Tr::tr("Canceled");
+            text = Tr::tr("Local build was canceled.");
+        } else {
+            state = Tr::tr("Failed");
+            text = Tr::tr("Local build failed.");
+            if (!process.errorString().isEmpty())
+                text.append(' ').append(process.errorString());
+        }
+        text.append('\n');
+
+        m_localBuildInfos.insert(projectName, {LocalBuildState::Finished});
         qCDebug(localBuildLog) << "buildState changed >" << state << projectName;
+        appendLocalBuildOutputFor(projectName, text, OutputFormat::LogMessageFormat);
         updateLocalBuildStateFor(projectName, state, 100);
     };
 
     m_localBuildInfos.insert(projectName, {LocalBuildState::None});
+    resetLocalBuildConsole(projectName);
+    const QString startingText = Tr::tr("Starting local build (%1)").arg(projectName).append('\n');
+    appendLocalBuildOutputFor(projectName, startingText,
+                              OutputFormat::LogMessageFormat);
     updateLocalBuildStateFor(projectName, Tr::tr("Starting"), 1);
     qCDebug(localBuildLog) << "starting local build (" << projectName << "):"
                            << cmdLine.toUserOutput();
@@ -596,6 +620,7 @@ bool LocalBuild::startLocalBuildFor(const QString &projectName)
 
 void LocalBuild::cancelLocalBuildFor(const QString &projectName)
 {
+    m_canceledRuns.insert(projectName);
     m_localBuildInfosRunner.cancelKey(projectName);
 }
 

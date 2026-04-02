@@ -169,6 +169,7 @@ private:
 
     QHash<FilePath, SFAData> m_startedAnalyses;
     QHash<FilePath, LocalBuildInfo> m_localBuildInfos;
+    QSet<FilePath> m_canceledAnalyses;
     QMappedTaskTreeRunner<FilePath> m_startedAnalysesRunner;
 };
 
@@ -245,19 +246,38 @@ void SingleFileAnalysis::onSessionStarted(const FilePath &filePath, int sessionI
     analysis.sessionId = sessionId;
     analysis.pipeName = pluginArPipeOut(analysis.bauhausSuite, sessionId);
     const Environment env = setupEnv(analysis);
-    auto onSetup = [analysisCmd = analysis.analysisCommand, env](Process &process) {
+    auto onSetup = [analysisCmd = analysis.analysisCommand, env, filePath](Process &process) {
         CommandLine cmd = HostOsInfo::isWindowsHost() ? CommandLine{"cmd", {"/c"}}
                                                       : CommandLine{"/bin/sh", {"-c"}};
         cmd.addCommandLineAsArgs(CommandLine{analysisCmd}, CommandLine::Raw);
         process.setCommand(cmd);
         process.setEnvironment(env);
+        process.setStdErrLineCallback([filePath](const QString &line) {
+            appendSfaOutputFor(filePath, line, OutputFormat::StdErrFormat);
+        });
+        process.setStdOutLineCallback([filePath](const QString &line) {
+            appendSfaOutputFor(filePath, line, OutputFormat::StdOutFormat);
+        });
     };
     const SFAData data = analysis;
     auto onDone = [data, filePath, this](const Process &process) {
-        m_localBuildInfos.insert(filePath, {LocalBuildState::Finished,
-                                               process.cleanedStdOut(), process.cleanedStdErr()});
-        const QString resultStr = (process.result() == ProcessResult::FinishedWithSuccess)
-                ? Tr::tr("Finished") : Tr::tr("Failed");
+        m_localBuildInfos.insert(filePath, {LocalBuildState::Finished});
+        QString resultStr;
+        QString text;
+        if (process.result() == ProcessResult::FinishedWithSuccess) {
+            resultStr = Tr::tr("Finished");
+            text = Tr::tr("Single file analysis finished successfully.");
+        } else if (m_canceledAnalyses.remove(filePath)) {
+            resultStr = Tr::tr("Canceled");
+            text = Tr::tr("Single file analysis was canceled.");
+        } else {
+            resultStr = Tr::tr("Failed");
+            text = Tr::tr("Single file analysis failed.");
+            if (!process.errorString().isEmpty())
+                text.append(' ').append(process.errorString());
+        }
+        text.append('\n');
+        appendSfaOutputFor(filePath, text, OutputFormat::LogMessageFormat);
         updateSfaStateFor(filePath, resultStr, 100);
 
         if (process.result() == ProcessResult::FinishedWithSuccess)
@@ -269,7 +289,12 @@ void SingleFileAnalysis::onSessionStarted(const FilePath &filePath, int sessionI
         qCDebug(sfaLog) << "requesting session finish";
         requestArSessionFinish(data.bauhausSuite, data.sessionId, false);
     };
+
     clearAllMarks(LineMarkerType::SFA);
+    resetSfaConsole(filePath);
+    const QString startingText = Tr::tr("Starting single file analysis (%1)")
+            .arg(filePath.toUserOutput()).append('\n');
+    appendSfaOutputFor(filePath, startingText, OutputFormat::LogMessageFormat);
     qCDebug(sfaLog) << "starting analysis cmd" << analysis.analysisCommand;
     m_startedAnalysesRunner.start(filePath, {ProcessTask(onSetup, onDone)});
     m_localBuildInfos.insert(filePath, {LocalBuildState::Building});
@@ -278,6 +303,7 @@ void SingleFileAnalysis::onSessionStarted(const FilePath &filePath, int sessionI
 
 void SingleFileAnalysis::cancelAnalysisFor(const FilePath &filePath)
 {
+    m_canceledAnalyses.insert(filePath);
     m_startedAnalysesRunner.cancelKey(filePath);
 }
 

@@ -30,9 +30,7 @@ enum class LocalBuildState { None, Started, Building, Analyzing, UpdatingDashboa
 
 struct LocalBuildInfo
 {
-    LocalBuildState state = LocalBuildState::None;
-    QString buildOutput = {};
-    QString axivionOutput = {};
+    LocalBuildState state = LocalBuildState::None; // just use the state - no struct needed
 };
 
 LocalBuildInfo localBuildInfoFor(const QString &projectName);

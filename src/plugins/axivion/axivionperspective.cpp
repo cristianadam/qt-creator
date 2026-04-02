@@ -17,6 +17,7 @@
 #include <coreplugin/coreconstants.h>
 #include <coreplugin/icore.h>
 #include <coreplugin/editormanager/editormanager.h>
+#include <coreplugin/outputwindow.h>
 
 #include <cppeditor/cppeditorconstants.h>
 
@@ -50,6 +51,7 @@
 #include <QClipboard>
 #include <QComboBox>
 #include <QDesktopServices>
+#include <QDockWidget>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -1595,7 +1597,7 @@ void ProgressItemDelegate::paint(QPainter *painter, const QStyleOptionViewItem &
     painter->drawText(ItemMargin + 1, opt.rect.top() + ItemMargin + fm.ascent(), labelText);
 
     QColor progressBrush = creatorColor(Theme::ProgressBarColorFinished);
-    if (data.percent == 100 && data.state == Tr::tr("Failed"))
+    if (data.percent == 100 && data.state != Tr::tr("Finished"))
         progressBrush = creatorColor(Theme::ProgressBarColorError);
 
     painter->setPen(opt.palette.shadow().color());
@@ -1643,6 +1645,104 @@ void ProgressWidget::removeFinishedItems()
     m_progressModel->removeFinished();
 }
 
+class ConsoleWidget : public QWidget
+{
+public:
+    explicit ConsoleWidget(QWidget *parent = nullptr);
+
+    void addOrUpdateConsole(const QString &console, const QString &output, OutputFormat format);
+    void selectConsole(const QString &console);
+    void resetConsole(const QString &console);
+    void removeFinished();
+
+    static QString consoleName(const FilePath &filePath, const QString &projectName)
+    {
+        return filePath.isEmpty() ? projectName
+                                  : QString("SFA: %1").arg(filePath.path());
+    }
+
+private:
+    QComboBox m_consoleSelector;
+    QStackedWidget m_consoleStack;
+    QHash<QString, OutputWindow *> m_consoles;
+};
+
+ConsoleWidget::ConsoleWidget(QWidget *parent)
+    : QWidget(parent)
+{
+    m_consoleSelector.setMinimumContentsLength(25);
+    using namespace Layouting;
+    Column {
+        Row { m_consoleSelector, st},
+        m_consoleStack,
+        st
+    }.attachTo(this);
+
+    connect(&m_consoleSelector, &QComboBox::currentIndexChanged, [this]{
+        if (auto outputWindow = m_consoles.value(m_consoleSelector.currentText()))
+            m_consoleStack.setCurrentWidget(outputWindow);
+    });
+}
+
+void ConsoleWidget::addOrUpdateConsole(const QString &console, const QString &output,
+                                       OutputFormat format)
+{
+    auto it = m_consoles.constFind(console);
+    if (it == m_consoles.constEnd()) {
+        // add a new console
+        static int counter = 0;
+        const Id contextId = Id{"Axivion.Console"}.withSuffix(counter++);
+        auto outputWindow = new OutputWindow(Context{contextId}, "");
+        outputWindow->setReadOnly(true);
+        m_consoleStack.addWidget(outputWindow);
+        it = m_consoles.insert(console, outputWindow);
+        m_consoleSelector.addItem(console);
+    }
+    OutputWindow *outputWindow = it.value();
+    QTC_ASSERT(outputWindow, return);
+    outputWindow->appendMessage(output, format);
+}
+
+void ConsoleWidget::selectConsole(const QString &console)
+{
+    int index = m_consoleSelector.findText(console);
+    if (index == -1)
+        return;
+    m_consoleSelector.setCurrentIndex(index);
+}
+
+void ConsoleWidget::resetConsole(const QString &console)
+{
+    auto it = m_consoles.constFind(console);
+    if (it == m_consoles.constEnd())
+        return;
+    OutputWindow *outputWindow = it.value();
+    QTC_ASSERT(outputWindow, return);
+    outputWindow->clear();
+}
+
+void ConsoleWidget::removeFinished()
+{
+    QList<QString> toBeRemoved;
+    for (auto it = m_consoles.cbegin(), end = m_consoles.cend(); it != end; ++it) {
+        LocalBuildInfo info = it.key().startsWith("SFA: ")
+                ? localBuildInfoFor(FilePath::fromString(it.key().mid(5)))
+                : localBuildInfoFor(it.key());
+        if (info.state == LocalBuildState::Finished)
+            toBeRemoved.append(it.key());
+    }
+    for (const QString &console : toBeRemoved) {
+        OutputWindow *output = m_consoles.value(console);
+        QTC_ASSERT(output, continue);
+        m_consoles.remove(console);
+        m_consoleStack.removeWidget(output);
+        delete output;
+        int index = m_consoleSelector.findText(console);
+        QTC_ASSERT(index != -1, continue);
+        m_consoleSelector.removeItem(index);
+    }
+}
+
 class AxivionPerspective : public Perspective
 {
 public:
@@ -1660,6 +1760,8 @@ public:
     void updateNamedFilters();
     void updateLocalBuildStateFor(const QString &projectName,const QString &state, int percent);
     void updateSfaStateFor(const FilePath &fileName, const QString &state, int percent);
+    void appendConsoleOutput(const QString &console, const QString &output, OutputFormat f);
+    void resetConsole(const QString &console);
 
     void leaveOrEnterDashboardMode(bool byLocalBuildButton);
     bool currentIssueHasValidPathMapping() const;
@@ -1675,6 +1777,7 @@ private:
     IssuesWidget *m_issuesWidget = nullptr;
     LazyImageBrowser *m_issueDetails = nullptr;
     ProgressWidget *m_progressWidget = nullptr;
+    ConsoleWidget *m_consoleWidget = nullptr;
 };
 
 AxivionPerspective::AxivionPerspective()
@@ -1702,6 +1805,10 @@ AxivionPerspective::AxivionPerspective()
     m_progressWidget = new ProgressWidget;
     m_progressWidget->setObjectName("AxivionLocalBuildProgress");
     m_progressWidget->setWindowTitle(Tr::tr("Local Analyses Progress"));
+
+    m_consoleWidget = new ConsoleWidget;
+    m_consoleWidget->setObjectName("AxivionAnalysisOutput");
+    m_consoleWidget->setWindowTitle(Tr::tr("Local Analyses Output"));
 
     auto reloadDataAct = new QAction(this);
     reloadDataAct->setIcon(Utils::Icons::RELOAD_TOOLBAR.icon());
@@ -1738,6 +1845,7 @@ AxivionPerspective::AxivionPerspective()
     addWindow(m_issuesWidget, Perspective::SplitVertical, nullptr);
     addWindow(m_issueDetails, Perspective::AddToTab, nullptr, true, Qt::RightDockWidgetArea);
     addWindow(m_progressWidget, Perspective::AddToTab, nullptr, false, Qt::RightDockWidgetArea);
+    addWindow(m_consoleWidget, Perspective::AddToTab, m_issuesWidget, false);
 
     ActionContainer *menu = ActionManager::actionContainer(Debugger::Constants::M_DEBUG_ANALYZER);
     QAction *action = new QAction(Tr::tr("Axivion"), this);
@@ -1862,23 +1970,16 @@ bool AxivionPerspective::handleProgressContextMenu(const ItemViewEvent &e)
         menu->addAction(action);
         menu->addSeparator();
     }
-    action = new QAction(Tr::tr("See Axivion Log..."), menu);
-    action->setEnabled(selectedFinished);
-    QObject::connect(action, &QAction::triggered, menu, [project, localBuildInfo] {
-        QString title = QString("Axivion Local Build: Axivion Log (%1)").arg(project);
-        EditorManager::openEditorWithContents(Core::Constants::K_DEFAULT_TEXT_EDITOR_ID,
-                                              &title, localBuildInfo.axivionOutput.toUtf8(),
-                                              "Axivion.LocalBuildLog");
-    });
-    menu->addAction(action);
-
-    action = new QAction(Tr::tr("See Build Log..."), menu);
-    action->setEnabled(selectedFinished);
-    QObject::connect(action, &QAction::triggered, menu, [project, localBuildInfo] {
-        QString title = QString("Axivion Local Build: Build Log (%1)").arg(project);
-        EditorManager::openEditorWithContents(Core::Constants::K_DEFAULT_TEXT_EDITOR_ID,
-                                              &title, localBuildInfo.buildOutput.toUtf8(),
-                                              "Axivion.LocalBuildAxivionLog");
+    action = new QAction(Tr::tr("See Build Output..."), menu);
+    const QString console = ConsoleWidget::consoleName(file, project);
+    QObject::connect(action, &QAction::triggered, menu, [this, console] {
+        m_consoleWidget->selectConsole(console);
+        Command *cmd = ActionManager::command("Dock.AxivionAnalysisOutput");
+        QTC_ASSERT(cmd, return);
+        if (cmd->action() && !cmd->action()->isChecked())
+            cmd->action()->trigger();
+        if (auto dockWidget = qobject_cast<QDockWidget *>(m_consoleWidget->parentWidget()))
+            dockWidget->raise();
     });
     menu->addAction(action);
 
@@ -1947,6 +2048,17 @@ void AxivionPerspective::updateSfaStateFor(const FilePath &filePath, const QStri
                                               {QString{}, filePath, state, percent});
 }
 
+void AxivionPerspective::appendConsoleOutput(const QString &console, const QString &output,
+                                             OutputFormat f)
+{
+    m_consoleWidget->addOrUpdateConsole(console, output, f);
+}
+
+void AxivionPerspective::resetConsole(const QString &console)
+{
+    m_consoleWidget->resetConsole(console);
+}
+
 void AxivionPerspective::leaveOrEnterDashboardMode(bool byLocalBuildButton)
 {
     m_issuesWidget->leaveOrEnterDashboardMode(byLocalBuildButton);
@@ -1973,6 +2085,7 @@ void AxivionPerspective::requestFocusForIssuesTable()
 
 void AxivionPerspective::removeFinishedBuilds()
 {
+    m_consoleWidget->removeFinished();
     removeFinishedLocalBuilds();
     removeFinishedAnalyses();
     m_progressWidget->removeFinishedItems();
@@ -2066,6 +2179,33 @@ void updateSfaStateFor(const FilePath &filePath, const QString &state, int perce
 {
     QTC_ASSERT(axivionPerspective(), return);
     axivionPerspective()->updateSfaStateFor(filePath, state, percent);
+}
+
+void appendLocalBuildOutputFor(const QString &projectName, const QString &output,
+                               Utils::OutputFormat format)
+{
+    QTC_ASSERT(axivionPerspective(), return);
+    axivionPerspective()->appendConsoleOutput(projectName, output, format);
+}
+
+void appendSfaOutputFor(const Utils::FilePath &fileName, const QString &output,
+                        Utils::OutputFormat format)
+{
+    QTC_ASSERT(axivionPerspective(), return);
+    axivionPerspective()->appendConsoleOutput(ConsoleWidget::consoleName(fileName, {}),
+                                              output, format);
+}
+
+void resetLocalBuildConsole(const QString &projectName)
+{
+    QTC_ASSERT(axivionPerspective(), return);
+    axivionPerspective()->resetConsole(projectName);
+}
+
+void resetSfaConsole(const Utils::FilePath &fileName)
+{
+    QTC_ASSERT(axivionPerspective(), return);
+    axivionPerspective()->resetConsole(ConsoleWidget::consoleName(fileName, {}));
 }
 
 void leaveOrEnterDashboardMode(bool byLocalBuildButton)
