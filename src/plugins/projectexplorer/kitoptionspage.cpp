@@ -825,7 +825,9 @@ KitOptionsPageWidget::KitOptionsPageWidget()
         Kit *wc = m_model.workingCopyForRow(currentRow);
         if (wc)
             wc->copyFrom(m_configWidget.workingCopy());
-        m_model.setChanged(currentRow, true);
+        const KitData d = m_model.item(currentRow);
+        const bool changed = !d.kit || !wc || !wc->isEqual(d.kit);
+        m_model.setChanged(currentRow, changed);
         m_model.notifyRowChanged(currentRow);
     });
     connect(&m_configWidget, &KitManagerConfigWidget::isAutoDetectedChanged, this, [this] {
