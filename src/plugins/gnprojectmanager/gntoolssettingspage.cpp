@@ -33,7 +33,7 @@ class GNToolItem final
 public:
     GNToolItem() = default;
     explicit GNToolItem(const QString &name);
-    explicit GNToolItem(const GNTools::Tool_t &tool);
+    explicit GNToolItem(const GNTools::Tool &tool);
     GNToolItem cloned() const;
 
     QVariant data(int column, int role) const;
@@ -57,7 +57,7 @@ GNToolItem::GNToolItem(const QString &name)
     , autoDetected{false}
 {}
 
-GNToolItem::GNToolItem(const GNTools::Tool_t &tool)
+GNToolItem::GNToolItem(const GNTools::Tool &tool)
     : name{tool->name()}
     , executable{tool->exe()}
     , id{tool->id()}
@@ -129,7 +129,7 @@ GNToolsModel::GNToolsModel()
                {{ProjectExplorer::Constants::msgManual(), [this](int row) {
                     return !item(row).autoDetected;
                 }}});
-    for (const GNTools::Tool_t &tool : GNTools::tools())
+    for (const GNTools::Tool &tool : GNTools::tools())
         appendItem(GNToolItem{tool});
 }
 

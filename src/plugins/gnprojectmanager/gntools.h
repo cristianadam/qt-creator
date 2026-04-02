@@ -60,22 +60,24 @@ class GNTools : public QObject
     ~GNTools() {}
 
 public:
-    using Tool_t = std::shared_ptr<GNTool>;
+    using Tool = std::shared_ptr<GNTool>;
+    using Tools = std::vector<Tool>;
 
-    static void setTools(std::vector<Tool_t> &&tools);
-    static const std::vector<Tool_t> &tools();
+    static void setTools(Tools &&tools);
+    static const Tools &tools();
+
+    static int toolCount();
+    static QVariant data(int row, int role);
 
     static void updateTool(const Utils::Id &itemId, const QString &name, const Utils::FilePath &exe);
     static void removeTool(const Utils::Id &id);
 
-    static std::shared_ptr<GNTool> toolById(const Utils::Id &id);
-    static std::shared_ptr<GNTool> autoDetectedTool();
+    static Tool toolById(const Utils::Id &id);
+    static Tool autoDetectedTool();
 
     static GNTools *instance();
-
 signals:
-    void toolAdded(const Tool_t &tool);
-    void toolRemoved(const Tool_t &tool);
+    void toolsChanged();
 };
 
 } // namespace GNProjectManager::Internal

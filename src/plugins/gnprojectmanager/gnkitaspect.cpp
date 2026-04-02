@@ -11,10 +11,9 @@
 #include <projectexplorer/kit.h>
 #include <projectexplorer/kitaspect.h>
 
-#include <utils/layoutbuilder.h>
 #include <utils/qtcassert.h>
 
-#include <QComboBox>
+#include <QAbstractListModel>
 
 using namespace ProjectExplorer;
 using namespace Utils;
@@ -48,112 +47,52 @@ bool GNKitAspect::isValid(const Kit *kit)
     return tool && tool->isValid();
 }
 
+// GNToolListModel
+
+class GNToolListModel final : public QAbstractListModel
+{
+public:
+    void reset()
+    {
+        beginResetModel();
+        endResetModel();
+    }
+
+    int rowCount(const QModelIndex &parent) const final
+    {
+        return parent.isValid() ? 0 : GNTools::toolCount() + 1;
+    }
+
+    QVariant data(const QModelIndex &index, int role) const final
+    {
+        if (!index.isValid() || index.row() < 0 || index.row() > GNTools::toolCount())
+            return {};
+        return GNTools::data(index.row() - 1, role);
+    }
+};
+
 // GNKitAspectImpl (widget)
 
 class GNKitAspectImpl final : public KitAspect
 {
 public:
-    GNKitAspectImpl(Kit *kit, const KitAspectFactory *factory);
-    ~GNKitAspectImpl() override { delete m_toolsComboBox; }
-
-private:
-    void addTool(const GNTools::Tool_t &tool);
-    void removeTool(const GNTools::Tool_t &tool);
-    void setCurrentToolIndex(int index);
-    int indexOf(const Id &id);
-    void loadTools();
-    void setToDefault();
-
-    void makeReadOnly(bool readOnly) final { m_toolsComboBox->setEnabled(!readOnly); }
-
-    void addToInnerLayout(Layouting::Layout &layout) final
+    GNKitAspectImpl(Kit *kit, const KitAspectFactory *factory)
+        : KitAspect(kit, factory)
     {
-        addMutableAction(m_toolsComboBox);
-        layout.addItem(m_toolsComboBox);
+        setManagingPage(Constants::SettingsPage::TOOLS_ID);
+
+        auto getter = [](const Kit &k) -> QVariant {
+            return GNKitAspect::gnToolId(&k).toSetting();
+        };
+        auto setter = [](Kit &k, const QVariant &v) { k.setValue(GN_TOOL_ID, v); };
+        auto resetModel = [this] { m_model.reset(); };
+        addListAspectSpec({&m_model, std::move(getter), std::move(setter), std::move(resetModel)});
+
+        connect(GNTools::instance(), &GNTools::toolsChanged, this, &KitAspect::refresh);
     }
 
-    void refresh() final
-    {
-        const auto id = GNKitAspect::gnToolId(kit());
-        m_toolsComboBox->setCurrentIndex(indexOf(id));
-    }
-
-    QComboBox *m_toolsComboBox;
+    GNToolListModel m_model;
 };
-
-GNKitAspectImpl::GNKitAspectImpl(Kit *kit, const KitAspectFactory *factory)
-    : KitAspect(kit, factory)
-    , m_toolsComboBox(createSubWidget<QComboBox>())
-{
-    setManagingPage(Constants::SettingsPage::TOOLS_ID);
-
-    m_toolsComboBox->setSizePolicy(QSizePolicy::Ignored,
-                                   m_toolsComboBox->sizePolicy().verticalPolicy());
-    m_toolsComboBox->setEnabled(false);
-    m_toolsComboBox->setToolTip(factory->description());
-    loadTools();
-
-    connect(GNTools::instance(), &GNTools::toolAdded, this, &GNKitAspectImpl::addTool);
-    connect(GNTools::instance(), &GNTools::toolRemoved, this, &GNKitAspectImpl::removeTool);
-    connect(m_toolsComboBox,
-            &QComboBox::currentIndexChanged,
-            this,
-            &GNKitAspectImpl::setCurrentToolIndex);
-}
-
-void GNKitAspectImpl::addTool(const GNTools::Tool_t &tool)
-{
-    QTC_ASSERT(tool, return);
-    m_toolsComboBox->addItem(tool->name(), tool->id().toSetting());
-}
-
-void GNKitAspectImpl::removeTool(const GNTools::Tool_t &tool)
-{
-    QTC_ASSERT(tool, return);
-    const int index = indexOf(tool->id());
-    QTC_ASSERT(index >= 0, return);
-    if (index == m_toolsComboBox->currentIndex())
-        setToDefault();
-    m_toolsComboBox->removeItem(index);
-}
-
-void GNKitAspectImpl::setCurrentToolIndex(int index)
-{
-    if (m_toolsComboBox->count() == 0)
-        return;
-    const Id id = Id::fromSetting(m_toolsComboBox->itemData(index));
-    GNKitAspect::setGNTool(kit(), id);
-}
-
-int GNKitAspectImpl::indexOf(const Id &id)
-{
-    for (int i = 0; i < m_toolsComboBox->count(); ++i) {
-        if (id == Id::fromSetting(m_toolsComboBox->itemData(i)))
-            return i;
-    }
-    return -1;
-}
-
-void GNKitAspectImpl::loadTools()
-{
-    for (const GNTools::Tool_t &tool : GNTools::tools())
-        addTool(tool);
-    refresh();
-    m_toolsComboBox->setEnabled(m_toolsComboBox->count());
-}
-
-void GNKitAspectImpl::setToDefault()
-{
-    const GNTools::Tool_t autoDetected = GNTools::autoDetectedTool();
-    if (autoDetected) {
-        const auto index = indexOf(autoDetected->id());
-        m_toolsComboBox->setCurrentIndex(index);
-        setCurrentToolIndex(index);
-    } else {
-        m_toolsComboBox->setCurrentIndex(0);
-        setCurrentToolIndex(0);
-    }
-}
 
 // GNKitAspectFactory
 
@@ -180,15 +119,26 @@ public:
 
     void setup(Kit *k) final
     {
-        const auto tool = GNKitAspect::gnTool(k);
-        if (!tool) {
-            const auto autoDetected = GNTools::autoDetectedTool();
-            if (autoDetected)
-                GNKitAspect::setGNTool(k, autoDetected->id());
-        }
+        if (k->hasValue(GN_TOOL_ID))
+            return;
+        const auto autoDetected = GNTools::autoDetectedTool();
+        if (autoDetected)
+            GNKitAspect::setGNTool(k, autoDetected->id());
     }
 
-    void fix(Kit *k) final { setup(k); }
+    void fix(Kit *k) final
+    {
+        const Id id = GNKitAspect::gnToolId(k);
+        if (!id.isValid())
+            return;
+        if (GNTools::toolById(id))
+            return;
+        const auto autoDetected = GNTools::autoDetectedTool();
+        if (autoDetected)
+            GNKitAspect::setGNTool(k, autoDetected->id());
+        else
+            k->setValue(GN_TOOL_ID, QVariant{});
+    }
 
     KitAspect *createKitAspect(Kit *k) const final { return new GNKitAspectImpl(k, this); }
 
