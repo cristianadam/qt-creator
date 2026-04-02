@@ -424,6 +424,7 @@ public:
     void redetectToolchains();
 
     void apply() final;
+    void cancel() final;
     bool isDirty() const final
     {
         return m_model.isDirty()
@@ -704,6 +705,12 @@ void ToolChainOptionsWidget::apply()
 {
     m_model.apply();
     ToolchainManager::setDetectionSettings(m_detectionSettings);
+}
+
+void ToolChainOptionsWidget::cancel()
+{
+    m_model.cancel();
+    m_detectionSettings = ToolchainManager::detectionSettings();
 }
 
 void ToolChainOptionsWidget::createToolchains(ToolchainFactory *factory, const QList<Id> &languages)
