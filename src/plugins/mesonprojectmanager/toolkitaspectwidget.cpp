@@ -19,6 +19,8 @@ using namespace Utils;
 
 namespace MesonProjectManager::Internal {
 
+const char MESON_TOOL_ID[] = "MesonProjectManager.MesonKitInformation.Meson";
+
 class MesonListModel final : public QAbstractListModel
 {
 public:
@@ -32,15 +34,25 @@ public:
 
     int rowCount(const QModelIndex &parent = {}) const final
     {
-        return parent.isValid() ? 0 : int(MesonTools::tools().size());
+        return parent.isValid() ? 0 : int(MesonTools::tools().size()) + 1;
     }
 
     QVariant data(const QModelIndex &index, int role) const final
     {
-        const std::vector<MesonTools::Tool_t> &tools = MesonTools::tools();
-        if (!index.isValid() || index.row() < 0 || index.row() >= int(tools.size()))
+        if (!index.isValid() || index.row() < 0 || index.row() > int(MesonTools::tools().size()))
             return {};
-        const MesonTools::Tool_t &tool = tools[index.row()];
+        if (index.row() == 0) {
+            switch (role) {
+            case Qt::DisplayRole:
+                return Tr::tr("None");
+            case KitAspect::IsNoneRole:
+                return true;
+            case KitAspect::IdRole:
+                return {};
+            }
+            return {};
+        }
+        const MesonTools::Tool_t &tool = MesonTools::tools()[index.row() - 1];
         switch (role) {
         case Qt::DisplayRole:
             return tool->name();
@@ -61,10 +73,10 @@ public:
     {
         setManagingPage(Constants::SettingsPage::TOOLS_ID);
 
-        auto getter = [](const Kit &k) { return MesonToolKitAspect::mesonToolId(&k).toSetting(); };
-        auto setter = [](Kit &k, const QVariant &v) {
-            MesonToolKitAspect::setMesonTool(&k, Id::fromSetting(v));
+        auto getter = [](const Kit &k) -> QVariant {
+            return MesonToolKitAspect::mesonToolId(&k).toSetting();
         };
+        auto setter = [](Kit &k, const QVariant &v) { k.setValue(MESON_TOOL_ID, v); };
         auto reset = [this] { model.reset(); };
         addListAspectSpec({&model, getter, setter, reset});
 
@@ -75,8 +87,6 @@ public:
 };
 
 // MesonToolKitAspect
-
-const char MESON_TOOL_ID[] = "MesonProjectManager.MesonKitInformation.Meson";
 
 void MesonToolKitAspect::setMesonTool(Kit *kit, Id id)
 {
@@ -126,17 +136,25 @@ public:
 
     void setup(Kit *k) final
     {
-        const auto tool = MesonToolKitAspect::mesonTool(k);
-        if (!tool) {
-            const auto autoDetected = MesonTools::autoDetectedTool();
-            if (autoDetected)
-                MesonToolKitAspect::setMesonTool(k, autoDetected->id());
-        }
+        if (k->hasValue(MESON_TOOL_ID))
+            return;
+        const auto autoDetected = MesonTools::autoDetectedTool();
+        if (autoDetected)
+            MesonToolKitAspect::setMesonTool(k, autoDetected->id());
     }
 
     void fix(Kit *k) final
     {
-        setup(k);
+        const Id id = MesonToolKitAspect::mesonToolId(k);
+        if (!id.isValid())
+            return;
+        if (MesonTools::toolById(id))
+            return;
+        const auto autoDetected = MesonTools::autoDetectedTool();
+        if (autoDetected)
+            MesonToolKitAspect::setMesonTool(k, autoDetected->id());
+        else
+            k->setValue(MESON_TOOL_ID, QVariant{});
     }
 
     KitAspect *createKitAspect(Kit *k) const final
