@@ -134,6 +134,33 @@ GeneralSettings &generalSettings()
     return theSettings;
 }
 
+void ColorAspect::addToLayoutImpl(Layouting::Layout &parent)
+{
+    auto button = createSubWidget<QtColorButton>();
+    button->setMinimumSize(QSize(64, 0));
+    button->setProperty("alphaAllowed", false);
+    button->setColor(volatileValue());
+
+    auto resetButton = createSubWidget<QPushButton>(Tr::tr("Reset"));
+    resetButton->setToolTip(Tr::tr("Reset to default.", "Color"));
+
+    connect(button, &QtColorButton::colorChanged, this, [this](const QColor &c) {
+        setVolatileValue(c);
+    });
+
+    connect(resetButton, &QAbstractButton::clicked, this, [this] {
+        setVolatileValue(defaultValue());
+    });
+
+    addOnVolatileValueChanged(button, [this, button] {
+        if (button->color() != volatileValue())
+            button->setColor(volatileValue());
+    });
+
+    addLabeledItem(parent, button);
+    parent.addItem(resetButton);
+}
+
 GeneralSettings::GeneralSettings()
 {
     setAutoApply(false);
@@ -196,6 +223,13 @@ GeneralSettings::GeneralSettings()
         ICore::askForRestart(Tr::tr("The language change will take effect after restart."));
     });
 
+    color.setSettingsKey("MainWindow/Color");
+    color.setLabelText(Tr::tr("Color:"));
+    color.setDefaultValue(QColor(StyleHelper::DEFAULT_BASE_COLOR));
+    color.addOnChanged(this, [this] {
+        StyleHelper::setBaseColor(color());
+    });
+
     static const SelectionAspect::Option options[] = {
         {Tr::tr("Round Up for .5 and Above"), {}, int(Qt::HighDpiScaleFactorRoundingPolicy::Round)},
         {Tr::tr("Always Round Up"), {}, int(Qt::HighDpiScaleFactorRoundingPolicy::Ceil)},
@@ -233,27 +267,21 @@ public:
     void apply() final;
     bool isDirty() const final;
 
-    void resetInterfaceColor();
     void resetWarnings();
 
     static bool canResetWarnings();
     void fillToolbarStyleBox() const;
 
-    QtColorButton *m_colorButton;
     ThemeChooser *m_themeChooser;
     QPushButton *m_resetWarningsButton;
     QComboBox *m_toolbarStyleBox;
 };
 
 GeneralSettingsWidget::GeneralSettingsWidget()
-    : m_colorButton(new QtColorButton)
-    , m_themeChooser(new ThemeChooser)
+    : m_themeChooser(new ThemeChooser)
     , m_resetWarningsButton(new QPushButton)
     , m_toolbarStyleBox(new QComboBox)
 {
-    m_colorButton->setMinimumSize(QSize(64, 0));
-    m_colorButton->setProperty("alphaAllowed", QVariant(false));
-
     m_resetWarningsButton->setText(Tr::tr("Reset Warnings", "Button text"));
     m_resetWarningsButton->setToolTip(
         Tr::tr("Re-enable warnings that were suppressed by selecting \"Do Not "
@@ -262,11 +290,8 @@ GeneralSettingsWidget::GeneralSettingsWidget()
 
     m_toolbarStyleBox->setSizeAdjustPolicy(QComboBox::AdjustToContents);
 
-    auto resetColorButton = new QPushButton(Tr::tr("Reset"));
-    resetColorButton->setToolTip(Tr::tr("Reset to default.", "Color"));
-
     Form form;
-    form.addRow({Tr::tr("Color:"), m_colorButton, resetColorButton, st});
+    form.addRow({generalSettings().color, st});
     form.addRow({Tr::tr("Theme:"), m_themeChooser});
     form.addRow({Tr::tr("Toolbar style:"), m_toolbarStyleBox, st});
     form.addRow({generalSettings().language, st});
@@ -322,13 +347,8 @@ GeneralSettingsWidget::GeneralSettingsWidget()
 
     fillToolbarStyleBox();
 
-    m_colorButton->setColor(StyleHelper::requestedBaseColor());
     m_resetWarningsButton->setEnabled(canResetWarnings());
 
-    connect(resetColorButton,
-            &QAbstractButton::clicked,
-            this,
-            &GeneralSettingsWidget::resetInterfaceColor);
     connect(m_resetWarningsButton,
             &QAbstractButton::clicked,
             this,
@@ -336,7 +356,6 @@ GeneralSettingsWidget::GeneralSettingsWidget()
 
     setOnCancel([] { generalSettings().cancel(); });
 
-    installCheckSettingsDirtyTrigger(m_colorButton);
     installCheckSettingsDirtyTrigger(m_themeChooser->themeComboBox());
     installCheckSettingsDirtyTrigger(m_toolbarStyleBox);
 
@@ -348,8 +367,6 @@ void GeneralSettingsWidget::apply()
     generalSettings().apply();
     generalSettings().writeSettings();
 
-    // Apply the new base color if accepted
-    StyleHelper::setBaseColor(m_colorButton->color());
     m_themeChooser->apply();
     if (const auto newStyle = m_toolbarStyleBox->currentData().value<StyleHelper::ToolbarStyle>();
         newStyle != StyleHelper::toolbarStyle()) {
@@ -367,9 +384,6 @@ bool GeneralSettingsWidget::isDirty() const
     if (generalSettings().isDirty())
         return true;
 
-    if (m_colorButton->color() != StyleHelper::requestedBaseColor())
-        return true;
-
     if (m_themeChooser->isDirty())
         return true;
 
@@ -379,12 +393,6 @@ bool GeneralSettingsWidget::isDirty() const
     }
 
     return false;
-}
-
-void GeneralSettingsWidget::resetInterfaceColor()
-{
-    m_colorButton->setColor(StyleHelper::DEFAULT_BASE_COLOR);
-    checkSettingsDirty();
 }
 
 void GeneralSettingsWidget::resetWarnings()
