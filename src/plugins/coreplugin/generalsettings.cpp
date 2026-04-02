@@ -321,25 +321,22 @@ GeneralSettings::GeneralSettings()
 
         // clang-format off
         return Column {
-            Group {
-                title(Tr::tr("User Interface")),
-                Form {
-                    color, st, br,
-                    theme, st, br,
-                    toolbarStyle, st, br,
-                    language, st, br,
-                    If (showDpiPolicy) >> Then {
-                        highDpiScaleFactorRoundingPolicy, st, br,
-                        If (envVarInfo) >> Then { envVarInfo, br } >> Else { st, br },
-                    },
-                    codecForLocale, st, br,
-                    showShortcutsInContextMenus, st, br,
-                    provideSplitterCursors, st, br,
-                    preferInfoBarOverPopup, st, br,
-                    useTabsInEditorViews, st, br,
-                    showOkAndCancelInSettingsMode, st, br,
-                    Row { new ResetWarningsButton, st },
-                }
+            Form {
+                color, st, br,
+                theme, st, br,
+                toolbarStyle, st, br,
+                language, st, br,
+                If (showDpiPolicy) >> Then {
+                    highDpiScaleFactorRoundingPolicy, st, br,
+                    If (envVarInfo) >> Then { envVarInfo, br } >> Else { st, br },
+                },
+                codecForLocale, st, br,
+                showShortcutsInContextMenus, st, br,
+                provideSplitterCursors, st, br,
+                preferInfoBarOverPopup, st, br,
+                useTabsInEditorViews, st, br,
+                showOkAndCancelInSettingsMode, st, br,
+                Row { new ResetWarningsButton, st },
             }
         };
         // clang-format on
