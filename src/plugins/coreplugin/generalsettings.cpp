@@ -133,6 +133,18 @@ GeneralSettings &generalSettings()
     return theSettings;
 }
 
+static void fillThemeItems(const StringSelectionAspect::ResultCallback &cb)
+{
+    const QList<ThemeEntry> themes = ThemeEntry::availableThemes();
+    QList<QStandardItem *> items;
+    for (const ThemeEntry &t : themes) {
+        auto item = new QStandardItem(t.displayName());
+        item->setData(t.id().toString());
+        items.append(item);
+    }
+    cb(items);
+}
+
 GeneralSettings::GeneralSettings()
 {
     setAutoApply(false);
@@ -244,6 +256,15 @@ GeneralSettings::GeneralSettings()
         }
     });
 
+    theme.setSettingsKey(Constants::SETTINGS_THEME);
+    theme.setLabelText(Tr::tr("Theme:"));
+    theme.setComboBoxEditable(false);
+    theme.setFillCallback(&fillThemeItems);
+    theme.setDefaultValue(ThemeEntry::themeSetting().toString());
+    connect(&theme, &BaseAspect::changed, this, [] {
+        ICore::askForRestart(Tr::tr("The theme change will take effect after restart."));
+    });
+
     readSettings();
 
     StyleHelper::setToolbarStyle(StyleHelper::ToolbarStyle(toolbarStyle()));
@@ -261,13 +282,11 @@ public:
 
     static bool canResetWarnings();
 
-    ThemeChooser *m_themeChooser;
     QPushButton *m_resetWarningsButton;
 };
 
 GeneralSettingsWidget::GeneralSettingsWidget()
-    : m_themeChooser(new ThemeChooser)
-    , m_resetWarningsButton(new QPushButton)
+    : m_resetWarningsButton(new QPushButton)
 {
     m_resetWarningsButton->setText(Tr::tr("Reset Warnings", "Button text"));
     m_resetWarningsButton->setToolTip(
@@ -277,7 +296,7 @@ GeneralSettingsWidget::GeneralSettingsWidget()
 
     Form form;
     form.addRow({generalSettings().color, st});
-    form.addRow({Tr::tr("Theme:"), m_themeChooser});
+    form.addRow({generalSettings().theme, st});
     form.addRow({generalSettings().toolbarStyle, st});
     form.addRow({generalSettings().language, st});
 
@@ -339,8 +358,6 @@ GeneralSettingsWidget::GeneralSettingsWidget()
 
     setOnCancel([] { generalSettings().cancel(); });
 
-    installCheckSettingsDirtyTrigger(m_themeChooser->themeComboBox());
-
     connect(&generalSettings(), &AspectContainer::volatileValueChanged, &checkSettingsDirty);
 }
 
@@ -348,19 +365,11 @@ void GeneralSettingsWidget::apply()
 {
     generalSettings().apply();
     generalSettings().writeSettings();
-
-    m_themeChooser->apply();
 }
 
 bool GeneralSettingsWidget::isDirty() const
 {
-    if (generalSettings().isDirty())
-        return true;
-
-    if (m_themeChooser->isDirty())
-        return true;
-
-    return false;
+    return generalSettings().isDirty();
 }
 
 void GeneralSettingsWidget::resetWarnings()

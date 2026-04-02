@@ -45,6 +45,17 @@ public:
     }
 };
 
+class ThemeSelectionAspect : public Utils::StringSelectionAspect
+{
+public:
+    using StringSelectionAspect::StringSelectionAspect;
+
+    void fixupComboBox(QComboBox *comboBox) override
+    {
+        comboBox->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    }
+};
+
 class GeneralSettings : public Utils::AspectContainer
 {
 public:
@@ -62,6 +73,7 @@ public:
     CodecForLocaleAspect codecForLocale{this};
     LanguageSelectionAspect language{this};
     Utils::ColorAspect color{this};
+    ThemeSelectionAspect theme{this};
 };
 
 GeneralSettings &generalSettings();
