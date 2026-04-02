@@ -5,12 +5,16 @@
 #include "gntools.h"
 
 #include "gnpluginconstants.h"
+#include "gnprojectmanagertr.h"
 
 #include <utils/algorithm.h>
 #include <utils/environment.h>
 #include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
 
+#include <projectexplorer/kitaspect.h>
+
+using namespace ProjectExplorer;
 using namespace Utils;
 
 namespace GNProjectManager::Internal {
@@ -88,9 +92,9 @@ std::optional<FilePath> findGN()
 
 // GNTools
 
-std::vector<GNTools::Tool_t> s_tools;
+static GNTools::Tools s_tools;
 
-GNTools::Tool_t GNTools::autoDetectedTool()
+GNTools::Tool GNTools::autoDetectedTool()
 {
     for (const auto &tool : s_tools) {
         if (tool->autoDetected())
@@ -113,20 +117,49 @@ static void ensureAutoDetected()
     }
 }
 
-void GNTools::setTools(std::vector<GNTools::Tool_t> &&tools)
+void GNTools::setTools(Tools &&tools)
 {
     std::swap(s_tools, tools);
     ensureAutoDetected();
 }
 
-const std::vector<GNTools::Tool_t> &GNTools::tools()
+int GNTools::toolCount()
+{
+    return s_tools.size();
+}
+
+QVariant GNTools::data(int row, int role)
+{
+    if (row < 0) {
+        switch (role) {
+        case Qt::DisplayRole:
+            return Tr::tr("None");
+        case KitAspect::IsNoneRole:
+            return true;
+        case KitAspect::IdRole:
+            return {};
+        }
+        return {};
+    }
+
+    const Tool &tool = s_tools.at(row);
+    switch (role) {
+    case Qt::DisplayRole:
+        return tool->name();
+    case KitAspect::IdRole:
+        return tool->id().toSetting();
+    }
+    return {};
+}
+
+const GNTools::Tools &GNTools::tools()
 {
     return s_tools;
 }
 
 void GNTools::updateTool(const Id &itemId, const QString &name, const FilePath &exe)
 {
-    auto item = std::find_if(std::begin(s_tools), std::end(s_tools), [&itemId](const Tool_t &tool) {
+    auto item = std::find_if(std::begin(s_tools), std::end(s_tools), [&itemId](const Tool &tool) {
         return tool->id() == itemId;
     });
     if (item != std::end(s_tools)) {
@@ -134,7 +167,7 @@ void GNTools::updateTool(const Id &itemId, const QString &name, const FilePath &
         (*item)->setName(name);
     } else {
         s_tools.emplace_back(std::make_shared<GNTool>(name, exe, itemId));
-        emit instance()->toolAdded(s_tools.back());
+        emit instance()->toolsChanged();
     }
 }
 
@@ -142,14 +175,14 @@ void GNTools::removeTool(const Id &id)
 {
     auto item = Utils::take(s_tools, [&id](const auto &item) { return item->id() == id; });
     QTC_ASSERT(item, return);
-    emit instance()->toolRemoved(*item);
+    emit instance()->toolsChanged();
 }
 
-std::shared_ptr<GNTool> GNTools::toolById(const Id &id)
+GNTools::Tool GNTools::toolById(const Id &id)
 {
     const auto tool = std::find_if(std::cbegin(s_tools),
                                    std::cend(s_tools),
-                                   [&id](const GNTools::Tool_t &tool) { return tool->id() == id; });
+                                   [&id](const GNTools::Tool &tool) { return tool->id() == id; });
     if (tool != std::cend(s_tools))
         return *tool;
     return nullptr;

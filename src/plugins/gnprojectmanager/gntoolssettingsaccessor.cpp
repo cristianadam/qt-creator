@@ -52,7 +52,7 @@ void GNToolsSettingsAccessor::saveGNTools()
     using namespace Constants;
     Store data;
     int entryCount = 0;
-    for (const GNTools::Tool_t &tool : GNTools::tools()) {
+    for (const GNTools::Tool &tool : GNTools::tools()) {
         data.insert(entryName(entryCount), variantFromStore(tool->toVariantMap()));
         ++entryCount;
     }
@@ -65,7 +65,7 @@ void GNToolsSettingsAccessor::loadGNTools()
     using namespace Constants;
     Store data = restoreSettings();
     int entryCount = data.value(ToolsSettings::ENTRY_COUNT, 0).toInt();
-    std::vector<GNTools::Tool_t> result;
+    std::vector<GNTools::Tool> result;
     for (int toolIndex = 0; toolIndex < entryCount; ++toolIndex) {
         Key name = entryName(toolIndex);
         Store store = storeFromVariant(data[name]);
