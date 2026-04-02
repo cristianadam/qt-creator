@@ -227,7 +227,26 @@ GeneralSettings::GeneralSettings()
             Tr::tr("The DPI rounding policy change will take effect after restart."));
     });
 
+    toolbarStyle.setSettingsKey(settingsKeyToolbarStyle);
+    toolbarStyle.setLabelText(Tr::tr("Toolbar style:"));
+    toolbarStyle.addOption({Tr::tr("Compact"), {}, int(StyleHelper::ToolbarStyle::Compact)});
+    toolbarStyle.addOption({Tr::tr("Relaxed"), {}, int(StyleHelper::ToolbarStyle::Relaxed)});
+    toolbarStyle.setDefaultValue(int(StyleHelper::defaultToolbarStyle()));
+    toolbarStyle.setDisplayStyle(SelectionAspect::DisplayStyle::ComboBox);
+    connect(&toolbarStyle, &BaseAspect::changed, this, [this] {
+        auto newStyle = StyleHelper::ToolbarStyle(toolbarStyle());
+
+        if (newStyle != StyleHelper::toolbarStyle()) {
+            StyleHelper::setToolbarStyle(newStyle);
+            QStyle *applicationStyle = QApplication::style();
+            for (QWidget *widget : QApplication::allWidgets())
+                applicationStyle->polish(widget);
+        }
+    });
+
     readSettings();
+
+    StyleHelper::setToolbarStyle(StyleHelper::ToolbarStyle(toolbarStyle()));
 }
 
 class GeneralSettingsWidget final : public IOptionsPageWidget
@@ -241,17 +260,14 @@ public:
     void resetWarnings();
 
     static bool canResetWarnings();
-    void fillToolbarStyleBox() const;
 
     ThemeChooser *m_themeChooser;
     QPushButton *m_resetWarningsButton;
-    QComboBox *m_toolbarStyleBox;
 };
 
 GeneralSettingsWidget::GeneralSettingsWidget()
     : m_themeChooser(new ThemeChooser)
     , m_resetWarningsButton(new QPushButton)
-    , m_toolbarStyleBox(new QComboBox)
 {
     m_resetWarningsButton->setText(Tr::tr("Reset Warnings", "Button text"));
     m_resetWarningsButton->setToolTip(
@@ -259,12 +275,10 @@ GeneralSettingsWidget::GeneralSettingsWidget()
            "Show Again\" (for example, missing highlighter).",
            nullptr));
 
-    m_toolbarStyleBox->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-
     Form form;
     form.addRow({generalSettings().color, st});
     form.addRow({Tr::tr("Theme:"), m_themeChooser});
-    form.addRow({Tr::tr("Toolbar style:"), m_toolbarStyleBox, st});
+    form.addRow({generalSettings().toolbarStyle, st});
     form.addRow({generalSettings().language, st});
 
     if (StyleHelper::defaultHighDpiScaleFactorRoundingPolicy()
@@ -316,8 +330,6 @@ GeneralSettingsWidget::GeneralSettingsWidget()
         }
     }.attachTo(this);
 
-    fillToolbarStyleBox();
-
     m_resetWarningsButton->setEnabled(canResetWarnings());
 
     connect(m_resetWarningsButton,
@@ -328,7 +340,6 @@ GeneralSettingsWidget::GeneralSettingsWidget()
     setOnCancel([] { generalSettings().cancel(); });
 
     installCheckSettingsDirtyTrigger(m_themeChooser->themeComboBox());
-    installCheckSettingsDirtyTrigger(m_toolbarStyleBox);
 
     connect(&generalSettings(), &AspectContainer::volatileValueChanged, &checkSettingsDirty);
 }
@@ -339,15 +350,6 @@ void GeneralSettingsWidget::apply()
     generalSettings().writeSettings();
 
     m_themeChooser->apply();
-    if (const auto newStyle = m_toolbarStyleBox->currentData().value<StyleHelper::ToolbarStyle>();
-        newStyle != StyleHelper::toolbarStyle()) {
-        ICore::settings()->setValueWithDefault(settingsKeyToolbarStyle, int(newStyle),
-                                               int(StyleHelper::defaultToolbarStyle()));
-        StyleHelper::setToolbarStyle(newStyle);
-        QStyle *applicationStyle = QApplication::style();
-        for (QWidget *widget : QApplication::allWidgets())
-            applicationStyle->polish(widget);
-    }
 }
 
 bool GeneralSettingsWidget::isDirty() const
@@ -357,11 +359,6 @@ bool GeneralSettingsWidget::isDirty() const
 
     if (m_themeChooser->isDirty())
         return true;
-
-    if (const auto newStyle = m_toolbarStyleBox->currentData().value<StyleHelper::ToolbarStyle>();
-            newStyle != StyleHelper::toolbarStyle()) {
-        return true;
-    }
 
     return false;
 }
@@ -376,31 +373,6 @@ void GeneralSettingsWidget::resetWarnings()
 bool GeneralSettingsWidget::canResetWarnings()
 {
     return InfoBar::anyGloballySuppressed() || CheckableMessageBox::hasSuppressedQuestions();
-}
-
-StyleHelper::ToolbarStyle toolbarStylefromSettings()
-{
-    if (!ExtensionSystem::PluginManager::instance()) // May happen in tests
-        return StyleHelper::defaultToolbarStyle();
-
-    return StyleHelper::ToolbarStyle(
-                ICore::settings()->value(settingsKeyToolbarStyle,
-                                         int(StyleHelper::defaultToolbarStyle())).toInt());
-}
-
-void GeneralSettingsWidget::fillToolbarStyleBox() const
-{
-    m_toolbarStyleBox->addItem(Tr::tr("Compact"),
-                               QVariant::fromValue(StyleHelper::ToolbarStyle::Compact));
-    m_toolbarStyleBox->addItem(Tr::tr("Relaxed"),
-                               QVariant::fromValue(StyleHelper::ToolbarStyle::Relaxed));
-    const int curId = m_toolbarStyleBox->findData(QVariant::fromValue(toolbarStylefromSettings()));
-    m_toolbarStyleBox->setCurrentIndex(curId);
-}
-
-void GeneralSettings::applyToolbarStyleFromSettings()
-{
-    StyleHelper::setToolbarStyle(toolbarStylefromSettings());
 }
 
 // GeneralSettingsPage
@@ -419,4 +391,4 @@ public:
 
 const GeneralSettingsPage settingsPage;
 
-} // Core::Internal
+} // namespace Core::Internal

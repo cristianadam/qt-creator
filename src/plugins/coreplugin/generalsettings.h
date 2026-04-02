@@ -56,13 +56,12 @@ public:
     Utils::BoolAspect useTabsInEditorViews{this};
     Utils::BoolAspect showOkAndCancelInSettingsMode{this};
 
+    Utils::SelectionAspect toolbarStyle{this};
     Utils::SelectionAspect highDpiScaleFactorRoundingPolicy{this};
 
     CodecForLocaleAspect codecForLocale{this};
     LanguageSelectionAspect language{this};
     Utils::ColorAspect color{this};
-
-    static void applyToolbarStyleFromSettings();
 };
 
 GeneralSettings &generalSettings();

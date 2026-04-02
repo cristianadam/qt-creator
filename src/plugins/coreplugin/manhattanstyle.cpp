@@ -140,7 +140,9 @@ ManhattanStyle::ManhattanStyle(const QString &baseStyleName)
     : QProxyStyle(QStyleFactory::create(baseStyleName))
     , d(new ManhattanStylePrivate())
 {
-    Core::Internal::GeneralSettings::applyToolbarStyleFromSettings();
+    // Make sure the general settings are read and applied, so that the style is
+    // correctly initialized based on them
+    Core::Internal::generalSettings();
 }
 
 ManhattanStyle::~ManhattanStyle()
