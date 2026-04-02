@@ -824,7 +824,7 @@ KitOptionsPageWidget::KitOptionsPageWidget()
             return;
         Kit *wc = m_model.workingCopyForRow(currentRow);
         if (wc)
-            wc->copyFrom(m_configWidget.workingCopy());
+            m_configWidget.save(wc);
         const KitData d = m_model.item(currentRow);
         const bool changed = !d.kit || !wc || !wc->isEqual(d.kit);
         m_model.setChanged(currentRow, changed);
@@ -875,13 +875,6 @@ void KitOptionsPageWidget::scrollToSelectedKit()
 
 void KitOptionsPageWidget::apply()
 {
-    const int currentRow = m_groupedView.currentRow();
-    if (currentRow >= 0) {
-        Kit *wc = m_model.workingCopyForRow(currentRow);
-        if (wc)
-            m_configWidget.save(wc);
-    }
-
     m_model.apply();
     updateState();
 }
