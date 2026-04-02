@@ -8,26 +8,19 @@
 #include "icore.h"
 #include "themechooser.h"
 
-#include <extensionsystem/pluginmanager.h>
 
 #include <utils/algorithm.h>
 #include <utils/checkablemessagebox.h>
-#include <utils/hostosinfo.h>
 #include <utils/infobar.h>
 #include <utils/layoutbuilder.h>
 #include <utils/stylehelper.h>
 #include <utils/textcodec.h>
 
 #include <QApplication>
-#include <QCheckBox>
-#include <QComboBox>
 #include <QCoreApplication>
-#include <QDir>
 #include <QGuiApplication>
 #include <QLibraryInfo>
-#include <QMessageBox>
 #include <QPushButton>
-#include <QSettings>
 #include <QStandardItem>
 #include <QStyleHints>
 
@@ -268,120 +261,79 @@ GeneralSettings::GeneralSettings()
     readSettings();
 
     StyleHelper::setToolbarStyle(StyleHelper::ToolbarStyle(toolbarStyle()));
-}
 
-class GeneralSettingsWidget final : public IOptionsPageWidget
-{
-public:
-    GeneralSettingsWidget();
+    setLayouter([this]() -> Layouting::Layout {
+        auto resetWarningsButton = new QPushButton;
+        resetWarningsButton->setText(Tr::tr("Reset Warnings", "Button text"));
+        resetWarningsButton->setToolTip(
+            Tr::tr("Re-enable warnings that were suppressed by selecting \"Do Not "
+               "Show Again\" (for example, missing highlighter).",
+               nullptr));
+        bool canReset = InfoBar::anyGloballySuppressed()
+                        || CheckableMessageBox::hasSuppressedQuestions();
+        resetWarningsButton->setEnabled(canReset);
+        QObject::connect(resetWarningsButton, &QAbstractButton::clicked, resetWarningsButton, [resetWarningsButton] {
+            InfoBar::clearGloballySuppressed();
+            CheckableMessageBox::resetAllDoNotAskAgainQuestions();
+            resetWarningsButton->setEnabled(InfoBar::anyGloballySuppressed()
+                                            || CheckableMessageBox::hasSuppressedQuestions());
+        });
 
-    void apply() final;
-    bool isDirty() const final;
+        Form form;
+        form.addRow({color, st});
+        form.addRow({theme, st});
+        form.addRow({toolbarStyle, st});
+        form.addRow({language, st});
 
-    void resetWarnings();
+        if (StyleHelper::defaultHighDpiScaleFactorRoundingPolicy()
+            != Qt::HighDpiScaleFactorRoundingPolicy::Unset) {
+            form.addRow({highDpiScaleFactorRoundingPolicy});
 
-    static bool canResetWarnings();
+            static const QList<const char *> envVars = {
+                StyleHelper::C_QT_SCALE_FACTOR_ROUNDING_POLICY,
+                "QT_ENABLE_HIGHDPI_SCALING",
+                "QT_FONT_DPI",
+                "QT_SCALE_FACTOR",
+                "QT_SCREEN_SCALE_FACTORS",
+                "QT_USE_PHYSICAL_DPI",
+            };
+            auto setVars = Utils::filtered(envVars, &qEnvironmentVariableIsSet);
+            if (!setVars.isEmpty()) {
+                QString toolTip = Tr::tr(
+                                      "The following environment variables are set and can "
+                                      "influence the UI scaling behavior of %1:")
+                                      .arg(QGuiApplication::applicationDisplayName())
+                                  + "\n\n"
+                                  + Utils::transform<QStringList>(setVars, [](const char *var) {
+                                        return QString("%1=%2")
+                                            .arg(QString::fromUtf8(var))
+                                            .arg(qEnvironmentVariable(var));
+                                    }).join("\n");
 
-    QPushButton *m_resetWarningsButton;
-};
+                auto envVarInfo = new InfoLabel(Tr::tr("Environment influences UI scaling behavior."));
+                envVarInfo->setAdditionalToolTip(toolTip);
+                form.addItem(envVarInfo);
+            } else {
+                form.addItem(st);
+            }
+        }
 
-GeneralSettingsWidget::GeneralSettingsWidget()
-    : m_resetWarningsButton(new QPushButton)
-{
-    m_resetWarningsButton->setText(Tr::tr("Reset Warnings", "Button text"));
-    m_resetWarningsButton->setToolTip(
-        Tr::tr("Re-enable warnings that were suppressed by selecting \"Do Not "
-           "Show Again\" (for example, missing highlighter).",
-           nullptr));
+        form.flush();
+        form.addRow({codecForLocale, st});
+        form.addRow({empty, showShortcutsInContextMenus});
+        form.addRow({empty, provideSplitterCursors});
+        form.addRow({empty, preferInfoBarOverPopup});
+        form.addRow({empty, useTabsInEditorViews});
+        form.addRow({empty, showOkAndCancelInSettingsMode});
+        form.addRow({Row{resetWarningsButton, st}});
 
-    Form form;
-    form.addRow({generalSettings().color, st});
-    form.addRow({generalSettings().theme, st});
-    form.addRow({generalSettings().toolbarStyle, st});
-    form.addRow({generalSettings().language, st});
-
-    if (StyleHelper::defaultHighDpiScaleFactorRoundingPolicy()
-        != Qt::HighDpiScaleFactorRoundingPolicy::Unset) {
-        form.addRow({generalSettings().highDpiScaleFactorRoundingPolicy});
-
-        static const QList<const char *> envVars = {
-            StyleHelper::C_QT_SCALE_FACTOR_ROUNDING_POLICY,
-            "QT_ENABLE_HIGHDPI_SCALING",
-            "QT_FONT_DPI",
-            "QT_SCALE_FACTOR",
-            "QT_SCREEN_SCALE_FACTORS",
-            "QT_USE_PHYSICAL_DPI",
+        return Column {
+            Group {
+                title(Tr::tr("User Interface")),
+                form
+            }
         };
-        auto setVars = Utils::filtered(envVars, &qEnvironmentVariableIsSet);
-        if (!setVars.isEmpty()) {
-            QString toolTip = Tr::tr(
-                                  "The following environment variables are set and can "
-                                  "influence the UI scaling behavior of %1:")
-                                  .arg(QGuiApplication::applicationDisplayName())
-                              + "\n\n"
-                              + Utils::transform<QStringList>(setVars, [](const char *var) {
-                                    return QString("%1=%2")
-                                        .arg(QString::fromUtf8(var))
-                                        .arg(qEnvironmentVariable(var));
-                                }).join("\n");
-
-            auto envVarInfo = new InfoLabel(Tr::tr("Environment influences UI scaling behavior."));
-            envVarInfo->setAdditionalToolTip(toolTip);
-            form.addItem(envVarInfo);
-        } else {
-            form.addItem(st);
-        }
-    }
-
-    form.flush();
-    form.addRow({generalSettings().codecForLocale, st});
-    form.addRow({empty, generalSettings().showShortcutsInContextMenus});
-    form.addRow({empty, generalSettings().provideSplitterCursors});
-    form.addRow({empty, generalSettings().preferInfoBarOverPopup});
-    form.addRow({empty, generalSettings().useTabsInEditorViews});
-    form.addRow({empty, generalSettings().showOkAndCancelInSettingsMode});
-    form.addRow({Row{m_resetWarningsButton, st}});
-
-    Column {
-        Group {
-            title(Tr::tr("User Interface")),
-            form
-        }
-    }.attachTo(this);
-
-    m_resetWarningsButton->setEnabled(canResetWarnings());
-
-    connect(m_resetWarningsButton,
-            &QAbstractButton::clicked,
-            this,
-            &GeneralSettingsWidget::resetWarnings);
-
-    setOnCancel([] { generalSettings().cancel(); });
-
-    connect(&generalSettings(), &AspectContainer::volatileValueChanged, &checkSettingsDirty);
-}
-
-void GeneralSettingsWidget::apply()
-{
-    generalSettings().apply();
-    generalSettings().writeSettings();
-}
-
-bool GeneralSettingsWidget::isDirty() const
-{
-    return generalSettings().isDirty();
-}
-
-void GeneralSettingsWidget::resetWarnings()
-{
-    InfoBar::clearGloballySuppressed();
-    CheckableMessageBox::resetAllDoNotAskAgainQuestions();
-    m_resetWarningsButton->setEnabled(false);
-}
-
-bool GeneralSettingsWidget::canResetWarnings()
-{
-    return InfoBar::anyGloballySuppressed() || CheckableMessageBox::hasSuppressedQuestions();
+    });
 }
 
 // GeneralSettingsPage
@@ -394,7 +346,7 @@ public:
         setId(Constants::SETTINGS_ID_INTERFACE);
         setDisplayName(Tr::tr("Interface"));
         setCategory(Constants::SETTINGS_CATEGORY_CORE);
-        setWidgetCreator([] { return new GeneralSettingsWidget; });
+        setSettingsProvider([] { return &generalSettings(); });
     }
 };
 
