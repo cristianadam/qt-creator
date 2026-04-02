@@ -49,7 +49,7 @@
     gradient that you set in the \uicontrol {Fill color} field. You can
     also use a \l{Pick colors}{color picker} to select colors and a
     \l{Pick gradients}{gradient picker} to select gradients from a
-    predefined set of \l{https://webgradients.com/}{WebGradients}.
+    predefined set of \l{WebGradients}.
 
     An optional solid border can be added to a rectangle with its own color
     and thickness by setting the values of the \uicontrol {Border color} and

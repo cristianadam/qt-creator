@@ -104,9 +104,8 @@
             \li \c -language \e <locale>
             \li Set the UI language.
 
-                Use a lowercase, two-letter
-                \l {https://www.iso.org/iso-639-language-codes.html}
-                {ISO 639 language code}, such as \e de, \e en, or \e fr.
+                Use a lowercase, two-letter \l{ISO 639 language code}, such as
+                \e de, \e en, or \e fr.
 
        \row
             \li \c {-test} \e{<plugin>}\c{[,testfunction[:testdata]] ...}

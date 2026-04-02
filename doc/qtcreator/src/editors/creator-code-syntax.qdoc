@@ -116,9 +116,8 @@
     \section1 JavaScript and QML error codes
 
     Many of the error messages are similar to the ones in Douglas Crockford's
-    \l{http://www.jslint.com}{JSLint} tool. For more information about JSLint
-    errors, see \l{https://github.com/jamesallardice/jslint-error-explanations}
-    {JSLint Error Explanations}.
+    \l{JSLint} tool. For more information about JSLint
+    errors, see \l{JSLint Error Explanations}.
 
     \table
     \header

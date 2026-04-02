@@ -126,11 +126,11 @@
     \title Adoptium OpenJDK
 */
 /*!
-    \externalpage http://openjdk.java.net
+    \externalpage https://openjdk.org/
     \title OpenJDK
 */
 /*!
-    \externalpage http://developer.android.com/sdk/index.html
+    \externalpage https://developer.android.com/tools
     \title Android SDK Command-line Tools
 */
 /*!
@@ -138,7 +138,7 @@
     \title avdmanager
 */
 /*!
-    \externalpage http://developer.android.com/tools/sdk/ndk/index.html
+    \externalpage https://developer.android.com/ndk/guides
     \title Android NDK
 */
 /*!
@@ -162,11 +162,11 @@
     \title Android OpenSSL support
 */
 /*!
-    \externalpage http://developer.android.com/guide/topics/manifest/uses-sdk-element.html#ApiLevels
+    \externalpage https://developer.android.com/guide/topics/manifest/uses-sdk-element.html#ApiLevels
     \title What is API Level?
 */
 /*!
-    \externalpage http://developer.android.com/guide/components/fundamentals.html
+    \externalpage https://developer.android.com/guide/components/fundamentals.html
     \title Android Application Fundamentals
 */
 /*!
@@ -384,4 +384,652 @@
 /*!
     \externalpage https://docs.kde.org/stable_kf6/en/kate/katepart/highlight.html
     \title Working with Syntax Highlighting
+*/
+/*!
+    \externalpage https://doc.qt.io/qt-6/qtqml-qtquick-compiler-tech.html
+    \title Qt Quick Compiler
+*/
+/*!
+    \externalpage https://www.jslint.com/
+    \title JSLint
+*/
+/*!
+    \externalpage https://cppcheck.sourceforge.io/
+    \title Cppcheck
+*/
+/*!
+    \externalpage https://sdcc.sourceforge.net/
+    \title SDCC
+*/
+/*!
+    \externalpage https://openocd.org/
+    \title OpenOCD
+*/
+/*!
+    \externalpage https://developer.arm.com/documentation/101407/0543/About-uVision
+    \title uVision
+*/
+/*!
+    \externalpage https://sourceware.org/gdb/current/onlinedocs/gdb.html/Breakpoints.html#Breakpoints
+    \title Breakpoints, Watchpoints, and Catchpoints
+*/
+/*!
+    \externalpage https://wiki.qt.io/QtCreator_Build_Gdb
+    \title QtCreator Build Gdb
+*/
+/*!
+    \externalpage https://developer.apple.com/library/archive/technotes/tn2124/_index.html#//apple_ref/doc/uid/DTS10003391
+    \title Mac OS X Debugging Magic
+*/
+/*!
+    \externalpage https://lldb.llvm.org/use/variable.html
+    \title Variable Formatting
+*/
+/*!
+    \externalpage https://wiki.ubuntu.com/SecurityTeam/Roadmap/KernelHardening#ptrace_Protection
+    \title KernelHardening
+*/
+/*!
+    \externalpage https://astyle.sourceforge.net/
+    \title Artistic Style
+*/
+/*!
+    \externalpage https://uncrustify.sourceforge.net/
+    \title Uncrustify
+*/
+/*!
+    \externalpage https://sourceforge.net/projects/astyle/files/astyle/
+    \title Artistic Style Files
+*/
+/*!
+    \externalpage https://sourceforge.net/projects/uncrustify/files/uncrustify/
+    \title Uncrustify Files
+*/
+/*!
+    \externalpage https://clang.llvm.org/diagnostics.html
+    \title Expressive Diagnostics
+*/
+/*!
+    \externalpage https://www.vim.org/docs.php
+    \title Vim documentation
+*/
+/*!
+    \externalpage https://specifications.freedesktop.org/shared-mime-info/latest/
+    \title Shared MIME-info Database
+*/
+/*!
+    \externalpage https://www.qtcentre.org/threads/19222-Qssl
+    \title Qt Centre: QSsl
+*/
+/*!
+    \externalpage https://help.apple.com/simulator/mac/current/#/
+    \title Simulator Help
+*/
+/*!
+    \externalpage https://www.qt.io/development/qt-framework/qt-licensing
+    \title Qt Licensing Overview
+*/
+/*!
+    \externalpage https://www.virtualbox.org/manual/ch04.html#guestadd-3d
+    \title Hardware 3D acceleration (OpenGL and Direct3D 8/9)
+*/
+/*!
+    \externalpage https://bugs.launchpad.net/ubuntu/+source/kdeutils/+bug/662005
+    \title Ubuntu bug 662005
+*/
+/*!
+    \externalpage https://qt-project.atlassian.net/browse/QTBUG-12025
+    \title QTBUG-12025
+*/
+/*!
+    \externalpage https://doc.qt.io/qbs/qbsmodules-qmlmodule.html
+    \title List of Modules
+*/
+/*!
+    \externalpage https://download.qt.io/official_releases/jom/
+    \title Qt Downloads: jom
+*/
+/*!
+    \externalpage https://doc.qt.io/qbs/index.html
+    \title Qbs Manual
+*/
+/*!
+    \externalpage https://doc.qt.io/qbs/language-introduction.html#modules
+    \title Qbs: Modules
+*/
+/*!
+    \externalpage https://kdiff3.sourceforge.net/
+    \title KDiff3
+*/
+/*!
+    \externalpage https://gnuwin32.sourceforge.net/packages/diffutils.htm
+    \title Diffutils for Windows
+*/
+/*!
+    \externalpage https://fossil-scm.org/home/doc/trunk/www/index.wiki
+    \title Fossil SCM client
+*/
+/*!
+    \externalpage https://clang.llvm.org/extra/clang-tidy/
+    \title Clang-Tidy
+*/
+/*!
+    \externalpage https://github.com/KDE/clazy/blob/master/README.md
+    \title Clazy
+*/
+/*!
+    \externalpage https://doc.qt.io/coco/
+    \title Coco Manual
+*/
+/*!
+    \externalpage https://www.qt.io/quality-assurance/axivion-suite
+    \title Axivion Suite
+*/
+/*!
+    \externalpage https://github.com/ssbssa/heob
+    \title Heob sources
+*/
+/*!
+    \externalpage https://yaml.org/
+    \title YAML
+*/
+/*!
+    \externalpage https://clang.llvm.org/docs/ClangStaticAnalyzer.html
+    \title Clang Static Analyzer documentation
+*/
+/*!
+    \externalpage https://lttng.org/
+    \title LTTng
+*/
+/*!
+    \externalpage https://github.com/KDABLabs/ctf2ctf
+    \title ctf2ctf
+*/
+/*!
+    \externalpage https://kcachegrind.github.io/html/Home.html
+    \title KCachegrind
+*/
+/*!
+    \externalpage https://doc.qt.io/qt-6/qnativeinterface-qandroidapplication.html#hideSplashScreen
+    \title QNativeInterface::QAndroidApplication::hideSplashScreen()
+*/
+/*!
+    \externalpage https://www.keil.com/product/
+    \title Keil
+*/
+/*!
+    \externalpage https://github.com/EmBitz/EBlink
+    \title EBlink
+*/
+/*!
+    \externalpage https://www.segger.com/products/debug-probes/j-link/
+    \title J-Link
+*/
+/*!
+    \externalpage https://www.st.com/en/development-tools/stlink-v3-bridge.html
+    \title ST-LINK Utility
+*/
+/*!
+    \externalpage https://microsoft.github.io/debug-adapter-protocol/
+    \title Debug Adapter Protocol (DAP)
+*/
+/*!
+    \externalpage https://cmake.org/
+    \title CMake homepage
+*/
+/*!
+    \externalpage https://cmake.org/cmake/help/latest/manual/cmake-file-api.7.html
+    \title CMake's file-based API
+*/
+/*!
+    \externalpage https://conan.io
+    \title Conan
+*/
+/*!
+    \externalpage https://docs.conan.io/2/integrations/cmake.html
+    \title Conan integration with CMake
+*/
+/*!
+    \externalpage https://docs.conan.io/2/reference/tools/qbs.html
+    \title Conan integration with Qbs
+*/
+/*!
+    \externalpage https://docs.conan.io/en/latest/integrations/qmake.html \\TODO: this is actually deprecated, no longer available in Conan 2.0?
+    \title Conan integration with qmake
+*/
+/*!
+    \externalpage https://docs.conan.io/2/integrations/meson.html
+    \title Conan integration with Meson
+*/
+/*!
+    \externalpage https://docs.conan.io/2/reference/conanfile.html
+    \title conanfile.py
+*/
+/*!
+    \externalpage https://docs.conan.io/2/reference/conanfile_txt.html
+    \title conanfile.txt
+*/
+/*!
+    \externalpage https://docs.python.org/3/library/pdb.html
+    \title PDB
+*/
+/*!
+    \externalpage https://doc.qt.io/qtforpython-6/tutorials/debugging/qtcreator/qtcreator.html
+    \title Debugging PySide with \QC (Linux)
+*/
+/*!
+    \externalpage https://sourceware.org/gdb/current/onlinedocs/gdb.html/Connecting.html
+    \title Debugging with GDB: Connecting to a Remote Target
+*/
+/*!
+    \externalpage https://sourceware.org/gdb/current/onlinedocs/gdb.html/Core-File-Generation.html
+    \title Debugging with GDB: How to Produce a Core File from Your Program
+*/
+/*!
+    \externalpage https://sourceware.org/gdb/current/onlinedocs/gdb.html/Pretty-Printing.html#Pretty-Printing
+    \title Debugging with GDB: Pretty Printing
+*/
+/*!
+    \externalpage https://sourceware.org/gdb/current/onlinedocs/gdb.html/Signals.html
+    \title Debugging with GDB: Signals
+*/
+/*!
+    \externalpage https://sourceware.org/gdb/current/onlinedocs/gdb.html/Values-From-Inferior.html
+    \title Debugging with GDB: Values From Inferior
+*/
+/*!
+    \externalpage https://lldb.llvm.org/cpp_reference/classlldb_1_1SBValue.html
+    \title LLDB: SBValue Class Reference
+*/
+/*!
+    \externalpage https://containers.dev/
+    \title Development Containers
+*/
+/*!
+    \externalpage https://docs.docker.com/get-started/docker-overview/
+    \title Docker overview
+*/
+/*!
+    \externalpage https://docs.docker.com/reference/cli/docker/image/pull/
+    \title docker image pull
+*/
+/*!
+    \externalpage https://github.com/jamesallardice/jslint-error-explanations
+    \title JSLint Error Explanations
+*/
+/*!
+    \externalpage https://huggingface.co/QtGroup/CodeLlama-7B-QML
+    \title codellama:7b-code-qml
+*/
+/*!
+    \externalpage https://huggingface.co/QtGroup/CodeLlama-13B-QML
+    \title codellama:13b-code-qml
+*/
+/*!
+    \externalpage https://platform.claude.com/
+    \title Anthropic account
+*/
+/*!
+    \externalpage https://platform.openai.com/
+    \title OpenAI account
+*/
+/*!
+    \externalpage https://clangd.llvm.org/
+    \title What is clangd
+*/
+/*!
+    \externalpage https://microsoft.github.io/language-server-protocol/
+    \title Language Server Protocol
+*/
+/*!
+    \externalpage https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html
+    \title Options to Request or Suppress Warnings
+*/
+/*!
+    \externalpage https://qt-project.atlassian.net/
+    \title Qt Project Bug Tracker
+*/
+/*!
+    \externalpage https://clang.llvm.org/docs/JSONCompilationDatabase.html
+    \title JSON compilation database format
+*/
+/*!
+    \externalpage https://github.com/features/copilot
+    \title GitHub Copilot
+*/
+/*!
+    \externalpage https://docs.github.com/en/billing/concepts/product-billing/github-copilot-licenses
+    \title GitHub Copilot licenses
+*/
+/*!
+    \externalpage https://github.com/github/copilot.vim/blob/release/README.md
+    \title GitHub Copilot for Vim and Neovim
+*/
+/*!
+    \externalpage https://github.com/tpope/vim-commentary
+    \title vim-commentary
+*/
+/*!
+    \externalpage https://github.com/vim-scripts/ReplaceWithRegister
+    \title ReplaceWithRegister
+*/
+/*!
+    \externalpage https://github.com/vim-scripts/argtextobj.vim
+    \title argtextobj.vim
+*/
+/*!
+    \externalpage https://github.com/tommcdo/vim-exchange
+    \title vim-exchange
+*/
+/*!
+    \externalpage https://github.com/tpope/vim-surround
+    \title vim-surround
+*/
+/*!
+    \externalpage https://github.com/microsoft/vscode-languageserver-node/pull/367
+    \title Proposal of the semantic highlighting protocol extension
+*/
+/*!
+    \externalpage https://www.iana.org/assignments/media-types/media-types.xhtml
+    \title IANA: Media Types
+*/
+/*!
+    \externalpage https://nodejs.org/en/learn/getting-started/an-introduction-to-the-npm-package-manager
+    \title An introduction to the npm package manager
+*/
+/*!
+    \externalpage https://download.eclipse.org/jdtls/milestones/
+    \title Eclipse Downloads
+*/
+/*!
+    \externalpage https://github.com/python-lsp/python-lsp-server/blob/develop/CONFIGURATION.md
+    \title Python Language Server Configuration
+*/
+/*!
+    \externalpage https://www.markdownguide.org/basic-syntax/
+    \title Markdown
+*/
+/*!
+    \externalpage https://nim-lang.org/docs/nimsuggest.html
+    \title Nim IDE Integration Guide
+*/
+/*!
+    \externalpage https://www.w3.org/TR/scxml/
+    \title State Chart XML (SCXML)
+*/
+/*!
+    \externalpage https://github.com/google/googletest/blob/main/docs/primer.md
+    \title Google Test Primer
+*/
+/*!
+    \externalpage https://www.boost.org/
+    \title Boost.org
+*/
+/*!
+    \externalpage https://www.boost.org/doc/libs/latest/libs/test/doc/html/index.html
+    \title Boost.Test
+*/
+/*!
+    \externalpage https://github.com/catchorg/Catch2/blob/devel/docs/Readme.md
+    \title Catch2
+*/
+/*!
+    \externalpage https://gitlab.kitware.com/cmake/community/-/wikis/doc/ctest/Testing-With-CTest
+    \title Testing with CTest
+*/
+/*!
+    \externalpage https://github.com/google/googletest/blob/main/docs/advanced.md#running-a-subset-of-the-tests
+    \title Running a Subset of the Tests
+*/
+/*!
+    \externalpage https://www.iso.org/iso-639-language-code
+    \title ISO 639 language code
+*/
+/*!
+    \externalpage https://lists.qt-project.org/listinfo/qt-creator
+    \title \QC mailing list
+*/
+/*!
+    \externalpage https://web.libera.chat/#qt-creator
+    \title Libera.Chat: the qt-creator channel
+*/
+/*!
+    \externalpage https://marketplace.qt.io/
+    \title Qt Marketplace
+*/
+/*!
+    \externalpage https://github.com/
+    \title GitHub
+*/
+/*!
+    \externalpage https://www.qt.io/download-qt-installer
+    \title \QOI
+*/
+/*!
+    \externalpage https://account.qt.io/
+    \title Qt Account
+*/
+/*!
+    \externalpage https://download.qt.io/official_releases/qtcreator/
+    \title Official releases
+*/
+/*!
+    \externalpage https://download.qt.io/snapshots/qtcreator/
+    \title Snapshots of the current and upcoming release
+*/
+/*!
+    \externalpage https://github.com/qt-creator/qt-creator/releases
+    \title GitHub: Qt Creator releases
+*/
+/*!
+    \externalpage https://github.com/qt-creator/qt-creator/#compiling-qt-creator
+    \title Compiling \QC
+*/
+/*!
+    \externalpage https://wiki.qt.io/Building_Qt_Creator_from_Git
+    \title Building \QC from Git
+*/
+/*!
+    \externalpage https://ffmpeg.org/download.html
+    \title FFmpeg
+*/
+/*!
+    \externalpage https://geoff.greer.fm/ag/
+    \title The Silver Searcher
+*/
+/*!
+    \externalpage https://github.com/ggreer/the_silver_searcher
+    \title GitHub: The Silver Searcher
+*/
+/*!
+    \externalpage https://www.qt.io/terms-conditions/privacy-and-security
+    \title Qt Appendix for Privacy and Security
+*/
+/*!
+    \externalpage https://doc.qt.io/qt-6/qt-add-executable.html
+    \title qt_add_executable
+*/
+/*!
+    \externalpage https://learn.microsoft.com/en-us/sysinternals/downloads/debugview
+    \title DebugView for Windows
+*/
+/*!
+    \externalpage https://code.qt.io/cgit/qt-creator/qt-creator.git/tree/dist
+    \title \QC changelog
+*/
+/*!
+    \externalpage https://www.incredibuild.com/
+    \title IncrediBuild homepage
+*/
+/*!
+    \externalpage https://docs.incredibuild.com/win/latest/windows/Qt_creator.html
+    \title IncrediBuild for \QC
+*/
+/*!
+    \externalpage https://doc.qt.io/qbs/qml-qbsmodules-cpp.html#minimumIosVersion-prop
+    \title cpp.minimumIosVersion
+*/
+/*!
+    \externalpage https://developer.apple.com/programs/enroll/
+    \title Enroll in the Apple Developer Program
+*/
+/*!
+    \externalpage https://developer.apple.com/documentation/xcode/running-your-app-in-simulator-or-on-a-device/#Configure-the-list-of-simulated-devices
+    \title Xcode documentation: Configure the list of simulated devices
+*/
+/*!
+    \externalpage https://mesonbuild.com/
+    \title The Meson Build system
+*/
+/*!
+    \externalpage https://www.gnu.org/licenses/old-licenses/lgpl-2.0.html
+    \title GNU Library General Public License, Version 2
+*/
+/*!
+    \externalpage https://github.com/KDE/clazy
+    \title Clazy project homepage
+*/
+/*!
+    \externalpage https://www.qt.io/development/developers
+    \title Qt Developers
+*/
+/*!
+    \externalpage https://wiki.qt.io/Qt_Contribution_Guidelines
+    \title Qt Contribution Guidelines
+*/
+/*!
+    \externalpage https://github.com/topics/qt
+    \title Qt Apps on GitHub
+*/
+/*!
+    \externalpage https://github.com/topics/qml
+    \title QML Apps on GitHub
+*/
+/*!
+    \externalpage https://techdocs.broadcom.com/us/en/vmware-cis/desktop-hypervisors/workstation-pro/17-0/using-vmware-workstation-pro/configuring-and-managing-virtual-machines/configure-display-settings-for-a-virtual-machine/prepare-the-host-system-to-use-accelerated-3d-graphics.html
+    \title Prepare the Host System to Use DirectX 9 Accelerated Graphics
+*/
+/*!
+    \externalpage https://www.gnu.org/software/emacs/manual/html_node/emacs/index.html
+    \title The Emacs Editor
+*/
+/*!
+    \externalpage https://github.com/google/googletest
+    \title Google C++ Testing Framework
+*/
+/*!
+    \externalpage https://cmake.org/cmake/help/latest/manual/ctest.1.html
+    \title CTest Manual
+*/
+/*!
+    \externalpage https://www.qt.io/quality-assurance/squish
+    \title Squish product page
+*/
+/*!
+    \externalpage https://godbolt.org/
+    \title Compiler Explorer
+*/
+/*!
+    \externalpage https://trac.macports.org/wiki/howto/ccache
+    \title How to enable ccache
+*/
+/*!
+    \externalpage https://clang.llvm.org/docs/UsersManual.html#clang-cl
+    \title clang-cl
+*/
+/*!
+    \externalpage https://github.com/nim-lang/nimble#readme
+    \title Nimble
+*/
+/*!
+    \externalpage https://nim-lang.org/
+    \title Nim language
+*/
+/*!
+    \externalpage https://ant.apache.org/
+    \title Ant
+*/
+/*!
+    \externalpage https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-build
+    \title dotnet build
+*/
+/*!
+    \externalpage https://docs.gradle.org/current/userguide/command_line_interface.html
+    \title Gradle
+*/
+/*!
+    \externalpage https://www.swift.org/documentation/server/guides/building.html
+    \title Swift
+*/
+/*!
+    \externalpage https://doc.qt.io/qbs/qbsprobes-qmlmodule.html
+    \title Qbs Probes
+*/
+/*!
+    \externalpage https://cmake.org/cmake/help/latest/manual/cmake.1.html#install-a-project
+    \title CMake: Install a Project
+*/
+/*!
+    \externalpage https://doc.qt.io/qtforpython-6/index.html
+    \title Qt for Python
+*/
+/*!
+    \externalpage https://pythonprogramminglanguage.com/repl/
+    \title Python interactive shell
+*/
+/*!
+    \externalpage https://doc.qt.io/qtforpython-6/tutorials/index.html
+    \title Qt for Python Examples and Tutorials
+*/
+/*!
+    \externalpage https://doc.qt.io/qt-6/qtqml-javascript-functionlist.html
+    \title List of JavaScript Objects and Functions
+*/
+/*!
+    \externalpage https://doc.qt.io/qt-6/qml-qtqml-qt.html
+    \title Qt QML Methods
+*/
+/*!
+    \externalpage https://webgradients.com/
+    \title WebGradients
+*/
+/*!
+    \externalpage https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Expressions_and_operators
+    \title JavaScript Expressions and Operators
+*/
+/*!
+    \externalpage https://curl.se/
+    \title curl
+*/
+/*!
+    \externalpage https://code.qt.io/cgit/qt-creator/plugin-telemetry.git
+    \title qt-creator/plugin-telemetry.git
+*/
+/*!
+    \externalpage https://doc.qt.io/qbs/overview.html
+    \title Qbs Overview
+*/
+/*!
+    \externalpage https://code.qt.io/cgit/qbs/qbs.git
+    \title Qbs sources
+*/
+/*!
+    \externalpage https://docs.mesa3d.org/drivers/llvmpipe.html
+    \title LLVMpipe introduction
+*/
+/*!
+    \externalpage https://github.com/llvm/llvm-project/blob/main/llvm/LICENSE.TXT
+    \title Apache 2.0 License with LLVM exceptions
+*/
+/*!
+    \externalpage https://github.com/llvm/llvm-project
+    \title llvm-project on GitHub
+*/
+/*!
+    \externalpage https://code.qt.io/cgit/clang/llvm-project.git
+    \title llvm-project sources
+*/
+/*!
+    \externalpage https://code.qt.io/cgit/clang/clazy.git
+    \title Clazy sources
 */

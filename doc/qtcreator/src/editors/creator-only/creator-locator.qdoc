@@ -194,7 +194,7 @@
             \image {qtcreator-add-online-doc.webp} {List of URLs in Filter Configuration dialog}
 
         \li Double-click the new entry to specify a URL and a search command.
-            For example, \c {http://www.google.com/search?q=%1}.
+            For example, \c {https://www.google.com/search?q=%1}.
 
         \li Select \uicontrol OK.
 

@@ -49,7 +49,7 @@
 
     Run \l{JavaScript and QML Checks}{static checks} on the QML and JavaScript
     code in your project to find common problems, similarly to using
-    \l{http://www.jslint.com}{JSLint}.
+    \l{JSLint}.
 
     \section1 Finding issues in C++ code with Clang tools
 
@@ -57,10 +57,10 @@
     Objective-C source code by using static analysis:
 
     \list
-        \li \l{https://clang.llvm.org/extra/clang-tidy/}{Clang-Tidy}, which
+        \li \l{Clang-Tidy}, which
             has diagnostics and fixes for typical programming errors,
             such as style violations or interface misuse.
-        \li \l{https://github.com/KDE/clazy/blob/master/README.md}{Clazy}, which
+        \li \l{Clazy}, which
             helps Clang understand Qt semantics. It displays Qt-related compiler
             warnings, ranging from unnecessary memory allocation to misuse of
             API and has refactoring actions for fixing some of the issues.
@@ -68,14 +68,14 @@
 
     \section1 Finding issues in C++ code with Cppcheck
 
-    Install the \l{http://cppcheck.sourceforge.net/}{Cppcheck} static analysis
+    Install the \l{Cppcheck} static analysis
     tool to detect undefined behavior and dangerous coding constructs in
     C++ code. Cppcheck analyzes the source code without actually running the
     application.
 
     \section1 Checking code coverage
 
-    Install the \l{https://doc.qt.io/coco/}{Coco} code coverage toolchain for
+    Install the \l{Coco Manual}{Coco} code coverage toolchain for
     Tcl, QML, C# and C/C++ programs on \macOS, Linux, or Windows to analyze the
     way an application runs as part of a test suite, for example. Use the
     results to make the tests more efficient and complete.
@@ -101,7 +101,7 @@
 
     \section1 Preventing code erosion
 
-    Install \l{https://www.axivion.com/en/products/axivion-suite/}{Axivion Suite}
+    Install \l{Axivion Suite}
     to protect software from erosion. With static code analysis,
     architecture analysis, and code-smells-detection, you can:
 
@@ -143,7 +143,7 @@
 
     \section1 Detecting memory leaks with Heob
 
-    On Windows, install the \l{https://github.com/ssbssa/heob}{Heob}
+    On Windows, install the \l{Heob sources}{Heob}
     heap observer to detect buffer overruns and memory leaks.
 
     \section1 Analyzing CPU usage

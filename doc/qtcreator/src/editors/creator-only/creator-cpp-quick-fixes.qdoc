@@ -85,7 +85,7 @@
     \brief Summary of quick fixes for C++ code.
 
     If you use the \l{Clang code model} to parse the C++ files,
-    you get \l{http://clang.llvm.org/diagnostics.html}{Clang fix-it hints} in the
+    you get \l{Expressive Diagnostics}{Clang fix-it hints} in the
     \uicontrol Edit mode. Use the standard ways of activating quick fixes, or
     select the fixes that are applicable on a line in the context menu in the
     left margin of the code editor.

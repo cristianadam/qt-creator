@@ -9,9 +9,8 @@
 
     \title Use GitHub Copilot
 
-    The Copilot plugin (disabled by default) integrates
-    \l{https://github.com/features/copilot}{GitHub Copilot} into \QC.
-    You can view suggestions from Copilot in the \uicontrol Edit mode.
+    The Copilot plugin (disabled by default) integrates \l{GitHub Copilot} into
+    \QC. You can view suggestions from Copilot in the \uicontrol Edit mode.
 
     \note If you enable the Copilot plugin, you must agree with and abide by
     the GitHub terms of use. It is your responsibility to know and accept the
@@ -25,11 +24,9 @@
     To use the Copilot plugin, you need:
 
     \list
-        \li An active \l{https://docs.github.com/en/billing/managing-billing-for-github-copilot/about-billing-for-github-copilot}
-            {GitHub Copilot subscription}.
+        \li An active \l{GitHub Copilot licenses}{GitHub Copilot subscription}.
         \li GitHub Copilot Neovim plugin installed (requires Node.js), as described in
-            \l{https://github.com/github/copilot.vim/blob/release/README.md}
-            {Copilot.vim/Readme.md}.
+            \l{GitHub Copilot for Vim and Neovim}{Copilot.vim/Readme.md}.
     \endlist
 
     \section1 Set Copilot preferences

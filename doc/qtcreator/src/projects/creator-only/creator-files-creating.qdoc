@@ -184,8 +184,8 @@
     translation files or icons. You can specify a locale in the
     \uicontrol Language field.
 
-    Use a lowercase, two-letter \l {https://www.iso.org/iso-639-language-codes.html}
-    {ISO 639 language code}, such as \e de, \e en, or \e fr.
+    Use a lowercase, two-letter \l{ISO 639 language code}, such as
+    \e de, \e en, or \e fr.
 
     \section1 Remove resource files
 

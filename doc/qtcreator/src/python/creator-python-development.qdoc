@@ -9,7 +9,7 @@
 
     \title Develop Qt for Python applications
 
-    With \l {https://doc.qt.io/qtforpython/index.html}{Qt for Python}, you can
+    With \l{Qt for Python}, you can
     use Qt 6 API in Python applications. Use the PySide6 modules to gain access
     to individual Qt modules, such as \l {Qt Core}, \l {Qt GUI}, and
     \l {Qt Widgets}.
@@ -30,8 +30,7 @@
     \endlist
 
     For more information about developing with Qt for Python, including
-    limitations, see \l {https://doc.qt.io/qtforpython/index.html}
-    {Qt for Python}.
+    limitations, see \l{Qt for Python}.
 
     \section1 Set up PySide6
 
@@ -111,8 +110,8 @@
     \section1 Use Python interactive shell
 
     You can write Python code in the \uicontrol Edit mode. Select \uicontrol REPL
-    on the toolbar to start the \l{https://pythonprogramminglanguage.com/repl/}
-    {Python interactive shell} in the \l {Open a Terminal}{Terminal} view.
+    on the toolbar to start the \l{Python interactive shell} in the
+    \l {Open a Terminal}{Terminal} view.
 
     \image {qtcreator-terminal-python.webp} {Python shell in the Terminal view}
 

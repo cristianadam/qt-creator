@@ -129,7 +129,7 @@
     \row
         \li url
         \li Resource locator, such as a file name. It can be either  absolute,
-            (\c http://qt-project.org), or relative  (\c pics/logo.png). A
+            (\c https://qt-project.org), or relative  (\c pics/logo.png). A
             relative URL is resolved relative to the URL of the parent
             component.
     \row

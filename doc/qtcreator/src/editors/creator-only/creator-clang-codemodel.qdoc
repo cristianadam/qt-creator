@@ -47,7 +47,7 @@
     \endlist
 
     The Clang code model plugin offers some of these services
-    for C++ on top of \l{https://clangd.llvm.org/}{Clangd}.
+    for C++ on top of \l{What is clangd}{Clangd}.
 
     \section1 About the Clang code model
 
@@ -58,7 +58,7 @@
     Clang focuses on detailed information for diagnostics, which is really
     useful if the code has typos, for example.
     We make use of these libraries via the clangd tool, which implements
-    an \l{https://microsoft.github.io/language-server-protocol/}{LSP} server.
+    an \l{Language Server Protocol}{LSP} server.
 
     Clang keeps up with the development of the C++ language. At the time of this
     writing, it supports C++98/03, C++11, C++14, C++17, C89, C99, Objective-C,
@@ -324,8 +324,7 @@
     begins with \c -Wno.
 
     Keep in mind that some options turn on other options. For more information,
-    see \l{https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html}
-    {Options to Request or Suppress Warnings} or the GCC or Clang manual pages.
+    see \l{Options to Request or Suppress Warnings} or the GCC or Clang manual pages.
 
     \sa {Specify clangd settings}, {Clang code model}, {Code Model}
 */

@@ -37,7 +37,7 @@
     trace-viewer (\c{chrome://tracing}) due to its high memory usage.
 
     The visualizer supports all event types used in data that the
-    \l {https://lttng.org/}{LTTng} tracing framework generates, converted
+    \l{LTTng} tracing framework generates, converted
     to CTF. However, some of the more advanced event types used, for example,
     in Android system traces, are not supported. The visualizer silently
     ignores unsupported event types.
@@ -202,7 +202,7 @@
 
     \section1 Converting LTTng data to CTF
 
-    The \l{https://github.com/KDAB/ctf2ctf}{ctf2ctf} tool uses \c babeltrace to
+    The \l{ctf2ctf} tool uses \c babeltrace to
     parse binary Common Trace Format (CTF) and converts it to Chrome Trace
     Format (CTF). It performs the following custom tasks to make the recording
     more human-readable:

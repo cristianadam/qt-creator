@@ -11,8 +11,7 @@
     \title Debug CMake project files
 
     With the \QC implementation of the
-    \l {https://microsoft.github.io/debug-adapter-protocol/}
-    {Debug Adapter Protocol (DAP)}, you can debug CMake project files.
+    \l{Debug Adapter Protocol (DAP)}, you can debug CMake project files.
 
     \note You need CMake 3.27 or later for DAP.
 

@@ -34,11 +34,11 @@
             \li Enable the plugin to use Bazaar or Breezy.
         \row
             \li \l{ClearCase}
-            \li \l{http://www-01.ibm.com/software/awdtools/clearcase/}
+            \li \l{https://www.ibm.com/docs/en/integration-designer/8.5.5?topic=systems-working-clearcase} \\TODO: This seems to be deprecated. Investigate.
             \li Enable the plugin to use it.
         \row
             \li \l{CVS}
-            \li \l{http://www.nongnu.org/cvs/}
+            \li \l{https://www.nongnu.org/cvs/}
             \li Enable the plugin to use it.
         \row
             \li \l{Fossil}
@@ -52,7 +52,7 @@
                 Gerrit version 2.6, or later.
         \row
             \li \l{GitLab}
-            \li \l{http://gitlab.com/}
+            \li \l{https://about.gitlab.com/}
             \li Enable the plugin to use it.
         \row
             \li \l{Mercurial}
@@ -60,13 +60,13 @@
             \li Enable the plugin to use it.
         \row
             \li \l{Perforce}
-            \li \l{http://www.perforce.com}
+            \li \l{https://www.perforce.com/}
             \li Server version 2006.1 and later.
 
                 Enable the plugin to use it.
         \row
             \li \l{Subversion}
-            \li \l{http://subversion.apache.org/}
+            \li \l{https://subversion.apache.org/}
             \li Subversion version 1.7.0 and later.
 
                 Enable the plugin to use it.

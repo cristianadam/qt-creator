@@ -47,8 +47,7 @@
     To use \c jom:
 
     \list 1
-        \li Download \c jom from \l{http://download.qt.io/official_releases/jom}
-            {Qt Downloads}.
+        \li Download \c jom from \l{Qt Downloads: jom}.
         \li Select \uicontrol {Use jom instead of nmake}.
     \endlist
 

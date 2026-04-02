@@ -162,8 +162,7 @@
     \QC creates the test in the specified project directory.
 
     For more information about creating Google tests, see the
-    \l{https://github.com/google/googletest/blob/master/docs/primer.md}
-    {Google Test Primer}.
+    \l{Google Test Primer}.
 
     \note While scanning for tests, the parser takes into account only files that
     directly or indirectly include \c {gtest/gtest.h}. Files that currently will
@@ -182,7 +181,7 @@
 
     To build and run Boost tests, install Boost.Test on the computer.
     Typically, the Boost installation includes it. Download Boost from
-    \l{https://www.boost.org/}{Boost.org}.
+    \l{Boost.org}.
 
     If the compiler and build system can find the Boost libraries, you
     do not need to specify the include directory when creating the test.
@@ -219,8 +218,7 @@
     \QC creates the test in the project directory.
 
     For more information about creating Boost tests, see
-    \l{https://www.boost.org/doc/libs/1_81_0/libs/test/doc/html/index.html}
-    {Boost.Test}.
+    \l{Boost.Test}.
 
     \note While scanning for tests, the parser takes into account only files that
     directly or indirectly include one of Boost's test library headers (any include
@@ -278,8 +276,7 @@
     \QC creates the test in the project directory.
 
     For more information about creating Catch2 tests, see
-    \l{https://github.com/catchorg/Catch2/blob/master/docs/Readme.md}
-    {Catch2}.
+    \l{Catch2}.
 
     \note While scanning for tests, the parser takes into account only files that
     directly or indirectly include one of the common Catch2 headers
@@ -311,8 +308,7 @@
     It may be any executable command including arguments.
 
     For more information about how to use CTest, see
-    \l{https://gitlab.kitware.com/cmake/community/-/wikis/doc/ctest/Testing-With-CTest}
-    {Testing with CTest}.
+    \l{Testing with CTest}.
 
     \sa {Test}{How to: Test}, {Select the build system}, {Testing}
 */
@@ -670,8 +666,7 @@
     \endtable
 
     For more information about GTest filters, see
-    \l{https://github.com/google/googletest/blob/master/docs/advanced.md#running-a-subset-of-the-tests}
-    {Running a Subset of the Tests}.
+    \l{Running a Subset of the Tests}.
 
     \section1 Boost Tests
 

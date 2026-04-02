@@ -1451,9 +1451,8 @@
     \section1 Emacs shortcuts
 
     You can specify shortcuts for executing actions in a way that is familiar to
-    \l{https://www.gnu.org/software/emacs/manual/html_node/emacs/index.html}
-    {Emacs} editor users. The actions are not bound to any key combinations by
-    default.
+    \l{The Emacs Editor}{Emacs} editor users. The actions are not bound to any
+    key combinations by default.
 
     \note Enable the EmacsKeys plugin to use the shortcuts.
 

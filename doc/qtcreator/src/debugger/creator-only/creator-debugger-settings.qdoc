@@ -55,8 +55,7 @@
     and warning messages. For more information, see \l{CDB} and \l{GDB}.
 
     For more information on breakpoints, see
-    \l{http://sourceware.org/gdb/onlinedocs/gdb/Breakpoints.html#Breakpoints}
-    {Breakpoints, Watchpoints, and Catchpoints} in GDB documentation.
+    \l{Breakpoints, Watchpoints, and Catchpoints} in GDB documentation.
 
     \section1 Source paths mapping
 

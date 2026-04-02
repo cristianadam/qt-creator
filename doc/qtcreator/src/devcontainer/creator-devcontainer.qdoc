@@ -23,7 +23,7 @@
     required for final deployment.
 
     For the full specification and the \c devcontainer.json file format, see the
-    \l{https://containers.dev/}{Development Container} documentation.
+    \l{Development Containers} documentation.
 
     \note Enable the Development Container Support plugin to use it.
 

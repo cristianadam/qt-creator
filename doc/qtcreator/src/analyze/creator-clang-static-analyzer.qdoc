@@ -130,7 +130,7 @@
 
     In addition to running the tools to collect diagnostics, you can select
     \inlineimage {icons/open.png} {Load diagnostics from YAML files exported with "-export-fixes"}
-    to load diagnostics from \l{https://yaml.org/}{YAML} files that you exported
+    to load diagnostics from \l{YAML} files that you exported
     using the \c {-export fixes} option.
 
     \sa {Check code syntax}, {Configure Clang Diagnostics},
@@ -271,8 +271,7 @@
             \image {qtcreator-clang-tidy.png} {Clang-Tidy Checks tab in the Diagnostic Configurations dialog}
 
             For more information about the available checkers, see
-            \l{https://clang-analyzer.llvm.org/available_checks.html}
-            {Clang Static Analyzer documentation}.
+            \l{Clang Static Analyzer documentation}.
 
         \li To edit the selected checks as plain text, select
             \uicontrol {Edit Checks as String}.

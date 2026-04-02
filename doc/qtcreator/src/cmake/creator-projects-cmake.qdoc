@@ -18,7 +18,7 @@
     \brief CMake is an alternative to qmake for automating the generation of
     build systems.
 
-    \l{https://cmake.org/}{CMake} automates the configuration of build systems.
+    \l{CMake homepage}{CMake} automates the configuration of build systems.
     It controls the software compilation process by using simple
     configuration files, called \c {CMakeLists.txt} files. CMake generates
     native build configurations and workspaces that you can use in the compiler
@@ -29,8 +29,8 @@
 
     \section1 Supported CMake versions
 
-    \QC requires CMake's \l{https://cmake.org/cmake/help/latest/manual/cmake-file-api.7.html}
-    {file-based API}, and therefore you'll need CMake version 3.14, or later.
+    \QC requires \l{CMake's file-based API}, and therefore you'll need CMake
+    version 3.14, or later.
 
     For systems with older versions of CMake, only workarounds are available:
 

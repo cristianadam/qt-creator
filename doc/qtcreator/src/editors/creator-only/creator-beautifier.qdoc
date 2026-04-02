@@ -21,11 +21,11 @@
 
     \list
 
-        \li \l{http://astyle.sourceforge.net}{Artistic Style}
+        \li \l{Artistic Style}
 
         \li \l{ClangFormat: Documentation}{ClangFormat}
 
-        \li \l{http://uncrustify.sourceforge.net}{Uncrustify}
+        \li \l{Uncrustify}
 
     \endlist
 
@@ -39,11 +39,9 @@
     \list 1
         \li Download and install the tool to use for formatting source code:
             \list
-                \li \l{http://sourceforge.net/projects/astyle/files/astyle}
-                    {Artistic Style}
+                \li \l{Artistic Style Files}{Artistic Style}
                 \li \l{ClangFormat: Download}{ClangFormat}
-                \li \l{http://sourceforge.net/projects/uncrustify/files/uncrustify}
-                    {Uncrustify}
+                \li \l{Uncrustify Files}{Uncrustify}
             \endlist
             \note You might have to build the tools from sources for some
             platforms.

@@ -15,7 +15,7 @@
     debug, and analyze applications built for them from \QC.}
 
     The \l{\B2Q: Documentation}{\B2Q} stack runs on a variety of hardware.
-    \l{http://qt.io/licensing/}{Qt license} holders can customize the contents of
+    \l{Qt Licensing Overview}{Qt license} holders can customize the contents of
     the stack and take it into production hardware.
 
     \note Enable the \B2Q plugin to use it.

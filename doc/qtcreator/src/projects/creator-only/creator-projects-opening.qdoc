@@ -37,11 +37,11 @@
     To open a partially supported project, open the configuration file for the project:
 
     \list
-        \li \c {build.xml} (\l{https://ant.apache.org/}{Ant})
+        \li \c {build.xml} (\l{Ant})
         \li \c {cargo.toml} (\l{Rust: cargo-build}{Cargo})
-        \li \c {.csproj} (\l{https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-build}{.NET/C#})
-        \li \c {.gradle} or \c {.gradle.kts} (\l{https://docs.gradle.org/current/userguide/command_line_interface.html}{Gradle})
-        \li \c {Package.swift} (\l{https://www.swift.org/documentation/server/guides/building.html}{Swift})
+        \li \c {.csproj} (\l{dotnet build}{.NET/C#})
+        \li \c {.gradle} or \c {.gradle.kts} (\l{Gradle})
+        \li \c {Package.swift} (\l{Swift})
     \endlist
 
     To build and run these projects, use the custom configuration \QC automatically

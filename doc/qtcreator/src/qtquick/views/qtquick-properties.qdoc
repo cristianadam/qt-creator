@@ -340,9 +340,8 @@
 
     \section1 Select web gradients
 
-    The \uicontrol {Gradient Picker} enables you to specify
-    \l{https://webgradients.com/}{WebGradients} for components
-    that support \l QGradient.
+    The \uicontrol {Gradient Picker} enables you to specify \l{WebGradients}
+    for components that support \l QGradient.
 
     To apply a web gradient to a component:
 

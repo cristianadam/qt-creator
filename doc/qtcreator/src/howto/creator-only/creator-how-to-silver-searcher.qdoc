@@ -19,9 +19,8 @@
     To use Silver Searcher:
 
     \list 1
-        \li Download and install Silver Searcher from
-            \l {https://geoff.greer.fm/ag/}{The Silver Searcher} or
-            \l {https://github.com/ggreer/the_silver_searcher}{GitHub}.
+        \li Download and install Silver Searcher from \l{The Silver Searcher}
+            or \l{GitHub: The Silver Searcher}{GitHub}.
 
             You might have to build Silver Searcher from sources for some
             platforms.

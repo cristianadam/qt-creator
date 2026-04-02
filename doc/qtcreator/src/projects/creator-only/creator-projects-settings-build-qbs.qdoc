@@ -55,7 +55,7 @@
         \li In \uicontrol Properties, specify the properties to pass
             to the project. Use colons (:) to separate keys from values.
             For more information, see
-            \l{http://doc.qt.io/qbs/language-introduction.html}{Qbs: Modules}.
+            \l{Qbs: Modules}.
 
         \li In \uicontrol Flags, select:
 
@@ -69,8 +69,7 @@
                     high-level descriptions.
 
                 \li \uicontrol {Force probes} to force re-execution of
-                    the configure scripts of
-                    \l{https://doc.qt.io/qbs/qbsprobes-qmlmodule.html}{QbProbes}.
+                    the configure scripts of \l{Qbs Probes}.
 
             \endlist
 

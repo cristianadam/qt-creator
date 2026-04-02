@@ -41,7 +41,7 @@
 
     \title Explore compiler code
 
-    With the \l{https://godbolt.org/}{Compiler Explorer}, you can enter code to
+    With the \l{Compiler Explorer}, you can enter code to
     explore the capabilities of your compilers and interpreters. \QC supports
     all languages, compilers, and libraries that Compiler Explorer supports. You
     can save your compiler explorer session as a JSON-based \c .qtce file.

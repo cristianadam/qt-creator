@@ -30,8 +30,7 @@
         \li Highlighting the symbol under cursor
         \li \l{View function tooltips}{Viewing function tooltips}
         \li \l{Semantic Highlighting}{Semantic highlighting}, as defined in
-            \l{https://github.com/microsoft/vscode-languageserver-node/pull/367}
-            {Proposal of the semantic highlighting protocol extension}
+            \l{Proposal of the semantic highlighting protocol extension}
         \li Navigating in the code by using the \l{Navigate with locator}
             {locator} or \l{Move to symbol definition or declaration}
             {moving to the symbol definition}
@@ -54,8 +53,8 @@
 
     \section1 Adding MIME types for language servers
 
-    \QC uses the \l{https://www.iana.org/assignments/media-types/media-types.xhtml}
-    {MIME type} of the file to determine which language server to request
+    \QC uses the \l{IANA: Media Types}{MIME type} of the file to determine
+    which language server to request
     information from when you open a file for editing. Add new MIME types or
     file patterns to match language servers. If you do not set at least one MIME
     type or file pattern, no files will be sent to the language server. This is
@@ -71,8 +70,8 @@
 
     Also, it offers to install language servers for JSON and YAML files
     when you open them in the editor if it can find the
-    \l{https://nodejs.org/en/learn/getting-started/an-introduction-to-the-npm-package-manager}
-    {NPM} package manager on the computer.
+    \l{An introduction to the npm package manager}{NPM} package manager on
+    the computer.
 
     \QC also offers to install language servers for Rust, C#, and Swift from
     their respective systems when you open projects in the editor that use them.
@@ -124,7 +123,7 @@
     The language server client has been mostly tested with Python and C++.
     If problems arise when you try them or some other language, please select
     \uicontrol Help > \uicontrol {Report Bug} to report them in the
-    \l{https://bugreports.qt.io/}{Qt Project Bug Tracker}. The reports
+    \l{Qt Project Bug Tracker}. The reports
     should include \QC console output with the environment
     variable \c {QT_LOGGING_RULES=qtc.languageclient.*=true} set.
 
@@ -195,8 +194,7 @@
         \li In \uicontrol Java, enter the path to the Java executable.
         \li In \uicontrol {Java Language Server}, enter the path to
             the Java language server \c .jar file. You can download the Java
-            language server from \l{https://download.eclipse.org/jdtls/milestones/}
-            {Eclipse Downloads}.
+            language server from \l{Eclipse Downloads}.
     \endlist
 
     \sa {Manage language servers}{How to: Manage language servers},
@@ -223,8 +221,7 @@
     \endlist
 
     For a complete list of configuration options, see
-    \l{https://github.com/python-lsp/python-lsp-server/blob/develop/CONFIGURATION.md}
-    {Python Language Server Configuration}.
+    \l{Python Language Server Configuration}.
 
     To disable the Python language server, clear
     \uicontrol {Use Python Language Server}.

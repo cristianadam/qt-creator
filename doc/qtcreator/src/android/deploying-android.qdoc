@@ -470,8 +470,7 @@
     \image {qtcreator-android-manifest-editor-splash-screen.webp} {Splash screens in Android Manifest Editor}
 
     By default, drawing an activity hides the splash screen. To keep it visible until
-    \l{https://doc.qt.io/qt-6/qnativeinterface-qandroidapplication.html#hideSplashScreen}
-    {QNativeInterface::QAndroidApplication::hideSplashScreen()} is
+    \l{QNativeInterface::QAndroidApplication::hideSplashScreen()} is
     called, select \uicontrol {Sticky splash screen}.
 
     In \uicontrol {Image show mode}, select whether to center the splash screen
