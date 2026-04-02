@@ -138,6 +138,61 @@ static void fillThemeItems(const StringSelectionAspect::ResultCallback &cb)
     cb(items);
 }
 
+class ResetWarningsButton : public QPushButton
+{
+public:
+    ResetWarningsButton()
+    {
+        setText(Tr::tr("Reset Warnings", "Button text"));
+        setToolTip(
+            Tr::tr("Re-enable warnings that were suppressed by selecting \"Do Not "
+                   "Show Again\" (for example, missing highlighter)."));
+        setEnabled(InfoBar::anyGloballySuppressed()
+                   || CheckableMessageBox::hasSuppressedQuestions());
+        connect(this, &QAbstractButton::clicked, this, [this] {
+            InfoBar::clearGloballySuppressed();
+            CheckableMessageBox::resetAllDoNotAskAgainQuestions();
+            setEnabled(InfoBar::anyGloballySuppressed()
+                       || CheckableMessageBox::hasSuppressedQuestions());
+        });
+    }
+};
+
+InfoLabel *createEnvVarInfoLabel()
+{
+    static const bool showDpiPolicy = StyleHelper::defaultHighDpiScaleFactorRoundingPolicy()
+                                      != Qt::HighDpiScaleFactorRoundingPolicy::Unset;
+
+    if (!showDpiPolicy)
+        return nullptr;
+
+    static const QList<const char *> envVars = {
+        StyleHelper::C_QT_SCALE_FACTOR_ROUNDING_POLICY,
+        "QT_ENABLE_HIGHDPI_SCALING",
+        "QT_FONT_DPI",
+        "QT_SCALE_FACTOR",
+        "QT_SCREEN_SCALE_FACTORS",
+        "QT_USE_PHYSICAL_DPI",
+    };
+    auto setVars = Utils::filtered(envVars, &qEnvironmentVariableIsSet);
+
+    if (setVars.isEmpty())
+        return nullptr;
+
+    QString toolTip
+        = Tr::tr(
+              "The following environment variables are set and can "
+              "influence the UI scaling behavior of %1:")
+              .arg(QGuiApplication::applicationDisplayName())
+          + "\n\n"
+          + Utils::transform<QStringList>(setVars, [](const char *var) {
+                return QString("%1=%2").arg(QString::fromUtf8(var)).arg(qEnvironmentVariable(var));
+            }).join("\n");
+    auto envVarInfo = new InfoLabel(Tr::tr("Environment influences UI scaling behavior."));
+    envVarInfo->setAdditionalToolTip(toolTip);
+    return envVarInfo;
+}
+
 GeneralSettings::GeneralSettings()
 {
     setAutoApply(false);
@@ -258,82 +313,41 @@ GeneralSettings::GeneralSettings()
         ICore::askForRestart(Tr::tr("The theme change will take effect after restart."));
     });
 
-    readSettings();
-
-    StyleHelper::setToolbarStyle(StyleHelper::ToolbarStyle(toolbarStyle()));
-
     setLayouter([this]() -> Layouting::Layout {
-        auto resetWarningsButton = new QPushButton;
-        resetWarningsButton->setText(Tr::tr("Reset Warnings", "Button text"));
-        resetWarningsButton->setToolTip(
-            Tr::tr("Re-enable warnings that were suppressed by selecting \"Do Not "
-               "Show Again\" (for example, missing highlighter).",
-               nullptr));
-        bool canReset = InfoBar::anyGloballySuppressed()
-                        || CheckableMessageBox::hasSuppressedQuestions();
-        resetWarningsButton->setEnabled(canReset);
-        QObject::connect(resetWarningsButton, &QAbstractButton::clicked, resetWarningsButton, [resetWarningsButton] {
-            InfoBar::clearGloballySuppressed();
-            CheckableMessageBox::resetAllDoNotAskAgainQuestions();
-            resetWarningsButton->setEnabled(InfoBar::anyGloballySuppressed()
-                                            || CheckableMessageBox::hasSuppressedQuestions());
-        });
+        static const bool showDpiPolicy = StyleHelper::defaultHighDpiScaleFactorRoundingPolicy()
+                                          != Qt::HighDpiScaleFactorRoundingPolicy::Unset;
 
-        Form form;
-        form.addRow({color, st});
-        form.addRow({theme, st});
-        form.addRow({toolbarStyle, st});
-        form.addRow({language, st});
+        auto envVarInfo = createEnvVarInfoLabel();
 
-        if (StyleHelper::defaultHighDpiScaleFactorRoundingPolicy()
-            != Qt::HighDpiScaleFactorRoundingPolicy::Unset) {
-            form.addRow({highDpiScaleFactorRoundingPolicy});
-
-            static const QList<const char *> envVars = {
-                StyleHelper::C_QT_SCALE_FACTOR_ROUNDING_POLICY,
-                "QT_ENABLE_HIGHDPI_SCALING",
-                "QT_FONT_DPI",
-                "QT_SCALE_FACTOR",
-                "QT_SCREEN_SCALE_FACTORS",
-                "QT_USE_PHYSICAL_DPI",
-            };
-            auto setVars = Utils::filtered(envVars, &qEnvironmentVariableIsSet);
-            if (!setVars.isEmpty()) {
-                QString toolTip = Tr::tr(
-                                      "The following environment variables are set and can "
-                                      "influence the UI scaling behavior of %1:")
-                                      .arg(QGuiApplication::applicationDisplayName())
-                                  + "\n\n"
-                                  + Utils::transform<QStringList>(setVars, [](const char *var) {
-                                        return QString("%1=%2")
-                                            .arg(QString::fromUtf8(var))
-                                            .arg(qEnvironmentVariable(var));
-                                    }).join("\n");
-
-                auto envVarInfo = new InfoLabel(Tr::tr("Environment influences UI scaling behavior."));
-                envVarInfo->setAdditionalToolTip(toolTip);
-                form.addItem(envVarInfo);
-            } else {
-                form.addItem(st);
-            }
-        }
-
-        form.flush();
-        form.addRow({codecForLocale, st});
-        form.addRow({empty, showShortcutsInContextMenus});
-        form.addRow({empty, provideSplitterCursors});
-        form.addRow({empty, preferInfoBarOverPopup});
-        form.addRow({empty, useTabsInEditorViews});
-        form.addRow({empty, showOkAndCancelInSettingsMode});
-        form.addRow({Row{resetWarningsButton, st}});
-
+        // clang-format off
         return Column {
             Group {
                 title(Tr::tr("User Interface")),
-                form
+                Form {
+                    color, st, br,
+                    theme, st, br,
+                    toolbarStyle, st, br,
+                    language, st, br,
+                    If (showDpiPolicy) >> Then {
+                        highDpiScaleFactorRoundingPolicy, st, br,
+                        If (envVarInfo) >> Then { envVarInfo, br } >> Else { st, br },
+                    },
+                    codecForLocale, st, br,
+                    showShortcutsInContextMenus, st, br,
+                    provideSplitterCursors, st, br,
+                    preferInfoBarOverPopup, st, br,
+                    useTabsInEditorViews, st, br,
+                    showOkAndCancelInSettingsMode, st, br,
+                    Row { new ResetWarningsButton, st },
+                }
             }
         };
+        // clang-format on
     });
+
+    readSettings();
+
+    StyleHelper::setToolbarStyle(StyleHelper::ToolbarStyle(toolbarStyle()));
 }
 
 // GeneralSettingsPage
