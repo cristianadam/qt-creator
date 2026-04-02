@@ -7,13 +7,20 @@
 #include "gnpluginconstants.h"
 #include "gnprojectmanagertr.h"
 
+#include <coreplugin/icore.h>
+
 #include <utils/algorithm.h>
 #include <utils/environment.h>
 #include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
+#include <utils/settingsaccessor.h>
+#include <utils/store.h>
 
 #include <projectexplorer/kitaspect.h>
 
+#include <QGuiApplication>
+
+using namespace Core;
 using namespace ProjectExplorer;
 using namespace Utils;
 
@@ -188,10 +195,61 @@ GNTools::Tool GNTools::toolById(const Id &id)
     return nullptr;
 }
 
+// Settings persistence
+
+static Key entryName(int index)
+{
+    return numberedKey(Constants::ToolsSettings::ENTRY_KEY, index);
+}
+
+class GNToolsSettingsAccessor final : public UpgradingSettingsAccessor
+{
+public:
+    GNToolsSettingsAccessor()
+    {
+        setDocType("QtCreatorGNTools");
+        setApplicationDisplayName(QGuiApplication::applicationDisplayName());
+        setBaseFilePath(ICore::userResourcePath(Constants::ToolsSettings::FILENAME));
+        load();
+        QObject::connect(ICore::instance(), &ICore::saveSettingsRequested, [this] { save(); });
+    }
+
+    void save()
+    {
+        Store data;
+        int entryCount = 0;
+        for (const GNTools::Tool &tool : GNTools::tools()) {
+            data.insert(entryName(entryCount), variantFromStore(tool->toVariantMap()));
+            ++entryCount;
+        }
+        data.insert(Constants::ToolsSettings::ENTRY_COUNT, entryCount);
+        saveSettings(data);
+    }
+
+    void load()
+    {
+        Store data = restoreSettings();
+        int entryCount = data.value(Constants::ToolsSettings::ENTRY_COUNT, 0).toInt();
+        GNTools::Tools result;
+        for (int i = 0; i < entryCount; ++i) {
+            Store store = storeFromVariant(data[entryName(i)]);
+            if (!store.isEmpty())
+                result.emplace_back(new GNTool(store));
+        }
+        GNTools::setTools(std::move(result));
+    }
+};
+
 GNTools *GNTools::instance()
 {
-    static GNTools inst;
-    return &inst;
+    static GNTools theGNTools;
+    return &theGNTools;
+}
+
+void setupGNTools()
+{
+    static GNToolsSettingsAccessor accessor;
+    GNTools::instance();
 }
 
 } // namespace GNProjectManager::Internal

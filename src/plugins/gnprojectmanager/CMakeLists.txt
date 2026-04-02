@@ -26,8 +26,6 @@ add_qtc_plugin(GNProjectManager
     gntarget.h
     gntools.cpp
     gntools.h
-    gntoolssettingsaccessor.cpp
-    gntoolssettingsaccessor.h
     gntoolssettingspage.cpp
     gntoolssettingspage.h
     gnutils.cpp
