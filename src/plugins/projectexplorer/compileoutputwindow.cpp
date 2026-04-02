@@ -34,7 +34,6 @@
 #include <QIcon>
 #include <QLabel>
 #include <QPlainTextEdit>
-#include <QPushButton>
 #include <QSpinBox>
 #include <QTextBlock>
 #include <QTextCharFormat>
@@ -315,30 +314,18 @@ CompileOutputSettings::CompileOutputSettings()
 
     backgroundColor.setSettingsKey("ProjectExplorer/CompileOutput/BackgroundColor");
     backgroundColor.setDefaultValue(QColor{});
-    backgroundColor.setMinimumSize({64, 0});
     backgroundColor.setEnabler(&overwriteColor);
 
     setLayouter([this] {
         using namespace Layouting;
         const QString msg = Tr::tr("Limit output to %1 characters");
         const QStringList parts = msg.split("%1") << QString() << QString();
-        auto resetColorButton = new QPushButton(Tr::tr("Reset"));
-        resetColorButton->setToolTip(Tr::tr("Reset to default.", "Color"));
-        connect(resetColorButton, &QPushButton::clicked, this, [this] {
-            backgroundColor.setVolatileValue(QColor{});
-        });
-        connect(&overwriteColor, &Utils::BoolAspect::volatileValueChanged,
-                resetColorButton, [this, resetColorButton] {
-            resetColorButton->setEnabled(overwriteColor.volatileValue());
-        });
-        resetColorButton->setEnabled(overwriteColor());
-
         return Column {
             wrapOutput,
             popUp,
             discardOutput,
             Row { parts.at(0), maxCharCount, parts.at(1), st },
-            Row { overwriteColor, backgroundColor, resetColorButton, st },
+            Row { overwriteColor, backgroundColor, st },
             st
         };
     });

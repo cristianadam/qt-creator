@@ -45,7 +45,6 @@
 #include <QHBoxLayout>
 #include <QLoggingCategory>
 #include <QMenu>
-#include <QPushButton>
 #include <QSortFilterProxyModel>
 #include <QSplitter>
 #include <QTabWidget>
@@ -1321,7 +1320,6 @@ AppOutputSettings::AppOutputSettings()
 
     backgroundColor.setSettingsKey("ProjectExplorer/Settings/BackgroundColor");
     backgroundColor.setDefaultValue(QColor{});
-    backgroundColor.setMinimumSize({64, 0});
     backgroundColor.setEnabler(&overwriteBackground);
 
     setLayouter([this] {
@@ -1329,18 +1327,6 @@ AppOutputSettings::AppOutputSettings()
         using namespace Layouting;
         const QString msg = Tr::tr("Limit output to %1 characters");
         const QStringList parts = msg.split("%1") << QString() << QString();
-        auto resetColorButton = new QPushButton(Tr::tr("Reset"));
-        resetColorButton->setToolTip(Tr::tr("Reset to default.", "Color"));
-        connect(resetColorButton, &QPushButton::clicked, this, [this] {
-            backgroundColor.setVolatileValue(QColor{});
-        });
-        auto setResetButtonEnabled = [this, resetColorButton] {
-            resetColorButton->setEnabled(overwriteBackground.volatileValue());
-        };
-        connect(&overwriteBackground, &Utils::BoolAspect::volatileValueChanged,
-                resetColorButton, setResetButtonEnabled);
-        setResetButtonEnabled();
-
         return Column {
             wrapOutput,
             cleanOldOutput,
@@ -1351,7 +1337,7 @@ AppOutputSettings::AppOutputSettings()
                 debugOutputMode, br,
             },
             Row { parts.at(0).trimmed(), maxCharCount, parts.at(1).trimmed(), st },
-            Row { overwriteBackground, backgroundColor, resetColorButton, st },
+            Row { overwriteBackground, backgroundColor, st },
             st,
         };
         // clang-format on

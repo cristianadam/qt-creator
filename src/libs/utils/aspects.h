@@ -559,7 +559,7 @@ public:
     ~ColorAspect() override;
 
     void addToLayoutImpl(Layouting::Layout &parent) override;
-    void setMinimumSize(const QSize &size);
+    void setAlphaAllowed(bool allowed);
 
 private:
     void volatileValueToGui() override;
