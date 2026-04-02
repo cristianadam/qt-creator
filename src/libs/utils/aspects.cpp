@@ -834,7 +834,7 @@ class ColorAspectPrivate
 {
 public:
     QPointer<QtColorButton> m_colorButton; // Owned by configuration widget
-    QSize m_size;
+    bool m_alphaAllowed = true;
 };
 
 class FontFamilyAspectPrivate
@@ -1952,18 +1952,25 @@ void ColorAspect::addToLayoutImpl(Layouting::Layout &parent)
 {
     QTC_CHECK(!d->m_colorButton);
     d->m_colorButton = createSubWidget<QtColorButton>();
-    if (d->m_size.isValid())
-        d->m_colorButton->setMinimumSize(d->m_size);
-    parent.addItem(d->m_colorButton.data());
+    d->m_colorButton->setMinimumWidth(64);
+    addLabeledItem(parent, d->m_colorButton);
+    d->m_colorButton->setAlphaAllowed(d->m_alphaAllowed);
+
+    auto resetButton = createSubWidget<QPushButton>(Tr::tr("Reset"));
+    resetButton->setToolTip(Tr::tr("Reset to default.", "Color"));
+    connect(resetButton, &QAbstractButton::clicked, this, [this] {
+        setVolatileValue(defaultValue());
+    });
+    parent.addItem(resetButton);
 
     volatileValueToGui();
     connect(d->m_colorButton.data(), &QtColorButton::colorChanged,
             this, &ColorAspect::handleGuiChanged);
 }
 
-void ColorAspect::setMinimumSize(const QSize &size)
+void ColorAspect::setAlphaAllowed(bool allowed)
 {
-    d->m_size = size;
+    d->m_alphaAllowed = allowed;
 }
 
 bool ColorAspect::guiToVolatileValue()

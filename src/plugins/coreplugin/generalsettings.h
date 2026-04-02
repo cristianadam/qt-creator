@@ -4,7 +4,6 @@
 #pragma once
 
 #include <utils/aspects.h>
-#include <utils/qtcolorbutton.h>
 
 namespace Core::Internal {
 
@@ -46,14 +45,6 @@ public:
     }
 };
 
-class ColorAspect : public Utils::TypedAspect<QColor>
-{
-public:
-    using TypedAspect::TypedAspect;
-
-    void addToLayoutImpl(Layouting::Layout &parent) override;
-};
-
 class GeneralSettings : public Utils::AspectContainer
 {
 public:
@@ -69,7 +60,7 @@ public:
 
     CodecForLocaleAspect codecForLocale{this};
     LanguageSelectionAspect language{this};
-    ColorAspect color{this};
+    Utils::ColorAspect color{this};
 
     static void applyToolbarStyleFromSettings();
 };

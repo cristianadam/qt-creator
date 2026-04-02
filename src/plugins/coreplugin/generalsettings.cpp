@@ -15,7 +15,6 @@
 #include <utils/hostosinfo.h>
 #include <utils/infobar.h>
 #include <utils/layoutbuilder.h>
-#include <utils/qtcolorbutton.h>
 #include <utils/stylehelper.h>
 #include <utils/textcodec.h>
 
@@ -134,33 +133,6 @@ GeneralSettings &generalSettings()
     return theSettings;
 }
 
-void ColorAspect::addToLayoutImpl(Layouting::Layout &parent)
-{
-    auto button = createSubWidget<QtColorButton>();
-    button->setMinimumSize(QSize(64, 0));
-    button->setProperty("alphaAllowed", false);
-    button->setColor(volatileValue());
-
-    auto resetButton = createSubWidget<QPushButton>(Tr::tr("Reset"));
-    resetButton->setToolTip(Tr::tr("Reset to default.", "Color"));
-
-    connect(button, &QtColorButton::colorChanged, this, [this](const QColor &c) {
-        setVolatileValue(c);
-    });
-
-    connect(resetButton, &QAbstractButton::clicked, this, [this] {
-        setVolatileValue(defaultValue());
-    });
-
-    addOnVolatileValueChanged(button, [this, button] {
-        if (button->color() != volatileValue())
-            button->setColor(volatileValue());
-    });
-
-    addLabeledItem(parent, button);
-    parent.addItem(resetButton);
-}
-
 GeneralSettings::GeneralSettings()
 {
     setAutoApply(false);
@@ -226,9 +198,8 @@ GeneralSettings::GeneralSettings()
     color.setSettingsKey("MainWindow/Color");
     color.setLabelText(Tr::tr("Color:"));
     color.setDefaultValue(QColor(StyleHelper::DEFAULT_BASE_COLOR));
-    color.addOnChanged(this, [this] {
-        StyleHelper::setBaseColor(color());
-    });
+    color.setAlphaAllowed(false);
+    color.addOnChanged(this, [this] { StyleHelper::setBaseColor(color()); });
 
     static const SelectionAspect::Option options[] = {
         {Tr::tr("Round Up for .5 and Above"), {}, int(Qt::HighDpiScaleFactorRoundingPolicy::Round)},
