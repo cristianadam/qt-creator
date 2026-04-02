@@ -9,7 +9,7 @@
 #include "gnpluginconstants.h"
 #include "gnproject.h"
 #include "gnprojectmanagertr.h"
-#include "gntoolssettingsaccessor.h"
+#include "gntools.h"
 #include "gntoolssettingspage.h"
 
 #include <extensionsystem/iplugin.h>
@@ -37,7 +37,7 @@ class GNProjectPlugin final : public ExtensionSystem::IPlugin
         setupGNBuildConfiguration();
         setupGNBuildStep();
 
-        setupGNToolsSettingsAccessor();
+        setupGNTools();
         setupGNToolsSettingsPage();
         setupGNKitAspect();
 

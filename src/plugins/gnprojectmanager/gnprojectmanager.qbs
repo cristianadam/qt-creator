@@ -38,8 +38,6 @@ Project {
             "gntarget.h",
             "gntools.cpp",
             "gntools.h",
-            "gntoolssettingsaccessor.cpp",
-            "gntoolssettingsaccessor.h",
             "gntoolssettingspage.cpp",
             "gntoolssettingspage.h",
             "gnutils.cpp",

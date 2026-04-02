@@ -80,4 +80,6 @@ signals:
     void toolsChanged();
 };
 
+void setupGNTools();
+
 } // namespace GNProjectManager::Internal
