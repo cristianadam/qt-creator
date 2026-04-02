@@ -36,30 +36,29 @@
 
         \row
             \li Develop Qt applications for desktop and \l{glossary-device}{devices}
-            \li \l{https://www.qt.io/developers/}{Qt Developers}
+            \li \l{Qt Developers}
 
         \row
             \li Participate in Qt development
-            \li \l{https://wiki.qt.io/Qt_Contribution_Guidelines}
-                {Qt Contribution Guidelines}
+            \li \l{Qt Contribution Guidelines}
 
        \row
             \li Find extensions for Qt, such as \QC plugins, development tools,
                 and Qt modules
-            \li \l{https://marketplace.qt.io/}{Qt Marketplace}
+            \li \l{Qt Marketplace}
 
         \row
             \li Find free Qt-based applications
-            \li \l{https://github.com/topics/qt}{Qt Apps on GitHub}
+            \li \l{Qt Apps on GitHub}
 
         \row
             \li Find free QML and Qt Quick applications
-            \li \l{https://github.com/topics/qml}{QML Apps on GitHub}
+            \li \l{QML Apps on GitHub}
 
         \row
             \li Develop with a commercial Qt license and support -
                 Qt by The Qt Company
-            \li \l{http://qt.io/licensing/}{Qt Licensing}
+            \li \l{Qt Licensing Overview}{Qt Licensing}
     \endtable
 
 */

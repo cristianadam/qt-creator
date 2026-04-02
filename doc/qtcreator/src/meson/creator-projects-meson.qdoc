@@ -11,7 +11,7 @@
 
     \brief Use Meson to build native desktop applications.
 
-    \l{https://mesonbuild.com/}{Meson} is an open source and multi-platform build
+    \l{The Meson Build system}{Meson} is an open source and multi-platform build
     system generator using Ninja as main backend. Build definitions are located
     in \c {meson.build} files while build options are located in
     \c {meson_options.txt}.

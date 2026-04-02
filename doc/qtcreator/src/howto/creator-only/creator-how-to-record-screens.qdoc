@@ -9,7 +9,7 @@
 
     \title Record screens
 
-    With \l{https://ffmpeg.org/download.html}{FFmpeg}, you can record your
+    With \l{FFmpeg}, you can record your
     screens and save the recordings as animated images or videos.
 
     To record screens:
@@ -92,7 +92,7 @@
 
     \title Set up screen recording
 
-    With \l{https://ffmpeg.org/download.html}{FFmpeg}, you can record your
+    With \l{FFmpeg}, you can record your
     screens and save the recordings as animated images or videos. You have
     to download and install FFmpeg and FFprobe to use the screen recorder.
 

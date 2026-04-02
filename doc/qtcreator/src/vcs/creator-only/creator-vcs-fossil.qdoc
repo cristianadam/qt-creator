@@ -25,7 +25,7 @@
     \section1 Configuring Fossil
 
     \list 1
-        \li Download the \l{http://fossil-scm.org}{Fossil SCM client} and
+        \li Download the \l{Fossil SCM client} and
             install the \c fossil executable file in your \c PATH.
 
         \li Create or designate a directory to store local Fossil repositories

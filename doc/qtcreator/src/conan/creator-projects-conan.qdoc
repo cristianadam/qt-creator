@@ -11,7 +11,7 @@
 
     \summary {The experimental Conan plugin integrates the Conan package manager.}
 
-    \l {https://conan.io}{Conan} is a C/C++ package manager that speeds up the
+    \l{Conan} is a C/C++ package manager that speeds up the
     integration of C or C++ libraries into your own project. It's available on
     all the \l{Supported platforms}{supported development platforms}.
 
@@ -19,10 +19,10 @@
     \QC:
 
     \list
-        \li \l{https://docs.conan.io/2/integrations/cmake.html}{CMake}
-        \li \l{https://docs.conan.io/2/integrations/autotools.html}{Autotools}
-        \li \l{https://docs.conan.io/2/integrations/meson.html}{Meson}
-        \li \l{https://docs.conan.io/2/reference/tools/qbs.html}{Qbs}
+        \li \l{Conan integration with Autotools}{Autotools}
+        \li \l{Conan integration with CMake}{CMake}
+        \li \l{Conan integration with Meson}{Meson}
+        \li \l{Conan integration with Qbs}{Qbs}
     \endlist
 
     The client-server architecture of Conan enables the client to fetch packages
@@ -38,9 +38,8 @@
     \note Enable the Conan plugin to use it.
 
     For each project, you must write a
-    \l{https://docs.conan.io/2/reference/conanfile.html}{\c conanfile.py}
-    or \l{https://docs.conan.io/2/reference/conanfile_txt.html}
-    {\c conanfile.txt} file that specifies the needed libraries and packages.
+    \l{conanfile.py}{\c conanfile.py} or \l{conanfile.txt}{\c conanfile.txt}
+    file that specifies the needed libraries and packages.
     Then, you must edit the build settings of the project to specify the
     location of the file and the contents of the Conan install command.
 

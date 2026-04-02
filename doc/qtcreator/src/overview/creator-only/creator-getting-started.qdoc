@@ -40,8 +40,7 @@
         \row
             \li \b {\l{Tutorial: Build and run}{Building and running an example}}
 
-                To check that \l{https://www.qt.io/download-qt-installer}
-                {\QOI} created \l{Managing kits}
+                To check that \l{\QOI} created \l{Managing kits}
                 {build and run kits}, open an example application and run it.
                 If you have not done so before, go to
                 \l{Tutorial: Build and run}.

@@ -273,9 +273,7 @@
 
     \QC does not support mixed-mode debugging, but you can attach GDB to the
     Python interpreter to debug the C++ implementation of the corresponding
-    Python code. For more information, see
-    \l{https://doc.qt.io/qtforpython-6/tutorials/debugging/qtcreator/qtcreator.html}
-    {Debugging PySide with \QC (Linux)}.
+    Python code. For more information, see \l{Debugging PySide with \QC (Linux)}.
 
     \section1 Debug console applications
 
@@ -632,8 +630,7 @@
     \uicontrol Debugger > \uicontrol GDB.
 
     For more information about connecting with \c {target extended-remote} mode
-    in GDB, see \l{https://sourceware.org/gdb/onlinedocs/gdb/Connecting.html}
-    {Debugging with GDB: Connecting to a Remote Target}.
+    in GDB, see \l{Debugging with GDB: Connecting to a Remote Target}.
 
     \section1 Application running, terminal access to remote machine and gdbserver available
 
@@ -1172,7 +1169,7 @@
 
     \note Creating snapshots involves creating core files of the debugged process,
     requiring significant amount of disk space. For details, see
-    \l{https://sourceware.org/gdb/onlinedocs/gdb/Core-File-Generation.html}.
+    \l{Debugging with GDB: How to Produce a Core File from Your Program}.
 
     \endomit
 
@@ -1540,10 +1537,9 @@
     \l {Local variables and function parameters}{Locals}
     and \l {Evaluating expressions}{Expressions} views.
 
-    Unlike GDB's
-    \l{https://sourceware.org/gdb/onlinedocs/gdb/Pretty-Printing.html#Pretty-Printing}
-    {pretty printers} and LLDB's \l{https://lldb.llvm.org/varformats.html}
-    {data formatters}, \QC's debugging helpers are independent of the
+    Unlike GDB's \l{Debugging with GDB: Pretty Printing}{pretty printers}
+    and LLDB's \l{Variable Formatting}{data formatters},
+    \QC's debugging helpers are independent of the
     native debugging backend. That is, the same code can be used with GDB on
     Linux, LLDB on macOS, and CDB on Windows, or any other platform on which at
     least one of the three supported backends is available.
@@ -1566,8 +1562,8 @@
     \image {qtcreator-debugging-helper-options.webp} {Locals & Expressions tab in Debugger preferences}
 
     If you receive error messages about receiving signals when using GDB, you
-    can specify \l{https://sourceware.org/gdb/onlinedocs/gdb/Signals.html}
-    {GDB commands} for handling the signals. For example, you can tell GDB to
+    can specify \l{Debugging with GDB: Signals}{GDB commands}
+    for handling the signals. For example, you can tell GDB to
     ignore the \c SIGSTOP signal if you receive the following error message:
     \c {The debugged process stopped because it received a signal from the operating
     system. Signal name: SIGSTOP}.
@@ -1669,10 +1665,8 @@
             the \uicontrol Locals and \uicontrol Expressions views.
 
         \li \c value of type \c Value, wrapping either a
-            \l{https://sourceware.org/gdb/onlinedocs/gdb/Values-From-Inferior.html}
-            {gdb.Value} or an
-            \l{https://lldb.llvm.org/cpp_reference/classlldb_1_1SBValue.html}
-            {lldb.SBValue}.
+            \l{Debugging with GDB: Values From Inferior}{gdb.Value} or an
+            \l{LLDB: SBValue Class Reference}{lldb.SBValue}.
 
     \endlist
 
@@ -2255,9 +2249,7 @@
     do not allow this, which stops all attempts to either directly attach to an
     existing process or use the \uicontrol {Run in terminal} option in \QC.
 
-    The reasons for this are described in
-    \l{https://wiki.ubuntu.com/SecurityTeam/Roadmap/KernelHardening#ptrace%20Protection}
-    {KernelHardening}.
+    The reasons for this are described in \l{KernelHardening}.
 
     However, the usefulness of this security measure seems dubious because this
     feature can be easily disabled. With root permissions, you can disable the

@@ -21,8 +21,7 @@
     back to the actual values from which they were generated.
 
     For more information about Qt privacy policy, see
-    \l{https://www.qt.io/terms-conditions/privacy-and-security}
-    {Qt Appendix for Privacy and Security}.
+    \l{Qt Appendix for Privacy and Security}.
 
    \QC respects the same privacy rules.
 
@@ -53,7 +52,7 @@
         \li The Qt examples that you opened.
     \endlist
 
-    The code is available at \l{https://code.qt.io/cgit/qt-creator/plugin-telemetry.git}.
+    The code is available at \l{qt-creator/plugin-telemetry.git}.
 
     \sa {Installation}
 */

@@ -22,8 +22,8 @@
 
     Select \uicontrol {Deploy Settings} > \uicontrol {Add Deploy Step} >
     \uicontrol {CMake Install} to add the
-    \l{https://cmake.org/cmake/help/latest/manual/cmake.1.html#install-a-project}
-    {install} option. It runs installation without using the generated build
+    \l{CMake: Install a Project}{install} option. It runs installation
+    without using the generated build
     system or the native build tool. \QC automatically adds the value of the
     \uicontrol {Working directory} field as the installation directory in the
     \c {--install} signature.

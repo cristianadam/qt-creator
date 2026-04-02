@@ -14,8 +14,8 @@
     \brief Create Docker devices from Docker images and use them to build, run,
     and debug applications.
 
-    Create Docker devices from \l{https://docs.docker.com/get-started/overview/}
-    {Docker images} and use them to build, run, and debug applications. A Docker
+    Create Docker devices from \l{Docker overview}{Docker images} and
+    use them to build, run, and debug applications. A Docker
     container operates like a virtual machine but uses less system resources at
     the cost of being less flexible.
 
@@ -30,8 +30,7 @@
     \note Enable the Docker plugin to use it.
 
     To pull images from Docker hub or other registries, use the
-    \l{https://docs.docker.com/engine/reference/commandline/pull/}{docker pull}
-    command.
+    \l{docker image pull}{docker pull} command.
 
     \sa {Enable and disable plugins}, {Docker}{How to: Develop for Docker}
 */

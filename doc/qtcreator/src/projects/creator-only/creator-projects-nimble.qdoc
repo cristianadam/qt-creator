@@ -12,9 +12,9 @@
     \brief The Nimble package manager uses the Nim compiler to generate Nim
     application executables for the desktop platforms.
 
-    \l {https://github.com/nim-lang/nimble#readme}{Nimble} is a package
+    \l{Nimble} is a package
     manager for the Nim programming language. It is delivered with
-    \l{https://nim-lang.org/}{Nim} and uses the Nim compiler to generate
+    \l{Nim language}{Nim} and uses the Nim compiler to generate
     executables that are supported on Windows, Linux, and \macos.
 
     \note Enable the Nim plugin to use Nimble and Nim.

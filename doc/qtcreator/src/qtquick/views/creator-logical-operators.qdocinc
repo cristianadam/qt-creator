@@ -6,9 +6,8 @@
     \section2 Summary of logical operators
 
     You can use the following
-    \l{https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Expressions_and_Operators}
-    {logical operators} in the expressions to combine several conditions in one
-    expression:
+    \l{JavaScript Expressions and Operators}{logical operators}
+    in the expressions to combine several conditions in one expression:
 
     \table
         \header

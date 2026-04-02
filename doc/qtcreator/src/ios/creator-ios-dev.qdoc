@@ -38,8 +38,7 @@
     that matches the value of \l{CMake: CMAKE_OSX_DEPLOYMENT_TARGET}
     {CMAKE_OSX_DEPLOYMENT_TARGET} (when using CMake),
     \l QMAKE_IOS_DEPLOYMENT_TARGET (when using qmake), or
-    \l{https://doc.qt.io/qbs/qml-qbsmodules-cpp.html#minimumIosVersion-prop}
-    {cpp.minimumIosVersion} (when using Qbs) because iOS (and the App Store)
+    \l{cpp.minimumIosVersion} (when using Qbs) because iOS (and the App Store)
     will use the \c LSMinimumSystemVersion value as the authoritative one.
 
     If you specify a deployment target value lower than what Qt requires, your
@@ -61,7 +60,7 @@
 
     The connections between \QC and an iOS device are protected by using a
     certificate that you receive from Apple when you
-    \l{https://developer.apple.com/programs/enroll/}
+    \l{Enroll in the Apple Developer Program}
     {enroll in the Apple Developer Program}. The certificate is copied to
     the device when you configure the device.
 
@@ -163,9 +162,8 @@
 
     If you do not have an iOS device or you do not want to create an account,
     you can test applications on
-    \l{http://developer.apple.com/library/ios/documentation/IDEs/Conceptual/iOS_Simulator_Guide/Introduction/Introduction.html}
-    {Simulator}, which is installed as part of Xcode. Each Xcode version
-    simulates a predefined set of hardware devices and software versions.
+    \l{Simulator Help}{Simulator}, which is installed as part of Xcode. Each Xcode
+    version simulates a predefined set of hardware devices and software versions.
 
     To change the simulated hardware and software version, go to
     \uicontrol Projects > \uicontrol {Run Settings} and select
@@ -179,8 +177,7 @@
     in Xcode.
 
     Manage the available simulator devices
-    \l{https://developer.apple.com/documentation/xcode/running-your-app-in-simulator-or-on-a-device/#Configure-the-list-of-simulated-devices}
-    {in Xcode}.
+    \l{Xcode documentation: Configure the list of simulated devices}{in Xcode}.
 
     \sa {iOS}{How to: Develop for iOS}, {Developing for iOS}
 */

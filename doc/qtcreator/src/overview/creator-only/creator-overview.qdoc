@@ -228,16 +228,15 @@
     applications and libraries:
 
     \list
-        \li \l{https://www.boost.org/doc/libs/1_81_0/libs/test/doc/html/index.html}
-            {Boost.Test}
-        \li \l{https://github.com/catchorg/Catch2}{Catch2 test framework}
-        \li \l{https://github.com/google/googletest}{Google C++ Testing Framework}
+        \li \l{Boost.Test}
+        \li \l{Catch2}{Catch2 test framework}
+        \li \l{Google C++ Testing Framework}
         \li \l{Qt Quick Test} framework
         \li \l{Qt Test} framework
     \endlist
 
     In addition, \QC offers build system based support for
-    \l{https://cmake.org/cmake/help/latest/manual/ctest.1.html}{CTest}.
+    \l{CTest Manual}{CTest}.
 
     You can use \QC to create, build, and run code based tests for your
     projects.
@@ -248,7 +247,7 @@
 
     The experimental Squish plugin integrates Squish into \QC.
 
-    \l{https://www.qt.io/product/quality-assurance/squish}{Squish} is an
+    \l{Squish product page}{Squish} is an
     automated GUI testing framework for testing Android, iOS, Java, \macos,
     Qt, Tk, Windows, and XView applications, as well as HTML-based web
     applications running in browsers.

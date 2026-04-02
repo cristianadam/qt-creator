@@ -90,8 +90,8 @@
     You can use the following custom models:
 
     \list
-        \li \l {https://huggingface.co/QtGroup/CodeLlama-7B-QML}{codellama:7b-code-qml}
-        \li \l {https://huggingface.co/QtGroup/CodeLlama-13B-QML}{codellama:13b-code-qml}
+        \li \l{codellama:7b-code-qml}
+        \li \l{codellama:13b-code-qml}
     \endlist
 
     \section1 Connect to an LLM
@@ -104,13 +104,12 @@
         \li Codestral (provided by Mistral)
         \li Claude 4.0 Sonnet (provided by Anthropic, remember that you
             need to have a token-based billing payment method configured for your
-            Anthropic account: \l {https://console.anthropic.com/}{console.anthropic.com})
+            \l{Anthropic account}.
         \li Claude 4.5 Sonnet (provided by Anthropic, remember that you
             need to have a token-based billing payment method configured for your
-            Anthropic account: \l {https://console.anthropic.com/}{console.anthropic.com})
+            \l{Anthropic account}.
         \li GPT 5 (provided by OpenAI, remember that you need to have a
-            token-based billing payment method configured for your OpenAI account:
-            \l {https://platform.openai.com/}{platform.openai.com})
+            token-based billing payment method configured for your \l{OpenAI account}.
         \li DeepSeek V3.2 (provided by DeepSeek)
         \li Code Llama 13B QML through Ollama (running locally on your computer)
         \li Code Llama 7B QML through Ollama (running locally on your computer)

@@ -22,8 +22,8 @@
     \e event, but also on earlier events. With state charts, you
     can easily share this information.
 
-    With the \QC file wizard, you can add \l{https://www.w3.org/TR/scxml/}
-    {State Chart XML (SCXML)} files with boilerplate code to projects. Edit
+    With the \QC file wizard, you can add \l{State Chart XML (SCXML)}
+    files with boilerplate code to projects. Edit
     the state charts with the SCXML editor to add states and transitions
     to the files. Then, use the classes in the Qt SCXML module to embed the
     state machines created from the files in Qt applications.
@@ -284,7 +284,7 @@
     \title Create state charts
 
     You can use \QC to create applications that embed state machines. A file
-    wizard creates \l{https://www.w3.org/TR/scxml/}{State Chart XML (SCXML)}
+    wizard creates \l{State Chart XML (SCXML)}
     files with boilerplate code that you can edit using an SCXML editor. You can
     use the classes in the \l {Qt SCXML} module to embed state machines created
     from the files in Qt applications.

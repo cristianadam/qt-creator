@@ -106,8 +106,7 @@
     need them and disable plugins you don't need.
 
     \l{Install plugins}{Download and install} more plugins from
-    \l{https://marketplace.qt.io/}{Qt Marketplace} or some
-    other source, such as \l{https://github.com/}{GitHub}.
+    \l{Qt Marketplace} or some other source, such as \l{GitHub}.
 
     To enable and disable plugins, go to \uicontrol Help >
     \uicontrol {About Plugins}.

@@ -9,12 +9,11 @@
 
     \title Install plugins
 
-    \l{https://marketplace.qt.io/}{Qt Marketplace} has links to \QC plugins that
+    \l{Qt Marketplace} has links to \QC plugins that
     you can download and install either for free or for a price set by their
     publisher.
 
-    You can also install plugins from other sources, such as
-    \l{https://github.com/}{GitHub}.
+    You can also install plugins from other sources, such as \l{GitHub}.
 
     \note You can install only plugins that your \QC version supports.
 

@@ -76,7 +76,7 @@
     are sufficient.
 
     You can also build your own GDB, as instructed in
-    \l{https://wiki.qt.io/QtCreator_Build_Gdb}{Building GDB}.
+    \l{QtCreator Build Gdb}.
 
     Builds of GDB shipped with Xcode on \macos are no longer supported.
 
@@ -134,7 +134,7 @@
 
     \section1 PDB versions
 
-    \l{https://docs.python.org/3/library/pdb.html}{PDB} is a source code debugger
+    \l{PDB} is a source code debugger
     for Python applications. You can use the PDB version installed with Python to
     debug projects that have a \l {Tutorial: Qt Widgets and Python}{\c pyproject.toml}
     configuration file.

@@ -20,7 +20,7 @@
             generation of build configurations. Qt installers install and
             configure qmake. To use one of the other supported build systems,
             you need to set it up.
-        \li \l {https://mesonbuild.com/}{Meson} is a fast and user-friendly
+        \li \l {The Meson Build system}{Meson} is a fast and user-friendly
             open-source build system that aims to minimize the time developers spend
             writing or debugging build definitions and waiting for the build system
             to start compiling code. For more information, see \l {Meson}.

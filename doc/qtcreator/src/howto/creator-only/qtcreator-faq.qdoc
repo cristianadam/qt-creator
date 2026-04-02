@@ -47,7 +47,7 @@
     \b {Has a reported issue been addressed?}
 
     You can look up any issue in the
-    \l{https://bugreports.qt.io/}{Qt Project Bug Tracker}.
+    \l{Qt Project Bug Tracker}.
 
     \include widgets/creator-faq-qtdesigner.qdocinc qt designer faq
 
@@ -150,7 +150,7 @@
     installed when you install \QC and \QSDK. On \macos, GDB is no longer
     officially supported. To build your own Python-enabled GDB, follow the
     instructions in
-    \l{https://wiki.qt.io/QtCreator_Build_Gdb}{Building GDB}.
+    \l{QtCreator Build Gdb}.
 
     You must use Python version 2.6 or 2.7.
 
@@ -182,7 +182,7 @@
 
     On Windows, nmake does not support the \c{-j} parameter. Instead, you can use
     \e jom. You can download a precompiled
-    version of jom from \l{https://download.qt.io/official_releases/jom/}{Qt Downloads}.
+    version of jom from \l{Qt Downloads: jom}.
     Put \c jom.exe in a location in the %PATH%. Go to the \uicontrol {Build Settings}
     and set \c jom.exe as the make command.
 
@@ -196,8 +196,7 @@
         What should I do?}
 
     The Qt in the binary packages is built with QT_NO_OPENSSL defined. Rebuilding it
-     is possible. For more information, see
-     \l{http://www.qtcentre.org/threads/19222-Qssl}.
+    is possible. For more information, see \l{Qt Centre: QSsl}.
 
     \b {Which development packages from the distribution are needed on
     Ubuntu or Debian?}
@@ -237,8 +236,7 @@
     This is the standard behavior for CMake projects. To create a GUI
     application on Windows or an application bundle on \macos, you must
     specify the \c WIN32 or \c MACOSX_BUNDLE property for the
-    \l{https://doc.qt.io/qt-6/qt-add-executable.html}{qt_add_executable}
-    command in the \c CMakeLists.txt file.
+    \l{qt_add_executable} command in the \c CMakeLists.txt file.
 
     When you run a console application, you can view the output in the console
     window of the calling application. If the
@@ -255,8 +253,7 @@
     \uicontrol{Application Output}. However, \QC can show output from only one
     source at the time for it to be displayed correctly. You can use an
     external debug output viewer, such as the
-    \l{https://technet.microsoft.com/en-us/sysinternals/bb896647}
-    {DebugView for Windows} to display output from GUI applications.
+    \l{DebugView for Windows} to display output from GUI applications.
 
     \section1 Questions about new features
 
@@ -264,8 +261,7 @@
 
     If it is a scheduled feature, you can see this in the task tracker. If a
     feature already has been implemented, it is mentioned in the
-    \l{https://code.qt.io/cgit/qt-creator/qt-creator.git/tree/dist}{changes file}
-    for the upcoming release.
+    \l{\QC changelog}{changes file} for the upcoming release.
 
     \b {Why does \QC not use tabs for editors by default?}
 

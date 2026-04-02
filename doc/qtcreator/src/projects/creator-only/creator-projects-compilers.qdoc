@@ -34,8 +34,7 @@
     \note On \macos, the \c ccache C/C++ compiler cache is detected
     automatically only if you installed it using Homebrew or MacPorts.
     When using MacPorts, you also need to create symlinks, as instructed in
-    \l{https://trac.macports.org/wiki/howto/ccache}{How to enable ccache}
-    in the MacPorts wiki.
+    \l{How to enable ccache} in the MacPorts wiki.
 
     \section1 Re-detect compilers
 
@@ -76,7 +75,7 @@
         \li A C, C++, Objective C, and Objective C++ front-end for the
             LLVM compiler for Windows, Linux, and \macos.
     \row
-        \li \l{https://clang.llvm.org/docs/UsersManual.html#clang-cl}{clang-cl}
+        \li \l{clang-cl}
         \li An alternative command-line interface to Clang that is compatible
             with the Visual C++ compiler, \c cl.exe.
     \row
@@ -118,18 +117,18 @@
         \li Compiler
         \li Description
     \row
-        \li \l{https://www.iar.com/iar-embedded-workbench/}{IAREW}
+        \li \l{IAR EW}
         \li A group of C and C++ bare-metal compilers from the various
             IAR Embedded Workbench development environments.
             Currently supported architectures are \c 8051, \c AVR, \tm Arm,
             \c STM8, and \c MSP430.
     \row
-        \li \l{https://www.keil.com}{KEIL}
-        \li A group of C and C++ bare-metal compilers from the various KEIL
+        \li \l{Keil}
+        \li A group of C and C++ bare-metal compilers from the various Keil
             development environments.
             Currently supported architectures are \c 8051 and \tm Arm.
     \row
-        \li \l{http://sdcc.sourceforge.net}{SDCC}
+        \li \l{SDCC}
         \li An optimizing C bare-metal compiler for various architectures.
             Currently supported architectures are \c 8051 and \c STM8.
     \endtable

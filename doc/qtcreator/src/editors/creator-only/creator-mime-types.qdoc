@@ -16,8 +16,8 @@
 
     \title Edit MIME types
 
-    \QC uses the \l{https://www.iana.org/assignments/media-types/media-types.xhtml}
-    {MIME type} of a file to determine what type of a file it is, so it can:
+    \QC uses the \l{IANA: Media Types}{MIME type} of a file to determine what
+    type of a file it is, so it can:
 
     \list
         \li Choose a mode and editor to open the file in.
@@ -89,8 +89,7 @@
 
     Magic headers can have the following types of values: string, host,
     big-endian, little-endian, and byte. \QC interprets the values according to the
-    \l{http://standards.freedesktop.org/shared-mime-info-spec/shared-mime-info-spec-latest.html}
-    {Shared MIME-info Database specification}.
+    \l{Shared MIME-info Database}{Shared MIME-info Database specification}.
 
     \list 1
 

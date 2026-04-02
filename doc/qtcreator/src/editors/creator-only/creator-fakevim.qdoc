@@ -53,8 +53,8 @@
         \li Insert and replace
     \endlist
 
-    For more information about using Vim, see \l{http://www.vim.org/docs.php}
-    {Documentation} on the Vim web site.
+    For more information about using Vim, see \l{Vim documentation} on the
+    Vim web site.
 
     \section1 Normal and visual modes
 
@@ -308,12 +308,11 @@
         \li Vim Plugin
         \li Description
     \row
-        \li \l{https://github.com/tpope/vim-commentary}{vim-commentary}
+        \li \l{vim-commentary}
         \li \c gc action to comment code regions. For example, \c gcc, \c gc2j,
             \c gcip
     \row
-        \li \l{https://github.com/vim-scripts/ReplaceWithRegister}
-            {ReplaceWithRegister}
+        \li \l{ReplaceWithRegister}
         \li
             \list
                 \li \c [count]["x]gr{motion} to replace \c {motion} with the
@@ -321,13 +320,13 @@
                 \li ["x]grr to replace the current line.
             \endlist
     \row
-        \li \l{https://github.com/vim-scripts/argtextobj.vim}{argtextobj.vim}
+        \li \l{argtextobj.vim}
         \li Defines the \c ia and \c aa text objects for function parameters.
     \row
-        \li \l{https://github.com/tommcdo/vim-exchange}{vim-exchange}
+        \li \l{vim-exchange}
         \li A text exchange operator for vim.
     \row
-        \li \l{https://github.com/tpope/vim-surround}{vim-surround}
+        \li \l{vim-surround}
         \li Adds mappings for deleting, adding, and changing surroundings.
     \endtable
 

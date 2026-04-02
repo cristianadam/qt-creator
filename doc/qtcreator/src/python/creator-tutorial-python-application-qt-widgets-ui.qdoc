@@ -19,8 +19,7 @@
     \image {qtcreator-new-project-python-window-ui-ready.webp} {A small Qt Widgets application}
 
     For more examples of creating Qt for Python applications, see
-    \l {https://doc.qt.io/qtforpython/tutorials/index.html}
-    {Qt for Python Examples and Tutorials}.
+    \l{Qt for Python Examples and Tutorials}.
 
     \section1 Create a window UI project
 

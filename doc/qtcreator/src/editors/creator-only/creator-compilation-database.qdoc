@@ -9,8 +9,7 @@
 
     \title Use compilation databases
 
-    The \l{https://clang.llvm.org/docs/JSONCompilationDatabase.html}
-    {JSON compilation database format} specifies how to replay single builds
+    The \l{JSON compilation database format} specifies how to replay single builds
     independently of the build system.
 
     A \e {compilation database} is basically a list of files and the compiler

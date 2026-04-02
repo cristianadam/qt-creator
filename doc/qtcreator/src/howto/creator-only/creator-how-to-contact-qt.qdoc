@@ -15,7 +15,7 @@
     \section1 Report bugs and suggest improvements
 
     To report bugs and add suggestions for improvement to the
-    \l{https://bugreports.qt.io/}{Qt Project Bug Tracker},
+    \l{Qt Project Bug Tracker},
     go to \uicontrol Help > \uicontrol {Report Bug}.
 
     To copy information about your \QC version that you can paste to the bug
@@ -34,10 +34,9 @@
 
     \section1 Join discussions
 
-    To join the \l{https://lists.qt-project.org/listinfo/qt-creator}
-    {\QC mailing list} or \l{https://web.libera.chat/#qt-creator}
-    {#qt-creator} channel on Libera.Chat IRC, go to \uicontrol Help >
-    \uicontrol Contact.
+    To join the \l{\QC mailing list} or
+    \l{Libera.Chat: the qt-creator channel}{#qt-creator} channel on Libera.Chat
+    IRC, go to \uicontrol Help > \uicontrol Contact.
 
     \sa {Paste and fetch code snippets}, {Technical support}
 */

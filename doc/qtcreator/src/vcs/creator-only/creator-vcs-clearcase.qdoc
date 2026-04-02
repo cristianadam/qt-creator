@@ -30,8 +30,8 @@
 
     \list 1
 
-        \li Download \l{http://gnuwin32.sourceforge.net/packages/diffutils.htm}
-            {Diffutils} and extract it to a directory in your PATH.
+        \li Download \l{Diffutils for Windows}{Diffutils} and extract it
+            to a directory in your PATH.
 
         \li Select \preferences > \uicontrol {Version Control} >
             \uicontrol ClearCase.

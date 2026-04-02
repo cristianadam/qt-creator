@@ -1052,8 +1052,7 @@
 
     Only graphical merge tools are supported. You can configure the
     merge tool to use on the command line. For example, to use the
-    \l{http://kdiff3.sourceforge.net/}{KDiff3} merge tool, enter the
-    following command:
+    \l{KDiff3} merge tool, enter the following command:
 
     \badcode
     git config --global merge.tool kdiff3
@@ -1414,7 +1413,7 @@
     are detected as Gerrit servers. Go to \preferences >
     \uicontrol {Version Control} > \uicontrol Gerrit to specify a fallback
     connection to a Gerrit server over SSH. The Gerrit REST interface and the
-    \l{https://curl.haxx.se/}{curl} tool are used for HTTP connections.
+    \l{curl} tool are used for HTTP connections.
 
     Select \uicontrol HTTPS to prepend \c https to the Gerrit URL
     if Gerrit does not add it.

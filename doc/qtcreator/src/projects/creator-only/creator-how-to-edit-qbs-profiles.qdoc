@@ -16,8 +16,7 @@
 
     You can add keys and values to the profile or remove them from it, as well
     as modify existing values. For a list of available keys and values, see
-    \l{http://doc.qt.io/qbs/list-of-modules.html}{List of Modules} in the Qbs
-    Manual.
+    \l{List of Modules} in the Qbs Manual.
 
     To edit the Qbs profile associated with a kit:
 

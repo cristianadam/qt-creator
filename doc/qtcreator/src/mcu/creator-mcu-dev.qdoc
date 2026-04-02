@@ -47,7 +47,11 @@
 
     \list
         \li \l{Getting started on Espressif}
-        \li \l{Getting started on Infineon}
+        \li Getting started on Infineon
+        \list
+            \li \l {Getting started on Infineon Traveo T2G}
+            \li \l {Getting started on Infineon PSOC Edge platforms}
+        \endlist
         \li Getting started on NXP
         \list
             \li \l {Getting started on NXP (BareMetal and FreeRTOS)}

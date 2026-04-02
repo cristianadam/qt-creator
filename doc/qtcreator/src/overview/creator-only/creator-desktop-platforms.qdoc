@@ -68,10 +68,8 @@
     \note Some \QC plugins rely on Direct3D (part of DirectX). You might
     have to manually enable support for it if you are running Windows in a
     Virtual Machine. For more information, see
-    \l{http://www.virtualbox.org/manual/ch04.html#guestadd-3d}
-    {Hardware 3D acceleration (OpenGL and Direct3D 8/9)} and
-    \l{https://techdocs.broadcom.com/us/en/vmware-cis/desktop-hypervisors/workstation-pro/17-0/using-vmware-workstation-pro/configuring-and-managing-virtual-machines/configure-display-settings-for-a-virtual-machine/prepare-the-host-system-to-use-accelerated-3d-graphics.html}
-    {Prepare the Host System to Use DirectX 9 Accelerated Graphics}.
+    \l{Hardware 3D acceleration (OpenGL and Direct3D 8/9)} and
+    \l{Prepare the Host System to Use DirectX 9 Accelerated Graphics}.
 
     \section1 Compiling from source
 

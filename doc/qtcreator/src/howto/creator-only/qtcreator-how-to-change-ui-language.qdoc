@@ -30,9 +30,8 @@
     qtcreator -language <locale>
     \endcode
 
-    Use a lowercase, two-letter
-    \l {https://www.iso.org/iso-639-language-codes.html}
-    {ISO 639 language code}, such as \e de, \e en, or \e fr.
+    Use a lowercase, two-letter \l{ISO 639 language code}, such as
+    \e de, \e en, or \e fr.
 
     \sa {Adapt the UI}{How to: Adapt the UI}, {Adapting the UI},
     {Run \QC from the command line}

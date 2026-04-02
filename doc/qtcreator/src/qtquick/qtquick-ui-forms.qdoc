@@ -85,9 +85,7 @@
 
     In addition, all functions of the \c Math and \c Date objects are supported.
 
-    For more information, see
-    \l{https://doc.qt.io/qt/qtqml-javascript-functionlist.html}
-    {List of JavaScript Objects and Functions}.
+    For more information, see \l{List of JavaScript Objects and Functions}.
 
     \section2 Qt QML methods
 
@@ -134,8 +132,7 @@
 
     \note Do not mix translation methods in a UI file.
 
-    For more information about using the methods, see
-    \l{https://doc.qt.io/qt/qml-qtqml-qt.html}{Qt QML Methods}.
+    For more information about using the methods, see \l{Qt QML Methods}.
 
     \section1 Using UI files
 
