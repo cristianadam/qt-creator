@@ -397,6 +397,8 @@ class AcpManagerSettings : public AspectContainer
 public:
     AcpManagerSettings()
     {
+        setSettingsGroup("AcpClient");
+
         setAutoApply(false);
         acpServers.setSettingsKey("AcpServers");
         acpServers.setDisplayStyle(AspectList::DisplayStyle::ListViewWithDetails);
