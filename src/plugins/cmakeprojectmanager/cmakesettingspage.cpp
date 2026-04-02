@@ -448,7 +448,7 @@ public:
 
 private:
     void apply() final { m_model.apply(); }
-
+    void cancel() final { m_model.cancel(); }
     bool isDirty() const final { return m_model.isDirty(); }
 
     void cloneCMakeTool();
