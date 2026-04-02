@@ -19,6 +19,32 @@ public:
     }
 };
 
+class LanguageSelectionAspect : public Utils::StringSelectionAspect
+{
+public:
+    using StringSelectionAspect::StringSelectionAspect;
+
+    static inline const QString kSystemLanguage = "__system__";
+
+    void fixupComboBox(QComboBox *comboBox) override
+    {
+        comboBox->setObjectName("languageBox");
+        comboBox->setMinimumContentsLength(20);
+    }
+
+    QVariant toSettingsValue(const QVariant &valueToSave) const override
+    {
+        const QString v = valueToSave.toString();
+        return v == kSystemLanguage ? QString() : v;
+    }
+
+    QVariant fromSettingsValue(const QVariant &savedValue) const override
+    {
+        const QString v = savedValue.toString();
+        return v.isEmpty() ? kSystemLanguage : v;
+    }
+};
+
 class GeneralSettings : public Utils::AspectContainer
 {
 public:
@@ -33,6 +59,7 @@ public:
     Utils::SelectionAspect highDpiScaleFactorRoundingPolicy{this};
 
     CodecForLocaleAspect codecForLocale{this};
+    LanguageSelectionAspect language{this};
 
     static void applyToolbarStyleFromSettings();
 };

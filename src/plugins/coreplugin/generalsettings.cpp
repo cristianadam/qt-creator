@@ -46,6 +46,88 @@ static bool defaultShowShortcutsInContextMenu()
     return QGuiApplication::styleHints()->showShortcutsInContextMenus();
 }
 
+static bool hasQmFilesForLocale(const QString &locale, const QString &creatorTrPath)
+{
+    static const QString qtTrPath = QLibraryInfo::path(QLibraryInfo::TranslationsPath);
+
+    const QString trFile = QLatin1String("/qt_") + locale + QLatin1String(".qm");
+    return QFileInfo::exists(qtTrPath + trFile) || QFileInfo::exists(creatorTrPath + trFile);
+}
+
+static void fillLanguageItems(const StringSelectionAspect::ResultCallback &cb)
+{
+    QList<QStandardItem *> items;
+
+    auto systemItem = new QStandardItem(Tr::tr("<System Language>"));
+    systemItem->setData(LanguageSelectionAspect::kSystemLanguage);
+    items.append(systemItem);
+
+    struct LangItem
+    {
+        QString display;
+        QString locale;
+        QString comparisonId;
+    };
+
+    QList<LangItem> langItems;
+    // need to add this explicitly, since there is no qm file for English
+    const QString english = QLocale::languageToString(QLocale::English);
+    langItems.append({english, QString("C"), english});
+
+    const FilePath creatorTrPath = ICore::resourcePath("translations");
+    const FilePaths languageFiles = creatorTrPath.dirEntries(
+        QStringList(QLatin1String("qtcreator*.qm")));
+    for (const FilePath &languageFile : languageFiles) {
+        const QString name = languageFile.fileName();
+        // Ignore english ts file that is for temporary spelling fixes only.
+        // We have the "English" item that is explicitly added at the top.
+        if (name == "qtcreator_en.qm")
+            continue;
+        int start = name.indexOf('_') + 1;
+        int end = name.lastIndexOf('.');
+        const QString locale = name.mid(start, end - start);
+        // no need to show a language that creator will not load anyway
+        if (hasQmFilesForLocale(locale, creatorTrPath.toUrlishString())) {
+            QLocale tmpLocale(locale);
+            const auto display = QString("%1 (%2) - %3 (%4)")
+                                     .arg(tmpLocale.nativeLanguageName(),
+                                          tmpLocale.nativeTerritoryName(),
+                                          QLocale::languageToString(tmpLocale.language()),
+                                          QLocale::territoryToString(tmpLocale.territory()));
+            // Create a fancy comparison string.
+            // We cannot use a "locale aware comparison" because we are comparing
+            // different locales. The probably "optimal solution" would be to compare
+            // by "latinized native name", but that's hard. Instead
+            // - for non-Latin-script locales use the english name, otherwise the native name
+            // - get rid of fancy characters like '\u010d' by decomposing them (e.g. to 'c')
+            QString comparisonId
+                = tmpLocale.script() == QLocale::LatinScript
+                      ? (tmpLocale.nativeLanguageName() + " "
+                         + tmpLocale.nativeTerritoryName())
+                      : (QLocale::languageToString(tmpLocale.language()) + " "
+                         + QLocale::territoryToString(tmpLocale.territory()));
+            for (int i = 0; i < comparisonId.size(); ++i) {
+                QChar &c = comparisonId[i];
+                if (c.decomposition().isEmpty())
+                    continue;
+                c = c.decomposition().at(0);
+            }
+            langItems.append({display, locale, comparisonId});
+        }
+    }
+
+    Utils::sort(langItems, [](const LangItem &a, const LangItem &b) {
+        return a.comparisonId.compare(b.comparisonId, Qt::CaseInsensitive) < 0;
+    });
+    for (const LangItem &i : std::as_const(langItems)) {
+        auto item = new QStandardItem(i.display);
+        item->setData(i.locale);
+        items.append(item);
+    }
+
+    cb(items);
+}
+
 GeneralSettings &generalSettings()
 {
     static GeneralSettings theSettings;
@@ -104,6 +186,16 @@ GeneralSettings::GeneralSettings()
         TextEncoding::setEncodingForLocale(codecForLocale.value().toUtf8());
     });
 
+    language.setSettingsKey("General/OverrideLanguage");
+    language.setDefaultValue(LanguageSelectionAspect::kSystemLanguage);
+    language.setLabelText(Tr::tr("Language:"));
+    language.setComboBoxEditable(false);
+    language.setFillCallback(&fillLanguageItems);
+
+    connect(&language, &BaseAspect::changed, this, [] {
+        ICore::askForRestart(Tr::tr("The language change will take effect after restart."));
+    });
+
     static const SelectionAspect::Option options[] = {
         {Tr::tr("Round Up for .5 and Above"), {}, int(Qt::HighDpiScaleFactorRoundingPolicy::Round)},
         {Tr::tr("Always Round Up"), {}, int(Qt::HighDpiScaleFactorRoundingPolicy::Ceil)},
@@ -143,15 +235,10 @@ public:
 
     void resetInterfaceColor();
     void resetWarnings();
-    void resetLanguage();
 
     static bool canResetWarnings();
-    void fillLanguageBox() const;
-    static QString language();
-    static void setLanguage(const QString &);
     void fillToolbarStyleBox() const;
 
-    QComboBox *m_languageBox;
     QtColorButton *m_colorButton;
     ThemeChooser *m_themeChooser;
     QPushButton *m_resetWarningsButton;
@@ -159,16 +246,11 @@ public:
 };
 
 GeneralSettingsWidget::GeneralSettingsWidget()
-    : m_languageBox(new QComboBox)
-    , m_colorButton(new QtColorButton)
+    : m_colorButton(new QtColorButton)
     , m_themeChooser(new ThemeChooser)
     , m_resetWarningsButton(new QPushButton)
     , m_toolbarStyleBox(new QComboBox)
 {
-    m_languageBox->setObjectName("languageBox");
-    m_languageBox->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    m_languageBox->setMinimumContentsLength(20);
-
     m_colorButton->setMinimumSize(QSize(64, 0));
     m_colorButton->setProperty("alphaAllowed", QVariant(false));
 
@@ -187,7 +269,7 @@ GeneralSettingsWidget::GeneralSettingsWidget()
     form.addRow({Tr::tr("Color:"), m_colorButton, resetColorButton, st});
     form.addRow({Tr::tr("Theme:"), m_themeChooser});
     form.addRow({Tr::tr("Toolbar style:"), m_toolbarStyleBox, st});
-    form.addRow({Tr::tr("Language:"), m_languageBox, st});
+    form.addRow({generalSettings().language, st});
 
     if (StyleHelper::defaultHighDpiScaleFactorRoundingPolicy()
         != Qt::HighDpiScaleFactorRoundingPolicy::Unset) {
@@ -238,7 +320,6 @@ GeneralSettingsWidget::GeneralSettingsWidget()
         }
     }.attachTo(this);
 
-    fillLanguageBox();
     fillToolbarStyleBox();
 
     m_colorButton->setColor(StyleHelper::requestedBaseColor());
@@ -255,7 +336,6 @@ GeneralSettingsWidget::GeneralSettingsWidget()
 
     setOnCancel([] { generalSettings().cancel(); });
 
-    installCheckSettingsDirtyTrigger(m_languageBox);
     installCheckSettingsDirtyTrigger(m_colorButton);
     installCheckSettingsDirtyTrigger(m_themeChooser->themeComboBox());
     installCheckSettingsDirtyTrigger(m_toolbarStyleBox);
@@ -263,91 +343,10 @@ GeneralSettingsWidget::GeneralSettingsWidget()
     connect(&generalSettings(), &AspectContainer::volatileValueChanged, &checkSettingsDirty);
 }
 
-static bool hasQmFilesForLocale(const QString &locale, const QString &creatorTrPath)
-{
-    static const QString qtTrPath = QLibraryInfo::path(QLibraryInfo::TranslationsPath);
-
-    const QString trFile = QLatin1String("/qt_") + locale + QLatin1String(".qm");
-    return QFileInfo::exists(qtTrPath + trFile) || QFileInfo::exists(creatorTrPath + trFile);
-}
-
-void GeneralSettingsWidget::fillLanguageBox() const
-{
-    const QString currentLocale = language();
-
-    m_languageBox->addItem(Tr::tr("<System Language>"), QString());
-
-    struct Item
-    {
-        QString display;
-        QString locale;
-        QString comparisonId;
-    };
-
-    QList<Item> items;
-    // need to add this explicitly, since there is no qm file for English
-    const QString english = QLocale::languageToString(QLocale::English);
-    items.append({english, QString("C"), english});
-
-    const FilePath creatorTrPath = ICore::resourcePath("translations");
-    const FilePaths languageFiles = creatorTrPath.dirEntries(
-        QStringList(QLatin1String("qtcreator*.qm")));
-    for (const FilePath &languageFile : languageFiles) {
-        const QString name = languageFile.fileName();
-        // Ignore english ts file that is for temporary spelling fixes only.
-        // We have the "English" item that is explicitly added at the top.
-        if (name == "qtcreator_en.qm")
-            continue;
-        int start = name.indexOf('_') + 1;
-        int end = name.lastIndexOf('.');
-        const QString locale = name.mid(start, end - start);
-        // no need to show a language that creator will not load anyway
-        if (hasQmFilesForLocale(locale, creatorTrPath.toUrlishString())) {
-            QLocale tmpLocale(locale);
-            const auto languageItem = QString("%1 (%2) - %3 (%4)")
-                                          .arg(
-                                              tmpLocale.nativeLanguageName(),
-                                              tmpLocale.nativeTerritoryName(),
-                                              QLocale::languageToString(tmpLocale.language()),
-                                              QLocale::territoryToString(tmpLocale.territory()));
-            // Create a fancy comparison string.
-            // We cannot use a "locale aware comparison" because we are comparing different locales.
-            // The probably "optimal solution" would be to compare by "latinized native name",
-            // but that's hard. Instead
-            // - for non-Latin-script locales use the english name, otherwise the native name
-            // - get rid of fancy characters like 'č' by decomposing them (e.g. to 'c')
-            QString comparisonId = tmpLocale.script() == QLocale::LatinScript
-                                       ? (tmpLocale.nativeLanguageName() + " "
-                                          + tmpLocale.nativeTerritoryName())
-                                       : (QLocale::languageToString(tmpLocale.language()) + " "
-                                          + QLocale::territoryToString(tmpLocale.territory()));
-            for (int i = 0; i < comparisonId.size(); ++i) {
-                QChar &c = comparisonId[i];
-                if (c.decomposition().isEmpty())
-                    continue;
-                c = c.decomposition().at(0);
-            }
-            items.append({languageItem, locale, comparisonId});
-        }
-    }
-
-    Utils::sort(items, [](const Item &a, const Item &b) {
-        return a.comparisonId.compare(b.comparisonId, Qt::CaseInsensitive) < 0;
-    });
-    for (const Item &i : std::as_const(items)) {
-        m_languageBox->addItem(i.display, i.locale);
-        if (i.locale == currentLocale)
-            m_languageBox->setCurrentIndex(m_languageBox->count() - 1);
-    }
-}
-
 void GeneralSettingsWidget::apply()
 {
     generalSettings().apply();
     generalSettings().writeSettings();
-
-    int currentIndex = m_languageBox->currentIndex();
-    setLanguage(m_languageBox->itemData(currentIndex, Qt::UserRole).toString());
 
     // Apply the new base color if accepted
     StyleHelper::setBaseColor(m_colorButton->color());
@@ -366,13 +365,6 @@ void GeneralSettingsWidget::apply()
 bool GeneralSettingsWidget::isDirty() const
 {
     if (generalSettings().isDirty())
-        return true;
-
-    QtcSettings *settings = ICore::settings();
-
-    int currentIndex = m_languageBox->currentIndex();
-    QString selecetedLanguange = m_languageBox->itemData(currentIndex, Qt::UserRole).toString();
-    if (settings->value("General/OverrideLanguage").toString() != selecetedLanguange)
         return true;
 
     if (m_colorButton->color() != StyleHelper::requestedBaseColor())
@@ -405,27 +397,6 @@ void GeneralSettingsWidget::resetWarnings()
 bool GeneralSettingsWidget::canResetWarnings()
 {
     return InfoBar::anyGloballySuppressed() || CheckableMessageBox::hasSuppressedQuestions();
-}
-
-void GeneralSettingsWidget::resetLanguage()
-{
-    // system language is default
-    m_languageBox->setCurrentIndex(0);
-}
-
-QString GeneralSettingsWidget::language()
-{
-    QtcSettings *settings = ICore::settings();
-    return settings->value("General/OverrideLanguage").toString();
-}
-
-void GeneralSettingsWidget::setLanguage(const QString &locale)
-{
-    QtcSettings *settings = ICore::settings();
-    if (settings->value("General/OverrideLanguage").toString() != locale)
-        ICore::askForRestart(Tr::tr("The language change will take effect after restart."));
-
-    settings->setValueWithDefault("General/OverrideLanguage", locale, {});
 }
 
 StyleHelper::ToolbarStyle toolbarStylefromSettings()
