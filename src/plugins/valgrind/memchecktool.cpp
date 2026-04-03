@@ -427,8 +427,11 @@ MemcheckTool::MemcheckTool(QObject *parent)
     initKindFilterAction(a, { FishyValue });
     m_errorFilterActions.append(a);
 
+    QtcSettings *settings = ICore::settings();
+
     m_errorView = new MemcheckErrorView;
-    m_errorView->setObjectName("MemcheckErrorView");
+    m_errorView->setObjectName("Valgrind.MemcheckTool.ErrorView");
+    m_errorView->setSettings(settings, m_errorView->objectName().toUtf8());
     m_errorView->setFrameStyle(QFrame::NoFrame);
     m_errorView->setAttribute(Qt::WA_MacShowFocusRect, false);
     m_errorModel.setRelevantFrameFinder(makeFrameFinder(QStringList()));
@@ -440,7 +443,6 @@ MemcheckTool::MemcheckTool(QObject *parent)
     m_errorView->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_errorView->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_errorView->setAutoScroll(false);
-    m_errorView->setObjectName("Valgrind.MemcheckTool.ErrorView");
     m_errorView->setWindowTitle(Tr::tr("Memory Issues"));
 
     m_perspective.addWindow(m_errorView, Perspective::SplitVertical, nullptr);

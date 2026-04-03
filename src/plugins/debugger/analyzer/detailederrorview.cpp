@@ -25,10 +25,10 @@ using namespace Utils;
 namespace Debugger {
 
 DetailedErrorView::DetailedErrorView(QWidget *parent) :
-    TreeView(parent),
+    BaseTreeView(parent),
     m_copyAction(new QAction(this))
 {
-    header()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    header()->setSectionResizeMode(QHeaderView::Interactive);
 
     m_copyAction->setText(Tr::tr("Copy"));
     m_copyAction->setIcon(Utils::Icons::COPY.icon());

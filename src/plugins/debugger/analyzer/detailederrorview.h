@@ -6,12 +6,13 @@
 #include <debugger/debugger_global.h>
 
 #include <utils/itemviews.h>
+#include <utils/basetreeview.h>
 
 namespace Utils { class Link; }
 
 namespace Debugger {
 
-class DEBUGGER_EXPORT DetailedErrorView : public Utils::TreeView
+class DEBUGGER_EXPORT DetailedErrorView : public Utils::BaseTreeView
 {
 public:
     DetailedErrorView(QWidget *parent = nullptr);
