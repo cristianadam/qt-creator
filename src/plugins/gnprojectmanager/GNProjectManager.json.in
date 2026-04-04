@@ -38,8 +38,9 @@
         "<mime-info xmlns='http://www.freedesktop.org/standards/shared-mime-info'>",
         "    <mime-type type='text/x-gn'>",
         "        <sub-class-of type='text/plain'/>",
-        "        <comment>GN build description</comment>",
+        "        <comment>GN build files</comment>",
         "        <glob pattern='BUILD.gn'/>",
+        "        <glob pattern='*.gni'/>",
         "        <glob pattern='.gn'/>",
         "    </mime-type>",
         "</mime-info>"
