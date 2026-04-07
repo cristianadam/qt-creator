@@ -14,6 +14,8 @@
 #include <coreplugin/session.h>
 #include <coreplugin/vcsmanager.h>
 
+#include <debugger/breakhandler.h>
+#include <debugger/breakpoint.h>
 #include <debugger/debuggerruncontrol.h>
 
 #include <projectexplorer/editorconfiguration.h>
@@ -991,6 +993,126 @@ static void initializeToolsForCommands(Mcp::Server &server)
     addToolForCommand("debug", Debugger::Constants::DEBUGGER_START);
 }
 
+static QString breakpointTypeToString(Debugger::Internal::BreakpointType type)
+{
+    using namespace Debugger::Internal;
+    switch (type) {
+    case BreakpointByFileAndLine:      return "fileAndLine";
+    case BreakpointByFunction:         return "function";
+    case BreakpointByAddress:          return "address";
+    case BreakpointAtThrow:            return "throw";
+    case BreakpointAtCatch:            return "catch";
+    case BreakpointAtMain:             return "main";
+    case BreakpointAtFork:             return "fork";
+    case BreakpointAtExec:             return "exec";
+    case BreakpointAtSysCall:          return "syscall";
+    case WatchpointAtAddress:          return "watchAddress";
+    case WatchpointAtExpression:       return "watchExpression";
+    case BreakpointOnQmlSignalEmit:    return "qmlSignal";
+    case BreakpointAtJavaScriptThrow:  return "jsThrow";
+    default:                           return "unknown";
+    }
+}
+
+bool McpCommands::deleteBreakpoint(int id)
+{
+    using namespace Debugger::Internal;
+    const GlobalBreakpoints bps = BreakpointManager::globalBreakpoints();
+    for (const GlobalBreakpoint &gbp : bps) {
+        if (gbp && gbp->modelId() == id) {
+            gbp->deleteBreakpoint();
+            return true;
+        }
+    }
+    return false;
+}
+
+QJsonArray McpCommands::getBreakpoints()
+{
+    using namespace Debugger::Internal;
+    QJsonArray result;
+    const GlobalBreakpoints bps = BreakpointManager::globalBreakpoints();
+    for (const GlobalBreakpoint &gbp : bps) {
+        if (!gbp)
+            continue;
+        const BreakpointParameters &p = gbp->requestedParameters();
+        QJsonObject obj;
+        obj["id"] = gbp->modelId();
+        obj["type"] = breakpointTypeToString(p.type);
+        obj["enabled"] = p.enabled;
+        if (!p.fileName.isEmpty())
+            obj["file"] = p.fileName.toUserOutput();
+        if (p.textPosition.line > 0)
+            obj["line"] = p.textPosition.line;
+        if (!p.functionName.isEmpty())
+            obj["function"] = p.functionName;
+        if (p.address != 0)
+            obj["address"] = QString("0x%1").arg(p.address, 0, 16);
+        if (!p.condition.isEmpty())
+            obj["condition"] = p.condition;
+        if (p.ignoreCount != 0)
+            obj["ignoreCount"] = p.ignoreCount;
+        if (p.oneShot)
+            obj["oneShot"] = true;
+        if (!p.message.isEmpty())
+            obj["message"] = p.message;
+        result.append(obj);
+    }
+    return result;
+}
+
+QJsonObject McpCommands::addBreakpoint(
+    const QString &type,
+    const QString &file,
+    int line,
+    const QString &functionName,
+    quint64 address,
+    const QString &condition,
+    int ignoreCount,
+    bool enabled,
+    bool oneShot)
+{
+    using namespace Debugger::Internal;
+
+    BreakpointType bpType = BreakpointByFileAndLine;
+    if (type == "function")
+        bpType = BreakpointByFunction;
+    else if (type == "address")
+        bpType = BreakpointByAddress;
+    else if (type == "throw")
+        bpType = BreakpointAtThrow;
+    else if (type == "catch")
+        bpType = BreakpointAtCatch;
+    else if (type == "main")
+        bpType = BreakpointAtMain;
+    else if (type == "watchAddress")
+        bpType = WatchpointAtAddress;
+    else if (type == "watchExpression")
+        bpType = WatchpointAtExpression;
+
+    BreakpointParameters params(bpType);
+    params.enabled = enabled;
+    params.oneShot = oneShot;
+    if (!file.isEmpty())
+        params.fileName = FilePath::fromUserInput(file);
+    if (line > 0)
+        params.textPosition.line = line;
+    if (!functionName.isEmpty())
+        params.functionName = functionName;
+    if (address != 0)
+        params.address = address;
+    if (!condition.isEmpty())
+        params.condition = condition;
+    if (ignoreCount > 0)
+        params.ignoreCount = ignoreCount;
+
+    const GlobalBreakpoint gbp = BreakpointManager::createBreakpoint(params);
+    if (!gbp)
+        return QJsonObject{{"success", false}, {"error", "Failed to create breakpoint"}};
+
+    return QJsonObject{{"success", true}, {"id", gbp->modelId()}};
+}
+
 void McpCommands::registerCommands(Mcp::Server &server)
 {
     using namespace Mcp::Schema;
@@ -1893,6 +2015,138 @@ void McpCommands::registerCommands(Mcp::Server &server)
             for (const QString &pr : projects.value_or(QStringList{})) // TODO: proper error handling
                 arr.append(pr);
             return QJsonObject{{"dependencies", arr}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("get_breakpoints")
+            .title("Get current breakpoints")
+            .description("Returns all breakpoints currently set in Qt Creator's debugger")
+            .annotations(ToolAnnotations{}.readOnlyHint(true).destructiveHint(false))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty(
+                        "breakpoints",
+                        QJsonObject{
+                            {"type", "array"},
+                            {"items", QJsonObject{{"type", "object"}}},
+                            {"description", "List of breakpoints"}})
+                    .addRequired("breakpoints")),
+        wrap([](const QJsonObject &) {
+            return QJsonObject{{"breakpoints", commands.getBreakpoints()}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("delete_breakpoint")
+            .title("Delete a breakpoint")
+            .description(
+                "Deletes a breakpoint by its ID (as returned by get_breakpoints or add_breakpoint)")
+            .annotations(ToolAnnotations().destructiveHint(true).idempotentHint(true))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "id",
+                        QJsonObject{
+                            {"type", "integer"}, {"description", "ID of the breakpoint to delete"}})
+                    .addRequired("id"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("success", QJsonObject{{"type", "boolean"}})
+                    .addRequired("success")),
+        wrap([](const QJsonObject &p) {
+            const bool ok = commands.deleteBreakpoint(p.value("id").toInt());
+            return QJsonObject{{"success", ok}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("add_breakpoint")
+            .title("Add a breakpoint")
+            .description("Adds a new breakpoint in Qt Creator's debugger.")
+            .annotations(ToolAnnotations{}.readOnlyHint(false).destructiveHint(false))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "type",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"enum",
+                             QJsonArray{
+                                 "fileAndLine",
+                                 "function",
+                                 "address",
+                                 "throw",
+                                 "catch",
+                                 "main",
+                                 "watchAddress",
+                                 "watchExpression"}},
+                            {"description", "Breakpoint type. Defaults to fileAndLine."},
+                            {"default", "fileAndLine"}})
+                    .addProperty(
+                        "file",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description",
+                             "Absolute path to the source file (for fileAndLine type)"}})
+                    .addProperty(
+                        "line",
+                        QJsonObject{
+                            {"type", "integer"},
+                            {"description",
+                             "Line number in the source file (for fileAndLine type)"}})
+                    .addProperty(
+                        "function",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description", "Function name (for function type)"}})
+                    .addProperty(
+                        "address",
+                        QJsonObject{
+                            {"type", "integer"},
+                            {"description", "Memory address (for address or watchAddress type)"}})
+                    .addProperty(
+                        "condition",
+                        QJsonObject{
+                            {"type", "string"}, {"description", "Optional condition expression"}})
+                    .addProperty(
+                        "ignoreCount",
+                        QJsonObject{
+                            {"type", "integer"},
+                            {"description", "Number of hits to ignore before breaking"}})
+                    .addProperty(
+                        "enabled",
+                        QJsonObject{
+                            {"type", "boolean"},
+                            {"description", "Whether the breakpoint is enabled. Defaults to true."},
+                            {"default", true}})
+                    .addProperty(
+                        "oneShot",
+                        QJsonObject{
+                            {"type", "boolean"},
+                            {"description",
+                             "If true, the breakpoint is removed after the first hit"},
+                            {"default", false}}))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("success", QJsonObject{{"type", "boolean"}})
+                    .addProperty(
+                        "id",
+                        QJsonObject{
+                            {"type", "integer"}, {"description", "ID of the created breakpoint"}})
+                    .addProperty("error", QJsonObject{{"type", "string"}})
+                    .addRequired("success")),
+        wrap([](const QJsonObject &p) {
+            return commands.addBreakpoint(
+                p.value("type").toString("fileAndLine"),
+                p.value("file").toString(),
+                p.value("line").toInt(0),
+                p.value("function").toString(),
+                static_cast<quint64>(p.value("address").toInteger(0)),
+                p.value("condition").toString(),
+                p.value("ignoreCount").toInt(0),
+                p.value("enabled").toBool(true),
+                p.value("oneShot").toBool(false));
         }));
 
     server.addTool(

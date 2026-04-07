@@ -3,6 +3,7 @@ add_qtc_plugin(mcpserver
   PLUGIN_CLASS McpServerPlugin
   PLUGIN_DEPENDS
     Core
+    Debugger
     ProjectExplorer
   DEPENDS
    ExtensionSystem

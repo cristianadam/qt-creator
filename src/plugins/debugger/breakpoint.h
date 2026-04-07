@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "debugger_global.h"
+
 #include <QMetaType>
 #include <QString>
 
@@ -114,7 +116,7 @@ inline void operator|=(BreakpointParts &p, BreakpointParts r)
     p = BreakpointParts(int(p) | int(r));
 }
 
-class BreakpointParameters
+class DEBUGGER_EXPORT BreakpointParameters
 {
 public:
     explicit BreakpointParameters(BreakpointType = UnknownBreakpointType);

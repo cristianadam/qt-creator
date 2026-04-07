@@ -120,6 +120,18 @@ public:
     bool isDebuggingActive();
     QString abortDebug();
     bool killDebuggedProcesses();
+    QJsonArray getBreakpoints();
+    bool deleteBreakpoint(int id);
+    QJsonObject addBreakpoint(
+        const QString &type,
+        const QString &file,
+        int line,
+        const QString &functionName,
+        quint64 address,
+        const QString &condition,
+        int ignoreCount,
+        bool enabled,
+        bool oneShot);
 
     void executeCommand(
         const QString &command,

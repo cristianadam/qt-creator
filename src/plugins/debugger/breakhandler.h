@@ -39,7 +39,7 @@ public:
 
 using SubBreakpoint = QPointer<SubBreakpointItem>;
 
-class GlobalBreakpointItem : public QObject, public Utils::TreeItem
+class DEBUGGER_EXPORT GlobalBreakpointItem : public QObject, public Utils::TreeItem
 {
 public:
     explicit GlobalBreakpointItem();
