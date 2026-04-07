@@ -52,7 +52,7 @@ if (WITH_DEBUGGER_DUMPERS)
   add_qtc_test(tst_debugger_dumpers
     EXCLUDE_FROM_PRECHECK
     TIMEOUT 0
-    DEPENDS Qt::Network Utils
+    DEPENDS Qt::Network Utils Debugger
     DEFINES
       DUMPERDIR="${PROJECT_SOURCE_DIR}/share/qtcreator/debugger"
       DEFAULT_QMAKE_BINARY="${qmake_binary}"
@@ -62,7 +62,6 @@ if (WITH_DEBUGGER_DUMPERS)
       "${DEBUGGERDIR}/debuggertr.h"
       "${DEBUGGERDIR}/debuggerprotocol.cpp" "${DEBUGGERDIR}/debuggerprotocol.h"
       "${DEBUGGERDIR}/simplifytype.cpp" "${DEBUGGERDIR}/simplifytype.h"
-      "${DEBUGGERDIR}/watchdata.cpp" "${DEBUGGERDIR}/watchdata.h"
       "${DEBUGGERDIR}/watchutils.cpp" "${DEBUGGERDIR}/watchutils.h"
       tst_dumpers.cpp
   )

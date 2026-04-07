@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "debugger_global.h"
 #include "watchdata.h"
 #include "debuggerengine.h"
 
@@ -14,7 +15,7 @@ class WatchModel;
 
 using DisplayFormats = QList<DisplayFormat>;
 
-class WatchModelBase : public Utils::TreeModel<WatchItem, WatchItem>
+class DEBUGGER_EXPORT WatchModelBase : public Utils::TreeModel<WatchItem, WatchItem>
 {
     Q_OBJECT
 
@@ -31,7 +32,7 @@ signals:
     void updateFinished();
 };
 
-class WatchHandler
+class DEBUGGER_EXPORT WatchHandler
 {
     Q_DISABLE_COPY_MOVE(WatchHandler)
 

@@ -21,6 +21,7 @@
 #include <debugger/enginemanager.h>
 #include <debugger/stackhandler.h>
 #include <debugger/threadshandler.h>
+#include <debugger/watchhandler.h>
 
 #include <projectexplorer/buildconfiguration.h>
 #include <projectexplorer/buildmanager.h>
@@ -993,6 +994,180 @@ static void initializeToolsForCommands(Mcp::Server &server)
     };
 
     addToolForCommand("clean_project", ProjectExplorer::Constants::CLEAN);
+}
+
+static Utils::Result<Debugger::Internal::WatchHandler *> getWatchHandler()
+{
+    using namespace Debugger::Internal;
+    const QPointer<DebuggerEngine> engine = EngineManager::currentEngine();
+    if (!engine)
+        return Utils::ResultError("No active debug session");
+    if (engine->state() != Debugger::InferiorStopOk)
+        return Utils::ResultError("Debugger is not paused (current state: "
+                                  + DebuggerEngine::stateName(engine->state()) + ")");
+    return engine->watchHandler();
+}
+
+static QJsonObject watchItemToJson(const Debugger::Internal::WatchItem *item)
+{
+    QJsonObject obj;
+    obj["iname"] = item->iname;
+    obj["name"] = item->name;
+    obj["value"] = item->value;
+    obj["type"] = item->type;
+    obj["valueEditable"] = item->valueEditable;
+    obj["hasChildren"] = item->wantsChildren || item->childCount() > 0;
+    if (item->address != 0)
+        obj["address"] = QString("0x%1").arg(item->address, 0, 16);
+    return obj;
+}
+
+void McpCommands::getVariables(bool includeWatchers,
+                                std::function<void(Utils::Result<QJsonArray>)> callback)
+{
+    using namespace Debugger::Internal;
+    const Utils::Result<WatchHandler *> handler = getWatchHandler();
+    if (!handler) {
+        callback(Utils::ResultError(handler.error()));
+        return;
+    }
+
+    QStringList rootInames = {"local"};
+    if (includeWatchers)
+        rootInames.append("watch");
+
+    const auto buildResult = [handler, rootInames]() -> Utils::Result<QJsonArray> {
+        QJsonArray result;
+        for (const QString &rootIname : rootInames) {
+            WatchItem *root = (*handler)->findItem(rootIname);
+            if (!root)
+                continue;
+            root->forFirstLevelChildren([&](WatchItem *item) {
+                QJsonObject obj = watchItemToJson(item);
+                // Include children that are already loaded in the model.
+                // Do NOT call fetchMore here: it adds inames to m_expandedINames,
+                // causing notifyUpdateFinished to prematurely clear wantsChildren
+                // for all expanded items regardless of whether their children arrived.
+                if (item->childCount() > 0) {
+                    QJsonArray children;
+                    item->forFirstLevelChildren([&](WatchItem *child) {
+                        children.append(watchItemToJson(child));
+                    });
+                    obj["children"] = children;
+                }
+                result.append(obj);
+            });
+        }
+        return result;
+    };
+
+    // Check if any root has its children loaded already.
+    const bool anyLoaded = std::any_of(rootInames.begin(), rootInames.end(),
+                                       [&handler](const QString &rootIname) {
+                                           const WatchItem *root = (*handler)->findItem(rootIname);
+                                           return root && root->childCount() > 0;
+                                       });
+    if (anyLoaded) {
+        callback(buildResult());
+        return;
+    }
+
+    // Locals not loaded yet — connect first, then trigger updateLocalsWindow so
+    // we don't miss the signal if it already fired before this call.
+    WatchModelBase *model = (*handler)->model();
+    QObject::connect(model, &WatchModelBase::updateFinished,
+                     this, [callback, buildResult]() { callback(buildResult()); },
+                     Qt::SingleShotConnection);
+    (*handler)->updateLocalsWindow();
+}
+
+void McpCommands::getVariable(const QString &iname,
+                               std::function<void(Utils::Result<QJsonObject>)> callback)
+{
+    using namespace Debugger::Internal;
+    const Utils::Result<WatchHandler *> handler = getWatchHandler();
+    if (!handler) {
+        callback(Utils::ResultError(handler.error()));
+        return;
+    }
+
+    WatchItem *item = (*handler)->findItem(iname);
+    if (!item) {
+        callback(Utils::ResultError("No variable with iname: " + iname));
+        return;
+    }
+
+    const auto buildResult = [handler, iname]() -> Utils::Result<QJsonObject> {
+        WatchItem *item = (*handler)->findItem(iname);
+        if (!item)
+            return Utils::ResultError("Variable no longer available: " + iname);
+        QJsonObject obj = watchItemToJson(item);
+        if (item->wantsChildren || item->childCount() > 0) {
+            QJsonArray children;
+            item->forFirstLevelChildren([&](WatchItem *child) {
+                children.append(watchItemToJson(child));
+            });
+            obj["children"] = children;
+        }
+        return obj;
+    };
+
+    if (item->childCount() > 0 || !item->wantsChildren) {
+        callback(buildResult());
+        return;
+    }
+
+    // Children not yet fetched — request them and wait for the model to update.
+    (*handler)->fetchMore(iname);
+    WatchModelBase *model = (*handler)->model();
+    QObject::connect(model, &WatchModelBase::updateFinished,
+                     this, [callback, buildResult]() { callback(buildResult()); },
+                     Qt::SingleShotConnection);
+}
+
+Utils::Result<bool> McpCommands::setVariable(const QString &iname, const QString &value)
+{
+    using namespace Debugger::Internal;
+    const Utils::Result<WatchHandler *> handler = getWatchHandler();
+    if (!handler)
+        return Utils::ResultError(handler.error());
+
+    WatchItem *item = (*handler)->findItem(iname);
+    if (!item)
+        return Utils::ResultError("No variable with iname: " + iname);
+    if (!item->valueEditable)
+        return Utils::ResultError("Variable is not editable: " + iname);
+
+    EngineManager::currentEngine()->assignValueInDebugger(item, item->expression(), QVariant(value));
+    return true;
+}
+
+Utils::Result<QString> McpCommands::addWatchExpression(const QString &expression,
+                                                        const QString &name)
+{
+    using namespace Debugger::Internal;
+    const Utils::Result<WatchHandler *> handler = getWatchHandler();
+    if (!handler)
+        return Utils::ResultError(handler.error());
+    if (expression.isEmpty())
+        return Utils::ResultError("Expression must not be empty");
+    (*handler)->watchExpression(expression, name);
+    return (*handler)->watcherName(expression);
+}
+
+Utils::Result<bool> McpCommands::removeWatchExpression(const QString &iname)
+{
+    using namespace Debugger::Internal;
+    const Utils::Result<WatchHandler *> handler = getWatchHandler();
+    if (!handler)
+        return Utils::ResultError(handler.error());
+    WatchItem *item = (*handler)->findItem(iname);
+    if (!item)
+        return Utils::ResultError("No watch expression with iname: " + iname);
+    if (!item->isWatcher())
+        return Utils::ResultError("Item is not a watch expression: " + iname);
+    (*handler)->removeItemByIName(iname);
+    return true;
 }
 
 static Utils::Result<Debugger::Internal::ThreadsHandler *> getThreadsHandler()
@@ -2203,6 +2378,223 @@ void McpCommands::registerCommands(Mcp::Server &server)
                     .addRequired("success")),
         [](const Schema::CallToolRequestParams &params) -> Utils::Result<CallToolResult> {
             const Utils::Result<bool> ok = commands.selectThread(params.argumentsAsObject().value("id").toString());
+            if (!ok)
+                return CallToolResult{}.isError(true).addContent(Schema::TextContent{}.text(ok.error()));
+            return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"success", true}});
+        });
+
+    const auto varItemSchema = [] {
+        return QJsonObject{
+            {"type", "object"},
+            {"required", QJsonArray{"iname", "name", "value", "type", "valueEditable", "hasChildren"}},
+            {"properties", QJsonObject{
+                {"iname",         QJsonObject{{"type", "string"},  {"description", "Internal name, e.g. \"local.myVar\". Use as key for get_variable / set_variable."}}},
+                {"name",          QJsonObject{{"type", "string"},  {"description", "Display name"}}},
+                {"value",         QJsonObject{{"type", "string"},  {"description", "Current value as a string"}}},
+                {"type",          QJsonObject{{"type", "string"},  {"description", "Type name"}}},
+                {"address",       QJsonObject{{"type", "string"},  {"description", "Memory address, e.g. \"0x1234\""}}},
+                {"valueEditable", QJsonObject{{"type", "boolean"}, {"description", "Whether the value can be changed via set_variable"}}},
+                {"hasChildren",   QJsonObject{{"type", "boolean"}, {"description", "Whether the variable has child members"}}},
+            }},
+        };
+    };
+
+    server.addTool(
+        Tool{}
+            .name("get_variables")
+            .title("List local variables")
+            .description(
+                "Returns local variables for the current stack frame. "
+                "Optionally includes watch expressions. "
+                "Variables with hasChildren=true may include a children array if already expanded; "
+                "otherwise call get_variable with the variable's iname to retrieve sub-fields. "
+                "Returns an error if no debug session is active or the debugger is not paused.")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "includeWatchers",
+                        QJsonObject{
+                            {"type", "boolean"},
+                            {"description", "Also return watch expressions (default: false)"},
+                            {"default", false}}))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty(
+                        "variables",
+                        QJsonObject{
+                            {"type", "array"},
+                            {"description", "List of variables"},
+                            {"items", varItemSchema()}})
+                    .addRequired("variables")),
+        [](const Schema::CallToolRequestParams &params,
+           const ToolInterface &toolInterface) -> Utils::Result<> {
+            const bool includeWatchers = params.argumentsAsObject().value("includeWatchers").toBool(false);
+            commands.getVariables(includeWatchers, [toolInterface](Utils::Result<QJsonArray> vars) {
+                if (!vars)
+                    toolInterface.finish(CallToolResult{}.isError(true).addContent(
+                        Schema::TextContent{}.text(vars.error())));
+                else
+                    toolInterface.finish(CallToolResult{}.isError(false).structuredContent(
+                        QJsonObject{{"variables", *vars}}));
+            });
+            return ResultOk;
+        });
+
+    server.addTool(
+        Tool{}
+            .name("get_variable")
+            .title("Get a variable")
+            .description(
+                "Returns the details of a single variable by its iname, including its children "
+                "if it has any (e.g. struct members or array elements). "
+                "If a child also has hasChildren=true, call get_variable again with that child's iname "
+                "to retrieve its sub-fields. "
+                "Returns an error if no debug session is active or the debugger is not paused.")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "iname",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description", "Internal name of the variable (e.g. \"local.myVar\")"}})
+                    .addRequired("iname"))
+            .outputSchema([] {
+                QJsonObject schema = [] {
+                    QJsonObject s;
+                    s["type"] = "object";
+                    s["required"] = QJsonArray{"iname", "name", "value", "type", "valueEditable", "hasChildren"};
+                    s["properties"] = QJsonObject{
+                        {"iname",         QJsonObject{{"type", "string"}}},
+                        {"name",          QJsonObject{{"type", "string"}}},
+                        {"value",         QJsonObject{{"type", "string"}}},
+                        {"type",          QJsonObject{{"type", "string"}}},
+                        {"address",       QJsonObject{{"type", "string"}}},
+                        {"valueEditable", QJsonObject{{"type", "boolean"}}},
+                        {"hasChildren",   QJsonObject{{"type", "boolean"}}},
+                        {"children",      QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "object"}}},
+                                                      {"description", "Child members, present when hasChildren is true"}}},
+                    };
+                    return s;
+                }();
+                return Tool::OutputSchema{}.addProperty("variable", schema).addRequired("variable");
+            }()),
+        [](const Schema::CallToolRequestParams &params,
+           const ToolInterface &toolInterface) -> Utils::Result<> {
+            commands.getVariable(
+                params.argumentsAsObject().value("iname").toString(),
+                [toolInterface](Utils::Result<QJsonObject> var) {
+                    if (!var)
+                        toolInterface.finish(CallToolResult{}.isError(true).addContent(
+                            Schema::TextContent{}.text(var.error())));
+                    else
+                        toolInterface.finish(CallToolResult{}.isError(false).structuredContent(
+                            QJsonObject{{"variable", *var}}));
+                });
+            return ResultOk;
+        });
+
+    server.addTool(
+        Tool{}
+            .name("set_variable")
+            .title("Set a variable value")
+            .description(
+                "Changes the value of a variable in the current debug session. "
+                "Only works for variables where valueEditable is true. "
+                "Returns an error if no debug session is active or the debugger is not paused.")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "iname",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description", "Internal name of the variable (e.g. \"local.myVar\")"}})
+                    .addProperty(
+                        "value",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description", "New value to assign"}})
+                    .addRequired("iname")
+                    .addRequired("value"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("success", QJsonObject{{"type", "boolean"}})
+                    .addRequired("success")),
+        [](const Schema::CallToolRequestParams &params) -> Utils::Result<CallToolResult> {
+            const QJsonObject p = params.argumentsAsObject();
+            const Utils::Result<bool> ok = commands.setVariable(p.value("iname").toString(), p.value("value").toString());
+            if (!ok)
+                return CallToolResult{}.isError(true).addContent(Schema::TextContent{}.text(ok.error()));
+            return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"success", true}});
+        });
+
+    server.addTool(
+        Tool{}
+            .name("add_watch_expression")
+            .title("Add a watch expression")
+            .description(
+                "Adds an expression to the watch list in the current debug session. "
+                "The expression is evaluated and its value updated as execution progresses. "
+                "Returns the iname of the new watch entry (e.g. \"watch.0\"), which can be used "
+                "with get_variable, set_variable, and remove_watch_expression. "
+                "Returns an error if no debug session is active or the debugger is not paused.")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "expression",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description", "Expression to watch (e.g. \"myVar\", \"ptr->field\")"}})
+                    .addProperty(
+                        "name",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description", "Optional display name; defaults to the expression"}})
+                    .addRequired("expression"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty(
+                        "iname",
+                        QJsonObject{{"type", "string"},
+                                    {"description", "Internal name of the watch entry (e.g. \"watch.0\")"}})
+                    .addRequired("iname")),
+        [](const Schema::CallToolRequestParams &params) -> Utils::Result<CallToolResult> {
+            const QJsonObject p = params.argumentsAsObject();
+            const Utils::Result<QString> iname = commands.addWatchExpression(
+                p.value("expression").toString(), p.value("name").toString());
+            if (!iname)
+                return CallToolResult{}.isError(true).addContent(Schema::TextContent{}.text(iname.error()));
+            return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"iname", *iname}});
+        });
+
+    server.addTool(
+        Tool{}
+            .name("remove_watch_expression")
+            .title("Remove a watch expression")
+            .description(
+                "Removes a watch expression from the current debug session by its iname. "
+                "Returns an error if the iname is not found or is not a watch expression, "
+                "or if no debug session is active or the debugger is not paused.")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "iname",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description",
+                             "Internal name of the watch entry to remove (e.g. \"watch.0\")"}})
+                    .addRequired("iname"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("success", QJsonObject{{"type", "boolean"}})
+                    .addRequired("success")),
+        [](const Schema::CallToolRequestParams &params) -> Utils::Result<CallToolResult> {
+            const Utils::Result<bool> ok = commands.removeWatchExpression(
+                params.argumentsAsObject().value("iname").toString());
             if (!ok)
                 return CallToolResult{}.isError(true).addContent(Schema::TextContent{}.text(ok.error()));
             return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"success", true}});

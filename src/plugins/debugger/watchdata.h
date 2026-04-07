@@ -3,19 +3,18 @@
 
 #pragma once
 
+#include "debugger_global.h"
 #include "debuggerprotocol.h"
 
 #include <utils/treemodel.h>
 
 #include <QMetaType>
 
-#include <vector>
-
 namespace Debugger::Internal {
 
 class GdbMi;
 
-class WatchItem : public Utils::TypedTreeItem<WatchItem, WatchItem>
+class DEBUGGER_EXPORT WatchItem : public Utils::TypedTreeItem<WatchItem, WatchItem>
 {
 public:
     WatchItem() {}

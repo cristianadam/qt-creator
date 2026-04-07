@@ -123,6 +123,11 @@ public:
     bool killDebuggedProcesses();
     Utils::Result<QJsonArray> getThreads();
     Utils::Result<bool> selectThread(const QString &id);
+    void getVariables(bool includeWatchers, std::function<void(Utils::Result<QJsonArray>)> callback);
+    void getVariable(const QString &iname, std::function<void(Utils::Result<QJsonObject>)> callback);
+    Utils::Result<bool> setVariable(const QString &iname, const QString &value);
+    Utils::Result<QString> addWatchExpression(const QString &expression, const QString &name);
+    Utils::Result<bool> removeWatchExpression(const QString &iname);
     QJsonArray getBreakpoints();
     bool deleteBreakpoint(int id);
     QJsonObject addBreakpoint(
