@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "debugger_global.h"
 #include "threaddata.h"
 
 #include <utils/treemodel.h>
@@ -22,7 +23,7 @@ class DebuggerEngine;
 class GdbMi;
 class ThreadsHandler;
 
-class ThreadItem : public QObject, public Utils::TreeItem
+class DEBUGGER_EXPORT ThreadItem : public QObject, public Utils::TreeItem
 {
 public:
     ThreadItem(const ThreadData &data = ThreadData());
@@ -46,7 +47,7 @@ public:
 using Thread = QPointer<ThreadItem>;
 using ThreadsHandlerModel = Utils::TreeModel<Utils::TypedTreeItem<ThreadItem>, ThreadItem>;
 
-class ThreadsHandler : public ThreadsHandlerModel
+class DEBUGGER_EXPORT ThreadsHandler : public ThreadsHandlerModel
 {
 public:
     explicit ThreadsHandler(DebuggerEngine *engine);

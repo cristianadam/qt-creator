@@ -528,6 +528,7 @@ public:
 
     RegisterHandler *registerHandler() const;
     StackHandler *stackHandler() const;
+    ThreadsHandler *threadsHandler() const;
     WatchHandler *watchHandler() const;
     BreakHandler *breakHandler() const;
     ModulesHandler *modulesHandler() const;
@@ -590,7 +591,6 @@ signals:
 protected:
     void setExamineModulesEnabled(bool on);
     PeripheralRegisterHandler *peripheralRegisterHandler() const;
-    ThreadsHandler *threadsHandler() const;
     SourceFilesHandler *sourceFilesHandler() const;
 
     void progressPing();

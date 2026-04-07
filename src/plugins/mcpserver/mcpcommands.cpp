@@ -20,6 +20,7 @@
 #include <debugger/debuggerruncontrol.h>
 #include <debugger/enginemanager.h>
 #include <debugger/stackhandler.h>
+#include <debugger/threadshandler.h>
 
 #include <projectexplorer/editorconfiguration.h>
 #include <projectexplorer/buildconfiguration.h>
@@ -994,6 +995,69 @@ static void initializeToolsForCommands(Mcp::Server &server)
     addToolForCommand("run_project", ProjectExplorer::Constants::RUN);
     addToolForCommand("clean_project", ProjectExplorer::Constants::CLEAN);
     addToolForCommand("debug", Debugger::Constants::DEBUGGER_START);
+}
+
+static Utils::Result<Debugger::Internal::ThreadsHandler *> getThreadsHandler()
+{
+    using namespace Debugger::Internal;
+    const QPointer<DebuggerEngine> engine = EngineManager::currentEngine();
+    if (!engine)
+        return Utils::ResultError("No active debug session");
+    if (engine->state() != Debugger::InferiorStopOk)
+        return Utils::ResultError("Debugger is not paused (current state: "
+                                  + DebuggerEngine::stateName(engine->state()) + ")");
+    return engine->threadsHandler();
+}
+
+Utils::Result<QJsonArray> McpCommands::getThreads()
+{
+    using namespace Debugger::Internal;
+    const Utils::Result<ThreadsHandler *> handler = getThreadsHandler();
+    if (!handler)
+        return Utils::ResultError(handler.error());
+
+    const Thread current = (*handler)->currentThread();
+    QJsonArray result;
+    (*handler)->forItemsAtLevel<1>([&](ThreadItem *item) {
+        const ThreadData &d = item->threadData;
+        QJsonObject obj;
+        obj["id"] = d.id;
+        obj["current"] = (current && current->id() == d.id);
+        if (!d.name.isEmpty())
+            obj["name"] = d.name;
+        if (!d.state.isEmpty())
+            obj["state"] = d.state;
+        if (!d.targetId.isEmpty())
+            obj["targetId"] = d.targetId;
+        if (!d.details.isEmpty())
+            obj["details"] = d.details;
+        if (!d.function.isEmpty())
+            obj["function"] = d.function;
+        if (!d.fileName.isEmpty())
+            obj["file"] = d.fileName;
+        if (d.lineNumber >= 0)
+            obj["line"] = d.lineNumber;
+        if (d.address != 0)
+            obj["address"] = QString("0x%1").arg(d.address, 0, 16);
+        result.append(obj);
+    });
+    return result;
+}
+
+Utils::Result<bool> McpCommands::selectThread(const QString &id)
+{
+    using namespace Debugger::Internal;
+    const Utils::Result<ThreadsHandler *> handler = getThreadsHandler();
+    if (!handler)
+        return Utils::ResultError(handler.error());
+
+    const Thread thread = (*handler)->threadForId(id);
+    if (!thread)
+        return Utils::ResultError("No thread with id: " + id);
+
+    (*handler)->setCurrentThread(thread);
+    EngineManager::currentEngine()->selectThread(thread);
+    return true;
 }
 
 Utils::Result<QJsonArray> McpCommands::getCallStack()
@@ -2076,6 +2140,75 @@ void McpCommands::registerCommands(Mcp::Server &server)
         wrap([](const QJsonObject &) {
             return QJsonObject{{"breakpoints", commands.getBreakpoints()}};
         }));
+
+    server.addTool(
+        Tool{}
+            .name("get_threads")
+            .title("Get current threads")
+            .description(
+                "Returns all threads of the current debug session. "
+                "Returns an error if no debug session is active or the debugger is not paused.")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .outputSchema([] {
+                const QJsonObject threadProperties{
+                    {"id",       QJsonObject{{"type", "string"},  {"description", "Thread ID"}}},
+                    {"current",  QJsonObject{{"type", "boolean"}, {"description", "True for the currently selected thread"}}},
+                    {"name",     QJsonObject{{"type", "string"},  {"description", "Thread name"}}},
+                    {"state",    QJsonObject{{"type", "string"},  {"description", "Thread state, e.g. \"stopped\""}}},
+                    {"targetId", QJsonObject{{"type", "string"},  {"description", "Target-level thread identifier"}}},
+                    {"details",  QJsonObject{{"type", "string"},  {"description", "Additional details from the debugger"}}},
+                    {"function", QJsonObject{{"type", "string"},  {"description", "Current function name"}}},
+                    {"file",     QJsonObject{{"type", "string"},  {"description", "Current source file"}}},
+                    {"line",     QJsonObject{{"type", "integer"}, {"description", "Current line number"}}},
+                    {"address",  QJsonObject{{"type", "string"},  {"description", "Current instruction address"}}},
+                };
+                const QJsonObject threadItem{
+                    {"type", "object"},
+                    {"required", QJsonArray{"id", "current"}},
+                    {"properties", threadProperties},
+                };
+                return Tool::OutputSchema{}
+                    .addProperty(
+                        "threads",
+                        QJsonObject{
+                            {"type", "array"},
+                            {"description", "List of threads"},
+                            {"items", threadItem}})
+                    .addRequired("threads");
+            }()),
+        [](const Schema::CallToolRequestParams &) -> Utils::Result<CallToolResult> {
+            const Utils::Result<QJsonArray> threads = commands.getThreads();
+            if (!threads)
+                return CallToolResult{}.isError(true).addContent(Schema::TextContent{}.text(threads.error()));
+            return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"threads", *threads}});
+        });
+
+    server.addTool(
+        Tool{}
+            .name("select_thread")
+            .title("Select a thread")
+            .description(
+                "Switches the current thread in the active debug session. "
+                "Returns an error if no debug session is active or the debugger is not paused.")
+            .annotations(ToolAnnotations{}.readOnlyHint(false).idempotentHint(true))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "id",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description", "Thread ID to select (as returned by get_threads)"}})
+                    .addRequired("id"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("success", QJsonObject{{"type", "boolean"}})
+                    .addRequired("success")),
+        [](const Schema::CallToolRequestParams &params) -> Utils::Result<CallToolResult> {
+            const Utils::Result<bool> ok = commands.selectThread(params.argumentsAsObject().value("id").toString());
+            if (!ok)
+                return CallToolResult{}.isError(true).addContent(Schema::TextContent{}.text(ok.error()));
+            return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"success", true}});
+        });
 
     server.addTool(
         Tool{}

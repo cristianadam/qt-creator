@@ -121,6 +121,8 @@ public:
     bool isDebuggingActive();
     QString abortDebug();
     bool killDebuggedProcesses();
+    Utils::Result<QJsonArray> getThreads();
+    Utils::Result<bool> selectThread(const QString &id);
     QJsonArray getBreakpoints();
     bool deleteBreakpoint(int id);
     QJsonObject addBreakpoint(
