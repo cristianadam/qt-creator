@@ -560,10 +560,8 @@ public:
 
     void addToLayoutImpl(Layouting::Layout &parent) override;
     void setAlphaAllowed(bool allowed);
-
-private:
-    void volatileValueToGui() override;
-    bool guiToVolatileValue() override;
+    void setWithResetButton(bool withResetButton);
+    void setMinimumSize(const QSize &size);
 
     std::unique_ptr<Internal::ColorAspectPrivate> d;
 };

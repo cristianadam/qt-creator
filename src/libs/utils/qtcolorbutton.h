@@ -29,6 +29,8 @@ public:
 
     bool isDialogOpen() const;
 
+    QPixmap generatePixmap() const;
+
 public slots:
     void setColor(const QColor &color);
 

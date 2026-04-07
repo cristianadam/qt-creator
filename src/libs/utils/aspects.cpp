@@ -37,6 +37,7 @@
 #include <QLayout>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMenu>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QPointer>
@@ -834,8 +835,9 @@ public:
 class ColorAspectPrivate
 {
 public:
-    QPointer<QtColorButton> m_colorButton; // Owned by configuration widget
     bool m_alphaAllowed = true;
+    bool m_withResetButton = true;
+    QSize m_minimumSize{64, 0};
 };
 
 class FontFamilyAspectPrivate
@@ -1984,22 +1986,39 @@ ColorAspect::~ColorAspect() = default;
 
 void ColorAspect::addToLayoutImpl(Layouting::Layout &parent)
 {
-    QTC_CHECK(!d->m_colorButton);
-    d->m_colorButton = createSubWidget<QtColorButton>();
-    d->m_colorButton->setMinimumWidth(64);
-    addLabeledItem(parent, d->m_colorButton);
-    d->m_colorButton->setAlphaAllowed(d->m_alphaAllowed);
+    auto button = createSubWidget<QtColorButton>();
+    button->setColor(volatileValue());
+    button->setAlphaAllowed(d->m_alphaAllowed);
+    button->setMinimumSize(d->m_minimumSize);
 
-    auto resetButton = createSubWidget<QPushButton>(Tr::tr("Reset"));
-    resetButton->setToolTip(Tr::tr("Reset to default.", "Color"));
-    connect(resetButton, &QAbstractButton::clicked, this, [this] {
-        setVolatileValue(defaultValue());
+    connect(button, &QtColorButton::colorChanged, this, [this](const QColor &c) {
+        setVolatileValue(c);
     });
-    parent.addItem(resetButton);
 
-    volatileValueToGui();
-    connect(d->m_colorButton.data(), &QtColorButton::colorChanged,
-            this, &ColorAspect::handleGuiChanged);
+    addOnVolatileValueChanged(button, [this, button] {
+        if (button->color() != volatileValue())
+            button->setColor(volatileValue());
+    });
+
+    if (d->m_withResetButton) {
+        auto resetButton = createSubWidget<QPushButton>(Tr::tr("Reset"));
+        resetButton->setToolTip(Tr::tr("Reset to default.", "Color"));
+        connect(resetButton, &QAbstractButton::clicked, this, [this] {
+            setVolatileValue(defaultValue());
+        });
+        addLabeledItems(parent, {button, resetButton});
+    } else {
+        QMenu *menu = new QMenu(button);
+        QAction *resetAction = menu->addAction(Tr::tr("Reset to default"), this, [this] {
+            setVolatileValue(defaultValue());
+        });
+        resetAction->setIcon(button->generatePixmap());
+        resetAction->setIconVisibleInMenu(true);
+        button->setMenu(menu);
+        button->setToolTip(
+            QStringList{toolTip(), Tr::tr("Press and Hold to reset to default.")}.join('\n'));
+        addLabeledItem(parent, button);
+    }
 }
 
 void ColorAspect::setAlphaAllowed(bool allowed)
@@ -2007,17 +2026,14 @@ void ColorAspect::setAlphaAllowed(bool allowed)
     d->m_alphaAllowed = allowed;
 }
 
-bool ColorAspect::guiToVolatileValue()
+void ColorAspect::setWithResetButton(bool withResetButton)
 {
-    if (d->m_colorButton)
-        return updateStorage(m_volatileValue, d->m_colorButton->color());
-    return false;
+    d->m_withResetButton = withResetButton;
 }
 
-void ColorAspect::volatileValueToGui()
+void ColorAspect::setMinimumSize(const QSize &size)
 {
-    if (d->m_colorButton)
-        d->m_colorButton->setColor(m_volatileValue);
+    d->m_minimumSize = size;
 }
 
 /*!

@@ -158,6 +158,11 @@ bool QtColorButton::isDialogOpen() const
     return d_ptr->m_dialogOpen;
 }
 
+QPixmap QtColorButton::generatePixmap() const
+{
+    return d_ptr->generatePixmap();
+}
+
 void QtColorButton::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event)

@@ -77,6 +77,8 @@ void setupColor(TerminalSettings *settings,
     color.setDefaultValue(defaultColor);
     color.setToolTip(Tr::tr("The color used for %1.")
                          .arg(humanReadableName.isEmpty() ? label : humanReadableName));
+    color.setWithResetButton(false);
+    color.setMinimumSize(QSize());
     settings->registerAspect(&color);
 }
 
