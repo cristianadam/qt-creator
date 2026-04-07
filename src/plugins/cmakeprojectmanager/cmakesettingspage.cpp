@@ -109,9 +109,9 @@ public:
     int rowForId(Id id) const;
 
 private:
-    QVariant variantData(const QVariant &v, int column, int role) const override
+    QVariant variantData(int row, int column, int role) const override
     {
-        return fromVariant(v).data(column, role);
+        return item(row).data(column, role);
     }
 };
 

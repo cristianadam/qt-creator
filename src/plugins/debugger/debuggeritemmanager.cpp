@@ -123,9 +123,9 @@ public:
     void autoDetectUvscDebuggers();
     QString uniqueDisplayName(const QString &base);
 
-    QVariant variantData(const QVariant &item, int column, int role) const final
+    QVariant variantData(int row, int column, int role) const final
     {
-        return fromVariant(item).data(column, role);
+        return item(row).data(column, role);
     }
 
 private:

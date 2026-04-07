@@ -410,7 +410,7 @@ signals:
     void kitStateChanged();
 
 private:
-    QVariant variantData(const QVariant &v, int column, int role) const final;
+    QVariant variantData(int row, int column, int role) const final;
     void addKit(Kit *k);
     void updateKit(Kit *k);
     void removeKit(Kit *k);
@@ -455,9 +455,9 @@ Kit *KitModel::workingCopyForRow(int row) const
     return m_workingCopies.at(row).get();
 }
 
-QVariant KitModel::variantData(const QVariant &v, int /*column*/, int role) const
+QVariant KitModel::variantData(int row, int /*column*/, int role) const
 {
-    const KitData d = fromVariant(v);
+    const KitData d = item(row);
     switch (role) {
     case Qt::DisplayRole:
         return d.workingCopy->displayName();

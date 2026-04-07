@@ -256,9 +256,9 @@ public:
         markRemoved(row);
     }
 
-    QVariant variantData(const QVariant &v, int column, int role) const final
+    QVariant variantData(int row, int column, int role) const final
     {
-        return fromVariant(v).data(column, role);
+        return item(row).data(column, role);
     }
 };
 

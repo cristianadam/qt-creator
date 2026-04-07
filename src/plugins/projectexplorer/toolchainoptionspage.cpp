@@ -218,7 +218,7 @@ public:
     Guard m_deregisterGuard;
 
 private:
-    QVariant variantData(const QVariant &v, int column, int role) const override;
+    QVariant variantData(int row, int column, int role) const override;
 
     StackedWidget * const m_widgetStack;
     QMap<Id, ToolchainConfigWidget *> m_widgets;
@@ -316,11 +316,11 @@ void ToolchainModel::destroyBundle(int row)
     removeItem(row);
 }
 
-QVariant ToolchainModel::variantData(const QVariant &v, int column, int role) const
+QVariant ToolchainModel::variantData(int row, int column, int role) const
 {
     if (role == Qt::FontRole)
         return {};
-    return toolchainBundleData(fromVariant(v).bundle, column, role);
+    return toolchainBundleData(item(row).bundle, column, role);
 }
 
 void ToolchainModel::apply()

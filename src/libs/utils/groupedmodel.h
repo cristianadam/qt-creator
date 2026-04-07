@@ -72,7 +72,7 @@ protected:
     void setDefaultAffectsDirty(bool on);
 
 private:
-    virtual QVariant variantData(const QVariant &item, int column, int role) const = 0;
+    virtual QVariant variantData(int row, int column, int role) const = 0;
 
     QVariantList m_variants;
     QStringList m_header;

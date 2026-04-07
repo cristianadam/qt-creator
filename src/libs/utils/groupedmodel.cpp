@@ -297,9 +297,8 @@ QVariant GroupedModel::data(const QModelIndex &index, int role) const
     if (!index.isValid() || index.row() >= m_volatileVariants.size())
         return {};
     const int row = index.row();
-    const QVariant item = m_volatileVariants.at(row);
     if (role == Qt::FontRole) {
-        QFont font = variantData(item, index.column(), Qt::FontRole).value<QFont>();
+        QFont font = variantData(row, index.column(), Qt::FontRole).value<QFont>();
         if (isDirty(row))
             font.setBold(true);
         if (m_removed.at(row))
@@ -308,7 +307,7 @@ QVariant GroupedModel::data(const QModelIndex &index, int role) const
             font.setItalic(true);
         return font;
     }
-    QVariant result = variantData(item, index.column(), role);
+    QVariant result = variantData(row, index.column(), role);
     if (role == Qt::DisplayRole && index.column() == 0
             && m_volatileDefaultFlag.at(row) && m_showDefault) {
         return Tr::tr("%1 (Default)").arg(result.toString());

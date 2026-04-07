@@ -118,7 +118,7 @@ public:
     void apply() override;
 
 private:
-    QVariant variantData(const QVariant &v, int column, int role) const override;
+    QVariant variantData(int row, int column, int role) const override;
     QString uniqueName(const QString &baseName) const;
 };
 
@@ -169,9 +169,9 @@ void GNToolsModel::apply()
     GroupedModel::apply();
 }
 
-QVariant GNToolsModel::variantData(const QVariant &v, int column, int role) const
+QVariant GNToolsModel::variantData(int row, int column, int role) const
 {
-    return fromVariant(v).data(column, role);
+    return item(row).data(column, role);
 }
 
 QString GNToolsModel::uniqueName(const QString &baseName) const
