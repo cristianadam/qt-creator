@@ -38,6 +38,7 @@ private slots:
     void environmentUnsetUnknownUnix();
 
     void environmentFromTextFile();
+    void environmentFromTextFileComplex();
 
     void expansion_data();
     void expansion();
@@ -250,7 +251,36 @@ void tst_Environment::environmentFromTextFile()
     f.close();
     EnvironmentChanges changes;
     changes.setFile(FilePath::fromString(f.fileName()));
-    QCOMPARE(EnvironmentItem::toStringList(changes.itemsFromFile()), (QStringList{"ANSWER=42", "FOO=BAR"}));
+    EnvironmentItems items = changes.itemsFromFile();
+    EnvironmentItem::sort(&items);
+    QCOMPARE(EnvironmentItem::toStringList(items), (QStringList{"ANSWER=42", "FOO=BAR"}));
+}
+
+void tst_Environment::environmentFromTextFileComplex()
+{
+    QTemporaryFile f;
+    QVERIFY(f.open());
+    f.write("PATH+=/bin\n");
+    f.write("PATH=+/usr/bin\n");
+    f.write("VAR=val\n");
+    f.write("## VAR=ignored\n");
+    f.write("#VAR2=${VAR}2\n");
+    f.write("REMOVED=something\n");
+    f.write("REMOVED\n");
+    f.close();
+    EnvironmentChanges changes;
+    changes.setFile(FilePath::fromString(f.fileName()));
+    Environment env;
+    changes.modifyEnvironment(env, nullptr);
+    QStringList resolved;
+    env.forEachEntry([&resolved](const QString &name, const QString &value, bool enabled) {
+        QString val = name + '=' + value;
+        if (!enabled)
+            val.prepend('#');
+        resolved << val;
+    });
+    const QString pathEntry = QString("PATH=/usr/bin%1/bin").arg(HostOsInfo::pathListSeparator());
+    QCOMPARE(resolved, (QStringList{pathEntry, "VAR=val", "#VAR2=val2"}));
 }
 
 void tst_Environment::expansion_data()

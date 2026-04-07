@@ -715,8 +715,8 @@ EnvironmentItems EnvironmentChanges::itemsFromFile() const
             qWarning() << contents.error();
             return {};
         }
-        theItems = Environment().diff(Environment(
-            QString::fromUtf8(normalizeNewlines(*contents)).split('\n', Qt::SkipEmptyParts)));
+        theItems = EnvironmentItem::fromStringList(
+            QString::fromUtf8(normalizeNewlines(*contents)).split('\n', Qt::SkipEmptyParts));
     }
 
     m_itemsFromFile.emplace(m_file.lastModified(), theItems);
