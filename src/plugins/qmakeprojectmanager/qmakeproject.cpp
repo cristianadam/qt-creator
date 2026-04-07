@@ -62,8 +62,9 @@
 #include <QLoggingCategory>
 #include <QTimer>
 
-using namespace QmakeProjectManager::Internal;
+using namespace Core;
 using namespace ProjectExplorer;
+using namespace QmakeProjectManager::Internal;
 using namespace QtSupport;
 using namespace Utils;
 
@@ -83,7 +84,7 @@ static Q_LOGGING_CATEGORY(qmakeBuildSystemLog, "qtc.qmake.buildsystem", QtWarnin
             << msg;                                                  \
     }
 
-class QmakePriFileDocument : public Core::IDocument
+class QmakePriFileDocument : public IDocument
 {
 public:
     QmakePriFileDocument(QmakePriFile *qmakePriFile, const FilePath &filePath) :
@@ -92,7 +93,7 @@ public:
         setId("Qmake.PriFile");
         setMimeType(Utils::Constants::PROFILE_MIMETYPE);
         setFilePath(filePath);
-        Core::DocumentManager::addDocument(this);
+        DocumentManager::addDocument(this);
     }
 
     ReloadBehavior reloadBehavior(ChangeTrigger state, ChangeType type) const override
@@ -296,13 +297,12 @@ void QmakeBuildSystem::updateDocuments()
         QTC_ASSERT(n, return nullptr);
         return static_cast<const QmakePriFileNode *>(n)->priFile();
     };
-    const auto docGenerator = [&](const FilePath &fp)
-            -> std::unique_ptr<Core::IDocument> {
+    const auto docGenerator = [&](const FilePath &fp) -> std::unique_ptr<IDocument> {
         QmakePriFile * const priFile = priFileForPath(fp);
-        QTC_ASSERT(priFile, return std::make_unique<Core::IDocument>());
+        QTC_ASSERT(priFile, return std::make_unique<IDocument>());
         return std::make_unique<QmakePriFileDocument>(priFile, fp);
     };
-    const auto docUpdater = [&](Core::IDocument *doc) {
+    const auto docUpdater = [&](IDocument *doc) {
         QmakePriFile * const priFile = priFileForPath(doc->filePath());
         QTC_ASSERT(priFile, return);
         static_cast<QmakePriFileDocument *>(doc)->setPriFile(priFile);
@@ -664,7 +664,7 @@ void QmakeBuildSystem::asyncUpdate()
 
     m_asyncUpdateFutureInterface.reset(new QFutureInterface<void>);
     m_asyncUpdateFutureInterface->setProgressRange(0, 0);
-    Core::ProgressManager::addTask(m_asyncUpdateFutureInterface->future(),
+    ProgressManager::addTask(m_asyncUpdateFutureInterface->future(),
                                    Tr::tr("Reading Project \"%1\"").arg(project()->displayName()),
                                    Constants::PROFILE_EVALUATE);
 
@@ -694,7 +694,7 @@ void QmakeBuildSystem::asyncUpdate()
 
     // Make sure we ignore requests for re-evaluation for files whose QmakePriFile objects
     // will get deleted during the parse.
-    const auto docUpdater = [](Core::IDocument *doc) {
+    const auto docUpdater = [](IDocument *doc) {
         static_cast<QmakePriFileDocument *>(doc)->setPriFile(nullptr);
     };
     if (m_asyncUpdateState != AsyncFullUpdatePending) {
@@ -1557,15 +1557,15 @@ void QmakeBuildSystem::runGenerator(Utils::Id id)
     const auto proc = new Process(this);
     connect(proc, &Process::done, proc, &Process::deleteLater);
     connect(proc, &Process::readyReadStandardOutput, this, [proc] {
-        Core::MessageManager::writeFlashing(proc->readAllStandardOutput());
+        MessageManager::writeFlashing(proc->readAllStandardOutput());
     });
     connect(proc, &Process::readyReadStandardError, this, [proc] {
-        Core::MessageManager::writeDisrupting(proc->readAllStandardError());
+        MessageManager::writeDisrupting(proc->readAllStandardError());
     });
     proc->setWorkingDirectory(outDir);
     proc->setEnvironment(buildConfiguration()->environment());
     proc->setCommand(cmdLine);
-    Core::MessageManager::writeFlashing(
+    MessageManager::writeFlashing(
         Tr::tr("Running in \"%1\": %2.").arg(outDir.toUserOutput(), cmdLine.toUserOutput()));
     proc->start();
 }
