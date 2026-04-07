@@ -68,11 +68,7 @@ public:
     static void cancelMsvcToolChainDetection();
     bool environmentInitialized() const { return !m_environmentModifications.isEmpty(); }
 
-    struct GenerateEnvResult
-    {
-        std::optional<QString> error;
-        Utils::EnvironmentItems environmentItems;
-    };
+    using GenerateEnvResult = Utils::Result<Utils::EnvironmentItems>;
 
 protected:
     class WarningFlagAdder

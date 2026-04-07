@@ -748,10 +748,10 @@ static QString winExpandDelayedEnvReferences(QString in, const Utils::Environmen
     return in;
 }
 
-static std::optional<QString> generateEnvironmentSettings(const Environment &env,
-                                                          const QString &batchFile,
-                                                          const QString &batchArgs,
-                                                          QMap<QString, QString> &envPairs)
+static Result<> generateEnvironmentSettings(const Environment &env,
+                                            const QString &batchFile,
+                                            const QString &batchArgs,
+                                            QMap<QString, QString> &envPairs)
 {
     const QString marker = "####################";
     // Create a temporary file name for the output. Use a temporary file here
@@ -783,7 +783,7 @@ static std::optional<QString> generateEnvironmentSettings(const Environment &env
     saver.write(QByteArray("@echo " + marker.toLocal8Bit() + "\r\n"));
     if (const Result<> &res = saver.finalize(); !res) {
         qWarning("%s: %s", Q_FUNC_INFO, qPrintable(res.error()));
-        return {};
+        return ResultOk;
     }
 
     Process run;
@@ -811,8 +811,8 @@ static std::optional<QString> generateEnvironmentSettings(const Environment &env
         QString command = QDir::toNativeSeparators(batchFile);
         if (!batchArgs.isEmpty())
             command += ' ' + batchArgs;
-        return Tr::tr("Failed to retrieve MSVC Environment from \"%1\":\n%2")
-            .arg(command, message);
+        return ResultError(Tr::tr("Failed to retrieve MSVC Environment from \"%1\":\n%2")
+            .arg(command, message));
     }
 
     // The SDK/MSVC scripts do not return exit codes != 0. Check on stdout.
@@ -823,13 +823,13 @@ static std::optional<QString> generateEnvironmentSettings(const Environment &env
     const int start = stdOut.indexOf(marker);
     if (start == -1) {
         qWarning("Could not find start marker in stdout output.");
-        return {};
+        return ResultOk;
     }
 
     const int end = stdOut.indexOf(marker, start + 1);
     if (end == -1) {
         qWarning("Could not find end marker in stdout output.");
-        return {};
+        return ResultOk;
     }
 
     const QString output = stdOut.mid(start, end - start);
@@ -844,21 +844,18 @@ static std::optional<QString> generateEnvironmentSettings(const Environment &env
         }
     }
 
-    return std::nullopt;
+    return ResultOk;
 }
 
 static void environmentModifications(QPromise<MsvcToolchain::GenerateEnvResult> &promise,
                                      QString vcvarsBat, QString varsBatArg)
 {
-    const Utils::Environment inEnv = Utils::Environment::systemEnvironment();
-    Utils::Environment outEnv;
+    const Environment inEnv = Environment::systemEnvironment();
+    Environment outEnv;
     QMap<QString, QString> envPairs;
-    Utils::EnvironmentItems diff;
-    std::optional<QString> error = generateEnvironmentSettings(inEnv,
-                                                                 vcvarsBat,
-                                                                 varsBatArg,
-                                                                 envPairs);
-    if (!error) {
+    EnvironmentItems diff;
+    const Result<> result = generateEnvironmentSettings(inEnv, vcvarsBat, varsBatArg, envPairs);
+    if (result) {
         // Now loop through and process them
         for (auto envIter = envPairs.cbegin(), end = envPairs.cend(); envIter != end; ++envIter) {
             const QString expandedValue = winExpandDelayedEnvReferences(envIter.value(), inEnv);
@@ -872,17 +869,18 @@ static void environmentModifications(QPromise<MsvcToolchain::GenerateEnvResult> 
                 diff.removeAt(i);
             }
         }
+        promise.addResult(diff);
+    } else {
+        promise.addResult(ResultError(result.error()));
     }
-
-    promise.addResult(MsvcToolchain::GenerateEnvResult{error, diff});
 }
 
 void MsvcToolchain::initEnvModWatcher(const QFuture<GenerateEnvResult> &future)
 {
     connect(&m_envModWatcher, &QFutureWatcher<GenerateEnvResult>::resultReadyAt, this, [this] {
         const GenerateEnvResult &result = m_envModWatcher.result();
-        if (result.error) {
-            QString errorMessage = *result.error;
+        if (!result) {
+            QString errorMessage = result.error();
             if (!errorMessage.isEmpty()) {
                 Task::TaskType severity;
                 if (m_environmentModifications.isEmpty()) {
@@ -896,7 +894,7 @@ void MsvcToolchain::initEnvModWatcher(const QFuture<GenerateEnvResult> &future)
                 TaskHub::addTask<CompileTask>(severity, errorMessage);
             }
         } else {
-            updateEnvironmentModifications(result.environmentItems);
+            updateEnvironmentModifications(*result);
         }
     });
     m_envModWatcher.setFuture(future);
@@ -932,12 +930,12 @@ Utils::Environment MsvcToolchain::readEnvironmentSetting(const Utils::Environmen
         m_envModWatcher.waitForFinished();
         if (m_envModWatcher.future().isFinished() && !m_envModWatcher.future().isCanceled()) {
             const GenerateEnvResult &result = m_envModWatcher.result();
-            if (result.error) {
-                const QString &errorMessage = *result.error;
+            if (!result) {
+                const QString &errorMessage = result.error();
                 if (!errorMessage.isEmpty())
                     TaskHub::addTask<CompileTask>(Task::Error, errorMessage);
             } else {
-                resultEnv.modify(result.environmentItems);
+                resultEnv.modify(*result);
             }
         }
     } else {
