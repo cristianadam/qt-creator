@@ -496,6 +496,15 @@ void GroupedModel::setVolatileVariant(int row, const QVariant &item)
     m_volatileVariants[row] = item;
 }
 
+void GroupedModel::resetVariant(int row, const QVariant &item)
+{
+    QTC_ASSERT(row >= 0 && row < m_variants.size() && !m_added.at(row), return);
+    m_variants[row] = item;
+    m_volatileVariants[row] = item;
+    m_changed[row] = false;
+    notifyRowChanged(row);
+}
+
 int GroupedModel::appendVolatileVariant(const QVariant &item)
 {
     const int row = m_volatileVariants.size();

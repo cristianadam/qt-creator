@@ -55,6 +55,7 @@ public:
 
     QVariant volatileVariant(int row) const;
     void setVolatileVariant(int row, const QVariant &item);
+    void resetVariant(int row, const QVariant &item);
 
     int appendVolatileVariant(const QVariant &item);
     const QVariantList &volatileVariants() const;
@@ -124,6 +125,11 @@ public:
     void setVolatileItem(int row, const ItemType &item)
     {
         setVolatileVariant(row, toVariant(item));
+    }
+
+    void resetItem(int row, const ItemType &item)
+    {
+        resetVariant(row, toVariant(item));
     }
 
     int appendVolatileItem(const ItemType &item)
