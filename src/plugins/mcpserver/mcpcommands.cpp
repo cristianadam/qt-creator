@@ -16,7 +16,10 @@
 
 #include <debugger/breakhandler.h>
 #include <debugger/breakpoint.h>
+#include <debugger/debuggerengine.h>
 #include <debugger/debuggerruncontrol.h>
+#include <debugger/enginemanager.h>
+#include <debugger/stackhandler.h>
 
 #include <projectexplorer/editorconfiguration.h>
 #include <projectexplorer/buildconfiguration.h>
@@ -991,6 +994,44 @@ static void initializeToolsForCommands(Mcp::Server &server)
     addToolForCommand("run_project", ProjectExplorer::Constants::RUN);
     addToolForCommand("clean_project", ProjectExplorer::Constants::CLEAN);
     addToolForCommand("debug", Debugger::Constants::DEBUGGER_START);
+}
+
+Utils::Result<QJsonArray> McpCommands::getCallStack()
+{
+    using namespace Debugger::Internal;
+    const QPointer<DebuggerEngine> engine = EngineManager::currentEngine();
+    if (!engine)
+        return Utils::ResultError("No active debug session");
+
+    if (engine->state() != Debugger::InferiorStopOk)
+        return Utils::ResultError("Debugger is not paused (current state: "
+                                  + DebuggerEngine::stateName(engine->state()) + ")");
+
+    const StackHandler *handler = engine->stackHandler();
+    if (!handler || !handler->isContentsValid())
+        return Utils::ResultError("Call stack is not available");
+
+    QJsonArray frames;
+    const int count = handler->stackSize();
+    const int currentIndex = handler->currentIndex();
+    for (int i = 0; i < count; ++i) {
+        const StackFrame frame = handler->frameAt(i);
+        QJsonObject obj;
+        obj["level"] = i;
+        obj["current"] = (i == currentIndex);
+        if (!frame.function.isEmpty())
+            obj["function"] = frame.function;
+        if (!frame.file.isEmpty())
+            obj["file"] = frame.file.toUserOutput();
+        if (frame.line >= 0)
+            obj["line"] = frame.line;
+        if (frame.address != 0)
+            obj["address"] = QString("0x%1").arg(frame.address, 0, 16);
+        if (!frame.module.isEmpty())
+            obj["module"] = frame.module;
+        frames.append(obj);
+    }
+    return frames;
 }
 
 static QString breakpointTypeToString(Debugger::Internal::BreakpointType type)
@@ -2035,6 +2076,45 @@ void McpCommands::registerCommands(Mcp::Server &server)
         wrap([](const QJsonObject &) {
             return QJsonObject{{"breakpoints", commands.getBreakpoints()}};
         }));
+
+    server.addTool(
+        Tool{}
+            .name("get_call_stack")
+            .title("Get current call stack")
+            .description(
+                "Returns the call stack (stack frames) of the current debug session. "
+                "Returns an error if no debug session is active or the debugger is not paused.")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .outputSchema([] {
+                const QJsonObject frameProperties{
+                    {"level",    QJsonObject{{"type", "integer"}, {"description", "Frame index, 0 = innermost"}}},
+                    {"current",  QJsonObject{{"type", "boolean"}, {"description", "True for the currently active frame"}}},
+                    {"function", QJsonObject{{"type", "string"},  {"description", "Function or method name"}}},
+                    {"file",     QJsonObject{{"type", "string"},  {"description", "Absolute path to the source file"}}},
+                    {"line",     QJsonObject{{"type", "integer"}, {"description", "Line number in the source file"}}},
+                    {"address",  QJsonObject{{"type", "string"},  {"description", "Instruction address, e.g. \"0x1234abcd\""}}},
+                    {"module",   QJsonObject{{"type", "string"},  {"description", "Module or shared library name"}}},
+                };
+                const QJsonObject frameItem{
+                    {"type", "object"},
+                    {"required", QJsonArray{"level", "current"}},
+                    {"properties", frameProperties},
+                };
+                return Tool::OutputSchema{}
+                    .addProperty(
+                        "frames",
+                        QJsonObject{
+                            {"type", "array"},
+                            {"description", "Stack frames, innermost first"},
+                            {"items", frameItem}})
+                    .addRequired("frames");
+            }()),
+        [](const Schema::CallToolRequestParams &) -> Utils::Result<CallToolResult> {
+            const Utils::Result<QJsonArray> frames = commands.getCallStack();
+            if (!frames)
+                return CallToolResult{}.isError(true).addContent(Schema::TextContent{}.text(frames.error()));
+            return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"frames", *frames}});
+        });
 
     server.addTool(
         Tool{}

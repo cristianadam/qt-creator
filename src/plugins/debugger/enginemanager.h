@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "debugger_global.h"
+
 #include <utils/treemodel.h>
 
 #include <QPointer>
@@ -12,7 +14,7 @@ namespace Debugger::Internal {
 class DebuggerEngine;
 struct PerspectiveItem;
 
-class EngineManager final : public QObject
+class DEBUGGER_EXPORT EngineManager final : public QObject
 {
     Q_OBJECT
 

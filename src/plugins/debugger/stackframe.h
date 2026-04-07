@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "debugger_global.h"
 #include "debuggerconstants.h"
 
 #include <utils/filepath.h>
@@ -15,7 +16,7 @@ namespace Debugger::Internal {
 
 class GdbMi;
 
-class StackFrame
+class DEBUGGER_EXPORT StackFrame
 {
 public:
     StackFrame();

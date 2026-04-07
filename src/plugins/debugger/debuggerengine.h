@@ -430,7 +430,7 @@ private:
     quint64 m_address = 0;
 };
 
-class DebuggerEngine : public QObject
+class DEBUGGER_EXPORT DebuggerEngine : public QObject
 {
     Q_OBJECT
 

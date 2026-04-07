@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "debugger_global.h"
 #include "stackframe.h"
 
 #include <utils/basetreeview.h>
@@ -62,7 +63,7 @@ using StackHandlerModel = Utils::TreeModel<
     StackFrameItem
 >;
 
-class StackHandler : public StackHandlerModel
+class DEBUGGER_EXPORT StackHandler : public StackHandlerModel
 {
     Q_OBJECT
 

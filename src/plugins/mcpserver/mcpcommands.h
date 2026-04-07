@@ -117,6 +117,7 @@ public:
     QJsonObject listIssues(const QString &path);
 
     // Debugging management helpers
+    Utils::Result<QJsonArray> getCallStack();
     bool isDebuggingActive();
     QString abortDebug();
     bool killDebuggedProcesses();
