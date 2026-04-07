@@ -992,7 +992,6 @@ static void initializeToolsForCommands(Mcp::Server &server)
             });
     };
 
-    addToolForCommand("run_project", ProjectExplorer::Constants::RUN);
     addToolForCommand("clean_project", ProjectExplorer::Constants::CLEAN);
 }
 
@@ -2411,57 +2410,45 @@ void McpCommands::registerCommands(Mcp::Server &server)
                 callback);
         }));
 
-    server.addTool(
-        Tool{}
-            .name("debug")
-            .title("Start debugging")
-            .description(
-                "Starts a debug session for the current startup project and waits for it to "
-                "finish. "
-                "Progress messages from the debugged application are streamed during execution. "
-                "On success, returns the full output. "
-                "On build failure, returns isError=true with structured content in the same "
-                "format as list_issues (issues array + summary). "
-                "Returns an error if there is no startup project, no active build configuration, "
-                "or the project cannot currently be run in debug mode.")
-            .execution(ToolExecution().taskSupport(ToolExecution::TaskSupport::optional))
-            .outputSchema([&] {
-                // Build an "issues" property object from IssuesManager::issuesSchema()
-                // so the schema stays in sync with list_issues automatically.
-                const Tool::OutputSchema issSchema = IssuesManager::issuesSchema();
-                QJsonObject issuesField{
-                    {"type", "object"},
-                    {"description",
-                     "Build issues — present when the build failed; same format as list_issues"}};
-                if (issSchema._properties) {
-                    QJsonObject props;
-                    for (auto it = issSchema._properties->cbegin();
-                         it != issSchema._properties->cend();
-                         ++it)
-                        props[it.key()] = it.value();
-                    issuesField["properties"] = props;
-                }
-                if (issSchema._required)
-                    issuesField["required"] = QJsonArray::fromStringList(*issSchema._required);
+    // Shared output schema for run/debug tools.
+    const auto runToolOutputSchema = [] {
+        const Tool::OutputSchema issSchema = IssuesManager::issuesSchema();
+        QJsonObject issuesField{
+            {"type", "object"},
+            {"description",
+             "Build issues — present when the build failed; same format as list_issues"}};
+        if (issSchema._properties) {
+            QJsonObject props;
+            for (auto it = issSchema._properties->cbegin();
+                 it != issSchema._properties->cend();
+                 ++it)
+                props[it.key()] = it.value();
+            issuesField["properties"] = props;
+        }
+        if (issSchema._required)
+            issuesField["required"] = QJsonArray::fromStringList(*issSchema._required);
 
-                return Tool::OutputSchema{}
-                    .addProperty(
-                        "output",
-                        QJsonObject{
-                            {"type", "string"},
-                            {"description",
-                             "Collected output from the debug session (present on success)"}})
-                    .addProperty("issues", issuesField);
-            }()),
-        [](const Schema::CallToolRequestParams &params,
-           const ToolInterface &toolInterface) -> Utils::Result<> {
+        return Tool::OutputSchema{}
+            .addProperty(
+                "output",
+                QJsonObject{
+                    {"type", "string"},
+                    {"description", "Collected output from the run (present on success)"}})
+            .addProperty("issues", issuesField);
+    }();
+
+    // Shared callback factory for run/debug tools.
+    const auto makeRunCallback =
+        [](Utils::Id runMode, const QString &finishedMessage)
+        -> Server::ToolInterfaceCallback {
+        return [runMode, finishedMessage](
+                   const Schema::CallToolRequestParams &params,
+                   const ToolInterface &toolInterface) -> Utils::Result<> {
             const Utils::Result<> canRun
-                = ProjectExplorer::ProjectExplorerPlugin::canRunStartupProject(
-                    ProjectExplorer::Constants::DEBUG_RUN_MODE);
+                = ProjectExplorer::ProjectExplorerPlugin::canRunStartupProject(runMode);
             if (!canRun) {
-                toolInterface.finish(
-                    CallToolResult{}.isError(true).addContent(
-                        Schema::TextContent{}.text(canRun.error())));
+                toolInterface.finish(CallToolResult{}.isError(true).addContent(
+                    Schema::TextContent{}.text(canRun.error())));
                 return ResultOk;
             }
 
@@ -2481,11 +2468,12 @@ void McpCommands::registerCommands(Mcp::Server &server)
                 [state](Schema::Task t) {
                     if (state->finished)
                         letTaskDieIn(t, 1min);
-
+                    const bool failed = !state->failureIssues.isEmpty();
                     return t
                         .status(
-                            state->finished ? Schema::TaskStatus::completed
-                                            : Schema::TaskStatus::working)
+                            !state->finished  ? Schema::TaskStatus::working
+                            : failed          ? Schema::TaskStatus::failed
+                                              : Schema::TaskStatus::completed)
                         .statusMessage(
                             state->output.isEmpty() ? std::nullopt
                                                     : std::optional{state->output.last()});
@@ -2504,9 +2492,8 @@ void McpCommands::registerCommands(Mcp::Server &server)
                 progressToken(params));
 
             if (!task) {
-                toolInterface.finish(
-                    CallToolResult{}.isError(true).addContent(
-                        Schema::TextContent{}.text(task.error())));
+                toolInterface.finish(CallToolResult{}.isError(true).addContent(
+                    Schema::TextContent{}.text(task.error())));
                 return ResultOk;
             }
 
@@ -2516,16 +2503,16 @@ void McpCommands::registerCommands(Mcp::Server &server)
             // buildQueueFinished handlers so each can disconnect the other.
             auto rcStartedConn = std::make_shared<QMetaObject::Connection>();
 
-            // Grab the RunControl of the debug session we're about to start.
-            // Use a plain (non-single-shot) connection so a non-debug RunControl
-            // starting first doesn't consume it prematurely; disconnect manually
-            // once we find the debug RunControl.
+            // Grab the RunControl we're about to start. Use a plain (non-single-shot)
+            // connection so a RunControl with a different mode starting first doesn't
+            // consume it prematurely; disconnect manually once we find ours.
             *rcStartedConn = QObject::connect(
                 ProjectExplorer::ProjectExplorerPlugin::instance(),
                 &ProjectExplorer::ProjectExplorerPlugin::runControlStarted,
                 ProjectExplorer::ProjectExplorerPlugin::instance(),
-                [state, notify, rcStartedConn](ProjectExplorer::RunControl *rc) {
-                    if (rc->runMode() != ProjectExplorer::Constants::DEBUG_RUN_MODE)
+                [state, notify, rcStartedConn, runMode, finishedMessage](
+                    ProjectExplorer::RunControl *rc) {
+                    if (rc->runMode() != runMode)
                         return;
                     QObject::disconnect(*rcStartedConn);
                     state->rc = rc;
@@ -2545,19 +2532,15 @@ void McpCommands::registerCommands(Mcp::Server &server)
                         rc,
                         &ProjectExplorer::RunControl::stopped,
                         rc,
-                        [state, notify]() {
+                        [state, notify, finishedMessage]() {
                             state->finished = true;
-                            if (notify) {
-                                notify(
-                                    Schema::TaskStatus::completed,
-                                    QString("Debug session finished"),
-                                    std::nullopt);
-                            }
+                            if (notify)
+                                notify(Schema::TaskStatus::completed, finishedMessage, std::nullopt);
                         },
                         Qt::SingleShotConnection);
                 });
 
-            // If the build fails before the RunControl is started, abort the task.
+            // If the build fails before the RunControl starts, abort the task.
             QObject::connect(
                 ProjectExplorer::BuildManager::instance(),
                 &ProjectExplorer::BuildManager::buildQueueFinished,
@@ -2574,16 +2557,50 @@ void McpCommands::registerCommands(Mcp::Server &server)
                                                .value("errorCount")
                                                .toInt();
                     const QString statusMsg
-                        = errorCount > 0 ? QString("Build failed with %1 error(s)").arg(errorCount)
-                                         : QString("Build failed");
+                        = errorCount > 0
+                              ? QString("Build failed with %1 error(s)").arg(errorCount)
+                              : QString("Build failed");
                     if (notify)
                         notify(Schema::TaskStatus::failed, statusMsg, std::nullopt);
                 },
                 Qt::SingleShotConnection);
 
-            ProjectExplorer::ProjectExplorerPlugin::runStartupProject(
-                ProjectExplorer::Constants::DEBUG_RUN_MODE, false);
+            ProjectExplorer::ProjectExplorerPlugin::runStartupProject(runMode, false);
             return ResultOk;
-        });
+        };
+    };
+
+    server.addTool(
+        Tool{}
+            .name("run_project")
+            .title("Run project")
+            .description(
+                "Runs the current startup project and waits for it to finish. "
+                "Progress messages from the application are streamed during execution. "
+                "On success, returns the full output. "
+                "On build failure, returns isError=true with structured content in the same "
+                "format as list_issues (issues array + summary). "
+                "Returns an error if there is no startup project, no active build configuration, "
+                "or the project cannot currently be run.")
+            .execution(ToolExecution().taskSupport(ToolExecution::TaskSupport::optional))
+            .outputSchema(runToolOutputSchema),
+        makeRunCallback(ProjectExplorer::Constants::NORMAL_RUN_MODE, "Run finished"));
+
+    server.addTool(
+        Tool{}
+            .name("debug")
+            .title("Start debugging")
+            .description(
+                "Starts a debug session for the current startup project and waits for it to "
+                "finish. "
+                "Progress messages from the debugged application are streamed during execution. "
+                "On success, returns the full output. "
+                "On build failure, returns isError=true with structured content in the same "
+                "format as list_issues (issues array + summary). "
+                "Returns an error if there is no startup project, no active build configuration, "
+                "or the project cannot currently be run in debug mode.")
+            .execution(ToolExecution().taskSupport(ToolExecution::TaskSupport::optional))
+            .outputSchema(runToolOutputSchema),
+        makeRunCallback(ProjectExplorer::Constants::DEBUG_RUN_MODE, "Debug session finished"));
 }
 } // namespace Mcp::Internal
