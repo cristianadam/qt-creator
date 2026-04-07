@@ -22,11 +22,11 @@
 #include <debugger/stackhandler.h>
 #include <debugger/threadshandler.h>
 
-#include <projectexplorer/editorconfiguration.h>
 #include <projectexplorer/buildconfiguration.h>
 #include <projectexplorer/buildmanager.h>
 #include <projectexplorer/editorconfiguration.h>
 #include <projectexplorer/project.h>
+#include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/projectmanager.h>
 #include <projectexplorer/projectnodes.h>
 #include <projectexplorer/runconfiguration.h>
@@ -994,7 +994,6 @@ static void initializeToolsForCommands(Mcp::Server &server)
 
     addToolForCommand("run_project", ProjectExplorer::Constants::RUN);
     addToolForCommand("clean_project", ProjectExplorer::Constants::CLEAN);
-    addToolForCommand("debug", Debugger::Constants::DEBUGGER_START);
 }
 
 static Utils::Result<Debugger::Internal::ThreadsHandler *> getThreadsHandler()
@@ -2411,5 +2410,180 @@ void McpCommands::registerCommands(Mcp::Server &server)
                 p["workingDir"].toString(),
                 callback);
         }));
+
+    server.addTool(
+        Tool{}
+            .name("debug")
+            .title("Start debugging")
+            .description(
+                "Starts a debug session for the current startup project and waits for it to "
+                "finish. "
+                "Progress messages from the debugged application are streamed during execution. "
+                "On success, returns the full output. "
+                "On build failure, returns isError=true with structured content in the same "
+                "format as list_issues (issues array + summary). "
+                "Returns an error if there is no startup project, no active build configuration, "
+                "or the project cannot currently be run in debug mode.")
+            .execution(ToolExecution().taskSupport(ToolExecution::TaskSupport::optional))
+            .outputSchema([&] {
+                // Build an "issues" property object from IssuesManager::issuesSchema()
+                // so the schema stays in sync with list_issues automatically.
+                const Tool::OutputSchema issSchema = IssuesManager::issuesSchema();
+                QJsonObject issuesField{
+                    {"type", "object"},
+                    {"description",
+                     "Build issues — present when the build failed; same format as list_issues"}};
+                if (issSchema._properties) {
+                    QJsonObject props;
+                    for (auto it = issSchema._properties->cbegin();
+                         it != issSchema._properties->cend();
+                         ++it)
+                        props[it.key()] = it.value();
+                    issuesField["properties"] = props;
+                }
+                if (issSchema._required)
+                    issuesField["required"] = QJsonArray::fromStringList(*issSchema._required);
+
+                return Tool::OutputSchema{}
+                    .addProperty(
+                        "output",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description",
+                             "Collected output from the debug session (present on success)"}})
+                    .addProperty("issues", issuesField);
+            }()),
+        [](const Schema::CallToolRequestParams &params,
+           const ToolInterface &toolInterface) -> Utils::Result<> {
+            const Utils::Result<> canRun
+                = ProjectExplorer::ProjectExplorerPlugin::canRunStartupProject(
+                    ProjectExplorer::Constants::DEBUG_RUN_MODE);
+            if (!canRun) {
+                toolInterface.finish(
+                    CallToolResult{}.isError(true).addContent(
+                        Schema::TextContent{}.text(canRun.error())));
+                return ResultOk;
+            }
+
+            struct State
+            {
+                QStringList output;
+                bool finished = false;
+                QJsonObject failureIssues; // non-empty when build failed
+                QPointer<ProjectExplorer::RunControl> rc;
+            };
+            auto state = std::make_shared<State>();
+
+            using namespace std::chrono_literals;
+
+            const Utils::Result<ToolInterface::TaskProgressNotify> task = toolInterface.startTask(
+                500ms,
+                [state](Schema::Task t) {
+                    if (state->finished)
+                        letTaskDieIn(t, 1min);
+
+                    return t
+                        .status(
+                            state->finished ? Schema::TaskStatus::completed
+                                            : Schema::TaskStatus::working)
+                        .statusMessage(
+                            state->output.isEmpty() ? std::nullopt
+                                                    : std::optional{state->output.last()});
+                },
+                [state]() -> Utils::Result<CallToolResult> {
+                    if (!state->failureIssues.isEmpty())
+                        return CallToolResult{}.isError(true).structuredContent(
+                            QJsonObject{{"issues", state->failureIssues}});
+                    return CallToolResult{}.isError(false).structuredContent(
+                        QJsonObject{{"output", state->output.join('\n')}});
+                },
+                [state]() {
+                    if (state->rc)
+                        state->rc->initiateStop();
+                },
+                progressToken(params));
+
+            if (!task) {
+                toolInterface.finish(
+                    CallToolResult{}.isError(true).addContent(
+                        Schema::TextContent{}.text(task.error())));
+                return ResultOk;
+            }
+
+            const ToolInterface::TaskProgressNotify notify = *task;
+
+            // rcStartedConn is shared between the runControlStarted and
+            // buildQueueFinished handlers so each can disconnect the other.
+            auto rcStartedConn = std::make_shared<QMetaObject::Connection>();
+
+            // Grab the RunControl of the debug session we're about to start.
+            // Use a plain (non-single-shot) connection so a non-debug RunControl
+            // starting first doesn't consume it prematurely; disconnect manually
+            // once we find the debug RunControl.
+            *rcStartedConn = QObject::connect(
+                ProjectExplorer::ProjectExplorerPlugin::instance(),
+                &ProjectExplorer::ProjectExplorerPlugin::runControlStarted,
+                ProjectExplorer::ProjectExplorerPlugin::instance(),
+                [state, notify, rcStartedConn](ProjectExplorer::RunControl *rc) {
+                    if (rc->runMode() != ProjectExplorer::Constants::DEBUG_RUN_MODE)
+                        return;
+                    QObject::disconnect(*rcStartedConn);
+                    state->rc = rc;
+                    QObject::connect(
+                        rc,
+                        &ProjectExplorer::RunControl::appendMessage,
+                        rc,
+                        [state, notify](const QString &msg, Utils::OutputFormat) {
+                            const QString trimmed = msg.trimmed();
+                            if (trimmed.isEmpty())
+                                return;
+                            state->output.append(trimmed);
+                            if (notify)
+                                notify(Schema::TaskStatus::working, trimmed, std::nullopt);
+                        });
+                    QObject::connect(
+                        rc,
+                        &ProjectExplorer::RunControl::stopped,
+                        rc,
+                        [state, notify]() {
+                            state->finished = true;
+                            if (notify) {
+                                notify(
+                                    Schema::TaskStatus::completed,
+                                    QString("Debug session finished"),
+                                    std::nullopt);
+                            }
+                        },
+                        Qt::SingleShotConnection);
+                });
+
+            // If the build fails before the RunControl is started, abort the task.
+            QObject::connect(
+                ProjectExplorer::BuildManager::instance(),
+                &ProjectExplorer::BuildManager::buildQueueFinished,
+                ProjectExplorer::BuildManager::instance(),
+                [state, notify, rcStartedConn](bool success) {
+                    if (success || state->rc)
+                        return;
+                    QObject::disconnect(*rcStartedConn);
+                    state->finished = true;
+
+                    state->failureIssues = commands.listIssues();
+                    const int errorCount = state->failureIssues.value("summary")
+                                               .toObject()
+                                               .value("errorCount")
+                                               .toInt();
+                    const QString statusMsg
+                        = errorCount > 0 ? QString("Build failed with %1 error(s)").arg(errorCount)
+                                         : QString("Build failed");
+                    if (notify)
+                        notify(Schema::TaskStatus::failed, statusMsg, std::nullopt);
+                },
+                Qt::SingleShotConnection);
+
+            ProjectExplorer::ProjectExplorerPlugin::runStartupProject(
+                ProjectExplorer::Constants::DEBUG_RUN_MODE, false);
+            return ResultOk;
+        });
 }
 } // namespace Mcp::Internal
