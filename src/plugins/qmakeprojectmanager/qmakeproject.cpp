@@ -15,6 +15,7 @@
 #include <coreplugin/documentmanager.h>
 #include <coreplugin/icontext.h>
 #include <coreplugin/icore.h>
+#include <coreplugin/progressmanager/futureprogress.h>
 #include <coreplugin/progressmanager/progressmanager.h>
 
 #include <cppeditor/cppmodelmanager.h>
@@ -664,18 +665,15 @@ void QmakeBuildSystem::asyncUpdate()
 
     m_asyncUpdateFutureInterface.reset(new QFutureInterface<void>);
     m_asyncUpdateFutureInterface->setProgressRange(0, 0);
-    ProgressManager::addTask(m_asyncUpdateFutureInterface->future(),
+    FutureProgress *progress = ProgressManager::addTask(m_asyncUpdateFutureInterface->future(),
                                    Tr::tr("Reading Project \"%1\"").arg(project()->displayName()),
                                    Constants::PROFILE_EVALUATE);
 
     m_asyncUpdateFutureInterface->reportStarted();
-    const auto watcher = new QFutureWatcher<void>(this);
-    connect(watcher, &QFutureWatcher<void>::canceled, this, [this] {
+    connect(progress, &FutureProgress::canceled, this, [this] {
         if (m_qmakeGlobals)
             m_qmakeGlobals->killProcesses();
     });
-    connect(watcher, &QFutureWatcher<void>::finished, watcher, &QObject::deleteLater);
-    watcher->setFuture(m_asyncUpdateFutureInterface->future());
 
     const Kit *const k = kit();
     QtSupport::QtVersion *const qtVersion = QtSupport::QtKitAspect::qtVersion(k);
