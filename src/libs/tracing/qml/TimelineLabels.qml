@@ -65,7 +65,6 @@ Flickable {
                     width: loader.width
 
                     Rectangle {
-                        id: categoryColorRect
                         height: loader.height
                         width: 3
                         color: modelData.categoryColor
@@ -84,7 +83,7 @@ Flickable {
                         contentY: categories.contentY
                         contentHeight: categories.contentHeight
                         visibleHeight: categories.height
-                        anchors.left: categoryColorRect.right
+                        anchors.left: parent.left
                         anchors.right: parent.right
                         height: parent.height
                         dragOffset: loader.y
