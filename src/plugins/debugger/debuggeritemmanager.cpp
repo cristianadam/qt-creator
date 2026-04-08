@@ -117,9 +117,10 @@ public:
 
     void readDebuggers(const FilePath &fileName, bool isSdk);
     void autoDetectCdbDebuggers();
-    void autoDetectGdbOrLldbDebuggers(const FilePaths &searchPaths,
-                                      const QString &detectionSource,
-                                      QString *logMessage = nullptr);
+    void autoDetectGdbOrLldbDebuggers(
+        const FilePaths &searchPaths,
+        const DetectionSource &detectionSource,
+        QString *logMessage = nullptr);
     void autoDetectUvscDebuggers();
     QString uniqueDisplayName(const QString &base);
 
@@ -280,10 +281,8 @@ static Utils::FilePaths searchGdbPathsFromRegistry()
 }
 
 void DebuggerModel::autoDetectGdbOrLldbDebuggers(
-    const FilePaths &searchPaths, const QString &detectionSourceId, QString *logMessage)
+    const FilePaths &searchPaths, const DetectionSource &detectionSource, QString *logMessage)
 {
-    const DetectionSource detectionSource{DetectionSource::FromSystem, detectionSourceId};
-
     QStringList filters
         = {"gdb-i686-pc-mingw32",
            "gdb-i686-pc-mingw32.exe",
@@ -563,9 +562,11 @@ void DebuggerModel::restoreDebuggers()
 void DebuggerModel::detectDebuggers(const IDeviceConstPtr &device, const FilePaths &searchPaths)
 {
     QTC_ASSERT(device, return);
-
-    autoDetectGdbOrLldbDebuggers(searchPaths, {});
-    if (device->id() == ProjectExplorer::Constants::DESKTOP_DEVICE_ID) {
+    const bool isDesktopDevice = device->id() == ProjectExplorer::Constants::DESKTOP_DEVICE_ID;
+    const DetectionSource detectionSource = isDesktopDevice ? DetectionSource::FromSystem
+                                                            : DetectionSource::Manual;
+    autoDetectGdbOrLldbDebuggers(searchPaths, detectionSource);
+    if (isDesktopDevice) {
         autoDetectCdbDebuggers();
         autoDetectUvscDebuggers();
     }

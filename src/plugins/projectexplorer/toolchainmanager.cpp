@@ -123,8 +123,10 @@ void ToolchainManager::restoreToolchains()
         Toolchains toRegister;
         for (ToolchainFactory *f : ToolchainFactory::allToolchainFactories()) {
             for (Toolchain * const tc : f->autoDetect(detector)) {
-                if (!m_instance->toolchains().contains(tc))
+                if (!m_instance->toolchains().contains(tc)) {
                     toRegister << tc;
+                    tc->setDetectionSource(DetectionSource::Manual);
+                }
             }
         }
         registerToolchains(toRegister);

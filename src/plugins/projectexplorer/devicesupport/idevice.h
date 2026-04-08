@@ -106,9 +106,6 @@ protected:
     void setChecker(const Checker &checker);
     void setToolType(DeviceToolAspect::ToolType toolType);
 
-private:
-    void autoDetect(const DeviceConstRef &device, const Utils::FilePaths &searchPaths);
-
     Utils::Id m_toolId;
     QString m_labelText;
     QString m_toolTip;

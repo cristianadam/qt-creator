@@ -633,11 +633,15 @@ void ToolChainOptionsWidget::redetectToolchains()
 
     // Step 2: Re-detect toolchains.
     for (const IDeviceConstPtr &device : m_deviceComboBox.selectedDevices()) {
+        const DetectionSource detectionSource = device->id() == Constants::DESKTOP_DEVICE_ID
+                                                    ? DetectionSource::FromSystem
+                                                    : DetectionSource::Manual;
         for (ToolchainFactory *f : ToolchainFactory::allToolchainFactories()) {
             const ToolchainDetector detector(knownTcs, device, device->toolSearchPaths());
             for (Toolchain * const tc : f->autoDetect(detector)) {
                 if (knownTcs.contains(tc))
                     continue;
+                tc->setDetectionSource(detectionSource);
                 knownTcs << tc;
                 const auto matchItem = [&](const ItemToCheck &item) {
                     const ToolchainTreeItem it = m_model.item(item.first);

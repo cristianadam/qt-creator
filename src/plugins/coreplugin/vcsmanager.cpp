@@ -709,6 +709,9 @@ void VcsManager::updateModifiedFiles(const Utils::FilePath &repository, const Fi
 void VcsManager::emitClearFileState(const Utils::FilePath &repository)
 {
     qCDebug(status).nospace() << "emit clearFileState(" << repository << ")";
+
+    d->m_fileStates[repository].clear();
+
     emit instance()->clearFileState(repository);
 }
 
