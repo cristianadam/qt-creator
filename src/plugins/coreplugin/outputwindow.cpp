@@ -58,8 +58,10 @@ class OutputWindowPrivate
 {
 public:
     explicit OutputWindowPrivate(QTextDocument *document)
-        : cursor(document)
+        : startOfNewContentCursor(document)
+        , cursor(document)
     {
+        startOfNewContentCursor.setKeepPositionOnInsert(true);
     }
 
     qsizetype totalQueuedValue(const std::function<qsizetype(const QString &)> &getValue) const
@@ -92,6 +94,7 @@ public:
     bool originalReadOnly = false;
     qsizetype maxCharCount = Core::Constants::DEFAULT_MAX_CHAR_COUNT;
     Qt::MouseButton mouseButtonPressed = Qt::NoButton;
+    QTextCursor startOfNewContentCursor;
     QTextCursor cursor;
     QString filterText;
     int lastFilteredBlockNumber = -1;
@@ -775,6 +778,7 @@ void OutputWindow::clear()
     d->formatter.clear();
     d->scrollToBottom = true;
     d->taskPositions.clear();
+    d->startOfNewContentCursor.setPosition(0);
 }
 
 void OutputWindow::clearLinesPrefixedWith(const QString& prefix, bool deleteTrailingLineBreak)
@@ -843,7 +847,8 @@ void OutputWindow::grayOutOldContent()
         d->cursor.movePosition(QTextCursor::End);
     QTextCharFormat endFormat = d->cursor.charFormat();
 
-    d->cursor.select(QTextCursor::Document);
+    d->cursor.setPosition(d->startOfNewContentCursor.position());
+    d->cursor.movePosition(QTextCursor::End, QTextCursor::KeepAnchor, 1);
 
     QTextCharFormat format;
     const QColor bkgColor = palette().base().color();
@@ -857,6 +862,7 @@ void OutputWindow::grayOutOldContent()
 
     d->cursor.movePosition(QTextCursor::End);
     d->cursor.setCharFormat(endFormat);
+    d->startOfNewContentCursor.setPosition(d->cursor.position());
     d->cursor.insertBlock(QTextBlockFormat());
 }
 
