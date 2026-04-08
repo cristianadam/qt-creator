@@ -91,7 +91,7 @@ public:
         disableAction.setText(Tr::tr("Disable Copilot"));
         disableAction.setToolTip(Tr::tr("Disable Copilot."));
         disableAction.addOnTriggered(this, [] {
-            settings().enableCopilot.setValue(true);
+            settings().enableCopilot.setValue(false);
             settings().apply();
         });
 
@@ -99,7 +99,7 @@ public:
         enableAction.setText(Tr::tr("Enable Copilot"));
         enableAction.setToolTip(Tr::tr("Enable Copilot."));
         enableAction.addOnTriggered(this, [] {
-            settings().enableCopilot.setValue(false);
+            settings().enableCopilot.setValue(true);
             settings().apply();
         });
 
