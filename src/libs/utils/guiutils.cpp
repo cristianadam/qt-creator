@@ -125,9 +125,10 @@ void markSettingsDirty()
 
 void checkSettingsDirty()
 {
-    QTC_ASSERT(s_checkSettingDirtyHook, return);
     if (s_suppressSettingsDirtyTrigger)
         return;
+
+    QTC_ASSERT(s_checkSettingDirtyHook, return);
     s_checkSettingDirtyHook();
 }
 

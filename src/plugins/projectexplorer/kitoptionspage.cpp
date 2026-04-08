@@ -19,6 +19,7 @@
 #include <utils/detailswidget.h>
 #include <utils/fileutils.h>
 #include <utils/groupedmodel.h>
+#include <utils/guiutils.h>
 #include <utils/guard.h>
 #include <utils/id.h>
 #include <utils/layoutbuilder.h>
@@ -924,5 +925,119 @@ void setupKitsSettingsPage()
 }
 
 } // ProjectExplorer::Internal
+
+#ifdef WITH_TESTS
+
+#include <QTest>
+
+namespace ProjectExplorer::Internal {
+
+static Kit *addTestKit(const QString &name)
+{
+    return KitManager::registerKit([&name](Kit *k) {
+        k->setUnexpandedDisplayName(name);
+    });
+}
+
+class KitModelTest : public QObject
+{
+    Q_OBJECT
+
+private slots:
+    void testDefaultSuffix();
+    void testCancelDoesNotPersistDefault();
+    void testRemoveDefaultAutoSwitches();
+    void testApplyCommitsDefault();
+};
+
+void KitModelTest::testDefaultSuffix()
+{
+    const DirtySettingsGuard guard;
+    Kit *kit = addTestKit("SuffixKit");
+    KitManager::setDefaultKit(kit);
+
+    KitModel model;
+    const int row = model.rowForOriginalKit(kit);
+    QVERIFY(row >= 0);
+    QVERIFY(model.isDefault(row));
+    const QString text = model.data(model.index(row, 0), Qt::DisplayRole).toString();
+    QVERIFY2(text.contains("(Default)"), qPrintable(text));
+
+    KitManager::deregisterKit(kit);
+}
+
+void KitModelTest::testCancelDoesNotPersistDefault()
+{
+    const DirtySettingsGuard guard;
+    Kit *kit1 = addTestKit("CancelKit1");
+    Kit *kit2 = addTestKit("CancelKit2");
+    KitManager::setDefaultKit(kit1);
+
+    {
+        KitModel model;
+        const int row2 = model.rowForOriginalKit(kit2);
+        QVERIFY(row2 >= 0);
+        model.setVolatileDefaultRow(row2);
+        // Destroy model without apply() -- simulates Cancel
+    }
+
+    QCOMPARE(KitManager::defaultKit(), kit1);
+
+    KitManager::deregisterKit(kit1);
+    KitManager::deregisterKit(kit2);
+}
+
+void KitModelTest::testRemoveDefaultAutoSwitches()
+{
+    const DirtySettingsGuard guard;
+    Kit *kit1 = addTestKit("RemoveKit1");
+    Kit *kit2 = addTestKit("RemoveKit2");
+    KitManager::setDefaultKit(kit1);
+
+    KitModel model;
+    const int row1 = model.rowForOriginalKit(kit1);
+    QVERIFY(row1 >= 0);
+    QVERIFY(model.isDefault(row1));
+
+    model.markForRemoval(model.workingCopyForRow(row1));
+
+    QVERIFY(model.isRemoved(row1));
+    const int newDefault = model.defaultRow();
+    QVERIFY(newDefault >= 0);
+    QVERIFY(newDefault != row1);
+    QVERIFY(!model.isRemoved(newDefault));
+
+    model.apply();
+    KitManager::deregisterKit(kit2);
+}
+
+void KitModelTest::testApplyCommitsDefault()
+{
+    const DirtySettingsGuard guard;
+    Kit *kit1 = addTestKit("ApplyKit1");
+    Kit *kit2 = addTestKit("ApplyKit2");
+    KitManager::setDefaultKit(kit1);
+
+    KitModel model;
+    const int row2 = model.rowForOriginalKit(kit2);
+    QVERIFY(row2 >= 0);
+
+    model.setVolatileDefaultRow(row2);
+    model.apply();
+
+    QCOMPARE(KitManager::defaultKit(), kit2);
+
+    KitManager::deregisterKit(kit1);
+    KitManager::deregisterKit(kit2);
+}
+
+QObject *createKitModelTest()
+{
+    return new KitModelTest;
+}
+
+} // ProjectExplorer::Internal
+
+#endif // WITH_TESTS
 
 #include "kitoptionspage.moc"

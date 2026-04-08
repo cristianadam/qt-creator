@@ -3,8 +3,12 @@
 
 #pragma once
 
+class QObject;
+
 namespace ProjectExplorer::Internal {
 
 void setupKitsSettingsPage();
+
+QObject *createKitModelTest();
 
 } // ProjectExplorer::Internal
