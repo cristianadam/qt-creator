@@ -250,7 +250,7 @@ McpServerPluginSettings::McpServerPluginSettings(McpServerPlugin *plugin)
 
     enableCors.setSettingsKey("EnableCors");
     enableCors.setEnabler(&enabled);
-    enableCors.setLabel(Tr::tr("CORS:"));
+    enableCors.setLabel(Tr::tr("Enable Cross Origin access:"));
     enableCors.setToolTip(
         Tr::tr(
             "Enable Cross-Origin Resource Sharing (CORS) for the Mcp Server. "
@@ -292,6 +292,7 @@ McpServerPluginSettings::McpServerPluginSettings(McpServerPlugin *plugin)
             enabled, br,
             Tr::tr("Listen on:"), listenAddress, br,
             port, br,
+            enableCors, br,
             statusIcon, statusLabel, br,
         };
         // clang-format on

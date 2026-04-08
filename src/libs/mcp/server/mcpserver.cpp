@@ -150,7 +150,7 @@ public:
 
         // Check origin is localhost.
         QHostAddress originHost(origin.host());
-        if (origin.host() != "localhost" && !originHost.isLoopback())
+        if (origin.host() != "localhost" && !originHost.isLoopback() && !enableCors)
             return ResultError(QString("Origin not allowed: %1").arg(origin.toString()));
 
         return {};
