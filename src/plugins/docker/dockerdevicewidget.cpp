@@ -135,6 +135,7 @@ DockerDeviceWidget::DockerDeviceWidget(const IDevice::Ptr &device)
 
     auto createLineLabel = new QLabel(dockerDevice->createCommandLine().toUserOutput());
     createLineLabel->setWordWrap(true);
+    createLineLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
     auto refreshNetworksButton = new QToolButton();
     setIgnoreForDirtyHook(refreshNetworksButton);
