@@ -83,7 +83,6 @@ public:
     int rowForKit(Kit *k) const;
     int rowForId(Id kitId) const;
     int rowForOriginalKit(Kit *k) const;
-    bool isDefaultKit(Kit *k) const;
     Kit *workingCopyForRow(int row) const;
     bool isNameUnique(int row) const;
 
@@ -192,12 +191,6 @@ int KitModel::rowForId(Id kitId) const
     return -1;
 }
 
-bool KitModel::isDefaultKit(Kit *k) const
-{
-    const int row = rowForKit(k);
-    return row >= 0 && isDefault(row);
-}
-
 void KitModel::apply()
 {
     // Collect kits to deregister (removed rows)
@@ -294,14 +287,7 @@ Kit *KitModel::markForAddition(Kit *baseKit)
         k->setUnexpandedDisplayName(newName);
     }
 
-    bool hasDefault = false;
-    for (int r = 0; r < newRow; ++r) {
-        if (isDefault(r) && !isRemoved(r)) {
-            hasDefault = true;
-            break;
-        }
-    }
-    if (!hasDefault)
+    if (defaultRow() < 0 || isRemoved(defaultRow()))
         setVolatileDefaultRow(newRow);
 
     return k;
@@ -389,14 +375,7 @@ void KitModel::removeKit(Kit *k)
 
 void KitModel::changeDefaultKit()
 {
-    Kit *defaultKit = KitManager::defaultKit();
-    for (int row = 0; row < itemCount(); ++row) {
-        if (item(row).kit == defaultKit) {
-            setVolatileDefaultRow(row);
-            return;
-        }
-    }
-    setVolatileDefaultRow(-1);
+    setVolatileDefaultRow(rowForOriginalKit(KitManager::defaultKit()));
 }
 
 bool KitModel::isNameUnique(int row) const
