@@ -50,8 +50,8 @@ void LanguageClientFormatter::handleResponse(const ResponseType &response)
         if (!result->isNull())
             changeSet = editsToChangeSet(result->toList(), m_document->document());
     }
-    m_progress.reportResult(changeSet);
-    m_progress.reportFinished();
+    if (m_formatCallback)
+        m_formatCallback(changeSet);
 }
 
 static const FormattingOptions formattingOptions(const TextEditor::TabSettings &settings)
@@ -114,30 +114,24 @@ void LanguageClientFormatter::setMode(FormatMode mode)
     }
 }
 
-QFutureWatcher<ChangeSet> *LanguageClientFormatter::format(
-        const QTextCursor &cursor, const TextEditor::TabSettings &tabSettings)
+void LanguageClientFormatter::format(const QTextCursor &cursor,
+        const TextEditor::TabSettings &tabSettings,
+        const TextEditor::FormatCallback &callback)
 {
-    QTC_ASSERT(m_client, return nullptr);
+    QTC_ASSERT(m_client, return);
     cancelCurrentRequest();
 
+    m_formatCallback = callback;
     auto request = m_formattingRequester->prepareRequest(cursor, tabSettings, this);
-    return std::visit([this](auto &&value) -> QFutureWatcher<ChangeSet> *{
+    std::visit([this](auto &&value) {
         using T = std::decay_t<decltype(value)>;
         if constexpr (std::is_same_v<T, std::monostate>) {
-            return nullptr;
+            return;
         } else {
-            m_progress = QFutureInterface<ChangeSet>();
             m_currentRequest = value.id();
             m_client->sendMessage(value);
             // ignore first contents changed, because this function is called inside a begin/endEdit block
             m_ignoreCancel = true;
-            m_progress.reportStarted();
-            auto watcher = new QFutureWatcher<ChangeSet>();
-            QObject::connect(watcher, &QFutureWatcher<ChangeSet>::canceled, [this] {
-                cancelCurrentRequest();
-            });
-            watcher->setFuture(m_progress.future());
-            return watcher;
         }
     }, request);
 }
@@ -145,8 +139,7 @@ QFutureWatcher<ChangeSet> *LanguageClientFormatter::format(
 void LanguageClientFormatter::cancelCurrentRequest()
 {
     if (QTC_GUARD(m_client) && m_currentRequest.has_value()) {
-        m_progress.reportCanceled();
-        m_progress.reportFinished();
+        m_formatCallback = {};
         m_client->cancelRequest(*m_currentRequest);
         m_ignoreCancel = false;
         m_currentRequest = std::nullopt;

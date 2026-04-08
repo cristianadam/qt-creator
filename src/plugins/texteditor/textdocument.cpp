@@ -550,13 +550,9 @@ void TextDocument::autoFormat(const QTextCursor &cursor)
     using namespace Utils::Text;
     if (!d->m_formatter)
         return;
-    if (QFutureWatcher<ChangeSet> *watcher = d->m_formatter->format(cursor, tabSettings())) {
-        connect(watcher, &QFutureWatcher<ChangeSet>::finished, this, [this, watcher]() {
-            if (!watcher->isCanceled())
-                applyChangeSet(watcher->result());
-            delete watcher;
-        });
-    }
+    d->m_formatter->format(cursor, tabSettings(), [this](const ChangeSet &result) {
+        applyChangeSet(result);
+    });
 }
 
 bool TextDocument::applyChangeSet(const ChangeSet &changeSet)

@@ -19,6 +19,8 @@ namespace TextEditor {
 
 class TabSettings;
 
+using FormatCallback = std::function<void(const Utils::ChangeSet &)>;
+
 class Formatter
 {
 public:
@@ -29,11 +31,9 @@ public:
     Formatter() = default;
     virtual ~Formatter() = default;
 
-    virtual QFutureWatcher<Utils::ChangeSet> *format(
-        const QTextCursor & /*cursor*/, const TextEditor::TabSettings & /*tabSettings*/)
-    {
-        return nullptr;
-    }
+    virtual void format(const QTextCursor & /*cursor*/,
+                        const TabSettings & /*tabSettings*/,
+                        const FormatCallback & /*callback*/) {}
 
     virtual bool isElectricCharacter(const QChar & /*ch*/) const { return false; }
     virtual bool supportsAutoFormat() const { return false; }

@@ -64,8 +64,9 @@ public:
     LanguageClientFormatter(TextEditor::TextDocument *document, Client *client);
     ~LanguageClientFormatter() override;
 
-    QFutureWatcher<Utils::ChangeSet> *format(
-        const QTextCursor &cursor, const TextEditor::TabSettings &tabSettings) override;
+    void format(const QTextCursor &cursor,
+                const TextEditor::TabSettings &tabSettings,
+                const TextEditor::FormatCallback &callback) override;
 
     void setMode(FormatMode mode) override;
     void handleResponse(const ResponseType &response);
@@ -77,7 +78,7 @@ private:
     QMetaObject::Connection m_cancelConnection;
     TextEditor::TextDocument *m_document; // not owned
     bool m_ignoreCancel = false;
-    QFutureInterface<Utils::ChangeSet> m_progress;
+    TextEditor::FormatCallback m_formatCallback = {};
     std::optional<LanguageServerProtocol::MessageId> m_currentRequest;
     std::unique_ptr<IFormattingRequest> m_formattingRequester;
 };
