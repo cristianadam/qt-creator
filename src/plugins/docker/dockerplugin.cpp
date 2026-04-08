@@ -5,17 +5,73 @@
 #include "dockerconstants.h"
 #include "dockerdevice.h"
 
-#include <extensionsystem/iplugin.h>
-
+#include <projectexplorer/devicesupport/idevice.h>
 #include <projectexplorer/projectexplorerconstants.h>
+#include <projectexplorer/qmldebugcommandlinearguments.h>
+#include <projectexplorer/runcontrol.h>
+
+#include <extensionsystem/iplugin.h>
 
 #include <utils/fsengine/fsengine.h>
 
+#include <QtTaskTree/QBarrier>
+
 using namespace Core;
 using namespace ProjectExplorer;
+using namespace QtTaskTree;
 using namespace Utils;
 
 namespace Docker::Internal {
+
+class DockerQmlToolingWorkerFactory final : public RunWorkerFactory
+{
+public:
+    DockerQmlToolingWorkerFactory()
+    {
+        setId("DockerQmlToolingWorkerFactory");
+        setPriority(10); // More important then the default 0.
+        setRecipeProducer([](RunControl *runControl) {
+            // Docker allocates the QML debug port when the container first starts.
+            // Call updateContainerAccess() explicitly so that toolControlChannel()
+            // returns a valid URL before we build the command line arguments below.
+            const auto dockerDevice =
+                std::static_pointer_cast<const DockerDevice>(runControl->device());
+            if (const Result<> result = dockerDevice->updateContainerAccess(); !result) {
+                runControl->postMessage(result.error(), Utils::ErrorMessageFormat);
+                return runControl->noRecipeTask();
+            }
+            // Docker maps the debug port 1:1 (host:PORT -> container:PORT). Read it
+            // directly rather than going through requestQmlChannel() /
+            // portsGatheringRecipe(), which would pick an unmapped port and trigger a
+            // QTC_CHECK in toolControlChannel().
+            const QUrl channel =
+                dockerDevice->toolControlChannel(IDevice::QmlControlChannel);
+            runControl->setQmlChannel(channel);
+
+            const auto modifier = [runControl](Process &process) {
+                const QmlDebugServicesPreset services =
+                    servicesForRunMode(runControl->runMode());
+                CommandLine cmd = runControl->commandLine();
+                cmd.addArg(qmlDebugTcpArguments(services, runControl->qmlChannel()));
+                process.setCommand(cmd);
+            };
+            const ProcessTask processTask(runControl->processTaskWithModifier(modifier));
+            return Group {
+                When (processTask, &Process::started, WorkflowPolicy::StopOnSuccessOrError) >> Do {
+                    runControl->createRecipe(runnerIdForRunMode(runControl->runMode()))
+                }
+            };
+        });
+        addSupportedRunMode(ProjectExplorer::Constants::QML_PROFILER_RUN_MODE);
+        addSupportedRunMode(ProjectExplorer::Constants::QML_PREVIEW_RUN_MODE);
+        addSupportedDeviceType(Constants::DOCKER_DEVICE_TYPE);
+    }
+};
+
+void setupDockerRunAndDebugSupport()
+{
+    static DockerQmlToolingWorkerFactory qmlToolingWorkerFactory;
+}
 
 class DockerPlugin final : public ExtensionSystem::IPlugin
 {
@@ -39,6 +95,7 @@ private:
     {
         m_deviceFactory = std::make_unique<DockerDeviceFactory>();
         m_dockerApi = std::make_unique<DockerApi>();
+        setupDockerRunAndDebugSupport();
     }
 
     std::unique_ptr<DockerDeviceFactory> m_deviceFactory;

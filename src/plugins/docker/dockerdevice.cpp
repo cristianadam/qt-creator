@@ -621,6 +621,20 @@ CommandLine DockerDevicePrivate::createCommandLine()
     }
 
     dockerCreate.addArgs(createMountArgs());
+
+    {
+        const Environment sysEnv = Environment::systemEnvironment();
+        const QString xauth = sysEnv.value("XAUTHORITY");
+        const QString xauthPath = xauth.isEmpty() ? sysEnv.value("HOME") + "/.Xauthority" : xauth;
+        const FilePath hostXauth = FilePath::fromUserInput(xauthPath);
+        if (hostXauth.exists()) {
+            const QString mountArg =
+                QString(R"(type=bind,"source=%1","destination=/.Xauthority",readonly)")
+                    .arg(escapeMountPath(hostXauth));
+            dockerCreate.addArgs({"--mount", mountArg});
+        }
+    }
+
     dockerCreate.addArgs(q->portMappings.createArguments());
 
     if (m_qmlDebuggerAccess.port() > 0) {
