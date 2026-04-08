@@ -402,7 +402,11 @@ AndroidBuildApkWidget::AndroidBuildApkWidget(AndroidBuildApkStep *step)
     // Application group
 
     QtSupport::QtVersion *qt = QtSupport::QtKitAspect::qtVersion(m_step->kit());
-    const int minApiSupported = static_cast<const AndroidQtVersion *>(qt)->defaultMinimumSDK();
+    // TODO This is never updated when the Qt version changes. That is not relevant for the
+    // "managed" kits, but can happen for manual kits.
+    const int minApiSupported = qt && qt->isAndroidQtVersion()
+                                    ? static_cast<const AndroidQtVersion *>(qt)->defaultMinimumSDK()
+                                    : 16;
     QStringList targets = AndroidConfig::apiLevelNamesFor(
         sdkManager().filteredSdkPlatforms(minApiSupported));
     targets.removeDuplicates();
