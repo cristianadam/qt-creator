@@ -271,6 +271,14 @@ public:
     SynchronizedValue<std::unique_ptr<DockerContainerThread>> m_deviceThread;
 
     QUrl m_qmlDebuggerAccess;
+
+    struct HandlesFileData
+    {
+        QString repoAndTag;
+        QString repoAndTagEncoded;
+        QString imageId;
+    };
+    SynchronizedValue<HandlesFileData> m_handlesFileCache;
 };
 
 static WrappedProcessInterface *makeProcessInterface(
@@ -1221,6 +1229,13 @@ DockerDevice::DockerDevice()
     tag.setLabelText(Tr::tr("Tag:"));
     tag.setReadOnly(true);
 
+    this->addOnChanged(this, [this]() {
+        auto handlesFileDataCache = d->m_handlesFileCache.writeLocked();
+        handlesFileDataCache->imageId = imageId();
+        handlesFileDataCache->repoAndTag = repoAndTag();
+        handlesFileDataCache->repoAndTagEncoded = repoAndTagEncoded();
+    });
+
     environment.setSettingsKey(DockerDeviceEnvironment);
     environment.setLabelText(Tr::tr("Container environment:"));
     connect(&environment, &DockerDeviceEnvironmentAspect::fetchRequested, this, [this] {
@@ -1432,13 +1447,15 @@ Result<> DockerDevice::handlesFile(const FilePath &filePath) const
 {
     const bool isDockerScheme = filePath.scheme() == Constants::DOCKER_DEVICE_SCHEME;
 
-    if (isDockerScheme && filePath.host() == imageId())
+    auto handlesFileDataCache = d->m_handlesFileCache.readLocked();
+
+    if (isDockerScheme && filePath.host() == handlesFileDataCache->imageId)
         return ResultOk;
 
-    if (isDockerScheme && filePath.host() == repoAndTagEncoded())
+    if (isDockerScheme && filePath.host() == handlesFileDataCache->repoAndTagEncoded)
         return ResultOk;
 
-    if (isDockerScheme && filePath.host() == repoAndTag())
+    if (isDockerScheme && filePath.host() == handlesFileDataCache->repoAndTag)
         return ResultOk;
 
     return IDevice::handlesFile(filePath);
