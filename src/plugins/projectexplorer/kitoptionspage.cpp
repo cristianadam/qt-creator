@@ -57,7 +57,6 @@ class KitData final
 public:
     Kit *kit = nullptr; // Not owned.
     Kit *workingCopy = nullptr;  // Not owned.
-    bool hasUniqueName = true;
 
     bool operator==(const KitData &other) const
     {
@@ -84,6 +83,7 @@ public:
     int rowForId(Id kitId) const;
     int rowForOriginalKit(Kit *k) const;
     bool isDefaultKit(Kit *k) const;
+    bool isNameUnique(int row) const;
     Kit *workingCopyForRow(int row) const;
 
     void apply() final;
@@ -142,6 +142,16 @@ Kit *KitModel::workingCopyForRow(int row) const
     return m_workingCopies.at(row).get();
 }
 
+bool KitModel::isNameUnique(int row) const
+{
+    const QString name = workingCopyForRow(row)->displayName();
+    for (int r = 0; r < itemCount(); ++r) {
+        if (r != row && !isRemoved(r) && workingCopyForRow(r)->displayName() == name)
+            return false;
+    }
+    return true;
+}
+
 QVariant KitModel::variantData(int row, int /*column*/, int role) const
 {
     const KitData d = item(row);
@@ -149,12 +159,12 @@ QVariant KitModel::variantData(int row, int /*column*/, int role) const
     case Qt::DisplayRole:
         return d.workingCopy->displayName();
     case Qt::DecorationRole:
-        if (d.workingCopy->isValid() && !d.hasUniqueName)
+        if (d.workingCopy->isValid() && !isNameUnique(row))
             return Icons::WARNING.icon();
         return d.workingCopy->displayIcon();
     case Qt::ToolTipRole: {
         Tasks tmp;
-        if (!d.hasUniqueName)
+        if (!isNameUnique(row))
             tmp.append(CompileTask(Task::Warning, Tr::tr("Display name is not unique.")));
         return d.workingCopy->toHtml(tmp);
     }
@@ -400,22 +410,9 @@ void KitModel::changeDefaultKit()
 
 void KitModel::validateKitNames()
 {
-    QHash<QString, int> nameHash;
     for (int row = 0; row < itemCount(); ++row) {
         if (!isRemoved(row))
-            nameHash[workingCopyForRow(row)->displayName()]++;
-    }
-
-    for (int row = 0; row < itemCount(); ++row) {
-        if (isRemoved(row))
-            continue;
-        KitData d = item(row);
-        const bool unique = nameHash.value(workingCopyForRow(row)->displayName()) == 1;
-        if (d.hasUniqueName != unique) {
-            d.hasUniqueName = unique;
-            setVolatileItem(row, d);
             notifyRowChanged(row);
-        }
     }
 }
 
@@ -443,7 +440,7 @@ public:
 private:
     void onDirty();
     void setFocusToName();
-    void load(Kit *originalKit, Kit *workingCopySrc, bool hasUniqueName);
+    void load(Kit *originalKit, Kit *workingCopySrc);
 
     void updateVisibility();
     QString validityMessage() const;
@@ -474,7 +471,6 @@ private:
     Kit m_modifiedKit{Id(WORKING_COPY_KIT_ID)};
     bool m_fixingKit = false;
     bool m_loading = false;
-    bool m_hasUniqueName = true;
     mutable QString m_cachedDisplayName;
 };
 
@@ -579,7 +575,7 @@ KitOptionsPageWidget::KitOptionsPageWidget()
         const int currentRow = m_groupedView.currentRow();
         if (row == currentRow && currentRow >= 0) {
             const KitData d = m_model.item(currentRow);
-            load(d.kit, d.workingCopy, d.hasUniqueName);
+            load(d.kit, d.workingCopy);
             m_model.notifyRowChanged(currentRow);
         }
         updateState();
@@ -650,7 +646,7 @@ void KitOptionsPageWidget::kitSelectionChanged(int oldRow, int newRow)
 
     if (newRow >= 0) {
         const KitData d = m_model.item(newRow);
-        load(d.kit, d.workingCopy, d.hasUniqueName);
+        load(d.kit, d.workingCopy);
         m_detailWidget.setVisible(true);
         m_groupedView.scrollToRow(newRow);
     } else {
@@ -746,10 +742,9 @@ void KitOptionsPageWidget::setFocusToName()
     m_nameEdit.setFocus();
 }
 
-void KitOptionsPageWidget::load(Kit *originalKit, Kit *workingCopySrc, bool hasUniqueName)
+void KitOptionsPageWidget::load(Kit *originalKit, Kit *workingCopySrc)
 {
     m_kit = originalKit;
-    m_hasUniqueName = hasUniqueName;
 
     m_loading = true;
 
@@ -777,7 +772,8 @@ void KitOptionsPageWidget::load(Kit *originalKit, Kit *workingCopySrc, bool hasU
 QString KitOptionsPageWidget::validityMessage() const
 {
     Tasks tmp;
-    if (!m_hasUniqueName)
+    const int row = m_groupedView.currentRow();
+    if (row >= 0 && !m_model.isNameUnique(row))
         tmp.append(CompileTask(Task::Warning, Tr::tr("Display name is not unique.")));
 
     return m_modifiedKit.toHtml(tmp);
