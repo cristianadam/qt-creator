@@ -407,9 +407,8 @@ Result<Environment> DesktopDevice::sourcedEnvironment(const FilePath &script) co
 {
     if (HostOsInfo::isAnyUnixHost())
         return getUnixEnvironment(script);
-
-    // TODO: Windows
-
+    if (HostOsInfo::isWindowsHost())
+        return getEnvironmentFromBatFile(script);
     return IDevice::sourcedEnvironment(script);
 }
 
@@ -479,6 +478,32 @@ export LD_LIBRARY_PATH=/opt/lib
                 "LD_LIBRARY_PATH=/opt/lib:/usr/local/lib",
                 "VAL1=base_foo",
                 "VAL2=base_bar"}));
+    }
+
+    void testBatFile()
+    {
+        if (!HostOsInfo::isWindowsHost())
+            QSKIP("Only applies on Windows hosts");
+
+        QTemporaryFile f(QDir::tempPath() + "/XXXXXXenv.bat");
+        QVERIFY(f.open());
+        f.write(R"(
+set AAA=aaa
+set ZZZ=zzz
+set PATH=C:\Program Files\MyTool;%PATH%
+)");
+        f.close();
+        EnvironmentChanges changes;
+        changes.setFile(FilePath::fromString(f.fileName()));
+        Environment baseEnv;
+        baseEnv.set("PATH", "C:\\Program\\ Files\\LLVM\\bin");
+        changes.modifyEnvironment(baseEnv, nullptr);
+        QCOMPARE(
+            baseEnv.toStringList(),
+            (QStringList{
+                "AAA=aaa",
+                "PATH=C:\\Program Files\\MyTool;C:\\Program\\ Files\\LLVM\\bin",
+                "ZZZ=zzz"}));
     }
 };
 

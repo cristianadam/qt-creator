@@ -219,6 +219,7 @@ QTCREATOR_UTILS_EXPORT int qtcEnvironmentVariableIntValue(const QString &key, bo
 
 QTCREATOR_UTILS_EXPORT Result<Environment> getUnixEnvironment(
     const FilePath &envCommand, OsType osType, const FilePath &scriptToSource);
+QTCREATOR_UTILS_EXPORT Result<Environment> getEnvironmentFromBatFile(const FilePath &batFile);
 
 } // namespace Utils
 

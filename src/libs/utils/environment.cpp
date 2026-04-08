@@ -5,11 +5,13 @@
 
 #include "algorithm.h"
 #include "filepath.h"
+#include "fileutils.h"
 #include "macroexpander.h"
 #include "qtcassert.h"
 #include "qtcprocess.h"
 #include "store.h"
 #include "stringutils.h"
+#include "temporarydirectory.h"
 #include "utilstr.h"
 
 #include <QDir>
@@ -685,7 +687,7 @@ EnvironmentItems EnvironmentChanges::itemsFromFile() const
 
     EnvironmentItems theItems;
 
-    if (m_file.endsWith(".sh")) { // TODO: .bat
+    if (m_file.endsWith(".sh") || m_file.endsWith(".bat")) {
         const Result<Environment> sourcedEnv = m_file.sourcedDeviceEnvironment();
         if (!sourcedEnv) {
             qWarning() << sourcedEnv.error();
@@ -701,10 +703,12 @@ EnvironmentItems EnvironmentChanges::itemsFromFile() const
         // A conceptually cleaner way of achieving this would be to pass in a base environment
         // with these variables set to dummy values. Then we could form a diff and even
         // differentiate between append and prepend.
-        theItems = Utils::transform(theItems, [](EnvironmentItem ei) {
+        const Qt::CaseSensitivity caseSensitivity = sourcedEnv->osType() == OsTypeWindows
+            ? Qt::CaseInsensitive : Qt::CaseSensitive;
+        theItems = Utils::transform(theItems, [caseSensitivity](EnvironmentItem ei) {
             // TODO: Re-use logic in EnvironmentModel::currentEntryIsPathList()
             if (ei.operation == EnvironmentItem::SetEnabled
-                && (ei.name == "PATH" || ei.name == "LD_LIBRARY_PATH")) {
+                && (ei.name == "LD_LIBRARY_PATH" || ei.name.compare("PATH", caseSensitivity) == 0)) {
                 ei.operation = EnvironmentItem::Prepend;
             }
             return ei;
@@ -864,6 +868,63 @@ Result<Environment> getUnixEnvironment(
     }
 
     return Environment(getEnvProc.cleanedStdOut().split(separator, Qt::SkipEmptyParts), osType);
+}
+
+Result<Environment> getEnvironmentFromBatFile(const FilePath &batFile)
+{
+    const QString marker = "__QTC__";
+    TempFileSaver saver(TemporaryDirectory::masterDirectoryPath() + "/XXXXXX.bat");
+    const QString call = "call " + ProcessArgs::quoteArg(batFile.nativePath());
+    saver.write(call.toLocal8Bit());
+    saver.write("\r\n");
+    saver.write(QByteArray("@echo " + marker.toLocal8Bit() + "\r\n"));
+    saver.write("set\r\n");
+    saver.write(QByteArray("@echo " + marker.toLocal8Bit() + "\r\n"));
+    if (const Result<> &res = saver.finalize(); !res) {
+        return ResultError(
+            Tr::tr("Failed to get environment variables from \"%1\": %2")
+                .arg(batFile.toUserOutput(), res.error()));
+    }
+
+    Process run;
+    const Environment inEnv = Environment::systemEnvironment();
+    run.setEnvironment(inEnv);
+    FilePath cmdPath = FilePath::fromUserInput(qtcEnvironmentVariable("COMSPEC"));
+    if (cmdPath.isEmpty())
+        cmdPath = inEnv.searchInPath(QLatin1String("cmd.exe"));
+    CommandLine cmd(cmdPath, {"/c", saver.filePath().nativePath()});
+    run.setUtf8Codec();
+    run.setCommand(cmd);
+    using namespace std::chrono;
+    run.runBlocking(5s);
+    if (run.result() != ProcessResult::FinishedWithSuccess) {
+        return ResultError(
+            Tr::tr("Failed to get environment variables from \"%1\": %2")
+                .arg(
+                    batFile.toUserOutput(),
+                    run.exitMessage(Process::FailureMessageFormat::WithStdErr)));
+    }
+
+    const QString stdOut = run.cleanedStdOut();
+    int start = stdOut.indexOf(marker);
+    if (start == -1) {
+        return ResultError(
+            Tr::tr("Failed to get environment variables from \"%1\": Unexpected output")
+                .arg(batFile.toUserOutput()));
+    }
+    start += marker.size();
+    const int end = stdOut.indexOf(marker, start);
+    if (end == -1) {
+        return ResultError(
+            Tr::tr("Failed to get environment variables from \"%1\": Unexpected output")
+                .arg(batFile.toUserOutput()));
+    }
+    const QString output = stdOut.mid(start, end - start);
+    const Environment outEnv(output.split('\n', Qt::SkipEmptyParts), OsTypeWindows);
+
+    Environment resultEnv;
+    resultEnv.modify(inEnv.diff(outEnv, true));
+    return resultEnv;
 }
 
 } // namespace Utils

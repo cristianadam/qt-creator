@@ -2636,8 +2636,12 @@ Result<Environment> FilePath::deviceEnvironmentWithError() const
 
 Result<Environment> FilePath::sourcedDeviceEnvironment() const
 {
-    if (isLocal() && HostOsInfo::isAnyUnixHost())
-        return getUnixEnvironment(FilePath::fromString("env"), osType(), *this);
+    if (isLocal()) {
+        if (HostOsInfo::isAnyUnixHost())
+            return getUnixEnvironment(FilePath::fromString("env"), osType(), *this);
+        if (HostOsInfo::isWindowsHost())
+            return getEnvironmentFromBatFile(*this);
+    }
     QTC_ASSERT(deviceFileHooks().sourcedEnvironment, return {});
     return deviceFileHooks().sourcedEnvironment(*this);
 }
