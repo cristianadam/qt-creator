@@ -93,6 +93,7 @@ public:
         disableAction.addOnTriggered(this, [] {
             settings().enableCopilot.setValue(false);
             settings().apply();
+            settings().writeSettings();
         });
 
         ActionBuilder enableAction(this, Constants::COPILOT_ENABLE);
@@ -101,6 +102,7 @@ public:
         enableAction.addOnTriggered(this, [] {
             settings().enableCopilot.setValue(true);
             settings().apply();
+            settings().writeSettings();
         });
 
         ActionBuilder toggleAction(this, Constants::COPILOT_TOGGLE);
@@ -111,6 +113,7 @@ public:
         toggleAction.addOnTriggered(this, [](bool checked) {
             settings().enableCopilot.setValue(checked);
             settings().apply();
+            settings().writeSettings();
         });
 
         QAction *toggleAct = toggleAction.contextAction();
