@@ -191,8 +191,7 @@ def package(args, paths):
             if not zippattern:
                 os.makedirs(signed_install_path)  # if nothing was installed
                 zippattern = '*'
-            common.conditional_sign_recursive(signed_install_path,
-                                              lambda ff: ff.endswith('.dylib'))
+            common.codesign(signed_install_path)
             common.check_print_call(zip
                                     + [os.path.join(paths.result, args.name + '-signed.7z'),
                                        zippattern],

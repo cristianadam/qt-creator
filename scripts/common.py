@@ -8,7 +8,9 @@ from itertools import islice
 import os
 import locale
 from pathlib import Path
+import re
 import shutil
+import struct
 import subprocess
 import sys
 from urllib.parse import urlparse
@@ -310,43 +312,113 @@ def codesign_call(identity=None, flags=None):
         codesign_call.extend(signing_flags.split())
     return codesign_call
 
-def codesign_executable(path, additional_arguments=None):
-    codesign = codesign_call()
-    if not codesign:
+def _is_mach_o_file(path: Path) -> bool:
+    """Determine whether a file is a Mach-O image containing native code."""
+    try:
+        with path.open("rb") as f:
+            header = f.read(8)
+    except OSError:
+        return False
+    if len(header) < 4:
+        return False
+    magic = header[:4]
+    if magic in {
+        b"\xfe\xed\xfa\xce",  # MH_MAGIC
+        b"\xce\xfa\xed\xfe",  # MH_CIGAM
+        b"\xfe\xed\xfa\xcf",  # MH_MAGIC_64
+        b"\xcf\xfa\xed\xfe",  # MH_CIGAM_64
+    }:
+        return True
+    # Universal (fat) binary shares 0xCAFEBABE with Java class files.
+    # Disambiguate by nfat_arch at offset 4 (< 20 means Mach-O).
+    if len(header) >= 8 and magic in {b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca"}:
+        byte_order = ">" if magic == b"\xca\xfe\xba\xbe" else "<"
+        nfat_arch = struct.unpack(f"{byte_order}I", header[4:8])[0]
+        return 0 < nfat_arch < 20
+    return False
+
+def _is_framework_version(path: Path) -> bool:
+    """Determine whether a path is a versioned macOS framework directory."""
+    return path.parent.name == "Versions" and path.parent.parent.suffix == ".framework"
+
+def _collect_signable_items(app_path: Path) -> list[Path]:
+    """Collect all Mach-O files and bundles under app_path, sorted deepest-first."""
+    items: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(app_path):
+        dp = Path(dirpath)
+        for dirname in dirnames:
+            full = dp / dirname
+            if full.suffix == ".app":
+                items.append(full)
+            elif full.suffix == ".framework":
+                # Sign individual versions, not the framework bundle itself
+                versions_dir = full / "Versions"
+                if versions_dir.is_dir():
+                    for entry in versions_dir.iterdir():
+                        if entry.is_dir() and not entry.is_symlink():
+                            items.append(entry)
+        for filename in filenames:
+            filepath = dp / filename
+            if filepath.is_symlink():
+                continue
+            if filepath.suffix == ".dylib" or _is_mach_o_file(filepath):
+                items.append(filepath)
+    items.sort(key=lambda p: len(p.parts), reverse=True)
+    return items
+
+def _sign_item_with_deps(path: Path, codesign_cmd: list[str], app_path: Path, signed: set[Path]):
+    """Sign a single item, recursively signing unsigned dependencies first."""
+    if path in signed:
         return
-    entitlements_basename = os.path.basename(path).removesuffix(".app")
-    entitlements_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', 'dist',
-                                     'installer', 'mac', entitlements_basename + '.entitlements')
-    if os.path.exists(entitlements_path):
-        codesign.extend(['--entitlements', entitlements_path])
-    if additional_arguments:
-        codesign.extend(additional_arguments)
-    subprocess.check_call(codesign + [path])
+    cmd = list(codesign_cmd)
+    entitlements_path = (
+        Path(__file__).resolve().parent.parent / "dist" / "installer" / "mac"
+        / (path.name + ".entitlements")
+    )
+    if entitlements_path.exists():
+        cmd.extend(["--entitlements", str(entitlements_path)])
+    if path.suffix == ".app" or _is_framework_version(path):
+        cmd.append("--preserve-metadata=entitlements")
+    while True:
+        result = subprocess.run([*cmd, str(path)], capture_output=True)
+        if result.returncode == 0:
+            signed.add(path)
+            return
+        output = result.stdout.decode(errors="ignore") + result.stderr.decode(errors="ignore")
+        match = re.search(
+            re.escape(str(path))
+            + r": code object is not signed at all\nIn subcomponent: (.+)",
+            output,
+        )
+        if match:
+            dep_path = Path(match.group(1).strip())
+            if not dep_path.is_relative_to(app_path):
+                msg = f"Dependency {dep_path} is outside of app bundle {app_path}"
+                raise RuntimeError(msg)
+            if dep_path in signed:
+                msg = f"Already signed {dep_path} but still failing for {path}"
+                raise RuntimeError(msg)
+            _sign_item_with_deps(dep_path, codesign_cmd, app_path, signed)
+            continue
+        raise subprocess.CalledProcessError(
+            result.returncode, [*cmd, str(path)], result.stdout, result.stderr,
+        )
 
-def os_walk(path, filter, function):
-    for r, _, fs in os.walk(path):
-        for f in fs:
-            ff = os.path.join(r, f)
-            if filter(ff):
-                function(ff)
-
-def conditional_sign_recursive(path, filter):
-    if is_mac_platform():
-        os_walk(path, filter, lambda fp: codesign_executable(fp))
 
 def codesign(app_path, identity=None, flags=None):
-    codesign = codesign_call(identity, flags)
-    if not codesign or not is_mac_platform():
+    codesign_cmd = codesign_call(identity, flags)
+    if not codesign_cmd or not is_mac_platform():
         return
-    # sign all executables in Resources
-    conditional_sign_recursive(os.path.join(app_path, 'Contents', 'Resources'),
-                               lambda ff: os.access(ff, os.X_OK))
-    # sign all libraries in Imports
-    conditional_sign_recursive(os.path.join(app_path, 'Contents', 'Imports'),
-                               lambda ff: ff.endswith('.dylib'))
+    root = Path(app_path)
+    # Collect all signable items and sign bottom-up (deepest first)
+    items = _collect_signable_items(root)
+    signed: set[Path] = set()
+    for item in items:
+        _sign_item_with_deps(item, codesign_cmd, root, signed)
+    # Sign the top-level bundle
+    if root not in signed:
+        _sign_item_with_deps(root, codesign_cmd, root, signed)
 
-    # sign the whole bundle
-    codesign_executable(app_path, ['--deep'])
 
 
 def codesign_main(args):
