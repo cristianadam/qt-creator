@@ -199,12 +199,12 @@ void TargetSetupPagePrivate::reset()
     removeAdditionalWidgets();
     while (widgets.size() > 0) {
         TargetSetupWidget *w = widgets.back();
-
         Kit *k = w->kit();
-        if (k && importer)
-            importer->removeProject(k);
 
         removeWidget(w);
+
+        if (k && importer)
+             importer->removeProject(k);
     }
 
     allKitsCheckBox->setChecked(false);
@@ -567,9 +567,13 @@ void TargetSetupPagePrivate::removeWidget(TargetSetupWidget *w)
 {
     if (!w)
         return;
+
+    auto it = std::find(widgets.begin(), widgets.end(), w);
+    QTC_ASSERT(it != widgets.end(), return);
+
     w->deleteLater();
     w->clearKit();
-    widgets.erase(std::find(widgets.begin(), widgets.end(), w));
+    widgets.erase(it);
 }
 
 TargetSetupWidget *TargetSetupPagePrivate::addWidget(Kit *k)
