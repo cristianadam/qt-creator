@@ -74,8 +74,12 @@ static Toolchains autoDetectToolchains(const ToolchainDetector &detector)
     }
 
     // We only use this for Desktop, so "FromSystem" detection is fine
-    for (Toolchain *tc : result)
-        tc->setDetectionSource(DetectionSource::FromSystem);
+    for (Toolchain *tc : result) {
+        // but do not override the ID
+        DetectionSource ds = tc->detectionSource();
+        ds.type = DetectionSource::FromSystem;
+        tc->setDetectionSource(ds);
+    }
 
     // Remove invalid toolchains that might have sneaked in.
     return Utils::filtered(result, [](const Toolchain *tc) { return tc->isValid(); });
