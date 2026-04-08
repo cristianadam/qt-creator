@@ -59,6 +59,9 @@ protected:
     void addSupportForLocalRunConfigs();
     void cloneProduct(Utils::Id exitstingStepId);
 
+    void setPriority(int priority);
+    int priority() const;
+
 private:
     friend class RunControl;
     friend class Internal::RunWorkerConflictTest;
@@ -75,6 +78,7 @@ private:
     QList<Utils::Id> m_supportedDeviceTypes;
     Utils::Id m_executionType;
     Utils::Id m_id;
+    int m_priority = 0; // Higher will be prefered.
 };
 
 using Canceler = std::function<QtTaskTree::ObjectSignal<void (RunControl::*)()>()>;

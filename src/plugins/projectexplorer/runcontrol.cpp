@@ -127,8 +127,17 @@ void RunWorkerFactory::cloneProduct(Id exitstingStepId)
     QTC_CHECK(false);
 }
 
-bool RunWorkerFactory::canCreate(
-    Id runMode, Id deviceType, Id runConfigId, Utils::Id executionType) const
+void RunWorkerFactory::setPriority(int priority)
+{
+    m_priority = priority;
+}
+
+int RunWorkerFactory::priority() const
+{
+    return m_priority;
+}
+
+bool RunWorkerFactory::canCreate(Id runMode, Id deviceType, Id runConfigId, Id executionType) const
 {
     if (executionType.isValid() && m_executionType.isValid() && executionType != m_executionType)
         return false;
@@ -417,32 +426,47 @@ void RunControl::forceStop()
 Group RunControl::createRecipe(Id runMode)
 {
     const Id deviceType = RunDeviceTypeKitAspect::deviceTypeId(d->data.kit);
+    QList<RunWorkerFactory *> factories;
     for (RunWorkerFactory *factory : std::as_const(g_runWorkerFactories)) {
         if (factory->canCreate(runMode, deviceType, d->data.runConfigId, d->data.executionType))
-            return factory->createRecipe(this);
+            factories.append(factory);
     }
-    return noRecipeTask();
+
+    if (factories.isEmpty())
+        return noRecipeTask();
+
+    // Keep all, for debugging reasons, there's usually just one, rarely two.
+    Utils::sort(factories, &RunWorkerFactory::priority);
+
+    return factories.back()->createRecipe(this);
 }
 
 bool RunControl::createMainRecipe()
 {
-    const QList<RunWorkerFactory *> candidates
-        = filtered(g_runWorkerFactories, [this](RunWorkerFactory *factory) {
-              return factory->canCreate(
+    QList<RunWorkerFactory *> factories;
+    for (RunWorkerFactory *factory : std::as_const(g_runWorkerFactories)) {
+        const Id id = factory->id();
+        Q_UNUSED(id);
+        if (factory->canCreate(
                   d->runMode,
                   RunDeviceTypeKitAspect::deviceTypeId(d->data.kit),
                   d->data.runConfigId,
-                  d->data.executionType);
-          });
+                  d->data.executionType))
+            factories.append(factory);
+    }
 
     // There might be combinations that cannot run. But that should have been checked
     // with canRun below.
-    QTC_ASSERT(!candidates.empty(), return false);
+    QTC_ASSERT(!factories.empty(), return false);
 
-    // There should be at most one top-level producer feeling responsible per combination.
-    // Breaking a tie should be done by tightening the restrictions on one of them.
-    QTC_CHECK(candidates.size() == 1);
-    setRunRecipe(candidates.front()->createRecipe(this));
+    // Ideally, there should be at most one top-level producer feeling responsible per
+    // combination. Breaking a tie should preferably done by tightening the restrictions
+    // on one of them. As a last resort, use priorities.
+
+    // Keep all, for debugging reasons, there's usually just one, rarely two.
+    Utils::sort(factories, &RunWorkerFactory::priority);
+
+    setRunRecipe(factories.back()->createRecipe(this));
     return true;
 }
 
