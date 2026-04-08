@@ -902,6 +902,7 @@ Result<> ProjectExplorerPlugin::initialize(const QStringList &arguments)
     addTestCreator(createGenericOutputParserTest);
     addTestCreator(createGnuMakeParserTest);
     addTestCreator(createJsonWizardTest);
+    addTestCreator(createKitModelTest);
     addTestCreator(createLdOutputParserTest);
     addTestCreator(createLinuxIccParserTest);
     addTestCreator(createMsvcParserTest);
