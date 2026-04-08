@@ -567,9 +567,14 @@ void TargetSetupPagePrivate::removeWidget(TargetSetupWidget *w)
 {
     if (!w)
         return;
+
+    const auto it = std::find(widgets.begin(), widgets.end(), w);
+    if (it == widgets.end())
+        return;
+
     w->deleteLater();
     w->clearKit();
-    widgets.erase(std::find(widgets.begin(), widgets.end(), w));
+    widgets.erase(it);
 }
 
 TargetSetupWidget *TargetSetupPagePrivate::addWidget(Kit *k)
