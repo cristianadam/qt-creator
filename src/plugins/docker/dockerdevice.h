@@ -94,6 +94,7 @@ public:
     DockerDeviceEnvironmentAspect environment{this};
     Internal::PortMappings portMappings{this};
     Utils::BoolAspect mountCmdBridge{this};
+    Utils::BoolAspect enableX11Forwarding{this};
 
 protected:
     void fromMap(const Utils::Store &map) final;

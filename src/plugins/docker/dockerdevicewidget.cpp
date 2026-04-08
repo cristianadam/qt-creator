@@ -160,6 +160,7 @@ DockerDeviceWidget::DockerDeviceWidget(const IDevice::Ptr &device)
             dockerDevice->keepEntryPoint, br,
             dockerDevice->enableLldbFlags, br,
             dockerDevice->mountCmdBridge, br,
+            dockerDevice->enableX11Forwarding, br,
             dockerDevice->network, refreshNetworksButton,br,
             dockerDevice->extraArgs, br,
             dockerDevice->environment, br,

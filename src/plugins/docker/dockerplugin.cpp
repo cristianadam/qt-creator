@@ -5,17 +5,57 @@
 #include "dockerconstants.h"
 #include "dockerdevice.h"
 
-#include <extensionsystem/iplugin.h>
-
+#include <projectexplorer/devicesupport/idevice.h>
 #include <projectexplorer/projectexplorerconstants.h>
+#include <projectexplorer/qmldebugcommandlinearguments.h>
+#include <projectexplorer/runcontrol.h>
+
+#include <extensionsystem/iplugin.h>
 
 #include <utils/fsengine/fsengine.h>
 
+#include <QtTaskTree/QBarrier>
+
 using namespace Core;
 using namespace ProjectExplorer;
+using namespace QtTaskTree;
 using namespace Utils;
 
 namespace Docker::Internal {
+
+class DockerQmlToolingWorkerFactory final : public RunWorkerFactory
+{
+public:
+    DockerQmlToolingWorkerFactory()
+    {
+        setId("DockerQmlToolingWorkerFactory");
+        setRecipeProducer([](RunControl *runControl) {
+            runControl->requestQmlChannel();
+
+            const auto modifier = [runControl](Process &process) {
+                const QmlDebugServicesPreset services =
+                    servicesForRunMode(runControl->runMode());
+                CommandLine cmd = runControl->commandLine();
+                cmd.addArg(qmlDebugTcpArguments(services, runControl->qmlChannel()));
+                process.setCommand(cmd);
+            };
+            const ProcessTask processTask(runControl->processTaskWithModifier(modifier));
+            return Group {
+                When (processTask, &Process::started, WorkflowPolicy::StopOnError) >> Do {
+                    runControl->createRecipe(runnerIdForRunMode(runControl->runMode()))
+                }
+            };
+        });
+        addSupportedRunMode(ProjectExplorer::Constants::QML_PROFILER_RUN_MODE);
+        addSupportedRunMode(ProjectExplorer::Constants::QML_PREVIEW_RUN_MODE);
+        addSupportedDeviceType(Constants::DOCKER_DEVICE_TYPE);
+    }
+};
+
+void setupDockerRunAndDebugSupport()
+{
+    static DockerQmlToolingWorkerFactory qmlToolingWorkerFactory;
+}
 
 class DockerPlugin final : public ExtensionSystem::IPlugin
 {
@@ -39,6 +79,7 @@ private:
     {
         m_deviceFactory = std::make_unique<DockerDeviceFactory>();
         m_dockerApi = std::make_unique<DockerApi>();
+        setupDockerRunAndDebugSupport();
     }
 
     std::unique_ptr<DockerDeviceFactory> m_deviceFactory;

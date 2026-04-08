@@ -60,7 +60,6 @@
 #include <QDialogButtonBox>
 #include <QFileSystemWatcher>
 #include <QHeaderView>
-#include <QHostAddress>
 #include <QLoggingCategory>
 #include <QMessageBox>
 #include <QNetworkInterface>
@@ -596,16 +595,14 @@ bool DockerDevicePrivate::isImageAvailable() const
 
 CommandLine DockerDevicePrivate::createCommandLine()
 {
-    const QString display = HostOsInfo::isLinuxHost() ? QString(":0")
-                                                      : QString("host.docker.internal:0");
-    CommandLine dockerCreate{settings().dockerBinaryPath(),
-                             {"create",
-                              "-i",
-                              "--rm",
-                              "-e",
-                              QString("DISPLAY=%1").arg(display),
-                              "-e",
-                              "XAUTHORITY=/.Xauthority"}};
+    CommandLine dockerCreate{settings().dockerBinaryPath(), {"create", "-i", "--rm"}};
+
+    if (q->enableX11Forwarding()) {
+        const QString display = HostOsInfo::isLinuxHost() ? QString(":0")
+                                                          : QString("host.docker.internal:0");
+        dockerCreate.addArgs({"-e", QString("DISPLAY=%1").arg(display),
+                              "-e", "XAUTHORITY=/.Xauthority"});
+    }
 
 #ifdef Q_OS_UNIX
     // no getuid() and getgid() on Windows.
@@ -621,13 +618,31 @@ CommandLine DockerDevicePrivate::createCommandLine()
     }
 
     dockerCreate.addArgs(createMountArgs());
-    dockerCreate.addArgs(q->portMappings.createArguments());
 
-    if (m_qmlDebuggerAccess.port() > 0) {
-        dockerCreate.addArg("-p");
-        dockerCreate.addArg(QString("0.0.0.0:%1:%2/tcp").arg(m_qmlDebuggerAccess.port())
-                            .arg(m_qmlDebuggerAccess.port()));
+    if constexpr (HostOsInfo::isLinuxHost()) {
+        if (q->enableX11Forwarding()) {
+            const FilePath x11Socket = FilePath::fromString("/tmp/.X11-unix");
+            if (x11Socket.exists()) {
+                dockerCreate.addArgs(
+                    {"--mount",
+                     R"(type=bind,"source=/tmp/.X11-unix","destination=/tmp/.X11-unix",readonly)"});
+            }
+
+            const Environment sysEnv = Environment::systemEnvironment();
+            const QString xauth = sysEnv.value("XAUTHORITY");
+            const QString xauthPath = xauth.isEmpty() ? sysEnv.value("HOME") + "/.Xauthority"
+                                                       : xauth;
+            const FilePath hostXauth = FilePath::fromUserInput(xauthPath);
+            if (hostXauth.exists()) {
+                const QString mountArg =
+                    QString(R"(type=bind,"source=%1","destination=/.Xauthority",readonly)")
+                        .arg(escapeMountPath(hostXauth));
+                dockerCreate.addArgs({"--mount", mountArg});
+            }
+        }
     }
+
+    dockerCreate.addArgs(q->portMappings.createArguments());
 
     if (!q->keepEntryPoint())
         dockerCreate.addArgs({"--entrypoint", "/bin/sh"});
@@ -655,19 +670,9 @@ Result<QString> DockerDevicePrivate::updateContainerAccess()
     if (*lockedThread)
         return (*lockedThread)->containerId();
 
-    // Try to find free unused ports locally and on container with the same number.
-    m_qmlDebuggerAccess.clear();
-    const QSet<int> usedContainerPorts = q->portMappings.usedContainerPorts();
-    for (int i = 0; i != 20; ++i) {
-        const QUrl url = urlFromLocalHostAndFreePort();
-        if (!usedContainerPorts.contains(url.port())) {
-            m_qmlDebuggerAccess = url;
-            break;
-        }
-    }
-
-    if (!m_qmlDebuggerAccess.isValid())
-        qCWarning(dockerDeviceLog) << "Failed to find a usable QML debugger port";
+    PortList freePortRange;
+    freePortRange.addRange(Port(10002), Port(10099));
+    q->setFreePorts(freePortRange);
 
     DockerContainerThread::Init init;
     init.dockerBinaryPath = settings().dockerBinaryPath();
@@ -675,13 +680,27 @@ Result<QString> DockerDevicePrivate::updateContainerAccess()
 
     auto result = DockerContainerThread::create(init);
 
-    if (result)
-        lockedThread->reset(result->release());
-
     if (!result)
         return make_unexpected(result.error());
 
-    return (*lockedThread)->containerId();
+    lockedThread->reset(result->release());
+    const QString containerId = (*lockedThread)->containerId();
+
+    // Fetch the container's IP on the docker bridge so that we can connect
+    // directly without host port mapping. With --network host the IP field is
+    // empty; fall back to loopback in that case.
+    m_qmlDebuggerAccess.clear();
+    Process inspectProc;
+    inspectProc.setCommand({settings().dockerBinaryPath(),
+                            {"inspect", containerId,
+                             "--format", "{{.NetworkSettings.IPAddress}}"}});
+    inspectProc.runBlocking();
+    const QString containerIp = inspectProc.stdOut().trimmed();
+
+    m_qmlDebuggerAccess.setScheme(urlTcpScheme());
+    m_qmlDebuggerAccess.setHost(containerIp.isEmpty() ? "127.0.0.1" : containerIp);
+
+    return containerId;
 }
 
 // Factory
@@ -1209,15 +1228,11 @@ DockerDevice::DockerDevice()
         }
     });
 
-    connect(DockerApi::instance(),
-            &DockerApi::dockerDaemonAvailableChanged,
-            &network,
-            &StringSelectionAspect::refill);
-    connect(
-        DockerApi::instance(),
-        &DockerApi::networksChanged,
-        &network,
-        &StringSelectionAspect::refill);
+    connect(DockerApi::instance(), &DockerApi::dockerDaemonAvailableChanged,
+            &network, &StringSelectionAspect::refill);
+
+    connect(DockerApi::instance(), &DockerApi::networksChanged,
+            &network, &StringSelectionAspect::refill);
 
     allowEmptyCommand.setValue(true);
 
@@ -1233,6 +1248,15 @@ DockerDevice::DockerDevice()
                "not have access to the folder where Qt Creator is installed this can fail. In that "
                "case you can disable this option for a slower workaround."));
 
+    enableX11Forwarding.setSettingsKey("EnableX11Forwarding");
+    enableX11Forwarding.setLabelText(Tr::tr("Enable X11 forwarding:"));
+    enableX11Forwarding.setDefaultValue(true);
+    enableX11Forwarding.setLabelPlacement(BoolAspect::LabelPlacement::InExtraLabel);
+    enableX11Forwarding.setToolTip(
+        Tr::tr("Mounts the X11 socket and Xauthority file into the container so that "
+               "graphical applications can display on the host. Disable to reduce "
+               "noise on the command line when X11 is not needed."));
+
     setDisplayType(Tr::tr("Docker"));
     setOsType(OsTypeLinux);
     setupId(IDevice::ManuallyAdded);
@@ -1240,8 +1264,8 @@ DockerDevice::DockerDevice()
     setMachineType(IDevice::Hardware);
 
     setFileAccessFactory([this]() -> DeviceFileAccessPtr {
-        if (auto fA = *d->m_fileAccess.readLocked())
-            return fA;
+        if (auto fileAccess = *d->m_fileAccess.readLocked())
+            return fileAccess;
 
         if (DeviceFileAccessPtr fileAccess = d->createFileAccess()) {
             setDeviceState(ProjectExplorer::IDevice::DeviceReadyToUse);
