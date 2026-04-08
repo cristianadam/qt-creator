@@ -70,4 +70,7 @@ qt-6-fedora-37-build: Dockerfile-qt-6-fedora-37-build ## Build-Image, Fedora 37,
 qt-6-ubuntu-24.04-build: Dockerfile-qt-6-ubuntu-24.04-build ## Build-Image, Ubuntu 24.04, Qt 6 image, With qbs
 	docker build . -f Dockerfile-qt-6-ubuntu-24.04-build -t qt-6-ubuntu-24.04-build
 
+qt-6-ubuntu-25.10-build: Dockerfile-qt-6-ubuntu-25.10-build ## Build-Image, Ubuntu 25.10, Qt 6 image, With qbs
+	docker build . -f Dockerfile-qt-6-ubuntu-25.10-build -t qt-6-ubuntu-25.10-build
+
 build: qt-5-ubuntu-16.04-build qt-5-ubuntu-20.04-build qt-5-ubuntu-20.04-run qt-5-ubuntu-20.04-clang-lldb-build qt-6-fedora-37-build qt-6-ubuntu-24.04-build ## Old build.sh targets
