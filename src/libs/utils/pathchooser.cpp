@@ -278,6 +278,11 @@ PathChooser::~PathChooser()
     // even when the possible ancestor-receiver is in mid of its destruction.
     disconnect(d->m_lineEdit, &QLineEdit::editingFinished, this, &PathChooser::editingFinished);
 
+    // Clear focus now while d is still valid. Without this, ~QWidget() would emit
+    // focusChanged, which propagates via ProjectTree and BuildConfiguration into
+    // EnvironmentAspect::environmentChanged and reaches setEnvironment() after d is freed.
+    clearFocus();
+
     delete d;
 }
 
