@@ -8,6 +8,8 @@
 #include "languageclientutils.h"
 #include "semantichighlightsupport.h"
 
+#include <texteditor/refactoringchanges.h>
+
 namespace Core { class IDocument; }
 
 namespace ProjectExplorer {

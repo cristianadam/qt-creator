@@ -3,17 +3,15 @@
 
 #pragma once
 
-#include "refactoringchanges.h"
+#include <QtGlobal>
 
-#include <utils/changeset.h>
-
-#include <QFutureWatcher>
-#include <QString>
+#include <functional>
 
 QT_BEGIN_NAMESPACE
-class QChar;
 class QTextCursor;
 QT_END_NAMESPACE
+
+namespace Utils { class ChangeSet; }
 
 namespace TextEditor {
 
@@ -34,22 +32,6 @@ public:
     virtual void format(const QTextCursor & /*cursor*/,
                         const TabSettings & /*tabSettings*/,
                         const FormatCallback & /*callback*/) {}
-
-    virtual bool isElectricCharacter(const QChar & /*ch*/) const { return false; }
-    virtual bool supportsAutoFormat() const { return false; }
-    virtual QFutureWatcher<Utils::ChangeSet> *autoFormat(
-        const QTextCursor & /*cursor*/, const TextEditor::TabSettings & /*tabSettings*/)
-    {
-        return nullptr;
-    }
-
-    virtual bool supportsFormatOnSave() const { return false; }
-    virtual QFutureWatcher<Utils::ChangeSet> *formatOnSave(
-        const QTextCursor & /*cursor*/, const TextEditor::TabSettings & /*tabSettings*/)
-    {
-        return nullptr;
-    }
-
     virtual void setMode(FormatMode) {}
 };
 

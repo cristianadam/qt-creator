@@ -6,6 +6,7 @@
 #include "extraencodingsettings.h"
 #include "fontsettings.h"
 #include "icodestylepreferences.h"
+#include "refactoringchanges.h"
 #include "storagesettings.h"
 #include "syntaxhighlighter.h"
 #include "tabsettings.h"

@@ -31,6 +31,8 @@
 #include <utils/fsengine/fileiconprovider.h>
 #include <utils/theme/theme.h>
 
+#include <QFutureWatcher>
+
 using namespace ProjectExplorer;
 using namespace Utils;
 

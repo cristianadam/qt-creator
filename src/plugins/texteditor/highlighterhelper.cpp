@@ -25,6 +25,7 @@
 #include <KSyntaxHighlighting/Repository>
 #include <KSyntaxHighlighting/SyntaxHighlighter>
 
+#include <QFutureWatcher>
 #include <QLoggingCategory>
 #include <QMetaEnum>
 

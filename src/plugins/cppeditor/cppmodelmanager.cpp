@@ -58,6 +58,7 @@
 #include <projectexplorer/target.h>
 #include <projectexplorer/toolchainkitaspect.h>
 
+#include <texteditor/refactoringchanges.h>
 #include <texteditor/textdocument.h>
 
 #include <utils/algorithm.h>

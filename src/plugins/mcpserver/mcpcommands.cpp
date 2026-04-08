@@ -34,6 +34,7 @@
 #include <projectexplorer/runcontrol.h>
 #include <projectexplorer/target.h>
 
+#include <texteditor/refactoringchanges.h>
 #include <texteditor/textdocument.h>
 
 #include <utils/algorithm.h>
