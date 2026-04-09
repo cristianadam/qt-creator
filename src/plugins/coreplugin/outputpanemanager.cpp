@@ -1069,6 +1069,10 @@ void OutputPaneManager::showPage(int idx, int flags)
         if (flags & IOutputPane::WithFocus) {
             if (out->canFocus())
                 out->setFocus();
+            if (flags & IOutputPane::ModeSwitch) {
+                // the focus request is meant seriously
+                ICore::raiseWindow(m_outputWidgetPane);
+            }
         }
 
         if (flags & IOutputPane::EnsureSizeHint)
