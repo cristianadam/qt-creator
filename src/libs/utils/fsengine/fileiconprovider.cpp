@@ -256,7 +256,14 @@ QIcon FileIconProviderImplementation::icon(const QFileInfo &fi) const
 {
     qCDebug(fileIconProvider) << "FileIconProvider::icon" << fi.absoluteFilePath();
 
-    return icon(FilePath::fromString(fi.filePath()));
+    // For non-local paths, avoid calling filePath.isDir() which may trigger a
+    // slow or unavailable remote device call (e.g. on the QFileInfoGatherer
+    // worker thread). Use fi.isDir() which is already cached by QDirListing.
+    const FilePath filePath = FilePath::fromString(fi.absoluteFilePath());
+    if (!filePath.isLocal())
+        return fi.isDir() ? dirIcon() : unknownFileIcon();
+
+    return icon(filePath);
 }
 
 /*!
