@@ -314,8 +314,9 @@ def codesign_executable(path, additional_arguments=None):
     codesign = codesign_call()
     if not codesign:
         return
+    entitlements_basename = os.path.basename(path).removesuffix(".app")
     entitlements_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', 'dist',
-                                     'installer', 'mac', os.path.basename(path) + '.entitlements')
+                                     'installer', 'mac', entitlements_basename + '.entitlements')
     if os.path.exists(entitlements_path):
         codesign.extend(['--entitlements', entitlements_path])
     if additional_arguments:
@@ -346,6 +347,7 @@ def codesign(app_path, identity=None, flags=None):
 
     # sign the whole bundle
     codesign_executable(app_path, ['--deep'])
+
 
 def codesign_main(args):
     codesign(args.app_bundle, args.identity, args.flags)
