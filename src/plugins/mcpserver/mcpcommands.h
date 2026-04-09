@@ -118,9 +118,6 @@ public:
 
     // Debugging management helpers
     Utils::Result<QJsonArray> getCallStack();
-    bool isDebuggingActive();
-    QString abortDebug();
-    bool killDebuggedProcesses();
     Utils::Result<QJsonArray> getThreads();
     Utils::Result<bool> selectThread(const QString &id);
     void getVariables(bool includeWatchers, std::function<void(Utils::Result<QJsonArray>)> callback);

@@ -3,6 +3,7 @@
 
 #include "mcpcommands.h"
 #include "issuesmanager.h"
+#include "mcpservertr.h"
 
 #include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/editormanager/documentmodel.h>
@@ -714,94 +715,6 @@ void McpCommands::executeCommand(
     process->start();
 }
 
-bool McpCommands::isDebuggingActive()
-{
-    // Check if debugging is currently active by looking at debugger actions
-    Core::ActionManager *actionManager = Core::ActionManager::instance();
-    if (!actionManager) {
-        return false;
-    }
-
-    // Try different possible action IDs for checking if debugging is active
-    QStringList stopActionIds
-        = {"Debugger.Stop", "Debugger.StopDebugger", "ProjectExplorer.StopDebugging"};
-
-    for (const QString &actionId : stopActionIds) {
-        Core::Command *command = actionManager->command(Id::fromString(actionId));
-        if (command && command->action() && command->action()->isEnabled()) {
-            qCDebug(mcpCommands) << "Debug session is active (Stop action enabled):" << actionId;
-            return true;
-        }
-    }
-
-    // Also check "Abort Debugging" action
-    QStringList abortActionIds
-        = {"Debugger.Abort", "Debugger.AbortDebugger", "ProjectExplorer.AbortDebugging"};
-
-    for (const QString &actionId : abortActionIds) {
-        Core::Command *command = actionManager->command(Id::fromString(actionId));
-        if (command && command->action() && command->action()->isEnabled()) {
-            qCDebug(mcpCommands) << "Debug session is active (Abort action enabled):" << actionId;
-            return true;
-        }
-    }
-
-    qCDebug(mcpCommands) << "No active debug session detected";
-    return false;
-}
-
-QString McpCommands::abortDebug()
-{
-    qCDebug(mcpCommands) << "Attempting to abort debug session...";
-
-    // Use ActionManager to trigger the "Abort Debugging" action
-    Core::ActionManager *actionManager = Core::ActionManager::instance();
-    if (!actionManager) {
-        return "ERROR: ActionManager not available";
-    }
-
-    // Try different possible action IDs for aborting debugging
-    QStringList abortActionIds
-        = {"Debugger.Abort",
-           "Debugger.AbortDebugger",
-           "ProjectExplorer.AbortDebugging",
-           "Debugger.AbortDebug"};
-
-    for (const QString &actionId : abortActionIds) {
-        qCDebug(mcpCommands) << "Trying abort debug action:" << actionId;
-
-        Core::Command *command = actionManager->command(Id::fromString(actionId));
-        if (command && command->action() && command->action()->isEnabled()) {
-            qCDebug(mcpCommands) << "Found abort debug action, triggering...";
-            command->action()->trigger();
-            return "Abort debug action triggered successfully: " + actionId;
-        }
-    }
-
-    return "Abort debug action not found or not enabled";
-}
-
-bool McpCommands::killDebuggedProcesses()
-{
-    qCDebug(mcpCommands) << "Attempting to kill debugged processes...";
-
-    // This is a simplified implementation
-    // In a real scenario, you'd need to:
-    // 1. Get the list of processes being debugged from the debugger
-    // 2. Kill each process appropriately
-
-    // For now, we'll try to find and kill any processes that might be debugged
-    // This is platform-specific and would need proper implementation
-
-    // TODO: Implement proper process killing for debugged applications
-    // This could involve:
-    // - Finding the debugged process PID
-    // - Using platform-specific kill commands
-    // - Handling different types of debugged processes (local, remote, etc.)
-
-    return true; // Simplified for now - always return true
-}
-
 QString McpCommands::getCurrentProject()
 {
     Project *project = ProjectManager::startupProject();
@@ -942,59 +855,6 @@ QMap<QString, QSet<QString>> McpCommands::knownRepositoriesInProject(const QStri
     }
 
     return repos;
-}
-
-// handleSessionLoadRequest method removed - using direct session loading instead
-
-static bool triggerCommand(const QString toolName, const Utils::Id commandId)
-{
-    auto error = [toolName](const QString &msg) {
-        qDebug() << "Cannot run tool " << toolName << ": " << msg;
-        return false;
-    };
-    Core::Command *command = Core::ActionManager::command(commandId);
-    if (!command)
-        return error("Cannot find command with id" + commandId.toString());
-    QAction *action = command->action();
-    if (!action)
-        return error("Command with id" + commandId.toString() + "has no action assigned");
-    if (!action->isEnabled())
-        return error("Action for Command with id" + commandId.toString() + "is not enabled");
-    action->trigger();
-    return true;
-}
-
-static void initializeToolsForCommands(Mcp::Server &server)
-{
-    auto addToolForCommand = [&server](const QString &name, const Utils::Id commandId) {
-        Core::Command *command = Core::ActionManager::command(commandId);
-        if (!command)
-            return;
-        QAction *action = command->action();
-        QTC_ASSERT(action, return);
-
-        const QString title = action->text();
-        const QString description = command->description();
-
-        using namespace Mcp::Schema;
-
-        server.addTool(
-            Tool{}
-                .name(name)
-                .title(title)
-                .description(description)
-                .outputSchema(
-                    Tool::OutputSchema{}
-                        .addProperty("success", QJsonObject{{"type", "boolean"}})
-                        .addRequired("success")),
-            [commandId, name](const CallToolRequestParams &) -> Utils::Result<CallToolResult> {
-                const bool ok = triggerCommand(name, commandId);
-                qDebug() << "Tool" << name << "execution result:" << (ok ? "success" : "failure");
-                return CallToolResult{}.isError(!ok).structuredContent(QJsonObject{{"success", ok}});
-            });
-    };
-
-    addToolForCommand("clean_project", ProjectExplorer::Constants::CLEAN);
 }
 
 static Utils::Result<Debugger::Internal::WatchHandler *> getWatchHandler()
@@ -1395,8 +1255,6 @@ QJsonObject McpCommands::addBreakpoint(
 void McpCommands::registerCommands(Mcp::Server &server)
 {
     using namespace Mcp::Schema;
-
-    initializeToolsForCommands(server);
 
     static McpCommands commands;
 
@@ -3082,6 +2940,78 @@ void McpCommands::registerCommands(Mcp::Server &server)
 
             ProjectExplorer::ProjectExplorerPlugin::runStartupProject(runMode, false);
             return ResultOk;
+        });
+
+    server.addTool(
+        Tool{}
+            .name("find_actions")
+            .title("Find actions")
+            .description("Finds actions matching a query string")
+            .inputSchema(
+                Tool::InputSchema{}.addProperty(
+                    "query",
+                    QJsonObject{
+                        {"type", "string"},
+                        {"description", "String to search for in action names"}}))
+            .outputSchema(
+                Tool::OutputSchema{}.addProperty(
+                    "actions",
+                    QJsonObject{
+                        {"type", "array"},
+                        {"items",
+                         QJsonObject{
+                             {"type", "object"},
+                             {"properties",
+                              QJsonObject{
+                                  {"id", QJsonObject{{"type", "string"}}},
+                                  {"text", QJsonObject{{"type", "string"}}},
+                                  {"description", QJsonObject{{"type", "string"}}},
+                              }},
+                             {"required", QJsonArray{"id", "text"}}}},
+                        {"description", "List of matching actions"}})),
+        [](const Schema::CallToolRequestParams &params) -> Utils::Result<CallToolResult> {
+            const QString query = params.argumentsAsObject().value("query").toString();
+            QList<Core::Command *> matches;
+            for (Core::Command *cmd : Core::ActionManager::commands()) {
+                const QString text = cmd->action() ? cmd->action()->text() : QString();
+                if (text.contains(query, Qt::CaseInsensitive))
+                    matches.append(cmd);
+            }
+            QJsonArray actions;
+            for (const auto &m : matches) {
+                const QString text = m->action() ? m->action()->text() : QString();
+                const QString description = m->description();
+                actions.append(
+                    QJsonObject{
+                        {"id", m->id().toString()}, {"text", text}, {"description", description}});
+            }
+            return CallToolResult{}.isError(false).structuredContent(
+                QJsonObject{{"actions", actions}});
+        });
+
+    server.addTool(
+        Tool{}
+            .name("call_action")
+            .title("Call an action")
+            .description("Calls an action by its ID")
+            .inputSchema(
+                Tool::InputSchema{}.addProperty(
+                    "id",
+                    QJsonObject{{"type", "string"}, {"description", "ID of the action to call"}})),
+        [](const Schema::CallToolRequestParams &params) -> Utils::Result<CallToolResult> {
+            const QJsonObject p = params.argumentsAsObject();
+            const QString id = p.value("id").toString();
+            Core::Command *cmd = Core::ActionManager::command(Id::fromString(id));
+            if (!cmd)
+                return ResultError(Tr::tr("No action found with ID '%1'").arg(id));
+            if (!cmd->action())
+                return ResultError(Tr::tr("Command '%1' has no associated action").arg(id));
+            if (!cmd->action()->isEnabled())
+                return ResultError(
+                    Tr::tr("Action '%1' is currently disabled").arg(cmd->action()->text()));
+
+            cmd->action()->trigger();
+            return CallToolResult{}.isError(false);
         });
 }
 } // namespace Mcp::Internal
