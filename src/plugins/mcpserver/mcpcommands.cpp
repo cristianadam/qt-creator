@@ -2984,16 +2984,104 @@ void McpCommands::registerCommands(Mcp::Server &server)
             .name("debug")
             .title("Start debugging")
             .description(
-                "Starts a debug session for the current startup project and waits for it to "
-                "finish. "
-                "Progress messages from the debugged application are streamed during execution. "
-                "On success, returns the full output. "
+                "Starts a debug session for the current startup project and returns immediately "
+                "once the session has launched. "
                 "On build failure, returns isError=true with structured content in the same "
                 "format as list_issues (issues array + summary). "
                 "Returns an error if there is no startup project, no active build configuration, "
                 "or the project cannot currently be run in debug mode.")
             .execution(ToolExecution().taskSupport(ToolExecution::TaskSupport::optional))
             .outputSchema(runToolOutputSchema),
-        makeRunCallback(ProjectExplorer::Constants::DEBUG_RUN_MODE, "Debug session finished"));
+        [](const Schema::CallToolRequestParams &params,
+           const ToolInterface &toolInterface) -> Utils::Result<> {
+            const Utils::Id runMode = ProjectExplorer::Constants::DEBUG_RUN_MODE;
+            const Utils::Result<> canRun
+                = ProjectExplorer::ProjectExplorerPlugin::canRunStartupProject(runMode);
+            if (!canRun) {
+                toolInterface.finish(
+                    CallToolResult{}.isError(true).addContent(
+                        Schema::TextContent{}.text(canRun.error())));
+                return ResultOk;
+            }
+
+            struct State
+            {
+                bool finished = false;
+                QJsonObject failureIssues;
+            };
+            auto state = std::make_shared<State>();
+
+            using namespace std::chrono_literals;
+
+            const Utils::Result<ToolInterface::TaskProgressNotify> task = toolInterface.startTask(
+                500ms,
+                [state](Schema::Task t) {
+                    if (state->finished)
+                        letTaskDieIn(t, 1min);
+                    const bool failed = !state->failureIssues.isEmpty();
+                    return t.status(
+                        !state->finished ? Schema::TaskStatus::working
+                        : failed         ? Schema::TaskStatus::failed
+                                         : Schema::TaskStatus::completed);
+                },
+                [state]() -> Utils::Result<CallToolResult> {
+                    if (!state->failureIssues.isEmpty())
+                        return CallToolResult{}.isError(true).structuredContent(
+                            QJsonObject{{"issues", state->failureIssues}});
+                    return CallToolResult{}.isError(false).structuredContent(
+                        QJsonObject{{"output", QString("Debug session started")}});
+                },
+                []() {},
+                progressToken(params));
+
+            if (!task) {
+                toolInterface.finish(
+                    CallToolResult{}.isError(true).addContent(
+                        Schema::TextContent{}.text(task.error())));
+                return ResultOk;
+            }
+
+            const ToolInterface::TaskProgressNotify notify = *task;
+
+            auto rcStartedConn = std::make_shared<QMetaObject::Connection>();
+
+            *rcStartedConn = QObject::connect(
+                ProjectExplorer::ProjectExplorerPlugin::instance(),
+                &ProjectExplorer::ProjectExplorerPlugin::runControlStarted,
+                ProjectExplorer::ProjectExplorerPlugin::instance(),
+                [state, notify, rcStartedConn, runMode](ProjectExplorer::RunControl *rc) {
+                    if (rc->runMode() != runMode)
+                        return;
+                    QObject::disconnect(*rcStartedConn);
+                    state->finished = true;
+                    if (notify)
+                        notify(Schema::TaskStatus::completed, "Debug session started", std::nullopt);
+                });
+
+            QObject::connect(
+                ProjectExplorer::BuildManager::instance(),
+                &ProjectExplorer::BuildManager::buildQueueFinished,
+                ProjectExplorer::BuildManager::instance(),
+                [state, notify, rcStartedConn](bool success) {
+                    if (success || state->finished)
+                        return;
+                    QObject::disconnect(*rcStartedConn);
+                    state->finished = true;
+                    state->failureIssues = commands.listIssues();
+                    const int errorCount = state->failureIssues.value("summary")
+                                               .toObject()
+                                               .value("errorCount")
+                                               .toInt();
+                    const QString statusMsg
+                        = errorCount > 0 ? QString("Build failed with %1 error(s)").arg(errorCount)
+                                         : QString("Build failed");
+                    if (notify)
+                        notify(Schema::TaskStatus::failed, statusMsg, std::nullopt);
+                },
+                Qt::SingleShotConnection);
+
+            ProjectExplorer::ProjectExplorerPlugin::runStartupProject(runMode, false);
+            return ResultOk;
+        });
 }
 } // namespace Mcp::Internal
