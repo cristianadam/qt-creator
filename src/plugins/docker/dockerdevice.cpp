@@ -1443,6 +1443,38 @@ DeviceTester *DockerDevice::createDeviceTester()
     return nullptr;
 }
 
+ExecutableItem DockerDevice::portsGatheringRecipe(const Storage<PortsOutputData> &output) const
+{
+    const Storage<PortsInputData> input;
+    const auto onSetup = [this, input] {
+        // /proc/net/tcp and /proc/net/tcp6 always exist on Linux. Avoids the
+        // isReadableDir("/proc/net") probe that goes through the file-access
+        // bridge and can return false for Docker.
+        const CommandLine cmd{filePath("/bin/sh"),
+                              {"-c", "cat /proc/net/tcp /proc/net/tcp6 2>/dev/null"}};
+        *input = {freePorts(), cmd};
+    };
+    const auto onDone = [input, output](const Process &process, DoneWith result) {
+        if (result == DoneWith::Success) {
+            QList<Port> portList;
+            for (const Port port : input->portsParser(process.rawStdOut())) {
+                if (input->freePorts.contains(port))
+                    portList.append(port);
+            }
+            *output = portList;
+        } else {
+            // Port scan failed (container not ready or command unavailable).
+            // Fall back to treating the managed range as fully free.
+            *output = QList<Port>{};
+        }
+        return DoneResult::Success;
+    };
+    const auto onProcessSetup = [input](Process &process) {
+        process.setCommand(input->commandLine);
+    };
+    return Group{input, onGroupSetup(onSetup), ProcessTask(onProcessSetup, onDone)};
+}
+
 Result<> DockerDevice::handlesFile(const FilePath &filePath) const
 {
     const bool isDockerScheme = filePath.scheme() == Constants::DOCKER_DEVICE_SCHEME;
