@@ -26,7 +26,6 @@
 
 #include <QCryptographicHash>
 #include <QDir>
-#include <QMetaEnum>
 #include <QPromise>
 #include <QPushButton>
 #include <QStandardItemModel>
@@ -206,12 +205,6 @@ std::optional<Acp::Registry::ACPAgentRegistry> AcpRegistryBrowser::s_registry;
 
 class AcpServerAspect : public AspectContainer
 {
-    static const auto &conTypeEnum()
-    {
-        static auto e = QMetaEnum::fromType<AcpSettings::ConnectionType>();
-        return e;
-    }
-
 public:
     AcpServerAspect()
     {
@@ -234,43 +227,16 @@ public:
         name.setDisplayStyle(StringAspect::DisplayStyle::LineEditDisplay);
         name.setDefaultValue(Tr::tr("<New Server>"));
 
-        connectionType.setLabelText(Tr::tr("Connection type:"));
-        connectionType.setSettingsKey("connectionType");
-        connectionType.setToolTip(Tr::tr("The type of connection to use for the ACP server."));
-        connectionType.setComboBoxEditable(false);
-        connectionType.setFillCallback([](StringSelectionAspect::ResultCallback cb) {
-            auto *stdioItem = new QStandardItem(Tr::tr("Standard IO"));
-            stdioItem->setData(conTypeEnum().valueToKey(AcpSettings::Stdio));
-            stdioItem->setToolTip("Standard IO");
-            auto *tcpItem = new QStandardItem(Tr::tr("TCP"));
-            tcpItem->setData(conTypeEnum().valueToKey(AcpSettings::Tcp));
-            tcpItem->setToolTip("TCP");
-            cb({stdioItem, tcpItem});
-        });
-
         launchCommand.setLabelText(Tr::tr("Launch command:"));
         launchCommand.setSettingsKey("launchCommand");
-        launchCommand.setToolTip(
-            Tr::tr("The command to launch the ACP server process. Only used for Standard IO."));
+        launchCommand.setToolTip(Tr::tr("The command to launch the ACP server process."));
         launchCommand.setExpectedKind(PathChooser::ExistingCommand);
 
         launchArguments.setLabelText(Tr::tr("Launch arguments:"));
         launchArguments.setSettingsKey("launchArguments");
         launchArguments.setToolTip(
-            Tr::tr("The arguments to launch the ACP server process. Only used for Standard IO."));
+            Tr::tr("The arguments to launch the ACP server process."));
         launchArguments.setDisplayStyle(StringAspect::DisplayStyle::LineEditDisplay);
-
-        host.setLabelText(Tr::tr("Host:"));
-        host.setSettingsKey("host");
-        host.setToolTip(Tr::tr("The hostname for the TCP connection."));
-        host.setDisplayStyle(StringAspect::DisplayStyle::LineEditDisplay);
-        host.setDefaultValue("localhost");
-
-        port.setLabelText(Tr::tr("Port:"));
-        port.setSettingsKey("port");
-        port.setToolTip(Tr::tr("The port for the TCP connection."));
-        port.setRange(1, 65535);
-        port.setDefaultValue(8080);
 
         environment.setSettingsKey("environment");
         environment.setLabelText("Environment Changes");
@@ -355,32 +321,14 @@ public:
 
         setLayouter([this]() -> Layouting::Layout {
             using namespace Layouting;
-            const auto updateVisible = [this]() {
-                const QString type = connectionType.volatileValue();
-                const bool isStdio = conTypeEnum().keyToValue(type.toUtf8()) == AcpSettings::Stdio;
-
-                launchCommand.setVisible(isStdio);
-                launchArguments.setVisible(isStdio);
-                environment.setVisible(isStdio);
-                host.setVisible(!isStdio);
-                port.setVisible(!isStdio);
-            };
-            updateVisible();
-
-            connect(
-                &connectionType, &StringSelectionAspect::volatileValueChanged, this, updateVisible);
-
             // clang-format off
             return Form{
                 noMargin,
                 registryBrowser, br,
                 name, br,
-                connectionType, br,
                 launchCommand, br,
                 launchArguments, br,
                 environment, br,
-                host, br,
-                port, br,
             };
             // clang-format on
         });
@@ -392,19 +340,11 @@ public:
         info.id = id.value();
         info.name = name.value();
         info.iconUrl = iconUrl.value();
-        info.connectionType = AcpSettings::ConnectionType(
-            conTypeEnum().keyToValue(connectionType.value().toUtf8()));
-
-        if (info.connectionType == AcpSettings::Stdio) {
-            info.launchInfo = CommandLine(
-                FilePath::fromUserInput(launchCommand.value()),
-                launchArguments.value(),
-                CommandLine::Raw);
-            info.envChanges = environment.value();
-        } else {
-            info.launchInfo
-                = QPair<QString, quint16>(host.value(), static_cast<quint16>(port.value()));
-        }
+        info.launchCommand = CommandLine(
+            FilePath::fromUserInput(launchCommand.value()),
+            launchArguments.value(),
+            CommandLine::Raw);
+        info.envChanges = environment.value();
         return info;
     }
 
@@ -413,14 +353,10 @@ public:
     StringAspect id{this};
     StringAspect name{this};
     StringAspect iconUrl{this};
-    StringSelectionAspect connectionType{this};
 
     FilePathAspect launchCommand{this};
     StringAspect launchArguments{this};
     EnvironmentChangesAspect environment{this};
-
-    StringAspect host{this};
-    IntegerAspect port{this};
 };
 
 static QString displayFunc(AcpServerAspect *aspect)

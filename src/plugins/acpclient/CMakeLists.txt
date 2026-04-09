@@ -24,7 +24,6 @@ add_qtc_plugin(AcpClient
     acpmessageview.cpp acpmessageview.h
     acppermissionhandler.cpp acppermissionhandler.h
     acpstdiotransport.cpp acpstdiotransport.h
-    acptcptransport.cpp acptcptransport.h
     acpterminalhandler.cpp acpterminalhandler.h
     acptransport.cpp acptransport.h
     chatinputedit.cpp chatinputedit.h

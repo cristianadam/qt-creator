@@ -9,7 +9,6 @@
 #include "acppermissionhandler.h"
 #include "acpsettings.h"
 #include "acpstdiotransport.h"
-#include "acptcptransport.h"
 #include "acpterminalhandler.h"
 
 #include <coreplugin/mcpmanager.h>
@@ -62,28 +61,18 @@ void AcpChatController::connectToServer(const QString &serverId, const FilePath 
     m_serverName = serverInfo.name;
     m_iconUrl = serverInfo.iconUrl;
 
-    if (serverInfo.connectionType == AcpSettings::Stdio) {
-        QTC_ASSERT(std::holds_alternative<CommandLine>(serverInfo.launchInfo), return);
-        const CommandLine &cmdLine = std::get<CommandLine>(serverInfo.launchInfo);
-        auto *transport = new AcpStdioTransport(this);
-        const FilePath command = cmdLine.executable();
-        transport->setCommandLine(CommandLine(command, cmdLine.arguments(), CommandLine::Raw));
-        if (!workingDirectory.isEmpty())
-            transport->setWorkingDirectory(workingDirectory);
-        if (serverInfo.envChanges.hasItems()) {
-            Environment env = command.deviceEnvironment();
-            serverInfo.envChanges.modifyEnvironment(env, nullptr);
-            transport->setEnvironment(env);
-        }
-        m_transport = transport;
-    } else {
-        QTC_ASSERT((std::holds_alternative<QPair<QString, quint16>>(serverInfo.launchInfo)), return);
-        const auto &[host, port] = std::get<QPair<QString, quint16>>(serverInfo.launchInfo);
-        auto *transport = new AcpTcpTransport(this);
-        transport->setHost(host);
-        transport->setPort(port);
-        m_transport = transport;
+    const CommandLine &cmdLine = serverInfo.launchCommand;
+    auto *transport = new AcpStdioTransport(this);
+    const FilePath command = cmdLine.executable();
+    transport->setCommandLine(CommandLine(command, cmdLine.arguments(), CommandLine::Raw));
+    if (!workingDirectory.isEmpty())
+        transport->setWorkingDirectory(workingDirectory);
+    if (serverInfo.envChanges.hasItems()) {
+        Environment env = command.deviceEnvironment();
+        serverInfo.envChanges.modifyEnvironment(env, nullptr);
+        transport->setEnvironment(env);
     }
+    m_transport = transport;
 
     m_client = new AcpClientObject(m_transport, this);
     if (m_inspector)

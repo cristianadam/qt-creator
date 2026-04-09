@@ -9,7 +9,6 @@
 #include <QFuture>
 #include <QIcon>
 #include <QObject>
-#include <QString>
 
 namespace AcpClient::Internal {
 
@@ -17,18 +16,13 @@ class AcpSettings : public QObject
 {
     Q_OBJECT
 public:
-    enum ConnectionType { Stdio, Tcp };
-    Q_ENUM(ConnectionType)
-
     struct ServerInfo
     {
         QString id;
         QString name;
         QString iconUrl;
-        ConnectionType connectionType = Stdio;
-        // Stdio: CommandLine, Tcp: QPair<host, port>
-        std::variant<Utils::CommandLine, QPair<QString, quint16>> launchInfo;
-        Utils::EnvironmentChanges envChanges; // Stdio only
+        Utils::CommandLine launchCommand;
+        Utils::EnvironmentChanges envChanges;
     };
 
     static QFuture<QIcon> iconForUrl(const QString &url);

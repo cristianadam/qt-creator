@@ -35,8 +35,6 @@ QtcPlugin {
         "acpsettings.h",
         "acpstdiotransport.cpp",
         "acpstdiotransport.h",
-        "acptcptransport.cpp",
-        "acptcptransport.h",
         "acpterminalhandler.cpp",
         "acpterminalhandler.h",
         "acptransport.cpp",
