@@ -1610,9 +1610,7 @@ QString Process::exitMessage(const CommandLine &command, ProcessResult result,
     case ProcessResult::TerminatedAbnormally:
         return Tr::tr("The command \"%1\" terminated abnormally.").arg(cmd);
     case ProcessResult::StartFailed:
-        return Tr::tr("The command \"%1\" could not be started.").arg(cmd) + ' '
-               + Tr::tr("Either the invoked program is missing, or you may have insufficient "
-                        "permissions to invoke the program.");
+        return Tr::tr("The command \"%1\" could not be started.").arg(cmd);
     case ProcessResult::Canceled:
         // TODO: We might want to format it nicely when bigger than 1 second, e.g. 1,324 s.
         //       Also when it's bigger than 1 minute, 1 hour, etc...
@@ -1624,6 +1622,16 @@ QString Process::exitMessage(const CommandLine &command, ProcessResult result,
 QString Process::exitMessage(FailureMessageFormat format) const
 {
     QString msg = exitMessage(commandLine(), result(), exitCode(), processDuration());
+    if (result() == ProcessResult::StartFailed) {
+        msg.append(' ');
+        const QString err = errorString();
+        if (err.isEmpty())
+            msg.append(Tr::tr("Either the invoked program is missing, or you may have "
+                              "insufficient permissions to invoke the program."));
+        else
+            msg.append(err);
+        return msg;
+    }
     if (format == FailureMessageFormat::Plain || result() == ProcessResult::FinishedWithSuccess)
         return msg;
     if (format == FailureMessageFormat::WithStdErr
