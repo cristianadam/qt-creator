@@ -426,6 +426,7 @@ private:
     void slotSettingsChanged();
     void initVersion();
     void initOptions();
+    void openStringListEditors();
     void resetOptions();
     void generateFallbackJson();
     QTableView *m_optionsTableView;
@@ -497,7 +498,11 @@ QmlFormatSettingsWidget::QmlFormatSettingsWidget(QWidget *parent, FormatterSelec
     // clang-format on
 
     initOptions();
+    openStringListEditors();
     initVersion();
+
+    connect(m_optionsModel, &QAbstractTableModel::modelReset,
+            this, &QmlFormatSettingsWidget::openStringListEditors);
 
     connect(
         m_optionsModel,
@@ -654,6 +659,17 @@ void QmlFormatSettingsWidget::initOptions()
     }
 
     m_optionsModel->setOptionsFromJson(doc);
+}
+
+void QmlFormatSettingsWidget::openStringListEditors()
+{
+    const QList<QmlFormatOptionsModel::Option> &options = m_optionsModel->options();
+    for (int row = 0; row < options.size(); ++row) {
+        if (options.at(row).isStringList()) {
+            m_optionsTableView->openPersistentEditor(
+                m_optionsModel->index(row, QmlFormatOptionsModel::Value));
+        }
+    }
 }
 
 void QmlFormatSettingsWidget::resetOptions()
