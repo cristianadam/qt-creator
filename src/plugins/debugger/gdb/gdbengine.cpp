@@ -441,8 +441,14 @@ void GdbEngine::handleResponse(const QString &buff)
             m_pendingLogStreamOutput.clear();
             m_pendingConsoleStreamOutput.clear();
 
-            if (response.data.data().isEmpty())
-                response.data.fromString(response.consoleStreamOutput, m_gdbOutputDecoder);
+            if (response.data.data().isEmpty()) {
+                // Python commands output their result as console stream data starting with
+                // "result={...}". GDB may emit other console messages (thread events etc.)
+                // before the Python result, so skip to the "result={" marker if present.
+                const QString &cso = response.consoleStreamOutput;
+                const int pos = cso.indexOf(QLatin1String("result={"));
+                response.data.fromString(pos >= 0 ? cso.mid(pos) : cso, m_gdbOutputDecoder);
+            }
 
             handleResultRecord(&response);
             break;
