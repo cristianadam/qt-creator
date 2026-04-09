@@ -609,8 +609,6 @@ static void searchFinished(SearchResult *search, QFutureWatcher<CPlusPlus::Usage
             renameCheckBox->setVisible(true);
         }
     }
-
-    watcher->deleteLater();
 }
 
 namespace {
@@ -833,17 +831,13 @@ void CppFindReferences::checkUnused(Core::SearchResult *search, const Link &link
 void CppFindReferences::createWatcher(const QFuture<CPlusPlus::Usage> &future, SearchResult *search)
 {
     auto watcher = new QFutureWatcher<CPlusPlus::Usage>();
-    // auto-delete:
-    connect(watcher, &QFutureWatcherBase::finished, watcher, [search, watcher]() {
-                searchFinished(search, watcher);
-            });
-
+    connect(watcher, &QFutureWatcherBase::finished, watcher, [search, watcher] {
+        searchFinished(search, watcher);
+        watcher->deleteLater();
+    });
     connect(watcher, &QFutureWatcherBase::resultsReadyAt, search,
             [search, watcher](int first, int last) {
-                displayResults(search, watcher, first, last);
-            });
-    connect(watcher, &QFutureWatcherBase::finished, search, [search, watcher]() {
-        search->finishSearch(watcher->isCanceled());
+        displayResults(search, watcher, first, last);
     });
     connect(search, &SearchResult::canceled, watcher, [watcher]() { watcher->cancel(); });
     connect(search, &SearchResult::paused, watcher, [watcher](bool paused) {
