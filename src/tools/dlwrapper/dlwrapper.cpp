@@ -11,8 +11,9 @@
 #include <QLoggingCategory>
 #include <QSocketNotifier>
 
-#include <QtTaskTree/qtasktree.h>
+#include <QtTaskTree/QConditional>
 #include <QtTaskTree/qprocesstask.h>
+#include <QtTaskTree/qtasktree.h>
 
 using namespace QtTaskTree;
 using namespace Utils;
@@ -41,6 +42,7 @@ int main(int argc, char *argv[])
 
     const FilePath tempDir = FilePath::fromUserInput(QDir::tempPath());
     const FilePath archiveUrl = FilePath::fromUserInput(commandLineParser.value("download"));
+    const FilePath extractedDir = tempDir / "qt-acp-dl" / archiveUrl.baseName();
     CommandLine cmdLine{
         FilePath::fromUserInput(commandLineParser.positionalArguments().value(0)),
         commandLineParser.positionalArguments().mid(1)};
@@ -56,11 +58,8 @@ int main(int argc, char *argv[])
 
     QTaskTree taskTree;
     Storage<std::unique_ptr<TemporaryFilePath>> tempArchive;
-    Storage<std::unique_ptr<TemporaryFilePath>> tempExtractedDir;
 
     const auto setupDownload = [tempDir, archiveUrl, tempArchive](FileStreamer &task) {
-        task.setSource(archiveUrl);
-
         auto tmpFileResult = TemporaryFilePath::create(tempDir / archiveUrl.fileName());
         if (!tmpFileResult) {
             qCWarning(dlWrapper) << "Failed to create temporary file:" << tmpFileResult.error();
@@ -71,33 +70,25 @@ int main(int argc, char *argv[])
         qCDebug(dlWrapper) << "Downloading" << archiveUrl << "to temporary file"
                            << (*tempArchive)->filePath();
 
+        task.setSource(archiveUrl);
         task.setDestination((*tempArchive)->filePath());
         task.setStreamMode(StreamMode::Transfer);
         return SetupResult::Continue;
     };
 
-    const auto setupUnarchive = [tempDir, archiveUrl, tempArchive, tempExtractedDir](
-                                    Unarchiver &task) {
+    const auto setupUnarchive = [extractedDir, tempArchive](Unarchiver &task) {
         task.setArchive((*tempArchive)->filePath());
-
-        auto tmpDirResult = TemporaryFilePath::create(tempDir / archiveUrl.baseName(), true);
-        if (!tmpDirResult) {
-            qCWarning(dlWrapper) << "Failed to create temporary directory:" << tmpDirResult.error();
-            return SetupResult::StopWithError;
-        }
-        *tempExtractedDir = std::move(*tmpDirResult);
-        task.setDestination((*tempExtractedDir)->filePath());
-        qCDebug(dlWrapper) << "Extracting archive to temporary directory"
-                           << (*tempExtractedDir)->filePath();
+        task.setDestination(extractedDir);
+        qCDebug(dlWrapper) << "Extracting archive to" << extractedDir;
         return SetupResult::Continue;
     };
 
     const auto setupProcess = [&](QProcess &process) {
         CommandLine c = cmdLine;
-        c.setExecutable((*tempExtractedDir)->filePath() / cmdLine.executable().toUrlishString());
+        c.setExecutable(extractedDir / cmdLine.executable().toUrlishString());
         process.setProgram(c.executable().toFSPathString());
         process.setArguments(c.splitArguments());
-        process.setWorkingDirectory((*tempExtractedDir)->filePath().toFSPathString());
+        process.setWorkingDirectory(extractedDir.toFSPathString());
         process.setInputChannelMode(QProcess::ForwardedInputChannel);
         process.setProcessChannelMode(QProcess::ForwardedChannels);
         QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
@@ -115,7 +106,7 @@ int main(int argc, char *argv[])
         }
         process.setProcessEnvironment(env);
         qCDebug(dlWrapper) << "Executing command" << c.toUserOutput() << "in directory"
-                           << (*tempExtractedDir)->filePath();
+                           << extractedDir;
     };
 
     const auto processDone = [&](const QProcess &process, DoneWith doneWith) {
@@ -126,9 +117,10 @@ int main(int argc, char *argv[])
     // clang-format off
     Group recipe {
         tempArchive,
-        tempExtractedDir,
-        FileStreamerTask(setupDownload),
-        UnarchiverTask(setupUnarchive),
+        If ([extractedDir] { return !extractedDir.exists(); }) >> Then {
+            FileStreamerTask(setupDownload),
+            UnarchiverTask(setupUnarchive),
+        },
         QProcessTask(setupProcess, processDone),
         onGroupDone([&](DoneWith doneWith){
             a.exit(doneWith == DoneWith::Success ? 0 : 1);
