@@ -13,6 +13,7 @@
 #include <utils/itemviews.h>
 #include <utils/layoutbuilder.h>
 #include <utils/macroexpander.h>
+#include <utils/shutdownguard.h>
 #include <utils/treemodel.h>
 
 #include <QHeaderView>
@@ -49,7 +50,7 @@ public:
 
 CustomLanguageModels &customLanguageModels()
 {
-    static CustomLanguageModels models;
+    static GuardedObject<CustomLanguageModels> models;
     return models;
 }
 

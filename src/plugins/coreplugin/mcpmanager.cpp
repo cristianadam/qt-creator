@@ -10,6 +10,7 @@
 #include <utils/algorithm.h>
 #include <utils/aspects.h>
 #include <utils/layoutbuilder.h>
+#include <utils/shutdownguard.h>
 
 #include <QMetaEnum>
 #include <QStandardItemModel>
@@ -187,7 +188,7 @@ public:
 
     static McpManagerSettings &instance()
     {
-        static McpManagerSettings settings;
+        static GuardedObject<McpManagerSettings> settings;
         return settings;
     }
 

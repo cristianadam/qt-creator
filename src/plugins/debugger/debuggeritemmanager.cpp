@@ -27,6 +27,7 @@
 #include <utils/persistentsettings.h>
 #include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
+#include <utils/shutdownguard.h>
 #include <utils/winutils.h>
 
 #include <QDebug>
@@ -135,7 +136,7 @@ private:
 
 static DebuggerModel &debuggerModel()
 {
-    static DebuggerModel theModel;
+    static GuardedObject<DebuggerModel> theModel;
     return theModel;
 }
 

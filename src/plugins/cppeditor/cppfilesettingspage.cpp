@@ -24,6 +24,7 @@
 #include <utils/mimeutils.h>
 #include <utils/pathchooser.h>
 #include <utils/qtcsettings.h>
+#include <utils/shutdownguard.h>
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -509,7 +510,7 @@ public:
 CppFileSettings &globalCppFileSettings()
 {
     // This is the global instance. There could be more.
-    static CppFileSettings theGlobalCppFileSettings;
+    static GuardedObject<CppFileSettings> theGlobalCppFileSettings;
     return theGlobalCppFileSettings;
 }
 

@@ -13,6 +13,7 @@
 #include <utils/checkablemessagebox.h>
 #include <utils/infobar.h>
 #include <utils/layoutbuilder.h>
+#include <utils/shutdownguard.h>
 #include <utils/stylehelper.h>
 #include <utils/textcodec.h>
 
@@ -122,7 +123,7 @@ static void fillLanguageItems(const StringSelectionAspect::ResultCallback &cb)
 
 GeneralSettings &generalSettings()
 {
-    static GeneralSettings theSettings;
+    static GuardedObject<GeneralSettings> theSettings;
     return theSettings;
 }
 
