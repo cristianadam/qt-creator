@@ -763,7 +763,11 @@ public:
     {
         setId(Constants::DEBUGGER_RUN_FACTORY);
         setRecipeProducer([](RunControl *runControl) {
-            return debuggerRecipe(runControl, DebuggerRunParameters::fromRunControl(runControl));
+            DebuggerRunParameters rp = DebuggerRunParameters::fromRunControl(runControl);
+            const IDevice::ConstPtr device = runControl->device();
+            if (device && device->type() == "DockerDeviceType" && rp.isQmlDebugging())
+                runControl->requestQmlChannel();
+            return debuggerRecipe(runControl, rp);
         });
 
         addSupportedRunMode(ProjectExplorer::Constants::DEBUG_RUN_MODE);
