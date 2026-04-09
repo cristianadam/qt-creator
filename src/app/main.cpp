@@ -782,6 +782,13 @@ int main(int argc, char **argv)
     if (!options.uiLanguage.isEmpty())
         uiLanguages.prepend(options.uiLanguage);
     const QString &creatorTrPath = resourcePath() + "/translations";
+    // Load any spelling fixes that might have been done temporarily after string freeze.
+    // For English the rest uses the built-in source texts.
+    // Incomplete translations might pick up the updated English texts for missing translations.
+    // Otherwise translations will override, since translations are investigated LIFO.
+    QTranslator enFixes;
+    if (enFixes.load("qtcreator_en", creatorTrPath))
+        app.installTranslator(&enFixes);
     for (QString locale : std::as_const(uiLanguages)) {
         locale = QLocale(locale).name();
         if (translator.load("qtcreator_" + locale, creatorTrPath)) {
@@ -795,14 +802,6 @@ int main(int argc, char **argv)
                 break;
             }
             Q_UNUSED(translator.load(QString())); // unload()
-        } else if (
-            locale == QLatin1String("C") /* overrideLanguage == "English" */
-            || locale.startsWith(QLatin1String("en")) /* "English" is built-in */) {
-            // Load any spelling fixes that might have been done temporarily after string freeze,
-            // for the rest use the built-in source text
-            if (translator.load("qtcreator_en", creatorTrPath))
-                app.installTranslator(&translator);
-            break;
         }
     }
 
