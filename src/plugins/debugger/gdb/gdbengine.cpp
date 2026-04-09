@@ -2028,7 +2028,7 @@ void GdbEngine::setTokenBarrier()
 {
     bool good = true;
     for (auto it = m_commandForToken.cbegin(), end = m_commandForToken.cend(); it != end; ++it) {
-        if (it->flags & Discardable) {
+        if (!(it->flags & Discardable)) {
             qDebug() << "TOKEN: " << it.key() << "CMD:" << it.value().function;
             good = false;
         }
