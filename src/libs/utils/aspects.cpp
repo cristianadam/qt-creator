@@ -4495,10 +4495,7 @@ void StringSelectionAspect::addToLayoutImpl(Layouting::Layout &parent)
         if (!modelIdx.isValid())
             return;
 
-        QString newValue = m_model->index(idx, 0).data(Qt::UserRole + 1).toString();
-        if (newValue.isEmpty())
-            return;
-
+        const QString newValue = m_model->index(idx, 0).data(Qt::UserRole + 1).toString();
         m_undoable.set(undoStack(), newValue);
         volatileValueToGui();
     });
