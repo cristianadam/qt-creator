@@ -55,6 +55,9 @@ public:
     bool hasDeviceTester() const override { return false; }
     ProjectExplorer::DeviceTester *createDeviceTester() override;
 
+    QtTaskTree::ExecutableItem portsGatheringRecipe(
+        const QtTaskTree::Storage<Utils::PortsOutputData> &output) const override;
+
     Utils::FilePath rootPath() const override;
 
     bool canMount(const Utils::FilePath &filePath) const override
