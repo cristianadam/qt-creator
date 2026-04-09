@@ -56,6 +56,9 @@
 #include <QStyledItemDelegate>
 #include <QTimer>
 
+#include <QtGui/private/qguiapplication_p.h>
+#include <qpa/qplatformtheme.h>
+
 using namespace Utils;
 
 namespace Core::Internal {
@@ -462,6 +465,11 @@ public:
     QSize sizeHint() const override { return QDialogButtonBox::sizeHint() + QSize(25, 0); }
 };
 
+static QString buttonText(QDialogButtonBox::StandardButton button)
+{
+    return QGuiApplicationPrivate::platformTheme()->standardButtonText(button);
+}
+
 class SettingsWidget : public QWidget
 {
 public:
@@ -519,13 +527,13 @@ private:
     LargerDialogButtonBox m_buttonBoxLong;
     LargerDialogButtonBox m_buttonBoxShort;
 
-    Button m_okButtonLong{Tr::tr("OK"), Button::MediumPrimary};
-    Button m_applyButtonLong{Tr::tr("Apply"), Button::MediumSecondary};
-    Button m_cancelButtonLong{Tr::tr("Cancel"), Button::MediumSecondary};
-    Button m_discardButtonLong{Tr::tr("Discard"), Button::MediumSecondary};
+    Button m_okButtonLong{buttonText(QDialogButtonBox::Ok), Button::MediumPrimary};
+    Button m_applyButtonLong{buttonText(QDialogButtonBox::Apply), Button::MediumSecondary};
+    Button m_cancelButtonLong{buttonText(QDialogButtonBox::Cancel), Button::MediumSecondary};
+    Button m_discardButtonLong{buttonText(QDialogButtonBox::Discard), Button::MediumSecondary};
 
-    Button m_applyButtonShort{Tr::tr("Apply"), Button::MediumPrimary};
-    Button m_discardButtonShort{Tr::tr("Discard"), Button::MediumSecondary};
+    Button m_applyButtonShort{buttonText(QDialogButtonBox::Apply), Button::MediumPrimary};
+    Button m_discardButtonShort{buttonText(QDialogButtonBox::Discard), Button::MediumSecondary};
 
     bool m_isDirty = false;
     bool m_currentlySwitching = false;
