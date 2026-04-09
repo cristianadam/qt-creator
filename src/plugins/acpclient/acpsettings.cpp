@@ -321,6 +321,19 @@ public:
 
         setLayouter([this]() -> Layouting::Layout {
             using namespace Layouting;
+            const auto updateVisible = [this]() {
+                const bool isCustom = registryBrowser.volatileValue().isEmpty();
+                name.setVisible(isCustom);
+                launchCommand.setVisible(isCustom);
+                launchArguments.setVisible(isCustom);
+                environment.setVisible(isCustom);
+            };
+            updateVisible();
+            connect(
+                &registryBrowser,
+                &AcpRegistryBrowser::volatileValueChanged,
+                this,
+                updateVisible);
             // clang-format off
             return Form{
                 noMargin,
