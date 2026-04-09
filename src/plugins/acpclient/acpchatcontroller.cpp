@@ -16,6 +16,8 @@
 #include <utils/algorithm.h>
 #include <utils/filepath.h>
 
+#include <texteditor/texteditor.h>
+
 #include <QLoggingCategory>
 
 static Q_LOGGING_CATEGORY(logController, "qtc.acpclient.controller", QtWarningMsg);
@@ -149,6 +151,7 @@ void AcpChatController::disconnectFromServer()
     m_agentVersion.clear();
     m_serverName.clear();
     m_authMethods.clear();
+    m_agentCapabilities.reset();
     m_initialized = false;
 
     if (m_connected) {
@@ -199,8 +202,18 @@ void AcpChatController::createNewSession()
     });
 }
 
+static bool supportsEmbeddedPromptResources(std::optional<Acp::AgentCapabilities> agentCapabilities)
+{
+    if (!agentCapabilities)
+        return false;
+    if (auto promptCapabilities = agentCapabilities->promptCapabilities())
+        return promptCapabilities->embeddedContext().value_or(false);
+    return false;
+}
+
 void AcpChatController::sendPrompt(const QString &text)
 {
+    using namespace TextEditor;
     if (text.isEmpty() || !m_client || m_sessionId.isEmpty())
         return;
 
@@ -209,7 +222,33 @@ void AcpChatController::sendPrompt(const QString &text)
 
     TextContent textContent;
     textContent.text(text);
-    request.prompt({ContentBlock(textContent)});
+    QList<ContentBlock> content = {textContent};
+    BaseTextEditor *currentTextEditor = BaseTextEditor::currentTextEditor();
+    if (currentTextEditor) {
+        const QString uri = "file://" + currentTextEditor->document()->filePath().toUrlishString();
+        content << ResourceLink()
+                       .name(currentTextEditor->document()->filePath().fileName())
+                       .description("Qt Creators current main Text Editor file.")
+                       .uri(uri);
+
+        if (supportsEmbeddedPromptResources(m_agentCapabilities)) {
+            TextEditorWidget *widget = currentTextEditor->editorWidget();
+            TextResourceContents editorState;
+            editorState.uri(uri);
+            QString stateString = "This is the state of the current Text Editor in Qt Creator\n";
+            QTextCursor tc = currentTextEditor->textCursor();
+            const QString cursorString = "Cursor %1: %2, Line(0-based): %3, Column(0-based): %4\n";
+            stateString += cursorString.arg("Position").arg(tc.position()).arg(tc.blockNumber()).arg(tc.positionInBlock());
+            tc.setPosition(tc.anchor());
+            stateString += cursorString.arg("Anchor").arg(tc.position()).arg(tc.blockNumber()).arg(tc.positionInBlock());
+            stateString += "First Visible Line: " + QString::number(widget->firstVisibleBlockNumber()) + "\n";
+            stateString += "Last Visible Line: " + QString::number(widget->lastVisibleBlockNumber()) + "\n";
+            content << EmbeddedResource().resource(
+                TextResourceContents().text(stateString).uri(uri));
+        }
+    }
+
+    request.prompt(content);
 
     m_client->prompt(request, [this](const QJsonObject &result, const std::optional<Error> &error) {
         if (error) {
@@ -321,6 +360,7 @@ void AcpChatController::onInitializeResult(const InitializeResponse &response)
     m_initialized = true;
 
     m_authMethods = response.authMethods().value_or(QList<AuthMethod>{});
+    m_agentCapabilities = response.agentCapabilities();
     createNewSession();
 }
 

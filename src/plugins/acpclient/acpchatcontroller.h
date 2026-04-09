@@ -77,6 +77,7 @@ private:
     QString m_serverName;
     QString m_iconUrl;
     QList<Acp::AuthMethod> m_authMethods;
+    std::optional<Acp::AgentCapabilities> m_agentCapabilities;
     bool m_connected = false;
     bool m_initialized = false;
 };
