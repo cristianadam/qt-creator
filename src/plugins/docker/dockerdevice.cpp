@@ -148,8 +148,6 @@ public:
 
     ~DockerDevicePrivate() { stopCurrentContainer(); }
 
-    CommandLine createCommandLine();
-
     Result<QString> updateContainerAccess();
     Result<> ensureReachable(const FilePath &other);
     void shutdown();
@@ -174,7 +172,24 @@ public:
 
     Result<FilePath> getCmdBridgePath() const;
 
-    QStringList createMountArgs() const;
+    struct CreateCommandLineParams
+    {
+        bool x11Forwarding = false;
+        bool useLocalUidGid = false;
+        bool mountCmdBridge = false;
+        bool keepEntryPoint = false;
+        bool enableLldbFlags = false;
+        QString network;
+        FilePaths mounts;
+        QString extraArgs;
+        QString repoTag;
+    };
+
+    CreateCommandLineParams appliedParams() const;
+    CreateCommandLineParams volatileParams() const;
+
+    QStringList createMountArgs(const CreateCommandLineParams &p) const;
+    CommandLine createCommandLine(const CreateCommandLineParams &p);
 
     bool isImageAvailable() const;
 
@@ -554,14 +569,51 @@ Result<FilePath> DockerDevicePrivate::getCmdBridgePath() const
         osAndArch->first, osAndArch->second, Core::ICore::libexecPath());
 };
 
-QStringList DockerDevicePrivate::createMountArgs() const
+DockerDevicePrivate::CreateCommandLineParams DockerDevicePrivate::appliedParams() const
+{
+    CreateCommandLineParams p;
+    p.x11Forwarding = q->enableX11Forwarding();
+    p.useLocalUidGid = q->useLocalUidGid();
+    p.network = q->network();
+    p.mounts = q->mounts();
+    p.mountCmdBridge = q->mountCmdBridge();
+    p.keepEntryPoint = q->keepEntryPoint();
+    p.enableLldbFlags = q->enableLldbFlags();
+    p.extraArgs = q->extraArgs();
+    p.repoTag = q->repoAndTag();
+    return p;
+}
+
+DockerDevicePrivate::CreateCommandLineParams DockerDevicePrivate::volatileParams() const
+{
+    CreateCommandLineParams p;
+    p.x11Forwarding = q->enableX11Forwarding.volatileValue();
+    p.useLocalUidGid = q->useLocalUidGid.volatileValue();
+    p.network = q->network.volatileValue();
+    p.mounts = transform(q->mounts.volatileValue(), &FilePath::fromUserInput);
+    p.mountCmdBridge = q->mountCmdBridge.volatileValue();
+    p.keepEntryPoint = q->keepEntryPoint.volatileValue();
+    p.enableLldbFlags = q->enableLldbFlags.volatileValue();
+    p.extraArgs = q->extraArgs.volatileValue();
+    const QString r = q->repo.volatileValue();
+    const QString t = q->tag.volatileValue();
+    if (r == "<none>")
+        p.repoTag = q->imageId.volatileValue();
+    else if (t == "<none>")
+        p.repoTag = r;
+    else
+        p.repoTag = r + ':' + t;
+    return p;
+}
+
+QStringList DockerDevicePrivate::createMountArgs(const CreateCommandLineParams &p) const
 {
     QStringList cmds;
     QList<MountPair> mounts;
-    for (const FilePath &m : q->mounts())
+    for (const FilePath &m : p.mounts)
         mounts.append({m, m});
 
-    if (q->mountCmdBridge()) {
+    if (p.mountCmdBridge) {
         const Result<FilePath> cmdBridgePath = getCmdBridgePath();
         QTC_CHECK_RESULT(cmdBridgePath);
 
@@ -593,11 +645,11 @@ bool DockerDevicePrivate::isImageAvailable() const
     return false;
 }
 
-CommandLine DockerDevicePrivate::createCommandLine()
+CommandLine DockerDevicePrivate::createCommandLine(const CreateCommandLineParams &p)
 {
     CommandLine dockerCreate{settings().dockerBinaryPath(), {"create", "-i", "--rm"}};
 
-    if (q->enableX11Forwarding()) {
+    if (p.x11Forwarding) {
         const QString display = HostOsInfo::isLinuxHost() ? QString(":0")
                                                           : QString("host.docker.internal:0");
         dockerCreate.addArgs({"-e", QString("DISPLAY=%1").arg(display),
@@ -606,21 +658,21 @@ CommandLine DockerDevicePrivate::createCommandLine()
 
 #ifdef Q_OS_UNIX
     // no getuid() and getgid() on Windows.
-    if (q->useLocalUidGid()) {
+    if (p.useLocalUidGid) {
         dockerCreate.addArgs({"-u", QString("%1:%2").arg(getuid()).arg(getgid())});
         dockerCreate.addArgs({"-e", QString("HOME=/tmp/qtc_home/%1").arg(getuid())});
     }
 #endif
 
-    if (!q->network().isEmpty()) {
+    if (!p.network.isEmpty()) {
         dockerCreate.addArg("--network");
-        dockerCreate.addArg(q->network());
+        dockerCreate.addArg(p.network);
     }
 
-    dockerCreate.addArgs(createMountArgs());
+    dockerCreate.addArgs(createMountArgs(p));
 
     if constexpr (HostOsInfo::isLinuxHost()) {
-        if (q->enableX11Forwarding()) {
+        if (p.x11Forwarding) {
             const FilePath x11Socket = FilePath::fromString("/tmp/.X11-unix");
             if (x11Socket.exists()) {
                 dockerCreate.addArgs(
@@ -631,7 +683,7 @@ CommandLine DockerDevicePrivate::createCommandLine()
             const Environment sysEnv = Environment::systemEnvironment();
             const QString xauth = sysEnv.value("XAUTHORITY");
             const QString xauthPath = xauth.isEmpty() ? sysEnv.value("HOME") + "/.Xauthority"
-                                                       : xauth;
+                                                      : xauth;
             const FilePath hostXauth = FilePath::fromUserInput(xauthPath);
             if (hostXauth.exists()) {
                 const QString mountArg =
@@ -644,15 +696,15 @@ CommandLine DockerDevicePrivate::createCommandLine()
 
     dockerCreate.addArgs(q->portMappings.createArguments());
 
-    if (!q->keepEntryPoint())
+    if (!p.keepEntryPoint)
         dockerCreate.addArgs({"--entrypoint", "/bin/sh"});
 
-    if (q->enableLldbFlags())
+    if (p.enableLldbFlags)
         dockerCreate.addArgs({"--cap-add=SYS_PTRACE", "--security-opt", "seccomp=unconfined"});
 
-    dockerCreate.addArgs(q->extraArgs(), CommandLine::Raw);
+    dockerCreate.addArgs(p.extraArgs, CommandLine::Raw);
 
-    dockerCreate.addArg(q->repoAndTag());
+    dockerCreate.addArg(p.repoTag);
 
     return dockerCreate;
 }
@@ -676,7 +728,7 @@ Result<QString> DockerDevicePrivate::updateContainerAccess()
 
     DockerContainerThread::Init init;
     init.dockerBinaryPath = settings().dockerBinaryPath();
-    init.createContainerCmd = createCommandLine();
+    init.createContainerCmd = createCommandLine(appliedParams());
 
     auto result = DockerContainerThread::create(init);
 
@@ -1136,7 +1188,12 @@ FilePath DockerDevice::rootPath() const
 
 CommandLine DockerDevice::createCommandLine() const
 {
-    return d->createCommandLine();
+    return d->createCommandLine(d->appliedParams());
+}
+
+CommandLine DockerDevice::createCommandLineForDisplay() const
+{
+    return d->createCommandLine(d->volatileParams());
 }
 
 IDeviceWidget *DockerDevice::createWidget()

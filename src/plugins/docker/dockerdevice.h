@@ -44,6 +44,7 @@ public:
     static Ptr create() { return Ptr(new DockerDevice); }
 
     Utils::CommandLine createCommandLine() const;
+    Utils::CommandLine createCommandLineForDisplay() const;
 
     ProjectExplorer::IDeviceWidget *createWidget() override;
     QList<ProjectExplorer::Task> validate() const override;

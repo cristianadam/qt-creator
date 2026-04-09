@@ -133,7 +133,7 @@ DockerDeviceWidget::DockerDeviceWidget(const IDevice::Ptr &device)
         listAutoDetected(device, [logView](const QString &msg) { logView->append(msg); });
     });
 
-    auto createLineLabel = new QLabel(dockerDevice->createCommandLine().toUserOutput());
+    auto createLineLabel = new QLabel(dockerDevice->createCommandLineForDisplay().toUserOutput());
     createLineLabel->setWordWrap(true);
     createLineLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
@@ -179,9 +179,10 @@ DockerDeviceWidget::DockerDeviceWidget(const IDevice::Ptr &device)
     }.attachTo(this);
     // clang-format on
 
-    connect(&*dockerDevice, &AspectContainer::applied, this, [createLineLabel, dockerDevice] {
-        createLineLabel->setText(dockerDevice->createCommandLine().toUserOutput());
+    connect(dockerDevice.get(), &BaseAspect::volatileValueChanged, this, [createLineLabel, dockerDevice] {
+        createLineLabel->setText(dockerDevice->createCommandLineForDisplay().toUserOutput());
     });
+
     connect(&dockerDevice->mounts, &FilePathListAspect::volatileValueChanged,
             this, checkSettingsDirty);
 
