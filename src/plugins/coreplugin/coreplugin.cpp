@@ -39,6 +39,7 @@
 #include <utils/crashreporting.h>
 #include <utils/datafromprocess.h>
 #include <utils/environment.h>
+#include <utils/fileutils.h>
 #include <utils/infobar.h>
 #include <utils/layoutbuilder.h>
 #include <utils/macroexpander.h>
@@ -513,6 +514,13 @@ Result<> CorePlugin::initialize(const QStringList &arguments)
     expander->registerPrefix(
         "Asciify:", "éΩ", Tr::tr("Convert string to pure ASCII."), [expander](const QString &s) {
             return asciify(expander->expand(s));
+        });
+    expander->registerPrefix(
+        "FileSystemFriendly:",
+        "string with spaces",
+        Tr::tr("Convert string to something that can be safely used in a file path."),
+        [expander](const QString &s) {
+            return Utils::FileUtils::fileSystemFriendlyName(expander->expand(s));
         });
 
     if (HostOsInfo::isAnyUnixHost()) { // on Windows we do not have this setting

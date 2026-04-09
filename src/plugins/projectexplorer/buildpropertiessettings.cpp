@@ -21,7 +21,7 @@ static QString defaultBuildDirectoryTemplate()
 {
     return qtcEnvironmentVariable(
         Constants::QTC_DEFAULT_BUILD_DIRECTORY_TEMPLATE,
-        "./build/%{Asciify:%{Kit:FileSystemName}-%{BuildConfig:Name}}");
+        "./build/%{FileSystemFriendly:%{Kit:Name}_%{BuildConfig:Name}}");
 }
 
 static QString defaultWorkingDirectoryTemplate()

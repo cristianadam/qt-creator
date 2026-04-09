@@ -147,6 +147,11 @@ QString UtilsJsExtension::asciify(const QString &input) const
     return Utils::asciify(input);
 }
 
+QString UtilsJsExtension::fileSystemFriendly(const QString &input) const
+{
+    return FileUtils::fileSystemFriendlyName(input);
+}
+
 QString UtilsJsExtension::qtQuickVersion(const QString &filePath) const
 {
     QDirIterator dirIt(FilePath::fromString(filePath).parentDir().path(), {"*.qml"},
