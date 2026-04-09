@@ -200,7 +200,7 @@ bool PerfConfigEventsModel::removeRows(int row, int count, const QModelIndex &pa
     for (int i = 0; i < count; ++i)
         events.removeAt(row);
     beginRemoveRows(parent, row, row + count - 1);
-    m_settings->events.setValue(events);
+    m_settings->events.setValue(events, BaseAspect::BeQuiet);
     endRemoveRows();
 
     if (events.isEmpty()) {
