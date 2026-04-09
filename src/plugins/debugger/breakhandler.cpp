@@ -1156,6 +1156,8 @@ void BreakpointItem::addToCommand(
     cmd->arg("line", requested.textPosition.line);
     cmd->arg("address", requested.address);
     cmd->arg("expression", requested.expression);
+    cmd->arg("tracepoint", requested.tracepoint);
+    cmd->arg("message", toHex(requested.message));
 
     BreakpointPathUsage pathUsage = (requested.pathUsage
                                      == BreakpointPathUsage::BreakpointPathUsageEngineDefault)

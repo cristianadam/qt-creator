@@ -460,6 +460,11 @@ void LldbEngine::handleResponse(const QString &response)
             handleInterpreterBreakpointModified(item);
         else if (name == "bridgemessage")
             showMessage(item["msg"].data(), item["channel"].toInt());
+        else if (name == "tracepointhit") {
+            QString message = fromHex(item["message"].data());
+            showMessage(message);
+            emit postMessageRequested(message, NormalMessageFormat, true);
+        }
     }
 }
 

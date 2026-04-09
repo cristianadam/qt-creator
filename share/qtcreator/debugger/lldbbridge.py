@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 import inspect
+import json
 import os
 import platform
 import re
@@ -1712,6 +1713,35 @@ class Dumper(DumperBase):
         return self.target.BreakpointCreateByName(
             'main', self.target.GetExecutable().GetFilename())
 
+    def breakpointCallback(self, frame, bp_loc, extra_args, internal_dict):
+        command_str = extra_args.GetValueForKey('command').GetStringValue(65536)
+        tracepoint = extra_args.GetValueForKey('tracepoint').GetBooleanValue()
+        message = extra_args.GetValueForKey('message').GetStringValue(65536)
+
+        from io import StringIO
+        origout = sys.stdout
+        sys.stdout = StringIO()
+        result = True
+
+        if command_str:
+            local_ns = {'frame': frame, 'bp_loc': bp_loc, 'internal_dict': internal_dict}
+            userCode = 'def foo(frame=frame, bp_loc=bp_loc, dict=internal_dict):\n  ' + command_str.replace('\n', '\n  ')
+            exec(userCode, local_ns)
+            result = local_ns['foo']()
+
+        d = lldb.theDumper
+        output = d.hexencode(sys.stdout.getvalue())
+        sys.stdout = origout
+        d.report(f'output={{channel="stderr",data="{output}"}}')
+        sys.stdout.flush()
+        if result is False:
+            d.reportState("continueafternextstop")
+        if tracepoint:
+            d.report(f'tracepointhit={{message="{d.hexencode(message)}"}}')
+            d.reportState("continueafternextstop")
+
+        return True
+
     def insertBreakpoint(self, args):
         bpType = args['type']
         if bpType == BreakpointType.BreakpointByFileAndLine:
@@ -1763,22 +1793,14 @@ class Dumper(DumperBase):
             bp.SetIgnoreCount(int(args['ignorecount']))
             bp.SetCondition(self.hexdecode(args['condition']))
             bp.SetEnabled(bool(args['enabled']))
-            bp.SetScriptCallbackBody('\n'.join([
-                'def foo(frame = frame, bp_loc = bp_loc, dict = internal_dict):',
-                '  ' + self.hexdecode(args['command']).replace('\n', '\n  '),
-                'from cStringIO import StringIO',
-                'origout = sys.stdout',
-                'sys.stdout = StringIO()',
-                'result = foo()',
-                'd = lldb.theDumper',
-                'output = d.hexencode(sys.stdout.getvalue())',
-                'sys.stdout = origout',
-                'd.report("output={channel=\"stderr\",data=\" + output + \"}")',
-                'sys.stdout.flush()',
-                'if result is False:',
-                '  d.reportState("continueafternextstop")',
-                'return True'
-            ]))
+            extra_args_dict = {
+                'tracepoint': bool(args['tracepoint']),
+                'message': self.hexdecode(args['message']),
+                'command': self.hexdecode(args['command'])
+            }
+            extra_args = lldb.SBStructuredData()
+            extra_args.SetFromJSON(json.dumps(extra_args_dict))
+            res = bp.SetScriptCallbackFunction('lldb.theDumper.breakpointCallback', extra_args)
             if isinstance(bp, lldb.SBBreakpoint):
                 bp.SetOneShot(bool(args['oneshot']))
         self.reportResult(self.describeBreakpoint(bp) + extra, args)
