@@ -84,6 +84,9 @@ private Q_SLOTS:
     void bug2();
     void bug3();
     void indentFunctionWithReturnTypeAnnotation();
+    void propertyModifiers();
+    void bracelessIfBody();
+    void pragmaStatement();
 };
 
 enum { DontCheck = -2, DontIndent = -1 };
@@ -1576,6 +1579,70 @@ void tst_QMLCodeFormatter::indentFunctionWithReturnTypeAnnotation()
     checkIndent(data);
 }
 
+
+void tst_QMLCodeFormatter::propertyModifiers()
+{
+    QList<Line> data;
+    data << Line("Item {")
+         << Line("    property int a")
+         << Line("    virtual property int b")
+         << Line("    final property int c")
+         << Line("    override property string d")
+         << Line("    readonly property int e: 1")
+         << Line("    default property int f")
+         << Line("    required property int g")
+         << Line("    required virtual property int h")
+         << Line("    virtual required property int i")
+         << Line("    x: 1")
+         << Line("}")
+         ;
+    checkIndent(data);
+}
+
+void tst_QMLCodeFormatter::bracelessIfBody()
+{
+    QList<Line> data;
+    data << Line("pragma HelloPragma: Value")
+         << Line("TextField {")
+         << Line("    onAccepted: {")
+         << Line("        if (!text)")
+         << Line("            return;")
+         << Line("        doSomething()")
+         << Line("        if (a)")
+         << Line("            if (b)")
+         << Line("                x()")
+         << Line("            else")
+         << Line("                y()")
+         << Line("        else")
+         << Line("            z()")
+         << Line("    }")
+         << Line("}")
+         ;
+    checkIndent(data);
+}
+
+void tst_QMLCodeFormatter::pragmaStatement()
+{
+    QList<Line> data;
+    data << Line("pragma Singleton")
+         << Line("import QtQuick 2.0")
+         << Line("")
+         << Line("Item {")
+         << Line("    x: 1")
+         << Line("}")
+         ;
+    checkIndent(data);
+
+    data.clear();
+    data << Line("pragma ComponentBehavior: Bound")
+         << Line("import QtQuick 2.0")
+         << Line("")
+         << Line("Item {")
+         << Line("    x: 1")
+         << Line("}")
+         ;
+    checkIndent(data);
+}
 
 QTEST_GUILESS_MAIN(tst_QMLCodeFormatter)
 #include "tst_qmlcodeformatter.moc"

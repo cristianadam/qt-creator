@@ -156,7 +156,10 @@ public: // must be public to make Q_GADGET introspection work
 
         switch_statement, // After 'switch' token
         case_start, // after a 'case' or 'default' token
-        case_cont // after the colon in a case/default
+        case_cont, // after the colon in a case/default
+
+        pragma_start, // after 'pragma'
+        pragma_with_colon // after pragma name, expecting optional ':' and value
     };
     Q_ENUM(StateType)
 
@@ -222,6 +225,7 @@ protected:
         Required,
         Component,
         Readonly,
+        Pragma,
 
         Question,
         PlusPlus,

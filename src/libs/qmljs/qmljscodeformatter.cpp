@@ -63,6 +63,7 @@ void CodeFormatter::recalculateStateAfter(const QTextBlock &block)
             switch (kind) {
             case Identifier:    enter(objectdefinition_or_js); continue;
             case Import:        enter(top_qml); continue;
+            case Pragma:        enter(top_qml); continue;
             case LeftBrace:     enter(top_js); enter(expression); continue; // if a file starts with {, it's likely json
             default:            enter(top_js); continue;
             } break;
@@ -70,6 +71,7 @@ void CodeFormatter::recalculateStateAfter(const QTextBlock &block)
         case top_qml:
             switch (kind) {
             case Import:        enter(import_start); break;
+            case Pragma:        enter(pragma_start); break;
             case Identifier:    enter(binding_or_objectdefinition); break;
             } break;
 
@@ -117,6 +119,19 @@ void CodeFormatter::recalculateStateAfter(const QTextBlock &block)
         case import_as:
             switch (kind) {
             case Identifier:    leave(); leave(); break;
+            } break;
+
+        case pragma_start:
+            switch (kind) {
+            case Identifier:    turnInto(pragma_with_colon); break;
+            default:            leave(); continue;
+            } break;
+
+        case pragma_with_colon:
+            switch (kind) {
+            case Colon:         break;
+            case Identifier:    leave(); break;
+            default:            leave(); continue;
             } break;
 
         case binding_or_objectdefinition:
@@ -940,6 +955,8 @@ CodeFormatter::TokenKind CodeFormatter::extendedTokenKind(const QmlJS::Token &to
             return As;
         if (text == QLatin1String("import"))
             return Import;
+        if (text == QLatin1String("pragma"))
+            return Pragma;
         if (text == QLatin1String("signal"))
             return Signal;
         if (text == QLatin1String("property"))
