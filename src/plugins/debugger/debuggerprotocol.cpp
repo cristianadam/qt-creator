@@ -15,7 +15,12 @@
 #include <utils/qtcassert.h>
 #include <utils/textcodec.h>
 
+#include <QByteArrayView>
+#include <QChar>
+
+#include <array>
 #include <cstdio>
+#include <cstring>
 
 namespace Debugger::Internal {
 
@@ -892,6 +897,127 @@ QString fromHex(const QString &str)
 QString toHex(const QString &str)
 {
     return QString::fromUtf8(str.toUtf8().toHex());
+}
+
+int formatToIntegerBase(int format)
+{
+    switch (format) {
+        case HexadecimalIntegerFormat: return 16;
+        case BinaryIntegerFormat:      return 2;
+        case OctalIntegerFormat:       return 8;
+    }
+    return 10;
+}
+
+static QString reformatIntegerHelper(quint64 value, int format)
+{
+    switch (format) {
+        case HexadecimalIntegerFormat:
+            return "(hex) " + QString::number(value, 16);
+        case BinaryIntegerFormat:
+            return "(bin) " + QString::number(value, 2);
+        case OctalIntegerFormat:
+            return "(oct) " + QString::number(value, 8);
+        case CharCodeIntegerFormat: {
+            QString res = "\"";
+            while (value > 0) {
+                res = QChar(ushort(value & 255)) + res;
+                value >>= 8;
+            }
+            return "\"" + res;
+        }
+        case FourCharIntegerFormat: {
+            char buf[4];
+            buf[0] = char((value >> 24) & 0xff);
+            buf[1] = char((value >> 16) & 0xff);
+            buf[2] = char((value >> 8) & 0xff);
+            buf[3] = char(value & 0xff);
+            return "'" + QString::fromLatin1(buf, 4) + "'";
+        }
+    }
+    return QString::number(value, 10);
+}
+
+QString reformatSignedInteger(qint64 value, int format)
+{
+    if (format == DecimalIntegerFormat || format == AutomaticFormat)
+        return QString::number(value, 10);
+    return reformatIntegerHelper(quint64(value), format);
+}
+
+QString reformatUnsignedInteger(quint64 value, int format)
+{
+    return reformatIntegerHelper(value, format);
+}
+
+QString reformatInteger(quint64 value, int format, int size, bool isSigned)
+{
+    // Follow convention and don't show negative non-decimal numbers.
+    if (format != AutomaticFormat && format != DecimalIntegerFormat)
+        isSigned = false;
+
+    switch (size) {
+    case 1: value = value & 0xff;         break;
+    case 2: value = value & 0xffff;       break;
+    case 4: value = value & 0xffffffff;   break;
+    default: break;
+    }
+    return isSigned ? reformatSignedInteger(qint64(value), format)
+                    : reformatUnsignedInteger(value, format);
+}
+
+QString reformatCharacter(int code, int size, bool isSigned)
+{
+    if (uint32_t(code) > 0xffff) {
+        std::array<char, sizeof(char32_t)> buf;
+        memcpy(buf.data(), &code, sizeof(char32_t));
+        QByteArrayView view(buf);
+        const QString encoded = QStringDecoder(QStringDecoder::Utf32)(view);
+        return QString("'%1'\t%2\t0x%3").arg(encoded).arg(unsigned(code))
+                   .arg(uint(code & ((1ULL << (8*size)) - 1)), 2 * size, 16, QLatin1Char('0'));
+    }
+
+    QChar c;
+    switch (size) {
+        case 1: c = QChar(char(code));     break;
+        case 2: c = QChar(uint16_t(code)); break;
+        case 4: c = QChar(uint32_t(code)); break;
+        default: c = QChar(uint(code));    break;
+    }
+
+    QString out;
+    if (c.isPrint())
+        out = QString("'") + c + "' ";
+    else if (code == 0)
+        out = "'\\0'";
+    else if (code == '\r')
+        out = "'\\r'";
+    else if (code == '\n')
+        out = "'\\n'";
+    else if (code == '\t')
+        out = "'\\t'";
+    else
+        out = "    ";
+
+    out += '\t';
+
+    if (isSigned) {
+        out += QString::number(code);
+        if (code < 0)
+            out += QString("/%1    ").arg((1ULL << (8*size)) + code).left(2 + 2 * size);
+        else
+            out += QString(2 + 2 * size, ' ');
+    } else {
+        if (size == 2)
+            out += QString::number(char16_t(code));
+        else
+            out += QString::number(unsigned(code));
+    }
+
+    out += '\t';
+    out += QString("0x%1").arg(uint(code & ((1ULL << (8*size)) - 1)),
+                               2 * size, 16, QLatin1Char('0'));
+    return out;
 }
 
 } // Debugger::Internal
