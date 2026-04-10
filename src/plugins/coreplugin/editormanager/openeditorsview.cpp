@@ -93,8 +93,12 @@ OpenEditorsWidget::OpenEditorsWidget()
     connect(qApp, &QApplication::focusChanged, this, [this](QWidget *old) {
         // re-sync after the user possibly changed the current item while
         // focus was in this view
-        if (old == this)
-            updateCurrentItem(EditorManager::currentEditor());
+        if (old == this) {
+            QMetaObject::invokeMethod(
+                this,
+                [this] { updateCurrentItem(EditorManager::currentEditor()); },
+                Qt::QueuedConnection);
+        }
     });
     connect(this, &OpenDocumentsTreeView::activated, this, &OpenEditorsWidget::handleActivated);
     connect(this, &OpenDocumentsTreeView::closeActivated,

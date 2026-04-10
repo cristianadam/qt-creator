@@ -662,7 +662,11 @@ LocatorWidget::LocatorWidget(Locator *locator)
         updatePlaceholderText(locateCmd);
     }
 
-    connect(qApp, &QApplication::focusChanged, this, &LocatorWidget::updatePreviousFocusWidget);
+    connect(qApp, &QApplication::focusChanged, this, [this](QWidget *previous, QWidget *current) {
+        const auto isInLocator = [this](QWidget *w) { return w == this || isAncestorOf(w); };
+        if (isInLocator(current) && !isInLocator(previous))
+            m_previousFocusWidget = previous;
+    });
 
     connect(locator, &Locator::filtersChanged, this, &LocatorWidget::updateFilterList);
     updateFilterList();
@@ -711,13 +715,6 @@ void LocatorWidget::updateFilterList()
 bool LocatorWidget::isInMainWindow() const
 {
     return window() == ICore::mainWindow();
-}
-
-void LocatorWidget::updatePreviousFocusWidget(QWidget *previous, QWidget *current)
-{
-    const auto isInLocator = [this](QWidget *w) { return w == this || isAncestorOf(w); };
-    if (isInLocator(current) && !isInLocator(previous))
-        m_previousFocusWidget = previous;
 }
 
 static void resetFocus(QPointer<QWidget> previousFocus, bool isInMainWindow)

@@ -35,7 +35,9 @@ EditorArea::EditorArea()
     updateCloseSplitButton();
 
     connect(qApp, &QApplication::focusChanged,
-            this, &EditorArea::focusChanged);
+            this, &EditorArea::focusChanged,
+            Qt::QueuedConnection);
+
     connect(
         m_splitterOrView,
         &SplitterOrView::splitStateChanged,
@@ -109,9 +111,9 @@ void EditorArea::restoreState(const QByteArray &s)
     m_splitterOrView->restoreState(s);
 }
 
-void EditorArea::focusChanged(QWidget *old, QWidget *now)
+void EditorArea::focusChanged()
 {
-    Q_UNUSED(old)
+    QWidget *now = QApplication::focusWidget();
     // only interesting if the focus moved within the editor area
     if (!focusWidget() || focusWidget() != now)
         return;

@@ -61,7 +61,6 @@ private:
     void updateFilterList();
     bool isInMainWindow() const;
 
-    void updatePreviousFocusWidget(QWidget *previous, QWidget *current);
     bool eventFilter(QObject *obj, QEvent *event) override;
 
     void runMatcher(const QString &text);

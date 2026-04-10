@@ -818,17 +818,24 @@ void QmlDesignerPlugin::trackWidgetFocusTime(QWidget *widget, const QString &ide
     NanotraceHR::Tracer tracer{"qml designer plugin track widget focus time", category()};
 
     connect(qApp, &QApplication::focusChanged, widget, [widget, identifier](QWidget *from, QWidget *to) {
-        static QElapsedTimer widgetUsageTimer;
-        static QString lastIdentifier;
-        if (widget->isAncestorOf(to)) {
-            if (!lastIdentifier.isEmpty())
-                emitUsageStatisticsTime(lastIdentifier, widgetUsageTimer.elapsed());
-            widgetUsageTimer.restart();
-            lastIdentifier = identifier;
-        } else if (widget->isAncestorOf(from) && lastIdentifier == identifier) {
-            emitUsageStatisticsTime(identifier, widgetUsageTimer.elapsed());
-            lastIdentifier.clear();
-        }
+        const bool isAncestorOfFrom = widget->isAncestorOf(from);
+        const bool isAncestorOfTo = widget->isAncestorOf(to);
+        QMetaObject::invokeMethod(
+            widget,
+            [isAncestorOfFrom, isAncestorOfTo, identifier] {
+                static QElapsedTimer widgetUsageTimer;
+                static QString lastIdentifier;
+                if (isAncestorOfTo) {
+                    if (!lastIdentifier.isEmpty())
+                        emitUsageStatisticsTime(lastIdentifier, widgetUsageTimer.elapsed());
+                    widgetUsageTimer.restart();
+                    lastIdentifier = identifier;
+                } else if (isAncestorOfFrom && lastIdentifier == identifier) {
+                    emitUsageStatisticsTime(identifier, widgetUsageTimer.elapsed());
+                    lastIdentifier.clear();
+                }
+            },
+            Qt::QueuedConnection);
     });
 }
 

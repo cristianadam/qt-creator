@@ -275,7 +275,7 @@ public:
     static void setFocusToEditor();
     void changeLog();
     void contact();
-    void updateFocusWidget(QWidget *old, QWidget *now);
+    void updateFocusWidget();
     NavigationWidget *navigationWidget(Side side) const;
     void setSidebarVisible(bool visible, Side side);
     void destroyVersionDialog();
@@ -1393,7 +1393,9 @@ void ICorePrivate::init()
 
     m_progressManager->progressView()->setParent(m_mainwindow);
 
-    connect(qApp, &QApplication::focusChanged, this, &ICorePrivate::updateFocusWidget);
+    connect(qApp, &QApplication::focusChanged,
+            this, &ICorePrivate::updateFocusWidget,
+            Qt::QueuedConnection);
 
     // Add small Toolbuttons for toggling the navigation widgets
     StatusBarManager::addStatusBarWidget(m_toggleLeftSideBarButton, StatusBarManager::First);
@@ -2340,20 +2342,20 @@ void ICore::removeContextObject(IContext *context)
 
 namespace Internal {
 
-void ICorePrivate::updateFocusWidget(QWidget *old, QWidget *now)
+void ICorePrivate::updateFocusWidget()
 {
-    Q_UNUSED(old)
+    QWidget *now = QApplication::focusWidget();
 
     // Prevent changing the context object just because the menu or a menu item is activated
     if (qobject_cast<QMenuBar*>(now) || qobject_cast<QMenu*>(now))
         return;
 
     QList<IContext *> newContext;
-    for (QWidget *p = QApplication::focusWidget(); p; p = p->parentWidget())
+    for (QWidget *p = now; p; p = p->parentWidget())
         newContext.append(ICore::contextObjects(p));
 
     // ignore toplevels that define no context, like popups without parent
-    if (!newContext.isEmpty() || QApplication::focusWidget() == m_mainwindow->focusWidget())
+    if (!newContext.isEmpty() || now == m_mainwindow->focusWidget())
         updateContextObject(newContext);
 }
 

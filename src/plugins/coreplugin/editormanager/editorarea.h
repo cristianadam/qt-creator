@@ -43,7 +43,7 @@ signals:
     void splitStateChanged();
 
 private:
-    void focusChanged(QWidget *old, QWidget *now);
+    void focusChanged();
     void setCurrentView(EditorView *view);
     void updateCurrentEditor(IEditor *editor);
     void updateCloseSplitButton();

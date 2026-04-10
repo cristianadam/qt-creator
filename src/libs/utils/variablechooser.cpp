@@ -72,7 +72,7 @@ public:
     }
 
     void updateDescription(const QModelIndex &index);
-    void updateCurrentEditor(QWidget *old, QWidget *widget);
+    void updateCurrentEditor();
     void handleItemActivated(const QModelIndex &index);
     void insertText(const QString &variable);
     void updatePositionAndShow(bool);
@@ -278,8 +278,9 @@ VariableChooserPrivate::VariableChooserPrivate(VariableChooser *parent)
     connect(m_variableTree, &QTreeView::activated,
             this, &VariableChooserPrivate::handleItemActivated);
     connect(qobject_cast<QApplication *>(qApp), &QApplication::focusChanged,
-            this, &VariableChooserPrivate::updateCurrentEditor);
-    updateCurrentEditor(nullptr, QApplication::focusWidget());
+            this, &VariableChooserPrivate::updateCurrentEditor,
+            Qt::QueuedConnection);
+    updateCurrentEditor();
 }
 
 void VariableGroupItem::populateGroup(MacroExpander *expander)
@@ -448,9 +449,9 @@ void VariableChooserPrivate::updateButtonGeometry()
                               .translated(-rightPadding, 0));
 }
 
-void VariableChooserPrivate::updateCurrentEditor(QWidget *old, QWidget *widget)
+void VariableChooserPrivate::updateCurrentEditor()
 {
-    Q_UNUSED(old)
+    QWidget *widget = QApplication::focusWidget();
     if (!widget) // we might loose focus, but then keep the previous state
         return;
     // prevent children of the chooser itself, and limit to children of chooser's parent

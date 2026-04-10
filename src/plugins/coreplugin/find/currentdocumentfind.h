@@ -50,7 +50,7 @@ signals:
     void candidateChanged();
 
 private:
-    void updateCandidateFindFilter(QWidget *old, QWidget *now);
+    void updateCandidateFindFilter();
     void clearFindSupport();
     void aggregationChanged();
     void candidateAggregationChanged();

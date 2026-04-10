@@ -22,7 +22,8 @@ CurrentDocumentFind::CurrentDocumentFind()
   : m_currentFind(nullptr)
 {
     connect(qApp, &QApplication::focusChanged,
-            this, &CurrentDocumentFind::updateCandidateFindFilter);
+            this, &CurrentDocumentFind::updateCandidateFindFilter,
+            Qt::QueuedConnection);
 }
 
 void CurrentDocumentFind::removeConnections()
@@ -146,10 +147,9 @@ void CurrentDocumentFind::clearFindScope()
     m_currentFind->clearFindScope();
 }
 
-void CurrentDocumentFind::updateCandidateFindFilter(QWidget *old, QWidget *now)
+void CurrentDocumentFind::updateCandidateFindFilter()
 {
-    Q_UNUSED(old)
-    QWidget *candidate = now;
+    QWidget *candidate = QApplication::focusWidget();
     QPointer<IFindSupport> impl = nullptr;
     while (!impl && candidate) {
         impl = Aggregation::query<IFindSupport>(candidate);
