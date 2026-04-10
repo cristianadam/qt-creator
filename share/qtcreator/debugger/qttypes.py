@@ -1566,7 +1566,12 @@ def qdump__QPixmap(d, value):
     if data == 0:
         d.putValue('(invalid)')
     else:
-        _, width, height = d.split('pii', data)
+        # Since Qt 6.11, QPlatformPixmap inherits QSharedData, adding a ref
+        # count (int) before w and h in the layout (after the vtable pointer).
+        if d.qtVersionAtLeast(0x060b00):
+            _, ref, width, height = d.split('piii', data)
+        else:
+            _, width, height = d.split('pii', data)
         d.putValue('(%dx%d)' % (width, height))
 
     d.putPlainChildren(value)
