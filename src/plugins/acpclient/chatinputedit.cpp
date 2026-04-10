@@ -6,10 +6,12 @@
 #include "chatinputcompletion.h"
 
 #include <utils/historycompleter.h>
+#include <utils/textutils.h>
 
 #include <texteditor/fontsettings.h>
 #include <texteditor/textdocument.h>
 #include <texteditor/texteditorconstants.h>
+#include <texteditor/textsuggestion.h>
 
 #include <QAbstractItemModel>
 #include <QApplication>
@@ -53,6 +55,7 @@ ChatInputEdit::ChatInputEdit(QWidget *parent)
 
     updateHeight();
     connect(this, &TextEditor::TextEditorWidget::textChanged, this, &ChatInputEdit::updateHeight);
+    connect(this, &TextEditor::TextEditorWidget::textChanged, this, &ChatInputEdit::updateSuggestion);
 }
 
 void ChatInputEdit::keyPressEvent(QKeyEvent *event)
@@ -107,6 +110,47 @@ void ChatInputEdit::updateHeight()
                   + cm.top() + cm.bottom() + 2 * docMargin + 2 * frameWidth();
     setFixedHeight(h);
     setVerticalScrollBarPolicy(visualLines > 5 ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
+}
+
+void ChatInputEdit::updateSuggestion()
+{
+    // Don't show suggestions while browsing history
+    if (m_historyIndex != -1) {
+        clearSuggestion();
+        return;
+    }
+
+    const QString currentText = toPlainText();
+
+    // Only suggest for non-empty, single-line input with cursor at the end
+    if (currentText.isEmpty() || currentText.contains('\n')
+        || textCursor().position() != document()->characterCount() - 1) {
+        clearSuggestion();
+        return;
+    }
+
+    const QAbstractItemModel *model = m_history->model();
+    const int count = model->rowCount();
+    QList<TextEditor::TextSuggestion::Data> suggestions;
+
+    for (int i = 0; i < count; ++i) {
+        const QString entry = model->data(model->index(i, 0)).toString();
+        if (entry != currentText && entry.startsWith(currentText, Qt::CaseInsensitive)) {
+            TextEditor::TextSuggestion::Data data;
+            data.range = {Utils::Text::Position{1, 0},
+                          Utils::Text::Position{1, int(currentText.length())}};
+            data.position = Utils::Text::Position{1, int(currentText.length())};
+            data.text = entry;
+            suggestions.append(data);
+        }
+    }
+
+    if (suggestions.isEmpty()) {
+        clearSuggestion();
+        return;
+    }
+
+    insertSuggestion(std::make_unique<TextEditor::CyclicSuggestion>(suggestions, document()));
 }
 
 void ChatInputEdit::historyUp()

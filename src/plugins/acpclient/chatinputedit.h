@@ -25,6 +25,7 @@ protected:
 
 private:
     void updateHeight();
+    void updateSuggestion();
     void historyUp();
     void historyDown();
 
