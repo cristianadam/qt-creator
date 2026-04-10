@@ -783,6 +783,8 @@ void BuildManager::startBuildQueue()
             ++d->m_progress;
             d->m_progressFutureInterface->setProgressValueAndText(
                 100 * d->m_progress, msgProgress(d->m_progress, d->m_maxProgress));
+            if (d->m_futureProgress)
+                d->m_futureProgress->setSubtitleVisibleInStatusBar(false);
             if (result == DoneWith::Success)
                 return;
             const QString projectName = buildStep->project()->displayName();
@@ -891,6 +893,10 @@ void BuildManager::progressChanged(int percent, const QString &text)
 {
     if (d->m_progressFutureInterface)
         d->m_progressFutureInterface->setProgressValueAndText(percent + 100 * d->m_progress, text);
+    if (d->m_futureProgress && !text.isEmpty()) {
+        d->m_futureProgress->setSubtitle(text);
+        d->m_futureProgress->setSubtitleVisibleInStatusBar(true);
+    }
 }
 
 bool BuildManager::buildQueueAppend(const QList<BuildItem> &items, const QStringList &preambleMessage)
