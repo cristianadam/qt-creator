@@ -39,6 +39,8 @@ QtcPlugin {
         "acpterminalhandler.h",
         "acptransport.cpp",
         "acptransport.h",
+        "chatinputcompletion.cpp",
+        "chatinputcompletion.h",
         "chatinputedit.cpp",
         "chatinputedit.h",
         "chatpanel.cpp",

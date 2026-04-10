@@ -26,6 +26,7 @@ add_qtc_plugin(AcpClient
     acpstdiotransport.cpp acpstdiotransport.h
     acpterminalhandler.cpp acpterminalhandler.h
     acptransport.cpp acptransport.h
+    chatinputcompletion.cpp chatinputcompletion.h
     chatinputedit.cpp chatinputedit.h
     chatpanel.cpp chatpanel.h
     collapsibleframe.h

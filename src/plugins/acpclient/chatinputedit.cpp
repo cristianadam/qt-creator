@@ -3,6 +3,7 @@
 
 #include "chatinputedit.h"
 #include "acpclienttr.h"
+#include "chatinputcompletion.h"
 
 #include <utils/historycompleter.h>
 
@@ -45,6 +46,8 @@ ChatInputEdit::ChatInputEdit(QWidget *parent)
     };
     applyWidgetColors();
     connect(textDocument(), &TextEditor::TextDocument::fontSettingsChanged, this, applyWidgetColors);
+
+    textDocument()->setCompletionAssistProvider(new ChatInputCompletionProvider(this));
 
     m_history = new Utils::HistoryCompleter("AcpChatInput", 100, this);
 
