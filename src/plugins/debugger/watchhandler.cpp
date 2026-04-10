@@ -1151,6 +1151,9 @@ static DisplayFormats typeFormatList(const WatchItem *item)
         v.toULongLong(&ok, 16);
     if (!ok)
         v.toULongLong(&ok, 8);
+    // 128-bit integers exceed ULLONG_MAX; accept them if the value is all decimal digits.
+    if (!ok && item->size == 16)
+        ok = !v.isEmpty() && std::all_of(v.cbegin(), v.cend(), [](QChar c) { return c.isDigit(); });
     if (ok) {
         formats.append(DecimalIntegerFormat);
         formats.append(HexadecimalIntegerFormat);
