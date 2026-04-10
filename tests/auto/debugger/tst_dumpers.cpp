@@ -6699,6 +6699,27 @@ void tst_Dumpers::dumper_data()
                + Check("u.a", AnyValue, "int")
                + Check("u.b", AnyValue, "int");
 
+    // Single-member wrapper: value shown directly without needing to expand.
+    QTest::newRow("SingleMemberWrapper")
+            << Data("struct FileId { int id; };\n"
+                    "struct Ratio { double value; };\n"
+                    "struct Base { int x; };\n"
+                    "struct Derived : Base {};\n",
+
+                    "FileId f;\n"
+                    "f.id = 42;\n"
+                    "Ratio r;\n"
+                    "r.value = 0.5;\n"
+                    "Derived d;\n"
+                    "d.x = 7;\n",
+
+                    "&f, &r, &d")
+
+               + Check("f", "42", "FileId")
+               + Check("r", "0.5", "Ratio")
+               + Check("d", "", "Derived")
+               + Check("d.x", "7", "int");
+
 //    QTest::newRow("TypeFormats")
 //                  << Data(
 //    "// These tests should result in properly displayed umlauts in the\n"
