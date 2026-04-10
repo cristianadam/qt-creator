@@ -1763,21 +1763,34 @@ def qdump__QSharedData(d, value):
     d.putValue('ref: %s' % value.to('i'))
 
 
-def qdump__QSharedDataPointer(d, value):
-    d_ptr = value['d']
+def qsharedDataPointerHelper(d, value):
+    # Since Qt 6.8, the 'd' member uses totally_ordered_wrapper<T*> instead of T*.
+    member_d = value['d']
+    if 'totally_ordered_wrapper' in str(member_d.type.name):
+        d_ptr = member_d['ptr']
+    else:
+        d_ptr = member_d
     if d_ptr.pointer() == 0:
         d.putValue('(null)')
     else:
         # This replaces the pointer by the pointee, making the
         # pointer transparent.
         try:
-            innerType = value.type[0]
+            value.type[0]
         except:
             d.putValue(d_ptr)
             d.putPlainChildren(value)
             return
         d.putBetterType(d.currentType)
         d.putItem(d_ptr.dereference())
+
+
+def qdump__QSharedDataPointer(d, value):
+    qsharedDataPointerHelper(d, value)
+
+
+def qdump__QExplicitlySharedDataPointer(d, value):
+    qsharedDataPointerHelper(d, value)
 
 
 def qdump__QSize(d, value):
