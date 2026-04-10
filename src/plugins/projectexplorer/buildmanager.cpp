@@ -891,6 +891,8 @@ void BuildManager::progressChanged(int percent, const QString &text)
 {
     if (d->m_progressFutureInterface)
         d->m_progressFutureInterface->setProgressValueAndText(percent + 100 * d->m_progress, text);
+    if (d->m_futureProgress && !text.isEmpty())
+        d->m_futureProgress->setSubtitle(text);
 }
 
 bool BuildManager::buildQueueAppend(const QList<BuildItem> &items, const QStringList &preambleMessage)
