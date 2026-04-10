@@ -79,6 +79,12 @@ public:
         contentLayout->setContentsMargins(0, 0, 0, 0);
         contentLayout->setSpacing(0);
         setLayout(contentLayout);
+        if (orientation == Qt::Horizontal) {
+            m_progressLabel = new QLabel;
+            m_progressLabel->setFont(StyleHelper::uiFont(StyleHelper::UiElementCaptionStrong));
+            m_progressLabel->hide();
+            contentLayout->addWidget(m_progressLabel);
+        }
         contentLayout->addWidget(m_contentWidget);
         QBoxLayout *layout;
         if (orientation == Qt::Horizontal)
@@ -117,6 +123,15 @@ public:
         connect(m_taskWindow.data(), &TaskWindow::tasksChanged, this, &BuildProgress::updateState);
     }
 
+public:
+    void setProgressText(const QString &text)
+    {
+        if (!m_progressLabel)
+            return;
+        m_progressLabel->setVisible(!text.isEmpty());
+        m_progressLabel->setText(text);
+    }
+
 private:
     void updateState()
     {
@@ -145,6 +160,7 @@ private:
         m_contentWidget->setVisible(haveWarnings || haveErrors);
     }
 
+    QLabel *m_progressLabel = nullptr;
     QWidget *m_contentWidget;
     QLabel *m_errorIcon;
     QLabel *m_warningIcon;
@@ -406,6 +422,7 @@ public:
     // Progress reporting to the progress manager
     QFutureInterface<void> *m_progressFutureInterface = nullptr;
     QPointer<FutureProgress> m_futureProgress;
+    BuildProgress *m_statusBarProgress = nullptr;
 
     QSingleTaskTreeRunner m_taskTreeRunner;
     QElapsedTimer m_elapsed;
@@ -646,6 +663,7 @@ void BuildManager::cleanupBuild()
     d->m_progress = 0;
     d->m_maxProgress = 0;
     d->m_futureProgress = nullptr;
+    d->m_statusBarProgress = nullptr;
 }
 
 void BuildManager::cancel()
@@ -783,8 +801,8 @@ void BuildManager::startBuildQueue()
             ++d->m_progress;
             d->m_progressFutureInterface->setProgressValueAndText(
                 100 * d->m_progress, msgProgress(d->m_progress, d->m_maxProgress));
-            if (d->m_futureProgress)
-                d->m_futureProgress->setSubtitleVisibleInStatusBar(false);
+            if (d->m_statusBarProgress)
+                d->m_statusBarProgress->setProgressText({});
             if (result == DoneWith::Success)
                 return;
             const QString projectName = buildStep->project()->displayName();
@@ -827,8 +845,8 @@ void BuildManager::startBuildQueue()
             m_instance, &BuildManager::finish);
 
     d->m_futureProgress.data()->setWidget(new BuildProgress(d->m_taskWindow));
-    d->m_futureProgress.data()->setStatusBarWidget(new BuildProgress(d->m_taskWindow,
-                                                                     Qt::Horizontal));
+    d->m_statusBarProgress = new BuildProgress(d->m_taskWindow, Qt::Horizontal);
+    d->m_futureProgress.data()->setStatusBarWidget(d->m_statusBarProgress);
     d->m_progressFutureInterface->setProgressRange(0, d->m_maxProgress * 100);
     d->m_progressFutureInterface->reportStarted();
 
@@ -893,10 +911,8 @@ void BuildManager::progressChanged(int percent, const QString &text)
 {
     if (d->m_progressFutureInterface)
         d->m_progressFutureInterface->setProgressValueAndText(percent + 100 * d->m_progress, text);
-    if (d->m_futureProgress && !text.isEmpty()) {
-        d->m_futureProgress->setSubtitle(text);
-        d->m_futureProgress->setSubtitleVisibleInStatusBar(true);
-    }
+    if (d->m_statusBarProgress)
+        d->m_statusBarProgress->setProgressText(text);
 }
 
 bool BuildManager::buildQueueAppend(const QList<BuildItem> &items, const QStringList &preambleMessage)
