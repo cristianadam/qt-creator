@@ -3093,6 +3093,16 @@ typename))
             self.putNumChild(0)
             return
 
+        # Single-member wrapper: show simple inner value directly (strong typedef pattern).
+        if self.useFancy and value.type.size() in (1, 2, 4, 8):
+            members = value.members(True)
+            if len(members) == 1:
+                if self.type_code(members[0].typeid) in (TypeCode.Integral, TypeCode.Float,
+                                                         TypeCode.Enum, TypeCode.Pointer):
+                    self.putItem(members[0])
+                    self.putBetterType(typename)
+                    return
+
         self.putExpandable()
         self.putEmptyValue()
         #self.warn('STRUCT GUTS: %s  ADDRESS: 0x%x ' % (value.name, value.address()))
