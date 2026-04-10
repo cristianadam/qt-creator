@@ -274,6 +274,9 @@ public:
     void setRevisionsVisible(bool b);
     bool revisionsVisible() const;
 
+    void setMinimapVisible(bool visible);
+    bool minimapVisible() const;
+
     void setVisibleWrapColumn(int column);
     int visibleWrapColumn() const;
 

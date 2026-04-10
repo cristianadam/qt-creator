@@ -1068,6 +1068,7 @@ public:
     QTimer m_scrollBarUpdateTimer;
     HighlightScrollBarController *m_highlightScrollBarController = nullptr;
     MinimapController *m_minimapController = nullptr;
+    std::optional<bool> m_minimapVisible;
 
     bool m_scrollBarUpdateScheduled = false;
 
@@ -1520,7 +1521,7 @@ void TextEditorWidgetPrivate::setupScrollBar()
         m_highlightScrollBarController = nullptr;
     }
 
-    if (m_displaySettings.m_displayMinimap) {
+    if (q->minimapVisible()) {
         if (!m_minimapController) {
             m_minimapController = new MinimapController();
             m_minimapController->setOverrideBlockColorFunction(
@@ -10704,6 +10705,19 @@ HighlightScrollBarController *TextEditorWidget::highlightScrollBarController() c
 MinimapController *TextEditorWidget::minimapController() const
 {
     return d->m_minimapController;
+}
+
+void TextEditorWidget::setMinimapVisible(bool visible)
+{
+    if (d->m_minimapVisible == visible)
+        return;
+    d->m_minimapVisible = visible;
+    d->setupScrollBar();
+}
+
+bool TextEditorWidget::minimapVisible() const
+{
+    return d->m_minimapVisible.value_or(d->m_displaySettings.m_displayMinimap);
 }
 
 // The remnants of PlainTextEditor.
