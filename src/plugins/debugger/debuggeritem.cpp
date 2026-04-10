@@ -206,12 +206,10 @@ Result<DebuggerItem::TechnicalData> DebuggerItem::TechnicalData::extract(
     DebuggerItem::addAndroidLldbPythonEnv(fromExecutable, env);
     DebuggerItem::fixupAndroidLlldbPythonDylib(fromExecutable);
 
-    if (nativeDapDebuggersEnabled()) {
-        for (const auto &dapServerSuffix : {QString{"-dap"}, QString{"-vscode"}}) {
-            const QString dapServerName = QString{"lldb%1"}.arg(dapServerSuffix);
-            if (fromExecutable.fileName().startsWith(dapServerName, Qt::CaseInsensitive)) {
-                return extractLldbTechnicalData(fromExecutable, env, dapServerSuffix);
-            }
+    for (const auto &dapServerSuffix : {QString{"-dap"}, QString{"-vscode"}}) {
+        const QString dapServerName = QString{"lldb%1"}.arg(dapServerSuffix);
+        if (fromExecutable.fileName().startsWith(dapServerName, Qt::CaseInsensitive)) {
+            return extractLldbTechnicalData(fromExecutable, env, dapServerSuffix);
         }
     }
 
