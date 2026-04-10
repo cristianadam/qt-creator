@@ -6225,8 +6225,8 @@ void tst_Dumpers::dumper_data()
     QTest::newRow("Float")
             << Data("#include <QFloat16>\n",
 
-                    "qfloat16 f1 = 45.3f;\n"
-                    "qfloat16 f2 = 45.1f;",
+                    "qfloat16 f1(45.3f);\n"
+                    "qfloat16 f2(45.1f);",
 
                     "&f1, &f2")
 
