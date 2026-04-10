@@ -136,6 +136,23 @@ def qdump__boost__unordered__unordered_set(d, value):
         # Values are stored before the next pointers. Determine the offset.
         buckets, bucketCount, size, mlf, maxload = value.split('ptttt')
         forward = False
+    elif value.type.size() == 8 * d.ptrSize():  # 64 for boost 1.88+
+        # grouped_bucket_array (fca.hpp): functions_base(p), size_(t), mlf_+pad(t),
+        # max_load_(t), buckets_.size_index_(t), buckets_.size_ = bucket_count(t),
+        # buckets_.buckets(p), buckets_.groups(p)
+        # Each bucket: {node_pointer next}; each node: {node_pointer next, value}
+        _, size, __, ___, ____, bucketCount, buckets_ptr, _____ = value.split('ptttttpp')
+        code = 'p{%s}' % innerType.name
+
+        def children(p):
+            for i in range(bucketCount):
+                node = d.extractPointer(p + i * d.ptrSize())
+                while node:
+                    node, val = d.split(code, node)
+                    yield val
+
+        d.putItems(size, children(buckets_ptr), maxNumChild=10000)
+        return
     else:
         raise Exception("Unknown boost::unordered_set layout")
 
