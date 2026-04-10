@@ -27,6 +27,10 @@ private slots:
     void reformatIntegerOverload_data();
     void reformatCharacter();
     void reformatCharacter_data();
+#if defined(__SIZEOF_INT128__)
+    void reformatUnsignedInteger128Test();
+    void reformatUnsignedInteger128Test_data();
+#endif
 };
 
 void tst_protocol::parseCString()
@@ -231,6 +235,51 @@ void tst_protocol::reformatCharacter_data()
     QTest::newRow("bell")
         << int('\a') << 1 << false << QString("    \t7\t0x07");
 }
+
+#if defined(__SIZEOF_INT128__)
+void tst_protocol::reformatUnsignedInteger128Test()
+{
+    QFETCH(QString, decimalValue);
+    QFETCH(int, format);
+    QFETCH(QString, expected);
+
+    // Parse decimal string to unsigned __int128 (mirroring the watchhandler.cpp logic)
+    unsigned __int128 uval = 0;
+    for (QChar c : decimalValue)
+        uval = uval * 10 + unsigned(c.unicode() - '0');
+
+    QCOMPARE(reformatUnsignedInteger128(uval, format), expected);
+}
+
+void tst_protocol::reformatUnsignedInteger128Test_data()
+{
+    QTest::addColumn<QString>("decimalValue");
+    QTest::addColumn<int>("format");
+    QTest::addColumn<QString>("expected");
+
+    // 2^64 = 18446744073709551616
+    QTest::newRow("2pow64-hex")
+        << "18446744073709551616" << int(HexadecimalIntegerFormat)
+        << QString("(hex) 10000000000000000");
+    QTest::newRow("2pow64-dec")
+        << "18446744073709551616" << int(DecimalIntegerFormat)
+        << QString("18446744073709551616");
+    QTest::newRow("2pow64-bin")
+        << "18446744073709551616" << int(BinaryIntegerFormat)
+        << QString("(bin) 10000000000000000000000000000000000000000000000000000000000000000");
+    QTest::newRow("2pow64-oct")
+        << "18446744073709551616" << int(OctalIntegerFormat)
+        << QString("(oct) 2000000000000000000000");
+
+    // UINT128_MAX = 2^128 - 1 = 340282366920938463463374607431768211455
+    QTest::newRow("uint128max-hex")
+        << "340282366920938463463374607431768211455" << int(HexadecimalIntegerFormat)
+        << QString("(hex) ffffffffffffffffffffffffffffffff");
+    QTest::newRow("uint128max-dec")
+        << "340282366920938463463374607431768211455" << int(DecimalIntegerFormat)
+        << QString("340282366920938463463374607431768211455");
+}
+#endif
 
 QTEST_APPLESS_MAIN(tst_protocol);
 

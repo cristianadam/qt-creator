@@ -329,6 +329,10 @@ QString reformatUnsignedInteger(quint64 value, int format);
 QString reformatInteger(quint64 value, int format, int size, bool isSigned);
 QString reformatCharacter(int code, int size, bool isSigned);
 
+#if defined(__SIZEOF_INT128__)
+QString reformatUnsignedInteger128(unsigned __int128 value, int format);
+#endif
+
 
 // These values are passed from the dumper to the frontend,
 // typically as a result of passing a related DisplayFormat value.

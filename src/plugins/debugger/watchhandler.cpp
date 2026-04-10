@@ -757,6 +757,24 @@ static QString formattedValue(const WatchItem *item)
             || format == BinaryIntegerFormat
             || format == CharCodeIntegerFormat) {
         bool isSigned = item->value.startsWith('-');
+#if defined(__SIZEOF_INT128__)
+        if (item->size == 16) {
+            if (format == DecimalIntegerFormat)
+                return item->value;
+            // Parse decimal string to unsigned __int128 (two's complement for negatives)
+            unsigned __int128 uval = 0;
+            const QString &str = item->value;
+            if (isSigned) {
+                for (int i = 1; i < str.size(); ++i)
+                    uval = uval * 10 + unsigned(str.at(i).unicode() - '0');
+                uval = ~uval + 1;
+            } else {
+                for (QChar c : str)
+                    uval = uval * 10 + unsigned(c.unicode() - '0');
+            }
+            return reformatUnsignedInteger128(uval, format);
+        }
+#endif
         quint64 raw = isSigned ? quint64(item->value.toLongLong()) : item->value.toULongLong();
         return reformatInteger(raw, format, item->size, isSigned);
     }
