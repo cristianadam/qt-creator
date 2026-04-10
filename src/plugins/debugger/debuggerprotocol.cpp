@@ -966,6 +966,35 @@ QString reformatInteger(quint64 value, int format, int size, bool isSigned)
                     : reformatUnsignedInteger(value, format);
 }
 
+#if defined(__SIZEOF_INT128__)
+static QString uint128ToBase(unsigned __int128 v, int base)
+{
+    if (v == 0)
+        return "0";
+    QString result;
+    while (v > 0) {
+        const int digit = int(v % unsigned(base));
+        result.prepend(QChar(digit < 10 ? '0' + digit : 'a' + digit - 10));
+        v /= unsigned(base);
+    }
+    return result;
+}
+
+QString reformatUnsignedInteger128(unsigned __int128 value, int format)
+{
+    switch (format) {
+    case HexadecimalIntegerFormat:
+        return "(hex) " + uint128ToBase(value, 16);
+    case BinaryIntegerFormat:
+        return "(bin) " + uint128ToBase(value, 2);
+    case OctalIntegerFormat:
+        return "(oct) " + uint128ToBase(value, 8);
+    default:
+        return uint128ToBase(value, 10);
+    }
+}
+#endif
+
 QString reformatCharacter(int code, int size, bool isSigned)
 {
     if (uint32_t(code) > 0xffff) {
