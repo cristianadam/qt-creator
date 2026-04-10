@@ -278,7 +278,8 @@ VariableChooserPrivate::VariableChooserPrivate(VariableChooser *parent)
     connect(m_variableTree, &QTreeView::activated,
             this, &VariableChooserPrivate::handleItemActivated);
     connect(qobject_cast<QApplication *>(qApp), &QApplication::focusChanged,
-            this, &VariableChooserPrivate::updateCurrentEditor);
+            this, &VariableChooserPrivate::updateCurrentEditor,
+            Qt::QueuedConnection);
     updateCurrentEditor(nullptr, QApplication::focusWidget());
 }
 

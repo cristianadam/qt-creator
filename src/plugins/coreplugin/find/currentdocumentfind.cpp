@@ -22,7 +22,8 @@ CurrentDocumentFind::CurrentDocumentFind()
   : m_currentFind(nullptr)
 {
     connect(qApp, &QApplication::focusChanged,
-            this, &CurrentDocumentFind::updateCandidateFindFilter);
+            this, &CurrentDocumentFind::updateCandidateFindFilter,
+            Qt::QueuedConnection);
 }
 
 void CurrentDocumentFind::removeConnections()

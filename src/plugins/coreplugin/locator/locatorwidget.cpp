@@ -662,7 +662,9 @@ LocatorWidget::LocatorWidget(Locator *locator)
         updatePlaceholderText(locateCmd);
     }
 
-    connect(qApp, &QApplication::focusChanged, this, &LocatorWidget::updatePreviousFocusWidget);
+    connect(qApp, &QApplication::focusChanged,
+            this, &LocatorWidget::updatePreviousFocusWidget,
+            Qt::QueuedConnection);
 
     connect(locator, &Locator::filtersChanged, this, &LocatorWidget::updateFilterList);
     updateFilterList();

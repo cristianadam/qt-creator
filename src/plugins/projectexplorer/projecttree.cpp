@@ -54,7 +54,8 @@ ProjectTree::ProjectTree(QObject *parent) : QObject(parent)
             this, &ProjectTree::update);
 
     connect(qApp, &QApplication::focusChanged,
-            this, &ProjectTree::update);
+            this, &ProjectTree::update,
+            Qt::QueuedConnection);
 
     connect(ProjectManager::instance(), &ProjectManager::projectAdded,
             this, &ProjectTree::sessionAndTreeChanged);

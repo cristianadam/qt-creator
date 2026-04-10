@@ -1393,7 +1393,9 @@ void ICorePrivate::init()
 
     m_progressManager->progressView()->setParent(m_mainwindow);
 
-    connect(qApp, &QApplication::focusChanged, this, &ICorePrivate::updateFocusWidget);
+    connect(qApp, &QApplication::focusChanged,
+            this, &ICorePrivate::updateFocusWidget,
+            Qt::QueuedConnection);
 
     // Add small Toolbuttons for toggling the navigation widgets
     StatusBarManager::addStatusBarWidget(m_toggleLeftSideBarButton, StatusBarManager::First);

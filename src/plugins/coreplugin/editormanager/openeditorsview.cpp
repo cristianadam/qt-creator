@@ -95,7 +95,7 @@ OpenEditorsWidget::OpenEditorsWidget()
         // focus was in this view
         if (old == this)
             updateCurrentItem(EditorManager::currentEditor());
-    });
+    }, Qt::QueuedConnection);
     connect(this, &OpenDocumentsTreeView::activated, this, &OpenEditorsWidget::handleActivated);
     connect(this, &OpenDocumentsTreeView::closeActivated,
             this, &OpenEditorsWidget::closeDocument);

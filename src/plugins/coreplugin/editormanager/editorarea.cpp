@@ -35,7 +35,9 @@ EditorArea::EditorArea()
     updateCloseSplitButton();
 
     connect(qApp, &QApplication::focusChanged,
-            this, &EditorArea::focusChanged);
+            this, &EditorArea::focusChanged,
+            Qt::QueuedConnection);
+
     connect(
         m_splitterOrView,
         &SplitterOrView::splitStateChanged,

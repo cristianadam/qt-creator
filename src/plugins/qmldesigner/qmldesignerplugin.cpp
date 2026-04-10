@@ -829,7 +829,7 @@ void QmlDesignerPlugin::trackWidgetFocusTime(QWidget *widget, const QString &ide
             emitUsageStatisticsTime(identifier, widgetUsageTimer.elapsed());
             lastIdentifier.clear();
         }
-    });
+    }, Qt::QueuedConnection);
 }
 
 void QmlDesignerPlugin::registerCombinedTracedPoints(const QString &identifierFirst,
