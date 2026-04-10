@@ -21,6 +21,12 @@ private slots:
     void parseCStringLatin1_data();
     void gdbmiFromString();
     void gdbmiFromString_data();
+    void reformatUnsignedIntegerTest();
+    void reformatUnsignedIntegerTest_data();
+    void reformatIntegerOverload();
+    void reformatIntegerOverload_data();
+    void reformatCharacter();
+    void reformatCharacter_data();
 };
 
 void tst_protocol::parseCString()
@@ -124,6 +130,106 @@ result={token="0",data=[{iname="local.this",name="this",origaddr="0x7fffffffa3c8
 
     QTest::newRow("with_thread_finished")
             << testData;
+}
+
+using namespace Debugger::Internal;
+
+void tst_protocol::reformatUnsignedIntegerTest()
+{
+    QFETCH(quint64, value);
+    QFETCH(int, format);
+    QFETCH(QString, expected);
+
+    QCOMPARE(reformatUnsignedInteger(value, format), expected);
+}
+
+void tst_protocol::reformatUnsignedIntegerTest_data()
+{
+    QTest::addColumn<quint64>("value");
+    QTest::addColumn<int>("format");
+    QTest::addColumn<QString>("expected");
+
+    QTest::newRow("decimal")
+        << quint64(97) << int(DecimalIntegerFormat) << QString("97");
+    QTest::newRow("hex")
+        << quint64(0x41) << int(HexadecimalIntegerFormat) << QString("(hex) 41");
+    QTest::newRow("binary")
+        << quint64(7) << int(BinaryIntegerFormat) << QString("(bin) 111");
+    QTest::newRow("octal")
+        << quint64(0xff) << int(OctalIntegerFormat) << QString("(oct) 377");
+    QTest::newRow("charcode-A")
+        << quint64(0x41) << int(CharCodeIntegerFormat) << QString("\"A\"");
+    QTest::newRow("charcode-AB")
+        << quint64(0x4142) << int(CharCodeIntegerFormat) << QString("\"AB\"");
+}
+
+void tst_protocol::reformatIntegerOverload()
+{
+    QFETCH(quint64, value);
+    QFETCH(int, format);
+    QFETCH(int, size);
+    QFETCH(bool, isSigned);
+    QFETCH(QString, expected);
+
+    QCOMPARE(reformatInteger(value, format, size, isSigned), expected);
+}
+
+void tst_protocol::reformatIntegerOverload_data()
+{
+    QTest::addColumn<quint64>("value");
+    QTest::addColumn<int>("format");
+    QTest::addColumn<int>("size");
+    QTest::addColumn<bool>("isSigned");
+    QTest::addColumn<QString>("expected");
+
+    // Masking: 0x1ff masked to 1 byte = 0xff = 255
+    QTest::newRow("mask-1byte")
+        << quint64(0x1ff) << int(AutomaticFormat) << 1 << false << QString("255");
+    QTest::newRow("mask-2byte")
+        << quint64(0x10041) << int(AutomaticFormat) << 2 << false << QString("65");
+    QTest::newRow("hex-1byte")
+        << quint64(0x41) << int(HexadecimalIntegerFormat) << 1 << false << QString("(hex) 41");
+    // Non-decimal formats force unsigned display
+    QTest::newRow("hex-signed-becomes-unsigned")
+        << quint64(0xff) << int(HexadecimalIntegerFormat) << 1 << true << QString("(hex) ff");
+    // Decimal signed: value is already masked, sign extension not applied inside
+    QTest::newRow("decimal-unsigned")
+        << quint64(42) << int(DecimalIntegerFormat) << 4 << false << QString("42");
+}
+
+void tst_protocol::reformatCharacter()
+{
+    QFETCH(int, code);
+    QFETCH(int, size);
+    QFETCH(bool, isSigned);
+    QFETCH(QString, expected);
+
+    QCOMPARE(Debugger::Internal::reformatCharacter(code, size, isSigned), expected);
+}
+
+void tst_protocol::reformatCharacter_data()
+{
+    QTest::addColumn<int>("code");
+    QTest::addColumn<int>("size");
+    QTest::addColumn<bool>("isSigned");
+    QTest::addColumn<QString>("expected");
+
+    // Printable ASCII: trailing space after the character, then tab
+    QTest::newRow("A-unsigned")
+        << int('A') << 1 << false << QString("'A' \t65\t0x41");
+    QTest::newRow("A-signed")
+        << int('A') << 1 << true << QString("'A' \t65    \t0x41");
+    QTest::newRow("nul")
+        << 0 << 1 << false << QString("'\\0'\t0\t0x00");
+    QTest::newRow("newline")
+        << int('\n') << 1 << false << QString("'\\n'\t10\t0x0a");
+    QTest::newRow("cr")
+        << int('\r') << 1 << false << QString("'\\r'\t13\t0x0d");
+    QTest::newRow("tab")
+        << int('\t') << 1 << false << QString("'\\t'\t9\t0x09");
+    // Non-printable, non-special: four spaces before the tab
+    QTest::newRow("bell")
+        << int('\a') << 1 << false << QString("    \t7\t0x07");
 }
 
 QTEST_APPLESS_MAIN(tst_protocol);

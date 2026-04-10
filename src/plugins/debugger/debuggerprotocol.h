@@ -322,6 +322,13 @@ enum DisplayFormat
     NormalizedTwoFloatFormat    = 30, // Frontend internal only
 };
 
+int formatToIntegerBase(int format);
+
+QString reformatSignedInteger(qint64 value, int format);
+QString reformatUnsignedInteger(quint64 value, int format);
+QString reformatInteger(quint64 value, int format, int size, bool isSigned);
+QString reformatCharacter(int code, int size, bool isSigned);
+
 
 // These values are passed from the dumper to the frontend,
 // typically as a result of passing a related DisplayFormat value.
