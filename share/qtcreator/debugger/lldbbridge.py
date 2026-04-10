@@ -115,7 +115,7 @@ class Dumper(DumperBase):
         if msg[-1:] == '\n':
             msg += '\n'
         print('@\nbridgemessage={msg="%s",channel="%s"}\n@'
-                % (msg.replace('"', '$'), LogChannel.AppError))
+                % (msg.replace('"', '$'), LogChannel.LogWarning))
 
     def fromNativeValue(self, nativeValue):
         self.check(isinstance(nativeValue, lldb.SBValue))
