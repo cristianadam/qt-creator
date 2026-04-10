@@ -3800,6 +3800,7 @@ void tst_Dumpers::dumper_data()
 
                     "&s1, &s2, &s3, &s4, &s5")
 
+               + Qt5
                + QmlPrivateProfile()
                + BigArrayProfile()
 
