@@ -3581,6 +3581,26 @@ void tst_Dumpers::dumper_data()
             "         QSharedDataPointer<EmployeeData> d;\n"
             "    };\n";
 
+    QTest::newRow("QSharedDataPointer")
+            << Data("#include <QSharedData>\n"
+                    "#include <QString>\n"
+                    + sharedData,
+
+                    "Employee e0;\n"
+                    "Employee e1(42, \"Baz\");\n"
+                    "Employee e2 = e1;\n",
+
+                    "&e0, &e1, &e2")
+
+               + CoreProfile()
+
+               + Check("e0.d.id", "-1", "int")
+               + Check("e0.d.name", "\"\"", "@QString")
+               + Check("e1.d.id", "42", "int")
+               + Check("e1.d.name", "\"Baz\"", "@QString")
+               + Check("e2.d.id", "42", "int")
+               + Check("e2.d.name", "\"Baz\"", "@QString");
+
 
     QTest::newRow("QAtomicPointer")
             << Data("#include <QAtomicPointer>\n"
