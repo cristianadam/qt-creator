@@ -723,6 +723,14 @@ template <class IntType> QString reformatInteger(IntType value, int format)
             }
             return "\"" + res;
         }
+        case FourCharIntegerFormat: {
+            char buf[4];
+            buf[0] = char((value >> 24) & 0xff);
+            buf[1] = char((value >> 16) & 0xff);
+            buf[2] = char((value >> 8) & 0xff);
+            buf[3] = char(value & 0xff);
+            return "'" + QString::fromLatin1(buf, 4) + "'";
+        }
     }
     return QString::number(value, 10); // not reached
 }
@@ -868,7 +876,8 @@ static QString formattedValue(const WatchItem *item)
             || format == DecimalIntegerFormat
             || format == OctalIntegerFormat
             || format == BinaryIntegerFormat
-            || format == CharCodeIntegerFormat) {
+            || format == CharCodeIntegerFormat
+            || format == FourCharIntegerFormat) {
         bool isSigned = item->value.startsWith('-');
         quint64 raw = isSigned ? quint64(item->value.toLongLong()) : item->value.toULongLong();
         return reformatInteger(raw, format, item->size, isSigned);
@@ -1160,6 +1169,8 @@ static DisplayFormats typeFormatList(const WatchItem *item)
         formats.append(BinaryIntegerFormat);
         formats.append(OctalIntegerFormat);
         formats.append(CharCodeIntegerFormat);
+        if (item->size == 4)
+            formats.append(FourCharIntegerFormat);
     }
 
     return formats;
@@ -2244,6 +2255,7 @@ QString WatchModel::nameForFormat(int format)
         case BinaryIntegerFormat: return Tr::tr("Binary Integer");
         case OctalIntegerFormat: return Tr::tr("Octal Integer");
         case CharCodeIntegerFormat: return Tr::tr("Char Code Integer");
+        case FourCharIntegerFormat: return Tr::tr("Four Character Code Integer");
 
         case CompactFloatFormat: return Tr::tr("Compact Float");
         case ScientificFloatFormat: return Tr::tr("Scientific Float");
