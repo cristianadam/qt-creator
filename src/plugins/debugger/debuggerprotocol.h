@@ -320,6 +320,7 @@ enum DisplayFormat
     ScientificFloatFormat       = 27, // Frontend internal only
     HexFloatFormat              = 29, // Frontend internal only
     NormalizedTwoFloatFormat    = 30, // Frontend internal only
+    FourCharIntegerFormat       = 31, // Frontend internal only
 };
 
 
