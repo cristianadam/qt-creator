@@ -17,6 +17,7 @@
 #include <utils/co_result.h>
 #include <utils/environmentdialog.h>
 #include <utils/filestreamer.h>
+#include <utils/globaltasktree.h>
 #include <utils/layoutbuilder.h>
 #include <utils/networkaccessmanager.h>
 #include <utils/stylehelper.h>
@@ -43,8 +44,6 @@ using SharedTempFile = std::shared_ptr<TemporaryFilePath>;
 
 // Persistent icon cache: stores themed SVGs under userResourcePath("acpclient/icons")
 // keyed by a hash of the URL. Survives restarts.
-
-static QParallelTaskTreeRunner s_iconFetchRunner;
 
 static Result<> createSvgFile(
     QByteArray data,
@@ -92,7 +91,7 @@ static void fetchIconToPersistentCache(const QString &url, const std::shared_ptr
         promise->finish();
     };
 
-    s_iconFetchRunner.start({FileStreamerTask(setupFetch, fetchDone)});
+    GlobalTaskTree::start({FileStreamerTask(setupFetch, fetchDone)});
 }
 
 class AcpRegistryBrowser : public StringSelectionAspect
