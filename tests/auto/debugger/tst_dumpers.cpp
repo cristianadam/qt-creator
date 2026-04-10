@@ -7215,8 +7215,8 @@ void tst_Dumpers::dumper_data()
                + Check("s1.1", "[1]", "11", "int") % BoostVersion(1 * 100000 + 54 * 100)
 
                + Check("s2", "<2 items>", "boost::unordered::unordered_set<std::string>") % BoostVersion(1 * 100000 + 54 * 100)
-               + Check("s2.0", "[0]", "\"def\"", "std::string") % BoostVersion(1 * 100000 + 54 * 100)
-               + Check("s2.1", "[1]", "\"abc\"", "std::string") % BoostVersion(1 * 100000 + 54 * 100);
+               + Check("s2.0", "[0]", "\"abc\"", "std::string") % BoostVersion(1 * 100000 + 54 * 100)
+               + Check("s2.1", "[1]", "\"def\"", "std::string") % BoostVersion(1 * 100000 + 54 * 100);
 
 #ifdef Q_OS_LINUX
     QTest::newRow("BoostVariant")
