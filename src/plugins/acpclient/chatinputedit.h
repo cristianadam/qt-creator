@@ -3,13 +3,13 @@
 
 #pragma once
 
-#include <QPlainTextEdit>
+#include <texteditor/texteditor.h>
 
 namespace Utils { class HistoryCompleter; }
 
 namespace AcpClient::Internal {
 
-class ChatInputEdit : public QPlainTextEdit
+class ChatInputEdit : public TextEditor::TextEditorWidget
 {
     Q_OBJECT
 
@@ -21,6 +21,7 @@ signals:
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
+    int extraAreaWidth(int * = nullptr) const override { return 0; }
 
 private:
     void updateHeight();

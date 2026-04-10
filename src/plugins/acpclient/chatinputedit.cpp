@@ -6,37 +6,57 @@
 
 #include <utils/historycompleter.h>
 
+#include <texteditor/fontsettings.h>
+#include <texteditor/textdocument.h>
+#include <texteditor/texteditorconstants.h>
+
 #include <QAbstractItemModel>
+#include <QApplication>
 #include <QKeyEvent>
 #include <QTextBlock>
 #include <QTextLayout>
 
+using namespace TextEditor;
+
 namespace AcpClient::Internal {
 
 ChatInputEdit::ChatInputEdit(QWidget *parent)
-    : QPlainTextEdit(parent)
+    : TextEditorWidget(parent)
 {
+    setupFallBackEditor(Utils::Id("AcpClient.ChatInput"));
     setTabChangesFocus(true);
     setPlaceholderText(Tr::tr("Type your message..."));
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     setFrameShape(QFrame::NoFrame);
+    setHighlightCurrentLine(false);
+    setLineNumbersVisible(false);
+    setMarksVisible(false);
+    setMinimapVisible(false);
 
-    // Transparent background — the container widget provides the border and bg
-    QPalette pal = palette();
-    pal.setColor(QPalette::Base, Qt::transparent);
-    setPalette(pal);
+    auto applyWidgetColors = [this] {
+        FontSettings fontSettings = textDocument()->fontSettings();
+        const QFont appFont = QApplication::font();
+        fontSettings.setFamily(appFont.family());
+        fontSettings.setFontSize(appFont.pointSize());
+        fontSettings.setFontZoom(100);
+        fontSettings.formatFor(C_TEXT).setForeground(QApplication::palette().color(QPalette::Text));
+        fontSettings.formatFor(C_TEXT).setBackground(QColor());
+        textDocument()->setFontSettings(fontSettings);
+    };
+    applyWidgetColors();
+    connect(textDocument(), &TextEditor::TextDocument::fontSettingsChanged, this, applyWidgetColors);
 
     m_history = new Utils::HistoryCompleter("AcpChatInput", 100, this);
 
     updateHeight();
-    connect(this, &QPlainTextEdit::textChanged, this, &ChatInputEdit::updateHeight);
+    connect(this, &TextEditor::TextEditorWidget::textChanged, this, &ChatInputEdit::updateHeight);
 }
 
 void ChatInputEdit::keyPressEvent(QKeyEvent *event)
 {
     if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
         if (event->modifiers() & Qt::ShiftModifier) {
-            QPlainTextEdit::keyPressEvent(event);
+            TextEditorWidget::keyPressEvent(event);
         } else {
             const QString text = toPlainText().trimmed();
             if (!text.isEmpty())
@@ -63,7 +83,7 @@ void ChatInputEdit::keyPressEvent(QKeyEvent *event)
         }
     }
 
-    QPlainTextEdit::keyPressEvent(event);
+    TextEditorWidget::keyPressEvent(event);
 }
 
 void ChatInputEdit::updateHeight()
