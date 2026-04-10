@@ -117,6 +117,16 @@ QmlJSEditorPluginPrivate::QmlJSEditorPluginPrivate()
         &QmlJS::ModelManagerInterface::projectInfoUpdated,
         LanguageClient::LanguageClientManager::instance(),
         []() { LanguageClient::LanguageClientManager::applySettings(qmllsSettings()); });
+    // re-do the embedded code model tasks and text marker when qmlls settings change
+    connect(
+        LanguageClient::LanguageClientManager::instance(),
+        &LanguageClient::LanguageClientManager::settingsChanged,
+        &m_qmlTaskManager,
+        [this](LanguageClient::BaseSettings *settings) {
+            if (settings->m_settingsTypeId == Constants::QMLLS_CLIENT_SETTINGS_ID)
+                m_qmlTaskManager.updateMessages();
+        });
+
     connect(modelManager,
             &QmlJS::ModelManagerInterface::aboutToRemoveFiles,
             &m_qmlTaskManager,

@@ -410,6 +410,7 @@ void LanguageClientManager::applySettings(BaseSettings *setting)
             }
         }
     }
+    emit managerInstance->settingsChanged(setting);
 }
 
 QList<BaseSettings *> LanguageClientManager::currentSettings()
