@@ -3458,6 +3458,13 @@ void FakeVimTester::test_advanced_commands()
     // bar character in regular expression is not command separator
     data.setText("abc");
     COMMAND("%s/a\\|b\\||/X/g|%s/[^X]/Y/g", "XXY");
+
+    // :global command
+    data.setText("abc" N "def" N "ghi");
+    COMMAND("g/def/d", "abc" N X "ghi");
+
+    data.setText("abc" N "def" N "ghi" N "def" N "jkl");
+    COMMAND("g/def/d", "abc" N "ghi" N X "jkl");
 }
 
 void FakeVimTester::test_map()
