@@ -19,6 +19,7 @@
 #include <QListWidget>
 #include <QMenu>
 #include <QPlainTextEdit>
+#include <QRadioButton>
 #include <QScrollBar>
 #include <QSpinBox>
 #include <QWidget>
@@ -238,6 +239,10 @@ void installMarkSettingsDirtyTriggerRecursively(QWidget *widget)
         }
         if (auto ob = qobject_cast<QCheckBox *>(child)) {
             QObject::connect(ob, &QCheckBox::toggled, markDirty);
+            continue;
+        }
+        if (auto ob = qobject_cast<QRadioButton *>(child)) {
+            QObject::connect(ob, &QRadioButton::toggled, markDirty);
             continue;
         }
         if (auto ob = qobject_cast<QListWidget *>(child)) {
