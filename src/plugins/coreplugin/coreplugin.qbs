@@ -5,12 +5,7 @@ QtcPlugin {
     name: "Core"
     Depends {
         name: "Qt"
-        submodules: ["widgets", "xml", "network", "qml", "printsupport"]
-    }
-
-    Depends {
-        name: "Qt.gui-private"
-        condition: qbs.targetOS.contains("windows")
+        submodules: ["gui-private", "network", "printsupport", "qml", "widgets", "xml"]
     }
 
     Depends { name: "Utils" }
