@@ -59,7 +59,7 @@
     \uicontrol {Remove Link}.
 
     If the \uicontrol {Qt Versions} tab does not show a Qt version
-    under \uicontrol Auto-detected, set it up manually.
+    under \uicontrol {Automatically Managed}, set it up manually.
 
     You specify the Qt version to use for each \l{glossary-buildandrun-kit}
     {kit} for building and running your projects in \preferences >
@@ -159,4 +159,3 @@
 
     \sa {Manage kits}{How to: Manage kits}, {Managing kits}
 */
-

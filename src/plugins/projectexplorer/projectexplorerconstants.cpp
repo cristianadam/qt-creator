@@ -12,7 +12,7 @@ namespace Constants {
 
 QString msgAutoDetected()
 {
-    return Tr::tr("Auto-detected");
+    return Tr::tr("Automatically Managed");
 }
 
 QString msgAutoDetectedToolTip()

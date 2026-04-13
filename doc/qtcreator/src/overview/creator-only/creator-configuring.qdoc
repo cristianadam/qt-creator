@@ -58,7 +58,7 @@
     \uicontrol Kits > \uicontrol {Qt Versions} does not show all the installed
     Qt versions, select \uicontrol {Link with Qt}.
 
-    If \uicontrol Auto-detected still does not show the Qt version, select
+    If \uicontrol {Automatically Managed} still does not show the Qt version, select
     \uicontrol {Add} to add it manually.
 
     Also check that \preferences > \uicontrol Kits >
