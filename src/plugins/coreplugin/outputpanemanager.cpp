@@ -40,6 +40,7 @@
 #include <QStackedWidget>
 #include <QStyle>
 #include <QTimeLine>
+#include <QToolBar>
 #include <QToolButton>
 
 using namespace Utils;
@@ -839,16 +840,16 @@ void OutputPaneManager::setupButtons()
                     m_instance->updateActions(outPane);
             });
 
-            QWidget *toolButtonsContainer = new QWidget(m_instance->m_opToolBarWidgets);
-            using namespace Layouting;
-            Row toolButtonsRow { spacing(0), noMargin };
+            auto *toolBar = new QToolBar(m_instance->m_opToolBarWidgets);
+            toolBar->setContentsMargins(0, 0, 0, 0);
             const QList<QWidget *> toolBarWidgets = outPane->toolBarWidgets();
             for (QWidget *toolButton : toolBarWidgets)
-                toolButtonsRow.addItem(toolButton);
-            toolButtonsRow.addItem(st);
-            toolButtonsRow.attachTo(toolButtonsContainer);
+                toolBar->addWidget(toolButton);
+            auto stretch = new QWidget;
+            stretch->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored);
+            toolBar->addWidget(stretch);
 
-            m_instance->m_opToolBarWidgets->insertWidget(i, toolButtonsContainer);
+            m_instance->m_opToolBarWidgets->insertWidget(i, toolBar);
         }
         QTC_CHECK(idx == i);
 
