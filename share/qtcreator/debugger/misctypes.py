@@ -618,3 +618,35 @@ def qdump__tl__expected(d: DumperBase, value: DumperBase.Value):
     if d.isExpanded():
         with Children(d):
             d.putSubItem('inner', val)
+
+
+#######################################################################
+#
+# GNUstep Objective-C Foundation types
+#
+#######################################################################
+
+def qdump__NXConstantString(d, value):
+    # GNUstep NXConstantString memory layout:
+    #   offset 0:         isa pointer  (ptrSize bytes)
+    #   offset ptrSize:   const char  *c_string
+    #   offset 2*ptrSize: unsigned int len
+    ptr_size = d.ptrSize()
+    obj_addr = value.address()
+    if not obj_addr:
+        d.putSpecialValue('notaccessible')
+        d.putNumChild(0)
+        return
+    c_string_ptr = d.extractPointer(obj_addr + ptr_size)
+    length = d.extractUInt(obj_addr + 2 * ptr_size)
+    shown = d.computeLimit(length, d.displayStringLimit)
+    if c_string_ptr and shown > 0:
+        d.putValue(d.readMemory(c_string_ptr, shown), 'latin1', length=length)
+    else:
+        d.putValue('')
+    d.putNumChild(0)
+
+
+# GNUstep uses the same layout for NSConstantString (the class registered
+# under that name in some configurations).
+qdump__NSConstantString = qdump__NXConstantString

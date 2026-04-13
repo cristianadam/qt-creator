@@ -137,6 +137,10 @@ class Dumper(DumperBase):
                     summary = nativeValue.Dereference().GetSummary()
                 else:
                     summary = nativeValue.GetSummary()
+                # GetSummary() uses LLDB's built-in ObjC formatters (Apple only).
+                # Fall back to GetObjectDescription() for GNUstep and other runtimes.
+                if not summary:
+                    summary = nativeValue.GetObjectDescription()
 
         nativeValue.SetPreferSyntheticValue(False)
 
@@ -2189,6 +2193,13 @@ class Tester(Dumper):
                             #self.report('ENV=%s' % os.environ.items())
                             #self.report('DUMPER=%s' % self.qqDumpers)
                             break
+                        else:
+                            # Stopped at an intermediate location (e.g. runtime
+                            # initialisation) with no source line. Resume.
+                            self.process.Continue()
+                    else:
+                        # Stopped but no thread has a reason we care about. Resume.
+                        self.process.Continue()
 
             else:
                 self.warn('TIMEOUT')
