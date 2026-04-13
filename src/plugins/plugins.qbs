@@ -55,6 +55,7 @@ Project {
         "gnprojectmanager/gnprojectmanager.qbs",
         "gradle/gradle.qbs",
         "helloworld/helloworld.qbs",
+        "internaltests/internaltests.qbs",
         "help/help.qbs",
         "imageviewer/imageviewer.qbs",
         "incredibuild/incredibuild.qbs",

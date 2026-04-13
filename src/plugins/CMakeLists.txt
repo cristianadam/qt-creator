@@ -83,6 +83,9 @@ add_subdirectory(clangformat)
 add_subdirectory(cmakeprojectmanager)
 
 # Level 7:
+if (WITH_TESTS)
+  add_subdirectory(internaltests)
+endif()
 add_subdirectory(android)
 add_subdirectory(autotest)
 add_subdirectory(axivion)

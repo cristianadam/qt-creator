@@ -34,6 +34,22 @@ public:
         bool usePythonDebugger;
         bool useMultiProcess;
         QString overrideStartup;
+
+#ifdef WITH_TESTS
+        static BaseAspect::Data::Ptr makeForTest(bool useQml)
+        {
+            auto *d = new Data;
+            d->m_classId = &DebuggerRunConfigurationAspect::staticMetaObject;
+            d->m_cloner = [](const BaseAspect::Data *src) -> BaseAspect::Data * {
+                return new Data(*static_cast<const Data *>(src));
+            };
+            d->useCppDebugger = false;
+            d->useQmlDebugger = useQml;
+            d->usePythonDebugger = false;
+            d->useMultiProcess = false;
+            return BaseAspect::Data::Ptr(d);
+        }
+#endif
     };
 
 private:

@@ -251,6 +251,12 @@ public:
     Canceler canceler();
     void handleProcessCancellation(Utils::Process *process);
 
+#ifdef WITH_TESTS
+    void setAspectDataForTest(Utils::AspectContainerData data);
+    void setDeviceForTest(const IDeviceConstPtr &device);
+    void setRunConfigIdForTest(Utils::Id id);
+#endif
+
 signals:
     void appendMessage(const QString &msg, Utils::OutputFormat format);
     void aboutToStart();
