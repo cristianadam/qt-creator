@@ -202,6 +202,7 @@ const char QBS_RUNCONFIG_ID[]   = "Qbs.RunConfiguration:";
 const char CMAKE_RUNCONFIG_ID[] = "CMakeProjectManager.CMakeRunConfiguration.";
 const char GN_RUNCONFIG_ID[] = "GNProjectManager.GNRunConfiguration.";
 const char CUSTOM_EXECUTABLE_RUNCONFIG_ID[] = "ProjectExplorer.CustomExecutableRunConfiguration";
+const char WORKSPACE_RUNCONFIG_ID[] = "WorkspaceProject.RunConfiguration:";
 
 const char STDPROCESS_EXECUTION_TYPE_ID[] = "StdProcessExecutionType";
 

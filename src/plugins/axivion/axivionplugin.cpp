@@ -939,9 +939,18 @@ Group dashboardInfoRecipe(DashboardMode dashboardMode, const DashboardInfoHandle
 {
     const auto onSetup = [dashboardMode, handler] {
         if (auto info = dashboardInfo(dashboardMode)) {
-            if (handler)
-                handler(*info);
-            return SetupResult::StopWithSuccess;
+            bool serverChanged = false;
+            if (dashboardMode == DashboardMode::Local) {
+                if (auto optionalAccess = localDashboardAccessFor(dd->m_currentProjectInfo->name)) {
+                    if (info->source != optionalAccess->url)
+                        serverChanged = true;
+                }
+            }
+            if (!serverChanged) { // if the server has changed we cannot stop here
+                if (handler)
+                    handler(*info);
+                return SetupResult::StopWithSuccess;
+            }
         }
 
         dd->m_networkAccessManager.setCookieJar(new QNetworkCookieJar); // remove old cookies
