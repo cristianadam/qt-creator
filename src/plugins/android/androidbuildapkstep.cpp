@@ -39,6 +39,7 @@
 #include <utils/qtcprocess.h>
 
 #include <QCheckBox>
+#include <QDir>
 #include <QComboBox>
 #include <QDateTime>
 #include <QDialogButtonBox>
@@ -1064,6 +1065,10 @@ QtTaskTree::GroupItem AndroidBuildApkStep::runRecipe()
                                  Task::Warning);
             return SetupResult::StopWithSuccess;
         }
+        if (isApkUpToDate()) {
+            emit addOutput(Tr::tr("APK is up to date."), OutputFormat::NormalMessage);
+            return SetupResult::StopWithSuccess;
+        }
         if (setupHelper())
             return SetupResult::Continue;
         reportWarningOrError(Tr::tr("Cannot set up \"%1\", not building an APK.")
@@ -1081,6 +1086,26 @@ QtTaskTree::GroupItem AndroidBuildApkStep::runRecipe()
         defaultProcessTask()
     };
     return root;
+}
+
+bool AndroidBuildApkStep::isApkUpToDate() const
+{
+    if (!m_packagePath.exists())
+        return false;
+    const QDateTime apkTime = m_packagePath.lastModified();
+    if (m_inputFile.exists() && m_inputFile.lastModified() > apkTime)
+        return false;
+    const FilePath androidBuildDir = androidBuildDirectory(buildConfiguration());
+    for (const QString &abi : applicationAbis(kit())) {
+        const FilePath libsDir = androidBuildDir / "libs" / abi;
+        if (!libsDir.exists())
+            return false;
+        for (const FilePath &lib : libsDir.dirEntries(QDir::Files)) {
+            if (lib.lastModified() > apkTime)
+                return false;
+        }
+    }
+    return true;
 }
 
 void AndroidBuildApkStep::reportWarningOrError(const QString &message, Task::TaskType type)

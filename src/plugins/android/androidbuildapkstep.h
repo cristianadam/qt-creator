@@ -65,6 +65,7 @@ private:
 
     void reportWarningOrError(const QString &message, ProjectExplorer::Task::TaskType type);
     void updateBuildToolsVersionInJsonFile();
+    bool isApkUpToDate() const;
 
     bool m_signPackage = false;
     bool m_openPackageLocationForRun = false;
