@@ -75,13 +75,13 @@ protected:
     RefactoringFile(const Utils::FilePath &filePath);
 
     void invalidate() { m_filePath.clear(); }
+    virtual void doFormatting();
 
 private:
     virtual void fileChanged() {} // derived classes may want to clear language specific extra data
     virtual Utils::Id indenterId() const { return {} ;}
 
     void setupFormattingRanges(const QList<Utils::ChangeSet::EditOp> &replaceList);
-    void doFormatting();
 
     TextEditorWidget *openEditor(bool activate, int line, int column);
     QTextDocument *mutableDocument() const;

@@ -749,6 +749,31 @@ bool QmlJSEditorDocument::supportsEncoding(const TextEncoding &encoding) const
     return encoding.isUtf8();
 }
 
+class RefactoringFileWithoutReindenting : public TextEditor::RefactoringFile
+{
+public:
+    static void applyChangeSet(const Utils::FilePath &filePath, const ChangeSet &changeSet);
+
+protected:
+    using TextEditor::RefactoringFile::RefactoringFile;
+    void doFormatting() override {}
+};
+
+void RefactoringFileWithoutReindenting::applyChangeSet(
+    const Utils::FilePath &filePath, const ChangeSet &changeSet)
+{
+    RefactoringFileWithoutReindenting(filePath).apply(changeSet);
+}
+
+void QmlJSEditorDocument::autoFormat(const QTextCursor &cursor)
+{
+    if (!formatter())
+        return;
+    formatter()->format(cursor, tabSettings(), [this](const ChangeSet &result) {
+        RefactoringFileWithoutReindenting::applyChangeSet(filePath(), result);
+    });
+}
+
 QmlJSEditorDocument::~QmlJSEditorDocument()
 {
     delete d;

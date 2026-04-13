@@ -84,7 +84,7 @@ public:
     Formatter* formatter() const;
     void setFormatter(Formatter *indenter); // transfers ownership
     void setFormatterMode(Formatter::FormatMode mode);
-    void autoFormat(const QTextCursor &cursor);
+    virtual void autoFormat(const QTextCursor &cursor);
     bool applyChangeSet(const Utils::ChangeSet &changeSet);
 
     TextMarks marks() const;

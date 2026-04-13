@@ -27,6 +27,7 @@ public:
     ~QmlJSEditorDocument() override;
 
     bool supportsEncoding(const Utils::TextEncoding &encoding) const override;
+    void autoFormat(const QTextCursor &cursor) override;
 
     const QmlJSTools::SemanticInfo &semanticInfo() const;
     bool isSemanticInfoOutdated() const;
