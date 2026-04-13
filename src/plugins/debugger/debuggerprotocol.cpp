@@ -157,6 +157,7 @@ static void parseSimpleEscape(DebuggerOutputParser &parser, DebuggerOutputParser
     switch (c.unicode()) {
         case 'a': buffer += '\a'; break;
         case 'b': buffer += '\b'; break;
+        case 'e': buffer += '\e'; break;
         case 'f': buffer += '\f'; break;
         case 'n': buffer += '\n'; break;
         case 'r': buffer += '\r'; break;

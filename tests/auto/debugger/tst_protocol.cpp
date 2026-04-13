@@ -64,7 +64,7 @@ void tst_protocol::parseCString_data()
 
     // This is expected to throw several warnings
     //  "MI Parse Error, unrecognized backslash escape"
-    QChar escapes[] = {'\a', '\b', '\f', '\n', '\r', '\t', '\v', '"', '\'', '\\'};
+    QChar escapes[] = {'\a', '\b', '\e', '\f', '\n', '\r', '\t', '\v', '"', '\'', '\\'};
     QTest::newRow("escaped")
         << R"("\a\b\c\d\e\f\g\h\i\j\k\l\m\n\o\p\q\r\s\t\u\v\w\y\z\"\'\\")"
         << QString(escapes, sizeof(escapes)/sizeof(escapes[0]));
