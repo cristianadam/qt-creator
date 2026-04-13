@@ -3,8 +3,11 @@
 
 #pragma once
 
+namespace ProjectExplorer { class Project; }
+
 namespace CMakeProjectManager::Internal {
 
 void setupCMakeInstallStep();
+bool hasInstallDeployPreset(ProjectExplorer::Project *project);
 
 } // CMakeProjectManager::Internal

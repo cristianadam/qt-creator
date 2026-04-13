@@ -7,6 +7,7 @@
 #include "cmakebuildconfiguration.h"
 #include "cmakebuildstep.h"
 #include "cmakebuildtarget.h"
+#include "cmakeinstallstep.h"
 #include "cmakekitaspect.h"
 #include "cmakeprocess.h"
 #include "cmakeproject.h"
@@ -28,6 +29,7 @@
 #include <projectexplorer/buildmanager.h>
 #include <projectexplorer/deploymentdata.h>
 #include <projectexplorer/devicesupport/devicekitaspects.h>
+#include <projectexplorer/deployconfiguration.h>
 #include <projectexplorer/extracompiler.h>
 #include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/projectexplorerconstants.h>
@@ -2042,6 +2044,25 @@ void CMakeBuildSystem::wireUpConnections()
         // Build configuration has changed:
         qCDebug(cmakeBuildSystemLog) << "Requesting parse due to active target changed";
         reparse(CMakeBuildSystem::REPARSE_DEFAULT);
+        if (hasInstallDeployPreset(project())) {
+            DeployConfiguration *dc = target()->activeDeployConfiguration();
+            QTC_ASSERT(dc, return);
+            BuildStepList *stepsList = dc->stepList();
+            QTC_ASSERT(stepsList, return);
+            if (stepsList->contains(Constants::CMAKE_INSTALL_STEP_ID)) {
+                qCDebug(cmakeBuildSystemLog) << "cmake --install deploy step already added";
+                return;
+            }
+            const auto factories = BuildStepFactory::allBuildStepFactories();
+            auto factoryIt = std::ranges::find_if(factories, [](const BuildStepFactory *factory){
+                return factory->stepId() == Constants::CMAKE_INSTALL_STEP_ID;
+            });
+            QTC_ASSERT(factoryIt != factories.end(), return);
+            BuildStep *newStep = (*factoryIt)->create(stepsList);
+            QTC_ASSERT(newStep, return);
+            stepsList->appendStep(newStep);
+            qCDebug(cmakeBuildSystemLog) << "Added cmake --install deploy step";
+        }
     });
 
     // BuildConfiguration changed:

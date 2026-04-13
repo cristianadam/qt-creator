@@ -8,6 +8,7 @@
 #include "cmakebuildsystem.h"
 #include "cmakekitaspect.h"
 #include "cmakeoutputparser.h"
+#include "cmakeproject.h"
 #include "cmakeprojectconstants.h"
 #include "cmakeprojectmanagertr.h"
 #include "cmaketool.h"
@@ -106,6 +107,22 @@ QWidget *CMakeInstallStep::createConfigWidget()
     connect(buildConfiguration(), &BuildConfiguration::buildTypeChanged, this, updateDetails);
 
     return widget;
+}
+
+bool hasInstallDeployPreset(Project *project)
+{
+    auto cmakeProject = qobject_cast<CMakeProject *>(project);
+    if (!cmakeProject)
+        return false;
+
+    const auto &vendor = cmakeProject->presetsData().vendor;
+    if (!vendor)
+        return false;
+
+    const QVariantList deployPresets = vendor->value("deployPresets").toList();
+    return std::any_of(deployPresets.begin(), deployPresets.end(), [](const QVariant &v) {
+        return v.toMap().value("type").toString() == "install";
+    });
 }
 
 // CMakeInstallStepFactory
