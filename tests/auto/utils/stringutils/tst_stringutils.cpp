@@ -313,10 +313,16 @@ void tst_StringUtils::testParseUsedPortFromNetstatOutput_data()
     QTest::newRow("Win8") << " TCP    192.168.0.80:51905     169.55.74.50:443       ESTABLISHED"   <<    51905;
     QTest::newRow("Win9") << "  UDP    [fe80::840a:2942:8def:abcd%6]:1900  *:*   "                 <<     1900;
 
-    // Linux
+    // Linux /proc/net/tcp (IPv4)
     QTest::newRow("Linux1") << "sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt ..." <<     -1;
     QTest::newRow("Linux2") << "0: 00000000:2805 00000000:0000 0A 00000000:00000000 00:00000000 00000000  ..." <<  10245;
     QTest::newRow("Linux3") << " 1: 0100007F:193F 00000000:0000 0A 00000000:00000000 00:00000000 00000000 ..." <<   6463;
+
+    // Linux /proc/net/tcp6 (IPv6) - used by Docker portsGatheringRecipe (QTCREATORBUG-34093)
+    QTest::newRow("Linux6_header") << "  sl  local_address                         remote_address                        st ..." << -1;
+    QTest::newRow("Linux6_1") << " 0: 00000000000000000000000001000000:0035 00000000000000000000000000000000:0000 0A ..." <<    53;
+    QTest::newRow("Linux6_2") << " 1: 0000000000000000FFFF00000100007F:EA60 00000000000000000000000000000000:0000 0A ..." << 60000;
+    QTest::newRow("Linux6_3") << " 2: 00000000000000000000000000000000:2710 00000000000000000000000000000000:0000 0A ..." << 10000;
 
     // Mac
     QTest::newRow("Mac1") << "Active Internet connections (including servers)"                                  <<    -1;
