@@ -765,6 +765,7 @@ struct EigenProfile {};
 struct UseDebugImage {};
 struct DwarfProfile { explicit DwarfProfile(int v) : version(v) {} int version; };
 struct CoreFoundationProfile {};
+struct GNUstepProfile {};
 
 struct CoreProfile {};
 struct CorePrivateProfile {};
@@ -1070,6 +1071,51 @@ public:
         return *this;
     }
 
+    const Data &operator+(const GNUstepProfile &) const
+    {
+        // Use gnustep-config to get compiler/linker flags for GNUstep Foundation.
+        // Also add the GCC private include directory so that Clang can find
+        // <objc/objc.h> from the GCC ObjC runtime (used by the Ubuntu packages).
+        // qmake compiles .mm files with $(CC) $(CFLAGS), so set both.
+        profileExtra +=
+            "CONFIG -= qt\n"
+            "GNUSTEP_FLAGS = $$system(gnustep-config --objc-flags)"
+            " -I$$system(gcc -print-file-name=include)\n"
+            // gnustep-config --objc-flags includes -O2; override with -O0 so that
+            // local ObjC pointer variables are not optimized away by the compiler
+            // and remain visible to the debugger.
+            "QMAKE_CFLAGS   += $$GNUSTEP_FLAGS -O0\n"
+            "QMAKE_CXXFLAGS += $$GNUSTEP_FLAGS -O0\n"
+            "LIBS += $$system(gnustep-config --base-libs)\n";
+
+        cmakelistsExtra +=
+            "find_program(GNUSTEP_CONFIG gnustep-config)\n"
+            "if(NOT GNUSTEP_CONFIG)\n"
+            "    message(FATAL_ERROR \"gnustep-config not found\")\n"
+            "endif()\n"
+            "execute_process(COMMAND ${GNUSTEP_CONFIG} --objc-flags\n"
+            "    OUTPUT_VARIABLE GNUSTEP_FLAGS OUTPUT_STRIP_TRAILING_WHITESPACE)\n"
+            "execute_process(COMMAND ${GNUSTEP_CONFIG} --base-libs\n"
+            "    OUTPUT_VARIABLE GNUSTEP_LIBS OUTPUT_STRIP_TRAILING_WHITESPACE)\n"
+            "separate_arguments(GNUSTEP_FLAGS_LIST UNIX_COMMAND \"${GNUSTEP_FLAGS}\")\n"
+            "separate_arguments(GNUSTEP_LIBS_LIST UNIX_COMMAND \"${GNUSTEP_LIBS}\")\n"
+            // gnustep-config --objc-flags includes -O2; override with -O0.
+            "target_compile_options(doit PRIVATE ${GNUSTEP_FLAGS_LIST} -O0)\n"
+            "target_link_options(doit PRIVATE ${GNUSTEP_LIBS_LIST})\n"
+            "find_program(GCC_PROG gcc)\n"
+            "if(GCC_PROG)\n"
+            "    execute_process(COMMAND ${GCC_PROG} -print-file-name=include\n"
+            "        OUTPUT_VARIABLE GCC_INCLUDE_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)\n"
+            "    target_include_directories(doit SYSTEM PRIVATE \"${GCC_INCLUDE_DIR}\")\n"
+            "endif()\n";
+
+        useQt = false;
+        useQHash = false;
+        useGNUstep = true;
+        language = Language::ObjectiveCxx;
+        return *this;
+    }
+
     const Data &operator+(InternalProfile) const
     {
         const auto parentDir = FilePath::fromUserInput(__FILE__).parentDir().path();
@@ -1102,6 +1148,7 @@ public:
     mutable bool useQt = false;
     mutable bool useQHash = false;
     mutable bool useBoost = false;
+    mutable bool useGNUstep = false;
     mutable bool disabledOnARM = false;
     mutable int engines = AllEngines;
     mutable int skipLevels = 0;              // Levels to go 'up' before dumping variables.
@@ -1496,7 +1543,7 @@ void tst_Dumpers::dumper()
         cmakeLanguage = "C";
     } else if (data.language == Language::ObjectiveCxx) {
         mainFile = "main.mm";
-        cmakeLanguage = "CXX";
+        cmakeLanguage = "OBJCXX";
     } else if (data.language == Language::Nim) {
         mainFile = "main.nim";
         cmakeLanguage = "CXX";
@@ -1721,6 +1768,8 @@ void tst_Dumpers::dumper()
     if (make.exitCode()) {
         if (data.useBoost && make.exitStatus() == QProcess::NormalExit)
             MSKIP_SINGLE("Compile failed - probably missing Boost?");
+        if (data.useGNUstep && make.exitStatus() == QProcess::NormalExit)
+            MSKIP_SINGLE("Compile failed - probably missing GNUstep?");
 
         qCDebug(lcDumpers).noquote() << error;
         qCDebug(lcDumpers) << "\n------------------ CODE --------------------";
@@ -8548,6 +8597,20 @@ void tst_Dumpers::dumper_data()
             // + Check("urlReference", "\"http://example.com\"", "CFURLRef &")
             ;
 #endif
+
+    QTest::newRow("GNUstepStrings")
+            << Data("#import <Foundation/Foundation.h>\n",
+
+                    "NSString *hello = @\"Hello GNUstep\"; (void)hello;\n"
+                    "NSString *empty = @\"\"; (void)empty;\n",
+
+                    "&hello, &empty")
+
+            + GNUstepProfile()
+            + LldbEngine
+
+            + Check("hello", "\"Hello GNUstep\"", TypePattern("NXConstantString|NSString"))
+            + Check("empty", "\"\"", TypePattern("NXConstantString|NSString"));
 
 
     QTest::newRow("ArrayOfFunctionPointers")
