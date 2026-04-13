@@ -500,7 +500,7 @@ void DapEngine::refreshModules(const GdbMi &modules)
                    && path.endsWith("' (built-in)>")) {
             path = "(builtin)";
         }
-        module.modulePath = FilePath::fromString(path);
+        module.modulePath = FilePath::fromUserInput(path);
         handler->updateModule(module);
     }
     handler->endUpdateAll();
@@ -520,7 +520,7 @@ void DapEngine::refreshState(const GdbMi &reportedState)
 void DapEngine::refreshLocation(const GdbMi &reportedLocation)
 {
     StackFrame frame;
-    frame.file = FilePath::fromString(reportedLocation["file"].data());
+    frame.file = FilePath::fromUserInput(reportedLocation["file"].data());
     frame.line = reportedLocation["line"].toInt();
     frame.usable = frame.file.isReadableFile();
     if (state() == InferiorRunOk) {
@@ -540,7 +540,7 @@ void DapEngine::refreshSymbols(const GdbMi &symbols)
         symbol.name = item["name"].data();
         syms.append(symbol);
     }
-    showModuleSymbols(FilePath::fromString(moduleName), syms);
+    showModuleSymbols(FilePath::fromUserInput(moduleName), syms);
 }
 
 bool DapEngine::canHandleToolTip(const DebuggerToolTipContext &) const
@@ -718,7 +718,7 @@ void DapEngine::handleStackTraceResponse(const QJsonObject &response)
         return;
 
     QJsonObject stackFrame = stackFrames[0].toObject();
-    const FilePath file = FilePath::fromString(
+    const FilePath file = FilePath::fromUserInput(
         stackFrame.value("source").toObject().value("path").toString());
     const int line = stackFrame.value("line").toInt();
     qCDebug(logCategory()) << "stackTrace success" << file << line;
@@ -1000,7 +1000,7 @@ void DapEngine::refreshStack(const QJsonArray &stackFrames)
         frame.function = item.value("name").toString();
         frame.line = item.value("line").toInt();
         QJsonObject source = item.value("source").toObject();
-        frame.file = FilePath::fromString(source.value("path").toString());
+        frame.file = FilePath::fromUserInput(source.value("path").toString());
         frame.address = item.value("instructionPointerReference").toInt();
         frame.usable = frame.file.isReadableFile();
         frame.debuggerId = item.value("id").toInt();
