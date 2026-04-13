@@ -6,6 +6,7 @@ QtcPlugin {
 
     Depends { name: "CmdBridgeClient" }
     Depends { name: "Core" }
+    Depends { name: "Debugger"; condition: qtc.testsEnabled }
     Depends { name: "ProjectExplorer" }
     Depends { name: "QtSupport" }
 
@@ -26,6 +27,15 @@ QtcPlugin {
         "dockersettings.cpp",
         "dockersettings.h",
     ]
+
+    Group {
+        name: "Tests"
+        condition: qtc.testsEnabled
+        files: [
+            "dockerdebuggertest.h",
+            "dockerdebuggertest.cpp",
+        ]
+    }
 
     Group {
         name: "images"

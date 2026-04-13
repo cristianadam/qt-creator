@@ -1,6 +1,7 @@
 add_qtc_plugin(Docker
   DEPENDS Utils CmdBridgeClient
   PLUGIN_DEPENDS Core ProjectExplorer QtSupport
+  PLUGIN_TEST_DEPENDS Debugger
   SOURCES
     docker_global.h
     dockertr.h
@@ -13,6 +14,13 @@ add_qtc_plugin(Docker
     dockerdeviceenvironmentaspect.cpp dockerdeviceenvironmentaspect.h
     dockerplugin.cpp
     dockersettings.cpp dockersettings.h
+)
+
+extend_qtc_plugin(Docker
+  CONDITION WITH_TESTS
+  SOURCES
+    dockerdebuggertest.h
+    dockerdebuggertest.cpp
 )
 
 qtc_add_resources(Docker "images"

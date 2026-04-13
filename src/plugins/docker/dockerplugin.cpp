@@ -4,6 +4,9 @@
 #include "dockerapi.h"
 #include "dockerconstants.h"
 #include "dockerdevice.h"
+#ifdef WITH_TESTS
+#include "dockerdebuggertest.h"
+#endif
 
 #include <projectexplorer/devicesupport/idevice.h>
 #include <projectexplorer/projectexplorerconstants.h>
@@ -80,6 +83,10 @@ private:
         m_deviceFactory = std::make_unique<DockerDeviceFactory>();
         m_dockerApi = std::make_unique<DockerApi>();
         setupDockerRunAndDebugSupport();
+#ifdef WITH_TESTS
+        addTestCreator(createDockerQmlChannelTest);
+        addTestCreator(createDockerPortsGatheringTest);
+#endif
     }
 
     std::unique_ptr<DockerDeviceFactory> m_deviceFactory;

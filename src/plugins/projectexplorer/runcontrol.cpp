@@ -557,6 +557,23 @@ void RunControl::setQmlChannel(const QUrl &channel)
     d->data.qmlChannel = channel;
 }
 
+#ifdef WITH_TESTS
+void RunControl::setAspectDataForTest(AspectContainerData data)
+{
+    d->data.aspectData = std::move(data);
+}
+
+void RunControl::setDeviceForTest(const IDeviceConstPtr &device)
+{
+    d->data.device = device;
+}
+
+void RunControl::setRunConfigIdForTest(Id id)
+{
+    d->data.runConfigId = id;
+}
+#endif
+
 void RunControl::requestPerfChannel()
 {
     d->data.usePerfChannel = true;

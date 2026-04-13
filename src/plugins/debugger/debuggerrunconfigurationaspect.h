@@ -29,11 +29,24 @@ public:
 
     struct Data : BaseAspect::Data
     {
-        bool useCppDebugger;
-        bool useQmlDebugger;
-        bool usePythonDebugger;
-        bool useMultiProcess;
+        bool useCppDebugger = false;
+        bool useQmlDebugger = false;
+        bool usePythonDebugger = false;
+        bool useMultiProcess = false;
         QString overrideStartup;
+
+#ifdef WITH_TESTS
+        static BaseAspect::Data::Ptr createQmlTestData()
+        {
+            auto *d = new Data;
+            d->m_classId = &DebuggerRunConfigurationAspect::staticMetaObject;
+            d->m_cloner = [](const BaseAspect::Data *src) -> BaseAspect::Data * {
+                return new Data(*static_cast<const Data *>(src));
+            };
+            d->useQmlDebugger = true;
+            return BaseAspect::Data::Ptr(d);
+        }
+#endif
     };
 
 private:
