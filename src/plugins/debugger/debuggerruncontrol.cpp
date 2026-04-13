@@ -227,7 +227,11 @@ static ExecutableItem fixupParamsRecipe(const Storage<DebuggerData> &storage)
             runParameters.setRemoteChannel(runControl->debugChannel().toString());
 
         if (runControl->usesQmlChannel()) {
-            runParameters.setQmlServer(runControl->qmlChannel());
+            const QUrl qmlChannel = runControl->qmlChannel();
+            runControl->postMessage(
+                QString("QML channel assigned: %1:%2").arg(qmlChannel.host()).arg(qmlChannel.port()),
+                LogMessageFormat);
+            runParameters.setQmlServer(qmlChannel);
             if (runParameters.isAddQmlServerInferiorCmdArgIfNeeded()
                 && runParameters.isQmlDebugging()
                 && runParameters.isCppDebugging()) {

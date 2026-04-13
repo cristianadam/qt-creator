@@ -918,14 +918,6 @@ static QString reformatIntegerHelper(quint64 value, int format)
             return "(bin) " + QString::number(value, 2);
         case OctalIntegerFormat:
             return "(oct) " + QString::number(value, 8);
-        case CharCodeIntegerFormat: {
-            QString res = "\"";
-            while (value > 0) {
-                res = QChar(ushort(value & 255)) + res;
-                value >>= 8;
-            }
-            return "\"" + res;
-        }
     }
     return QString::number(value, 10);
 }
@@ -953,6 +945,12 @@ QString reformatInteger(quint64 value, int format, int size, bool isSigned)
     case 2: value = value & 0xffff;       break;
     case 4: value = value & 0xffffffff;   break;
     default: break;
+    }
+    if (format == CharCodeIntegerFormat) {
+        QString res = "'";
+        for (int i = (size - 1) * 8; i >= 0; i -= 8)
+            res += QChar(ushort((value >> i) & 0xff));
+        return res + "'";
     }
     return isSigned ? reformatSignedInteger(qint64(value), format)
                     : reformatUnsignedInteger(value, format);
