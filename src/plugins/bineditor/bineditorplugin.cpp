@@ -2216,32 +2216,40 @@ public:
         m_toolBar->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
         m_toolBar->addWidget(w);
 
-        m_undoAction = new QAction(Tr::tr("&Undo"), this);
-        m_redoAction = new QAction(Tr::tr("&Redo"), this);
-        m_copyAction = new QAction(this);
-        m_selectAllAction = new QAction(this);
+        const Context context(Id::generate());
+        setContext(context);
 
-        Context context(Id::generate());
-        IContext::attach(m_widget, context);
+        QAction *undoAction = nullptr;
+        ActionBuilder(this, Core::Constants::UNDO)
+            .bindContextAction(&undoAction)
+            .setContext(context)
+            .setEnabled(false)
+            .addOnTriggered(m_document.get(), &BinEditorDocument::undo);
 
-        ActionManager::registerAction(m_undoAction, Core::Constants::UNDO, context);
-        ActionManager::registerAction(m_redoAction, Core::Constants::REDO, context);
-        ActionManager::registerAction(m_copyAction, Core::Constants::COPY, context);
-        ActionManager::registerAction(m_selectAllAction, Core::Constants::SELECTALL, context);
+        QAction *redoAction = nullptr;
+        ActionBuilder(this, Core::Constants::REDO)
+            .bindContextAction(&redoAction)
+            .setContext(context)
+            .setEnabled(false)
+            .addOnTriggered(m_document.get(), &BinEditorDocument::redo);
 
-        connect(m_undoAction, &QAction::triggered, doc.get(), &BinEditorDocument::undo);
-        connect(m_redoAction, &QAction::triggered, doc.get(), &BinEditorDocument::redo);
-        connect(m_copyAction, &QAction::triggered, m_widget, &BinEditorWidget::copy);
-        connect(m_selectAllAction, &QAction::triggered, m_widget, &BinEditorWidget::selectAll);
+        ActionBuilder(this, Core::Constants::COPY)
+            .setContext(context)
+            .addOnTriggered(m_widget.data(), &BinEditorWidget::copy);
 
-        auto updateActions = [this] {
-            m_selectAllAction->setEnabled(true);
-            m_undoAction->setEnabled(m_widget->isUndoAvailable());
-            m_redoAction->setEnabled(m_widget->isRedoAvailable());
-        };
+        ActionBuilder(this, Core::Constants::SELECTALL)
+            .setContext(context)
+            .setEnabled(true)
+            .addOnTriggered(m_widget.data(), &BinEditorWidget::selectAll);
 
-        connect(doc.get(), &BinEditorDocument::undoAvailable, m_widget, updateActions);
-        connect(doc.get(), &BinEditorDocument::redoAvailable, m_widget, updateActions);
+        connect(m_document.get(), &BinEditorDocument::undoAvailable,
+                undoAction, [this, undoAction] {
+            undoAction->setEnabled(m_widget->isUndoAvailable());
+        });
+        connect(m_document.get(), &BinEditorDocument::redoAvailable,
+                redoAction, [this, redoAction] {
+            redoAction->setEnabled(m_widget->isRedoAvailable());
+        });
 
         auto aggregate = new Aggregation::Aggregate;
         auto binEditorFind = new BinEditorFind(m_widget);
@@ -2342,10 +2350,6 @@ private:
     QPointer<BinEditorWidget> m_widget;
     QToolBar *m_toolBar;
 
-    QAction *m_undoAction = nullptr;
-    QAction *m_redoAction = nullptr;
-    QAction *m_copyAction = nullptr;
-    QAction *m_selectAllAction = nullptr;
 };
 
 class BinEditorFactoryService final : public QObject, public FactoryService
