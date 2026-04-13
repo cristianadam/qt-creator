@@ -200,6 +200,9 @@ QmlJSEditorPluginPrivate::QmlJSEditorPluginPrivate()
     cmd = ActionManager::command(TextEditor::Constants::AUTO_INDENT_SELECTION);
     contextMenu->addAction(cmd);
 
+    cmd = ActionManager::command(TextEditor::Constants::AUTO_FORMAT_SELECTION);
+    contextMenu->addAction(cmd);
+
     cmd = ActionManager::command(TextEditor::Constants::REFORMAT_FILE);
     contextMenu->addAction(cmd);
 
