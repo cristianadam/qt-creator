@@ -88,7 +88,7 @@ public:
         return m_localBuildInfosRunner.isKeyRunning(projectName);
     }
 
-    LocalBuildInfo localBuildInfoFor(const QString &projectName)
+    LocalBuildState localBuildStateFor(const QString &projectName)
     {
         return m_localBuildInfos.value(projectName);
     }
@@ -107,7 +107,7 @@ private:
     QHash<QString, LocalDashboard> m_startedDashboards;
     QMappedTaskTreeRunner<QString> m_startedDashboardsRunner;
 
-    QHash<QString, LocalBuildInfo> m_localBuildInfos;
+    QHash<QString, LocalBuildState> m_localBuildInfos;
     QMappedTaskTreeRunner<QString> m_localBuildInfosRunner;
     QSet<QString> m_canceledRuns;
 
@@ -451,12 +451,12 @@ void LocalBuild::handleLocalBuildOutputFor(const QString &projectName, const QSt
     static const QRegularExpression buildStateRegex(
                 R"(^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} - (?<type>[a-z ]{4}) - (.+) - (?<text>.+)$)");
     QTC_ASSERT(hasRunningBuildFor(projectName), return);
-    const LocalBuildState state = m_localBuildInfos.value(projectName).state;
+    const LocalBuildState state = m_localBuildInfos.value(projectName);
 
     const QRegularExpressionMatch match = buildStateRegex.match(line);
     switch (state) {
     case LocalBuildState::None:
-        m_localBuildInfos.insert(projectName, {LocalBuildState::Started});
+        m_localBuildInfos.insert(projectName, LocalBuildState::Started);
         qCDebug(localBuildLog) << "buildState changed > started" << projectName;
         updateLocalBuildStateFor(projectName, Tr::tr("Started"), 5);
         break;
@@ -466,7 +466,7 @@ void LocalBuild::handleLocalBuildOutputFor(const QString &projectName, const QSt
             if (type == "sql" && match.captured("text").startsWith("Finished import")) {
                 qCDebug(localBuildLog) << "local dashboard changed.. (LocalBuild)"; // TODO trigger update of perspective?
             } else if (type == "bld") {
-                m_localBuildInfos.insert(projectName, {LocalBuildState::Building});
+                m_localBuildInfos.insert(projectName, LocalBuildState::Building);
                 qCDebug(localBuildLog) << "buildState changed > building" << projectName;
                 updateLocalBuildStateFor(projectName, Tr::tr("Building"), 30);
             }
@@ -476,7 +476,7 @@ void LocalBuild::handleLocalBuildOutputFor(const QString &projectName, const QSt
         if (match.hasMatch()) {
             if (match.captured("type").trimmed() == "bld"
                     && match.captured("text").startsWith("End of build actions")) {
-                m_localBuildInfos.insert(projectName, {LocalBuildState::Analyzing});
+                m_localBuildInfos.insert(projectName, LocalBuildState::Analyzing);
                 qCDebug(localBuildLog) << "buildState changed > analyzing" << projectName;
                 updateLocalBuildStateFor(projectName, Tr::tr("Analyzing"), 60);
             }
@@ -486,7 +486,7 @@ void LocalBuild::handleLocalBuildOutputFor(const QString &projectName, const QSt
         if (match.hasMatch()) {
             const QString type = match.captured("type").trimmed();
             if (type == "sql" || type == "db") {
-                m_localBuildInfos.insert(projectName, {LocalBuildState::UpdatingDashboard});
+                m_localBuildInfos.insert(projectName, LocalBuildState::UpdatingDashboard);
                 qCDebug(localBuildLog) << "buildState changed > updatingdashboard" << projectName;
                 updateLocalBuildStateFor(projectName, Tr::tr("Updating Dashboard"), 90);
             }
@@ -628,7 +628,7 @@ void LocalBuild::removeFinishedLocalBuilds()
 {
     auto it = m_localBuildInfos.begin();
     while (it != m_localBuildInfos.end()) {
-        if (it->state == LocalBuildState::Finished)
+        if (*it == LocalBuildState::Finished)
             it = m_localBuildInfos.erase(it);
         else
             ++it;
@@ -660,9 +660,9 @@ bool hasRunningLocalBuild(const QString &projectName)
     return s_localBuildInstance.hasRunningBuildFor(projectName);
 }
 
-LocalBuildInfo localBuildInfoFor(const QString &projectName)
+LocalBuildState localBuildStateFor(const QString &projectName)
 {
-    return s_localBuildInstance.localBuildInfoFor(projectName);
+    return s_localBuildInstance.localBuildStateFor(projectName);
 }
 
 void removeFinishedLocalBuilds()

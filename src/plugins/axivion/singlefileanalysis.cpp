@@ -156,7 +156,7 @@ public:
         return m_startedAnalysesRunner.isKeyRunning(filePath);
     }
 
-    LocalBuildInfo localBuildInfoFor(const FilePath &filePath) const
+    LocalBuildState localBuildStateFor(const FilePath &filePath) const
     {
         return m_localBuildInfos.value(filePath);
     }
@@ -168,7 +168,7 @@ private:
     void onSessionStarted(const FilePath &filePath, int sessionId);
 
     QHash<FilePath, SFAData> m_startedAnalyses;
-    QHash<FilePath, LocalBuildInfo> m_localBuildInfos;
+    QHash<FilePath, LocalBuildState> m_localBuildInfos;
     QSet<FilePath> m_canceledAnalyses;
     QMappedTaskTreeRunner<FilePath> m_startedAnalysesRunner;
 };
@@ -311,7 +311,7 @@ void SingleFileAnalysis::removeFinishedAnalyses()
 {
     auto it = m_localBuildInfos.begin();
     while (it != m_localBuildInfos.end()) {
-        if (it->state == LocalBuildState::Finished)
+        if (*it == LocalBuildState::Finished)
             it = m_localBuildInfos.erase(it);
         else
             ++it;
@@ -371,9 +371,9 @@ void cancelSingleFileAnalysis(const FilePath &filePath)
     s_sfaInstance.cancelAnalysisFor(filePath);
 }
 
-LocalBuildInfo localBuildInfoFor(const FilePath &filePath)
+LocalBuildState localBuildStateFor(const FilePath &filePath)
 {
-    return s_sfaInstance.localBuildInfoFor(filePath);
+    return s_sfaInstance.localBuildStateFor(filePath);
 }
 
 } // namespace Axivion::Internal

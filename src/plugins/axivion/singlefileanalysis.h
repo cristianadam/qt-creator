@@ -15,6 +15,6 @@ void cancelSingleFileAnalysis(const Utils::FilePath &filePath);
 void removeFinishedAnalyses();
 void shutdownAllAnalyses();
 
-LocalBuildInfo localBuildInfoFor(const Utils::FilePath &filePath);
+LocalBuildState localBuildStateFor(const Utils::FilePath &filePath);
 
 } // namespace Axivion::Internal

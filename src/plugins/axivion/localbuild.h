@@ -28,12 +28,7 @@ bool hasRunningLocalBuild(const QString &projectName);
 
 enum class LocalBuildState { None, Started, Building, Analyzing, UpdatingDashboard, Finished };
 
-struct LocalBuildInfo
-{
-    LocalBuildState state = LocalBuildState::None; // just use the state - no struct needed
-};
-
-LocalBuildInfo localBuildInfoFor(const QString &projectName);
+LocalBuildState localBuildStateFor(const QString &projectName);
 void removeFinishedLocalBuilds();
 
 } // namespace Axivion::Internal

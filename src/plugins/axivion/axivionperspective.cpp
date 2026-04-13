@@ -1725,10 +1725,10 @@ void ConsoleWidget::removeFinished()
 {
     QList<QString> toBeRemoved;
     for (auto it = m_consoles.cbegin(), end = m_consoles.cend(); it != end; ++it) {
-        LocalBuildInfo info = it.key().startsWith("SFA: ")
-                ? localBuildInfoFor(FilePath::fromString(it.key().mid(5)))
-                : localBuildInfoFor(it.key());
-        if (info.state == LocalBuildState::Finished)
+        LocalBuildState info = it.key().startsWith("SFA: ")
+                ? localBuildStateFor(FilePath::fromString(it.key().mid(5)))
+                : localBuildStateFor(it.key());
+        if (info == LocalBuildState::Finished)
             toBeRemoved.append(it.key());
     }
     for (const QString &console : toBeRemoved) {
@@ -1948,9 +1948,9 @@ bool AxivionPerspective::handleProgressContextMenu(const ItemViewEvent &e)
     const QString project = first.isValid() ? first.data(ProjectNameRole).toString() : QString{};
     const FilePath file = first.isValid() ? FilePath::fromString(first.data(FileRole).toString())
                                           : FilePath{};
-    const LocalBuildInfo localBuildInfo = file.isEmpty() ? localBuildInfoFor(project)
-                                                         : localBuildInfoFor(file);
-    const bool selectedFinished = localBuildInfo.state == LocalBuildState::Finished;
+    const LocalBuildState localBuildState = file.isEmpty() ? localBuildStateFor(project)
+                                                           : localBuildStateFor(file);
+    const bool selectedFinished = localBuildState == LocalBuildState::Finished;
     QMenu *menu = new QMenu;
     QAction *action = nullptr;
     if (!selectedFinished && first.isValid()) {
