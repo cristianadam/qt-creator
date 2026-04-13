@@ -1998,6 +1998,7 @@ void AxivionPerspective::requestFocusForIssuesTable()
 void AxivionPerspective::removeFinishedBuilds()
 {
     removeFinishedLocalBuilds();
+    removeFinishedAnalyses();
     m_progressWidget->removeFinishedItems();
 }
 
