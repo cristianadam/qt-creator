@@ -6,7 +6,7 @@ QtcPlugin {
 
     Depends { name: "CmdBridgeClient" }
     Depends { name: "Core" }
-    Depends { name: "Debugger"; condition: qtc.testsEnabled }
+    Depends { name: "Debugger"; condition: qtc.withPluginTests }
     Depends { name: "ProjectExplorer" }
     Depends { name: "QtSupport" }
 
@@ -30,7 +30,7 @@ QtcPlugin {
 
     Group {
         name: "Tests"
-        condition: qtc.testsEnabled
+        condition: qtc.withPluginTests
         files: [
             "dockerdebuggertest.h",
             "dockerdebuggertest.cpp",
