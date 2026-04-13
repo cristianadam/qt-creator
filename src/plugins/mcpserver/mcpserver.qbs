@@ -5,6 +5,7 @@ QtcPlugin {
 
     Depends { name: "app_version_header" }
     Depends { name: "Core" }
+    Depends { name: "Debugger" }
     Depends { name: "McpServerLib" }
     Depends { name: "ProjectExplorer" }
     Depends { name: "TextEditor" }

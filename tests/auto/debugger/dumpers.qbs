@@ -2,6 +2,7 @@ import qbs.FileInfo
 
 QtcAutotest {
     name: "Debugger dumpers autotest"
+    Depends { name: "Debugger" }
     Depends { name: "Utils" }
     Depends { name: "Qt.network" } // For QHostAddress
     Depends { name: "Qt.widgets" }
@@ -12,7 +13,6 @@ QtcAutotest {
             "debuggertr.h",
             "debuggerprotocol.h", "debuggerprotocol.cpp",
             "simplifytype.h", "simplifytype.cpp",
-            "watchdata.h", "watchdata.cpp",
             "watchutils.h", "watchutils.cpp"
         ]
     }
