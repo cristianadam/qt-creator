@@ -45,7 +45,6 @@ Q_LOGGING_CATEGORY(wsp, "qtc.projectexplorer.workspace.project", QtWarningMsg);
 const QLatin1StringView FOLDER_MIMETYPE{"inode/directory"};
 const QLatin1StringView WORKSPACE_MIMETYPE{"text/x-workspace-project"};
 const char WORKSPACE_PROJECT_ID[] = "ProjectExplorer.WorkspaceProject";
-const char WORKSPACE_PROJECT_RUNCONFIG_ID[] = "WorkspaceProject.RunConfiguration:";
 
 const QLatin1StringView PROJECT_NAME_KEY{"project.name"};
 const QLatin1StringView FILES_EXCLUDE_KEY{"files.exclude"};
@@ -435,8 +434,7 @@ class WorkspaceProjectRunConfigurationFactory : public RunConfigurationFactory
 public:
     WorkspaceProjectRunConfigurationFactory()
     {
-        registerRunConfiguration<WorkspaceRunConfiguration>(
-            Id(WORKSPACE_PROJECT_RUNCONFIG_ID));
+        registerRunConfiguration<WorkspaceRunConfiguration>(Id(Constants::WORKSPACE_RUNCONFIG_ID));
         addSupportedProjectType(WORKSPACE_PROJECT_ID);
     }
 };
@@ -798,7 +796,7 @@ void setupWorkspaceProject(QObject *guard)
         });
 
     static WorkspaceProjectRunConfigurationFactory theRunConfigurationFactory;
-    static ProcessRunnerFactory theRunWorkerFactory{{WORKSPACE_PROJECT_RUNCONFIG_ID}};
+    static ProcessRunnerFactory theRunWorkerFactory{{Constants::WORKSPACE_RUNCONFIG_ID}};
     static WorkspaceBuildConfigurationFactory theBuildConfigurationFactory;
 }
 
