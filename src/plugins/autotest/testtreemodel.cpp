@@ -1020,8 +1020,10 @@ bool TestTreeSortFilterModel::filterAcceptsRow(int sourceRow, const QModelIndex 
     switch (item->type()) {
     case ITestTreeItem::TestDataFunction:
         accept = m_filterMode & ShowTestData;
+        break;
     case ITestTreeItem::TestSpecialFunction:
         accept = m_filterMode & ShowInitAndCleanup;
+        break;
     default:
         break;
     }
