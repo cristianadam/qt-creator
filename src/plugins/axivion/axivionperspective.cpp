@@ -1611,7 +1611,7 @@ void ProgressItemDelegate::paint(QPainter *painter, const QStyleOptionViewItem &
     painter->restore();
 }
 
-class ProgressWidget : public QScrollArea
+class ProgressWidget : public BaseTreeView
 {
 public:
     explicit ProgressWidget(QWidget *parent = nullptr);
@@ -1624,17 +1624,12 @@ private:
 };
 
 ProgressWidget::ProgressWidget(QWidget *parent)
-    : QScrollArea(parent)
+    : BaseTreeView(parent)
 {
-    setFrameStyle(QFrame::NoFrame);
-
-    BaseTreeView *view = new BaseTreeView(this);
-    view->setHeaderHidden(true);
-    view->header()->setStretchLastSection(true);
-    view->setRootIsDecorated(false);
-    view->setModel(m_progressModel = new ProgressModel(view));
-    view->setItemDelegate(new ProgressItemDelegate(view));
-    setWidget(view);
+    setHeaderHidden(true);
+    header()->setStretchLastSection(true);
+    setModel(m_progressModel = new ProgressModel(this));
+    setItemDelegate(new ProgressItemDelegate(this));
 }
 
 void ProgressWidget::addOrUpdateProgressItem(const QString &projectName,
