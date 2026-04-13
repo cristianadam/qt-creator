@@ -459,6 +459,8 @@ Kit *KitModel::workingCopyForRow(int row) const
 QVariant KitModel::variantData(int row, int /*column*/, int role) const
 {
     const KitData d = item(row);
+    QTC_ASSERT(d.workingCopy, return {});
+
     switch (role) {
     case Qt::DisplayRole:
         return d.workingCopy->displayName();
@@ -472,9 +474,8 @@ QVariant KitModel::variantData(int row, int /*column*/, int role) const
             tmp.append(CompileTask(Task::Warning, Tr::tr("Display name is not unique.")));
         return d.workingCopy->toHtml(tmp);
     }
-    default:
-        return {};
     }
+    return {};
 }
 
 int KitModel::rowForKit(Kit *k) const
@@ -551,8 +552,8 @@ void KitModel::apply()
             newWorkingCopies.push_back(std::move(m_workingCopies[row]));
     }
 
-    GroupedModel::apply();
     m_workingCopies = std::move(newWorkingCopies);
+    GroupedModel::apply();
 
     for (Kit *k : kitsToDeregister)
         KitManager::deregisterKit(k);
@@ -1007,6 +1008,7 @@ private slots:
     void testCancelDoesNotPersistDefault();
     void testRemoveDefaultAutoSwitches();
     void testApplyCommitsDefault();
+    void testApplyWithRemovedKit();
 };
 
 void KitModelTest::testDefaultSuffix()
@@ -1092,6 +1094,40 @@ void KitModelTest::testApplyCommitsDefault()
     QCOMPARE(KitManager::defaultKit(), kit2);
 
     KitManager::deregisterKit(kit1);
+    KitManager::deregisterKit(kit2);
+}
+
+void KitModelTest::testApplyWithRemovedKit()
+{
+    // Regression test for QTCREATORBUG-34340: Apply while a kit is removed
+    // must not leave null working-copy pointers accessible during the model reset.
+    const DirtySettingsGuard guard;
+    Kit *kit1 = addTestKit("RemoveApplyKit1");
+    Kit *kit2 = addTestKit("RemoveApplyKit2");
+
+    KitModel model;
+    const int row1 = model.rowForOriginalKit(kit1);
+    QVERIFY(row1 >= 0);
+    model.markForRemoval(model.workingCopyForRow(row1));
+    QVERIFY(model.isRemoved(row1));
+
+    bool checkedDuringReset = false;
+    QObject::connect(model.groupedDisplayModel(), &QAbstractItemModel::modelReset,
+                     &model, [&model, &checkedDuringReset] {
+        checkedDuringReset = true;
+        for (int row = 0; row < model.itemCount(); ++row)
+            QVERIFY(model.workingCopyForRow(row));
+    });
+
+    const int countBeforeApply = model.itemCount();
+    model.apply();
+
+    QVERIFY(checkedDuringReset);
+    QCOMPARE(model.itemCount(), countBeforeApply - 1);
+    QCOMPARE(model.rowForOriginalKit(kit1), -1);
+    QVERIFY(model.rowForOriginalKit(kit2) >= 0);
+    QVERIFY(!KitManager::kits().contains(kit1));
+    QVERIFY(KitManager::kits().contains(kit2));
     KitManager::deregisterKit(kit2);
 }
 
