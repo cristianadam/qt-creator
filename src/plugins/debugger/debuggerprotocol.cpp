@@ -931,6 +931,8 @@ QString reformatSignedInteger(qint64 value, int format)
 
 QString reformatUnsignedInteger(quint64 value, int format)
 {
+    if (format == CharCodeIntegerFormat)
+        return reformatInteger(value, format, 4, false);
     return reformatIntegerHelper(value, format);
 }
 
@@ -948,8 +950,13 @@ QString reformatInteger(quint64 value, int format, int size, bool isSigned)
     }
     if (format == CharCodeIntegerFormat) {
         QString res = "'";
-        for (int i = (size - 1) * 8; i >= 0; i -= 8)
-            res += QChar(ushort((value >> i) & 0xff));
+        for (int i = (size - 1) * 8; i >= 0; i -= 8) {
+            const ushort c = (value >> i) & 0xff;
+            if (c == 0)
+                res += "\\0";
+            else
+                res += QChar(c);
+        }
         return res + "'";
     }
     return isSigned ? reformatSignedInteger(qint64(value), format)

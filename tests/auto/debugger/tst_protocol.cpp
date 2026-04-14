@@ -158,9 +158,9 @@ void tst_protocol::reformatUnsignedIntegerTest_data()
     QTest::newRow("octal")
         << quint64(0xff) << int(OctalIntegerFormat) << QString("(oct) 377");
     QTest::newRow("charcode-A")
-        << quint64(0x41) << int(CharCodeIntegerFormat) << QString("\"A\"");
+        << quint64(0x41) << int(CharCodeIntegerFormat) << QString("'\\0\\0\\0A'");
     QTest::newRow("charcode-AB")
-        << quint64(0x4142) << int(CharCodeIntegerFormat) << QString("\"AB\"");
+        << quint64(0x4142) << int(CharCodeIntegerFormat) << QString("'\\0\\0AB'");
 }
 
 void tst_protocol::reformatIntegerOverload()
