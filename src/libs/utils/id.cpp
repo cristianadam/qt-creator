@@ -216,6 +216,8 @@ Id Id::fromName(QByteArrayView name)
 
 QVariant Id::toSetting() const
 {
+    if (!isValid())
+        return {};
     QReadLocker lock(&s_cacheMutex);
     return QVariant(QString::fromUtf8(stringFromId.value(m_id).str));
 }
