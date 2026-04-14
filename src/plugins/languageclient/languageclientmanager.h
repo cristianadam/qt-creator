@@ -100,6 +100,7 @@ signals:
     void clientAdded(Client *client);
     void clientInitialized(Client *client);
     void clientRemoved(Client *client, bool unexpected);
+    void settingsChanged(BaseSettings *changed);
     void shutdownFinished();
     void openCallHierarchy();
 

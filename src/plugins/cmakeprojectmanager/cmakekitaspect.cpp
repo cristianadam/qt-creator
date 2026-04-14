@@ -1288,7 +1288,7 @@ private:
                 this, &CMakeConfigurationKitAspectImpl::applyChanges);
 
         refresh();
-        m_dialog->show();
+        m_dialog->open();
     }
 
     void applyChanges()

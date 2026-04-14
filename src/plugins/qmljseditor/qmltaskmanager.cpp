@@ -18,6 +18,7 @@
 #include <qmljs/qmljsconstants.h>
 #include <qmljs/qmljslink.h>
 #include <qmljs/qmljscheck.h>
+#include <qmljstools/qmljsmodelmanager.h>
 #include <utils/async.h>
 
 #include <QDebug>
@@ -61,6 +62,9 @@ void QmlTaskManager::collectMessages(QPromise<FileErrorMessages> &promise,
                                      bool updateSemantic)
 {
     for (const ModelManagerInterface::ProjectInfo &info : projectInfos) {
+        if (qmllsSettings()->isEnabledOnProject(QmlJSTools::Internal::projectFromProjectInfo(info)))
+            continue;
+
         QHash<FilePath, QList<DiagnosticMessage>> linkMessages;
         ContextPtr context;
         if (updateSemantic) {
