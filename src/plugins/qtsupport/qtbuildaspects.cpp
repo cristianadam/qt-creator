@@ -53,8 +53,8 @@ void QmlDebuggingAspect::addToLayoutImpl(Layouting::Layout &parent)
                                  "Only use in a safe environment.");
         }
         warningLabel->setText(warningText);
-        setVisible(supported);
-        const bool warningLabelsVisible = supported && !warningText.isEmpty();
+        setEnabled(supported);
+        const bool warningLabelsVisible = !warningText.isEmpty();
         // avoid explicitly showing the widget when it doesn't have a parent, but always
         // explicitly hide it when necessary
         if (warningLabel->parentWidget() || !warningLabelsVisible)
