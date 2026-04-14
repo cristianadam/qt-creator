@@ -258,6 +258,14 @@ public:
         return *fileAccess;
     }
 
+    void updateHandlesFileCache()
+    {
+        auto handlesFileDataCache = m_handlesFileCache.writeLocked();
+        handlesFileDataCache->imageId = q->imageId();
+        handlesFileDataCache->repoAndTag = q->repoAndTag();
+        handlesFileDataCache->repoAndTagEncoded = q->repoAndTagEncoded();
+    }
+
     DockerDevice *const q;
 
     struct MountPair
@@ -1229,12 +1237,7 @@ DockerDevice::DockerDevice()
     tag.setLabelText(Tr::tr("Tag:"));
     tag.setReadOnly(true);
 
-    this->addOnChanged(this, [this]() {
-        auto handlesFileDataCache = d->m_handlesFileCache.writeLocked();
-        handlesFileDataCache->imageId = imageId();
-        handlesFileDataCache->repoAndTag = repoAndTag();
-        handlesFileDataCache->repoAndTagEncoded = repoAndTagEncoded();
-    });
+    this->addOnChanged(this, [this]() { d->updateHandlesFileCache(); });
 
     environment.setSettingsKey(DockerDeviceEnvironment);
     environment.setLabelText(Tr::tr("Container environment:"));
@@ -1426,6 +1429,8 @@ void DockerDevice::fromMap(const Store &map)
         setDefaultDisplayName(
             Tr::tr("Docker Image \"%1\" (%2)").arg(repoAndTag()).arg(imageId.value()));
     }
+
+    d->updateHandlesFileCache();
 }
 
 void DockerDevice::toMap(Store &map) const
