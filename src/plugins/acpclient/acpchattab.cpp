@@ -225,6 +225,7 @@ AcpChatTab::AcpChatTab(QWidget *parent)
     connect(m_controller, &AcpChatController::connectionStateChanged, this, [this](bool connected) {
         m_serverCombo->setEnabled(!connected);
         m_cwdEdit->setEnabled(!connected);
+        m_connectButton->setEnabled(!connected);
         if (!connected) {
             m_stack->setCurrentIndex(0);
             m_chatPanel->setSendEnabled(false);
