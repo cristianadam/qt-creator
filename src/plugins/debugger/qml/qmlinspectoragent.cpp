@@ -262,9 +262,10 @@ void QmlInspectorAgent::onResult(quint32 queryId, const QVariant &value,
     qCDebug(qmlInspectorLog) << __FUNCTION__ << "done";
 }
 
-void QmlInspectorAgent::newObject(int engineId, int /*objectId*/, int /*parentId*/)
+void QmlInspectorAgent::newObject(int engineId, int objectId, int parentId)
 {
-    qCDebug(qmlInspectorLog) << __FUNCTION__ << "()";
+    qCDebug(qmlInspectorLog) << __FUNCTION__ << "() objectId:" << objectId
+                             << "parentId:" << parentId;
 
     log(LogReceive, "OBJECT_CREATED");
 
@@ -455,6 +456,14 @@ void QmlInspectorAgent::verifyAndInsertObjectInTree(const ObjectReference &objec
         QString parentIname = m_debugIdToIname.value(parentId);
         if (parentId != WatchItem::InvalidId && !handler->isExpandedIName(parentIname)
                 && !m_fetchDataIds.contains(parentId)) {
+            const WatchItem *parentItem = handler->findItem(parentIname);
+            const int parentChildCount = parentItem ? parentItem->childCount() : -1;
+            qCDebug(qmlInspectorLog)
+                << "  stacking" << object.className() << object.debugId()
+                << ": parent" << parentId << "not expanded"
+                << "(parent childCount:" << parentChildCount
+                << "- expandItem will" << (parentChildCount == 0 ? "fire" : "NOT fire")
+                << "=> items with childCount>0 get stuck here)";
             m_objectStack.push(QPair<ObjectReference, int>(object, engineId));
             handler->fetchMore(parentIname);
             return; // recursive
@@ -482,6 +491,16 @@ void QmlInspectorAgent::verifyAndInsertObjectInTree(const ObjectReference &objec
                 || (top.first.parentId() < 0 && objectDebugId == top.second)) {
             QString objectIname = m_debugIdToIname.value(objectDebugId);
             if (!handler->isExpandedIName(objectIname) && !m_fetchDataIds.contains(objectDebugId)) {
+                const WatchItem *parentItem = handler->findItem(objectIname);
+                const int parentChildCount = parentItem ? parentItem->childCount() : -1;
+                const QString expandNote = parentChildCount == 0
+                    ? QLatin1String("fire")
+                    : QString("NOT fire => %1 %2 gets stuck")
+                          .arg(top.first.className()).arg(top.first.debugId());
+                qCDebug(qmlInspectorLog)
+                    << "  stack: fetchMore on" << objectIname
+                    << "(childCount:" << parentChildCount
+                    << "- expandItem will" << expandNote << ")";
                 handler->fetchMore(objectIname);
             } else {
                 verifyAndInsertObjectInTree(top.first, top.second);
@@ -679,6 +698,16 @@ bool QmlInspectorAgent::isConnected() const
 
 void QmlInspectorAgent::clearObjectTree()
 {
+    if (!m_objectStack.isEmpty()) {
+        qCDebug(qmlInspectorLog)
+            << "clearObjectTree: discarding" << m_objectStack.size()
+            << "unresolved stack items (these were never shown in Locals):";
+        for (const auto &entry : std::as_const(m_objectStack)) {
+            qCDebug(qmlInspectorLog)
+                << "  " << entry.first.className() << entry.first.debugId()
+                << "parentId:" << entry.first.parentId();
+        }
+    }
     if (m_qmlEngine)
         m_qmlEngine->watchHandler()->removeAllData(true);
     m_objectTreeQueryIds.clear();
