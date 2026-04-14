@@ -74,7 +74,8 @@ public:
         setManagingPage(Constants::SettingsPage::TOOLS_ID);
 
         auto getter = [](const Kit &k) -> QVariant {
-            return MesonToolKitAspect::mesonToolId(&k).toSetting();
+            const Id id = MesonToolKitAspect::mesonToolId(&k);
+            return id.isValid() ? id.toSetting() : QVariant{};
         };
         auto setter = [](Kit &k, const QVariant &v) { k.setValue(MESON_TOOL_ID, v); };
         auto reset = [this] { model.reset(); };
