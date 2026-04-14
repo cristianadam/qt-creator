@@ -25,13 +25,6 @@ public:
     QDateTime buildTime; // can be invalid if compiled without time stamp
 
     FilePath plugins;
-
-    /*! Local plugin path: <localappdata>/plugins
-        where <localappdata> is e.g.
-        "%LOCALAPPDATA%\QtProject\qtcreator" on Windows Vista and later
-        "$XDG_DATA_HOME/data/QtProject/qtcreator" or "~/.local/share/data/QtProject/qtcreator" on Linux
-        "~/Library/Application Support/QtProject/Qt Creator" on Mac
-    */
     FilePath userPluginsRoot;
 
     FilePath luaPlugins;

@@ -216,11 +216,6 @@ static inline FilePaths getPluginPaths()
         IDE_VERSION_RELEASE,
         QVersionNumber::fromString(Core::Constants::IDE_VERSION_COMPAT).microVersion());
 
-    // Local plugin path: <localappdata>/plugins/<ideversion>
-    //    where <localappdata> is e.g.
-    //    "%LOCALAPPDATA%\QtProject\qtcreator" on Windows Vista and later
-    //    "$XDG_DATA_HOME/data/QtProject/qtcreator" or "~/.local/share/data/QtProject/qtcreator" on Linux
-    //    "~/Library/Application Support/QtProject/Qt Creator" on Mac
     const FilePath userPluginPath = appInfo().userPluginsRoot.parentDir();
 
     // Qt Creator X.Y.Z can load plugins from X.Y.(Z-1) etc, so add current and previous
@@ -500,6 +495,14 @@ ShowInGuiHandler *ShowInGuiHandler::instance = nullptr;
 
 FilePath userPluginsRoot()
 {
+    /*
+        Local plugin path: <localappdata>/plugins
+        where <localappdata> is e.g.
+        "%LOCALAPPDATA%\QtProject\qtcreator\<arch>" on Windows Vista and later
+        "$XDG_DATA_HOME/data/QtProject/qtcreator" or "~/.local/share/data/QtProject/qtcreator" on Linux
+        "~/Library/Application Support/QtProject/Qt Creator" on Mac
+    */
+
     FilePath rootPath = FilePath::fromUserInput(
         QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation));
 
@@ -510,6 +513,10 @@ FilePath userPluginsRoot()
 
     rootPath /= QLatin1StringView(
         HostOsInfo::isMacHost() ? Core::Constants::IDE_DISPLAY_NAME : Core::Constants::IDE_ID);
+
+    if (HostOsInfo::isWindowsHost())
+        rootPath /= QSysInfo::buildCpuArchitecture();
+
     rootPath /= "plugins";
 
     rootPath /= Core::Constants::IDE_VERSION_LONG;
