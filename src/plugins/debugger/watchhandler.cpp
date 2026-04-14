@@ -54,6 +54,7 @@
 #include <QMenu>
 #include <QMimeData>
 #include <QPainter>
+#include <QPointer>
 #include <QSet>
 #include <QStringDecoder>
 #include <QTabWidget>
@@ -573,7 +574,7 @@ public:
     WatchItem *m_returnRoot; // Not owned.
     WatchItem *m_tooltipRoot; // Not owned.
 
-    SeparatedView *m_separatedView; // Not owned.
+    QPointer<SeparatedView> m_separatedView; // Parented to DebuggerMainWindow; may be destroyed first.
 
     QSet<QString> m_expandedINames;
     QHash<QString, int> m_maxArrayCount;
@@ -2191,7 +2192,8 @@ void WatchHandler::cleanup()
     m_model->reinitialize();
     m_model->setValueAnnotations({});
     emit m_model->updateFinished();
-    m_model->m_separatedView->hide();
+    if (m_model->m_separatedView)
+        m_model->m_separatedView->hide();
 }
 
 static bool sortByName(const WatchItem *a, const WatchItem *b)
