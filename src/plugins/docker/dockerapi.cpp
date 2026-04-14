@@ -103,6 +103,9 @@ bool DockerApi::imageExists(const QString &imageId)
     if (process.exitCode() == 0)
         return true;
 
+    qCDebug(dockerApiLog) << "Failed to inspect image" << imageId << ":"
+                          << process.verboseExitMessage();
+
     return false;
 }
 
