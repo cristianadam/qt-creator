@@ -1064,48 +1064,6 @@ Store FindToolBar::save() const
     return s;
 }
 
-void FindToolBar::writeSettings()
-{
-    Utils::QtcSettings *settings = ICore::settings();
-    settings->beginGroup("Find");
-    settings->beginGroup("FindToolBar");
-    settings->setValueWithDefault("Backward", bool((m_findFlags & FindBackward) != 0), false);
-    settings->setValueWithDefault("CaseSensitively",
-                                  bool((m_findFlags & FindCaseSensitively) != 0),
-                                  false);
-    settings->setValueWithDefault("WholeWords", bool((m_findFlags & FindWholeWords) != 0), false);
-    settings->setValueWithDefault("RegularExpression",
-                                  bool((m_findFlags & FindRegularExpression) != 0),
-                                  false);
-    settings->setValueWithDefault("PreserveCase",
-                                  bool((m_findFlags & FindPreserveCase) != 0),
-                                  false);
-    settings->endGroup();
-    settings->endGroup();
-}
-
-void FindToolBar::readSettings()
-{
-    QtcSettings *settings = ICore::settings();
-    settings->beginGroup("Find");
-    settings->beginGroup("FindToolBar");
-    FindFlags flags;
-    if (settings->value("Backward", false).toBool())
-        flags |= FindBackward;
-    if (settings->value("CaseSensitively", false).toBool())
-        flags |= FindCaseSensitively;
-    if (settings->value("WholeWords", false).toBool())
-        flags |= FindWholeWords;
-    if (settings->value("RegularExpression", false).toBool())
-        flags |= FindRegularExpression;
-    if (settings->value("PreserveCase", false).toBool())
-        flags |= FindPreserveCase;
-    settings->endGroup();
-    settings->endGroup();
-    m_findFlags = flags;
-    findFlagsChanged();
-}
-
 void FindToolBar::setUseFakeVim(bool on)
 {
     m_useFakeVim = on;

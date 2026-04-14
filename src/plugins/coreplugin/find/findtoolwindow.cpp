@@ -420,31 +420,6 @@ Store FindToolWindow::save() const
     return s;
 }
 
-void FindToolWindow::writeSettings()
-{
-    Utils::QtcSettings *settings = ICore::settings();
-    settings->beginGroup("Find");
-    settings->setValueWithDefault("CurrentFilter",
-                                  m_currentFilter ? m_currentFilter->id() : QString());
-    for (IFindFilter *filter : std::as_const(m_filters))
-        filter->writeSettings(settings);
-    settings->endGroup();
-}
-
-void FindToolWindow::readSettings()
-{
-    QtcSettings *settings = ICore::settings();
-    settings->beginGroup("Find");
-    const QString currentFilter = settings->value("CurrentFilter").toString();
-    for (int i = 0; i < m_filters.size(); ++i) {
-        IFindFilter *filter = m_filters.at(i);
-        filter->readSettings(settings);
-        if (filter->id() == currentFilter)
-            setCurrentFilterIndex(i);
-    }
-    settings->endGroup();
-}
-
 void FindToolWindow::findCompleterActivated(const QModelIndex &index)
 {
     const int findFlagsI = index.data(Find::CompletionModelFindFlagsRole).toInt();

@@ -38,10 +38,6 @@ public:
     void restore(const Utils::Store &s);
     Utils::Store save() const;
 
-    // TODO deprecated since QtC 14.0
-    void readSettings();
-    void writeSettings();
-
 protected:
     bool event(QEvent *event) override;
     bool eventFilter(QObject *obj, QEvent *event) override;

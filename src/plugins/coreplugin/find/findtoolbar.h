@@ -49,10 +49,6 @@ public:
     void restore(const Utils::Store &s);
     Utils::Store save() const;
 
-    // TODO deprecated since QtC 14.0
-    void readSettings();
-    void writeSettings();
-
     void openFindToolBar(OpenFlags flags = UpdateAll);
     void setUseFakeVim(bool on);
 
