@@ -9,6 +9,7 @@
 #include "texteditortr.h"
 
 #include <utils/fileutils.h>
+#include <utils/infolabel.h>
 #include <utils/layoutbuilder.h>
 
 #include <QApplication>
@@ -42,6 +43,11 @@ CodeStyleSelectorWidget::CodeStyleSelectorWidget(const void *project, QWidget *p
     m_importButton = new QPushButton(Tr::tr("Import..."));
     m_importButton->setEnabled(false);
 
+    m_readonlyLabel = new InfoLabel(
+        Tr::tr("The selected configuration is read-only. Copy the configuration for editing."),
+        Utils::InfoLabel::Warning);
+    m_readonlyLabel->setVisible(false);
+
     using namespace Layouting;
 
     Column {
@@ -53,6 +59,7 @@ CodeStyleSelectorWidget::CodeStyleSelectorWidget(const void *project, QWidget *p
             m_exportButton,
             m_importButton
         },
+        m_readonlyLabel,
         noMargin,
     }.attachTo(this);
 
@@ -140,6 +147,7 @@ void CodeStyleSelectorWidget::slotCurrentDelegateChanged(ICodeStylePreferences *
 
     const bool removeEnabled = delegate && !delegate->isReadOnly() && !delegate->currentDelegate();
     m_removeButton->setEnabled(removeEnabled);
+    m_readonlyLabel->setVisible(delegate && delegate->isReadOnly());
 }
 
 void CodeStyleSelectorWidget::slotCopyClicked()

@@ -14,6 +14,8 @@ class QComboBox;
 class QPushButton;
 QT_END_NAMESPACE
 
+namespace Utils { class InfoLabel; }
+
 namespace TextEditor {
 
 class ICodeStylePreferences;
@@ -54,6 +56,7 @@ private:
     QPushButton *m_removeButton;
     QPushButton *m_exportButton;
     QPushButton *m_importButton;
+    Utils::InfoLabel *m_readonlyLabel;
 };
 
 } // namespace TextEditor
