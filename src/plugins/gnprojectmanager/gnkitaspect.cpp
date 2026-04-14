@@ -82,7 +82,8 @@ public:
         setManagingPage(Constants::SettingsPage::TOOLS_ID);
 
         auto getter = [](const Kit &k) -> QVariant {
-            return GNKitAspect::gnToolId(&k).toSetting();
+            const Id id = GNKitAspect::gnToolId(&k);
+            return id.isValid() ? id.toSetting() : QVariant{};
         };
         auto setter = [](Kit &k, const QVariant &v) { k.setValue(GN_TOOL_ID, v); };
         auto resetModel = [this] { m_model.reset(); };
