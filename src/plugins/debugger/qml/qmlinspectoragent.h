@@ -3,8 +3,9 @@
 
 #pragma once
 
-#include <QStack>
 #include <QPointer>
+#include <QSet>
+#include <QStack>
 #include <QTimer>
 
 #include <coreplugin/icontext.h>
@@ -97,6 +98,7 @@ private:
 
     QList<int> m_objectWatches;
     QList<int> m_fetchDataIds;
+    QSet<int> m_knownDelegateIds;
     QTimer m_delayQueryTimer;
 
     // toolbar

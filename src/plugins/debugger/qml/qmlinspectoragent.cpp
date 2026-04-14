@@ -254,6 +254,17 @@ void QmlInspectorAgent::onResult(quint32 queryId, const QVariant &value,
                     updateObjectTree(m_rootContexts[engine.debugId()], engine.debugId());
                     fetchObject(engine.debugId());
                 }
+                // Objects absent from the context tree (buildObjectList() in the
+                // Qt debug service only collects root-context instances, missing
+                // objects in per-delegate child contexts) are tracked via
+                // m_knownDelegateIds as they arrive via OBJECT_CREATED. Re-fetch
+                // them now so they become visible in the Locals tree. Do this
+                // after clearObjectTree() so the FETCH_OBJECT responses are not
+                // discarded.
+                for (int id : std::as_const(m_knownDelegateIds)) {
+                    if (!m_debugIdToIname.contains(id))
+                        fetchObject(id);
+                }
                 m_rootContextQueryIds.clear();
             }
         }
@@ -268,6 +279,31 @@ void QmlInspectorAgent::newObject(int engineId, int objectId, int parentId)
                              << "parentId:" << parentId;
 
     log(LogReceive, "OBJECT_CREATED");
+
+    // Track objects with no QObject parent unconditionally, even before
+    // m_engines is populated. OBJECT_CREATED for the initial scene arrives
+    // synchronously during QML parsing -- before LIST_ENGINES_R has come
+    // back -- so m_engines is still empty at that point. If we gated this
+    // on the engine loop below, all initial delegate IDs would be missed.
+    if (parentId == WatchItem::InvalidId && objectId != WatchItem::InvalidId) {
+        // Objects with parentId == -1 have QObject::parent() == nullptr
+        // (idForObject returns -1 for null). In Qt Quick, visual parenting
+        // via QQuickItem::setParentItem() does not set QObject::parent(),
+        // so delegate items created by Repeater, ListView, etc. commonly
+        // have null QObject parent despite having a visual parent.
+        //
+        // Such objects are also absent from the context tree returned by
+        // LIST_OBJECTS: buildObjectList() in the Qt debug service collects
+        // only the root QQmlContext's instance list and never emits objects
+        // that live in per-delegate child contexts. Remember the ID so that
+        // after each context-tree rebuild we fetch them directly.
+        //
+        // Note: this heuristic only covers objects with null QObject
+        // parent. Objects created by QQmlInstantiator do have a non-null
+        // parent and are missed here despite the same context-tree gap.
+        qCDebug(qmlInspectorLog) << "  no QObject parent, queuing for post-rebuild fetch:" << objectId;
+        m_knownDelegateIds.insert(objectId);
+    }
 
     for (const auto &engine : std::as_const(m_engines)) {
         if (engine.debugId() == engineId) {
