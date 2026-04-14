@@ -25,6 +25,7 @@
 
 #include <qmljstools/qmljsindenter.h>
 #include <qmljstools/qmljstoolsconstants.h>
+#include <qmljstools/qmljstoolssettings.h>
 
 #include <projectexplorer/project.h>
 #include <projectexplorer/projectexplorerconstants.h>
@@ -999,6 +1000,11 @@ void QmlJSEditorWidget::contextMenuEvent(QContextMenuEvent *e)
 
     if (ActionContainer *mcontext = ActionManager::actionContainer(Constants::M_CONTEXT)) {
         QMenu *contextMenu = mcontext->menu();
+        // builtin can do auto-indent but can't do auto-format, while qmlls/qmlformat can do
+        // auto-format but no auto-indent.
+        const bool formatWithBuiltin
+            = QmlJSTools::globalQmlJSCodeStyle()->currentCodeStyleSettings().formatter
+              == QmlJSTools::QmlJSCodeStyleSettings::Builtin;
         const QList<QAction *> actions = contextMenu->actions();
         for (QAction *action : actions) {
             menu->addAction(action);
@@ -1010,6 +1016,10 @@ void QmlJSEditorWidget::contextMenuEvent(QContextMenuEvent *e)
                             qmlJsEditorDocument()->semanticInfo().declaringMemberNoProperties(position()));
                 action->setEnabled(enabled);
             }
+            if (action->objectName() == TextEditor::Constants::AUTO_INDENT_SELECTION)
+                action->setEnabled(formatWithBuiltin);
+            if (action->objectName() == TextEditor::Constants::AUTO_FORMAT_SELECTION)
+                action->setEnabled(!formatWithBuiltin);
         }
     }
 

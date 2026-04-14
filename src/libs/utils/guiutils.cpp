@@ -252,6 +252,10 @@ void installMarkSettingsDirtyTriggerRecursively(QObject *object)
             QObject::connect(ob, &QCheckBox::toggled, markDirty);
             continue;
         }
+        if (auto ob = qobject_cast<QRadioButton *>(child)) {
+            QObject::connect(ob, &QRadioButton::toggled, markDirty);
+            continue;
+        }
         if (auto ob = qobject_cast<QListWidget *>(child)) {
             QObject::connect(ob, &QListWidget::itemChanged, markDirty);
             QObject::connect(ob->model(), &QAbstractItemModel::rowsInserted, markDirty);

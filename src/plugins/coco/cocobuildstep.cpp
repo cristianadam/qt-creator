@@ -114,16 +114,16 @@ void CocoBuildStep::updateDisplay()
         emit setButtonState(true, Tr::tr("Disable Coverage"));
     } else {
         setSummaryText(Tr::tr("Coco Code Coverage: Disabled."));
-        // m_reconfigureButton->setText(Tr::tr("Enable Coverage"));
         emit setButtonState(true, Tr::tr("Enable Coverage"));
     }
 }
 
-void CocoBuildStep::display(BuildConfiguration *buildConfig)
+void CocoBuildStep::display()
 {
-    Q_ASSERT( m_buildSettings.isNull() );
+    if (!m_buildSettings.isNull())
+        return;
 
-    m_buildSettings = BuildSettings::createdFor(buildConfig);
+    m_buildSettings = BuildSettings::createdFor(buildConfiguration());
     m_buildSettings->read();
     m_buildSettings->connectToBuildStep(this);
 
@@ -147,6 +147,7 @@ public:
         setSupportedProjectType(QmakeProjectManager::Constants::QMAKEPROJECT_ID);
         setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);
         setRepeatable(false);
+        setExtraInit([](BuildStep *step) { dynamic_cast<CocoBuildStep *>(step)->display(); });
     }
 };
 
@@ -159,6 +160,7 @@ public:
         setSupportedProjectType(CMakeProjectManager::Constants::CMAKE_PROJECT_ID);
         setSupportedStepList(ProjectExplorer::Constants::BUILDSTEPS_BUILD);
         setRepeatable(false);
+        setExtraInit([](BuildStep *step) { dynamic_cast<CocoBuildStep *>(step)->display(); });
     }
 };
 
@@ -171,7 +173,7 @@ static void addBuildStep(Target *target)
             if (!steps->contains(Constants::COCO_STEP_ID))
                 steps->insertStep(0, CocoBuildStep::create(config));
 
-            steps->firstOfType<CocoBuildStep>()->display(config);
+            steps->firstOfType<CocoBuildStep>()->display();
         }
     }
 }
@@ -182,8 +184,13 @@ void setupCocoBuildSteps()
     static CMakeStepFactory theCmakeStepFactory;
 
     QObject::connect(ProjectManager::instance(), &ProjectManager::projectAdded, [](Project *project) {
-        if (Target *target = project->activeTarget())
+        if (Target *target = project->activeTarget()) {
             addBuildStep(target);
+
+            QObject::connect(target, &Target::addedBuildConfiguration, [](BuildConfiguration *bc) {
+                addBuildStep(bc->target());
+            });
+        }
 
         QObject::connect(project, &Project::addedTarget, [](Target *target) {
             addBuildStep(target);

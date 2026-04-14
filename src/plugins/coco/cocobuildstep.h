@@ -11,8 +11,6 @@
 
 #include <QPointer>
 
-class QPushButton;
-
 namespace Coco::Internal {
 
 class CocoBuildStep : public ProjectExplorer::BuildStep
@@ -25,7 +23,7 @@ public:
     CocoBuildStep(ProjectExplorer::BuildStepList *bsl, Utils::Id id);
 
     bool init() override;
-    void display(ProjectExplorer::BuildConfiguration *buildConfig);
+    void display();
 
 signals:
     void setButtonState(bool enabled, const QString &text = {});
