@@ -123,7 +123,7 @@ QmlJSEditorPluginPrivate::QmlJSEditorPluginPrivate()
         &LanguageClient::LanguageClientManager::settingsChanged,
         &m_qmlTaskManager,
         [this](LanguageClient::BaseSettings *settings) {
-            if (settings->m_settingsTypeId == Constants::QMLLS_CLIENT_SETTINGS_ID)
+            if (settings->settingsTypeId() == Constants::QMLLS_CLIENT_SETTINGS_ID)
                 m_qmlTaskManager.updateMessages();
         });
 
