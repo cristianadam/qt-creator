@@ -29,24 +29,30 @@ public:
 
     CachedData cached(const FilePath &filePath, const RetrievalFunction &retrievalFunction)
     {
+        {
+            QMutexLocker lk(&m_mutex);
+            CachedData *data = m_cache.object(filePath);
+
+            // If the cache entry is fresh, return a copy immediately.
+            if (data && data->timeout >= QDateTime::currentDateTime())
+                return *data;
+        }
+
+        // Retrieve without the lock: the retrieval function queries the
+        // filesystem and must not hold m_mutex, because it may indirectly
+        // call invalidate() (e.g. via a device file-access factory that
+        // calls FSEngine::invalidateFileInfoCache()), which would deadlock.
+        CachedData retrieved = retrievalFunction(filePath);
+
         QMutexLocker lk(&m_mutex);
-        CachedData *data = m_cache.object(filePath);
-
-        // If the cache entry is too old, don't use it ...
-        if (data && data->timeout < QDateTime::currentDateTime())
-            data = nullptr;
-
-        // If no data was found, retrieve it and store it in the cache ...
-        if (!data) {
-            data = new CachedData;
-            *data = retrievalFunction(filePath);
-            if (Q_UNLIKELY(!m_cache.insert(filePath, data))) {
-                // This path will never happen, but to silence coverity we
-                // have to check it since insert in theory could delete
-                // the object if a cost bigger than the cache size is
-                // specified.
-                return {};
-            }
+        auto data = new CachedData(retrieved);
+        if (Q_UNLIKELY(!m_cache.insert(filePath, data))) {
+            // This path will never happen, but to silence coverity we
+            // have to check it since insert in theory could delete
+            // the object if a cost bigger than the cache size is
+            // specified.
+            // Note: data has been deleted by QCache::insert on failure.
+            return retrieved;
         }
 
         // Return a copy of the data, so it cannot be deleted by the cache
