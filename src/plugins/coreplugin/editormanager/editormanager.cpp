@@ -3153,6 +3153,7 @@ QAction *EditorManager::createDiffAgainstCurrentFileAction(
     QObject *parent, const std::function<Utils::FilePath()> &filePath)
 {
     const auto diffAgainstCurrentFile = [filePath]() {
+        QTC_ASSERT(EditorManager::currentDocument(), return);
         const FilePath leftFilePath = filePath();
         const FilePath rightFilePath = EditorManager::currentDocument()->filePath();
         if (leftFilePath.isEmpty() || rightFilePath.isEmpty())
@@ -3161,6 +3162,7 @@ QAction *EditorManager::createDiffAgainstCurrentFileAction(
             diffService->diffFiles(leftFilePath, rightFilePath);
     };
     auto diffAction = new QAction(Tr::tr("Diff Against Current File"), parent);
+    diffAction->setEnabled(EditorManager::currentDocument());
     QObject::connect(diffAction, &QAction::triggered, parent, diffAgainstCurrentFile);
     return diffAction;
 }
