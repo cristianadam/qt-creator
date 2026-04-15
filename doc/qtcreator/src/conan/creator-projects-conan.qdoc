@@ -22,6 +22,7 @@
         \li \l{https://docs.conan.io/2/integrations/cmake.html}{CMake}
         \li \l{https://docs.conan.io/2/integrations/autotools.html}{Autotools}
         \li \l{https://docs.conan.io/2/integrations/meson.html}{Meson}
+        \li \l{https://docs.conan.io/2/reference/tools/qbs.html}{Qbs}
     \endlist
 
     The client-server architecture of Conan enables the client to fetch packages
