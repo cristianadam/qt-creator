@@ -410,7 +410,7 @@ void FindToolWindow::restore(const Utils::Store &s)
 Store FindToolWindow::save() const
 {
     Store s;
-    if (m_currentFilter && (m_filters.isEmpty() || m_filters.first() != m_currentFilter))
+    if (m_currentFilter)
         s.insert("CurrentFilter", m_currentFilter->id());
     for (IFindFilter *filter : std::as_const(m_filters)) {
         const Store store = filter->save();
