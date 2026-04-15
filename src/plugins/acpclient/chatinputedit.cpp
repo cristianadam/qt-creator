@@ -8,6 +8,8 @@
 #include <utils/historycompleter.h>
 #include <utils/textutils.h>
 
+#include <texteditor/displaysettings.h>
+#include <texteditor/marginsettings.h>
 #include <texteditor/fontsettings.h>
 #include <texteditor/textdocument.h>
 #include <texteditor/texteditorconstants.h>
@@ -42,8 +44,11 @@ ChatInputEdit::ChatInputEdit(QWidget *parent)
         fontSettings.setFamily(appFont.family());
         fontSettings.setFontSize(appFont.pointSize());
         fontSettings.setFontZoom(100);
-        fontSettings.formatFor(C_TEXT).setForeground(QApplication::palette().color(QPalette::Text));
-        fontSettings.formatFor(C_TEXT).setBackground(QColor());
+        const QPalette appPalette = QApplication::palette();
+        fontSettings.formatFor(C_TEXT).setForeground(appPalette.color(QPalette::Text));
+        fontSettings.formatFor(C_TEXT).setBackground(appPalette.color(QPalette::Base));
+        fontSettings.formatFor(C_DISABLED_CODE).setForeground(appPalette.color(QPalette::Disabled, QPalette::Text));
+        fontSettings.formatFor(C_DISABLED_CODE).setBackground(appPalette.color(QPalette::Base));
         textDocument()->setFontSettings(fontSettings);
     };
     applyWidgetColors();
@@ -56,6 +61,24 @@ ChatInputEdit::ChatInputEdit(QWidget *parent)
     updateHeight();
     connect(this, &TextEditor::TextEditorWidget::textChanged, this, &ChatInputEdit::updateHeight);
     connect(this, &TextEditor::TextEditorWidget::textChanged, this, &ChatInputEdit::updateSuggestion);
+}
+
+void ChatInputEdit::setDisplaySettings(const DisplaySettingsData &settings)
+{
+    DisplaySettingsData overridden = settings;
+    overridden.m_visualizeWhitespace = false;
+    overridden.m_visualizeIndent = false;
+    overridden.m_textWrapping = true;
+    overridden.m_scrollBarHighlights = false;
+    TextEditorWidget::setDisplaySettings(overridden);
+}
+
+void ChatInputEdit::setMarginSettings(const MarginSettingsData &settings)
+{
+    MarginSettingsData overridden = settings;
+    overridden.m_showMargin = false;
+    overridden.m_useIndenter = false;
+    TextEditorWidget::setMarginSettings(overridden);
 }
 
 void ChatInputEdit::keyPressEvent(QKeyEvent *event)

@@ -21,6 +21,8 @@ signals:
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
+    void setDisplaySettings(const TextEditor::DisplaySettingsData &settings) override;
+    void setMarginSettings(const TextEditor::MarginSettingsData &settings) override;
     int extraAreaWidth(int * = nullptr) const override { return 0; }
 
 private:
