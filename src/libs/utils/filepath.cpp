@@ -218,7 +218,22 @@ FilePath FilePath::fromUrl(const QUrl &url)
     FilePath result;
     if (url.isLocalFile())
         return FilePath::fromString(doCleanPath(url.toLocalFile()));
-    return FilePath::fromParts(url.scheme(), url.host(), url.path());
+
+    const QString host = [&] {
+        // <user>:<password>@<host>:<port>
+        const QString port = url.port() > 0 ? QString::number(url.port()) : QString();
+        QString result = url.userName();
+        if (!url.password().isEmpty())
+            result += ':' + url.password();
+        if (!result.isEmpty())
+            result += '@';
+        result += url.host();
+        if (!port.isEmpty())
+            result += ':' + port;
+        return result;
+    }();
+
+    return FilePath::fromParts(url.scheme(), host, url.path());
 }
 
 /*!

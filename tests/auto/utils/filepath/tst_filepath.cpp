@@ -177,6 +177,8 @@ private slots:
     void fromUrl();
     void fromUrl_data();
 
+    void fromUrlHost();
+
 private:
     QTemporaryDir tempDir;
     QString rootPath;
@@ -2634,6 +2636,9 @@ void tst_filepath::fromUrl_data()
     QTest::newRow("local-with-scheme") << QUrl("file:///a/b/c") << FilePath::fromString("/a/b/c");
     QTest::newRow("local-with-scheme-directory-trailing-slash")
         << QUrl("file:///a/b/c/") << FilePath::fromString("/a/b/c");
+
+    QTest::newRow("expl") << QUrl("ssh://bolle:bommel@host:1234/a/b/c")
+                          << FilePath::fromParts(u"ssh", u":1234", u"/a/b/c");
 }
 
 void tst_filepath::fromUrl()
@@ -2642,6 +2647,29 @@ void tst_filepath::fromUrl()
     QFETCH(FilePath, expected);
 
     QCOMPARE(FilePath::fromUrl(url), expected);
+}
+
+void tst_filepath::fromUrlHost()
+{
+    QUrl u1("ssh://host:1234/a/b/c");
+    const auto p1 = FilePath::fromUrl(u1);
+    QCOMPARE(p1.host(), "host:1234");
+
+    QUrl u2("ssh://user@host:444/a/b/c");
+    const auto p2 = FilePath::fromUrl(u2);
+    QCOMPARE(p2.host(), "user@host:444");
+
+    QUrl u3("ssh://user:pwd@host/a/b/c");
+    const auto p3 = FilePath::fromUrl(u3);
+    QCOMPARE(p3.host(), "user:pwd@host");
+
+    QUrl u4("ssh://:pwd@host/a/b/c");
+    const auto p4 = FilePath::fromUrl(u4);
+    QCOMPARE(p4.host(), ":pwd@host");
+
+    QUrl u5("ssh://:pwd@host:555/a/b/c");
+    const auto p5 = FilePath::fromUrl(u5);
+    QCOMPARE(p5.host(), ":pwd@host:555");
 }
 
 } // Utils
