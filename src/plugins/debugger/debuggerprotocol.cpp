@@ -157,7 +157,7 @@ static void parseSimpleEscape(DebuggerOutputParser &parser, DebuggerOutputParser
     switch (c.unicode()) {
         case 'a': buffer += '\a'; break;
         case 'b': buffer += '\b'; break;
-        case 'e': buffer += '\e'; break;
+        case 'e': buffer += '\033'; break; // msvc complains about '\e'
         case 'f': buffer += '\f'; break;
         case 'n': buffer += '\n'; break;
         case 'r': buffer += '\r'; break;
