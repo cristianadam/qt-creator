@@ -143,7 +143,6 @@ QWidget *FindInFiles::createConfigWidget()
         m_directory->setPromptDialogTitle(Tr::tr("Directory to Search"));
         connect(m_directory.data(), &PathChooser::textChanged, this,
                 [this] { setSearchDir(m_directory->filePath()); });
-        connect(this, &BaseFileFind::searchDirChanged, m_directory, &PathChooser::setFilePath);
         m_directory->setHistoryCompleter(HistoryKey, /*restoreLastItemFromHistory=*/ true);
         if (!HistoryCompleter::historyExistsFor(HistoryKey)) {
             auto completer = static_cast<HistoryCompleter *>(m_directory->lineEdit()->completer());
@@ -223,7 +222,7 @@ FindInFiles &findInFiles()
 void FindInFiles::findOnFileSystem(const FilePath &path)
 {
     const FilePath folder = path.isDir() ? path : path.parentDir();
-    findInFiles().setSearchDir(folder);
+    findInFiles().m_directory->setFilePath(folder);
     Find::openFindDialog(&findInFiles());
 }
 
