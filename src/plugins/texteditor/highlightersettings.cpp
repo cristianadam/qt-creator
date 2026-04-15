@@ -36,6 +36,8 @@ static QString expressionsFromList(const QStringList &patterns)
 
 HighlighterSettings::HighlighterSettings()
 {
+    setAutoApply(false);
+
     setSettingsGroup(QString("Text") + Constants::HIGHLIGHTER_SETTINGS_CATEGORY);
 
     definitionFilesPath.setSettingsKey("UserDefinitionFilesPath");
