@@ -12,8 +12,10 @@
 #include <coreplugin/find/ifindsupport.h>
 
 #include <utils/algorithm.h>
+#include <utils/utilsicons.h>
 #include <utils/markdownbrowser.h>
 #include <utils/stylehelper.h>
+#include <utils/icondisplay.h>
 #include <utils/theme/theme.h>
 
 #include <limits>
@@ -565,19 +567,24 @@ public:
         setFrameShape(QFrame::NoFrame);
         setCollapsible(false);
 
-        auto *icon = new QLabel(QStringLiteral("\u26A0"), this); // ⚠
-        m_headerLayout->addWidget(icon);
+        m_iconDisplay = new Utils::IconDisplay(this);
+        m_iconDisplay->setIcon(Utils::Icons::WARNING);
+        m_headerLayout->addWidget(m_iconDisplay);
 
         QString labelHtml = QStringLiteral("<b>Permission Request</b>");
-        if (!title.isEmpty())
-            labelHtml += QStringLiteral(": %1").arg(title.toHtmlEscaped());
         if (!kindText.isEmpty())
             labelHtml += QStringLiteral(" <small>[%1]</small>").arg(kindText.toHtmlEscaped());
-        auto *label = new QLabel(labelHtml, this);
-        label->setTextFormat(Qt::RichText);
-        label->setWordWrap(true);
-        m_headerLayout->addWidget(label, 1);
+        auto *headerLabel = new QLabel(labelHtml, this);
+        headerLabel->setTextFormat(Qt::RichText);
+        headerLabel->setWordWrap(true);
+        m_headerLayout->addWidget(headerLabel, 1);
 
+        if (!title.isEmpty()) {
+            auto *titleLabel = new QLabel(title, this);
+            titleLabel->setTextFormat(Qt::RichText);
+            titleLabel->setWordWrap(true);
+            m_bodyLayout->addWidget(titleLabel);
+        }
         m_buttonLayout = new QHBoxLayout;
         m_buttonLayout->setSpacing(6);
         m_bodyLayout->addLayout(m_buttonLayout);
@@ -585,7 +592,7 @@ public:
         m_statusLabel = new QLabel(this);
         m_statusLabel->setTextFormat(Qt::RichText);
         m_statusLabel->hide();
-        m_bodyLayout->addWidget(m_statusLabel);
+        m_headerLayout->addWidget(m_statusLabel);
     }
 
     QPushButton *addOptionButton(const QString &text, Acp::PermissionOptionKind kind)
@@ -606,12 +613,15 @@ public:
         m_buttonLayout->addStretch();
     }
 
-    void setResolved(const QString &text)
+    void setResolved(const QString &text, bool accepted)
     {
         for (QPushButton *button : m_buttons)
-            button->setEnabled(false);
+            button->hide();
+        m_iconDisplay->setIcon(accepted ? Utils::Icons::OK : Utils::Icons::CRITICAL);
         m_statusLabel->setText(QStringLiteral("<i>%1</i>").arg(text.toHtmlEscaped()));
         m_statusLabel->show();
+        setCollapsible(true);
+        setCollapsed(true);
     }
 
 protected:
@@ -633,6 +643,7 @@ protected:
     }
 
 private:
+    Utils::IconDisplay *m_iconDisplay = nullptr;
     QHBoxLayout *m_buttonLayout = nullptr;
     QLabel *m_statusLabel = nullptr;
     QList<QPushButton *> m_buttons;
@@ -1188,22 +1199,26 @@ void AcpMessageView::addPermissionRequest(const QJsonValue &id,
     for (const PermissionOption &option : options) {
         auto *button = widget->addOptionButton(option.name(), option.kind());
         connect(button, &QPushButton::clicked, this,
-                [this, id, optionId = option.optionId(), widget] {
-            widget->setResolved(tr("Approved"));
-            emit permissionOptionSelected(id, optionId);
+                [this, id, option, widget] {
+            const bool accepted = option.kind() == PermissionOptionKind::allow_once
+                                  || option.kind() == PermissionOptionKind::allow_always;
+            widget->setResolved(option.name(), accepted);
+            emit permissionOptionSelected(id, option.optionId());
         });
     }
 
-    // Add a deny/cancel button
-    auto *cancelButton = widget->addOptionButton(tr("Deny"),
-                                                  PermissionOptionKind::reject_once);
-    widget->finishButtonLayout();
-    connect(cancelButton, &QPushButton::clicked, this,
-            [this, id, widget] {
-        widget->setResolved(tr("Denied"));
-        emit permissionCancelled(id);
-    });
+    const bool hasRejectOption = Utils::anyOf(
+        options, Utils::equal(&PermissionOption::kind, PermissionOptionKind::reject_once));
+    if (!hasRejectOption) {
+        // Add a deny/cancel button if not already present, to allow user to reject the request without selecting an option
+        auto *cancelButton = widget->addOptionButton(tr("Deny"), PermissionOptionKind::reject_once);
+        connect(cancelButton, &QPushButton::clicked, this, [this, id, widget] {
+            widget->setResolved(tr("Denied"), false);
+            emit permissionCancelled(id);
+        });
+    }
 
+    widget->finishButtonLayout();
     addWidget(widget);
 }
 
@@ -1241,13 +1256,8 @@ void AcpMessageView::addErrorMessage(const QString &text)
     widget->setFrameShape(QFrame::NoFrame);
     widget->setCollapsible(false);
 
-    auto *icon = new QLabel(QStringLiteral("\u26A0"), widget); // ⚠
-    QPalette iconPal = icon->palette();
-    iconPal.setColor(QPalette::WindowText, QColor(0xef, 0x44, 0x44));
-    icon->setPalette(iconPal);
-    QFont iconFont = icon->font();
-    iconFont.setPointSizeF(iconFont.pointSizeF() * 1.2);
-    icon->setFont(iconFont);
+    auto *icon = new Utils::IconDisplay(widget);
+    icon->setIcon(Utils::Icons::CRITICAL);
     widget->headerLayout()->addWidget(icon);
 
     auto *label = new QLabel(QStringLiteral("<b>Error:</b> %1").arg(text.toHtmlEscaped()), widget);
