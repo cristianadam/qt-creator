@@ -232,6 +232,11 @@ public:
     enum ControlChannelHint { QmlControlChannel };
     virtual QUrl toolControlChannel(const ControlChannelHint &) const;
 
+    // Returns the Unix socket path on the remote device to pass to the inferior's
+    // -qmljsdebugger=file: argument.  Non-empty only when the device forwards QML
+    // debug connections via Unix socket (e.g. Docker with cmdbridge).
+    virtual QString qmlDebugRemoteSocketPath() const { return {}; }
+
     Utils::PortList freePorts() const;
     void setFreePorts(const Utils::PortList &freePorts);
 

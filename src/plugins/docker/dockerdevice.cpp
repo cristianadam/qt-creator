@@ -229,6 +229,15 @@ public:
         if (!initResult)
             return ResultError(initResult.error());
 
+        const QUrl localSocketUrl = Utils::urlFromLocalSocket();
+        if (!localSocketUrl.path().isEmpty()) {
+            auto forwardResult = fAccess->forwardLocalSocketServer(localSocketUrl.path());
+            if (forwardResult) {
+                m_qmlDebuggerAccess = localSocketUrl;
+                m_qmlDebuggerForward = std::move(*forwardResult);
+            }
+        }
+
         return fAccess;
     }
 
@@ -279,6 +288,7 @@ public:
     SynchronizedValue<std::unique_ptr<DockerContainerThread>> m_deviceThread;
 
     QUrl m_qmlDebuggerAccess;
+    std::unique_ptr<CmdBridge::LocalSocketForward> m_qmlDebuggerForward;
 
     struct HandlesFileData
     {
@@ -489,6 +499,9 @@ Result<CommandLine> DockerDevicePrivate::withDockerExecCmd(
 void DockerDevicePrivate::stopCurrentContainer()
 {
     { // scope, so they are unlocked before setDeviceState
+        m_qmlDebuggerForward.reset();
+        m_qmlDebuggerAccess.clear();
+
         auto fileAccess = m_fileAccess.writeLocked();
         fileAccess->reset();
 
@@ -753,20 +766,6 @@ Result<QString> DockerDevicePrivate::updateContainerAccess()
 
     lockedThread->reset(result->release());
     const QString containerId = (*lockedThread)->containerId();
-
-    // Fetch the container's IP on the docker bridge so that we can connect
-    // directly without host port mapping. With --network host the IP field is
-    // empty; fall back to loopback in that case.
-    m_qmlDebuggerAccess.clear();
-    Process inspectProc;
-    inspectProc.setCommand({settings().dockerBinaryPath(),
-                            {"inspect", containerId,
-                             "--format", "{{.NetworkSettings.IPAddress}}"}});
-    inspectProc.runBlocking();
-    const QString containerIp = inspectProc.stdOut().trimmed();
-
-    m_qmlDebuggerAccess.setScheme(urlTcpScheme());
-    m_qmlDebuggerAccess.setHost(containerIp.isEmpty() ? "127.0.0.1" : containerIp);
 
     return containerId;
 }
@@ -1550,6 +1549,11 @@ QUrl DockerDevice::toolControlChannel(const ControlChannelHint &hint) const
 {
     QTC_CHECK(hint == QmlControlChannel);
     return d->m_qmlDebuggerAccess;
+}
+
+QString DockerDevice::qmlDebugRemoteSocketPath() const
+{
+    return d->m_qmlDebuggerForward ? d->m_qmlDebuggerForward->path().path() : QString{};
 }
 
 } // namespace Docker

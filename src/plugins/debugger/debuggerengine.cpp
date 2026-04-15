@@ -276,6 +276,7 @@ Result<> DebuggerRunParameters::fixupParameters(ProjectExplorer::RunControl *run
     }
 
     if (m_isQmlDebugging) {
+        const auto device = runControl->device();
         QmlDebugServicesPreset service;
         if (isCppDebugging()) {
             if (m_nativeMixedEnabled) {
@@ -287,9 +288,12 @@ Result<> DebuggerRunParameters::fixupParameters(ProjectExplorer::RunControl *run
             service = QmlDebuggerServices;
         }
         if (m_startMode != AttachToLocalProcess && m_startMode != AttachToCrashedProcess) {
+            const QString remoteSockPath = device ? device->qmlDebugRemoteSocketPath() : QString{};
             const QString qmlarg = isCppDebugging() && m_nativeMixedEnabled
                                  ? qmlDebugNativeArguments(service, false)
-                                 : qmlDebugTcpArguments(service, m_qmlServer);
+                                 : (!remoteSockPath.isEmpty()
+                                    ? qmlDebugLocalArguments(service, remoteSockPath)
+                                    : qmlDebugTcpArguments(service, m_qmlServer));
             m_inferior.command.addArg(qmlarg);
         }
     }

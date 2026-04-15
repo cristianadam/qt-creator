@@ -251,6 +251,12 @@ bool QmlDebugConnection::isConnecting() const
     return !d->gotHello && d->device;
 }
 
+bool QmlDebugConnection::isListening() const
+{
+    Q_D(const QmlDebugConnection);
+    return d->server && d->server->isListening();
+}
+
 void QmlDebugConnection::close()
 {
     Q_D(QmlDebugConnection);
@@ -342,8 +348,10 @@ void QmlDebugConnection::startLocalServer(const QString &fileName)
     Q_D(QmlDebugConnection);
     if (d->gotHello)
         close();
-    if (d->server)
+    if (d->server) {
+        d->server->close(); // removes the socket file before the deferred deletion
         d->server->deleteLater();
+    }
     d->server = new QLocalServer(this);
     // QueuedConnection so that waitForNewConnection() returns true.
     connect(d->server, &QLocalServer::newConnection,

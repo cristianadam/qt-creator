@@ -31,6 +31,7 @@ public:
 
     bool isConnected() const;
     bool isConnecting() const;
+    bool isListening() const;
     void close();
 
     QmlDebugClient *client(const QString &name) const;

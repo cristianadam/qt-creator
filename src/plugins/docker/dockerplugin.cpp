@@ -39,7 +39,11 @@ public:
                 const QmlDebugServicesPreset services =
                     servicesForRunMode(runControl->runMode());
                 CommandLine cmd = runControl->commandLine();
-                cmd.addArg(qmlDebugTcpArguments(services, runControl->qmlChannel()));
+                const QString remotePath = runControl->device()->qmlDebugRemoteSocketPath();
+                if (!remotePath.isEmpty())
+                    cmd.addArg(qmlDebugLocalArguments(services, remotePath));
+                else
+                    cmd.addArg(qmlDebugTcpArguments(services, runControl->qmlChannel()));
                 process.setCommand(cmd);
             };
             const ProcessTask processTask(

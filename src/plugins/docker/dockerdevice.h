@@ -82,6 +82,7 @@ public:
     QPixmap deviceStateIcon() const override;
 
     QUrl toolControlChannel(const ControlChannelHint &) const override;
+    QString qmlDebugRemoteSocketPath() const override;
 
     Utils::StringAspect imageId{this};
     Utils::StringAspect repo{this};

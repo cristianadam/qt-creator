@@ -38,9 +38,10 @@
 #include <texteditor/texteditor.h>
 
 #include <utils/basetreeview.h>
-#include <utils/qtcprocess.h>
 #include <utils/qtcassert.h>
+#include <utils/qtcprocess.h>
 #include <utils/treemodel.h>
+#include <utils/url.h>
 
 #include <QDebug>
 #include <QDockWidget>
@@ -347,28 +348,39 @@ void QmlEngine::beginConnection()
     if (!connection || connection->isConnected())
         return;
 
-    QString host = runParameters().qmlServer().host();
-    // Use localhost as default
-    if (host.isEmpty())
-        host = QHostAddress(QHostAddress::LocalHost).toString();
+    const QUrl server = runParameters().qmlServer();
+    if (server.scheme() == Utils::urlSocketScheme()) {
+        // Act as a local socket server: Qt Creator listens and the remote QML runtime connects.
+        // Do NOT start the connection timer here — the server must keep listening until the
+        // QML runtime in the container connects (which may take longer than the TCP timeout).
+        // connectionFailed() fires if listen() fails; connected() fires on success.
+        if (connection->isListening())
+            return; // already listening; a second beginConnection() call is harmless but wasteful
+        connection->startLocalServer(server.path());
+    } else {
+        QString host = server.host();
+        // Use localhost as default
+        if (host.isEmpty())
+            host = QHostAddress(QHostAddress::LocalHost).toString();
 
-    // FIXME: Not needed?
-    /*
-     * Let plugin-specific code override the port printed by the application. This is necessary
-     * in the case of port forwarding, when the port the application listens on is not the same that
-     * we want to connect to.
-     * NOTE: It is still necessary to wait for the output in that case, because otherwise we cannot
-     * be sure that the port is already open. The usual method of trying to connect repeatedly
-     * will not work, because the intermediate port is already open. So the connection
-     * will be accepted on that port but the forwarding to the target port will fail and
-     * the connection will be closed again (instead of returning the "connection refused"
-     * error that we expect).
-     */
-    const int port = runParameters().qmlServer().port();
-    connection->connectToHost(host, port);
+        // FIXME: Not needed?
+        /*
+         * Let plugin-specific code override the port printed by the application. This is necessary
+         * in the case of port forwarding, when the port the application listens on is not the same
+         * that we want to connect to.
+         * NOTE: It is still necessary to wait for the output in that case, because otherwise we
+         * cannot be sure that the port is already open. The usual method of trying to connect
+         * repeatedly will not work, because the intermediate port is already open. So the connection
+         * will be accepted on that port but the forwarding to the target port will fail and the
+         * connection will be closed again (instead of returning the "connection refused" error that
+         * we expect).
+         */
+        const int port = server.port();
+        connection->connectToHost(host, port);
 
-    //A timeout to check the connection state
-    d->connectionTimer.start();
+        //A timeout to check the connection state
+        d->connectionTimer.start();
+    }
 }
 
 void QmlEngine::connectionStartupFailed()
