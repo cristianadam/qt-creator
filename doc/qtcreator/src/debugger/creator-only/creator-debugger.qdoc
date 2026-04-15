@@ -2258,7 +2258,7 @@
     in \c{/etc/sysctl.d/10-ptrace.conf}. Even if you do not have elevated
     permissions, you can disable the feature by preloading a library that
     calls \c{prctl(0x59616d61, getppid(), 0, 0, 0);}. \QC ships such a
-    library: add \c{$QTCREATORDIR/lib/libptracepreload.so} to the
+    library: add \c{$QTCREATORDIR/lib/qtcreator/libptracepreload.so} to the
     \c{LD_PRELOAD} environment variable.
 
     \sa {Debug}{How to: Debug}, {Debugging}, {Debuggers}

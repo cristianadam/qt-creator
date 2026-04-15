@@ -120,3 +120,9 @@ qtc_add_resources(Debugger "testcases"
   BASE "."
   FILES ${test_cases}
 )
+
+add_qtc_library(ptracepreload SHARED
+    CONDITION UNIX AND NOT APPLE
+    SKIP_PCH
+    SOURCES ptracepreload.c
+)
