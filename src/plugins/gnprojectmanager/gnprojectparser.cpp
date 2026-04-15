@@ -51,11 +51,23 @@ static bool isHeader(const FilePath &file)
 
 static bool isSource(const FilePath &file)
 {
-    return file.endsWith(".c")
-        || file.endsWith(".cpp")
-        || file.endsWith(".cxx")
-        || file.endsWith(".cc")
-        || file.endsWith(".C");
+    static const std::unordered_set<QStringView> srcs = {
+        // C/C++
+        u"c", u"C", u"cpp", u"cppm", u"cxx", u"cc", u"c++",
+
+        // Objective-C/C++
+        u"m", u"M", u"mm", u"mi",u"mii",
+
+        // ASM
+        u"s", u"S", u"asm",
+
+        // rust
+        u"rs",
+
+        // swift
+        u"swift",
+    };
+    return srcs.contains(file.suffixView());
 }
 
 static std::unique_ptr<VirtualFolderNode> createVFolder(const FilePath &basePath,
@@ -426,7 +438,7 @@ RawProjectParts GNProjectParser::
         for (const auto &src : sourceFiles) {
             if (src.endsWith(".c"))
                 hasCFiles = true;
-            if (src.endsWith(".cpp") || src.endsWith(".cc") || src.endsWith(".cxx"))
+            if (src.endsWith(".cpp") || src.endsWith(".cc") || src.endsWith(".cxx") || src.endsWith(".cppm"))
                 hasCppFiles = true;
         }
 
