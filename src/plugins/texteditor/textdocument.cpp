@@ -401,8 +401,8 @@ QAction *TextDocument::createDiffAgainstCurrentFileAction(
 {
     const auto diffAgainstCurrentFile = [filePath]() {
         if (auto diffService = DiffService::instance()) {
-            if (auto textDocument = TextEditor::TextDocument::currentTextDocument()) {
-                const FilePath leftFilePath = textDocument->filePath();
+            if (auto document = EditorManager::currentDocument()) {
+                const FilePath leftFilePath = document->filePath();
                 const FilePath rightFilePath = filePath();
                 if (!leftFilePath.isEmpty() && !rightFilePath.isEmpty())
                     diffService->diffFiles(leftFilePath, rightFilePath);
@@ -410,6 +410,7 @@ QAction *TextDocument::createDiffAgainstCurrentFileAction(
         }
     };
     auto diffAction = new QAction(Tr::tr("Diff Against Current File"), parent);
+    diffAction->setEnabled(EditorManager::currentDocument());
     QObject::connect(diffAction, &QAction::triggered, parent, diffAgainstCurrentFile);
     return diffAction;
 }
