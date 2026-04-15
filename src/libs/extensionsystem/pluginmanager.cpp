@@ -1354,6 +1354,15 @@ void PluginManagerPrivate::shutdown()
     stopAll();
     if (!asynchronousPlugins.isEmpty()) {
         shutdownEventLoop = new QEventLoop;
+        QTimer::singleShot(std::chrono::seconds(10), this, [this] {
+            qWarning() << "Shutdown did not succeed after timeout of 10 seconds.";
+            qWarning() << "The following plugins are still in the queue:"
+                       << qPrintable(
+                              Utils::transform<QList>(asynchronousPlugins, &PluginSpec::id)
+                                  .join(", "));
+            qWarning() << "Shutting down.";
+            shutdownEventLoop->exit();
+        });
         shutdownEventLoop->exec();
     }
     deleteAll();
