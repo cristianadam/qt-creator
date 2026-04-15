@@ -24,7 +24,7 @@ Definition definitionForName(const QString &name);
 
 Definitions definitionsForDocument(const TextDocument *document);
 Definitions definitionsForMimeType(const QString &mimeType);
-Definitions definitionsForFileName(const Utils::FilePath &fileName);
+Definitions definitionsForFileName(const Utils::FilePath &filePath);
 
 void rememberDefinitionForDocument(const Definition &definition, const TextDocument *document);
 void clearDefinitionForDocumentCache();

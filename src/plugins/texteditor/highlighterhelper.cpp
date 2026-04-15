@@ -67,6 +67,8 @@ Definitions definitionsForDocument(const TextEditor::TextDocument *document)
     // never considered.
     // The KSyntaxHighlighting CLI also completely ignores MIME types.
     const FilePath &filePath = document->filePath();
+    if (highlighterSettings().isIgnoredFilePattern(filePath.fileName()))
+        return {};
     Definitions definitions = definitionsForFileName(filePath);
     if (definitions.isEmpty()) {
         // check for *.in filename since those are usually used for
@@ -133,16 +135,19 @@ Definitions definitionsForMimeType(const QString &mimeType)
     return definitions;
 }
 
-Definitions definitionsForFileName(const FilePath &fileName)
+Definitions definitionsForFileName(const FilePath &filePath)
 {
-    Definitions definitions = highlightRepository()->definitionsForFileName(fileName.fileName());
+    if (highlighterSettings().isIgnoredFilePattern(filePath.fileName()))
+        return {};
+
+    Definitions definitions = highlightRepository()->definitionsForFileName(filePath.fileName());
 
     if (definitions.size() > 1) {
-        const QString &fileExtension = fileName.completeSuffix();
+        const QString &fileExtension = filePath.completeSuffix();
         const Definition &rememberedDefinition
             = fileExtension.isEmpty()
                   ? definitionForSetting(kDefinitionForFilePath,
-                                         fileName.absoluteFilePath().toUrlishString())
+                                         filePath.absoluteFilePath().toUrlishString())
                   : definitionForSetting(kDefinitionForExtension, fileExtension);
         if (rememberedDefinition.isValid() && definitions.contains(rememberedDefinition))
             definitions = {rememberedDefinition};
