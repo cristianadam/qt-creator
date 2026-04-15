@@ -32,6 +32,10 @@ private slots:
     void reformatter_data();
     void reformatter();
 
+    void pragmaValue();
+    void propertyModifiers();
+    void bracelessIfBody();
+
 private:
 };
 
@@ -136,6 +140,87 @@ void tst_Reformatter::reformatter()
 
     QString formatted = reformat(doc);
     QCOMPARE(formatted, expected);
+}
+
+void tst_Reformatter::pragmaValue()
+{
+    const QString canonical =
+        "pragma ComponentBehavior: Bound\n"
+        "\n"
+        "import QtQuick 2.0\n"
+        "\n"
+        "Item {}\n";
+
+    // non-canonical: extra space before the colon
+    const QString nonCanonical =
+        "pragma ComponentBehavior : Bound\n"
+        "\n"
+        "import QtQuick 2.0\n"
+        "\n"
+        "Item {}\n";
+
+    Utils::FilePath fPath = Utils::FilePath::fromString("test.qml");
+    {
+        Document::MutablePtr doc = Document::create(fPath, Dialect::Qml);
+        doc->setSource(canonical);
+        doc->parse();
+        QVERIFY(doc->diagnosticMessages().isEmpty());
+        QCOMPARE(reformat(doc), canonical);
+    }
+    {
+        Document::MutablePtr doc = Document::create(fPath, Dialect::Qml);
+        doc->setSource(nonCanonical);
+        doc->parse();
+        QVERIFY(doc->diagnosticMessages().isEmpty());
+        QCOMPARE(reformat(doc), canonical);
+    }
+}
+
+void tst_Reformatter::propertyModifiers()
+{
+    const QString source =
+        "Item {\n"
+        "    property int a\n"
+        "    readonly property int b: 1\n"
+        "    default property int c\n"
+        "    required property int d\n"
+        "    x: 1\n"
+        "}\n";
+
+    Utils::FilePath fPath = Utils::FilePath::fromString("test.qml");
+    Document::MutablePtr doc = Document::create(fPath, Dialect::Qml);
+    doc->setSource(source);
+    doc->parse();
+    QVERIFY(doc->diagnosticMessages().isEmpty());
+    QCOMPARE(reformat(doc), source);
+}
+
+void tst_Reformatter::bracelessIfBody()
+{
+    const QString source =
+        "pragma HelloPragma: Value\n"
+        "\n"
+        "TextField {\n"
+        "    onAccepted: {\n"
+        "        if (!text)\n"
+        "            return\n"
+        "        doSomething()\n"
+        "        if (a)\n"
+        "            if (b)\n"
+        "                x()\n"
+        "            else\n"
+        "                y()\n"
+        "        else\n"
+        "            z()\n"
+        "    }\n"
+        "}\n";
+
+    Utils::FilePath fPath = Utils::FilePath::fromString("test.qml");
+    Document::MutablePtr doc = Document::create(fPath, Dialect::Qml);
+    doc->setSource(source);
+    doc->parse();
+    QVERIFY(doc->diagnosticMessages().isEmpty());
+    QCOMPARE(reformat(doc), source);
 }
 
 QTEST_GUILESS_MAIN(tst_Reformatter);
