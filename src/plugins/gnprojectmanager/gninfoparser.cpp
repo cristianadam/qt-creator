@@ -33,6 +33,11 @@ static GNTarget extractTarget(const QString &label,
         res.sources << resolveGNPath(src.toString(), rootPath);
     }
 
+    const QJsonArray dataArray = targetObj["data"].toArray();
+    for (const auto &data : dataArray) {
+        res.datas << resolveGNPath(data.toString(), rootPath);
+    }
+
     const auto scriptIt = targetObj.constFind("script");
     if (scriptIt != targetObj.constEnd()) {
         res.sources << resolveGNPath(scriptIt->toString(), rootPath);
@@ -109,8 +114,7 @@ Result parse(const FilePath &projectJsonPath)
     }
 
     Utils::erase(result.targets, [](const GNTarget &target) {
-        return target.type == GNTarget::Type::group
-               || target.type == GNTarget::Type::action
+        return target.type == GNTarget::Type::action
                || target.type == GNTarget::Type::actionForEach
                || target.type == GNTarget::Type::bundleData
                || target.type == GNTarget::Type::createBundle

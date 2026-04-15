@@ -34,6 +34,7 @@ struct GNTarget
     QString displayName;
     QString path;
     QStringList sources;
+    QStringList datas;
     QStringList outputs;
     QStringList cflags;
     QStringList defines;

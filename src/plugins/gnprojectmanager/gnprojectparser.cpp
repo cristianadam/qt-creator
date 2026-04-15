@@ -110,6 +110,10 @@ static std::unique_ptr<GNTargetNode> makeTargetNode(std::unique_ptr<GNProjectNod
             otherFiles << file;
     }
 
+    for (const auto &data : target.datas) {
+        otherFiles << FilePath::fromString(data);
+    }
+
     if (!sources.isEmpty()) {
         auto sourcesGroup = createVFolder(targetNode->path(),
                                           Tr::tr("Source Files"),
@@ -154,8 +158,10 @@ static std::unique_ptr<GNProjectNode> buildTree(const FilePath &srcDir,
     }
 
     // Add targets
-    for (const GNTarget &target : targets)
-        root->addNestedNode(makeTargetNode(root, target));
+    for (const GNTarget &target : targets) {
+        if (!target.sources.empty() || !target.datas.empty())
+            root->addNestedNode(makeTargetNode(root, target));
+    }
 
     return root;
 }
