@@ -76,7 +76,7 @@
     are sufficient.
 
     You can also build your own GDB, as instructed in
-    \l{http://wiki.qt.io/QtCreator_Build_Gdb}{Building GDB}.
+    \l{https://wiki.qt.io/QtCreator_Build_Gdb}{Building GDB}.
 
     Builds of GDB shipped with Xcode on \macos are no longer supported.
 
@@ -113,14 +113,9 @@
     your application is compiled as \e debug because \e release is the default
     library.
 
-    If you use a qmake based project in \QC, you can set a flag in
-    your \l{glossary-run-config}{run configuration}, in
-    \uicontrol Projects mode. In the run configuration, select
+    To use debug libraries, set a flag in your \l{glossary-run-config}{run configuration},
+    in \uicontrol Projects mode. In the run configuration, select
     \uicontrol{Use debug version of frameworks}.
-
-    For more detailed information about debugging on \macos,
-    see: \l{http://developer.apple.com/library/mac/#technotes/tn2124/_index.html#//apple_ref/doc/uid/DTS10003391}
-    {Mac OS X Debugging Magic}.
 
     \section1 LLDB versions
 
