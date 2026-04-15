@@ -87,6 +87,7 @@ set(SOURCE_FILES
     find.go
     is.go
     readfile.go
+    socketforward.go
     stat.go
     writefile.go
     watcher.go
@@ -103,3 +104,15 @@ add_custom_target(CmdBridge
 )
 
 add_feature_info("Executable CmdBridge" YES ${CMDBRIDGEFEATURE_TEXT})
+
+if(WITH_TESTS)
+  set(VENDOR_MODE_TEST_OPTION "")
+  if(CMDBRIDGE_BUILD_VENDOR_MODE)
+    set(VENDOR_MODE_TEST_OPTION "-mod=vendor")
+  endif()
+  add_test(
+    NAME tst_cmdbridge_socketforward
+    COMMAND ${GO_BIN} test ${VENDOR_MODE_TEST_OPTION} -v -run . -timeout 30s
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+  )
+endif()

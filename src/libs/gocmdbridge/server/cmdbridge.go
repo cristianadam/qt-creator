@@ -27,9 +27,14 @@ type issamefile struct {
 	Path2 string
 }
 
+type socketdatacmd struct {
+	Data []byte
+}
+
 type command struct {
-	Type string
-	Id   int
+	Type   string
+	Id     int
+	ConnId int // identifies a specific connection within a forward (socketdata, socketclose)
 
 	Stat stat
 	Exec execute
@@ -50,6 +55,8 @@ type command struct {
 	Signal signal
 
 	IsSameFile issamefile
+
+	SocketData socketdatacmd
 }
 
 type errorresult struct {
@@ -488,7 +495,7 @@ func processIsSameFile(cmd command, out chan<- []byte) {
 	out <- result
 }
 
-func processCommand(watcher *WatcherHandler, cmd command, out chan<- []byte) {
+func processCommand(watcher *WatcherHandler, socketHandler *SocketForwardHandler, cmd command, out chan<- []byte) {
 	defer globalWaitGroup.Done()
 
 	switch cmd.Type {
@@ -548,6 +555,14 @@ func processCommand(watcher *WatcherHandler, cmd command, out chan<- []byte) {
 		processWriteFile(cmd, out)
 	case "issamefile":
 		processIsSameFile(cmd, out)
+	case "forwardlocalsocketserver":
+		socketHandler.processForward(cmd, out)
+	case "socketdata":
+		socketHandler.processData(cmd)
+	case "socketclose":
+		socketHandler.processClose(cmd)
+	case "stopforwardserver":
+		socketHandler.processStopForward(cmd, out)
 	case "error":
 		result, _ := cbor.Marshal(errorresult{
 			Type:  "error",
@@ -560,10 +575,10 @@ func processCommand(watcher *WatcherHandler, cmd command, out chan<- []byte) {
 	}
 }
 
-func executor(watcher *WatcherHandler, commands <-chan command, out chan<- []byte) {
+func executor(watcher *WatcherHandler, socketHandler *SocketForwardHandler, commands <-chan command, out chan<- []byte) {
 	for cmd := range commands {
 		globalWaitGroup.Add(1)
-		go processCommand(watcher, cmd, out)
+		go processCommand(watcher, socketHandler, cmd, out)
 	}
 }
 
@@ -661,6 +676,7 @@ func readMain(test bool) {
 	go watchDogLoop(watchDogChannel)
 
 	watcher := NewWatcherHandler()
+	socketHandler := NewSocketForwardHandler()
 
 	var outputWG sync.WaitGroup
 	outputWG.Add(1)
@@ -676,7 +692,7 @@ func readMain(test bool) {
 	globalWaitGroup.Add(1)
 	go func() {
 		defer globalWaitGroup.Done()
-		executor(watcher, commandChannel, outputChannel)
+		executor(watcher, socketHandler, commandChannel, outputChannel)
 	}()
 
 	globalWaitGroup.Add(1)

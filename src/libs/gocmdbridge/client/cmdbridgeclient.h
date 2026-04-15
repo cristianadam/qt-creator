@@ -10,8 +10,11 @@
 #include <utils/processinterface.h>
 
 #include <memory>
+#include <variant>
 
+#include <QByteArray>
 #include <QFuture>
+#include <QString>
 
 namespace CmdBridge {
 
@@ -119,6 +122,36 @@ public:
     Utils::Result<QFuture<uint>> groupId(const QString &path);
 
     Utils::Result<QFuture<bool>> isSameFile(const QString &path1, const QString &path2);
+
+    // Events streamed from the Go bridge for an active socket server forward.
+    struct SocketServerConnect { int connId; };                     // A remote client has connected.
+    struct SocketServerData { int connId; QByteArray bytes; };      // Bytes from the remote client.
+    struct SocketServerClose { int connId; };                       // Remote client has disconnected.
+    using SocketServerEvent
+        = std::variant<SocketServerConnect, SocketServerData, SocketServerClose>;
+
+    struct SocketServerForward
+    {
+        int id;
+        QString remotePath;                        // Path of Go's socket server on the remote.
+        QFuture<SocketServerEvent> eventFuture;    // Streams connect/data/close events.
+    };
+
+    // Tells Go to create a Unix socket server on the remote device.  Returns a
+    // SocketServerForward that streams events; the caller responds to
+    // SocketServerConnect by connecting to the local App's server and relays
+    // SocketServerData / SocketServerClose in both directions.
+    Utils::Result<SocketServerForward> forwardSocketServer();
+
+    // Send raw bytes to the remote client identified by connId within forward id.
+    void sendSocketData(int id, int connId, const QByteArray &data);
+
+    // Notify Go that the local side has closed its end of a specific connection.
+    void sendSocketClose(int id, int connId);
+
+    // Tear down the Go socket server for this id entirely (closes listener + socket file).
+    // Call this when the LocalSocketForward handle is destroyed.
+    void sendSocketStopForward(int id);
 
 protected:
     bool exit();

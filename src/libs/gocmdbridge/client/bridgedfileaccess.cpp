@@ -10,7 +10,11 @@
 #include <utils/futuresynchronizer.h>
 
 #include <QElapsedTimer>
+#include <QFutureWatcher>
+#include <QLocalServer>
+#include <QLocalSocket>
 #include <QLoggingCategory>
+#include <QTimer>
 
 Q_LOGGING_CATEGORY(faLog, "qtc.cmdbridge.fileaccess", QtWarningMsg);
 
@@ -30,8 +34,8 @@ FileAccess::~FileAccess()
         m_client->disconnect();
         // and we don't want to block the main thread while it does either.
         if (QThread::isMainThread()) {
-            Utils::futureSynchronizer()->addFuture(
-                Utils::asyncRun([client = std::move(m_client)]() mutable { client.reset(); }));
+            futureSynchronizer()->addFuture(
+                asyncRun([client = std::move(m_client)]() mutable { client.reset(); }));
         }
     }
 }
@@ -95,11 +99,11 @@ FileAccess::DeployResult FileAccess::deployAndInit(
 {
     const auto logError = [](const QString &msg, DeployError::Code code) {
         qCWarning(faLog) << msg;
-        return Utils::make_unexpected(DeployError{msg, code});
+        return make_unexpected(DeployError{msg, code});
     };
     const auto toDeployError = [](const Result<> &result) -> DeployResult {
         if (!result)
-            return Utils::make_unexpected(DeployError{result.error(), DeployError::Other});
+            return make_unexpected(DeployError{result.error(), DeployError::Other});
         return DeployResult();
     };
 
@@ -849,4 +853,242 @@ Result<Environment> FileAccess::deviceEnvironment() const
     return m_environment;
 }
 
+// ---------------------------------------------------------------------------
+// LocalSocketForward implementation
+// ---------------------------------------------------------------------------
+
+// Private implementation class.  Q_OBJECT is used so that the instance can
+// act as the context object in connect() calls, ensuring all lambdas are
+// automatically disconnected when this object is destroyed.
+//
+// The forwarding direction is:
+//   remote app  <->  Go socket server  <->  cmdbridge protocol
+//       <->  (this) QLocalSocket  <->  local App socket server
+//
+// Multiple simultaneous remote clients are supported.  Each SocketServerConnect
+// event carries a ConnId; a fresh QLocalSocket is created per ConnId so the
+// local App sees an independent connection for every remote client.
+class LocalSocketForwardImpl : public QObject
+{
+    Q_OBJECT
+
+    struct ConnState
+    {
+        QLocalSocket *socket = nullptr;
+        int retryMs = 25;       // current back-off interval
+        int retryCount = 0;
+    };
+
+public:
+    LocalSocketForwardImpl(
+        Client *client,
+        int socketId,
+        const QString &localServerPath,
+        const QString &remotePath,
+        QFuture<Client::SocketServerEvent> eventFuture)
+        : m_client(client)
+        , m_socketId(socketId)
+        , m_localServerPath(localServerPath)
+        , m_remotePath(remotePath)
+    {
+        connect(&m_watcher,
+                &QFutureWatcher<Client::SocketServerEvent>::resultReadyAt,
+                this,
+                [this](int idx) { handleEvent(m_watcher.resultAt(idx)); });
+
+        m_watcher.setFuture(eventFuture);
+    }
+
+    ~LocalSocketForwardImpl() override
+    {
+        // If requestStop() was already called the watcher and sockets are
+        // being kept alive deliberately; just disconnect so that no slot fires
+        // on a partially-destroyed object.
+        m_watcher.disconnect();
+        if (!m_stopRequested) {
+            m_watcher.cancel();
+            cleanupConnections();
+            if (m_client)
+                m_client->sendSocketStopForward(m_socketId);
+        }
+    }
+
+    // Initiate graceful teardown: keep the watcher connected and the future
+    // un-cancelled so that in-flight socketdata events keep flowing through
+    // handleEvent until Go confirms (via "forwardserverstopped") that all
+    // queued packets have been flushed.  The object then self-destructs.
+    void requestStop()
+    {
+        QTC_ASSERT(!m_stopRequested, return);
+        m_stopRequested = true;
+        if (m_client)
+            m_client->sendSocketStopForward(m_socketId);
+        connect(&m_watcher,
+                &QFutureWatcher<Client::SocketServerEvent>::finished,
+                this,
+                [this] {
+                    cleanupConnections();
+                    deleteLater();
+                });
+    }
+
+    QString remotePath() const { return m_remotePath; }
+
+private:
+    void handleEvent(const Client::SocketServerEvent &event)
+    {
+        if (const auto *conn = std::get_if<Client::SocketServerConnect>(&event)) {
+            onRemoteConnect(conn->connId);
+        } else if (const auto *data = std::get_if<Client::SocketServerData>(&event)) {
+            auto it = m_connections.find(data->connId);
+            if (it != m_connections.end() && it->socket)
+                it->socket->write(data->bytes);
+        } else if (const auto *close = std::get_if<Client::SocketServerClose>(&event)) {
+            auto it = m_connections.find(close->connId);
+            if (it != m_connections.end() && it->socket)
+                it->socket->disconnectFromServer();
+        }
+    }
+
+    void onRemoteConnect(int connId)
+    {
+        ConnState &cs = m_connections[connId];
+        cs.retryMs = 25;
+        cs.retryCount = 0;
+
+        // Should not happen, but guard against a duplicate connect for the same connId.
+        if (cs.socket) {
+            if (m_client)
+                m_client->sendSocketClose(m_socketId, connId);
+            cs.socket->disconnect();
+            cs.socket->deleteLater();
+            cs.socket = nullptr;
+        }
+
+        QLocalSocket *socket = new QLocalSocket(this);
+        cs.socket = socket;
+        QPointer<QLocalSocket> weakSocket(socket);
+
+        // The local App may not have called listen() yet when the remote client
+        // connects.  Retry with exponential back-off instead of silently dropping.
+        connect(
+            socket,
+            &QLocalSocket::errorOccurred,
+            this,
+            [this, connId, weakSocket](QLocalSocket::LocalSocketError error) {
+                auto it = m_connections.find(connId);
+                if (it == m_connections.end() || it->socket != weakSocket)
+                    return;
+                if (error == QLocalSocket::ServerNotFoundError
+                    || error == QLocalSocket::ConnectionRefusedError) {
+                    if (++it->retryCount > kMaxLocalConnectRetries) {
+                        if (m_client)
+                            m_client->sendSocketClose(m_socketId, connId);
+                        m_connections.erase(it);
+                        if (weakSocket)
+                            weakSocket->deleteLater();
+                        return;
+                    }
+                    const int delay = qMin(it->retryMs * 2, 1000);
+                    it->retryMs = delay;
+                    QTimer::singleShot(delay, this, [this, connId, weakSocket]() {
+                        auto it2 = m_connections.find(connId);
+                        if (it2 == m_connections.end() || it2->socket != weakSocket)
+                            return;
+                        if (weakSocket->state() == QLocalSocket::UnconnectedState)
+                            weakSocket->connectToServer(m_localServerPath);
+                    });
+                } else {
+                    if (m_client)
+                        m_client->sendSocketClose(m_socketId, connId);
+                    m_connections.erase(it);
+                    if (weakSocket)
+                        weakSocket->deleteLater();
+                }
+            });
+
+        connect(socket, &QLocalSocket::readyRead, this, [this, connId, weakSocket]() {
+            auto it = m_connections.find(connId);
+            if (it != m_connections.end() && it->socket == weakSocket && m_client)
+                m_client->sendSocketData(m_socketId, connId, weakSocket->readAll());
+        });
+
+        connect(socket, &QLocalSocket::disconnected, this, [this, connId, weakSocket]() {
+            if (m_client)
+                m_client->sendSocketClose(m_socketId, connId);
+            auto it = m_connections.find(connId);
+            if (it != m_connections.end() && it->socket == weakSocket)
+                m_connections.erase(it);
+            if (weakSocket)
+                weakSocket->deleteLater();
+        });
+
+        socket->connectToServer(m_localServerPath);
+    }
+
+    void cleanupConnections()
+    {
+        for (const auto &cs : std::as_const(m_connections)) {
+            if (cs.socket) {
+                cs.socket->disconnect();
+                cs.socket->deleteLater();
+            }
+        }
+        m_connections.clear();
+    }
+
+    QPointer<Client> m_client;
+    int m_socketId;
+    QString m_localServerPath;
+    QString m_remotePath;
+    bool m_stopRequested = false;
+    static constexpr int kMaxLocalConnectRetries = 30; // ~26 s at cap
+    QMap<int, ConnState> m_connections;                // connId -> per-connection state
+    QFutureWatcher<Client::SocketServerEvent> m_watcher;
+};
+
+class LocalSocketForwardHandle : public LocalSocketForward
+{
+public:
+    explicit LocalSocketForwardHandle(std::unique_ptr<LocalSocketForwardImpl> impl)
+        : m_impl(std::move(impl))
+    {}
+
+    ~LocalSocketForwardHandle() override
+    {
+        // Graceful teardown: keep LocalSocketForwardImpl alive until Go confirms
+        // all in-flight packets have been flushed ("forwardserverstopped"), then
+        // it self-destructs via deleteLater().
+        m_impl.release()->requestStop();
+    }
+
+    FilePath path() const override
+    {
+        return FilePath::fromString(m_impl->remotePath());
+    }
+
+private:
+    std::unique_ptr<LocalSocketForwardImpl> m_impl;
+};
+
+Result<std::unique_ptr<LocalSocketForward>> FileAccess::forwardLocalSocketServer(
+    const QString &localSocketServerPath)
+{
+    if (!m_client)
+        return ResultError(Tr::tr("The bridge is not initialized."));
+
+    auto forwardResult = m_client->forwardSocketServer();
+    if (!forwardResult)
+        return ResultError(forwardResult.error());
+
+    return std::make_unique<LocalSocketForwardHandle>(std::make_unique<LocalSocketForwardImpl>(
+        m_client.get(),
+        forwardResult->id,
+        localSocketServerPath,
+        forwardResult->remotePath,
+        forwardResult->eventFuture));
+}
+
 } // namespace CmdBridge
+
+#include "bridgedfileaccess.moc"

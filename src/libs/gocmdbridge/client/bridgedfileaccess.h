@@ -12,12 +12,26 @@
 #include <utils/qtcprocess.h>
 
 #include <functional>
+#include <memory>
 
 class tst_CmdBridge;
 
 namespace CmdBridge {
 
 class Client;
+
+// RAII handle returned by forwardLocalSocketServer().  Keep it alive for as
+// long as the forwarding should remain active; destroying it tears down the
+// Go-side socket server and all associated connections.
+class QTCREATOR_CMDBRIDGE_EXPORT LocalSocketForward
+{
+public:
+    virtual ~LocalSocketForward() = default;
+
+    // Path of the Unix socket server that was created on the remote device by
+    // the Go bridge.  Remote processes should connect to this path.
+    virtual Utils::FilePath path() const = 0;
+};
 
 class QTCREATOR_CMDBRIDGE_EXPORT FileAccess : public Utils::DeviceFileAccess
 {
@@ -45,6 +59,15 @@ public:
         bool deleteOnExit);
 
     Utils::Result<> signalProcess(int pid, Utils::ControlSignal signal) const;
+
+    // Connects a local QLocalSocket to the Unix socket server at
+    // localSocketServerPath, then asks the Go bridge to create a new socket
+    // server on the remote device.  Remote processes connecting to that server
+    // have their data tunneled through the cmdbridge to the local App.
+    // Returns a handle; path() gives the remote server path.  Drop the handle
+    // to stop forwarding.
+    Utils::Result<std::unique_ptr<LocalSocketForward>> forwardLocalSocketServer(
+        const QString &localSocketServerPath);
 
     Utils::Result<Utils::Environment> deviceEnvironment() const override;
 

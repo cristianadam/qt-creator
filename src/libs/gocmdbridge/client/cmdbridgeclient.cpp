@@ -60,9 +60,11 @@ struct ClientPrivate
     Utils::SynchronizedValue<Jobs> jobs;
 
     QMap<int, std::shared_ptr<QPromise<FilePath>>> watchers;
+    QMap<int, std::shared_ptr<QPromise<Client::SocketServerEvent>>> socketServerForwards;
 
     Result<> readPacket(QCborStreamReader &reader);
     std::optional<Result<>> handleWatchResults(const QVariantMap &map);
+    std::optional<Result<>> handleSocketResults(const QVariantMap &map);
 };
 
 QString decodeString(QCborStreamReader &reader)
@@ -194,6 +196,53 @@ std::optional<Result<>> ClientPrivate::handleWatchResults(const QVariantMap &map
     return std::nullopt;
 }
 
+std::optional<Result<>> ClientPrivate::handleSocketResults(const QVariantMap &map)
+{
+    const QString type = map.value("Type").toString();
+
+    auto addEvent = [&](int id, Client::SocketServerEvent event) -> std::optional<Result<>> {
+        const auto it = socketServerForwards.find(id);
+        if (it == socketServerForwards.end())
+            return Result<>{}; // Already torn down — ignore late events from Go.
+        const auto promise = it.value();
+        if (!promise->isCanceled())
+            promise->addResult(std::move(event));
+        return Result<>{};
+    };
+
+    if (type == "socketconnect") {
+        const int connId = map.value("ConnId").toInt();
+        return addEvent(map.value("Id").toInt(), Client::SocketServerConnect{connId});
+    }
+
+    if (type == "socketdata") {
+        const int connId = map.value("ConnId").toInt();
+        const QByteArray bytes = map.value("Data").toByteArray();
+        return addEvent(map.value("Id").toInt(), Client::SocketServerData{connId, bytes});
+    }
+
+    if (type == "socketclose") {
+        const int connId = map.value("ConnId").toInt();
+        const auto id = map.value("Id").toInt();
+        auto result = addEvent(id, Client::SocketServerClose{connId});
+        // The server keeps running (more clients may connect later), so we do
+        // NOT finish the promise or erase it from the map here.
+        return result;
+    }
+
+    if (type == "forwardserverstopped") {
+        const auto id = map.value("Id").toInt();
+        const auto it = socketServerForwards.find(id);
+        if (it != socketServerForwards.end()) {
+            it.value()->finish();
+            socketServerForwards.erase(it);
+        }
+        return Result<>{};
+    }
+
+    return std::nullopt;
+}
+
 Result<> ClientPrivate::readPacket(QCborStreamReader &reader)
 {
     if (!reader.enterContainer())
@@ -218,6 +267,10 @@ Result<> ClientPrivate::readPacket(QCborStreamReader &reader)
     auto watchHandled = handleWatchResults(map);
     if (watchHandled)
         return *watchHandled;
+
+    auto socketHandled = handleSocketResults(map);
+    if (socketHandled)
+        return *socketHandled;
 
     auto id = map.value("Id").toInt();
     auto j = jobs.readLocked();
@@ -312,6 +365,12 @@ Result<> Client::start(bool deleteOnExit)
                         {"ErrorType", (d->process->exitCode() == 0 ? "NormalExit" : "ErrorExit")}});
                 }
 
+                // Finish any outstanding socket forward promises so that
+                // QFutureWatcher/QFuture waiters do not block forever.
+                for (auto &promise : d->socketServerForwards)
+                    promise->finish();
+                d->socketServerForwards.clear();
+
                 emit done(d->process->resultData());
                 d->process->deleteLater();
                 d->process = nullptr;
@@ -319,7 +378,7 @@ Result<> Client::start(bool deleteOnExit)
             });
 
             auto stateMachine =
-                [markerOffset = 0, state = int(0), packetSize(0), packetData = QByteArray(), this](
+                [markerOffset = 0, state = int(0), packetSize = quint32(0), packetData = QByteArray(), this](
                     QByteArray &buffer) mutable -> bool {
                     static const QByteArray MagicCode{GOBRIDGE_MAGIC_PACKET_MARKER};
 
@@ -351,8 +410,12 @@ Result<> Client::start(bool deleteOnExit)
                             return false; // wait for more data
                         QDataStream ds(buffer);
                         ds >> packetSize;
-                        // TODO: Enforce max size in bridge.
-                        if (packetSize > 0 && packetSize < 16384) {
+                        // Socket-data packets can carry up to 32 KiB of payload plus
+                        // CBOR map overhead; file-read results can be larger still.
+                        // 64 MiB is a safe upper bound that allows all legitimate
+                        // traffic while still catching obviously corrupted size fields.
+                        static constexpr quint32 maxPacketSize = 64u * 1024 * 1024;
+                        if (packetSize > 0 && packetSize <= maxPacketSize) {
                             state = 2;
                             buffer.remove(0, sizeof(packetSize));
                         } else {
@@ -944,6 +1007,71 @@ Result<QFuture<bool>> Client::isSameFile(const QString &path1, const QString &pa
 
             return JobResult::Done;
         });
+}
+
+Utils::Result<Client::SocketServerForward> Client::forwardSocketServer()
+{
+    auto jobResult = createJob<SocketServerForward>(
+        d.get(),
+        QCborMap{{"Type", "forwardlocalsocketserver"}},
+        [this](QVariantMap map, QPromise<SocketServerForward> &promise) {
+            ASSERT_TYPE("forwardlocalsocketserverready");
+
+            const auto id = map.value("Id").toInt();
+            const QString remotePath = map.value("Path").toString();
+
+            auto eventPromise = std::make_shared<QPromise<SocketServerEvent>>();
+            eventPromise->start();
+            QFuture<SocketServerEvent> eventFuture = eventPromise->future();
+            d->socketServerForwards.insert(id, std::move(eventPromise));
+
+            promise.addResult(SocketServerForward{id, remotePath, eventFuture});
+            return JobResult::Done;
+        });
+
+    if (!jobResult)
+        return ResultError(jobResult.error());
+
+    try {
+        return jobResult->result();
+    } catch (const std::exception &e) {
+        return ResultError(QString::fromUtf8(e.what()));
+    }
+}
+
+void Client::sendSocketData(int id, int connId, const QByteArray &data)
+{
+    QMetaObject::invokeMethod(d->process, [this, id, connId, data]() {
+        QTC_ASSERT(d->process, return);
+        QCborMap msg{
+            {"Type", "socketdata"},
+            {"Id", id},
+            {"ConnId", connId},
+            {"SocketData", QCborMap{{"Data", data}}}};
+        d->process->writeRaw(msg.toCborValue().toCbor());
+    });
+}
+
+void Client::sendSocketClose(int id, int connId)
+{
+    QMetaObject::invokeMethod(d->process, [this, id, connId]() {
+        QTC_ASSERT(d->process, return);
+        QCborMap msg{{"Type", "socketclose"}, {"Id", id}, {"ConnId", connId}};
+        d->process->writeRaw(msg.toCborValue().toCbor());
+    });
+}
+
+void Client::sendSocketStopForward(int id)
+{
+    QMetaObject::invokeMethod(d->process, [this, id]() {
+        QTC_ASSERT(d->process, return);
+        QCborMap msg{{"Type", "stopforwardserver"}, {"Id", id}};
+        d->process->writeRaw(msg.toCborValue().toCbor());
+        // Do NOT erase socketServerForwards[id] here. Go will send a
+        // "forwardserverstopped" packet only after all in-flight socketdata /
+        // socketclose packets have been written to the output channel, so
+        // handleSocketResults will erase the entry when that ack arrives.
+    });
 }
 
 bool Client::exit()

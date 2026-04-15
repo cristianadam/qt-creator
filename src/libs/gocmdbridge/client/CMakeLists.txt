@@ -1,5 +1,6 @@
 add_qtc_library(CmdBridgeClient
   PUBLIC_DEPENDS Utils
+  DEPENDS Qt::Network
   DEFINES GOBRIDGE_MAGIC_PACKET_MARKER=\"${GOBRIDGE_MAGIC_PACKET_MARKER}\"
   SOURCES
     bridgedfileaccess.cpp

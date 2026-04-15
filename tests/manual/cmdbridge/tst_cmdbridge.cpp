@@ -1,6 +1,7 @@
 // Copyright (C) 2022 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
+#include "utils/futuresynchronizer.h"
 #include <app/app_version.h>
 
 #include <client/bridgedfileaccess.h>
@@ -13,7 +14,10 @@
 #include <utils/temporarydirectory.h>
 
 #include <QElapsedTimer>
+#include <QLocalServer>
+#include <QLocalSocket>
 #include <QObject>
+#include <QSignalSpy>
 #include <QTest>
 
 using namespace Utils;
@@ -507,6 +511,271 @@ The end.
                 qDebug() << "Exit code:" << exitCode;
             }
         }
+    }
+
+    void testSocketForward()
+    {
+        {
+            CmdBridge::FileAccess fileAccess;
+            CmdBridge::FileAccess::DeployResult res = fileAccess.deployAndInit(
+                FilePath::fromUserInput(libExecPath),
+                FilePath::fromUserInput("/"),
+                Environment::systemEnvironment());
+
+            QVERIFY_DEPLOY_RESULT(res);
+
+            // Set up a local QLocalServer that the forwarding will connect to.
+            const QString localServerName = QDir::tempPath() + "/tst-cmdbridge-local.sock";
+            QFile::remove(localServerName);
+            QLocalServer localServer;
+            QVERIFY(localServer.listen(localServerName));
+
+            // Ask the bridge to create a remote socket server and forward to our local one.
+            auto forwardResult = fileAccess.forwardLocalSocketServer(localServerName);
+            QVERIFY_RESULT(forwardResult);
+            auto &forward = *forwardResult;
+            QVERIFY(forward);
+
+            const QString remotePath = forward->path().path();
+            qDebug() << "Remote socket path:" << remotePath;
+            QVERIFY(!remotePath.isEmpty());
+            QVERIFY(QFile::exists(remotePath));
+
+            // Connect a "remote app" client to the Go socket server.
+            QLocalSocket remoteClient;
+            remoteClient.connectToServer(remotePath);
+            QVERIFY(remoteClient.waitForConnected(5000));
+
+            // The forwarding chain is asynchronous (QFutureWatcher -> onRemoteConnect
+            // -> QLocalSocket::connectToServer) so we must spin the event loop with
+            // QTRY_* instead of using blocking waitFor* calls.
+            // Note: use hasPendingConnections() inside QTRY_VERIFY because
+            // nextPendingConnection() consumes the connection—and QTRY_VERIFY
+            // evaluates its expression one extra time in the final QVERIFY.
+            QTRY_VERIFY_WITH_TIMEOUT(localServer.hasPendingConnections(), 5000);
+            QLocalSocket *localConn = localServer.nextPendingConnection();
+            QVERIFY(localConn);
+
+            // Test remote -> local direction.
+            // Use += to accumulate: QTRY_VERIFY evaluates the expression one extra
+            // time in its final QVERIFY, and readAll() consumes the buffer.
+            const QByteArray testData1 = "Hello from remote";
+            remoteClient.write(testData1);
+            remoteClient.flush();
+            QByteArray localReceived;
+            QTRY_VERIFY_WITH_TIMEOUT(
+                (localReceived += localConn->readAll()).size() >= testData1.size(), 5000);
+            QCOMPARE(localReceived, testData1);
+
+            // Test local -> remote direction.
+            const QByteArray testData2 = "Hello from local";
+            localConn->write(testData2);
+            localConn->flush();
+            QByteArray remoteReceived;
+            QTRY_VERIFY_WITH_TIMEOUT(
+                (remoteReceived += remoteClient.readAll()).size() >= testData2.size(), 5000);
+            QCOMPARE(remoteReceived, testData2);
+
+            // Test that closing the remote client is detected.
+            QSignalSpy localDisconnected(localConn, &QLocalSocket::disconnected);
+            remoteClient.disconnectFromServer();
+            QTRY_VERIFY_WITH_TIMEOUT(!localDisconnected.isEmpty(), 5000);
+
+            // Test reconnection: a second remote client should be accepted.
+            QLocalSocket remoteClient2;
+            remoteClient2.connectToServer(remotePath);
+            QVERIFY(remoteClient2.waitForConnected(5000));
+
+            QTRY_VERIFY_WITH_TIMEOUT(localServer.hasPendingConnections(), 5000);
+            QLocalSocket *localConn2 = localServer.nextPendingConnection();
+            QVERIFY(localConn2);
+
+            const QByteArray testData3 = "Second connection";
+            remoteClient2.write(testData3);
+            remoteClient2.flush();
+            QByteArray localReceived2;
+            QTRY_VERIFY_WITH_TIMEOUT(
+                (localReceived2 += localConn2->readAll()).size() >= testData3.size(), 5000);
+            QCOMPARE(localReceived2, testData3);
+
+            // Destroy the forward handle; the remote socket server should be torn down.
+            forward.reset();
+
+            // Give the Go side a moment to clean up.
+            QTRY_VERIFY_WITH_TIMEOUT(!QFile::exists(remotePath), 5000);
+
+            localServer.close();
+            QFile::remove(localServerName);
+        }
+        auto emptyFlush = []() {
+            Utils::futureSynchronizer()->flushFinishedFutures();
+            return Utils::futureSynchronizer()->isEmpty();
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(emptyFlush(), 5000);
+    }
+
+    void testSocketForwardMultipleConnections()
+    {
+        {
+            CmdBridge::FileAccess fileAccess;
+            CmdBridge::FileAccess::DeployResult res = fileAccess.deployAndInit(
+                FilePath::fromUserInput(libExecPath),
+                FilePath::fromUserInput("/"),
+                Environment::systemEnvironment());
+
+            QVERIFY_DEPLOY_RESULT(res);
+
+            const QString localServerName = QDir::tempPath() + "/tst-cmdbridge-multi.sock";
+            QFile::remove(localServerName);
+            QLocalServer localServer;
+            QVERIFY(localServer.listen(localServerName));
+
+            auto forwardResult = fileAccess.forwardLocalSocketServer(localServerName);
+            QVERIFY_RESULT(forwardResult);
+            auto &forward = *forwardResult;
+            QVERIFY(forward);
+
+            const QString remotePath = forward->path().path();
+            QVERIFY(!remotePath.isEmpty());
+            QVERIFY(QFile::exists(remotePath));
+
+            // Connect two remote clients sequentially so we can pair each one
+            // with the local connection it triggers.
+            QLocalSocket remote1;
+            remote1.connectToServer(remotePath);
+            QVERIFY(remote1.waitForConnected(5000));
+
+            QTRY_VERIFY_WITH_TIMEOUT(localServer.hasPendingConnections(), 5000);
+            QLocalSocket *local1 = localServer.nextPendingConnection();
+            QVERIFY(local1);
+
+            QLocalSocket remote2;
+            remote2.connectToServer(remotePath);
+            QVERIFY(remote2.waitForConnected(5000));
+
+            QTRY_VERIFY_WITH_TIMEOUT(localServer.hasPendingConnections(), 5000);
+            QLocalSocket *local2 = localServer.nextPendingConnection();
+            QVERIFY(local2);
+
+            // remote1 -> local1: data must not appear on local2.
+            const QByteArray data1 = "Hello from remote 1";
+            remote1.write(data1);
+            remote1.flush();
+            QByteArray received1;
+            QTRY_VERIFY_WITH_TIMEOUT(
+                (received1 += local1->readAll()).size() >= data1.size(), 5000);
+            QCOMPARE(received1, data1);
+            // local2 must stay silent.
+            QVERIFY(local2->bytesAvailable() == 0);
+
+            // remote2 -> local2.
+            const QByteArray data2 = "Hello from remote 2";
+            remote2.write(data2);
+            remote2.flush();
+            QByteArray received2;
+            QTRY_VERIFY_WITH_TIMEOUT(
+                (received2 += local2->readAll()).size() >= data2.size(), 5000);
+            QCOMPARE(received2, data2);
+
+            // local2 -> remote2.
+            const QByteArray reply2 = "Reply to remote 2";
+            local2->write(reply2);
+            local2->flush();
+            QByteArray remoteReceived2;
+            QTRY_VERIFY_WITH_TIMEOUT(
+                (remoteReceived2 += remote2.readAll()).size() >= reply2.size(), 5000);
+            QCOMPARE(remoteReceived2, reply2);
+
+            // Close remote1; local1 must disconnect but local2/remote2 must survive.
+            QSignalSpy local1Disconnected(local1, &QLocalSocket::disconnected);
+            remote1.disconnectFromServer();
+            QTRY_VERIFY_WITH_TIMEOUT(!local1Disconnected.isEmpty(), 5000);
+
+            // Connection 2 is still alive: exchange one more round.
+            const QByteArray data3 = "Connection 2 still alive";
+            remote2.write(data3);
+            remote2.flush();
+            QByteArray received3;
+            QTRY_VERIFY_WITH_TIMEOUT(
+                (received3 += local2->readAll()).size() >= data3.size(), 5000);
+            QCOMPARE(received3, data3);
+
+            // Tear down.
+            forward.reset();
+            QTRY_VERIFY_WITH_TIMEOUT(!QFile::exists(remotePath), 5000);
+
+            localServer.close();
+            QFile::remove(localServerName);
+        }
+        auto emptyFlush = []() {
+            Utils::futureSynchronizer()->flushFinishedFutures();
+            return Utils::futureSynchronizer()->isEmpty();
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(emptyFlush(), 5000);
+    }
+
+    void testSocketForwardAfterLocalServerClose()
+    {
+        {
+            CmdBridge::FileAccess fileAccess;
+            CmdBridge::FileAccess::DeployResult res = fileAccess.deployAndInit(
+                FilePath::fromUserInput(libExecPath),
+                FilePath::fromUserInput("/"),
+                Environment::systemEnvironment());
+
+            QVERIFY_DEPLOY_RESULT(res);
+
+            const QString localServerName = QDir::tempPath() + "/tst-cmdbridge-svrclose.sock";
+            QFile::remove(localServerName);
+            QLocalServer localServer;
+            QVERIFY(localServer.listen(localServerName));
+
+            auto forwardResult = fileAccess.forwardLocalSocketServer(localServerName);
+            QVERIFY_RESULT(forwardResult);
+            auto &forward = *forwardResult;
+            QVERIFY(forward);
+
+            const QString remotePath = forward->path().path();
+
+            // Establish a connection before closing the server.
+            QLocalSocket remote;
+            remote.connectToServer(remotePath);
+            QVERIFY(remote.waitForConnected(5000));
+
+            QTRY_VERIFY_WITH_TIMEOUT(localServer.hasPendingConnections(), 5000);
+            QLocalSocket *local = localServer.nextPendingConnection();
+            QVERIFY(local);
+
+            // Close the server: new clients can no longer connect, but the
+            // already-accepted QLocalSocket must remain open and functional.
+            localServer.close();
+
+            // remote -> local: the established pipe must still carry data.
+            const QByteArray toLocal = "remote to local after server close";
+            remote.write(toLocal);
+            remote.flush();
+            QByteArray localReceived;
+            QTRY_VERIFY_WITH_TIMEOUT(
+                (localReceived += local->readAll()).size() >= toLocal.size(), 5000);
+            QCOMPARE(localReceived, toLocal);
+
+            // local -> remote.
+            const QByteArray toRemote = "local to remote after server close";
+            local->write(toRemote);
+            local->flush();
+            QByteArray remoteReceived;
+            QTRY_VERIFY_WITH_TIMEOUT(
+                (remoteReceived += remote.readAll()).size() >= toRemote.size(), 5000);
+            QCOMPARE(remoteReceived, toRemote);
+
+            forward.reset();
+            QFile::remove(localServerName);
+        }
+        auto emptyFlush = []() {
+            Utils::futureSynchronizer()->flushFinishedFutures();
+            return Utils::futureSynchronizer()->isEmpty();
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(emptyFlush(), 5000);
     }
 
     void testSameFile()
