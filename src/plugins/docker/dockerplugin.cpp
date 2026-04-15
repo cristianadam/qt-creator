@@ -42,7 +42,8 @@ public:
                 cmd.addArg(qmlDebugTcpArguments(services, runControl->qmlChannel()));
                 process.setCommand(cmd);
             };
-            const ProcessTask processTask(runControl->processTaskWithModifier(modifier));
+            const ProcessTask processTask(
+                runControl->processTaskWithModifier(modifier, {.setupCanceler = false}));
             return Group {
                 When (processTask, &Process::started, WorkflowPolicy::StopOnError) >> Do {
                     runControl->createRecipe(runnerIdForRunMode(runControl->runMode()))
