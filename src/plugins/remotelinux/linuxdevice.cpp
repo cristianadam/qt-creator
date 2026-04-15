@@ -16,36 +16,29 @@
 #include <coreplugin/messagemanager.h>
 
 #include <gocmdbridge/client/bridgedfileaccess.h>
-#include <gocmdbridge/client/cmdbridgeclient.h>
 
 #include <projectexplorer/devicesupport/devicemanager.h>
 #include <projectexplorer/devicesupport/idevice.h>
 #include <projectexplorer/devicesupport/idevicewidget.h>
-#include <projectexplorer/devicesupport/processlist.h>
 #include <projectexplorer/devicesupport/sshparameters.h>
 #include <projectexplorer/devicesupport/sshsettings.h>
 #include <projectexplorer/kitmanager.h>
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/projectexplorersettings.h>
 
-#include <utils/algorithm.h>
 #include <utils/async.h>
 #include <utils/devicefileaccess.h>
 #include <utils/environment.h>
-#include <utils/fancylineedit.h>
 #include <utils/globaltasktree.h>
 #include <utils/hostosinfo.h>
 #include <utils/infobar.h>
 #include <utils/layoutbuilder.h>
 #include <utils/pathchooser.h>
-#include <utils/port.h>
 #include <utils/portlist.h>
-#include <utils/processinfo.h>
 #include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
 #include <utils/stringutils.h>
 #include <utils/temporaryfile.h>
-#include <utils/utilsicons.h>
 
 #include <QLabel>
 #include <QLoggingCategory>
@@ -153,7 +146,10 @@ SshSharedConnection::SshSharedConnection(const SshParameters &sshParameters, QOb
 
 SshSharedConnection::~SshSharedConnection()
 {
-    QTC_CHECK(m_ref == 0);
+    // Would be desirable to have, but the destruction order is not well-defined
+    // between SshConnectionHandle and SshSharedConnection.
+    // QTC_CHECK(m_ref == 0);
+
     disconnect();
     disconnectFromHost();
 }
