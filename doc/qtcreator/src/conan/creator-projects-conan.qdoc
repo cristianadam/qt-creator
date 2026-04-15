@@ -19,10 +19,9 @@
     \QC:
 
     \list
-        \li \l{https://docs.conan.io/en/latest/integrations/cmake.html}{CMake}
-        \li \l{https://docs.conan.io/en/latest/integrations/qbs.html}{Qbs}
-        \li \l{https://docs.conan.io/en/latest/integrations/qmake.html}{qmake}
-        \li \l{https://docs.conan.io/en/latest/integrations/meson.html}{Meson}
+        \li \l{https://docs.conan.io/2/integrations/cmake.html}{CMake}
+        \li \l{https://docs.conan.io/2/integrations/autotools.html}{Autotools}
+        \li \l{https://docs.conan.io/2/integrations/meson.html}{Meson}
     \endlist
 
     The client-server architecture of Conan enables the client to fetch packages
@@ -38,8 +37,8 @@
     \note Enable the Conan plugin to use it.
 
     For each project, you must write a
-    \l{https://docs.conan.io/en/latest/reference/conanfile.html}{\c conanfile.py}
-    or \l{https://docs.conan.io/en/latest/reference/conanfile_txt.html}
+    \l{https://docs.conan.io/2/reference/conanfile.html}{\c conanfile.py}
+    or \l{https://docs.conan.io/2/reference/conanfile_txt.html}
     {\c conanfile.txt} file that specifies the needed libraries and packages.
     Then, you must edit the build settings of the project to specify the
     location of the file and the contents of the Conan install command.
