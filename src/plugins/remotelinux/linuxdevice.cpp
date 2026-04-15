@@ -522,7 +522,7 @@ LinuxDeviceConfigurationWidget::LinuxDeviceConfigurationWidget(
     Form {
         Tr::tr("Machine type:"), machineType, st, br,
         ssh.host, ssh.port, ssh.hostKeyCheckingMode, st, br,
-        ssh.timeout, st, br,
+        device->freePortsAspect, portWarningLabel, ssh.timeout, st, br,
         ssh.userName, st, br,
         ssh.useKeyFile, st, br,
         ssh.privateKeyFile, createKeyButton, br,
