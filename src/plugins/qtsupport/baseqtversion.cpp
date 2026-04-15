@@ -176,7 +176,6 @@ public:
     void updateMkspec();
     QHash<ProKey, ProString> versionInfo();
     static bool queryQMakeVariables(const FilePath &binary,
-                                    const Environment &env,
                                     QHash<ProKey, ProString> *versionInfo,
                                     QString *error);
     enum PropertyVariant { PropertyVariantDev, PropertyVariantGet, PropertyVariantSrc };
@@ -1249,12 +1248,12 @@ QVersionNumber QtVersion::qtVersion() const
     return QVersionNumber::fromString(qtVersionString());
 }
 
-Result<QtVersionData> dataForQMake(const FilePath m_qmakeCommand, const Environment env)
+Result<QtVersionData> dataForQMake(const FilePath m_qmakeCommand)
 {
     QtVersionData data;
 
     QString error;
-    if (!QtVersionPrivate::queryQMakeVariables(m_qmakeCommand, env, &data.versionInfo, &error)) {
+    if (!QtVersionPrivate::queryQMakeVariables(m_qmakeCommand, &data.versionInfo, &error)) {
         return Utils::make_unexpected(Tr::tr("Cannot update Qt version information from %1: %2.")
                                           .arg(m_qmakeCommand.displayName(), error));
     }
@@ -1345,8 +1344,7 @@ void QtVersionPrivate::updateVersionInfoNow()
         return;
 
     // extract data from qmake executable
-    m_dataFuture = Utils::asyncRun(
-        [qmake = m_qmakeCommand] { return dataForQMake(qmake, qmake.deviceEnvironment()); });
+    m_dataFuture = Utils::asyncRun([qmake = m_qmakeCommand] { return dataForQMake(qmake); });
 }
 
 QHash<ProKey,ProString> QtVersionPrivate::versionInfo()
@@ -1813,7 +1811,7 @@ static QByteArray runQmakeQuery(const FilePath &binary, const Environment &env, 
     return out;
 }
 
-bool QtVersionPrivate::queryQMakeVariables(const FilePath &binary, const Environment &env,
+bool QtVersionPrivate::queryQMakeVariables(const FilePath &binary,
                                            QHash<ProKey, ProString> *versionInfo, QString *error)
 {
     QString tmp;
@@ -1825,8 +1823,8 @@ bool QtVersionPrivate::queryQMakeVariables(const FilePath &binary, const Environ
         return false;
     }
 
-    QByteArray output;
-    output = runQmakeQuery(binary, env, error);
+    const Environment env = binary.deviceEnvironment();
+    QByteArray output = runQmakeQuery(binary, env, error);
 
     if (binary.fileName().contains("qmake") && !output.contains("QMAKE_VERSION:")) {
         // Some setups pass error messages via stdout, fooling the logic below.
@@ -2359,8 +2357,7 @@ QtVersion *QtVersionFactory::createQtVersionFromQMakePath(
     const FilePath &qmakePath, const DetectionSource &detectionSource, QString *error)
 {
     QHash<ProKey, ProString> versionInfo;
-    const Environment env = qmakePath.deviceEnvironment();
-    if (!QtVersionPrivate::queryQMakeVariables(qmakePath, env, &versionInfo, error))
+    if (!QtVersionPrivate::queryQMakeVariables(qmakePath, &versionInfo, error))
         return nullptr;
     FilePath mkspec = QtVersionPrivate::mkspecFromVersionInfo(versionInfo, qmakePath);
 
