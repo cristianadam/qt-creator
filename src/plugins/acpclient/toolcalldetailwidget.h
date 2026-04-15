@@ -6,12 +6,19 @@
 #include "collapsibleframe.h"
 
 #include <acp/acp.h>
+#include <utils/icon.h>
 
 class QLabel;
 
-namespace Utils { class MarkdownBrowser; }
+namespace Utils {
+class IconDisplay;
+class MarkdownBrowser;
+} // namespace Utils
 
 namespace AcpClient::Internal {
+
+Utils::Icon toolCallStatusIcon(Acp::ToolCallStatus status);
+QColor toolCallBorderColor(Acp::ToolCallStatus status);
 
 class ToolCallDetailWidget : public CollapsibleFrame
 {
@@ -37,7 +44,7 @@ private:
     void addLocations(const QList<Acp::ToolCallLocation> &locations);
     void addBodyWidget(QWidget *widget);
 
-    QLabel *m_statusLabel = nullptr;
+    Utils::IconDisplay *m_statusDisplay = nullptr;
     QLabel *m_titleLabel = nullptr;
     Acp::ToolCallStatus m_status = Acp::ToolCallStatus::in_progress;
     QList<Utils::MarkdownBrowser *> m_browsers;

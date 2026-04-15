@@ -2,14 +2,15 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "toolcalldetailwidget.h"
-#include "acpclienttr.h"
 
 #include <coreplugin/editormanager/editormanager.h>
 
+#include <utils/icondisplay.h>
 #include <utils/link.h>
 #include <utils/markdownbrowser.h>
 #include <utils/stylehelper.h>
 #include <utils/theme/theme.h>
+#include <utils/utilsicons.h>
 
 #include <QAbstractTextDocumentLayout>
 #include <QLabel>
@@ -25,18 +26,18 @@ using namespace Utils::StyleHelper::SpacingTokens;
 
 namespace AcpClient::Internal {
 
-static QString statusIcon(ToolCallStatus status)
+Utils::Icon toolCallStatusIcon(ToolCallStatus status)
 {
     switch (status) {
-    case ToolCallStatus::pending:     return QStringLiteral("\u25CB");   // ○
-    case ToolCallStatus::in_progress: return QStringLiteral("\u23F3");   // ⏳
-    case ToolCallStatus::completed:   return QStringLiteral("\u2713");   // ✓
-    case ToolCallStatus::failed:      return QStringLiteral("\u2717");   // ✗
+    case ToolCallStatus::pending:     return Utils::Icons::DOWNLOAD;
+    case ToolCallStatus::in_progress: return Utils::Icons::RELOAD;
+    case ToolCallStatus::completed:   return Utils::Icons::OK;
+    case ToolCallStatus::failed:      return Utils::Icons::CRITICAL;
     }
-    return QStringLiteral("?");
+    return {};
 }
 
-static QColor borderColor(ToolCallStatus status)
+QColor toolCallBorderColor(ToolCallStatus status)
 {
     switch (status) {
     case ToolCallStatus::pending:     return Qt::gray;
@@ -54,8 +55,8 @@ ToolCallDetailWidget::ToolCallDetailWidget(const ToolCall &toolCall, QWidget *pa
     setCollapsible(false);
 
     // Header: status icon + title + kind badge
-    m_statusLabel = new QLabel(this);
-    m_headerLayout->addWidget(m_statusLabel);
+    m_statusDisplay = new Utils::IconDisplay(this);
+    m_headerLayout->addWidget(m_statusDisplay);
 
     const ToolCallStatus status = toolCall.status().value_or(ToolCallStatus::in_progress);
     const QString kindText = toolCall.kind() ? toString(*toolCall.kind()) : QString();
@@ -74,7 +75,7 @@ ToolCallDetailWidget::ToolCallDetailWidget(const ToolCall &toolCall, QWidget *pa
 
 void ToolCallDetailWidget::applyStatus(ToolCallStatus status)
 {
-    m_statusLabel->setText(statusIcon(status));
+    m_statusDisplay->setIcon(toolCallStatusIcon(status));
     m_status = status;
     update();
 }
@@ -92,7 +93,7 @@ void ToolCallDetailWidget::paintEvent(QPaintEvent *)
                         RadiusM - 0.5, RadiusM - 0.5);
     p.setClipPath(clip);
     p.setRenderHint(QPainter::Antialiasing, false);
-    p.fillRect(QRect(0, 0, 3, height()), borderColor(m_status));
+    p.fillRect(QRect(0, 0, 3, height()), toolCallBorderColor(m_status));
     p.setClipping(false);
 }
 

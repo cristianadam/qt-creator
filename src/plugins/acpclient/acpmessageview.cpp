@@ -280,36 +280,6 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// Tool call helpers
-// ---------------------------------------------------------------------------
-
-static QString toolCallStatusIcon(ToolCallStatus status)
-{
-    switch (status) {
-    case ToolCallStatus::pending:
-        return QStringLiteral("\u25CB");   // ○
-    case ToolCallStatus::in_progress:
-        return QStringLiteral("\u23F3");   // ⏳
-    case ToolCallStatus::completed:
-        return QStringLiteral("\u2713");   // ✓
-    case ToolCallStatus::failed:
-        return QStringLiteral("\u2717");   // ✗
-    }
-    return QStringLiteral("?");
-}
-
-static QColor toolCallBorderColor(ToolCallStatus status)
-{
-    switch (status) {
-    case ToolCallStatus::pending:     return Qt::gray;
-    case ToolCallStatus::in_progress: return QColor{0x1e, 0x90, 0xff}; // dodgerblue
-    case ToolCallStatus::completed:   return Qt::green;
-    case ToolCallStatus::failed:      return Qt::red;
-    }
-    return Qt::gray;
-}
-
-// ---------------------------------------------------------------------------
 // ToolCallWidget
 // ---------------------------------------------------------------------------
 
@@ -322,8 +292,8 @@ public:
     {
         setFrameShape(QFrame::NoFrame);
 
-        m_statusLabel = new QLabel(this);
-        m_headerLayout->addWidget(m_statusLabel);
+        m_statusDisplay = new Utils::IconDisplay(this);
+        m_headerLayout->addWidget(m_statusDisplay);
 
         QString labelHtml = QStringLiteral("<b>%1</b>").arg(title.toHtmlEscaped());
         if (!kindText.isEmpty())
@@ -338,7 +308,7 @@ public:
     void applyStatus(ToolCallStatus status)
     {
         m_status = status;
-        m_statusLabel->setText(toolCallStatusIcon(status));
+        m_statusDisplay->setIcon(toolCallStatusIcon(status));
         update();
     }
 
@@ -366,7 +336,7 @@ protected:
     }
 
 private:
-    QLabel *m_statusLabel = nullptr;
+    Utils::IconDisplay *m_statusDisplay = nullptr;
     QLabel *m_titleLabel = nullptr;
     ToolCallStatus m_status = ToolCallStatus::pending;
 };
@@ -384,25 +354,58 @@ public:
         setFrameShape(QFrame::NoFrame);
         setCollapsed(true);
 
-        // Use a vertical layout inside the header so the running-tools line
-        // stacks below the counts line — QLabel word-wrap inside QHBoxLayout
-        // has a known Qt issue where height-for-width negotiation fails.
         auto *headerVBox = new QVBoxLayout;
         headerVBox->setContentsMargins(0, 0, 0, 0);
         headerVBox->setSpacing(0);
 
+        // Summary row: main icon + "N tool calls" + per-status icon+count pairs
+        auto *summaryRow = new QHBoxLayout;
+        summaryRow->setContentsMargins(0, 0, 0, 0);
+        summaryRow->setSpacing(GapHXs);
+
+        m_summaryIcon = new Utils::IconDisplay(this);
+        summaryRow->addWidget(m_summaryIcon);
+
         m_summaryLabel = new QLabel(this);
-        m_summaryLabel->setTextFormat(Qt::RichText);
-        headerVBox->addWidget(m_summaryLabel);
+        summaryRow->addWidget(m_summaryLabel);
+
+        // Per-status icon + count widgets (hidden by default)
+        for (int i = 0; i < StatusCount; ++i) {
+            m_statusIcons[i] = new Utils::IconDisplay(this);
+            m_statusIcons[i]->setVisible(false);
+            summaryRow->addWidget(m_statusIcons[i]);
+
+            m_statusLabels[i] = new QLabel(this);
+            m_statusLabels[i]->setVisible(false);
+            summaryRow->addWidget(m_statusLabels[i]);
+        }
+
+        m_statusIcons[Completed]->setIcon(toolCallStatusIcon(ToolCallStatus::completed));
+        m_statusIcons[InProgress]->setIcon(toolCallStatusIcon(ToolCallStatus::in_progress));
+        m_statusIcons[Failed]->setIcon(toolCallStatusIcon(ToolCallStatus::failed));
+        m_statusIcons[Pending]->setIcon(toolCallStatusIcon(ToolCallStatus::pending));
+
+        summaryRow->addStretch(1);
+        headerVBox->addLayout(summaryRow);
+
+        // Running-tools row
+        auto *runningRow = new QHBoxLayout;
+        runningRow->setContentsMargins(0, 0, 0, 0);
+        runningRow->setSpacing(GapHXs);
+
+        m_runningIcon = new Utils::IconDisplay(this);
+        m_runningIcon->setIcon(toolCallStatusIcon(ToolCallStatus::in_progress));
+        m_runningIcon->setVisible(false);
+        runningRow->addWidget(m_runningIcon);
 
         m_runningLabel = new QLabel(this);
-        m_runningLabel->setTextFormat(Qt::RichText);
         m_runningLabel->setWordWrap(true);
         m_runningLabel->setVisible(false);
         QFont smallFont = m_runningLabel->font();
         smallFont.setPointSizeF(smallFont.pointSizeF() * 0.9);
         m_runningLabel->setFont(smallFont);
-        headerVBox->addWidget(m_runningLabel);
+        runningRow->addWidget(m_runningLabel, 1);
+        headerVBox->addLayout(runningRow);
 
         m_headerLayout->addLayout(headerVBox, 1);
 
@@ -436,57 +439,54 @@ public:
     {
         const int total = m_statuses.size();
 
-        int completed = 0, failed = 0, inProgress = 0, pending = 0;
+        int counts[StatusCount] = {};
         QStringList runningNames;
         for (auto it = m_statuses.cbegin(); it != m_statuses.cend(); ++it) {
             switch (it.value()) {
-            case ToolCallStatus::completed:   ++completed; break;
-            case ToolCallStatus::failed:      ++failed; break;
+            case ToolCallStatus::completed:   ++counts[Completed]; break;
+            case ToolCallStatus::failed:      ++counts[Failed]; break;
             case ToolCallStatus::in_progress:
-                ++inProgress;
+                ++counts[InProgress];
                 if (const QString title = m_titles.value(it.key()); !title.isEmpty())
                     runningNames << title;
                 break;
             case ToolCallStatus::pending:
-                ++pending;
+                ++counts[Pending];
                 if (const QString title = m_titles.value(it.key()); !title.isEmpty())
                     runningNames << title;
                 break;
             }
         }
 
-        QString text = QStringLiteral("\u2699 <b>%1 tool call%2</b>")
-                            .arg(total)
-                            .arg(total != 1 ? QStringLiteral("s") : QString());
+        m_summaryIcon->setIcon(Utils::Icons::PROJECT); // wrench icon
+        m_summaryLabel->setText(QStringLiteral("<b>%1 tool call%2</b>")
+                                    .arg(total)
+                                    .arg(total != 1 ? QStringLiteral("s") : QString()));
 
-        QStringList parts;
-        if (completed > 0)
-            parts << QStringLiteral("<span style='color:green'>\u2713%1</span>").arg(completed);
-        if (inProgress > 0)
-            parts << QStringLiteral("<span style='color:dodgerblue'>\u23F3%1</span>").arg(inProgress);
-        if (failed > 0)
-            parts << QStringLiteral("<span style='color:red'>\u2717%1</span>").arg(failed);
-        if (pending > 0)
-            parts << QStringLiteral("<span style='color:gray'>\u25CB%1</span>").arg(pending);
-
-        if (!parts.isEmpty())
-            text += QStringLiteral("  ") + parts.join(QStringLiteral(" "));
-
-        m_summaryLabel->setText(text);
+        for (int i = 0; i < StatusCount; ++i) {
+            const bool visible = counts[i] > 0;
+            m_statusIcons[i]->setVisible(visible);
+            m_statusLabels[i]->setVisible(visible);
+            if (visible)
+                m_statusLabels[i]->setText(QString::number(counts[i]));
+        }
 
         // Show currently running / pending tool names on a separate line
-        if (!runningNames.isEmpty()) {
-            m_runningLabel->setText(
-                QStringLiteral("<span style='color:dodgerblue'>\u23F3 %1</span>")
-                    .arg(runningNames.join(QStringLiteral(", ")).toHtmlEscaped()));
-            m_runningLabel->setVisible(true);
-        } else {
-            m_runningLabel->setVisible(false);
-        }
+        const bool hasRunning = !runningNames.isEmpty();
+        m_runningIcon->setVisible(hasRunning);
+        m_runningLabel->setVisible(hasRunning);
+        if (hasRunning)
+            m_runningLabel->setText(runningNames.join(QStringLiteral(", ")));
     }
 
 private:
+    enum StatusIndex { Completed, InProgress, Failed, Pending, StatusCount };
+
+    Utils::IconDisplay *m_summaryIcon = nullptr;
     QLabel *m_summaryLabel = nullptr;
+    Utils::IconDisplay *m_statusIcons[StatusCount] = {};
+    QLabel *m_statusLabels[StatusCount] = {};
+    Utils::IconDisplay *m_runningIcon = nullptr;
     QLabel *m_runningLabel = nullptr;
     QVBoxLayout *m_innerLayout = nullptr;
     QHash<QString, ToolCallStatus> m_statuses;
