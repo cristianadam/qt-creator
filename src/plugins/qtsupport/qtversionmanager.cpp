@@ -286,6 +286,7 @@ void QtVersionManagerImpl::updateFromInstaller(bool emitSignal)
     QList<int> added;
     QList<int> removed;
     QList<int> changed;
+    QList<QtVersion *> toDelete;
 
     const QList<QtVersionFactory *> factories = QtVersionFactory::allQtVersionFactories();
     PersistentSettingsReader reader;
@@ -340,7 +341,7 @@ void QtVersionManagerImpl::updateFromInstaller(bool emitSignal)
                 m_versions.remove(id);
                 qtversionMap[Constants::QTVERSIONID] = id;
                 qtversionMap[Constants::QTVERSIONNAME] = v->unexpandedDisplayName();
-                delete v;
+                toDelete << v;
 
                 if (QtVersion *qtv = factory->restore(type, qtversionMap, reader.filePath())) {
                     Q_ASSERT(qtv->detectionSource().isAutoDetected());
@@ -384,7 +385,7 @@ void QtVersionManagerImpl::updateFromInstaller(bool emitSignal)
                 qCDebug(log) << "  removing version" << qtVersion->detectionSource();
                 m_versions.remove(qtVersion->uniqueId());
                 removed << qtVersion->uniqueId();
-                delete qtVersion;
+                toDelete << qtVersion;
             }
         }
     }
@@ -399,6 +400,7 @@ void QtVersionManagerImpl::updateFromInstaller(bool emitSignal)
     }
     if (emitSignal)
         emit QtVersionManager::instance()->qtVersionsChanged(added, removed, changed);
+    qDeleteAll(toDelete);
 }
 
 void QtVersionManagerImpl::saveQtVersions()
@@ -783,14 +785,13 @@ void QtVersionManagerImpl::setNewQtVersions(const QtVersions &newVersions)
                                                        return v.first->uniqueId();
                                                    });
 
-    qDeleteAll(m_versions);
+    const QList<QtVersion *> toDelete = m_versions.values();
     m_versions = Utils::transform<VersionMap>(sortedNewVersions, [](QtVersion *v) {
         return std::make_pair(v->uniqueId(), v);
     });
     saveQtVersions();
-
-    if (!changedVersions.isEmpty() || !addedVersions.isEmpty() || !removedVersions.isEmpty())
-        emit QtVersionManager::instance()->qtVersionsChanged(addedIds, removedIds, changedIds);
+    emit QtVersionManager::instance()->qtVersionsChanged(addedIds, removedIds, changedIds);
+    qDeleteAll(toDelete);
 }
 
 void QtVersionManager::setDocumentationSetting(const QtVersionManager::DocumentationSetting &setting)
