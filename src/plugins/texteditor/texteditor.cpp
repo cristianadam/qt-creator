@@ -7649,6 +7649,7 @@ void TextEditorWidget::processTooltipRequest(const QTextCursor &c)
 void TextEditorWidget::extraAreaLeaveEvent(QEvent *)
 {
     d->extraAreaPreviousMarkTooltipRequestedLine = -1;
+    d->extraAreaToggleMarkBlockNumber = -1;
     ToolTip::hide();
 
     // fake missing mouse move event from Qt
