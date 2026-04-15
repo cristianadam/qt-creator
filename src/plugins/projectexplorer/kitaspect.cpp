@@ -255,6 +255,7 @@ void KitAspect::reload()
         d->mutableAction->setChecked(k->isMutable(id));
         d->mutableAction->setEnabled(!k->isSticky(id));
     }
+    valueToVolatileValue();
     refresh();
 }
 
