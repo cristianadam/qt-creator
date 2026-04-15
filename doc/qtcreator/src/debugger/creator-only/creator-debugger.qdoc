@@ -26,7 +26,7 @@
         \li Debug executable binary files - GNU Symbolic Debugger (GDB),
             the Microsoft Console Debugger (CDB), and the debugger of the
             low level virtual machine (LLVM) project, LLDB.
-        \li Debug QML and Java code and Qt Quick applications -
+        \li Debug QML and JavaScript code and Qt Quick applications -
             QML/JavaScript debugger.
         \li Debug Python source code - PDB.
     \endlist
@@ -1542,7 +1542,7 @@
 
     Unlike GDB's
     \l{https://sourceware.org/gdb/onlinedocs/gdb/Pretty-Printing.html#Pretty-Printing}
-    {pretty printers} and LLDB's \l{http://lldb.llvm.org/varformats.html}
+    {pretty printers} and LLDB's \l{https://lldb.llvm.org/varformats.html}
     {data formatters}, \QC's debugging helpers are independent of the
     native debugging backend. That is, the same code can be used with GDB on
     Linux, LLDB on macOS, and CDB on Windows, or any other platform on which at
@@ -1614,10 +1614,9 @@
     \list 1
 
         \li Open the \c share/qtcreator/debugger/personaltypes.py file for
-            editing. For example, if your Qt installation is located in the
-            \c Qt5 directory on Windows, look in
-            \c C:\Qt5\Tools\QtCreator\share\qtcreator\debugger. On \macos, look
-            in \c {Qt5/Qt Creator.app/Contents/resources/debugger}.
+            editing. For example, on Windows look in
+            \c C:\Qt\Tools\QtCreator\share\qtcreator\debugger. On \macos, look
+            in \c {Qt Creator.app/Contents/resources/debugger}.
 
         \li Add your dumper implementation to the end of the \c personaltypes.py
             file.  For more information about implementing debugging helpers,
@@ -2174,8 +2173,6 @@
 
     \list 1
 
-        \li Make sure you use at least \QC 3.0.1
-
         \li Select \imagerunsmall (\uicontrol Run) to
             check that the \l {Running applications}{build and run kit selector}
             picked a runnable target and you can run the application.
@@ -2266,7 +2263,7 @@
     existing process or use the \uicontrol {Run in terminal} option in \QC.
 
     The reasons for this are described in
-    \l{http://wiki.ubuntu.com/SecurityTeam/Roadmap/KernelHardening#ptrace%20Protection}
+    \l{https://wiki.ubuntu.com/SecurityTeam/Roadmap/KernelHardening#ptrace%20Protection}
     {KernelHardening}.
 
     However, the usefulness of this security measure seems dubious because this
@@ -2274,9 +2271,10 @@
     feature temporarily by writing \c{0} into
     \c{/proc/sys/kernel/yama/ptrace_scope} or permanently by changing the value
     in \c{/etc/sysctl.d/10-ptrace.conf}. Even if you do not have elevated
-    permissions, you can disable the feature later by adding a library that
-    calls \c{prctl(0x59616d61, getppid(), 0, 0, 0);}, such as the one in
-    \c{$QTCREATORDIR/lib/libptracepreload.so} to the LD_PRELOAD environment.
+    permissions, you can disable the feature by preloading a library that
+    calls \c{prctl(0x59616d61, getppid(), 0, 0, 0);}. \QC ships such a
+    library: add \c{$QTCREATORDIR/lib/libptracepreload.so} to the
+    \c{LD_PRELOAD} environment variable.
 
     \sa {Debug}{How to: Debug}, {Debugging}, {Debuggers}
 */
