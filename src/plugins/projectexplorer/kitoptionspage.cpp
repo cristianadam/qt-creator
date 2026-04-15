@@ -631,9 +631,15 @@ void KitOptionsPageWidget::kitSelectionChanged(int oldRow, int newRow)
     if (oldRow >= 0) {
         Kit *wc = m_model.workingCopyForRow(oldRow);
         if (wc) {
+            m_loading = true;
             for (KitAspect *aspect : std::as_const(m_kitAspects))
                 aspect->apply();
+            m_loading = false;
             wc->copyFrom(&m_modifiedKit);
+            const KitData d = m_model.item(oldRow);
+            const bool changed = !d.kit || !wc->isEqual(d.kit);
+            m_model.setChanged(oldRow, changed);
+            m_model.notifyRowChanged(oldRow);
         }
     }
 
@@ -786,6 +792,8 @@ void KitOptionsPageWidget::addAspectsToWorkingCopy(Layouting::Layout &parent)
         aspectsById.insert(factory->id(), aspect);
 
         connect(aspect->mutableAction(), &QAction::toggled,
+            this, [this] { if (!m_loading) onDirty(); });
+        connect(aspect, &BaseAspect::volatileValueChanged,
             this, [this] { if (!m_loading) onDirty(); });
     }
 

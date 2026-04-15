@@ -209,7 +209,7 @@ private:
             else if (!checked && hasVsLangEntry)
                 m_buildEnvChanges.removeUserItem(forceMSVCEnglishItem());
             if (checked != hasVsLangEntry)
-                markSettingsDirty();
+                emit volatileValueChanged();
             refresh();
         });
     }
