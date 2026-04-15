@@ -102,7 +102,6 @@ QVariant CompletionModel::data(const QModelIndex &index, int role) const
     return QVariant();
 }
 
-static Utils::Key completionSettingsArrayPrefix() { return "FindCompletions"; }
 static Utils::Key completionSettingsTextKey() { return "Text"; }
 static Utils::Key completionSettingsFlagsKey() { return "Flags"; }
 
