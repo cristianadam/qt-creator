@@ -60,7 +60,7 @@ void ZenModePlugin::settingsChanged()
 
 void ZenModePlugin::readUserSettings()
 {
-    m_userSettings.menuBarState = m_menuBar->isVisible();
+    m_userSettings.menuBarState = m_menuBar ? m_menuBar->isVisible() : true;
     m_userSettings.fullScreenState = m_window->isFullScreen();
     m_userSettings.leftSidebarState =
             (m_toggleLeftSidebarAction && m_toggleLeftSidebarAction->isChecked());
@@ -74,7 +74,8 @@ void ZenModePlugin::readUserSettings()
 
 void ZenModePlugin::restoreUserSettings()
 {
-    m_menuBar->setVisible(m_userSettings.menuBarState);
+    if (m_menuBar)
+        m_menuBar->setVisible(m_userSettings.menuBarState);
     if (m_userSettings.fullScreenState)
         m_window->showFullScreen();
     if (m_toggleLeftSidebarAction
@@ -141,11 +142,14 @@ bool ZenModePlugin::delayedInitialize()
     getActions();
 
     m_window = ICore::mainWindow();
-    m_menuBar = m_window->menuBar();
+
+    QMenuBar *menuBar = ActionManager::actionContainer(Core::Constants::MENU_BAR)->menuBar();
+    m_menuBar = !menuBar->isNativeMenuBar() ? menuBar : nullptr;
 
     readUserSettings();
 
-    m_menuBar->setVisible(true);
+    if (m_menuBar)
+        m_menuBar->setVisible(true);
     setFullScreenMode(false);
     return true;
 }
@@ -290,7 +294,8 @@ void ZenModePlugin::toggleZenMode()
 
     setSidebarsAndModesVisible(!m_zenModeActive);
     setFullScreenMode(m_zenModeActive);
-    m_menuBar->setVisible(!m_zenModeActive);
+    if (m_menuBar)
+        m_menuBar->setVisible(!m_zenModeActive);
 }
 
 void ZenModePlugin::toggleDistractionFreeMode()
