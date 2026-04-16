@@ -173,10 +173,6 @@
     \title \QMCU
 */
 /*!
-    \externalpage https://doc.qt.io/QtForMCUs/qtul-qmltypes.html
-    \title \QMCU - All QML Types
-*/
-/*!
     \externalpage https://doc.qt.io/QtForMCUs/qtul-supported-platforms.html
     \title \QMCU - Supported target platforms
 */
@@ -217,10 +213,6 @@
     \title Getting started on Espressif
 */
 /*!
-    \externalpage https://doc.qt.io/QtForMCUs/qtul-getting-started-windows.html
-    \title Getting Started on Windows
-*/
-/*!
     \externalpage https://www.iar.com/embedded-development-tools/iar-embedded-workbench
     \title IAR EW
 */
@@ -249,10 +241,6 @@
 /*!
     \externalpage https://doc.rust-lang.org/cargo/commands/cargo-build.html
     \title Rust: cargo-build
-*/
-/*!
-    \externalpage https://www.rust-lang.org/
-    \title Rust
 */
 /*!
     \externalpage https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Expressions_and_operators
@@ -293,10 +281,6 @@
 /*!
     \externalpage https://www.markdownguide.org/basic-syntax/
     \title Markdown
-*/
-/*!
-    \externalpage https://docs.microsoft.com/en-us/java/openjdk/download
-    \title Download OpenJDK
 */
 /*!
     \externalpage https://www.nuget.org/downloads
@@ -467,18 +451,6 @@
 /*!
     \externalpage https://developer.android.com/guide/topics/manifest/uses-sdk-element.html#ApiLevels
     \title What is API Level?
-*/
-/*!
-    \externalpage https://developer.android.com/guide/components/fundamentals.html
-    \title Android Application Fundamentals
-*/
-/*!
-    \externalpage https://developer.android.com/studio
-    \title Download Android Studio
-*/
-/*!
-    \externalpage https://developer.android.com/studio/install
-    \title Android Studio Installation Guide
 */
 
 // Apple and iOS development resources
