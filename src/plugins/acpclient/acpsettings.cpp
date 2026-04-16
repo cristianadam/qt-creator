@@ -103,87 +103,16 @@ public:
         setComboBoxEditable(false);
 
         auto fillCallback = [this](ResultCallback resultCb) {
-            // Cached ?
-            if (s_registry) {
-                QList<QStandardItem *> items;
+            if (!s_registry) {
+                // Not yet fetched — return just the custom item for now
                 auto customItem = new QStandardItem(Tr::tr("<Custom>"));
                 customItem->setData(QString());
                 customItem->setToolTip(
                     Tr::tr("Manually specify an agent not listed in the registry"));
-                items.append(customItem);
-
-                for (const auto &agent : s_registry->agents()) {
-                    auto item = new QStandardItem(agent.name() + " (" + agent.version() + ")");
-                    item->setToolTip(agent.description());
-                    item->setData(agent.id());
-                    Utils::onResultReady(
-                        AcpSettings::iconForUrl(agent.icon().value_or(QString())),
-                        this,
-                        [id = agent.id(), this](const QIcon &icon) {
-                            if (auto item = itemById(id))
-                                item->setData(icon, Qt::DecorationRole);
-                        });
-
-                    items.append(item);
-                }
-                resultCb(items);
+                resultCb({customItem});
                 return;
             }
-
-            const auto setupFetch = [](QNetworkReplyWrapper &wrapper) {
-                wrapper.setNetworkAccessManager(Utils::NetworkAccessManager::instance());
-                wrapper.setOperation(QNetworkAccessManager::Operation::GetOperation);
-                QNetworkRequest request(
-                    QUrl("https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json"));
-                wrapper.setRequest(request);
-            };
-            const auto fetchDone =
-                [resultCb, this](const QNetworkReplyWrapper &wrapper, DoneWith doneWith) {
-                    if (doneWith != DoneWith::Success)
-                        return;
-
-                    const QByteArray data = wrapper.reply()->readAll();
-                    QJsonParseError error;
-                    const QJsonDocument doc = QJsonDocument::fromJson(data, &error);
-                    if (error.error != QJsonParseError::NoError) {
-                        qWarning() << "Failed to parse registry JSON:" << error.errorString();
-                        return;
-                    }
-
-                    auto registry = Acp::Registry::fromJson<Acp::Registry::ACPAgentRegistry>(
-                        doc.object());
-
-                    if (!registry) {
-                        s_registry.reset();
-                        qWarning() << "Failed to parse registry:" << registry.error();
-                        return;
-                    }
-                    s_registry = std::move(*registry);
-
-                    QList<QStandardItem *> items;
-                    auto customItem = new QStandardItem(Tr::tr("<Custom>"));
-                    customItem->setData(QString());
-                    customItem->setToolTip(
-                        Tr::tr("Manually specify an agent not listed in the registry"));
-                    items.append(customItem);
-
-                    for (const auto &agent : s_registry->agents()) {
-                        auto item = new QStandardItem(agent.name() + " (" + agent.version() + ")");
-                        item->setToolTip(agent.description());
-                        item->setData(agent.id());
-                        Utils::onResultReady(
-                            AcpSettings::iconForUrl(agent.icon().value_or(QString())),
-                            this,
-                            [id = agent.id(), this](const QIcon &icon) {
-                                if (auto item = itemById(id))
-                                    item->setData(icon, Qt::DecorationRole);
-                            });
-                        items.append(item);
-                    }
-
-                    resultCb(items);
-                };
-            m_runner.start(Group{QNetworkReplyWrapperTask(setupFetch, fetchDone)});
+            resultCb(registryItems());
         };
         setFillCallback(fillCallback);
     }
@@ -195,8 +124,75 @@ public:
 
     std::optional<Acp::Registry::ACPAgentRegistry> registry() const { return s_registry; }
 
+    QList<QStandardItem *> registryItems()
+    {
+        QList<QStandardItem *> items;
+        auto customItem = new QStandardItem(Tr::tr("<Custom>"));
+        customItem->setData(QString());
+        customItem->setToolTip(
+            Tr::tr("Manually specify an agent not listed in the registry"));
+        items.append(customItem);
+
+        if (s_registry) {
+            for (const auto &agent : s_registry->agents()) {
+                auto item = new QStandardItem(agent.name() + " (" + agent.version() + ")");
+                item->setToolTip(agent.description());
+                item->setData(agent.id());
+                Utils::onResultReady(
+                    AcpSettings::iconForUrl(agent.icon().value_or(QString())),
+                    this,
+                    [id = agent.id(), this](const QIcon &icon) {
+                        if (auto item = itemById(id))
+                            item->setData(icon, Qt::DecorationRole);
+                    });
+                items.append(item);
+            }
+        }
+        return items;
+    }
+
+    static void prefetch(std::function<void()> onDone = {})
+    {
+        if (s_registry) {
+            if (onDone)
+                onDone();
+            return;
+        }
+
+        const auto setupFetch = [](QNetworkReplyWrapper &wrapper) {
+            wrapper.setNetworkAccessManager(Utils::NetworkAccessManager::instance());
+            wrapper.setOperation(QNetworkAccessManager::Operation::GetOperation);
+            QNetworkRequest request(
+                QUrl("https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json"));
+            wrapper.setRequest(request);
+        };
+        const auto fetchDone = [onDone](const QNetworkReplyWrapper &wrapper, DoneWith doneWith) {
+            if (doneWith != DoneWith::Success)
+                return;
+
+            const QByteArray data = wrapper.reply()->readAll();
+            QJsonParseError error;
+            const QJsonDocument doc = QJsonDocument::fromJson(data, &error);
+            if (error.error != QJsonParseError::NoError) {
+                qWarning() << "Failed to parse registry JSON:" << error.errorString();
+                return;
+            }
+
+            auto registry = Acp::Registry::fromJson<Acp::Registry::ACPAgentRegistry>(
+                doc.object());
+            if (!registry) {
+                qWarning() << "Failed to parse registry:" << registry.error();
+                return;
+            }
+            s_registry = std::move(*registry);
+            if (onDone)
+                onDone();
+        };
+
+        GlobalTaskTree::start({QNetworkReplyWrapperTask(setupFetch, fetchDone)});
+    }
+
 private:
-    QParallelTaskTreeRunner m_runner;
     static std::optional<Acp::Registry::ACPAgentRegistry> s_registry;
 };
 
@@ -240,82 +236,7 @@ public:
         environment.setSettingsKey("environment");
         environment.setLabelText("Environment Changes");
         connect(&registryBrowser, &AcpRegistryBrowser::volatileValueChanged, this, [this]() {
-            const QString selectedId = registryBrowser.volatileValue();
-            if (selectedId.isEmpty())
-                return;
-
-            const auto &registry = registryBrowser.registry();
-            if (!registry) {
-                qWarning() << "No registry data available";
-                return;
-            }
-
-            const auto agent = std::find_if(
-                registry->agents().begin(),
-                registry->agents().end(),
-                [&selectedId](const Acp::Registry::ACPAgent &agent) {
-                    return agent.id() == selectedId;
-                });
-            if (agent == registry->agents().end()) {
-                qWarning() << "Selected agent not found in registry:" << selectedId;
-                return;
-            }
-            const Acp::Registry::ACPAgent &selectedAgent = *agent;
-            name.setValue(selectedAgent.name());
-            iconUrl.setValue(selectedAgent.icon().value_or(QString()));
-
-            if (selectedAgent.distribution().binary()) {
-                const FilePath stubPath = (appInfo().libexec / "dlwrapper").withExecutableSuffix();
-
-                launchCommand.setValue(stubPath);
-
-                const QMap<QPair<OsType, OsArch>, std::optional<Acp::Registry::binaryTarget>>
-                    platformToBinary{
-                        {qMakePair(OsTypeMac, OsArchArm64),
-                         selectedAgent.distribution().binary()->darwinminusaarch64()},
-                        {qMakePair(OsTypeMac, OsArchAMD64),
-                         selectedAgent.distribution().binary()->darwinminusx86_64()},
-                        {qMakePair(OsTypeLinux, OsArchArm64),
-                         selectedAgent.distribution().binary()->linuxminusaarch64()},
-                        {qMakePair(OsTypeLinux, OsArchAMD64),
-                         selectedAgent.distribution().binary()->linuxminusx86_64()},
-                        {qMakePair(OsTypeWindows, OsArchArm64),
-                         selectedAgent.distribution().binary()->windowsminusaarch64()},
-                        {qMakePair(OsTypeWindows, OsArchAMD64),
-                         selectedAgent.distribution().binary()->windowsminusx86_64()},
-                    };
-                const auto it = platformToBinary.find(
-                    qMakePair(HostOsInfo::hostOs(), HostOsInfo::hostArchitecture()));
-                if (it == platformToBinary.end() || !it.value().has_value()) {
-                    qWarning() << "No suitable binary found for current platform";
-                    return;
-                }
-                const auto binary = it.value().value();
-
-                QStringList envChanges;
-
-                const QMap<QString, QString> env = binary.env().value_or(QMap<QString, QString>{});
-                for (const auto &[key, value] : env.asKeyValueRange())
-                    envChanges.append("--env " + key + "=" + value);
-
-                const QString cmdLine
-                    = (QStringList{binary.cmd()} + binary.args().value_or(QStringList{})).join(" ");
-
-                launchArguments.setValue(QString("--download %1 %2 %3")
-                                             .arg(binary.archive())
-                                             .arg(envChanges.join(" "))
-                                             .arg(cmdLine));
-            } else if (selectedAgent.distribution().npx()) {
-                launchCommand.setValue(FilePath("npx"));
-                launchArguments.setValue(
-                    selectedAgent.distribution().npx()->package() + " "
-                    + selectedAgent.distribution().npx()->args().value_or(QStringList{}).join(" "));
-            } else if (selectedAgent.distribution().uvx()) {
-                launchCommand.setValue(FilePath("uvx"));
-                launchArguments.setValue(
-                    selectedAgent.distribution().uvx()->package() + " "
-                    + selectedAgent.distribution().uvx()->args().value_or(QStringList{}).join(" "));
-            }
+            applyRegistryTemplate();
         });
 
         setLayouter([this]() -> Layouting::Layout {
@@ -344,6 +265,84 @@ public:
             };
             // clang-format on
         });
+    }
+
+    void applyRegistryTemplate()
+    {
+        const QString selectedId = registryBrowser.volatileValue();
+        if (selectedId.isEmpty())
+            return;
+
+        const auto &registry = registryBrowser.registry();
+        if (!registry) {
+            qWarning() << "No registry data available";
+            return;
+        }
+
+        const auto agent = std::find_if(
+            registry->agents().begin(),
+            registry->agents().end(),
+            [&selectedId](const Acp::Registry::ACPAgent &a) {
+                return a.id() == selectedId;
+            });
+        if (agent == registry->agents().end()) {
+            qWarning() << "Selected agent not found in registry:" << selectedId;
+            return;
+        }
+        const Acp::Registry::ACPAgent &selectedAgent = *agent;
+        name.setValue(selectedAgent.name());
+        iconUrl.setValue(selectedAgent.icon().value_or(QString()));
+
+        if (selectedAgent.distribution().binary()) {
+            const FilePath stubPath = (appInfo().libexec / "dlwrapper").withExecutableSuffix();
+            launchCommand.setValue(stubPath);
+
+            const QMap<QPair<OsType, OsArch>, std::optional<Acp::Registry::binaryTarget>>
+                platformToBinary{
+                    {qMakePair(OsTypeMac, OsArchArm64),
+                     selectedAgent.distribution().binary()->darwinminusaarch64()},
+                    {qMakePair(OsTypeMac, OsArchAMD64),
+                     selectedAgent.distribution().binary()->darwinminusx86_64()},
+                    {qMakePair(OsTypeLinux, OsArchArm64),
+                     selectedAgent.distribution().binary()->linuxminusaarch64()},
+                    {qMakePair(OsTypeLinux, OsArchAMD64),
+                     selectedAgent.distribution().binary()->linuxminusx86_64()},
+                    {qMakePair(OsTypeWindows, OsArchArm64),
+                     selectedAgent.distribution().binary()->windowsminusaarch64()},
+                    {qMakePair(OsTypeWindows, OsArchAMD64),
+                     selectedAgent.distribution().binary()->windowsminusx86_64()},
+                };
+            const auto it = platformToBinary.find(
+                qMakePair(HostOsInfo::hostOs(), HostOsInfo::hostArchitecture()));
+            if (it == platformToBinary.end() || !it.value().has_value()) {
+                qWarning() << "No suitable binary found for current platform";
+                return;
+            }
+            const auto binary = it.value().value();
+
+            QStringList envChanges;
+            const QMap<QString, QString> env = binary.env().value_or(QMap<QString, QString>{});
+            for (const auto &[key, value] : env.asKeyValueRange())
+                envChanges.append("--env " + key + "=" + value);
+
+            const QString cmdLine
+                = (QStringList{binary.cmd()} + binary.args().value_or(QStringList{})).join(" ");
+
+            launchArguments.setValue(QString("--download %1 %2 %3")
+                                         .arg(binary.archive())
+                                         .arg(envChanges.join(" "))
+                                         .arg(cmdLine));
+        } else if (selectedAgent.distribution().npx()) {
+            launchCommand.setValue(FilePath("npx"));
+            launchArguments.setValue(
+                selectedAgent.distribution().npx()->package() + " "
+                + selectedAgent.distribution().npx()->args().value_or(QStringList{}).join(" "));
+        } else if (selectedAgent.distribution().uvx()) {
+            launchCommand.setValue(FilePath("uvx"));
+            launchArguments.setValue(
+                selectedAgent.distribution().uvx()->package() + " "
+                + selectedAgent.distribution().uvx()->args().value_or(QStringList{}).join(" "));
+        }
     }
 
     AcpSettings::ServerInfo toServerInfo() const
@@ -471,6 +470,14 @@ void setupAcpSettings()
 {
     (void) settingsPage();
     (void) AcpSettings::instance();
+    AcpRegistryBrowser::prefetch([] {
+        AcpManagerSettings::instance().acpServers.forEachItem(
+            [](const std::shared_ptr<AcpServerAspect> &server) {
+                server->applyRegistryTemplate();
+            });
+        AcpManagerSettings::instance().acpServers.writeSettings();
+        emit AcpSettings::instance().serversChanged();
+    });
 }
 
 } // namespace AcpClient::Internal
