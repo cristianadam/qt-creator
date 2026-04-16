@@ -333,8 +333,7 @@ void setupResources(QObject *guard, Mcp::Server &server, QParallelTaskTreeRunner
         editorManager, &EditorManager::editorOpened, guard, [&server](Core::IEditor *editor) {
             const FilePath path = editor->document()->filePath();
             const QString mimeType = editor->document()->mimeType();
-            const QString strPath = path.isLocal() ? "file://" + path.toUserOutput()
-                                                   : path.toUserOutput();
+            const QString strPath = path.toUrl().toString();
             server.addResource(
                 Mcp::Schema::Resource().uri(strPath).mimeType(mimeType).name(path.fileName()),
                 getOpenEditorContent);
@@ -342,14 +341,13 @@ void setupResources(QObject *guard, Mcp::Server &server, QParallelTaskTreeRunner
     QObject::connect(
         editorManager, &EditorManager::editorAboutToClose, guard, [&server](Core::IEditor *editor) {
             const FilePath path = editor->document()->filePath();
-            const QString strPath = path.isLocal() ? "file://" + path.toUserOutput()
-                                                   : path.toUserOutput();
+            const QString strPath = path.toUrl().toString();
             server.removeResource(strPath);
         });
 
     server.setResourceFallbackCallback(
         [](Mcp::Schema::ReadResourceRequestParams params) -> Result<Mcp::Schema::ReadResourceResult> {
-            const FilePath filePath = FilePath::fromUserInput(params.uri());
+            const FilePath filePath = FilePath::fromUrl(QUrl(params.uri()));
             if (!filePath.exists())
                 return ResultError("File does not exist: " + filePath.toUserOutput());
 
@@ -388,18 +386,18 @@ void setupResources(QObject *guard, Mcp::Server &server, QParallelTaskTreeRunner
 
     server.addResourceTemplate(
         Mcp::Schema::ResourceTemplate()
-            .uriTemplate("file://{path}")
+            .uriTemplate("file:///{path}")
             .name("Local files")
             .description("Access local files by URI, e.g. file:///path/to/file.txt"));
 
     const auto addTemplate = [&server](const FilePath &root, const QString &name) {
         server.addResourceTemplate(
             Mcp::Schema::ResourceTemplate()
-                .uriTemplate(root.toUserOutput() + "{path}")
+                .uriTemplate(root.toUrl().toString() + "{path}")
                 .name(name)
                 .description(QString("Access files on device %1 by URI, e.g. %2/path/to/file.txt")
                                  .arg(name)
-                                 .arg(root.toUserOutput())));
+                                 .arg(root.toUrl().toString())));
     };
 
     for (int i = 0; i < ProjectExplorer::DeviceManager::deviceCount(); ++i) {
