@@ -305,8 +305,6 @@ void KitModel::updateKit(Kit *k)
             KitDataWrapper updated = d;
             updated.workingCopy = k->kitData();
             resetItem(row, updated);
-        } else {
-            notifyRowChanged(row);
         }
         break;
     }
@@ -513,7 +511,6 @@ KitOptionsPageWidget::KitOptionsPageWidget()
         if (row == currentRow && currentRow >= 0) {
             const KitDataWrapper d = m_model.item(currentRow);
             load(d.kit, d.workingCopy);
-            m_model.notifyRowChanged(currentRow);
         }
         updateState();
     });
