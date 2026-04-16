@@ -237,6 +237,11 @@ public:
     // debug connections via Unix socket (e.g. Docker with cmdbridge).
     virtual QString qmlDebugRemoteSocketPath() const { return {}; }
 
+    // Returns true when the device forwards QML debug connections via a Unix socket
+    // and requestQmlChannel() must be called before the debug recipe starts, so that
+    // the bridge initialisation runs before fixupParameters() reads the socket path.
+    virtual bool forwardsQmlDebugSocket() const { return false; }
+
     Utils::PortList freePorts() const;
     void setFreePorts(const Utils::PortList &freePorts);
 

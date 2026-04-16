@@ -83,6 +83,7 @@ public:
 
     QUrl toolControlChannel(const ControlChannelHint &) const override;
     QString qmlDebugRemoteSocketPath() const override;
+    bool forwardsQmlDebugSocket() const override { return true; }
 
     Utils::StringAspect imageId{this};
     Utils::StringAspect repo{this};
