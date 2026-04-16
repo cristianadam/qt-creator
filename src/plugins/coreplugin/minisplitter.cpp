@@ -5,6 +5,7 @@
 
 #include "generalsettings.h"
 
+#include <extensionsystem/pluginmanager.h>
 #include <utils/stylehelper.h>
 #include <utils/theme/theme.h>
 
@@ -114,7 +115,8 @@ using namespace Core::Internal;
 
 bool MiniSplitterHandle::event(QEvent *event)
 {
-    if (generalSettings().provideSplitterCursors()) {
+    if (!ExtensionSystem::PluginManager::isShuttingDown()
+        && generalSettings().provideSplitterCursors()) {
         if (event->type() == QEvent::HoverEnter) {
             const qreal ratio = screen()->devicePixelRatio();
             setCursor(orientation() == Qt::Horizontal ? hsplitCursor(ratio) : vsplitCursor(ratio));
