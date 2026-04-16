@@ -2639,6 +2639,8 @@ void GitClient::continuePreviousGitCommand(const FilePath &workingDirectory,
         msgBox.addButton(hasChanges ? buttonName : Tr::tr("Skip"), QMessageBox::AcceptRole);
     msgBox.addButton(QMessageBox::Abort);
     msgBox.addButton(QMessageBox::Ignore);
+    msgBox.setEscapeButton(QMessageBox::Ignore);
+
     switch (msgBox.exec()) {
     case QMessageBox::Ignore:
         break;
