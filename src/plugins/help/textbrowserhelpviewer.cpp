@@ -265,7 +265,7 @@ QString TextBrowserHelpWidget::linkAt(const QPoint &pos)
 
 void TextBrowserHelpWidget::withFixedTopPosition(const std::function<void()> &action)
 {
-    const int topTextPosition = cursorForPosition({width() / 2, 0}).position();
+    const int topTextPosition = cursorForPosition(QPoint{width() / 2, 0}).position();
     action();
     scrollToTextPosition(topTextPosition);
 }
@@ -373,7 +373,7 @@ void TextBrowserHelpWidget::mouseReleaseEvent(QMouseEvent *e)
 
 void TextBrowserHelpWidget::resizeEvent(QResizeEvent *e)
 {
-    const int topTextPosition = cursorForPosition({width() / 2, 0}).position();
+    const int topTextPosition = cursorForPosition(QPoint{width() / 2, 0}).position();
     QTextBrowser::resizeEvent(e);
     scrollToTextPosition(topTextPosition);
 }
