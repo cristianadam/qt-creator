@@ -27,6 +27,7 @@
 #include <clang/Format/Format.h>
 #include <clang/Tooling/Core/Replacement.h>
 
+using namespace ProjectExplorer;
 using namespace TextEditor;
 using namespace Utils;
 
@@ -913,13 +914,12 @@ void ClangFormatBaseIndenter::autoIndent(const QTextCursor &cursor,
 }
 
 clang::format::FormatStyle ClangFormatBaseIndenterPrivate::customSettingsStyle(
-    const FilePath &fileName) const
+    const FilePath &projectFile) const
 {
-    const ProjectExplorer::Project *projectForFile
-        = ProjectExplorer::ProjectManager::projectForFile(fileName);
+    const Project *projectForFile = ProjectManager::projectForFile(projectFile);
 
     const ICodeStylePreferences *preferences
-        =  !getProjectUseGlobalSettings(projectForFile) && projectForFile
+        =  !getProjectUseGlobalSettings(projectFile) && projectForFile
               ? projectForFile->editorConfiguration()->codeStyle("Cpp")->currentPreferences()
               : TextEditorSettings::codeStyle("Cpp")->currentPreferences();
 

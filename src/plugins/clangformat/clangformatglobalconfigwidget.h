@@ -32,7 +32,7 @@ class ClangFormatGlobalConfigWidget final : public TextEditor::CodeStyleEditorWi
 
 public:
     ClangFormatGlobalConfigWidget(
-        ProjectExplorer::Project *project,
+        const Utils::FilePath &projectFile,
         TextEditor::ICodeStylePreferences *codeStyle,
         QWidget *parent);
     void apply() override;
@@ -55,7 +55,7 @@ private:
 
     bool projectClangFormatFileExists();
 
-    ProjectExplorer::Project *m_project = nullptr;
+    Utils::FilePath m_projectFile;
     TextEditor::ICodeStylePreferences *m_codeStyle = nullptr;
     Utils::Guard m_ignoreChanges;
     bool m_useCustomSettings = false;

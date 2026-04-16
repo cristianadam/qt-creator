@@ -4,9 +4,9 @@
 #pragma once
 
 #include "texteditor_global.h"
-#include <utils/id.h>
 
-#include <QString>
+#include <utils/filepath.h>
+#include <utils/id.h>
 
 QT_BEGIN_NAMESPACE
 class QTextDocument;
@@ -17,7 +17,6 @@ namespace TextEditor {
 class CodeStyleEditorWidget;
 class ICodeStylePreferences;
 class Indenter;
-class ProjectWrapper;
 
 class TEXTEDITOR_EXPORT ICodeStylePreferencesFactory
 {
@@ -31,7 +30,7 @@ public:
     virtual ~ICodeStylePreferencesFactory() = default;
 
     virtual CodeStyleEditorWidget *createCodeStyleEditor(
-        const ProjectWrapper &project,
+        const Utils::FilePath &projectFile,
         ICodeStylePreferences *codeStyle,
         QWidget *parent = nullptr) const
         = 0;

@@ -67,8 +67,8 @@ public:
     virtual void toMap(Utils::Store &map) const;
     virtual void fromMap(const Utils::Store &map);
 
-    void setProject(const void *project);
-    const void *project() const;
+    void setProject(const Utils::FilePath &projectFile);
+    Utils::FilePath project() const;
 
     Utils::Id globalSettingsCategory();
     void setGlobalSettingsCategory(const Utils::Id &id);

@@ -1574,18 +1574,6 @@ void Project::addVariablesToMacroExpander(const QByteArray &prefix,
                                });
 }
 
-TextEditor::ProjectWrapper wrapProject(Project *p)
-{
-    return TextEditor::ProjectWrapper(p, [](const void *p) {
-        return reinterpret_cast<const Project *>(p)->projectFilePath();
-    });
-}
-
-Project *unwrapProject(const TextEditor::ProjectWrapper &w)
-{
-    return reinterpret_cast<Project *>(w.project());
-}
-
 static Project::QmlCodeModelInfoFromQtVersionHook s_qtversionExtraProjectInfoHook;
 
 void Project::setQmlCodeModelInfoFromQtVersionHook(QmlCodeModelInfoFromQtVersionHook hook)
