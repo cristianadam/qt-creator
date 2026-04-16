@@ -11,7 +11,10 @@ class QLineEdit;
 class QPushButton;
 class QStackedWidget;
 
-namespace Utils { class PathChooser; }
+namespace Utils {
+class InfoLabel;
+class PathChooser;
+}
 
 namespace AcpClient::Internal {
 
@@ -45,9 +48,10 @@ private:
 
     // Config page
     QStackedWidget *m_stack;
+    QStackedWidget *m_configStack;
     QComboBox *m_serverCombo;
     Utils::PathChooser *m_cwdEdit;
-    QLabel *m_noServerLabel;
+    Utils::InfoLabel *m_noServerLabel;
     QLabel *m_connectionErrorLabel = nullptr;
     QPushButton *m_connectButton;
 

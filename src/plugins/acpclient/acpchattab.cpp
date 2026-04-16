@@ -15,6 +15,7 @@
 #include <projectexplorer/projectmanager.h>
 
 #include <utils/async.h>
+#include <utils/infolabel.h>
 
 #include <QComboBox>
 #include <QFormLayout>
@@ -41,83 +42,118 @@ AcpChatTab::AcpChatTab(QWidget *parent)
     m_stack = new QStackedWidget;
 
     // --- Page 0: Configuration (shown when disconnected) ---
-    auto *configPage = new QWidget;
-    auto *configOuter = new QVBoxLayout(configPage);
-    configOuter->addStretch();
+    {
+        auto *configPage = new QWidget;
+        auto *configOuter = new QVBoxLayout(configPage);
+        configOuter->addStretch();
 
-    auto *configForm = new QWidget;
-    configForm->setMaximumWidth(480);
-    configForm->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    auto *configLayout = new QVBoxLayout(configForm);
-    configLayout->setSpacing(12);
+        m_configStack = new QStackedWidget;
+        m_configStack->setMaximumWidth(480);
+        m_configStack->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
-    auto *titleLabel = new QLabel(Tr::tr("Connect to ACP Server"));
-    QFont titleFont = titleLabel->font();
-    titleFont.setPointSizeF(titleFont.pointSizeF() * 1.3);
-    titleFont.setBold(true);
-    titleLabel->setFont(titleFont);
-    configLayout->addWidget(titleLabel);
+        // Config stack page 0: no servers configured
+        {
+            auto *noServerPage = new QWidget;
+            auto *noServerLayout = new QVBoxLayout(noServerPage);
+            noServerLayout->setSpacing(12);
+            noServerLayout->addStretch();
 
-    auto *formLayout = new QFormLayout;
-    formLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+            m_noServerLabel = new InfoLabel(
+                Tr::tr("No ACP servers configured. Add a server in the settings to get started."),
+                InfoLabel::Information);
+            m_noServerLabel->setElideMode(Qt::ElideNone);
+            m_noServerLabel->setWordWrap(true);
+            noServerLayout->addWidget(m_noServerLabel);
 
-    m_serverCombo = new QComboBox;
-    m_serverCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+            auto *manageButton = new QPushButton(Tr::tr("Manage Servers..."));
+            manageButton->setToolTip(Tr::tr("Open ACP server settings"));
+            connect(manageButton, &QPushButton::clicked, this, [] {
+                Core::ICore::showSettings("AI.ACPSERVERS");
+            });
+            auto *manageRow = new QHBoxLayout;
+            manageRow->addStretch();
+            manageRow->addWidget(manageButton);
+            manageRow->addStretch();
+            noServerLayout->addLayout(manageRow);
+            noServerLayout->addStretch();
 
-    auto *serverRow = new QHBoxLayout;
-    serverRow->addWidget(m_serverCombo, 1);
-    auto *manageButton = new QPushButton(Tr::tr("Manage"));
-    manageButton->setToolTip(Tr::tr("Open ACP server settings"));
-    connect(manageButton, &QPushButton::clicked, this, [] {
-        Core::ICore::showSettings("AI.ACPSERVERS");
-    });
-    serverRow->addWidget(manageButton);
-    formLayout->addRow(Tr::tr("Server:"), serverRow);
+            m_configStack->addWidget(noServerPage); // index 0
+        }
 
-    m_cwdEdit = new Utils::PathChooser;
-    m_cwdEdit->setHistoryCompleter("AcpChat.WorkingDirectories");
+        // Config stack page 1: connection form
+        {
+            auto *connectPage = new QWidget;
+            auto *connectLayout = new QVBoxLayout(connectPage);
+            connectLayout->setSpacing(12);
+            connectLayout->addStretch();
 
-    const auto updateCwdPlaceholder = [this] {
-        const Project *project = ProjectManager::startupProject();
-        m_cwdEdit->setDefaultValue(project ? project->projectDirectory() : FilePath{});
-    };
-    updateCwdPlaceholder();
-    connect(ProjectManager::instance(),
-            &ProjectManager::startupProjectChanged,
-            this,
-            updateCwdPlaceholder);
-    formLayout->addRow(Tr::tr("Working directory:"), m_cwdEdit);
+            auto *titleLabel = new QLabel(Tr::tr("Connect to ACP Server"));
+            QFont titleFont = titleLabel->font();
+            titleFont.setPointSizeF(titleFont.pointSizeF() * 1.3);
+            titleFont.setBold(true);
+            titleLabel->setFont(titleFont);
+            connectLayout->addWidget(titleLabel);
 
-    configLayout->addLayout(formLayout);
+            auto *formLayout = new QFormLayout;
+            formLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
-    m_noServerLabel = new QLabel(Tr::tr("No servers configured. Use <b>Manage</b> to add one."));
-    m_noServerLabel->setWordWrap(true);
-    QPalette infoPal = m_noServerLabel->palette();
-    infoPal.setColor(QPalette::WindowText, infoPal.color(QPalette::PlaceholderText));
-    m_noServerLabel->setPalette(infoPal);
-    configLayout->addWidget(m_noServerLabel);
+            m_serverCombo = new QComboBox;
+            m_serverCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
-    m_connectionErrorLabel = new QLabel;
-    m_connectionErrorLabel->setWordWrap(true);
-    m_connectionErrorLabel->setTextFormat(Qt::RichText);
-    m_connectionErrorLabel->hide();
-    QPalette errorPal = m_connectionErrorLabel->palette();
-    errorPal.setColor(QPalette::WindowText, QColor(0xfc, 0x8c, 0x8c));
-    m_connectionErrorLabel->setPalette(errorPal);
-    configLayout->addWidget(m_connectionErrorLabel);
+            auto *serverRow = new QHBoxLayout;
+            serverRow->addWidget(m_serverCombo, 1);
+            auto *manageButton = new QPushButton(Tr::tr("Manage"));
+            manageButton->setToolTip(Tr::tr("Open ACP server settings"));
+            connect(manageButton, &QPushButton::clicked, this, [] {
+                Core::ICore::showSettings("AI.ACPSERVERS");
+            });
+            serverRow->addWidget(manageButton);
+            formLayout->addRow(Tr::tr("Server:"), serverRow);
 
-    m_connectButton = new QPushButton(Tr::tr("Connect"));
-    m_connectButton->setDefault(true);
-    configLayout->addWidget(m_connectButton);
+            m_cwdEdit = new Utils::PathChooser;
+            m_cwdEdit->setHistoryCompleter("AcpChat.WorkingDirectories");
 
-    auto *configCenter = new QHBoxLayout;
-    configCenter->addStretch();
-    configCenter->addWidget(configForm);
-    configCenter->addStretch();
-    configOuter->addLayout(configCenter);
-    configOuter->addStretch();
+            const auto updateCwdPlaceholder = [this] {
+                const Project *project = ProjectManager::startupProject();
+                m_cwdEdit->setDefaultValue(
+                    project ? project->projectDirectory() : FilePath{});
+            };
+            updateCwdPlaceholder();
+            connect(ProjectManager::instance(),
+                    &ProjectManager::startupProjectChanged,
+                    this,
+                    updateCwdPlaceholder);
+            formLayout->addRow(Tr::tr("Working directory:"), m_cwdEdit);
 
-    m_stack->addWidget(configPage);  // index 0
+            connectLayout->addLayout(formLayout);
+
+            m_connectionErrorLabel = new QLabel;
+            m_connectionErrorLabel->setWordWrap(true);
+            m_connectionErrorLabel->setTextFormat(Qt::RichText);
+            m_connectionErrorLabel->hide();
+            QPalette errorPal = m_connectionErrorLabel->palette();
+            errorPal.setColor(QPalette::WindowText, QColor(0xfc, 0x8c, 0x8c));
+            m_connectionErrorLabel->setPalette(errorPal);
+            connectLayout->addWidget(m_connectionErrorLabel);
+
+            m_connectButton = new QPushButton(Tr::tr("Connect"));
+            m_connectButton->setDefault(true);
+            connectLayout->addWidget(m_connectButton);
+
+            connectLayout->addStretch();
+
+            m_configStack->addWidget(connectPage); // index 1
+        }
+
+        auto *configCenter = new QHBoxLayout;
+        configCenter->addStretch();
+        configCenter->addWidget(m_configStack);
+        configCenter->addStretch();
+        configOuter->addLayout(configCenter);
+        configOuter->addStretch();
+
+        m_stack->addWidget(configPage);  // index 0
+    }
 
     // --- Page 1: Authentication (shown when auth required) ---
     {
@@ -372,8 +408,7 @@ void AcpChatTab::populateServerCombo()
     }
 
     const bool hasServers = m_serverCombo->count() > 0;
-    m_connectButton->setEnabled(hasServers);
-    m_noServerLabel->setVisible(!hasServers);
+    m_configStack->setCurrentIndex(hasServers ? 1 : 0);
 }
 
 void AcpChatTab::connectToAgent()
