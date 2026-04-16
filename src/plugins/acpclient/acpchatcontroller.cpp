@@ -87,7 +87,7 @@ void AcpChatController::connectToServer(const QString &serverId, const FilePath 
             this, &AcpChatController::permissionRequested);
 
     connect(m_client, &AcpClientObject::stateChanged,
-            this, [this](AcpClientObject::State state) { onStateChanged(static_cast<int>(state)); });
+            this, &AcpChatController::connectionStateChanged);
     connect(m_client, &AcpClientObject::sessionUpdate,
             this, &AcpChatController::sessionUpdate);
     connect(m_client, &AcpClientObject::initializeResult,
@@ -114,8 +114,7 @@ void AcpChatController::connectToServer(const QString &serverId, const FilePath 
         m_client->initialize(initReq);
     });
 
-    m_connected = true;
-    emit connectionStateChanged(true);
+    emit connectionStateChanged(m_client->state());
     m_transport->start();
 }
 
@@ -154,10 +153,7 @@ void AcpChatController::disconnectFromServer()
     m_agentCapabilities.reset();
     m_initialized = false;
 
-    if (m_connected) {
-        m_connected = false;
-        emit connectionStateChanged(false);
-    }
+    emit connectionStateChanged(AcpClientObject::State::Disconnected);
 }
 
 void AcpChatController::createNewSession()
@@ -322,30 +318,6 @@ void AcpChatController::sendPermissionCancelled(const QJsonValue &id)
 {
     if (m_permissionHandler)
         m_permissionHandler->sendPermissionCancelled(id);
-}
-
-void AcpChatController::onStateChanged(int state)
-{
-    const auto s = static_cast<AcpClientObject::State>(state);
-    switch (s) {
-    case AcpClientObject::State::Disconnected:
-        m_initialized = false;
-        if (m_connected) {
-            m_connected = false;
-            emit connectionStateChanged(false);
-        }
-        break;
-    case AcpClientObject::State::Connecting:
-        if (!m_connected) {
-            m_connected = true;
-            emit connectionStateChanged(true);
-        }
-        break;
-    case AcpClientObject::State::Initialized:
-        break;
-    default:
-        break;
-    }
 }
 
 void AcpChatController::onInitializeResult(const InitializeResponse &response)

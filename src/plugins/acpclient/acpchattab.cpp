@@ -258,11 +258,12 @@ AcpChatTab::AcpChatTab(QWidget *parent)
             m_controller, &AcpChatController::setConfigOption);
 
     // --- Connections: Controller -> UI ---
-    connect(m_controller, &AcpChatController::connectionStateChanged, this, [this](bool connected) {
-        m_serverCombo->setEnabled(!connected);
-        m_cwdEdit->setEnabled(!connected);
-        m_connectButton->setEnabled(!connected);
-        if (!connected) {
+    connect(m_controller, &AcpChatController::connectionStateChanged, this, [this](AcpClientObject::State state) {
+        const bool disconnected = state == AcpClientObject::State::Disconnected;
+        m_serverCombo->setEnabled(disconnected);
+        m_cwdEdit->setEnabled(disconnected);
+        m_connectButton->setEnabled(disconnected);
+        if (disconnected) {
             m_stack->setCurrentIndex(0);
             m_chatPanel->setSendEnabled(false);
             m_chatPanel->setPrompting(false);

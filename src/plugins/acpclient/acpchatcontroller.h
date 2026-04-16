@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "acpclientobject.h"
+
 #include <acp/acp.h>
 
 #include <QJsonValue>
@@ -40,14 +42,13 @@ public:
     void sendPermissionResponse(const QJsonValue &id, const QString &optionId);
     void sendPermissionCancelled(const QJsonValue &id);
 
-    bool isConnected() const { return m_connected; }
     bool isInitialized() const { return m_initialized; }
     const QString &sessionId() const { return m_sessionId; }
     const QString &agentName() const { return m_agentName; }
     const QString &agentVersion() const { return m_agentVersion; }
 
 signals:
-    void connectionStateChanged(bool connected);
+    void connectionStateChanged(AcpClientObject::State state);
     void agentInfoReceived(const QString &name, const QString &version, const QString &iconUrl);
     void sessionCreated(const QString &sessionId);
     void configOptionsReceived(const QList<Acp::SessionConfigOption> &configOptions);
@@ -59,7 +60,6 @@ signals:
     void errorOccurred(const QString &error);
 
 private:
-    void onStateChanged(int state);
     void onInitializeResult(const Acp::InitializeResponse &response);
     Acp::NewSessionRequest buildNewSessionRequest() const;
 
@@ -78,7 +78,6 @@ private:
     QString m_iconUrl;
     QList<Acp::AuthMethod> m_authMethods;
     std::optional<Acp::AgentCapabilities> m_agentCapabilities;
-    bool m_connected = false;
     bool m_initialized = false;
 };
 
