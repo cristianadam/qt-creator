@@ -105,8 +105,8 @@ private:
         if (format != Utils::StdOutFormat)
             return Status::NotHandled;
 
-        static const QRegularExpression percentProgress("(^\\[\\s*(\\d*)%\\])");
-        static const QRegularExpression ninjaProgress("^(\\[\\s*(\\d*)/\\s*(\\d*).*\\])");
+        static const QRegularExpression percentProgress("^\\[(\\s*(\\d*)%)\\]");
+        static const QRegularExpression ninjaProgress("^\\[(\\s*(\\d*)/\\s*(\\d*).*)\\]");
 
         QRegularExpressionMatch match;
         if (m_progressType == ProgressType::Make) {
