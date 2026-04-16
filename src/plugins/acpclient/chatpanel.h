@@ -44,6 +44,7 @@ public:
     bool isPrompting() const { return m_prompting; }
 
     void updateConfigOptions(const QList<Acp::SessionConfigOption> &configOptions);
+    void clear();
     void clearConfigOptions();
 
     void updateAvailableCommands(const QList<Acp::AvailableCommand> &commands);

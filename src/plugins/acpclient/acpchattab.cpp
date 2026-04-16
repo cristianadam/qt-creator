@@ -265,6 +265,7 @@ AcpChatTab::AcpChatTab(QWidget *parent)
         m_connectButton->setEnabled(disconnected);
         if (disconnected) {
             m_stack->setCurrentIndex(0);
+            m_chatPanel->clear();
             m_chatPanel->setSendEnabled(false);
             m_chatPanel->setPrompting(false);
             m_chatPanel->clearConfigOptions();

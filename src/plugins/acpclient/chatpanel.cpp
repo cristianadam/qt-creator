@@ -316,6 +316,11 @@ void ChatPanel::updateConfigOptions(const QList<SessionConfigOption> &configOpti
     }
 }
 
+void ChatPanel::clear()
+{
+    m_messageView->clear();
+}
+
 void ChatPanel::clearConfigOptions()
 {
     qDeleteAll(m_configCombos);
