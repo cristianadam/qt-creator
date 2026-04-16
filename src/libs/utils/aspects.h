@@ -1276,6 +1276,7 @@ public:
     void setDisplayStyle(DisplayStyle displayStyle);
 
     CovariantCallback<QString(BaseAspect *)> listViewDisplayCallback;
+    CovariantCallback<QVariant(BaseAspect *)> listViewDecorationCallback;
 
     CovariantCallback<void(std::shared_ptr<BaseAspect>)> itemAddedCallback;
     CovariantCallback<void(std::shared_ptr<BaseAspect>)> itemRemovedCallback;

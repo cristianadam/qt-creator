@@ -388,6 +388,14 @@ public:
         acpServers.setCreateItemFunction([] { return std::make_shared<AcpServerAspect>(); });
 
         acpServers.listViewDisplayCallback = displayFunc;
+        acpServers.listViewDecorationCallback = [](AcpServerAspect *aspect) {
+            const QString iconUrl = aspect->iconUrl.volatileValue();
+            if (iconUrl.isEmpty())
+                return QVariant();
+
+            QIcon icon = AcpSettings::iconForUrl(iconUrl).result();
+            return QVariant(icon);
+        };
 
         setLayouter([this]() {
             using namespace Layouting;

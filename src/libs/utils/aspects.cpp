@@ -3820,14 +3820,18 @@ class AspectListModelItem : public TypedTreeItem<AspectListModelItem>
     std::shared_ptr<BaseAspect> m_aspect;
     QObject guard;
     std::function<QString(BaseAspect *)> m_displayFunction;
+    std::function<QVariant(BaseAspect *)> m_decorationFunction;
 
 public:
     AspectListModelItem() = default;
     AspectListModelItem(
         const std::shared_ptr<BaseAspect> &aspect,
-        const std::function<QString(BaseAspect *)> &displayFunction)
+        const std::function<QString(BaseAspect *)> &displayFunction,
+        const std::function<QVariant(BaseAspect *)> &decorationFunction)
         : m_aspect(aspect)
         , m_displayFunction(displayFunction)
+        , m_decorationFunction(decorationFunction)
+
     {
         auto upd = [this] { update(); };
         QObject::connect(aspect.get(), &BaseAspect::volatileValueChanged, &guard, upd);
@@ -3838,6 +3842,9 @@ public:
     {
         if (column != 0)
             return {};
+        if (role == Qt::DecorationRole) {
+            return m_decorationFunction(m_aspect.get());
+        }
         if (role == Qt::DisplayRole) {
             return m_displayFunction(m_aspect.get());
         }
@@ -3873,9 +3880,12 @@ public:
 class AspectListModel : public TreeModel<AspectListModelItem, AspectListModelItem>
 {
 public:
-    AspectListModel(const std::function<QString(BaseAspect *)> &displayFunction)
+    AspectListModel(
+        const std::function<QString(BaseAspect *)> &displayFunction,
+        const std::function<QVariant(BaseAspect *)> &decorationFunction)
         : TreeModel<AspectListModelItem, AspectListModelItem>()
         , m_displayFunction(displayFunction)
+        , m_decorationFunction(decorationFunction)
     {
     }
 
@@ -3921,7 +3931,8 @@ public:
                     }
                 } else {
                     // The item in the aspect is not in the model, add it.
-                    modelItem = new AspectListModelItem(*itAspect, m_displayFunction);
+                    modelItem
+                        = new AspectListModelItem(*itAspect, m_displayFunction, m_decorationFunction);
                     modelItem->setStatus(newItems.contains(*itAspect), !inVolatile);
                     rootItem()->insertChild(modelIdx, modelItem);
                     ++modelIdx;
@@ -3947,7 +3958,8 @@ public:
         // Add remaining items in aspect to model.
         if (itAspect != volatileItems.end()) {
             for (; itAspect != volatileItems.end(); ++itAspect) {
-                auto item = new AspectListModelItem(*itAspect, m_displayFunction);
+                auto item
+                    = new AspectListModelItem(*itAspect, m_displayFunction, m_decorationFunction);
                 item->setStatus(newItems.contains(*itAspect), false);
                 rootItem()->appendChild(item);
             }
@@ -3956,6 +3968,7 @@ public:
 
 private:
     std::function<QString(BaseAspect *)> m_displayFunction;
+    std::function<QVariant(BaseAspect *)> m_decorationFunction;
 };
 
 class Internal::AspectListPrivate
@@ -3987,8 +4000,10 @@ public:
 
     AspectListModel model;
 
-    AspectListPrivate(std::function<QString(BaseAspect *)> displayFunction)
-        : model(displayFunction)
+    AspectListPrivate(
+        std::function<QString(BaseAspect *)> displayFunction,
+        std::function<QVariant(BaseAspect *)> decorationFunction)
+        : model(displayFunction, decorationFunction)
     {}
 
     void addToLayoutImplInlineList(Layouting::Layout &parent, AspectList *aspect)
@@ -4139,10 +4154,16 @@ public:
 
 AspectList::AspectList(Utils::AspectContainer *container)
     : Utils::BaseAspect(container)
-    , d(std::make_unique<Internal::AspectListPrivate>([this](BaseAspect *aspect) -> QString {
-        QTC_ASSERT(listViewDisplayCallback, return QString("No listViewDisplayCallback set"));
-        return listViewDisplayCallback(aspect);
-    }))
+    , d(std::make_unique<Internal::AspectListPrivate>(
+          [this](BaseAspect *aspect) -> QString {
+              QTC_ASSERT(listViewDisplayCallback, return QString("No listViewDisplayCallback set"));
+              return listViewDisplayCallback(aspect);
+          },
+          [this](BaseAspect *aspect) -> QVariant {
+              if (listViewDecorationCallback)
+                  return listViewDecorationCallback(aspect);
+              return QVariant();
+          }))
 {}
 
 AspectList::~AspectList() = default;
