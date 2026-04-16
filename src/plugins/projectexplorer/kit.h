@@ -9,11 +9,18 @@
 
 #include <coreplugin/featureprovider.h>
 
+#include <utils/displayname.h>
+#include <utils/fileutils.h>
+#include <utils/id.h>
 #include <utils/store.h>
 
+#include <QHash>
+#include <QIcon>
 #include <QSet>
+#include <QVariant>
 
 #include <memory>
+#include <optional>
 
 namespace Utils {
 class Environment;
@@ -28,6 +35,32 @@ namespace Internal {
 class KitManagerPrivate;
 class KitModel;
 class KitPrivate;
+
+// Copiable value type holding all user-editable kit data.
+// We need copies to allow dirty-detection.
+class KitData
+{
+public:
+    KitData() = default;
+    KitData(const KitData &) = default;
+    KitData &operator=(const KitData &) = default;
+
+    bool operator==(const KitData &other) const;
+
+    QString unexpandedDisplayName() const;
+    QIcon icon() const;
+
+    Utils::DisplayName m_unexpandedDisplayName;
+    QString m_fileSystemFriendlyName;
+    Utils::FilePath m_iconPath;
+    Utils::Id m_deviceTypeForIcon;
+    QHash<Utils::Id, QVariant> m_data;
+    QSet<Utils::Id> m_sticky;
+    QSet<Utils::Id> m_mutable;
+    std::optional<QSet<Utils::Id>> m_irrelevantAspects;
+    std::optional<QSet<Utils::Id>> m_relevantAspects;
+};
+
 } // namespace Internal
 
 /**
@@ -112,6 +145,9 @@ public:
     QString toHtml(const Tasks &additional = Tasks(), const QString &extraText = QString()) const;
     Kit *clone(bool keepName = false) const;
     void copyFrom(const Kit *k);
+    void copyFrom(const Internal::KitData &src);
+
+    Internal::KitData kitData() const;
 
     // Note: Stickyness is *not* saved!
     void setDetectionSource(const DetectionSource &source);
@@ -140,6 +176,7 @@ public:
 
     QString newKitName(const QList<Kit *> &allKits) const;
     static QString newKitName(const QString &name, const QList<Kit *> &allKits);
+    static QString newKitName(const QString &name, const QStringList &existingNames);
 
     void toMap(Utils::Store &data) const;
 
