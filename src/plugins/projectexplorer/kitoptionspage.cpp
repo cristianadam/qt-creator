@@ -56,12 +56,8 @@ class KitDataWrapper final
 public:
     Kit *kit = nullptr; // Not owned.
     KitData workingCopy;
-    bool hasUniqueName = true;
 
-    bool operator==(const KitDataWrapper &other) const
-    {
-        return kit == other.kit && workingCopy == other.workingCopy;
-    }
+    bool operator==(const KitDataWrapper &other) const = default;
 };
 
 } // namespace ProjectExplorer::Internal
@@ -88,6 +84,7 @@ public:
     int markForAddition(Kit *baseKit);
 
     QString newKitName(const QString &sourceName) const;
+    bool isNameUnique(int row) const;
 
 signals:
     void kitStateChanged();
@@ -98,7 +95,6 @@ private:
     void updateKit(Kit *k);
     void removeKit(Kit *k);
     void changeDefaultKit();
-    void validateKitNames();
 
     bool m_isRegistering = false;
 };
@@ -131,24 +127,28 @@ KitModel::KitModel()
             this, &KitModel::changeDefaultKit);
 }
 
+static QString displayNameOf(const KitDataWrapper &d)
+{
+    const QString name = d.workingCopy.unexpandedDisplayName();
+    return d.kit ? d.kit->macroExpander()->expand(name) : name;
+}
+
 QVariant KitModel::variantData(int row, int /*column*/, int role) const
 {
     const KitDataWrapper d = item(row);
     switch (role) {
-    case Qt::DisplayRole: {
-        const QString name = d.workingCopy.unexpandedDisplayName();
-        return d.kit ? d.kit->macroExpander()->expand(name) : name;
-    }
+    case Qt::DisplayRole:
+        return displayNameOf(d);
     case Qt::DecorationRole:
         if (d.kit) {
-            if (d.kit->isValid() && !d.hasUniqueName)
+            if (d.kit->isValid() && !isNameUnique(row))
                 return Icons::WARNING.icon();
             return d.kit->displayIcon();
         }
         return d.workingCopy.icon();
     case Qt::ToolTipRole: {
         Tasks tmp;
-        if (!d.hasUniqueName)
+        if (!isNameUnique(row))
             tmp.append(CompileTask(Task::Warning, Tr::tr("Display name is not unique.")));
         return d.kit ? d.kit->toHtml(tmp) : d.workingCopy.unexpandedDisplayName();
     }
@@ -228,7 +228,7 @@ void KitModel::markForRemoval(int row)
     }
 
     markRemoved(row);
-    validateKitNames();
+    notifyAllRowsChanged();
     emit kitStateChanged();
 }
 
@@ -256,7 +256,7 @@ int KitModel::markForAddition(Kit *baseKit)
     if (defaultRow() < 0 || isRemoved(defaultRow()))
         setVolatileDefaultRow(newRow);
 
-    validateKitNames();
+    notifyAllRowsChanged();
     return newRow;
 }
 
@@ -290,7 +290,7 @@ void KitModel::addKit(Kit *k)
     if (k == KitManager::defaultKit())
         setDefaultRow(rowForId(k->id()));
 
-    validateKitNames();
+    notifyAllRowsChanged();
     emit kitStateChanged();
 }
 
@@ -311,7 +311,7 @@ void KitModel::updateKit(Kit *k)
         break;
     }
 
-    validateKitNames();
+    notifyAllRowsChanged();
     emit kitStateChanged();
 }
 
@@ -332,7 +332,7 @@ void KitModel::removeKit(Kit *k)
             }
         }
         removeItem(row);
-        validateKitNames();
+        notifyAllRowsChanged();
         emit kitStateChanged();
         return;
     }
@@ -343,28 +343,14 @@ void KitModel::changeDefaultKit()
     setVolatileDefaultRow(rowForOriginalKit(KitManager::defaultKit()));
 }
 
-void KitModel::validateKitNames()
+bool KitModel::isNameUnique(int row) const
 {
-    const auto displayName = [](const KitDataWrapper &d) {
-        const QString name = d.workingCopy.unexpandedDisplayName();
-        return d.kit ? d.kit->macroExpander()->expand(name) : name;
-    };
-
-    QHash<QString, int> nameHash;
-    for (int row = 0; row < itemCount(); ++row) {
-        if (!isRemoved(row))
-            nameHash[displayName(item(row))]++;
+    const QString name = displayNameOf(item(row));
+    for (int r = 0; r < itemCount(); ++r) {
+        if (r != row && !isRemoved(r) && displayNameOf(item(r)) == name)
+            return false;
     }
-    for (int row = 0; row < itemCount(); ++row) {
-        if (isRemoved(row))
-            continue;
-        KitDataWrapper d = item(row);
-        const bool unique = nameHash.value(displayName(d)) == 1;
-        if (d.hasUniqueName != unique) {
-            d.hasUniqueName = unique;
-            setVolatileItem(row, d);
-        }
-    }
+    return true;
 }
 
 // KitOptionsPageWidget
@@ -680,7 +666,7 @@ void KitOptionsPageWidget::onDirty()
     KitDataWrapper d = m_model.item(currentRow);
     d.workingCopy = m_modifiedKit.kitData();
     m_model.setVolatileItem(currentRow, d);
-    m_model.notifyRowChanged(currentRow);
+    m_model.notifyAllRowsChanged();
 }
 
 void KitOptionsPageWidget::setFocusToName()
@@ -722,7 +708,7 @@ QString KitOptionsPageWidget::validityMessage() const
 {
     Tasks tmp;
     const int row = m_groupedView.currentRow();
-    if (row >= 0 && !m_model.item(row).hasUniqueName)
+    if (row >= 0 && !m_model.isNameUnique(row))
         tmp.append(CompileTask(Task::Warning, Tr::tr("Display name is not unique.")));
 
     return m_modifiedKit.toHtml(tmp);
