@@ -9,6 +9,8 @@
 
 #include <coreplugin/featureprovider.h>
 
+#include <utils/fileutils.h>
+#include <utils/id.h>
 #include <utils/store.h>
 
 #include <QSet>
@@ -22,6 +24,7 @@ class OutputLineParser;
 } // namespace Utils
 
 namespace ProjectExplorer {
+class KitData;
 class Project;
 
 namespace Internal {
@@ -112,6 +115,9 @@ public:
     QString toHtml(const Tasks &additional = Tasks(), const QString &extraText = QString()) const;
     Kit *clone(bool keepName = false) const;
     void copyFrom(const Kit *k);
+    void copyFrom(const KitData &src);
+
+    KitData kitData() const;
 
     // Note: Stickyness is *not* saved!
     void setDetectionSource(const DetectionSource &source);
@@ -140,6 +146,7 @@ public:
 
     QString newKitName(const QList<Kit *> &allKits) const;
     static QString newKitName(const QString &name, const QList<Kit *> &allKits);
+    static QString newKitName(const QString &name, const QStringList &existingNames);
 
     void toMap(Utils::Store &data) const;
 

@@ -73,6 +73,7 @@ QtcPlugin {
             "importwidget.cpp", "importwidget.h",
             "ioutputparser.cpp", "ioutputparser.h",
             "kit.cpp", "kit.h",
+            "kitdata.cpp", "kitdata.h",
             "kitaspect.cpp", "kitaspect.h",
             "kitchooser.cpp", "kitchooser.h",
             "kitfeatureprovider.h",

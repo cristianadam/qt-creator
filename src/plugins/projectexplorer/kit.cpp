@@ -5,8 +5,8 @@
 
 #include "devicesupport/devicekitaspects.h"
 #include "devicesupport/idevice.h"
-#include "devicesupport/idevicefactory.h"
 #include "kitaspect.h"
+#include "kitdata.h"
 #include "kitmanager.h"
 #include "ioutputparser.h"
 #include "outputparsers.h"
@@ -56,7 +56,7 @@ namespace Internal {
 // -------------------------------------------------------------------------
 
 
-class KitPrivate
+class KitPrivate : public KitData
 {
 public:
     KitPrivate(Id id, Kit *kit) :
@@ -64,8 +64,6 @@ public:
     {
         if (!id.isValid())
             m_id = Id::generate();
-
-        m_unexpandedDisplayName.setDefaultValue(Tr::tr("Unnamed"));
 
         m_macroExpander.setDisplayName(Tr::tr("Kit"));
         m_macroExpander.setAccumulating(true);
@@ -89,9 +87,6 @@ public:
             [kit] { return kit->id().toString(); });
     }
 
-    DisplayName m_unexpandedDisplayName;
-    QString m_fileSystemFriendlyName;
-    DetectionSource m_detectionSource;
     Id m_id;
     int m_nestedBlockingLevel = 0;
     bool m_hasError = false;
@@ -99,14 +94,6 @@ public:
     bool m_hasValidityInfo = false;
     bool m_mustNotify = false;
     QIcon m_cachedIcon;
-    FilePath m_iconPath;
-    Id m_deviceTypeForIcon;
-
-    QHash<Id, QVariant> m_data;
-    QSet<Id> m_sticky;
-    QSet<Id> m_mutable;
-    std::optional<QSet<Id>> m_irrelevantAspects;
-    std::optional<QSet<Id>> m_relevantAspects;
     MacroExpander m_macroExpander;
 };
 
@@ -124,11 +111,14 @@ Kit::Predicate Kit::defaultPredicate()
 Kit::Kit(Id id)
     : d(std::make_unique<Internal::KitPrivate>(id, this))
 {
+    d->m_unexpandedDisplayName.setDefaultValue(Tr::tr("Unnamed"));
 }
 
 Kit::Kit(const Store &data)
     : d(std::make_unique<Internal::KitPrivate>(Id(), this))
 {
+    d->m_unexpandedDisplayName.setDefaultValue(Tr::tr("Unnamed"));
+
     d->m_id = Id::fromSetting(data.value(ID_KEY));
 
     const bool autoDetected = data.value(AUTODETECTED_KEY).toBool();
@@ -150,7 +140,8 @@ Kit::Kit(const Store &data)
 
     d->m_unexpandedDisplayName.fromMap(data, DISPLAYNAME_KEY);
     d->m_fileSystemFriendlyName = data.value(FILESYSTEMFRIENDLYNAME_KEY).toString();
-    d->m_iconPath = FilePath::fromString(data.value(ICON_KEY, d->m_iconPath.toUrlishString()).toString());
+    d->m_iconPath = FilePath::fromString(
+        data.value(ICON_KEY, d->m_iconPath.toUrlishString()).toString());
     d->m_deviceTypeForIcon = Id::fromSetting(data.value(DEVICE_TYPE_FOR_ICON_KEY));
     if (const auto it = data.constFind(RELEVANT_ASPECTS_KEY); it != data.constEnd())
         d->m_relevantAspects = transform<QSet<Id>>(it.value().toList(), &Id::fromSetting);
@@ -192,6 +183,7 @@ void Kit::unblockNotification()
 
 void Kit::copyKitCommon(Kit *target, const Kit *source)
 {
+    target->d->m_detectionSource = source->d->m_detectionSource;
     target->d->m_data = source->d->m_data;
     target->d->m_iconPath = source->d->m_iconPath;
     target->d->m_deviceTypeForIcon = source->d->m_deviceTypeForIcon;
@@ -220,9 +212,20 @@ Kit *Kit::clone(bool keepName) const
 void Kit::copyFrom(const Kit *k)
 {
     copyKitCommon(this, k);
-    d->m_detectionSource = k->d->m_detectionSource;
     d->m_unexpandedDisplayName = k->d->m_unexpandedDisplayName;
     d->m_fileSystemFriendlyName = k->d->m_fileSystemFriendlyName;
+}
+
+void Kit::copyFrom(const KitData &src)
+{
+    static_cast<KitData &>(*d) = src;
+    d->m_hasValidityInfo = false;
+    d->m_cachedIcon = {};
+}
+
+KitData Kit::kitData() const
+{
+    return *d;
 }
 
 bool Kit::isValid() const
@@ -366,34 +369,26 @@ int Kit::weight() const
     });
 }
 
-static QIcon iconForDeviceType(Utils::Id deviceType)
-{
-    const IDeviceFactory *factory = Utils::findOrDefault(IDeviceFactory::allDeviceFactories(),
-        [&deviceType](const IDeviceFactory *factory) {
-            return factory->deviceType() == deviceType;
-        });
-    return factory ? factory->icon() : QIcon();
-}
-
 QIcon Kit::icon() const
 {
     if (!d->m_cachedIcon.isNull())
         return d->m_cachedIcon;
 
-    if (!d->m_deviceTypeForIcon.isValid() && !d->m_iconPath.isEmpty() && d->m_iconPath.exists()) {
-        d->m_cachedIcon = QIcon(d->m_iconPath.toUrlishString());
+    if (!d->m_deviceTypeForIcon.isValid()
+            && !d->m_iconPath.isEmpty() && d->m_iconPath.exists()) {
+        d->m_cachedIcon = QIcon(d->m_iconPath.toFSPathString());
         return d->m_cachedIcon;
     }
 
-    const Utils::Id deviceType = d->m_deviceTypeForIcon.isValid()
+    const Id deviceType = d->m_deviceTypeForIcon.isValid()
             ? d->m_deviceTypeForIcon : RunDeviceTypeKitAspect::deviceTypeId(this);
-    const QIcon deviceTypeIcon = iconForDeviceType(deviceType);
+    const QIcon deviceTypeIcon = KitData::iconForDeviceType(deviceType);
     if (!deviceTypeIcon.isNull()) {
         d->m_cachedIcon = deviceTypeIcon;
         return d->m_cachedIcon;
     }
 
-    d->m_cachedIcon = iconForDeviceType(Constants::DESKTOP_DEVICE_TYPE);
+    d->m_cachedIcon = KitData::iconForDeviceType(Constants::DESKTOP_DEVICE_TYPE);
     return d->m_cachedIcon;
 }
 
@@ -551,12 +546,12 @@ void Kit::toMap(Store &data) const
     data.insert(STICKY_INFO_KEY, stickyInfo);
 
     if (d->m_relevantAspects) {
-        data.insert(RELEVANT_ASPECTS_KEY, transform<QVariantList>(d->m_relevantAspects.value(),
-                                                                  &Id::toSetting));
+        data.insert(RELEVANT_ASPECTS_KEY, transform<QVariantList>(
+                        d->m_relevantAspects.value(), &Id::toSetting));
     }
     if (d->m_irrelevantAspects) {
-        data.insert(IRRELEVANT_ASPECTS_KEY, transform<QVariantList>(d->m_irrelevantAspects.value(),
-                                                                    &Id::toSetting));
+        data.insert(IRRELEVANT_ASPECTS_KEY, transform<QVariantList>(
+                        d->m_irrelevantAspects.value(), &Id::toSetting));
     }
 
     Store extra;
@@ -795,10 +790,15 @@ QString Kit::newKitName(const QList<Kit *> &allKits) const
 
 QString Kit::newKitName(const QString &name, const QList<Kit *> &allKits)
 {
+    return newKitName(name, transform(allKits, &Kit::unexpandedDisplayName));
+}
+
+QString Kit::newKitName(const QString &name, const QStringList &existingNames)
+{
     const QString baseName = name.isEmpty()
             ? Tr::tr("Unnamed")
             : Tr::tr("Clone of %1").arg(name);
-    return Utils::makeUniquelyNumbered(baseName, transform(allKits, &Kit::unexpandedDisplayName));
+    return Utils::makeUniquelyNumbered(baseName, existingNames);
 }
 
 void Kit::kitUpdated()
@@ -808,7 +808,7 @@ void Kit::kitUpdated()
         return;
     }
     d->m_hasValidityInfo = false;
-    d->m_cachedIcon = QIcon();
+    d->m_cachedIcon = {};
     KitManager::notifyAboutUpdate(this);
     d->m_mustNotify = false;
 }
