@@ -128,7 +128,7 @@ def __processSubItems__(treeObjStr, section, parModelIndexStr, doneItems,
 def __iterateTree__(treeObjStr, additionalFunc, *additionalParameters):
     global currentSelectedTreeItem, sectionInProgress
     model = waitForObject(treeObjStr).model()
-    # 1st row: Auto-detected, 2nd row: Manual
+    # 1st row: Automatically Managed, 2nd row: Manual
     for sect in dumpIndices(model):
         sectionInProgress = str(sect.text)
         doneItems = []

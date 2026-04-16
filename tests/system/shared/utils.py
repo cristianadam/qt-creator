@@ -365,7 +365,7 @@ def getConfiguredKits():
     # merge defined target names with their configured Qt versions and devices
     for kit, qtVersion in kitsWithQtVersionName.items():
         if qtVersion in qtVersionNames:
-            result.append(kit)
+            result.append(kit[:-10] if kit.endswith(" (Default)") else kit)
         elif qtVersion != __PYKIT__: # ignore e.g. Python kits
             test.fail("Qt version '%s' for kit '%s' can't be found in qtVersionNames."
                       % (qtVersion, kit))
@@ -431,7 +431,7 @@ def iterateKits(clickOkWhenDone, alreadyOnOptionsDialog,
     model = treeView.model()
     test.compare(model.rowCount(), 2, "Verifying expected target section count")
     autoDetected = model.index(0, 0)
-    test.compare(autoDetected.data().toString(), "Auto-detected",
+    test.compare(autoDetected.data().toString(), "Automatically Managed",
                  "Verifying label for target section")
     manual = model.index(1, 0)
     test.compare(manual.data().toString(), "Manual", "Verifying label for target section")
