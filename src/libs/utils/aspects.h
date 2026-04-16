@@ -1221,6 +1221,7 @@ private:
 
 class QTCREATOR_UTILS_EXPORT AspectList : public Utils::BaseAspect
 {
+    Q_OBJECT
     friend class Internal::AspectListPrivate;
 public:
     using CreateItem = std::function<std::shared_ptr<BaseAspect>()>;
@@ -1280,6 +1281,9 @@ public:
     CovariantCallback<void(std::shared_ptr<BaseAspect>)> itemRemovedCallback;
 
     void addToLayoutImpl(Layouting::Layout &parent) override;
+
+signals:
+    void volatileItemListChanged();
 
 private:
     std::unique_ptr<Internal::AspectListPrivate> d;

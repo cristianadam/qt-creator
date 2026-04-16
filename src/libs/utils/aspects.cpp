@@ -4034,7 +4034,7 @@ public:
         // clang-format off
         parent.addItem(
             Group {
-                replaceLayoutOn(aspect, &AspectList::volatileValueChanged, fill)
+                replaceLayoutOn(aspect, &AspectList::volatileItemListChanged, fill)
             }
         );
         // clang-format on
@@ -4198,6 +4198,7 @@ std::shared_ptr<BaseAspect> AspectList::actualAddItem(const std::shared_ptr<Base
         itemAddedCallback(item);
     d->model.sync(*this);
     emit volatileValueChanged();
+    emit volatileItemListChanged();
     if (isAutoApply())
         d->items = d->volatileItems;
     return item;
@@ -4235,6 +4236,7 @@ void AspectList::actualRemoveItem(const std::shared_ptr<BaseAspect> &item)
         itemRemovedCallback(item);
     d->model.sync(*this);
     emit volatileValueChanged();
+    emit volatileItemListChanged();
     if (isAutoApply())
         d->items = d->volatileItems;
 }
@@ -4283,6 +4285,7 @@ void AspectList::cancel()
     forEachItem([](BaseAspect *aspect) { aspect->cancel(); });
     d->model.sync(*this);
     emit volatileValueChanged();
+    emit volatileItemListChanged();
 }
 
 void AspectList::setAutoApply(bool on)
