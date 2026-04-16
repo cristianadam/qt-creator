@@ -11,6 +11,7 @@
 #include "cppqtstyleindenter.h"
 
 #include <projectexplorer/project.h>
+#include <projectexplorer/projectmanager.h>
 
 #include <texteditor/icodestylepreferencesfactory.h>
 #include <texteditor/indenter.h>
@@ -18,6 +19,7 @@
 #include <QLayout>
 
 using namespace TextEditor;
+using namespace Utils;
 
 namespace CppEditor {
 
@@ -26,12 +28,12 @@ class CppCodeStyleEditor final : public CodeStyleEditor
 public:
     static CppCodeStyleEditor *create(
         const ICodeStylePreferencesFactory *factory,
-        ProjectExplorer::Project *project,
+        const FilePath &projectFile,
         ICodeStylePreferences *codeStyle,
         QWidget *parent)
     {
         auto editor = new CppCodeStyleEditor{parent};
-        editor->init(factory, wrapProject(project), codeStyle);
+        editor->init(factory, projectFile, codeStyle);
         return editor;
     }
 
@@ -41,7 +43,7 @@ private:
     {}
 
     CodeStyleEditorWidget *createEditorWidget(
-        const void * /*project*/,
+        const FilePath & /*projectFile*/,
         ICodeStylePreferences *codeStyle,
         QWidget *parent) const final
     {
@@ -77,12 +79,11 @@ public:
 
 private:
     CodeStyleEditorWidget *createCodeStyleEditor(
-            const ProjectWrapper &project,
+            const FilePath &projectFile,
             ICodeStylePreferences *codeStyle,
             QWidget *parent) const final
     {
-        return CppCodeStyleEditor::create(
-                    this, ProjectExplorer::unwrapProject(project), codeStyle, parent);
+        return CppCodeStyleEditor::create(this, projectFile, codeStyle, parent);
     }
 
     Utils::Id languageId() final

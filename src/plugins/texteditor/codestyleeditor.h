@@ -10,8 +10,6 @@
 #include <QString>
 #include <QWidget>
 
-#include <functional>
-
 QT_BEGIN_NAMESPACE
 class QVBoxLayout;
 QT_END_NAMESPACE
@@ -21,25 +19,6 @@ class CodeStyleSelectorWidget;
 class ICodeStylePreferencesFactory;
 class ICodeStylePreferences;
 class SnippetEditorWidget;
-
-class TEXTEDITOR_EXPORT ProjectWrapper
-{
-public:
-    using PathRetriever = std::function<Utils::FilePath(const void *)>;
-    ProjectWrapper() : ProjectWrapper({}, {}) {}
-    ProjectWrapper(void *project, const PathRetriever &pathRetriever)
-        : m_project(project)
-        , m_pathRetriever(pathRetriever)
-    {}
-
-    void *project() const { return m_project; }
-    operator bool() const { return m_project; }
-    Utils::FilePath projectFilePath() const { return m_pathRetriever(m_project); }
-
-private:
-    void * const m_project;
-    const PathRetriever m_pathRetriever;
-};
 
 class TEXTEDITOR_EXPORT CodeStyleEditorWidget : public QWidget
 {
@@ -62,7 +41,7 @@ protected:
     CodeStyleEditor(QWidget *parent = nullptr);
     virtual void init(
         const ICodeStylePreferencesFactory *factory,
-        const ProjectWrapper &project,
+        const Utils::FilePath &projectFile,
         ICodeStylePreferences *codeStyle);
 
     QVBoxLayout *m_layout = nullptr;
@@ -72,14 +51,16 @@ protected:
 
 private:
     virtual CodeStyleSelectorWidget *createCodeStyleSelectorWidget(
-        ICodeStylePreferences *codeStyle, const void *project, QWidget *parent = nullptr) const;
+        ICodeStylePreferences *codeStyle,
+        const Utils::FilePath &projectFile,
+        QWidget *parent = nullptr) const;
     virtual SnippetEditorWidget *createPreviewWidget(
         const ICodeStylePreferencesFactory *factory,
-        const ProjectWrapper &project,
+        const Utils::FilePath &projectFile,
         ICodeStylePreferences *codeStyle,
         QWidget *parent = nullptr) const;
     virtual CodeStyleEditorWidget *createEditorWidget(
-        const void *project,
+        const Utils::FilePath &projectFile,
         ICodeStylePreferences *codeStyle,
         QWidget *parent = nullptr) const
         = 0;

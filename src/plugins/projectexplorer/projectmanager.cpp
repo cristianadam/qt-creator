@@ -23,7 +23,6 @@
 #include <coreplugin/session.h>
 
 #include <utils/algorithm.h>
-#include <utils/fileutils.h>
 #include <utils/mimeutils.h>
 #include <utils/persistentsettings.h>
 #include <utils/qtcassert.h>
@@ -553,6 +552,15 @@ QList<Project *> ProjectManager::projectOrder(const Project *project)
     }
 
     return result;
+}
+
+Project *ProjectManager::projectForProjectFile(const FilePath &projectFile)
+{
+    Project * const project = Utils::findOrDefault(projects(), [&projectFile](const Project *p) {
+        return p->projectFilePath() == projectFile;
+    });
+    QTC_ASSERT(project, qDebug() << projectFile);
+    return project;
 }
 
 Project *ProjectManager::projectForFile(const FilePath &fileName)

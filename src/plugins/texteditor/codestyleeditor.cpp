@@ -24,28 +24,30 @@
 #include <QTextBlock>
 #include <QVBoxLayout>
 
+using namespace Utils;
+
 namespace TextEditor {
 
 void CodeStyleEditor::init(
-    const ICodeStylePreferencesFactory *factory,
-    const ProjectWrapper &project,
-    ICodeStylePreferences *codeStyle)
+        const ICodeStylePreferencesFactory *factory,
+        const FilePath &projectFile,
+        ICodeStylePreferences *codeStyle)
 {
-    m_selector = createCodeStyleSelectorWidget(codeStyle, project.project());
+    m_selector = createCodeStyleSelectorWidget(codeStyle, projectFile);
     m_layout->addWidget(m_selector);
     Utils::installMarkSettingsDirtyTriggerRecursively(m_selector);
     auto infoLabel = new Utils::InfoLabel(Tr::tr("All changes below take effect immediately."),
                                           Utils::InfoLabel::Information);
     infoLabel->setFilled(true);
     m_layout->addWidget(infoLabel);
-    if (!project) {
-        m_editor = createEditorWidget(project.project(), codeStyle);
+    if (projectFile.isEmpty()) {
+        m_editor = createEditorWidget(projectFile, codeStyle);
         if (m_editor)
             m_layout->addWidget(m_editor);
         return;
     }
 
-    m_preview = createPreviewWidget(factory, project, codeStyle, m_editor);
+    m_preview = createPreviewWidget(factory, projectFile, codeStyle, m_editor);
     m_layout->addWidget(m_preview);
 
     QLabel *label = new QLabel(
@@ -61,18 +63,18 @@ void CodeStyleEditor::init(
 }
 
 CodeStyleSelectorWidget *CodeStyleEditor::createCodeStyleSelectorWidget(
-    ICodeStylePreferences *codeStyle, const void *project, QWidget *parent) const
+        ICodeStylePreferences *codeStyle, const Utils::FilePath &projectFile, QWidget *parent) const
 {
-    auto selector = new CodeStyleSelectorWidget{project, parent};
+    auto selector = new CodeStyleSelectorWidget{projectFile, parent};
     selector->setCodeStyle(codeStyle);
     return selector;
 }
 
 SnippetEditorWidget *CodeStyleEditor::createPreviewWidget(
-    const ICodeStylePreferencesFactory *factory,
-    const ProjectWrapper &project,
-    ICodeStylePreferences *codeStyle,
-    QWidget *parent) const
+        const ICodeStylePreferencesFactory *factory,
+        const FilePath &projectFile,
+        ICodeStylePreferences *codeStyle,
+        QWidget *parent) const
 {
     auto preview = new SnippetEditorWidget{parent};
     DisplaySettingsData displaySettings = preview->displaySettings();
@@ -85,9 +87,9 @@ SnippetEditorWidget *CodeStyleEditor::createPreviewWidget(
     Indenter *indenter = factory->createIndenter(preview->document());
     if (indenter) {
         indenter->setOverriddenPreferences(codeStyle);
-        const Utils::FilePath fileName = project ? project.projectFilePath().pathAppended(
-                                                       "snippet.cpp")
-                                                 : Core::ICore::userResourcePath("snippet.cpp");
+        const FilePath fileName = !projectFile.isEmpty()
+            ? projectFile.pathAppended("snippet.cpp")
+            : Core::ICore::userResourcePath("snippet.cpp");
         indenter->setFileName(fileName);
         preview->textDocument()->setIndenter(indenter);
     } else {
