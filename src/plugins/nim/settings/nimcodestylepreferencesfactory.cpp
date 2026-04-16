@@ -19,6 +19,7 @@
 #include <QTextDocument>
 
 using namespace TextEditor;
+using namespace Utils;
 
 namespace Nim {
 
@@ -27,12 +28,12 @@ class NimCodeStyleEditor final : public CodeStyleEditor
 public:
     static NimCodeStyleEditor *create(
         const ICodeStylePreferencesFactory *factory,
-        const ProjectWrapper &project,
+        const FilePath &projectFile,
         ICodeStylePreferences *codeStyle,
         QWidget *parent )
     {
         auto editor = new NimCodeStyleEditor{parent};
-        editor->init(factory, project, codeStyle);
+        editor->init(factory, projectFile, codeStyle);
         return editor;
     }
 
@@ -42,7 +43,7 @@ private:
     {}
 
     CodeStyleEditorWidget *createEditorWidget(
-        const void * /*project*/,
+        const FilePath & /*projectFile*/,
         ICodeStylePreferences *codeStyle,
         QWidget *parent) const final
     {
@@ -69,11 +70,11 @@ public:
 
 private:
     CodeStyleEditorWidget *createCodeStyleEditor(
-            const ProjectWrapper &project,
+            const FilePath &projectFile,
             ICodeStylePreferences *codeStyle,
             QWidget *parent) const final
     {
-        return NimCodeStyleEditor::create(this, project, codeStyle, parent);
+        return NimCodeStyleEditor::create(this, projectFile, codeStyle, parent);
     }
 
     Utils::Id languageId() final

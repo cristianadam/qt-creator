@@ -228,7 +228,7 @@ ICodeStylePreferences *CodeStylePool::importCodeStyle(const FilePath &fileName)
 }
 
 ICodeStylePreferences *CodeStylePool::loadCodeStyle(
-    const FilePath &fileName, bool readOnly, const void *project)
+    const FilePath &fileName, bool readOnly, const FilePath &projectFile)
 {
     ICodeStylePreferences *codeStyle = nullptr;
     PersistentSettingsReader reader;
@@ -244,7 +244,7 @@ ICodeStylePreferences *CodeStylePool::loadCodeStyle(
             codeStyle->setDisplayName(displayName);
             codeStyle->fromMap(map);
             codeStyle->setReadOnly(readOnly);
-            codeStyle->setProject(project);
+            codeStyle->setProject(projectFile);
 
             addCodeStyle(codeStyle);
         }

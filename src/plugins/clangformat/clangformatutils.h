@@ -21,16 +21,15 @@ namespace CppEditor { class CppCodeStyleSettings; }
 
 namespace ClangFormat {
 
-QString projectUniqueId(const ProjectExplorer::Project *project);
+QString projectUniqueId(const Utils::FilePath &projectFile);
 
-bool getProjectUseGlobalSettings(const ProjectExplorer::Project *project);
+bool getProjectUseGlobalSettings(const Utils::FilePath &projectFile);
 
-bool getProjectCustomSettings(const ProjectExplorer::Project *project);
+bool getProjectCustomSettings(const Utils::FilePath &projectFile);
 bool getCurrentCustomSettings(const Utils::FilePath &filePath);
 
-ClangFormatSettings::Mode getProjectIndentationOrFormattingSettings(
-    const ProjectExplorer::Project *project);
-ClangFormatSettings::Mode getCurrentIndentationOrFormattingSettings(const Utils::FilePath &filePath);
+ClangFormatSettings::Mode getProjectIndentationOrFormattingSettings(const Utils::FilePath &projectFile);
+ClangFormatSettings::Mode getCurrentIndentationOrFormattingSettings(const Utils::FilePath &projectFile);
 
 TextEditor::ICodeStylePreferences *preferencesForFile(const Utils::FilePath &filePath);
 Utils::FilePath configForFile(const Utils::FilePath &filePath);

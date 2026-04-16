@@ -11,11 +11,15 @@
 
 #include <cppeditor/cppcodestylepreferencesfactory.h>
 #include <cppeditor/cppcodestylesettingspage.h>
+
 #include <projectexplorer/project.h>
+#include <projectexplorer/projectmanager.h>
 #include <projectexplorer/projecttree.h>
+
 #include <texteditor/codestylepool.h>
 #include <texteditor/codestyleselectorwidget.h>
 #include <texteditor/texteditorsettings.h>
+
 #include <utils/fileutils.h>
 #include <utils/layoutbuilder.h>
 
@@ -31,9 +35,9 @@ using namespace Utils;
 namespace ClangFormat {
 
 ClangFormatGlobalConfigWidget::ClangFormatGlobalConfigWidget(
-    Project *project, ICodeStylePreferences *codeStyle, QWidget *parent)
+        const FilePath &projectFile, ICodeStylePreferences *codeStyle, QWidget *parent)
     : CodeStyleEditorWidget(parent)
-    , m_project(project)
+    , m_projectFile(projectFile)
     , m_codeStyle(codeStyle)
 {
     const QString sizeThresholdToolTip = Tr::tr(
@@ -95,7 +99,7 @@ ClangFormatGlobalConfigWidget::ClangFormatGlobalConfigWidget(
     initFileSizeThresholdSpinBox();
     initCurrentProjectLabel();
 
-    if (project) {
+    if (!projectFile.isEmpty()) {
         m_formatOnSave->hide();
         m_formatWhileTyping->hide();
 
@@ -138,11 +142,11 @@ void ClangFormatGlobalConfigWidget::initIndentationOrFormattingCombobox()
         static_cast<int>(ClangFormatSettings::Mode::Disable), Tr::tr("Use built-in indenter"));
 
     m_indentingOrFormatting->setCurrentIndex(
-        static_cast<int>(getProjectIndentationOrFormattingSettings(m_project)));
+        static_cast<int>(getProjectIndentationOrFormattingSettings(m_projectFile)));
 
     connect(m_indentingOrFormatting, &QComboBox::currentIndexChanged, this, [this](int index) {
-        if (m_project)
-            m_project->setNamedSettings(Constants::MODE_ID, index);
+        if (Project *project = ProjectManager::projectForFile(m_projectFile))
+            project->setNamedSettings(Constants::MODE_ID, index);
 
         emit modeChanged(static_cast<ClangFormatSettings::Mode>(index));
     });
@@ -150,30 +154,32 @@ void ClangFormatGlobalConfigWidget::initIndentationOrFormattingCombobox()
 
 void ClangFormatGlobalConfigWidget::initUseGlobalSettingsCheckBox()
 {
-    if (!m_project)
+    if (m_projectFile.isEmpty())
         return;
 
     const auto enableProjectSettings = [this] {
-        const bool isDisabled = m_project && m_useGlobalSettings->isChecked();
+        const bool isDisabled = !m_projectFile.isEmpty() && m_useGlobalSettings->isChecked();
         m_indentingOrFormatting->setDisabled(isDisabled);
         m_formattingModeLabel->setDisabled(isDisabled);
         const auto currentMode = static_cast<ClangFormatSettings::Mode>(
             m_indentingOrFormatting->currentIndex());
         m_projectHasClangFormat->setDisabled(
             isDisabled || (currentMode == ClangFormatSettings::Mode::Disable));
-        m_useCustomSettingsCheckBox->setChecked(getProjectCustomSettings(m_project));
+        m_useCustomSettingsCheckBox->setChecked(getProjectCustomSettings(m_projectFile));
         m_useCustomSettingsCheckBox->setDisabled(
             isDisabled || (currentMode == ClangFormatSettings::Mode::Disable));
 
         emit m_codeStyle->currentPreferencesChanged(m_codeStyle->currentPreferences());
     };
 
-    m_useGlobalSettings->setChecked(getProjectUseGlobalSettings(m_project));
+    m_useGlobalSettings->setChecked(getProjectUseGlobalSettings(m_projectFile));
     enableProjectSettings();
 
     connect(
         m_useGlobalSettings, &QCheckBox::toggled, this, [this, enableProjectSettings](bool checked) {
-            m_project->setNamedSettings(Constants::USE_GLOBAL_SETTINGS, checked);
+            Project *project = ProjectManager::projectForFile(m_projectFile);
+            if (QTC_GUARD(project))
+                project->setNamedSettings(Constants::USE_GLOBAL_SETTINGS, checked);
             enableProjectSettings();
         });
 }
@@ -184,7 +190,7 @@ void ClangFormatGlobalConfigWidget::initFileSizeThresholdSpinBox()
     m_fileSizeThresholdSpinBox->setMaximum(std::numeric_limits<int>::max());
     m_fileSizeThresholdSpinBox->setSuffix(" KB");
     m_fileSizeThresholdSpinBox->setValue(ClangFormatSettings::instance().fileSizeThreshold());
-    if (m_project) {
+    if (!m_projectFile.isEmpty()) {
         m_fileSizeThresholdSpinBox->hide();
         m_fileSizeThresholdLabel->hide();
     }
@@ -200,8 +206,10 @@ void ClangFormatGlobalConfigWidget::initFileSizeThresholdSpinBox()
 void ClangFormatGlobalConfigWidget::initCurrentProjectLabel()
 {
     auto setCurrentProjectLabelVisible = [this]() {
-        ProjectExplorer::Project *currentProject
-            = m_project ? m_project : ProjectExplorer::ProjectTree::currentProject();
+        QTC_ASSERT(!m_projectFile.isEmpty(), return);
+        Project *currentProject = ProjectManager::projectForFile(m_projectFile);
+        if (!currentProject)
+            currentProject = ProjectExplorer::ProjectTree::currentProject();
 
         if (currentProject) {
             Utils::FilePath settingsFilePath = currentProject->projectDirectory()
@@ -224,14 +232,14 @@ void ClangFormatGlobalConfigWidget::initCurrentProjectLabel()
 bool ClangFormatGlobalConfigWidget::projectClangFormatFileExists()
 {
     llvm::Expected<clang::format::FormatStyle> styleFromProjectFolder = clang::format::getStyle(
-        "file", m_project->projectFilePath().path().toStdString(), "none", "", nullptr, true);
+        "file", m_projectFile.path().toStdString(), "none", "", nullptr, true);
 
     return styleFromProjectFolder && !(*styleFromProjectFolder == clang::format::getNoStyle());
 }
 
 void ClangFormatGlobalConfigWidget::initCustomSettingsCheckBox()
 {
-    if (!m_project || !projectClangFormatFileExists()) {
+    if (m_projectFile.isEmpty() || !projectClangFormatFileExists()) {
         m_projectHasClangFormat->hide();
     } else {
         m_projectHasClangFormat->show();
@@ -246,7 +254,7 @@ void ClangFormatGlobalConfigWidget::initCustomSettingsCheckBox()
         m_projectHasClangFormat->setDisabled(isDisable);
     };
 
-    m_useCustomSettingsCheckBox->setChecked(getProjectCustomSettings(m_project));
+    m_useCustomSettingsCheckBox->setChecked(getProjectCustomSettings(m_projectFile));
     m_useCustomSettingsCheckBox->setToolTip(
         "<html>"
         + Tr::tr("When this option is enabled, ClangFormat will use a "
@@ -266,8 +274,10 @@ void ClangFormatGlobalConfigWidget::initCustomSettingsCheckBox()
         setEnableCustomSettingsCheckBox);
 
     connect(m_useCustomSettingsCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
-        if (m_project) {
-            m_project->setNamedSettings(Constants::USE_CUSTOM_SETTINGS_ID, checked);
+        QTC_ASSERT(!m_projectFile.isEmpty(), return);
+        Project *project = ProjectManager::projectForFile(m_projectFile);
+        if (project) {
+            project->setNamedSettings(Constants::USE_CUSTOM_SETTINGS_ID, checked);
         } else {
             ClangFormatSettings::instance().setUseCustomSettings(checked);
         }
@@ -281,7 +291,7 @@ void ClangFormatGlobalConfigWidget::apply()
     ClangFormatSettings &settings = ClangFormatSettings::instance();
     settings.setFormatOnSave(m_formatOnSave->isChecked());
     settings.setFormatWhileTyping(m_formatWhileTyping->isChecked());
-    if (!m_project) {
+    if (m_projectFile.isEmpty()) {
         settings.setMode(
             static_cast<ClangFormatSettings::Mode>(m_indentingOrFormatting->currentIndex()));
         settings.setUseCustomSettings(m_useCustomSettingsCheckBox->isChecked());

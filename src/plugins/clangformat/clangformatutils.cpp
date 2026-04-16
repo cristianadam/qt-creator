@@ -272,18 +272,22 @@ void fromTabSettings(clang::format::FormatStyle &style, const TextEditor::TabSet
     }
 }
 
-QString projectUniqueId(const ProjectExplorer::Project *project)
+QString projectUniqueId(const FilePath &projectFile)
 {
-    if (!project)
+    if (projectFile.isEmpty())
         return QString();
 
-    return QString::fromUtf8(QCryptographicHash::hash(project->projectFilePath().toUrlishString().toUtf8(),
+    return QString::fromUtf8(QCryptographicHash::hash(projectFile.toUrlishString().toUtf8(),
                                                       QCryptographicHash::Md5)
                                  .toHex(0));
 }
 
-bool getProjectUseGlobalSettings(const ProjectExplorer::Project *project)
+bool getProjectUseGlobalSettings(const FilePath &projectFile)
 {
+    if (projectFile.isEmpty())
+        return false;
+    const Project *project = ProjectManager::projectForFile(projectFile);
+    QTC_CHECK(project);
     const QVariant projectUseGlobalSettings = project ? project->namedSettings(
                                                   Constants::USE_GLOBAL_SETTINGS)
                                                       : QVariant();
@@ -291,8 +295,12 @@ bool getProjectUseGlobalSettings(const ProjectExplorer::Project *project)
     return projectUseGlobalSettings.isValid() ? projectUseGlobalSettings.toBool() : true;
 }
 
-bool getProjectCustomSettings(const ProjectExplorer::Project *project)
+bool getProjectCustomSettings(const FilePath &projectFile)
 {
+    if (projectFile.isEmpty())
+        return false;
+    const Project *project = ProjectManager::projectForFile(projectFile);
+    QTC_CHECK(project);
     const QVariant projectCustomSettings = project ? project->namedSettings(
                                                Constants::USE_CUSTOM_SETTINGS_ID)
                                                    : QVariant();
@@ -302,19 +310,24 @@ bool getProjectCustomSettings(const ProjectExplorer::Project *project)
                : ClangFormatSettings::instance().useCustomSettings();
 }
 
-bool getCurrentCustomSettings(const Utils::FilePath &filePath)
+bool getCurrentCustomSettings(const FilePath &filePath)
 {
-    const ProjectExplorer::Project *project = ProjectExplorer::ProjectManager::projectForFile(
-        filePath);
-
-    return getProjectUseGlobalSettings(project)
+    const Project *project = ProjectManager::projectForFile(filePath);
+    QTC_ASSERT(project, return false);
+    const FilePath projectPath = project->projectFilePath();
+    return getProjectUseGlobalSettings(projectPath)
                ? ClangFormatSettings::instance().useCustomSettings()
-               : getProjectCustomSettings(project);
+               : getProjectCustomSettings(projectPath);
 }
 
-ClangFormatSettings::Mode getProjectIndentationOrFormattingSettings(
-    const ProjectExplorer::Project *project)
+ClangFormatSettings::Mode getProjectIndentationOrFormattingSettings(const FilePath &projectFile)
 {
+    if (projectFile.isEmpty())
+        return ClangFormatSettings::instance().mode();
+
+    const Project *project = ProjectManager::projectForFile(projectFile);
+    QTC_CHECK(project);
+
     const QVariant projectIndentationOrFormatting = project
                                                         ? project->namedSettings(Constants::MODE_ID)
                                                         : QVariant();
@@ -324,17 +337,19 @@ ClangFormatSettings::Mode getProjectIndentationOrFormattingSettings(
                : ClangFormatSettings::instance().mode();
 }
 
-ClangFormatSettings::Mode getCurrentIndentationOrFormattingSettings(const Utils::FilePath &filePath)
+ClangFormatSettings::Mode getCurrentIndentationOrFormattingSettings(const FilePath &filePath)
 {
-    const ProjectExplorer::Project *project = ProjectExplorer::ProjectManager::projectForFile(
-        filePath);
+    const Project *project = ProjectManager::projectForFile(filePath);
+    if (!project)
+        return ClangFormatSettings::instance().mode();
 
-    return getProjectUseGlobalSettings(project)
+    const FilePath projectPath = project->projectFilePath();
+    return getProjectUseGlobalSettings(projectPath)
                ? ClangFormatSettings::instance().mode()
-               : getProjectIndentationOrFormattingSettings(project);
+               : getProjectIndentationOrFormattingSettings(projectPath);
 }
 
-Utils::FilePath findConfig(const Utils::FilePath &filePath)
+FilePath findConfig(const FilePath &filePath)
 {
     return filePath.searchHereAndInParents(
         {Constants::SETTINGS_FILE_NAME, Constants::SETTINGS_FILE_ALT_NAME}, QDir::Files);
@@ -342,10 +357,11 @@ Utils::FilePath findConfig(const Utils::FilePath &filePath)
 
 ICodeStylePreferences *preferencesForFile(const FilePath &filePath)
 {
-    const ProjectExplorer::Project *project = ProjectExplorer::ProjectManager::projectForFile(
-        filePath);
+    const Project *project = ProjectManager::projectForFile(filePath);
+    if (!project)
+        return TextEditorSettings::codeStyle("Cpp")->currentPreferences();
 
-    return !getProjectUseGlobalSettings(project) && project
+    return !getProjectUseGlobalSettings(project->projectFilePath())
                ? project->editorConfiguration()->codeStyle("Cpp")->currentPreferences()
                : TextEditor::TextEditorSettings::codeStyle("Cpp")->currentPreferences();
 }

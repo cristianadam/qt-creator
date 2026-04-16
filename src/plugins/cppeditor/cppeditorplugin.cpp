@@ -284,7 +284,8 @@ void CppEditorPlugin::initialize()
                            const Project &project) -> Result<QVariant> {
         CodeStylePool * const pool = CppToolsSettings::cppCodeStyle()->delegatingPool();
         QTC_ASSERT(pool, return ResultError(Tr::tr("Internal error: No code style pool")));
-        if (ICodeStylePreferences * const style = pool->loadCodeStyle(codeStyleFile, true, &project))
+        if (ICodeStylePreferences * const style
+                = pool->loadCodeStyle(codeStyleFile, true, project.projectFilePath()))
             return Id::fromName(style->id()).toSetting();
         return ResultError(Tr::tr("No code style found in file."));
     };

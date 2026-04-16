@@ -23,6 +23,7 @@
 
 #include <projectexplorer/editorconfiguration.h>
 #include <projectexplorer/project.h>
+#include <projectexplorer/projectmanager.h>
 
 #include <texteditor/displaysettings.h>
 #include <texteditor/icodestylepreferences.h>
@@ -72,15 +73,15 @@ bool ClangFormatConfigWidget::eventFilter(QObject *object, QEvent *event)
 }
 
 ClangFormatConfigWidget::ClangFormatConfigWidget(
-    const Project *project, TextEditor::ICodeStylePreferences *codeStyle, QWidget *parent)
+        const FilePath &projectFile, TextEditor::ICodeStylePreferences *codeStyle, QWidget *parent)
     : CodeStyleEditorWidget(parent)
+    , m_projectFile(projectFile)
     , m_preview(new TextEditor::SnippetEditorWidget(this))
 
 {
-    m_project = project;
     m_config = std::make_unique<ClangFormatFile>(codeStyle->currentPreferences());
 
-    createStyleFileIfNeeded(!m_project);
+    createStyleFileIfNeeded(m_projectFile.isEmpty());
 
     initPreview(codeStyle);
     initEditor();
@@ -198,7 +199,7 @@ void ClangFormatConfigWidget::initEditor()
 
 void ClangFormatConfigWidget::initPreview(TextEditor::ICodeStylePreferences *codeStyle)
 {
-    FilePath fileName = m_project ? m_project->projectFilePath().pathAppended("snippet.cpp")
+    FilePath fileName = !m_projectFile.isEmpty() ? m_projectFile.pathAppended("snippet.cpp")
                                   : Core::ICore::userResourcePath("snippet.cpp");
 
     TextEditor::DisplaySettingsData displaySettings = m_preview->displaySettings();
@@ -239,8 +240,8 @@ FilePath ClangFormatConfigWidget::globalPath()
 
 FilePath ClangFormatConfigWidget::projectPath()
 {
-    if (m_project)
-        return globalPath().pathAppended("clang-format/" + projectUniqueId(m_project));
+    if (!m_projectFile.isEmpty())
+        return globalPath().pathAppended("clang-format/" + projectUniqueId(m_projectFile));
 
     return {};
 }
@@ -255,12 +256,15 @@ void ClangFormatConfigWidget::createStyleFileIfNeeded(bool isGlobal)
 
     path.ensureWritableDir();
     if (!isGlobal) {
-        FilePath possibleProjectConfig = m_project->rootProjectDirectory()
-                                         / Constants::SETTINGS_FILE_NAME;
-        if (possibleProjectConfig.exists()) {
-            // Just copy the .clang-format if current project has one.
-            possibleProjectConfig.copyFile(configFile);
-            return;
+        const Project *project = ProjectManager::projectForFile(m_projectFile);
+        if (QTC_GUARD(project)){
+            FilePath possibleProjectConfig = project->rootProjectDirectory()
+                                             / Constants::SETTINGS_FILE_NAME;
+            if (possibleProjectConfig.exists()) {
+                // Just copy the .clang-format if current project has one.
+                possibleProjectConfig.copyFile(configFile);
+                return;
+            }
         }
     }
 

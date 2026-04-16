@@ -39,12 +39,12 @@ class QmlJsCodeStyleEditor final : public CodeStyleEditor
 public:
     static QmlJsCodeStyleEditor *create(
         const ICodeStylePreferencesFactory *factory,
-        ProjectExplorer::Project *project,
+        const FilePath &projectFile,
         ICodeStylePreferences *codeStyle,
         QWidget *parent)
     {
         auto editor = new QmlJsCodeStyleEditor{parent};
-        editor->init(factory, wrapProject(project), codeStyle);
+        editor->init(factory, projectFile, codeStyle);
         return editor;
     }
 
@@ -54,7 +54,7 @@ private:
     {}
 
     CodeStyleEditorWidget *createEditorWidget(
-        const void * /*project*/,
+        const FilePath &/*project*/,
         ICodeStylePreferences *codeStyle,
         QWidget *parent) const final
     {
@@ -224,12 +224,11 @@ public:
 
 private:
     CodeStyleEditorWidget *createCodeStyleEditor(
-            const ProjectWrapper &project,
+            const FilePath &projectFile,
             ICodeStylePreferences *codeStyle,
             QWidget *parent) const final
     {
-        return QmlJsCodeStyleEditor::create(
-                    this, ProjectExplorer::unwrapProject(project), codeStyle, parent);
+        return QmlJsCodeStyleEditor::create(this, projectFile, codeStyle, parent);
     }
 
     Utils::Id languageId() final

@@ -41,7 +41,7 @@ namespace ClangFormat {
 class ClangFormatSelectorWidget final : public CodeStyleSelectorWidget
 {
 public:
-    ClangFormatSelectorWidget(const void *project, QWidget *parent = nullptr);
+    ClangFormatSelectorWidget(const FilePath &projectFile, QWidget *parent = nullptr);
 
     void onModeChanged(ClangFormatSettings::Mode newMode);
     void onUseCustomSettingsChanged(bool doUse);
@@ -61,7 +61,7 @@ class ClangFormatCodeStyleEditor final : public CodeStyleEditor
 public:
     static ClangFormatCodeStyleEditor *create(
         const ICodeStylePreferencesFactory *factory,
-        Project *project,
+        const FilePath &projectFile,
         ICodeStylePreferences *codeStyle,
         QWidget *parent);
 
@@ -70,18 +70,18 @@ private:
 
     void init(
         const ICodeStylePreferencesFactory *factory,
-        const ProjectWrapper &project,
+        const FilePath &projectFile,
         ICodeStylePreferences *codeStyle) override;
     void apply() override;
     void finish() override;
 
     CodeStyleEditorWidget *createEditorWidget(
-        const void *project,
+        const FilePath &projectFile,
         ICodeStylePreferences *codeStyle,
         QWidget *parent = nullptr) const override;
     CodeStyleSelectorWidget *createCodeStyleSelectorWidget(
         ICodeStylePreferences *codeStyle,
-        const void *project,
+        const FilePath &projectFile,
         QWidget *parent = nullptr) const override;
     QString previewText() const override;
     QString snippetProviderGroupId() const override;
@@ -93,7 +93,7 @@ class ClangFormatCodeStyleEditorWidget : public CodeStyleEditorWidget
 {
 public:
     ClangFormatCodeStyleEditorWidget(
-        const Project *project, ICodeStylePreferences *codeStyle, QWidget *parent);
+        const FilePath &projectFile, ICodeStylePreferences *codeStyle, QWidget *parent);
 
     void onModeChanged(ClangFormatSettings::Mode newMode);
     void onUseCustomSettingsChanged(bool doUse);
@@ -106,8 +106,8 @@ private:
     ClangFormatConfigWidget *m_clangFormatSettings = nullptr;
 };
 
-ClangFormatSelectorWidget::ClangFormatSelectorWidget(const void *project, QWidget *parent)
-    : CodeStyleSelectorWidget{project, parent}
+ClangFormatSelectorWidget::ClangFormatSelectorWidget(const FilePath &projectFile, QWidget *parent)
+    : CodeStyleSelectorWidget{projectFile, parent}
 {}
 
 void ClangFormatSelectorWidget::onModeChanged(ClangFormatSettings::Mode newMode)
@@ -183,9 +183,9 @@ void ClangFormatSelectorWidget::updateReadOnlyState()
 }
 
 ClangFormatCodeStyleEditorWidget::ClangFormatCodeStyleEditorWidget(
-    const Project *project, ICodeStylePreferences *codeStyle, QWidget *parent)
+        const FilePath &projectFile, ICodeStylePreferences *codeStyle, QWidget *parent)
     : CodeStyleEditorWidget{parent}
-    , m_clangFormatSettings{new ClangFormatConfigWidget(project, codeStyle, this)}
+    , m_clangFormatSettings{new ClangFormatConfigWidget(projectFile, codeStyle, this)}
 {
     auto layout = new QVBoxLayout{this};
     layout->setContentsMargins(0, 0, 0, 0);
@@ -231,12 +231,12 @@ void ClangFormatCodeStyleEditorWidget::finish()
 
 ClangFormatCodeStyleEditor *ClangFormatCodeStyleEditor::create(
     const ICodeStylePreferencesFactory *factory,
-    Project *project,
+    const FilePath &projectFile,
     ICodeStylePreferences *codeStyle,
     QWidget *parent)
 {
     auto editor = new ClangFormatCodeStyleEditor{parent};
-    editor->init(factory, wrapProject(project), codeStyle);
+    editor->init(factory, projectFile, codeStyle);
     return editor;
 }
 
@@ -245,12 +245,11 @@ ClangFormatCodeStyleEditor::ClangFormatCodeStyleEditor(QWidget *parent)
 {}
 
 void ClangFormatCodeStyleEditor::init(
-    const ICodeStylePreferencesFactory *factory, const ProjectWrapper &project, ICodeStylePreferences *codeStyle)
+        const ICodeStylePreferencesFactory *factory, const FilePath &projectFile, ICodeStylePreferences *codeStyle)
 {
-    m_globalSettings
-        = new ClangFormatGlobalConfigWidget{unwrapProject(project), codeStyle, this};
+    m_globalSettings = new ClangFormatGlobalConfigWidget{projectFile, codeStyle, this};
     m_layout->addWidget(m_globalSettings);
-    CodeStyleEditor::init(factory, project, codeStyle);
+    CodeStyleEditor::init(factory, projectFile, codeStyle);
 
     const ClangFormatSettings::Mode currentMode = m_globalSettings->mode();
 
@@ -290,16 +289,15 @@ void ClangFormatCodeStyleEditor::finish()
 }
 
 CodeStyleEditorWidget *ClangFormatCodeStyleEditor::createEditorWidget(
-    const void *project, ICodeStylePreferences *codeStyle, QWidget *parent) const
+        const FilePath &projectFile, ICodeStylePreferences *codeStyle, QWidget *parent) const
 {
-    return new ClangFormatCodeStyleEditorWidget{
-            reinterpret_cast<const Project *>(project), codeStyle, parent};
+    return new ClangFormatCodeStyleEditorWidget{projectFile, codeStyle, parent};
 }
 
 CodeStyleSelectorWidget *ClangFormatCodeStyleEditor::createCodeStyleSelectorWidget(
-    ICodeStylePreferences *codeStyle, const void *project, QWidget *parent) const
+        ICodeStylePreferences *codeStyle, const FilePath &projectFile, QWidget *parent) const
 {
-    auto selector = new ClangFormatSelectorWidget{project, parent};
+    auto selector = new ClangFormatSelectorWidget{projectFile, parent};
     selector->setCodeStyle(codeStyle);
     return selector;
 }
@@ -322,11 +320,11 @@ public:
     ClangFormatCodeStylePreferencesFactory() = default;
 
     CodeStyleEditorWidget *createCodeStyleEditor(
-            const ProjectWrapper &project,
+            const FilePath &projectFile,
             ICodeStylePreferences *codeStyle,
             QWidget *parent = nullptr) const override
     {
-        return ClangFormatCodeStyleEditor::create(this, unwrapProject(project), codeStyle, parent);
+        return ClangFormatCodeStyleEditor::create(this, projectFile, codeStyle, parent);
     }
 
     Id languageId() override

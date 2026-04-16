@@ -5,11 +5,11 @@
 
 #include "texteditor_global.h"
 
+#include <utils/filepath.h>
 #include <utils/id.h>
 
 #include <QObject>
 
-namespace Utils { class FilePath; }
 namespace TextEditor {
 
 class ICodeStylePreferences;
@@ -46,7 +46,7 @@ public:
     ICodeStylePreferences *importCodeStyle(const Utils::FilePath &fileName);
     void exportCodeStyle(const Utils::FilePath &fileName, ICodeStylePreferences *codeStyle) const;
     ICodeStylePreferences *loadCodeStyle(
-        const Utils::FilePath &fileName, bool readOnly = false, const void *project = nullptr);
+            const Utils::FilePath &fileName, bool readOnly = false, const Utils::FilePath &projectFile = {});
 
 signals:
     void codeStyleAdded(ICodeStylePreferences *);

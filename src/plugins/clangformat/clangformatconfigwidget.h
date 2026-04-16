@@ -24,18 +24,14 @@ class ICodeStylePreferences;
 class TextEditorWidget;
 } // namespace TextEditor
 
-namespace Utils {
-class InfoLabel;
-}
-
-namespace ProjectExplorer { class Project; }
+namespace Utils { class InfoLabel; }
 
 namespace ClangFormat {
 class ClangFormatConfigWidget final : public TextEditor::CodeStyleEditorWidget
 {
 public:
     ClangFormatConfigWidget(
-        const ProjectExplorer::Project *project,
+        const Utils::FilePath &projectFile,
         TextEditor::ICodeStylePreferences *codeStyle,
         QWidget *parent);
     ~ClangFormatConfigWidget() override;
@@ -58,7 +54,7 @@ private:
     void updateReadOnlyState();
     TextEditor::TextEditorWidget *editorWidget() const;
 
-    const ProjectExplorer::Project *m_project = nullptr;
+    const Utils::FilePath m_projectFile;
     QScrollArea *m_editorScrollArea = nullptr;
     TextEditor::SnippetEditorWidget * const m_preview;
     std::unique_ptr<Core::IEditor> m_editor;
