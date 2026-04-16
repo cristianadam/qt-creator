@@ -305,6 +305,6 @@ void ZenModePlugin::toggleDistractionFreeMode()
     updateStateIcons();
     updateContentEditorWidth();
 
-    setSidebarsAndModesVisible(m_distractionFreeModeActive);
+    setSidebarsAndModesVisible(!m_distractionFreeModeActive);
 }
 } // namespace ZenMode::Internal
