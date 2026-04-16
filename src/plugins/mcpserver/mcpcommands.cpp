@@ -1306,6 +1306,8 @@ void McpCommands::registerCommands(Mcp::Server &server)
             if (!projectName.isEmpty())
                 projects = projectsForName(projectName);
 
+            projects.removeIf([](Project *p) { return !p; });
+
             if (projects.isEmpty()) {
                 qCDebug(mcpCommands) << "No project found, cannot build";
                 return ResultError("No project named '" + projectName + "' found");
