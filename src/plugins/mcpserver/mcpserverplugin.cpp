@@ -211,6 +211,16 @@ public:
     }
 
     bool isServerRunning() const { return !m_server.boundTcpServers().isEmpty(); }
+    QString listenAddresses() const
+    {
+        return Utils::transform<QStringList>(
+                   m_server.boundTcpServers(),
+                   [](QTcpServer *s) {
+                       return s->serverAddress().toString() + ":"
+                              + QString::number(s->serverPort());
+                   })
+            .join(", ");
+    }
 
 private:
     QParallelTaskTreeRunner m_taskRunner;
@@ -243,9 +253,11 @@ McpServerPluginSettings::McpServerPluginSettings(McpServerPlugin *plugin)
 
     port.setSettingsKey("Port");
     port.setLabel(Tr::tr("Port:"));
-    port.setDefaultValue(8249);
-    port.setRange(1, 65535);
-    port.setToolTip(Tr::tr("The port for the Mcp Server to listen on."));
+    port.setDefaultValue(0);
+    port.setSpecialValueText(Tr::tr("Automatic"));
+    port.setRange(0, 65535);
+    port.setToolTip(
+        Tr::tr("The port for the Mcp Server to listen on. Leave on 0 to auto-select a free port."));
     port.setEnabler(&enabled);
 
     enableCors.setSettingsKey("EnableCors");
@@ -278,10 +290,13 @@ McpServerPluginSettings::McpServerPluginSettings(McpServerPlugin *plugin)
             statusIcon->setPalette(p);
             statusIcon->setText(isRunning ? "✓" : "✗");
 
-            if (isRunning)
-                statusLabel->setText(Tr::tr("The Mcp Server is running"));
-            else
+            if (isRunning) {
+                statusLabel->setText(
+                    Tr::tr("The Mcp Server is running, listening on: %1")
+                        .arg(plugin->listenAddresses()));
+            } else {
                 statusLabel->setText(Tr::tr("The Mcp Server is not running"));
+            }
         };
 
         updateStatus();
