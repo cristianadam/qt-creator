@@ -270,13 +270,17 @@ LocatorFilterEntry::Acceptor ActionsFilter::acceptor(const ActionFilterEntryData
         m_lastTriggered.removeAll(data);
         m_lastTriggered.prepend(data);
         if (data.action) {
-            QMetaObject::invokeMethod(
+            // Delay until focus changed AND the focus change actually triggered the context change
+            // which is delayed yet again
+            connect(
+                ICore::instance(),
+                &ICore::contextChanged,
                 data.action,
                 [action = data.action] {
                     if (action && action->isEnabled())
                         action->trigger();
                 },
-                Qt::QueuedConnection);
+                Qt::SingleShotConnection);
         } else if (data.optionsPageId.isValid()) {
             QMetaObject::invokeMethod(
                 Core::ICore::instance(),
