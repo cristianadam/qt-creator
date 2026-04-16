@@ -6,6 +6,7 @@ QtcManualTest {
     Depends { name: "app_version_header" }
     Depends { name: "CmdBridgeClient" }
     Depends { name: "Utils" }
+    Depends { name: "Qt.network" }
 
     cpp.defines: {
         var defines = base;

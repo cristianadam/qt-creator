@@ -2,6 +2,7 @@ QtcLibrary {
     name: "CmdBridgeClient"
     Depends { name: "Utils" }
     Depends { name: "cpp" }
+    Depends { name: "Qt.network" }
 
     cpp.defines: base.concat("CMDBRIDGECLIENT_LIBRARY",
                              "GOBRIDGE_MAGIC_PACKET_MARKER=\"" + project.magicPacketMarker + "\"")
