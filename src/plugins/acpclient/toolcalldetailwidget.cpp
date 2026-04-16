@@ -8,6 +8,7 @@
 #include <utils/icondisplay.h>
 #include <utils/link.h>
 #include <utils/markdownbrowser.h>
+#include <utils/progressindicator.h>
 #include <utils/stylehelper.h>
 #include <utils/theme/theme.h>
 #include <utils/utilsicons.h>
@@ -26,15 +27,21 @@ using namespace Utils::StyleHelper::SpacingTokens;
 
 namespace AcpClient::Internal {
 
-Utils::Icon toolCallStatusIcon(ToolCallStatus status)
+QWidget *toolCallStatusWidget(ToolCallStatus status, QWidget *parent)
 {
+    if (status == ToolCallStatus::in_progress)
+        return new Utils::ProgressIndicator(Utils::ProgressIndicatorSize::Small, parent);
+
+    Utils::Icon icon;
     switch (status) {
-    case ToolCallStatus::pending:     return Utils::Icons::DOWNLOAD;
-    case ToolCallStatus::in_progress: return Utils::Icons::RELOAD;
-    case ToolCallStatus::completed:   return Utils::Icons::OK;
-    case ToolCallStatus::failed:      return Utils::Icons::CRITICAL;
+    case ToolCallStatus::pending:   icon = Utils::Icons::DOWNLOAD; break;
+    case ToolCallStatus::completed: icon = Utils::Icons::OK; break;
+    case ToolCallStatus::failed:    icon = Utils::Icons::CRITICAL; break;
+    default: break;
     }
-    return {};
+    auto *display = new Utils::IconDisplay(parent);
+    display->setIcon(icon);
+    return display;
 }
 
 QColor toolCallBorderColor(ToolCallStatus status)
@@ -54,11 +61,11 @@ ToolCallDetailWidget::ToolCallDetailWidget(const ToolCall &toolCall, QWidget *pa
     setFrameShape(QFrame::NoFrame);
     setCollapsible(false);
 
-    // Header: status icon + title + kind badge
-    m_statusDisplay = new Utils::IconDisplay(this);
-    m_headerLayout->addWidget(m_statusDisplay);
-
     const ToolCallStatus status = toolCall.status().value_or(ToolCallStatus::in_progress);
+
+    // Header: status widget + title + kind badge
+    m_statusWidget = toolCallStatusWidget(status, this);
+    m_headerLayout->addWidget(m_statusWidget);
     const QString kindText = toolCall.kind() ? toString(*toolCall.kind()) : QString();
 
     QString labelHtml = QStringLiteral("<b>%1</b>").arg(toolCall.title().toHtmlEscaped());
@@ -68,14 +75,16 @@ ToolCallDetailWidget::ToolCallDetailWidget(const ToolCall &toolCall, QWidget *pa
     m_titleLabel->setTextFormat(Qt::RichText);
     m_headerLayout->addWidget(m_titleLabel, 1);
 
-    applyStatus(status);
-
+    m_status = status;
     populateContent(toolCall);
 }
 
 void ToolCallDetailWidget::applyStatus(ToolCallStatus status)
 {
-    m_statusDisplay->setIcon(toolCallStatusIcon(status));
+    auto *newWidget = toolCallStatusWidget(status, this);
+    m_headerLayout->replaceWidget(m_statusWidget, newWidget);
+    delete m_statusWidget;
+    m_statusWidget = newWidget;
     m_status = status;
     update();
 }

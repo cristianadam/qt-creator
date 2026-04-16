@@ -292,8 +292,8 @@ public:
     {
         setFrameShape(QFrame::NoFrame);
 
-        m_statusDisplay = new Utils::IconDisplay(this);
-        m_headerLayout->addWidget(m_statusDisplay);
+        m_statusWidget = toolCallStatusWidget(status, this);
+        m_headerLayout->addWidget(m_statusWidget);
 
         QString labelHtml = QStringLiteral("<b>%1</b>").arg(title.toHtmlEscaped());
         if (!kindText.isEmpty())
@@ -302,13 +302,16 @@ public:
         m_titleLabel->setTextFormat(Qt::RichText);
         m_headerLayout->addWidget(m_titleLabel, 1);
 
-        applyStatus(status);
+        m_status = status;
     }
 
     void applyStatus(ToolCallStatus status)
     {
+        auto *newWidget = toolCallStatusWidget(status, this);
+        m_headerLayout->replaceWidget(m_statusWidget, newWidget);
+        delete m_statusWidget;
+        m_statusWidget = newWidget;
         m_status = status;
-        m_statusDisplay->setIcon(toolCallStatusIcon(status));
         update();
     }
 
@@ -336,7 +339,7 @@ protected:
     }
 
 private:
-    Utils::IconDisplay *m_statusDisplay = nullptr;
+    QWidget *m_statusWidget = nullptr;
     QLabel *m_titleLabel = nullptr;
     ToolCallStatus m_status = ToolCallStatus::pending;
 };
@@ -370,8 +373,14 @@ public:
         summaryRow->addWidget(m_summaryLabel);
 
         // Per-status icon + count widgets (hidden by default)
+        static constexpr ToolCallStatus statusMap[StatusCount] = {
+            ToolCallStatus::completed,
+            ToolCallStatus::in_progress,
+            ToolCallStatus::failed,
+            ToolCallStatus::pending,
+        };
         for (int i = 0; i < StatusCount; ++i) {
-            m_statusIcons[i] = new Utils::IconDisplay(this);
+            m_statusIcons[i] = toolCallStatusWidget(statusMap[i], this);
             m_statusIcons[i]->setVisible(false);
             summaryRow->addWidget(m_statusIcons[i]);
 
@@ -379,11 +388,6 @@ public:
             m_statusLabels[i]->setVisible(false);
             summaryRow->addWidget(m_statusLabels[i]);
         }
-
-        m_statusIcons[Completed]->setIcon(toolCallStatusIcon(ToolCallStatus::completed));
-        m_statusIcons[InProgress]->setIcon(toolCallStatusIcon(ToolCallStatus::in_progress));
-        m_statusIcons[Failed]->setIcon(toolCallStatusIcon(ToolCallStatus::failed));
-        m_statusIcons[Pending]->setIcon(toolCallStatusIcon(ToolCallStatus::pending));
 
         summaryRow->addStretch(1);
         headerVBox->addLayout(summaryRow);
@@ -393,8 +397,7 @@ public:
         runningRow->setContentsMargins(0, 0, 0, 0);
         runningRow->setSpacing(GapHXs);
 
-        m_runningIcon = new Utils::IconDisplay(this);
-        m_runningIcon->setIcon(toolCallStatusIcon(ToolCallStatus::in_progress));
+        m_runningIcon = toolCallStatusWidget(ToolCallStatus::in_progress, this);
         m_runningIcon->setVisible(false);
         runningRow->addWidget(m_runningIcon);
 
@@ -484,9 +487,9 @@ private:
 
     Utils::IconDisplay *m_summaryIcon = nullptr;
     QLabel *m_summaryLabel = nullptr;
-    Utils::IconDisplay *m_statusIcons[StatusCount] = {};
+    QWidget *m_statusIcons[StatusCount] = {};
     QLabel *m_statusLabels[StatusCount] = {};
-    Utils::IconDisplay *m_runningIcon = nullptr;
+    QWidget *m_runningIcon = nullptr;
     QLabel *m_runningLabel = nullptr;
     QVBoxLayout *m_innerLayout = nullptr;
     QHash<QString, ToolCallStatus> m_statuses;
