@@ -356,8 +356,11 @@ void QmlDebugConnection::startLocalServer(const QString &fileName)
     // QueuedConnection so that waitForNewConnection() returns true.
     connect(d->server, &QLocalServer::newConnection,
             this, &QmlDebugConnection::newConnection, Qt::QueuedConnection);
-    if (!d->server->listen(fileName))
+    if (!d->server->listen(fileName)) {
+        qWarning("QmlDebugConnection: failed to listen on \"%s\": %s",
+                 qPrintable(fileName), qPrintable(d->server->errorString()));
         emit connectionFailed();
+    }
 }
 
 void QmlDebugConnection::newConnection()
