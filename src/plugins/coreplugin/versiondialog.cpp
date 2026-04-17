@@ -36,7 +36,7 @@ public:
 };
 
 VersionDialog::VersionDialog()
-    : QDialog(ICore::dialogParent())
+    : QDialog(ICore::mainWindow())
 {
     // We need to set the window icon explicitly here since for some reason the
     // application icon isn't used when the size of the dialog is fixed (at least not on X11/GNOME)
@@ -87,7 +87,7 @@ bool VersionDialog::event(QEvent *event)
     return QDialog::event(event);
 }
 
-static QDialog *s_versionDialog = nullptr;
+static QPointer<QDialog> s_versionDialog = nullptr;
 
 static void destroyVersionDialog()
 {
@@ -106,6 +106,7 @@ void showAboutQtCreator()
         QObject::connect(s_versionDialog, &QDialog::finished, &destroyVersionDialog);
         ICore::registerWindow(s_versionDialog, Context("Core.VersionDialog"));
         s_versionDialog->show();
+        ICore::raiseWindow(s_versionDialog);
     }
 }
 
