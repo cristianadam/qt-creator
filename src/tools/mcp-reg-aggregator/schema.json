@@ -1,0 +1,270 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/mcp-registry.schema.json",
+  "title": "McpRegistry",
+  "description": "Condensed snapshot of the MCP server registry",
+  "type": "object",
+  "required": ["generated_at", "count", "servers"],
+  "additionalProperties": false,
+  "properties": {
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when this snapshot was generated"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of servers in this snapshot"
+    },
+    "servers": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/Server" }
+    }
+  },
+  "definitions": {
+    "Server": {
+      "title": "Server",
+      "type": "object",
+      "required": ["name", "description", "version", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Reverse-DNS scoped server name, e.g. 'io.github.user/repo'",
+          "pattern": "^[a-zA-Z0-9.-]+/[a-zA-Z0-9._-]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Human-readable display name"
+        },
+        "description": {
+          "type": "string",
+          "description": "Short description of what the server does"
+        },
+        "version": {
+          "type": "string",
+          "description": "Semantic version of this server entry"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "deprecated", "deleted"],
+          "description": "Lifecycle status of this server"
+        },
+        "repository_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL to the source repository"
+        },
+        "website_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL to the project website or documentation"
+        },
+        "icons": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Icon" },
+          "description": "Base64-embedded icons for this server"
+        },
+        "packages": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Package" },
+          "description": "Distribution packages for running this server locally"
+        },
+        "remotes": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Remote" },
+          "description": "Remote transport endpoints for this server"
+        }
+      }
+    },
+    "Package": {
+      "title": "Package",
+      "type": "object",
+      "required": [
+        "registry_type",
+        "identifier",
+        "transport_type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "registry_type": {
+          "type": "string",
+          "enum": ["npm", "pypi", "oci", "nuget", "mcpb"],
+          "description": "Package registry type"
+        },
+        "identifier": {
+          "type": "string",
+          "description": "Package name or download URL"
+        },
+        "version": {
+          "type": "string",
+          "description": "Pinned version of the package"
+        },
+        "transport_type": {
+          "type": "string",
+          "enum": ["stdio", "streamable-http", "sse"],
+          "description": "Transport mechanism used by this package"
+        },
+        "runtime_hint": {
+          "type": "string",
+          "description": "Suggested runtime command, e.g. 'npx', 'uvx', 'docker'"
+        },
+        "runtime_arguments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Argument"
+          },
+          "description": "Arguments to pass to the package's runtime command"
+        },
+        "package_arguments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Argument"
+          },
+          "description": "Arguments to pass to the package's binary"
+        },
+        "headers": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/KeyValueInput" },
+          "description": "HTTP headers to include in requests, present for streamable-http and sse transports only"
+        },
+        "env_vars": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/KeyValueInput" },
+          "description": "Environment variables accepted or required by this package"
+        }
+      }
+    },
+    "Argument": {
+      "title": "Argument",
+      "type": "object",
+      "required": [
+        "type",
+        "required",
+        "repeated"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "positional",
+            "named"
+          ],
+          "description": "Whether this is a positional or named (flag) argument"
+        },
+        "name": {
+          "type": "string",
+          "description": "Flag name including leading dashes, e.g. '--port'. Null for positional arguments."
+        },
+        "value_hint": {
+          "type": "string",
+          "description": "Identifier for positional arguments, e.g. 'file_path'. Null for named arguments."
+        },
+        "description": {
+          "type": "string",
+          "description": "What this argument is for"
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether this argument must be provided"
+        },
+        "repeated": {
+          "type": "boolean",
+          "description": "Whether this argument can be repeated multiple times"
+        },
+        "default": {
+          "type": "string",
+          "description": "Default value if not provided"
+        },
+        "value": {
+          "type": "string",
+          "description": "Fixed value for this argument"
+        }
+      }
+    },
+    "KeyValueInput": {
+      "title": "KeyValueInput",
+      "type": "object",
+      "required": ["name", "required", "secret"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Environment variable name, e.g. 'OPENWEATHER_API_KEY'"
+        },
+        "description": {
+          "type": "string",
+          "description": "What this variable is for"
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether this variable must be set to run the server"
+        },
+        "secret": {
+          "type": "boolean",
+          "description": "Whether this variable holds a secret / credential"
+        },
+        "default": {
+          "type": "string",
+          "description": "Default value if not provided"
+        }
+      }
+    },
+    "Icon": {
+      "title": "Icon",
+      "type": "object",
+      "required": ["url"],
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Original icon URL"
+        },
+        "data": {
+          "type": "string",
+          "description": "Base64-encoded image bytes, present for SVG icons only"
+        },
+        "mime_type": {
+          "type": "string",
+          "description": "MIME type of the image, e.g. 'image/png'"
+        },
+        "sizes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Icon size descriptors, e.g. ['48x48', 'any']"
+        },
+        "theme": {
+          "type": "string",
+          "enum": ["light", "dark"],
+          "description": "Preferred color scheme this icon is designed for"
+        }
+      }
+    },
+    "Remote": {
+      "title": "Remote",
+      "type": "object",
+      "required": ["type", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["streamable-http", "sse"],
+          "description": "Remote transport protocol"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Endpoint URL for this remote transport"
+        },
+        "headers": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/KeyValueInput" },
+          "description": "HTTP headers to include in requests"
+        }
+      }
+    }
+  }
+}

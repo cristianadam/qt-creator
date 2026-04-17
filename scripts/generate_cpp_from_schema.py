@@ -10,6 +10,9 @@ from pathlib import Path
 # Controls whether doc/inline comments are emitted. Set via --no-comments.
 _emit_comments: bool = True
 
+# Controls whether setter/builder methods are emitted. Set via --read-only.
+_read_only: bool = False
+
 # Maps variant_type_str -> alias_name for inline union aliases already emitted.
 # Prevents redefinition of fromJson/toJsonValue for equivalent variant types.
 _emitted_variant_sigs: dict = {}
@@ -180,9 +183,10 @@ def parse_enum(name, spec):
             lines.extend(use_return_if_no_co_await(fj))
             lines.append("")
             # For serialization to JSON, use toString
-            lines.append(f"inline QJsonValue toJsonValue(const {name} &v) {{")
-            lines.append("    return toString(v);")
-            lines.append("}")
+            if not _read_only:
+                lines.append(f"inline QJsonValue toJsonValue(const {name} &v) {{")
+                lines.append("    return toString(v);")
+                lines.append("}")
             return prefix + "\n".join(lines)
         else:
             # Fallback: use QString typedef
@@ -608,22 +612,23 @@ def _gen_discriminated_wrapper_struct(name, disc_field, variants, unique_cpp_typ
     lines.append(f"")
 
     # toJson
-    lines.append(f"inline QJsonObject toJson(const {name} &data) {{")
-    lines.append(f"    QJsonObject obj = std::visit([](const auto &v) -> QJsonObject {{")
-    if has_inline_only:
-        lines.append(f"        using T = std::decay_t<decltype(v)>;")
-        lines.append(f"        if constexpr (std::is_same_v<T, std::monostate>) return {{}};")
-        lines.append(f"        else return toJson(v);")
-    else:
-        lines.append(f"        return toJson(v);")
-    lines.append(f"    }}, data._value);")
-    lines.append(f"    obj.insert(\"{disc_field}\", data._kind);")
-    lines.append(f"    return obj;")
-    lines.append(f"}}")
-    lines.append(f"")
-    lines.append(f"inline QJsonValue toJsonValue(const {name} &val) {{")
-    lines.append(f"    return toJson(val);")
-    lines.append(f"}}")
+    if not _read_only:
+        lines.append(f"inline QJsonObject toJson(const {name} &data) {{")
+        lines.append(f"    QJsonObject obj = std::visit([](const auto &v) -> QJsonObject {{")
+        if has_inline_only:
+            lines.append(f"        using T = std::decay_t<decltype(v)>;")
+            lines.append(f"        if constexpr (std::is_same_v<T, std::monostate>) return {{}};")
+            lines.append(f"        else return toJson(v);")
+        else:
+            lines.append(f"        return toJson(v);")
+        lines.append(f"    }}, data._value);")
+        lines.append(f"    obj.insert(\"{disc_field}\", data._kind);")
+        lines.append(f"    return obj;")
+        lines.append(f"}}")
+        lines.append(f"")
+        lines.append(f"inline QJsonValue toJsonValue(const {name} &val) {{")
+        lines.append(f"    return toJson(val);")
+        lines.append(f"}}")
 
     return prefix + "\n".join(lines), variant_type_str
 
@@ -679,22 +684,23 @@ def _gen_discriminated_alias(name, disc_field, variants, unique_cpp_types, spec,
     lines.append(f"")
 
     # toJson — re-insert the discriminator field
-    lines.append(f"inline QJsonObject toJson(const {name} &val) {{")
-    lines.append(f"    QJsonObject obj = std::visit([](const auto &v) -> QJsonObject {{")
-    lines.append(f"        using T = std::decay_t<decltype(v)>;")
-    lines.append(f"        if constexpr (std::is_same_v<T, QJsonObject>) {{")
-    lines.append(f"            return v;")
-    lines.append(f"        }} else {{")
-    lines.append(f"            return toJson(v);")
-    lines.append(f"        }}")
-    lines.append(f"    }}, val);")
-    lines.append(f"    obj.insert(\"{disc_field}\", dispatchValue(val));")
-    lines.append(f"    return obj;")
-    lines.append(f"}}")
-    lines.append(f"")
-    lines.append(f"inline QJsonValue toJsonValue(const {name} &val) {{")
-    lines.append(f"    return toJson(val);")
-    lines.append(f"}}")
+    if not _read_only:
+        lines.append(f"inline QJsonObject toJson(const {name} &val) {{")
+        lines.append(f"    QJsonObject obj = std::visit([](const auto &v) -> QJsonObject {{")
+        lines.append(f"        using T = std::decay_t<decltype(v)>;")
+        lines.append(f"        if constexpr (std::is_same_v<T, QJsonObject>) {{")
+        lines.append(f"            return v;")
+        lines.append(f"        }} else {{")
+        lines.append(f"            return toJson(v);")
+        lines.append(f"        }}")
+        lines.append(f"    }}, val);")
+        lines.append(f"    obj.insert(\"{disc_field}\", dispatchValue(val));")
+        lines.append(f"    return obj;")
+        lines.append(f"}}")
+        lines.append(f"")
+        lines.append(f"inline QJsonValue toJsonValue(const {name} &val) {{")
+        lines.append(f"    return toJson(val);")
+        lines.append(f"}}")
 
     # Shared field accessors
     ref_names = unique_cpp_types
@@ -1245,36 +1251,37 @@ def _build_map_value_variant_code(alias_name, variant_types):
     lines.append("")
 
     # toJsonValue
-    lines.append(f"inline QJsonValue toJsonValue(const {alias_name} &val) {{")
-    lines.append("    return std::visit([](const auto &v) -> QJsonValue {")
-    lines.append("        using T = std::decay_t<decltype(v)>;")
-    for vt in variant_types:
-        if vt == "QString":
-            lines.append(f"        if constexpr (std::is_same_v<T, QString>) return v;")
-        elif vt == "int":
-            lines.append(f"        if constexpr (std::is_same_v<T, int>) return v;")
-        elif vt == "double":
-            lines.append(f"        if constexpr (std::is_same_v<T, double>) return v;")
-        elif vt == "bool":
-            lines.append(f"        if constexpr (std::is_same_v<T, bool>) return v;")
-        elif vt == "QStringList":
-            lines.append(f"        if constexpr (std::is_same_v<T, QStringList>) {{")
-            lines.append(f"            QJsonArray arr;")
-            lines.append(f"            for (const QString &s : v) arr.append(s);")
-            lines.append(f"            return arr;")
-            lines.append(f"        }}")
-        elif vt.startswith("QList<"):
-            lines.append(f"        if constexpr (std::is_same_v<T, {vt}>) {{")
-            lines.append(f"            QJsonArray arr;")
-            lines.append(f"            for (const auto &item : v) arr.append(toJsonValue(item));")
-            lines.append(f"            return arr;")
-            lines.append(f"        }}")
-        else:
-            lines.append(f"        if constexpr (std::is_same_v<T, {vt}>) return toJson(v);")
-    lines.append("        return QJsonValue{};")
-    lines.append("    }, val);")
-    lines.append("}")
-    lines.append("")
+    if not _read_only:
+        lines.append(f"inline QJsonValue toJsonValue(const {alias_name} &val) {{")
+        lines.append("    return std::visit([](const auto &v) -> QJsonValue {")
+        lines.append("        using T = std::decay_t<decltype(v)>;")
+        for vt in variant_types:
+            if vt == "QString":
+                lines.append(f"        if constexpr (std::is_same_v<T, QString>) return v;")
+            elif vt == "int":
+                lines.append(f"        if constexpr (std::is_same_v<T, int>) return v;")
+            elif vt == "double":
+                lines.append(f"        if constexpr (std::is_same_v<T, double>) return v;")
+            elif vt == "bool":
+                lines.append(f"        if constexpr (std::is_same_v<T, bool>) return v;")
+            elif vt == "QStringList":
+                lines.append(f"        if constexpr (std::is_same_v<T, QStringList>) {{")
+                lines.append(f"            QJsonArray arr;")
+                lines.append(f"            for (const QString &s : v) arr.append(s);")
+                lines.append(f"            return arr;")
+                lines.append(f"        }}")
+            elif vt.startswith("QList<"):
+                lines.append(f"        if constexpr (std::is_same_v<T, {vt}>) {{")
+                lines.append(f"            QJsonArray arr;")
+                lines.append(f"            for (const auto &item : v) arr.append(toJsonValue(item));")
+                lines.append(f"            return arr;")
+                lines.append(f"        }}")
+            else:
+                lines.append(f"        if constexpr (std::is_same_v<T, {vt}>) return toJson(v);")
+        lines.append("        return QJsonValue{};")
+        lines.append("    }, val);")
+        lines.append("}")
+        lines.append("")
 
     return lines
 
@@ -1311,6 +1318,231 @@ def nested_short_name(parent_name, child_name):
         if stripped:
             return stripped[0].upper() + stripped[1:]
     return child_name
+
+
+def _emit_toJson(name, props, types, required, lines, has_additional_props,
+                 inline_enum_names, sub_struct_names, array_item_struct_names,
+                 array_item_union_names, field_union_names, map_value_union_names):
+    """Emit the toJson function for a struct. Extracted so it can be skipped in --read-only mode."""
+    lines.append(f"inline QJsonObject toJson(const {name} &data) {{")
+    init_entries = []  # (key, value_expr) for the initializer list
+    post_lines   = []  # lines emitted after the QJsonObject declaration
+
+    for prop, spec in props.items():
+        prop_name = sanitize_identifier(prop)
+        is_optional = prop not in required
+
+        def is_const_string(spec):
+            return spec.get("type") == "string" and "const" in spec
+
+        if prop in inline_enum_names:
+            if is_optional:
+                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
+                post_lines.append(f"        obj.insert(\"{prop}\", toJsonValue(*data._{sanitize_identifier(prop)}));")
+            else:
+                init_entries.append((prop, f"toJsonValue(data._{sanitize_identifier(prop)})"))
+        elif prop in sub_struct_names:
+            if is_optional:
+                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
+                post_lines.append(f"        obj.insert(\"{prop}\", toJson(*data._{sanitize_identifier(prop)}));")
+            else:
+                init_entries.append((prop, f"toJson(data._{sanitize_identifier(prop)})"))
+        elif _extract_ref(spec):
+            t = ref_type(_extract_ref(spec))
+            if is_integer_const_namespace(t, types):
+                if is_optional:
+                    post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
+                    post_lines.append(f"        obj.insert(\"{prop}\", *data._{sanitize_identifier(prop)});")
+                else:
+                    init_entries.append((prop, f"data._{sanitize_identifier(prop)}"))
+            else:
+                is_enum = is_enum_type(t, types)
+                is_union = is_union_type_name(t, types)
+                is_simple = is_simple_type_alias(t, types)
+                if is_simple:
+                    if is_optional:
+                        post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
+                        post_lines.append(f"        obj.insert(\"{prop}\", *data._{sanitize_identifier(prop)});")
+                    else:
+                        init_entries.append((prop, f"data._{sanitize_identifier(prop)}"))
+                else:
+                    val_fn = "toJsonValue" if (is_enum or is_union) else "toJson"
+                    if is_optional:
+                        post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
+                        post_lines.append(f"        obj.insert(\"{prop}\", {val_fn}(*data._{sanitize_identifier(prop)}));")
+                    else:
+                        init_entries.append((prop, f"{val_fn}(data._{sanitize_identifier(prop)})"))
+        elif _extract_nullable_ref(spec):
+            t = _extract_nullable_ref(spec)
+            if is_integer_const_namespace(t, types):
+                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
+                post_lines.append(f"        obj.insert(\"{prop}\", *data._{sanitize_identifier(prop)});")
+                if prop in required:
+                    post_lines.append(f"    else")
+                    post_lines.append(f"        obj.insert(\"{prop}\", QJsonValue::Null);")
+            else:
+                is_enum = is_enum_type(t, types)
+                is_union = is_union_type_name(t, types)
+                is_simple = is_simple_type_alias(t, types)
+                val_fn = "toJsonValue" if (is_enum or is_union) else ("" if is_simple else "toJson")
+                if val_fn:
+                    post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
+                    post_lines.append(f"        obj.insert(\"{prop}\", {val_fn}(*data._{sanitize_identifier(prop)}));")
+                else:
+                    post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
+                    post_lines.append(f"        obj.insert(\"{prop}\", *data._{sanitize_identifier(prop)});")
+                if prop in required:
+                    post_lines.append(f"    else")
+                    post_lines.append(f"        obj.insert(\"{prop}\", QJsonValue::Null);")
+        elif spec.get("type") == "array" and _extract_ref(spec.get("items", {})):
+            item_type = ref_type(_extract_ref(spec.get("items", {})))
+            is_enum = is_enum_type(item_type, types)
+            is_union = is_union_type_name(item_type, types)
+            arr_fn = "toJsonValue" if (is_enum or is_union) else "toJson"
+            if is_optional:
+                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value()) {{")
+                post_lines.append(f"        QJsonArray arr_{prop_name};")
+                post_lines.append(f"        for (const auto &v : *data._{sanitize_identifier(prop)}) arr_{prop_name}.append({arr_fn}(v));")
+                post_lines.append(f"        obj.insert(\"{prop}\", arr_{prop_name});")
+                post_lines.append(f"    }}")
+            else:
+                post_lines.append(f"    QJsonArray arr_{prop_name};")
+                post_lines.append(f"    for (const auto &v : data._{sanitize_identifier(prop)}) arr_{prop_name}.append({arr_fn}(v));")
+                post_lines.append(f"    obj.insert(\"{prop}\", arr_{prop_name});")
+        elif prop in array_item_struct_names:
+            if is_optional:
+                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value()) {{")
+                post_lines.append(f"        QJsonArray arr_{prop_name};")
+                post_lines.append(f"        for (const auto &v : *data._{sanitize_identifier(prop)}) arr_{prop_name}.append(toJson(v));")
+                post_lines.append(f"        obj.insert(\"{prop}\", arr_{prop_name});")
+                post_lines.append(f"    }}")
+            else:
+                post_lines.append(f"    QJsonArray arr_{prop_name};")
+                post_lines.append(f"    for (const auto &v : data._{sanitize_identifier(prop)}) arr_{prop_name}.append(toJson(v));")
+                post_lines.append(f"    obj.insert(\"{prop}\", arr_{prop_name});")
+        elif prop in array_item_union_names:
+            if is_optional:
+                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value()) {{")
+                post_lines.append(f"        QJsonArray arr_{prop_name};")
+                post_lines.append(f"        for (const auto &v : *data._{sanitize_identifier(prop)}) arr_{prop_name}.append(toJsonValue(v));")
+                post_lines.append(f"        obj.insert(\"{prop}\", arr_{prop_name});")
+                post_lines.append(f"    }}")
+            else:
+                post_lines.append(f"    QJsonArray arr_{prop_name};")
+                post_lines.append(f"    for (const auto &v : data._{sanitize_identifier(prop)}) arr_{prop_name}.append(toJsonValue(v));")
+                post_lines.append(f"    obj.insert(\"{prop}\", arr_{prop_name});")
+        elif prop in field_union_names:
+            if is_optional:
+                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
+                post_lines.append(f"        obj.insert(\"{prop}\", toJsonValue(*data._{sanitize_identifier(prop)}));")
+            else:
+                init_entries.append((prop, f"toJsonValue(data._{sanitize_identifier(prop)})"))
+        elif spec.get("type") == "array":
+            if is_optional:
+                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value()) {{")
+                post_lines.append(f"        QJsonArray arr_{prop_name};")
+                post_lines.append(f"        for (const auto &v : *data._{sanitize_identifier(prop)}) arr_{prop_name}.append(v);")
+                post_lines.append(f"        obj.insert(\"{prop}\", arr_{prop_name});")
+                post_lines.append(f"    }}")
+            else:
+                post_lines.append(f"    QJsonArray arr_{prop_name};")
+                post_lines.append(f"    for (const auto &v : data._{sanitize_identifier(prop)}) arr_{prop_name}.append(v);")
+                post_lines.append(f"    obj.insert(\"{prop}\", arr_{prop_name});")
+        elif prop in map_value_union_names:
+            val_alias, full_map_type = map_value_union_names[prop]
+            if is_optional:
+                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value()) {{")
+                post_lines.append(f"        QJsonObject map_{prop_name};")
+                post_lines.append(f"        for (auto it = data._{sanitize_identifier(prop)}->constBegin(); it != data._{sanitize_identifier(prop)}->constEnd(); ++it)")
+                post_lines.append(f"            map_{prop_name}.insert(it.key(), toJsonValue(it.value()));")
+                post_lines.append(f"        obj.insert(\"{prop}\", map_{prop_name});")
+                post_lines.append(f"    }}")
+            else:
+                post_lines.append(f"    QJsonObject map_{prop_name};")
+                post_lines.append(f"    for (auto it = data._{sanitize_identifier(prop)}.constBegin(); it != data._{sanitize_identifier(prop)}.constEnd(); ++it)")
+                post_lines.append(f"        map_{prop_name}.insert(it.key(), toJsonValue(it.value()));")
+                post_lines.append(f"    obj.insert(\"{prop}\", map_{prop_name});")
+        elif is_open_map(spec):
+            if is_optional:
+                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value()) {{")
+                post_lines.append(f"        QJsonObject map_{prop_name};")
+                post_lines.append(f"        for (auto it = data._{sanitize_identifier(prop)}->constBegin(); it != data._{sanitize_identifier(prop)}->constEnd(); ++it)")
+                post_lines.append(f"            map_{prop_name}.insert(it.key(), it.value());")
+                post_lines.append(f"        obj.insert(\"{prop}\", map_{prop_name});")
+                post_lines.append(f"    }}")
+            else:
+                post_lines.append(f"    QJsonObject map_{prop_name};")
+                post_lines.append(f"    for (auto it = data._{sanitize_identifier(prop)}.constBegin(); it != data._{sanitize_identifier(prop)}.constEnd(); ++it)")
+                post_lines.append(f"        map_{prop_name}.insert(it.key(), it.value());")
+                post_lines.append(f"    obj.insert(\"{prop}\", map_{prop_name});")
+        elif is_typed_map(spec) is not None:
+            val_type = is_typed_map(spec)
+            if is_optional:
+                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value()) {{")
+                post_lines.append(f"        QJsonObject map_{prop_name};")
+                if val_type in ("QString", "QJsonObject", "int", "double", "bool"):
+                    post_lines.append(f"        for (auto it = data._{sanitize_identifier(prop)}->constBegin(); it != data._{sanitize_identifier(prop)}->constEnd(); ++it)")
+                    post_lines.append(f"            map_{prop_name}.insert(it.key(), QJsonValue(it.value()));")
+                else:
+                    post_lines.append(f"        for (auto it = data._{sanitize_identifier(prop)}->constBegin(); it != data._{sanitize_identifier(prop)}->constEnd(); ++it)")
+                    post_lines.append(f"            map_{prop_name}.insert(it.key(), toJsonValue(it.value()));")
+                post_lines.append(f"        obj.insert(\"{prop}\", map_{prop_name});")
+                post_lines.append(f"    }}")
+            else:
+                post_lines.append(f"    QJsonObject map_{prop_name};")
+                if val_type in ("QString", "QJsonObject", "int", "double", "bool"):
+                    post_lines.append(f"    for (auto it = data._{sanitize_identifier(prop)}.constBegin(); it != data._{sanitize_identifier(prop)}.constEnd(); ++it)")
+                    post_lines.append(f"        map_{prop_name}.insert(it.key(), QJsonValue(it.value()));")
+                else:
+                    post_lines.append(f"    for (auto it = data._{sanitize_identifier(prop)}.constBegin(); it != data._{sanitize_identifier(prop)}.constEnd(); ++it)")
+                    post_lines.append(f"        map_{prop_name}.insert(it.key(), toJsonValue(it.value()));")
+                post_lines.append(f"    obj.insert(\"{prop}\", map_{prop_name});")
+        elif is_const_string(spec):
+            const_value = spec["const"]
+            init_entries.append((prop, f"QString(\"{const_value}\")"))
+        else:
+            _, is_nullable = _nullable_type(spec)
+            if is_optional:
+                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
+                post_lines.append(f"        obj.insert(\"{prop}\", *data._{sanitize_identifier(prop)});")
+            elif is_nullable:
+                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
+                post_lines.append(f"        obj.insert(\"{prop}\", *data._{sanitize_identifier(prop)});")
+                post_lines.append(f"    else")
+                post_lines.append(f"        obj.insert(\"{prop}\", QJsonValue::Null);")
+            else:
+                init_entries.append((prop, f"data._{sanitize_identifier(prop)}"))
+
+    # Emit Q_UNUSED(data) when the parameter is never referenced
+    data_is_used = (
+        post_lines
+        or has_additional_props
+        or any("data." in v for _, v in init_entries)
+    )
+    if not data_is_used:
+        lines.append(f"    Q_UNUSED(data)")
+
+    # Emit QJsonObject declaration
+    if init_entries:
+        if len(init_entries) == 1:
+            k, v = init_entries[0]
+            lines.append(f"    QJsonObject obj{{{{\"{k}\", {v}}}}};")
+        else:
+            lines.append(f"    QJsonObject obj{{")
+            for i, (k, v) in enumerate(init_entries):
+                comma = "," if i < len(init_entries) - 1 else ""
+                lines.append(f"        {{\"{k}\", {v}}}{comma}")
+            lines.append(f"    }};")
+    else:
+        lines.append(f"    QJsonObject obj;")
+
+    lines.extend(post_lines)
+    if has_additional_props:
+        lines.append(f"    for (auto it = data._additionalProperties.constBegin(); it != data._additionalProperties.constEnd(); ++it)")
+        lines.append(f"        obj.insert(it.key(), it.value());")
+    lines.append(f"    return obj;")
+    lines.append("}")
+    lines.append("")  # blank line after toJson
 
 
 def parse_struct(name, props, types, required=None, description='', nested_children=None, children_of=None, original_name=None, has_additional_props=False):
@@ -1469,10 +1701,11 @@ def parse_struct(name, props, types, required=None, description='', nested_child
             ser_lines.append(f"    return Utils::ResultError(\"Invalid {qname} value: \" + str);")
             ser_lines.append("}")
             ser_lines.append("")
-            ser_lines.append(f"inline QJsonValue toJsonValue(const {qname} &v) {{")
-            ser_lines.append("    return toString(v);")
-            ser_lines.append("}")
-            ser_lines.append("")
+            if not _read_only:
+                ser_lines.append(f"inline QJsonValue toJsonValue(const {qname} &v) {{")
+                ser_lines.append("    return toString(v);")
+                ser_lines.append("}")
+                ser_lines.append("")
             child_serial_blocks.append("\n".join(ser_lines))
             inline_enum_names[prop] = enum_class_name
         else:
@@ -1617,7 +1850,8 @@ def parse_struct(name, props, types, required=None, description='', nested_child
         lines.append(f"    QJsonObject _additionalProperties;  //!< additional properties")
 
     # Builder methods — named after the field (keyword-escaped), return *this by reference.
-    lines.append("")
+    if not _read_only:
+        lines.append("")
 
     def singular_add_name(prop):
         """Return the singular 'addXxx' method name for a collection field named prop."""
@@ -1630,6 +1864,8 @@ def parse_struct(name, props, types, required=None, description='', nested_child
         return 'add' + singular[0].upper() + singular[1:]
 
     for prop, spec in props.items():
+        if _read_only:
+            break
         prop_name = sanitize_identifier(prop)
         if is_const_string(spec):
             continue  # no stored member, no builder
@@ -1742,7 +1978,7 @@ def parse_struct(name, props, types, required=None, description='', nested_child
                     f"    {name}& {add_name}({_param_type(list_item_type)} v) "
                     f"{{ _{sanitize_identifier(prop)}.append(v); return *this; }}")
 
-    if has_additional_props:
+    if has_additional_props and not _read_only:
         lines.append(f"    {name}& additionalProperties(const QString &key, const QJsonValue &v) {{ _additionalProperties.insert(key, v); return *this; }}")
         lines.append(f"    {name}& additionalProperties(const QJsonObject &obj) {{ for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) _additionalProperties.insert(it.key(), it.value()); return *this; }}")
 
@@ -2007,228 +2243,10 @@ def parse_struct(name, props, types, required=None, description='', nested_child
     # toJson function — two-pass:
     # Pass 1: collect required single-value fields for an initializer list.
     # Pass 2: emit optional and array fields as post-init insert calls.
-    lines.append(f"inline QJsonObject toJson(const {name} &data) {{")
-    init_entries = []  # (key, value_expr) for the initializer list
-    post_lines   = []  # lines emitted after the QJsonObject declaration
-
-    for prop, spec in props.items():
-        prop_name = sanitize_identifier(prop)
-        is_optional = prop not in required
-        if prop in inline_enum_names:
-            if is_optional:
-                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
-                post_lines.append(f"        obj.insert(\"{prop}\", toJsonValue(*data._{sanitize_identifier(prop)}));")
-            else:
-                init_entries.append((prop, f"toJsonValue(data._{sanitize_identifier(prop)})"))
-        elif prop in sub_struct_names:
-            if is_optional:
-                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
-                post_lines.append(f"        obj.insert(\"{prop}\", toJson(*data._{sanitize_identifier(prop)}));")
-            else:
-                init_entries.append((prop, f"toJson(data._{sanitize_identifier(prop)})"))
-        elif _extract_ref(spec):
-            t = ref_type(_extract_ref(spec))
-            if is_integer_const_namespace(t, types):
-                # Integer const namespace — serialize as plain int
-                if is_optional:
-                    post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
-                    post_lines.append(f"        obj.insert(\"{prop}\", *data._{sanitize_identifier(prop)});")
-                else:
-                    init_entries.append((prop, f"data._{sanitize_identifier(prop)}"))
-            else:
-                is_enum = is_enum_type(t, types)
-                is_union = is_union_type_name(t, types)
-                is_simple = is_simple_type_alias(t, types)
-                if is_simple:
-                    # Simple primitive aliases (e.g. QString) convert directly to QJsonValue
-                    if is_optional:
-                        post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
-                        post_lines.append(f"        obj.insert(\"{prop}\", *data._{sanitize_identifier(prop)});")
-                    else:
-                        init_entries.append((prop, f"data._{sanitize_identifier(prop)}"))
-                else:
-                    val_fn = "toJsonValue" if (is_enum or is_union) else "toJson"
-                    if is_optional:
-                        post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
-                        post_lines.append(f"        obj.insert(\"{prop}\", {val_fn}(*data._{sanitize_identifier(prop)}));")
-                    else:
-                        init_entries.append((prop, f"{val_fn}(data._{sanitize_identifier(prop)})"))
-        elif _extract_nullable_ref(spec):
-            t = _extract_nullable_ref(spec)
-            if is_integer_const_namespace(t, types):
-                # Integer const namespace — serialize as plain int
-                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
-                post_lines.append(f"        obj.insert(\"{prop}\", *data._{sanitize_identifier(prop)});")
-                if prop in required:
-                    post_lines.append(f"    else")
-                    post_lines.append(f"        obj.insert(\"{prop}\", QJsonValue::Null);")
-            else:
-                is_enum = is_enum_type(t, types)
-                is_union = is_union_type_name(t, types)
-                is_simple = is_simple_type_alias(t, types)
-                val_fn = "toJsonValue" if (is_enum or is_union) else ("" if is_simple else "toJson")
-                # Always optional (nullable) — emit when has_value
-                if val_fn:
-                    post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
-                    post_lines.append(f"        obj.insert(\"{prop}\", {val_fn}(*data._{sanitize_identifier(prop)}));")
-                else:
-                    post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
-                    post_lines.append(f"        obj.insert(\"{prop}\", *data._{sanitize_identifier(prop)});")
-                if prop in required:
-                    # Required but nullable: emit null when empty
-                    post_lines.append(f"    else")
-                    post_lines.append(f"        obj.insert(\"{prop}\", QJsonValue::Null);")
-        elif spec.get("type") == "array" and _extract_ref(spec.get("items", {})):
-            item_type = ref_type(_extract_ref(spec.get("items", {})))
-            is_enum = is_enum_type(item_type, types)
-            is_union = is_union_type_name(item_type, types)
-            arr_fn = "toJsonValue" if (is_enum or is_union) else "toJson"
-            if is_optional:
-                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value()) {{")
-                post_lines.append(f"        QJsonArray arr_{prop_name};")
-                post_lines.append(f"        for (const auto &v : *data._{sanitize_identifier(prop)}) arr_{prop_name}.append({arr_fn}(v));")
-                post_lines.append(f"        obj.insert(\"{prop}\", arr_{prop_name});")
-                post_lines.append(f"    }}")
-            else:
-                post_lines.append(f"    QJsonArray arr_{prop_name};")
-                post_lines.append(f"    for (const auto &v : data._{sanitize_identifier(prop)}) arr_{prop_name}.append({arr_fn}(v));")
-                post_lines.append(f"    obj.insert(\"{prop}\", arr_{prop_name});")
-        elif prop in array_item_struct_names:
-            if is_optional:
-                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value()) {{")
-                post_lines.append(f"        QJsonArray arr_{prop_name};")
-                post_lines.append(f"        for (const auto &v : *data._{sanitize_identifier(prop)}) arr_{prop_name}.append(toJson(v));")
-                post_lines.append(f"        obj.insert(\"{prop}\", arr_{prop_name});")
-                post_lines.append(f"    }}")
-            else:
-                post_lines.append(f"    QJsonArray arr_{prop_name};")
-                post_lines.append(f"    for (const auto &v : data._{sanitize_identifier(prop)}) arr_{prop_name}.append(toJson(v));")
-                post_lines.append(f"    obj.insert(\"{prop}\", arr_{prop_name});")
-        elif prop in array_item_union_names:
-            if is_optional:
-                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value()) {{")
-                post_lines.append(f"        QJsonArray arr_{prop_name};")
-                post_lines.append(f"        for (const auto &v : *data._{sanitize_identifier(prop)}) arr_{prop_name}.append(toJsonValue(v));")
-                post_lines.append(f"        obj.insert(\"{prop}\", arr_{prop_name});")
-                post_lines.append(f"    }}")
-            else:
-                post_lines.append(f"    QJsonArray arr_{prop_name};")
-                post_lines.append(f"    for (const auto &v : data._{sanitize_identifier(prop)}) arr_{prop_name}.append(toJsonValue(v));")
-                post_lines.append(f"    obj.insert(\"{prop}\", arr_{prop_name});")
-        elif prop in field_union_names:
-            if is_optional:
-                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
-                post_lines.append(f"        obj.insert(\"{prop}\", toJsonValue(*data._{sanitize_identifier(prop)}));")
-            else:
-                init_entries.append((prop, f"toJsonValue(data._{sanitize_identifier(prop)})"))
-        elif spec.get("type") == "array":
-            if is_optional:
-                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value()) {{")
-                post_lines.append(f"        QJsonArray arr_{prop_name};")
-                post_lines.append(f"        for (const auto &v : *data._{sanitize_identifier(prop)}) arr_{prop_name}.append(v);")
-                post_lines.append(f"        obj.insert(\"{prop}\", arr_{prop_name});")
-                post_lines.append(f"    }}")
-            else:
-                post_lines.append(f"    QJsonArray arr_{prop_name};")
-                post_lines.append(f"    for (const auto &v : data._{sanitize_identifier(prop)}) arr_{prop_name}.append(v);")
-                post_lines.append(f"    obj.insert(\"{prop}\", arr_{prop_name});")
-        elif prop in map_value_union_names:
-            val_alias, full_map_type = map_value_union_names[prop]
-            if is_optional:
-                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value()) {{")
-                post_lines.append(f"        QJsonObject map_{prop_name};")
-                post_lines.append(f"        for (auto it = data._{sanitize_identifier(prop)}->constBegin(); it != data._{sanitize_identifier(prop)}->constEnd(); ++it)")
-                post_lines.append(f"            map_{prop_name}.insert(it.key(), toJsonValue(it.value()));")
-                post_lines.append(f"        obj.insert(\"{prop}\", map_{prop_name});")
-                post_lines.append(f"    }}")
-            else:
-                post_lines.append(f"    QJsonObject map_{prop_name};")
-                post_lines.append(f"    for (auto it = data._{sanitize_identifier(prop)}.constBegin(); it != data._{sanitize_identifier(prop)}.constEnd(); ++it)")
-                post_lines.append(f"        map_{prop_name}.insert(it.key(), toJsonValue(it.value()));")
-                post_lines.append(f"    obj.insert(\"{prop}\", map_{prop_name});")
-        elif is_open_map(spec):
-            if is_optional:
-                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value()) {{")
-                post_lines.append(f"        QJsonObject map_{prop_name};")
-                post_lines.append(f"        for (auto it = data._{sanitize_identifier(prop)}->constBegin(); it != data._{sanitize_identifier(prop)}->constEnd(); ++it)")
-                post_lines.append(f"            map_{prop_name}.insert(it.key(), it.value());")
-                post_lines.append(f"        obj.insert(\"{prop}\", map_{prop_name});")
-                post_lines.append(f"    }}")
-            else:
-                post_lines.append(f"    QJsonObject map_{prop_name};")
-                post_lines.append(f"    for (auto it = data._{sanitize_identifier(prop)}.constBegin(); it != data._{sanitize_identifier(prop)}.constEnd(); ++it)")
-                post_lines.append(f"        map_{prop_name}.insert(it.key(), it.value());")
-                post_lines.append(f"    obj.insert(\"{prop}\", map_{prop_name});")
-        elif is_typed_map(spec) is not None:
-            val_type = is_typed_map(spec)
-            if is_optional:
-                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value()) {{")
-                post_lines.append(f"        QJsonObject map_{prop_name};")
-                if val_type in ("QString", "QJsonObject", "int", "double", "bool"):
-                    post_lines.append(f"        for (auto it = data._{sanitize_identifier(prop)}->constBegin(); it != data._{sanitize_identifier(prop)}->constEnd(); ++it)")
-                    post_lines.append(f"            map_{prop_name}.insert(it.key(), QJsonValue(it.value()));")
-                else:
-                    post_lines.append(f"        for (auto it = data._{sanitize_identifier(prop)}->constBegin(); it != data._{sanitize_identifier(prop)}->constEnd(); ++it)")
-                    post_lines.append(f"            map_{prop_name}.insert(it.key(), toJsonValue(it.value()));")
-                post_lines.append(f"        obj.insert(\"{prop}\", map_{prop_name});")
-                post_lines.append(f"    }}")
-            else:
-                post_lines.append(f"    QJsonObject map_{prop_name};")
-                if val_type in ("QString", "QJsonObject", "int", "double", "bool"):
-                    post_lines.append(f"    for (auto it = data._{sanitize_identifier(prop)}.constBegin(); it != data._{sanitize_identifier(prop)}.constEnd(); ++it)")
-                    post_lines.append(f"        map_{prop_name}.insert(it.key(), QJsonValue(it.value()));")
-                else:
-                    post_lines.append(f"    for (auto it = data._{sanitize_identifier(prop)}.constBegin(); it != data._{sanitize_identifier(prop)}.constEnd(); ++it)")
-                    post_lines.append(f"        map_{prop_name}.insert(it.key(), toJsonValue(it.value()));")
-                post_lines.append(f"    obj.insert(\"{prop}\", map_{prop_name});")
-        elif is_const_string(spec):
-            const_value = spec["const"]
-            init_entries.append((prop, f"QString(\"{const_value}\")"))
-        else:
-            _, is_nullable = _nullable_type(spec)
-            if is_optional:
-                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
-                post_lines.append(f"        obj.insert(\"{prop}\", *data._{sanitize_identifier(prop)});")
-            elif is_nullable:
-                # Required but nullable: always emit the key; use QJsonValue::Null when empty
-                post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value())")
-                post_lines.append(f"        obj.insert(\"{prop}\", *data._{sanitize_identifier(prop)});")
-                post_lines.append(f"    else")
-                post_lines.append(f"        obj.insert(\"{prop}\", QJsonValue::Null);")
-            else:
-                init_entries.append((prop, f"data._{sanitize_identifier(prop)}"))
-
-    # Emit Q_UNUSED(data) when the parameter is never referenced
-    # (e.g. structs whose only fields are const-string fields like jsonrpc/method).
-    data_is_used = (
-        post_lines
-        or has_additional_props
-        or any("data." in v for _, v in init_entries)
-    )
-    if not data_is_used:
-        lines.append(f"    Q_UNUSED(data)")
-
-    # Emit QJsonObject declaration
-    if init_entries:
-        if len(init_entries) == 1:
-            k, v = init_entries[0]
-            lines.append(f"    QJsonObject obj{{{{\"{k}\", {v}}}}};")
-        else:
-            lines.append(f"    QJsonObject obj{{")
-            for i, (k, v) in enumerate(init_entries):
-                comma = "," if i < len(init_entries) - 1 else ""
-                lines.append(f"        {{\"{k}\", {v}}}{comma}")
-            lines.append(f"    }};")
-    else:
-        lines.append(f"    QJsonObject obj;")
-
-    lines.extend(post_lines)
-    if has_additional_props:
-        lines.append(f"    for (auto it = data._additionalProperties.constBegin(); it != data._additionalProperties.constEnd(); ++it)")
-        lines.append(f"        obj.insert(it.key(), it.value());")
-    lines.append(f"    return obj;")
-    lines.append("}")
-    lines.append("")  # blank line after toJson
+    if not _read_only:
+        _emit_toJson(name, props, types, required, lines, has_additional_props,
+                     inline_enum_names, sub_struct_names, array_item_struct_names,
+                     array_item_union_names, field_union_names, map_value_union_names)
     lines.append("")  # ensures \n\n so the next comment is separated
     preamble = "".join(child_preamble_blocks) + "".join(sub_struct_blocks)
     return preamble + doc_comment(description) + "\n".join(lines)
@@ -2380,29 +2398,30 @@ def _build_inline_union_code(union_alias, ref_names, types):
     union_lines.extend(use_return_if_no_co_await(fj))
 
     # toJsonValue — custom if list types present, otherwise default
-    if list_types:
-        union_lines.append("")
-        union_lines.append(f"inline QJsonValue toJsonValue(const {union_alias} &val) {{")
-        union_lines.append("    return std::visit([](const auto &v) -> QJsonValue {")
-        union_lines.append("        using T = std::decay_t<decltype(v)>;")
-        first = True
-        for list_t, inner_t in list_types:
-            kw = "if" if first else "} else if"
-            first = False
-            union_lines.append(f"        {kw} constexpr (std::is_same_v<T, {list_t}>) {{")
-            union_lines.append(f"            QJsonArray arr;")
-            union_lines.append(f"            for (const auto &item : v) arr.append(toJson(item));")
-            union_lines.append(f"            return arr;")
-        union_lines.append("        } else if constexpr (std::is_same_v<T, QJsonObject>) {")
-        union_lines.append("            return v;")
-        union_lines.append("        } else {")
-        union_lines.append("            return toJson(v);")
-        union_lines.append("        }")
-        union_lines.append("    }, val);")
-        union_lines.append("}")
-        union_lines.append("")
-    else:
-        union_lines.extend(_toJsonValue_visit_lines(union_alias))
+    if not _read_only:
+        if list_types:
+            union_lines.append("")
+            union_lines.append(f"inline QJsonValue toJsonValue(const {union_alias} &val) {{")
+            union_lines.append("    return std::visit([](const auto &v) -> QJsonValue {")
+            union_lines.append("        using T = std::decay_t<decltype(v)>;")
+            first = True
+            for list_t, inner_t in list_types:
+                kw = "if" if first else "} else if"
+                first = False
+                union_lines.append(f"        {kw} constexpr (std::is_same_v<T, {list_t}>) {{")
+                union_lines.append(f"            QJsonArray arr;")
+                union_lines.append(f"            for (const auto &item : v) arr.append(toJson(item));")
+                union_lines.append(f"            return arr;")
+            union_lines.append("        } else if constexpr (std::is_same_v<T, QJsonObject>) {")
+            union_lines.append("            return v;")
+            union_lines.append("        } else {")
+            union_lines.append("            return toJson(v);")
+            union_lines.append("        }")
+            union_lines.append("    }, val);")
+            union_lines.append("}")
+            union_lines.append("")
+        else:
+            union_lines.extend(_toJsonValue_visit_lines(union_alias))
     return union_lines
 
 def _collect_sub_struct_output(sub_code, short_name, parent_name,
@@ -2673,9 +2692,17 @@ def main():
         help="Header to #include for the export macro (e.g. acp_global.h). "
              "Used only with --export-macro.",
     )
+    parser.add_argument(
+        "--read-only",
+        action="store_true",
+        default=False,
+        help="Skip generation of setter/builder methods (setXYZ, addXYZ). "
+             "Only getters and fromJson/toJson are emitted.",
+    )
     args = parser.parse_args()
-    global _emit_comments, _emitted_variant_sigs
+    global _emit_comments, _emitted_variant_sigs, _read_only
     _emit_comments = not args.no_comments
+    _read_only = args.read_only
     _emitted_variant_sigs = {}  # reset per run
     schema_path = Path(args.schema)
     output_path = Path(args.output)
@@ -2935,7 +2962,7 @@ def _emit_type_alias(name, spec, code, emitted, variant_signatures, alias_fromjs
             result, _ = parse_union(name, spec, skip_to_json=True, skip_from_json=True, types=types)
             code.append(result)
         else:
-            result, _ = parse_union(name, spec, skip_to_json=False, skip_from_json=False, types=types)
+            result, _ = parse_union(name, spec, skip_to_json=_read_only, skip_from_json=False, types=types)
             code.append(result)
             variant_signatures[signature] = name
     elif enum_keyed_map_info(spec) is not None:
@@ -2953,9 +2980,10 @@ def _emit_type_alias(name, spec, code, emitted, variant_signatures, alias_fromjs
             lines.append(f"    std::optional<{val_type}> _{field};")
         lines.append(f"")
         # Builder-style setters
-        for field, orig in pairs:
-            lines.append(f"    {name}& {field}(const std::optional<{val_type}> & v) {{ _{field} = v; return *this; }}")
-        lines.append(f"")
+        if not _read_only:
+            for field, orig in pairs:
+                lines.append(f"    {name}& {field}(const std::optional<{val_type}> & v) {{ _{field} = v; return *this; }}")
+            lines.append(f"")
         # Const reference getters
         for field, orig in pairs:
             lines.append(f"    const std::optional<{val_type}>& {field}() const {{ return _{field}; }}")
@@ -2984,17 +3012,18 @@ def _emit_type_alias(name, spec, code, emitted, variant_signatures, alias_fromjs
         lines.append(f"")
 
         # toJson
-        lines.append(f"inline QJsonObject toJson(const {name} &data) {{")
-        lines.append(f"    QJsonObject obj;")
-        for field, orig in pairs:
-            if val_type in ("QString", "QJsonObject", "int", "double", "bool"):
-                lines.append(f'    if (data._{field}.has_value())')
-                lines.append(f'        obj.insert("{orig}", QJsonValue(*data._{field}));')
-            else:
-                lines.append(f'    if (data._{field}.has_value())')
-                lines.append(f'        obj.insert("{orig}", toJson(*data._{field}));')
-        lines.append(f"    return obj;")
-        lines.append(f"}}")
+        if not _read_only:
+            lines.append(f"inline QJsonObject toJson(const {name} &data) {{")
+            lines.append(f"    QJsonObject obj;")
+            for field, orig in pairs:
+                if val_type in ("QString", "QJsonObject", "int", "double", "bool"):
+                    lines.append(f'    if (data._{field}.has_value())')
+                    lines.append(f'        obj.insert("{orig}", QJsonValue(*data._{field}));')
+                else:
+                    lines.append(f'    if (data._{field}.has_value())')
+                    lines.append(f'        obj.insert("{orig}", toJson(*data._{field}));')
+            lines.append(f"    return obj;")
+            lines.append(f"}}")
 
         code.append("\n".join(lines) + "\n")
     elif is_typed_map(spec) is not None:
@@ -3020,17 +3049,18 @@ def _emit_type_alias(name, spec, code, emitted, variant_signatures, alias_fromjs
         fj.append(f"}}")
         alias_lines.extend(use_return_if_no_co_await(fj))
         # toJson
-        alias_lines.append(f"")
-        alias_lines.append(f"inline QJsonObject toJson(const {name} &data) {{")
-        alias_lines.append(f"    QJsonObject obj;")
-        if val_type in ("QString", "QJsonObject", "int", "double", "bool"):
-            alias_lines.append(f"    for (auto it = data.constBegin(); it != data.constEnd(); ++it)")
-            alias_lines.append(f"        obj.insert(it.key(), QJsonValue(it.value()));")
-        else:
-            alias_lines.append(f"    for (auto it = data.constBegin(); it != data.constEnd(); ++it)")
-            alias_lines.append(f"        obj.insert(it.key(), toJson(it.value()));")
-        alias_lines.append(f"    return obj;")
-        alias_lines.append(f"}}")
+        if not _read_only:
+            alias_lines.append(f"")
+            alias_lines.append(f"inline QJsonObject toJson(const {name} &data) {{")
+            alias_lines.append(f"    QJsonObject obj;")
+            if val_type in ("QString", "QJsonObject", "int", "double", "bool"):
+                alias_lines.append(f"    for (auto it = data.constBegin(); it != data.constEnd(); ++it)")
+                alias_lines.append(f"        obj.insert(it.key(), QJsonValue(it.value()));")
+            else:
+                alias_lines.append(f"    for (auto it = data.constBegin(); it != data.constEnd(); ++it)")
+                alias_lines.append(f"        obj.insert(it.key(), toJson(it.value()));")
+            alias_lines.append(f"    return obj;")
+            alias_lines.append(f"}}")
         code.append("\n".join(alias_lines) + "\n")
     elif is_open_map(spec):
         map_type = "QMap<QString, QJsonValue>"
@@ -3049,13 +3079,14 @@ def _emit_type_alias(name, spec, code, emitted, variant_signatures, alias_fromjs
         fj.append(f"}}")
         alias_lines.extend(fj)
         # toJson
-        alias_lines.append(f"")
-        alias_lines.append(f"inline QJsonObject toJson(const {name} &data) {{")
-        alias_lines.append(f"    QJsonObject obj;")
-        alias_lines.append(f"    for (auto it = data.constBegin(); it != data.constEnd(); ++it)")
-        alias_lines.append(f"        obj.insert(it.key(), it.value());")
-        alias_lines.append(f"    return obj;")
-        alias_lines.append(f"}}")
+        if not _read_only:
+            alias_lines.append(f"")
+            alias_lines.append(f"inline QJsonObject toJson(const {name} &data) {{")
+            alias_lines.append(f"    QJsonObject obj;")
+            alias_lines.append(f"    for (auto it = data.constBegin(); it != data.constEnd(); ++it)")
+            alias_lines.append(f"        obj.insert(it.key(), it.value());")
+            alias_lines.append(f"    return obj;")
+            alias_lines.append(f"}}")
         code.append("\n".join(alias_lines) + "\n")
     else:
         # Handle $ref-only type aliases (e.g. "EmptyResult": {"$ref": "#/$defs/Result"})

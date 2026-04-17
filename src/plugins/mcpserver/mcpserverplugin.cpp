@@ -9,7 +9,7 @@
 
 #include <coreplugin/coreconstants.h>
 #include <coreplugin/icore.h>
-#include <coreplugin/mcpmanager.h>
+#include <coreplugin/mcp/mcpmanager.h>
 #include <coreplugin/messagemanager.h>
 
 #include <debugger/debuggerconstants.h>
@@ -204,6 +204,7 @@ public:
                 "Qt Creator builtin",
                 McpManager::ConnectionType::Streamable_Http,
                 url,
+                {},
                 {}};
 
             QTC_CHECK(McpManager::registerMcpServer(serverInfo));

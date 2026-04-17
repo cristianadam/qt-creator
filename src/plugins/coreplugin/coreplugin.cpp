@@ -21,7 +21,7 @@
 #include "locator/locator.h"
 #include "locator/locator_test.h"
 #include "loggingviewer.h"
-#include "mcpmanager.h"
+#include "mcp/mcpmanager.h"
 #include "modemanager.h"
 #include "session.h"
 #include "systemsettings.h"

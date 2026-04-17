@@ -3,9 +3,10 @@
 
 #pragma once
 
-#include "core_global.h"
+#include "../core_global.h"
 
 #include <utils/commandline.h>
+#include <utils/environment.h>
 
 #include <QString>
 #include <QUrl>
@@ -27,6 +28,7 @@ public:
         ConnectionType connectionType;
         std::variant<Utils::CommandLine, QUrl> launchInfo;
         QStringList httpHeaders;
+        Utils::EnvironmentChanges envChanges;
     };
 
 public:

@@ -1,0 +1,23 @@
+{
+  "name": "mcp-reg-aggregator",
+  "version": "1.0.0",
+  "description": "Aggregates the MCP server registry and uploads a condensed JSON to S3",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "fetch": "npm run build && mkdir -p out/pages && node dist/index.js --output out/mcp-registry.json"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.600.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -216,8 +216,10 @@ add_qtc_plugin(Core
     loggingviewer.h
     manhattanstyle.cpp
     manhattanstyle.h
-    mcpmanager.cpp
-    mcpmanager.h
+    mcp/mcpmanager.cpp
+    mcp/mcpmanager.h
+    mcp/mcpregistry.cpp
+    mcp/mcpregistry.h
     messagebox.cpp
     messagebox.h
     messagemanager.cpp

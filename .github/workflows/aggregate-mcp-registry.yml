@@ -1,0 +1,42 @@
+name: Aggregate MCP Registry
+
+on:
+  schedule:
+    - cron: "0 * * * *" # every hour at :00
+  workflow_dispatch:
+    # manual trigger from GitHub UI
+
+jobs:
+  aggregate-mcp-registry:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: src/tools/mcp-reg-aggregator/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: src/tools/mcp-reg-aggregator
+
+      - name: Build
+        run: npm run build
+        working-directory: src/tools/mcp-reg-aggregator
+
+      - name: Run aggregator
+        run: npm start
+        working-directory: src/tools/mcp-reg-aggregator
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.MCP_REG_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MCP_REG_AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.MCP_REG_AWS_REGION }}
+          S3_BUCKET: ${{ secrets.MCP_REG_S3_BUCKET }}
+          S3_KEY: mcp/registry.json

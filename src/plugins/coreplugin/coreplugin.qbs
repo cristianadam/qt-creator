@@ -112,8 +112,6 @@ QtcPlugin {
             "loggingviewer.h",
             "manhattanstyle.cpp",
             "manhattanstyle.h",
-            "mcpmanager.cpp",
-            "mcpmanager.h",
             "messagebox.cpp",
             "messagebox.h",
             "messagemanager.cpp",
@@ -228,6 +226,17 @@ QtcPlugin {
             "openeditorsview.cpp", "openeditorsview.h",
             "openeditorswindow.cpp", "openeditorswindow.h",
             "systemeditor.cpp", "systemeditor.h",
+        ]
+    }
+
+    Group {
+        name: "MCP"
+        prefix: "mcp/"
+        files: [
+            "mcpmanager.cpp",
+            "mcpmanager.h",
+            "mcpregistry.cpp",
+            "mcpregistry.h",
         ]
     }
 
