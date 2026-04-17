@@ -78,6 +78,7 @@ const char fixedOptionsC[]
       "    -block                        Block until editor is closed\n"
       "    -pluginpath <path>            Add a custom search path for plugins\n"
       "    -language <locale>            Set the UI language\n"
+      "    -list-themes                  List available UI themes\n"
       "    -trace-on-warning <pattern>   Print a stack trace for each message containing pattern\n";
 
 const char HELP_OPTION1[] = "-h";
@@ -99,6 +100,7 @@ const char PID_OPTION[] = "-pid";
 const char BLOCK_OPTION[] = "-block";
 const char PLUGINPATH_OPTION[] = "-pluginpath";
 const char LANGUAGE_OPTION[] = "-language";
+const char LIST_THEMES_OPTION[] = "-list-themes";
 const char USER_LIBRARY_PATH_OPTION[] = "-user-library-path"; // hidden option for qtcreator.sh
 const char TRACE_ON_WARNING_OPTION[] = "-trace-on-warning";
 
@@ -170,6 +172,22 @@ static void printHelp(const QString &a0)
     PluginManager::formatOptions(str, OptionIndent, DescriptionIndent);
     PluginManager::formatPluginOptions(str, OptionIndent, DescriptionIndent);
     displayHelpText(help);
+}
+
+static void printThemes()
+{
+    QString output;
+    QTextStream str(&output);
+    str << "Available themes:\n";
+    const FilePath themesDir = appInfo().resources / "themes";
+    const FilePaths entries = themesDir.dirEntries({{"*.creatortheme"}, QDir::Files});
+    for (const FilePath &entry : entries) {
+        const QString id = entry.completeBaseName();
+        QSettings s(entry.toFSPathString(), QSettings::IniFormat);
+        const QString name = s.value("ThemeName", id).toString();
+        str << "    " << id << " (" << name << ")\n";
+    }
+    displayHelpText(output);
 }
 
 QString applicationDirPath(char *arg = nullptr)
@@ -871,6 +889,7 @@ int main(int argc, char **argv)
         appOptions.insert(QLatin1String(VERSION_OPTION), false);
         appOptions.insert(QLatin1String(VERSION_OPTION2), false);
         appOptions.insert(QLatin1String(CLIENT_OPTION), false);
+        appOptions.insert(QLatin1String(LIST_THEMES_OPTION), false);
         appOptions.insert(QLatin1String(PID_OPTION), true);
         appOptions.insert(QLatin1String(BLOCK_OPTION), false);
         if (Result<> res = PluginManager::parseOptions(pluginArguments, appOptions, &foundAppOptions); !res) {
@@ -913,6 +932,11 @@ int main(int argc, char **argv)
         printHelp(QFileInfo(app.applicationFilePath()).baseName());
         return 0;
     }
+    if (foundAppOptions.contains(QLatin1String(LIST_THEMES_OPTION))) {
+        printThemes();
+        return 0;
+    }
+
 
     qint64 pid = -1;
     if (foundAppOptions.contains(QLatin1String(PID_OPTION))) {
