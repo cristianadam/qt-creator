@@ -385,9 +385,12 @@ QVector<HelpViewerFactory> LocalHelpManager::viewerBackends()
     const int index = Utils::indexOf(result, [](const HelpViewerFactory &f) {
         return f.id == QByteArray(QTC_DEFAULT_HELPVIEWER_BACKEND);
     });
-    if (QTC_GUARD(index >= 0)) {
+    if (index >= 0) {
         const HelpViewerFactory defaultBackend = result.takeAt(index);
         result.prepend(defaultBackend);
+    } else {
+        qWarning("Default help viewer backend \"%s\" not found, using first available.",
+                 QTC_DEFAULT_HELPVIEWER_BACKEND);
     }
 #endif
     return result;
