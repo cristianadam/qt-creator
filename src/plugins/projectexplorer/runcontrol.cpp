@@ -251,7 +251,8 @@ public:
     void startTaskTree();
     void emitStopped();
 
-    QUrl getNextChannel(PortList *portList, const QList<Port> &usedPorts) const;
+    QUrl getNextChannel(PortList *portList, const QList<Port> &usedPorts,
+                        IDevice::ControlChannelHint hint) const;
 
     Group portsGathererRecipe();
 
@@ -461,14 +462,15 @@ void RunControl::postMessage(const QString &msg, OutputFormat format, bool appen
     emit appendMessage((appendNewLine && !msg.endsWith('\n')) ? msg + '\n': msg, format);
 }
 
-QUrl RunControlPrivate::getNextChannel(PortList *portList, const QList<Port> &usedPorts) const
+QUrl RunControlPrivate::getNextChannel(PortList *portList, const QList<Port> &usedPorts,
+                                       IDevice::ControlChannelHint hint) const
 {
     QUrl result;
     if (q->device()->sshForwardDebugServerPort()) {
         result.setScheme(urlTcpScheme());
         result.setHost("localhost");
     } else {
-        result = q->device()->toolControlChannel(IDevice::ControlChannelHint());
+        result = q->device()->toolControlChannel(hint);
     }
     result.setPort(portList->getNextFreePort(usedPorts).number());
     return result;
@@ -497,13 +499,13 @@ Group RunControlPrivate::portsGathererRecipe()
         const QList<Port> usedPorts = *ports;
         q->postMessage(Tr::tr("Found %n free ports.", nullptr, portList.count()), NormalMessageFormat);
         if (data.useDebugChannel)
-            data.debugChannel = getNextChannel(&portList, usedPorts);
+            data.debugChannel = getNextChannel(&portList, usedPorts, IDevice::DebugControlChannel);
         if (data.useQmlChannel)
-            data.qmlChannel = getNextChannel(&portList, usedPorts);
+            data.qmlChannel = getNextChannel(&portList, usedPorts, IDevice::QmlControlChannel);
         if (data.usePerfChannel)
-            data.perfChannel = getNextChannel(&portList, usedPorts);
+            data.perfChannel = getNextChannel(&portList, usedPorts, IDevice::QmlControlChannel);
         if (data.useWorkerChannel)
-            data.workerChannel = getNextChannel(&portList, usedPorts);
+            data.workerChannel = getNextChannel(&portList, usedPorts, IDevice::QmlControlChannel);
         return DoneResult::Success;
     };
 

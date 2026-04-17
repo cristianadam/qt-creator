@@ -1,7 +1,6 @@
 add_qtc_plugin(Docker
   DEPENDS Utils CmdBridgeClient
-  PLUGIN_DEPENDS Core ProjectExplorer QtSupport
-  PLUGIN_TEST_DEPENDS Debugger
+  PLUGIN_DEPENDS Core ProjectExplorer QtSupport Debugger
   SOURCES
     docker_global.h
     dockertr.h

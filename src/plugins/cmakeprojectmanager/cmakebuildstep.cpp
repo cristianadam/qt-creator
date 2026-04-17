@@ -15,6 +15,8 @@
 
 #include <android/androidconstants.h>
 
+#include <docker/dockerconstants.h>
+
 #include <baremetal/baremetalconstants.h>
 
 #include <ios/iosconstants.h>
@@ -220,6 +222,7 @@ static bool supportsStageForInstallation(const Kit *kit)
     QTC_ASSERT(buildDevice, return false);
     return (!runDevice || runDevice->id() != buildDevice->id())
            && runDeviceType != Android::Constants::ANDROID_DEVICE_TYPE
+           && runDeviceType != Docker::Constants::DOCKER_DEVICE_TYPE
            && runDeviceType != Ios::Constants::IOS_DEVICE_TYPE
            && runDeviceType != Ios::Constants::IOS_SIMULATOR_TYPE
            && runDeviceType != BareMetal::Constants::BareMetalOsType

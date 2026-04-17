@@ -6,7 +6,7 @@ QtcPlugin {
 
     Depends { name: "CmdBridgeClient" }
     Depends { name: "Core" }
-    Depends { name: "Debugger"; condition: qtc.withPluginTests }
+    Depends { name: "Debugger" }
     Depends { name: "ProjectExplorer" }
     Depends { name: "QtSupport" }
 

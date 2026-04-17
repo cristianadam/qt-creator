@@ -776,11 +776,6 @@ public:
         setId(Constants::DEBUGGER_RUN_FACTORY);
         setRecipeProducer([](RunControl *runControl) {
             const DebuggerRunParameters rp = DebuggerRunParameters::fromRunControl(runControl);
-            if (rp.isQmlDebugging()) {
-                const IDevice::ConstPtr device = runControl->device();
-                if (device && device->forwardsQmlDebugSocket())
-                    runControl->requestQmlChannel();
-            }
             return debuggerRecipe(runControl, rp);
         });
 
@@ -790,6 +785,7 @@ public:
         addSupportedRunMode(ProjectExplorer::Constants::DAP_LLDB_DEBUG_RUN_MODE);
 
         setExecutionType(ProjectExplorer::Constants::STDPROCESS_EXECUTION_TYPE_ID);
+        addSupportedDeviceType(ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE);
 
         addSupportForLocalRunConfigs();
     }

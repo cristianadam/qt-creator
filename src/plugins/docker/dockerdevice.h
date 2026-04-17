@@ -81,9 +81,9 @@ public:
     QString deviceStateToString() const override;
     QPixmap deviceStateIcon() const override;
 
-    bool forwardsQmlDebugSocket() const override;
     QUrl toolControlChannel(const ControlChannelHint &) const override;
-    QString qmlDebugRemoteSocketPath() const override;
+    QtTaskTree::ExecutableItem portsGatheringRecipe(
+        const QtTaskTree::Storage<Utils::PortsOutputData> &output) const override;
 
     QtTaskTree::ExecutableItem signalOperationRecipe(
         const ProjectExplorer::SignalOperationData &data,

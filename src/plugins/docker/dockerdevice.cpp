@@ -63,11 +63,14 @@
 #include <QHeaderView>
 #include <QLoggingCategory>
 #include <QMessageBox>
+#include <QHostAddress>
 #include <QNetworkInterface>
+#include <QTcpServer>
 #include <QPushButton>
 #include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QStandardItem>
+#include <QSysInfo>
 #include <QTextBrowser>
 #include <QThread>
 #include <QTimer>
@@ -185,6 +188,8 @@ public:
         FilePaths mounts;
         QString extraArgs;
         QString repoTag;
+        Port portsFrom;
+        Port portsTo;
     };
 
     CreateCommandLineParams appliedParams() const;
@@ -230,15 +235,6 @@ public:
 
         if (!initResult)
             return ResultError(initResult.error());
-
-        const QUrl localSocketUrl = Utils::urlFromLocalSocket();
-        if (!localSocketUrl.path().isEmpty()) {
-            auto forwardResult = fAccess->forwardLocalSocketServer(localSocketUrl.path());
-            if (forwardResult) {
-                m_qmlDebuggerAccess = localSocketUrl;
-                m_qmlDebuggerForward = std::move(*forwardResult);
-            }
-        }
 
         return fAccess;
     }
@@ -288,9 +284,6 @@ public:
     bool m_isShutdown = false;
     SynchronizedValue<DeviceFileAccessPtr> m_fileAccess;
     SynchronizedValue<std::unique_ptr<DockerContainerThread>> m_deviceThread;
-
-    QUrl m_qmlDebuggerAccess;
-    std::unique_ptr<CmdBridge::LocalSocketForward> m_qmlDebuggerForward;
 
     struct HandlesFileData
     {
@@ -501,9 +494,6 @@ Result<CommandLine> DockerDevicePrivate::withDockerExecCmd(
 void DockerDevicePrivate::stopCurrentContainer()
 {
     { // scope, so they are unlocked before setDeviceState
-        m_qmlDebuggerForward.reset();
-        m_qmlDebuggerAccess.clear();
-
         auto fileAccess = m_fileAccess.writeLocked();
         fileAccess->reset();
 
@@ -612,6 +602,7 @@ DockerDevicePrivate::CreateCommandLineParams DockerDevicePrivate::appliedParams(
     p.enableLldbFlags = q->enableLldbFlags();
     p.extraArgs = q->extraArgs();
     p.repoTag = q->repoAndTag();
+
     return p;
 }
 
@@ -626,6 +617,7 @@ DockerDevicePrivate::CreateCommandLineParams DockerDevicePrivate::volatileParams
     p.keepEntryPoint = q->keepEntryPoint.volatileValue();
     p.enableLldbFlags = q->enableLldbFlags.volatileValue();
     p.extraArgs = q->extraArgs.volatileValue();
+
     const QString r = q->repo.volatileValue();
     const QString t = q->tag.volatileValue();
     if (r == "<none>")
@@ -722,10 +714,18 @@ CommandLine DockerDevicePrivate::createCommandLine(const CreateCommandLineParams
                         .arg(escapeMountPath(hostXauth));
                 dockerCreate.addArgs({"--mount", mountArg});
             }
+
+            dockerCreate.addArgs({"--hostname", QSysInfo::machineHostName()});
         }
     }
 
     dockerCreate.addArgs(q->portMappings.createArguments());
+    if (p.portsFrom.isValid() && p.portsTo.isValid()) {
+        dockerCreate.addArgs({"-p",
+            QString("%1-%2:%1-%2")
+                .arg(p.portsFrom.number())
+                .arg(p.portsTo.number())});
+    }
 
     if (!p.keepEntryPoint)
         dockerCreate.addArgs({"--entrypoint", "/bin/sh"});
@@ -738,6 +738,45 @@ CommandLine DockerDevicePrivate::createCommandLine(const CreateCommandLineParams
     dockerCreate.addArg(p.repoTag);
 
     return dockerCreate;
+}
+
+static constexpr int DockerFreePortCount = 10;
+
+// Probe the host for DockerFreePortCount consecutive free ports in [10000, 30000).
+// We try up to 20 random aligned blocks, which is sufficient even when many blocks are in use.
+static Result<Port> findFreePortRangeStart()
+{
+    const int blockCount = (30000 - 10000) / DockerFreePortCount;
+
+    for (int attempt = 0; attempt < 20; ++attempt) {
+        const quint16 base
+            = quint16(10000 + (QRandomGenerator::global()->generate() % blockCount)
+                              * DockerFreePortCount);
+
+        QList<QTcpServer *> servers;
+        servers.reserve(DockerFreePortCount);
+        bool allFree = true;
+
+        for (int i = 0; i < DockerFreePortCount; ++i) {
+            auto *server = new QTcpServer;
+            if (server->listen(QHostAddress::Any, quint16(base + i))) {
+                servers.append(server);
+            } else {
+                delete server;
+                allFree = false;
+                break;
+            }
+        }
+
+        qDeleteAll(servers);
+
+        if (allFree)
+            return Port(base);
+    }
+
+    return ResultError(
+        Tr::tr("Could not find %1 consecutive free ports for Docker container.")
+            .arg(DockerFreePortCount));
 }
 
 Result<QString> DockerDevicePrivate::updateContainerAccess()
@@ -753,13 +792,24 @@ Result<QString> DockerDevicePrivate::updateContainerAccess()
     if (*lockedThread)
         return (*lockedThread)->containerId();
 
+    const Result<Port> portStart = findFreePortRangeStart();
+    if (!portStart)
+        return make_unexpected(portStart.error());
+
+    const Port portsFrom = *portStart;
+    const Port portsTo = Port(portsFrom.number() + DockerFreePortCount - 1);
+
     PortList freePortRange;
-    freePortRange.addRange(Port(10002), Port(10099));
+    freePortRange.addRange(portsFrom, portsTo);
     q->setFreePorts(freePortRange);
+
+    CreateCommandLineParams params = appliedParams();
+    params.portsFrom = portsFrom;
+    params.portsTo = portsTo;
 
     DockerContainerThread::Init init;
     init.dockerBinaryPath = settings().dockerBinaryPath();
-    init.createContainerCmd = createCommandLine(appliedParams());
+    init.createContainerCmd = createCommandLine(params);
 
     auto result = DockerContainerThread::create(init);
 
@@ -1548,20 +1598,39 @@ QPixmap DockerDevice::deviceStateIcon() const
     }
 }
 
-bool DockerDevice::forwardsQmlDebugSocket() const
+QUrl DockerDevice::toolControlChannel(const ControlChannelHint &) const
 {
-    return true;
+    QUrl url;
+    url.setScheme(urlTcpScheme());
+    url.setHost("localhost");
+    return url;
 }
 
-QUrl DockerDevice::toolControlChannel(const ControlChannelHint &hint) const
+ExecutableItem DockerDevice::portsGatheringRecipe(const Storage<PortsOutputData> &output) const
 {
-    QTC_CHECK(hint == QmlControlChannel);
-    return d->m_qmlDebuggerAccess;
-}
+    // Only check ports in use inside the container. Docker's userland proxy binds all
+    // mapped host ports as idle listeners, so a host-side /proc/net/tcp* scan would
+    // mark the entire mapped range as occupied and leave nothing to allocate.
+    // The container-side scan is sufficient: gdbserver actually running on port X
+    // appears there; an idle mapped port does not.
+    //
+    // Do not delegate to IDevice::portsGatheringRecipe: it probes isReadableDir("/proc/net")
+    // which returns false through the Docker file-access bridge, causing it to fall back to
+    // netstat, which is not available in most containers. Read the tcp tables directly instead.
+    const Storage<PortsInputData> input;
 
-QString DockerDevice::qmlDebugRemoteSocketPath() const
-{
-    return d->m_qmlDebuggerForward ? d->m_qmlDebuggerForward->path().path() : QString{};
+    const auto onSetup = [this, input]() -> SetupResult {
+        if (const auto r = updateContainerAccess(); !r)
+            return SetupResult::StopWithError;
+        *input = {freePorts(), CommandLine{filePath("/bin/sh"), {"-c", "cat /proc/net/tcp*"}}};
+        return SetupResult::Continue;
+    };
+
+    return Group {
+        input,
+        onGroupSetup(onSetup),
+        portsFromProcessRecipe(input, output),
+    };
 }
 
 ExecutableItem DockerDevice::signalOperationRecipe(

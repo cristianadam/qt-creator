@@ -8,6 +8,8 @@
 #include "dockerdebuggertest.h"
 #endif
 
+#include <debugger/debuggerruncontrol.h>
+
 #include <projectexplorer/devicesupport/idevice.h>
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/qmldebugcommandlinearguments.h>
@@ -20,6 +22,7 @@
 #include <QtTaskTree/QBarrier>
 
 using namespace Core;
+using namespace Debugger;
 using namespace ProjectExplorer;
 using namespace QtTaskTree;
 using namespace Utils;
@@ -39,11 +42,7 @@ public:
                 const QmlDebugServicesPreset services =
                     servicesForRunMode(runControl->runMode());
                 CommandLine cmd = runControl->commandLine();
-                const QString remotePath = runControl->device()->qmlDebugRemoteSocketPath();
-                if (!remotePath.isEmpty())
-                    cmd.addArg(qmlDebugLocalArguments(services, remotePath));
-                else
-                    cmd.addArg(qmlDebugTcpArguments(services, runControl->qmlChannel()));
+                cmd.addArg(qmlDebugTcpArguments(services, runControl->qmlChannel()));
                 process.setCommand(cmd);
             };
             const ProcessTask processTask(
@@ -60,9 +59,33 @@ public:
     }
 };
 
+class DockerDebugWorkerFactory final : public RunWorkerFactory
+{
+public:
+    DockerDebugWorkerFactory()
+    {
+        setId("DockerDebugWorkerFactory");
+        setRecipeProducer([](RunControl *runControl) {
+            DebuggerRunParameters rp = DebuggerRunParameters::fromRunControl(runControl);
+            rp.setupPortsGatherer(runControl);
+            if (rp.isCppDebugging()) {
+                rp.setStartMode(AttachToRemoteServer);
+                rp.setCloseMode(KillAndExitMonitorAtClose);
+                rp.setUseExtendedRemote(true);
+                rp.setLldbPlatform("remote-linux");
+            }
+            rp.setUseTerminal(false);
+            return debuggerRecipe(runControl, rp);
+        });
+        addSupportedRunMode(ProjectExplorer::Constants::DEBUG_RUN_MODE);
+        addSupportedDeviceType(Constants::DOCKER_DEVICE_TYPE);
+    }
+};
+
 void setupDockerRunAndDebugSupport()
 {
     static DockerQmlToolingWorkerFactory qmlToolingWorkerFactory;
+    static DockerDebugWorkerFactory debugWorkerFactory;
 }
 
 class DockerPlugin final : public ExtensionSystem::IPlugin
@@ -91,7 +114,6 @@ private:
 #ifdef WITH_TESTS
         addTestCreator(createDockerQmlChannelTest);
         addTestCreator(createDockerPortsGatheringTest);
-        addTestCreator(createDockerQmlForwardingTest);
 #endif
     }
 

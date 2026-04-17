@@ -258,10 +258,6 @@ Result<> DebuggerRunParameters::fixupParameters(ProjectExplorer::RunControl *run
                     return ResultError(Tr::tr("Not enough free ports for QML debugging."));
             }
         }
-        if (device && device->forwardsQmlDebugSocket()) {
-            if (m_qmlServer.port() <= 0)
-                m_qmlServer = device->toolControlChannel(IDevice::QmlControlChannel);
-        }
     }
 
     if (settings().autoEnrichParameters()) {
@@ -288,12 +284,11 @@ Result<> DebuggerRunParameters::fixupParameters(ProjectExplorer::RunControl *run
             service = QmlDebuggerServices;
         }
         if (m_startMode != AttachToLocalProcess && m_startMode != AttachToCrashedProcess) {
-            const QString remoteSockPath = device ? device->qmlDebugRemoteSocketPath() : QString{};
-            const QString qmlarg = isCppDebugging() && m_nativeMixedEnabled
-                                 ? qmlDebugNativeArguments(service, false)
-                                 : (!remoteSockPath.isEmpty()
-                                    ? qmlDebugLocalArguments(service, remoteSockPath)
-                                    : qmlDebugTcpArguments(service, m_qmlServer));
+            QString qmlarg;
+            if (isCppDebugging() && m_nativeMixedEnabled)
+                qmlarg = qmlDebugNativeArguments(service, false);
+            else
+                qmlarg = qmlDebugTcpArguments(service, m_qmlServer);
             m_inferior.command.addArg(qmlarg);
         }
     }
