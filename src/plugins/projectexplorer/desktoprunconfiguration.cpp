@@ -104,11 +104,16 @@ void DesktopRunConfiguration::updateTargetInformation()
     auto launcherAspect = aspect<LauncherAspect>();
     launcherAspect->setVisible(false);
 
-    auto wda = aspect<WorkingDirectoryAspect>();
-    if (!bti.workingDirectory.isEmpty())
-        wda->setDefaultWorkingDirectory(bti.workingDirectory);
-
     const FilePath executable = executableToRun(bti);
+
+    auto wda = aspect<WorkingDirectoryAspect>();
+    if (!bti.workingDirectory.isEmpty()) {
+        wda->setDefaultWorkingDirectory(bti.workingDirectory);
+    } else {
+        const IDeviceConstPtr runDevice = RunDeviceKitAspect::device(kit());
+        if (runDevice && !runDevice->rootPath().isLocal())
+            wda->setDefaultWorkingDirectory(FilePath());
+    }
     aspect<ExecutableAspect>()->setExecutable(executable);
 
     const QStringList argumentsList = bti.additionalData.toMap()["arguments"].toStringList();

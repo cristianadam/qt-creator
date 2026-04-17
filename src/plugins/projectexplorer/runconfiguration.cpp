@@ -625,8 +625,11 @@ ProcessRunData RunConfiguration::runnable() const
 {
     ProcessRunData r;
     r.command = commandLine();
-    if (auto workingDirectoryAspect = aspect<WorkingDirectoryAspect>())
-        r.workingDirectory = r.command.executable().withNewMappedPath(workingDirectoryAspect->workingDirectory());
+    if (auto workingDirectoryAspect = aspect<WorkingDirectoryAspect>()) {
+        const FilePath wd = workingDirectoryAspect->workingDirectory();
+        if (!wd.isEmpty())
+            r.workingDirectory = r.command.executable().withNewMappedPath(wd);
+    }
     if (auto environmentAspect = aspect<EnvironmentAspect>())
     {
         r.environment = environmentAspect->expandedEnvironment(*macroExpander());
