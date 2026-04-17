@@ -895,6 +895,15 @@ public:
                 &QFutureWatcher<Client::SocketServerEvent>::resultReadyAt,
                 this,
                 [this](int idx) { handleEvent(m_watcher.resultAt(idx)); });
+        connect(&m_watcher,
+                &QFutureWatcher<Client::SocketServerEvent>::finished,
+                this,
+                [this] {
+                    if (m_stopRequested) {
+                        cleanupConnections();
+                        deleteLater();
+                    }
+                });
 
         m_watcher.setFuture(eventFuture);
     }
@@ -923,13 +932,6 @@ public:
         m_stopRequested = true;
         if (m_client)
             m_client->sendSocketStopForward(m_socketId);
-        connect(&m_watcher,
-                &QFutureWatcher<Client::SocketServerEvent>::finished,
-                this,
-                [this] {
-                    cleanupConnections();
-                    deleteLater();
-                });
     }
 
     QString remotePath() const { return m_remotePath; }
