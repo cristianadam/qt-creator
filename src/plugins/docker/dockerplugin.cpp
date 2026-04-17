@@ -91,6 +91,7 @@ private:
 #ifdef WITH_TESTS
         addTestCreator(createDockerQmlChannelTest);
         addTestCreator(createDockerPortsGatheringTest);
+        addTestCreator(createDockerQmlForwardingTest);
 #endif
     }
 
