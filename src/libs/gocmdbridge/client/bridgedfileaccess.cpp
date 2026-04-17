@@ -965,6 +965,9 @@ private:
             cs.socket = nullptr;
         }
 
+        qCDebug(faLog) << "LocalSocketForward: remote client" << connId
+                       << "connected, forwarding to local server at" << m_localServerPath;
+
         QLocalSocket *socket = new QLocalSocket(this);
         cs.socket = socket;
         QPointer<QLocalSocket> weakSocket(socket);
@@ -982,6 +985,9 @@ private:
                 if (error == QLocalSocket::ServerNotFoundError
                     || error == QLocalSocket::ConnectionRefusedError) {
                     if (++it->retryCount > kMaxLocalConnectRetries) {
+                        qCWarning(faLog) << "LocalSocketForward: gave up connecting to"
+                                         << m_localServerPath << "after"
+                                         << kMaxLocalConnectRetries << "retries";
                         if (m_client)
                             m_client->sendSocketClose(m_socketId, connId);
                         m_connections.erase(it);
@@ -989,6 +995,9 @@ private:
                             weakSocket->deleteLater();
                         return;
                     }
+                    qCDebug(faLog) << "LocalSocketForward: connect to" << m_localServerPath
+                                   << "failed (error" << error << "), retry"
+                                   << it->retryCount << "of" << kMaxLocalConnectRetries;
                     const int delay = qMin(it->retryMs * 2, 1000);
                     it->retryMs = delay;
                     QTimer::singleShot(delay, this, [this, connId, weakSocket]() {
@@ -999,6 +1008,9 @@ private:
                             weakSocket->connectToServer(m_localServerPath);
                     });
                 } else {
+                    qCWarning(faLog) << "LocalSocketForward: non-retryable error connecting to"
+                                     << m_localServerPath << "- error:" << error
+                                     << weakSocket->errorString();
                     if (m_client)
                         m_client->sendSocketClose(m_socketId, connId);
                     m_connections.erase(it);
