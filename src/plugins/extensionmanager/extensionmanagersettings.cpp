@@ -37,17 +37,6 @@ ExtensionManagerSettings::ExtensionManagerSettings()
     useExternalRepo.setDefaultValue(false);
     useExternalRepo.setLabelText(Tr::tr("Use external repository"));
 
-#ifndef QT_NO_SSL
-    const bool sslSupported = QSslSocket::supportsSsl();
-#else
-    const bool sslSupported = false;
-#endif
-
-    useExternalRepo.setEnabled(sslSupported);
-    if (!sslSupported) {
-        useExternalRepo.setToolTip(Tr::tr("SSL support is not available."));
-    }
-
     repositoryUrls.setSettingsKey("RepositoryUrls");
     repositoryUrls.setLabelText(Tr::tr("Repository URLs:"));
     repositoryUrls.setToolTip(
@@ -58,6 +47,15 @@ ExtensionManagerSettings::ExtensionManagerSettings()
 
     // clang-format off
     setLayouter([this] {
+#ifndef QT_NO_SSL
+        const bool sslSupported = QSslSocket::supportsSsl();
+#else
+        const bool sslSupported = false;
+#endif
+        useExternalRepo.setEnabled(sslSupported);
+        if (!sslSupported)
+            useExternalRepo.setToolTip(Tr::tr("SSL support is not available."));
+
         using namespace Layouting;
         using namespace Core;
         return Column {
