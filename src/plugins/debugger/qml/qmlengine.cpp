@@ -349,6 +349,8 @@ void QmlEngine::beginConnection()
         return;
 
     const QUrl server = runParameters().qmlServer();
+    qDebug() << QString("QML Debugger: beginConnection scheme=%1 path=%2 port=%3")
+                    .arg(server.scheme(), server.path()).arg(server.port());
     if (server.scheme() == Utils::urlSocketScheme()) {
         // Act as a local socket server: Qt Creator listens and the remote QML runtime connects.
         // Do NOT start the connection timer here — the server must keep listening until the
@@ -357,6 +359,7 @@ void QmlEngine::beginConnection()
         if (connection->isListening())
             return; // already listening; a second beginConnection() call is harmless but wasteful
         connection->startLocalServer(server.path());
+        qDebug() << "QML Debugger: startLocalServer done, isListening=" << connection->isListening();
     } else {
         QString host = server.host();
         // Use localhost as default

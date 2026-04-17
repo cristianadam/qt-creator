@@ -82,6 +82,7 @@ public:
     QPixmap deviceStateIcon() const override;
 
     bool forwardsQmlDebugSocket() const override;
+    void prepareQmlDebugging() const override;
     QUrl toolControlChannel(const ControlChannelHint &) const override;
     QString qmlDebugRemoteSocketPath() const override;
 

@@ -2297,6 +2297,7 @@ Result<> DebuggerPlugin::initialize(const QStringList &arguments)
 
 #ifdef WITH_TESTS
     addTestCreator(createDebuggerTest);
+    addTestCreator(createDebuggerFixupParametersTest);
 #endif
 
     return ResultOk;

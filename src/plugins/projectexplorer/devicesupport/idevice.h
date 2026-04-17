@@ -233,9 +233,14 @@ public:
     virtual QUrl toolControlChannel(const ControlChannelHint &) const;
 
     // Returns true when the device forwards QML debug connections via a Unix socket
-    // (e.g. Docker with cmdbridge).  Use this to decide whether to call
-    // requestQmlChannel() before starting the debug session.
+    // (e.g. Docker with cmdbridge).
     virtual bool forwardsQmlDebugSocket() const { return false; }
+
+    // Called by the debugger before fixupParameters() to ensure the device-side
+    // QML debug socket forward is established.  The default is a no-op; devices
+    // that forward the socket (e.g. Docker) override this to initialize their
+    // file-access bridge so that toolControlChannel() returns a valid URL.
+    virtual void prepareQmlDebugging() const {}
 
     // Returns the Unix socket path on the remote device to pass to the inferior's
     // -qmljsdebugger=file: argument.  Non-empty only when the device forwards QML

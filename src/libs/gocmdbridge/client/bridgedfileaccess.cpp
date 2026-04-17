@@ -939,6 +939,8 @@ public:
 private:
     void handleEvent(const Client::SocketServerEvent &event)
     {
+        qWarning() << "LocalSocketForward: handleEvent type=" << event.index()
+                   << "socketId=" << m_socketId;
         if (const auto *conn = std::get_if<Client::SocketServerConnect>(&event)) {
             onRemoteConnect(conn->connId);
         } else if (const auto *data = std::get_if<Client::SocketServerData>(&event)) {
@@ -967,8 +969,8 @@ private:
             cs.socket = nullptr;
         }
 
-        qCDebug(faLog) << "LocalSocketForward: remote client" << connId
-                       << "connected, forwarding to local server at" << m_localServerPath;
+        qWarning() << "LocalSocketForward: remote client" << connId
+                   << "connected, forwarding to local server at" << m_localServerPath;
 
         QLocalSocket *socket = new QLocalSocket(this);
         cs.socket = socket;
@@ -1037,6 +1039,10 @@ private:
                 weakSocket->deleteLater();
         });
 
+        connect(socket, &QLocalSocket::connected, this, [this, connId]() {
+            qWarning() << "LocalSocketForward: connected to local server" << m_localServerPath
+                       << "for connId" << connId;
+        });
         socket->connectToServer(m_localServerPath);
     }
 

@@ -7,7 +7,7 @@
 
 namespace Docker::Internal {
 
-QObject *createDockerQmlChannelTest();
+QObject *createDockerQmlSocketTest();
 QObject *createDockerPortsGatheringTest();
 QObject *createDockerQmlForwardingTest();
 

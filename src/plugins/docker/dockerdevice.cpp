@@ -196,6 +196,10 @@ public:
     Result<DeviceFileAccessPtr> createBridgeFileAccess(
         SynchronizedValue<DeviceFileAccessPtr>::unique_lock &fileAccess)
     {
+        QTC_ASSERT(QThread::isMainThread(),
+                   qWarning() << "createBridgeFileAccess() called from a background thread;"
+                               << "LocalSocketForwardImpl will lack an event loop");
+
         Result<FilePath> cmdBridgePath = getCmdBridgePath();
 
         if (!cmdBridgePath)
@@ -1548,6 +1552,11 @@ QPixmap DockerDevice::deviceStateIcon() const
 bool DockerDevice::forwardsQmlDebugSocket() const
 {
     return true;
+}
+
+void DockerDevice::prepareQmlDebugging() const
+{
+    fileAccess();
 }
 
 QUrl DockerDevice::toolControlChannel(const ControlChannelHint &hint) const

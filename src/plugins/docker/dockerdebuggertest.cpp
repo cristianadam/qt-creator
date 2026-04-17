@@ -33,17 +33,18 @@ using namespace Utils;
 
 namespace Docker::Internal {
 
-// Verifies the fix for QTCREATORBUG-34093, part 2:
-// DebuggerRunWorkerFactory now calls requestQmlChannel() for Docker devices
-// when QML debugging is enabled. Before the fix no QML channel port was ever
-// allocated and the application waited indefinitely for the debugger.
+// Verifies the design for QTCREATORBUG-34093:
+// Docker devices forward QML debug connections via a CmdBridge Unix socket.
+// fixupParameters() calls device->prepareQmlDebugging() (which initialises the
+// bridge) and then reads the socket URL from toolControlChannel(), so no TCP
+// port is ever allocated.  The TCP channel mechanism (requestQmlChannel()) is
+// therefore NOT used for Docker devices.
 
-class DockerQmlChannelTest : public QObject
+class DockerQmlSocketTest : public QObject
 {
     Q_OBJECT
 
 private:
-    // Build AspectContainerData with QML debugging enabled and C++/Python disabled.
     static AspectContainerData makeQmlOnlyAspectData()
     {
         AspectContainerData data;
@@ -51,7 +52,6 @@ private:
         return data;
     }
 
-    // Build AspectContainerData with both C++ and QML debugging enabled.
     static AspectContainerData makeCombinedAspectData()
     {
         AspectContainerData data;
@@ -67,45 +67,39 @@ private slots:
         m_kits.clear();
     }
 
-    // Test 1: Docker device + QML debugging -> requestQmlChannel() must be called.
-    void testDockerQmlDebuggingRequestsQmlChannel()
+    // Docker device + QML-only debugging: socket forwarding flag is set; no TCP
+    // channel is requested (the bridge is set up lazily in fixupParameters()).
+    void testDockerQmlDebuggingUsesSocketForwarding()
     {
         auto device = DockerDevice::create();
+        QVERIFY(device->forwardsQmlDebugSocket());
 
         Kit *kit = KitManager::registerKit([](Kit *k) {
-            k->setUnexpandedDisplayName("Docker_DockerDebuggerTest");
+            k->setUnexpandedDisplayName("Docker_DockerQmlSocketTest");
         });
         QVERIFY(kit);
         m_kits.append(kit);
 
         auto *rc = new RunControl(ProjectExplorer::Constants::DEBUG_RUN_MODE);
-        // setKit() sets d->data.kit and calls setDevice(RunDeviceKitAspect::device(kit)).
-        // The kit has no device, so setDevice(nullptr) is called first, then
-        // setDeviceForTest() overrides it with the Docker device.
         rc->setKit(kit);
         rc->setDeviceForTest(device);
         rc->setRunConfigIdForTest(ProjectExplorer::Constants::CMAKE_RUNCONFIG_ID);
         rc->setAspectDataForTest(makeQmlOnlyAspectData());
-
-        // createRecipe() finds DebuggerRunWorkerFactory and calls its recipe producer.
-        // The producer calls requestQmlChannel() as a side effect when the device
-        // is DockerDeviceType and isQmlDebugging() is true.
         rc->createRecipe(ProjectExplorer::Constants::DEBUG_RUN_MODE);
 
-        QVERIFY(rc->usesQmlChannel());
+        QVERIFY(!rc->usesQmlChannel());
         delete rc;
     }
 
-    // Test 2: Docker device + combined C++/QML debugging -> requestQmlChannel() must be called.
-    // Regression test for QTCREATORBUG-34093: combined mode must also trigger
-    // requestQmlChannel() so that createBridgeFileAccess() runs (and sets
-    // m_qmlDebuggerAccess) before fixupParameters() looks at m_qmlServer.
-    void testDockerCombinedDebuggingRequestsQmlChannel()
+    // Docker device + combined C++/QML debugging: same — socket forwarding, no
+    // TCP channel.
+    void testDockerCombinedDebuggingUsesSocketForwarding()
     {
         auto device = DockerDevice::create();
+        QVERIFY(device->forwardsQmlDebugSocket());
 
         Kit *kit = KitManager::registerKit([](Kit *k) {
-            k->setUnexpandedDisplayName("Docker_CombinedDebuggerTest");
+            k->setUnexpandedDisplayName("Docker_CombinedQmlSocketTest");
         });
         QVERIFY(kit);
         m_kits.append(kit);
@@ -115,25 +109,24 @@ private slots:
         rc->setDeviceForTest(device);
         rc->setRunConfigIdForTest(ProjectExplorer::Constants::CMAKE_RUNCONFIG_ID);
         rc->setAspectDataForTest(makeCombinedAspectData());
-
         rc->createRecipe(ProjectExplorer::Constants::DEBUG_RUN_MODE);
 
-        QVERIFY(rc->usesQmlChannel());
+        QVERIFY(!rc->usesQmlChannel());
         delete rc;
     }
 
-    // Test 3: Non-Docker device (no device) + QML debugging -> no requestQmlChannel().
-    void testNonDockerQmlDebuggingDoesNotRequestQmlChannel()
+    // Non-Docker device: no socket forwarding, no TCP channel (the TCP channel
+    // is allocated later by the desktop-device path in fixupParameters()).
+    void testNonDockerQmlDebuggingDoesNotForwardSocket()
     {
         Kit *kit = KitManager::registerKit([](Kit *k) {
-            k->setUnexpandedDisplayName("Docker_NonDockerDebuggerTest");
+            k->setUnexpandedDisplayName("Docker_NonDockerQmlSocketTest");
         });
         QVERIFY(kit);
         m_kits.append(kit);
 
         auto *rc = new RunControl(ProjectExplorer::Constants::DEBUG_RUN_MODE);
         rc->setKit(kit);
-        // No Docker device -> condition "device->type() == DockerDeviceType" is false.
         rc->setRunConfigIdForTest(ProjectExplorer::Constants::CMAKE_RUNCONFIG_ID);
         rc->setAspectDataForTest(makeQmlOnlyAspectData());
         rc->createRecipe(ProjectExplorer::Constants::DEBUG_RUN_MODE);
@@ -146,9 +139,9 @@ private:
     QList<Kit *> m_kits;
 };
 
-QObject *createDockerQmlChannelTest()
+QObject *createDockerQmlSocketTest()
 {
-    return new DockerQmlChannelTest;
+    return new DockerQmlSocketTest;
 }
 
 // DockerPortsGatheringTest

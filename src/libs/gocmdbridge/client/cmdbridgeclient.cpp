@@ -211,8 +211,13 @@ std::optional<Result<>> ClientPrivate::handleSocketResults(const QVariantMap &ma
     };
 
     if (type == "socketconnect") {
+        const int id = map.value("Id").toInt();
         const int connId = map.value("ConnId").toInt();
-        return addEvent(map.value("Id").toInt(), Client::SocketServerConnect{connId});
+        const bool known = socketServerForwards.contains(id);
+        qWarning() << "socketconnect: id=" << id << "connId=" << connId
+                   << "known=" << known
+                   << "knownIds=" << socketServerForwards.keys();
+        return addEvent(id, Client::SocketServerConnect{connId});
     }
 
     if (type == "socketdata") {
@@ -1024,6 +1029,7 @@ Utils::Result<Client::SocketServerForward> Client::forwardSocketServer()
             eventPromise->start();
             QFuture<SocketServerEvent> eventFuture = eventPromise->future();
             d->socketServerForwards.insert(id, std::move(eventPromise));
+            qWarning() << "forwardSocketServer registered: id=" << id << "remotePath=" << remotePath;
 
             promise.addResult(SocketServerForward{id, remotePath, eventFuture});
             return JobResult::Done;

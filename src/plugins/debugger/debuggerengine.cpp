@@ -259,8 +259,9 @@ Result<> DebuggerRunParameters::fixupParameters(ProjectExplorer::RunControl *run
             }
         }
         if (device && device->forwardsQmlDebugSocket()) {
-            if (m_qmlServer.port() <= 0)
-                m_qmlServer = device->toolControlChannel(IDevice::QmlControlChannel);
+            device->prepareQmlDebugging();
+            m_qmlServer = device->toolControlChannel(IDevice::QmlControlChannel);
+            qDebug() << QString("QML socket channel: %1").arg(m_qmlServer.toString());
         }
     }
 

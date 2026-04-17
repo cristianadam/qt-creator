@@ -89,7 +89,7 @@ private:
         m_dockerApi = std::make_unique<DockerApi>();
         setupDockerRunAndDebugSupport();
 #ifdef WITH_TESTS
-        addTestCreator(createDockerQmlChannelTest);
+        addTestCreator(createDockerQmlSocketTest);
         addTestCreator(createDockerPortsGatheringTest);
         addTestCreator(createDockerQmlForwardingTest);
 #endif

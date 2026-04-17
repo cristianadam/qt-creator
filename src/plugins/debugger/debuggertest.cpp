@@ -6,7 +6,9 @@
 #include "debuggertest.h"
 
 #include "debuggercore.h"
+#include "debuggerengine.h"
 #include "debuggeritem.h"
+#include "debuggerrunconfigurationaspect.h"
 #include "debuggerruncontrol.h"
 
 #include <coreplugin/editormanager/editormanager.h>
@@ -15,11 +17,15 @@
 #include <cppeditor/projectinfo.h>
 
 #include <projectexplorer/buildmanager.h>
+#include <projectexplorer/devicesupport/idevice.h>
+#include <projectexplorer/kit.h>
+#include <projectexplorer/kitmanager.h>
 #include <projectexplorer/projectmanager.h>
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/runcontrol.h>
 
 #include <utils/filepath.h>
+#include <utils/url.h>
 
 #include <QTest>
 #include <QSignalSpy>
@@ -242,6 +248,92 @@ void DebuggerUnitTests::testDebuggerMatching()
 QObject *createDebuggerTest()
 {
     return new DebuggerUnitTests;
+}
+
+// DebuggerFixupParametersTest
+//
+// Verifies that fixupParameters() unconditionally sets m_qmlServer to the
+// Unix socket URL when the device forwards QML debug sockets.
+//
+// Regression test for combined C++/QML debugging on Docker (QTCREATORBUG-34093).
+// The test pre-sets a TCP address in m_qmlServer to guard against any code path
+// that could install a TCP URL before fixupParameters() runs; the socket override
+// must win regardless.
+
+class FakeSocketForwardDevice final : public ProjectExplorer::IDevice
+{
+public:
+    static Ptr create(const QUrl &socketUrl)
+    {
+        return Ptr(new FakeSocketForwardDevice(socketUrl));
+    }
+
+    ProjectExplorer::IDeviceWidget *createWidget() override { return nullptr; }
+    bool forwardsQmlDebugSocket() const override { return true; }
+    QUrl toolControlChannel(const ControlChannelHint &) const override { return m_socketUrl; }
+
+private:
+    explicit FakeSocketForwardDevice(const QUrl &socketUrl) : m_socketUrl(socketUrl) {}
+    QUrl m_socketUrl;
+};
+
+class DebuggerFixupParametersTest : public QObject
+{
+    Q_OBJECT
+
+private slots:
+    void cleanupTestCase()
+    {
+        for (Kit *k : m_kits)
+            KitManager::deregisterKit(k);
+        m_kits.clear();
+    }
+
+    void testSocketUrlOverridesTcpWhenDeviceForwards()
+    {
+        QUrl socketUrl;
+        socketUrl.setScheme(Utils::urlSocketScheme());
+        socketUrl.setPath("/tmp/fake-qml-debug-socket");
+        const IDevice::ConstPtr device = FakeSocketForwardDevice::create(socketUrl);
+
+        Kit *kit = KitManager::registerKit([](Kit *k) {
+            k->setUnexpandedDisplayName("Debugger_FixupParametersTest");
+        });
+        QVERIFY(kit);
+        m_kits.append(kit);
+
+        auto *rc = new RunControl(ProjectExplorer::Constants::DEBUG_RUN_MODE);
+        rc->setKit(kit);
+        rc->setDeviceForTest(device);
+        rc->setRunConfigIdForTest(ProjectExplorer::Constants::CMAKE_RUNCONFIG_ID);
+        AspectContainerData aspectData;
+        aspectData.append(DebuggerRunConfigurationAspect::Data::createCombinedTestData());
+        rc->setAspectDataForTest(aspectData);
+
+        DebuggerRunParameters rp = DebuggerRunParameters::fromRunControl(rc);
+
+        // Simulate fixupParamsRecipe installing a TCP URL after requestQmlChannel()
+        // pre-allocates a port.  The TCP port > 0, which is the condition that
+        // previously prevented the socket URL override.
+        rp.setQmlServer(QUrl("http://127.0.0.1:12345"));
+
+        const Result<> res = rp.fixupParameters(rc);
+        if (!res)
+            QFAIL(qPrintable(res.error()));
+
+        QCOMPARE(rp.qmlServer().scheme(), Utils::urlSocketScheme());
+        QCOMPARE(rp.qmlServer().path(), socketUrl.path());
+
+        delete rc;
+    }
+
+private:
+    QList<Kit *> m_kits;
+};
+
+QObject *createDebuggerFixupParametersTest()
+{
+    return new DebuggerFixupParametersTest;
 }
 
 } // Debugger::Internal

@@ -9,6 +9,7 @@ namespace Debugger::Internal {
 
 #ifdef WITH_TESTS
 QObject *createDebuggerTest();
+QObject *createDebuggerFixupParametersTest();
 #endif
 
 } // Debugger::Internal
