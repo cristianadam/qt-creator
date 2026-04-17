@@ -199,13 +199,13 @@ public:
         if (!m_useOriginal && m_category && m_originalSettings) {
             m_saved = std::array<bool, 5>{};
 
-            for (int i = QtDebugMsg; i < QtInfoMsg; i++) {
+            for (int i = QtDebugMsg; i <= QtInfoMsg; i++) {
                 (*m_saved)[i] = m_category->isEnabled(static_cast<QtMsgType>(i));
                 m_category->setEnabled(static_cast<QtMsgType>(i), (*m_originalSettings)[i]);
             }
 
         } else if (!useOriginal && m_useOriginal && m_saved && m_category) {
-            for (int i = QtDebugMsg; i < QtInfoMsg; i++)
+            for (int i = QtDebugMsg; i <= QtInfoMsg; i++)
                 m_category->setEnabled(static_cast<QtMsgType>(i), (*m_saved)[i]);
         }
         m_useOriginal = useOriginal;
@@ -364,7 +364,7 @@ LoggingCategoryModel::~LoggingCategoryModel() {}
 
 void LoggingCategoryModel::append(const LoggingCategoryEntry &entry)
 {
-    beginInsertRows(QModelIndex(), m_categories.size(), m_categories.size() + 1);
+    beginInsertRows(QModelIndex(), m_categories.size(), m_categories.size());
     m_categories.push_back(entry);
     endInsertRows();
 }
@@ -588,7 +588,7 @@ public:
     static LoggingViewManagerWidget *instance()
     {
         static QPointer<LoggingViewManagerWidget> instance = new LoggingViewManagerWidget(
-            Core::ICore::dialogParent());
+            Core::ICore::mainWindow());
         return instance;
     }
 
@@ -1117,8 +1117,7 @@ void LoggingViewer::showLoggingView()
     QTC_ASSERT(staticLogWidget, return);
 
     staticLogWidget->show();
-    staticLogWidget->raise();
-    staticLogWidget->activateWindow();
+    ICore::raiseWindow(staticLogWidget);
 
     wasLogViewerShown = true;
 }
