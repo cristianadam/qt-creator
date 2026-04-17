@@ -1,14 +1,14 @@
-Qt Creator 13
+Qt Creator 20
 =============
 
-Qt Creator version 13 contains bug fixes and new features.
+Qt Creator version 20 contains bug fixes and new features.
 It is a free upgrade for all users.
 
 The most important changes are listed in this document. For a complete list of
 changes, see the Git log for the Qt Creator sources that you can check out from
 the public Git repository or view online at
 
-<https://code.qt.io/cgit/qt-creator/qt-creator.git/log/?id=12.0..v13.0.0>
+<https://code.qt.io/cgit/qt-creator/qt-creator.git/log/?id=19.0..v20.0.0>
 
 New plugins
 -----------
@@ -27,6 +27,8 @@ Added
 Changed
 
 Fixed
+
+### Model Context Protocol
 
 Help
 ----
