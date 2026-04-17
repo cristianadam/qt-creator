@@ -767,7 +767,13 @@ public:
     {
         setId(Constants::DEBUGGER_RUN_FACTORY);
         setRecipeProducer([](RunControl *runControl) {
-            return debuggerRecipe(runControl, DebuggerRunParameters::fromRunControl(runControl));
+            const DebuggerRunParameters rp = DebuggerRunParameters::fromRunControl(runControl);
+            if (rp.isQmlDebugging()) {
+                const IDevice::ConstPtr device = runControl->device();
+                if (device && device->forwardsQmlDebugSocket())
+                    runControl->requestQmlChannel();
+            }
+            return debuggerRecipe(runControl, rp);
         });
 
         addSupportedRunMode(ProjectExplorer::Constants::DEBUG_RUN_MODE);

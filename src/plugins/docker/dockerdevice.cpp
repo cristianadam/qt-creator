@@ -1545,6 +1545,11 @@ QPixmap DockerDevice::deviceStateIcon() const
     }
 }
 
+bool DockerDevice::forwardsQmlDebugSocket() const
+{
+    return true;
+}
+
 QUrl DockerDevice::toolControlChannel(const ControlChannelHint &hint) const
 {
     QTC_CHECK(hint == QmlControlChannel);

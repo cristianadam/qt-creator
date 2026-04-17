@@ -46,6 +46,18 @@ public:
             d->useQmlDebugger = true;
             return BaseAspect::Data::Ptr(d);
         }
+
+        static BaseAspect::Data::Ptr createCombinedTestData()
+        {
+            auto *d = new Data;
+            d->m_classId = &DebuggerRunConfigurationAspect::staticMetaObject;
+            d->m_cloner = [](const BaseAspect::Data *src) -> BaseAspect::Data * {
+                return new Data(*static_cast<const Data *>(src));
+            };
+            d->useCppDebugger = true;
+            d->useQmlDebugger = true;
+            return BaseAspect::Data::Ptr(d);
+        }
 #endif
     };
 

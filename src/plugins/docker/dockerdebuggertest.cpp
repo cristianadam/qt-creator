@@ -49,6 +49,14 @@ private:
         return data;
     }
 
+    // Build AspectContainerData with both C++ and QML debugging enabled.
+    static AspectContainerData makeCombinedAspectData()
+    {
+        AspectContainerData data;
+        data.append(Debugger::DebuggerRunConfigurationAspect::Data::createCombinedTestData());
+        return data;
+    }
+
 private slots:
     void cleanupTestCase()
     {
@@ -86,7 +94,33 @@ private slots:
         delete rc;
     }
 
-    // Test 2: Non-Docker device (no device) + QML debugging -> no requestQmlChannel().
+    // Test 2: Docker device + combined C++/QML debugging -> requestQmlChannel() must be called.
+    // Regression test for QTCREATORBUG-34093: combined mode must also trigger
+    // requestQmlChannel() so that createBridgeFileAccess() runs (and sets
+    // m_qmlDebuggerAccess) before fixupParameters() looks at m_qmlServer.
+    void testDockerCombinedDebuggingRequestsQmlChannel()
+    {
+        auto device = DockerDevice::create();
+
+        Kit *kit = KitManager::registerKit([](Kit *k) {
+            k->setUnexpandedDisplayName("Docker_CombinedDebuggerTest");
+        });
+        QVERIFY(kit);
+        m_kits.append(kit);
+
+        auto *rc = new RunControl(ProjectExplorer::Constants::DEBUG_RUN_MODE);
+        rc->setKit(kit);
+        rc->setDeviceForTest(device);
+        rc->setRunConfigIdForTest(ProjectExplorer::Constants::CMAKE_RUNCONFIG_ID);
+        rc->setAspectDataForTest(makeCombinedAspectData());
+
+        rc->createRecipe(ProjectExplorer::Constants::DEBUG_RUN_MODE);
+
+        QVERIFY(rc->usesQmlChannel());
+        delete rc;
+    }
+
+    // Test 3: Non-Docker device (no device) + QML debugging -> no requestQmlChannel().
     void testNonDockerQmlDebuggingDoesNotRequestQmlChannel()
     {
         Kit *kit = KitManager::registerKit([](Kit *k) {
