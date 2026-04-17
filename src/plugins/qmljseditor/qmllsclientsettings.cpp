@@ -35,6 +35,7 @@
 
 #include <QCheckBox>
 #include <QJsonDocument>
+#include <QLayout>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QRadioButton>
