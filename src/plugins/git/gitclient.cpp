@@ -3391,6 +3391,11 @@ void GitClient::synchronousAbortCommand(const FilePath &workingDir, const QStrin
         return;
     }
 
+    if (abortCommand == "rebase") {
+        // Aborting a rebase hard resets the working copy, therefore stash changes as backup
+        synchronousStash(workingDir, "InteractiveRebaseBackup");
+    }
+
     const CommandResult result = vcsSynchronousExec(workingDir, {abortCommand, "--abort"},
                                  RunFlag::ExpectRepoChanges | RunFlag::ShowSuccessMessage);
     VcsOutputWindow::appendSilently(workingDir, result.cleanedStdOut());
