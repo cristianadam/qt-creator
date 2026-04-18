@@ -87,11 +87,6 @@ using namespace VcsBase;
 
 namespace Git::Internal {
 
-static QStringList defaultArguments()
-{
-    return {"-c", "core.quotepath=false"};
-}
-
 static QString branchesDisplay(const QString &prefix, QStringList *branches, bool *first)
 {
     const int limit = 12;
@@ -317,7 +312,7 @@ QStringList GitBaseDiffEditorController::addConfigurationArguments(const QString
 {
     QTC_ASSERT(!args.isEmpty(), return args);
 
-    QStringList realArgs = defaultArguments() + QStringList{
+    QStringList realArgs = {
         "-c",
         "diff.color=false",
         args.at(0),
@@ -868,7 +863,6 @@ GitClient &gitClient()
 GitClient::GitClient()
     : VcsBase::VcsBaseClientImpl(&Internal::settings())
 {
-    setExtraArguments(defaultArguments());
     m_gitQtcEditor = QString::fromLatin1("\"%1\" -client -block -pid %2")
             .arg(QCoreApplication::applicationFilePath())
             .arg(QCoreApplication::applicationPid());
@@ -2383,6 +2377,11 @@ Environment GitClient::processEnvironment(const FilePath &appliedTo) const
     environment.set("GIT_EDITOR", m_gitQtcEditor);
     environment.set("GIT_SEQUENCE_EDITOR", m_disableSequenceEditor ? "true" : m_gitQtcEditor);
     environment.set("GIT_OPTIONAL_LOCKS", "0");
+
+    environment.set("GIT_CONFIG_COUNT",   "1");
+    environment.set("GIT_CONFIG_KEY_0",   "core.quotepath");
+    environment.set("GIT_CONFIG_VALUE_0", "false");
+
     return environment.appliedToEnvironment(appliedTo.deviceEnvironment());
 }
 
