@@ -2194,10 +2194,14 @@ CMakeBuildConfigurationFactory::CMakeBuildConfigurationFactory()
     setBuildGenerator([](const Kit *k, const FilePath &projectPath, bool forSetup) {
         QList<BuildInfo> result;
 
-        // Skip the default shadow build directories for build types if we have presets
         const CMakeConfigItem presetItem = CMakeConfigurationKitAspect::cmakePresetConfigItem(k);
-        if (!presetItem.isNull())
+        if (!presetItem.isNull()) {
+            QVariant v = k->value(Constants::KIT_BUILDINFO_LIST);
+            if (v.canConvert<QList<ProjectExplorer::BuildInfo>>()) {
+                result = qvariant_cast<QList<ProjectExplorer::BuildInfo>>(v);
+            }
             return result;
+        }
 
         for (int type = BuildTypeDebug; type != BuildTypeLast; ++type) {
             BuildInfo info = createBuildInfo(BuildType(type));
