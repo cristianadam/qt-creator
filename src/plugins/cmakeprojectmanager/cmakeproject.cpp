@@ -78,6 +78,9 @@ CMakeProject::CMakeProject(const FilePath &fileName)
 
     if (fileName.endsWith(Constants::CMAKE_CACHE_TXT))
         m_buildDirToImport = fileName.parentDir();
+
+    if (m_presetsData.havePresets)
+        static_cast<CMakeProjectImporter *>(projectImporter())->createKitsFromPresets();
 }
 
 CMakeProject::~CMakeProject()

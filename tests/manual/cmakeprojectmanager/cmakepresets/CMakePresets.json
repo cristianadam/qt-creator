@@ -15,7 +15,7 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build-${presetName}",
       "graphviz" : "${sourceDir}/build-${presetName}/graphviz.dot",
-      "toolchainFile" : "$env{HOME}/Qt/6.10.0/gcc_64/lib/cmake/Qt6/qt.toolchain.cmake",
+      "toolchainFile" : "$env{HOME}/Qt/6.11.0/gcc_64/lib/cmake/Qt6/qt.toolchain.cmake",
       "condition" : {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -28,7 +28,7 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build-${presetName}",
       "graphviz" : "${sourceDir}/build-${presetName}/graphviz.dot",
-      "toolchainFile" : "$env{HOME}/Qt/6.10.0/macos/lib/cmake/Qt6/qt.toolchain.cmake",
+      "toolchainFile" : "$env{HOME}/Qt/6.11.0/macos/lib/cmake/Qt6/qt.toolchain.cmake",
       "condition" : {
         "type": "equals",
         "lhs": "${hostSystemName}",

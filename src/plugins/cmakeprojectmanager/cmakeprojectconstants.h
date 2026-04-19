@@ -90,5 +90,7 @@ const char OUTPUT_PREFIX[] = "[cmake] ";
 
 const char VXWORKS_DEVICE_TYPE[] = "VxWorks.Device.Type";
 
+const char KIT_BUILDINFO_LIST[] = "CMakeProjectManager.BuildInfoList";
+
 } // namespace Constants
 } // namespace CMakeProjectManager

@@ -335,7 +335,7 @@ FilePaths CMakeProjectImporter::importCandidates()
     if (!m_project->buildDirectoryToImport().isEmpty())
         return {m_project->buildDirectoryToImport()};
 
-    FilePaths candidates = presetCandidates();
+    FilePaths candidates;
 
     if (candidates.isEmpty()) {
         candidates << importCandidatesFromBuildFolderTemplate(projectFilePath());
@@ -497,6 +497,52 @@ bool CMakeProjectImporter::filter(ProjectExplorer::Kit *k) const
     return std::find_if(configurePresets.cbegin(), configurePresets.cend(),
                         [&presetName](const auto &preset) { return presetName == preset.name; })
            != configurePresets.cend();
+}
+
+static QString kitIdFromDirectoryData(const QString &projectFilePath, DirectoryData *data)
+{
+    return QString("%1:CMakePresets:%2").arg(projectFilePath).arg(data->cmakePreset);
+}
+
+
+void CMakeProjectImporter::createKitsFromPresets()
+{
+    const Utils::FilePaths presetDirs = presetCandidates();
+
+    for (const Utils::FilePath &dir : presetDirs) {
+        QString warning;
+
+        const QList<void*> dataList = examineDirectory(dir, &warning);
+        if (dataList.isEmpty())
+            continue;
+
+        QList<BuildInfo> buildInfos;
+        for (void *d : dataList) {
+            buildInfos.push_back(buildInfoList(d).first());
+        }
+
+        DirectoryData *data = static_cast<DirectoryData*>(dataList.first());
+        const Id kitId = Id::fromString(kitIdFromDirectoryData(projectFilePath().path(), data));
+
+        Kit *kit = KitManager::kit(kitId);
+        if (!kit || !kit->isValid()) {
+            KitManager::registerKit(
+                [this, data, buildInfos](Kit *kit) {
+                    KitGuard kitGuard(kit);
+
+                    kit->setValue(Constants::KIT_BUILDINFO_LIST, QVariant::fromValue(buildInfos));
+                    applyDirectoryDataToKit(data, kit);
+                    kit->setDetectionSource({DetectionSource::Temporary, "CMakePresets"});
+
+                    kit->setup();
+                    kit->fix();
+                },
+                kitId);
+        }
+
+        for (auto d : dataList)
+            deleteDirectoryData(d);
+    }
 }
 
 static CMakeConfig configurationFromPresetProbe(
@@ -1354,83 +1400,92 @@ Kit *CMakeProjectImporter::createKit(void *directoryData) const
     DirectoryData *data = static_cast<DirectoryData *>(directoryData);
 
     return QtProjectImporter::createTemporaryKit(data->qt, [&data, this](Kit *k) {
-        CMakeTool *cmakeTool = CMakeToolManager::findByCommand(data->cmakeBinary);
-        if (!cmakeTool) {
-            qCDebug(cmInputLog) << "Creating temporary CMakeTool for" << data->cmakeBinary.toUserOutput();
-
-            UpdateGuard guard(*this);
-
-            auto newTool = std::make_unique<CMakeTool>(DetectionSource::Manual, CMakeTool::createId());
-            newTool->setFilePath(data->cmakeBinary);
-            newTool->setDisplayName(uniqueCMakeToolDisplayName(*newTool));
-
-            cmakeTool = newTool.get();
-            CMakeToolManager::registerCMakeTool(std::move(newTool));
-            addTemporaryData(CMakeKitAspect::id(), cmakeTool->id().toSetting(), k);
-        }
-
-        CMakeKitAspect::setCMakeExecutable(k, data->cmakeBinary);
-
-        CMakeGeneratorKitAspect::setGenerator(k, data->generator);
-        CMakeGeneratorKitAspect::setPlatform(k, data->platform);
-        CMakeGeneratorKitAspect::setToolset(k, data->toolset);
-
-        SysRootKitAspect::setSysRoot(k, data->sysroot);
-        setupBuildAndRunDevice(k, data->cmakeSystemName, data->sysroot);
-
-        for (const ToolchainDescriptionEx &cmtcd : std::as_const(data->toolchains)) {
-            const ToolchainData tcd = findOrCreateToolchains(cmtcd);
-            QTC_ASSERT(!tcd.tcs.isEmpty(), continue);
-
-            if (tcd.areTemporary) {
-                for (Toolchain *tc : tcd.tcs)
-                    addTemporaryData(ToolchainKitAspect::id(), tc->id(), k);
-            }
-
-            Toolchain *toolchain = tcd.tcs.at(0);
-            if (!cmtcd.originalTargetTriple.isEmpty())
-                toolchain->setExplicitCodeModelTargetTriple(cmtcd.originalTargetTriple);
-
-            if (!data->cmakePresetDisplayname.isEmpty() && tcd.areTemporary) {
-                // Handle Android CMake compilers
-                if (data->cmakeSystemName == "Android") {
-                    const QString archTriplet = cmtcd.targetArchitecture;
-                    const Abi androidAbi = Abi::abiFromTargetTriplet(archTriplet);
-                    if (auto gccToolchain = toolchain->asGccToolchain()) {
-                        gccToolchain->setOriginalTargetTriple(archTriplet);
-                        gccToolchain->setTargetAbi(androidAbi);
-                        gccToolchain->setPlatformCodeGenFlags({"-target", archTriplet});
-                        gccToolchain->setPlatformLinkerFlags({"-target", archTriplet});
-                    }
-                }
-
-                // Mark CMake presets toolchains as manual
-                toolchain->setDetectionSource(DetectionSource::Manual);
-            }
-
-            ToolchainKitAspect::setToolchain(k, toolchain);
-        }
-
-        if (!data->cmakePresetDisplayname.isEmpty()) {
-            k->setUnexpandedDisplayName(displayPresetName(data->cmakePresetDisplayname));
-
-            CMakeConfigurationKitAspect::setCMakePreset(k, data->cmakePreset);
-        }
-        if (!data->cmakePreset.isEmpty())
-            ensureBuildDirectory(*data, k);
-
-        if (!data->cmakePreset.isEmpty() && data->cmakeSystemName == "Android") {
-            k->setValueSilently(
-                Android::Constants::ANDROID_KIT_NDK, data->androidNdk.toFSPathString());
-            k->setValueSilently(
-                Android::Constants::ANDROID_KIT_SDK, data->androidSdk.toFSPathString());
-        }
-
-        if (data->debugger.isValid())
-            DebuggerKitAspect::setDebugger(k, data->debugger);
-
+        applyDirectoryDataToKit(data, k);
         qCInfo(cmInputLog) << "Temporary Kit created.";
     });
+}
+
+void CMakeProjectImporter::applyDirectoryDataToKit(DirectoryData *data, ProjectExplorer::Kit *k) const
+{
+    CMakeTool *cmakeTool = CMakeToolManager::findByCommand(data->cmakeBinary);
+    if (!cmakeTool) {
+        qCDebug(cmInputLog) << "Creating temporary CMakeTool for" << data->cmakeBinary.toUserOutput();
+
+        UpdateGuard guard(*this);
+
+        auto newTool = std::make_unique<CMakeTool>(DetectionSource::Manual, CMakeTool::createId());
+        newTool->setFilePath(data->cmakeBinary);
+        newTool->setDisplayName(uniqueCMakeToolDisplayName(*newTool));
+
+        cmakeTool = newTool.get();
+        CMakeToolManager::registerCMakeTool(std::move(newTool));
+        addTemporaryData(CMakeKitAspect::id(), cmakeTool->id().toSetting(), k);
+    }
+
+    QtSupport::QtKitAspect::setQtVersion(k, data->qt.qt);
+
+    CMakeKitAspect::setCMakeExecutable(k, data->cmakeBinary);
+
+    CMakeConfigurationKitAspect::setConfiguration(
+        k, CMakeConfigurationKitAspect::defaultConfiguration(k));
+
+    CMakeGeneratorKitAspect::setGenerator(k, data->generator);
+    CMakeGeneratorKitAspect::setPlatform(k, data->platform);
+    CMakeGeneratorKitAspect::setToolset(k, data->toolset);
+
+    SysRootKitAspect::setSysRoot(k, data->sysroot);
+    setupBuildAndRunDevice(k, data->cmakeSystemName, data->sysroot);
+
+    for (const ToolchainDescriptionEx &cmtcd : std::as_const(data->toolchains)) {
+        const ToolchainData tcd = findOrCreateToolchains(cmtcd);
+        QTC_ASSERT(!tcd.tcs.isEmpty(), continue);
+
+        if (tcd.areTemporary) {
+            for (Toolchain *tc : tcd.tcs)
+                addTemporaryData(ToolchainKitAspect::id(), tc->id(), k);
+        }
+
+        Toolchain *toolchain = tcd.tcs.at(0);
+        if (!cmtcd.originalTargetTriple.isEmpty())
+            toolchain->setExplicitCodeModelTargetTriple(cmtcd.originalTargetTriple);
+
+        if (!data->cmakePresetDisplayname.isEmpty() && tcd.areTemporary) {
+            // Handle Android CMake compilers
+            if (data->cmakeSystemName == "Android") {
+                const QString archTriplet = cmtcd.targetArchitecture;
+                const Abi androidAbi = Abi::abiFromTargetTriplet(archTriplet);
+                if (auto gccToolchain = toolchain->asGccToolchain()) {
+                    gccToolchain->setOriginalTargetTriple(archTriplet);
+                    gccToolchain->setTargetAbi(androidAbi);
+                    gccToolchain->setPlatformCodeGenFlags({"-target", archTriplet});
+                    gccToolchain->setPlatformLinkerFlags({"-target", archTriplet});
+                }
+            }
+
+            // Mark CMake presets toolchains as manual
+            toolchain->setDetectionSource(DetectionSource::Manual);
+        }
+
+        ToolchainKitAspect::setToolchain(k, toolchain);
+    }
+
+    if (!data->cmakePresetDisplayname.isEmpty()) {
+        k->setUnexpandedDisplayName(displayPresetName(data->cmakePresetDisplayname));
+
+        CMakeConfigurationKitAspect::setCMakePreset(k, data->cmakePreset);
+    }
+    if (!data->cmakePreset.isEmpty())
+        ensureBuildDirectory(*data, k);
+
+    if (!data->cmakePreset.isEmpty() && data->cmakeSystemName == "Android") {
+        k->setValueSilently(
+            Android::Constants::ANDROID_KIT_NDK, data->androidNdk.toFSPathString());
+        k->setValueSilently(
+            Android::Constants::ANDROID_KIT_SDK, data->androidSdk.toFSPathString());
+    }
+
+    if (data->debugger.isValid())
+        DebuggerKitAspect::setDebugger(k, data->debugger);
 }
 
 const QList<BuildInfo> CMakeProjectImporter::buildInfoList(void *directoryData) const
