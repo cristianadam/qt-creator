@@ -80,7 +80,7 @@ CMakeProject::CMakeProject(const FilePath &fileName)
         m_buildDirToImport = fileName.parentDir();
 
     if (m_presetsData.havePresets)
-        static_cast<CMakeProjectImporter *>(projectImporter())->createKitsFromPresets();
+        createKitsFromPresets();
 }
 
 CMakeProject::~CMakeProject()
@@ -461,6 +461,11 @@ void CMakeProject::readPresets()
     }
 }
 
+void CMakeProject::createKitsFromPresets() const
+{
+    static_cast<CMakeProjectImporter *>(projectImporter())->createKitsFromPresets();
+}
+
 FilePath CMakeProject::buildDirectoryToImport() const
 {
     return m_buildDirToImport;
@@ -487,17 +492,6 @@ void CMakeProject::configureAsExampleProject(ProjectExplorer::Kit *kit)
         }
     }
     setup(infoList);
-}
-
-void CMakeProjectManager::CMakeProject::setOldPresetKits(
-    const QList<ProjectExplorer::Kit *> &presetKits) const
-{
-    m_oldPresetKits = presetKits;
-}
-
-QList<Kit *> CMakeProject::oldPresetKits() const
-{
-    return m_oldPresetKits;
 }
 
 #ifdef WITH_TESTS

@@ -33,15 +33,10 @@ public:
     Internal::PresetsData presetsData() const;
     void readPresets();
     Utils::FilePath buildDirectoryToImport() const;
-
-    void setOldPresetKits(const QList<ProjectExplorer::Kit *> &presetKits) const;
-    QList<ProjectExplorer::Kit *> oldPresetKits() const;
+    void createKitsFromPresets() const;
 
     Internal::CMakeSpecificSettings &settings();
     static QString projectDisplayName(const Utils::FilePath &projectFilePath);
-
-signals:
-    void cmakePresetsUpdated();
 
 private:
     ProjectExplorer::DeploymentKnowledge deploymentKnowledge() const override;
@@ -53,7 +48,6 @@ private:
     void setupTestPresets(Internal::PresetsData &presetsData);
 
     mutable Internal::CMakeProjectImporter *m_projectImporter = nullptr;
-    mutable QList<ProjectExplorer::Kit*> m_oldPresetKits;
 
     ProjectExplorer::Tasks m_issues;
     Internal::PresetsData m_presetsData;

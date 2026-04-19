@@ -68,6 +68,7 @@ public:
 
     static void setCMakePreset(ProjectExplorer::Kit *k, const QString &presetName);
     static CMakeConfigItem cmakePresetConfigItem(const ProjectExplorer::Kit *k);
+    static Utils::Id cmakePresetKitId(const QString &projectName, const QString &presetName);
 
     static ProjectExplorer::KitAspect *createKitAspect(ProjectExplorer::Kit *k);
 };

@@ -1432,6 +1432,12 @@ CMakeConfigItem CMakeConfigurationKitAspect::cmakePresetConfigItem(const Kit *k)
     return config.value(QTC_CMAKE_PRESET_KEY);
 }
 
+Id CMakeConfigurationKitAspect::cmakePresetKitId(
+    const QString &projectName, const QString &presetName)
+{
+    return Id::fromString(QString("%1:CMakePresets:%2").arg(projectName).arg(presetName));
+}
+
 QVariant CMakeConfigurationKitAspectFactory::defaultValue(const Kit *k) const
 {
     // FIXME: Convert preload scripts

@@ -150,16 +150,6 @@ CMakeSpecificSettings::CMakeSpecificSettings(Project *p, bool autoApply)
     if (project) {
         // Re-read the settings. Reading in constructor is too early
         connect(project, &Project::settingsLoaded, this, [this] { readSettings(); });
-
-        if (CMakeProject *cmakeProject = qobject_cast<CMakeProject *>(project)) {
-            connect(cmakeProject, &CMakeProject::cmakePresetsUpdated, this, [this] {
-                // clear settings first
-                Store data;
-                project->setNamedSettings(Constants::Settings::GENERAL_ID, variantFromStore(data));
-
-                readSettings();
-            });
-        }
     }
 }
 

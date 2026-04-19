@@ -30,6 +30,7 @@
 #include <debugger/debuggerconstants.h>
 
 #include <projectexplorer/buildmanager.h>
+#include <projectexplorer/kitmanager.h>
 #include <projectexplorer/project.h>
 #include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/projectexplorerconstants.h>
@@ -461,13 +462,22 @@ void CMakeManager::reloadCMakePresets()
     if (clickedButton == QMessageBox::Cancel)
         return;
 
-    const QSet<QString> oldPresets = Utils::transform<QSet>(project->presetsData().configurePresets,
-                                                            [](const auto &preset) {
-                                                                return preset.name;
-                                                            });
-    project->readPresets();
+    const auto presetKitId = [project](const QString &presetName) {
+        return CMakeConfigurationKitAspect::cmakePresetKitId(
+            project->projectFilePath().path(), presetName);
+    };
 
-    QList<Kit*> oldKits;
+    const QSet<Id> oldPresets = Utils::transform<QSet>(
+        project->presetsData().configurePresets,
+        [presetKitId](const auto &preset) { return presetKitId(preset.name); });
+
+    QList<Kit *> oldKits
+        = Utils::filtered(KitManager::kits(), [presetKitId, oldPresets](const Kit *k) {
+              const auto presetConfigItem = CMakeConfigurationKitAspect::cmakePresetConfigItem(k);
+              return !presetConfigItem.isNull()
+                     && oldPresets.contains(presetKitId(QString::fromUtf8(presetConfigItem.value)));
+          });
+
     for (const auto &target : project->targets()) {
         const CMakeConfigItem presetItem = CMakeConfigurationKitAspect::cmakePresetConfigItem(
             target->kit());
@@ -481,16 +491,15 @@ void CMakeManager::reloadCMakePresets()
         if (!presetItem.isNull() && bs)
             bs->clearCMakeCache();
 
-        if (!presetItem.isNull() && oldPresets.contains(QString::fromUtf8(presetItem.value)))
-            oldKits << target->kit();
-
         project->removeTarget(target);
     }
 
-    project->setOldPresetKits(oldKits);
+    KitManager::deregisterKits(oldKits);
 
-    emit project->cmakePresetsUpdated();
+    project->readPresets();
+    project->createKitsFromPresets();
 
+    // Switch to configure the build configurations for the Kits
     Core::ModeManager::activateMode(ProjectExplorer::Constants::MODE_SESSION);
     Core::ModeManager::setFocusToCurrentMode();
 }

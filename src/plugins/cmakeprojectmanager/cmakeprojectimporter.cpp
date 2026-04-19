@@ -564,16 +564,6 @@ Target *CMakeProjectImporter::preferredTarget(const QList<Target *> &possibleTar
         });
     }
 
-    for (Kit *kit : m_project->oldPresetKits()) {
-        const bool haveKit = Utils::contains(possibleTargets, [kit](const auto &target) {
-            return target->kit() == kit;
-        });
-
-        if (!haveKit)
-            KitManager::deregisterKit(kit);
-    }
-    m_project->setOldPresetKits({});
-
     return ProjectImporter::preferredTarget(possibleTargets);
 }
 
@@ -1199,8 +1189,8 @@ void CMakeProjectImporter::createKitsFromPresets()
             buildInfos.emplace_back(buildInfoList(&newData).first());
         }
 
-        const Id kitId = Id::fromString(
-            QString("%1:CMakePresets:%2").arg(projectFilePath().path()).arg(data.cmakePreset));
+        const Id kitId = CMakeConfigurationKitAspect::cmakePresetKitId(
+            projectFilePath().path(), data.cmakePreset);
 
         Kit *kit = KitManager::kit(kitId);
         if (!kit || !kit->isValid()) {
