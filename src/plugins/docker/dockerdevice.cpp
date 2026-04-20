@@ -1260,8 +1260,9 @@ DockerDevice::DockerDevice()
     keepEntryPoint.setLabelPlacement(BoolAspect::LabelPlacement::InExtraLabel);
 
     enableLldbFlags.setSettingsKey(DockerDeviceEnableLldbFlags);
-    enableLldbFlags.setLabelText(Tr::tr("Enable flags needed for LLDB:"));
-    enableLldbFlags.setDefaultValue(false);
+    enableLldbFlags.setLabelText(Tr::tr("Enable ptrace-based debugging:"));
+    enableLldbFlags.setToolTip(Tr::tr("Needed for gdb and lldb to attach to processes."));
+    enableLldbFlags.setDefaultValue(true);
     enableLldbFlags.setLabelPlacement(BoolAspect::LabelPlacement::InExtraLabel);
 
     mounts.setSettingsKey(DockerDeviceMappedPaths);
