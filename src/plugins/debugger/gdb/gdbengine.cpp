@@ -4002,7 +4002,13 @@ void GdbEngine::setEnvironmentVariables()
                 && str.compare("path", Qt::CaseInsensitive) == 0;
     };
 
-    Environment baseEnv = runParameters().debugger().environment;
+    // For a remote engine the inferior runs under gdbserver on the target, which already
+    // has the right base environment from its SSH session.  Diffing against the local
+    // debugger's environment would produce spurious "unset environment" commands (e.g.
+    // for DISPLAY, PATH) that strip variables gdbserver legitimately inherited on the
+    // target.  Use an empty base so we only send "set environment" for variables the
+    // run configuration explicitly configures, leaving everything else inherited.
+    Environment baseEnv = isRemoteEngine() ? Environment{} : runParameters().debugger().environment;
     Environment runEnv = runParameters().inferior().environment;
     const EnvironmentItems items = baseEnv.diff(runEnv);
     for (const EnvironmentItem &item : items) {
