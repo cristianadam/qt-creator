@@ -20,6 +20,7 @@
 #include <utils/hostosinfo.h>
 #include <utils/plaintextedit/plaintexteditaccessibility.h>
 #include <utils/processreaper.h>
+#include <utils/qtcassert.h>
 #include <utils/qtcsettings.h>
 #include <utils/qtcsettings_p.h>
 #include <utils/stylehelper.h>
@@ -76,7 +77,8 @@ const char fixedOptionsC[]
       "    -pid <pid>                    Attempt to connect to instance given by pid\n"
       "    -block                        Block until editor is closed\n"
       "    -pluginpath <path>            Add a custom search path for plugins\n"
-      "    -language <locale>            Set the UI language\n";
+      "    -language <locale>            Set the UI language\n"
+      "    -trace-on-warning <pattern>   Print a stack trace for each message containing pattern\n";
 
 const char HELP_OPTION1[] = "-h";
 const char HELP_OPTION2[] = "-help";
@@ -98,6 +100,7 @@ const char BLOCK_OPTION[] = "-block";
 const char PLUGINPATH_OPTION[] = "-pluginpath";
 const char LANGUAGE_OPTION[] = "-language";
 const char USER_LIBRARY_PATH_OPTION[] = "-user-library-path"; // hidden option for qtcreator.sh
+const char TRACE_ON_WARNING_OPTION[] = "-trace-on-warning";
 
 // Helpers for displaying messages. Note that there is no console on Windows.
 
@@ -356,6 +359,7 @@ struct Options
     // list of arguments to be passed to the application or plugin manager
     std::vector<char *> appArguments;
     std::optional<QString> userLibraryPath;
+    QStringList traceOnWarningPatterns;
     bool hasTestOption = false;
     bool wantsCleanSettings = false;
     bool hasStyleOption = false;
@@ -391,6 +395,9 @@ Options parseCommandLine(int argc, char *argv[])
             ++it;
             options.userLibraryPath = nextArg;
             options.preAppArguments << arg << nextArg;
+        } else if (arg == TRACE_ON_WARNING_OPTION && hasNext) {
+            ++it;
+            options.traceOnWarningPatterns << nextArg;
         } else if (arg == TEMPORARY_CLEAN_SETTINGS1 || arg == TEMPORARY_CLEAN_SETTINGS2) {
             options.wantsCleanSettings = true;
             options.preAppArguments << arg;
@@ -549,6 +556,34 @@ int main(int argc, char **argv)
     // because settings can change the way plugin manager behaves
     Options options = parseCommandLine(argc, argv);
     applicationDirPath(argv[0]);
+
+    if (!options.traceOnWarningPatterns.isEmpty()) {
+        static const QStringList patterns = options.traceOnWarningPatterns;
+        static QtMessageHandler prevHandler = nullptr;
+        static bool inHandler = false;
+        prevHandler = qInstallMessageHandler(
+            [](QtMsgType type, const QMessageLogContext &ctx, const QString &msg) {
+                if (!inHandler) {
+                    for (const QString &pattern : patterns) {
+                        if (msg.contains(pattern, Qt::CaseInsensitive)
+                                || QString::fromLatin1(ctx.category).contains(
+                                    pattern, Qt::CaseInsensitive)) {
+                            inHandler = true;
+                            fprintf(stderr, "Message matched -trace-on-warning pattern '%s':\n  %s\n",
+                                    qPrintable(pattern), qPrintable(msg));
+                            Utils::dumpBacktrace(50);
+                            fflush(stderr);
+                            inHandler = false;
+                            break;
+                        }
+                    }
+                }
+                if (prevHandler)
+                    prevHandler(type, ctx, msg);
+                else
+                    fprintf(stderr, "%s\n", qPrintable(msg));
+            });
+    }
 
     // Remove entries from environment variables that were set up by Qt Creator to run
     // the application (in this case, us).
