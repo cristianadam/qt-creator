@@ -4,7 +4,8 @@
 namespace Acp {
 
 template<>
-Utils::Result<McpCapabilities> fromJson<McpCapabilities>(const QJsonValue &val) {
+Utils::Result<McpCapabilities> fromJson<McpCapabilities>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for McpCapabilities");
     const QJsonObject obj = val.toObject();
@@ -20,7 +21,8 @@ Utils::Result<McpCapabilities> fromJson<McpCapabilities>(const QJsonValue &val) 
     return result;
 }
 
-QJsonObject toJson(const McpCapabilities &data) {
+QJsonObject toJson(const McpCapabilities &data)
+{
     QJsonObject obj;
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -32,7 +34,8 @@ QJsonObject toJson(const McpCapabilities &data) {
 }
 
 template<>
-Utils::Result<PromptCapabilities> fromJson<PromptCapabilities>(const QJsonValue &val) {
+Utils::Result<PromptCapabilities> fromJson<PromptCapabilities>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for PromptCapabilities");
     const QJsonObject obj = val.toObject();
@@ -50,7 +53,8 @@ Utils::Result<PromptCapabilities> fromJson<PromptCapabilities>(const QJsonValue 
     return result;
 }
 
-QJsonObject toJson(const PromptCapabilities &data) {
+QJsonObject toJson(const PromptCapabilities &data)
+{
     QJsonObject obj;
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -64,7 +68,8 @@ QJsonObject toJson(const PromptCapabilities &data) {
 }
 
 template<>
-Utils::Result<SessionCapabilities> fromJson<SessionCapabilities>(const QJsonValue &val) {
+Utils::Result<SessionCapabilities> fromJson<SessionCapabilities>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for SessionCapabilities");
     const QJsonObject obj = val.toObject();
@@ -76,7 +81,8 @@ Utils::Result<SessionCapabilities> fromJson<SessionCapabilities>(const QJsonValu
     return result;
 }
 
-QJsonObject toJson(const SessionCapabilities &data) {
+QJsonObject toJson(const SessionCapabilities &data)
+{
     QJsonObject obj;
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -84,7 +90,8 @@ QJsonObject toJson(const SessionCapabilities &data) {
 }
 
 template<>
-Utils::Result<AgentCapabilities> fromJson<AgentCapabilities>(const QJsonValue &val) {
+Utils::Result<AgentCapabilities> fromJson<AgentCapabilities>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for AgentCapabilities");
     const QJsonObject obj = val.toObject();
@@ -104,7 +111,8 @@ Utils::Result<AgentCapabilities> fromJson<AgentCapabilities>(const QJsonValue &v
     co_return result;
 }
 
-QJsonObject toJson(const AgentCapabilities &data) {
+QJsonObject toJson(const AgentCapabilities &data)
+{
     QJsonObject obj;
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -119,13 +127,15 @@ QJsonObject toJson(const AgentCapabilities &data) {
     return obj;
 }
 
-template<> Utils::Result<SessionId> fromJson<SessionId>(const QJsonValue &val) {
+template<> Utils::Result<SessionId> fromJson<SessionId>(const QJsonValue &val)
+{
     if (!val.isString()) return Utils::ResultError("Expected string");
     return val.toString();
 }
 
 template<>
-Utils::Result<UnstructuredCommandInput> fromJson<UnstructuredCommandInput>(const QJsonValue &val) {
+Utils::Result<UnstructuredCommandInput> fromJson<UnstructuredCommandInput>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for UnstructuredCommandInput");
     const QJsonObject obj = val.toObject();
@@ -140,7 +150,8 @@ Utils::Result<UnstructuredCommandInput> fromJson<UnstructuredCommandInput>(const
     return result;
 }
 
-QJsonObject toJson(const UnstructuredCommandInput &data) {
+QJsonObject toJson(const UnstructuredCommandInput &data)
+{
     QJsonObject obj{{"hint", data._hint}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -148,7 +159,8 @@ QJsonObject toJson(const UnstructuredCommandInput &data) {
 }
 
 template<>
-Utils::Result<AvailableCommandInput> fromJson<AvailableCommandInput>(const QJsonValue &val) {
+Utils::Result<AvailableCommandInput> fromJson<AvailableCommandInput>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Invalid AvailableCommandInput: expected object");
     const QJsonObject obj = val.toObject();
@@ -157,11 +169,13 @@ Utils::Result<AvailableCommandInput> fromJson<AvailableCommandInput>(const QJson
     co_return Utils::ResultError("Invalid AvailableCommandInput");
 }
 
-QString hint(const AvailableCommandInput &val) {
+QString hint(const AvailableCommandInput &val)
+{
     return std::visit([](const auto &v) -> QString { return v._hint; }, val);
 }
 
-QJsonObject toJson(const AvailableCommandInput &val) {
+QJsonObject toJson(const AvailableCommandInput &val)
+{
     return std::visit([](const auto &v) -> QJsonObject {
         using T = std::decay_t<decltype(v)>;
         if constexpr (std::is_same_v<T, QJsonObject>) {
@@ -172,12 +186,14 @@ QJsonObject toJson(const AvailableCommandInput &val) {
     }, val);
 }
 
-QJsonValue toJsonValue(const AvailableCommandInput &val) {
+QJsonValue toJsonValue(const AvailableCommandInput &val)
+{
     return toJson(val);
 }
 
 template<>
-Utils::Result<AvailableCommand> fromJson<AvailableCommand>(const QJsonValue &val) {
+Utils::Result<AvailableCommand> fromJson<AvailableCommand>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for AvailableCommand");
     const QJsonObject obj = val.toObject();
@@ -197,7 +213,8 @@ Utils::Result<AvailableCommand> fromJson<AvailableCommand>(const QJsonValue &val
     co_return result;
 }
 
-QJsonObject toJson(const AvailableCommand &data) {
+QJsonObject toJson(const AvailableCommand &data)
+{
     QJsonObject obj{
         {"description", data._description},
         {"name", data._name}
@@ -210,7 +227,8 @@ QJsonObject toJson(const AvailableCommand &data) {
 }
 
 template<>
-Utils::Result<AvailableCommandsUpdate> fromJson<AvailableCommandsUpdate>(const QJsonValue &val) {
+Utils::Result<AvailableCommandsUpdate> fromJson<AvailableCommandsUpdate>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for AvailableCommandsUpdate");
     const QJsonObject obj = val.toObject();
@@ -230,7 +248,8 @@ Utils::Result<AvailableCommandsUpdate> fromJson<AvailableCommandsUpdate>(const Q
     co_return result;
 }
 
-QJsonObject toJson(const AvailableCommandsUpdate &data) {
+QJsonObject toJson(const AvailableCommandsUpdate &data)
+{
     QJsonObject obj;
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -240,7 +259,8 @@ QJsonObject toJson(const AvailableCommandsUpdate &data) {
     return obj;
 }
 
-QString toString(SessionConfigOptionCategory v) {
+QString toString(SessionConfigOptionCategory v)
+{
     switch(v) {
         case SessionConfigOptionCategory::mode: return "mode";
         case SessionConfigOptionCategory::model: return "model";
@@ -250,7 +270,8 @@ QString toString(SessionConfigOptionCategory v) {
 }
 
 template<>
-Utils::Result<SessionConfigOptionCategory> fromJson<SessionConfigOptionCategory>(const QJsonValue &val) {
+Utils::Result<SessionConfigOptionCategory> fromJson<SessionConfigOptionCategory>(const QJsonValue &val)
+{
     const QString str = val.toString();
     if (str == "mode") return SessionConfigOptionCategory::mode;
     if (str == "model") return SessionConfigOptionCategory::model;
@@ -258,12 +279,14 @@ Utils::Result<SessionConfigOptionCategory> fromJson<SessionConfigOptionCategory>
     return Utils::ResultError("Invalid SessionConfigOptionCategory value: " + str);
 }
 
-QJsonValue toJsonValue(const SessionConfigOptionCategory &v) {
+QJsonValue toJsonValue(const SessionConfigOptionCategory &v)
+{
     return toString(v);
 }
 
 template<>
-Utils::Result<SessionConfigSelectOption> fromJson<SessionConfigSelectOption>(const QJsonValue &val) {
+Utils::Result<SessionConfigSelectOption> fromJson<SessionConfigSelectOption>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for SessionConfigSelectOption");
     const QJsonObject obj = val.toObject();
@@ -286,7 +309,8 @@ Utils::Result<SessionConfigSelectOption> fromJson<SessionConfigSelectOption>(con
     co_return result;
 }
 
-QJsonObject toJson(const SessionConfigSelectOption &data) {
+QJsonObject toJson(const SessionConfigSelectOption &data)
+{
     QJsonObject obj{
         {"name", data._name},
         {"value", data._value}
@@ -299,7 +323,8 @@ QJsonObject toJson(const SessionConfigSelectOption &data) {
 }
 
 template<>
-Utils::Result<SessionConfigSelectGroup> fromJson<SessionConfigSelectGroup>(const QJsonValue &val) {
+Utils::Result<SessionConfigSelectGroup> fromJson<SessionConfigSelectGroup>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for SessionConfigSelectGroup");
     const QJsonObject obj = val.toObject();
@@ -326,7 +351,8 @@ Utils::Result<SessionConfigSelectGroup> fromJson<SessionConfigSelectGroup>(const
     co_return result;
 }
 
-QJsonObject toJson(const SessionConfigSelectGroup &data) {
+QJsonObject toJson(const SessionConfigSelectGroup &data)
+{
     QJsonObject obj{
         {"group", data._group},
         {"name", data._name}
@@ -340,7 +366,8 @@ QJsonObject toJson(const SessionConfigSelectGroup &data) {
 }
 
 template<>
-Utils::Result<SessionConfigSelectOptions> fromJson<SessionConfigSelectOptions>(const QJsonValue &val) {
+Utils::Result<SessionConfigSelectOptions> fromJson<SessionConfigSelectOptions>(const QJsonValue &val)
+{
     if (val.isArray()) {
         bool ok = true;
         QList<SessionConfigSelectOption> list;
@@ -364,7 +391,8 @@ Utils::Result<SessionConfigSelectOptions> fromJson<SessionConfigSelectOptions>(c
     return Utils::ResultError("Invalid SessionConfigSelectOptions");
 }
 
-QJsonValue toJsonValue(const SessionConfigSelectOptions &val) {
+QJsonValue toJsonValue(const SessionConfigSelectOptions &val)
+{
     return std::visit([](const auto &v) -> QJsonValue {
         using T = std::decay_t<decltype(v)>;
         if constexpr (std::is_same_v<T, QList<SessionConfigSelectOption>>) {
@@ -386,7 +414,8 @@ QJsonValue toJsonValue(const SessionConfigSelectOptions &val) {
 }
 
 template<>
-Utils::Result<SessionConfigSelect> fromJson<SessionConfigSelect>(const QJsonValue &val) {
+Utils::Result<SessionConfigSelect> fromJson<SessionConfigSelect>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for SessionConfigSelect");
     const QJsonObject obj = val.toObject();
@@ -402,7 +431,8 @@ Utils::Result<SessionConfigSelect> fromJson<SessionConfigSelect>(const QJsonValu
     co_return result;
 }
 
-QJsonObject toJson(const SessionConfigSelect &data) {
+QJsonObject toJson(const SessionConfigSelect &data)
+{
     QJsonObject obj{
         {"currentValue", data._currentValue},
         {"options", toJsonValue(data._options)}
@@ -411,7 +441,8 @@ QJsonObject toJson(const SessionConfigSelect &data) {
 }
 
 template<>
-Utils::Result<SessionConfigOption> fromJson<SessionConfigOption>(const QJsonValue &val) {
+Utils::Result<SessionConfigOption> fromJson<SessionConfigOption>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for SessionConfigOption");
     const QJsonObject obj = val.toObject();
@@ -443,7 +474,8 @@ Utils::Result<SessionConfigOption> fromJson<SessionConfigOption>(const QJsonValu
     co_return result;
 }
 
-QJsonObject toJson(const SessionConfigOption &data) {
+QJsonObject toJson(const SessionConfigOption &data)
+{
     QJsonObject obj{
         {"id", data._id},
         {"name", data._name}
@@ -460,7 +492,8 @@ QJsonObject toJson(const SessionConfigOption &data) {
 }
 
 template<>
-Utils::Result<ConfigOptionUpdate> fromJson<ConfigOptionUpdate>(const QJsonValue &val) {
+Utils::Result<ConfigOptionUpdate> fromJson<ConfigOptionUpdate>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for ConfigOptionUpdate");
     const QJsonObject obj = val.toObject();
@@ -480,7 +513,8 @@ Utils::Result<ConfigOptionUpdate> fromJson<ConfigOptionUpdate>(const QJsonValue 
     co_return result;
 }
 
-QJsonObject toJson(const ConfigOptionUpdate &data) {
+QJsonObject toJson(const ConfigOptionUpdate &data)
+{
     QJsonObject obj;
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -490,7 +524,8 @@ QJsonObject toJson(const ConfigOptionUpdate &data) {
     return obj;
 }
 
-QString toString(Role v) {
+QString toString(Role v)
+{
     switch(v) {
         case Role::assistant: return "assistant";
         case Role::user: return "user";
@@ -499,19 +534,22 @@ QString toString(Role v) {
 }
 
 template<>
-Utils::Result<Role> fromJson<Role>(const QJsonValue &val) {
+Utils::Result<Role> fromJson<Role>(const QJsonValue &val)
+{
     const QString str = val.toString();
     if (str == "assistant") return Role::assistant;
     if (str == "user") return Role::user;
     return Utils::ResultError("Invalid Role value: " + str);
 }
 
-QJsonValue toJsonValue(const Role &v) {
+QJsonValue toJsonValue(const Role &v)
+{
     return toString(v);
 }
 
 template<>
-Utils::Result<Annotations> fromJson<Annotations>(const QJsonValue &val) {
+Utils::Result<Annotations> fromJson<Annotations>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for Annotations");
     const QJsonObject obj = val.toObject();
@@ -535,7 +573,8 @@ Utils::Result<Annotations> fromJson<Annotations>(const QJsonValue &val) {
     return result;
 }
 
-QJsonObject toJson(const Annotations &data) {
+QJsonObject toJson(const Annotations &data)
+{
     QJsonObject obj;
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -549,7 +588,8 @@ QJsonObject toJson(const Annotations &data) {
 }
 
 template<>
-Utils::Result<AudioContent> fromJson<AudioContent>(const QJsonValue &val) {
+Utils::Result<AudioContent> fromJson<AudioContent>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for AudioContent");
     const QJsonObject obj = val.toObject();
@@ -569,7 +609,8 @@ Utils::Result<AudioContent> fromJson<AudioContent>(const QJsonValue &val) {
     co_return result;
 }
 
-QJsonObject toJson(const AudioContent &data) {
+QJsonObject toJson(const AudioContent &data)
+{
     QJsonObject obj{
         {"data", data._data},
         {"mimeType", data._mimeType}
@@ -582,7 +623,8 @@ QJsonObject toJson(const AudioContent &data) {
 }
 
 template<>
-Utils::Result<BlobResourceContents> fromJson<BlobResourceContents>(const QJsonValue &val) {
+Utils::Result<BlobResourceContents> fromJson<BlobResourceContents>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for BlobResourceContents");
     const QJsonObject obj = val.toObject();
@@ -604,7 +646,8 @@ Utils::Result<BlobResourceContents> fromJson<BlobResourceContents>(const QJsonVa
     return result;
 }
 
-QJsonObject toJson(const BlobResourceContents &data) {
+QJsonObject toJson(const BlobResourceContents &data)
+{
     QJsonObject obj{
         {"blob", data._blob},
         {"uri", data._uri}
@@ -617,7 +660,8 @@ QJsonObject toJson(const BlobResourceContents &data) {
 }
 
 template<>
-Utils::Result<TextResourceContents> fromJson<TextResourceContents>(const QJsonValue &val) {
+Utils::Result<TextResourceContents> fromJson<TextResourceContents>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for TextResourceContents");
     const QJsonObject obj = val.toObject();
@@ -639,7 +683,8 @@ Utils::Result<TextResourceContents> fromJson<TextResourceContents>(const QJsonVa
     return result;
 }
 
-QJsonObject toJson(const TextResourceContents &data) {
+QJsonObject toJson(const TextResourceContents &data)
+{
     QJsonObject obj{
         {"text", data._text},
         {"uri", data._uri}
@@ -652,7 +697,8 @@ QJsonObject toJson(const TextResourceContents &data) {
 }
 
 template<>
-Utils::Result<EmbeddedResourceResource> fromJson<EmbeddedResourceResource>(const QJsonValue &val) {
+Utils::Result<EmbeddedResourceResource> fromJson<EmbeddedResourceResource>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Invalid EmbeddedResourceResource: expected object");
     const QJsonObject obj = val.toObject();
@@ -663,11 +709,13 @@ Utils::Result<EmbeddedResourceResource> fromJson<EmbeddedResourceResource>(const
     co_return Utils::ResultError("Invalid EmbeddedResourceResource");
 }
 
-QString uri(const EmbeddedResourceResource &val) {
+QString uri(const EmbeddedResourceResource &val)
+{
     return std::visit([](const auto &v) -> QString { return v._uri; }, val);
 }
 
-QJsonObject toJson(const EmbeddedResourceResource &val) {
+QJsonObject toJson(const EmbeddedResourceResource &val)
+{
     return std::visit([](const auto &v) -> QJsonObject {
         using T = std::decay_t<decltype(v)>;
         if constexpr (std::is_same_v<T, QJsonObject>) {
@@ -678,12 +726,14 @@ QJsonObject toJson(const EmbeddedResourceResource &val) {
     }, val);
 }
 
-QJsonValue toJsonValue(const EmbeddedResourceResource &val) {
+QJsonValue toJsonValue(const EmbeddedResourceResource &val)
+{
     return toJson(val);
 }
 
 template<>
-Utils::Result<EmbeddedResource> fromJson<EmbeddedResource>(const QJsonValue &val) {
+Utils::Result<EmbeddedResource> fromJson<EmbeddedResource>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for EmbeddedResource");
     const QJsonObject obj = val.toObject();
@@ -701,7 +751,8 @@ Utils::Result<EmbeddedResource> fromJson<EmbeddedResource>(const QJsonValue &val
     co_return result;
 }
 
-QJsonObject toJson(const EmbeddedResource &data) {
+QJsonObject toJson(const EmbeddedResource &data)
+{
     QJsonObject obj{{"resource", toJsonValue(data._resource)}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -711,7 +762,8 @@ QJsonObject toJson(const EmbeddedResource &data) {
 }
 
 template<>
-Utils::Result<ImageContent> fromJson<ImageContent>(const QJsonValue &val) {
+Utils::Result<ImageContent> fromJson<ImageContent>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for ImageContent");
     const QJsonObject obj = val.toObject();
@@ -735,7 +787,8 @@ Utils::Result<ImageContent> fromJson<ImageContent>(const QJsonValue &val) {
     co_return result;
 }
 
-QJsonObject toJson(const ImageContent &data) {
+QJsonObject toJson(const ImageContent &data)
+{
     QJsonObject obj{
         {"data", data._data},
         {"mimeType", data._mimeType}
@@ -750,7 +803,8 @@ QJsonObject toJson(const ImageContent &data) {
 }
 
 template<>
-Utils::Result<ResourceLink> fromJson<ResourceLink>(const QJsonValue &val) {
+Utils::Result<ResourceLink> fromJson<ResourceLink>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for ResourceLink");
     const QJsonObject obj = val.toObject();
@@ -786,7 +840,8 @@ Utils::Result<ResourceLink> fromJson<ResourceLink>(const QJsonValue &val) {
     co_return result;
 }
 
-QJsonObject toJson(const ResourceLink &data) {
+QJsonObject toJson(const ResourceLink &data)
+{
     QJsonObject obj{
         {"name", data._name},
         {"uri", data._uri}
@@ -807,7 +862,8 @@ QJsonObject toJson(const ResourceLink &data) {
 }
 
 template<>
-Utils::Result<TextContent> fromJson<TextContent>(const QJsonValue &val) {
+Utils::Result<TextContent> fromJson<TextContent>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for TextContent");
     const QJsonObject obj = val.toObject();
@@ -824,7 +880,8 @@ Utils::Result<TextContent> fromJson<TextContent>(const QJsonValue &val) {
     co_return result;
 }
 
-QJsonObject toJson(const TextContent &data) {
+QJsonObject toJson(const TextContent &data)
+{
     QJsonObject obj{{"text", data._text}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -834,7 +891,8 @@ QJsonObject toJson(const TextContent &data) {
 }
 
 template<>
-Utils::Result<ContentBlock> fromJson<ContentBlock>(const QJsonValue &val) {
+Utils::Result<ContentBlock> fromJson<ContentBlock>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Invalid ContentBlock: expected object");
     const QString dispatchValue = val.toObject().value("type").toString();
@@ -851,7 +909,8 @@ Utils::Result<ContentBlock> fromJson<ContentBlock>(const QJsonValue &val) {
     co_return Utils::ResultError("Invalid ContentBlock: unknown type \"" + dispatchValue + "\"");
 }
 
-QString dispatchValue(const ContentBlock &val) {
+QString dispatchValue(const ContentBlock &val)
+{
     return std::visit([](const auto &v) -> QString {
         using T = std::decay_t<decltype(v)>;
         if constexpr (std::is_same_v<T, TextContent>) return "text";
@@ -863,7 +922,8 @@ QString dispatchValue(const ContentBlock &val) {
     }, val);
 }
 
-QJsonObject toJson(const ContentBlock &val) {
+QJsonObject toJson(const ContentBlock &val)
+{
     QJsonObject obj = std::visit([](const auto &v) -> QJsonObject {
         using T = std::decay_t<decltype(v)>;
         if constexpr (std::is_same_v<T, QJsonObject>) {
@@ -876,12 +936,14 @@ QJsonObject toJson(const ContentBlock &val) {
     return obj;
 }
 
-QJsonValue toJsonValue(const ContentBlock &val) {
+QJsonValue toJsonValue(const ContentBlock &val)
+{
     return toJson(val);
 }
 
 template<>
-Utils::Result<ContentChunk> fromJson<ContentChunk>(const QJsonValue &val) {
+Utils::Result<ContentChunk> fromJson<ContentChunk>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for ContentChunk");
     const QJsonObject obj = val.toObject();
@@ -897,7 +959,8 @@ Utils::Result<ContentChunk> fromJson<ContentChunk>(const QJsonValue &val) {
     co_return result;
 }
 
-QJsonObject toJson(const ContentChunk &data) {
+QJsonObject toJson(const ContentChunk &data)
+{
     QJsonObject obj{{"content", toJsonValue(data._content)}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -905,7 +968,8 @@ QJsonObject toJson(const ContentChunk &data) {
 }
 
 template<>
-Utils::Result<CurrentModeUpdate> fromJson<CurrentModeUpdate>(const QJsonValue &val) {
+Utils::Result<CurrentModeUpdate> fromJson<CurrentModeUpdate>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for CurrentModeUpdate");
     const QJsonObject obj = val.toObject();
@@ -921,14 +985,16 @@ Utils::Result<CurrentModeUpdate> fromJson<CurrentModeUpdate>(const QJsonValue &v
     co_return result;
 }
 
-QJsonObject toJson(const CurrentModeUpdate &data) {
+QJsonObject toJson(const CurrentModeUpdate &data)
+{
     QJsonObject obj{{"currentModeId", data._currentModeId}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
     return obj;
 }
 
-QString toString(PlanEntryPriority v) {
+QString toString(PlanEntryPriority v)
+{
     switch(v) {
         case PlanEntryPriority::high: return "high";
         case PlanEntryPriority::medium: return "medium";
@@ -938,7 +1004,8 @@ QString toString(PlanEntryPriority v) {
 }
 
 template<>
-Utils::Result<PlanEntryPriority> fromJson<PlanEntryPriority>(const QJsonValue &val) {
+Utils::Result<PlanEntryPriority> fromJson<PlanEntryPriority>(const QJsonValue &val)
+{
     const QString str = val.toString();
     if (str == "high") return PlanEntryPriority::high;
     if (str == "medium") return PlanEntryPriority::medium;
@@ -946,11 +1013,13 @@ Utils::Result<PlanEntryPriority> fromJson<PlanEntryPriority>(const QJsonValue &v
     return Utils::ResultError("Invalid PlanEntryPriority value: " + str);
 }
 
-QJsonValue toJsonValue(const PlanEntryPriority &v) {
+QJsonValue toJsonValue(const PlanEntryPriority &v)
+{
     return toString(v);
 }
 
-QString toString(PlanEntryStatus v) {
+QString toString(PlanEntryStatus v)
+{
     switch(v) {
         case PlanEntryStatus::pending: return "pending";
         case PlanEntryStatus::in_progress: return "in_progress";
@@ -960,7 +1029,8 @@ QString toString(PlanEntryStatus v) {
 }
 
 template<>
-Utils::Result<PlanEntryStatus> fromJson<PlanEntryStatus>(const QJsonValue &val) {
+Utils::Result<PlanEntryStatus> fromJson<PlanEntryStatus>(const QJsonValue &val)
+{
     const QString str = val.toString();
     if (str == "pending") return PlanEntryStatus::pending;
     if (str == "in_progress") return PlanEntryStatus::in_progress;
@@ -968,12 +1038,14 @@ Utils::Result<PlanEntryStatus> fromJson<PlanEntryStatus>(const QJsonValue &val) 
     return Utils::ResultError("Invalid PlanEntryStatus value: " + str);
 }
 
-QJsonValue toJsonValue(const PlanEntryStatus &v) {
+QJsonValue toJsonValue(const PlanEntryStatus &v)
+{
     return toString(v);
 }
 
 template<>
-Utils::Result<PlanEntry> fromJson<PlanEntry>(const QJsonValue &val) {
+Utils::Result<PlanEntry> fromJson<PlanEntry>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for PlanEntry");
     const QJsonObject obj = val.toObject();
@@ -996,7 +1068,8 @@ Utils::Result<PlanEntry> fromJson<PlanEntry>(const QJsonValue &val) {
     co_return result;
 }
 
-QJsonObject toJson(const PlanEntry &data) {
+QJsonObject toJson(const PlanEntry &data)
+{
     QJsonObject obj{
         {"content", data._content},
         {"priority", toJsonValue(data._priority)},
@@ -1008,7 +1081,8 @@ QJsonObject toJson(const PlanEntry &data) {
 }
 
 template<>
-Utils::Result<Plan> fromJson<Plan>(const QJsonValue &val) {
+Utils::Result<Plan> fromJson<Plan>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for Plan");
     const QJsonObject obj = val.toObject();
@@ -1028,7 +1102,8 @@ Utils::Result<Plan> fromJson<Plan>(const QJsonValue &val) {
     co_return result;
 }
 
-QJsonObject toJson(const Plan &data) {
+QJsonObject toJson(const Plan &data)
+{
     QJsonObject obj;
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -1039,7 +1114,8 @@ QJsonObject toJson(const Plan &data) {
 }
 
 template<>
-Utils::Result<Content> fromJson<Content>(const QJsonValue &val) {
+Utils::Result<Content> fromJson<Content>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for Content");
     const QJsonObject obj = val.toObject();
@@ -1055,7 +1131,8 @@ Utils::Result<Content> fromJson<Content>(const QJsonValue &val) {
     co_return result;
 }
 
-QJsonObject toJson(const Content &data) {
+QJsonObject toJson(const Content &data)
+{
     QJsonObject obj{{"content", toJsonValue(data._content)}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -1063,7 +1140,8 @@ QJsonObject toJson(const Content &data) {
 }
 
 template<>
-Utils::Result<Diff> fromJson<Diff>(const QJsonValue &val) {
+Utils::Result<Diff> fromJson<Diff>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for Diff");
     const QJsonObject obj = val.toObject();
@@ -1085,7 +1163,8 @@ Utils::Result<Diff> fromJson<Diff>(const QJsonValue &val) {
     return result;
 }
 
-QJsonObject toJson(const Diff &data) {
+QJsonObject toJson(const Diff &data)
+{
     QJsonObject obj{
         {"newText", data._newText},
         {"path", data._path}
@@ -1098,7 +1177,8 @@ QJsonObject toJson(const Diff &data) {
 }
 
 template<>
-Utils::Result<Terminal> fromJson<Terminal>(const QJsonValue &val) {
+Utils::Result<Terminal> fromJson<Terminal>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for Terminal");
     const QJsonObject obj = val.toObject();
@@ -1113,7 +1193,8 @@ Utils::Result<Terminal> fromJson<Terminal>(const QJsonValue &val) {
     return result;
 }
 
-QJsonObject toJson(const Terminal &data) {
+QJsonObject toJson(const Terminal &data)
+{
     QJsonObject obj{{"terminalId", data._terminalId}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -1121,7 +1202,8 @@ QJsonObject toJson(const Terminal &data) {
 }
 
 template<>
-Utils::Result<ToolCallContent> fromJson<ToolCallContent>(const QJsonValue &val) {
+Utils::Result<ToolCallContent> fromJson<ToolCallContent>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Invalid ToolCallContent: expected object");
     const QString dispatchValue = val.toObject().value("type").toString();
@@ -1134,7 +1216,8 @@ Utils::Result<ToolCallContent> fromJson<ToolCallContent>(const QJsonValue &val) 
     co_return Utils::ResultError("Invalid ToolCallContent: unknown type \"" + dispatchValue + "\"");
 }
 
-QString dispatchValue(const ToolCallContent &val) {
+QString dispatchValue(const ToolCallContent &val)
+{
     return std::visit([](const auto &v) -> QString {
         using T = std::decay_t<decltype(v)>;
         if constexpr (std::is_same_v<T, Content>) return "content";
@@ -1144,7 +1227,8 @@ QString dispatchValue(const ToolCallContent &val) {
     }, val);
 }
 
-QJsonObject toJson(const ToolCallContent &val) {
+QJsonObject toJson(const ToolCallContent &val)
+{
     QJsonObject obj = std::visit([](const auto &v) -> QJsonObject {
         using T = std::decay_t<decltype(v)>;
         if constexpr (std::is_same_v<T, QJsonObject>) {
@@ -1157,12 +1241,14 @@ QJsonObject toJson(const ToolCallContent &val) {
     return obj;
 }
 
-QJsonValue toJsonValue(const ToolCallContent &val) {
+QJsonValue toJsonValue(const ToolCallContent &val)
+{
     return toJson(val);
 }
 
 template<>
-Utils::Result<ToolCallLocation> fromJson<ToolCallLocation>(const QJsonValue &val) {
+Utils::Result<ToolCallLocation> fromJson<ToolCallLocation>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for ToolCallLocation");
     const QJsonObject obj = val.toObject();
@@ -1181,7 +1267,8 @@ Utils::Result<ToolCallLocation> fromJson<ToolCallLocation>(const QJsonValue &val
     return result;
 }
 
-QJsonObject toJson(const ToolCallLocation &data) {
+QJsonObject toJson(const ToolCallLocation &data)
+{
     QJsonObject obj{{"path", data._path}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -1190,7 +1277,8 @@ QJsonObject toJson(const ToolCallLocation &data) {
     return obj;
 }
 
-QString toString(ToolCallStatus v) {
+QString toString(ToolCallStatus v)
+{
     switch(v) {
         case ToolCallStatus::pending: return "pending";
         case ToolCallStatus::in_progress: return "in_progress";
@@ -1201,7 +1289,8 @@ QString toString(ToolCallStatus v) {
 }
 
 template<>
-Utils::Result<ToolCallStatus> fromJson<ToolCallStatus>(const QJsonValue &val) {
+Utils::Result<ToolCallStatus> fromJson<ToolCallStatus>(const QJsonValue &val)
+{
     const QString str = val.toString();
     if (str == "pending") return ToolCallStatus::pending;
     if (str == "in_progress") return ToolCallStatus::in_progress;
@@ -1210,11 +1299,13 @@ Utils::Result<ToolCallStatus> fromJson<ToolCallStatus>(const QJsonValue &val) {
     return Utils::ResultError("Invalid ToolCallStatus value: " + str);
 }
 
-QJsonValue toJsonValue(const ToolCallStatus &v) {
+QJsonValue toJsonValue(const ToolCallStatus &v)
+{
     return toString(v);
 }
 
-QString toString(ToolKind v) {
+QString toString(ToolKind v)
+{
     switch(v) {
         case ToolKind::read: return "read";
         case ToolKind::edit: return "edit";
@@ -1231,7 +1322,8 @@ QString toString(ToolKind v) {
 }
 
 template<>
-Utils::Result<ToolKind> fromJson<ToolKind>(const QJsonValue &val) {
+Utils::Result<ToolKind> fromJson<ToolKind>(const QJsonValue &val)
+{
     const QString str = val.toString();
     if (str == "read") return ToolKind::read;
     if (str == "edit") return ToolKind::edit;
@@ -1246,12 +1338,14 @@ Utils::Result<ToolKind> fromJson<ToolKind>(const QJsonValue &val) {
     return Utils::ResultError("Invalid ToolKind value: " + str);
 }
 
-QJsonValue toJsonValue(const ToolKind &v) {
+QJsonValue toJsonValue(const ToolKind &v)
+{
     return toString(v);
 }
 
 template<>
-Utils::Result<ToolCall> fromJson<ToolCall>(const QJsonValue &val) {
+Utils::Result<ToolCall> fromJson<ToolCall>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for ToolCall");
     const QJsonObject obj = val.toObject();
@@ -1294,7 +1388,8 @@ Utils::Result<ToolCall> fromJson<ToolCall>(const QJsonValue &val) {
     co_return result;
 }
 
-QJsonObject toJson(const ToolCall &data) {
+QJsonObject toJson(const ToolCall &data)
+{
     QJsonObject obj{
         {"title", data._title},
         {"toolCallId", data._toolCallId}
@@ -1323,7 +1418,8 @@ QJsonObject toJson(const ToolCall &data) {
 }
 
 template<>
-Utils::Result<ToolCallUpdate> fromJson<ToolCallUpdate>(const QJsonValue &val) {
+Utils::Result<ToolCallUpdate> fromJson<ToolCallUpdate>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for ToolCallUpdate");
     const QJsonObject obj = val.toObject();
@@ -1359,7 +1455,8 @@ Utils::Result<ToolCallUpdate> fromJson<ToolCallUpdate>(const QJsonValue &val) {
     co_return result;
 }
 
-QJsonObject toJson(const ToolCallUpdate &data) {
+QJsonObject toJson(const ToolCallUpdate &data)
+{
     QJsonObject obj{{"toolCallId", data._toolCallId}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -1381,7 +1478,8 @@ QJsonObject toJson(const ToolCallUpdate &data) {
 }
 
 template<>
-Utils::Result<SessionUpdate> fromJson<SessionUpdate>(const QJsonValue &val) {
+Utils::Result<SessionUpdate> fromJson<SessionUpdate>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Invalid SessionUpdate: expected object");
     const QJsonObject obj = val.toObject();
@@ -1411,7 +1509,8 @@ Utils::Result<SessionUpdate> fromJson<SessionUpdate>(const QJsonValue &val) {
     co_return result;
 }
 
-QJsonObject toJson(const SessionUpdate &data) {
+QJsonObject toJson(const SessionUpdate &data)
+{
     QJsonObject obj = std::visit([](const auto &v) -> QJsonObject {
         return toJson(v);
     }, data._value);
@@ -1419,12 +1518,14 @@ QJsonObject toJson(const SessionUpdate &data) {
     return obj;
 }
 
-QJsonValue toJsonValue(const SessionUpdate &val) {
+QJsonValue toJsonValue(const SessionUpdate &val)
+{
     return toJson(val);
 }
 
 template<>
-Utils::Result<SessionNotification> fromJson<SessionNotification>(const QJsonValue &val) {
+Utils::Result<SessionNotification> fromJson<SessionNotification>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for SessionNotification");
     const QJsonObject obj = val.toObject();
@@ -1444,7 +1545,8 @@ Utils::Result<SessionNotification> fromJson<SessionNotification>(const QJsonValu
     co_return result;
 }
 
-QJsonObject toJson(const SessionNotification &data) {
+QJsonObject toJson(const SessionNotification &data)
+{
     QJsonObject obj{
         {"sessionId", data._sessionId},
         {"update", toJsonValue(data._update)}
@@ -1455,7 +1557,8 @@ QJsonObject toJson(const SessionNotification &data) {
 }
 
 template<>
-Utils::Result<AgentNotification> fromJson<AgentNotification>(const QJsonValue &val) {
+Utils::Result<AgentNotification> fromJson<AgentNotification>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for AgentNotification");
     const QJsonObject obj = val.toObject();
@@ -1468,7 +1571,8 @@ Utils::Result<AgentNotification> fromJson<AgentNotification>(const QJsonValue &v
     return result;
 }
 
-QJsonObject toJson(const AgentNotification &data) {
+QJsonObject toJson(const AgentNotification &data)
+{
     QJsonObject obj{{"method", data._method}};
     if (data._params.has_value())
         obj.insert("params", *data._params);
@@ -1476,7 +1580,8 @@ QJsonObject toJson(const AgentNotification &data) {
 }
 
 template<>
-Utils::Result<EnvVariable> fromJson<EnvVariable>(const QJsonValue &val) {
+Utils::Result<EnvVariable> fromJson<EnvVariable>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for EnvVariable");
     const QJsonObject obj = val.toObject();
@@ -1494,7 +1599,8 @@ Utils::Result<EnvVariable> fromJson<EnvVariable>(const QJsonValue &val) {
     return result;
 }
 
-QJsonObject toJson(const EnvVariable &data) {
+QJsonObject toJson(const EnvVariable &data)
+{
     QJsonObject obj{
         {"name", data._name},
         {"value", data._value}
@@ -1505,7 +1611,8 @@ QJsonObject toJson(const EnvVariable &data) {
 }
 
 template<>
-Utils::Result<CreateTerminalRequest> fromJson<CreateTerminalRequest>(const QJsonValue &val) {
+Utils::Result<CreateTerminalRequest> fromJson<CreateTerminalRequest>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for CreateTerminalRequest");
     const QJsonObject obj = val.toObject();
@@ -1548,7 +1655,8 @@ Utils::Result<CreateTerminalRequest> fromJson<CreateTerminalRequest>(const QJson
     co_return result;
 }
 
-QJsonObject toJson(const CreateTerminalRequest &data) {
+QJsonObject toJson(const CreateTerminalRequest &data)
+{
     QJsonObject obj{
         {"command", data._command},
         {"sessionId", data._sessionId}
@@ -1573,7 +1681,8 @@ QJsonObject toJson(const CreateTerminalRequest &data) {
 }
 
 template<>
-Utils::Result<KillTerminalCommandRequest> fromJson<KillTerminalCommandRequest>(const QJsonValue &val) {
+Utils::Result<KillTerminalCommandRequest> fromJson<KillTerminalCommandRequest>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for KillTerminalCommandRequest");
     const QJsonObject obj = val.toObject();
@@ -1592,7 +1701,8 @@ Utils::Result<KillTerminalCommandRequest> fromJson<KillTerminalCommandRequest>(c
     co_return result;
 }
 
-QJsonObject toJson(const KillTerminalCommandRequest &data) {
+QJsonObject toJson(const KillTerminalCommandRequest &data)
+{
     QJsonObject obj{
         {"sessionId", data._sessionId},
         {"terminalId", data._terminalId}
@@ -1603,7 +1713,8 @@ QJsonObject toJson(const KillTerminalCommandRequest &data) {
 }
 
 template<>
-Utils::Result<ReadTextFileRequest> fromJson<ReadTextFileRequest>(const QJsonValue &val) {
+Utils::Result<ReadTextFileRequest> fromJson<ReadTextFileRequest>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for ReadTextFileRequest");
     const QJsonObject obj = val.toObject();
@@ -1630,7 +1741,8 @@ Utils::Result<ReadTextFileRequest> fromJson<ReadTextFileRequest>(const QJsonValu
     co_return result;
 }
 
-QJsonObject toJson(const ReadTextFileRequest &data) {
+QJsonObject toJson(const ReadTextFileRequest &data)
+{
     QJsonObject obj{
         {"path", data._path},
         {"sessionId", data._sessionId}
@@ -1645,7 +1757,8 @@ QJsonObject toJson(const ReadTextFileRequest &data) {
 }
 
 template<>
-Utils::Result<ReleaseTerminalRequest> fromJson<ReleaseTerminalRequest>(const QJsonValue &val) {
+Utils::Result<ReleaseTerminalRequest> fromJson<ReleaseTerminalRequest>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for ReleaseTerminalRequest");
     const QJsonObject obj = val.toObject();
@@ -1664,7 +1777,8 @@ Utils::Result<ReleaseTerminalRequest> fromJson<ReleaseTerminalRequest>(const QJs
     co_return result;
 }
 
-QJsonObject toJson(const ReleaseTerminalRequest &data) {
+QJsonObject toJson(const ReleaseTerminalRequest &data)
+{
     QJsonObject obj{
         {"sessionId", data._sessionId},
         {"terminalId", data._terminalId}
@@ -1675,7 +1789,8 @@ QJsonObject toJson(const ReleaseTerminalRequest &data) {
 }
 
 template<>
-Utils::Result<RequestId> fromJson<RequestId>(const QJsonValue &val) {
+Utils::Result<RequestId> fromJson<RequestId>(const QJsonValue &val)
+{
     if (val.isNull())
         return RequestId(std::monostate{});
     if (val.isDouble())
@@ -1685,7 +1800,8 @@ Utils::Result<RequestId> fromJson<RequestId>(const QJsonValue &val) {
     return Utils::ResultError("Invalid RequestId");
 }
 
-QJsonValue toJsonValue(const RequestId &val) {
+QJsonValue toJsonValue(const RequestId &val)
+{
     return std::visit([](const auto &v) -> QJsonValue {
         using T = std::decay_t<decltype(v)>;
         if constexpr (std::is_same_v<T, std::monostate>) {
@@ -1697,7 +1813,8 @@ QJsonValue toJsonValue(const RequestId &val) {
     }, val);
 }
 
-QString toString(PermissionOptionKind v) {
+QString toString(PermissionOptionKind v)
+{
     switch(v) {
         case PermissionOptionKind::allow_once: return "allow_once";
         case PermissionOptionKind::allow_always: return "allow_always";
@@ -1708,7 +1825,8 @@ QString toString(PermissionOptionKind v) {
 }
 
 template<>
-Utils::Result<PermissionOptionKind> fromJson<PermissionOptionKind>(const QJsonValue &val) {
+Utils::Result<PermissionOptionKind> fromJson<PermissionOptionKind>(const QJsonValue &val)
+{
     const QString str = val.toString();
     if (str == "allow_once") return PermissionOptionKind::allow_once;
     if (str == "allow_always") return PermissionOptionKind::allow_always;
@@ -1717,12 +1835,14 @@ Utils::Result<PermissionOptionKind> fromJson<PermissionOptionKind>(const QJsonVa
     return Utils::ResultError("Invalid PermissionOptionKind value: " + str);
 }
 
-QJsonValue toJsonValue(const PermissionOptionKind &v) {
+QJsonValue toJsonValue(const PermissionOptionKind &v)
+{
     return toString(v);
 }
 
 template<>
-Utils::Result<PermissionOption> fromJson<PermissionOption>(const QJsonValue &val) {
+Utils::Result<PermissionOption> fromJson<PermissionOption>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for PermissionOption");
     const QJsonObject obj = val.toObject();
@@ -1745,7 +1865,8 @@ Utils::Result<PermissionOption> fromJson<PermissionOption>(const QJsonValue &val
     co_return result;
 }
 
-QJsonObject toJson(const PermissionOption &data) {
+QJsonObject toJson(const PermissionOption &data)
+{
     QJsonObject obj{
         {"kind", toJsonValue(data._kind)},
         {"name", data._name},
@@ -1757,7 +1878,8 @@ QJsonObject toJson(const PermissionOption &data) {
 }
 
 template<>
-Utils::Result<RequestPermissionRequest> fromJson<RequestPermissionRequest>(const QJsonValue &val) {
+Utils::Result<RequestPermissionRequest> fromJson<RequestPermissionRequest>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for RequestPermissionRequest");
     const QJsonObject obj = val.toObject();
@@ -1785,7 +1907,8 @@ Utils::Result<RequestPermissionRequest> fromJson<RequestPermissionRequest>(const
     co_return result;
 }
 
-QJsonObject toJson(const RequestPermissionRequest &data) {
+QJsonObject toJson(const RequestPermissionRequest &data)
+{
     QJsonObject obj{
         {"sessionId", data._sessionId},
         {"toolCall", toJson(data._toolCall)}
@@ -1799,7 +1922,8 @@ QJsonObject toJson(const RequestPermissionRequest &data) {
 }
 
 template<>
-Utils::Result<TerminalOutputRequest> fromJson<TerminalOutputRequest>(const QJsonValue &val) {
+Utils::Result<TerminalOutputRequest> fromJson<TerminalOutputRequest>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for TerminalOutputRequest");
     const QJsonObject obj = val.toObject();
@@ -1818,7 +1942,8 @@ Utils::Result<TerminalOutputRequest> fromJson<TerminalOutputRequest>(const QJson
     co_return result;
 }
 
-QJsonObject toJson(const TerminalOutputRequest &data) {
+QJsonObject toJson(const TerminalOutputRequest &data)
+{
     QJsonObject obj{
         {"sessionId", data._sessionId},
         {"terminalId", data._terminalId}
@@ -1829,7 +1954,8 @@ QJsonObject toJson(const TerminalOutputRequest &data) {
 }
 
 template<>
-Utils::Result<WaitForTerminalExitRequest> fromJson<WaitForTerminalExitRequest>(const QJsonValue &val) {
+Utils::Result<WaitForTerminalExitRequest> fromJson<WaitForTerminalExitRequest>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for WaitForTerminalExitRequest");
     const QJsonObject obj = val.toObject();
@@ -1848,7 +1974,8 @@ Utils::Result<WaitForTerminalExitRequest> fromJson<WaitForTerminalExitRequest>(c
     co_return result;
 }
 
-QJsonObject toJson(const WaitForTerminalExitRequest &data) {
+QJsonObject toJson(const WaitForTerminalExitRequest &data)
+{
     QJsonObject obj{
         {"sessionId", data._sessionId},
         {"terminalId", data._terminalId}
@@ -1859,7 +1986,8 @@ QJsonObject toJson(const WaitForTerminalExitRequest &data) {
 }
 
 template<>
-Utils::Result<WriteTextFileRequest> fromJson<WriteTextFileRequest>(const QJsonValue &val) {
+Utils::Result<WriteTextFileRequest> fromJson<WriteTextFileRequest>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for WriteTextFileRequest");
     const QJsonObject obj = val.toObject();
@@ -1881,7 +2009,8 @@ Utils::Result<WriteTextFileRequest> fromJson<WriteTextFileRequest>(const QJsonVa
     co_return result;
 }
 
-QJsonObject toJson(const WriteTextFileRequest &data) {
+QJsonObject toJson(const WriteTextFileRequest &data)
+{
     QJsonObject obj{
         {"content", data._content},
         {"path", data._path},
@@ -1893,7 +2022,8 @@ QJsonObject toJson(const WriteTextFileRequest &data) {
 }
 
 template<>
-Utils::Result<AgentRequest> fromJson<AgentRequest>(const QJsonValue &val) {
+Utils::Result<AgentRequest> fromJson<AgentRequest>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for AgentRequest");
     const QJsonObject obj = val.toObject();
@@ -1910,7 +2040,8 @@ Utils::Result<AgentRequest> fromJson<AgentRequest>(const QJsonValue &val) {
     co_return result;
 }
 
-QJsonObject toJson(const AgentRequest &data) {
+QJsonObject toJson(const AgentRequest &data)
+{
     QJsonObject obj{
         {"id", toJsonValue(data._id)},
         {"method", data._method}
@@ -1921,7 +2052,8 @@ QJsonObject toJson(const AgentRequest &data) {
 }
 
 template<>
-Utils::Result<AuthenticateResponse> fromJson<AuthenticateResponse>(const QJsonValue &val) {
+Utils::Result<AuthenticateResponse> fromJson<AuthenticateResponse>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for AuthenticateResponse");
     const QJsonObject obj = val.toObject();
@@ -1933,7 +2065,8 @@ Utils::Result<AuthenticateResponse> fromJson<AuthenticateResponse>(const QJsonVa
     return result;
 }
 
-QJsonObject toJson(const AuthenticateResponse &data) {
+QJsonObject toJson(const AuthenticateResponse &data)
+{
     QJsonObject obj;
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -1941,7 +2074,8 @@ QJsonObject toJson(const AuthenticateResponse &data) {
 }
 
 template<>
-Utils::Result<Error> fromJson<Error>(const QJsonValue &val) {
+Utils::Result<Error> fromJson<Error>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for Error");
     const QJsonObject obj = val.toObject();
@@ -1957,7 +2091,8 @@ Utils::Result<Error> fromJson<Error>(const QJsonValue &val) {
     return result;
 }
 
-QJsonObject toJson(const Error &data) {
+QJsonObject toJson(const Error &data)
+{
     QJsonObject obj{
         {"code", data._code},
         {"message", data._message}
@@ -1968,7 +2103,8 @@ QJsonObject toJson(const Error &data) {
 }
 
 template<>
-Utils::Result<AuthMethod> fromJson<AuthMethod>(const QJsonValue &val) {
+Utils::Result<AuthMethod> fromJson<AuthMethod>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for AuthMethod");
     const QJsonObject obj = val.toObject();
@@ -1990,7 +2126,8 @@ Utils::Result<AuthMethod> fromJson<AuthMethod>(const QJsonValue &val) {
     return result;
 }
 
-QJsonObject toJson(const AuthMethod &data) {
+QJsonObject toJson(const AuthMethod &data)
+{
     QJsonObject obj{
         {"id", data._id},
         {"name", data._name}
@@ -2003,7 +2140,8 @@ QJsonObject toJson(const AuthMethod &data) {
 }
 
 template<>
-Utils::Result<Implementation> fromJson<Implementation>(const QJsonValue &val) {
+Utils::Result<Implementation> fromJson<Implementation>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for Implementation");
     const QJsonObject obj = val.toObject();
@@ -2025,7 +2163,8 @@ Utils::Result<Implementation> fromJson<Implementation>(const QJsonValue &val) {
     return result;
 }
 
-QJsonObject toJson(const Implementation &data) {
+QJsonObject toJson(const Implementation &data)
+{
     QJsonObject obj{
         {"name", data._name},
         {"version", data._version}
@@ -2037,13 +2176,15 @@ QJsonObject toJson(const Implementation &data) {
     return obj;
 }
 
-template<> Utils::Result<ProtocolVersion> fromJson<ProtocolVersion>(const QJsonValue &val) {
+template<> Utils::Result<ProtocolVersion> fromJson<ProtocolVersion>(const QJsonValue &val)
+{
     if (!val.isDouble()) return Utils::ResultError("Expected number");
     return static_cast<int>(val.toDouble());
 }
 
 template<>
-Utils::Result<InitializeResponse> fromJson<InitializeResponse>(const QJsonValue &val) {
+Utils::Result<InitializeResponse> fromJson<InitializeResponse>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for InitializeResponse");
     const QJsonObject obj = val.toObject();
@@ -2071,7 +2212,8 @@ Utils::Result<InitializeResponse> fromJson<InitializeResponse>(const QJsonValue 
     co_return result;
 }
 
-QJsonObject toJson(const InitializeResponse &data) {
+QJsonObject toJson(const InitializeResponse &data)
+{
     QJsonObject obj{{"protocolVersion", data._protocolVersion}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -2088,7 +2230,8 @@ QJsonObject toJson(const InitializeResponse &data) {
 }
 
 template<>
-Utils::Result<SessionMode> fromJson<SessionMode>(const QJsonValue &val) {
+Utils::Result<SessionMode> fromJson<SessionMode>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for SessionMode");
     const QJsonObject obj = val.toObject();
@@ -2111,7 +2254,8 @@ Utils::Result<SessionMode> fromJson<SessionMode>(const QJsonValue &val) {
     co_return result;
 }
 
-QJsonObject toJson(const SessionMode &data) {
+QJsonObject toJson(const SessionMode &data)
+{
     QJsonObject obj{
         {"id", data._id},
         {"name", data._name}
@@ -2124,7 +2268,8 @@ QJsonObject toJson(const SessionMode &data) {
 }
 
 template<>
-Utils::Result<SessionModeState> fromJson<SessionModeState>(const QJsonValue &val) {
+Utils::Result<SessionModeState> fromJson<SessionModeState>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for SessionModeState");
     const QJsonObject obj = val.toObject();
@@ -2148,7 +2293,8 @@ Utils::Result<SessionModeState> fromJson<SessionModeState>(const QJsonValue &val
     co_return result;
 }
 
-QJsonObject toJson(const SessionModeState &data) {
+QJsonObject toJson(const SessionModeState &data)
+{
     QJsonObject obj{{"currentModeId", data._currentModeId}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -2159,7 +2305,8 @@ QJsonObject toJson(const SessionModeState &data) {
 }
 
 template<>
-Utils::Result<LoadSessionResponse> fromJson<LoadSessionResponse>(const QJsonValue &val) {
+Utils::Result<LoadSessionResponse> fromJson<LoadSessionResponse>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for LoadSessionResponse");
     const QJsonObject obj = val.toObject();
@@ -2177,7 +2324,8 @@ Utils::Result<LoadSessionResponse> fromJson<LoadSessionResponse>(const QJsonValu
     co_return result;
 }
 
-QJsonObject toJson(const LoadSessionResponse &data) {
+QJsonObject toJson(const LoadSessionResponse &data)
+{
     QJsonObject obj;
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -2189,7 +2337,8 @@ QJsonObject toJson(const LoadSessionResponse &data) {
 }
 
 template<>
-Utils::Result<NewSessionResponse> fromJson<NewSessionResponse>(const QJsonValue &val) {
+Utils::Result<NewSessionResponse> fromJson<NewSessionResponse>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for NewSessionResponse");
     const QJsonObject obj = val.toObject();
@@ -2211,7 +2360,8 @@ Utils::Result<NewSessionResponse> fromJson<NewSessionResponse>(const QJsonValue 
     co_return result;
 }
 
-QJsonObject toJson(const NewSessionResponse &data) {
+QJsonObject toJson(const NewSessionResponse &data)
+{
     QJsonObject obj{{"sessionId", data._sessionId}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -2222,7 +2372,8 @@ QJsonObject toJson(const NewSessionResponse &data) {
     return obj;
 }
 
-QString toString(StopReason v) {
+QString toString(StopReason v)
+{
     switch(v) {
         case StopReason::end_turn: return "end_turn";
         case StopReason::max_tokens: return "max_tokens";
@@ -2234,7 +2385,8 @@ QString toString(StopReason v) {
 }
 
 template<>
-Utils::Result<StopReason> fromJson<StopReason>(const QJsonValue &val) {
+Utils::Result<StopReason> fromJson<StopReason>(const QJsonValue &val)
+{
     const QString str = val.toString();
     if (str == "end_turn") return StopReason::end_turn;
     if (str == "max_tokens") return StopReason::max_tokens;
@@ -2244,12 +2396,14 @@ Utils::Result<StopReason> fromJson<StopReason>(const QJsonValue &val) {
     return Utils::ResultError("Invalid StopReason value: " + str);
 }
 
-QJsonValue toJsonValue(const StopReason &v) {
+QJsonValue toJsonValue(const StopReason &v)
+{
     return toString(v);
 }
 
 template<>
-Utils::Result<PromptResponse> fromJson<PromptResponse>(const QJsonValue &val) {
+Utils::Result<PromptResponse> fromJson<PromptResponse>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for PromptResponse");
     const QJsonObject obj = val.toObject();
@@ -2265,7 +2419,8 @@ Utils::Result<PromptResponse> fromJson<PromptResponse>(const QJsonValue &val) {
     co_return result;
 }
 
-QJsonObject toJson(const PromptResponse &data) {
+QJsonObject toJson(const PromptResponse &data)
+{
     QJsonObject obj{{"stopReason", toJsonValue(data._stopReason)}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -2273,7 +2428,8 @@ QJsonObject toJson(const PromptResponse &data) {
 }
 
 template<>
-Utils::Result<SetSessionConfigOptionResponse> fromJson<SetSessionConfigOptionResponse>(const QJsonValue &val) {
+Utils::Result<SetSessionConfigOptionResponse> fromJson<SetSessionConfigOptionResponse>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for SetSessionConfigOptionResponse");
     const QJsonObject obj = val.toObject();
@@ -2293,7 +2449,8 @@ Utils::Result<SetSessionConfigOptionResponse> fromJson<SetSessionConfigOptionRes
     co_return result;
 }
 
-QJsonObject toJson(const SetSessionConfigOptionResponse &data) {
+QJsonObject toJson(const SetSessionConfigOptionResponse &data)
+{
     QJsonObject obj;
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -2304,7 +2461,8 @@ QJsonObject toJson(const SetSessionConfigOptionResponse &data) {
 }
 
 template<>
-Utils::Result<SetSessionModeResponse> fromJson<SetSessionModeResponse>(const QJsonValue &val) {
+Utils::Result<SetSessionModeResponse> fromJson<SetSessionModeResponse>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for SetSessionModeResponse");
     const QJsonObject obj = val.toObject();
@@ -2316,7 +2474,8 @@ Utils::Result<SetSessionModeResponse> fromJson<SetSessionModeResponse>(const QJs
     return result;
 }
 
-QJsonObject toJson(const SetSessionModeResponse &data) {
+QJsonObject toJson(const SetSessionModeResponse &data)
+{
     QJsonObject obj;
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -2324,11 +2483,13 @@ QJsonObject toJson(const SetSessionModeResponse &data) {
 }
 
 template<>
-Utils::Result<AgentResponse> fromJson<AgentResponse>(const QJsonValue & /*val*/) {
+Utils::Result<AgentResponse> fromJson<AgentResponse>(const QJsonValue & /*val*/)
+{
     return Utils::ResultError("Invalid AgentResponse");
 }
 
-QJsonValue toJsonValue(const AgentResponse &val) {
+QJsonValue toJsonValue(const AgentResponse &val)
+{
     return std::visit([](const auto &v) -> QJsonValue {
         {
             return QVariant::fromValue(v).toJsonValue();
@@ -2337,7 +2498,8 @@ QJsonValue toJsonValue(const AgentResponse &val) {
 }
 
 template<>
-Utils::Result<AuthenticateRequest> fromJson<AuthenticateRequest>(const QJsonValue &val) {
+Utils::Result<AuthenticateRequest> fromJson<AuthenticateRequest>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for AuthenticateRequest");
     const QJsonObject obj = val.toObject();
@@ -2352,7 +2514,8 @@ Utils::Result<AuthenticateRequest> fromJson<AuthenticateRequest>(const QJsonValu
     return result;
 }
 
-QJsonObject toJson(const AuthenticateRequest &data) {
+QJsonObject toJson(const AuthenticateRequest &data)
+{
     QJsonObject obj{{"methodId", data._methodId}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -2360,7 +2523,8 @@ QJsonObject toJson(const AuthenticateRequest &data) {
 }
 
 template<>
-Utils::Result<CancelNotification> fromJson<CancelNotification>(const QJsonValue &val) {
+Utils::Result<CancelNotification> fromJson<CancelNotification>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for CancelNotification");
     const QJsonObject obj = val.toObject();
@@ -2376,7 +2540,8 @@ Utils::Result<CancelNotification> fromJson<CancelNotification>(const QJsonValue 
     co_return result;
 }
 
-QJsonObject toJson(const CancelNotification &data) {
+QJsonObject toJson(const CancelNotification &data)
+{
     QJsonObject obj{{"sessionId", data._sessionId}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -2384,7 +2549,8 @@ QJsonObject toJson(const CancelNotification &data) {
 }
 
 template<>
-Utils::Result<FileSystemCapability> fromJson<FileSystemCapability>(const QJsonValue &val) {
+Utils::Result<FileSystemCapability> fromJson<FileSystemCapability>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for FileSystemCapability");
     const QJsonObject obj = val.toObject();
@@ -2400,7 +2566,8 @@ Utils::Result<FileSystemCapability> fromJson<FileSystemCapability>(const QJsonVa
     return result;
 }
 
-QJsonObject toJson(const FileSystemCapability &data) {
+QJsonObject toJson(const FileSystemCapability &data)
+{
     QJsonObject obj;
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -2412,7 +2579,8 @@ QJsonObject toJson(const FileSystemCapability &data) {
 }
 
 template<>
-Utils::Result<ClientCapabilities> fromJson<ClientCapabilities>(const QJsonValue &val) {
+Utils::Result<ClientCapabilities> fromJson<ClientCapabilities>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for ClientCapabilities");
     const QJsonObject obj = val.toObject();
@@ -2428,7 +2596,8 @@ Utils::Result<ClientCapabilities> fromJson<ClientCapabilities>(const QJsonValue 
     co_return result;
 }
 
-QJsonObject toJson(const ClientCapabilities &data) {
+QJsonObject toJson(const ClientCapabilities &data)
+{
     QJsonObject obj;
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -2440,7 +2609,8 @@ QJsonObject toJson(const ClientCapabilities &data) {
 }
 
 template<>
-Utils::Result<ClientNotification> fromJson<ClientNotification>(const QJsonValue &val) {
+Utils::Result<ClientNotification> fromJson<ClientNotification>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for ClientNotification");
     const QJsonObject obj = val.toObject();
@@ -2453,7 +2623,8 @@ Utils::Result<ClientNotification> fromJson<ClientNotification>(const QJsonValue 
     return result;
 }
 
-QJsonObject toJson(const ClientNotification &data) {
+QJsonObject toJson(const ClientNotification &data)
+{
     QJsonObject obj{{"method", data._method}};
     if (data._params.has_value())
         obj.insert("params", *data._params);
@@ -2461,7 +2632,8 @@ QJsonObject toJson(const ClientNotification &data) {
 }
 
 template<>
-Utils::Result<InitializeRequest> fromJson<InitializeRequest>(const QJsonValue &val) {
+Utils::Result<InitializeRequest> fromJson<InitializeRequest>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for InitializeRequest");
     const QJsonObject obj = val.toObject();
@@ -2481,7 +2653,8 @@ Utils::Result<InitializeRequest> fromJson<InitializeRequest>(const QJsonValue &v
     co_return result;
 }
 
-QJsonObject toJson(const InitializeRequest &data) {
+QJsonObject toJson(const InitializeRequest &data)
+{
     QJsonObject obj{{"protocolVersion", data._protocolVersion}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -2493,7 +2666,8 @@ QJsonObject toJson(const InitializeRequest &data) {
 }
 
 template<>
-Utils::Result<HttpHeader> fromJson<HttpHeader>(const QJsonValue &val) {
+Utils::Result<HttpHeader> fromJson<HttpHeader>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for HttpHeader");
     const QJsonObject obj = val.toObject();
@@ -2511,7 +2685,8 @@ Utils::Result<HttpHeader> fromJson<HttpHeader>(const QJsonValue &val) {
     return result;
 }
 
-QJsonObject toJson(const HttpHeader &data) {
+QJsonObject toJson(const HttpHeader &data)
+{
     QJsonObject obj{
         {"name", data._name},
         {"value", data._value}
@@ -2522,7 +2697,8 @@ QJsonObject toJson(const HttpHeader &data) {
 }
 
 template<>
-Utils::Result<McpServerHttp> fromJson<McpServerHttp>(const QJsonValue &val) {
+Utils::Result<McpServerHttp> fromJson<McpServerHttp>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for McpServerHttp");
     const QJsonObject obj = val.toObject();
@@ -2548,7 +2724,8 @@ Utils::Result<McpServerHttp> fromJson<McpServerHttp>(const QJsonValue &val) {
     co_return result;
 }
 
-QJsonObject toJson(const McpServerHttp &data) {
+QJsonObject toJson(const McpServerHttp &data)
+{
     QJsonObject obj{
         {"name", data._name},
         {"url", data._url}
@@ -2562,7 +2739,8 @@ QJsonObject toJson(const McpServerHttp &data) {
 }
 
 template<>
-Utils::Result<McpServerSse> fromJson<McpServerSse>(const QJsonValue &val) {
+Utils::Result<McpServerSse> fromJson<McpServerSse>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for McpServerSse");
     const QJsonObject obj = val.toObject();
@@ -2588,7 +2766,8 @@ Utils::Result<McpServerSse> fromJson<McpServerSse>(const QJsonValue &val) {
     co_return result;
 }
 
-QJsonObject toJson(const McpServerSse &data) {
+QJsonObject toJson(const McpServerSse &data)
+{
     QJsonObject obj{
         {"name", data._name},
         {"url", data._url}
@@ -2602,7 +2781,8 @@ QJsonObject toJson(const McpServerSse &data) {
 }
 
 template<>
-Utils::Result<McpServerStdio> fromJson<McpServerStdio>(const QJsonValue &val) {
+Utils::Result<McpServerStdio> fromJson<McpServerStdio>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for McpServerStdio");
     const QJsonObject obj = val.toObject();
@@ -2636,7 +2816,8 @@ Utils::Result<McpServerStdio> fromJson<McpServerStdio>(const QJsonValue &val) {
     co_return result;
 }
 
-QJsonObject toJson(const McpServerStdio &data) {
+QJsonObject toJson(const McpServerStdio &data)
+{
     QJsonObject obj{
         {"command", data._command},
         {"name", data._name}
@@ -2653,7 +2834,8 @@ QJsonObject toJson(const McpServerStdio &data) {
 }
 
 template<>
-Utils::Result<McpServer> fromJson<McpServer>(const QJsonValue &val) {
+Utils::Result<McpServer> fromJson<McpServer>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Invalid McpServer: expected object");
     const QString dispatchValue = val.toObject().value("type").toString();
@@ -2666,7 +2848,8 @@ Utils::Result<McpServer> fromJson<McpServer>(const QJsonValue &val) {
     co_return Utils::ResultError("Invalid McpServer: unknown type \"" + dispatchValue + "\"");
 }
 
-QString dispatchValue(const McpServer &val) {
+QString dispatchValue(const McpServer &val)
+{
     return std::visit([](const auto &v) -> QString {
         using T = std::decay_t<decltype(v)>;
         if constexpr (std::is_same_v<T, McpServerHttp>) return "http";
@@ -2676,7 +2859,8 @@ QString dispatchValue(const McpServer &val) {
     }, val);
 }
 
-QJsonObject toJson(const McpServer &val) {
+QJsonObject toJson(const McpServer &val)
+{
     QJsonObject obj = std::visit([](const auto &v) -> QJsonObject {
         using T = std::decay_t<decltype(v)>;
         if constexpr (std::is_same_v<T, QJsonObject>) {
@@ -2689,16 +2873,19 @@ QJsonObject toJson(const McpServer &val) {
     return obj;
 }
 
-QJsonValue toJsonValue(const McpServer &val) {
+QJsonValue toJsonValue(const McpServer &val)
+{
     return toJson(val);
 }
 
-QString name(const McpServer &val) {
+QString name(const McpServer &val)
+{
     return std::visit([](const auto &v) -> QString { return v._name; }, val);
 }
 
 template<>
-Utils::Result<LoadSessionRequest> fromJson<LoadSessionRequest>(const QJsonValue &val) {
+Utils::Result<LoadSessionRequest> fromJson<LoadSessionRequest>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for LoadSessionRequest");
     const QJsonObject obj = val.toObject();
@@ -2725,7 +2912,8 @@ Utils::Result<LoadSessionRequest> fromJson<LoadSessionRequest>(const QJsonValue 
     co_return result;
 }
 
-QJsonObject toJson(const LoadSessionRequest &data) {
+QJsonObject toJson(const LoadSessionRequest &data)
+{
     QJsonObject obj{
         {"cwd", data._cwd},
         {"sessionId", data._sessionId}
@@ -2739,7 +2927,8 @@ QJsonObject toJson(const LoadSessionRequest &data) {
 }
 
 template<>
-Utils::Result<NewSessionRequest> fromJson<NewSessionRequest>(const QJsonValue &val) {
+Utils::Result<NewSessionRequest> fromJson<NewSessionRequest>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for NewSessionRequest");
     const QJsonObject obj = val.toObject();
@@ -2762,7 +2951,8 @@ Utils::Result<NewSessionRequest> fromJson<NewSessionRequest>(const QJsonValue &v
     co_return result;
 }
 
-QJsonObject toJson(const NewSessionRequest &data) {
+QJsonObject toJson(const NewSessionRequest &data)
+{
     QJsonObject obj{{"cwd", data._cwd}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -2773,7 +2963,8 @@ QJsonObject toJson(const NewSessionRequest &data) {
 }
 
 template<>
-Utils::Result<PromptRequest> fromJson<PromptRequest>(const QJsonValue &val) {
+Utils::Result<PromptRequest> fromJson<PromptRequest>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for PromptRequest");
     const QJsonObject obj = val.toObject();
@@ -2797,7 +2988,8 @@ Utils::Result<PromptRequest> fromJson<PromptRequest>(const QJsonValue &val) {
     co_return result;
 }
 
-QJsonObject toJson(const PromptRequest &data) {
+QJsonObject toJson(const PromptRequest &data)
+{
     QJsonObject obj{{"sessionId", data._sessionId}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -2808,7 +3000,8 @@ QJsonObject toJson(const PromptRequest &data) {
 }
 
 template<>
-Utils::Result<SetSessionConfigOptionRequest> fromJson<SetSessionConfigOptionRequest>(const QJsonValue &val) {
+Utils::Result<SetSessionConfigOptionRequest> fromJson<SetSessionConfigOptionRequest>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for SetSessionConfigOptionRequest");
     const QJsonObject obj = val.toObject();
@@ -2832,7 +3025,8 @@ Utils::Result<SetSessionConfigOptionRequest> fromJson<SetSessionConfigOptionRequ
     co_return result;
 }
 
-QJsonObject toJson(const SetSessionConfigOptionRequest &data) {
+QJsonObject toJson(const SetSessionConfigOptionRequest &data)
+{
     QJsonObject obj{
         {"configId", data._configId},
         {"sessionId", data._sessionId},
@@ -2844,7 +3038,8 @@ QJsonObject toJson(const SetSessionConfigOptionRequest &data) {
 }
 
 template<>
-Utils::Result<SetSessionModeRequest> fromJson<SetSessionModeRequest>(const QJsonValue &val) {
+Utils::Result<SetSessionModeRequest> fromJson<SetSessionModeRequest>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for SetSessionModeRequest");
     const QJsonObject obj = val.toObject();
@@ -2864,7 +3059,8 @@ Utils::Result<SetSessionModeRequest> fromJson<SetSessionModeRequest>(const QJson
     co_return result;
 }
 
-QJsonObject toJson(const SetSessionModeRequest &data) {
+QJsonObject toJson(const SetSessionModeRequest &data)
+{
     QJsonObject obj{
         {"modeId", data._modeId},
         {"sessionId", data._sessionId}
@@ -2875,7 +3071,8 @@ QJsonObject toJson(const SetSessionModeRequest &data) {
 }
 
 template<>
-Utils::Result<ClientRequest> fromJson<ClientRequest>(const QJsonValue &val) {
+Utils::Result<ClientRequest> fromJson<ClientRequest>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for ClientRequest");
     const QJsonObject obj = val.toObject();
@@ -2892,7 +3089,8 @@ Utils::Result<ClientRequest> fromJson<ClientRequest>(const QJsonValue &val) {
     co_return result;
 }
 
-QJsonObject toJson(const ClientRequest &data) {
+QJsonObject toJson(const ClientRequest &data)
+{
     QJsonObject obj{
         {"id", toJsonValue(data._id)},
         {"method", data._method}
@@ -2903,7 +3101,8 @@ QJsonObject toJson(const ClientRequest &data) {
 }
 
 template<>
-Utils::Result<CreateTerminalResponse> fromJson<CreateTerminalResponse>(const QJsonValue &val) {
+Utils::Result<CreateTerminalResponse> fromJson<CreateTerminalResponse>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for CreateTerminalResponse");
     const QJsonObject obj = val.toObject();
@@ -2918,7 +3117,8 @@ Utils::Result<CreateTerminalResponse> fromJson<CreateTerminalResponse>(const QJs
     return result;
 }
 
-QJsonObject toJson(const CreateTerminalResponse &data) {
+QJsonObject toJson(const CreateTerminalResponse &data)
+{
     QJsonObject obj{{"terminalId", data._terminalId}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -2926,7 +3126,8 @@ QJsonObject toJson(const CreateTerminalResponse &data) {
 }
 
 template<>
-Utils::Result<KillTerminalCommandResponse> fromJson<KillTerminalCommandResponse>(const QJsonValue &val) {
+Utils::Result<KillTerminalCommandResponse> fromJson<KillTerminalCommandResponse>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for KillTerminalCommandResponse");
     const QJsonObject obj = val.toObject();
@@ -2938,7 +3139,8 @@ Utils::Result<KillTerminalCommandResponse> fromJson<KillTerminalCommandResponse>
     return result;
 }
 
-QJsonObject toJson(const KillTerminalCommandResponse &data) {
+QJsonObject toJson(const KillTerminalCommandResponse &data)
+{
     QJsonObject obj;
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -2946,7 +3148,8 @@ QJsonObject toJson(const KillTerminalCommandResponse &data) {
 }
 
 template<>
-Utils::Result<ReadTextFileResponse> fromJson<ReadTextFileResponse>(const QJsonValue &val) {
+Utils::Result<ReadTextFileResponse> fromJson<ReadTextFileResponse>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for ReadTextFileResponse");
     const QJsonObject obj = val.toObject();
@@ -2961,7 +3164,8 @@ Utils::Result<ReadTextFileResponse> fromJson<ReadTextFileResponse>(const QJsonVa
     return result;
 }
 
-QJsonObject toJson(const ReadTextFileResponse &data) {
+QJsonObject toJson(const ReadTextFileResponse &data)
+{
     QJsonObject obj{{"content", data._content}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -2969,7 +3173,8 @@ QJsonObject toJson(const ReadTextFileResponse &data) {
 }
 
 template<>
-Utils::Result<ReleaseTerminalResponse> fromJson<ReleaseTerminalResponse>(const QJsonValue &val) {
+Utils::Result<ReleaseTerminalResponse> fromJson<ReleaseTerminalResponse>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for ReleaseTerminalResponse");
     const QJsonObject obj = val.toObject();
@@ -2981,7 +3186,8 @@ Utils::Result<ReleaseTerminalResponse> fromJson<ReleaseTerminalResponse>(const Q
     return result;
 }
 
-QJsonObject toJson(const ReleaseTerminalResponse &data) {
+QJsonObject toJson(const ReleaseTerminalResponse &data)
+{
     QJsonObject obj;
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -2989,7 +3195,8 @@ QJsonObject toJson(const ReleaseTerminalResponse &data) {
 }
 
 template<>
-Utils::Result<SelectedPermissionOutcome> fromJson<SelectedPermissionOutcome>(const QJsonValue &val) {
+Utils::Result<SelectedPermissionOutcome> fromJson<SelectedPermissionOutcome>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for SelectedPermissionOutcome");
     const QJsonObject obj = val.toObject();
@@ -3005,7 +3212,8 @@ Utils::Result<SelectedPermissionOutcome> fromJson<SelectedPermissionOutcome>(con
     co_return result;
 }
 
-QJsonObject toJson(const SelectedPermissionOutcome &data) {
+QJsonObject toJson(const SelectedPermissionOutcome &data)
+{
     QJsonObject obj{{"optionId", data._optionId}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -3013,7 +3221,8 @@ QJsonObject toJson(const SelectedPermissionOutcome &data) {
 }
 
 template<>
-Utils::Result<RequestPermissionOutcome> fromJson<RequestPermissionOutcome>(const QJsonValue &val) {
+Utils::Result<RequestPermissionOutcome> fromJson<RequestPermissionOutcome>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Invalid RequestPermissionOutcome: expected object");
     const QJsonObject obj = val.toObject();
@@ -3029,7 +3238,8 @@ Utils::Result<RequestPermissionOutcome> fromJson<RequestPermissionOutcome>(const
     co_return result;
 }
 
-QJsonObject toJson(const RequestPermissionOutcome &data) {
+QJsonObject toJson(const RequestPermissionOutcome &data)
+{
     QJsonObject obj = std::visit([](const auto &v) -> QJsonObject {
         using T = std::decay_t<decltype(v)>;
         if constexpr (std::is_same_v<T, std::monostate>) return {};
@@ -3039,12 +3249,14 @@ QJsonObject toJson(const RequestPermissionOutcome &data) {
     return obj;
 }
 
-QJsonValue toJsonValue(const RequestPermissionOutcome &val) {
+QJsonValue toJsonValue(const RequestPermissionOutcome &val)
+{
     return toJson(val);
 }
 
 template<>
-Utils::Result<RequestPermissionResponse> fromJson<RequestPermissionResponse>(const QJsonValue &val) {
+Utils::Result<RequestPermissionResponse> fromJson<RequestPermissionResponse>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for RequestPermissionResponse");
     const QJsonObject obj = val.toObject();
@@ -3060,7 +3272,8 @@ Utils::Result<RequestPermissionResponse> fromJson<RequestPermissionResponse>(con
     co_return result;
 }
 
-QJsonObject toJson(const RequestPermissionResponse &data) {
+QJsonObject toJson(const RequestPermissionResponse &data)
+{
     QJsonObject obj{{"outcome", toJsonValue(data._outcome)}};
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -3068,7 +3281,8 @@ QJsonObject toJson(const RequestPermissionResponse &data) {
 }
 
 template<>
-Utils::Result<TerminalExitStatus> fromJson<TerminalExitStatus>(const QJsonValue &val) {
+Utils::Result<TerminalExitStatus> fromJson<TerminalExitStatus>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for TerminalExitStatus");
     const QJsonObject obj = val.toObject();
@@ -3088,7 +3302,8 @@ Utils::Result<TerminalExitStatus> fromJson<TerminalExitStatus>(const QJsonValue 
     return result;
 }
 
-QJsonObject toJson(const TerminalExitStatus &data) {
+QJsonObject toJson(const TerminalExitStatus &data)
+{
     QJsonObject obj;
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -3100,7 +3315,8 @@ QJsonObject toJson(const TerminalExitStatus &data) {
 }
 
 template<>
-Utils::Result<TerminalOutputResponse> fromJson<TerminalOutputResponse>(const QJsonValue &val) {
+Utils::Result<TerminalOutputResponse> fromJson<TerminalOutputResponse>(const QJsonValue &val)
+{
     if (!val.isObject())
         co_return Utils::ResultError("Expected JSON object for TerminalOutputResponse");
     const QJsonObject obj = val.toObject();
@@ -3120,7 +3336,8 @@ Utils::Result<TerminalOutputResponse> fromJson<TerminalOutputResponse>(const QJs
     co_return result;
 }
 
-QJsonObject toJson(const TerminalOutputResponse &data) {
+QJsonObject toJson(const TerminalOutputResponse &data)
+{
     QJsonObject obj{
         {"output", data._output},
         {"truncated", data._truncated}
@@ -3133,7 +3350,8 @@ QJsonObject toJson(const TerminalOutputResponse &data) {
 }
 
 template<>
-Utils::Result<WaitForTerminalExitResponse> fromJson<WaitForTerminalExitResponse>(const QJsonValue &val) {
+Utils::Result<WaitForTerminalExitResponse> fromJson<WaitForTerminalExitResponse>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for WaitForTerminalExitResponse");
     const QJsonObject obj = val.toObject();
@@ -3153,7 +3371,8 @@ Utils::Result<WaitForTerminalExitResponse> fromJson<WaitForTerminalExitResponse>
     return result;
 }
 
-QJsonObject toJson(const WaitForTerminalExitResponse &data) {
+QJsonObject toJson(const WaitForTerminalExitResponse &data)
+{
     QJsonObject obj;
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
@@ -3165,7 +3384,8 @@ QJsonObject toJson(const WaitForTerminalExitResponse &data) {
 }
 
 template<>
-Utils::Result<WriteTextFileResponse> fromJson<WriteTextFileResponse>(const QJsonValue &val) {
+Utils::Result<WriteTextFileResponse> fromJson<WriteTextFileResponse>(const QJsonValue &val)
+{
     if (!val.isObject())
         return Utils::ResultError("Expected JSON object for WriteTextFileResponse");
     const QJsonObject obj = val.toObject();
@@ -3177,7 +3397,8 @@ Utils::Result<WriteTextFileResponse> fromJson<WriteTextFileResponse>(const QJson
     return result;
 }
 
-QJsonObject toJson(const WriteTextFileResponse &data) {
+QJsonObject toJson(const WriteTextFileResponse &data)
+{
     QJsonObject obj;
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);

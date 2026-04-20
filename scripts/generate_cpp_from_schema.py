@@ -2531,11 +2531,22 @@ def _split_code_block(code_block, export_macro=None):
                 decl_lines.append(cleaned)
         return decl_lines
 
-    def _remove_inline(func_lines):
-        """Remove 'inline' keyword from function definition lines."""
+    def _format_func_def(func_lines):
+        """Remove 'inline' keyword from function definition lines.
+        Also moves the opening brace of function signatures to a new line (Allman style)."""
         result = []
         for fl in func_lines:
-            result.append(re.sub(r'\binline\s+', '', fl))
+            fl = re.sub(r'\binline\s+', '', fl)
+            # Move the function-level opening brace to its own line.
+            # Only applies to non-indented lines ending with ' {' — these are
+            # function signatures, not lambda captures or nested blocks.
+            if not fl.startswith(' ') and fl.rstrip().endswith('{'):
+                sig = fl.rstrip()[:-1].rstrip()
+                if sig:  # skip a bare '{' line
+                    result.append(sig)
+                    result.append('{')
+                    continue
+            result.append(fl)
         return result
 
     while i < len(lines):
@@ -2550,7 +2561,7 @@ def _split_code_block(code_block, export_macro=None):
             split_lines = ['template<>'] + [fl.replace('template<> ', '', 1) if fl.strip().startswith('template<>') else fl for fl in func_lines[0:1]] + func_lines[1:]
             h_lines.extend(_make_forward_decl(split_lines))
             h_lines.append('')
-            cpp_lines.extend(_remove_inline(func_lines))
+            cpp_lines.extend(_format_func_def(func_lines))
             cpp_lines.append('')
             i = end + 1
             continue
@@ -2568,7 +2579,7 @@ def _split_code_block(code_block, export_macro=None):
                     h_lines.extend(_make_forward_decl(func_lines))
                     h_lines.append('')
                     # Definition for cpp
-                    cpp_lines.extend(_remove_inline(func_lines))
+                    cpp_lines.extend(_format_func_def(func_lines))
                     cpp_lines.append('')
                     i = end + 1
                     continue
@@ -2581,7 +2592,7 @@ def _split_code_block(code_block, export_macro=None):
                     func_lines = lines[i:end + 1]
                     h_lines.extend(_make_forward_decl(func_lines))
                     h_lines.append('')
-                    cpp_lines.extend(_remove_inline(func_lines))
+                    cpp_lines.extend(_format_func_def(func_lines))
                     cpp_lines.append('')
                     i = end + 1
                     continue
@@ -2596,7 +2607,7 @@ def _split_code_block(code_block, export_macro=None):
             func_lines = lines[i:end + 1]
             h_lines.extend(_make_forward_decl(func_lines))
             h_lines.append('')
-            cpp_lines.extend(_remove_inline(func_lines))
+            cpp_lines.extend(_format_func_def(func_lines))
             cpp_lines.append('')
             i = end + 1
             continue
@@ -2615,7 +2626,7 @@ def _split_code_block(code_block, export_macro=None):
                 h_lines.extend(_make_forward_decl(lines[j:end + 1]))
                 h_lines.append('')
                 # For cpp: no doc comment, just definition
-                cpp_lines.extend(_remove_inline(lines[j:end + 1]))
+                cpp_lines.extend(_format_func_def(lines[j:end + 1]))
                 cpp_lines.append('')
                 i = end + 1
                 continue
