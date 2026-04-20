@@ -2324,7 +2324,7 @@ QJsonObject toJson(const SetSessionModeResponse &data) {
 }
 
 template<>
-Utils::Result<AgentResponse> fromJson<AgentResponse>(const QJsonValue &val) {
+Utils::Result<AgentResponse> fromJson<AgentResponse>(const QJsonValue & /*val*/) {
     return Utils::ResultError("Invalid AgentResponse");
 }
 

@@ -57,9 +57,17 @@ namespace {namespace} {{
 '''
 
 def use_return_if_no_co_await(lines):
-    """Replace co_return with return in lines where co_await is never used."""
+    """Replace co_return with return in lines where co_await is never used.
+    Also comments out the 'val' parameter name when it is not referenced in the body."""
     if not any('co_await' in line for line in lines):
-        return [line.replace('co_return', 'return') for line in lines]
+        lines = [line.replace('co_return', 'return') for line in lines]
+    # Suppress unused 'val' parameter in fromJson specializations
+    if (len(lines) >= 2
+            and 'fromJson' in lines[1]
+            and 'const QJsonValue &val' in lines[1]
+            and not any(re.search(r'\bval\b', line) for line in lines[2:])):
+        lines = list(lines)
+        lines[1] = lines[1].replace('const QJsonValue &val', 'const QJsonValue & /*val*/')
     return lines
 
 
