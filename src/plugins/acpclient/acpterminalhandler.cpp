@@ -143,7 +143,7 @@ void AcpTerminalHandler::handleWaitForExit(const QJsonValue &id, const WaitForTe
     }
 }
 
-void AcpTerminalHandler::handleKill(const QJsonValue &id, const KillTerminalCommandRequest &request)
+void AcpTerminalHandler::handleKill(const QJsonValue &id, const KillTerminalRequest &request)
 {
     auto it = m_terminals.find(request.terminalId());
     if (it == m_terminals.end()) {
@@ -155,7 +155,7 @@ void AcpTerminalHandler::handleKill(const QJsonValue &id, const KillTerminalComm
     if (it->process && it->process->isRunning())
         it->process->kill();
 
-    KillTerminalCommandResponse response;
+    KillTerminalResponse response;
     m_client->sendResponse(id, Acp::toJson(response));
 }
 

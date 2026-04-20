@@ -68,12 +68,12 @@ QJsonObject toJson(const PromptCapabilities &data)
 }
 
 template<>
-Utils::Result<SessionCapabilities> fromJson<SessionCapabilities>(const QJsonValue &val)
+Utils::Result<SessionListCapabilities> fromJson<SessionListCapabilities>(const QJsonValue &val)
 {
     if (!val.isObject())
-        return Utils::ResultError("Expected JSON object for SessionCapabilities");
+        return Utils::ResultError("Expected JSON object for SessionListCapabilities");
     const QJsonObject obj = val.toObject();
-    SessionCapabilities result;
+    SessionListCapabilities result;
     if (obj.contains("_meta"))
         if (!obj["_meta"].isNull()) {
             result.__meta = obj.value("_meta").toObject();
@@ -81,11 +81,37 @@ Utils::Result<SessionCapabilities> fromJson<SessionCapabilities>(const QJsonValu
     return result;
 }
 
+QJsonObject toJson(const SessionListCapabilities &data)
+{
+    QJsonObject obj;
+    if (data.__meta.has_value())
+        obj.insert("_meta", *data.__meta);
+    return obj;
+}
+
+template<>
+Utils::Result<SessionCapabilities> fromJson<SessionCapabilities>(const QJsonValue &val)
+{
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for SessionCapabilities");
+    const QJsonObject obj = val.toObject();
+    SessionCapabilities result;
+    if (obj.contains("_meta"))
+        if (!obj["_meta"].isNull()) {
+            result.__meta = obj.value("_meta").toObject();
+        }
+    if (obj.contains("list") && !obj["list"].isNull())
+        result._list = co_await fromJson<SessionListCapabilities>(obj["list"]);
+    co_return result;
+}
+
 QJsonObject toJson(const SessionCapabilities &data)
 {
     QJsonObject obj;
     if (data.__meta.has_value())
         obj.insert("_meta", *data.__meta);
+    if (data._list.has_value())
+        obj.insert("list", toJson(*data._list));
     return obj;
 }
 
@@ -1114,6 +1140,40 @@ QJsonObject toJson(const Plan &data)
 }
 
 template<>
+Utils::Result<SessionInfoUpdate> fromJson<SessionInfoUpdate>(const QJsonValue &val)
+{
+    if (!val.isObject())
+        return Utils::ResultError("Expected JSON object for SessionInfoUpdate");
+    const QJsonObject obj = val.toObject();
+    SessionInfoUpdate result;
+    if (obj.contains("_meta"))
+        if (!obj["_meta"].isNull()) {
+            result.__meta = obj.value("_meta").toObject();
+        }
+    if (obj.contains("title"))
+        if (!obj["title"].isNull()) {
+            result._title = obj.value("title").toString();
+        }
+    if (obj.contains("updatedAt"))
+        if (!obj["updatedAt"].isNull()) {
+            result._updatedAt = obj.value("updatedAt").toString();
+        }
+    return result;
+}
+
+QJsonObject toJson(const SessionInfoUpdate &data)
+{
+    QJsonObject obj;
+    if (data.__meta.has_value())
+        obj.insert("_meta", *data.__meta);
+    if (data._title.has_value())
+        obj.insert("title", *data._title);
+    if (data._updatedAt.has_value())
+        obj.insert("updatedAt", *data._updatedAt);
+    return obj;
+}
+
+template<>
 Utils::Result<Content> fromJson<Content>(const QJsonValue &val)
 {
     if (!val.isObject())
@@ -1504,6 +1564,8 @@ Utils::Result<SessionUpdate> fromJson<SessionUpdate>(const QJsonValue &val)
         result._value = co_await fromJson<CurrentModeUpdate>(val);
     else if (kind == "config_option_update")
         result._value = co_await fromJson<ConfigOptionUpdate>(val);
+    else if (kind == "session_info_update")
+        result._value = co_await fromJson<SessionInfoUpdate>(val);
     else
         co_return Utils::ResultError("Invalid SessionUpdate: unknown sessionUpdate \"" + kind + "\"");
     co_return result;
@@ -1681,16 +1743,16 @@ QJsonObject toJson(const CreateTerminalRequest &data)
 }
 
 template<>
-Utils::Result<KillTerminalCommandRequest> fromJson<KillTerminalCommandRequest>(const QJsonValue &val)
+Utils::Result<KillTerminalRequest> fromJson<KillTerminalRequest>(const QJsonValue &val)
 {
     if (!val.isObject())
-        co_return Utils::ResultError("Expected JSON object for KillTerminalCommandRequest");
+        co_return Utils::ResultError("Expected JSON object for KillTerminalRequest");
     const QJsonObject obj = val.toObject();
     if (!obj.contains("sessionId"))
         co_return Utils::ResultError("Missing required field: sessionId");
     if (!obj.contains("terminalId"))
         co_return Utils::ResultError("Missing required field: terminalId");
-    KillTerminalCommandRequest result;
+    KillTerminalRequest result;
     if (obj.contains("_meta"))
         if (!obj["_meta"].isNull()) {
             result.__meta = obj.value("_meta").toObject();
@@ -1701,7 +1763,7 @@ Utils::Result<KillTerminalCommandRequest> fromJson<KillTerminalCommandRequest>(c
     co_return result;
 }
 
-QJsonObject toJson(const KillTerminalCommandRequest &data)
+QJsonObject toJson(const KillTerminalRequest &data)
 {
     QJsonObject obj{
         {"sessionId", data._sessionId},
@@ -2103,16 +2165,16 @@ QJsonObject toJson(const Error &data)
 }
 
 template<>
-Utils::Result<AuthMethod> fromJson<AuthMethod>(const QJsonValue &val)
+Utils::Result<AuthMethodAgent> fromJson<AuthMethodAgent>(const QJsonValue &val)
 {
     if (!val.isObject())
-        return Utils::ResultError("Expected JSON object for AuthMethod");
+        return Utils::ResultError("Expected JSON object for AuthMethodAgent");
     const QJsonObject obj = val.toObject();
     if (!obj.contains("id"))
         return Utils::ResultError("Missing required field: id");
     if (!obj.contains("name"))
         return Utils::ResultError("Missing required field: name");
-    AuthMethod result;
+    AuthMethodAgent result;
     if (obj.contains("_meta"))
         if (!obj["_meta"].isNull()) {
             result.__meta = obj.value("_meta").toObject();
@@ -2126,7 +2188,7 @@ Utils::Result<AuthMethod> fromJson<AuthMethod>(const QJsonValue &val)
     return result;
 }
 
-QJsonObject toJson(const AuthMethod &data)
+QJsonObject toJson(const AuthMethodAgent &data)
 {
     QJsonObject obj{
         {"id", data._id},
@@ -2137,6 +2199,44 @@ QJsonObject toJson(const AuthMethod &data)
     if (data._description.has_value())
         obj.insert("description", *data._description);
     return obj;
+}
+
+template<>
+Utils::Result<AuthMethod> fromJson<AuthMethod>(const QJsonValue &val)
+{
+    if (!val.isObject())
+        co_return Utils::ResultError("Invalid AuthMethod: expected object");
+    const QJsonObject obj = val.toObject();
+    if (obj.contains("id"))
+        co_return AuthMethod(co_await fromJson<AuthMethodAgent>(val));
+    co_return Utils::ResultError("Invalid AuthMethod");
+}
+
+QString id(const AuthMethod &val)
+{
+    return std::visit([](const auto &v) -> QString { return v._id; }, val);
+}
+
+QString name(const AuthMethod &val)
+{
+    return std::visit([](const auto &v) -> QString { return v._name; }, val);
+}
+
+QJsonObject toJson(const AuthMethod &val)
+{
+    return std::visit([](const auto &v) -> QJsonObject {
+        using T = std::decay_t<decltype(v)>;
+        if constexpr (std::is_same_v<T, QJsonObject>) {
+            return v;
+        } else {
+            return toJson(v);
+        }
+    }, val);
+}
+
+QJsonValue toJsonValue(const AuthMethod &val)
+{
+    return toJson(val);
 }
 
 template<>
@@ -2223,9 +2323,92 @@ QJsonObject toJson(const InitializeResponse &data)
         obj.insert("agentInfo", toJson(*data._agentInfo));
     if (data._authMethods.has_value()) {
         QJsonArray arr_authMethods;
-        for (const auto &v : *data._authMethods) arr_authMethods.append(toJson(v));
+        for (const auto &v : *data._authMethods) arr_authMethods.append(toJsonValue(v));
         obj.insert("authMethods", arr_authMethods);
     }
+    return obj;
+}
+
+template<>
+Utils::Result<SessionInfo> fromJson<SessionInfo>(const QJsonValue &val)
+{
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for SessionInfo");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("sessionId"))
+        co_return Utils::ResultError("Missing required field: sessionId");
+    if (!obj.contains("cwd"))
+        co_return Utils::ResultError("Missing required field: cwd");
+    SessionInfo result;
+    if (obj.contains("_meta"))
+        if (!obj["_meta"].isNull()) {
+            result.__meta = obj.value("_meta").toObject();
+        }
+    result._cwd = obj.value("cwd").toString();
+    if (obj.contains("sessionId") && obj["sessionId"].isString())
+        result._sessionId = co_await fromJson<SessionId>(obj["sessionId"]);
+    if (obj.contains("title"))
+        if (!obj["title"].isNull()) {
+            result._title = obj.value("title").toString();
+        }
+    if (obj.contains("updatedAt"))
+        if (!obj["updatedAt"].isNull()) {
+            result._updatedAt = obj.value("updatedAt").toString();
+        }
+    co_return result;
+}
+
+QJsonObject toJson(const SessionInfo &data)
+{
+    QJsonObject obj{
+        {"cwd", data._cwd},
+        {"sessionId", data._sessionId}
+    };
+    if (data.__meta.has_value())
+        obj.insert("_meta", *data.__meta);
+    if (data._title.has_value())
+        obj.insert("title", *data._title);
+    if (data._updatedAt.has_value())
+        obj.insert("updatedAt", *data._updatedAt);
+    return obj;
+}
+
+template<>
+Utils::Result<ListSessionsResponse> fromJson<ListSessionsResponse>(const QJsonValue &val)
+{
+    if (!val.isObject())
+        co_return Utils::ResultError("Expected JSON object for ListSessionsResponse");
+    const QJsonObject obj = val.toObject();
+    if (!obj.contains("sessions"))
+        co_return Utils::ResultError("Missing required field: sessions");
+    ListSessionsResponse result;
+    if (obj.contains("_meta"))
+        if (!obj["_meta"].isNull()) {
+            result.__meta = obj.value("_meta").toObject();
+        }
+    if (obj.contains("nextCursor"))
+        if (!obj["nextCursor"].isNull()) {
+            result._nextCursor = obj.value("nextCursor").toString();
+        }
+    if (obj.contains("sessions") && obj["sessions"].isArray()) {
+        const QJsonArray arr = obj["sessions"].toArray();
+        for (const QJsonValue &v : arr) {
+            result._sessions.append(co_await fromJson<SessionInfo>(v));
+        }
+    }
+    co_return result;
+}
+
+QJsonObject toJson(const ListSessionsResponse &data)
+{
+    QJsonObject obj;
+    if (data.__meta.has_value())
+        obj.insert("_meta", *data.__meta);
+    if (data._nextCursor.has_value())
+        obj.insert("nextCursor", *data._nextCursor);
+    QJsonArray arr_sessions;
+    for (const auto &v : data._sessions) arr_sessions.append(toJson(v));
+    obj.insert("sessions", arr_sessions);
     return obj;
 }
 
@@ -2549,12 +2732,12 @@ QJsonObject toJson(const CancelNotification &data)
 }
 
 template<>
-Utils::Result<FileSystemCapability> fromJson<FileSystemCapability>(const QJsonValue &val)
+Utils::Result<FileSystemCapabilities> fromJson<FileSystemCapabilities>(const QJsonValue &val)
 {
     if (!val.isObject())
-        return Utils::ResultError("Expected JSON object for FileSystemCapability");
+        return Utils::ResultError("Expected JSON object for FileSystemCapabilities");
     const QJsonObject obj = val.toObject();
-    FileSystemCapability result;
+    FileSystemCapabilities result;
     if (obj.contains("_meta"))
         if (!obj["_meta"].isNull()) {
             result.__meta = obj.value("_meta").toObject();
@@ -2566,7 +2749,7 @@ Utils::Result<FileSystemCapability> fromJson<FileSystemCapability>(const QJsonVa
     return result;
 }
 
-QJsonObject toJson(const FileSystemCapability &data)
+QJsonObject toJson(const FileSystemCapabilities &data)
 {
     QJsonObject obj;
     if (data.__meta.has_value())
@@ -2590,7 +2773,7 @@ Utils::Result<ClientCapabilities> fromJson<ClientCapabilities>(const QJsonValue 
             result.__meta = obj.value("_meta").toObject();
         }
     if (obj.contains("fs") && obj["fs"].isObject())
-        result._fs = co_await fromJson<FileSystemCapability>(obj["fs"]);
+        result._fs = co_await fromJson<FileSystemCapabilities>(obj["fs"]);
     if (obj.contains("terminal"))
         result._terminal = obj.value("terminal").toBool();
     co_return result;
@@ -2662,6 +2845,40 @@ QJsonObject toJson(const InitializeRequest &data)
         obj.insert("clientCapabilities", toJson(*data._clientCapabilities));
     if (data._clientInfo.has_value())
         obj.insert("clientInfo", toJson(*data._clientInfo));
+    return obj;
+}
+
+template<>
+Utils::Result<ListSessionsRequest> fromJson<ListSessionsRequest>(const QJsonValue &val)
+{
+    if (!val.isObject())
+        return Utils::ResultError("Expected JSON object for ListSessionsRequest");
+    const QJsonObject obj = val.toObject();
+    ListSessionsRequest result;
+    if (obj.contains("_meta"))
+        if (!obj["_meta"].isNull()) {
+            result.__meta = obj.value("_meta").toObject();
+        }
+    if (obj.contains("cursor"))
+        if (!obj["cursor"].isNull()) {
+            result._cursor = obj.value("cursor").toString();
+        }
+    if (obj.contains("cwd"))
+        if (!obj["cwd"].isNull()) {
+            result._cwd = obj.value("cwd").toString();
+        }
+    return result;
+}
+
+QJsonObject toJson(const ListSessionsRequest &data)
+{
+    QJsonObject obj;
+    if (data.__meta.has_value())
+        obj.insert("_meta", *data.__meta);
+    if (data._cursor.has_value())
+        obj.insert("cursor", *data._cursor);
+    if (data._cwd.has_value())
+        obj.insert("cwd", *data._cwd);
     return obj;
 }
 
@@ -3126,12 +3343,12 @@ QJsonObject toJson(const CreateTerminalResponse &data)
 }
 
 template<>
-Utils::Result<KillTerminalCommandResponse> fromJson<KillTerminalCommandResponse>(const QJsonValue &val)
+Utils::Result<KillTerminalResponse> fromJson<KillTerminalResponse>(const QJsonValue &val)
 {
     if (!val.isObject())
-        return Utils::ResultError("Expected JSON object for KillTerminalCommandResponse");
+        return Utils::ResultError("Expected JSON object for KillTerminalResponse");
     const QJsonObject obj = val.toObject();
-    KillTerminalCommandResponse result;
+    KillTerminalResponse result;
     if (obj.contains("_meta"))
         if (!obj["_meta"].isNull()) {
             result.__meta = obj.value("_meta").toObject();
@@ -3139,7 +3356,7 @@ Utils::Result<KillTerminalCommandResponse> fromJson<KillTerminalCommandResponse>
     return result;
 }
 
-QJsonObject toJson(const KillTerminalCommandResponse &data)
+QJsonObject toJson(const KillTerminalResponse &data)
 {
     QJsonObject obj;
     if (data.__meta.has_value())

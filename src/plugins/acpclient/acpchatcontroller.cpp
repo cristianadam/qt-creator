@@ -105,7 +105,7 @@ void AcpChatController::connectToServer(const QString &serverId, const FilePath 
 
         ClientCapabilities caps;
         caps.terminal(true);
-        FileSystemCapability fsCaps;
+        FileSystemCapabilities fsCaps;
         fsCaps.readTextFile(true);
         fsCaps.writeTextFile(true);
         caps.fs(fsCaps);

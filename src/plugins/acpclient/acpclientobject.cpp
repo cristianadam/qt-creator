@@ -163,7 +163,7 @@ void AcpClientObject::handleRequest(const QJsonValue &id, const QString &method,
     } else if (method == QLatin1String("terminal/wait_for_exit")) {
         dispatch.template operator()<WaitForTerminalExitRequest>(&AcpClientObject::waitForTerminalExitRequested);
     } else if (method == QLatin1String("terminal/kill")) {
-        dispatch.template operator()<KillTerminalCommandRequest>(&AcpClientObject::killTerminalRequested);
+        dispatch.template operator()<KillTerminalRequest>(&AcpClientObject::killTerminalRequested);
     } else if (method == QLatin1String("terminal/release")) {
         dispatch.template operator()<ReleaseTerminalRequest>(&AcpClientObject::releaseTerminalRequested);
     } else if (method == QLatin1String("fs/read_text_file")) {

@@ -62,7 +62,7 @@ signals:
     void createTerminalRequested(const QJsonValue &id, const Acp::CreateTerminalRequest &request);
     void terminalOutputRequested(const QJsonValue &id, const Acp::TerminalOutputRequest &request);
     void waitForTerminalExitRequested(const QJsonValue &id, const Acp::WaitForTerminalExitRequest &request);
-    void killTerminalRequested(const QJsonValue &id, const Acp::KillTerminalCommandRequest &request);
+    void killTerminalRequested(const QJsonValue &id, const Acp::KillTerminalRequest &request);
     void releaseTerminalRequested(const QJsonValue &id, const Acp::ReleaseTerminalRequest &request);
     void readTextFileRequested(const QJsonValue &id, const Acp::ReadTextFileRequest &request);
     void writeTextFileRequested(const QJsonValue &id, const Acp::WriteTextFileRequest &request);

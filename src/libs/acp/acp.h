@@ -104,6 +104,31 @@ ACPLIB_EXPORT Utils::Result<PromptCapabilities> fromJson<PromptCapabilities>(con
 ACPLIB_EXPORT QJsonObject toJson(const PromptCapabilities &data);
 
 /**
+ * Capabilities for the `session/list` method.
+ *
+ * By supplying `{}` it means that the agent supports listing of sessions.
+ */
+struct SessionListCapabilities {
+    /**
+     * The _meta property is reserved by ACP to allow clients and agents to attach additional
+     * metadata to their interactions. Implementations MUST NOT make assumptions about values at
+     * these keys.
+     *
+     * See protocol docs: [Extensibility](https://agentclientprotocol.com/protocol/extensibility)
+     */
+    std::optional<QJsonObject> __meta;
+
+    SessionListCapabilities& _meta(const std::optional<QJsonObject> & v) { __meta = v; return *this; }
+
+    const std::optional<QJsonObject>& _meta() const { return __meta; }
+};
+
+template<>
+ACPLIB_EXPORT Utils::Result<SessionListCapabilities> fromJson<SessionListCapabilities>(const QJsonValue &val);
+
+ACPLIB_EXPORT QJsonObject toJson(const SessionListCapabilities &data);
+
+/**
  * Session capabilities supported by the agent.
  *
  * As a baseline, all Agents **MUST** support `session/new`, `session/prompt`, `session/cancel`, and `session/update`.
@@ -123,10 +148,13 @@ struct SessionCapabilities {
      * See protocol docs: [Extensibility](https://agentclientprotocol.com/protocol/extensibility)
      */
     std::optional<QJsonObject> __meta;
+    std::optional<SessionListCapabilities> _list;  //!< Whether the agent supports `session/list`.
 
     SessionCapabilities& _meta(const std::optional<QJsonObject> & v) { __meta = v; return *this; }
+    SessionCapabilities& list(const std::optional<SessionListCapabilities> & v) { _list = v; return *this; }
 
     const std::optional<QJsonObject>& _meta() const { return __meta; }
+    const std::optional<SessionListCapabilities>& list() const { return _list; }
 };
 
 template<>
@@ -927,6 +955,38 @@ ACPLIB_EXPORT Utils::Result<Plan> fromJson<Plan>(const QJsonValue &val);
 
 ACPLIB_EXPORT QJsonObject toJson(const Plan &data);
 
+/**
+ * Update to session metadata. All fields are optional to support partial updates.
+ *
+ * Agents send this notification to update session information like title or custom metadata.
+ * This allows clients to display dynamic session names and track session state changes.
+ */
+struct SessionInfoUpdate {
+    /**
+     * The _meta property is reserved by ACP to allow clients and agents to attach additional
+     * metadata to their interactions. Implementations MUST NOT make assumptions about values at
+     * these keys.
+     *
+     * See protocol docs: [Extensibility](https://agentclientprotocol.com/protocol/extensibility)
+     */
+    std::optional<QJsonObject> __meta;
+    std::optional<QString> _title;  //!< Human-readable title for the session. Set to null to clear.
+    std::optional<QString> _updatedAt;  //!< ISO 8601 timestamp of last activity. Set to null to clear.
+
+    SessionInfoUpdate& _meta(const std::optional<QJsonObject> & v) { __meta = v; return *this; }
+    SessionInfoUpdate& title(const std::optional<QString> & v) { _title = v; return *this; }
+    SessionInfoUpdate& updatedAt(const std::optional<QString> & v) { _updatedAt = v; return *this; }
+
+    const std::optional<QJsonObject>& _meta() const { return __meta; }
+    const std::optional<QString>& title() const { return _title; }
+    const std::optional<QString>& updatedAt() const { return _updatedAt; }
+};
+
+template<>
+ACPLIB_EXPORT Utils::Result<SessionInfoUpdate> fromJson<SessionInfoUpdate>(const QJsonValue &val);
+
+ACPLIB_EXPORT QJsonObject toJson(const SessionInfoUpdate &data);
+
 /** Standard content block (text, images, resources). */
 struct Content {
     /**
@@ -1244,7 +1304,7 @@ ACPLIB_EXPORT QJsonObject toJson(const ToolCallUpdate &data);
  * See protocol docs: [Agent Reports Output](https://agentclientprotocol.com/protocol/prompt-turn#3-agent-reports-output)
  */
 struct SessionUpdate {
-    using Variant = std::variant<ContentChunk, ToolCall, ToolCallUpdate, Plan, AvailableCommandsUpdate, CurrentModeUpdate, ConfigOptionUpdate>;
+    using Variant = std::variant<ContentChunk, ToolCall, ToolCallUpdate, Plan, AvailableCommandsUpdate, CurrentModeUpdate, ConfigOptionUpdate, SessionInfoUpdate>;
     Variant _value;
     QString _kind;  //!< discriminator value (sessionUpdate)
 
@@ -1388,8 +1448,8 @@ ACPLIB_EXPORT QJsonObject toJson(const CreateTerminalRequest &data);
 
 // Skipped unknown type alias: ExtRequest
 
-/** Request to kill a terminal command without releasing the terminal. */
-struct KillTerminalCommandRequest {
+/** Request to kill a terminal without releasing it. */
+struct KillTerminalRequest {
     /**
      * The _meta property is reserved by ACP to allow clients and agents to attach additional
      * metadata to their interactions. Implementations MUST NOT make assumptions about values at
@@ -1401,9 +1461,9 @@ struct KillTerminalCommandRequest {
     SessionId _sessionId;  //!< The session ID for this request.
     QString _terminalId;  //!< The ID of the terminal to kill.
 
-    KillTerminalCommandRequest& _meta(const std::optional<QJsonObject> & v) { __meta = v; return *this; }
-    KillTerminalCommandRequest& sessionId(const SessionId & v) { _sessionId = v; return *this; }
-    KillTerminalCommandRequest& terminalId(const QString & v) { _terminalId = v; return *this; }
+    KillTerminalRequest& _meta(const std::optional<QJsonObject> & v) { __meta = v; return *this; }
+    KillTerminalRequest& sessionId(const SessionId & v) { _sessionId = v; return *this; }
+    KillTerminalRequest& terminalId(const QString & v) { _terminalId = v; return *this; }
 
     const std::optional<QJsonObject>& _meta() const { return __meta; }
     const SessionId& sessionId() const { return _sessionId; }
@@ -1411,9 +1471,9 @@ struct KillTerminalCommandRequest {
 };
 
 template<>
-ACPLIB_EXPORT Utils::Result<KillTerminalCommandRequest> fromJson<KillTerminalCommandRequest>(const QJsonValue &val);
+ACPLIB_EXPORT Utils::Result<KillTerminalRequest> fromJson<KillTerminalRequest>(const QJsonValue &val);
 
-ACPLIB_EXPORT QJsonObject toJson(const KillTerminalCommandRequest &data);
+ACPLIB_EXPORT QJsonObject toJson(const KillTerminalRequest &data);
 
 /**
  * Request to read content from a text file.
@@ -1769,8 +1829,12 @@ ACPLIB_EXPORT QJsonObject toJson(const Error &data);
 
 // Skipped unknown type alias: ExtResponse
 
-/** Describes an available authentication method. */
-struct AuthMethod {
+/**
+ * Agent handles authentication itself.
+ *
+ * This is the default authentication method type.
+ */
+struct AuthMethodAgent {
     /**
      * The _meta property is reserved by ACP to allow clients and agents to attach additional
      * metadata to their interactions. Implementations MUST NOT make assumptions about values at
@@ -1783,10 +1847,10 @@ struct AuthMethod {
     QString _id;  //!< Unique identifier for this authentication method.
     QString _name;  //!< Human-readable name of the authentication method.
 
-    AuthMethod& _meta(const std::optional<QJsonObject> & v) { __meta = v; return *this; }
-    AuthMethod& description(const std::optional<QString> & v) { _description = v; return *this; }
-    AuthMethod& id(const QString & v) { _id = v; return *this; }
-    AuthMethod& name(const QString & v) { _name = v; return *this; }
+    AuthMethodAgent& _meta(const std::optional<QJsonObject> & v) { __meta = v; return *this; }
+    AuthMethodAgent& description(const std::optional<QString> & v) { _description = v; return *this; }
+    AuthMethodAgent& id(const QString & v) { _id = v; return *this; }
+    AuthMethodAgent& name(const QString & v) { _name = v; return *this; }
 
     const std::optional<QJsonObject>& _meta() const { return __meta; }
     const std::optional<QString>& description() const { return _description; }
@@ -1795,9 +1859,30 @@ struct AuthMethod {
 };
 
 template<>
+ACPLIB_EXPORT Utils::Result<AuthMethodAgent> fromJson<AuthMethodAgent>(const QJsonValue &val);
+
+ACPLIB_EXPORT QJsonObject toJson(const AuthMethodAgent &data);
+
+/**
+ * Describes an available authentication method.
+ *
+ * The `type` field acts as the discriminator in the serialized JSON form.
+ * When no `type` is present, the method is treated as `agent`.
+ */
+using AuthMethod = std::variant<AuthMethodAgent>;
+
+template<>
 ACPLIB_EXPORT Utils::Result<AuthMethod> fromJson<AuthMethod>(const QJsonValue &val);
 
-ACPLIB_EXPORT QJsonObject toJson(const AuthMethod &data);
+/** Returns the 'id' field from the active variant. */
+ACPLIB_EXPORT QString id(const AuthMethod &val);
+
+/** Returns the 'name' field from the active variant. */
+ACPLIB_EXPORT QString name(const AuthMethod &val);
+
+ACPLIB_EXPORT QJsonObject toJson(const AuthMethod &val);
+
+ACPLIB_EXPORT QJsonValue toJsonValue(const AuthMethod &val);
 
 /**
  * Metadata about the implementation of the client or agent.
@@ -1901,6 +1986,71 @@ template<>
 ACPLIB_EXPORT Utils::Result<InitializeResponse> fromJson<InitializeResponse>(const QJsonValue &val);
 
 ACPLIB_EXPORT QJsonObject toJson(const InitializeResponse &data);
+
+/** Information about a session returned by session/list */
+struct SessionInfo {
+    /**
+     * The _meta property is reserved by ACP to allow clients and agents to attach additional
+     * metadata to their interactions. Implementations MUST NOT make assumptions about values at
+     * these keys.
+     *
+     * See protocol docs: [Extensibility](https://agentclientprotocol.com/protocol/extensibility)
+     */
+    std::optional<QJsonObject> __meta;
+    QString _cwd;  //!< The working directory for this session. Must be an absolute path.
+    SessionId _sessionId;  //!< Unique identifier for the session
+    std::optional<QString> _title;  //!< Human-readable title for the session
+    std::optional<QString> _updatedAt;  //!< ISO 8601 timestamp of last activity
+
+    SessionInfo& _meta(const std::optional<QJsonObject> & v) { __meta = v; return *this; }
+    SessionInfo& cwd(const QString & v) { _cwd = v; return *this; }
+    SessionInfo& sessionId(const SessionId & v) { _sessionId = v; return *this; }
+    SessionInfo& title(const std::optional<QString> & v) { _title = v; return *this; }
+    SessionInfo& updatedAt(const std::optional<QString> & v) { _updatedAt = v; return *this; }
+
+    const std::optional<QJsonObject>& _meta() const { return __meta; }
+    const QString& cwd() const { return _cwd; }
+    const SessionId& sessionId() const { return _sessionId; }
+    const std::optional<QString>& title() const { return _title; }
+    const std::optional<QString>& updatedAt() const { return _updatedAt; }
+};
+
+template<>
+ACPLIB_EXPORT Utils::Result<SessionInfo> fromJson<SessionInfo>(const QJsonValue &val);
+
+ACPLIB_EXPORT QJsonObject toJson(const SessionInfo &data);
+
+/** Response from listing sessions. */
+struct ListSessionsResponse {
+    /**
+     * The _meta property is reserved by ACP to allow clients and agents to attach additional
+     * metadata to their interactions. Implementations MUST NOT make assumptions about values at
+     * these keys.
+     *
+     * See protocol docs: [Extensibility](https://agentclientprotocol.com/protocol/extensibility)
+     */
+    std::optional<QJsonObject> __meta;
+    /**
+     * Opaque cursor token. If present, pass this in the next request's cursor parameter
+     * to fetch the next page. If absent, there are no more results.
+     */
+    std::optional<QString> _nextCursor;
+    QList<SessionInfo> _sessions;  //!< Array of session information objects
+
+    ListSessionsResponse& _meta(const std::optional<QJsonObject> & v) { __meta = v; return *this; }
+    ListSessionsResponse& nextCursor(const std::optional<QString> & v) { _nextCursor = v; return *this; }
+    ListSessionsResponse& sessions(const QList<SessionInfo> & v) { _sessions = v; return *this; }
+    ListSessionsResponse& addSession(const SessionInfo & v) { _sessions.append(v); return *this; }
+
+    const std::optional<QJsonObject>& _meta() const { return __meta; }
+    const std::optional<QString>& nextCursor() const { return _nextCursor; }
+    const QList<SessionInfo>& sessions() const { return _sessions; }
+};
+
+template<>
+ACPLIB_EXPORT Utils::Result<ListSessionsResponse> fromJson<ListSessionsResponse>(const QJsonValue &val);
+
+ACPLIB_EXPORT QJsonObject toJson(const ListSessionsResponse &data);
 
 /**
  * A mode the agent can operate in.
@@ -2115,6 +2265,13 @@ ACPLIB_EXPORT QJsonObject toJson(const SetSessionConfigOptionResponse &data);
 
 /** Response to `session/set_mode` method. */
 struct SetSessionModeResponse {
+    /**
+     * The _meta property is reserved by ACP to allow clients and agents to attach additional
+     * metadata to their interactions. Implementations MUST NOT make assumptions about values at
+     * these keys.
+     *
+     * See protocol docs: [Extensibility](https://agentclientprotocol.com/protocol/extensibility)
+     */
     std::optional<QJsonObject> __meta;
 
     SetSessionModeResponse& _meta(const std::optional<QJsonObject> & v) { __meta = v; return *this; }
@@ -2195,12 +2352,11 @@ ACPLIB_EXPORT Utils::Result<CancelNotification> fromJson<CancelNotification>(con
 ACPLIB_EXPORT QJsonObject toJson(const CancelNotification &data);
 
 /**
- * Filesystem capabilities supported by the client.
  * File system capabilities that a client may support.
  *
  * See protocol docs: [FileSystem](https://agentclientprotocol.com/protocol/initialization#filesystem)
  */
-struct FileSystemCapability {
+struct FileSystemCapabilities {
     /**
      * The _meta property is reserved by ACP to allow clients and agents to attach additional
      * metadata to their interactions. Implementations MUST NOT make assumptions about values at
@@ -2212,9 +2368,9 @@ struct FileSystemCapability {
     std::optional<bool> _readTextFile;  //!< Whether the Client supports `fs/read_text_file` requests.
     std::optional<bool> _writeTextFile;  //!< Whether the Client supports `fs/write_text_file` requests.
 
-    FileSystemCapability& _meta(const std::optional<QJsonObject> & v) { __meta = v; return *this; }
-    FileSystemCapability& readTextFile(std::optional<bool> v) { _readTextFile = v; return *this; }
-    FileSystemCapability& writeTextFile(std::optional<bool> v) { _writeTextFile = v; return *this; }
+    FileSystemCapabilities& _meta(const std::optional<QJsonObject> & v) { __meta = v; return *this; }
+    FileSystemCapabilities& readTextFile(std::optional<bool> v) { _readTextFile = v; return *this; }
+    FileSystemCapabilities& writeTextFile(std::optional<bool> v) { _writeTextFile = v; return *this; }
 
     const std::optional<QJsonObject>& _meta() const { return __meta; }
     const std::optional<bool>& readTextFile() const { return _readTextFile; }
@@ -2222,9 +2378,9 @@ struct FileSystemCapability {
 };
 
 template<>
-ACPLIB_EXPORT Utils::Result<FileSystemCapability> fromJson<FileSystemCapability>(const QJsonValue &val);
+ACPLIB_EXPORT Utils::Result<FileSystemCapabilities> fromJson<FileSystemCapabilities>(const QJsonValue &val);
 
-ACPLIB_EXPORT QJsonObject toJson(const FileSystemCapability &data);
+ACPLIB_EXPORT QJsonObject toJson(const FileSystemCapabilities &data);
 
 /**
  * Capabilities supported by the client.
@@ -2247,15 +2403,15 @@ struct ClientCapabilities {
      * File system capabilities supported by the client.
      * Determines which file operations the agent can request.
      */
-    std::optional<FileSystemCapability> _fs;
+    std::optional<FileSystemCapabilities> _fs;
     std::optional<bool> _terminal;  //!< Whether the Client support all `terminal/*` methods.
 
     ClientCapabilities& _meta(const std::optional<QJsonObject> & v) { __meta = v; return *this; }
-    ClientCapabilities& fs(const std::optional<FileSystemCapability> & v) { _fs = v; return *this; }
+    ClientCapabilities& fs(const std::optional<FileSystemCapabilities> & v) { _fs = v; return *this; }
     ClientCapabilities& terminal(std::optional<bool> v) { _terminal = v; return *this; }
 
     const std::optional<QJsonObject>& _meta() const { return __meta; }
-    const std::optional<FileSystemCapability>& fs() const { return _fs; }
+    const std::optional<FileSystemCapabilities>& fs() const { return _fs; }
     const std::optional<bool>& terminal() const { return _terminal; }
 };
 
@@ -2320,6 +2476,37 @@ template<>
 ACPLIB_EXPORT Utils::Result<InitializeRequest> fromJson<InitializeRequest>(const QJsonValue &val);
 
 ACPLIB_EXPORT QJsonObject toJson(const InitializeRequest &data);
+
+/**
+ * Request parameters for listing existing sessions.
+ *
+ * Only available if the Agent supports the `sessionCapabilities.list` capability.
+ */
+struct ListSessionsRequest {
+    /**
+     * The _meta property is reserved by ACP to allow clients and agents to attach additional
+     * metadata to their interactions. Implementations MUST NOT make assumptions about values at
+     * these keys.
+     *
+     * See protocol docs: [Extensibility](https://agentclientprotocol.com/protocol/extensibility)
+     */
+    std::optional<QJsonObject> __meta;
+    std::optional<QString> _cursor;  //!< Opaque cursor token from a previous response's nextCursor field for cursor-based pagination
+    std::optional<QString> _cwd;  //!< Filter sessions by working directory. Must be an absolute path.
+
+    ListSessionsRequest& _meta(const std::optional<QJsonObject> & v) { __meta = v; return *this; }
+    ListSessionsRequest& cursor(const std::optional<QString> & v) { _cursor = v; return *this; }
+    ListSessionsRequest& cwd(const std::optional<QString> & v) { _cwd = v; return *this; }
+
+    const std::optional<QJsonObject>& _meta() const { return __meta; }
+    const std::optional<QString>& cursor() const { return _cursor; }
+    const std::optional<QString>& cwd() const { return _cwd; }
+};
+
+template<>
+ACPLIB_EXPORT Utils::Result<ListSessionsRequest> fromJson<ListSessionsRequest>(const QJsonValue &val);
+
+ACPLIB_EXPORT QJsonObject toJson(const ListSessionsRequest &data);
 
 /** An HTTP header to set when making requests to the MCP server. */
 struct HttpHeader {
@@ -2686,8 +2873,8 @@ ACPLIB_EXPORT Utils::Result<CreateTerminalResponse> fromJson<CreateTerminalRespo
 
 ACPLIB_EXPORT QJsonObject toJson(const CreateTerminalResponse &data);
 
-/** Response to terminal/kill command method */
-struct KillTerminalCommandResponse {
+/** Response to `terminal/kill` method */
+struct KillTerminalResponse {
     /**
      * The _meta property is reserved by ACP to allow clients and agents to attach additional
      * metadata to their interactions. Implementations MUST NOT make assumptions about values at
@@ -2697,15 +2884,15 @@ struct KillTerminalCommandResponse {
      */
     std::optional<QJsonObject> __meta;
 
-    KillTerminalCommandResponse& _meta(const std::optional<QJsonObject> & v) { __meta = v; return *this; }
+    KillTerminalResponse& _meta(const std::optional<QJsonObject> & v) { __meta = v; return *this; }
 
     const std::optional<QJsonObject>& _meta() const { return __meta; }
 };
 
 template<>
-ACPLIB_EXPORT Utils::Result<KillTerminalCommandResponse> fromJson<KillTerminalCommandResponse>(const QJsonValue &val);
+ACPLIB_EXPORT Utils::Result<KillTerminalResponse> fromJson<KillTerminalResponse>(const QJsonValue &val);
 
-ACPLIB_EXPORT QJsonObject toJson(const KillTerminalCommandResponse &data);
+ACPLIB_EXPORT QJsonObject toJson(const KillTerminalResponse &data);
 
 /** Response containing the contents of a text file. */
 struct ReadTextFileResponse {

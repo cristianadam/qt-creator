@@ -12,6 +12,7 @@
 #include <coreplugin/find/ifindsupport.h>
 
 #include <utils/algorithm.h>
+#include <utils/qtcassert.h>
 #include <utils/utilsicons.h>
 #include <utils/markdownbrowser.h>
 #include <utils/stylehelper.h>
@@ -677,8 +678,11 @@ public:
 
         // Method selector (only shown if multiple methods)
         m_methodCombo = new QComboBox(this);
-        for (const Acp::AuthMethod &method : methods)
-            m_methodCombo->addItem(method.name(), method.id());
+        for (const Acp::AuthMethod &method : methods) {
+            const auto *agent = std::get_if<Acp::AuthMethodAgent>(&method);
+            QTC_ASSERT(agent, continue);
+            m_methodCombo->addItem(agent->name(), agent->id());
+        }
         m_methodCombo->setVisible(methods.size() > 1);
         m_bodyLayout->addWidget(m_methodCombo);
 
@@ -720,7 +724,9 @@ public:
         auto updateDescription = [this, methods] {
             const int idx = m_methodCombo->currentIndex();
             if (idx >= 0 && idx < methods.size()) {
-                const auto &desc = methods.at(idx).description();
+                const auto *agent = std::get_if<Acp::AuthMethodAgent>(&methods.at(idx));
+                QTC_ASSERT(agent, return);
+                const auto &desc = agent->description();
                 if (desc.has_value() && !desc->isEmpty()) {
                     m_descriptionLabel->setText(*desc);
                     m_descriptionLabel->show();
