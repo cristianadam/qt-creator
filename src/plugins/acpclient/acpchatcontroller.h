@@ -35,7 +35,8 @@ public:
     void disconnectFromServer();
 
     void createNewSession();
-    void sendPrompt(const QString &text);
+    void sendPrompt(const QString &text, const QList<Utils::FilePath> &additionalFiles = {},
+                    bool includeCurrentEditor = true);
     void cancelPrompt();
     void authenticate(const QString &methodId);
     void setConfigOption(const QString &configId, const QString &value);

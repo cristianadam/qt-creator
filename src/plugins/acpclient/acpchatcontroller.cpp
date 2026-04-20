@@ -207,7 +207,9 @@ static bool supportsEmbeddedPromptResources(std::optional<Acp::AgentCapabilities
     return false;
 }
 
-void AcpChatController::sendPrompt(const QString &text)
+void AcpChatController::sendPrompt(const QString &text,
+                                   const QList<Utils::FilePath> &additionalFiles,
+                                   bool includeCurrentEditor)
 {
     using namespace TextEditor;
     if (text.isEmpty() || !m_client || m_sessionId.isEmpty())
@@ -220,8 +222,8 @@ void AcpChatController::sendPrompt(const QString &text)
     textContent.text(text);
     QList<ContentBlock> content = {textContent};
     BaseTextEditor *currentTextEditor = BaseTextEditor::currentTextEditor();
-    if (currentTextEditor) {
-        const QString uri = "file://" + currentTextEditor->document()->filePath().toUrlishString();
+    if (includeCurrentEditor && currentTextEditor) {
+        const QString uri = currentTextEditor->document()->filePath().toUrl().toString();
         content << ResourceLink()
                        .name(currentTextEditor->document()->filePath().fileName())
                        .description("Qt Creators current main Text Editor file.")
@@ -241,6 +243,24 @@ void AcpChatController::sendPrompt(const QString &text)
             stateString += "Last Visible Line: " + QString::number(widget->lastVisibleBlockNumber()) + "\n";
             content << EmbeddedResource().resource(
                 TextResourceContents().text(stateString).uri(uri));
+        }
+    }
+
+    for (const Utils::FilePath &file : additionalFiles) {
+        const QString uri = file.toUrl().toString();
+        content << ResourceLink()
+                       .name(file.fileName())
+                       .description("Manually added context file.")
+                       .uri(uri);
+
+        if (supportsEmbeddedPromptResources(m_agentCapabilities)) {
+            const auto fileContents = file.fileContents();
+            if (fileContents) {
+                content << EmbeddedResource().resource(
+                    TextResourceContents()
+                        .text(QString::fromUtf8(*fileContents))
+                        .uri(uri));
+            }
         }
     }
 

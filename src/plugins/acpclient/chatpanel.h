@@ -5,8 +5,11 @@
 
 #include <acp/acp.h>
 
+#include <utils/filepath.h>
+
 #include <QJsonValue>
 #include <QMap>
+#include <QStringList>
 #include <QWidget>
 
 namespace Utils {
@@ -18,6 +21,7 @@ class StyledBar;
 class QComboBox;
 class QHBoxLayout;
 class QLabel;
+class QMenu;
 class QTimer;
 class QToolButton;
 
@@ -48,6 +52,9 @@ public:
     void clearConfigOptions();
 
     void updateAvailableCommands(const QList<Acp::AvailableCommand> &commands);
+    void setAutoContextItems(const QStringList &names);
+    bool isAutoContextItemActive(const QString &name) const;
+    QList<Utils::FilePath> manualContextFiles() const { return m_manualContextFiles; }
 
     // Delegate to message view
     void addUserMessage(const QString &text);
@@ -93,6 +100,16 @@ private:
     ChatInputEdit *m_inputEdit;
     SendButton *m_sendButton;
     QToolButton *m_commandsButton;
+    QWidget *m_contextBar = nullptr;
+    QHBoxLayout *m_contextBarLayout = nullptr;
+    QLabel *m_contextLabel = nullptr;
+    QToolButton *m_addContextButton = nullptr;
+    QMenu *m_addContextMenu = nullptr;
+    QStringList m_offeredAutoContextNames;
+    QStringList m_removedAutoContextNames;
+    QList<Utils::FilePath> m_manualContextFiles;
+
+    void updateContextBar();
 
     bool m_prompting = false;
 };

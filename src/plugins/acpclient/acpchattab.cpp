@@ -9,10 +9,13 @@
 #include "chatinputedit.h"
 #include "chatpanel.h"
 
+#include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/icore.h>
 
 #include <projectexplorer/project.h>
 #include <projectexplorer/projectmanager.h>
+
+#include <texteditor/texteditor.h>
 
 #include <utils/async.h>
 #include <utils/infolabel.h>
@@ -241,6 +244,17 @@ AcpChatTab::AcpChatTab(QWidget *parent)
     connect(&AcpSettings::instance(), &AcpSettings::serversChanged,
             this, &AcpChatTab::populateServerCombo);
 
+    // --- Connections: Editor context ---
+    auto updateContextItems = [this](Core::IEditor *editor) {
+        if (qobject_cast<TextEditor::BaseTextEditor *>(editor))
+            m_chatPanel->setAutoContextItems({Tr::tr("Current Editor")});
+        else
+            m_chatPanel->setAutoContextItems({});
+    };
+    connect(Core::EditorManager::instance(), &Core::EditorManager::currentEditorChanged,
+            this, updateContextItems);
+    updateContextItems(Core::EditorManager::currentEditor());
+
     // --- Connections: Config page ---
     connect(m_connectButton, &QPushButton::clicked, this, &AcpChatTab::connectToAgent);
 
@@ -248,7 +262,8 @@ AcpChatTab::AcpChatTab(QWidget *parent)
     connect(m_chatPanel, &ChatPanel::sendRequested, this, [this](const QString &text) {
         m_chatPanel->addUserMessage(text);
         m_chatPanel->setPrompting(true);
-        m_controller->sendPrompt(text);
+        const bool includeEditor = m_chatPanel->isAutoContextItemActive(Tr::tr("Current Editor"));
+        m_controller->sendPrompt(text, m_chatPanel->manualContextFiles(), includeEditor);
     });
     connect(m_chatPanel, &ChatPanel::cancelRequested,
             m_controller, &AcpChatController::cancelPrompt);
