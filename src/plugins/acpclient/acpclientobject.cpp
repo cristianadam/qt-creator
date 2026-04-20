@@ -63,6 +63,11 @@ void AcpClientObject::newSession(const NewSessionRequest &request, ResponseCallb
     sendRequest(QStringLiteral("session/new"), Acp::toJson(request), callback);
 }
 
+void AcpClientObject::listSessions(const ListSessionsRequest &request, ResponseCallback callback)
+{
+    sendRequest(QStringLiteral("session/list"), Acp::toJson(request), callback);
+}
+
 void AcpClientObject::loadSession(const LoadSessionRequest &request, ResponseCallback callback)
 {
     sendRequest(QStringLiteral("session/load"), Acp::toJson(request), callback);

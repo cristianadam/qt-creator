@@ -21,6 +21,7 @@ namespace AcpClient::Internal {
 class AcpChatController;
 class AcpInspector;
 class ChatPanel;
+class SessionPickerWidget;
 
 class AcpChatTab : public QWidget
 {
@@ -44,6 +45,7 @@ private:
     void connectToAgent();
     void populateServerCombo();
     void updateTitle();
+    void showSessionPicker(bool autoCreateIfEmpty = false);
 
     // Config page
     QStackedWidget *m_stack;
@@ -63,6 +65,8 @@ private:
     ChatPanel *m_chatPanel;
 
     AcpChatController *m_controller;
+    SessionPickerWidget *m_activePicker = nullptr;
+    QString m_pendingPrompt;
     QString m_title;
 };
 

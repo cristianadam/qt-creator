@@ -4,6 +4,7 @@
 #include "acpmessageview.h"
 #include "acpsettings.h"
 #include "collapsibleframe.h"
+#include "sessionpickerwidget.h"
 #include "toolcalldetailwidget.h"
 
 #include <utils/async.h>
@@ -1254,6 +1255,16 @@ void AcpMessageView::resolveAuthentication()
         m_currentAuthWidget->setResolved();
         m_currentAuthWidget = nullptr;
     }
+}
+
+SessionPickerWidget *AcpMessageView::addSessionPicker()
+{
+    finishAgentMessage();
+    finishToolCallGroup();
+
+    auto *picker = new SessionPickerWidget(m_container);
+    addWidget(picker);
+    return picker;
 }
 
 void AcpMessageView::addErrorMessage(const QString &text)

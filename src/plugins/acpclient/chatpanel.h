@@ -31,6 +31,7 @@ namespace AcpClient::Internal {
 class AcpMessageView;
 class ChatInputEdit;
 class SendButton;
+class SessionPickerWidget;
 
 class ChatPanel : public QWidget
 {
@@ -72,6 +73,8 @@ public:
     void addAuthenticationRequest(const QList<Acp::AuthMethod> &methods);
     void showAuthenticationError(const QString &error);
     void resolveAuthentication();
+
+    SessionPickerWidget *addSessionPicker();
 
 signals:
     void sendRequested(const QString &text);

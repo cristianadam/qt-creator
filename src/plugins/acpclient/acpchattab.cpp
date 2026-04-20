@@ -8,6 +8,7 @@
 #include "acpsettings.h"
 #include "chatinputedit.h"
 #include "chatpanel.h"
+#include "sessionpickerwidget.h"
 
 #include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/icore.h>
@@ -263,6 +264,14 @@ AcpChatTab::AcpChatTab(QWidget *parent)
 
     // --- Connections: ChatPanel -> Controller ---
     connect(m_chatPanel, &ChatPanel::sendRequested, this, [this](const QString &text) {
+        if (m_activePicker) {
+            QObject::disconnect(m_controller, &AcpChatController::sessionsListed,
+                                m_activePicker, nullptr);
+            m_activePicker->deleteLater();
+            m_pendingPrompt = text;
+            m_controller->createNewSession();
+            return;
+        }
         m_chatPanel->addUserMessage(text);
         m_chatPanel->setPrompting(true);
         const bool includeEditor = m_chatPanel->isAutoContextItemActive(Tr::tr("Current Editor"));
@@ -300,8 +309,7 @@ AcpChatTab::AcpChatTab(QWidget *parent)
     });
     connect(m_chatPanel, &ChatPanel::authenticateRequested,
             m_controller, &AcpChatController::authenticate);
-    connect(m_controller, &AcpChatController::authenticationFailed,
-            this, [this](const QString &error) {
+    connect(m_controller, &AcpChatController::authenticationFailed, this, [this](const QString &error) {
         m_chatPanel->showAuthenticationError(
             Tr::tr("Authentication failed: %1").arg(error));
     });
@@ -311,6 +319,14 @@ AcpChatTab::AcpChatTab(QWidget *parent)
         m_chatPanel->setSendEnabled(true);
         m_chatPanel->appendAgentText("Cute Greetings,\n\n your AI Agent is ready and you can start chatting.");
         m_chatPanel->finishAgentMessage();
+        if (!m_pendingPrompt.isEmpty()) {
+            const QString text = m_pendingPrompt;
+            m_pendingPrompt.clear();
+            m_chatPanel->addUserMessage(text);
+            m_chatPanel->setPrompting(true);
+            const bool includeEditor = m_chatPanel->isAutoContextItemActive(Tr::tr("Current Editor"));
+            m_controller->sendPrompt(text, m_chatPanel->manualContextFiles(), includeEditor);
+        }
     });
     connect(m_controller, &AcpChatController::configOptionsReceived,
             m_chatPanel, &ChatPanel::updateConfigOptions);
@@ -359,6 +375,16 @@ AcpChatTab::AcpChatTab(QWidget *parent)
     connect(m_chatPanel, &ChatPanel::permissionCancelled,
             m_controller, &AcpChatController::sendPermissionCancelled);
 
+    connect(m_controller, &AcpChatController::sessionSelectionRequired, this, [this] {
+        m_chatPanel->resolveAuthentication();
+        m_stack->setCurrentIndex(2);
+        showSessionPicker(/*autoCreateIfEmpty=*/true);
+    });
+    connect(m_controller, &AcpChatController::sessionLoaded, this, [this]() {
+        m_stack->setCurrentIndex(2);
+        m_chatPanel->setSendEnabled(true);
+    });
+
     connect(m_controller, &AcpChatController::promptFinished, this, [this] {
         m_chatPanel->setPrompting(false);
         m_chatPanel->finishAgentMessage();
@@ -401,6 +427,46 @@ void AcpChatTab::setFocus()
 QString AcpChatTab::title() const
 {
     return m_title;
+}
+
+void AcpChatTab::showSessionPicker(bool autoCreateIfEmpty)
+{
+    auto *picker = m_chatPanel->addSessionPicker();
+    m_activePicker = picker;
+    m_chatPanel->setSendEnabled(true);
+    connect(picker, &QObject::destroyed, this, [this] { m_activePicker = nullptr; });
+
+    if (const Project *project = ProjectManager::startupProject())
+        picker->setCurrentProjectDir(project->projectDirectory());
+    connect(picker, &SessionPickerWidget::sessionSelected, this,
+            [this, picker](const QString &sessionId) {
+        picker->setResolved(sessionId);
+        m_controller->loadSession(sessionId);
+    });
+    connect(picker, &SessionPickerWidget::newSessionRequested,
+            m_controller, &AcpChatController::createNewSession);
+    connect(picker, &SessionPickerWidget::loadMoreRequested,
+            m_controller, &AcpChatController::listSessions);
+
+    auto isFirstPage = QSharedPointer<bool>::create(true);
+    connect(m_controller, &AcpChatController::sessionsListed, picker,
+            [this, picker, isFirstPage, autoCreateIfEmpty](
+                const QList<Acp::SessionInfo> &sessions,
+                const std::optional<QString> &nextCursor) {
+        if (*isFirstPage) {
+            *isFirstPage = false;
+            if (autoCreateIfEmpty && sessions.isEmpty() && !nextCursor.has_value()) {
+                picker->deleteLater();
+                m_controller->createNewSession();
+                return;
+            }
+            picker->setInitialSessions(sessions, nextCursor);
+        } else {
+            picker->appendSessions(sessions, nextCursor);
+        }
+    });
+
+    m_controller->listSessions();
 }
 
 void AcpChatTab::populateServerCombo()

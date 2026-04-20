@@ -29,6 +29,7 @@ add_qtc_plugin(AcpClient
     chatinputcompletion.cpp chatinputcompletion.h
     chatinputedit.cpp chatinputedit.h
     chatpanel.cpp chatpanel.h
+    sessionpickerwidget.cpp sessionpickerwidget.h
     collapsibleframe.h
     toolcalldetailwidget.cpp toolcalldetailwidget.h
 )

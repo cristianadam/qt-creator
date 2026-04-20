@@ -347,20 +347,21 @@ void AcpChatController::onInitializeResult(const InitializeResponse &response)
         m_agentVersion = info->version();
     }
 
-    emit agentInfoReceived(m_agentName, m_agentVersion, m_iconUrl);
-
     m_initialized = true;
 
     m_authMethods = response.authMethods().value_or(QList<AuthMethod>{});
     m_agentCapabilities = response.agentCapabilities();
-    createNewSession();
+
+    emit agentInfoReceived(m_agentName, m_agentVersion, m_iconUrl);
+
+    if (supportsSessionList())
+        emit sessionSelectionRequired();
+    else
+        createNewSession();
 }
 
-NewSessionRequest AcpChatController::buildNewSessionRequest() const
+static QList<McpServer> buildMcpServers()
 {
-    NewSessionRequest req;
-    req.cwd(m_workingDirectory.toFSPathString());
-
     auto generateHeaders = [](const QStringList &headers) {
         return Utils::transform(headers, [](const QString &h) -> HttpHeader {
             HttpHeader header;
@@ -399,9 +400,80 @@ NewSessionRequest AcpChatController::buildNewSessionRequest() const
         }
         }
     }
-    req.mcpServers(mcpServers);
+    return mcpServers;
+}
 
+NewSessionRequest AcpChatController::buildNewSessionRequest() const
+{
+    NewSessionRequest req;
+    req.cwd(m_workingDirectory.toFSPathString());
+    req.mcpServers(buildMcpServers());
     return req;
+}
+
+bool AcpChatController::supportsSessionList() const
+{
+    if (!m_agentCapabilities)
+        return false;
+    const auto &sessionCaps = m_agentCapabilities->sessionCapabilities();
+    return sessionCaps.has_value() && sessionCaps->list().has_value();
+}
+
+void AcpChatController::listSessions(const std::optional<QString> &cursor)
+{
+    if (!m_client || !m_initialized)
+        return;
+
+    ListSessionsRequest req;
+    if (cursor)
+        req.cursor(*cursor);
+
+    m_client->listSessions(req, [this](const QJsonObject &result, const std::optional<Error> &error) {
+        if (error) {
+            emit errorOccurred(Tr::tr("Failed to list sessions: %1").arg(error->message()));
+            return;
+        }
+        auto resp = fromJson<ListSessionsResponse>(QJsonValue(result));
+        if (!resp) {
+            emit errorOccurred(Tr::tr("Failed to list sessions: invalid response"));
+            return;
+        }
+        emit sessionsListed(resp->sessions(), resp->nextCursor());
+    });
+}
+
+void AcpChatController::loadSession(const QString &sessionId)
+{
+    if (!m_client || !m_initialized)
+        return;
+
+    LoadSessionRequest req;
+    req.sessionId(sessionId);
+    req.cwd(m_workingDirectory.toFSPathString());
+    req.mcpServers(buildMcpServers());
+
+    m_client->loadSession(req, [this, sessionId](const QJsonObject &result,
+                                                  const std::optional<Error> &error) {
+        if (error) {
+            emit errorOccurred(Tr::tr("Failed to load session: %1").arg(error->message()));
+            return;
+        }
+        m_sessionId = sessionId;
+        emit sessionLoaded(m_sessionId);
+
+        auto resp = fromJson<LoadSessionResponse>(QJsonValue(result));
+        if (resp) {
+            if (const auto &opts = resp->configOptions(); opts.has_value() && !opts->isEmpty()) {
+                QList<SessionConfigOption> configOptions;
+                for (const QJsonValue &item : *opts) {
+                    auto opt = fromJson<SessionConfigOption>(item);
+                    if (opt)
+                        configOptions.append(*opt);
+                }
+                emit configOptionsReceived(configOptions);
+            }
+        }
+    });
 }
 
 } // namespace AcpClient::Internal

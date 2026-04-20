@@ -18,6 +18,7 @@ namespace AcpClient::Internal {
 
 class AuthenticationWidget;
 class MessageWidget;
+class SessionPickerWidget;
 class ThoughtWidget;
 class ToolCallDetailWidget;
 class ToolCallGroupWidget;
@@ -50,6 +51,8 @@ public:
     void addAuthenticationRequest(const QList<Acp::AuthMethod> &methods);
     void showAuthenticationError(const QString &error);
     void resolveAuthentication();
+
+    SessionPickerWidget *addSessionPicker();
 
 signals:
     void permissionOptionSelected(const QJsonValue &id, const QString &optionId);

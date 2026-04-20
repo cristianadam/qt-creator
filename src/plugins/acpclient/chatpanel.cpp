@@ -6,6 +6,7 @@
 #include "acpmessageview.h"
 #include "acpsettings.h"
 #include "chatinputedit.h"
+#include "sessionpickerwidget.h"
 
 #include <coreplugin/findplaceholder.h>
 
@@ -516,6 +517,11 @@ void ChatPanel::showAuthenticationError(const QString &error)
 void ChatPanel::resolveAuthentication()
 {
     m_messageView->resolveAuthentication();
+}
+
+SessionPickerWidget *ChatPanel::addSessionPicker()
+{
+    return m_messageView->addSessionPicker();
 }
 
 void ChatPanel::updateAvailableCommands(const QList<AvailableCommand> &commands)

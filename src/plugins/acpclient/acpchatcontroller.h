@@ -35,6 +35,8 @@ public:
     void disconnectFromServer();
 
     void createNewSession();
+    void listSessions(const std::optional<QString> &cursor = {});
+    void loadSession(const QString &sessionId);
     void sendPrompt(const QString &text, const QList<Utils::FilePath> &additionalFiles = {},
                     bool includeCurrentEditor = true);
     void cancelPrompt();
@@ -44,6 +46,7 @@ public:
     void sendPermissionCancelled(const QJsonValue &id);
 
     bool isInitialized() const { return m_initialized; }
+    bool supportsSessionList() const;
     const QString &sessionId() const { return m_sessionId; }
     const QString &agentName() const { return m_agentName; }
     const QString &agentVersion() const { return m_agentVersion; }
@@ -51,7 +54,11 @@ public:
 signals:
     void connectionStateChanged(AcpClientObject::State state);
     void agentInfoReceived(const QString &name, const QString &version, const QString &iconUrl);
+    void sessionSelectionRequired();
     void sessionCreated(const QString &sessionId);
+    void sessionLoaded(const QString &sessionId);
+    void sessionsListed(const QList<Acp::SessionInfo> &sessions,
+                        const std::optional<QString> &nextCursor);
     void configOptionsReceived(const QList<Acp::SessionConfigOption> &configOptions);
     void sessionUpdate(const QString &sessionId, const Acp::SessionUpdate &update);
     void authenticationRequired(const QList<Acp::AuthMethod> &methods);
