@@ -567,7 +567,7 @@ void ClangModelManagerSupport::updateLanguageClient(Project *project)
     if (jsonDbDir.isEmpty())
         return;
 
-    if (settings.useExternalCompilationDb())
+    if (settings.useExternalCompilationDb)
         return doUpdateLanguageClient(project, projectInfo, jsonDbDir);
 
     const FilePath includeDir = settings.clangdIncludePath(project ? project->activeKit() : nullptr);

@@ -57,6 +57,7 @@ public:
                    && s1.headerSourceSwitchMode == s2.headerSourceSwitchMode
                    && s1.completionRankingModel == s2.completionRankingModel
                    && s1.autoIncludeHeaders == s2.autoIncludeHeaders
+                   && s1.useExternalCompilationDb == s2.useExternalCompilationDb
                    && s1.documentUpdateThreshold == s2.documentUpdateThreshold
                    && s1.sizeThresholdEnabled == s2.sizeThresholdEnabled
                    && s1.sizeThresholdInKb == s2.sizeThresholdInKb
@@ -68,7 +69,6 @@ public:
 
         Utils::FilePath clangdFilePath(const ProjectExplorer::Kit *kit) const;
         bool useGoodClangd(const ProjectExplorer::Kit *kit) const;
-        bool useExternalCompilationDb() const { return false; }
         Utils::FilePath clangdIncludePath(const ProjectExplorer::Kit *kit) const;
         bool sizeIsOkay(const Utils::FilePath &fp) const;
         ClangDiagnosticConfig diagnosticConfig() const;
@@ -99,6 +99,7 @@ public:
         bool sizeThresholdEnabled = false;
         bool haveCheckedHardwareReqirements = false;
         bool updateDependentSources = false;
+        bool useExternalCompilationDb = false;
         int completionResults = defaultCompletionResults();
 
     private:

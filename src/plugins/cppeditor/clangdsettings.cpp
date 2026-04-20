@@ -81,6 +81,7 @@ static Key diagnosticConfigIdKey() { return "diagnosticConfigId"; }
 static Key checkedHardwareKey() { return "checkedHardware"; }
 static Key completionResultsKey() { return "completionResults"; }
 static Key updateDependentSourcesKey() { return "updateDependentSources"; }
+static Key useExternalCompilationDbKey() { return "ClangdUseExternalCompilationDb"; }
 
 const char blockProjectIndexingProperty[] = "ClangBlockProjectIndexing";
 
@@ -494,6 +495,7 @@ Store ClangdSettings::Data::toMap() const
     map.insert(checkedHardwareKey(), haveCheckedHardwareReqirements);
     map.insert(completionResultsKey(), completionResults);
     map.insert(updateDependentSourcesKey(), updateDependentSources);
+    map.insert(useExternalCompilationDbKey(), useExternalCompilationDb);
     return map;
 }
 
@@ -515,6 +517,7 @@ void ClangdSettings::Data::fromMap(const Store &map)
     completionRankingModel = CompletionRankingModel(map.value(clangdCompletionRankingModelKey(),
                                                               int(completionRankingModel)).toInt());
     autoIncludeHeaders = map.value(clangdHeaderInsertionKey(), false).toBool();
+    useExternalCompilationDb = map.value(useExternalCompilationDbKey(), false).toBool();
     workerThreadLimit = map.value(clangdThreadLimitKey(), 0).toInt();
     documentUpdateThreshold = map.value(clangdDocumentThresholdKey(), 500).toInt();
     sizeThresholdEnabled = map.value(clangdSizeThresholdEnabledKey(), false).toBool();
@@ -626,6 +629,7 @@ private:
     QComboBox m_headerSourceSwitchComboBox;
     QComboBox m_completionRankingModelComboBox;
     QCheckBox m_autoIncludeHeadersCheckBox;
+    QCheckBox m_useExternalCompilationDbCheckBox;
     QCheckBox m_updateDependentSourcesCheckBox;
     QCheckBox m_sizeThresholdCheckBox;
     QSpinBox m_threadLimitSpinBox;
@@ -685,6 +689,12 @@ void ClangdSettingsWidget::setup(const ClangdSettings::Data &settingsData, bool 
         "included headers.</p>"
         "<p>If this option is disabled, the dependent source files are only re-parsed when the "
         "header file is saved.</p>");
+    const QString useExternalCompilationDbToolTip = Tr::tr(
+        "<p>Controls whether clangd will use an existing compile_commands.json file, rather than "
+        "one set up by Qt Creator, which is the default.</p>"
+        "<p>When enabling this option, the user is responsible for providing a suitable file at "
+        "the index location specified above, as well as for keeping that file in sync with the "
+        "project state.</p>");
     const QString documentUpdateToolTip
         //: %1 is the application name (Qt Creator)
         = Tr::tr("Defines the amount of time %1 waits before sending document changes to the "
@@ -735,6 +745,10 @@ void ClangdSettingsWidget::setup(const ClangdSettings::Data &settingsData, bool 
     m_autoIncludeHeadersCheckBox.setText(Tr::tr("Insert header files on completion"));
     m_autoIncludeHeadersCheckBox.setChecked(settingsData.autoIncludeHeaders);
     m_autoIncludeHeadersCheckBox.setToolTip(autoIncludeToolTip);
+    m_useExternalCompilationDbCheckBox.setText(
+        Tr::tr("Use externally provided compilation database"));
+    m_useExternalCompilationDbCheckBox.setChecked(settingsData.useExternalCompilationDb);
+    m_useExternalCompilationDbCheckBox.setToolTip(useExternalCompilationDbToolTip);
     m_updateDependentSourcesCheckBox.setText(Tr::tr("Update dependent sources"));
     m_updateDependentSourcesCheckBox.setChecked(settingsData.updateDependentSources);
     m_updateDependentSourcesCheckBox.setToolTip(updateDependentSourcesToolTip);
@@ -823,6 +837,7 @@ void ClangdSettingsWidget::setup(const ClangdSettings::Data &settingsData, bool 
 
     formLayout->addRow(QString(), &m_autoIncludeHeadersCheckBox);
     formLayout->addRow(QString(), &m_updateDependentSourcesCheckBox);
+    formLayout->addRow(QString(), &m_useExternalCompilationDbCheckBox);
     const auto limitResultsLayout = new QHBoxLayout;
     limitResultsLayout->addWidget(&m_completionResults);
     limitResultsLayout->addStretch(1);
@@ -989,6 +1004,8 @@ void ClangdSettingsWidget::setup(const ClangdSettings::Data &settingsData, bool 
             this, &ClangdSettingsWidget::settingsDataChanged);
     connect(&m_autoIncludeHeadersCheckBox, &QCheckBox::toggled,
             this, &ClangdSettingsWidget::settingsDataChanged);
+    connect(&m_useExternalCompilationDbCheckBox, &QCheckBox::toggled,
+            this, &ClangdSettingsWidget::settingsDataChanged);
     connect(&m_updateDependentSourcesCheckBox, &QCheckBox::toggled,
             this, &ClangdSettingsWidget::settingsDataChanged);
     connect(&m_threadLimitSpinBox, &QSpinBox::valueChanged,
@@ -1021,6 +1038,7 @@ ClangdSettings::Data ClangdSettingsWidget::settingsData() const
     data.completionRankingModel = ClangdSettings::CompletionRankingModel(
         m_completionRankingModelComboBox.currentData().toInt());
     data.autoIncludeHeaders = m_autoIncludeHeadersCheckBox.isChecked();
+    data.useExternalCompilationDb = m_useExternalCompilationDbCheckBox.isChecked();
     data.updateDependentSources = m_updateDependentSourcesCheckBox.isChecked();
     data.workerThreadLimit = m_threadLimitSpinBox.value();
     data.documentUpdateThreshold = m_documentUpdateThreshold.value();
