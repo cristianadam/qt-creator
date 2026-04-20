@@ -27,6 +27,8 @@ using namespace Utils;
 
 namespace CppEditor {
 
+Q_LOGGING_CATEGORY(LOG, "qtc.cppeditor.generatedcodemodelsupport", QtWarningMsg)
+
 class QObjectCache
 {
 public:
@@ -67,8 +69,7 @@ GeneratedFileSupport::GeneratedFileSupport(ExtraCompiler *generator,
 {
     CppModelManager::addGeneratedFileSupport(this);
 
-    QLoggingCategory log("qtc.cppeditor.generatedcodemodelsupport", QtWarningMsg);
-    qCDebug(log) << "ctor GeneratedFileSupport for" << m_generator->source()
+    qCDebug(LOG) << "ctor GeneratedFileSupport for" << m_generator->source()
                  << generatedFile;
 
     connect(m_generator, &ExtraCompiler::contentsChanged,
@@ -79,8 +80,7 @@ GeneratedFileSupport::GeneratedFileSupport(ExtraCompiler *generator,
 GeneratedFileSupport::~GeneratedFileSupport()
 {
     CppModelManager::emitGeneratedFileSupportRemoved(m_generatedFilePath);
-    QLoggingCategory log("qtc.cppeditor.generatedcodemodelsupport", QtWarningMsg);
-    qCDebug(log) << "dtor ~generatedcodemodelsupport for" << m_generatedFilePath;
+    qCDebug(LOG) << "dtor ~generatedcodemodelsupport for" << m_generatedFilePath;
 
     CppModelManager::removeGeneratedFileSupport(this);
 }
