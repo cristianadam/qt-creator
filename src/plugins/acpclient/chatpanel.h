@@ -75,7 +75,6 @@ public:
 signals:
     void sendRequested(const QString &text);
     void cancelRequested();
-    void disconnectRequested();
     void configOptionChanged(const QString &configId, const QString &value);
     void permissionOptionSelected(const QJsonValue &id, const QString &optionId);
     void permissionCancelled(const QJsonValue &id);

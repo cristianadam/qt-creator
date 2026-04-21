@@ -176,11 +176,6 @@ ChatPanel::ChatPanel(QWidget *parent)
     m_elapsedLabel->setFont(elapsedFont);
     toolbarLayout->addWidget(m_elapsedLabel);
 
-    auto *disconnectButton = new QPushButton;
-    disconnectButton->setText(Tr::tr("Disconnect"));
-    connect(disconnectButton, &QPushButton::clicked, this, &ChatPanel::disconnectRequested);
-    toolbarLayout->addWidget(disconnectButton);
-
     // --- Message view ---
     m_messageView = new AcpMessageView;
     m_messageView->setDetailedMode(true);

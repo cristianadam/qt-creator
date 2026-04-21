@@ -42,7 +42,6 @@ signals:
 
 private:
     void connectToAgent();
-    void disconnectFromAgent();
     void populateServerCombo();
     void updateTitle();
 

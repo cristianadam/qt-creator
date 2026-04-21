@@ -268,10 +268,7 @@ AcpChatTab::AcpChatTab(QWidget *parent)
         const bool includeEditor = m_chatPanel->isAutoContextItemActive(Tr::tr("Current Editor"));
         m_controller->sendPrompt(text, m_chatPanel->manualContextFiles(), includeEditor);
     });
-    connect(m_chatPanel, &ChatPanel::cancelRequested,
-            m_controller, &AcpChatController::cancelPrompt);
-    connect(m_chatPanel, &ChatPanel::disconnectRequested,
-            this, &AcpChatTab::disconnectFromAgent);
+    connect(m_chatPanel, &ChatPanel::cancelRequested, m_controller, &AcpChatController::cancelPrompt);
     connect(m_chatPanel, &ChatPanel::configOptionChanged,
             m_controller, &AcpChatController::setConfigOption);
 
@@ -437,11 +434,6 @@ void AcpChatTab::connectToAgent()
     const QString serverId = m_serverCombo->currentData().toString();
     const FilePath workingDirectory = m_cwdEdit->filePath();
     m_controller->connectToServer(serverId, workingDirectory);
-}
-
-void AcpChatTab::disconnectFromAgent()
-{
-    m_controller->disconnectFromServer();
 }
 
 void AcpChatTab::updateTitle()
