@@ -246,10 +246,13 @@ AcpChatTab::AcpChatTab(QWidget *parent)
 
     // --- Connections: Editor context ---
     auto updateContextItems = [this](Core::IEditor *editor) {
-        if (qobject_cast<TextEditor::BaseTextEditor *>(editor))
-            m_chatPanel->setAutoContextItems({Tr::tr("Current Editor")});
-        else
+        if (qobject_cast<TextEditor::BaseTextEditor *>(editor)) {
+            m_chatPanel->setAutoContextItems(
+                {editor->document() ? editor->document()->filePath().fileName()
+                                    : Tr::tr("Current Editor")});
+        } else {
             m_chatPanel->setAutoContextItems({});
+        }
     };
     connect(Core::EditorManager::instance(), &Core::EditorManager::currentEditorChanged,
             this, updateContextItems);
