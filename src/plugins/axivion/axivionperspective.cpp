@@ -1701,7 +1701,7 @@ AxivionPerspective::AxivionPerspective()
 
     m_progressWidget = new ProgressWidget;
     m_progressWidget->setObjectName("AxivionLocalBuildProgress");
-    m_progressWidget->setWindowTitle(Tr::tr("Local Build Progress"));
+    m_progressWidget->setWindowTitle(Tr::tr("Local Analyses Progress"));
 
     auto reloadDataAct = new QAction(this);
     reloadDataAct->setIcon(Utils::Icons::RELOAD_TOOLBAR.icon());
