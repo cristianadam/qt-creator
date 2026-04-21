@@ -48,10 +48,13 @@
 #include <QApplication>
 #include <QLoggingCategory>
 #include <QUuid>
+#include <QtTaskTree/QConditional>
+#include <QtTaskTree/QTaskTree>
 
 using namespace Debugger;
 using namespace ProjectExplorer;
 using namespace QtSupport;
+using namespace QtTaskTree;
 using namespace Utils;
 
 using namespace std::chrono_literals;
@@ -811,17 +814,393 @@ void CMakeProjectImporter::createKitsFromPresets()
 {
     const FilePaths presetDirs = presetCandidates();
 
-    for (const FilePath &dir : presetDirs) {
-        const QList<DirectoryData> dataList = cmakePresetExamineDirectory(dir);
-        if (dataList.isEmpty())
-            continue;
+    const ListIterator iterator(presetDirs);
+    struct InternalStorage
+    {
+        PresetsDetails::ConfigurePreset configurePreset;
+        CMakeConfig config;
+        CMakeConfig cache;
+        DirectoryData directoryData;
+        Environment env;
+        FilePath qmakePath;
+        QString cmakePrefixPath;
+        std::unique_ptr<TemporaryDirectory> qtcQMakeProbeDir;
+    };
+    const Storage<InternalStorage> storage;
+
+    const auto onCompilerSetup = [this, iterator, storage](Process &process) {
+        QList<DirectoryData> result;
+
+        DirectoryData &data = storage->directoryData;
+        Environment &env = storage->env;
+        PresetsDetails::ConfigurePreset &configurePreset = storage->configurePreset;
+        CMakeConfig &config = storage->config;
+        CMakeConfig &cache = storage->cache;
+
+        const QString presetName = fileNameToPresetName(iterator->fileName());
+        configurePreset = Utils::findOrDefault(
+            m_project->presetsData().configurePresets,
+            [presetName](const PresetsDetails::ConfigurePreset &preset) {
+                return preset.name == presetName;
+            });
+
+        env = projectDirectory().deviceEnvironment();
+        CMakePresets::Macros::expand(configurePreset, env, projectDirectory());
+
+        if (configurePreset.displayName)
+            data.cmakePresetDisplayname = configurePreset.displayName.value();
+        else
+            data.cmakePresetDisplayname = configurePreset.name;
+        data.cmakePreset = configurePreset.name;
+
+        if (!configurePreset.cmakeExecutable) {
+            const CMakeTool *cmakeTool = CMakeToolManager::defaultCMakeTool();
+            if (cmakeTool) {
+                configurePreset.cmakeExecutable = cmakeTool->cmakeExecutable();
+            } else {
+                configurePreset.cmakeExecutable = FilePath();
+                TaskHub::addTask<BuildSystemTask>(
+                    Task::TaskType::DisruptingError, Tr::tr("<No CMake Tool available>"));
+            }
+        } else {
+            FilePath cmakeExecutable = configurePreset.cmakeExecutable.value();
+            QString cmake = cmakeExecutable.path(); // Don't replace in scheme/host
+            CMakePresets::Macros::expand(configurePreset, env, projectDirectory(), cmake);
+
+            configurePreset.cmakeExecutable = cmakeExecutable.withNewPath(cmake);
+        }
+
+        data.cmakeBinary = configurePreset.cmakeExecutable.value();
+        if (configurePreset.generator)
+            data.generator = configurePreset.generator.value();
+
+        if (configurePreset.binaryDir) {
+            QString binaryDir = configurePreset.binaryDir.value();
+            CMakePresets::Macros::expand(configurePreset, env, projectDirectory(), binaryDir);
+            data.buildDirectory = FilePath::fromString(binaryDir);
+        }
+
+        const bool architectureExternalStrategy
+            = configurePreset.architecture && configurePreset.architecture->strategy
+              && configurePreset.architecture->strategy
+                     == PresetsDetails::ValueStrategyPair::Strategy::external;
+
+        const bool toolsetExternalStrategy
+            = configurePreset.toolset && configurePreset.toolset->strategy
+              && configurePreset.toolset->strategy
+                     == PresetsDetails::ValueStrategyPair::Strategy::external;
+
+        if (!architectureExternalStrategy && configurePreset.architecture
+            && configurePreset.architecture.value().value)
+            data.platform = configurePreset.architecture.value().value.value();
+
+        if (!toolsetExternalStrategy && configurePreset.toolset && configurePreset.toolset.value().value)
+            data.toolset = configurePreset.toolset.value().value.value();
+
+        if (architectureExternalStrategy && toolsetExternalStrategy) {
+            const Toolchain *tc
+                = findExternalToolchain(configurePreset.architecture->value.value_or(QString()),
+                                        configurePreset.toolset->value.value_or(QString()));
+            if (tc)
+                tc->addToEnvironment(env);
+        }
+
+        CMakePresets::Macros::updateToolchainFile(configurePreset,
+                                                  env,
+                                                  projectDirectory(),
+                                                  data.buildDirectory);
+
+        CMakePresets::Macros::updateCacheVariables(configurePreset, env, projectDirectory());
+
+        cache = configurePreset.cacheVariables ? configurePreset.cacheVariables.value()
+                                               : CMakeConfig();
+        const bool noCompilers = cache.valueOf("CMAKE_C_COMPILER").isEmpty()
+                                 && cache.valueOf("CMAKE_CXX_COMPILER").isEmpty();
+        if (noCompilers || !configurePreset.generator) {
+            const FilePath cmakeListTxt = *iterator / Constants::CMAKE_LISTS_TXT;
+            cmakeListTxt.writeFileContents(s_presetCompilerProbeCMakeScript);
+
+            process.setDisableUnixTerminal();
+
+            const FilePath cmakeExecutable = configurePreset.cmakeExecutable.value_or(FilePath());
+
+            Environment env = cmakeExecutable.deviceEnvironment();
+            CMakePresets::Macros::expand(configurePreset, env, projectDirectory());
+
+            env.setupEnglishOutput();
+            process.setEnvironment(env);
+
+            QStringList args;
+            args.emplace_back("-S");
+            args.emplace_back(iterator->path());
+            args.emplace_back("-B");
+            args.emplace_back(iterator->pathAppended("build/").path());
+
+            if (configurePreset.generator) {
+                args.emplace_back("-G");
+                args.emplace_back(*configurePreset.generator);
+            }
+            if (configurePreset.architecture && configurePreset.architecture->value) {
+                if (!configurePreset.architecture->strategy
+                    || configurePreset.architecture->strategy
+                           != PresetsDetails::ValueStrategyPair::Strategy::external) {
+                    args.emplace_back("-A");
+                    args.emplace_back(*configurePreset.architecture->value);
+                }
+            }
+            if (configurePreset.toolset && configurePreset.toolset->value) {
+                if (!configurePreset.toolset->strategy
+                    || configurePreset.toolset->strategy
+                           != PresetsDetails::ValueStrategyPair::Strategy::external) {
+                    args.emplace_back("-T");
+                    args.emplace_back(*configurePreset.toolset->value);
+                }
+            }
+
+            if (configurePreset.cacheVariables) {
+                CMakeConfig cacheVariables = configurePreset.cacheVariables.value();
+                // For the compiler probe we don't need VCPKG_MANIFEST_MODE
+                cacheVariables.remove("VCPKG_MANIFEST_MODE");
+
+                args.append(cacheVariables.toArguments());
+            }
+
+            qCDebug(cmInputLog) << "CMake probing for compilers: " << cmakeExecutable.toUserOutput()
+                                << args;
+            process.setCommand({cmakeExecutable, args});
+            return SetupResult::Continue;
+        }
+
+        config = cache;
+        updateCompilerPaths(config, env);
+        config.insert(CMakeConfigItem(
+            "CMAKE_COMMAND",
+            CMakeConfigItem::PATH,
+            configurePreset.cmakeExecutable.value().path().toUtf8()));
+        if (configurePreset.generator)
+            config.insert(CMakeConfigItem(
+                "CMAKE_GENERATOR",
+                CMakeConfigItem::STRING,
+                configurePreset.generator.value().toUtf8()));
+
+        return SetupResult::StopWithSuccess;
+    };
+
+    const auto onCompilerDone = [iterator, storage](const Process &process) {
+        qCDebug(cmInputLog).noquote() << process.cleanedStdOut() << process.cleanedStdErr();
+
+        const CMakeConfig config
+            = CMakeConfig::fromFile(iterator->pathAppended("build/CMakeCache.txt"), nullptr);
+
+        DirectoryData &data = storage->directoryData;
+        PresetsDetails::ConfigurePreset &configurePreset = storage->configurePreset;
+
+        if (!configurePreset.generator) {
+            const QString cmakeGenerator = config.stringValueOf(QByteArray("CMAKE_GENERATOR"));
+            configurePreset.generator = cmakeGenerator;
+            data.generator = cmakeGenerator;
+            data.platform = extractVisualStudioPlatformFromConfig(config);
+            if (!data.platform.isEmpty())
+                configurePreset.architecture = {data.platform, {}};
+        }
+        storage->config = config;
+    };
+
+    const auto onQMakeSetup = [iterator, storage](Process &process) {
+        DirectoryData &data = storage->directoryData;
+        CMakeConfig &config = storage->config;
+        Environment &env = storage->env;
+        FilePath &qmake = storage->qmakePath;
+        QString &prefixPath = storage->cmakePrefixPath;
+
+        data.sysroot = config.filePathValueOf("CMAKE_SYSROOT");
+        data.osxSysroot = config.stringValueOf("CMAKE_OSX_SYSROOT");
+        data.cmakeSystemName = config.stringValueOf("CMAKE_SYSTEM_NAME");
+        data.androidNdk = config.filePathValueOf("ANDROID_NDK");
+        data.androidSdk = config.filePathValueOf("ANDROID_SDK");
+
+        // Qt4 way to define things (more convenient for us, so try this first;-)
+        qmake = config.filePathValueOf("QT_QMAKE_EXECUTABLE");
+        qCDebug(cmInputLog) << "QT_QMAKE_EXECUTABLE=" << qmake.toUserOutput();
+
+        // Check Qt5 settings: oh, the horror!
+        const FilePath qtCMakeDir = [config, env] {
+            FilePath tmp;
+            // Check the CMake "<package-name>_DIR" variable
+            for (const auto &var : {"Qt6", "Qt6Core", "Qt5", "Qt5Core"}) {
+                tmp = config.filePathValueOf(QByteArray(var) + "_DIR");
+                if (!tmp.isEmpty())
+                    break;
+            }
+            return tmp;
+        }();
+        qCDebug(cmInputLog) << "QtXCore_DIR=" << qtCMakeDir.toUserOutput();
+        const FilePath canQtCMakeDir = FilePath::fromString(qtCMakeDir.toFileInfo().canonicalFilePath());
+        qCInfo(cmInputLog) << "QtXCore_DIR (canonical)=" << canQtCMakeDir.toUserOutput();
+
+        prefixPath = [qtCMakeDir, canQtCMakeDir, config, env] {
+            QString result;
+            if (!qtCMakeDir.isEmpty()) {
+                result = canQtCMakeDir.parentDir().parentDir().parentDir().path(); // Up 3 levels...
+            } else {
+                // Check the CMAKE_PREFIX_PATH and "<package-name>_ROOT" CMake or environment variables
+                // This can be a single value or a semicolon-separated list
+                for (const auto &var : {"CMAKE_PREFIX_PATH", "Qt6_ROOT", "Qt5_ROOT"}) {
+                    result = config.stringValueOf(var);
+                    if (result.isEmpty())
+                        result = env.value(QString::fromUtf8(var));
+                    if (!result.isEmpty())
+                        break;
+                }
+            }
+            return result;
+        }();
+        qCDebug(cmInputLog) << "PrefixPath:" << prefixPath;
+
+        if (!qmake.isEmpty() && !prefixPath.isEmpty())
+            return SetupResult::StopWithSuccess;
+
+        FilePath toolchainFile = config.filePathValueOf(QByteArray("CMAKE_TOOLCHAIN_FILE"));
+        if (prefixPath.isEmpty() && toolchainFile.isEmpty())
+            return SetupResult::StopWithSuccess;
+
+        // Run a CMake project that would do qmake probing
+        std::unique_ptr<TemporaryDirectory> &qtcQMakeProbeDir = storage->qtcQMakeProbeDir;
+        qtcQMakeProbeDir = std::make_unique<TemporaryDirectory>("qtc-cmake-qmake-probe-XXXXXXXX");
+
+        FilePath cmakeListTxt(qtcQMakeProbeDir->filePath(Constants::CMAKE_LISTS_TXT));
+
+        cmakeListTxt.writeFileContents(s_qmakeProbeCMakeScript);
+
+        process.setDisableUnixTerminal();
+
+        Environment cmakeEnv(env);
+        cmakeEnv.setupEnglishOutput();
+        process.setEnvironment(cmakeEnv);
+
+        const QString cmakeGenerator = config.stringValueOf(QByteArray("CMAKE_GENERATOR"));
+        const QString cmakeGeneratorPlatform = config.stringValueOf(
+            QByteArray("CMAKE_GENERATOR_PLATFORM"));
+        const QString cmakeGeneratorToolset = config.stringValueOf(
+            QByteArray("CMAKE_GENERATOR_TOOLSET"));
+        const FilePath cmakeExecutable = config.filePathValueOf(QByteArray("CMAKE_COMMAND"));
+        const FilePath cmakeMakeProgram = config.filePathValueOf(QByteArray("CMAKE_MAKE_PROGRAM"));
+        const FilePath hostPath = config.filePathValueOf(QByteArray("QT_HOST_PATH"));
+        const QString findRootPath = config.stringValueOf("CMAKE_FIND_ROOT_PATH");
+
+        QStringList args;
+        args.push_back("-S");
+        args.push_back(qtcQMakeProbeDir->path().path());
+        args.push_back("-B");
+        args.push_back(qtcQMakeProbeDir->filePath("build").path());
+        if (!cmakeGenerator.isEmpty()) {
+            args.push_back("-G");
+            args.push_back(cmakeGenerator);
+        }
+        if (!cmakeGeneratorPlatform.isEmpty()) {
+            args.push_back("-A");
+            args.push_back(cmakeGeneratorPlatform);
+        }
+        if (!cmakeGeneratorToolset.isEmpty()) {
+            args.push_back("-T");
+            args.push_back(cmakeGeneratorToolset);
+        }
+
+        if (!cmakeMakeProgram.isEmpty())
+            args.push_back(QStringLiteral("-DCMAKE_MAKE_PROGRAM=%1").arg(cmakeMakeProgram.path()));
+        if (!toolchainFile.isEmpty())
+            args.push_back(QStringLiteral("-DCMAKE_TOOLCHAIN_FILE=%1").arg(toolchainFile.path()));
+        if (!prefixPath.isEmpty())
+            args.push_back(QStringLiteral("-DCMAKE_PREFIX_PATH=%1").arg(prefixPath));
+        if (!findRootPath.isEmpty())
+            args.push_back(QStringLiteral("-DCMAKE_FIND_ROOT_PATH=%1").arg(findRootPath));
+        if (!hostPath.isEmpty())
+            args.push_back(QStringLiteral("-DQT_HOST_PATH=%1").arg(hostPath.path()));
+
+        qCDebug(cmInputLog) << "CMake probing for qmake path: " << cmakeExecutable.toUserOutput()
+                            << args;
+        process.setCommand({cmakeExecutable, args});
+
+        return SetupResult::Continue;
+    };
+
+    const auto onQMakeDone = [iterator, storage] {
+        std::unique_ptr<TemporaryDirectory> &qtcQMakeProbeDir = storage->qtcQMakeProbeDir;
+        FilePath &qmakeLocation = storage->qmakePath;
+        QString &resultedPrefixPath = storage->cmakePrefixPath;
+
+        const FilePath qmakeLocationTxt = qtcQMakeProbeDir->filePath("qmake-location.txt");
+        qmakeLocation = FilePath::fromUtf8(qmakeLocationTxt.fileContents().value_or(QByteArray()));
+        qCDebug(cmInputLog) << "qmake location: " << qmakeLocation.toUserOutput();
+
+        const FilePath prefixPathTxt = qtcQMakeProbeDir->filePath("cmake-prefix-path.txt");
+        resultedPrefixPath = QString::fromUtf8(prefixPathTxt.fileContents().value_or(QByteArray()));
+        qCDebug(cmInputLog) << "PrefixPath [after qmake probe]: " << resultedPrefixPath;
+    };
+
+    const auto onPresetDone = [this, storage] {
+        FilePath &qmake = storage->qmakePath;
+        QString &cmakePrefixPath = storage->cmakePrefixPath;
+
+        DirectoryData &data = storage->directoryData;
+        CMakeConfig &config = storage->config;
+        CMakeConfig &cache = storage->cache;
+
+        PresetsDetails::ConfigurePreset &configurePreset = storage->configurePreset;
+        Environment &env = storage->env;
+
+        if (!qmake.isEmpty())
+            data.qt = findOrCreateQtVersion(qmake);
+
+        if (!cmakePrefixPath.isEmpty() && config.valueOf("CMAKE_PREFIX_PATH").isEmpty())
+            config.insert(
+                CMakeConfigItem("CMAKE_PREFIX_PATH", CMakeConfigItem::PATH, cmakePrefixPath.toUtf8()));
+
+        // Toolchains:
+        data.toolchains = extractToolchainsFromCache(config);
+
+        // Update QT_QMAKE_EXECUTABLE and CMAKE_C|XX_COMPILER config values
+        updateConfigWithDirectoryData(config, data);
+
+        data.hasQmlDebugging = CMakeBuildConfiguration::hasQmlDebugging(config);
+
+        data.debugger = findOrRegisterDebugger(
+            env, configurePreset, DebuggerCMakeExpander(configurePreset, env, projectDirectory()));
+
+        QByteArrayList buildConfigurationTypes = {cache.valueOf("CMAKE_BUILD_TYPE")};
+        if (buildConfigurationTypes.front().isEmpty()) {
+            buildConfigurationTypes.clear();
+            QByteArray buildConfigurationTypesString = cache.valueOf("CMAKE_CONFIGURATION_TYPES");
+            if (!buildConfigurationTypesString.isEmpty()) {
+                buildConfigurationTypes = buildConfigurationTypesString.split(';');
+            } else {
+                for (int type = CMakeBuildConfigurationFactory::BuildTypeDebug;
+                     type != CMakeBuildConfigurationFactory::BuildTypeLast;
+                     ++type) {
+                    BuildInfo info = CMakeBuildConfigurationFactory::createBuildInfo(
+                        CMakeBuildConfigurationFactory::BuildType(type));
+                    buildConfigurationTypes << info.typeName.toUtf8();
+                }
+            }
+        }
 
         QList<BuildInfo> buildInfos;
-        for (auto data : dataList)
-            buildInfos.push_back(buildInfoList(&data).first());
+        for (const auto &buildType : std::as_const(buildConfigurationTypes)) {
+            DirectoryData newData(data);
+            newData.cmakeBuildType = buildType;
 
-        DirectoryData data = dataList.first();
-        const Id kitId = Id::fromString(QString("%1:CMakePresets:%2").arg(projectFilePath().path()).arg(data.cmakePreset));
+            // Handle QML Debugging
+            auto type = CMakeBuildConfigurationFactory::buildTypeFromByteArray(
+                newData.cmakeBuildType);
+            if (type == CMakeBuildConfigurationFactory::BuildTypeDebug
+                || type == CMakeBuildConfigurationFactory::BuildTypeProfile)
+                newData.hasQmlDebugging = true;
+
+            buildInfos.emplace_back(buildInfoList(&newData).first());
+        }
+
+        const Id kitId = Id::fromString(
+            QString("%1:CMakePresets:%2").arg(projectFilePath().path()).arg(data.cmakePreset));
 
         Kit *kit = KitManager::kit(kitId);
         if (!kit || !kit->isValid()) {
@@ -838,77 +1217,28 @@ void CMakeProjectImporter::createKitsFromPresets()
                 },
                 kitId);
         }
-    }
-}
+    };
 
-static CMakeConfig configurationFromPresetProbe(
-    const FilePath &importPath,
-    const FilePath &sourceDirectory,
-    const PresetsDetails::ConfigurePreset &configurePreset)
-{
-    const FilePath cmakeListTxt = importPath / Constants::CMAKE_LISTS_TXT;
-    cmakeListTxt.writeFileContents(s_presetCompilerProbeCMakeScript);
-
-    Process cmake;
-    cmake.setDisableUnixTerminal();
-
-    const FilePath cmakeExecutable = configurePreset.cmakeExecutable.value_or(FilePath());
-
-    Environment env = cmakeExecutable.deviceEnvironment();
-    CMakePresets::Macros::expand(configurePreset, env, sourceDirectory);
-
-    env.setupEnglishOutput();
-    cmake.setEnvironment(env);
-
-    QStringList args;
-    args.emplace_back("-S");
-    args.emplace_back(importPath.path());
-    args.emplace_back("-B");
-    args.emplace_back(importPath.pathAppended("build/").path());
-
-    if (configurePreset.generator) {
-        args.emplace_back("-G");
-        args.emplace_back(*configurePreset.generator);
-    }
-    if (configurePreset.architecture && configurePreset.architecture->value) {
-        if (!configurePreset.architecture->strategy
-            || configurePreset.architecture->strategy
-                   != PresetsDetails::ValueStrategyPair::Strategy::external) {
-            args.emplace_back("-A");
-            args.emplace_back(*configurePreset.architecture->value);
+    // clang-format off
+    const Group recipe{
+        For (iterator) >> Do {
+            parallel,
+            Group {
+                storage,
+                If (ProcessTask(onCompilerSetup, onCompilerDone)) >> Then {
+                    ProcessTask(onQMakeSetup, onQMakeDone),
+                    QSyncTask(onPresetDone)
+                }
+            }
         }
-    }
-    if (configurePreset.toolset && configurePreset.toolset->value) {
-        if (!configurePreset.toolset->strategy
-            || configurePreset.toolset->strategy
-                   != PresetsDetails::ValueStrategyPair::Strategy::external) {
-            args.emplace_back("-T");
-            args.emplace_back(*configurePreset.toolset->value);
-        }
-    }
+    };
+    // clang-format on
 
-    if (configurePreset.cacheVariables) {
-        CMakeConfig cache = configurePreset.cacheVariables ? *configurePreset.cacheVariables
-                                                                 : CMakeConfig();
-        // For the compiler probe we don't need VCPKG_MANIFEST_MODE
-        cache.remove("VCPKG_MANIFEST_MODE");
-
-        args.append(cache.toArguments());
-    }
-
-    qCDebug(cmInputLog) << "CMake probing for compilers: " << cmakeExecutable.toUserOutput()
-                        << args;
-    cmake.setCommand({cmakeExecutable, args});
-    cmake.runBlocking(30s);
-
-    qCDebug(cmInputLog).noquote() << cmake.readAllStandardOutput() << cmake.readAllStandardError();
-
-    QString errorMessage;
-    const CMakeConfig config = CMakeConfig::fromFile(importPath.pathAppended(
-                                                         "build/CMakeCache.txt"),
-                                                     &errorMessage);
-
-    return config;
+    // Need to wait here so that the Kits are created before ProjectManager::restoreSettings is called.
+    QEventLoop loop;
+    m_taskTreeRunner
+        .start(recipe, {}, [&](const QTaskTree &, DoneWith) { loop.quit(); }, CallDoneFlag::Always);
+    loop.exec();
 }
 
 static QMakeAndCMakePrefixPath qtInfoFromCMakeCache(const CMakeConfig &config,
@@ -1309,180 +1639,6 @@ void CMakeProjectImporter::applyDirectoryDataToKit(const DirectoryData &data, Pr
 
     if (data.debugger.isValid())
         DebuggerKitAspect::setDebugger(k, data.debugger);
-}
-
-QList<DirectoryData> CMakeProjectImporter::cmakePresetExamineDirectory(const FilePath &importPath) const
-{
-    QList<DirectoryData> result;
-
-    DirectoryData data;
-
-    const QString presetName = fileNameToPresetName(importPath.fileName());
-    PresetsDetails::ConfigurePreset configurePreset
-        = Utils::findOrDefault(m_project->presetsData().configurePresets,
-                               [presetName](const PresetsDetails::ConfigurePreset &preset) {
-                                   return preset.name == presetName;
-                               });
-
-    Environment env = projectDirectory().deviceEnvironment();
-    CMakePresets::Macros::expand(configurePreset, env, projectDirectory());
-
-    if (configurePreset.displayName)
-        data.cmakePresetDisplayname = configurePreset.displayName.value();
-    else
-        data.cmakePresetDisplayname = configurePreset.name;
-    data.cmakePreset = configurePreset.name;
-
-    if (!configurePreset.cmakeExecutable) {
-        const CMakeTool *cmakeTool = CMakeToolManager::defaultCMakeTool();
-        if (cmakeTool) {
-            configurePreset.cmakeExecutable = cmakeTool->cmakeExecutable();
-        } else {
-            configurePreset.cmakeExecutable = FilePath();
-            TaskHub::addTask<BuildSystemTask>(
-                Task::TaskType::DisruptingError, Tr::tr("<No CMake Tool available>"));
-        }
-    } else {
-        FilePath cmakeExecutable = configurePreset.cmakeExecutable.value();
-        QString cmake = cmakeExecutable.path(); // Don't replace in scheme/host
-        CMakePresets::Macros::expand(configurePreset, env, projectDirectory(), cmake);
-
-        configurePreset.cmakeExecutable = cmakeExecutable.withNewPath(cmake);
-    }
-
-    data.cmakeBinary = configurePreset.cmakeExecutable.value();
-    if (configurePreset.generator)
-        data.generator = configurePreset.generator.value();
-
-    if (configurePreset.binaryDir) {
-        QString binaryDir = configurePreset.binaryDir.value();
-        CMakePresets::Macros::expand(configurePreset, env, projectDirectory(), binaryDir);
-        data.buildDirectory = FilePath::fromString(binaryDir);
-    }
-
-    const bool architectureExternalStrategy
-        = configurePreset.architecture && configurePreset.architecture->strategy
-          && configurePreset.architecture->strategy
-                 == PresetsDetails::ValueStrategyPair::Strategy::external;
-
-    const bool toolsetExternalStrategy
-        = configurePreset.toolset && configurePreset.toolset->strategy
-          && configurePreset.toolset->strategy
-                 == PresetsDetails::ValueStrategyPair::Strategy::external;
-
-    if (!architectureExternalStrategy && configurePreset.architecture
-        && configurePreset.architecture.value().value)
-        data.platform = configurePreset.architecture.value().value.value();
-
-    if (!toolsetExternalStrategy && configurePreset.toolset && configurePreset.toolset.value().value)
-        data.toolset = configurePreset.toolset.value().value.value();
-
-    if (architectureExternalStrategy && toolsetExternalStrategy) {
-        const Toolchain *tc
-            = findExternalToolchain(configurePreset.architecture->value.value_or(QString()),
-                                    configurePreset.toolset->value.value_or(QString()));
-        if (tc)
-            tc->addToEnvironment(env);
-    }
-
-    CMakePresets::Macros::updateToolchainFile(configurePreset,
-                                              env,
-                                              projectDirectory(),
-                                              data.buildDirectory);
-
-    CMakePresets::Macros::updateCacheVariables(configurePreset, env, projectDirectory());
-
-    const CMakeConfig cache = configurePreset.cacheVariables
-                                  ? configurePreset.cacheVariables.value()
-                                  : CMakeConfig();
-    CMakeConfig config;
-    const bool noCompilers = cache.valueOf("CMAKE_C_COMPILER").isEmpty()
-                             && cache.valueOf("CMAKE_CXX_COMPILER").isEmpty();
-    if (noCompilers || !configurePreset.generator) {
-        QApplication::setOverrideCursor(Qt::WaitCursor);
-        config = configurationFromPresetProbe(importPath, projectDirectory(), configurePreset);
-        QApplication::restoreOverrideCursor();
-
-        if (!configurePreset.generator) {
-            QString cmakeGenerator = config.stringValueOf(QByteArray("CMAKE_GENERATOR"));
-            configurePreset.generator = cmakeGenerator;
-            data.generator = cmakeGenerator;
-            data.platform = extractVisualStudioPlatformFromConfig(config);
-            if (!data.platform.isEmpty()) {
-                configurePreset.architecture = PresetsDetails::ValueStrategyPair();
-                configurePreset.architecture->value = data.platform;
-            }
-        }
-    } else {
-        config = cache;
-        updateCompilerPaths(config, env);
-        config.insert(CMakeConfigItem(
-            "CMAKE_COMMAND",
-            CMakeConfigItem::PATH,
-            configurePreset.cmakeExecutable.value().path().toUtf8()));
-        if (configurePreset.generator)
-            config.insert(CMakeConfigItem(
-                "CMAKE_GENERATOR",
-                CMakeConfigItem::STRING,
-                configurePreset.generator.value().toUtf8()));
-    }
-
-    data.sysroot = config.filePathValueOf("CMAKE_SYSROOT");
-    data.osxSysroot = config.stringValueOf("CMAKE_OSX_SYSROOT");
-    data.cmakeSystemName = config.stringValueOf("CMAKE_SYSTEM_NAME");
-    data.androidNdk = config.filePathValueOf("ANDROID_NDK");
-    data.androidSdk = config.filePathValueOf("ANDROID_SDK");
-
-    const auto [qmake, cmakePrefixPath] = qtInfoFromCMakeCache(config, env);
-    if (!qmake.isEmpty())
-        data.qt = findOrCreateQtVersion(qmake);
-
-    if (!cmakePrefixPath.isEmpty() && config.valueOf("CMAKE_PREFIX_PATH").isEmpty())
-        config.insert(
-            CMakeConfigItem("CMAKE_PREFIX_PATH", CMakeConfigItem::PATH, cmakePrefixPath.toUtf8()));
-
-    // Toolchains:
-    data.toolchains = extractToolchainsFromCache(config);
-
-    // Update QT_QMAKE_EXECUTABLE and CMAKE_C|XX_COMPILER config values
-    updateConfigWithDirectoryData(config, data);
-
-    data.hasQmlDebugging = CMakeBuildConfiguration::hasQmlDebugging(config);
-
-    data.debugger = findOrRegisterDebugger(
-        env, configurePreset, DebuggerCMakeExpander(configurePreset, env, projectDirectory()));
-
-    QByteArrayList buildConfigurationTypes = {cache.valueOf("CMAKE_BUILD_TYPE")};
-    if (buildConfigurationTypes.front().isEmpty()) {
-        buildConfigurationTypes.clear();
-        QByteArray buildConfigurationTypesString = cache.valueOf("CMAKE_CONFIGURATION_TYPES");
-        if (!buildConfigurationTypesString.isEmpty()) {
-            buildConfigurationTypes = buildConfigurationTypesString.split(';');
-        } else {
-            for (int type = CMakeBuildConfigurationFactory::BuildTypeDebug;
-                 type != CMakeBuildConfigurationFactory::BuildTypeLast;
-                 ++type) {
-                BuildInfo info = CMakeBuildConfigurationFactory::createBuildInfo(
-                    CMakeBuildConfigurationFactory::BuildType(type));
-                buildConfigurationTypes << info.typeName.toUtf8();
-            }
-        }
-    }
-    for (const auto &buildType : std::as_const(buildConfigurationTypes)) {
-        DirectoryData newData(data);
-        newData.cmakeBuildType = buildType;
-
-        // Handle QML Debugging
-        auto type = CMakeBuildConfigurationFactory::buildTypeFromByteArray(
-            newData.cmakeBuildType);
-        if (type == CMakeBuildConfigurationFactory::BuildTypeDebug
-            || type == CMakeBuildConfigurationFactory::BuildTypeProfile)
-            newData.hasQmlDebugging = true;
-
-        result.emplace_back(newData);
-    }
-
-    return result;
 }
 
 const QList<BuildInfo> CMakeProjectImporter::buildInfoList(void *directoryData) const
