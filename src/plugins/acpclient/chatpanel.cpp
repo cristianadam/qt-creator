@@ -9,10 +9,13 @@
 
 #include <coreplugin/findplaceholder.h>
 #include <utils/elidinglabel.h>
+#include <utils/layoutbuilder.h>
 #include <utils/progressindicator.h>
+#include <utils/qtcwidgets.h>
 #include <utils/styledbar.h>
 #include <utils/stylehelper.h>
 #include <utils/theme/theme.h>
+#include <utils/utilsicons.h>
 
 #include <QComboBox>
 #include <QDateTime>
@@ -95,34 +98,45 @@ private:
     bool m_prompting = false;
 };
 
+class ContextBarButton : public QtcIconButton
+{
+public:
+    explicit ContextBarButton(const Utils::Icon &icon, const QString &tooltip, QWidget *parent = nullptr)
+        : QtcIconButton(parent)
+    {
+        setIcon(icon.icon());
+        setToolTip(tooltip);
+        static int size = [](){
+            QLabel label("XOW");
+            label.setMargin(2);
+            return label.sizeHint().height();
+        }();
+        setMaximumSize(size, size);
+    }
+};
+
+
 class ContextItem : public QWidget
 {
     Q_OBJECT
 public:
-    explicit ContextItem(const QString &text, bool removable = false, QWidget *parent = nullptr)
+    explicit ContextItem(const QString &text, QWidget *parent = nullptr)
         : QWidget(parent)
     {
         setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
         setAttribute(Qt::WA_Hover);
 
         auto *layout = new QHBoxLayout(this);
-        layout->setContentsMargins(PaddingHM, 2, removable ? 2 : PaddingHM, 2);
-        layout->setSpacing(GapHS);
+        layout->setContentsMargins(PaddingHM, 0, 0, 0);
+        layout->setSpacing(PaddingHXxs);
 
         auto *label = new QLabel(text);
+        label->setMargin(2);
         layout->addWidget(label);
 
-        if (removable) {
-            auto *closeBtn = new QToolButton;
-            closeBtn->setText(QStringLiteral("\u00D7"));
-            closeBtn->setAutoRaise(true);
-            closeBtn->setFixedSize(16, 16);
-            QFont f = closeBtn->font();
-            f.setPointSizeF(f.pointSizeF() * 0.85);
-            closeBtn->setFont(f);
-            layout->addWidget(closeBtn);
-            connect(closeBtn, &QToolButton::clicked, this, &ContextItem::removeRequested);
-        }
+        auto *closeBtn = new ContextBarButton(Icons::CLOSE_TOOLBAR, Tr::tr("Remove context"));
+        connect(closeBtn, &QToolButton::clicked, this, &ContextItem::removeRequested);
+        layout->addWidget(closeBtn);
     }
 
 signals:
@@ -133,9 +147,8 @@ protected:
     {
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing);
-        StyleHelper::drawCardBg(&p, rect(),
-                                creatorColor(Theme::PaletteLight),
-                                QPen(creatorColor(Theme::PaletteMid), 1), RadiusS);
+        StyleHelper::drawCardBg(
+            &p, rect(), palette().color(QPalette::Highlight), QPen(Qt::NoPen), RadiusS);
     }
 };
 
@@ -200,8 +213,9 @@ ChatPanel::ChatPanel(QWidget *parent)
     inputOuterLayout->setSpacing(GapVXs);
 
     m_contextBar = new QWidget;
-    m_contextBarLayout = new QHBoxLayout(m_contextBar);
-    m_contextBarLayout->setContentsMargins(0, 0, 0, 0);
+    Layouting::Flow{}.attachTo(m_contextBar);
+    m_contextBarLayout = m_contextBar->layout();
+    m_contextBarLayout->setContentsMargins(0, PaddingVXxs, 0, PaddingVXxs);
     m_contextBarLayout->setSpacing(GapHS);
 
     m_contextLabel = new QLabel(Tr::tr("Context:"));
@@ -212,16 +226,14 @@ ChatPanel::ChatPanel(QWidget *parent)
     }
     m_contextBarLayout->addWidget(m_contextLabel);
 
-    m_addContextButton = new QToolButton;
-    m_addContextButton->setText(QStringLiteral("+"));
-    m_addContextButton->setToolTip(Tr::tr("Add context"));
-    m_addContextButton->setAutoRaise(true);
-    m_addContextButton->setPopupMode(QToolButton::InstantPopup);
-    m_addContextMenu = new QMenu(m_addContextButton);
-    connect(m_addContextMenu, &QMenu::aboutToShow, this, [this] {
-        m_addContextMenu->clear();
+    auto addContextButton = new ContextBarButton(Utils::Icons::PLUS_TOOLBAR, Tr::tr("Add context"));
+    connect(addContextButton, &QtcIconButton::released, this, [this] {
+        auto menu = new QMenu(m_addContextButton);
+        menu->setAttribute(Qt::WA_DeleteOnClose);
 
-        auto *addFileAction = m_addContextMenu->addAction(Tr::tr("Add file..."));
+        menu->clear();
+
+        auto *addFileAction = menu->addAction(Tr::tr("Add file..."));
         connect(addFileAction, &QAction::triggered, this, [this] {
             const QString path = QFileDialog::getOpenFileName(this, Tr::tr("Add Context File"));
             if (path.isEmpty())
@@ -234,20 +246,21 @@ ChatPanel::ChatPanel(QWidget *parent)
         });
 
         if (!m_removedAutoContextNames.isEmpty()) {
-            m_addContextMenu->addSeparator();
+            menu->addSeparator();
             for (const QString &name : std::as_const(m_removedAutoContextNames)) {
-                auto *action = m_addContextMenu->addAction(Tr::tr("Current Editor (%1)").arg(name));
+                auto *action = menu->addAction(Tr::tr("Current Editor (%1)").arg(name));
                 connect(action, &QAction::triggered, this, [this, name] {
                     m_removedAutoContextNames.removeOne(name);
                     updateContextBar();
                 });
             }
         }
-    });
-    m_addContextButton->setMenu(m_addContextMenu);
 
+        menu->popup(QCursor::pos());
+    });
+
+    m_addContextButton = addContextButton;
     m_contextBarLayout->addWidget(m_addContextButton);
-    m_contextBarLayout->addStretch(1);
     inputOuterLayout->addWidget(m_contextBar);
 
     auto *inputContainer = new InputContainerWidget;
@@ -544,7 +557,7 @@ void ChatPanel::updateContextBar()
     for (const QString &name : std::as_const(m_offeredAutoContextNames)) {
         if (m_removedAutoContextNames.contains(name))
             continue;
-        auto *item = new ContextItem(name, true, m_contextBar);
+        auto *item = new ContextItem(name, m_contextBar);
         connect(item, &ContextItem::removeRequested, this, [this, name] {
             m_removedAutoContextNames.append(name);
             QMetaObject::invokeMethod(this, [this] { updateContextBar(); }, Qt::QueuedConnection);
@@ -553,7 +566,7 @@ void ChatPanel::updateContextBar()
     }
 
     for (const Utils::FilePath &file : std::as_const(m_manualContextFiles)) {
-        auto *item = new ContextItem(file.fileName(), true, m_contextBar);
+        auto *item = new ContextItem(file.fileName(), m_contextBar);
         connect(item, &ContextItem::removeRequested, this, [this, file] {
             m_manualContextFiles.removeOne(file);
             QMetaObject::invokeMethod(this, [this] { updateContextBar(); }, Qt::QueuedConnection);
@@ -562,8 +575,6 @@ void ChatPanel::updateContextBar()
     }
 
     m_contextBarLayout->addWidget(m_addContextButton);
-
-    m_contextBarLayout->addStretch(1);
 }
 
 } // namespace AcpClient::Internal
