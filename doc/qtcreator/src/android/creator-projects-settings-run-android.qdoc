@@ -25,13 +25,13 @@
 
     The default arguments for the Activity manager for a normal run:
 
-    \badcode
+    \code [shell]
     am start -n <package_name>/<QtActivity_name>
     \endcode
 
     The default arguments for the Activity manager for the debugger mode:
 
-    \badcode
+    \code [shell]
     am start -n <package_name>/<QtActivity_name> -D
     \endcode
 

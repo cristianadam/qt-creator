@@ -37,14 +37,14 @@
 
     To override the default path where user settings are stored, enter:
 
-    \badcode
+    \code [shell]
     qtcreator -settingspath <path>
     \endcode
 
     To override the default path from where user-independent settings are read
     (for example, those written by the installer), enter:
 
-    \badcode
+    \code [shell]
     qtcreator -installsettingspath <path>
     \endcode
 
@@ -52,7 +52,7 @@
 
     To use clean settings that are deleted when you quit \QC, enter:
 
-    \badcode
+    \code [shell]
     qtcreator -tcs
     \endcode
 

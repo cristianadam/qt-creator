@@ -87,3 +87,5 @@ navigation.toctitles = "All Topics"
 navigation.toctitles.inclusive = false
 
 buildversion = "$IDE_DISPLAY_NAME $QTC_VERSION"
+
+codelanguages = Shell

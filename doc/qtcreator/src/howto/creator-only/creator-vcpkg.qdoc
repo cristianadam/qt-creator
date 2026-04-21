@@ -22,7 +22,7 @@
 
     To set up vcpkg from the command line, enter:
 
-    \badcode
+    \code [shell]
     $ git clone https://github.com/microsoft/vcpkg
     $ cd vcpkg
 

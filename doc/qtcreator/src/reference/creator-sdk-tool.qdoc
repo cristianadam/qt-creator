@@ -22,14 +22,14 @@
     To use the SDK Tool, enter the following command in the \c {Tools\sdktool\bin}
     directory in the Qt installation directory:
 
-    \badcode
+    \code [shell]
     sdktool [OPTION] [OPERATION [OPTIONS]]
     \endcode
 
     For information about the options and operations that your SDK Tool version
     supports, enter:
 
-    \badcode
+    \code [shell]
     sdktool --help
     \endcode
 
@@ -147,7 +147,7 @@
 
     \section2 addAbiFlavor
 
-    \badcode
+    \code [shell]
     sdktool addAbiFlavor --flavor <NAME> --oses <OS>(,<OS>)*
     \endcode
 
@@ -174,7 +174,7 @@
 
     To add Yocto Poky on Linux, enter:
 
-    \badcode
+    \code [shell]
     ./sdktool addAbiFlavor \
     --flavor poky \
     --oses linux
@@ -184,7 +184,7 @@
 
     \section2 addCMake
 
-    \badcode
+    \code [shell]
     sdktool addCMake --id <ID> --name <NAME> --path <PATH> [<KEY> <TYPE:VALUE>]
     \endcode
 
@@ -226,7 +226,7 @@
 
     To add a CMake tool on Windows, enter:
 
-    \badcode
+    \code [shell]
     sdktool addCMake \
     --id "my.custom.cmake" \
     --name "Custom CMake" \
@@ -237,7 +237,7 @@
 
     \section2 addTC
 
-    \badcode
+    \code [shell]
     sdktool addTC --id <ID> --language <ID> --name <NAME> --path <PATH> --abi <ABI STRING> [OPTIONS]
     \endcode
 
@@ -311,7 +311,7 @@
 
     To add a GCC compiler on Linux, enter:
 
-    \badcode
+    \code [shell]
     ./sdktool addTC \
         --id "ProjectExplorer.ToolChain.Gcc:company.product.toolchain.g++" \
         --language Cxx
@@ -327,7 +327,7 @@
 
     \section2 addDebugger
 
-    \badcode
+    \code [shell]
     sdktool addDebugger --id <ID> --name <NAME> [OPTIONS]
     \endcode
 
@@ -383,7 +383,7 @@
 
     To add a GDB debugger on Linux, enter:
 
-    \badcode
+    \code [shell]
     ./sdktool addDebugger \
         --id "company.product.toolchain.gdb" \
         --name "GDB (company, product)" \
@@ -396,7 +396,7 @@
 
     \section2 addDev
 
-    \badcode
+    \code [shell]
     sdktool addDev --id <ID> --name <NAME> --type <INT> [OPTIONS]
     \endcode
 
@@ -529,7 +529,7 @@
     To add a remote Linux device (hardware device) on Linux and use SSH keys to
     authenticate to the device, enter:
 
-    \badcode
+    \code [shell]
     ./sdktool addDev \
         --id " LinuxDevice1" \
         --name "My Remote Linux Device" \
@@ -549,7 +549,7 @@
 
     \section2 addQt
 
-    \badcode
+    \code [shell]
     sdktool addQt --id <ID> --name <NAME> --qmake <PATH> --type <TYPE> [OPTIONS]
     \endcode
 
@@ -605,7 +605,7 @@
 
     To add a self-built Qt 6.8 version on Linux, enter:
 
-    \badcode
+    \code [shell]
     ./sdktool addQt \
         --id "company.product.qt" \
         --name "Custom Qt" \
@@ -617,7 +617,7 @@
 
     \section2 addKit
 
-    \badcode
+    \code [shell]
     sdktool addKit --id <ID> --name <NAME> --devicetype <TYPE> [OPTIONS]
     \endcode
 
@@ -734,7 +734,7 @@
     To add a kit that uses the GCC compiler and the self-built Qt to build
     applications on Linux, enter:
 
-    \badcode
+    \code [shell]
     ./sdktool addKit \
         --id "company.product.kit" \
         --name "Qt %{Qt:Version} (company, product)" \
@@ -758,7 +758,7 @@
     To remove a CMake tool, compiler, debugger, device, Qt version, or kit,
     enter:
 
-    \badcode
+    \code [shell]
     rm<Item> --id <ID>
     \endcode
 

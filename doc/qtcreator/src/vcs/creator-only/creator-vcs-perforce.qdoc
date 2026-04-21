@@ -48,7 +48,7 @@
         \li Clear \uicontrol {Environment Variables}.
         \li To set \c P4CONFIG to use the file that you created, run the
             following command from the command line once:
-            \badcode
+            \code [shell]
             p4 set P4CONFIG=p4config.txt
             \endcode
     \endlist

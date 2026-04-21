@@ -115,7 +115,7 @@
 
     To build the project from the command line (when compiling with GCC), enter:
 
-    \badcode
+    \code [shell]
     cmake <other options> -C <project dir>/cocoplugin-gcc.cmake
     \endcode
 

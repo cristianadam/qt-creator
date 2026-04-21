@@ -82,7 +82,7 @@
 
             To change the ibus shortcut, enter the following command on the
             command line to start ibus setup:
-            \badcode
+            \code [shell]
             ibus-setup
             \endcode
 
