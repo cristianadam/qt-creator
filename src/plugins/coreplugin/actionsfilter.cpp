@@ -280,7 +280,7 @@ LocatorFilterEntry::Acceptor ActionsFilter::acceptor(const ActionFilterEntryData
                     if (action && action->isEnabled())
                         action->trigger();
                 },
-                Qt::SingleShotConnection);
+                Qt::ConnectionType(Qt::SingleShotConnection | Qt::QueuedConnection));
         } else if (data.optionsPageId.isValid()) {
             QMetaObject::invokeMethod(
                 Core::ICore::instance(),
