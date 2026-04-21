@@ -138,11 +138,7 @@ public:
     };
     static BuildType buildTypeFromByteArray(const QByteArray &in);
     static ProjectExplorer::BuildConfiguration::BuildType cmakeBuildTypeToBuildType(const BuildType &in);
-
-private:
     static ProjectExplorer::BuildInfo createBuildInfo(BuildType buildType);
-
-    friend class Internal::CMakeProjectImporter;
 };
 
 namespace Internal { void setupCMakeBuildConfiguration(); }

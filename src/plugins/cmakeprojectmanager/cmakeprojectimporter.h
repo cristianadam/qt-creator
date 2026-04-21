@@ -37,11 +37,11 @@ private:
 
     void deleteDirectoryData(void *directoryData) const final;
 
-    void ensureBuildDirectory(DirectoryData &data, const ProjectExplorer::Kit *k) const;
+    void ensureBuildDirectory(const DirectoryData &data, const ProjectExplorer::Kit *k) const;
 
-    void applyDirectoryDataToKit(DirectoryData *data, ProjectExplorer::Kit *k) const;
+    void applyDirectoryDataToKit(const DirectoryData &data, ProjectExplorer::Kit *k) const;
 
-    QList<DirectoryData *> cmakePresetExamineDirectory(const Utils::FilePath &importPath) const;
+    QList<DirectoryData> cmakePresetExamineDirectory(const Utils::FilePath &importPath) const;
 
     const CMakeProject *m_project;
     std::unique_ptr<Utils::TemporaryFilePath> m_presetsTempDir;
