@@ -864,9 +864,9 @@ void SshProcessInterfacePrivate::handleReadyReadStandardOutput()
     int endMarkerLength = endMarker.length();
     int endMarkerOffset = m_output.indexOf(endMarker);
     if (endMarkerOffset == -1) {
-        static const QByteArray endMarker = s_pidMarker + "\r\n";
-        endMarkerOffset = m_output.indexOf(endMarker);
-        endMarkerLength = endMarker.length();
+        static const QByteArray endMarkerCRLF = s_pidMarker + "\r\n";
+        endMarkerOffset = m_output.indexOf(endMarkerCRLF);
+        endMarkerLength = endMarkerCRLF.length();
         if (endMarkerOffset == -1)
             return;
     }
@@ -1393,8 +1393,10 @@ static RunResult runUnameCommand(const FilePath &rootPath)
 void LinuxDevicePrivate::setupFileAccess(
     const SshParameters &sshParameters, const Continuation<> &cont)
 {
-    QTC_ASSERT(QThread::isMainThread(),
-               cont(ResultError(ResultAssert, "setupFileAccess called from wrong thread")));
+    QTC_ASSERT(
+        QThread::isMainThread(),
+        cont(ResultError(ResultAssert, "setupFileAccess called from wrong thread"));
+        return);
 
     announceConnectionAttempt();
 
@@ -1511,7 +1513,7 @@ void LinuxDevicePrivate::unannounceConnectionAttempt()
     infoBar->addInfo(info);
     Core::MessageManager::writeSilently(message);
 
-    QTimer::singleShot(5000, q, [id=announceId(), infoBar] { infoBar->removeInfo(id); });
+    QTimer::singleShot(5000, infoBar, [id = announceId(), infoBar] { infoBar->removeInfo(id); });
 }
 
 void LinuxDevicePrivate::announceConnectionLoss()
@@ -1524,7 +1526,7 @@ void LinuxDevicePrivate::announceConnectionLoss()
     info.setInfoType(InfoLabel::Warning);
     InfoBar *infoBar = Core::ICore::popupInfoBar();
     infoBar->addInfo(info);
-    QTimer::singleShot(5000, q, [id, infoBar] { infoBar->removeInfo(id); });
+    QTimer::singleShot(5000, infoBar, [id, infoBar] { infoBar->removeInfo(id); });
     Core::MessageManager::writeSilently(message);
     closeConnection(true);
 }
