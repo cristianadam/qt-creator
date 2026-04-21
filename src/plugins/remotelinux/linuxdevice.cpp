@@ -17,6 +17,7 @@
 
 #include <gocmdbridge/client/bridgedfileaccess.h>
 
+#include <projectexplorer/buildconfiguration.h>
 #include <projectexplorer/devicesupport/devicemanager.h>
 #include <projectexplorer/devicesupport/idevice.h>
 #include <projectexplorer/devicesupport/idevicewidget.h>
@@ -25,6 +26,7 @@
 #include <projectexplorer/kitmanager.h>
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/projectexplorersettings.h>
+#include <projectexplorer/target.h>
 
 #include <utils/async.h>
 #include <utils/devicefileaccess.h>
@@ -526,6 +528,7 @@ LinuxDeviceConfigurationWidget::LinuxDeviceConfigurationWidget(
         linuxDevice->sourceProfile, br,
         device->sshForwardDebugServerPort, br,
         device->linkDevice, br,
+        linuxDevice->mounts.labelText(), linuxDevice->mounts, br,
         device->deviceToolsGui(),
         Row { autoDetectButton, st, },
     }.attachTo(this);
@@ -536,6 +539,7 @@ LinuxDeviceConfigurationWidget::LinuxDeviceConfigurationWidget(
 
     connect(&device->sshParametersAspectContainer(), &AspectContainer::volatileValueChanged,
             this, &markSettingsDirty);
+    connect(&linuxDevice->mounts, &FilePathListAspect::volatileValueChanged, this, checkSettingsDirty);
 
     installMarkSettingsDirtyTriggerRecursively(this);
 }
@@ -1148,12 +1152,21 @@ LinuxDevice::LinuxDevice()
     autoConnectOnStartup.setLabelText(Tr::tr("Auto-connect on startup"));
     autoConnectOnStartup.setLabelPlacement(BoolAspect::LabelPlacement::AtCheckBox);
 
-    addDeviceAction({
-        Tr::tr("Deploy Public Key..."),
-        [](const IDevice::Ptr &device) {
-            runPublicKeyDeploymentDialog(device);
-        }
+    mounts.setSettingsKey("AccessibleHostPaths");
+    mounts.setLabelText(Tr::tr("Accessible host paths:"));
+    mounts.setToolTip(
+        Tr::tr(
+            "Defines paths on the host that are accessible from the remote machine under the same "
+            "name."));
+    mounts.setPlaceHolderText(
+        Tr::tr("Host directories that are accessible from the remote device."));
+    mounts.addOnChanged(DeviceManager::instance(), [this] {
+        DeviceManager::instance()->deviceUpdated(id());
     });
+
+    addDeviceAction({Tr::tr("Deploy Public Key..."), [](const IDevice::Ptr &device) {
+                         runPublicKeyDeploymentDialog(device);
+                     }});
 
     addDeviceAction({
         Tr::tr("Connect"),
@@ -1321,6 +1334,30 @@ Result<> LinuxDevice::handlesFile(const FilePath &filePath) const
     if (filePath.scheme() == u"ssh" && filePath.host() == userAtHostAndPort())
         return ResultOk;
     return IDevice::handlesFile(filePath);
+}
+
+Result<> LinuxDevice::ensureReachable(const FilePath &other) const
+{
+    if (other.isLocal()) {
+        for (const FilePath &mount : mounts()) {
+            if (mount == other)
+                return ResultOk;
+            if (other.isChildOf(mount))
+                return ResultOk;
+        }
+    }
+    return IDevice::ensureReachable(other);
+}
+
+Result<> LinuxDevice::supportsBuildingProject(const FilePath &projectDir) const
+{
+    return ensureReachable(projectDir);
+}
+
+bool LinuxDevice::prepareForBuild(const Target *target)
+{
+    return ensureReachable(target->project()->projectDirectory())
+           && ensureReachable(target->activeBuildConfiguration()->buildDirectory());
 }
 
 ProcessInterface *LinuxDevice::createProcessInterface() const

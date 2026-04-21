@@ -62,6 +62,9 @@ public:
     Utils::FilePath rootPath() const override;
 
     Utils::Result<> handlesFile(const Utils::FilePath &filePath) const override;
+    Utils::Result<> ensureReachable(const Utils::FilePath &other) const override;
+    Utils::Result<> supportsBuildingProject(const Utils::FilePath &projectDir) const override;
+    bool prepareForBuild(const ProjectExplorer::Target *target) override;
 
     Utils::ProcessInterface *createProcessInterface() const override;
     ProjectExplorer::FileTransferInterface *createFileTransferInterface(
@@ -87,6 +90,7 @@ public:
 public:
     Utils::BoolAspect sourceProfile{this};
     Utils::BoolAspect autoConnectOnStartup{this};
+    Utils::FilePathListAspect mounts{this};
 
 protected:
     LinuxDevice();
