@@ -15,10 +15,14 @@
 #include <QMetaEnum>
 #include <QStandardItemModel>
 #include <QUuid>
+#include <QTimer>
 
 using namespace Utils;
 
 namespace Core {
+
+static const char MCPMANAGER_SETTINGS_PAGE_ID[] = "AI.MCPMANAGER";
+static const char QT_DOCS_MCPSERVER_MANAGER_ID[] = "QTCREATOR.BUILTIN.QTDOCS.MCP.SERVER";
 
 class McpServerAspect : public AspectContainer
 {
@@ -173,17 +177,35 @@ public:
 
         mcpServers.listViewDisplayCallback = displayFunc;
 
+        enableDocsMcpServer.setLabelText(Tr::tr("Enable Qt Documentation MCP Server"));
+        enableDocsMcpServer.setToolTip(
+            Tr::tr(
+                "When enabled, the Qt documentation MCP server from https://qt-docs-mcp.qt.io/mcp "
+                "will be used."));
+        enableDocsMcpServer.setDefaultValue(true);
+        enableDocsMcpServer.setSettingsKey("EnableQtDocsServer");
+
+        connect(&enableDocsMcpServer, &BoolAspect::changed, this, [this] {
+            if (enableDocsMcpServer())
+                registerQtDocsServer();
+            else
+                removeQtDocsServer();
+        });
+
         setLayouter([this]() {
             using namespace Layouting;
             // clang-format off
             return Column{
                 Tr::tr("MCP Servers:"), br,
+                enableDocsMcpServer,
                 &mcpServers,
             };
             // clang-format on
         });
 
         readSettings();
+        if (enableDocsMcpServer())
+            QTimer::singleShot(0, this, &McpManagerSettings::registerQtDocsServer);
     }
 
     static McpManagerSettings &instance()
@@ -192,10 +214,22 @@ public:
         return settings;
     }
 
-    AspectList mcpServers{this};
-};
+    void registerQtDocsServer()
+    {
+        const auto serverInfo = McpManager::ServerInfo{
+            QT_DOCS_MCPSERVER_MANAGER_ID,
+            "Qt Documentation builtin server",
+            McpManager::ConnectionType::Streamable_Http,
+            QUrl("https://qt-docs-mcp.qt.io/mcp"),
+            {}};
+        QTC_CHECK(McpManager::registerMcpServer(serverInfo));
+    }
 
-static const char MCPMANAGER_SETTINGS_PAGE_ID[] = "AI.MCPMANAGER";
+    void removeQtDocsServer() { McpManager::removeMcpServer(QT_DOCS_MCPSERVER_MANAGER_ID); }
+
+    AspectList mcpServers{this};
+    BoolAspect enableDocsMcpServer{this};
+};
 
 class McpManagerSettingsPage final : public IOptionsPage
 {
