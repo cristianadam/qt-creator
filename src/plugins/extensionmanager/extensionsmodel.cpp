@@ -391,6 +391,8 @@ QString customOsArchToString(OsArch osArch)
         return "arm";
     case OsArchArm64:
         return "arm64";
+    case OsArchLoongArch64:
+        return "loongarch64";
     case OsArchUnknown:
         break;
     }

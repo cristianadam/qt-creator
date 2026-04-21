@@ -92,6 +92,8 @@ OsArch binaryArchitecture()
     return OsArchArm;
 #elif defined(Q_PROCESSOR_IA64)
     return OsArchItanium;
+#elif defined(Q_PROCESSOR_LOONGARCH_64)
+    return OsArchLoongArch64;
 #else
 #  if !defined(QT_NO_DEBUG) || defined(QT_FORCE_ASSERTS)
     static_assert(false, "Unknown architecture, please add detection.");

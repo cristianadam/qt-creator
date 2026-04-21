@@ -56,6 +56,8 @@ Result<OsArch> osArchFromString(const QString &architecture)
         return OsArchArm;
     if (architecture == QLatin1String("arm64") || architecture == QLatin1String("aarch64"))
         return OsArchArm64;
+    if (architecture == QLatin1String("loongarch64"))
+        return OsArchLoongArch64;
 
     return Utils::ResultError(QString::fromLatin1("Unknown architecture: %1").arg(architecture));
 }

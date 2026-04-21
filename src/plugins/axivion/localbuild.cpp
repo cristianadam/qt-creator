@@ -482,7 +482,7 @@ void LocalBuild::handleLocalBuildOutputFor(const QString &projectName, const QSt
     case LocalBuildState::Analyzing:
         if (match.hasMatch()) {
             const QString type = match.captured("type").trimmed();
-            if (type == "sql" || "db") {
+            if (type == "sql" || type == "db") {
                 m_localBuildInfos.insert(projectName, {LocalBuildState::UpdatingDashboard});
                 qCDebug(localBuildLog) << "buildState changed > updatingdashboard" << projectName;
                 updateLocalBuildStateFor(projectName, Tr::tr("Updating Dashboard"), 90);

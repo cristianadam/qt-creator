@@ -1625,7 +1625,7 @@ void BinEditorWidget::keyPressEvent(QKeyEvent *e)
         break;
     }
     default: {
-        if (m_readOnly)
+        if (m_readOnly || ctrlPressed)
             break;
         QString text = e->text();
         for (int i = 0; i < text.size(); ++i) {
