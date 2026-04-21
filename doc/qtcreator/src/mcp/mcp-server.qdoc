@@ -44,7 +44,7 @@
 
     \list 1
         \li Go to \uicontrol Terminal, and enter:
-            \badcode
+            \code [shell]
             npx @modelcontextprotocol/inspector
             \endcode
         \li Open the URL indicated in the terminal output

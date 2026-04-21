@@ -1054,7 +1054,7 @@
     merge tool to use on the command line. For example, to use the
     \l{KDiff3} merge tool, enter the following command:
 
-    \badcode
+    \code [shell]
     git config --global merge.tool kdiff3
     \endcode
 

@@ -483,7 +483,7 @@
             On some distributions, you can run the following command with
             root (or equivalent) privileges:
 
-            \badcode
+            \code [shell]
             echo -e "kernel.perf_event_paranoid=-1\nkernel.kptr_restrict=0" | sudo tee /etc/sysctl.d/10-perf.conf
             \endcode
 

@@ -125,7 +125,7 @@
     URL, the essential packages list, and the appropriate NDK for each Qt version.
     The file is in the \QC resource folder:
 
-    \badcode
+    \code [shell]
     # Linux and macOS
     ~/.config/QtProject/qtcreator/android/sdk_definitions.json
 
@@ -286,7 +286,7 @@
 
     To start the emulator manually from the terminal, enter:
 
-    \badcode
+    \code [shell]
     cd <ANDROID_SDK_ROOT>/emulator
     ./emulator -avd <AVD_NAME>
     \endcode

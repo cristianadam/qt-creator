@@ -134,7 +134,7 @@
     options of a certain predefined style from the command line. For example,
     to create a format file for the LLVM style, enter the following command:
 
-    \badcode
+    \code [shell]
     clang-format -style=llvm -dump-config > .clang-format
     \endcode
 

@@ -39,13 +39,13 @@
     For example:
     \list 1
         \li Clone the module repository.
-            \badcode
+            \code [shell]
             git clone https://code.qt.io/qt-labs/qtquickdesigner-components.git
             \endcode
 
         \li Install the Qt Quick Studio Components module.
 
-        \badcode
+        \code [shell]
         mkdir build
         cd build
         cmake -GNinja -DCMAKE_INSTALL_PREFIX=<path_to_qt_install_directory> <path_to_qtquickdesigner-components>

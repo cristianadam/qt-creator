@@ -21,7 +21,7 @@
     directory that contains the \QC executable or specify the path to
     \QC as a part of the command:
 
-    \badcode
+    \code [shell]
     qtcreator [option] [filename[:line_number[:column_number]]]
     \endcode
 

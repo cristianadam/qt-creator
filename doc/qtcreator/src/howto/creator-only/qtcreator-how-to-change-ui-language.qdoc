@@ -26,7 +26,7 @@
 
     To set the UI language when you start \QC from the command line, enter:
 
-    \badcode
+    \code [shell]
     qtcreator -language <locale>
     \endcode
 

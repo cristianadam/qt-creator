@@ -61,13 +61,13 @@
 
     For example, on Windows, enter:
 
-    \badcode
+    \code [shell]
     choco install qtcreator
     \endcode
 
     And on \macos, enter:
 
-    \badcode
+    \code [shell]
     brew install --cask qt-creator
     \endcode
 
