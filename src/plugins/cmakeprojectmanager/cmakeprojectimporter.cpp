@@ -590,6 +590,223 @@ bool CMakeProjectImporter::filter(ProjectExplorer::Kit *k) const
            != configurePresets.cend();
 }
 
+static Toolchain *findExternalToolchain(const QString &presetArchitecture, const QString &presetToolset)
+{
+    // A compiler path example. Note that the compiler version is not the same version from MsvcToolchain
+    // ... \MSVC\14.29.30133\bin\Hostx64\x64\cl.exe
+    //
+    // And the CMakePresets.json
+    //
+    // "toolset": {
+    //      "value": "v142,host=x64,version=14.29.30133",
+    //      "strategy": "external"
+    //  },
+    //  "architecture": {
+    //      "value": "x64",
+    //      "strategy": "external"
+    //  }
+
+    auto msvcToolchains = ToolchainManager::toolchains([](const Toolchain *tc) {
+        return  tc->typeId() ==  ProjectExplorer::Constants::MSVC_TOOLCHAIN_TYPEID;
+    });
+
+    const QSet<Abi::OSFlavor> msvcFlavors = Utils::toSet(Utils::transform(msvcToolchains, [](const Toolchain *tc) {
+        return tc->targetAbi().osFlavor();
+    }));
+
+    return ToolchainManager::toolchain(
+        [presetArchitecture, presetToolset, msvcFlavors](const Toolchain *tc) -> bool {
+            if (tc->typeId() != ProjectExplorer::Constants::MSVC_TOOLCHAIN_TYPEID)
+                return false;
+
+            const FilePath compilerPath = tc->compilerCommand();
+            const QString architecture = compilerPath.parentDir().fileName().toLower();
+            const QString host
+                = compilerPath.parentDir().parentDir().fileName().toLower().replace("host", "host=");
+            const QString version
+                = QString("version=%1")
+                      .arg(compilerPath.parentDir().parentDir().parentDir().parentDir().fileName());
+
+            static std::pair<QString, Abi::OSFlavor> abiTable[] = {
+                                                                   {QStringLiteral("v144"), Abi::WindowsMsvc2026Flavor},
+                                                                   {QStringLiteral("v143"), Abi::WindowsMsvc2022Flavor},
+                                                                   {QStringLiteral("v142"), Abi::WindowsMsvc2019Flavor},
+                                                                   {QStringLiteral("v141"), Abi::WindowsMsvc2017Flavor},
+                                                                   };
+
+            Abi::OSFlavor toolsetAbi = Abi::UnknownFlavor;
+            for (const auto &abiPair : abiTable) {
+                if (presetToolset.contains(abiPair.first)) {
+                    toolsetAbi = abiPair.second;
+                    break;
+                }
+            }
+
+            // User didn't specify any flavor, so pick the highest toolchain available
+            if (toolsetAbi == Abi::UnknownFlavor) {
+                for (const auto &abiPair : abiTable) {
+                    if (msvcFlavors.contains(abiPair.second)) {
+                        toolsetAbi = abiPair.second;
+                        break;
+                    }
+                }
+            }
+
+            if (toolsetAbi != tc->targetAbi().osFlavor())
+                return false;
+
+            if (presetToolset.contains("host=") && !presetToolset.contains(host))
+                return false;
+
+            // Make sure we match also version=14.29
+            auto versionIndex = presetToolset.indexOf("version=");
+            if (versionIndex != -1 && !version.startsWith(presetToolset.mid(versionIndex)))
+                return false;
+
+            if (presetArchitecture != architecture)
+                return false;
+
+            qCDebug(cmInputLog) << "For external architecture" << presetArchitecture
+                                << "and toolset" << presetToolset
+                                << "the following toolchain was selected:\n"
+                                << compilerPath.toUserOutput();
+            return true;
+        });
+}
+
+static void updateCompilerPaths(CMakeConfig &config, const Environment &env)
+{
+    auto updateRelativePath = [&config, env](const QByteArray &key) {
+        FilePath pathValue = config.filePathValueOf(key);
+
+        if (pathValue.isAbsolutePath() || pathValue.isEmpty())
+            return;
+
+        pathValue = env.searchInPath(pathValue.fileName());
+
+        auto it = std::find_if(config.begin(), config.end(), [&key](const CMakeConfigItem &item) {
+            return item.key == key;
+        });
+        QTC_ASSERT(it != config.end(), return);
+
+        it->value = pathValue.path().toUtf8();
+    };
+
+    updateRelativePath("CMAKE_C_COMPILER");
+    updateRelativePath("CMAKE_CXX_COMPILER");
+}
+
+static QString extractVisualStudioPlatformFromConfig(const CMakeConfig &config)
+{
+    const QString cmakeGenerator = config.stringValueOf(QByteArray("CMAKE_GENERATOR"));
+    QString platform;
+    if (cmakeGenerator.contains("Visual Studio")) {
+        const FilePath linker = config.filePathValueOf("CMAKE_LINKER");
+        const QString toolsDir = linker.parentDir().fileName();
+        if (toolsDir.compare("x64", Qt::CaseInsensitive) == 0) {
+            platform = "x64";
+        } else if (toolsDir.compare("x86", Qt::CaseInsensitive) == 0) {
+            platform = "Win32";
+        } else if (toolsDir.compare("arm64", Qt::CaseInsensitive) == 0) {
+            platform = "ARM64";
+        } else if (toolsDir.compare("arm", Qt::CaseInsensitive) == 0) {
+            platform = "ARM";
+        }
+    }
+
+    return platform;
+}
+
+static void updateConfigWithDirectoryData(CMakeConfig &config, const DirectoryData &data)
+{
+    auto updateCompilerValue = [&config, &data](const QByteArray &key, const Utils::Id &language) {
+        auto tcd = Utils::findOrDefault(data.toolchains, [&language](const ToolchainDescription &t) {
+            return t.language == language;
+        });
+
+        if (config.contains(key)) {
+            CMakeConfigItem &item = config[key];
+            if (item.value.isEmpty())
+                item.value = tcd.compilerPath.path().toUtf8();
+        } else {
+            config.insert(
+                CMakeConfigItem(key, CMakeConfigItem::FILEPATH, tcd.compilerPath.path().toUtf8()));
+        }
+    };
+
+    updateCompilerValue("CMAKE_C_COMPILER", ProjectExplorer::Constants::C_LANGUAGE_ID);
+    updateCompilerValue("CMAKE_CXX_COMPILER", ProjectExplorer::Constants::CXX_LANGUAGE_ID);
+
+    if (data.qt.qt)
+        config.insert(CMakeConfigItem(
+            "QT_QMAKE_EXECUTABLE",
+            CMakeConfigItem::FILEPATH,
+            data.qt.qt->qmakeFilePath().path().toUtf8()));
+}
+
+struct QMakeAndCMakePrefixPath
+{
+    FilePath qmakePath;
+    QString cmakePrefixPath; // can be a semicolon-separated list
+};
+
+static QList<ToolchainDescriptionEx> extractToolchainsFromCache(const CMakeConfig &config)
+{
+    QList<ToolchainDescriptionEx> result;
+    bool haveCCxxCompiler = false;
+    for (const CMakeConfigItem &i : config) {
+        if (!i.key.startsWith("CMAKE_") || !i.key.endsWith("_COMPILER"))
+            continue;
+        const QByteArray language = i.key.mid(6, i.key.size() - 6 - 9); // skip "CMAKE_" and "_COMPILER"
+        Id languageId;
+        if (language == "CXX") {
+            haveCCxxCompiler = true;
+            languageId = ProjectExplorer::Constants::CXX_LANGUAGE_ID;
+        } else if (language == "C") {
+            haveCCxxCompiler = true;
+            languageId = ProjectExplorer::Constants::C_LANGUAGE_ID;
+        } else {
+            languageId = Id::fromName(language);
+        }
+
+        const FilePath compilerPath = FilePath::fromUtf8(i.value);
+        const QString compilerTarget = config.stringValueOf(
+            "CMAKE_" + language + "_COMPILER_TARGET");
+        const QString targetArhitecture = config.stringValueOf(
+            "CMAKE_" + language + "_LIBRARY_ARCHITECTURE");
+
+        result.append({compilerPath, languageId, compilerTarget, targetArhitecture});
+    }
+
+    if (!haveCCxxCompiler) {
+        const QByteArray generator = config.valueOf("CMAKE_GENERATOR");
+        QString cCompilerName;
+        QString cxxCompilerName;
+        if (generator.contains("Visual Studio")) {
+            cCompilerName = "cl.exe";
+            cxxCompilerName = "cl.exe";
+        } else if (generator.contains("Xcode")) {
+            cCompilerName = "clang";
+            cxxCompilerName = "clang++";
+        }
+
+        if (!cCompilerName.isEmpty() && !cxxCompilerName.isEmpty()) {
+            const FilePath linker = config.filePathValueOf("CMAKE_LINKER");
+            if (!linker.isEmpty()) {
+                const FilePath compilerPath = linker.parentDir();
+                result.append(
+                    {.compilerPath = compilerPath.pathAppended(cCompilerName),
+                     .language = ProjectExplorer::Constants::C_LANGUAGE_ID});
+                result.append(
+                    {.compilerPath = compilerPath.pathAppended(cxxCompilerName),
+                     .language = ProjectExplorer::Constants::CXX_LANGUAGE_ID});
+            }
+        }
+    }
+
+    return result;
+}
+
 void CMakeProjectImporter::createKitsFromPresets()
 {
     const FilePaths presetDirs = presetCandidates();
@@ -693,12 +910,6 @@ static CMakeConfig configurationFromPresetProbe(
 
     return config;
 }
-
-struct QMakeAndCMakePrefixPath
-{
-    FilePath qmakePath;
-    QString cmakePrefixPath; // can be a semicolon-separated list
-};
 
 static QMakeAndCMakePrefixPath qtInfoFromCMakeCache(const CMakeConfig &config,
                                                     const Environment &env)
@@ -822,216 +1033,6 @@ static QMakeAndCMakePrefixPath qtInfoFromCMakeCache(const CMakeConfig &config,
     return {qmakeLocation, resultedPrefixPath};
 }
 
-static QList<ToolchainDescriptionEx> extractToolchainsFromCache(const CMakeConfig &config)
-{
-    QList<ToolchainDescriptionEx> result;
-    bool haveCCxxCompiler = false;
-    for (const CMakeConfigItem &i : config) {
-        if (!i.key.startsWith("CMAKE_") || !i.key.endsWith("_COMPILER"))
-            continue;
-        const QByteArray language = i.key.mid(6, i.key.size() - 6 - 9); // skip "CMAKE_" and "_COMPILER"
-        Id languageId;
-        if (language == "CXX") {
-            haveCCxxCompiler = true;
-            languageId = ProjectExplorer::Constants::CXX_LANGUAGE_ID;
-        } else if (language == "C") {
-            haveCCxxCompiler = true;
-            languageId = ProjectExplorer::Constants::C_LANGUAGE_ID;
-        } else {
-            languageId = Id::fromName(language);
-        }
-
-        const FilePath compilerPath = FilePath::fromUtf8(i.value);
-        const QString compilerTarget = config.stringValueOf(
-            "CMAKE_" + language + "_COMPILER_TARGET");
-        const QString targetArhitecture = config.stringValueOf(
-            "CMAKE_" + language + "_LIBRARY_ARCHITECTURE");
-
-        result.append({compilerPath, languageId, compilerTarget, targetArhitecture});
-    }
-
-    if (!haveCCxxCompiler) {
-        const QByteArray generator = config.valueOf("CMAKE_GENERATOR");
-        QString cCompilerName;
-        QString cxxCompilerName;
-        if (generator.contains("Visual Studio")) {
-            cCompilerName = "cl.exe";
-            cxxCompilerName = "cl.exe";
-        } else if (generator.contains("Xcode")) {
-            cCompilerName = "clang";
-            cxxCompilerName = "clang++";
-        }
-
-        if (!cCompilerName.isEmpty() && !cxxCompilerName.isEmpty()) {
-            const FilePath linker = config.filePathValueOf("CMAKE_LINKER");
-            if (!linker.isEmpty()) {
-                const FilePath compilerPath = linker.parentDir();
-                result.append(
-                    {.compilerPath = compilerPath.pathAppended(cCompilerName),
-                     .language = ProjectExplorer::Constants::C_LANGUAGE_ID});
-                result.append(
-                    {.compilerPath = compilerPath.pathAppended(cxxCompilerName),
-                     .language = ProjectExplorer::Constants::CXX_LANGUAGE_ID});
-            }
-        }
-    }
-
-    return result;
-}
-
-static QString extractVisualStudioPlatformFromConfig(const CMakeConfig &config)
-{
-    const QString cmakeGenerator = config.stringValueOf(QByteArray("CMAKE_GENERATOR"));
-    QString platform;
-    if (cmakeGenerator.contains("Visual Studio")) {
-        const FilePath linker = config.filePathValueOf("CMAKE_LINKER");
-        const QString toolsDir = linker.parentDir().fileName();
-        if (toolsDir.compare("x64", Qt::CaseInsensitive) == 0) {
-            platform = "x64";
-        } else if (toolsDir.compare("x86", Qt::CaseInsensitive) == 0) {
-            platform = "Win32";
-        } else if (toolsDir.compare("arm64", Qt::CaseInsensitive) == 0) {
-            platform = "ARM64";
-        } else if (toolsDir.compare("arm", Qt::CaseInsensitive) == 0) {
-            platform = "ARM";
-        }
-    }
-
-    return platform;
-}
-
-void updateCompilerPaths(CMakeConfig &config, const Environment &env)
-{
-    auto updateRelativePath = [&config, env](const QByteArray &key) {
-        FilePath pathValue = config.filePathValueOf(key);
-
-        if (pathValue.isAbsolutePath() || pathValue.isEmpty())
-            return;
-
-        pathValue = env.searchInPath(pathValue.fileName());
-
-        auto it = std::find_if(config.begin(), config.end(), [&key](const CMakeConfigItem &item) {
-            return item.key == key;
-        });
-        QTC_ASSERT(it != config.end(), return);
-
-        it->value = pathValue.path().toUtf8();
-    };
-
-    updateRelativePath("CMAKE_C_COMPILER");
-    updateRelativePath("CMAKE_CXX_COMPILER");
-}
-
-static void updateConfigWithDirectoryData(CMakeConfig &config, const DirectoryData &data)
-{
-    auto updateCompilerValue = [&config, &data](const QByteArray &key, const Utils::Id &language) {
-        auto tcd = Utils::findOrDefault(data.toolchains, [&language](const ToolchainDescription &t) {
-            return t.language == language;
-        });
-
-        if (config.contains(key)) {
-            CMakeConfigItem &item = config[key];
-            if (item.value.isEmpty())
-                item.value = tcd.compilerPath.path().toUtf8();
-        } else {
-            config.insert(
-                CMakeConfigItem(key, CMakeConfigItem::FILEPATH, tcd.compilerPath.path().toUtf8()));
-        }
-    };
-
-    updateCompilerValue("CMAKE_C_COMPILER", ProjectExplorer::Constants::C_LANGUAGE_ID);
-    updateCompilerValue("CMAKE_CXX_COMPILER", ProjectExplorer::Constants::CXX_LANGUAGE_ID);
-
-    if (data.qt.qt)
-        config.insert(CMakeConfigItem(
-            "QT_QMAKE_EXECUTABLE",
-            CMakeConfigItem::FILEPATH,
-            data.qt.qt->qmakeFilePath().path().toUtf8()));
-}
-
-Toolchain *findExternalToolchain(const QString &presetArchitecture, const QString &presetToolset)
-{
-    // A compiler path example. Note that the compiler version is not the same version from MsvcToolchain
-    // ... \MSVC\14.29.30133\bin\Hostx64\x64\cl.exe
-    //
-    // And the CMakePresets.json
-    //
-    // "toolset": {
-    //      "value": "v142,host=x64,version=14.29.30133",
-    //      "strategy": "external"
-    //  },
-    //  "architecture": {
-    //      "value": "x64",
-    //      "strategy": "external"
-    //  }
-
-    auto msvcToolchains = ToolchainManager::toolchains([](const Toolchain *tc) {
-        return  tc->typeId() ==  ProjectExplorer::Constants::MSVC_TOOLCHAIN_TYPEID;
-    });
-
-    const QSet<Abi::OSFlavor> msvcFlavors = Utils::toSet(Utils::transform(msvcToolchains, [](const Toolchain *tc) {
-        return tc->targetAbi().osFlavor();
-    }));
-
-    return ToolchainManager::toolchain(
-        [presetArchitecture, presetToolset, msvcFlavors](const Toolchain *tc) -> bool {
-            if (tc->typeId() != ProjectExplorer::Constants::MSVC_TOOLCHAIN_TYPEID)
-                return false;
-
-            const FilePath compilerPath = tc->compilerCommand();
-            const QString architecture = compilerPath.parentDir().fileName().toLower();
-            const QString host
-                = compilerPath.parentDir().parentDir().fileName().toLower().replace("host", "host=");
-            const QString version
-                = QString("version=%1")
-                      .arg(compilerPath.parentDir().parentDir().parentDir().parentDir().fileName());
-
-            static std::pair<QString, Abi::OSFlavor> abiTable[] = {
-                {QStringLiteral("v144"), Abi::WindowsMsvc2026Flavor},
-                {QStringLiteral("v143"), Abi::WindowsMsvc2022Flavor},
-                {QStringLiteral("v142"), Abi::WindowsMsvc2019Flavor},
-                {QStringLiteral("v141"), Abi::WindowsMsvc2017Flavor},
-            };
-
-            Abi::OSFlavor toolsetAbi = Abi::UnknownFlavor;
-            for (const auto &abiPair : abiTable) {
-                if (presetToolset.contains(abiPair.first)) {
-                    toolsetAbi = abiPair.second;
-                    break;
-                }
-            }
-
-            // User didn't specify any flavor, so pick the highest toolchain available
-            if (toolsetAbi == Abi::UnknownFlavor) {
-                for (const auto &abiPair : abiTable) {
-                    if (msvcFlavors.contains(abiPair.second)) {
-                        toolsetAbi = abiPair.second;
-                        break;
-                    }
-                }
-            }
-
-            if (toolsetAbi != tc->targetAbi().osFlavor())
-                return false;
-
-            if (presetToolset.contains("host=") && !presetToolset.contains(host))
-                return false;
-
-            // Make sure we match also version=14.29
-            auto versionIndex = presetToolset.indexOf("version=");
-            if (versionIndex != -1 && !version.startsWith(presetToolset.mid(versionIndex)))
-                return false;
-
-            if (presetArchitecture != architecture)
-                return false;
-
-            qCDebug(cmInputLog) << "For external architecture" << presetArchitecture
-                                << "and toolset" << presetToolset
-                                << "the following toolchain was selected:\n"
-                                << compilerPath.toUserOutput();
-            return true;
-        });
-}
 
 QList<void *> CMakeProjectImporter::examineDirectory(const FilePath &importPath,
                                                      QString *warningMessage) const
