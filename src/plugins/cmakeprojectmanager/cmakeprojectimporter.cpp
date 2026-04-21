@@ -512,7 +512,7 @@ void CMakeProjectImporter::createKitsFromPresets()
     for (const Utils::FilePath &dir : presetDirs) {
         QString warning;
 
-        const QList<DirectoryData *> dataList = cmakePresetExamineDirectory(dir, &warning);
+        const QList<DirectoryData *> dataList = cmakePresetExamineDirectory(dir);
         if (dataList.isEmpty())
             continue;
 
