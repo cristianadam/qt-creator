@@ -504,14 +504,11 @@ static QString kitIdFromDirectoryData(const QString &projectFilePath, DirectoryD
     return QString("%1:CMakePresets:%2").arg(projectFilePath).arg(data->cmakePreset);
 }
 
-
 void CMakeProjectImporter::createKitsFromPresets()
 {
-    const Utils::FilePaths presetDirs = presetCandidates();
+    const FilePaths presetDirs = presetCandidates();
 
-    for (const Utils::FilePath &dir : presetDirs) {
-        QString warning;
-
+    for (const FilePath &dir : presetDirs) {
         const QList<DirectoryData *> dataList = cmakePresetExamineDirectory(dir);
         if (dataList.isEmpty())
             continue;
@@ -520,7 +517,7 @@ void CMakeProjectImporter::createKitsFromPresets()
         for (auto d : dataList)
             buildInfos.push_back(buildInfoList(d).first());
 
-        DirectoryData *data = static_cast<DirectoryData*>(dataList.first());
+        DirectoryData *data = static_cast<DirectoryData *>(dataList.first());
         const Id kitId = Id::fromString(kitIdFromDirectoryData(projectFilePath().path(), data));
 
         Kit *kit = KitManager::kit(kitId);
