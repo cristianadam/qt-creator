@@ -40,8 +40,8 @@ private:
     void ensureBuildDirectory(DirectoryData &data, const ProjectExplorer::Kit *k) const;
 
     void applyDirectoryDataToKit(DirectoryData *data, ProjectExplorer::Kit *k) const;
-    QList<DirectoryData *> cmakePresetExamineDirectory(
-        const Utils::FilePath &importPath, QString *warningMessage) const;
+
+    QList<DirectoryData *> cmakePresetExamineDirectory(const Utils::FilePath &importPath) const;
 
     const CMakeProject *m_project;
     std::unique_ptr<Utils::TemporaryFilePath> m_presetsTempDir;

@@ -1317,7 +1317,7 @@ void CMakeProjectImporter::applyDirectoryDataToKit(DirectoryData *data, ProjectE
 }
 
 QList<DirectoryData *> CMakeProjectImporter::cmakePresetExamineDirectory(
-    const Utils::FilePath &importPath, QString *warningMessage) const
+    const FilePath &importPath) const
 {
     QList<DirectoryData *> result;
 
@@ -1363,7 +1363,7 @@ QList<DirectoryData *> CMakeProjectImporter::cmakePresetExamineDirectory(
     if (configurePreset.binaryDir) {
         QString binaryDir = configurePreset.binaryDir.value();
         CMakePresets::Macros::expand(configurePreset, env, projectDirectory(), binaryDir);
-        data->buildDirectory = Utils::FilePath::fromString(binaryDir);
+        data->buildDirectory = FilePath::fromString(binaryDir);
     }
 
     const bool architectureExternalStrategy
