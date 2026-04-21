@@ -60,7 +60,7 @@ public:
                     case EnvironmentItem::SetEnabled:
                     case EnvironmentItem::Prepend:
                     case EnvironmentItem::Append:
-                        env.addItem(std::make_tuple("_QTC_" + i.name, i.value));
+                        env.addItem(std::make_tuple("_QTC_" + i.name, i.value, true));
                         break;
                     default:
                         break;

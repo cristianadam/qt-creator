@@ -516,7 +516,7 @@ const NameValueDictionary &Environment::resolved() const
                     if (m_dict.value(key).isEmpty())
                         m_dict.set(key, value, true);
                 } else {
-                    QTC_ASSERT(false, qDebug() << "operating on partial dictionary");
+                    QTC_ASSERT(false, qDebug() << "operating on partial dictionary" << key << value);
                     m_dict.set(key, value, true);
                 }
             }
