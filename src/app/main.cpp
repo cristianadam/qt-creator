@@ -942,7 +942,7 @@ int main(int argc, char **argv)
     if (foundAppOptions.contains(QLatin1String(PID_OPTION))) {
         QString pidString = foundAppOptions.value(QLatin1String(PID_OPTION));
         bool pidOk;
-        qint64 tmpPid = pidString.toInt(&pidOk);
+        qint64 tmpPid = pidString.toLongLong(&pidOk);
         if (pidOk)
             pid = tmpPid;
     }
