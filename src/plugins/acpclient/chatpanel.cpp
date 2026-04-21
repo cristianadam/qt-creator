@@ -8,8 +8,10 @@
 #include "chatinputedit.h"
 
 #include <coreplugin/findplaceholder.h>
+
 #include <utils/elidinglabel.h>
 #include <utils/layoutbuilder.h>
+#include <utils/fileutils.h>
 #include <utils/progressindicator.h>
 #include <utils/qtcwidgets.h>
 #include <utils/styledbar.h>
@@ -235,10 +237,21 @@ ChatPanel::ChatPanel(QWidget *parent)
 
         auto *addFileAction = menu->addAction(Tr::tr("Add file..."));
         connect(addFileAction, &QAction::triggered, this, [this] {
-            const QString path = QFileDialog::getOpenFileName(this, Tr::tr("Add Context File"));
-            if (path.isEmpty())
+            const FilePath fp = Utils::FileUtils::getOpenFilePath(
+                Tr::tr("Add Context File"), {}, {}, nullptr, {}, false, false);
+            if (fp.isEmpty())
                 return;
-            const Utils::FilePath fp = Utils::FilePath::fromString(path);
+            if (!m_manualContextFiles.contains(fp)) {
+                m_manualContextFiles.append(fp);
+                updateContextBar();
+            }
+        });
+        auto *addRemoteFileAction = menu->addAction(Tr::tr("Add remote file..."));
+        connect(addRemoteFileAction, &QAction::triggered, this, [this] {
+            const FilePath fp = Utils::FileUtils::getOpenFilePath(
+                Tr::tr("Add Context File"), {}, {}, nullptr, {}, false, true);
+            if (fp.isEmpty())
+                return;
             if (!m_manualContextFiles.contains(fp)) {
                 m_manualContextFiles.append(fp);
                 updateContextBar();
