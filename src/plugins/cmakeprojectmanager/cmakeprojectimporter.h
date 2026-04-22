@@ -7,8 +7,6 @@
 
 #include <utils/temporaryfile.h>
 
-#include <QtTaskTree/QSingleTaskTreeRunner>
-
 namespace CMakeProjectManager {
 
 class CMakeProject;
@@ -45,7 +43,6 @@ private:
 
     const CMakeProject *m_project;
     std::unique_ptr<Utils::TemporaryFilePath> m_presetsTempDir;
-    QtTaskTree::QSingleTaskTreeRunner m_taskTreeRunner;
 };
 
 #ifdef WITH_TESTS

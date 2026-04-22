@@ -1225,10 +1225,7 @@ void CMakeProjectImporter::createKitsFromPresets()
     // clang-format on
 
     // Need to wait here so that the Kits are created before ProjectManager::restoreSettings is called.
-    QEventLoop loop;
-    m_taskTreeRunner
-        .start(recipe, {}, [&](const QTaskTree &, DoneWith) { loop.quit(); }, CallDoneFlag::Always);
-    loop.exec();
+    QTaskTree::runBlocking(recipe);
 }
 
 static QMakeAndCMakePrefixPath qtInfoFromCMakeCache(const CMakeConfig &config,
