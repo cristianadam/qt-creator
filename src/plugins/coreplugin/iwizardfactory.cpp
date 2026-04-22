@@ -272,9 +272,10 @@ Wizard *IWizardFactory::runWizard(const FilePath &path, Id platform,
             connect(m_action, &QAction::triggered, wizard, [wizard] { ICore::raiseWindow(wizard); });
         connect(s_inspectWizardAction, &QAction::triggered,
                 wizard, [wizard] { wizard->showVariables(); });
-        connect(wizard, &Utils::Wizard::finished, this, [wizard](int result) {
+        connect(wizard, &Utils::Wizard::finished, this, [wizard, id = id()](int result) {
             if (result != QDialog::Accepted)
                 s_reopenData.clear();
+            emit ICore::instance()->wizardFinished(id, result == QDialog::Accepted);
             wizard->deleteLater();
         });
         connect(wizard, &QObject::destroyed, this, [] {

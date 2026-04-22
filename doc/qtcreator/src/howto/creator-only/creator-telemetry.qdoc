@@ -50,6 +50,7 @@
                 \li The compiler and debugger types and versions.
             \endlist
         \li The Qt examples that you opened.
+        \li The \QC wizards that you used.
     \endlist
 
     The code is available at \l{qt-creator/plugin-telemetry.git}.
