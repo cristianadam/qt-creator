@@ -163,13 +163,12 @@ QmakeProject::QmakeProject(const FilePath &fileName) :
     setCanBuildProducts();
     setHasMakeInstallEquivalent(true);
     setBuildSystemCreator<QmakeBuildSystem>();
+    setProjectImporter(new QmakeProjectImporter(projectFilePath()));
 }
 
 QmakeProject::~QmakeProject()
 {
-    delete m_projectImporter;
-    m_projectImporter = nullptr;
-
+    setProjectImporter(nullptr);
     // Make sure root node (and associated readers) are shut hown before proceeding
     setRootProjectNode(nullptr);
 }
@@ -1442,13 +1441,6 @@ FilePath QmakeBuildSystem::executableFor(const QmakeProFile *file)
             target = ti.target + extension;
     }
     return ti.destDir / target;
-}
-
-ProjectImporter *QmakeProject::projectImporter() const
-{
-    if (!m_projectImporter)
-        m_projectImporter = new QmakeProjectImporter(projectFilePath());
-    return m_projectImporter;
 }
 
 QmakeBuildSystem::AsyncUpdateState QmakeBuildSystem::asyncUpdateState() const

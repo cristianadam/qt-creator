@@ -39,16 +39,10 @@ class QbsProject : public ProjectExplorer::Project
 
 public:
     explicit QbsProject(const Utils::FilePath &filename);
-    ~QbsProject();
-
-    ProjectExplorer::ProjectImporter *projectImporter() const override;
 
     ProjectExplorer::DeploymentKnowledge deploymentKnowledge() const override;
 
     void configureAsExampleProject(ProjectExplorer::Kit *kit) final;
-
-private:
-    mutable ProjectExplorer::ProjectImporter *m_importer = nullptr;
 };
 
 class QbsBuildSystem final : public ProjectExplorer::BuildSystem

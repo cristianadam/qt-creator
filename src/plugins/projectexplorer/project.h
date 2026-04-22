@@ -155,7 +155,7 @@ public:
     bool supportsBuilding() const;
     virtual void configureAsExampleProject(ProjectExplorer::Kit *kit);
 
-    virtual ProjectImporter *projectImporter() const;
+    ProjectImporter *projectImporter() const;
 
     virtual DeploymentKnowledge deploymentKnowledge() const;
     bool hasMakeInstallEquivalent() const;
@@ -282,6 +282,8 @@ protected:
 
     [[deprecated("Use Project::setType()")]]
     void setId(Utils::Id id) { setType(id); }
+
+    void setProjectImporter(ProjectImporter *importer);
 
 private:
     void setBuildSystemName(const QString &name);

@@ -19,6 +19,7 @@
 #include "projectexplorerconstants.h"
 #include "projectexplorersettings.h"
 #include "projectexplorertr.h"
+#include "projectimporter.h"
 #include "projectmanager.h"
 #include "projectnodes.h"
 #include "projecttree.h"
@@ -206,6 +207,8 @@ public:
     Store m_extraData;
 
     QList<Store> m_vanishedTargets;
+
+    std::unique_ptr<ProjectImporter> m_projectImporter;
 };
 
 ProjectPrivate::~ProjectPrivate()
@@ -1359,7 +1362,12 @@ ProjectNode *Project::findNodeForBuildKey(const QString &buildKey) const
 
 ProjectImporter *Project::projectImporter() const
 {
-    return nullptr;
+    return d->m_projectImporter.get();
+}
+
+void Project::setProjectImporter(ProjectImporter *importer)
+{
+    d->m_projectImporter.reset(importer);
 }
 
 void Project::setCanBuildProducts()

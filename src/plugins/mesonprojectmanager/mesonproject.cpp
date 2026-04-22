@@ -32,17 +32,8 @@ public:
         setCanBuildProducts();
         setHasMakeInstallEquivalent(true);
         setBuildSystemCreator<MesonBuildSystem>();
+        setProjectImporter(new MesonProjectImporter(projectFilePath()));
     }
-
-    ProjectImporter *projectImporter() const final
-    {
-        if (m_projectImporter)
-            m_projectImporter = std::make_unique<MesonProjectImporter>(projectFilePath());
-        return m_projectImporter.get();
-    }
-
-private:
-    mutable std::unique_ptr<MesonProjectImporter> m_projectImporter;
 };
 
 void setupMesonProject()

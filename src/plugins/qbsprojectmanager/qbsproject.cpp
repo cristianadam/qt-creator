@@ -107,18 +107,7 @@ QbsProject::QbsProject(const FilePath &fileName)
     setCanBuildProducts();
     setDisplayName(fileName.completeBaseName());
     setBuildSystemCreator<QbsBuildSystem>();
-}
-
-QbsProject::~QbsProject()
-{
-    delete m_importer;
-}
-
-ProjectImporter *QbsProject::projectImporter() const
-{
-    if (!m_importer)
-        m_importer = new QbsProjectImporter(projectFilePath());
-    return m_importer;
+    setProjectImporter(new QbsProjectImporter(projectFilePath()));
 }
 
 void QbsProject::configureAsExampleProject(Kit *kit)

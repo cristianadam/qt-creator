@@ -20,11 +20,8 @@ class CMAKE_EXPORT CMakeProject final : public ProjectExplorer::Project
 
 public:
     explicit CMakeProject(const Utils::FilePath &filename, bool createPresetKits = true);
-    ~CMakeProject() final;
 
     ProjectExplorer::Tasks projectIssues(const ProjectExplorer::Kit *k) const final;
-
-    ProjectExplorer::ProjectImporter *projectImporter() const final;
 
     using IssueType = ProjectExplorer::Task::TaskType;
     void addIssue(IssueType type, const QString &text);
@@ -46,8 +43,6 @@ private:
                                          Internal::PresetsData &cmakeUserPresetsData);
     void setupBuildPresets(Internal::PresetsData &presetsData);
     void setupTestPresets(Internal::PresetsData &presetsData);
-
-    mutable Internal::CMakeProjectImporter *m_projectImporter = nullptr;
 
     ProjectExplorer::Tasks m_issues;
     Internal::PresetsData m_presetsData;

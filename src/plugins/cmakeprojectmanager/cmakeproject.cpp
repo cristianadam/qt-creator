@@ -79,13 +79,10 @@ CMakeProject::CMakeProject(const FilePath &fileName, bool createPresetKits)
     if (fileName.endsWith(Constants::CMAKE_CACHE_TXT))
         m_buildDirToImport = fileName.parentDir();
 
+    CMakeProjectImporter *importer = new CMakeProjectImporter(projectFilePath(), this);
+    setProjectImporter(importer);
     if (m_presetsData.havePresets && createPresetKits)
-        createKitsFromPresets();
-}
-
-CMakeProject::~CMakeProject()
-{
-    delete m_projectImporter;
+        importer->createKitsFromPresets();
 }
 
 Tasks CMakeProject::projectIssues(const Kit *k) const
@@ -107,13 +104,6 @@ Tasks CMakeProject::projectIssues(const Kit *k) const
 
     result.append(m_issues);
     return result;
-}
-
-ProjectImporter *CMakeProject::projectImporter() const
-{
-    if (!m_projectImporter)
-        m_projectImporter = new CMakeProjectImporter(projectFilePath(), this);
-    return m_projectImporter;
 }
 
 void CMakeProject::addIssue(IssueType type, const QString &text)

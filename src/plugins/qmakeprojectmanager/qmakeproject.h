@@ -45,15 +45,11 @@ public:
 
     void configureAsExampleProject(ProjectExplorer::Kit *kit) final;
 
-    ProjectExplorer::ProjectImporter *projectImporter() const final;
-
 protected:
     RestoreResult fromMap(const Utils::Store &map, QString *errorMessage) final;
 
 private:
     ProjectExplorer::DeploymentKnowledge deploymentKnowledge() const override;
-
-    mutable ProjectExplorer::ProjectImporter *m_projectImporter = nullptr;
 };
 
 class QmakeBuildSystem final : public ProjectExplorer::BuildSystem
