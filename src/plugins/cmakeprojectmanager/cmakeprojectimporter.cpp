@@ -14,6 +14,7 @@
 
 #include <android/androidconstants.h>
 #include <coreplugin/messagemanager.h>
+#include <coreplugin/progressmanager/taskprogress.h>
 #include <debugger/debuggeritem.h>
 #include <debugger/debuggeritemmanager.h>
 #include <debugger/debuggerkitaspect.h>
@@ -1225,7 +1226,13 @@ void CMakeProjectImporter::createKitsFromPresets()
     // clang-format on
 
     // Need to wait here so that the Kits are created before ProjectManager::restoreSettings is called.
-    QTaskTree::runBlocking(recipe);
+    QTaskTree taskTree(recipe);
+
+    auto progress = new Core::TaskProgress(&taskTree);
+    progress->setDisplayName(Tr::tr("Creating CMakePresets Kits"));
+    progress->setId(Constants::PRESETS_KITS_PROGRESS);
+
+    taskTree.runBlocking();
 }
 
 static QMakeAndCMakePrefixPath qtInfoFromCMakeCache(const CMakeConfig &config,
