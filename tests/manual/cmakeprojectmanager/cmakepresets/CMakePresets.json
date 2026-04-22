@@ -20,7 +20,14 @@
         "type": "equals",
         "lhs": "${hostSystemName}",
         "rhs": "Linux"
-      }
+      },
+      "vendor": {
+          "qt.io/QtCreator/1.0": {
+              "runEnvironment": {
+                  "HOME_VARIABLE_WITH_HEART": "$env{HOME}/❤️"
+              }
+          }
+        }
     },
     {
       "name": "macos-clang",
@@ -33,7 +40,14 @@
         "type": "equals",
         "lhs": "${hostSystemName}",
         "rhs": "Darwin"
-      }
+      },
+      "vendor": {
+          "qt.io/QtCreator/1.0": {
+              "runEnvironment": {
+                  "HOME_VARIABLE_WITH_HEART": "$env{HOME}/❤️"
+              }
+          }
+        }
     }
   ]
 }

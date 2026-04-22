@@ -24,6 +24,7 @@
 #include <projectexplorer/buildpropertiessettings.h>
 #include <projectexplorer/devicesupport/devicekitaspects.h>
 #include <projectexplorer/devicesupport/idevice.h>
+#include <projectexplorer/environmentkitaspect.h>
 #include <projectexplorer/gcctoolchain.h>
 #include <projectexplorer/kitmanager.h>
 #include <projectexplorer/projectexplorerconstants.h>
@@ -1082,6 +1083,36 @@ static SetupResult setupQMakeProcess(
     return SetupResult::Continue;
 }
 
+static void applyRunEnvironmentToKit(
+    const PresetsDetails::ConfigurePreset &preset, Kit *kit, const FilePath &projectDir)
+{
+    if (!preset.vendor)
+        return;
+
+    const QVariantMap runEnvMap = preset.vendor->value("runEnvironment").toMap();
+    if (runEnvMap.isEmpty())
+        return;
+
+    // Treat the "runEnvironment" as the normal Presets "environment"
+    EnvironmentItems items;
+    for (auto it = runEnvMap.constBegin(); it != runEnvMap.constEnd(); ++it)
+        items.append({it.key(), it.value().toString()});
+
+    PresetsDetails::ConfigurePreset runPreset(preset);
+    runPreset.environment = Environment();
+    runPreset.environment->modify(items);
+
+    Environment env = projectDir.deviceEnvironment();
+
+    // Expand any macros present
+    items.clear();
+    CMakePresets::Macros::expand(runPreset, items, projectDir);
+
+    EnvironmentChanges changes;
+    changes.setItemsFromUser(items);
+    EnvironmentKitAspect::setRunEnvChanges(kit, changes);
+}
+
 void CMakeProjectImporter::createKitsFromPresets()
 {
     const ListIterator iterator(presetCandidates());
@@ -1196,7 +1227,7 @@ void CMakeProjectImporter::createKitsFromPresets()
 
         Kit *kit = KitManager::kit(kitId);
         if (!kit || !kit->isValid()) {
-            KitManager::registerKit(
+            kit = KitManager::registerKit(
                 [this, data, buildInfos](Kit *kit) {
                     KitGuard kitGuard(kit);
 
@@ -1208,6 +1239,7 @@ void CMakeProjectImporter::createKitsFromPresets()
                     kit->fix();
                 },
                 kitId);
+            applyRunEnvironmentToKit(configurePreset, kit, projectDirectory());
         }
     };
 
