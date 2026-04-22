@@ -774,11 +774,6 @@ FilePath RunControl::targetFilePath() const
     return d->data.buildTargetInfo.targetFilePath;
 }
 
-FilePath RunControl::projectFilePath() const
-{
-    return d->data.buildTargetInfo.projectFilePath;
-}
-
 /*!
     A handle to the application process.
 

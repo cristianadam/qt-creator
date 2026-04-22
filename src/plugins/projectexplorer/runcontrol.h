@@ -190,7 +190,6 @@ public:
     Utils::Store settingsData(Utils::Id id) const;
 
     Utils::FilePath targetFilePath() const;
-    Utils::FilePath projectFilePath() const;
 
     void setupFormatter(Utils::OutputFormatter *formatter) const;
     Utils::Id runMode() const;
