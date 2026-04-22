@@ -116,7 +116,7 @@ void AutotestUnitTests::testCodeParser()
     QFETCH(int, expectedDataTagsCount);
 
     CppEditor::Tests::ProjectOpenerAndCloser projectManager;
-    QVERIFY(projectManager.open(projectFilePath, true, m_kit));
+    QVERIFY(projectManager.open(projectFilePath, m_kit));
 
     QSignalSpy parserSpy(m_model->parser(), &TestCodeParser::parsingFinished);
     QSignalSpy modelUpdateSpy(m_model, &TestTreeModel::sweepingDone);
@@ -166,7 +166,7 @@ void AutotestUnitTests::testCodeParserSwitchStartup()
     CppEditor::Tests::ProjectOpenerAndCloser projectManager;
     for (int i = 0; i < projectFilePaths.size(); ++i) {
         qDebug() << "Opening project" << projectFilePaths.at(i);
-        QVERIFY(projectManager.open(projectFilePaths.at(i), true, m_kit));
+        QVERIFY(projectManager.open(projectFilePaths.at(i), m_kit));
 
         QSignalSpy parserSpy(m_model->parser(), &TestCodeParser::parsingFinished);
         QSignalSpy modelUpdateSpy(m_model, &TestTreeModel::sweepingDone);
@@ -226,7 +226,7 @@ void AutotestUnitTests::testCodeParserGTest()
 
     QFETCH(FilePath, projectFilePath);
     CppEditor::Tests::ProjectOpenerAndCloser projectManager;
-    QVERIFY(projectManager.open(projectFilePath, true, m_kit));
+    QVERIFY(projectManager.open(projectFilePath, m_kit));
 
     QSignalSpy parserSpy(m_model->parser(), &TestCodeParser::parsingFinished);
     QSignalSpy modelUpdateSpy(m_model, &TestTreeModel::sweepingDone);
@@ -276,7 +276,7 @@ void AutotestUnitTests::testCodeParserBoostTest()
     QFETCH(QString, extension);
     CppEditor::Tests::ProjectOpenerAndCloser projectManager;
     const CppEditor::ProjectInfo::ConstPtr projectInfo
-            = projectManager.open(projectFilePath, true, m_kit);
+            = projectManager.open(projectFilePath, m_kit);
     QVERIFY(projectInfo);
 
     QSignalSpy parserSpy(m_model->parser(), &TestCodeParser::parsingFinished);

@@ -166,9 +166,7 @@ public:
     ~ProjectOpenerAndCloser(); // Closes opened projects
 
     ProjectInfo::ConstPtr open(
-            const Utils::FilePath &projectFile,
-            bool configureAsExampleProject = false,
-            ProjectExplorer::Kit *kit = nullptr);
+        const Utils::FilePath &projectFile, ProjectExplorer::Kit *kit = nullptr);
 
     QList<ProjectExplorer::Project *> projects() const { return m_openProjects; };
 

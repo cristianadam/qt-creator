@@ -418,8 +418,7 @@ ProjectOpenerAndCloser::~ProjectOpenerAndCloser()
     QObject::disconnect(connection);
 }
 
-ProjectInfo::ConstPtr ProjectOpenerAndCloser::open(const FilePath &projectFile,
-        bool configureAsExampleProject, Kit *kit)
+ProjectInfo::ConstPtr ProjectOpenerAndCloser::open(const FilePath &projectFile, Kit *kit)
 {
     OpenProjectResult result = ProjectExplorerPlugin::openProject(projectFile);
     if (!result) {
@@ -428,8 +427,7 @@ ProjectInfo::ConstPtr ProjectOpenerAndCloser::open(const FilePath &projectFile,
     }
 
     Project *project = result.project();
-    if (configureAsExampleProject)
-        project->configureAsExampleProject(kit);
+    project->configureAsExampleProject(kit);
 
     if (TestCase::waitUntilProjectIsFullyOpened(project)) {
         m_openProjects.append(project);

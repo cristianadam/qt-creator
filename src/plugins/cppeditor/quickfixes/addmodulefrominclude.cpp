@@ -100,7 +100,7 @@ private slots:
             ":/cppeditor/testcases/add-module-from-include");
         SourceFilesRefreshGuard refreshGuard;
         ProjectOpenerAndCloser projectMgr;
-        QVERIFY(projectMgr.open(projectDir->absolutePath("add-module-from-include.pro"), true, kit));
+        QVERIFY(projectMgr.open(projectDir->absolutePath("add-module-from-include.pro"), kit));
         QVERIFY(refreshGuard.wait());
 
         // Open source file and locate the include directive.

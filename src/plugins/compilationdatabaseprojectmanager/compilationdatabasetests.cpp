@@ -59,7 +59,7 @@ void CompilationDatabaseTests::testProject()
     QFETCH(FilePath, projectFilePath);
 
     CppEditor::Tests::ProjectOpenerAndCloser projectManager;
-    const CppEditor::ProjectInfo::ConstPtr projectInfo = projectManager.open(projectFilePath, true);
+    const CppEditor::ProjectInfo::ConstPtr projectInfo = projectManager.open(projectFilePath);
     QVERIFY(projectInfo);
 
     QVector<CppEditor::ProjectPart::ConstPtr> projectParts = projectInfo->projectParts();

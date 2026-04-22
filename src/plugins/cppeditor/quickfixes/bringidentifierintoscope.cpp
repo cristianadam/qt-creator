@@ -1554,7 +1554,7 @@ private slots:
             ":/cppeditor/testcases/bring-identifier-into-scope/add-qt-dependency");
         SourceFilesRefreshGuard refreshGuard;
         ProjectOpenerAndCloser projectMgr;
-        QVERIFY(projectMgr.open(projectDir->absolutePath("add-qt-dependency.pro"), true, kit));
+        QVERIFY(projectMgr.open(projectDir->absolutePath("add-qt-dependency.pro"), kit));
         QVERIFY(refreshGuard.wait());
 
         // Open source file and locate the use of Qt class.

@@ -266,7 +266,7 @@ private slots:
             ":/cppeditor/testcases/reorder-member-impls/" + projectName);
         SourceFilesRefreshGuard refreshGuard;
         ProjectOpenerAndCloser projectMgr;
-        QVERIFY(projectMgr.open(projectDir->absolutePath(projectName + ".pro"), true, kit));
+        QVERIFY(projectMgr.open(projectDir->absolutePath(projectName + ".pro"), kit));
         QVERIFY(refreshGuard.wait());
 
         // Open header file and locate class.

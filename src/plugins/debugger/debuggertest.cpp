@@ -91,7 +91,7 @@ void DebuggerUnitTests::testStateMachine()
     FilePath proFile = m_tmpDir->absolutePath("simple/simple.pro");
 
     CppEditor::Tests::ProjectOpenerAndCloser projectManager;
-    QVERIFY(projectManager.open(proFile, true));
+    QVERIFY(projectManager.open(proFile));
 
     QEventLoop loop;
     connect(BuildManager::instance(), &BuildManager::buildQueueFinished,

@@ -571,7 +571,7 @@ void ModelManagerTest::testExtraeditorsupportUiFiles()
     const FilePath projectFile = temporaryDir.absolutePath("testdata_guiproject1.pro");
 
     ProjectOpenerAndCloser projects;
-    QVERIFY(projects.open(projectFile, /*configureAsExampleProject=*/ true));
+    QVERIFY(projects.open(projectFile));
 
     // Check working copy.
     // A GeneratedFileSupport object should have been added for the ui_* file.
@@ -983,7 +983,7 @@ void ModelManagerTest::testRenameIncludes()
     const FilePath projectFile = projectDir.pathAppended(projectDir.fileName() + ".pro");
     SourceFilesRefreshGuard refreshGuard;
     ProjectOpenerAndCloser projectMgr;
-    const ProjectInfo::ConstPtr projectInfo = projectMgr.open(projectFile, true, kit);
+    const ProjectInfo::ConstPtr projectInfo = projectMgr.open(projectFile, kit);
     QVERIFY(projectInfo);
     QVERIFY(refreshGuard.wait());
 
@@ -1058,7 +1058,7 @@ void ModelManagerTest::testMoveIncludingSources()
     SourceFilesRefreshGuard refreshGuard;
     const FilePath projectFile = projectDir.pathAppended(projectDir.fileName() + ".pro");
     ProjectOpenerAndCloser projectMgr;
-    QVERIFY(projectMgr.open(projectFile, true, kit));
+    QVERIFY(projectMgr.open(projectFile, kit));
     QVERIFY(refreshGuard.wait());
 
     // Verify initial code model state.
@@ -1443,12 +1443,12 @@ void ModelManagerTest::testOptionalIndexing()
     const FilePath p1ProjectFile = projectDir.pathAppended("lib1.pro");
     auto projectMgr = std::make_unique<ProjectOpenerAndCloser>();
     SourceFilesRefreshGuard refreshGuard;
-    QVERIFY(projectMgr->open(p1ProjectFile, true, kit));
+    QVERIFY(projectMgr->open(p1ProjectFile, kit));
     QVERIFY(refreshGuard.wait());
     refreshGuard.expect(1);
     Project *p1 = projectMgr->projects().first();
     const FilePath p2ProjectFile = projectDir.pathAppended("lib2.pro");
-    QVERIFY(projectMgr->open(p2ProjectFile, true, kit));
+    QVERIFY(projectMgr->open(p2ProjectFile, kit));
     QVERIFY(refreshGuard.wait());
     refreshGuard.expect(1);
     Project *p2 = projectMgr->projects().last();
@@ -1482,14 +1482,14 @@ void ModelManagerTest::testOptionalIndexing()
     projectMgr.reset(nullptr);
     projectMgr.reset(new ProjectOpenerAndCloser);
     refreshGuard.expect(1);
-    QVERIFY(projectMgr->open(p1ProjectFile, true, kit));
+    QVERIFY(projectMgr->open(p1ProjectFile, kit));
     p1 = projectMgr->projects().first();
     QCOMPARE(
         CppCodeModelSettings::settingsForProject(p1).enableIndexing,
         enableForP1 ? *enableForP1 : enableGlobally);
     QVERIFY(refreshGuard.wait());
     refreshGuard.expect(1);
-    QVERIFY(projectMgr->open(p2ProjectFile, true, kit));
+    QVERIFY(projectMgr->open(p2ProjectFile, kit));
     p2 = projectMgr->projects().last();
     QCOMPARE(
         CppCodeModelSettings::settingsForProject(p2).enableIndexing,

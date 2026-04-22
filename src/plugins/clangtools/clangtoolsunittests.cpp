@@ -103,7 +103,7 @@ void ClangToolsUnitTests::testProject()
 
     // Open project
     Tests::ProjectOpenerAndCloser projectManager;
-    QVERIFY(projectManager.open(projectFilePath, true, m_kit));
+    QVERIFY(projectManager.open(projectFilePath, m_kit));
 
     // Run tools
     for (ClangTool * const tool : {ClangTidyTool::instance(), ClazyTool::instance()}) {
