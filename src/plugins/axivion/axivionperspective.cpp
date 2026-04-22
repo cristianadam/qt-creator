@@ -109,6 +109,7 @@ struct LinkWithColumns
 
 static bool issueListContextMenuEvent(const ItemViewEvent &ev); // impl at bottom
 static bool progressListContextMenuEvent(const ItemViewEvent &ev); // impl at bottom
+static bool progressListActivate(const FilePath &filePath, const QString &projectName); // impl at bottom
 static void resetFocusToIssuesTable(); // impl at bottom
 
 /**
@@ -1482,6 +1483,8 @@ bool ProgressItem::setData(int column, const QVariant &data, int role)
         if (ev.as<QContextMenuEvent>())
             return progressListContextMenuEvent(ev);
     }
+    if (role == BaseTreeView::ItemActivatedRole)
+        return progressListActivate(m_data.filePath, m_data.projectName);
 
     return TreeItem::setData(column, data, role);
 }
@@ -1762,6 +1765,7 @@ public:
     void updateSfaStateFor(const FilePath &fileName, const QString &state, int percent);
     void appendConsoleOutput(const QString &console, const QString &output, OutputFormat f);
     void resetConsole(const QString &console);
+    void openConsoleWith(const QString &console);
 
     void leaveOrEnterDashboardMode(bool byLocalBuildButton);
     bool currentIssueHasValidPathMapping() const;
@@ -1973,13 +1977,7 @@ bool AxivionPerspective::handleProgressContextMenu(const ItemViewEvent &e)
     action = new QAction(Tr::tr("See Build Output..."), menu);
     const QString console = ConsoleWidget::consoleName(file, project);
     QObject::connect(action, &QAction::triggered, menu, [this, console] {
-        m_consoleWidget->selectConsole(console);
-        Command *cmd = ActionManager::command("Dock.AxivionAnalysisOutput");
-        QTC_ASSERT(cmd, return);
-        if (cmd->action() && !cmd->action()->isChecked())
-            cmd->action()->trigger();
-        if (auto dockWidget = qobject_cast<QDockWidget *>(m_consoleWidget->parentWidget()))
-            dockWidget->raise();
+        openConsoleWith(console);
     });
     menu->addAction(action);
 
@@ -2057,6 +2055,17 @@ void AxivionPerspective::appendConsoleOutput(const QString &console, const QStri
 void AxivionPerspective::resetConsole(const QString &console)
 {
     m_consoleWidget->resetConsole(console);
+}
+
+void AxivionPerspective::openConsoleWith(const QString &console)
+{
+    m_consoleWidget->selectConsole(console);
+    Command *cmd = ActionManager::command("Dock.AxivionAnalysisOutput");
+    QTC_ASSERT(cmd, return);
+    if (cmd->action() && !cmd->action()->isChecked())
+        cmd->action()->trigger();
+    if (auto dockWidget = qobject_cast<QDockWidget *>(m_consoleWidget->parentWidget()))
+        dockWidget->raise();
 }
 
 void AxivionPerspective::leaveOrEnterDashboardMode(bool byLocalBuildButton)
@@ -2137,6 +2146,14 @@ static bool progressListContextMenuEvent(const ItemViewEvent &ev)
 {
     QTC_ASSERT(axivionPerspective(), return false);
     return axivionPerspective()->handleProgressContextMenu(ev);
+}
+
+static bool progressListActivate(const FilePath &filePath, const QString &projectName)
+{
+    QTC_ASSERT(axivionPerspective(), return false);
+    const QString console = ConsoleWidget::consoleName(filePath, projectName);
+    axivionPerspective()->openConsoleWith(console);
+    return true;
 }
 
 static void resetFocusToIssuesTable()
