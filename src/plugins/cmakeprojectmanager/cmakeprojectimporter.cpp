@@ -293,11 +293,6 @@ static QString fileNameToPresetName(const QString &fileName)
     return name;
 }
 
-static QString displayPresetName(const QString &presetName)
-{
-    return QString("%1 (CMake preset)").arg(presetName);
-}
-
 static FilePaths findBuildFolders(const FilePath &path, const QList<QStringView> &patterns)
 {
     FilePaths result;
@@ -838,10 +833,7 @@ void CMakeProjectImporter::createKitsFromPresets()
         env = projectDirectory().deviceEnvironment();
         CMakePresets::Macros::expand(configurePreset, env, projectDirectory());
 
-        if (configurePreset.displayName)
-            data.cmakePresetDisplayname = configurePreset.displayName.value();
-        else
-            data.cmakePresetDisplayname = configurePreset.name;
+        data.cmakePresetDisplayname = configurePreset.displayName.value_or(configurePreset.name);
         data.cmakePreset = configurePreset.name;
 
         if (!configurePreset.cmakeExecutable) {
@@ -1589,7 +1581,8 @@ void CMakeProjectImporter::applyDirectoryDataToKit(const DirectoryData &data, Pr
     }
 
     if (!data.cmakePresetDisplayname.isEmpty()) {
-        k->setUnexpandedDisplayName(displayPresetName(data.cmakePresetDisplayname));
+        k->setUnexpandedDisplayName(
+            QString("%1: %2").arg(m_project->displayName()).arg(data.cmakePresetDisplayname));
 
         CMakeConfigurationKitAspect::setCMakePreset(k, data.cmakePreset);
     }
