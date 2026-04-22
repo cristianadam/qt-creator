@@ -389,7 +389,7 @@ public:
 private:
     void onDirty();
     void setFocusToName();
-    void load(Kit *originalKit, const KitData &workingCopySrc);
+    void load(Kit *originalKit, const KitData &workingCopySrc, int row = -1);
 
     void updateVisibility();
     QString validityMessage() const;
@@ -524,7 +524,7 @@ KitOptionsPageWidget::KitOptionsPageWidget()
         const int currentRow = m_groupedView.currentRow();
         if (row == currentRow && currentRow >= 0) {
             const KitDataWrapper d = m_model.item(currentRow);
-            load(d.kit, d.workingCopy);
+            load(d.kit, d.workingCopy, currentRow);
         }
         updateState();
     });
@@ -595,8 +595,8 @@ void KitOptionsPageWidget::kitSelectionChanged(int oldRow, int newRow)
     }
 
     if (newRow >= 0) {
-        const KitDataWrapper d = m_model.item(newRow);
-        load(d.kit, d.workingCopy);
+        const KitDataWrapper prevData = m_model.item(newRow);
+        load(prevData.kit, prevData.workingCopy, newRow);
         m_detailWidget.setVisible(true);
         m_groupedView.scrollToRow(newRow);
     } else {
@@ -686,7 +686,7 @@ void KitOptionsPageWidget::setFocusToName()
     m_nameEdit.setFocus();
 }
 
-void KitOptionsPageWidget::load(Kit *originalKit, const KitData &workingCopySrc)
+void KitOptionsPageWidget::load(Kit *originalKit, const KitData &workingCopySrc, int row)
 {
     m_kit = originalKit;
 
@@ -704,6 +704,18 @@ void KitOptionsPageWidget::load(Kit *originalKit, const KitData &workingCopySrc)
     m_fileSystemFriendlyNameLineEdit.setText(m_modifiedKit.customFileSystemFriendlyName());
 
     m_loading = false;
+
+    // KitAspect::refresh() may normalize invalid stored values as a side effect of reload().
+    // If the row had no prior user changes, update the committed baseline so the
+    // normalization doesn't register as a user edit.
+    if (row >= 0 && !m_model.isDirty(row)) {
+        const KitData normalizedData = m_modifiedKit.kitData();
+        if (normalizedData != workingCopySrc) {
+            KitDataWrapper item = m_model.item(row);
+            item.workingCopy = normalizedData;
+            m_model.resetItem(row, item);
+        }
+    }
 
     updateVisibility();
 
