@@ -1485,36 +1485,8 @@ bool CMakeProjectImporter::matchKit(void *directoryData, const Kit *k) const
         }
         return true;
     }();
-    const bool noCompilers = [k, data] {
-        const QList<Id> allLanguages = ToolchainManager::allLanguages();
-        for (const ToolchainDescriptionEx &tcd : std::as_const(data->toolchains)) {
-            if (!Utils::contains(allLanguages,
-                                 [&tcd](const Id &language) { return language == tcd.language; }))
-                continue;
-            Toolchain *tc = ToolchainKitAspect::toolchain(k, tcd.language);
-            if (tc && tc->matchesCompilerCommand(tcd.compilerPath)) {
-                return false;
-            }
-        }
-        return true;
-    }();
 
-    bool haveCMakePreset = false;
-    if (!data->cmakePreset.isEmpty()) {
-        const auto presetConfigItem = CMakeConfigurationKitAspect::cmakePresetConfigItem(k);
-
-        const QString presetName = presetConfigItem.expandedValue(k);
-        if (data->cmakePreset != presetName)
-            return false;
-
-        if (!k->unexpandedDisplayName().contains(displayPresetName(data->cmakePresetDisplayname)))
-            return false;
-
-        ensureBuildDirectory(*data, k);
-        haveCMakePreset = true;
-    }
-
-    if (!compilersMatch && !(haveCMakePreset && noCompilers))
+    if (!compilersMatch)
         return false;
 
     qCDebug(cmInputLog) << k->displayName()
