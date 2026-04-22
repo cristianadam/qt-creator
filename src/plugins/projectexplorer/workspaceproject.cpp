@@ -164,7 +164,7 @@ void WorkspaceBuildSystem::reparse(bool force)
         bti.displayName = name;
         bti.displayNameUniquifier = QString(" (%1)").arg(i);
         bti.targetFilePath = executable;
-        bti.projectFilePath = projectPath;
+        bti.projectFilePath = project->projectFilePath();
         bti.workingDirectory = workingDirectory;
         bti.additionalData = QVariantMap{{"arguments", arguments}};
         bti.usesTerminal = targetObject["useTerminal"].toBool(false);
