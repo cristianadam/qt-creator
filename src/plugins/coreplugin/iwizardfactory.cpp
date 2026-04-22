@@ -120,14 +120,14 @@ using namespace Core;
 using namespace Utils;
 
 namespace {
-static QList<IFeatureProvider *> s_providerList;
+QList<IFeatureProvider *> s_providerList;
 QList<IWizardFactory *> s_allFactories;
 QList<IWizardFactory::FactoryCreator> s_factoryCreators;
 QAction *s_inspectWizardAction = nullptr;
 bool s_areFactoriesLoaded = false;
 bool s_isWizardRunning = false;
 QWidget *s_currentWizard = nullptr;
-static QSet<Id> s_plugins;
+QSet<Id> s_plugins;
 
 // NewItemDialog reopening data:
 class NewItemDialogData
@@ -264,7 +264,6 @@ Wizard *IWizardFactory::runWizard(const FilePath &path, Id platform,
     ICore::updateNewItemDialogState();
 
     Wizard *wizard = runWizardImpl(path, platform, variables, showWizard);
-
 
     if (wizard) {
         s_currentWizard = wizard;
@@ -448,6 +447,7 @@ static QIcon iconWithText(const QIcon &icon, const QString &text)
     if (icon.isNull()) {
         static const QIcon fallBack =
                 IWizardFactory::themedIcon(":/utils/images/wizardicon-file.png");
+        QTC_ASSERT(!fallBack.isNull(), return {});
         return iconWithText(fallBack, text);
     }
 
