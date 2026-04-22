@@ -892,11 +892,11 @@ void setupGuiModule()
             sol::base_classes,
             sol::bases<Widget, Object>());
 
-        gui.new_usertype<Layouting::IconDisplay>(
+        gui.new_usertype<QtcWidgets::IconDisplay>(
             "IconDisplay",
             sol::call_constructor,
             sol::factories([guard](const sol::table &children) {
-                return constructWidgetType<Layouting::IconDisplay>(children, guard);
+                return constructWidgetType<QtcWidgets::IconDisplay>(children, guard);
             }),
             sol::base_classes,
             sol::bases<Widget, Object>());

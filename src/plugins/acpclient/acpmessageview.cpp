@@ -13,12 +13,12 @@
 #include <coreplugin/find/ifindsupport.h>
 
 #include <utils/algorithm.h>
-#include <utils/qtcassert.h>
-#include <utils/utilsicons.h>
 #include <utils/markdownbrowser.h>
+#include <utils/qtcassert.h>
+#include <utils/qtcwidgets.h>
 #include <utils/stylehelper.h>
-#include <utils/icondisplay.h>
 #include <utils/theme/theme.h>
+#include <utils/utilsicons.h>
 
 #include <limits>
 
@@ -368,7 +368,7 @@ public:
         summaryRow->setContentsMargins(0, 0, 0, 0);
         summaryRow->setSpacing(GapHXs);
 
-        m_summaryIcon = new Utils::IconDisplay(this);
+        m_summaryIcon = new Utils::QtcIconDisplay(this);
         summaryRow->addWidget(m_summaryIcon);
 
         m_summaryLabel = new QLabel(this);
@@ -487,7 +487,7 @@ public:
 private:
     enum StatusIndex { Completed, InProgress, Failed, Pending, StatusCount };
 
-    Utils::IconDisplay *m_summaryIcon = nullptr;
+    Utils::QtcIconDisplay *m_summaryIcon = nullptr;
     QLabel *m_summaryLabel = nullptr;
     QWidget *m_statusIcons[StatusCount] = {};
     QLabel *m_statusLabels[StatusCount] = {};
@@ -572,7 +572,7 @@ public:
         setFrameShape(QFrame::NoFrame);
         setCollapsible(false);
 
-        m_iconDisplay = new Utils::IconDisplay(this);
+        m_iconDisplay = new Utils::QtcIconDisplay(this);
         m_iconDisplay->setIcon(Utils::Icons::WARNING);
         m_headerLayout->addWidget(m_iconDisplay);
 
@@ -648,7 +648,7 @@ protected:
     }
 
 private:
-    Utils::IconDisplay *m_iconDisplay = nullptr;
+    Utils::QtcIconDisplay *m_iconDisplay = nullptr;
     QHBoxLayout *m_buttonLayout = nullptr;
     QLabel *m_statusLabel = nullptr;
     QList<QPushButton *> m_buttons;
@@ -1276,7 +1276,7 @@ void AcpMessageView::addErrorMessage(const QString &text)
     widget->setFrameShape(QFrame::NoFrame);
     widget->setCollapsible(false);
 
-    auto *icon = new Utils::IconDisplay(widget);
+    auto *icon = new Utils::QtcIconDisplay(widget);
     icon->setIcon(Utils::Icons::CRITICAL);
     widget->headerLayout()->addWidget(icon);
 

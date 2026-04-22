@@ -202,6 +202,27 @@ private:
     QVariantAnimation *m_animation;
 };
 
+class Icon;
+class IconDisplayPrivate;
+
+class QTCREATOR_UTILS_EXPORT QtcIconDisplay : public QWidget
+{
+    Q_OBJECT
+public:
+    QtcIconDisplay(QWidget *parent = nullptr);
+    ~QtcIconDisplay() override;
+
+    void setIcon(const Utils::Icon &);
+
+    void paintEvent(QPaintEvent *event) override;
+    QSize sizeHint() const override;
+
+private:
+    friend class IconDisplayPrivates;
+
+    std::unique_ptr<IconDisplayPrivate> d;
+};
+
 namespace QtcWidgets {
 
 class QTCREATOR_UTILS_EXPORT Label : public Layouting::Widget
@@ -288,6 +309,16 @@ public:
 
     void setUrl(const QString &url);
     void setRadius(int radius);
+};
+
+class QTCREATOR_UTILS_EXPORT IconDisplay : public Layouting::Widget
+{
+public:
+    using Implementation = QtcIconDisplay;
+    using I = Building::BuilderItem<IconDisplay>;
+
+    IconDisplay(std::initializer_list<I> ps);
+    void setIcon(const Icon &icon);
 };
 
 } // namespace QtcWidgets

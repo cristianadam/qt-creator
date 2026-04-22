@@ -10,7 +10,6 @@
 #include "guiutils.h"
 #include "hostosinfo.h"
 #include "icon.h"
-#include "icondisplay.h"
 #include "markdownbrowser.h"
 #include "qtcassert.h"
 #include "spinner/spinner.h"
@@ -1723,17 +1722,6 @@ void Spinner::setRunning(bool running)
 void Spinner::setDecorated(bool on)
 {
     access(this)->setDecorated(on);
-}
-
-IconDisplay::IconDisplay(std::initializer_list<I> ps)
-{
-    ptr = new Implementation;
-    apply(this, ps);
-}
-
-void IconDisplay::setIcon(const Utils::Icon &icon)
-{
-    access(this)->setIcon(icon);
 }
 
 void destroyLayout(QLayout *layout)

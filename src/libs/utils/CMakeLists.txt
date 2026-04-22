@@ -90,7 +90,6 @@ add_qtc_library(Utils
     hostosinfo.cpp hostosinfo.h
     htmldocextractor.cpp htmldocextractor.h
     icon.cpp icon.h
-    icondisplay.h icondisplay.cpp
     id.cpp id.h
     indexedcontainerproxyconstiterator.h
     infobar.cpp infobar.h

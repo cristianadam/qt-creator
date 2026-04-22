@@ -22,6 +22,7 @@
 #include <utils/layoutbuilder.h>
 #include <utils/mathutils.h>
 #include <utils/qtcassert.h>
+#include <utils/qtcwidgets.h>
 #include <utils/stylehelper.h>
 #include <utils/theme/theme.h>
 #include <utils/utilsicons.h>
@@ -234,7 +235,7 @@ InfoWidget::InfoWidget(const InfoBarEntry &info, QPointer<InfoBar> infoBar)
     Column {
         Row {
             Column {
-                Layouting::IconDisplay { icon(InfoBarEntry::icon(infoType)) },
+                QtcWidgets::IconDisplay { icon(InfoBarEntry::icon(infoType)) },
                 st,
                 customMargins(0, 0, StyleHelper::SpacingTokens::PaddingHXxs, 0),
             },

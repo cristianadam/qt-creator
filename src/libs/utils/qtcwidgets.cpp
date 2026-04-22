@@ -983,6 +983,59 @@ void QtcPageIndicator::paintEvent(QPaintEvent *event)
         update();
 }
 
+
+class IconDisplayPrivate
+{
+public:
+    QIcon m_icon;
+};
+
+QtcIconDisplay::QtcIconDisplay(QWidget *parent)
+    : QWidget(parent)
+    , d(std::make_unique<IconDisplayPrivate>())
+{
+    setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+}
+
+QtcIconDisplay::~QtcIconDisplay() = default;
+
+void QtcIconDisplay::paintEvent(QPaintEvent *event)
+{
+    Q_UNUSED(event)
+
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+
+    qreal dpr = devicePixelRatio();
+    QSize actualSize = size();
+    auto px = d->m_icon.pixmap(actualSize, dpr);
+    px.setDevicePixelRatio(dpr);
+
+    QRect r(QPoint(0, 0), actualSize);
+    r.moveCenter(rect().center());
+
+    painter.drawPixmap(r, px);
+}
+
+QSize QtcIconDisplay::sizeHint() const
+{
+    if (d->m_icon.isNull())
+        return {};
+
+    if (auto sizes = d->m_icon.availableSizes(); !sizes.isEmpty())
+        return sizes.first();
+
+    return {};
+}
+
+void QtcIconDisplay::setIcon(const Icon &icon)
+{
+    d->m_icon = icon.icon();
+    update();
+}
+
+
 namespace QtcWidgets {
 
 Button::Button()
@@ -1146,6 +1199,18 @@ void Image::setRadius(int radius)
 {
     Layouting::Tools::access(this)->setRadius(radius);
 }
+
+IconDisplay::IconDisplay(std::initializer_list<I> ps)
+{
+    ptr = new Implementation;
+    Layouting::Tools::apply(this, ps);
+}
+
+void IconDisplay::setIcon(const Utils::Icon &icon)
+{
+    Layouting::Tools::access(this)->setIcon(icon);
+}
+
 
 } // namespace QtcWidgets
 

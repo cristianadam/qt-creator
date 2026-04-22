@@ -180,8 +180,6 @@ QtcLibrary {
         "htmldocextractor.h",
         "icon.cpp",
         "icon.h",
-        "icondisplay.cpp",
-        "icondisplay.h",
         "id.cpp",
         "id.h",
         "indexedcontainerproxyconstiterator.h",

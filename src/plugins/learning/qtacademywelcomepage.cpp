@@ -340,7 +340,7 @@ static Grid createDetailWidget(const CourseItem *course)
                     fillBrush(Qt::gray),
                     Row {
                         customMargins(5, 0, 5, 0),
-                        Layouting::IconDisplay {
+                        QtcWidgets::IconDisplay {
                             icon(Utils::Icons::CLOCK_BLACK)
                         },
                         blackLabel(course->duration)

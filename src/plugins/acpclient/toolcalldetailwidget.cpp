@@ -5,10 +5,10 @@
 
 #include <coreplugin/editormanager/editormanager.h>
 
-#include <utils/icondisplay.h>
 #include <utils/link.h>
 #include <utils/markdownbrowser.h>
 #include <utils/progressindicator.h>
+#include <utils/qtcwidgets.h>
 #include <utils/stylehelper.h>
 #include <utils/theme/theme.h>
 #include <utils/utilsicons.h>
@@ -39,7 +39,7 @@ QWidget *toolCallStatusWidget(ToolCallStatus status, QWidget *parent)
     case ToolCallStatus::failed:    icon = Utils::Icons::CRITICAL; break;
     default: break;
     }
-    auto *display = new Utils::IconDisplay(parent);
+    auto *display = new Utils::QtcIconDisplay(parent);
     display->setIcon(icon);
     return display;
 }
