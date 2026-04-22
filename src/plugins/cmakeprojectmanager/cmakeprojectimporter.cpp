@@ -805,7 +805,7 @@ struct InternalStorage
     Environment env;
     FilePath qmakePath;
     QString cmakePrefixPath;
-    std::unique_ptr<TemporaryDirectory> qtcQMakeProbeDir;
+    FilePath qtcQMakeProbeDir;
 };
 
 static SetupResult setupCompilerProcess(Process &process, InternalStorage &storage,
@@ -961,7 +961,8 @@ static SetupResult setupCompilerProcess(Process &process, InternalStorage &stora
     return SetupResult::StopWithSuccess;
 }
 
-static SetupResult setupQMakeProcess(Process &process, InternalStorage &storage)
+static SetupResult setupQMakeProcess(
+    Process &process, InternalStorage &storage, const FilePath &presetPath)
 {
     DirectoryData &data = storage.directoryData;
     CMakeConfig &config = storage.config;
@@ -1021,10 +1022,11 @@ static SetupResult setupQMakeProcess(Process &process, InternalStorage &storage)
         return SetupResult::StopWithSuccess;
 
     // Run a CMake project that would do qmake probing
-    std::unique_ptr<TemporaryDirectory> &qtcQMakeProbeDir = storage.qtcQMakeProbeDir;
-    qtcQMakeProbeDir = std::make_unique<TemporaryDirectory>("qtc-cmake-qmake-probe-XXXXXXXX");
+    FilePath &qtcQMakeProbeDir = storage.qtcQMakeProbeDir;
+    qtcQMakeProbeDir = presetPath.pathAppended("qtc-cmake-qmake-probe");
+    qtcQMakeProbeDir.ensureWritableDir();
 
-    const FilePath cmakeListTxt(qtcQMakeProbeDir->filePath(Constants::CMAKE_LISTS_TXT));
+    const FilePath cmakeListTxt(qtcQMakeProbeDir.pathAppended(Constants::CMAKE_LISTS_TXT));
 
     cmakeListTxt.writeFileContents(s_qmakeProbeCMakeScript);
 
@@ -1046,9 +1048,9 @@ static SetupResult setupQMakeProcess(Process &process, InternalStorage &storage)
 
     QStringList args;
     args.push_back("-S");
-    args.push_back(qtcQMakeProbeDir->path().path());
+    args.push_back(qtcQMakeProbeDir.path());
     args.push_back("-B");
-    args.push_back(qtcQMakeProbeDir->filePath("build").path());
+    args.push_back(qtcQMakeProbeDir.pathAppended("build").path());
     if (!cmakeGenerator.isEmpty()) {
         args.push_back("-G");
         args.push_back(cmakeGenerator);
@@ -1110,20 +1112,20 @@ void CMakeProjectImporter::createKitsFromPresets()
         storage->config = config;
     };
 
-    const auto onQMakeSetup = [storage](Process &process) {
-        return setupQMakeProcess(process, *storage);
+    const auto onQMakeSetup = [iterator, storage](Process &process) {
+        return setupQMakeProcess(process, *storage, *iterator);
     };
 
-    const auto onQMakeDone = [iterator, storage] {
-        std::unique_ptr<TemporaryDirectory> &qtcQMakeProbeDir = storage->qtcQMakeProbeDir;
+    const auto onQMakeDone = [storage] {
+        FilePath &qtcQMakeProbeDir = storage->qtcQMakeProbeDir;
         FilePath &qmakeLocation = storage->qmakePath;
         QString &resultedPrefixPath = storage->cmakePrefixPath;
 
-        const FilePath qmakeLocationTxt = qtcQMakeProbeDir->filePath("qmake-location.txt");
+        const FilePath qmakeLocationTxt = qtcQMakeProbeDir.pathAppended("qmake-location.txt");
         qmakeLocation = FilePath::fromUtf8(qmakeLocationTxt.fileContents().value_or(QByteArray()));
         qCDebug(cmInputLog) << "qmake location: " << qmakeLocation.toUserOutput();
 
-        const FilePath prefixPathTxt = qtcQMakeProbeDir->filePath("cmake-prefix-path.txt");
+        const FilePath prefixPathTxt = qtcQMakeProbeDir.pathAppended("cmake-prefix-path.txt");
         resultedPrefixPath = QString::fromUtf8(prefixPathTxt.fileContents().value_or(QByteArray()));
         qCDebug(cmInputLog) << "PrefixPath [after qmake probe]: " << resultedPrefixPath;
     };
