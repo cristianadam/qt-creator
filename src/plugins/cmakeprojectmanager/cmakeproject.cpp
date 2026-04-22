@@ -56,7 +56,7 @@ static FilePath cmakeListTxtFromFilePath(const FilePath &filepath)
 /*!
   \class CMakeProject
 */
-CMakeProject::CMakeProject(const FilePath &fileName, bool createPresetKits)
+CMakeProject::CMakeProject(const FilePath &fileName)
     : Project(Utils::Constants::CMAKE_MIMETYPE, cmakeListTxtFromFilePath(fileName))
     , m_settings(this, true)
 {
@@ -81,7 +81,7 @@ CMakeProject::CMakeProject(const FilePath &fileName, bool createPresetKits)
 
     CMakeProjectImporter *importer = new CMakeProjectImporter(projectFilePath(), this);
     setProjectImporter(importer);
-    if (m_presetsData.havePresets && createPresetKits)
+    if (m_presetsData.havePresets)
         importer->createKitsFromPresets();
 }
 
@@ -524,7 +524,7 @@ private slots:
         QVERIFY(presetFiles.writeFileContents(content));
 
         // create a CMakeProject – this will automatically read & combine presets
-        CMakeProject project(presetFiles, false);
+        CMakeProject project(presetFiles);
         const PresetsData &pd = project.presetsData();
 
         // locate the child preset
@@ -807,7 +807,7 @@ private slots:
         QVERIFY(windowsPresets.writeFileContents(windows));
 
         // create a CMakeProject – this will automatically read & combine presets
-        CMakeProject project(presetsFiles, false);
+        CMakeProject project(presetsFiles);
         const PresetsData &pd = project.presetsData();
 
         // locate the loaded preset

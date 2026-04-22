@@ -19,7 +19,7 @@ class CMAKE_EXPORT CMakeProject final : public ProjectExplorer::Project
     Q_OBJECT
 
 public:
-    explicit CMakeProject(const Utils::FilePath &filename, bool createPresetKits = true);
+    explicit CMakeProject(const Utils::FilePath &filename);
 
     ProjectExplorer::Tasks projectIssues(const ProjectExplorer::Kit *k) const final;
 
