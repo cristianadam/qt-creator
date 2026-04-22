@@ -16,9 +16,8 @@ class Target;
 class Toolchain;
 
 // Documentation inside.
-class PROJECTEXPLORER_EXPORT ProjectImporter : public QObject
+class PROJECTEXPLORER_EXPORT ProjectImporter
 {
-    Q_OBJECT
 public:
     struct ToolchainData {
         QList<Toolchain *> tcs;
@@ -26,7 +25,7 @@ public:
     };
 
     ProjectImporter(const Utils::FilePath &path);
-    ~ProjectImporter() override;
+    virtual ~ProjectImporter();
 
     const Utils::FilePath projectFilePath() const { return m_projectPath; }
     const Utils::FilePath projectDirectory() const { return m_projectPath.parentDir(); }

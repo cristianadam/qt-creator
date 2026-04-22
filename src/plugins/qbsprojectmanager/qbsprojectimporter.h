@@ -9,8 +9,6 @@ namespace QbsProjectManager::Internal {
 
 class QbsProjectImporter final : public QtSupport::QtProjectImporter
 {
-    Q_OBJECT
-
 public:
     QbsProjectImporter(const Utils::FilePath &path);
 
