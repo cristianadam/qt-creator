@@ -118,8 +118,8 @@ private:
                 }
                 return ResultError(
                     Tr::tr("Failed starting Docker container. Exit code: %1, output: %2")
-                        .arg(eventProcess.exitCode())
-                        .arg(eventProcess.allOutput()));
+                        .arg(m_startProcess->exitCode())
+                        .arg(m_startProcess->allOutput()));
             }
             if (!eventProcess.stdOutLines().isEmpty()) {
                 break;
