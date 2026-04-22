@@ -88,6 +88,11 @@ public:
     TargetSetupWidget *widget(const Id kitId) const;
     TargetSetupWidget *widget(const Kit *k) const { return k ? widget(k->id()) : nullptr; }
 
+    ProjectImporter *importer() const
+    {
+        return project ? project->projectImporter() : nullptr;
+    }
+
     TargetSetupPage * const q;
     QObject *guard = new QObject{q};
     QWidget *centralWidget;
@@ -99,7 +104,6 @@ public:
     QCheckBox *hideUnsuitableKitsCheckBox;
 
     TasksGenerator tasksGenerator;
-    QPointer<ProjectImporter> importer;
     FilePath projectPath;
     Project *project = nullptr;
     QString defaultShadowBuildLocation;
@@ -174,7 +178,7 @@ void TargetSetupPagePrivate::setupWidgets(const QString &filterText)
     for (Kit *k : KitManager::sortedKits()) {
         if (!filterText.isEmpty() && !k->displayName().contains(filterText, Qt::CaseInsensitive))
             continue;
-        if (importer && !importer->filter(k))
+        if (importer() && !importer()->filter(k))
             continue;
         const auto widget = new TargetSetupWidget(k, projectPath);
         updateWidget(widget);
@@ -203,8 +207,8 @@ void TargetSetupPagePrivate::reset()
 
         removeWidget(w);
 
-        if (k && importer)
-             importer->removeProject(k);
+        if (k && importer())
+             importer()->removeProject(k);
     }
 
     allKitsCheckBox->setChecked(false);
@@ -231,15 +235,7 @@ void TargetSetupPage::setProjectAndPath(Project *project, const FilePath &path)
     }
 
     d->headerLabel->setVisible(!d->projectPath.isEmpty());
-}
-
-void TargetSetupPage::setProjectImporter(ProjectImporter *importer)
-{
-    if (importer == d->importer)
-        return;
-
-    d->importer = importer;
-    d->importWidget->setVisible(d->importer);
+    d->importWidget->setVisible(d->project ? bool(d->project->projectImporter()) : false);
 }
 
 bool TargetSetupPage::importLineEditHasFocus() const
@@ -249,10 +245,10 @@ bool TargetSetupPage::importLineEditHasFocus() const
 
 void TargetSetupPagePrivate::setupImports()
 {
-    if (!importer || projectPath.isEmpty())
+    if (!importer() || projectPath.isEmpty())
         return;
 
-    const FilePaths toImport = importer->importCandidates();
+    const FilePaths toImport = importer()->importCandidates();
     for (const FilePath &path : toImport)
         import(path, true);
 }
@@ -273,8 +269,8 @@ void TargetSetupPagePrivate::handleKitRemoval(Kit *k)
     if (isUpdating())
         return;
 
-    if (importer)
-        importer->cleanupKit(k);
+    if (importer())
+        importer()->cleanupKit(k);
 
     removeWidget(k);
     kitSelectionChanged();
@@ -286,8 +282,8 @@ void TargetSetupPagePrivate::handleKitUpdate(Kit *k)
     if (isUpdating())
         return;
 
-    if (importer)
-        importer->makePersistent(k);
+    if (importer())
+        importer()->makePersistent(k);
 
     const auto newWidgetList = sortedWidgetList();
     if (newWidgetList != widgets) { // Sorting has changed.
@@ -533,16 +529,16 @@ void TargetSetupPage::changeAllKitsSelections()
 
 bool TargetSetupPagePrivate::isUpdating() const
 {
-    return importer && importer->isUpdating();
+    return importer() && importer()->isUpdating();
 }
 
 void TargetSetupPagePrivate::import(const FilePath &path, bool silent)
 {
-    if (!importer)
+    if (!importer())
         return;
 
     QHash<TargetSetupWidget *, QList<BuildInfo>> buildInfos;
-    for (const BuildInfo &info : importer->import(path, silent)) {
+    for (const BuildInfo &info : importer()->import(path, silent)) {
         TargetSetupWidget *w = widget(info.kitId);
         if (!w) {
             Kit *k = KitManager::kit(info.kitId);
@@ -661,8 +657,8 @@ void TargetSetupPage::setupProject(Project *project)
 
         Kit *k = widget->kit();
 
-        if (k && d->importer)
-            d->importer->makePersistent(k);
+        if (k && d->importer())
+            d->importer()->makePersistent(k);
         toSetUp << widget->selectedBuildInfoList();
         widget->clearKit();
     }
@@ -674,8 +670,8 @@ void TargetSetupPage::setupProject(Project *project)
     d->reset();
 
     Target *activeTarget = nullptr;
-    if (d->importer)
-        activeTarget = d->importer->preferredTarget(project->targets());
+    if (d->importer())
+        activeTarget = d->importer()->preferredTarget(project->targets());
     if (activeTarget)
         project->setActiveTarget(activeTarget, SetActive::NoCascade);
 }

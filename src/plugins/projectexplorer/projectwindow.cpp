@@ -742,7 +742,6 @@ public:
             QTC_ASSERT(m_project.get(), return Tasks());
             return m_project->projectIssues(k);
         });
-        m_targetSetupPage->setProjectImporter(m_project->projectImporter());
         m_targetSetupPage->initializePage();
         m_targetSetupPage->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 

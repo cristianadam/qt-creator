@@ -34,7 +34,6 @@ public:
     // Call these before initializePage!
     void setTasksGenerator(const TasksGenerator &tasksGenerator);
     void setProjectAndPath(Project *project, const Utils::FilePath &dir);
-    void setProjectImporter(ProjectImporter *importer);
     bool importLineEditHasFocus() const;
 
     bool isComplete() const override;
