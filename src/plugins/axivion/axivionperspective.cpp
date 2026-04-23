@@ -1851,6 +1851,19 @@ AxivionPerspective::AxivionPerspective()
     addWindow(m_progressWidget, Perspective::AddToTab, nullptr, false, Qt::RightDockWidgetArea);
     addWindow(m_consoleWidget, Perspective::AddToTab, m_issuesWidget, false);
 
+    setAboutToActivateCallback([this]{
+        // ensure we display the Issues widget on first show
+        QMetaObject::invokeMethod(this, [this]{
+            Command *cmd = ActionManager::command("Dock.AxivionIssuesWidget");
+            QTC_ASSERT(cmd, return);
+            if (cmd->action() && !cmd->action()->isChecked())
+                cmd->action()->trigger();
+            if (auto dw = qobject_cast<QDockWidget *>(m_issuesWidget->parentWidget()))
+                dw->raise();
+        }, Qt::QueuedConnection);
+        setAboutToActivateCallback({}); // reset, as this should only happen on first show
+    });
+
     ActionContainer *menu = ActionManager::actionContainer(Debugger::Constants::M_DEBUG_ANALYZER);
     QAction *action = new QAction(Tr::tr("Axivion"), this);
     action->setIcon(Icon({{":/axivion/images/axivion.png", Theme::MenuBarItemTextColorNormal}},
