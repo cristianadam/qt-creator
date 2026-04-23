@@ -59,11 +59,9 @@ namespace Internal {
 class KitPrivate : public KitData
 {
 public:
-    KitPrivate(Id id, Kit *kit) :
-        m_id(id)
+    KitPrivate(Id id, Kit *kit)
     {
-        if (!id.isValid())
-            m_id = Id::generate();
+        m_id = id.isValid() ? id : Id::generate();
 
         m_macroExpander.setDisplayName(Tr::tr("Kit"));
         m_macroExpander.setAccumulating(true);
@@ -87,7 +85,6 @@ public:
             [kit] { return kit->id().toString(); });
     }
 
-    Id m_id;
     int m_nestedBlockingLevel = 0;
     bool m_hasError = false;
     bool m_hasWarning = false;
@@ -218,7 +215,9 @@ void Kit::copyFrom(const Kit *k)
 
 void Kit::copyFrom(const KitData &src)
 {
+    const Id savedId = d->m_id;
     static_cast<KitData &>(*d) = src;
+    d->m_id = savedId;
     d->m_hasValidityInfo = false;
     d->m_cachedIcon = {};
 }

@@ -34,6 +34,7 @@ public:
     QIcon icon() const;
     static QIcon iconForDeviceType(Utils::Id deviceType);
 
+    Utils::Id m_id;
     DetectionSource m_detectionSource{DetectionSource::Manual};
     Utils::DisplayName m_unexpandedDisplayName;
     QString m_fileSystemFriendlyName;

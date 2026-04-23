@@ -35,9 +35,12 @@ bool KitData::operator==(const KitData &other) const
         && m_relevantAspects == other.m_relevantAspects
         && m_irrelevantAspects == other.m_irrelevantAspects
         && m_mutable == other.m_mutable;
-    // Note: This leaves out m_sticky, this is intentional for now:
-    // Kit::setSticky() calls kitUpdated() directly and never goes through the working
-    // copy, so dirty-detection doesn't need to track it
+    // Note: m_id and m_sticky are intentionally left out:
+    // - m_id identifies a registered kit but is not user-editable; dirty-detection
+    //   always compares the committed and volatile copies of the same row, so both
+    //   have the same id anyway.
+    // - m_sticky: Kit::setSticky() calls kitUpdated() directly and never goes through
+    //   the working copy, so dirty-detection doesn't need to track it.
 }
 
 QIcon KitData::icon() const
