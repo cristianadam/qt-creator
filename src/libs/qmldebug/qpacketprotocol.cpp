@@ -3,6 +3,7 @@
 
 #include "qpacketprotocol.h"
 
+#include <qdebug.h>
 #include <qelapsedtimer.h>
 #include <qendian.h>
 
@@ -105,7 +106,10 @@ public:
 
     void bytesWritten(qint64 bytes)
     {
-        Q_ASSERT(!sendingPackets.isEmpty());
+        if (sendingPackets.isEmpty()) {
+            qWarning() << "No packets to send, but bytes were written?";
+            return;
+        }
 
         while (bytes) {
             if (sendingPackets.at(0) > bytes) {
