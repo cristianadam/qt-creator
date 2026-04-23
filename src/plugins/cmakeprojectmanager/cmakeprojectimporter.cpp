@@ -1563,13 +1563,16 @@ Kit *CMakeProjectImporter::createKit(void *directoryData) const
 
 void CMakeProjectImporter::applyDirectoryDataToKit(const DirectoryData &data, ProjectExplorer::Kit *k) const
 {
+    const DetectionSource detectionSource = !data.cmakePreset.isEmpty() ? DetectionSource::Temporary
+                                                                        : DetectionSource::Manual;
+
     CMakeTool *cmakeTool = CMakeToolManager::findByCommand(data.cmakeBinary);
     if (!cmakeTool) {
         qCDebug(cmInputLog) << "Creating temporary CMakeTool for" << data.cmakeBinary.toUserOutput();
 
         UpdateGuard guard(*this);
 
-        auto newTool = std::make_unique<CMakeTool>(DetectionSource::Manual, CMakeTool::createId());
+        auto newTool = std::make_unique<CMakeTool>(detectionSource, CMakeTool::createId());
         newTool->setFilePath(data.cmakeBinary);
         newTool->setDisplayName(uniqueCMakeToolDisplayName(*newTool));
 
@@ -1618,8 +1621,7 @@ void CMakeProjectImporter::applyDirectoryDataToKit(const DirectoryData &data, Pr
                 }
             }
 
-            // Mark CMake presets toolchains as manual
-            toolchain->setDetectionSource(DetectionSource::Manual);
+            toolchain->setDetectionSource(detectionSource);
         }
 
         ToolchainKitAspect::setToolchain(k, toolchain);
