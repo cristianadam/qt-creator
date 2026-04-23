@@ -1617,6 +1617,10 @@ void ToolInterface::elicit(
                 r = Utils::ResultError("Client error: " + error.error().message());
                 cb(Utils::ResultError("Client error: " + error.error().message()));
             });
+    } else {
+        qCWarning(mcpServerLog) << "elicit() called after server shutdown; "
+                                   "resolving callback with error";
+        cb(Utils::ResultError("Server is shutting down"));
     }
 }
 
@@ -1678,6 +1682,10 @@ void ToolInterface::sample(
                 r = Utils::ResultError("Client error: " + error.error().message());
                 cb(Utils::ResultError("Client error: " + error.error().message()));
             });
+    } else {
+        qCWarning(mcpServerLog) << "sample() called after server shutdown; "
+                                   "resolving callback with error";
+        cb(Utils::ResultError("Server is shutting down"));
     }
 }
 
@@ -1688,9 +1696,10 @@ void ToolInterface::notify(const Schema::ServerNotification &notification) const
         return;
     }
 
-    if (auto serverPrivate = d->_server.lock()) {
+    if (auto serverPrivate = d->_server.lock())
         serverPrivate->sendNotification(notification, d->_sessionId);
-    }
+    else
+        qCWarning(mcpServerLog) << "notify() called after server shutdown; notification dropped";
 }
 
 void ToolInterface::finish(const Utils::Result<Schema::CallToolResult> &result) const
