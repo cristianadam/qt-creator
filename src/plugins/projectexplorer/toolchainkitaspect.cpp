@@ -369,6 +369,12 @@ void ToolchainKitAspectFactory::setup(Kit *k)
     QTC_ASSERT(ToolchainManager::isLoaded(), return);
     QTC_ASSERT(k, return);
 
+    // Already set up?
+    for (const Id lang : ToolchainManager::allLanguages()) {
+        if (ToolchainKitAspect::toolchain(k, lang))
+            return;
+    }
+
     if (k->detectionSource().isSdkProvided())
         setupForSdkKit(k);
     else
