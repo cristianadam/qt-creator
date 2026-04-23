@@ -8,6 +8,7 @@
 
 #include <coreplugin/coreconstants.h>
 #include <coreplugin/icore.h>
+#include <coreplugin/dialogs/ioptionspage.h>
 
 #include <languageclient/languageclientinterface.h>
 #include <languageclient/languageclientmanager.h>
@@ -51,8 +52,6 @@
 #include <QTreeView>
 
 #include <nanotrace/nanotrace.h>
-
-#include <limits>
 
 using namespace QmlJSEditor::Internal;
 using namespace QtSupport;
@@ -428,63 +427,22 @@ private:
     Utils::TreeModel<AnalyzerMessageItem> analyzerMessageModel;
 };
 
-QmlJsEditingSettingsPage::QmlJsEditingSettingsPage()
-{
-    setId(SETTINGS_PAGE);
-    setDisplayName(::QmlJSEditor::Tr::tr("QML/JS Editing"));
-    setCategory(Constants::SETTINGS_CATEGORY_QML);
-    setWidgetCreator([] { return new QmlJsEditingSettingsPageWidget; });
-    setSettingsProvider([] { return &settings(); });
-}
-
-class QmlJsEditingProjectSettingsWidget final : public ProjectSettingsWidget
+class QmlJsEditingSettingsPage : public Core::IOptionsPage
 {
 public:
-    explicit QmlJsEditingProjectSettingsWidget(Project *)
+    QmlJsEditingSettingsPage()
     {
-        setUseGlobalSettingsCheckBoxVisible(false);
-        setGlobalSettingsId(SETTINGS_PAGE);
-        setExpanding(true);
-
-        using namespace Layouting;
-        // clang-format off
-        Column {
-            Group {
-                title(Tr::tr("QML Language Server")),
-                Row {
-                    PushButton {
-                        text(Tr::tr("Open Language Server preferences...")),
-                        onClicked(this, [] {
-                            ProjectExplorerPlugin::activateProjectPanel(
-                                LanguageClient::Constants::LANGUAGECLIENT_SETTINGS_PANEL);
-                        })
-                    },
-                    st,
-                },
-            },
-            tight,
-            st,
-        }.attachTo(this);
-        // clang-format on
+        setId(SETTINGS_PAGE);
+        setDisplayName(::QmlJSEditor::Tr::tr("QML/JS Editing"));
+        setCategory(Constants::SETTINGS_CATEGORY_QML);
+        setWidgetCreator([] { return new QmlJsEditingSettingsPageWidget; });
+        setSettingsProvider([] { return &settings(); });
     }
 };
 
-class QmlJsEditingProjectPanelFactory : public ProjectPanelFactory
+void setupQmlJsEditingSettings()
 {
-public:
-    QmlJsEditingProjectPanelFactory()
-    {
-        setPriority(34); // just before the LanguageClientProjectPanelFactory
-        setDisplayName(Tr::tr("Qt Quick"));
-        setCreateWidgetFunction([](Project *project) {
-            return new QmlJsEditingProjectSettingsWidget(project);
-        });
-    }
-};
-
-void setupQmlJsEditingProjectPanel()
-{
-    static QmlJsEditingProjectPanelFactory theQmlJsEditingProjectPanelFactory;
+    static QmlJsEditingSettingsPage theQmlJsEditingSettingsPage;
 }
 
 

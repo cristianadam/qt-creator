@@ -3,15 +3,8 @@
 
 #pragma once
 
-#include <coreplugin/dialogs/ioptionspage.h>
-
-#include <projectexplorer/project.h>
-
+#include <utils/aspects.h>
 #include <utils/filepath.h>
-
-#include <QMutex>
-#include <QObject>
-#include <QVersionNumber>
 
 namespace QmlJSEditor::Internal {
 
@@ -45,12 +38,6 @@ public:
 
 QmlJsEditingSettings &settings();
 
-class QmlJsEditingSettingsPage : public Core::IOptionsPage
-{
-public:
-    QmlJsEditingSettingsPage();
-};
-
-void setupQmlJsEditingProjectPanel();
+void setupQmlJsEditingSettings();
 
 } // QmlJSEditor::Internal

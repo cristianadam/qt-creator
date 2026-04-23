@@ -93,7 +93,6 @@ private:
     QPointer<QmlJSEditorDocument> m_currentDocument;
 
     QmlJS::JsonSchemaManager m_jsonManager{{ICore::userResourcePath("json"), ICore::resourcePath("json")}};
-    QmlJsEditingSettingsPage m_qmJSEditingSettingsPage;
 };
 
 static QmlJSEditorPluginPrivate *dd = nullptr;
@@ -514,7 +513,7 @@ class QmlJSEditorPlugin final : public ExtensionSystem::IPlugin
         registerQmllsSettings();
         setupQmlJsOutline();
         setupQmlJSEditor();
-        setupQmlJsEditingProjectPanel();
+        setupQmlJsEditingSettings();
     }
 
     void extensionsInitialized() final
