@@ -303,6 +303,17 @@ bool McpCommands::closeFile(const QString &path)
         return false;
     }
 
+    // Refuse to silently discard unsaved edits. The Core::EditorManager
+    // variant we call below has askAboutModifiedEditors=false, so there
+    // is no user prompt — and an MCP caller can't respond to one anyway.
+    // Caller must save_file (or revert) before closing.
+    if (doc->isModified()) {
+        qCWarning(mcpCommands)
+            << "Refusing to close modified document without save:" << path
+            << "- call save_file first";
+        return false;
+    }
+
     qCDebug(mcpCommands) << "Closing file:" << path;
 
     bool closed = Core::EditorManager::closeDocuments({doc}, false);
