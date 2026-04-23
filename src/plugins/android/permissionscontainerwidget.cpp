@@ -352,9 +352,9 @@ void PermissionsContainerWidget::loadPermissionsFromManifest()
 
     const AndroidManifestParser::ManifestData &data = *dataResult;
 
+    m_permissionsModel->setPermissions(data.permissions);
     m_defaultPermissonsCheckBox->setChecked(data.hasDefaultPermissionsComment);
     m_defaultFeaturesCheckBox->setChecked(data.hasDefaultFeaturesComment);
-    m_permissionsModel->setPermissions(data.permissions);
 }
 
 } // namespace Android::Internal
