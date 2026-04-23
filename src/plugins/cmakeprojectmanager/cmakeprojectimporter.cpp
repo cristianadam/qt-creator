@@ -1186,7 +1186,7 @@ void CMakeProjectImporter::createKitsFromPresets()
                 || type == CMakeBuildConfigurationFactory::BuildTypeProfile)
                 newData.hasQmlDebugging = true;
 
-            buildInfos.emplace_back(buildInfoList(&newData).first());
+            buildInfos.emplace_back(buildInfo(&newData));
         }
 
         const Id kitId = CMakeConfigurationKitAspect::cmakePresetKitId(
@@ -1607,7 +1607,7 @@ void CMakeProjectImporter::applyDirectoryDataToKit(const DirectoryData &data, Pr
         DebuggerKitAspect::setDebugger(k, data.debugger);
 }
 
-const QList<BuildInfo> CMakeProjectImporter::buildInfoList(void *directoryData) const
+BuildInfo CMakeProjectImporter::buildInfo(void *directoryData) const
 {
     auto data = static_cast<const DirectoryData *>(directoryData);
 
@@ -1643,7 +1643,7 @@ const QList<BuildInfo> CMakeProjectImporter::buildInfoList(void *directoryData) 
     info.extraInfo = config;
 
     qCDebug(cmInputLog) << "BuildInfo configured.";
-    return {info};
+    return info;
 }
 
 void CMakeProjectImporter::deleteDirectoryData(void *directoryData) const

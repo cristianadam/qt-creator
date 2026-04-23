@@ -24,7 +24,7 @@ private:
     // will get one of the results from examineDirectory
     ProjectExplorer::Kit *createKit(void *directoryData) const final;
     // will get one of the results from examineDirectory
-    const QList<ProjectExplorer::BuildInfo> buildInfoList(void *directoryData) const final;
+    ProjectExplorer::BuildInfo buildInfo(void *directoryData) const final;
 
     void deleteDirectoryData(void *directoryData) const final;
 };

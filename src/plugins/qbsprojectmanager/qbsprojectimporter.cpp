@@ -203,7 +203,7 @@ Kit *QbsProjectImporter::createKit(void *directoryData) const
     });
 }
 
-const QList<BuildInfo> QbsProjectImporter::buildInfoList(void *directoryData) const
+BuildInfo QbsProjectImporter::buildInfo(void *directoryData) const
 {
     const auto * const bgData = static_cast<BuildGraphData *>(directoryData);
     BuildInfo info;
@@ -217,7 +217,7 @@ const QList<BuildInfo> QbsProjectImporter::buildInfoList(void *directoryData) co
     config.insert("configName", info.displayName);
     info.extraInfo = variantFromStore(config);
     qCDebug(qbsPmLog) << "creating build info for " << info.displayName << ' ' << bgData->buildVariant;
-    return {info};
+    return info;
 }
 
 void QbsProjectImporter::deleteDirectoryData(void *directoryData) const

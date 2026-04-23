@@ -183,7 +183,7 @@ Kit *QmakeProjectImporter::createKit(void *directoryData) const
     return createTemporaryKit(data->qtVersionData, data->parsedSpec, data->osType);
 }
 
-const QList<BuildInfo> QmakeProjectImporter::buildInfoList(void *directoryData) const
+BuildInfo QmakeProjectImporter::buildInfo(void *directoryData) const
 {
     auto *data = static_cast<DirectoryData *>(directoryData);
 
@@ -205,7 +205,7 @@ const QList<BuildInfo> QmakeProjectImporter::buildInfoList(void *directoryData) 
     extra.makefile = data->makefile;
     info.extraInfo = QVariant::fromValue(extra);
 
-    return {info};
+    return info;
 }
 
 void QmakeProjectImporter::deleteDirectoryData(void *directoryData) const

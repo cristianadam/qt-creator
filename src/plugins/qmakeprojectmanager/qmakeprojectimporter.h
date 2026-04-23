@@ -21,7 +21,7 @@ private:
     QList<void *> examineDirectory(const Utils::FilePath &importPath, QString *warningMessage) const final;
     bool matchKit(void *directoryData, const ProjectExplorer::Kit *k) const final;
     ProjectExplorer::Kit *createKit(void *directoryData) const final;
-    const QList<ProjectExplorer::BuildInfo> buildInfoList(void *directoryData) const final;
+    ProjectExplorer::BuildInfo buildInfo(void *directoryData) const final;
 
     void deleteDirectoryData(void *directoryData) const final;
 

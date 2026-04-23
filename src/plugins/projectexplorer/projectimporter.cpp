@@ -131,26 +131,20 @@ const QList<BuildInfo> ProjectImporter::import(const Utils::FilePath &importPath
 
         for (Kit *k : std::as_const(kitList)) {
             qCDebug(log) << "Creating buildinfos for kit" << k->displayName();
-            const QList<BuildInfo> infoList = buildInfoList(data);
-            if (infoList.isEmpty()) {
-                qCDebug(log) << "No build infos for kit" << k->displayName();
-                continue;
-            }
+            BuildInfo info = buildInfo(data);
 
             auto factory = BuildConfigurationFactory::find(k, projectFilePath());
             if (!factory) {
                 qCDebug(log) << "No factory for kit" << k->displayName();
                 continue;
             }
-            for (BuildInfo i : infoList) {
-                const QVariantMap extraInfo = i.extraInfo.toMap();
-                if (!extraInfo["hideImportedSuffix"].toBool())
-                    i.displayName = Tr::tr("%1 (imported)").arg(i.displayName);
-                i.kitId = k->id();
-                i.factory = factory;
-                if (!result.contains(i))
-                    result += i;
-            }
+            const QVariantMap extraInfo = info.extraInfo.toMap();
+            if (!extraInfo["hideImportedSuffix"].toBool())
+                info.displayName = Tr::tr("%1 (imported)").arg(info.displayName);
+            info.kitId = k->id();
+            info.factory = factory;
+            if (!result.contains(info))
+                result += info;
         }
     }
 

@@ -180,7 +180,7 @@ protected:
                                    QString *warningMessage) const override;
     bool matchKit(void *directoryData, const Kit *k) const override;
     Kit *createKit(void *directoryData) const override;
-    const QList<BuildInfo> buildInfoList(void *directoryData) const override;
+    BuildInfo buildInfo(void *directoryData) const override;
     void deleteDirectoryData(void *directoryData) const override;
 
 private:
@@ -238,7 +238,7 @@ Kit *TestQtProjectImporter::createKit(void *directoryData) const
     });
 }
 
-const QList<BuildInfo> TestQtProjectImporter::buildInfoList(void *directoryData) const
+BuildInfo TestQtProjectImporter::buildInfo(void *directoryData) const
 {
     Q_UNUSED(directoryData)
     assert(m_testData.contains(directoryData));
@@ -251,7 +251,7 @@ const QList<BuildInfo> TestQtProjectImporter::buildInfoList(void *directoryData)
     info.typeName = "Debug";
     info.buildDirectory = m_path;
     info.buildType = BuildConfiguration::Debug;
-    return {info};
+    return info;
 }
 
 void TestQtProjectImporter::deleteDirectoryData(void *directoryData) const

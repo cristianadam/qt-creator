@@ -44,7 +44,7 @@ ProjectExplorer::Kit *MesonProjectImporter::createKit(void *directoryData) const
     return nullptr;
 }
 
-const QList<ProjectExplorer::BuildInfo> MesonProjectImporter::buildInfoList(void *directoryData) const
+ProjectExplorer::BuildInfo MesonProjectImporter::buildInfo(void *directoryData) const
 {
     Q_UNUSED(directoryData)
     //TODO, this can be done later
