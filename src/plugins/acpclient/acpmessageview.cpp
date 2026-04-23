@@ -151,6 +151,9 @@ public:
                 });
             }
         });
+
+        connect(m_browser->document(), &QTextDocument::contentsChanged,
+                this, [this] { m_cachedUnwrappedIdealWidth = -1; });
     }
 
     void setText(const QString &text)
@@ -177,19 +180,22 @@ public:
     {
         if (!m_browser)
             return CollapsibleFrame::sizeHint();
-        // Temporarily remove the text width constraint so idealWidth() returns
-        // the true single-line (unwrapped) width of the document.
         QTextDocument *doc = m_browser->document();
-        const qreal savedTextWidth = doc->textWidth();
-        doc->setTextWidth(-1);
-        const qreal iw = doc->idealWidth();
-        doc->setTextWidth(savedTextWidth);
-        if (iw <= 0)
+        if (m_cachedUnwrappedIdealWidth < 0) {
+            // Temporarily remove the text width constraint so idealWidth() returns
+            // the true single-line (unwrapped) width of the document. Each toggle
+            // triggers a full relayout, so cache the result until contents change.
+            const qreal savedTextWidth = doc->textWidth();
+            doc->setTextWidth(-1);
+            m_cachedUnwrappedIdealWidth = doc->idealWidth();
+            doc->setTextWidth(savedTextWidth);
+        }
+        if (m_cachedUnwrappedIdealWidth <= 0)
             return CollapsibleFrame::sizeHint();
         const QMargins bm = m_bodyLayout->contentsMargins();
         const QMargins bcm = m_browser->contentsMargins();
         const int docMargin = static_cast<int>(doc->documentMargin());
-        const int contentWidth = qCeil(iw) + bm.left() + bm.right()
+        const int contentWidth = qCeil(m_cachedUnwrappedIdealWidth) + bm.left() + bm.right()
                                  + bcm.left() + bcm.right() + 2 * docMargin;
         return QSize(contentWidth, CollapsibleFrame::sizeHint().height());
     }
@@ -224,6 +230,7 @@ private:
     QTimer *m_renderTimer = nullptr;
     QString m_rawText;
     bool m_heightUpdatePending = false;
+    mutable qreal m_cachedUnwrappedIdealWidth = -1;
 };
 
 // ---------------------------------------------------------------------------
