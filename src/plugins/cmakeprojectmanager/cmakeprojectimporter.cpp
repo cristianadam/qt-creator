@@ -798,9 +798,7 @@ static QList<ToolchainDescriptionEx> extractToolchainsFromCache(const CMakeConfi
 
 void CMakeProjectImporter::createKitsFromPresets()
 {
-    const FilePaths presetDirs = presetCandidates();
-
-    const ListIterator iterator(presetDirs);
+    const ListIterator iterator(presetCandidates());
     struct InternalStorage
     {
         PresetsDetails::ConfigurePreset configurePreset;
@@ -815,8 +813,6 @@ void CMakeProjectImporter::createKitsFromPresets()
     const Storage<InternalStorage> storage;
 
     const auto onCompilerSetup = [this, iterator, storage](Process &process) {
-        QList<DirectoryData> result;
-
         DirectoryData &data = storage->directoryData;
         Environment &env = storage->env;
         PresetsDetails::ConfigurePreset &configurePreset = storage->configurePreset;
@@ -846,7 +842,7 @@ void CMakeProjectImporter::createKitsFromPresets()
                     Task::TaskType::DisruptingError, Tr::tr("<No CMake Tool available>"));
             }
         } else {
-            FilePath cmakeExecutable = configurePreset.cmakeExecutable.value();
+            const FilePath cmakeExecutable = configurePreset.cmakeExecutable.value();
             QString cmake = cmakeExecutable.path(); // Don't replace in scheme/host
             CMakePresets::Macros::expand(configurePreset, env, projectDirectory(), cmake);
 
@@ -1043,7 +1039,7 @@ void CMakeProjectImporter::createKitsFromPresets()
         if (!qmake.isEmpty() && !prefixPath.isEmpty())
             return SetupResult::StopWithSuccess;
 
-        FilePath toolchainFile = config.filePathValueOf(QByteArray("CMAKE_TOOLCHAIN_FILE"));
+        const FilePath toolchainFile = config.filePathValueOf(QByteArray("CMAKE_TOOLCHAIN_FILE"));
         if (prefixPath.isEmpty() && toolchainFile.isEmpty())
             return SetupResult::StopWithSuccess;
 
@@ -1051,7 +1047,7 @@ void CMakeProjectImporter::createKitsFromPresets()
         std::unique_ptr<TemporaryDirectory> &qtcQMakeProbeDir = storage->qtcQMakeProbeDir;
         qtcQMakeProbeDir = std::make_unique<TemporaryDirectory>("qtc-cmake-qmake-probe-XXXXXXXX");
 
-        FilePath cmakeListTxt(qtcQMakeProbeDir->filePath(Constants::CMAKE_LISTS_TXT));
+        const FilePath cmakeListTxt(qtcQMakeProbeDir->filePath(Constants::CMAKE_LISTS_TXT));
 
         cmakeListTxt.writeFileContents(s_qmakeProbeCMakeScript);
 
