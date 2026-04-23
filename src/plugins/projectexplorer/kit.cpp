@@ -196,10 +196,13 @@ Kit *Kit::clone(bool keepName) const
 {
     auto k = new Kit;
     copyKitCommon(k, this);
-    if (keepName)
+    if (keepName) {
         k->d->m_unexpandedDisplayName = d->m_unexpandedDisplayName;
-    else
-        k->d->m_unexpandedDisplayName.setValue(newKitName(KitManager::kits()));
+    } else {
+        const QString baseName = Tr::tr("Clone of %1").arg(unexpandedDisplayName());
+        const QStringList allNames = transform(KitManager::kits(), &Kit::unexpandedDisplayName);
+        k->d->m_unexpandedDisplayName.setValue(Utils::makeUniquelyNumbered(baseName, allNames));
+    }
     k->d->m_detectionSource = DetectionSource::Manual;
     // Do not clone m_fileSystemFriendlyName, needs to be unique
     k->d->m_hasError = d->m_hasError;  // TODO: Is this intentionally not done for copyFrom()?
@@ -782,24 +785,6 @@ MacroExpander *Kit::macroExpander() const
     return &d->m_macroExpander;
 }
 
-QString Kit::newKitName(const QList<Kit *> &allKits) const
-{
-    return newKitName(unexpandedDisplayName(), allKits);
-}
-
-QString Kit::newKitName(const QString &name, const QList<Kit *> &allKits)
-{
-    return newKitName(name, transform(allKits, &Kit::unexpandedDisplayName));
-}
-
-QString Kit::newKitName(const QString &name, const QStringList &existingNames)
-{
-    const QString baseName = name.isEmpty()
-            ? Tr::tr("Unnamed")
-            : Tr::tr("Clone of %1").arg(name);
-    return Utils::makeUniquelyNumbered(baseName, existingNames);
-}
-
 void Kit::kitUpdated()
 {
     if (d->m_nestedBlockingLevel > 0) {
@@ -811,7 +796,6 @@ void Kit::kitUpdated()
     KitManager::notifyAboutUpdate(this);
     d->m_mustNotify = false;
 }
-
 
 static Id replacementKey() { return "IsReplacementKit"; }
 

@@ -144,10 +144,6 @@ public:
     bool hasFeatures(const QSet<Utils::Id> &features) const;
     Utils::MacroExpander *macroExpander() const;
 
-    QString newKitName(const QList<Kit *> &allKits) const;
-    static QString newKitName(const QString &name, const QList<Kit *> &allKits);
-    static QString newKitName(const QString &name, const QStringList &existingNames);
-
     void toMap(Utils::Store &data) const;
 
 private:

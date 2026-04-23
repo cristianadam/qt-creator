@@ -27,6 +27,7 @@
 #include <utils/macroexpander.h>
 #include <utils/pathchooser.h>
 #include <utils/qtcassert.h>
+#include <utils/stringutils.h>
 #include <utils/utilsicons.h>
 #include <utils/variablechooser.h>
 
@@ -70,7 +71,7 @@ public:
     void markForRemoval(int row);
     int markForAddition(Kit *baseKit);
 
-    QString newKitName(const QString &sourceName) const;
+
     bool isNameUnique(int row) const;
 
 signals:
@@ -232,7 +233,13 @@ void KitModel::markForRemoval(int row)
 
 int KitModel::markForAddition(Kit *baseKit)
 {
-    const QString newName = newKitName(baseKit ? baseKit->unexpandedDisplayName() : QString());
+    QStringList allNames;
+    for (int row = 0; row < itemCount(); ++row)
+        allNames << item(row).unexpandedDisplayName();
+    const QString baseName = baseKit
+        ? Tr::tr("Clone of %1").arg(baseKit->unexpandedDisplayName())
+        : Tr::tr("Unnamed");
+    const QString newName = Utils::makeUniquelyNumbered(baseName, allNames);
 
     Kit tempKit{Id(WORKING_COPY_KIT_ID)};
     if (baseKit)
@@ -254,13 +261,6 @@ int KitModel::markForAddition(Kit *baseKit)
     return newRow;
 }
 
-QString KitModel::newKitName(const QString &sourceName) const
-{
-    QStringList allNames;
-    for (int row = 0; row < itemCount(); ++row)
-        allNames << item(row).unexpandedDisplayName();
-    return Kit::newKitName(sourceName, allNames);
-}
 
 void KitModel::addKit(Kit *k)
 {
