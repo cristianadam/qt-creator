@@ -1723,6 +1723,15 @@ Utils::Result<ToolInterface::TaskProgressNotify> ToolInterface::startTask(
             "task");
     }
 
+    // The update and result callbacks are mandatory and stored as std::function.
+    // Calling an empty std::function throws std::bad_function_call, which would
+    // crash the server either synchronously in the polling timer or on the next
+    // tasks/get or tasks/result request from the client. Fail fast here.
+    if (!onUpdateTask)
+        return Utils::ResultError("onUpdateTask callback must not be empty");
+    if (!onResultCallback)
+        return Utils::ResultError("onResultCallback callback must not be empty");
+
     if (!d->_initialRequest.params().task()) {
         if (!pollingIntervalMs) {
             qCWarning(mcpServerLog)
