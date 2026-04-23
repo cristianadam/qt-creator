@@ -45,7 +45,8 @@
           "qt.io/QtCreator/1.0": {
               "runEnvironment": {
                   "HOME_VARIABLE_WITH_HEART": "$env{HOME}/❤️"
-              }
+              },
+              "debugger": "/usr/bin/lldb"
           }
         }
     }
