@@ -2211,6 +2211,8 @@ private slots:
 
         // Load Project.
         QFETCH(QString, projectFileName);
+        struct ProjectCloser { void operator()(Project *p) { ProjectManager::removeProject(p); }};
+        std::unique_ptr<Project, ProjectCloser> projectHolder;
         const auto theProject = ProjectExplorerPlugin::openProject(projectDir.pathAppended(projectFileName));
         if (!theProject
             && !ProjectManager::canOpenProjectForMimeType(Utils::mimeTypeForFile(projectFileName))) {
@@ -2219,6 +2221,7 @@ private slots:
         }
 
         QVERIFY2(theProject, qPrintable(theProject.errorMessage()));
+        projectHolder.reset(theProject.project());
         QVERIFY(theProject.project()->configureAsExampleProject(kit));
         QCOMPARE(theProject.project()->targets().size(), 1);
         BuildSystem * const bs = theProject.project()->activeBuildSystem();
