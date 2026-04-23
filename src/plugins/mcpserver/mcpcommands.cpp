@@ -999,7 +999,10 @@ Utils::Result<bool> McpCommands::setVariable(const QString &iname, const QString
     if (!item->valueEditable)
         return Utils::ResultError("Variable is not editable: " + iname);
 
-    EngineManager::currentEngine()->assignValueInDebugger(item, item->expression(), QVariant(value));
+    const QPointer<DebuggerEngine> engine = EngineManager::currentEngine();
+    if (!engine)
+        return Utils::ResultError("Debug session ended before value could be assigned");
+    engine->assignValueInDebugger(item, item->expression(), QVariant(value));
     return true;
 }
 
@@ -1090,7 +1093,10 @@ Utils::Result<bool> McpCommands::selectThread(const QString &id)
         return Utils::ResultError("No thread with id: " + id);
 
     (*handler)->setCurrentThread(thread);
-    EngineManager::currentEngine()->selectThread(thread);
+    const QPointer<DebuggerEngine> engine = EngineManager::currentEngine();
+    if (!engine)
+        return Utils::ResultError("Debug session ended before thread could be selected");
+    engine->selectThread(thread);
     return true;
 }
 
