@@ -3,12 +3,13 @@
 
 #include "mcpmanager.h"
 
-#include "coreconstants.h"
-#include "coreplugintr.h"
-#include "dialogs/ioptionspage.h"
-#include "icore.h"
+#include "../coreconstants.h"
+#include "../coreplugintr.h"
+#include "../dialogs/ioptionspage.h"
+#include "../icore.h"
 #include "mcpregistry.h"
-#include "spinner/spinner.h"
+
+#include <solutions/spinner/spinner.h>
 
 #include <utils/algorithm.h>
 #include <utils/aspects.h>

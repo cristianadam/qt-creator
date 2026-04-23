@@ -10,6 +10,7 @@ QtcPlugin {
 
     Depends { name: "Utils" }
     Depends { name: "Aggregation" }
+    Depends { name: "Spinner" }
     Depends { name: "TerminalLib" }
     Depends { name: "qtkeychain" }
 
