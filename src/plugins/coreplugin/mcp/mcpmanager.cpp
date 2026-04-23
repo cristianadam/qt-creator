@@ -14,7 +14,6 @@
 #include <utils/algorithm.h>
 #include <utils/aspects.h>
 #include <utils/async.h>
-#include <utils/filestreamer.h>
 #include <utils/globaltasktree.h>
 #include <utils/layoutbuilder.h>
 #include <utils/networkaccessmanager.h>
@@ -162,11 +161,9 @@ public:
         QTimer::singleShot(0, this, &McpRegistryModel::fetchMcpRegistry);
     }
 
-    ~McpRegistryModel() { m_taskTreeRunner.cancel(); }
-
     static McpRegistryModel &instance()
     {
-        static McpRegistryModel inst;
+        static GuardedObject<McpRegistryModel> inst;
         return inst;
     }
 
@@ -260,6 +257,8 @@ public:
     // Downloads the best icon asynchronously, calling onDone with the resulting QIcon.
     void fetchMcpIconAsync(const McpRegistry::Server &server, int row) const
     {
+        using namespace QtTaskTree;
+
         const McpRegistry::Icon *icon = bestIconForTheme(server.icons());
         if (!icon || icon->url().isEmpty())
             return;
@@ -271,22 +270,23 @@ public:
         }
 
         const QString url = icon->url();
-        const auto setupFetch = [url](FileStreamer &task) {
-            task.setSource(FilePath::fromUserInput(url));
-            task.setStreamMode(StreamMode::Reader);
+        const auto setupFetch = [url](QNetworkReplyWrapper &task) {
+            task.setNetworkAccessManager(Utils::NetworkAccessManager::instance());
+            task.setOperation(QNetworkAccessManager::GetOperation);
+            task.setRequest(QNetworkRequest(url));
         };
 
         const auto fetchDone =
-            [this, row, destPath](const FileStreamer &task, QtTaskTree::DoneWith doneWith) {
-                if (doneWith != QtTaskTree::DoneWith::Success)
+            [this, row, destPath](const QNetworkReplyWrapper &task, DoneWith doneWith) {
+                if (doneWith != DoneWith::Success)
                     return;
 
-                Result<> res = writeMcpIconFile(task.readData(), destPath);
+                Result<> res = writeMcpIconFile(task.reply()->readAll(), destPath);
                 if (res)
                     setIcon(QIcon(destPath.toFSPathString()), row);
             };
 
-        m_taskTreeRunner.start({FileStreamerTask(setupFetch, fetchDone)});
+        m_taskTreeRunner.start({QNetworkReplyWrapperTask(setupFetch, fetchDone)});
     }
 
     int rowCount(const QModelIndex & = {}) const override { return m_mcpServers.size(); }
