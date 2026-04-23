@@ -371,6 +371,7 @@ static ProcessTask debugServerTask(const Storage<DebuggerData> &storage)
                     }
                 }
             }
+
             QTC_ASSERT(runControl->usesDebugChannel(), return SetupResult::StopWithError);
             if (cmd.executable().baseName().contains("lldb-server")) {
                 cmd.addArg("platform");
@@ -404,6 +405,13 @@ static ProcessTask debugServerTask(const Storage<DebuggerData> &storage)
 
                 if (runParameters.serverAttachPid().isValid())
                     cmd.addArg(QString::number(runParameters.serverAttachPid().pid()));
+            }
+
+            if (cmd.executable().isEmpty()) {
+                runControl->postMessage(
+                    Tr::tr("Debug server executable not found on device \"%1\".")
+                        .arg(runControl->device()->displayName()), ErrorMessageFormat);
+                return SetupResult::StopWithError;
             }
         }
 
