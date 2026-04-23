@@ -361,7 +361,7 @@ private:
     void onDirty();
     void setFocusToName();
     void flushWorkingCopy(int row);
-    void load(Kit *originalKit, const KitData &workingCopySrc, int row = -1);
+    void load(const KitData &workingCopySrc, int row = -1);
 
     void updateVisibility();
     QString validityMessage() const;
@@ -388,7 +388,6 @@ private:
     QLineEdit m_nameEdit;
     QLineEdit m_fileSystemFriendlyNameLineEdit;
     QList<KitAspect *> m_kitAspects;
-    Kit *m_kit = nullptr;
     Kit m_modifiedKit{Id(WORKING_COPY_KIT_ID)};
     bool m_fixingKit = false;
     bool m_loading = false;
@@ -495,7 +494,7 @@ KitOptionsPageWidget::KitOptionsPageWidget()
         const int row = m_model.rowForOriginalKit(k);
         const int currentRow = m_groupedView.currentRow();
         if (row == currentRow && currentRow >= 0)
-            load(k, m_model.item(currentRow), currentRow);
+            load(m_model.item(currentRow), currentRow);
         updateState();
     });
 
@@ -557,7 +556,7 @@ void KitOptionsPageWidget::kitSelectionChanged(int oldRow, int newRow)
         flushWorkingCopy(oldRow);
 
     if (newRow >= 0) {
-        load(m_model.kitForRow(newRow), m_model.item(newRow), newRow);
+        load(m_model.item(newRow), newRow);
         m_detailWidget.setVisible(true);
         m_groupedView.scrollToRow(newRow);
     } else {
@@ -616,7 +615,7 @@ void KitOptionsPageWidget::updateState()
     const int row = m_groupedView.currentRow();
     if (row >= 0) {
         canCopy = true;
-        canDelete = !m_kit || !m_kit->detectionSource().isSdkProvided();
+        canDelete = !m_modifiedKit.detectionSource().isSdkProvided();
         canMakeDefault = !m_model.isDefault(row) && !m_model.isRemoved(row);
     }
 
@@ -653,10 +652,8 @@ void KitOptionsPageWidget::setFocusToName()
     m_nameEdit.setFocus();
 }
 
-void KitOptionsPageWidget::load(Kit *originalKit, const KitData &workingCopySrc, int row)
+void KitOptionsPageWidget::load(const KitData &workingCopySrc, int row)
 {
-    m_kit = originalKit;
-
     m_loading = true;
 
     m_modifiedKit.copyFrom(workingCopySrc);
@@ -684,7 +681,7 @@ void KitOptionsPageWidget::load(Kit *originalKit, const KitData &workingCopySrc,
 
     updateVisibility();
 
-    if (originalKit && originalKit->detectionSource().isAutoDetected()) {
+    if (m_modifiedKit.detectionSource().isAutoDetected()) {
         for (KitAspect *aspect : std::as_const(m_kitAspects))
             aspect->makeStickySubWidgetsReadOnly();
     }
