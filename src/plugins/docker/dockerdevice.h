@@ -85,6 +85,10 @@ public:
     QUrl toolControlChannel(const ControlChannelHint &) const override;
     QString qmlDebugRemoteSocketPath() const override;
 
+    QtTaskTree::ExecutableItem signalOperationRecipe(
+        const ProjectExplorer::SignalOperationData &data,
+        const QtTaskTree::Storage<Utils::Result<>> &resultStorage) const final;
+
     Utils::StringAspect imageId{this};
     Utils::StringAspect repo{this};
     Utils::StringAspect tag{this};

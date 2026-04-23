@@ -41,6 +41,7 @@
 #include <utils/overridecursor.h>
 #include <utils/pathlisteditor.h>
 #include <utils/port.h>
+#include <utils/processinfo.h>
 #include <utils/processinterface.h>
 #include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
@@ -49,8 +50,8 @@
 #include <utils/temporaryfile.h>
 #include <utils/terminalhooks.h>
 #include <utils/treemodel.h>
-#include <utils/utilsicons.h>
 #include <utils/url.h>
+#include <utils/utilsicons.h>
 
 #include <QApplication>
 #include <QCheckBox>
@@ -68,9 +69,10 @@
 #include <QRegularExpression>
 #include <QStandardItem>
 #include <QTextBrowser>
-#include <QTimer>
 #include <QThread>
+#include <QTimer>
 #include <QToolButton>
+#include <QtTaskTree/QConditional>
 
 #include <optional>
 
@@ -1560,6 +1562,78 @@ QUrl DockerDevice::toolControlChannel(const ControlChannelHint &hint) const
 QString DockerDevice::qmlDebugRemoteSocketPath() const
 {
     return d->m_qmlDebuggerForward ? d->m_qmlDebuggerForward->path().path() : QString{};
+}
+
+ExecutableItem DockerDevice::signalOperationRecipe(
+    const SignalOperationData &data, const Storage<Result<>> &resultStorage) const
+{
+    const auto onSetup = [data, resultStorage] {
+        const Result<> validResult = data.isValid();
+        if (validResult)
+            return SetupResult::Continue;
+
+        *resultStorage = validResult;
+        return SetupResult::StopWithError;
+    };
+
+    Storage<qint64> pid;
+
+    const auto onFindProcessSetup = [data](Async<Result<qint64>> &task) {
+        task.setConcurrentCallData(
+            [](QPromise<Result<qint64>> &promise, const FilePath &filePath) {
+                const Result<QList<ProcessInfo>> list = ProcessInfo::processInfoList();
+                if (!list) {
+                    promise.addResult(ResultError(list.error()));
+                    return;
+                }
+
+                for (const ProcessInfo &processInfo : *list) {
+                    if (processInfo.commandLine == filePath.path()) {
+                        promise.addResult(processInfo.processId);
+                        return;
+                    }
+                }
+                promise.addResult(ResultError(Tr::tr("Process not found.")));
+            },
+            data.filePath);
+    };
+
+    const auto onFindProcessDone = [pid, resultStorage](const Async<Result<qint64>> &task) {
+        const Result<qint64> result = task.result();
+        if (!result) {
+            *resultStorage = ResultError(result.error());
+            return DoneResult::Error;
+        }
+        *pid = *result;
+        return DoneResult::Success;
+    };
+
+    const auto onProcessSetup = [rootPath = rootPath(), pid, data](Process &process) {
+        int signal = data.mode == SignalOperationMode::InterruptByPid ? 2 : 9;
+
+        process.setCommand(
+            {rootPath.withNewPath("kill"), {QString("-%1").arg(signal), QString::number(*pid)}});
+    };
+
+    const auto onProcessDone = [resultStorage](const Process &process, DoneWith result) {
+        if (result == DoneWith::Error)
+            *resultStorage = ResultError(process.exitMessage());
+        else if (result == DoneWith::Cancel)
+            *resultStorage = ResultError(Tr::tr("Signal operation canceled."));
+    };
+
+    // clang-format off
+    return Group {
+        pid,
+        onGroupSetup(onSetup),
+        If ([data] { return data.mode == SignalOperationMode::KillByPath; }) >> Then {
+            AsyncTask<Result<qint64>>(onFindProcessSetup, onFindProcessDone),
+        } >> Else {
+            QSyncTask([data, pid] { *pid = data.pid;})
+        },
+        ProcessTask(onProcessSetup, onProcessDone),
+    };
+    // clang-format on
 }
 
 } // namespace Docker
