@@ -229,18 +229,17 @@ bool McpCommands::setFilePlainText(const QString &path, const QString &contents)
         return false;
     }
 
-    auto doc = Core::DocumentModel::documentForFilePath(filePath);
-
-    if (!doc) {
-        qCDebug(mcpCommands) << "No document found for file:" << path;
-        return false;
+    // If the file is already open in a text editor, update its in-memory
+    // buffer. The caller is responsible for calling save_file afterwards.
+    if (auto *doc = Core::DocumentModel::documentForFilePath(filePath)) {
+        if (auto *textDoc = qobject_cast<TextEditor::TextDocument *>(doc)) {
+            textDoc->document()->setPlainText(contents);
+            return true;
+        }
     }
 
-    if (auto textDoc = qobject_cast<TextEditor::TextDocument *>(doc)) {
-        textDoc->document()->setPlainText(contents);
-        return true;
-    }
-
+    // Otherwise write to disk directly. Guard against non-text files to
+    // avoid corrupting binary content.
     MimeType mime = mimeTypeForFile(filePath);
     if (!mime.inherits("text/plain")) {
         qCDebug(mcpCommands) << "File is not a plain text document:" << path
