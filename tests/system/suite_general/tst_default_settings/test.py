@@ -195,7 +195,7 @@ def __kitFunc__(it, foundQt, foundCompNames):
     if 'Python' in it: # skip Python kits
         return
 
-    defaultKitSuffix = " (default)"
+    defaultKitSuffix = " (Default)"
     if it.endswith(defaultKitSuffix):
         global glblDefaultKits
         glblDefaultKits += 1
@@ -320,7 +320,7 @@ def __getExpectedDebuggers__():
         result.extend(findAllFilesInPATH(debugger + exeSuffix))
     if platform.system() == 'Linux':
         explicitlyOmitted = ("lldb-platform", "lldb-gdbserver", "lldb-instr", "lldb-argdumper",
-                             "lldb-server", "lldb-vscode")
+                             "lldb-server", "lldb-vscode", "lldb-dap")
         result.extend(filter(lambda s: not (any(omitted in s for omitted in explicitlyOmitted)),
                              findAllFilesInPATH("lldb-*")))
     if platform.system() == 'Darwin':
