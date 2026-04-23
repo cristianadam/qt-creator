@@ -63,7 +63,7 @@ public:
 
     int rowForId(Id kitId) const;
     int rowForOriginalKit(Kit *k) const;
-    Kit *kitForRow(int row) const { return m_kits[row]; }
+    Kit *kitForRow(int row) const { return KitManager::kit(item(row).m_id); }
 
     void apply() final;
 
@@ -84,7 +84,6 @@ private:
     void changeDefaultKit();
 
     bool m_isRegistering = false;
-    QList<Kit *> m_kits;
 };
 
 KitModel::KitModel()
@@ -92,7 +91,7 @@ KitModel::KitModel()
     setShowDefault(true);
     setHeader({Tr::tr("Name")});
     setFilters(Constants::msgAutoDetected(), {{Tr::tr("Manual"), [this](int row) {
-        return !m_kits[row] || !m_kits[row]->detectionSource().isAutoDetected();
+        return !item(row).m_detectionSource.isAutoDetected();
     }}});
 
     if (KitManager::isLoaded()) {
@@ -126,8 +125,8 @@ static QString displayNameOf(Kit *kit, const KitData &d)
 
 QVariant KitModel::variantData(int row, int /*column*/, int role) const
 {
-    Kit *kit = m_kits[row];
     const KitData d = item(row);
+    Kit *kit = KitManager::kit(d.m_id);
     switch (role) {
     case Qt::DisplayRole:
         return displayNameOf(kit, d);
@@ -157,13 +156,17 @@ QVariant KitModel::variantData(int row, int /*column*/, int role) const
 
 int KitModel::rowForOriginalKit(Kit *k) const
 {
-    return m_kits.indexOf(k);
+    for (int row = 0; row < itemCount(); ++row) {
+        if (item(row).m_id == k->id())
+            return row;
+    }
+    return -1;
 }
 
 int KitModel::rowForId(Id kitId) const
 {
     for (int row = 0; row < itemCount(); ++row) {
-        if (m_kits[row] && m_kits[row]->id() == kitId)
+        if (item(row).m_id == kitId)
             return row;
     }
     return -1;
@@ -171,14 +174,12 @@ int KitModel::rowForId(Id kitId) const
 
 void KitModel::apply()
 {
-    // Collect kits to deregister and removed row indices (in reverse order)
+    // Collect kits to deregister (removed rows)
     QList<Kit *> kitsToDeregister;
-    QList<int> removedRows;
     for (int row = 0; row < itemCount(); ++row) {
         if (isRemoved(row)) {
-            removedRows.prepend(row);
-            if (m_kits[row])
-                kitsToDeregister.append(m_kits[row]);
+            if (Kit *kit = KitManager::kit(item(row).m_id))
+                kitsToDeregister.append(kit);
         }
     }
 
@@ -189,7 +190,7 @@ void KitModel::apply()
         if (!isAdded(row) && !isDirty(row))
             continue;
         const KitData d = item(row);
-        if (Kit *kit = m_kits[row]) {
+        if (Kit *kit = KitManager::kit(d.m_id)) {
             kit->copyFrom(d);
             KitManager::notifyAboutUpdate(kit);
         } else {
@@ -201,14 +202,11 @@ void KitModel::apply()
 
     // Apply default kit selection
     if (const int defRow = defaultRow(); defRow >= 0) {
-        if (Kit *kit = m_kits[defRow])
+        if (Kit *kit = KitManager::kit(item(defRow).m_id))
             KitManager::setDefaultKit(kit);
     }
 
     GroupedModel::apply();
-
-    for (int row : removedRows)
-        m_kits.removeAt(row);
 
     for (Kit *k : kitsToDeregister)
         KitManager::deregisterKit(k);
@@ -227,10 +225,7 @@ void KitModel::markForRemoval(int row)
         }
     }
 
-    const bool wasAdded = isAdded(row);
     markRemoved(row);
-    if (wasAdded)
-        m_kits.removeAt(row);
     notifyAllRowsChanged();
     emit kitStateChanged();
 }
@@ -248,8 +243,8 @@ int KitModel::markForAddition(Kit *baseKit)
 
     KitData kd = tempKit.kitData();
     kd.m_detectionSource = DetectionSource::Manual;
+    kd.m_id = {};
     const int newRow = itemCount();
-    m_kits.append(nullptr);
     appendVolatileItem(kd);
 
     if (defaultRow() < 0 || isRemoved(defaultRow()))
@@ -271,8 +266,10 @@ void KitModel::addKit(Kit *k)
 {
     if (m_isRegistering) {
         for (int row = 0; row < itemCount(); ++row) {
-            if (isAdded(row) && !m_kits[row]) {
-                m_kits[row] = k;
+            if (isAdded(row) && !item(row).m_id.isValid()) {
+                KitData d = item(row);
+                d.m_id = k->id();
+                setVolatileItem(row, d);
                 notifyRowChanged(row);
                 return;
             }
@@ -280,7 +277,6 @@ void KitModel::addKit(Kit *k)
         return;
     }
 
-    m_kits.append(k);
     appendVariant(toVariant(k->kitData()));
 
     if (k == KitManager::defaultKit())
@@ -292,7 +288,7 @@ void KitModel::addKit(Kit *k)
 
 void KitModel::updateKit(Kit *k)
 {
-    const int row = m_kits.indexOf(k);
+    const int row = rowForOriginalKit(k);
     if (row < 0)
         return;
 
@@ -307,7 +303,7 @@ void KitModel::updateKit(Kit *k)
 
 void KitModel::removeKit(Kit *k)
 {
-    const int row = m_kits.indexOf(k);
+    const int row = rowForOriginalKit(k);
     if (row < 0)
         return;
     if (isRemoved(row))
@@ -321,7 +317,6 @@ void KitModel::removeKit(Kit *k)
         }
     }
     removeItem(row);
-    m_kits.removeAt(row);
     notifyAllRowsChanged();
     emit kitStateChanged();
 }
@@ -333,9 +328,9 @@ void KitModel::changeDefaultKit()
 
 bool KitModel::isNameUnique(int row) const
 {
-    const QString name = displayNameOf(m_kits[row], item(row));
+    const QString name = displayNameOf(kitForRow(row), item(row));
     for (int r = 0; r < itemCount(); ++r) {
-        if (r != row && !isRemoved(r) && displayNameOf(m_kits[r], item(r)) == name)
+        if (r != row && !isRemoved(r) && displayNameOf(kitForRow(r), item(r)) == name)
             return false;
     }
     return true;
@@ -365,6 +360,7 @@ public:
 private:
     void onDirty();
     void setFocusToName();
+    void flushWorkingCopy(int row);
     void load(Kit *originalKit, const KitData &workingCopySrc, int row = -1);
 
     void updateVisibility();
@@ -557,14 +553,8 @@ void KitOptionsPageWidget::apply()
 void KitOptionsPageWidget::kitSelectionChanged(int oldRow, int newRow)
 {
     // Save current widget state back to the model before switching rows.
-    if (oldRow >= 0) {
-        m_loading = true;
-        for (KitAspect *aspect : std::as_const(m_kitAspects))
-            aspect->apply();
-        m_loading = false;
-        m_model.setVolatileItem(oldRow, m_modifiedKit.kitData());
-        m_model.notifyRowChanged(oldRow);
-    }
+    if (oldRow >= 0)
+        flushWorkingCopy(oldRow);
 
     if (newRow >= 0) {
         load(m_model.kitForRow(newRow), m_model.item(newRow), newRow);
@@ -636,16 +626,24 @@ void KitOptionsPageWidget::updateState()
     m_filterButton.setEnabled(canCopy);
 }
 
+void KitOptionsPageWidget::flushWorkingCopy(int row)
+{
+    m_loading = true;
+    for (KitAspect *aspect : std::as_const(m_kitAspects))
+        aspect->apply();
+    m_loading = false;
+    KitData d = m_modifiedKit.kitData();
+    d.m_id = m_model.item(row).m_id;
+    m_model.setVolatileItem(row, d);
+    m_model.notifyRowChanged(row);
+}
+
 void KitOptionsPageWidget::onDirty()
 {
     const int currentRow = m_groupedView.currentRow();
     if (currentRow < 0)
         return;
-    m_loading = true;
-    for (KitAspect *aspect : std::as_const(m_kitAspects))
-        aspect->apply();
-    m_loading = false;
-    m_model.setVolatileItem(currentRow, m_modifiedKit.kitData());
+    flushWorkingCopy(currentRow);
     m_model.notifyAllRowsChanged();
 }
 
@@ -1003,12 +1001,13 @@ void KitModelTest::testApplyWithRemovedKit()
             QVERIFY(model.kitForRow(row));
     });
 
+    const Id kit1Id = kit1->id();
     const int countBeforeApply = model.itemCount();
     model.apply();
 
     QVERIFY(checkedDuringReset);
     QCOMPARE(model.itemCount(), countBeforeApply - 1);
-    QCOMPARE(model.rowForOriginalKit(kit1), -1);
+    QCOMPARE(model.rowForId(kit1Id), -1);
     QVERIFY(model.rowForOriginalKit(kit2) >= 0);
     QVERIFY(!KitManager::kits().contains(kit1));
     QVERIFY(KitManager::kits().contains(kit2));
