@@ -234,6 +234,10 @@ void IssuesManager::onTaskRemoved(const ProjectExplorer::Task &task)
 void IssuesManager::onTasksCleared(const Utils::Id &category)
 {
     qCDebug(mcpIssues) << "IssuesManager: Tasks cleared:" << category.toString();
+    if (!category.isValid()) { // invalid Id means "clear all" (TaskHub::clearTasks() with no arg)
+        m_trackedTasks.clear();
+        return;
+    }
     m_trackedTasks.removeIf(Utils::equal(&ProjectExplorer::Task::category, category));
 }
 
