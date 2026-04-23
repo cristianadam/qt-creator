@@ -145,6 +145,10 @@ tmp/
 # ignore both a directory as well as a symlink
 /share/qtcreator/QtProject
 
+# Claude
+/CLAUDE.md
+/.claude/
+
 # Binaries
 # --------
 *.dll
