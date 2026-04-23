@@ -88,10 +88,11 @@ public:
         s_oldFilter = QLoggingCategory::installFilter(&LogCategoryRegistry::filter);
     }
 
-    QList<QLoggingCategory *> categories() { return m_categories; }
+    QHash<QString, QLoggingCategory *> categories() { return m_categories; }
 
 signals:
     void newLogCategory(QLoggingCategory *category);
+    void blackListed(const QString &loggingCategory);
 
 private:
     LogCategoryRegistry() = default;
@@ -99,22 +100,40 @@ private:
 
     void onFilter(QLoggingCategory *category)
     {
+        const QString catName = QString::fromUtf8(category->categoryName());
+        const char *namePointer = category->categoryName();
+
         if (QThread::currentThread() != thread()) {
             QMetaObject::invokeMethod(
-                this, [category, this] { onFilter(category); }, Qt::QueuedConnection);
+                this,
+                [category, catName, namePointer, this] { onFilter(category, catName, namePointer); },
+                Qt::QueuedConnection);
             return;
         }
+        onFilter(category, catName, namePointer);
+    }
 
-        if (!m_categories.contains(category)) {
-            m_categories.append(category);
+    void onFilter(QLoggingCategory *category, const QString &catName, const char *namePointer)
+    {
+        if (m_blackList.contains(catName))
+            return;
+        if (category->categoryName() != namePointer) // something bad happened in between (deleted?)
+            return;
+        QLoggingCategory *stored = m_categories.value(catName);
+        if (!stored) {
+            m_categories.insert(catName, category);
             emit newLogCategory(category);
+        } else if (stored != category) {
+            m_blackList.insert(catName);
+            emit blackListed(catName);
         }
     }
 
 private:
     static QLoggingCategory::CategoryFilter s_oldFilter;
 
-    QList<QLoggingCategory *> m_categories;
+    QHash<QString, QLoggingCategory *> m_categories;
+    QSet<QString> m_blackList;
     bool m_started{false};
 };
 
@@ -196,6 +215,9 @@ public:
 
     void setUseOriginal(bool useOriginal)
     {
+        if (!isValid())
+            return;
+
         if (!m_useOriginal && m_category && m_originalSettings) {
             m_saved = std::array<bool, 5>{};
 
@@ -213,6 +235,9 @@ public:
 
     bool isEnabled(QtMsgType msgType) const
     {
+        if (!isValid())
+            return false;
+
         if (m_category)
             return m_category->isEnabled(msgType);
         if (m_saved)
@@ -222,6 +247,9 @@ public:
 
     bool isEnabledOriginally(QtMsgType msgType) const
     {
+        if (!isValid())
+            return false;
+
         if (m_originalSettings)
             return (*m_originalSettings)[msgType];
         return isEnabled(msgType);
@@ -230,6 +258,9 @@ public:
     void setEnabled(QtMsgType msgType, bool isEnabled)
     {
         QTC_ASSERT(!m_useOriginal, return);
+
+        if (!isValid())
+            return;
 
         if (m_category)
             m_category->setEnabled(msgType, isEnabled);
@@ -241,6 +272,9 @@ public:
     void setSaved(const SavedEntry &entry)
     {
         QTC_ASSERT(entry.name == name(), return);
+
+        if (!isValid())
+            return;
 
         m_saved = entry.levels;
         m_color = entry.color;
@@ -257,8 +291,10 @@ public:
     void setLogCategory(QLoggingCategory *category)
     {
         QTC_ASSERT(QString::fromUtf8(category->categoryName()) == m_name, return);
+        QTC_ASSERT(!m_blacklisted, return);
 
         m_category = category;
+        m_namePointer = m_category->categoryName();
         if (!m_originalSettings) {
             m_originalSettings = {
                 category->isDebugEnabled(),
@@ -282,13 +318,26 @@ public:
     bool isCriticalEnabled() const { return isEnabled(QtCriticalMsg); }
     bool isInfoEnabled() const { return isEnabled(QtInfoMsg); }
 
+    void blacklist() { m_blacklisted = true; }
+    bool isValid() const
+    {
+        if (m_blacklisted)
+            return false;
+        if (m_category
+            && m_category->categoryName() != m_namePointer) // something bad happened (deleted?)
+            return false;
+        return true;
+    }
+
 private:
     QString m_name;
     QLoggingCategory *m_category{nullptr};
+    const char *m_namePointer{nullptr}; // kept for sanity checking
     std::optional<std::array<bool, 5>> m_originalSettings;
     std::optional<std::array<bool, 5>> m_saved;
     QColor m_color;
     bool m_useOriginal{false};
+    bool m_blacklisted{false};
 };
 
 class LoggingCategoryModel : public QAbstractListModel
@@ -319,6 +368,16 @@ public:
                 &LogCategoryRegistry::newLogCategory,
                 this,
                 newCategory);
+        connect(&LogCategoryRegistry::instance(),
+                &LogCategoryRegistry::blackListed,
+                this,
+                [this](const QString &catName) {
+                    auto it = std::find_if(m_categories.begin(),
+                                           m_categories.end(),
+                                           [catName](const auto &cat) { return cat.name() == catName; });
+                    if (it != m_categories.end())
+                        it->blacklist();
+        });
 
         LogCategoryRegistry::instance().start();
     };
@@ -374,7 +433,10 @@ QVariant LoggingCategoryModel::data(const QModelIndex &index, int role) const
     if (!index.isValid())
         return {};
 
-    if (index.column() == Column::Name && role == Qt::DisplayRole) {
+    if (role == Qt::ToolTipRole && !m_categories.at(index.row()).isValid()) {
+        return Tr::tr("This logging category uses discouraged non-static approach and"
+                      " cannot get handled by the logging viewer.");
+    } else if (index.column() == Column::Name && role == Qt::DisplayRole) {
         return m_categories.at(index.row()).name();
     } else if (role == Qt::DecorationRole && index.column() == Column::Color) {
         const QColor color = m_categories.at(index.row()).color();
@@ -383,7 +445,9 @@ QVariant LoggingCategoryModel::data(const QModelIndex &index, int role) const
 
         static const QColor defaultColor = Utils::creatorTheme()->palette().text().color();
         return defaultColor;
-    } else if (index.column() >= Column::Debug && index.column() <= Column::Info) {
+    } else if (
+        m_categories.at(index.row()).isValid() && index.column() >= Column::Debug
+        && index.column() <= Column::Info) {
         if (role == Qt::CheckStateRole) {
             const LoggingCategoryEntry &entry = m_categories.at(index.row());
             const bool isEnabled = entry.isEnabled(
@@ -439,13 +503,15 @@ Qt::ItemFlags LoggingCategoryModel::flags(const QModelIndex &index) const
     if (index.column() == LoggingCategoryModel::Column::Fatal)
         return Qt::NoItemFlags;
 
+    Qt::ItemFlag enabled = m_categories[index.row()].isValid() ? Qt::ItemIsEnabled
+                                                               : Qt::NoItemFlags;
     if (index.column() == Column::Name || index.column() == Column::Color)
-        return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
+        return enabled | Qt::ItemIsSelectable;
 
     if (m_useOriginal)
         return Qt::ItemIsSelectable | Qt::ItemIsUserCheckable;
 
-    return Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable;
+    return enabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable;
 }
 
 QVariant LoggingCategoryModel::headerData(int section, Qt::Orientation orientation, int role) const
