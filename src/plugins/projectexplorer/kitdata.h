@@ -47,3 +47,5 @@ public:
 };
 
 } // namespace ProjectExplorer
+
+Q_DECLARE_METATYPE(ProjectExplorer::KitData)
