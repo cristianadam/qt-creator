@@ -427,7 +427,7 @@ ProjectInfo::ConstPtr ProjectOpenerAndCloser::open(const FilePath &projectFile, 
     }
 
     Project *project = result.project();
-    project->configureAsExampleProject(kit);
+    QTC_ASSERT(project->configureAsExampleProject(kit), return {});
 
     if (TestCase::waitUntilProjectIsFullyOpened(project)) {
         m_openProjects.append(project);

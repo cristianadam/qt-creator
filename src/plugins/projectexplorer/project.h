@@ -153,7 +153,7 @@ public:
 
     virtual bool needsConfiguration() const;
     bool supportsBuilding() const;
-    virtual void configureAsExampleProject(ProjectExplorer::Kit *kit);
+    [[nodiscard]] bool configureAsExampleProject(ProjectExplorer::Kit *kit);
 
     ProjectImporter *projectImporter() const;
 
@@ -286,6 +286,8 @@ protected:
     void setProjectImporter(ProjectImporter *importer);
 
 private:
+    virtual bool configureAsExampleProjectImpl(ProjectExplorer::Kit *kit);
+
     void setBuildSystemName(const QString &name);
     void setBuildSystemCreator(const std::function<BuildSystem *(BuildConfiguration *)> &creator);
 

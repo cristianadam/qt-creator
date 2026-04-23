@@ -1115,19 +1115,6 @@ void CentralizedFolderWatcher::delayedFolderChanged(const QString &folder)
         m_buildSystem->updateCodeModels();
 }
 
-void QmakeProject::configureAsExampleProject(Kit *kit)
-{
-    QList<BuildInfo> infoList;
-    const QList<Kit *> kits(kit != nullptr ? QList<Kit *>({kit}) : KitManager::kits());
-    for (Kit *k : kits) {
-        if (QtSupport::QtKitAspect::qtVersion(k) != nullptr) {
-            if (auto factory = BuildConfigurationFactory::find(k, projectFilePath()))
-                infoList << factory->allAvailableSetups(k, projectFilePath());
-        }
-    }
-    setup(infoList);
-}
-
 void QmakeBuildSystem::updateBuildSystemData()
 {
     const QmakeProFile *const file = rootProFile();

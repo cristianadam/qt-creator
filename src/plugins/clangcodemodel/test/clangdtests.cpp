@@ -205,7 +205,7 @@ void ClangdTest::initTestCase()
             m_projectDir->absolutePath(m_projectFileName));
     QVERIFY2(openProjectResult, qPrintable(openProjectResult.errorMessage()));
     m_project = openProjectResult.project();
-    m_project->configureAsExampleProject(m_kit);
+    QVERIFY(m_project->configureAsExampleProject(m_kit));
 
     waitForNewClient();
     QVERIFY(m_client);

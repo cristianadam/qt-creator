@@ -274,7 +274,7 @@ F2TestCase::F2TestCase(CppEditorAction action,
         QVERIFY2(openProjectResult && openProjectResult.project(),
                  qPrintable(openProjectResult.errorMessage()));
         projectCloser.setProject(openProjectResult.project());
-        openProjectResult.project()->configureAsExampleProject(m_testKit);
+        QVERIFY(openProjectResult.project()->configureAsExampleProject(m_testKit));
 
         // Wait until project is fully indexed.
         QVERIFY(CppEditor::Tests::waitForSignalOrTimeout(openProjectResult.project(),

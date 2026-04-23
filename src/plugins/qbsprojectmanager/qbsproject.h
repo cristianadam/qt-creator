@@ -40,9 +40,8 @@ class QbsProject : public ProjectExplorer::Project
 public:
     explicit QbsProject(const Utils::FilePath &filename);
 
+private:
     ProjectExplorer::DeploymentKnowledge deploymentKnowledge() const override;
-
-    void configureAsExampleProject(ProjectExplorer::Kit *kit) final;
 };
 
 class QbsBuildSystem final : public ProjectExplorer::BuildSystem

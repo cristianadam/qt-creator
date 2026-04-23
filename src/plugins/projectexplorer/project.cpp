@@ -1300,8 +1300,28 @@ bool Project::supportsBuilding() const
     return d->m_supportsBuilding;
 }
 
-void Project::configureAsExampleProject(Kit * /*kit*/)
+bool Project::configureAsExampleProject(Kit *kit)
 {
+    // If the caller provided a kit, it must be valid.
+    QTC_ASSERT(!kit || kit->isValid(), return false);
+
+    // If the caller did not provide a kit, it means it has no special preference.
+    // So we choose one.
+    if (!kit)
+        kit = KitManager::kit([](const Kit *k) { return k->isValid(); });
+    if (!kit)
+        return false;
+
+    return configureAsExampleProjectImpl(kit);
+}
+
+bool Project::configureAsExampleProjectImpl(Kit *kit)
+{
+    if (auto factory = BuildConfigurationFactory::find(kit, projectFilePath())) {
+        setup(factory->allAvailableSetups(kit, projectFilePath()));
+        return true;
+    }
+    return false;
 }
 
 DeploymentKnowledge Project::deploymentKnowledge() const
@@ -2119,7 +2139,7 @@ private slots:
             QFile(f.absoluteFilePath()).setPermissions(f.permissions() | QFile::WriteUser);
         const auto theProject = ProjectExplorerPlugin::openProject(projectDir.pathAppended("generic-project.creator"));
         QVERIFY2(theProject, qPrintable(theProject.errorMessage()));
-        theProject.project()->configureAsExampleProject(kit);
+        QVERIFY(theProject.project()->configureAsExampleProject(kit));
         QCOMPARE(theProject.project()->targets().size(), 1);
         Target * const target = theProject.project()->activeTarget();
         QVERIFY(target);
@@ -2150,8 +2170,15 @@ private slots:
 
     void testSourceToBinaryMapping()
     {
+        bool requiresQt = QByteArray(QTest::currentDataTag()) == "qmake";
+
         // Find suitable kit.
-        Kit * const kit = findOr(KitManager::kits(), nullptr, [](const Kit *k) {
+        Kit * const kit = findOr(KitManager::kits(), nullptr, [requiresQt](const Kit *k) {
+            if (requiresQt) {
+                const auto val = k->value("QtSupport.QtInformation");
+                if (!val.isValid() || val.toInt() == -1)
+                    return false;
+            }
             return k->isValid() && ToolchainKitAspect::cxxToolchain(k);
         });
         if (!kit)
@@ -2192,7 +2219,7 @@ private slots:
         }
 
         QVERIFY2(theProject, qPrintable(theProject.errorMessage()));
-        theProject.project()->configureAsExampleProject(kit);
+        QVERIFY(theProject.project()->configureAsExampleProject(kit));
         QCOMPARE(theProject.project()->targets().size(), 1);
         BuildSystem * const bs = theProject.project()->activeBuildSystem();
         QVERIFY(bs);

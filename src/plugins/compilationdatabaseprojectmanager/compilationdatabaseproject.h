@@ -15,9 +15,6 @@ class CompilationDatabaseProject final : public ProjectExplorer::Project
 
 public:
     explicit CompilationDatabaseProject(const Utils::FilePath &filename);
-
-private:
-    void configureAsExampleProject(ProjectExplorer::Kit *kit) final;
 };
 
 void setupCompilationDatabaseEditor();

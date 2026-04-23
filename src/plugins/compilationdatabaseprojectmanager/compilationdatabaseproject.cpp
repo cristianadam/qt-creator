@@ -428,14 +428,6 @@ static FilePath rootPathFromSettings(Project *project)
     return rootPath;
 }
 
-void CompilationDatabaseProject::configureAsExampleProject(Kit *kit)
-{
-    if (kit)
-        addTargetForKit(kit);
-    else if (KitManager::defaultKit())
-        addTargetForKit(KitManager::defaultKit());
-}
-
 void CompilationDatabaseBuildSystem::reparseProject()
 {
     if (project()->activeBuildSystem() != this)

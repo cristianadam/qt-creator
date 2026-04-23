@@ -215,7 +215,7 @@ public:
 private:
     RestoreResult fromMap(const Store &map, QString *errorMessage) final;
     DeploymentKnowledge deploymentKnowledge() const final;
-    void configureAsExampleProject(Kit *kit) final;
+    bool configureAsExampleProjectImpl(Kit *kit) final;
 };
 
 GenericBuildSystem::GenericBuildSystem(BuildConfiguration *bc)
@@ -652,24 +652,23 @@ DeploymentKnowledge GenericProject::deploymentKnowledge() const
     return DeploymentKnowledge::Approximative;
 }
 
-void GenericProject::configureAsExampleProject(Kit *kit)
+bool GenericProject::configureAsExampleProjectImpl(Kit *kit)
 {
     QList<BuildInfo> infoList;
-    const QList<Kit *> kits(kit != nullptr ? QList<Kit *>({kit}) : KitManager::kits());
-    for (Kit *k : kits) {
-        if (auto factory = BuildConfigurationFactory::find(k, projectFilePath())) {
-            for (int i = 0; i < 5; ++i) {
-                BuildInfo buildInfo;
-                buildInfo.buildSystemName = "generic";
-                buildInfo.displayName = Tr::tr("Build %1").arg(i + 1);
-                buildInfo.factory = factory;
-                buildInfo.kitId = k->id();
-                buildInfo.buildDirectory = projectFilePath();
-                infoList << buildInfo;
-            }
+    if (auto factory = BuildConfigurationFactory::find(kit, projectFilePath())) {
+        // This is required by ProjectTest::testMultipleBuildConfigs().
+        for (int i = 0; i < 5; ++i) {
+            BuildInfo buildInfo;
+            buildInfo.buildSystemName = "generic";
+            buildInfo.displayName = Tr::tr("Build %1").arg(i + 1);
+            buildInfo.factory = factory;
+            buildInfo.kitId = kit->id();
+            buildInfo.buildDirectory = projectFilePath();
+            infoList << buildInfo;
         }
     }
     setup(infoList);
+    return true;
 }
 
 void GenericProject::editFilesTriggered()

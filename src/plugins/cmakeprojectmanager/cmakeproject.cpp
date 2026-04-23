@@ -471,19 +471,6 @@ ProjectExplorer::DeploymentKnowledge CMakeProject::deploymentKnowledge() const
                : DeploymentKnowledge::Bad;
 }
 
-void CMakeProject::configureAsExampleProject(ProjectExplorer::Kit *kit)
-{
-    QList<BuildInfo> infoList;
-    const QList<Kit *> kits(kit != nullptr ? QList<Kit *>({kit}) : KitManager::kits());
-    for (Kit *k : kits) {
-        if (QtSupport::QtKitAspect::qtVersion(k) != nullptr) {
-            if (auto factory = BuildConfigurationFactory::find(k, projectFilePath()))
-                infoList << factory->allAvailableSetups(k, projectFilePath());
-        }
-    }
-    setup(infoList);
-}
-
 #ifdef WITH_TESTS
 
 class TestPresetsInheritance final : public QObject

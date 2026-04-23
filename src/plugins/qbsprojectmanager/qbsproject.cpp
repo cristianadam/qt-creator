@@ -110,21 +110,6 @@ QbsProject::QbsProject(const FilePath &fileName)
     setProjectImporter(new QbsProjectImporter(projectFilePath()));
 }
 
-void QbsProject::configureAsExampleProject(Kit *kit)
-{
-    QList<BuildInfo> infoList;
-    const QList<Kit *> kits(kit != nullptr ? QList<Kit *>({kit}) : KitManager::kits());
-    for (Kit *k : kits) {
-        if (QtSupport::QtKitAspect::qtVersion(k) != nullptr) {
-            if (auto factory = BuildConfigurationFactory::find(k, projectFilePath()))
-                infoList << factory->allAvailableSetups(k, projectFilePath());
-        }
-    }
-    setup(infoList);
-    if (activeBuildSystem())
-        static_cast<QbsBuildSystem *>(activeBuildSystem())->prepareForParsing();
-}
-
 static bool supportsNodeAction(const QbsBuildSystem *bs, ProjectAction action, const Node *node)
 {
     if (!bs->isProjectEditable())
