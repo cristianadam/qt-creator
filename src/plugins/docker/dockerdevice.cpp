@@ -1560,10 +1560,10 @@ ExecutableItem DockerDevice::signalOperationRecipe(
 
     Storage<qint64> pid;
 
-    const auto onFindProcessSetup = [data](Async<Result<qint64>> &task) {
+    const auto onFindProcessSetup = [this, data](Async<Result<qint64>> &task) {
         task.setConcurrentCallData(
-            [](QPromise<Result<qint64>> &promise, const FilePath &filePath) {
-                const Result<QList<ProcessInfo>> list = ProcessInfo::processInfoList();
+            [](QPromise<Result<qint64>> &promise, const FilePath &filePath, const FilePath &rootPath) {
+                const Result<QList<ProcessInfo>> list = ProcessInfo::processInfoList(rootPath);
                 if (!list) {
                     promise.addResult(ResultError(list.error()));
                     return;
@@ -1577,7 +1577,7 @@ ExecutableItem DockerDevice::signalOperationRecipe(
                 }
                 promise.addResult(ResultError(Tr::tr("Process not found.")));
             },
-            data.filePath);
+            data.filePath, rootPath());
     };
 
     const auto onFindProcessDone = [pid, resultStorage](const Async<Result<qint64>> &task) {
