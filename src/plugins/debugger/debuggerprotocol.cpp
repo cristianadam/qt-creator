@@ -1049,4 +1049,11 @@ QString reformatCharacter(int code, int size, bool isSigned)
     return out;
 }
 
+QString reformatCharacterWithFormat(int code, int size, bool isSigned, int format)
+{
+    if (format == AutomaticFormat)
+        return reformatCharacter(code, size, isSigned);
+    return reformatInteger(quint64(code), format, size, isSigned);
+}
+
 } // Debugger::Internal

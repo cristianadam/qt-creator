@@ -27,6 +27,8 @@ private slots:
     void reformatIntegerOverload_data();
     void reformatCharacter();
     void reformatCharacter_data();
+    void reformatCharacterWithFormat();
+    void reformatCharacterWithFormat_data();
 #if defined(__SIZEOF_INT128__)
     void reformatUnsignedInteger128Test();
     void reformatUnsignedInteger128Test_data();
@@ -243,6 +245,43 @@ void tst_protocol::reformatCharacter_data()
     QTest::newRow("unsigned-minus40")
         << int(-40) << 1 << false
         << (QString("'") + QChar(0xd8) + "' \t216\t0xd8");
+}
+
+void tst_protocol::reformatCharacterWithFormat()
+{
+    QFETCH(int, code);
+    QFETCH(int, size);
+    QFETCH(bool, isSigned);
+    QFETCH(int, format);
+    QFETCH(QString, expected);
+
+    QCOMPARE(Debugger::Internal::reformatCharacterWithFormat(code, size, isSigned, format),
+             expected);
+}
+
+void tst_protocol::reformatCharacterWithFormat_data()
+{
+    QTest::addColumn<int>("code");
+    QTest::addColumn<int>("size");
+    QTest::addColumn<bool>("isSigned");
+    QTest::addColumn<int>("format");
+    QTest::addColumn<QString>("expected");
+
+    QTest::newRow("auto-A")
+        << int('A') << 1 << false << int(AutomaticFormat)
+        << QString("'A' \t65\t0x41");
+
+    QTest::newRow("decimal-A")
+        << int('A') << 1 << false << int(DecimalIntegerFormat)
+        << QString("65");
+
+    QTest::newRow("decimal-signed-minus8")
+        << int(-8) << 1 << true << int(DecimalIntegerFormat)
+        << QString("248");
+
+    QTest::newRow("hex-A")
+        << int('A') << 1 << false << int(HexadecimalIntegerFormat)
+        << QString("(hex) 41");
 }
 
 #if defined(__SIZEOF_INT128__)
