@@ -33,19 +33,19 @@ static const char DETECTIONSOURCEID[] = "DetectionSource.id";
 
 namespace ProjectExplorer {
 
-void ProjectExplorer::DetectionSource::fromMap(const Utils::Store &store)
+void DetectionSource::fromMap(const Store &store)
 {
     type = static_cast<DetectionType>(store.value(DETECTIONSOURCETYPE).toInt());
     id = store.value(DETECTIONSOURCEID).toString();
 }
 
-void DetectionSource::toMap(Utils::Store &store) const
+void DetectionSource::toMap(Store &store) const
 {
     store.insert(DETECTIONSOURCETYPE, static_cast<int>(type));
     store.insert(DETECTIONSOURCEID, id);
 }
 
-std::optional<DetectionSource> DetectionSource::createFromMap(const Utils::Store &store)
+std::optional<DetectionSource> DetectionSource::createFromMap(const Store &store)
 {
     if (store.contains(DETECTIONSOURCETYPE) && store.contains(DETECTIONSOURCEID)) {
         DetectionSource ds;
@@ -166,9 +166,9 @@ public:
     Kit *kit;
     const KitAspectFactory * const factory;
     QAction *mutableAction = nullptr;
-    Utils::Id managingPageId;
+    Id managingPageId;
     QPushButton *manageButton = nullptr;
-    Utils::Guard ignoreChanges;
+    Guard ignoreChanges;
     QList<KitAspect *> aspectsToEmbed;
 
     struct ListAspect
@@ -364,7 +364,10 @@ void KitAspect::addMutableAction(QWidget *child)
     child->setContextMenuPolicy(Qt::ActionsContextMenu);
 }
 
-void KitAspect::setManagingPage(Utils::Id pageId) { d->managingPageId = pageId; }
+void KitAspect::setManagingPage(Id pageId)
+{
+    d->managingPageId = pageId;
+}
 
 void KitAspect::setAspectsToEmbed(const QList<KitAspect *> &aspects)
 {
@@ -473,7 +476,7 @@ const QList<KitAspectFactory *> KitAspectFactory::kitAspectFactories()
 
 std::optional<QtTaskTree::ExecutableItem> KitAspectFactory::autoDetect(
     Kit *kit,
-    const Utils::FilePaths &searchPaths,
+    const FilePaths &searchPaths,
     const DetectionSource &detectionSource,
     const LogCallback &logCallback) const
 {
@@ -524,7 +527,6 @@ Group kitDetectionRecipe(
     const LogCallback &logCallback)
 {
     using namespace QtTaskTree;
-    using namespace Utils;
 
     Storage<GroupItems> detectorItems;
     Storage<Kit *> kit;
