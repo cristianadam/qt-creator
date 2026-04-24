@@ -1027,10 +1027,10 @@ public:
         const auto updateGlobalSettingsCheckBox = [this] {
             if (ClangdSettings::instance().data().isSessionMode()) {
                 setUseGlobalSettingsCheckBoxEnabled(false);
-                setUseGlobalSettings(true);
+                ProjectSettingsWidget::setUseGlobalSettings(true);
             } else {
                 setUseGlobalSettingsCheckBoxEnabled(true);
-                setUseGlobalSettings(m_useGlobalSettings);
+                ProjectSettingsWidget::setUseGlobalSettings(m_useGlobalSettings);
             }
             m_widget.setEnabled(!m_useGlobalSettings);
         };
