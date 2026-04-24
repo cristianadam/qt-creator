@@ -393,8 +393,11 @@ public:
             if (iconUrl.isEmpty())
                 return QVariant();
 
-            QIcon icon = AcpSettings::iconForUrl(iconUrl).result();
-            return QVariant(icon);
+            const QFuture<QIcon> future = AcpSettings::iconForUrl(iconUrl);
+            if (future.isFinished())
+                return QVariant(future.result());
+
+            return QVariant();
         };
 
         setLayouter([this]() {
