@@ -995,7 +995,7 @@ QString reformatUnsignedInteger128(unsigned __int128 value, int format)
 
 QString reformatCharacter(int code, int size, bool isSigned)
 {
-    if (uint32_t(code) > 0xffff) {
+    if (code > 0xffff) {
         std::array<char, sizeof(char32_t)> buf;
         memcpy(buf.data(), &code, sizeof(char32_t));
         QByteArrayView view(buf);
@@ -1035,7 +1035,9 @@ QString reformatCharacter(int code, int size, bool isSigned)
         else
             out += QString(2 + 2 * size, ' ');
     } else {
-        if (size == 2)
+        if (size == 1)
+            out += QString::number(uint8_t(code));
+        else if (size == 2)
             out += QString::number(char16_t(code));
         else
             out += QString::number(unsigned(code));

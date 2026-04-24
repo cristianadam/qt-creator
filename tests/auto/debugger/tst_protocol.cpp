@@ -234,6 +234,15 @@ void tst_protocol::reformatCharacter_data()
     // Non-printable, non-special: four spaces before the tab
     QTest::newRow("bell")
         << int('\a') << 1 << false << QString("    \t7\t0x07");
+    QTest::newRow("signed-minus8")
+        << int(-8) << 1 << true
+        << (QString("'") + QChar(0xf8) + "' \t-8/248\t0xf8");
+    QTest::newRow("signed-minus1")
+        << int(-1) << 1 << true
+        << (QString("'") + QChar(0xff) + "' \t-1/255\t0xff");
+    QTest::newRow("unsigned-minus40")
+        << int(-40) << 1 << false
+        << (QString("'") + QChar(0xd8) + "' \t216\t0xd8");
 }
 
 #if defined(__SIZEOF_INT128__)
