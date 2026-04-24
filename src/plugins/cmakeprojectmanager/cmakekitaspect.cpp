@@ -135,8 +135,13 @@ public:
             if (!tool->cmakeExecutable().isExecutableFile())
                 return Icons::CRITICAL.icon();
             return {};
-        case Qt::ToolTipRole:
-            return tool->cmakeExecutable().toUserOutput();
+        case Qt::ToolTipRole: {
+            QString tooltip = Tr::tr("Version: %1").arg(tool->versionDisplay());
+            tooltip += "<br>" + Tr::tr("Supports fileApi: %1")
+                                    .arg(tool->hasFileApi() ? Tr::tr("yes") : Tr::tr("no"));
+            tooltip += "<br>" + Tr::tr("Detection source: \"%1\"").arg(tool->detectionSource().id);
+            return tooltip;
+        }
         case KitAspect::IdRole:
             return tool->id().toSetting();
         default:
