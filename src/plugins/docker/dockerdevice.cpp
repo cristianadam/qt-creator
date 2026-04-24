@@ -231,15 +231,6 @@ public:
         if (!initResult)
             return ResultError(initResult.error());
 
-        const QUrl localSocketUrl = Utils::urlFromLocalSocket();
-        if (!localSocketUrl.path().isEmpty()) {
-            auto forwardResult = fAccess->forwardLocalSocketServer(localSocketUrl.path());
-            if (forwardResult) {
-                m_qmlDebuggerAccess = localSocketUrl;
-                m_qmlDebuggerForward = std::move(*forwardResult);
-            }
-        }
-
         return fAccess;
     }
 
@@ -288,9 +279,6 @@ public:
     bool m_isShutdown = false;
     SynchronizedValue<DeviceFileAccessPtr> m_fileAccess;
     SynchronizedValue<std::unique_ptr<DockerContainerThread>> m_deviceThread;
-
-    QUrl m_qmlDebuggerAccess;
-    std::unique_ptr<CmdBridge::LocalSocketForward> m_qmlDebuggerForward;
 
     struct HandlesFileData
     {
@@ -501,9 +489,6 @@ Result<CommandLine> DockerDevicePrivate::withDockerExecCmd(
 void DockerDevicePrivate::stopCurrentContainer()
 {
     { // scope, so they are unlocked before setDeviceState
-        m_qmlDebuggerForward.reset();
-        m_qmlDebuggerAccess.clear();
-
         auto fileAccess = m_fileAccess.writeLocked();
         fileAccess->reset();
 
@@ -1548,20 +1533,17 @@ QPixmap DockerDevice::deviceStateIcon() const
     }
 }
 
-bool DockerDevice::forwardsQmlDebugSocket() const
+QUrl DockerDevice::toolControlChannel(const ControlChannelHint &) const
 {
-    return true;
+    QUrl url;
+    url.setScheme(Utils::urlTcpScheme());
+    url.setHost("localhost");
+    return url;
 }
 
-QUrl DockerDevice::toolControlChannel(const ControlChannelHint &hint) const
+QString DockerDevice::qmlDebugServerBindHost() const
 {
-    QTC_CHECK(hint == QmlControlChannel);
-    return d->m_qmlDebuggerAccess;
-}
-
-QString DockerDevice::qmlDebugRemoteSocketPath() const
-{
-    return d->m_qmlDebuggerForward ? d->m_qmlDebuggerForward->path().path() : QString{};
+    return "0.0.0.0";
 }
 
 ExecutableItem DockerDevice::signalOperationRecipe(

@@ -10,7 +10,6 @@
 #include "dockersettings.h"
 
 #include <projectexplorer/devicesupport/devicemanager.h>
-#include <projectexplorer/devicesupport/idevice.h>
 #include <projectexplorer/kit.h>
 #include <projectexplorer/kitmanager.h>
 #include <projectexplorer/projectexplorerconstants.h>
@@ -22,9 +21,7 @@
 
 #include <QtTaskTree/QTaskTree>
 
-#include <QLocalServer>
 #include <QLoggingCategory>
-#include <QSignalSpy>
 #include <QTest>
 
 using namespace ProjectExplorer;
@@ -98,8 +95,8 @@ private slots:
 
     // Test 2: Docker device + combined C++/QML debugging -> requestQmlChannel() must be called.
     // Regression test for QTCREATORBUG-34093: combined mode must also trigger
-    // requestQmlChannel() so that createBridgeFileAccess() runs (and sets
-    // m_qmlDebuggerAccess) before fixupParameters() looks at m_qmlServer.
+    // requestQmlChannel() so that a QML channel port is allocated before
+    // fixupParameters() looks at m_qmlServer.
     void testDockerCombinedDebuggingRequestsQmlChannel()
     {
         auto device = DockerDevice::create();
@@ -133,7 +130,7 @@ private slots:
 
         auto *rc = new RunControl(ProjectExplorer::Constants::DEBUG_RUN_MODE);
         rc->setKit(kit);
-        // No Docker device -> condition "device->type() == DockerDeviceType" is false.
+        // No device set -> condition "device && type != DESKTOP" is false.
         rc->setRunConfigIdForTest(ProjectExplorer::Constants::CMAKE_RUNCONFIG_ID);
         rc->setAspectDataForTest(makeQmlOnlyAspectData());
         rc->createRecipe(ProjectExplorer::Constants::DEBUG_RUN_MODE);
@@ -272,108 +269,6 @@ private slots:
 QObject *createDockerPortsGatheringTest()
 {
     return new DockerPortsGatheringTest;
-}
-
-// DockerQmlForwardingTest
-//
-// Verifies end-to-end QML debug socket forwarding: a process inside the
-// container connects to the CmdBridge-managed remote Unix socket and the
-// connection is forwarded to a QLocalServer on the host.
-//
-// Requires a running Docker daemon and qt-6-ubuntu-25.10-build (which has
-// Python 3); skipped automatically when unavailable.
-
-class DockerQmlForwardingTest : public QObject
-{
-    Q_OBJECT
-
-private:
-    DockerDevice::Ptr m_device;
-
-private slots:
-    void initTestCase()
-    {
-        if (!DockerApi::instance()->canConnect())
-            QSKIP("Docker daemon is not reachable");
-
-        const FilePath dockerBin = settings().dockerBinaryPath.effectiveBinary();
-        Process imageCheck;
-        imageCheck.setCommand({dockerBin, {"image", "inspect", "qt-6-ubuntu-25.10-build:latest",
-                                           "--format", "{{.Id}}"}});
-        imageCheck.runBlocking();
-        if (imageCheck.result() != ProcessResult::FinishedWithSuccess)
-            QSKIP("qt-6-ubuntu-25.10-build not available locally");
-
-        m_device = DockerDevice::create();
-        m_device->repo.setValue("qt-6-ubuntu-25.10-build");
-        m_device->tag.setValue("latest");
-        m_device->imageId.setValue(imageCheck.stdOut().trimmed());
-
-        DeviceManager::addDevice(m_device);
-
-        const Result<> r = m_device->updateContainerAccess();
-        if (!r)
-            QSKIP(qPrintable("Failed to start Docker container: " + r.error()));
-    }
-
-    void cleanupTestCase()
-    {
-        QLoggingCategory::setFilterRules("qtc.cmdbridge.client=false");
-        if (m_device) {
-            DeviceManager::removeDevice(m_device->id());
-            m_device->shutdown();
-        }
-        m_device.reset();
-        QLoggingCategory::setFilterRules("");
-    }
-
-    void testQmlSocketForwardingWorks()
-    {
-        // Trigger createBridgeFileAccess(), which sets m_qmlDebuggerAccess
-        // (local socket URL) and m_qmlDebuggerForward (remote socket path).
-        const DeviceFileAccessPtr access = m_device->fileAccess();
-        QVERIFY2(access, "Failed to obtain file access (CmdBridge not initialized)");
-
-        const QUrl localUrl = m_device->toolControlChannel(IDevice::QmlControlChannel);
-        QVERIFY2(!localUrl.path().isEmpty(),
-                 "toolControlChannel returned empty path; "
-                 "createBridgeFileAccess may not have run or socket forward failed");
-
-        const QString remotePath = m_device->qmlDebugRemoteSocketPath();
-        QVERIFY2(!remotePath.isEmpty(),
-                 "qmlDebugRemoteSocketPath is empty; socket forward was not established");
-
-        // Start the local server before launching socat so it is ready when
-        // LocalSocketForwardImpl forwards the connection.
-        QLocalServer server;
-        QVERIFY2(server.listen(localUrl.path()),
-                 qPrintable("QLocalServer failed to listen at " + localUrl.path()
-                            + ": " + server.errorString()));
-
-        QSignalSpy newConnectionSpy(&server, &QLocalServer::newConnection);
-
-        // Connect from inside Docker to the remote socket path. The Python
-        // one-liner connects and immediately closes, which is enough to
-        // trigger newConnection on the host side.
-        Process connectProcess;
-        connectProcess.setCommand(
-            {m_device->filePath("/usr/bin/python3"),
-             {"-c",
-              "import socket; s=socket.socket(socket.AF_UNIX);"
-              " s.connect('" + remotePath + "'); s.close()"}});
-        connectProcess.start();
-
-        QVERIFY2(newConnectionSpy.wait(30000),
-                 qPrintable("QLocalServer did not receive a forwarded connection "
-                            "within 30 s.\n"
-                            "  local socket:  " + localUrl.path() + "\n"
-                            "  remote socket: " + remotePath));
-    }
-};
-
-QObject *createDockerQmlForwardingTest()
-{
-    return new DockerQmlForwardingTest;
 }
 
 } // namespace Docker::Internal

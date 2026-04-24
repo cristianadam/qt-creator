@@ -358,6 +358,8 @@ void QmlEngine::beginConnection()
             return; // already listening; a second beginConnection() call is harmless but wasteful
         connection->startLocalServer(server.path());
     } else {
+        if (connection->isConnecting())
+            return;
         QString host = server.host();
         // Use localhost as default
         if (host.isEmpty())
@@ -1119,7 +1121,9 @@ void QmlEngine::connectionFailed()
 void QmlEngine::checkConnectionState()
 {
     if (!isConnected()) {
-        closeConnection();
+        d->connectionTimer.stop();
+        if (QmlDebugConnection *connection = d->connection())
+            connection->close();
         connectionStartupFailed();
     }
 }
