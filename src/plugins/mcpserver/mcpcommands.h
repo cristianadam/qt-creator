@@ -30,7 +30,7 @@ public:
 
     using ResponseCallback = std::function<void(const QJsonObject &response)>;
 
-    // Core Mcp commands
+    // Core MCP commands
     QString stopDebug();
 
     QStringList listProjects();

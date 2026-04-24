@@ -410,9 +410,9 @@ int main(int argc, char *argv[])
 
     Mcp::Server server(
         Mcp::Schema::Implementation()
-            .description("A simple Mcp server for testing purposes")
+            .description("A simple MCP server for testing purposes")
             .name("test-mcp-server")
-            .title("Test Mcp Server")
+            .title("Test MCP Server")
             .version("0.1")
             .websiteUrl("https://www.qt.io"));
 

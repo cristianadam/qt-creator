@@ -1230,7 +1230,7 @@ Server::Server(Schema::Implementation serverInfo)
             if (req.headers().contains("mcp-protocol-version")
                 && req.headers().value("mcp-protocol-version") != "2025-11-25") {
                 responder.write(
-                    "Unsupported Mcp protocol version",
+                    "Unsupported MCP protocol version",
                     errorHeaders,
                     QHttpServerResponse::StatusCode::BadRequest);
                 return;

@@ -1137,7 +1137,7 @@ public:
     McpManagerSettingsPage()
     {
         setId(MCPMANAGER_SETTINGS_PAGE_ID);
-        setDisplayName(Tr::tr("Mcp Servers"));
+        setDisplayName(Tr::tr("MCP Servers"));
         setCategory(Core::Constants::SETTINGS_CATEGORY_AI);
         setSettingsProvider([] { return &McpManagerSettings::instance(); });
     }

@@ -20,7 +20,7 @@ namespace Mcp::Internal {
  * This class provides a clean interface for accessing and retrieving
  * issues from Qt Creator's Issues panel. It encapsulates the complexity
  * of accessing internal Qt Creator APIs and provides a simple interface
- * for the Mcp plugin.
+ * for the MCP plugin.
  */
 class IssuesManager : public QObject
 {
