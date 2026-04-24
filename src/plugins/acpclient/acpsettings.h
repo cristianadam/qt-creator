@@ -41,5 +41,6 @@ private:
 };
 
 void setupAcpSettings();
+void prefetchAcpRegistry();
 
 } // namespace AcpClient::Internal

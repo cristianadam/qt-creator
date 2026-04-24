@@ -103,6 +103,12 @@ public:
 
     void extensionsInitialized() final {}
 
+    bool delayedInitialize() final
+    {
+        prefetchAcpRegistry();
+        return true;
+    }
+
     ShutdownFlag aboutToShutdown() final
     {
         return SynchronousShutdown;

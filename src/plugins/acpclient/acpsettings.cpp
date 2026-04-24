@@ -481,8 +481,12 @@ void setupAcpSettings()
 {
     (void) settingsPage();
     (void) AcpSettings::instance();
-    QObject::connect(Core::ICore::instance(), &Core::ICore::coreOpened, [] {
-        AcpRegistryBrowser::prefetch([] {
+}
+
+void prefetchAcpRegistry()
+{
+    AcpRegistryBrowser::prefetch(
+        [] {
             AcpManagerSettings::instance().acpServers.forEachItem(
                 [](const std::shared_ptr<AcpServerAspect> &server) {
                     server->applyRegistryTemplate();
@@ -490,7 +494,6 @@ void setupAcpSettings()
             AcpManagerSettings::instance().acpServers.writeSettings();
             emit AcpSettings::instance().serversChanged();
         });
-    });
 }
 
 } // namespace AcpClient::Internal
