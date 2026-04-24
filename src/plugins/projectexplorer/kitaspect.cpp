@@ -56,7 +56,21 @@ std::optional<DetectionSource> DetectionSource::createFromMap(const Utils::Store
 }
 
 namespace {
-class KitAspectSortModel : public SortModel
+
+class KitAspectComboBox final : public QComboBox
+{
+public:
+    using QComboBox::QComboBox;
+
+    bool event(QEvent *e) final
+    {
+        if (e->type() == QEvent::ToolTip)
+            setToolTip(itemData(currentIndex(), Qt::ToolTipRole).toString());
+        return QComboBox::event(e);
+    }
+};
+
+class KitAspectSortModel final : public SortModel
 {
 public:
     using SortModel::SortModel;
@@ -272,7 +286,7 @@ void KitAspect::addToInnerLayout(Layouting::Layout &layout)
 
 void KitAspect::addListAspectSpec(const ListAspectSpec &listAspectSpec)
 {
-    const auto comboBox = createSubWidget<QComboBox>();
+    const auto comboBox = createSubWidget<KitAspectComboBox>();
     const auto sortModel = new KitAspectSortModel(this);
     sortModel->setSourceModel(listAspectSpec.model);
     comboBox->setModel(sortModel);
@@ -282,16 +296,10 @@ void KitAspect::addListAspectSpec(const ListAspectSpec &listAspectSpec)
 
     refresh();
 
-    const auto updateTooltip = [comboBox] {
-        comboBox->setToolTip(
-            comboBox->itemData(comboBox->currentIndex(), Qt::ToolTipRole).toString());
-    };
-    updateTooltip();
     connect(comboBox, &QComboBox::currentIndexChanged,
-        this, [this, listAspectSpec, comboBox, updateTooltip] {
+        this, [this, listAspectSpec, comboBox] {
             if (d->ignoreChanges.isLocked())
                 return;
-            updateTooltip();
 
             if (Kit *k = kit())
                 listAspectSpec.setter(*k, comboBox->itemData(comboBox->currentIndex(), IdRole));
