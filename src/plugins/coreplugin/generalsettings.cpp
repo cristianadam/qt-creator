@@ -266,7 +266,7 @@ void GeneralSettingsWidget::fillLanguageBox() const
     QList<Item> items;
     // need to add this explicitly, since there is no qm file for English
     const QString english = QLocale::languageToString(QLocale::English);
-    items.append({english, QString("C"), english});
+    items.append({english, QString("en"), english});
 
     const FilePath creatorTrPath = ICore::resourcePath("translations");
     const FilePaths languageFiles = creatorTrPath.dirEntries(
