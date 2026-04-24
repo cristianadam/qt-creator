@@ -87,10 +87,8 @@ int NameValueDictionary::size() const
 
 void NameValueDictionary::modify(const EnvironmentItems &items)
 {
-    NameValueDictionary resultKeyValueDictionary = *this;
     for (const EnvironmentItem &item : items)
-        item.apply(&resultKeyValueDictionary);
-    *this = resultKeyValueDictionary;
+        item.apply(this);
 }
 
 EnvironmentItems NameValueDictionary::diff(const NameValueDictionary &other, bool checkAppendPrepend) const
