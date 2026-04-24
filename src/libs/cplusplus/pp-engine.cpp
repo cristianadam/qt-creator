@@ -1613,6 +1613,8 @@ void Preprocessor::handlePreprocessorDirective(PPToken *tk)
     static const QByteArray ppElse("else");
     static const QByteArray ppUndef("undef");
     static const QByteArray ppElif("elif");
+    static const QByteArray ppElifDef("elifdef");
+    static const QByteArray ppElifNDef("elifndef");
     static const QByteArray ppInclude("include");
     static const QByteArray ppIncludeNext("include_next");
     static const QByteArray ppImport("import");
@@ -1650,6 +1652,10 @@ void Preprocessor::handlePreprocessorDirective(PPToken *tk)
                 handleElseDirective(tk, poundToken);
             else if (directive == ppElif)
                 handleElifDirective(tk, poundToken);
+            else if (directive == ppElifDef)
+                handleElifDefDirective(false, tk, poundToken);
+            else if (directive == ppElifNDef)
+                handleElifDefDirective(true, tk, poundToken);
         }
     }
 
@@ -2050,7 +2056,7 @@ void Preprocessor::handleIfDefDirective(bool checkUndefined, PPToken *tk)
             // the macro is a feature constraint(e.g. QT_NO_XXX)
             if (checkUndefined && macroName.startsWith("QT_NO_")) {
                 if (macro->filePath() == configurationFileName()) {
-                    // and it' defined in a pro file (e.g. DEFINES += QT_NO_QOBJECT)
+                    // and it's defined in a pro file (e.g. DEFINES += QT_NO_QOBJECT)
 
                     value = false; // take the branch
                 }
@@ -2077,6 +2083,71 @@ void Preprocessor::handleIfDefDirective(bool checkUndefined, PPToken *tk)
     } else {
         qCWarning(lexerLog) << "#ifdef without identifier";
     }
+}
+
+void Preprocessor::handleElifDefDirective(bool checkUndefined, PPToken *tk, PPToken &poundToken)
+{
+    if (m_state.m_ifLevel == 0) {
+        qCWarning(lexerLog) << "#elif(n)def without #if";
+        handleIfDefDirective(checkUndefined, tk);
+        return;
+    }
+
+    lex(tk); // consume "elif(n)def" token
+
+    if (!tk->is(T_IDENTIFIER)) {
+        qCWarning(lexerLog) << "#elif(n)def without identifier";
+        return;
+    }
+
+    if (m_state.m_skipping[m_state.m_ifLevel - 1]) {
+        // we keep on skipping because we are nested in a skipped block
+        m_state.m_skipping[m_state.m_ifLevel] = true;
+        return;
+    }
+    if (m_state.m_trueTest[m_state.m_ifLevel]) {
+        if (!m_state.m_skipping[m_state.m_ifLevel]) {
+            // start skipping because the preceding then-part was not skipped
+            m_state.m_skipping[m_state.m_ifLevel] = true;
+            if (m_client)
+                startSkippingBlocks(poundToken);
+        }
+        return;
+    }
+
+    if (checkUndefined && m_state.m_ifLevel == 0)
+        m_state.updateIncludeGuardState(State::IncludeGuardStateHint_Ifndef, tk);
+
+    bool value = false;
+    const ByteArrayRef macroName = tk->asByteArrayRef();
+    if (Macro *macro = macroDefinition(macroName, tk->byteOffset, tk->utf16charOffset,
+                                       tk->lineno, m_env, m_client)) {
+        value = true;
+
+        // the macro is a feature constraint(e.g. QT_NO_XXX)
+        if (checkUndefined && macroName.startsWith("QT_NO_")) {
+            if (macro->filePath() == configurationFileName()) {
+                // and it's defined in a pro file (e.g. DEFINES += QT_NO_QOBJECT)
+
+                value = false; // take the branch
+            }
+        }
+    } else if (Environment::isBuiltinMacro(macroName)) {
+        value = true;
+    }
+
+    if (checkUndefined)
+        value = !value;
+
+    // preceding then-part was skipped, so calculate if we should start
+    // skipping, depending on the condition
+    bool startSkipping = !value;
+    m_state.m_trueTest[m_state.m_ifLevel] = !startSkipping;
+    m_state.m_skipping[m_state.m_ifLevel] = startSkipping;
+    if (m_client && !startSkipping)
+        m_client->stopSkippingBlocks(poundToken.utf16charOffset - 1);
+
+    lex(tk); // consume the identifier
 }
 
 void Preprocessor::handleUndefDirective(PPToken *tk)

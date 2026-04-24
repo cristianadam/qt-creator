@@ -33,7 +33,7 @@ const QStringList CppCompletionAssistProcessor::preprocessorCompletions()
                             "pragma omp sections", "pragma omp parallel sections", "pragma omp single",
                             "pragma omp master", "pragma omp critical", "pragma omp barrier",
                             "pragma omp flush", "pragma omp threadprivate", "undef", "if", "ifdef",
-                            "ifndef", "elif", "else", "endif"};
+                            "ifndef", "elif", "elifdef", "elifndef", "else", "endif"};
     return list;
 }
 
