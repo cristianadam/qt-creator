@@ -788,9 +788,11 @@ public:
     StringListAspect httpHeaders{this};
 };
 
-static QString displayFunc(McpServerAspect *aspect)
+static QVariant displayFunc(McpServerAspect *aspect, int role)
 {
-    return aspect->name.volatileValue();
+    if (role == Qt::DisplayRole)
+        return aspect->name.volatileValue();
+    return {};
 }
 
 static std::optional<QString> toString(const McpRegistry::Argument &arg)
@@ -1051,7 +1053,7 @@ public:
             return newItem;
         });
 
-        mcpServers.listViewDisplayCallback = displayFunc;
+        mcpServers.listViewDataCallback = displayFunc;
 
         enableDocsMcpServer.setLabelText(Tr::tr("Enable Qt Documentation MCP Server"));
         enableDocsMcpServer.setToolTip(

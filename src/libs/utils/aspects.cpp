@@ -3820,18 +3820,15 @@ class AspectListModelItem : public TypedTreeItem<AspectListModelItem>
 {
     std::shared_ptr<BaseAspect> m_aspect;
     QObject guard;
-    std::function<QString(BaseAspect *)> m_displayFunction;
-    std::function<QVariant(BaseAspect *)> m_decorationFunction;
+    std::function<QVariant(BaseAspect *, int role)> m_dataFunction;
 
 public:
     AspectListModelItem() = default;
     AspectListModelItem(
         const std::shared_ptr<BaseAspect> &aspect,
-        const std::function<QString(BaseAspect *)> &displayFunction,
-        const std::function<QVariant(BaseAspect *)> &decorationFunction)
+        const std::function<QVariant(BaseAspect *, int role)> &dataFunction)
         : m_aspect(aspect)
-        , m_displayFunction(displayFunction)
-        , m_decorationFunction(decorationFunction)
+        , m_dataFunction(dataFunction)
 
     {
         auto upd = [this] { update(); };
@@ -3843,19 +3840,26 @@ public:
     {
         if (column != 0)
             return {};
-        if (role == Qt::DecorationRole) {
-            return m_decorationFunction(m_aspect.get());
-        }
-        if (role == Qt::DisplayRole) {
-            return m_displayFunction(m_aspect.get());
-        }
         if (role == Qt::FontRole) {
             QFont f;
             f.setBold(m_aspect->isDirty() || added);
             f.setStrikeOut(deleted);
             return f;
         }
-        return {};
+
+        QVariant data = m_dataFunction(m_aspect.get(), role);
+        if (data.canConvert<QFuture<QVariant>>()) {
+            QFuture<QVariant> future = data.value<QFuture<QVariant>>();
+            if (!future.isFinished()) {
+                future.then(model(), [m = model(), idx = index(), role](const QFuture<QVariant> &f) {
+                    if (f.isFinished())
+                        m->dataChanged(idx, idx, {role});
+                });
+                return {};
+            }
+            return future.result();
+        }
+        return data;
     }
 
     bool hasAspect(const std::shared_ptr<BaseAspect> &aspect) const { return aspect == m_aspect; }
@@ -3881,12 +3885,9 @@ public:
 class AspectListModel : public TreeModel<AspectListModelItem, AspectListModelItem>
 {
 public:
-    AspectListModel(
-        const std::function<QString(BaseAspect *)> &displayFunction,
-        const std::function<QVariant(BaseAspect *)> &decorationFunction)
+    AspectListModel(const std::function<QVariant(BaseAspect *, int role)> &dataFunction)
         : TreeModel<AspectListModelItem, AspectListModelItem>()
-        , m_displayFunction(displayFunction)
-        , m_decorationFunction(decorationFunction)
+        , m_dataFunction(dataFunction)
     {
     }
 
@@ -3932,8 +3933,7 @@ public:
                     }
                 } else {
                     // The item in the aspect is not in the model, add it.
-                    modelItem
-                        = new AspectListModelItem(*itAspect, m_displayFunction, m_decorationFunction);
+                    modelItem = new AspectListModelItem(*itAspect, m_dataFunction);
                     modelItem->setStatus(newItems.contains(*itAspect), !inVolatile);
                     rootItem()->insertChild(modelIdx, modelItem);
                     ++modelIdx;
@@ -3959,8 +3959,7 @@ public:
         // Add remaining items in aspect to model.
         if (itAspect != volatileItems.end()) {
             for (; itAspect != volatileItems.end(); ++itAspect) {
-                auto item
-                    = new AspectListModelItem(*itAspect, m_displayFunction, m_decorationFunction);
+                auto item = new AspectListModelItem(*itAspect, m_dataFunction);
                 item->setStatus(newItems.contains(*itAspect), false);
                 rootItem()->appendChild(item);
             }
@@ -3968,8 +3967,7 @@ public:
     }
 
 private:
-    std::function<QString(BaseAspect *)> m_displayFunction;
-    std::function<QVariant(BaseAspect *)> m_decorationFunction;
+    std::function<QVariant(BaseAspect *, int)> m_dataFunction;
 };
 
 class Internal::AspectListPrivate
@@ -4001,10 +3999,8 @@ public:
 
     AspectListModel model;
 
-    AspectListPrivate(
-        std::function<QString(BaseAspect *)> displayFunction,
-        std::function<QVariant(BaseAspect *)> decorationFunction)
-        : model(displayFunction, decorationFunction)
+    AspectListPrivate(std::function<QVariant(BaseAspect *, int)> dataFunction)
+        : model(dataFunction)
     {}
 
     void addToLayoutImplInlineList(Layouting::Layout &parent, AspectList *aspect)
@@ -4156,14 +4152,9 @@ public:
 AspectList::AspectList(Utils::AspectContainer *container)
     : Utils::BaseAspect(container)
     , d(std::make_unique<Internal::AspectListPrivate>(
-          [this](BaseAspect *aspect) -> QString {
-              QTC_ASSERT(listViewDisplayCallback, return QString("No listViewDisplayCallback set"));
-              return listViewDisplayCallback(aspect);
-          },
-          [this](BaseAspect *aspect) -> QVariant {
-              if (listViewDecorationCallback)
-                  return listViewDecorationCallback(aspect);
-              return QVariant();
+          [this](BaseAspect *aspect, int role) -> QVariant {
+              QTC_ASSERT(listViewDataCallback, return QString("No listViewDataCallback set"));
+              return listViewDataCallback(aspect, role);
           }))
 {}
 

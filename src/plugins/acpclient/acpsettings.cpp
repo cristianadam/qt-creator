@@ -370,11 +370,6 @@ public:
     EnvironmentChangesAspect environment{this};
 };
 
-static QString displayFunc(AcpServerAspect *aspect)
-{
-    return aspect->name.volatileValue();
-}
-
 class AcpManagerSettings : public AspectContainer
 {
 public:
@@ -387,17 +382,20 @@ public:
         acpServers.setDisplayStyle(AspectList::DisplayStyle::ListViewWithDetails);
         acpServers.setCreateItemFunction([] { return std::make_shared<AcpServerAspect>(); });
 
-        acpServers.listViewDisplayCallback = displayFunc;
-        acpServers.listViewDecorationCallback = [](AcpServerAspect *aspect) {
-            const QString iconUrl = aspect->iconUrl.volatileValue();
-            if (iconUrl.isEmpty())
-                return QVariant();
+        acpServers.listViewDataCallback = [](AcpServerAspect *aspect, int role) -> QVariant {
+            if (role == Qt::DisplayRole)
+                return aspect->name.volatileValue();
 
-            const QFuture<QIcon> future = AcpSettings::iconForUrl(iconUrl);
-            if (future.isFinished())
-                return QVariant(future.result());
+            if (role == Qt::DecorationRole) {
+                const QString iconUrl = aspect->iconUrl.volatileValue();
+                if (iconUrl.isEmpty())
+                    return QVariant();
 
-            return QVariant();
+                return QVariant::fromValue(
+                    AcpSettings::iconForUrl(iconUrl).then(
+                        [](const QIcon &icon) -> QVariant { return icon; }));
+            }
+            return {};
         };
 
         setLayouter([this]() {
