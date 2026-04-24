@@ -629,7 +629,9 @@
             "pre_excludes": {
                 "$(delta:+)": [
                     "*/glsl.g",
-                    "*/qmljs.g"
+                    "*/qmljs.g",
+                    "*/src/libs/acp/*",
+                    "*/src/libs/mcp/schemas/*"
                 ]
             }
         },
@@ -640,7 +642,13 @@
             "_active": true
         },
         "DeadCodeDetection": {
-            "_active": true
+            "_active": true,
+            "pre_excludes": {
+                "$(delta:+)": [
+                    "*/src/libs/acp/*",
+                    "*/src/libs/mcp/schemas/*"
+                ]
+            }
         },
         "Frameworks-QtSupport": {
             "_active": true,
@@ -684,7 +692,7 @@
             "_active": true
         },
         "Metric-Lines.File.Code": {
-            "_active": true
+            "_active": false
         },
         "Metric-Lines.File.Comment": {
             "_active": true
@@ -693,7 +701,7 @@
             "_active": true
         },
         "Metric-Lines.File.LOC": {
-            "_active": true
+            "_active": false
         },
         "Metric-Lines.File.OnlyComment": {
             "_active": true
