@@ -244,7 +244,7 @@ public:
         : CollapsibleFrame(parent)
     {
         setFrameShape(QFrame::NoFrame);
-        setCollapsible(false);
+        setCollapsible(true);
 
         auto *header = new QLabel(QStringLiteral("<i>Thought</i>"), this);
         QPalette hpal = header->palette();
@@ -1070,6 +1070,8 @@ void AcpMessageView::addUserMessage(const QString &text)
 
 void AcpMessageView::appendAgentText(const QString &text)
 {
+    if (m_currentThoughtWidget)
+        m_currentThoughtWidget->setCollapsed(true);
     m_currentThoughtWidget = nullptr;
     finishToolCallGroup();
     if (!m_currentAgentWidget) {
@@ -1303,6 +1305,8 @@ void AcpMessageView::finishAgentMessage()
     if (m_currentAgentWidget)
         m_currentAgentWidget->flush();
     m_currentAgentWidget = nullptr;
+    if (m_currentThoughtWidget)
+        m_currentThoughtWidget->setCollapsed(true);
     m_currentThoughtWidget = nullptr;
 }
 
