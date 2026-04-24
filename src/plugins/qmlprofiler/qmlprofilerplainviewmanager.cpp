@@ -78,9 +78,9 @@ QString QmlProfilerPlainViewManager::fileDialogTraceFilesFilter()
     return Internal::QmlProfilerTool::fileDialogTraceFilesFilter();
 }
 
-QFuture<void> QmlProfilerPlainViewManager::loadTraceFile(const FilePath &file)
+void QmlProfilerPlainViewManager::loadTraceFile(const FilePath &file)
 {
-    return d->modelManager->load(file.toFSPathString());
+    d->modelManager->load(file.toFSPathString());
 }
 
 void QmlProfilerPlainViewManager::clear()

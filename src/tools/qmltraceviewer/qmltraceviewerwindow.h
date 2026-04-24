@@ -5,11 +5,7 @@
 
 #include <utils/fancymainwindow.h>
 
-#include <QFuture>
-
-namespace Utils {
-class FilePath;
-}
+namespace Utils { class FilePath; }
 
 namespace QmlTraceViewer {
 
@@ -22,7 +18,7 @@ class Window : public Utils::FancyMainWindow
 public:
     explicit Window(QWidget *parent = nullptr);
 
-    QFuture<void> loadTraceFile(const Utils::FilePath &filePath);
+    void loadTraceFile(const Utils::FilePath &filePath);
 
 protected:
     void closeEvent(QCloseEvent *event) override;

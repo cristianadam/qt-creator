@@ -5,12 +5,11 @@
 
 #include "qmlprofiler_global.h"
 
-#include <QFuture>
 #include <qwindowdefs.h>
 
-namespace Utils {
-class FilePath;
-}
+#include <QObject>
+
+namespace Utils { class FilePath; }
 
 namespace QmlProfiler {
 
@@ -24,7 +23,7 @@ public:
 
     QWidgetList views(QWidget *parent);
     static QString fileDialogTraceFilesFilter();
-    QFuture<void> loadTraceFile(const Utils::FilePath &file);
+    void loadTraceFile(const Utils::FilePath &file);
     void clear();
     std::chrono::milliseconds traceDuration() const;
 

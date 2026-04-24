@@ -40,7 +40,7 @@ class WindowPrivate : public QObject
 public:
     WindowPrivate(Window *window = nullptr);
 
-    QFuture<void> showOpenFileDialog();
+    void showOpenFileDialog();
 
     void onError(const QString &error);
     void onLoadFinished();
@@ -75,7 +75,7 @@ WindowPrivate::WindowPrivate(Window *window)
             this, &WindowPrivate::onGotoSourceLocation);
 }
 
-QFuture<void> WindowPrivate::showOpenFileDialog()
+void WindowPrivate::showOpenFileDialog()
 {
     const FilePath filePath = FileUtils::getOpenFilePath(
         Tr::tr("Load QML Trace"),
@@ -83,9 +83,7 @@ QFuture<void> WindowPrivate::showOpenFileDialog()
         QmlProfilerPlainViewManager::fileDialogTraceFilesFilter());
 
     if (!filePath.isEmpty())
-        return q->loadTraceFile(filePath);
-
-    return {};
+        q->loadTraceFile(filePath);
 }
 
 void WindowPrivate::onError(const QString &error)
@@ -196,14 +194,14 @@ Window::Window(QWidget *parent)
     restoreGeometry(settings().windowGeometry());
 }
 
-QFuture<void> Window::loadTraceFile(const FilePath &filePath)
+void Window::loadTraceFile(const FilePath &filePath)
 {
     settings().lastTraceFile.setValue(filePath);
     d->setTraceDuration(milliseconds{0});
     d->progressIndicator->show();
     d->lastLoadError.clear();
     RPC::notifyTraceFileLoadingStarted(filePath);
-    return d->viewManager->loadTraceFile(filePath);
+    d->viewManager->loadTraceFile(filePath);
 }
 
 void Window::closeEvent(QCloseEvent *event)
