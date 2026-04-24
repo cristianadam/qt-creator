@@ -64,10 +64,10 @@ jobs:
             file(APPEND "$ENV{GITHUB_OUTPUT}" "tag=${{github.run_id}}\n")
         endif()
 
-    - name: Setup Go 1.22.x
+    - name: Setup Go 1.26.x
       uses: actions/setup-go@v5
       with:
-        go-version: 1.22.x
+        go-version: 1.26.x
     - name: Install UPX
       if: ${{ !startsWith(matrix.config.os, 'macos') }}
       uses: crazy-max/ghaction-upx@v3
