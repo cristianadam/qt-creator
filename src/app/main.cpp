@@ -829,11 +829,12 @@ int main(int argc, char **argv)
     QTranslator translator;
     QTranslator qtTranslator;
     QStringList uiLanguages = QLocale::system().uiLanguages();
-    const QString overrideLanguage = options.hasTestOption
-                                         ? QString("C") // force built-in when running tests
-                                         : userSettings->value("General/OverrideLanguage").toString();
+    const QString overrideLanguage
+        = options.hasTestOption ? QString("en") // force built-in when running tests
+                                : userSettings->value("General/OverrideLanguage").toString();
+    // "C" is synonymous to "en" for old settings
     if (!overrideLanguage.isEmpty())
-        uiLanguages.prepend(overrideLanguage);
+        uiLanguages.prepend(overrideLanguage == "C" ? "en" : overrideLanguage);
     if (!options.uiLanguage.isEmpty())
         uiLanguages.prepend(options.uiLanguage);
     const QString &creatorTrPath = resourcePath() + "/translations";

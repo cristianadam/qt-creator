@@ -65,7 +65,7 @@ static void fillLanguageItems(const StringSelectionAspect::ResultCallback &cb)
     QList<LangItem> langItems;
     // need to add this explicitly, since there is no qm file for English
     const QString english = QLocale::languageToString(QLocale::English);
-    langItems.append({english, QString("C"), english});
+    langItems.append({english, QString("en"), english});
 
     const FilePath creatorTrPath = ICore::resourcePath("translations");
     const FilePaths languageFiles = creatorTrPath.dirEntries(
