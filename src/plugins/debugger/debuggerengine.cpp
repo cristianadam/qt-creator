@@ -75,19 +75,11 @@
 #include <utils/utilsicons.h>
 
 #include <QApplication>
-#include <QComboBox>
 #include <QDebug>
-#include <QDir>
 #include <QDockWidget>
 #include <QHeaderView>
 #include <QTextBlock>
 #include <QTimer>
-#include <QToolButton>
-
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonValue>
 
 using namespace Core;
 using namespace Debugger::Internal;
@@ -123,7 +115,7 @@ QDebug operator<<(QDebug str, const DebuggerRunParameters &rp)
     return str;
 }
 
-DebuggerRunParameters DebuggerRunParameters::fromRunControl(ProjectExplorer::RunControl *runControl)
+DebuggerRunParameters DebuggerRunParameters::fromRunControl(RunControl *runControl)
 {
     Kit *kit = runControl->kit();
     QTC_ASSERT(kit, return {});
@@ -222,7 +214,7 @@ void DebuggerRunParameters::setBreakOnMainNextTime()
     breakOnMainNextTime = true;
 }
 
-void DebuggerRunParameters::setupPortsGatherer(ProjectExplorer::RunControl *runControl) const
+void DebuggerRunParameters::setupPortsGatherer(RunControl *runControl) const
 {
     if (isCppDebugging())
         runControl->requestDebugChannel();
@@ -230,7 +222,7 @@ void DebuggerRunParameters::setupPortsGatherer(ProjectExplorer::RunControl *runC
         runControl->requestQmlChannel();
 }
 
-Result<> DebuggerRunParameters::fixupParameters(ProjectExplorer::RunControl *runControl)
+Result<> DebuggerRunParameters::fixupParameters(RunControl *runControl)
 {
     if (m_symbolFile.isEmpty())
         m_symbolFile = m_inferior.command.executable();
