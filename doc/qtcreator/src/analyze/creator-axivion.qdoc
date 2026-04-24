@@ -180,14 +180,19 @@
     parameters.
     \endlist
 
-    View running and finished local builds in \uicontrol {Local Build Progress}.
+    View running and finished local builds in \uicontrol {Local Analyses Progress}.
 
-    \image {qtcreator-axivion-localbuild-progress.webp} {Local Build Progress}
+    \image {qtcreator-axivion-localbuild-progress.webp} {Local Analyses Progress}
 
     Right-click a local build to cancel a running build from the context menu.
-    You can inspect the Axivion or build log of local builds after they finished.
-    Select \uicontrol {Remove All Finished} to remove
-    the local builds which have finished already from the local build progress.
+    You can inspect the output of the local build by double click or select
+    \uicontrol {See Build Output...} from the context menu. This opens the
+    \uicontrol {Local Analyses Output} view which provides the output for
+    running or finished local analyses.
+    Select \uicontrol {Remove All Finished} to remove the local builds which
+    have finished already from the local build progress.
+    This will also remove the respective output from the
+    \uicontrol {Local Analyses Output} view.
 
     \section1 Local dashboard
 
@@ -239,7 +244,7 @@
     see \c {IDE Integration} and \c {Local Analyses} in the official Axivion documentation.
 
     You can see the progress of a running single file analysis in
-    \uicontrol {Local Build Progress}. It will have the prefix \c {SFA:}.
+    \uicontrol {Local Analyses Progress}. It will have the prefix \c {SFA:}.
 
     When the single file analysis finishes, additional color-coded line markers might
     be added to the opened file. Color-coded line markers originate from a single
