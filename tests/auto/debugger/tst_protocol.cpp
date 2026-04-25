@@ -245,6 +245,14 @@ void tst_protocol::reformatCharacter_data()
     QTest::newRow("unsigned-minus40")
         << int(-40) << 1 << false
         << (QString("'") + QChar(0xd8) + "' \t216\t0xd8");
+
+    // Debugger reports value as unsigned. Function must re-interpret as signed.
+    QTest::newRow("signed-from-unsigned-size1")
+        << 216 << 1 << true
+        << (QString("'") + QChar(0xd8) + "' \t-40/216\t0xd8");
+    QTest::newRow("signed-from-unsigned-size2")
+        << 0x8000 << 2 << true
+        << (QString("'") + QChar(0x8000) + "' \t-32768/32768\t0x8000");
 }
 
 void tst_protocol::reformatCharacterWithFormat()

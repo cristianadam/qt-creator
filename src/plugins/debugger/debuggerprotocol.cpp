@@ -1029,6 +1029,12 @@ QString reformatCharacter(int code, int size, bool isSigned)
     out += '\t';
 
     if (isSigned) {
+        switch (size) {
+        case 1: code = int8_t(code);  break;
+        case 2: code = int16_t(code); break;
+        case 4: code = int32_t(code); break;
+        }
+
         out += QString::number(code);
         if (code < 0)
             out += QString("/%1    ").arg((1ULL << (8*size)) + code).left(2 + 2 * size);
