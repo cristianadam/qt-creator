@@ -38,6 +38,8 @@
 
 #include <qnx/qnxconstants.h>
 #include <qtsupport/qtkitaspect.h>
+#include <qtsupport/qtversionfactory.h>
+#include <qtsupport/qtversionmanager.h>
 
 #include <utils/algorithm.h>
 #include <utils/qtcprocess.h>
@@ -479,13 +481,13 @@ FilePaths CMakeProjectImporter::presetCandidates()
     return candidates;
 }
 
-struct DebuggerCMakeExpander
+struct PresetMacroExpander
 {
     const PresetsDetails::ConfigurePreset &preset;
     const Environment &env;
     const FilePath &projectDirectory;
 
-    DebuggerCMakeExpander(
+    PresetMacroExpander(
         const PresetsDetails::ConfigurePreset &p, const Environment &e, const FilePath &projectDir)
         : preset(p)
         , env(e)
@@ -510,7 +512,7 @@ struct DebuggerCMakeExpander
 };
 
 static QVariant findOrRegisterDebugger(
-    const DebuggerCMakeExpander &expander, const QString &projectName)
+    const PresetMacroExpander &expander, const QString &projectName)
 {
     Environment env = expander.env;
     const PresetsDetails::ConfigurePreset &preset = expander.preset;
@@ -553,6 +555,73 @@ static QVariant findOrRegisterDebugger(
         debugger.setDetectionSource(DetectionSource::Temporary);
         return DebuggerItemManager::registerDebugger(debugger);
     }
+}
+
+static QtProjectImporter::QtVersionData findOrRegisterQtVersion(
+    const PresetMacroExpander &expander, const QString &projectName)
+{
+    const PresetsDetails::ConfigurePreset &preset = expander.preset;
+    const Environment &env = expander.env;
+
+    const QString qtKey("qt");
+    if (!preset.vendor || !preset.vendor->contains(qtKey))
+        return {};
+
+    const QVariant qtVariant = preset.vendor->value(qtKey);
+    FilePath qmakePath;
+    QtVersion *version = nullptr;
+
+    if (qtVariant.canConvert<QString>()) {
+        qmakePath = FilePath::fromUserInput(expander.expand(qtVariant.toString()));
+        if (qmakePath.isEmpty())
+            return {};
+
+        if (qmakePath.isRelativePath())
+            qmakePath = env.searchInPath(qmakePath.fileName());
+
+        // Check if this Qt version is already known to the manager
+        for (QtVersion *v : QtVersionManager::versions()) {
+            if (v->qmakeFilePath() == qmakePath) {
+                version = v;
+                break;
+            }
+        }
+
+        if (version)
+            return {version, false}; // Not a temporary version
+
+        // If not known, create it as a temporary version
+        version
+            = QtVersionFactory::createQtVersionFromQMakePath(qmakePath, DetectionSource::Temporary);
+    } else {
+        QVariantMap qtMap = qtVariant.toMap();
+        if (qtMap.isEmpty())
+            return {};
+
+        qtMap.insert("DetectionSource.type", int(DetectionSource::Temporary));
+        qtMap.insert("DetectionSource.id", -1);
+
+        const Store store = storeFromMap(expander.expand(qtMap));
+
+        const QString type = qtMap.value("QtVersion.Type").toString();
+        const FilePath qmakePath = FilePath::fromUserInput(qtMap.value("QMakePath").toString());
+
+        const QList<QtVersionFactory *> factories = QtVersionFactory::allQtVersionFactories();
+        QtVersionFactory *factory = Utils::findOrDefault(factories, [type](QtVersionFactory *f) {
+            return f->canRestore(type);
+        });
+        if (!factory)
+            return {};
+
+        version = factory->restore(type, store, qmakePath);
+    }
+
+    if (version) {
+        version->setUnexpandedDisplayName(projectName + ": " + version->unexpandedDisplayName());
+        QtVersionManager::addVersion(version);
+        return {version, true}; // Is a temporary version
+    }
+    return {};
 }
 
 Target *CMakeProjectImporter::preferredTarget(const QList<Target *> &possibleTargets)
@@ -980,6 +1049,9 @@ static SetupResult setupQMakeProcess(
     data.androidNdk = config.filePathValueOf("ANDROID_NDK");
     data.androidSdk = config.filePathValueOf("ANDROID_SDK");
 
+    if (data.qt.qt)
+        return SetupResult::StopWithSuccess;
+
     // Qt4 way to define things (more convenient for us, so try this first;-)
     qmake = config.filePathValueOf("QT_QMAKE_EXECUTABLE");
     qCDebug(cmInputLog) << "QT_QMAKE_EXECUTABLE=" << qmake.toUserOutput();
@@ -1146,7 +1218,14 @@ void CMakeProjectImporter::createKitsFromPresets()
         storage->config = config;
     };
 
-    const auto onQMakeSetup = [iterator, storage](Process &process) {
+    const auto onQMakeSetup = [this, iterator, storage](Process &process) {
+        DirectoryData &data = storage->directoryData;
+        Environment &env = storage->env;
+        PresetsDetails::ConfigurePreset &configurePreset = storage->configurePreset;
+
+        data.qt = findOrRegisterQtVersion(
+            PresetMacroExpander(configurePreset, env, projectDirectory()), m_project->displayName());
+
         return setupQMakeProcess(process, *storage, *iterator);
     };
 
@@ -1191,7 +1270,7 @@ void CMakeProjectImporter::createKitsFromPresets()
         data.hasQmlDebugging = CMakeBuildConfiguration::hasQmlDebugging(config);
 
         data.debugger = findOrRegisterDebugger(
-            DebuggerCMakeExpander(configurePreset, env, projectDirectory()),
+            PresetMacroExpander(configurePreset, env, projectDirectory()),
             m_project->displayName());
 
         QByteArrayList buildConfigurationTypes = {cache.valueOf("CMAKE_BUILD_TYPE")};

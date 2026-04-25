@@ -35,7 +35,6 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build-${presetName}",
       "graphviz" : "${sourceDir}/build-${presetName}/graphviz.dot",
-      "toolchainFile" : "$env{HOME}/Qt/6.11.0/macos/lib/cmake/Qt6/qt.toolchain.cmake",
       "condition" : {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -46,7 +45,8 @@
               "runEnvironment": {
                   "HOME_VARIABLE_WITH_HEART": "$env{HOME}/❤️"
               },
-              "debugger": "/usr/bin/lldb"
+              "debugger": "/usr/bin/lldb",
+              "qt": "$env{HOME}/Qt/6.11.0/macos/bin/qmake"
           }
         }
     }
