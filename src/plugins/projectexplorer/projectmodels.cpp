@@ -543,19 +543,18 @@ void FlatModel::handleProjectAdded(Project *project)
 
 void FlatModel::updateVCStatusFor(const Utils::FilePath root, const QStringList &files)
 {
-    std::for_each(std::begin(files), std::end(files), [root, this](const QString &file) {
-        const FilePath filePath = root.pathAppended(file);
-        Node *node = ProjectTree::nodeForFile(filePath);
-        if (!node)
-            return;
-        FileNode *fileNode = node->asFileNode();
-        if (!fileNode)
-            return;
-
-        fileNode->resetModificationState();
-        const QModelIndex index = indexForNode(fileNode);
-        emit dataChanged(index, index, {Qt::ForegroundRole});
-    });
+    for (const QString &relFilePath : files) {
+        for (const Project * const project : ProjectManager::projects()) {
+            const QList<const Node *> nodes
+                = project->nodesForFilePath(root.pathAppended(relFilePath), Project::AllFiles);
+            for (const Node * const node : nodes) {
+                FileNode * const fileNode = static_cast<FileNode *>(const_cast<Node *>(node));
+                fileNode->resetModificationState();
+                const QModelIndex index = indexForNode(fileNode);
+                emit dataChanged(index, index, {Qt::ForegroundRole});
+            }
+        }
+    }
 }
 
 void FlatModel::clearVCStatusFor(const Utils::FilePath &root)
