@@ -61,7 +61,7 @@ private slots:
         QFETCH(QStringList, expectedTargets);
 
         {
-            QTemporaryDir build_dir{"test-meson"};
+            QTemporaryDir build_dir{src_dir + "/test-meson"};
             FilePath buildDir = FilePath::fromString(build_dir.path());
             const auto tool = findMeson();
             QVERIFY(tool.has_value());
