@@ -2,14 +2,11 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 import QtQuick
-import QtQuick.Window
 
-Window {
+Item {
     id: root
     width: 640
     height: 480
-    visible: true
-    title: qsTr("Hello World")
 
     Rectangle {
         id: rect
@@ -32,7 +29,7 @@ Window {
             State {
                 name: "widerText"
                 PropertyChanges { myText.width: undefined }
-                AnchorChanges { innerRect.width: undefined } // 16 29 37
+                AnchorChanges { innerRect.width: undefined } // 16 33 41
             },
             State {
                 when: root.visible
