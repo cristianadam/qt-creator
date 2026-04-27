@@ -49,11 +49,7 @@ tst_Check::tst_Check()
 }
 
 
-#ifdef Q_OS_MAC
-#  define SHARE_PATH "/Resources"
-#else
-#  define SHARE_PATH "/share/qtcreator"
-#endif
+#define SHARE_PATH "/share/qtcreator"
 
 QString resourcePath()
 {
