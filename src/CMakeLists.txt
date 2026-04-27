@@ -1,7 +1,7 @@
 add_library(app_version INTERFACE)
 target_include_directories(app_version
   INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
-  INTERFACE $<INSTALL_INTERFACE:${IDE_HEADER_INSTALL_PATH}/src>)
+  INTERFACE $<INSTALL_INTERFACE:${IDE_DEVEL_HEADER_INSTALL_PATH}/src>)
 install(TARGETS app_version EXPORT QtCreator)
 
 add_subdirectory(libs)
@@ -16,20 +16,20 @@ install(
     ${PROJECT_SOURCE_DIR}/HACKING
     ${PROJECT_SOURCE_DIR}/LICENSES/LICENSE.GPL3-EXCEPT
     ${PROJECT_SOURCE_DIR}/README.md
-  DESTINATION ${IDE_DATA_PATH}
+  DESTINATION ${IDE_DEVEL_DATA_INSTALL_PATH}
   COMPONENT Devel EXCLUDE_FROM_ALL
 )
 
 install(
   DIRECTORY
     ${PROJECT_SOURCE_DIR}/scripts
-  DESTINATION ${IDE_DATA_PATH}
+  DESTINATION ${IDE_DEVEL_DATA_INSTALL_PATH}
   COMPONENT Devel EXCLUDE_FROM_ALL
   USE_SOURCE_PERMISSIONS
 )
 
 install(EXPORT QtCreator
-  DESTINATION ${IDE_CMAKE_INSTALL_PATH}/QtCreator
+  DESTINATION ${IDE_DEVEL_CMAKE_INSTALL_PATH}/QtCreator
   COMPONENT Devel EXCLUDE_FROM_ALL
   NAMESPACE QtCreator::
   FILE QtCreatorTargets.cmake
@@ -62,7 +62,7 @@ configure_package_config_file(
   # This is generated into a different directory on purpose, so it doesn't collide with the
   # build-tree config file.
   "${CMAKE_BINARY_DIR}/cmake/install/QtCreatorConfig.cmake"
-  INSTALL_DESTINATION "${IDE_CMAKE_INSTALL_PATH}/QtCreator"
+  INSTALL_DESTINATION "${IDE_DEVEL_CMAKE_INSTALL_PATH}/QtCreator"
   ${common_configure_package_config_file_options}
 )
 
@@ -97,6 +97,6 @@ install(
     ${PROJECT_SOURCE_DIR}/cmake/QtcSeparateDebugInfo.cmake
     ${PROJECT_SOURCE_DIR}/cmake/QtcSeparateDebugInfo.Info.plist.in
     ${CMAKE_BINARY_DIR}/cmake/install/QtCreatorConfig.cmake
-  DESTINATION ${IDE_CMAKE_INSTALL_PATH}/QtCreator
+  DESTINATION ${IDE_DEVEL_CMAKE_INSTALL_PATH}/QtCreator
   COMPONENT Devel EXCLUDE_FROM_ALL
 )

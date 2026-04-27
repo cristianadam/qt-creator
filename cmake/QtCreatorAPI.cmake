@@ -20,8 +20,11 @@ set(IDE_DATA_PATH "${_IDE_DATA_PATH}")                  # The IDE data path (rel
 set(IDE_DOC_PATH "${_IDE_DOC_PATH}")                    # The IDE documentation path (relative to CMAKE_INSTALL_PREFIX).
 set(IDE_BIN_PATH "${_IDE_BIN_PATH}")                    # The IDE bin path (relative to CMAKE_INSTALL_PREFIX).
 
-set(IDE_HEADER_INSTALL_PATH "${_IDE_HEADER_INSTALL_PATH}")
-set(IDE_CMAKE_INSTALL_PATH "${_IDE_CMAKE_INSTALL_PATH}")
+set(IDE_DEVEL_LIBRARY_ARCHIVE_INSTALL_PATH "${_IDE_DEVEL_LIBRARY_ARCHIVE_INSTALL_PATH}")
+set(IDE_DEVEL_LIBRARY_INSTALL_PATH "${_IDE_DEVEL_LIBRARY_INSTALL_PATH}")
+set(IDE_DEVEL_DATA_INSTALL_PATH "${_IDE_DEVEL_DATA_INSTALL_PATH}")
+set(IDE_DEVEL_HEADER_INSTALL_PATH "${_IDE_DEVEL_HEADER_INSTALL_PATH}")
+set(IDE_DEVEL_CMAKE_INSTALL_PATH "${_IDE_DEVEL_CMAKE_INSTALL_PATH}")
 
 file(RELATIVE_PATH RELATIVE_PLUGIN_PATH "/${IDE_BIN_PATH}" "/${IDE_PLUGIN_PATH}")
 file(RELATIVE_PATH RELATIVE_LIBEXEC_PATH "/${IDE_BIN_PATH}" "/${IDE_LIBEXEC_PATH}")
@@ -270,7 +273,7 @@ function(add_qtc_library name)
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
       PUBLIC
         "$<BUILD_INTERFACE:${public_build_interface_dir}>"
-        "$<INSTALL_INTERFACE:${IDE_HEADER_INSTALL_PATH}/${include_dir_relative_path}>"
+        "$<INSTALL_INTERFACE:${IDE_DEVEL_HEADER_INSTALL_PATH}/${include_dir_relative_path}>"
     )
   endif()
 
@@ -311,7 +314,9 @@ function(add_qtc_library name)
 
   unset(NAMELINK_OPTION)
   if (library_type STREQUAL "SHARED")
-    set(NAMELINK_OPTION NAMELINK_SKIP)
+    if(NOT APPLE)
+      set(NAMELINK_OPTION NAMELINK_SKIP)
+    endif()
     qtc_add_link_flags_no_undefined(${name})
   endif()
 
@@ -335,10 +340,10 @@ function(add_qtc_library name)
         ${COMPONENT_OPTION}
         OPTIONAL
       OBJECTS
-        DESTINATION "${IDE_LIBRARY_PATH}"
+        DESTINATION "${IDE_DEVEL_LIBRARY_ARCHIVE_INSTALL_PATH}"
         COMPONENT Devel EXCLUDE_FROM_ALL
       ARCHIVE
-        DESTINATION "${IDE_LIBRARY_ARCHIVE_PATH}"
+        DESTINATION "${IDE_DEVEL_LIBRARY_ARCHIVE_INSTALL_PATH}"
         COMPONENT Devel EXCLUDE_FROM_ALL
         OPTIONAL
     )
@@ -355,7 +360,7 @@ function(add_qtc_library name)
   if (NAMELINK_OPTION AND NOT QTC_STATIC_BUILD)
     install(TARGETS ${name}
       LIBRARY
-        DESTINATION "${IDE_LIBRARY_PATH}"
+        DESTINATION "${IDE_DEVEL_LIBRARY_INSTALL_PATH}"
         NAMELINK_ONLY
         COMPONENT Devel EXCLUDE_FROM_ALL
       OPTIONAL
@@ -676,7 +681,7 @@ function(add_qtc_plugin target_name)
       "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
     PUBLIC
       "$<BUILD_INTERFACE:${public_build_interface_dir}>"
-      "$<INSTALL_INTERFACE:${IDE_HEADER_INSTALL_PATH}/${include_dir_relative_path}>"
+      "$<INSTALL_INTERFACE:${IDE_DEVEL_HEADER_INSTALL_PATH}/${include_dir_relative_path}>"
   )
 
   set(plugin_dir "${IDE_PLUGIN_PATH}")
@@ -747,18 +752,18 @@ function(add_qtc_plugin target_name)
       # export of external plugins
       install(EXPORT ${export}
         FILE ${export}Targets.cmake
-        DESTINATION ${IDE_CMAKE_INSTALL_PATH}/${export}
+        DESTINATION ${IDE_DEVEL_CMAKE_INSTALL_PATH}/${export}
         COMPONENT Devel EXCLUDE_FROM_ALL
         NAMESPACE QtCreator::
       )
       include(CMakePackageConfigHelpers)
       configure_package_config_file(${_THIS_MODULE_BASE_DIR}/Config.cmake.in
         "${CMAKE_BINARY_DIR}/cmake/${export}Config.cmake"
-        INSTALL_DESTINATION ${IDE_CMAKE_INSTALL_PATH}/${export}
+        INSTALL_DESTINATION ${IDE_DEVEL_CMAKE_INSTALL_PATH}/${export}
       )
       install(
         FILES ${CMAKE_BINARY_DIR}/cmake/${export}Config.cmake
-        DESTINATION ${IDE_CMAKE_INSTALL_PATH}/${export}
+        DESTINATION ${IDE_DEVEL_CMAKE_INSTALL_PATH}/${export}
         COMPONENT Devel EXCLUDE_FROM_ALL
       )
       export(EXPORT ${export}
@@ -1385,7 +1390,7 @@ function(qtc_add_public_header header)
 
   install(
     FILES ${header}
-    DESTINATION "${IDE_HEADER_INSTALL_PATH}/${include_dir_relative_path}"
+    DESTINATION "${IDE_DEVEL_HEADER_INSTALL_PATH}/${include_dir_relative_path}"
     COMPONENT Devel EXCLUDE_FROM_ALL
   )
 endfunction()
