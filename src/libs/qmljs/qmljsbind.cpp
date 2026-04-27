@@ -145,7 +145,7 @@ ObjectValue *Bind::bindObject(UiQualifiedId *qualifiedTypeNameId, UiObjectInitia
                 nextRoot = _inlineComponents.value(parentComponentName);
             } else {
                 parentComponentName = "";
-                nextRoot = _rootObjectValue;
+                nextRoot = _inlineComponents.value(QString());
             }
             // we add the inline component inside its parent
             nextRoot->setMember(_currentComponentName.mid(_currentComponentName.lastIndexOf('.') + 1), objectValue);
