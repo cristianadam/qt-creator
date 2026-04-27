@@ -372,6 +372,10 @@ def qdump__std____1__unique_ptr(d, value):
             d.putItem(value["__value_"])
             d.putValue(d.currentValue.value, d.currentValue.encoding)
         except:
+            try:
+                p = value["__ptr_"].pointer()  # new libc++: __ptr_ promoted from anonymous struct
+            except:
+                pass
             d.putItem(d.createValue(p, value.type[0]))
     d.putBetterType(value.type)
 
