@@ -380,8 +380,27 @@ def qform__std____1__unordered_map():
     return [DisplayFormat.CompactMap]
 
 
+def __hash_table_size_and_first(d, table):
+    # New libc++ (LLVM 19+): __first_node_ sentinel node
+    # Avoid __size_ which is ambiguous — __bucket_list_deallocator also has __size_
+    # (bucket count), and LLDB may find it first. Count via linked list traversal instead.
+    try:
+        first = table["__first_node_"]["__next_"].pointer()
+        size = 0
+        node = first
+        while node:
+            size += 1
+            (node,) = d.split("p", node)
+        return size, first
+    except:
+        pass
+    # Old libc++: __p2_ compressed pair for size, __p1_ compressed pair for begin
+    return table["__p2_"]["__value_"].integer(), table["__p1_"].split("p")[0]
+
+
 def qdump__std____1__unordered_map(d, value):
-    size = value["__table_"]["__p2_"]["__value_"].integer()
+    table = value["__table_"]
+    size, curr = __hash_table_size_and_first(d, table)
     d.putItemCount(size)
 
     keyType = value.type[0]
@@ -389,8 +408,6 @@ def qdump__std____1__unordered_map(d, value):
     pairType = value.type[4][0]
 
     if d.isExpanded():
-        curr = value["__table_"]["__p1_"].split("p")[0]
-
         def traverse_list(node):
             while node:
                 (next_, _, pad, pair) = d.split("pp@{%s}" % (pairType.name), node)
@@ -407,14 +424,13 @@ def qdump__std____1__unordered_multimap(d, value):
 
 
 def qdump__std____1__unordered_set(d, value):
-    size = value["__table_"]["__p2_"]["__value_"].integer()
+    table = value["__table_"]
+    size, curr = __hash_table_size_and_first(d, table)
     d.putItemCount(size)
 
     valueType = value.type[0]
 
     if d.isExpanded():
-        curr = value["__table_"]["__p1_"].split("p")[0]
-
         def traverse_list(node):
             while node:
                 (next_, _, pad, val) = d.split("pp@{%s}" % (valueType.name), node)
