@@ -87,10 +87,6 @@
         "taskWindowFound": {
           "description": "Whether the TaskWindow object was found",
           "type": "boolean"
-        },
-        "buildManagerAvailable": {
-          "description": "Whether BuildManager tasks are available",
-          "type": "boolean"
         }
       }
     },
@@ -130,8 +126,7 @@
       "status": {
         "accessible": true,
         "signalsConnected": true,
-        "taskWindowFound": true,
-        "buildManagerAvailable": true
+        "taskWindowFound": true
       }
     },
     {
@@ -146,8 +141,7 @@
       "status": {
         "accessible": true,
         "signalsConnected": true,
-        "taskWindowFound": true,
-        "buildManagerAvailable": true
+        "taskWindowFound": true
       }
     },
     {
@@ -161,8 +155,7 @@
       "status": {
         "accessible": false,
         "signalsConnected": false,
-        "taskWindowFound": false,
-        "buildManagerAvailable": false
+        "taskWindowFound": false
       },
       "errorMessage": "ERROR:Issues panel not accessible - cannot retrieve current issues"
     }

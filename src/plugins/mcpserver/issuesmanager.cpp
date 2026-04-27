@@ -117,8 +117,7 @@ QJsonObject IssuesManager::getCurrentIssues(
         result["status"] = QJsonObject{
             {"accessible", false},
             {"signalsConnected", false},
-            {"taskWindowFound", false},
-            {"buildManagerAvailable", false}
+            {"taskWindowFound", false}
         };
         return result;
     }
@@ -180,7 +179,6 @@ QJsonObject IssuesManager::getCurrentIssues(
     status["accessible"] = m_accessible;
     status["signalsConnected"] = m_signalsConnected;
     status["taskWindowFound"] = m_taskWindow != nullptr;
-    status["buildManagerAvailable"] = ProjectExplorer::BuildManager::tasksAvailable();
 
     // Assemble final result
     result["issues"] = issuesArray;
