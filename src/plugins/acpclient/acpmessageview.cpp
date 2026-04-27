@@ -13,6 +13,7 @@
 #include <coreplugin/find/ifindsupport.h>
 
 #include <utils/algorithm.h>
+#include <utils/layoutbuilder.h>
 #include <utils/markdownbrowser.h>
 #include <utils/qtcassert.h>
 #include <utils/qtcwidgets.h>
@@ -586,26 +587,33 @@ public:
         m_iconDisplay->setIcon(Utils::Icons::WARNING);
         m_headerLayout->addWidget(m_iconDisplay);
 
-        QString labelHtml = QStringLiteral("<b>Permission Request</b>");
-        if (!kindText.isEmpty())
-            labelHtml += QStringLiteral(" <small>[%1]</small>").arg(kindText.toHtmlEscaped());
-        auto *headerLabel = new QLabel(labelHtml, this);
-        headerLabel->setTextFormat(Qt::RichText);
+        auto *headerLabel = new QLabel(tr("Permission Request"), this);
+        QFont boldFont = headerLabel->font();
+        boldFont.setBold(true);
+        headerLabel->setFont(boldFont);
         headerLabel->setWordWrap(true);
         m_headerLayout->addWidget(headerLabel, 1);
 
+        if (!kindText.isEmpty()) {
+            auto *kindLabel = new QLabel(QStringLiteral("[%1]").arg(kindText), this);
+            QFont smallFont = kindLabel->font();
+            smallFont.setPointSizeF(smallFont.pointSizeF() * 0.85);
+            kindLabel->setFont(smallFont);
+            kindLabel->setWordWrap(true);
+            m_headerLayout->addWidget(kindLabel);
+        }
+
         if (!title.isEmpty()) {
-            auto *titleLabel = new QLabel(title, this);
-            titleLabel->setTextFormat(Qt::RichText);
+            auto *titleLabel = new Utils::ElidingLabel(title, this);
             titleLabel->setWordWrap(true);
             m_bodyLayout->addWidget(titleLabel);
         }
-        m_buttonLayout = new QHBoxLayout;
-        m_buttonLayout->setSpacing(6);
-        m_bodyLayout->addLayout(m_buttonLayout);
+        auto *buttonWidget = new QWidget(this);
+        Layouting::Flow{}.attachTo(buttonWidget);
+        m_buttonLayout = buttonWidget->layout();
+        m_bodyLayout->addWidget(buttonWidget);
 
-        m_statusLabel = new QLabel(this);
-        m_statusLabel->setTextFormat(Qt::RichText);
+        m_statusLabel = new Utils::ElidingLabel(this);
         m_statusLabel->hide();
         m_headerLayout->addWidget(m_statusLabel);
     }
@@ -621,11 +629,6 @@ public:
         m_buttonLayout->addWidget(button);
         m_buttons.append(button);
         return button;
-    }
-
-    void finishButtonLayout()
-    {
-        m_buttonLayout->addStretch();
     }
 
     void setResolved(const QString &text, bool accepted)
@@ -659,8 +662,8 @@ protected:
 
 private:
     Utils::QtcIconDisplay *m_iconDisplay = nullptr;
-    QHBoxLayout *m_buttonLayout = nullptr;
-    QLabel *m_statusLabel = nullptr;
+    QLayout *m_buttonLayout = nullptr;
+    Utils::ElidingLabel *m_statusLabel = nullptr;
     QList<QPushButton *> m_buttons;
 };
 
@@ -1238,7 +1241,6 @@ void AcpMessageView::addPermissionRequest(const QJsonValue &id,
         });
     }
 
-    widget->finishButtonLayout();
     addWidget(widget);
 }
 
