@@ -624,6 +624,98 @@ static QtProjectImporter::QtVersionData findOrRegisterQtVersion(
     return {};
 }
 
+static QList<Toolchain *> findOrRegisterToolchains(
+    const PresetMacroExpander &expander, const QString &projectName)
+{
+    const PresetsDetails::ConfigurePreset &preset = expander.preset;
+
+    if (!preset.vendor || !preset.vendor->contains("compiler"))
+        return {};
+
+    QVariantMap compilerMap = preset.vendor->value("compiler").toMap();
+    if (compilerMap.isEmpty())
+        return {};
+
+    QList<Toolchain *> result;
+    const QMap<QString, Id> langMapping
+        = {{"c", ProjectExplorer::Constants::C_LANGUAGE_ID},
+           {"cxx", ProjectExplorer::Constants::CXX_LANGUAGE_ID}};
+
+    bool doRegisterToolchains = false;
+    for (auto it = langMapping.begin(); it != langMapping.end(); ++it) {
+        const QString key = it.key();
+        if (!compilerMap.contains(key))
+            continue;
+
+        const QVariant value = compilerMap.value(key);
+
+        if (value.canConvert<QString>()) {
+            FilePath path = FilePath::fromUserInput(expander.expand(value.toString()));
+            if (path.isEmpty())
+                continue;
+
+            Id language = it.value();
+
+            Toolchain *existingTc = ToolchainManager::instance()->toolchain(
+                [path, language](const Toolchain *tc) {
+                    return tc->language() == language && tc->matchesCompilerCommand(path);
+                });
+
+            if (existingTc) {
+                result.append(existingTc);
+                continue;
+            }
+
+            ToolchainDescription tcd{path, language};
+            Toolchains detected;
+            for (ToolchainFactory *factory : ToolchainFactory::allToolchainFactories()) {
+                const Toolchains tcs = factory->detectForImport(tcd);
+                if (!tcs.isEmpty()) {
+                    detected = tcs;
+                    break;
+                }
+            }
+
+            if (!detected.isEmpty()) {
+                Toolchain *tc = detected.at(0);
+                tc->setDetectionSource(DetectionSource::Temporary);
+                tc->setDisplayName(QString("%1: %2").arg(projectName).arg(tc->displayName()));
+                doRegisterToolchains = true;
+                result.append(tc);
+            }
+        } else if (value.canConvert<QVariantMap>()) {
+            QVariantMap map = value.toMap();
+            if (map.isEmpty())
+                continue;
+
+            const Store store = storeFromMap(expander.expand(map));
+
+            Toolchain *restoredTc = nullptr;
+            for (ToolchainFactory *factory : ToolchainFactory::allToolchainFactories()) {
+                Toolchain *tc = factory->restore(store);
+                if (tc) {
+                    restoredTc = tc;
+                    break;
+                }
+            }
+
+            if (restoredTc) {
+                restoredTc->setLanguage(it.value());
+                restoredTc->setDetectionSource(DetectionSource::Temporary);
+                restoredTc->setDisplayName(
+                    QString("%1: %2").arg(projectName).arg(restoredTc->displayName()));
+                doRegisterToolchains = true;
+                result.append(restoredTc);
+            }
+        }
+    }
+
+    if (doRegisterToolchains)
+        ToolchainManager::instance()->registerToolchains(result);
+
+    return result;
+}
+
 Target *CMakeProjectImporter::preferredTarget(const QList<Target *> &possibleTargets)
 {
     if (!m_project->buildDirectoryToImport().isEmpty()) {
@@ -960,11 +1052,17 @@ static SetupResult setupCompilerProcess(Process &process, InternalStorage &stora
                                               data.buildDirectory);
     CMakePresets::Macros::updateCacheVariables(configurePreset, env, projectDirectory);
 
-    cache = configurePreset.cacheVariables ? configurePreset.cacheVariables.value()
-                                           : CMakeConfig();
-    const bool noCompilers = cache.valueOf("CMAKE_C_COMPILER").isEmpty()
+    cache = configurePreset.cacheVariables.value_or(CMakeConfig());
+    const bool noCompilersInCache = cache.valueOf("CMAKE_C_COMPILER").isEmpty()
                              && cache.valueOf("CMAKE_CXX_COMPILER").isEmpty();
-    if (noCompilers || !configurePreset.generator) {
+    bool vendorCompilersProvided = false;
+    if (configurePreset.vendor && configurePreset.vendor->contains("compiler")) {
+        QVariantMap compilerMap = configurePreset.vendor->value("compiler").toMap();
+        if (compilerMap.contains("c") || compilerMap.contains("cxx")) {
+            vendorCompilersProvided = true;
+        }
+    }
+    if ((noCompilersInCache && !vendorCompilersProvided) || !configurePreset.generator) {
         const FilePath cmakeListTxt = presetPath / Constants::CMAKE_LISTS_TXT;
         cmakeListTxt.writeFileContents(s_presetCompilerProbeCMakeScript);
 
@@ -1262,7 +1360,10 @@ void CMakeProjectImporter::createKitsFromPresets()
                 CMakeConfigItem("CMAKE_PREFIX_PATH", CMakeConfigItem::PATH, cmakePrefixPath.toUtf8()));
 
         // Toolchains:
-        data.toolchains = extractToolchainsFromCache(config);
+        const QList<Toolchain *> vendorToolchains = findOrRegisterToolchains(
+            PresetMacroExpander(configurePreset, env, projectDirectory()), m_project->displayName());
+        if (vendorToolchains.isEmpty())
+            data.toolchains = extractToolchainsFromCache(config);
 
         // Update QT_QMAKE_EXECUTABLE and CMAKE_C|XX_COMPILER config values
         updateConfigWithDirectoryData(config, data);
@@ -1323,6 +1424,16 @@ void CMakeProjectImporter::createKitsFromPresets()
                 },
                 kitId);
             applyRunEnvironmentToKit(configurePreset, kit, projectDirectory());
+
+            if (!vendorToolchains.isEmpty()) {
+                for (Toolchain *tc : vendorToolchains)
+                    ToolchainKitAspect::setToolchain(kit, tc);
+
+                const QList<ToolchainBundle> bundles = ToolchainBundle::collectBundles(
+                    vendorToolchains, ToolchainBundle::HandleMissing::CreateAndRegister);
+                if (!bundles.isEmpty())
+                    ToolchainKitAspect::setBundle(kit, bundles.first());
+            }
         }
     };
 

@@ -46,9 +46,13 @@
                   "HOME_VARIABLE_WITH_HEART": "$env{HOME}/❤️"
               },
               "debugger": "/usr/bin/lldb",
-              "qt": "$env{HOME}/Qt/6.11.0/macos/bin/qmake"
+              "qt": "$env{HOME}/Qt/6.11.0/macos/bin/qmake",
+              "compiler": {
+                "c" : "$env{HOME}/llvm/mac/bin/clang",
+                "cxx" : "$env{HOME}/llvm/mac/bin/clang++"
+              }
           }
-        }
+      }
     }
   ]
 }
