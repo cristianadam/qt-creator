@@ -1742,6 +1742,22 @@ Utils::Result<ToolInterface::TaskProgressNotify> ToolInterface::startTask(
                 "server-initiated tasks");
         }
 
+        if (d->_responder.httpResponder) {
+            auto headers = [&]() -> QHttpHeaders {
+                if (auto sp = d->_server.lock())
+                    return sp->corsHeaders(d->_sessionId);
+                return {};
+            }();
+            headers.append("Content-type", "text/event-stream");
+            d->_responder.httpResponder->writeBeginChunked(
+                headers, QHttpServerResponder::StatusCode::Ok);
+            d->_responder.write = [http = d->_responder.httpResponder](QJsonDocument json) {
+                const QByteArray data = json.toJson(QJsonDocument::Compact);
+                http->writeChunk("data: " + data + "\n\n");
+                http->writeEndChunked({});
+            };
+        }
+
         d->_longRunningToolTimer.reset(new QTimer());
         d->_longRunningToolTimer->setSingleShot(false);
         d->_longRunningToolTimer->setInterval(pollingIntervalMs.value());
@@ -1767,13 +1783,21 @@ Utils::Result<ToolInterface::TaskProgressNotify> ToolInterface::startTask(
 
                 if (task.status() == Schema::TaskStatus::working) {
                     if (progressToken) {
-                        self.notify(
+                        Schema::ServerNotification notification =
                             Schema::ProgressNotification().params(
                                 Schema::ProgressNotificationParams()
                                     .progress(pcounter++)
                                     .message(task.statusMessage().value_or(
                                         QString("Task is working...")))
-                                    .progressToken(*progressToken)));
+                                    .progressToken(*progressToken));
+                        if (self.d->_responder.httpResponder) {
+                            const QByteArray data =
+                                QJsonDocument(Schema::toJson(notification))
+                                    .toJson(QJsonDocument::Compact);
+                            self.d->_responder.httpResponder->writeChunk("data: " + data + "\n\n");
+                        } else {
+                            self.notify(notification);
+                        }
                     }
                     return;
                 }
