@@ -554,15 +554,6 @@ QList<Project *> ProjectManager::projectOrder(const Project *project)
     return result;
 }
 
-Project *ProjectManager::projectForProjectFile(const FilePath &projectFile)
-{
-    Project * const project = Utils::findOrDefault(projects(), [&projectFile](const Project *p) {
-        return p->projectFilePath() == projectFile;
-    });
-    QTC_ASSERT(project, qDebug() << projectFile);
-    return project;
-}
-
 Project *ProjectManager::projectForFile(const FilePath &fileName)
 {
     if (Project * const project = Utils::findOrDefault(ProjectManager::projects(),
@@ -611,10 +602,15 @@ bool ProjectManager::isInProjectSourceDir(const Utils::FilePath &filePath, const
     return false;
 }
 
-Project *ProjectManager::projectWithProjectFilePath(const FilePath &filePath)
+Project *ProjectManager::projectWithProjectFile(const FilePath &projectFile, bool shouldExist)
 {
-    return Utils::findOrDefault(ProjectManager::projects(),
-            [&filePath](const Project *p) { return p->projectFilePath() == filePath; });
+    Project * const project = Utils::findOrDefault(projects(), [&projectFile](const Project *p) {
+        return p->projectFilePath() == projectFile;
+    });
+    if (shouldExist) {
+        QTC_ASSERT(project, qDebug() << projectFile);
+    }
+    return project;
 }
 
 bool ProjectManager::isKnownFile(const Utils::FilePath &filePath)

@@ -47,7 +47,8 @@ bool ProjectPart::belongsToProject(const Utils::FilePath &project) const
 
 Project *ProjectPart::project() const
 {
-    return ProjectManager::projectWithProjectFilePath(topLevelProject);
+    return hasProject() ? ProjectManager::projectWithProjectFile(topLevelProject, true)
+                        : nullptr;
 }
 
 QByteArray ProjectPart::readProjectConfigFile(const FilePath &projectConfigFile)

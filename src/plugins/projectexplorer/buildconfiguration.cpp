@@ -1283,7 +1283,8 @@ FilePath BuildConfiguration::rawBuildDirectoryFromTemplate(
     qCDebug(bcLog) << Q_FUNC_INFO;
 
     auto environment = Environment::systemEnvironment();
-    if (const Project * const project = ProjectManager::projectWithProjectFilePath(projectFilePath)) {
+    if (const Project * const project
+        = ProjectManager::projectWithProjectFile(projectFilePath, true)) {
         // This adds the environment variables from the <project>.shared file
         project->additionalEnvironment()
             .modifyEnvironment(environment, kit ? kit->macroExpander() : nullptr);

@@ -28,7 +28,7 @@ ProjectInfo::ConstPtr ProjectInfo::cloneWithNewSettings(const ConstPtr &pi,
 
 ProjectExplorer::Project *ProjectInfo::project() const
 {
-    return ProjectExplorer::ProjectManager::projectWithProjectFilePath(projectFilePath());
+    return ProjectExplorer::ProjectManager::projectWithProjectFile(projectFilePath(), false);
 }
 
 bool ProjectInfo::operator ==(const ProjectInfo &other) const

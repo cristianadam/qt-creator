@@ -3052,12 +3052,12 @@ void ProjectExplorerPluginPrivate::extendEditorManagerContextMenu()
                 });
                 actionOpenProjects->setEnabled(
                     Utils::anyOf(projectsInDirectory(filePath), [](const FilePath &fp) {
-                        return !ProjectManager::projectWithProjectFilePath(fp);
+                        return !ProjectManager::projectWithProjectFile(fp, false);
                     }));
             } else if (ProjectExplorerPlugin::isProjectFile(filePath)) {
                 QAction *actionOpenAsProject
                     = new QAction(Tr::tr("Open Project \"%1\"").arg(filePath.fileName()), menu);
-                if (ProjectManager::projectWithProjectFilePath(filePath)) {
+                if (ProjectManager::projectWithProjectFile(filePath, false)) {
                     actionOpenAsProject->setEnabled(false);
                     actionOpenAsProject->setToolTip(Tr::tr("The project is already open."));
                 }
