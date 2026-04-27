@@ -10562,6 +10562,11 @@ void TextEditorWidget::invokeAssist(AssistKind kind, IAssistProvider *provider)
     setOverwriteMode(previousMode);
 }
 
+void TextEditorWidget::setCompletionTriggerOverride(CompletionTrigger trigger)
+{
+    d->m_codeAssistant.setCompletionTriggerOverride(trigger);
+}
+
 std::unique_ptr<AssistInterface> TextEditorWidget::createAssistInterface(AssistKind kind,
                                                                          AssistReason reason) const
 {

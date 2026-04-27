@@ -37,6 +37,7 @@ ChatInputEdit::ChatInputEdit(QWidget *parent)
     setLineNumbersVisible(false);
     setMarksVisible(false);
     setMinimapVisible(false);
+    setCompletionTriggerOverride(ManualCompletion);
 
     auto applyWidgetColors = [this] {
         FontSettings fontSettings = textDocument()->fontSettings();
