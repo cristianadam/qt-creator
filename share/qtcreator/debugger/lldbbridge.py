@@ -272,7 +272,7 @@ class Dumper(DumperBase):
                 val.laddress = None
                 fields.append(val)
 
-            elif fieldName is None:  # Anon members
+            elif not fieldName:  # Anon members (None in old LLDB, "" in LLDB 2100+)
                 anonNumber += 1
                 fieldName = '#%s' % anonNumber
                 fakeMember = nativeValue.GetChildAtIndex(i)
