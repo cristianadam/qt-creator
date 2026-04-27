@@ -81,8 +81,14 @@ clang::format::FormatStyle calculateQtcStyle()
     style.AlwaysBreakAfterReturnType = FormatStyle::RTBS_None;
     style.AlwaysBreakTemplateDeclarations = FormatStyle::BTDS_Yes;
 #endif
+#if LLVM_VERSION_MAJOR >= 23
+    style.PackArguments = { FormatStyle::BPAS_OnePerLine };
+#else
     style.BinPackArguments = false;
-#if LLVM_VERSION_MAJOR >= 20
+#endif
+#if LLVM_VERSION_MAJOR >= 23
+    style.PackParameters = { FormatStyle::BPPS_OnePerLine };
+#elif LLVM_VERSION_MAJOR >= 20
     style.BinPackParameters = FormatStyle::BPPS_OnePerLine;
 #else
     style.BinPackParameters = false;
