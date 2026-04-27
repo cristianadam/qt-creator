@@ -18,6 +18,7 @@
 #include <utils/qtcwidgets.h>
 #include <utils/stylehelper.h>
 #include <utils/theme/theme.h>
+#include <utils/elidinglabel.h>
 #include <utils/utilsicons.h>
 
 #include <limits>
@@ -296,7 +297,7 @@ class ToolCallWidget : public CollapsibleFrame
 {
 public:
     explicit ToolCallWidget(ToolCallStatus status, const QString &title,
-                            const QString &kindText = {}, QWidget *parent = nullptr)
+                            std::optional<ToolKind> kind = {}, QWidget *parent = nullptr)
         : CollapsibleFrame(parent)
     {
         setFrameShape(QFrame::NoFrame);
@@ -304,11 +305,13 @@ public:
         m_statusWidget = toolCallStatusWidget(status, this);
         m_headerLayout->addWidget(m_statusWidget);
 
-        QString labelHtml = QStringLiteral("<b>%1</b>").arg(title.toHtmlEscaped());
-        if (!kindText.isEmpty())
-            labelHtml += QStringLiteral(" <small>[%1]</small>").arg(kindText.toHtmlEscaped());
-        m_titleLabel = new QLabel(labelHtml, this);
-        m_titleLabel->setTextFormat(Qt::RichText);
+        if (const auto icon = iconForToolKind(kind)) {
+            auto *kindIcon = new Utils::QtcIconDisplay(this);
+            kindIcon->setIcon(*icon);
+            m_headerLayout->addWidget(kindIcon);
+        }
+
+        m_titleLabel = new Utils::ElidingLabel(title, this);
         m_headerLayout->addWidget(m_titleLabel, 1);
 
         m_status = status;
@@ -349,7 +352,7 @@ protected:
 
 private:
     QWidget *m_statusWidget = nullptr;
-    QLabel *m_titleLabel = nullptr;
+    Utils::ElidingLabel *m_titleLabel = nullptr;
     ToolCallStatus m_status = ToolCallStatus::pending;
 };
 
@@ -1128,8 +1131,7 @@ void AcpMessageView::addToolCall(const ToolCall &toolCall)
         group->addChildWidget(detail);
         m_toolCallDetailWidgets[toolCall.toolCallId()] = detail;
     } else {
-        const QString kindText = toolCall.kind() ? toString(*toolCall.kind()) : QString();
-        auto *widget = new ToolCallWidget(status, toolCall.title(), kindText, group);
+        auto *widget = new ToolCallWidget(status, toolCall.title(), toolCall.kind(), group);
         widget->setCollapsible(false);
         group->addChildWidget(widget);
         m_toolCallWidgets[toolCall.toolCallId()] = widget;
@@ -1176,12 +1178,11 @@ void AcpMessageView::updateToolCall(const ToolCallUpdate &update)
     if (!widget) {
         const ToolCallStatus status = update.status().value_or(ToolCallStatus::in_progress);
         const QString title = update.title().value_or(QStringLiteral("Tool Call"));
-        const QString kindText = update.kind() ? toString(*update.kind()) : QString();
         auto *group = ensureToolCallGroup();
         group->trackStatus(update.toolCallId(), status);
         group->trackTitle(update.toolCallId(), title);
         m_toolCallGroups[update.toolCallId()] = group;
-        widget = new ToolCallWidget(status, title, kindText, group);
+        widget = new ToolCallWidget(status, title, update.kind(), group);
         widget->setCollapsible(false);
         group->addChildWidget(widget);
         m_toolCallWidgets[update.toolCallId()] = widget;

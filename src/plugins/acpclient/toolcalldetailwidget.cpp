@@ -11,6 +11,7 @@
 #include <utils/qtcwidgets.h>
 #include <utils/stylehelper.h>
 #include <utils/theme/theme.h>
+#include <utils/elidinglabel.h>
 #include <utils/utilsicons.h>
 
 #include <QAbstractTextDocumentLayout>
@@ -44,6 +45,35 @@ QWidget *toolCallStatusWidget(ToolCallStatus status, QWidget *parent)
     return display;
 }
 
+std::optional<Utils::Icon> iconForToolKind(std::optional<ToolKind> kind)
+{
+    if (kind) {
+        switch (*kind) {
+        case ToolKind::read:
+            return Utils::Icons::SAVEFILE;
+        case ToolKind::edit:
+            return Utils::Icons::PASTE;
+        case ToolKind::delete_:
+            return Utils::Icons::CLEAN;
+        case ToolKind::move:
+            return Utils::Icons::COPY;
+        case ToolKind::search:
+            return Utils::Icons::ZOOM;
+        case ToolKind::execute:
+            return Utils::Icons::RUN_SMALL;
+        case ToolKind::think:
+            return Utils::Icons::EYE_OPEN;
+        case ToolKind::fetch:
+            return Utils::Icons::DOWNLOAD;
+        case ToolKind::switch_mode:
+            return Utils::Icons::RELOAD;
+        case ToolKind::other:
+            return std::nullopt;
+        }
+    }
+    return std::nullopt;
+}
+
 QColor toolCallBorderColor(ToolCallStatus status)
 {
     switch (status) {
@@ -66,13 +96,15 @@ ToolCallDetailWidget::ToolCallDetailWidget(const ToolCall &toolCall, QWidget *pa
     // Header: status widget + title + kind badge
     m_statusWidget = toolCallStatusWidget(status, this);
     m_headerLayout->addWidget(m_statusWidget);
-    const QString kindText = toolCall.kind() ? toString(*toolCall.kind()) : QString();
 
-    QString labelHtml = QStringLiteral("<b>%1</b>").arg(toolCall.title().toHtmlEscaped());
-    if (!kindText.isEmpty())
-        labelHtml += QStringLiteral(" <small>[%1]</small>").arg(kindText.toHtmlEscaped());
-    m_titleLabel = new QLabel(labelHtml, this);
-    m_titleLabel->setTextFormat(Qt::RichText);
+    if (const auto icon = iconForToolKind(toolCall.kind())) {
+        auto *kindIcon = new Utils::QtcIconDisplay(this);
+        kindIcon->setIcon(*icon);
+        m_headerLayout->addWidget(kindIcon);
+    }
+
+    m_titleLabel = new Utils::ElidingLabel(toolCall.title(), this);
+    m_titleLabel->setElideMode(Qt::ElideRight);
     m_headerLayout->addWidget(m_titleLabel, 1);
 
     m_status = status;
@@ -113,17 +145,12 @@ void ToolCallDetailWidget::setContentMaxWidth(int width)
         browser->setMaximumWidth(browserMax);
 }
 
-void ToolCallDetailWidget::updateTitle(const QString &title)
-{
-    m_titleLabel->setText(QStringLiteral("<b>%1</b>").arg(title.toHtmlEscaped()));
-}
-
 void ToolCallDetailWidget::updateContent(const ToolCallUpdate &update)
 {
     if (const auto status = update.status())
         applyStatus(*status);
     if (const auto title = update.title())
-        updateTitle(*title);
+        m_titleLabel->setText(*title);
 
     // Parse updated content if available
     if (const auto &contentArr = update.content()) {

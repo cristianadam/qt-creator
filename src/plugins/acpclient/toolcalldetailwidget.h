@@ -7,9 +7,14 @@
 
 #include <acp/acp.h>
 
+#include <utils/icon.h>
+
+#include <optional>
+
 class QLabel;
 
 namespace Utils {
+class ElidingLabel;
 class MarkdownBrowser;
 } // namespace Utils
 
@@ -17,6 +22,7 @@ namespace AcpClient::Internal {
 
 QWidget *toolCallStatusWidget(Acp::ToolCallStatus status, QWidget *parent = nullptr);
 QColor toolCallBorderColor(Acp::ToolCallStatus status);
+std::optional<Utils::Icon> iconForToolKind(std::optional<Acp::ToolKind> kind);
 
 class ToolCallDetailWidget : public CollapsibleFrame
 {
@@ -26,7 +32,6 @@ public:
     explicit ToolCallDetailWidget(const Acp::ToolCall &toolCall, QWidget *parent = nullptr);
 
     void applyStatus(Acp::ToolCallStatus status);
-    void updateTitle(const QString &title);
     void updateContent(const Acp::ToolCallUpdate &update);
     void setContentMaxWidth(int width);
 
@@ -43,7 +48,7 @@ private:
     void addBodyWidget(QWidget *widget);
 
     QWidget *m_statusWidget = nullptr;
-    QLabel *m_titleLabel = nullptr;
+    Utils::ElidingLabel *m_titleLabel = nullptr;
     Acp::ToolCallStatus m_status = Acp::ToolCallStatus::in_progress;
     QList<Utils::MarkdownBrowser *> m_browsers;
 };
