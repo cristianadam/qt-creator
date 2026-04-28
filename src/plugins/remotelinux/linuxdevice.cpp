@@ -1108,8 +1108,10 @@ CommandLine SshProcessInterfacePrivate::fullLocalCommandLine() const
 
     const Environment &env = q->m_setup.m_environment;
     env.forEachEntry([&](const QString &key, const QString &value, bool enabled) {
-        if (enabled && !key.trimmed().isEmpty() && !value.contains('\n'))
-            inner.addArgs(key + "='" + env.expandVariables(value) + '\'', CommandLine::Raw);
+        if (enabled && !key.trimmed().isEmpty() && !value.contains('\n')) {
+            inner.addArgs(
+                key + "=" + ProcessArgs::quoteArgUnix(env.expandVariables(value)), CommandLine::Raw);
+        }
     });
 
     if (!useTerminal && !commandLine.isEmpty())
