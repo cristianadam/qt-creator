@@ -1996,6 +1996,8 @@ void DebuggerPluginPrivate::remoteCommand(const QStringList &options)
     runScheduled();
 }
 
+void registerMcpTools();
+
 void DebuggerPluginPrivate::extensionsInitialized()
 {
     QTimer::singleShot(0, this, &DebuggerItemManager::restoreDebuggers);
@@ -2013,6 +2015,8 @@ void DebuggerPluginPrivate::extensionsInitialized()
             cmd->setAttribute(Command::CA_NonConfigurable);
         }
     }
+
+    registerMcpTools();
 
     DebuggerMainWindow::ensureMainWindowExists();
 }

@@ -30,9 +30,7 @@ public:
 
     using ResponseCallback = std::function<void(const QJsonObject &response)>;
 
-    // Core MCP commands
-    QString stopDebug();
-
+    // Core Mcp commands
     QStringList listProjects();
     QStringList listBuildConfigs();
     bool switchToBuildConfig(const QString &name);
@@ -113,35 +111,6 @@ public:
     // Issue management commands
     QJsonObject listIssues();
     QJsonObject listIssues(const QString &path);
-
-    // Debugging management helpers
-    Utils::Result<QString> debuggerStepOver();
-    Utils::Result<QString> debuggerStepIn();
-    Utils::Result<QString> debuggerStepOut();
-    Utils::Result<QString> debuggerContinue();
-    Utils::Result<QString> debuggerInterrupt();
-    Utils::Result<QJsonObject> debuggerGetStatus();
-    void evaluateExpression(const QString &expression, std::function<void(Utils::Result<QJsonObject>)> callback);
-    Utils::Result<QJsonArray> getCallStack();
-    Utils::Result<QJsonArray> getThreads();
-    Utils::Result<bool> selectThread(const QString &id);
-    void getVariables(bool includeWatchers, std::function<void(Utils::Result<QJsonArray>)> callback);
-    void getVariable(const QString &iname, std::function<void(Utils::Result<QJsonObject>)> callback);
-    Utils::Result<bool> setVariable(const QString &iname, const QString &value);
-    Utils::Result<QString> addWatchExpression(const QString &expression, const QString &name);
-    Utils::Result<bool> removeWatchExpression(const QString &iname);
-    QJsonArray getBreakpoints();
-    bool deleteBreakpoint(int id);
-    QJsonObject addBreakpoint(
-        const QString &type,
-        const QString &file,
-        int line,
-        const QString &functionName,
-        quint64 address,
-        const QString &condition,
-        int ignoreCount,
-        bool enabled,
-        bool oneShot);
 
     void executeCommand(
         const QString &command,
