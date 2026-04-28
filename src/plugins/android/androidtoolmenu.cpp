@@ -130,7 +130,6 @@ FilePath manifestDir(TextEditor::TextEditorWidget *textEditorWidget, bool showWa
     return getManifestDirWithWizardOption(textEditorWidget, project->projectDirectory());
 }
 
-const char ANDROID_TOOLS_MENU_ID[] = "Android.Tools.Menu";
 const char ANDROID_GRAPHICAL_EDITOR_ID[] = "Android.Tools.Graphical.Editor.ID";
 
 class AndroidIconSplashEditorWidget : public QWidget
@@ -265,7 +264,7 @@ public:
 
 void setupAndroidToolsMenu()
 {
-    Core::MenuBuilder devMenu(ANDROID_TOOLS_MENU_ID);
+    Core::MenuBuilder devMenu(Constants::ANDROID_TOOLS_MENU_ID);
     devMenu.setTitle(Android::Tr::tr("Android"));
     devMenu.addSeparator();
     devMenu.addToContainer(Core::Constants::M_TOOLS);
@@ -310,25 +309,25 @@ void setupAndroidToolsMenu()
         .setText(Android::Tr::tr("Manifest XML Source"))
         .addOnTriggered([openEditorAtTab]() {
             openEditorAtTab(AndroidIconSplashEditorWidget::XMLSourceTab);
-        }).addToContainer(ANDROID_TOOLS_MENU_ID);
+        }).addToContainer(Constants::ANDROID_TOOLS_MENU_ID);
 
     Core::ActionBuilder(Core::ActionManager::instance(), "Android.Tools.Icon")
         .setText(Android::Tr::tr("Icon Editor"))
         .addOnTriggered([openEditorAtTab]() {
             openEditorAtTab(AndroidIconSplashEditorWidget::IconTab);
-        }).addToContainer(ANDROID_TOOLS_MENU_ID);
+        }).addToContainer(Constants::ANDROID_TOOLS_MENU_ID);
 
     Core::ActionBuilder(Core::ActionManager::instance(), "Android.Tools.Permissions")
         .setText(Android::Tr::tr("Permissions Editor"))
         .addOnTriggered([openEditorAtTab]() {
             openEditorAtTab(AndroidIconSplashEditorWidget::PermissionsTab);
-        }).addToContainer(ANDROID_TOOLS_MENU_ID);
+        }).addToContainer(Constants::ANDROID_TOOLS_MENU_ID);
 
     Core::ActionBuilder(Core::ActionManager::instance(), "Android.Tools.Splashscreen")
         .setText(Android::Tr::tr("Splashscreen Editor"))
         .addOnTriggered([openEditorAtTab]() {
             openEditorAtTab(AndroidIconSplashEditorWidget::SplashTab);
-        }).addToContainer(ANDROID_TOOLS_MENU_ID);
+        }).addToContainer(Constants::ANDROID_TOOLS_MENU_ID);
 
 }
 

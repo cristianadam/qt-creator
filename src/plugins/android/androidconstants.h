@@ -7,6 +7,8 @@
 
 namespace Android::Constants {
 
+const char ANDROID_TOOLS_MENU_ID[] = "Android.Tools.Menu";
+
 const char ANDROID_SETTINGS_ID[] = "BB.Android Configurations";
 const char ANDROID_TOOLCHAIN_TYPEID[] = "Qt4ProjectManager.ToolChain.Android";
 const char ANDROID_QT_TYPE[] = "Qt4ProjectManager.QtVersion.Android";
