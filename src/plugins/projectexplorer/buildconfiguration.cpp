@@ -1284,7 +1284,7 @@ FilePath BuildConfiguration::rawBuildDirectoryFromTemplate(
 
     auto environment = Environment::systemEnvironment();
     if (const Project * const project
-        = ProjectManager::projectWithProjectFile(projectFilePath, true)) {
+        = ProjectManager::projectWithProjectFile(projectFilePath, false)) {
         // This adds the environment variables from the <project>.shared file
         project->additionalEnvironment()
             .modifyEnvironment(environment, kit ? kit->macroExpander() : nullptr);
