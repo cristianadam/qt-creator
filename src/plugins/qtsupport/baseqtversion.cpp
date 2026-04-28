@@ -869,9 +869,8 @@ QString QtVersion::toHtml(bool verbose) const
     str << "<tr><td><b>" << Tr::tr("Name:")
         << "</b></td><td>" << displayName() << "</td></tr>";
     if (!isValid()) {
-        str << "<tr><td colspan=2><b>"
-            << Tr::tr("Invalid Qt version")
-            << "</b></td></tr>";
+        str << "<tr><td><b>" << Tr::tr("Invalid Qt version:")
+            << "</b></td><td>" << invalidReason() << "</td></tr>";
     } else {
         str << "<tr><td><b>" << Tr::tr("ABI:")
             << "</b></td>";

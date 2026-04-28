@@ -182,27 +182,22 @@ QVariant qtVersionData(const QtVersion *version, int column, int role, bool hasN
     }
 
     if (role == Qt::ToolTipRole) {
-        const QString row = "<dt style=\"font-weight:bold\">%1:</dt>"
-                            "<dd>%2</dd>";
-        QString desc = "<dl style=\"white-space:pre\">";
-        if (version->isValid())
-            desc += row.arg(Tr::tr("Qt Version"), version->qtVersionString());
-        desc += row.arg(Tr::tr("Location of qmake"), version->qmakeFilePath().toUserOutput());
+        QString desc = version->toHtml(true);
+        QString extra;
+        const QString row = "<tr><td><b>%1:</b></td><td>%2</td></tr>";
         if (version->isValid()) {
             const UnsupportedAbisInfo abisInfo = checkForUnsupportedAbis(version);
             if (abisInfo.status == UnsupportedAbisInfo::Status::AllMissing)
-                desc += row.arg(Tr::tr("Error"), abisInfo.message);
-            if (abisInfo.status == UnsupportedAbisInfo::Status::SomeMissing)
-                desc += row.arg(Tr::tr("Warning"), abisInfo.message);
-            const QStringList warnings = version->warningReason();
-            for (const QString &w : warnings)
-                desc += row.arg(Tr::tr("Warning"), w);
-        } else {
-            desc += row.arg(Tr::tr("Error"), version->invalidReason());
+                extra += row.arg(Tr::tr("Error"), abisInfo.message);
+            else if (abisInfo.status == UnsupportedAbisInfo::Status::SomeMissing)
+                extra += row.arg(Tr::tr("Warning"), abisInfo.message);
+            for (const QString &w : version->warningReason())
+                extra += row.arg(Tr::tr("Warning"), w);
         }
         if (hasNonUniqueName)
-            desc += row.arg(Tr::tr("Warning"), nonUniqueDisplayNameWarning());
-        desc += "</dl>";
+            extra += row.arg(Tr::tr("Warning"), nonUniqueDisplayNameWarning());
+        if (!extra.isEmpty())
+            desc.replace("</table>", extra + "</table>");
         return desc;
     }
 
