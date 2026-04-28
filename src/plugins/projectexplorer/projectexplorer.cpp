@@ -2183,8 +2183,14 @@ void ProjectExplorerPluginPrivate::closeAllProjects()
     ModeManager::activateMode(Core::Constants::MODE_WELCOME);
 }
 
+namespace Internal {
+void registerMcpTools();
+} // namespace Internal
+
 void ProjectExplorerPlugin::extensionsInitialized()
 {
+    Internal::registerMcpTools();
+
     DeviceManager::addDevice(dd->m_desktopDeviceFactory.construct());
 
     CustomWizard::createWizards();

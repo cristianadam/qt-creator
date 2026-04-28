@@ -2,22 +2,14 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 #pragma once
 
-#include "issuesmanager.h"
 #include <mcp/server/mcpserver.h>
 
 #include <utils/result.h>
 
-#include <QMap>
 #include <QObject>
 #include <QStringList>
 
-namespace ProjectExplorer {
-class Project;
-}
-
 namespace Mcp::Internal {
-
-class IssuesManager;
 
 class McpCommands : public QObject
 {
@@ -31,12 +23,8 @@ public:
     using ResponseCallback = std::function<void(const QJsonObject &response)>;
 
     // Core Mcp commands
-    QStringList listProjects();
-    QStringList listBuildConfigs();
-    bool switchToBuildConfig(const QString &name);
     bool quit();
     QString getVersion();
-    QString getBuildStatus();
 
     // document management commands
     bool openFile(const QString &path);
@@ -44,18 +32,9 @@ public:
     bool setFilePlainText(const QString &path, const QString &contents);
     bool saveFile(const QString &path);
     bool closeFile(const QString &path);
-    QStringList findFiles(
-        const QList<ProjectExplorer::Project *> &projects, const QRegularExpression &re);
     bool reformatFile(const QString &path);
     void searchInFile(
         const QString &path,
-        const QString &pattern,
-        bool regex,
-        bool caseSensitive,
-        const ResponseCallback &callback);
-    void searchInFiles(
-        const QString &filePattern,
-        const std::optional<QString> &projectName,
         const QString &pattern,
         bool regex,
         bool caseSensitive,
@@ -76,14 +55,6 @@ public:
         bool regex,
         bool caseSensitive,
         const ResponseCallback &callback);
-    void replaceInFiles(
-        const QString &filePattern,
-        const std::optional<QString> &projectName,
-        const QString &pattern,
-        const QString &replacement,
-        bool regex,
-        bool caseSensitive,
-        const ResponseCallback &callback);
     void replaceInDirectory(
         const QString directory,
         const QString &pattern,
@@ -93,14 +64,9 @@ public:
         const ResponseCallback &callback);
 
     // Additional useful commands
-    QString getCurrentProject();
-    QString getCurrentBuildConfig();
     QStringList listOpenFiles();
     QStringList listVisibleFiles();
-    Utils::Result<QStringList> projectDependencies(const QString &projectName);
     bool createNewFile(const QString &path, const QString &text);
-    QJsonArray getRunConfigurations();
-    QMap<QString, QSet<QString> > knownRepositoriesInProject(const QString &projectName);
 
     // Session management commands
     QStringList listSessions();
@@ -108,19 +74,11 @@ public:
     bool loadSession(const QString &sessionName);
     bool saveSession();
 
-    // Issue management commands
-    QJsonObject listIssues();
-    QJsonObject listIssues(const QString &path);
-
     void executeCommand(
         const QString &command,
         const QString &arguments,
         const QString &workingDirectory,
         const ResponseCallback &callback);
-
-private:
-    // Issues management
-    IssuesManager m_issuesManager;
 };
 
 } // namespace Mcp::Internal

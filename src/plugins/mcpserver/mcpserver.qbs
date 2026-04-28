@@ -13,8 +13,6 @@ QtcPlugin {
     Depends { name: "Qt"; submodules: ["network", "widgets"] }
 
     files: [
-        "issuesmanager.cpp",
-        "issuesmanager.h",
         "mcpcommands.cpp",
         "mcpcommands.h",
         "mcpserverplugin.cpp",

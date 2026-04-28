@@ -3,13 +3,13 @@
 
 #include "issuesmanager.h"
 
+#include "buildmanager.h"
+#include "task.h"
+#include "taskhub.h"
+
 #include <coreplugin/icore.h>
 #include <coreplugin/ioutputpane.h>
 #include <extensionsystem/pluginmanager.h>
-#include <projectexplorer/buildmanager.h>
-#include <projectexplorer/projectexplorer.h>
-#include <projectexplorer/task.h>
-#include <projectexplorer/taskhub.h>
 #include <utils/algorithm.h>
 #include <utils/id.h>
 
@@ -23,7 +23,7 @@
 
 Q_LOGGING_CATEGORY(mcpIssues, "qtc.mcpserver.issues", QtWarningMsg)
 
-namespace Mcp::Internal {
+namespace ProjectExplorer {
 
 IssuesManager::IssuesManager(QObject *parent)
     : QObject(parent)
@@ -117,7 +117,8 @@ QJsonObject IssuesManager::getCurrentIssues(
         result["status"] = QJsonObject{
             {"accessible", false},
             {"signalsConnected", false},
-            {"taskWindowFound", false}
+            {"taskWindowFound", false},
+            {"buildManagerAvailable", false}
         };
         return result;
     }
@@ -179,6 +180,7 @@ QJsonObject IssuesManager::getCurrentIssues(
     status["accessible"] = m_accessible;
     status["signalsConnected"] = m_signalsConnected;
     status["taskWindowFound"] = m_taskWindow != nullptr;
+    status["buildManagerAvailable"] = ProjectExplorer::BuildManager::tasksAvailable();
 
     // Assemble final result
     result["issues"] = issuesArray;

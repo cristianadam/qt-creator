@@ -2,17 +2,19 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 #pragma once
 
+#include "projectexplorer_export.h"
+
 #include <QJsonObject>
 #include <QObject>
 #include <QString>
 #include <QStringList>
 
 // Include for MOC compilation
-#include <projectexplorer/task.h>
+#include "task.h"
 
 #include <mcp/server/mcpserver.h>
 
-namespace Mcp::Internal {
+namespace ProjectExplorer {
 
 /**
  * @brief Manages access to Qt Creator's Issues panel
@@ -22,7 +24,7 @@ namespace Mcp::Internal {
  * of accessing internal Qt Creator APIs and provides a simple interface
  * for the MCP plugin.
  */
-class IssuesManager : public QObject
+class PROJECTEXPLORER_EXPORT IssuesManager : public QObject
 {
     Q_OBJECT
 
@@ -120,4 +122,4 @@ private:
     bool m_signalsConnected = false;
 };
 
-} // namespace Mcp::Internal
+} // namespace ProjectExplorer

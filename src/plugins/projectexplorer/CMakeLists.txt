@@ -197,6 +197,11 @@ extend_qtc_plugin(ProjectExplorer
 )
 
 extend_qtc_plugin(ProjectExplorer
+  SOURCES mcpsupport.cpp issuesmanager.cpp issuesmanager.h
+  DEPENDS McpServerLib
+)
+
+extend_qtc_plugin(ProjectExplorer
   CONDITION WITH_TESTS
   SOURCES
     jsonwizard/jsonwizard_test.cpp jsonwizard/jsonwizard_test.h

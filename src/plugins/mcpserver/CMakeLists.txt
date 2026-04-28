@@ -3,13 +3,13 @@ add_qtc_plugin(mcpserver
   PLUGIN_CLASS McpServerPlugin
   PLUGIN_DEPENDS
     Core
+    TextEditor
     ProjectExplorer
   DEPENDS
    ExtensionSystem
    Utils
    McpServerLib
   SOURCES
-    issuesmanager.cpp issuesmanager.h
     mcpcommands.cpp mcpcommands.h
     mcpserverplugin.cpp
     mcpserverconstants.h
