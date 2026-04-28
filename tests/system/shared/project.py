@@ -310,6 +310,8 @@ def createNewQtQuickApplication(workingDir, projectName=None,
     else:
         __handleBuildSystem__(buildSystem)
     requiredQt = __createProjectHandleQtQuickSelection__(minimumQtVersion)
+    if template == "Qt Quick Application (compat)":
+        __createProjectHandleTranslationSelection__()
     __modifyAvailableTargets__(available, requiredQt)
     checkedTargets = __chooseTargets__(targets, available)
     snooze(1)
