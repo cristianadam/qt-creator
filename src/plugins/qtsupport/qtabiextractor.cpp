@@ -109,7 +109,7 @@ private:
 
     Abi::OS getOs(const QString &osString) const
     {
-        if (osString == "Linux" || osString == "Android")
+        if (osString == "Linux" || osString == "Android" || osString == "OHOS")
             return Abi::LinuxOS;
         if (osString == "Darwin" || osString == "iOS")
             return Abi::DarwinOS;
@@ -145,6 +145,8 @@ private:
     {
         if (osString == "Android")
             return Abi::AndroidLinuxFlavor;
+        if (osString == "OHOS")
+            return Abi::OpenHarmonyLinuxFlavor;
         switch (os) {
         case Abi::LinuxOS:
         case Abi::DarwinOS:

@@ -78,6 +78,7 @@ public:
 
         // Linux
         AndroidLinuxFlavor,
+        OpenHarmonyLinuxFlavor,
 
         // Unix
         SolarisUnixFlavor,
