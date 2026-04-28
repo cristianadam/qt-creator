@@ -1298,7 +1298,11 @@ Result<QtVersionData> dataForQMake(const FilePath m_qmakeCommand)
         {&data.examplesPath, &data.hasExamples},
         {&data.demosPath, &data.hasDemos},
     };
-    if (data.binPath.osType() != OsTypeMac)
+    // For cross builds, QT_INSTALL_HEADERS is inside the target sysroot and not
+    // necessarily available on the host. Only check it for native builds.
+    const bool isCrossBuild = !data.hostPrefixPath.isEmpty()
+                              && data.hostPrefixPath != data.prefix;
+    if (data.binPath.osType() != OsTypeMac && !isCrossBuild)
         checkDirs.push_back({&data.headerPath, &data.installed});
 
     QtConcurrent::map(checkDirs, [](CheckDir &checkDir) {
