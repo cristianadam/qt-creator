@@ -12,6 +12,8 @@
 #include <QMutex>
 #include <QObject>
 
+#include <QtTaskTree/QParallelTaskTreeRunner>
+
 #include <optional>
 
 namespace Docker::Internal {
@@ -65,6 +67,7 @@ private:
 
     Utils::SynchronizedValue<Utils::FilePath> m_dockerClientBinary;
     Utils::Result<QList<Network>> m_networks;
+    QtTaskTree::QParallelTaskTreeRunner m_taskTreeRunner;
 };
 
 } // Docker::Internal
