@@ -354,6 +354,8 @@ QtSettingsPageWidget::QtSettingsPageWidget()
     m_qmakePath.setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     m_qmakePath.setTextInteractionFlags(Qt::LinksAccessibleByMouse|Qt::TextSelectableByMouse);
 
+    m_errorLabel.setTextInteractionFlags(Qt::LinksAccessibleByMouse|Qt::TextSelectableByMouse);
+
     m_editPathPushButton.setText(PathChooser::browseButtonLabel());
 
     using namespace Layouting;
