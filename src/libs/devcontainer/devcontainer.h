@@ -59,9 +59,6 @@ public:
 
     ~Instance();
 
-    Utils::Result<> up(const RunningInstance &runningInstance); // Create and start the container
-    Utils::Result<> down(); // Stop and remove the container
-
     Utils::ProcessInterface *createProcessInterface(const RunningInstance &runningInstance) const;
 
     Utils::Result<QtTaskTree::Group> upRecipe(const RunningInstance &runningInstance) const;
