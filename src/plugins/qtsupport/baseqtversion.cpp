@@ -787,7 +787,8 @@ Abis QtVersion::detectQtAbis() const
 
 Abis QtVersion::qtAbisFromJson() const
 {
-    return QtSupport::Internal::qtAbisFromJson(*this, {d->data().archDataPath, d->data().dataPath});
+    return QtSupport::Internal::qtAbisFromJson(
+        *this, {d->data().archDataPath, d->data().dataPath, d->data().hostDataPath});
 }
 
 bool QtVersion::hasAbi(ProjectExplorer::Abi::OS os, ProjectExplorer::Abi::OSFlavor flavor) const
