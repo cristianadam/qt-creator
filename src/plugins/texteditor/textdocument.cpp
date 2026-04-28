@@ -144,18 +144,27 @@ MultiTextCursor TextDocumentPrivate::indentOrUnindent(const MultiTextCursor &cur
                 cursor.removeSelectedText();
             } else {
                 for (QTextBlock block = startBlock; block != endBlock; block = block.next()) {
+                    QTC_ASSERT(block.isValid(), break);
                     const QString text = block.text();
-                    int indentPosition = tabSettings.lineIndentPosition(text);
-                    if (!doIndent && !indentPosition)
-                        indentPosition = TabSettings::firstNonSpace(text);
-                    int targetColumn
-                        = tabSettings.indentedColumn(tabSettings.columnAt(text, indentPosition),
-                                                     doIndent);
-                    cursor.setPosition(block.position() + indentPosition);
-                    cursor.insertText(tabSettings.indentationString(0, targetColumn, 0));
+                    const int fnsPos = tabSettings.firstNonSpace(text);
+                    const int fnsCol = tabSettings.columnAt(text, fnsPos);
+                    const int indentColumn = fnsCol / tabSettings.m_indentSize * tabSettings.m_indentSize;
+                    const int indentPosition = tabSettings.positionAtColumn(text, indentColumn);
+                    if (!doIndent && indentColumn == 0) {
+                        if (fnsPos == 0)
+                            continue;
+                        // Unindent line that has no indentation but leading spaces, just remove
+                        // everything from beginning of line until first non-space character
+                        cursor.setPosition(block.position());
+                        cursor.setPosition(block.position() + fnsPos, QTextCursor::KeepAnchor);
+                        cursor.removeSelectedText();
+                        continue;
+                    }
+                    const int targetColumn = tabSettings.indentedColumn(indentColumn, doIndent);
+                    const QString indentationString = tabSettings.indentationString(0, targetColumn, 0);
                     cursor.setPosition(block.position());
                     cursor.setPosition(block.position() + indentPosition, QTextCursor::KeepAnchor);
-                    cursor.removeSelectedText();
+                    cursor.insertText(indentationString);
                 }
                 // make sure that selection that begins in first column stays at first column
                 // even if we insert text at first column

@@ -41,7 +41,6 @@ public:
 
     TabSettings autoDetect(const QTextDocument *document) const;
 
-    int lineIndentPosition(const QString &text) const;
     int columnAt(const QString &text, int position) const;
     int columnAtCursorPosition(const QTextCursor &cursor) const;
     int positionAtColumn(const QString &text, int column, int *offset = nullptr, bool allowOverstep = false) const;
