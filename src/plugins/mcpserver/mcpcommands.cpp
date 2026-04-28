@@ -24,6 +24,8 @@
 #include <debugger/threadshandler.h>
 #include <debugger/watchhandler.h>
 
+#include <mcp/server/toolregistry.h>
+
 #include <projectexplorer/buildconfiguration.h>
 #include <projectexplorer/buildmanager.h>
 #include <projectexplorer/editorconfiguration.h>
@@ -1518,7 +1520,7 @@ QJsonObject McpCommands::addBreakpoint(
     return QJsonObject{{"success", true}, {"id", gbp->modelId()}};
 }
 
-void McpCommands::registerCommands(Mcp::Server &server)
+void McpCommands::registerCommands()
 {
     using namespace Mcp::Schema;
 
@@ -1546,7 +1548,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
         };
     };
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Schema::Tool()
             .name("build")
             .title("Build project")
@@ -1608,7 +1610,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return ResultOk;
         });
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("get_build_status")
             .title("Get current build status")
@@ -1622,7 +1624,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"status", commands.getBuildStatus()}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("open_file")
             .title("Open a file in Qt Creator")
@@ -1647,7 +1649,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"success", ok}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("file_plain_text")
             .title("file plain text")
@@ -1672,7 +1674,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"text", text}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("set_file_plain_text")
             .title("set file plain text")
@@ -1704,7 +1706,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"success", ok}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("save_file")
             .title("Save a file in Qt Creator")
@@ -1729,7 +1731,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"success", ok}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("close_file")
             .title("Close a file in Qt Creator")
@@ -1754,7 +1756,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"success", ok}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("find_files_in_projects")
             .title("Find files in project")
@@ -1812,7 +1814,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
                 .isError(false);
         });
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("search_in_file")
             .title("Search for pattern in a single file")
@@ -1852,7 +1854,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             commands.searchInFile(path, pattern, isRegex, caseSensitive, callback);
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("search_in_files")
             .title("Search for pattern in project files")
@@ -1905,7 +1907,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
                 .searchInFiles(filePattern, projectName, pattern, isRegex, caseSensitive, callback);
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("search_in_directory")
             .title("Search for pattern in a directory")
@@ -1945,7 +1947,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             commands.searchInDirectory(directory, pattern, isRegex, caseSensitive, callback);
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("replace_in_file")
             .title("Replace pattern in a single file")
@@ -1992,7 +1994,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             commands.replaceInFile(path, pattern, replacement, isRegex, caseSensitive, callback);
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("replace_in_files")
             .title("Replace pattern in project files")
@@ -2053,7 +2055,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
                 filePattern, projectName, pattern, replacement, isRegex, caseSensitive, callback);
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("replace_in_directory")
             .title("Replace pattern in a directory")
@@ -2102,7 +2104,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
                 directory, pattern, replacement, isRegex, caseSensitive, callback);
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("list_projects")
             .title("List all available projects")
@@ -2122,7 +2124,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"projects", arr}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("list_build_configs")
             .title("List available build configurations")
@@ -2142,7 +2144,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"buildConfigs", arr}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("switch_build_config")
             .title("Switch to a specific build configuration")
@@ -2166,7 +2168,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"success", ok}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("list_open_files")
             .title("List currently open files")
@@ -2186,7 +2188,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"openFiles", arr}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("list_visible_files")
             .title("List currently visible files")
@@ -2206,7 +2208,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"visibleFiles", arr}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("list_sessions")
             .title("List available sessions")
@@ -2226,7 +2228,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"sessions", arr}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("load_session")
             .title("Load a specific session")
@@ -2249,7 +2251,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"success", ok}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("list_issues")
             .title("List current issues (warnings and errors)")
@@ -2258,7 +2260,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             .outputSchema(IssuesManager::issuesSchema()),
         wrap([](const QJsonObject &) { return commands.listIssues(); }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("list_file_issues")
             .title("List current issues for file (warnings and errors)")
@@ -2279,7 +2281,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return commands.listIssues(path);
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("quit")
             .title("Quit Qt Creator")
@@ -2294,7 +2296,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"success", ok}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("get_current_project")
             .title("Get the currently active project")
@@ -2309,7 +2311,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"project", proj}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("get_current_build_config")
             .title("Get the currently active build configuration")
@@ -2324,7 +2326,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"buildConfig", cfg}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("get_current_session")
             .title("Get the currently active session")
@@ -2339,7 +2341,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"session", sess}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("save_session")
             .title("Save the current session")
@@ -2354,7 +2356,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"success", ok}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool()
             .name("known_repositories_in_projects")
             .title("Get known version control repositories in all projects")
@@ -2393,7 +2395,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"repositories", reposJson}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool()
             .name("project_dependencies")
             .title("List project dependencies for all projects")
@@ -2422,7 +2424,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"dependencies", arr}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("get_breakpoints")
             .title("Get current breakpoints")
@@ -2441,7 +2443,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"breakpoints", commands.getBreakpoints()}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("get_threads")
             .title("Get current threads")
@@ -2483,7 +2485,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"threads", *threads}});
         });
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("select_thread")
             .title("Select a thread")
@@ -2526,7 +2528,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
         };
     };
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("get_variables")
             .title("List local variables")
@@ -2568,7 +2570,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return ResultOk;
         });
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("get_variable")
             .title("Get a variable")
@@ -2622,7 +2624,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return ResultOk;
         });
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("set_variable")
             .title("Set a variable value")
@@ -2657,7 +2659,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"success", true}});
         });
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("add_watch_expression")
             .title("Add a watch expression")
@@ -2697,7 +2699,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"iname", *iname}});
         });
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("remove_watch_expression")
             .title("Remove a watch expression")
@@ -2727,7 +2729,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"success", true}});
         });
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("get_call_stack")
             .title("Get current call stack")
@@ -2766,7 +2768,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"frames", *frames}});
         });
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("delete_breakpoint")
             .title("Delete a breakpoint")
@@ -2789,7 +2791,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"success", ok}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("add_breakpoint")
             .title("Add a breakpoint")
@@ -2879,7 +2881,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
                 p.value("oneShot").toBool(false));
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool()
             .name("execute_command")
             .title("executes the command")
@@ -3089,7 +3091,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
         };
     };
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("run_project")
             .title("Run project")
@@ -3105,7 +3107,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             .outputSchema(runToolOutputSchema),
         makeRunCallback(ProjectExplorer::Constants::NORMAL_RUN_MODE, "Run finished"));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("debug")
             .title("Start debugging")
@@ -3210,7 +3212,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return ResultOk;
         });
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("find_actions")
             .title("Find actions")
@@ -3257,7 +3259,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
                 QJsonObject{{"actions", actions}});
         });
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("call_action")
             .title("Call an action")
@@ -3282,7 +3284,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return CallToolResult{}.isError(false);
         });
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("create_new_file")
             .title("Create a new file")
@@ -3314,7 +3316,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"success", ok}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("get_run_configurations")
             .title("Get run configurations")
@@ -3342,7 +3344,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"configurations", commands.getRunConfigurations()}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("reformat_file")
             .title("Reformat a file")
@@ -3369,7 +3371,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
         }));
 
     // Debugger stepping tools
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("debugger_step_over")
             .title("Step over")
@@ -3388,7 +3390,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"message", *result}});
         });
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("debugger_step_in")
             .title("Step into")
@@ -3407,7 +3409,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"message", *result}});
         });
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("debugger_step_out")
             .title("Step out")
@@ -3426,7 +3428,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"message", *result}});
         });
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("debugger_continue")
             .title("Continue execution")
@@ -3445,7 +3447,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"message", *result}});
         });
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("debugger_interrupt")
             .title("Pause execution")
@@ -3464,7 +3466,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"message", *result}});
         });
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("debugger_get_status")
             .title("Get debugger status")
@@ -3488,7 +3490,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return CallToolResult{}.isError(false).structuredContent(*result);
         });
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("evaluate_expression")
             .title("Evaluate expression in debugger")
@@ -3526,7 +3528,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return ResultOk;
         });
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("stop_debug")
             .title("Stop debugging")

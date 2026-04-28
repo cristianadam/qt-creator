@@ -16,7 +16,7 @@
 
 #include <extensionsystem/iplugin.h>
 
-#include <mcp/server/mcpserver.h>
+#include <mcp/server/toolregistry.h>
 
 #include <texteditor/textdocument.h>
 
@@ -154,7 +154,7 @@ public:
     void extensionsInitialized() final
     {
         // Initialize the server
-        McpCommands::registerCommands(m_server);
+        McpCommands::registerCommands();
         setupResources(this, m_server, &m_taskRunner);
     }
 
@@ -226,7 +226,7 @@ public:
 private:
     QParallelTaskTreeRunner m_taskRunner;
 
-    Mcp::Server m_server{
+    Mcp::AutoRegisteringServer m_server{
         Mcp::Schema::Implementation()
             .name("qt-creator-mcp-server")
             .title("Qt Creator MCP Server")

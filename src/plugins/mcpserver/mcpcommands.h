@@ -26,7 +26,7 @@ class McpCommands : public QObject
 public:
     explicit McpCommands(QObject *parent = nullptr);
 
-    static void registerCommands(Mcp::Server &server);
+    static void registerCommands();
 
     using ResponseCallback = std::function<void(const QJsonObject &response)>;
 
