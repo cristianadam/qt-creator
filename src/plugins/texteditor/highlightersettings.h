@@ -12,10 +12,12 @@ class HighlighterSettings final : public Utils::AspectContainer
 public:
     HighlighterSettings();
 
-    bool isIgnoredFilePattern(const QString &fileName) const;
+    bool skipUpdateCheck(const QString &fileName) const;
+    bool skipHighlighting(const QString &fileName) const;
 
     Utils::FilePathAspect definitionFilesPath{this};
-    Utils::StringAspect ignoredFiles{this};
+    Utils::StringListAspect skipUpdateCheckForFilesPattern{this};
+    Utils::StringListAspect skipFilesPattern{this};
 };
 
 HighlighterSettings &highlighterSettings();

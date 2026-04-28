@@ -4016,7 +4016,7 @@ void TextEditorWidgetPrivate::updateSyntaxInfoBar(const HighlighterHelper::Defin
     InfoBar *infoBar = m_document->infoBar();
 
     if (definitions.isEmpty() && infoBar->canInfoBeAdded(missing)
-        && !highlighterSettings().isIgnoredFilePattern(fileName)) {
+        && !highlighterSettings().skipUpdateCheck(fileName)) {
         InfoBarEntry info(missing,
                           Tr::tr("A highlight definition was not found for this file. "
                                  "Would you like to download additional highlight definition files?"),
