@@ -958,6 +958,9 @@ public:
     bool guiToVolatileValue() override;
     void volatileValueToGui() override;
 
+    enum class DisplayStyle { ListView, CommaSeparatedLineEdit };
+    void setDisplayStyle(DisplayStyle displayStyle);
+
     void addToLayoutImpl(Layouting::Layout &parent) override;
 
     void appendValue(const QString &value, bool allowDuplicates = true);

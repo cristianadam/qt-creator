@@ -1044,6 +1044,7 @@ public:
     bool m_allowAdding{true};
     bool m_allowRemoving{true};
     bool m_allowEditing{true};
+    StringListAspect::DisplayStyle m_displayStyle{StringListAspect::DisplayStyle::ListView};
 };
 
 class FilePathListAspectPrivate
@@ -3040,8 +3041,46 @@ void StringListAspect::volatileValueToGui()
     d->m_undoable.setWithoutUndo(m_volatileValue);
 }
 
+void StringListAspect::setDisplayStyle(DisplayStyle displayStyle)
+{
+    d->m_displayStyle = displayStyle;
+}
+
 void StringListAspect::addToLayoutImpl(Layout &parent)
 {
+    if (d->m_displayStyle == DisplayStyle::CommaSeparatedLineEdit) {
+        auto lineEdit = createSubWidget<FancyLineEdit>();
+
+        auto listToText = [](const QStringList &list) { return list.join(","); };
+        auto textToList = [](const QString &text) {
+            QStringList parts = text.split(',', Qt::SkipEmptyParts);
+            for (QString &p : parts)
+                p = p.trimmed();
+            parts.removeAll({});
+            return parts;
+        };
+
+        lineEdit->setText(listToText(d->m_undoable.get()));
+        lineEdit->setReadOnly(isReadOnly());
+
+        connect(lineEdit, &QLineEdit::textEdited, this, [this, lineEdit, textToList] {
+            d->m_undoable.set(undoStack(), textToList(lineEdit->text()));
+        });
+
+        connect(
+            &d->m_undoable.m_signal,
+            &UndoSignaller::changed,
+            lineEdit,
+            [this, lineEdit, listToText, textToList] {
+                if (textToList(lineEdit->text()) != d->m_undoable.get())
+                    lineEdit->setText(listToText(d->m_undoable.get()));
+                handleGuiChanged();
+            });
+
+        addLabeledItem(parent, lineEdit);
+        return;
+    }
+
     auto editor = createSubWidget<QTreeWidget>();
     editor->setHeaderHidden(true);
     editor->setRootIsDecorated(false);
