@@ -48,7 +48,7 @@ public:
     bool closeFile(const QString &path);
     QStringList findFiles(
         const QList<ProjectExplorer::Project *> &projects, const QRegularExpression &re);
-    // TODO: reformat file
+    bool reformatFile(const QString &path);
     void searchInFile(
         const QString &path,
         const QString &pattern,
@@ -93,8 +93,6 @@ public:
         bool regex,
         bool caseSensitive,
         const ResponseCallback &callback);
-    // TODO: get symbol info
-    // TODO: rename symbol
 
     // Additional useful commands
     QString getCurrentProject();
@@ -102,9 +100,9 @@ public:
     QStringList listOpenFiles();
     QStringList listVisibleFiles();
     Utils::Result<QStringList> projectDependencies(const QString &projectName);
-    // TODO: add a new File to the project
+    bool createNewFile(const QString &path, const QString &text);
+    QJsonArray getRunConfigurations();
     QMap<QString, QSet<QString> > knownRepositoriesInProject(const QString &projectName);
-    // TODO: get repositories in project
 
     // Session management commands
     QStringList listSessions();
@@ -117,6 +115,13 @@ public:
     QJsonObject listIssues(const QString &path);
 
     // Debugging management helpers
+    Utils::Result<QString> debuggerStepOver();
+    Utils::Result<QString> debuggerStepIn();
+    Utils::Result<QString> debuggerStepOut();
+    Utils::Result<QString> debuggerContinue();
+    Utils::Result<QString> debuggerInterrupt();
+    Utils::Result<QJsonObject> debuggerGetStatus();
+    void evaluateExpression(const QString &expression, std::function<void(Utils::Result<QJsonObject>)> callback);
     Utils::Result<QJsonArray> getCallStack();
     Utils::Result<QJsonArray> getThreads();
     Utils::Result<bool> selectThread(const QString &id);

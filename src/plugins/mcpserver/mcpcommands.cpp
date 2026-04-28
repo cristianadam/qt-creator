@@ -27,6 +27,7 @@
 #include <projectexplorer/buildconfiguration.h>
 #include <projectexplorer/buildmanager.h>
 #include <projectexplorer/editorconfiguration.h>
+#include <projectexplorer/kit.h>
 #include <projectexplorer/project.h>
 #include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/projectmanager.h>
@@ -37,6 +38,7 @@
 
 #include <texteditor/refactoringchanges.h>
 #include <texteditor/textdocument.h>
+#include <texteditor/texteditor.h>
 
 #include <utils/algorithm.h>
 #include <utils/async.h>
@@ -865,6 +867,254 @@ QMap<QString, QSet<QString>> McpCommands::knownRepositoriesInProject(const QStri
     }
 
     return repos;
+}
+
+bool McpCommands::createNewFile(const QString &path, const QString &text)
+{
+    if (path.isEmpty()) {
+        qCDebug(mcpCommands) << "Empty file path provided";
+        return false;
+    }
+
+    FilePath filePath = FilePath::fromUserInput(path);
+
+    if (filePath.exists()) {
+        qCDebug(mcpCommands) << "File already exists:" << path;
+        return false;
+    }
+
+    // Create parent directories if needed
+    const FilePath parentDir = filePath.parentDir();
+    if (!parentDir.exists()) {
+        if (!parentDir.createDir()) {
+            qCDebug(mcpCommands) << "Failed to create parent directories:" << parentDir.toUserOutput();
+            return false;
+        }
+    }
+
+    Result<qint64> result = filePath.writeFileContents(
+        Core::EditorManager::defaultTextEncoding().encode(text));
+    if (!result) {
+        qCDebug(mcpCommands) << "Failed to create file:" << path << "Error:" << result.error();
+        return false;
+    }
+    return true;
+}
+
+QJsonArray McpCommands::getRunConfigurations()
+{
+    QJsonArray result;
+    Project *project = ProjectManager::startupProject();
+    if (!project)
+        return result;
+
+    Target *target = project->activeTarget();
+    if (!target)
+        return result;
+
+    BuildConfiguration *bc = target->activeBuildConfiguration();
+    if (!bc)
+        return result;
+
+    RunConfiguration *activeRc = target->activeRunConfiguration();
+    const QList<RunConfiguration *> rcs = bc->runConfigurations();
+    for (RunConfiguration *rc : rcs) {
+        QJsonObject obj;
+        obj["name"] = rc->expandedDisplayName();
+        obj["active"] = (rc == activeRc);
+        result.append(obj);
+    }
+    return result;
+}
+
+bool McpCommands::reformatFile(const QString &path)
+{
+    if (path.isEmpty())
+        return false;
+
+    const FilePath filePath = FilePath::fromUserInput(path);
+
+    // If not already open, open it
+    Core::IEditor *editor = Core::EditorManager::openEditor(filePath);
+    if (!editor)
+        return false;
+
+    auto *textEditor = qobject_cast<TextEditor::TextEditorWidget *>(editor->widget());
+    if (!textEditor)
+        return false;
+
+    // Select all text and reformat
+    QTextCursor cursor = textEditor->textCursor();
+    cursor.select(QTextCursor::Document);
+    textEditor->setTextCursor(cursor);
+
+    // Trigger the TextEditor.ReformatFile action
+    Core::Command *cmd = Core::ActionManager::command(
+        Utils::Id("TextEditor.ReformatFile"));
+    if (cmd && cmd->action() && cmd->action()->isEnabled()) {
+        cmd->action()->trigger();
+        return true;
+    }
+
+    // Fallback: use auto-indent on the whole document
+    textEditor->autoIndent();
+    return true;
+}
+
+// Forward declaration
+static Utils::Result<Debugger::Internal::WatchHandler *> getWatchHandler();
+
+// Debugger stepping controls
+static Utils::Result<Debugger::Internal::DebuggerEngine *> getActiveEngine()
+{
+    using namespace Debugger::Internal;
+    const QPointer<DebuggerEngine> engine = EngineManager::currentEngine();
+    if (!engine)
+        return Utils::ResultError("No active debug session");
+    return engine.data();
+}
+
+Utils::Result<QString> McpCommands::debuggerStepOver()
+{
+    using namespace Debugger::Internal;
+    const auto engine = getActiveEngine();
+    if (!engine)
+        return Utils::ResultError(engine.error());
+    if ((*engine)->state() != Debugger::InferiorStopOk)
+        return Utils::ResultError("Debugger is not paused (current state: "
+                                  + DebuggerEngine::stateName((*engine)->state()) + ")");
+    (*engine)->handleExecStepOver();
+    return QString("Step over executed");
+}
+
+Utils::Result<QString> McpCommands::debuggerStepIn()
+{
+    using namespace Debugger::Internal;
+    const auto engine = getActiveEngine();
+    if (!engine)
+        return Utils::ResultError(engine.error());
+    if ((*engine)->state() != Debugger::InferiorStopOk)
+        return Utils::ResultError("Debugger is not paused (current state: "
+                                  + DebuggerEngine::stateName((*engine)->state()) + ")");
+    (*engine)->handleExecStepIn();
+    return QString("Step in executed");
+}
+
+Utils::Result<QString> McpCommands::debuggerStepOut()
+{
+    using namespace Debugger::Internal;
+    const auto engine = getActiveEngine();
+    if (!engine)
+        return Utils::ResultError(engine.error());
+    if ((*engine)->state() != Debugger::InferiorStopOk)
+        return Utils::ResultError("Debugger is not paused (current state: "
+                                  + DebuggerEngine::stateName((*engine)->state()) + ")");
+    (*engine)->handleExecStepOut();
+    return QString("Step out executed");
+}
+
+Utils::Result<QString> McpCommands::debuggerContinue()
+{
+    using namespace Debugger::Internal;
+    const auto engine = getActiveEngine();
+    if (!engine)
+        return Utils::ResultError(engine.error());
+    if ((*engine)->state() != Debugger::InferiorStopOk)
+        return Utils::ResultError("Debugger is not paused (current state: "
+                                  + DebuggerEngine::stateName((*engine)->state()) + ")");
+    (*engine)->handleExecContinue();
+    return QString("Continue executed");
+}
+
+Utils::Result<QString> McpCommands::debuggerInterrupt()
+{
+    using namespace Debugger::Internal;
+    const auto engine = getActiveEngine();
+    if (!engine)
+        return Utils::ResultError(engine.error());
+    if ((*engine)->state() != Debugger::InferiorRunOk)
+        return Utils::ResultError("Debugger is not running (current state: "
+                                  + DebuggerEngine::stateName((*engine)->state()) + ")");
+    (*engine)->handleExecInterrupt();
+    return QString("Interrupt requested");
+}
+
+Utils::Result<QJsonObject> McpCommands::debuggerGetStatus()
+{
+    using namespace Debugger::Internal;
+    const QPointer<DebuggerEngine> engine = EngineManager::currentEngine();
+
+    QJsonObject result;
+    if (!engine) {
+        result["hasSession"] = false;
+        result["state"] = "none";
+        return result;
+    }
+
+    result["hasSession"] = true;
+    result["state"] = DebuggerEngine::stateName(engine->state());
+
+    const bool isPaused = engine->state() == Debugger::InferiorStopOk;
+    const bool isRunning = engine->state() == Debugger::InferiorRunOk;
+    result["isPaused"] = isPaused;
+    result["isRunning"] = isRunning;
+
+    if (isPaused) {
+        const StackHandler *handler = engine->stackHandler();
+        if (handler && handler->isContentsValid() && handler->stackSize() > 0) {
+            const StackFrame frame = handler->frameAt(handler->currentIndex());
+            QJsonObject pos;
+            if (!frame.file.isEmpty())
+                pos["file"] = frame.file.toUserOutput();
+            if (frame.line >= 0)
+                pos["line"] = frame.line;
+            if (!frame.function.isEmpty())
+                pos["function"] = frame.function;
+            result["currentPosition"] = pos;
+        }
+    }
+
+    return result;
+}
+
+void McpCommands::evaluateExpression(
+    const QString &expression,
+    std::function<void(Utils::Result<QJsonObject>)> callback)
+{
+    using namespace Debugger::Internal;
+    const Utils::Result<WatchHandler *> handler = getWatchHandler();
+    if (!handler) {
+        callback(Utils::ResultError(handler.error()));
+        return;
+    }
+
+    // Add as a temporary watch expression
+    (*handler)->watchExpression(expression, expression);
+    const QString iname = (*handler)->watcherName(expression);
+
+    // Wait for the result
+    WatchModelBase *model = (*handler)->model();
+    QObject::connect(
+        model,
+        &WatchModelBase::updateFinished,
+        this,
+        [handler, iname, expression, callback]() {
+            WatchItem *item = (*handler)->findItem(iname);
+            if (!item) {
+                callback(Utils::ResultError("Expression evaluation failed: " + expression));
+                return;
+            }
+            QJsonObject result;
+            result["expression"] = expression;
+            result["value"] = item->value;
+            result["type"] = item->type;
+            if (item->address != 0)
+                result["address"] = QString("0x%1").arg(item->address, 0, 16);
+            callback(result);
+            // Remove the temporary watch
+            (*handler)->removeItemByIName(iname);
+        },
+        Qt::SingleShotConnection);
 }
 
 static Utils::Result<Debugger::Internal::WatchHandler *> getWatchHandler()
@@ -3031,5 +3281,265 @@ void McpCommands::registerCommands(Mcp::Server &server)
             cmd->action()->trigger();
             return CallToolResult{}.isError(false);
         });
+
+    server.addTool(
+        Tool{}
+            .name("create_new_file")
+            .title("Create a new file")
+            .description(
+                "Creates a new file at the specified path and optionally populates it with text. "
+                "Creates parent directories automatically. Fails if the file already exists.")
+            .annotations(ToolAnnotations{}.readOnlyHint(false).destructiveHint(false))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "path",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description", "Absolute path where the file should be created"}})
+                    .addProperty(
+                        "text",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description", "Optional content to write into the new file"}})
+                    .addRequired("path"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("success", QJsonObject{{"type", "boolean"}})
+                    .addRequired("success")),
+        wrap([](const QJsonObject &p) {
+            const QString path = p.value("path").toString();
+            const QString text = p.value("text").toString();
+            bool ok = commands.createNewFile(path, text);
+            return QJsonObject{{"success", ok}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("get_run_configurations")
+            .title("Get run configurations")
+            .description(
+                "Returns the project's existing run configurations. "
+                "The result includes configuration names and which one is active.")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty(
+                        "configurations",
+                        QJsonObject{
+                            {"type", "array"},
+                            {"items",
+                             QJsonObject{
+                                 {"type", "object"},
+                                 {"properties",
+                                  QJsonObject{
+                                      {"name", QJsonObject{{"type", "string"}}},
+                                      {"active", QJsonObject{{"type", "boolean"}}}}},
+                                 {"required", QJsonArray{"name", "active"}}}},
+                            {"description", "List of run configurations"}})
+                    .addRequired("configurations")),
+        wrap([](const QJsonObject &) {
+            return QJsonObject{{"configurations", commands.getRunConfigurations()}};
+        }));
+
+    server.addTool(
+        Tool{}
+            .name("reformat_file")
+            .title("Reformat a file")
+            .description(
+                "Reformats a specified file using Qt Creator's code formatting rules. "
+                "Opens the file if not already open.")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "path",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description", "Absolute path to the file to reformat"}})
+                    .addRequired("path"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("success", QJsonObject{{"type", "boolean"}})
+                    .addRequired("success")),
+        wrap([](const QJsonObject &p) {
+            const QString path = p.value("path").toString();
+            bool ok = commands.reformatFile(path);
+            return QJsonObject{{"success", ok}};
+        }));
+
+    // Debugger stepping tools
+    server.addTool(
+        Tool{}
+            .name("debugger_step_over")
+            .title("Step over")
+            .description(
+                "Steps over the current line in the debugger. "
+                "Requires an active debug session that is paused.")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("message", QJsonObject{{"type", "string"}})
+                    .addRequired("message")),
+        [](const Schema::CallToolRequestParams &) -> Utils::Result<CallToolResult> {
+            const auto result = commands.debuggerStepOver();
+            if (!result)
+                return CallToolResult{}.isError(true).addContent(Schema::TextContent{}.text(result.error()));
+            return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"message", *result}});
+        });
+
+    server.addTool(
+        Tool{}
+            .name("debugger_step_in")
+            .title("Step into")
+            .description(
+                "Steps into the next function call in the debugger. "
+                "Requires an active debug session that is paused.")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("message", QJsonObject{{"type", "string"}})
+                    .addRequired("message")),
+        [](const Schema::CallToolRequestParams &) -> Utils::Result<CallToolResult> {
+            const auto result = commands.debuggerStepIn();
+            if (!result)
+                return CallToolResult{}.isError(true).addContent(Schema::TextContent{}.text(result.error()));
+            return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"message", *result}});
+        });
+
+    server.addTool(
+        Tool{}
+            .name("debugger_step_out")
+            .title("Step out")
+            .description(
+                "Steps out of the current function in the debugger. "
+                "Requires an active debug session that is paused.")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("message", QJsonObject{{"type", "string"}})
+                    .addRequired("message")),
+        [](const Schema::CallToolRequestParams &) -> Utils::Result<CallToolResult> {
+            const auto result = commands.debuggerStepOut();
+            if (!result)
+                return CallToolResult{}.isError(true).addContent(Schema::TextContent{}.text(result.error()));
+            return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"message", *result}});
+        });
+
+    server.addTool(
+        Tool{}
+            .name("debugger_continue")
+            .title("Continue execution")
+            .description(
+                "Resumes program execution in the debugger until the next breakpoint. "
+                "Requires an active debug session that is paused.")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("message", QJsonObject{{"type", "string"}})
+                    .addRequired("message")),
+        [](const Schema::CallToolRequestParams &) -> Utils::Result<CallToolResult> {
+            const auto result = commands.debuggerContinue();
+            if (!result)
+                return CallToolResult{}.isError(true).addContent(Schema::TextContent{}.text(result.error()));
+            return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"message", *result}});
+        });
+
+    server.addTool(
+        Tool{}
+            .name("debugger_interrupt")
+            .title("Pause execution")
+            .description(
+                "Pauses the currently running debuggee. "
+                "Requires an active debug session that is running.")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("message", QJsonObject{{"type", "string"}})
+                    .addRequired("message")),
+        [](const Schema::CallToolRequestParams &) -> Utils::Result<CallToolResult> {
+            const auto result = commands.debuggerInterrupt();
+            if (!result)
+                return CallToolResult{}.isError(true).addContent(Schema::TextContent{}.text(result.error()));
+            return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"message", *result}});
+        });
+
+    server.addTool(
+        Tool{}
+            .name("debugger_get_status")
+            .title("Get debugger status")
+            .description(
+                "Returns the current status of the debugger including whether a session is active, "
+                "its state (paused/running/stopped), and the current position if paused.")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("hasSession", QJsonObject{{"type", "boolean"}})
+                    .addProperty("state", QJsonObject{{"type", "string"}})
+                    .addProperty("isPaused", QJsonObject{{"type", "boolean"}})
+                    .addProperty("isRunning", QJsonObject{{"type", "boolean"}})
+                    .addProperty("currentPosition", QJsonObject{{"type", "object"}})
+                    .addRequired("hasSession")
+                    .addRequired("state")),
+        [](const Schema::CallToolRequestParams &) -> Utils::Result<CallToolResult> {
+            const auto result = commands.debuggerGetStatus();
+            if (!result)
+                return CallToolResult{}.isError(true).addContent(Schema::TextContent{}.text(result.error()));
+            return CallToolResult{}.isError(false).structuredContent(*result);
+        });
+
+    server.addTool(
+        Tool{}
+            .name("evaluate_expression")
+            .title("Evaluate expression in debugger")
+            .description(
+                "Evaluates an expression in the context of the current debug session. "
+                "Returns the expression's value and type. "
+                "Requires an active debug session that is paused.")
+            .annotations(ToolAnnotations{}.readOnlyHint(true))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "expression",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description", "Expression to evaluate (e.g. \"myVar\", \"ptr->field\", \"a + b\")"}})
+                    .addRequired("expression"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("expression", QJsonObject{{"type", "string"}})
+                    .addProperty("value", QJsonObject{{"type", "string"}})
+                    .addProperty("type", QJsonObject{{"type", "string"}})
+                    .addRequired("expression")
+                    .addRequired("value")),
+        [](const Schema::CallToolRequestParams &params,
+           const ToolInterface &toolInterface) -> Utils::Result<> {
+            const QString expr = params.argumentsAsObject().value("expression").toString();
+            commands.evaluateExpression(expr, [toolInterface](Utils::Result<QJsonObject> result) {
+                if (!result)
+                    toolInterface.finish(CallToolResult{}.isError(true).addContent(
+                        Schema::TextContent{}.text(result.error())));
+                else
+                    toolInterface.finish(
+                        CallToolResult{}.isError(false).structuredContent(*result));
+            });
+            return ResultOk;
+        });
+
+    server.addTool(
+        Tool{}
+            .name("stop_debug")
+            .title("Stop debugging")
+            .description(
+                "Stops the current debug session. "
+                "Returns a message indicating whether the stop was successful.")
+            .annotations(ToolAnnotations{}.readOnlyHint(false).destructiveHint(true))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("message", QJsonObject{{"type", "string"}})
+                    .addRequired("message")),
+        wrap([](const QJsonObject &) {
+            return QJsonObject{{"message", commands.stopDebug()}};
+        }));
 }
 } // namespace Mcp::Internal
