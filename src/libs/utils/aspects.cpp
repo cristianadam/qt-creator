@@ -1040,10 +1040,10 @@ public:
 class StringListAspectPrivate
 {
 public:
-    UndoableValue<QStringList> undoable;
-    bool allowAdding{true};
-    bool allowRemoving{true};
-    bool allowEditing{true};
+    UndoableValue<QStringList> m_undoable;
+    bool m_allowAdding{true};
+    bool m_allowRemoving{true};
+    bool m_allowEditing{true};
 };
 
 class FilePathListAspectPrivate
@@ -3027,7 +3027,7 @@ StringListAspect::~StringListAspect() = default;
 
 bool StringListAspect::guiToVolatileValue()
 {
-    const QStringList newValue = d->undoable.get();
+    const QStringList newValue = d->m_undoable.get();
     if (newValue != m_volatileValue) {
         m_volatileValue = newValue;
         return true;
@@ -3037,7 +3037,7 @@ bool StringListAspect::guiToVolatileValue()
 
 void StringListAspect::volatileValueToGui()
 {
-    d->undoable.setWithoutUndo(m_volatileValue);
+    d->m_undoable.setWithoutUndo(m_volatileValue);
 }
 
 void StringListAspect::addToLayoutImpl(Layout &parent)
@@ -3046,10 +3046,10 @@ void StringListAspect::addToLayoutImpl(Layout &parent)
     editor->setHeaderHidden(true);
     editor->setRootIsDecorated(false);
     editor->setEditTriggers(
-        d->allowEditing ? QAbstractItemView::AllEditTriggers : QAbstractItemView::NoEditTriggers);
+        d->m_allowEditing ? QAbstractItemView::AllEditTriggers : QAbstractItemView::NoEditTriggers);
 
-    QPushButton *add = d->allowAdding ? createSubWidget<QPushButton>(Tr::tr("Add")) : nullptr;
-    QPushButton *remove = d->allowRemoving ? createSubWidget<QPushButton>(Tr::tr("Remove")) : nullptr;
+    QPushButton *add = d->m_allowAdding ? createSubWidget<QPushButton>(Tr::tr("Add")) : nullptr;
+    QPushButton *remove = d->m_allowRemoving ? createSubWidget<QPushButton>(Tr::tr("Remove")) : nullptr;
 
     auto itemsToStringList = [editor] {
         QStringList items;
@@ -3063,7 +3063,7 @@ void StringListAspect::addToLayoutImpl(Layout &parent)
 
     auto populate = [editor, this] {
         editor->clear();
-        for (const QString &entry : d->undoable.get()) {
+        for (const QString &entry : d->m_undoable.get()) {
             auto item = new QTreeWidgetItem(editor, {entry});
             item->setData(0, Qt::ToolTipRole, entry);
             item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable);
@@ -3072,7 +3072,7 @@ void StringListAspect::addToLayoutImpl(Layout &parent)
 
     if (add) {
         connect(add, &QPushButton::clicked, this, [this, populate, editor] {
-            d->undoable.setSilently(d->undoable.get() << "");
+            d->m_undoable.setSilently(d->m_undoable.get() << "");
             populate();
             const QTreeWidgetItem *root = editor->invisibleRootItem();
             QTreeWidgetItem *lastChild = root->child(root->childCount() - 1);
@@ -3087,13 +3087,13 @@ void StringListAspect::addToLayoutImpl(Layout &parent)
             QTC_ASSERT(selected.size() == 1, return);
             editor->invisibleRootItem()->removeChild(selected.first());
             delete selected.first();
-            d->undoable.set(undoStack(), itemsToStringList());
+            d->m_undoable.set(undoStack(), itemsToStringList());
         });
     }
 
     connect(
-        &d->undoable.m_signal, &UndoSignaller::changed, editor, [this, populate, itemsToStringList] {
-            if (itemsToStringList() != d->undoable.get())
+        &d->m_undoable.m_signal, &UndoSignaller::changed, editor, [this, populate, itemsToStringList] {
+            if (itemsToStringList() != d->m_undoable.get())
                 populate();
 
             handleGuiChanged();
@@ -3109,7 +3109,7 @@ void StringListAspect::addToLayoutImpl(Layout &parent)
                 return;
             if (tl != br)
                 return;
-            d->undoable.set(undoStack(), itemsToStringList());
+            d->m_undoable.set(undoStack(), itemsToStringList());
         });
 
     populate();
@@ -3119,10 +3119,10 @@ void StringListAspect::addToLayoutImpl(Layout &parent)
         Row {
             noMargin,
             editor,
-            If (d->allowAdding || d->allowRemoving) >> Then {
+            If (d->m_allowAdding || d->m_allowRemoving) >> Then {
                 Column {
-                    If (d->allowAdding) >> Then {add},
-                    If (d->allowRemoving) >> Then {remove},
+                    If (d->m_allowAdding) >> Then {add},
+                    If (d->m_allowRemoving) >> Then {remove},
                     st,
                 }
             },
@@ -3171,28 +3171,28 @@ void StringListAspect::removeValues(const QStringList &values)
 
 void StringListAspect::setUiAllowAdding(bool allowAdding)
 {
-    d->allowAdding = allowAdding;
+    d->m_allowAdding = allowAdding;
 }
 void StringListAspect::setUiAllowRemoving(bool allowRemoving)
 {
-    d->allowRemoving = allowRemoving;
+    d->m_allowRemoving = allowRemoving;
 }
 void StringListAspect::setUiAllowEditing(bool allowEditing)
 {
-    d->allowEditing = allowEditing;
+    d->m_allowEditing = allowEditing;
 }
 
 bool StringListAspect::uiAllowAdding() const
 {
-    return d->allowAdding;
+    return d->m_allowAdding;
 }
 bool StringListAspect::uiAllowRemoving() const
 {
-    return d->allowRemoving;
+    return d->m_allowRemoving;
 }
 bool StringListAspect::uiAllowEditing() const
 {
-    return d->allowEditing;
+    return d->m_allowEditing;
 }
 
 /*!
