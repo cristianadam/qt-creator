@@ -54,8 +54,7 @@ public:
     void clearConfigOptions();
 
     void updateAvailableCommands(const QList<Acp::AvailableCommand> &commands);
-    void setAutoContextItems(const QStringList &names);
-    bool isAutoContextItemActive(const QString &name) const;
+    bool includeCurrentEditorContext() const { return m_includeCurrentEditorContext; }
     QList<Utils::FilePath> manualContextFiles() const { return m_manualContextFiles; }
 
     // Delegate to message view
@@ -107,8 +106,7 @@ private:
     QLayout *m_contextBarLayout = nullptr;
     QLabel *m_contextLabel = nullptr;
     QWidget *m_addContextButton = nullptr;
-    QStringList m_offeredAutoContextNames;
-    QStringList m_removedAutoContextNames;
+    bool m_includeCurrentEditorContext = true;
     QList<Utils::FilePath> m_manualContextFiles;
 
     void updateContextBar();

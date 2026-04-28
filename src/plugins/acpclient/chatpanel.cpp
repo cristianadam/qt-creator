@@ -259,18 +259,20 @@ ChatPanel::ChatPanel(QWidget *parent)
             }
         });
 
-        if (!m_removedAutoContextNames.isEmpty()) {
+        if (!m_includeCurrentEditorContext) {
             menu->addSeparator();
-            for (const QString &name : std::as_const(m_removedAutoContextNames)) {
-                auto *action = menu->addAction(Tr::tr("Current Editor (%1)").arg(name));
-                connect(action, &QAction::triggered, this, [this, name] {
-                    m_removedAutoContextNames.removeOne(name);
-                    updateContextBar();
-                });
-            }
+            auto *action = menu->addAction(Tr::tr("Current Editor"));
+            connect(action, &QAction::triggered, this, [this] {
+                m_includeCurrentEditorContext = true;
+                updateContextBar();
+            });
         }
 
         menu->popup(QCursor::pos());
+    });
+
+    connect(Core::EditorManager::instance(), &Core::EditorManager::currentEditorChanged, this, [this] {
+        updateContextBar();
     });
 
     m_addContextButton = addContextButton;
@@ -322,6 +324,7 @@ ChatPanel::ChatPanel(QWidget *parent)
     });
 
     // Config option combo connections are made dynamically in updateConfigOptions()
+    updateContextBar();
 }
 
 void ChatPanel::setAgentInfo(const QString &name, const QString &version,
@@ -546,22 +549,6 @@ void ChatPanel::updateAvailableCommands(const QList<AvailableCommand> &commands)
     m_commandsButton->setMenu(menu);
 }
 
-void ChatPanel::setAutoContextItems(const QStringList &names)
-{
-    // Drop any dismissed names that are no longer being offered
-    m_removedAutoContextNames.removeIf([&names](const QString &n) {
-        return !names.contains(n);
-    });
-    m_offeredAutoContextNames = names;
-    updateContextBar();
-}
-
-bool ChatPanel::isAutoContextItemActive(const QString &name) const
-{
-    return m_offeredAutoContextNames.contains(name)
-           && !m_removedAutoContextNames.contains(name);
-}
-
 void ChatPanel::updateContextBar()
 {
     while (QLayoutItem *item = m_contextBarLayout->takeAt(0)) {
@@ -573,15 +560,19 @@ void ChatPanel::updateContextBar()
 
     m_contextBarLayout->addWidget(m_contextLabel);
 
-    for (const QString &name : std::as_const(m_offeredAutoContextNames)) {
-        if (m_removedAutoContextNames.contains(name))
-            continue;
-        auto *item = new ContextItem(name, m_contextBar);
-        connect(item, &ContextItem::removeRequested, this, [this, name] {
-            m_removedAutoContextNames.append(name);
-            QMetaObject::invokeMethod(this, [this] { updateContextBar(); }, Qt::QueuedConnection);
-        });
-        m_contextBarLayout->addWidget(item);
+    if (m_includeCurrentEditorContext) {
+        if (auto editor = TextEditor::BaseTextEditor::currentTextEditor()) {
+            Utils::FilePath filePath = editor->document()->filePath();
+            if (!filePath.isEmpty()) {
+                const QString name = filePath.fileName();
+                auto *item = new ContextItem(name, m_contextBar);
+                connect(item, &ContextItem::removeRequested, this, [this, name] {
+                    m_includeCurrentEditorContext = false;
+                    QMetaObject::invokeMethod(this, [this] { updateContextBar(); }, Qt::QueuedConnection);
+                });
+                m_contextBarLayout->addWidget(item);
+            }
+        }
     }
 
     for (const Utils::FilePath &file : std::as_const(m_manualContextFiles)) {
