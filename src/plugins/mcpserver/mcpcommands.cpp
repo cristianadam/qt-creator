@@ -1401,7 +1401,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
         Tool{}
             .name("file_plain_text")
             .title("file plain text")
-            .description("Returns the content of the file as plain text")
+            .description("Returns the content of the file as plain text. This also supports files on remote devices with uris like docker://... or ssh:// and others.")
             .annotations(ToolAnnotations{}.readOnlyHint(true))
             .inputSchema(
                 Tool::InputSchema{}
@@ -1428,7 +1428,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             .title("set file plain text")
             .description(
                 "overrided the content of the file with the provided plain text. If the "
-                "file is currently open it is not saved!")
+                "file is currently open it is not saved! This also supports files on remote devices with uris like docker://... or ssh:// and others.")
             .annotations(ToolAnnotations{}.readOnlyHint(false))
             .inputSchema(
                 Tool::InputSchema{}
