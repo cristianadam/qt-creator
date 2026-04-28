@@ -139,7 +139,6 @@ FilePath manifestDir(TextEditor::TextEditorWidget *textEditorWidget, bool showWa
     return getManifestDirWithWizardOption(textEditorWidget, project->projectDirectory());
 }
 
-const char ANDROID_TOOLS_MENU_ID[] = "Android.Tools.Menu";
 const char ANDROID_GRAPHICAL_EDITOR_ID[] = "Android.Tools.Graphical.Editor.ID";
 
 class AndroidIconSplashEditorWidget : public QWidget
@@ -350,7 +349,7 @@ static void installApkFile()
 
 void setupAndroidToolsMenu()
 {
-    Core::MenuBuilder devMenu(ANDROID_TOOLS_MENU_ID);
+    Core::MenuBuilder devMenu(Constants::ANDROID_TOOLS_MENU_ID);
     devMenu.setTitle(Android::Tr::tr("Android"));
     devMenu.addSeparator();
     devMenu.addToContainer(Core::Constants::M_TOOLS);
@@ -384,7 +383,7 @@ void setupAndroidToolsMenu()
     Core::ActionBuilder(Core::ActionManager::instance(), "Android.Tools.InstallApkFile")
         .setText(Android::Tr::tr("Install an APK File"))
         .addOnTriggered(installApkFile)
-        .addToContainer(ANDROID_TOOLS_MENU_ID);
+        .addToContainer(Constants::ANDROID_TOOLS_MENU_ID);
 
     QAction *xmlSourceAction = nullptr;
     QAction *iconAction = nullptr;
@@ -396,28 +395,28 @@ void setupAndroidToolsMenu()
         .bindContextAction(&xmlSourceAction)
         .addOnTriggered([openEditorAtTab]() {
             openEditorAtTab(AndroidIconSplashEditorWidget::XMLSourceTab);
-        }).addToContainer(ANDROID_TOOLS_MENU_ID);
+        }).addToContainer(Constants::ANDROID_TOOLS_MENU_ID);
 
     Core::ActionBuilder(Core::ActionManager::instance(), "Android.Tools.Icon")
         .setText(Android::Tr::tr("Icon Editor"))
         .bindContextAction(&iconAction)
         .addOnTriggered([openEditorAtTab]() {
             openEditorAtTab(AndroidIconSplashEditorWidget::IconTab);
-        }).addToContainer(ANDROID_TOOLS_MENU_ID);
+        }).addToContainer(Constants::ANDROID_TOOLS_MENU_ID);
 
     Core::ActionBuilder(Core::ActionManager::instance(), "Android.Tools.Permissions")
         .setText(Android::Tr::tr("Permissions Editor"))
         .bindContextAction(&permissionsAction)
         .addOnTriggered([openEditorAtTab]() {
             openEditorAtTab(AndroidIconSplashEditorWidget::PermissionsTab);
-        }).addToContainer(ANDROID_TOOLS_MENU_ID);
+        }).addToContainer(Constants::ANDROID_TOOLS_MENU_ID);
 
     Core::ActionBuilder(Core::ActionManager::instance(), "Android.Tools.Splashscreen")
         .setText(Android::Tr::tr("Splashscreen Editor"))
         .bindContextAction(&splashscreenAction)
         .addOnTriggered([openEditorAtTab]() {
             openEditorAtTab(AndroidIconSplashEditorWidget::SplashTab);
-        }).addToContainer(ANDROID_TOOLS_MENU_ID);
+        }).addToContainer(Constants::ANDROID_TOOLS_MENU_ID);
 
     const bool hasProject = ProjectManager::startupProject() != nullptr;
     for (QAction *action : {xmlSourceAction, iconAction, permissionsAction, splashscreenAction}) {

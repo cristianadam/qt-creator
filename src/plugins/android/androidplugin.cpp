@@ -7,6 +7,7 @@
 #include "androiddebugsupport.h"
 #include "androiddeployqtstep.h"
 #include "androiddevice.h"
+#include "androidlogcat.h"
 #include "androidmanifesteditor.h"
 #include "androidpackageinstallationstep.h"
 #include "androidqmltoolingsupport.h"
@@ -102,6 +103,7 @@ class AndroidPlugin final : public ExtensionSystem::IPlugin
 
         setupJavaEditor();
         setupAndroidToolsMenu();
+        initAndroidLogcat();
 
         connect(KitManager::instance(), &KitManager::kitsLoaded, this, &AndroidPlugin::kitsRestored,
                 Qt::SingleShotConnection);
