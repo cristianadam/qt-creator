@@ -67,6 +67,7 @@ QNetworkReplyWrapper::~QNetworkReplyWrapper()
     if (d->m_reply) {
         disconnect(d->m_reply.get(), nullptr, this, nullptr);
         d->m_reply->abort();
+        d->m_reply.reset();
     }
 }
 
