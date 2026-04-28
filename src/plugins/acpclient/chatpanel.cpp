@@ -297,7 +297,10 @@ ChatPanel::ChatPanel(QWidget *parent)
 
     m_sendButton = new SendButton(Tr::tr("Send"));
     m_sendButton->setEnabled(false);
-    inputLayout->addWidget(m_sendButton);
+    QVBoxLayout *sendLayout = new QVBoxLayout();
+    sendLayout->addStretch();
+    sendLayout->addWidget(m_sendButton);
+    inputLayout->addLayout(sendLayout);
 
     inputOuterLayout->addWidget(inputContainer);
     layout->addWidget(inputOuter);
