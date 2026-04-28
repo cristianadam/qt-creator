@@ -6,7 +6,7 @@
 #include "chatinputcompletion.h"
 
 #include <utils/historycompleter.h>
-#include <utils/texteditorlayout.h>
+#include <utils/plaintextedit/texteditorlayout.h>
 #include <utils/textutils.h>
 
 #include <texteditor/displaysettings.h>
