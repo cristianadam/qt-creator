@@ -3,7 +3,7 @@
 
 #include "coredumputils.h"
 
-#include "debuggertr.h"
+#include "../debuggertr.h"
 
 #include <coreplugin/messagebox.h>
 
