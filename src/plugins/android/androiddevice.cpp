@@ -549,7 +549,7 @@ IDevice::Ptr AndroidDevice::create()
     return IDevice::Ptr(new AndroidDevice);
 }
 
-AndroidDeviceInfo AndroidDevice::androidDeviceInfoFromDevice(const ConstPtr &dev)
+AndroidDeviceInfo AndroidDevice::androidDeviceInfoFromDevice(const IDevice::ConstPtr &dev)
 {
     QTC_ASSERT(dev, return {});
     AndroidDeviceInfo info;
@@ -638,6 +638,21 @@ QString AndroidDevice::serialNumber() const
 QString AndroidDevice::avdName() const
 {
     return extraData(Constants::AndroidAvdName).toString();
+}
+
+AndroidDevice::ConstPtr AndroidDevice::asReady(const IDeviceConstPtr &device)
+{
+    if (!device || device->type() != Constants::ANDROID_DEVICE_TYPE
+        || device->deviceState() != IDevice::DeviceReadyToUse) {
+        return {};
+    }
+    return std::dynamic_pointer_cast<const AndroidDevice>(device);
+}
+
+QString AndroidDevice::displayNameWithSerial() const
+{
+    const QString serial = extraData(Constants::AndroidSerialNumber).toString();
+    return serial.isEmpty() ? displayName() : QString("%1 (%2)").arg(displayName(), serial);
 }
 
 int AndroidDevice::sdkLevel() const
