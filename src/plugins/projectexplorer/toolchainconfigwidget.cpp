@@ -54,6 +54,11 @@ ToolchainConfigWidget::ToolchainConfigWidget(const ToolchainBundle &bundle)
     connect(m_nameLineEdit, &QLineEdit::textChanged, this, &ToolchainConfigWidget::dirty);
 }
 
+QString ToolchainConfigWidget::currentDisplayName() const
+{
+    return m_nameLineEdit->text();
+}
+
 bool ToolchainConfigWidget::isDirty() const
 {
     if (m_nameLineEdit->text() != m_bundle.displayName())
