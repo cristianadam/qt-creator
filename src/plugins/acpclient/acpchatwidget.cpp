@@ -22,7 +22,7 @@ public:
     TabWidget(QWidget *parent = nullptr)
         : QTabWidget(parent)
     {
-        setTabBar(new Utils::DocumentTabBar);
+        setTabBar(new Utils::DocumentTabBar(this));
     }
 };
 
