@@ -333,11 +333,25 @@ bool WrapperNode::setData(int column, const QVariant &value, int role)
 
     QTC_ASSERT(m_node, return false);
 
-    std::vector<std::tuple<Node *, FilePath, FilePath>> toRename;
     const QString valuePath = value.toString();
     const FilePath orgFilePath = m_node->filePath();
     const FilePath newFilePath = orgFilePath.parentDir().pathAppended(valuePath);
-    toRename.emplace_back(std::make_tuple(m_node, orgFilePath, newFilePath));
+
+    auto selectedFile = std::make_tuple(m_node, orgFilePath, newFilePath);
+
+    using RenameVector = std::vector<std::tuple<Node *, FilePath, FilePath>>;
+
+    const auto rename = [m = model()](const RenameVector &toRename) {
+        QList<std::pair<Node *, FilePath>> renameList;
+        for (const auto &f : toRename)
+            renameList << std::make_pair(std::get<0>(f), std::get<2>(f));
+        const QList<std::pair<FilePath, FilePath>> renamedList = ProjectExplorerPlugin::renameFiles(
+            renameList);
+        if (m) {
+            for (const auto &[oldFilePath, newFilePath] : renamedList)
+                emit qobject_cast<FlatModel *>(m)->renamed(oldFilePath, newFilePath);
+        }
+    };
 
     // The base name of the file was changed. Go look for other files with the same base name
     // and offer to rename them as well.
@@ -349,42 +363,48 @@ bool WrapperNode::setData(int column, const QVariant &value, int role)
                 return n->filePath().fileName();
             });
             fileNames.removeDuplicates();
-            const QMessageBox::StandardButton reply = QMessageBox::question(
-                Core::ICore::dialogParent(), Tr::tr("Rename More Files?"),
+
+            QMessageBox *msgBox = new QMessageBox(Core::ICore::dialogParent());
+            msgBox->setAttribute(Qt::WA_DeleteOnClose);
+            msgBox->setIcon(QMessageBox::Question);
+            msgBox->setWindowTitle(Tr::tr("Rename More Files?"));
+            msgBox->setText(
                 Tr::tr("Would you like to rename these files as well?\n    %1")
-                    .arg(fileNames.join("\n    ")),
-                QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel,
-                QMessageBox::Yes);
-            switch (reply) {
-            case QMessageBox::Yes: {
-                const FilePath dir = orgFilePath.parentDir();
-                for (Node * const n : candidateNodes) {
-                    FilePath targetFilePath = dir / dir.pathAppended(valuePath).completeBaseName();
-                    const QString suffix = n->filePath().suffix();
-                    if (!suffix.isEmpty())
-                        targetFilePath = targetFilePath.stringAppended('.' + suffix);
-                    toRename.emplace_back(std::make_tuple(n, n->filePath(), targetFilePath));
-                }
-                break;
-            }
-            case QMessageBox::Cancel:
-                return false;
-            default:
-                break;
-            }
+                    .arg(fileNames.join("\n    ")));
+            msgBox->setStandardButtons(QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
+            msgBox->setDefaultButton(QMessageBox::Yes);
+
+            const auto onFinished =
+                [candidateNodes, valuePath, orgFilePath, msgBox, selectedFile, rename]() {
+                    if (msgBox->result() == QMessageBox::Cancel)
+                        return;
+
+                    if (msgBox->result() == QMessageBox::No) {
+                        rename({selectedFile});
+                        return;
+                    }
+
+                    RenameVector allToRename = {selectedFile};
+                    const FilePath dir = orgFilePath.parentDir();
+                    for (Node *const n : candidateNodes) {
+                        FilePath targetFilePath = dir
+                                                  / dir.pathAppended(valuePath).completeBaseName();
+                        const QString suffix = n->filePath().suffix();
+                        if (!suffix.isEmpty())
+                            targetFilePath = targetFilePath.stringAppended('.' + suffix);
+                        allToRename.emplace_back(std::make_tuple(n, n->filePath(), targetFilePath));
+                    }
+                    rename(allToRename);
+                };
+
+            QObject::connect(msgBox, &QMessageBox::finished, msgBox, onFinished);
+
+            msgBox->show();
+            return false;
         }
     }
 
-    QList<std::pair<Node *, FilePath>> renameList;
-    for (const auto &f : toRename)
-        renameList << std::make_pair(std::get<0>(f), std::get<2>(f));
-    const QList<std::pair<FilePath, FilePath>> renamedList
-        = ProjectExplorerPlugin::renameFiles(renameList);
-    if (model()) {
-        for (const auto &[oldFilePath, newFilePath] : renamedList)
-            emit qobject_cast<FlatModel *>(model())->renamed(oldFilePath, newFilePath);
-    }
-
+    rename({selectedFile});
     return true;
 }
 
