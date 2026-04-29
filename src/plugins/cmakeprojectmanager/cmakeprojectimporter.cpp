@@ -1296,14 +1296,24 @@ void CMakeProjectImporter::createKitsFromPresets()
                                     m_project->presetsData().configurePresets);
     };
 
-    const auto onCompilerDone = [iterator, storage](const Process &process) {
+    const auto onCompilerDone = [iterator, storage](const Process &process, DoneWith doneWith) {
+        PresetsDetails::ConfigurePreset &configurePreset = storage->configurePreset;
+        DirectoryData &data = storage->directoryData;
+
         qCDebug(cmInputLog).noquote() << process.cleanedStdOut() << process.cleanedStdErr();
+        if (doneWith == DoneWith::Error) {
+            TaskHub::addTask<BuildSystemTask>(
+                Task::TaskType::DisruptingError,
+                Tr::tr("CMake Preset: \"%1\" failure.\n%2\n%3")
+                    .arg(
+                        configurePreset.displayName.value_or(configurePreset.name),
+                        process.cleanedStdOut(),
+                        process.cleanedStdErr()));
+            return;
+        }
 
         const CMakeConfig config
             = CMakeConfig::fromFile(iterator->pathAppended("build/CMakeCache.txt"), nullptr);
-
-        DirectoryData &data = storage->directoryData;
-        PresetsDetails::ConfigurePreset &configurePreset = storage->configurePreset;
 
         if (!configurePreset.generator) {
             const QString cmakeGenerator = config.stringValueOf(QByteArray("CMAKE_GENERATOR"));
@@ -1327,10 +1337,23 @@ void CMakeProjectImporter::createKitsFromPresets()
         return setupQMakeProcess(process, *storage, *iterator);
     };
 
-    const auto onQMakeDone = [storage] {
+    const auto onQMakeDone = [storage](const Process &process, DoneWith doneWith) {
         FilePath &qtcQMakeProbeDir = storage->qtcQMakeProbeDir;
         FilePath &qmakeLocation = storage->qmakePath;
         QString &resultedPrefixPath = storage->cmakePrefixPath;
+        PresetsDetails::ConfigurePreset &configurePreset = storage->configurePreset;
+
+        qCDebug(cmInputLog).noquote() << process.cleanedStdOut() << process.cleanedStdErr();
+        if (doneWith == DoneWith::Error) {
+            TaskHub::addTask<BuildSystemTask>(
+                Task::TaskType::DisruptingError,
+                Tr::tr("CMake Preset: \"%1\" failure.\n%2\n%3")
+                    .arg(
+                        configurePreset.displayName.value_or(configurePreset.name),
+                        process.cleanedStdOut(),
+                        process.cleanedStdErr()));
+            return;
+        }
 
         const FilePath qmakeLocationTxt = qtcQMakeProbeDir.pathAppended("qmake-location.txt");
         qmakeLocation = FilePath::fromUtf8(qmakeLocationTxt.fileContents().value_or(QByteArray()));
@@ -1441,13 +1464,12 @@ void CMakeProjectImporter::createKitsFromPresets()
     const Group recipe{
         For (iterator) >> Do {
             parallel,
-            finishAllAndSuccess,
+            continueOnError,
             Group {
                 storage,
-                If (ProcessTask(onCompilerSetup, onCompilerDone)) >> Then {
-                    ProcessTask(onQMakeSetup, onQMakeDone),
-                    QSyncTask(onPresetDone)
-                }
+                ProcessTask(onCompilerSetup, onCompilerDone),
+                ProcessTask(onQMakeSetup, onQMakeDone),
+                QSyncTask(onPresetDone)
             }
         }
     };
