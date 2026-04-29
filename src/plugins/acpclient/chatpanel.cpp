@@ -11,8 +11,8 @@
 #include <coreplugin/findplaceholder.h>
 
 #include <utils/elidinglabel.h>
-#include <utils/layoutbuilder.h>
 #include <utils/fileutils.h>
+#include <utils/layoutbuilder.h>
 #include <utils/progressindicator.h>
 #include <utils/qtcwidgets.h>
 #include <utils/styledbar.h>
@@ -20,16 +20,17 @@
 #include <utils/theme/theme.h>
 #include <utils/utilsicons.h>
 
+#include <QApplication>
 #include <QComboBox>
 #include <QDateTime>
 #include <QFileDialog>
 #include <QHBoxLayout>
-#include <QStringList>
 #include <QLabel>
 #include <QMenu>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QPushButton>
+#include <QStringList>
 #include <QTextBlock>
 #include <QTextCursor>
 #include <QTimer>
@@ -502,6 +503,8 @@ void ChatPanel::addPermissionRequest(const QJsonValue &id,
                                      const Acp::RequestPermissionRequest &request)
 {
     m_messageView->addPermissionRequest(id, request);
+    QApplication::alert(m_messageView);
+
     connect(m_messageView, &AcpMessageView::permissionOptionSelected,
             this, &ChatPanel::permissionOptionSelected, Qt::UniqueConnection);
     connect(m_messageView, &AcpMessageView::permissionCancelled,
