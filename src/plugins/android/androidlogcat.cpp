@@ -3,13 +3,22 @@
 
 #include "androidlogcat.h"
 
+#include "QtTaskTree/qtasktree.h"
 #include "androidconfigurations.h"
+#include "androidconstants.h"
+#include "androiddevice.h"
+#include "androidtr.h"
 #include "androidutils.h"
+
+#include <cstddef>
+#include <projectexplorer/projectexplorerconstants.h>
+#include <projectexplorer/runcontrol.h>
 
 #include <utils/commandline.h>
 #include <utils/outputformat.h>
 #include <utils/qtcprocess.h>
 
+#include <QtTaskTree/QBarrier>
 #include <QtTaskTree/QTaskTree>
 
 #include <QHash>
@@ -20,6 +29,7 @@
 
 using namespace Utils;
 using namespace QtTaskTree;
+using namespace ProjectExplorer;
 
 namespace Android::Internal {
 
@@ -48,14 +58,24 @@ public:
     void retain();
     void release();
 
+    // Per-tab context. Single tab per stream at the moment; later this would be a list.
+    // Moreover, more fields might be added later
+    struct TabContext
+    {
+        QPointer<RunControl> tab;
+    };
+
+    void setTab(RunControl *tab) { m_tabContext.tab = tab; }
+
 signals:
     void entryReady(const LogcatEntry &entry);
 
 private:
     const Id m_deviceId;
     const QString m_serial;
-    int m_references;
     std::unique_ptr<QTaskTree> m_task;
+    int m_references;
+    TabContext m_tabContext;
 
 private:
     void startTail();
@@ -104,8 +124,6 @@ void LogcatStream::startTail()
         });
         process.setCommand(adbLogcat(serial, {"-v", "color", "-v", "brief"}));
     };
-
-    //Forever needs to be checked? as we keep running adb for emulator or usb plug/unplug
     m_task = std::make_unique<QTaskTree>(
         Group{ProcessTask(onClearSetup) || successItem, Forever{ProcessTask(onSetup) || successItem}});
     m_task->start();
@@ -143,9 +161,78 @@ void LogcatStream::parseLine(const QString &raw, bool onlyError)
     emit entryReady({line, isError ? Utils::StdErrFormat : Utils::StdOutFormat});
 }
 
+static bool isAndroidDeviceReady(const IDeviceConstPtr &device)
+{
+    return device && device->type() == Constants::ANDROID_DEVICE_TYPE
+           && device->deviceState() == IDevice::DeviceReadyToUse;
+}
+
+static LogcatStream *ensureStream(const IDeviceConstPtr &device)
+{
+    if (!isAndroidDeviceReady(device))
+        return nullptr;
+    const auto androidDev = std::dynamic_pointer_cast<const AndroidDevice>(device);
+    const auto serial = androidDev->serialNumber();
+    if (serial.isEmpty())
+        return nullptr;
+    const auto id = device->id();
+    auto &reg = streamRegistry();
+    if (auto *stream = reg.value(id))
+        return stream;
+    auto *stream = new LogcatStream(id, serial);
+    reg.insert(id, stream);
+    return stream;
+}
+
+static QString logcatTitle(const QString &serial)
+{
+    return Tr::tr("Logcat (%1)").arg(serial);
+}
+
+static RunControl *openLogcatTabForStream(LogcatStream *logcatStream)
+{
+    if (!logcatStream)
+        return nullptr;
+
+    auto *runControl = new RunControl(ProjectExplorer::Constants::NORMAL_RUN_MODE);
+    runControl->setDisplayName(logcatTitle(logcatStream->serial()));
+
+    logcatStream->retain();
+    logcatStream->setTab(runControl);
+
+    QPointer<RunControl> rcPtr = runControl;
+    QObject::connect(
+        logcatStream, &LogcatStream::entryReady, runControl, [rcPtr](const LogcatEntry &entry) {
+            if (rcPtr)
+                rcPtr->postMessage(entry.line, entry.fmt, false);
+        });
+
+    QPointer<LogcatStream> streamPtr = logcatStream;
+    QObject::connect(runControl, &QObject::destroyed, [streamPtr] {
+        if (!streamPtr)
+            return;
+        streamPtr->setTab(nullptr);
+        streamPtr->release();
+    });
+    // add to keep recipe stays "running" indefinitely?
+    rcPtr->setRunRecipe(QBarrierTask([](QBarrier &) {}).withCancel([rcPtr] {
+        return makeObjectSignal(rcPtr.data(), &RunControl::canceled);
+    }));
+    rcPtr->start();
+    return rcPtr;
+}
+
+static RunControl *ensureVisibleTab(const IDeviceConstPtr &device)
+{
+    auto *stream = ensureStream(device);
+    if (!stream)
+        return nullptr;
+    return openLogcatTabForStream(stream);
+}
+
 void initAndroidLogcat()
 {
-    //UI wiring in follow-up commits
+    // UI (Tools menu) lands in follow-up commit
 }
 
 } // namespace Android::Internal
