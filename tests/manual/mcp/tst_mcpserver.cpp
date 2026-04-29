@@ -459,7 +459,7 @@ int main(int argc, char *argv[])
             .title("Task Echo Tool")
             .execution(
                 Mcp::Schema::ToolExecution().taskSupport(
-                    Mcp::Schema::ToolExecution::TaskSupport::required))
+                    Mcp::Schema::ToolExecution::TaskSupport::optional))
             .inputSchema(
                 Mcp::Schema::Tool::InputSchema()
                     .addProperty(

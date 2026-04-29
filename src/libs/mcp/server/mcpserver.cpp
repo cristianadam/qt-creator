@@ -84,6 +84,16 @@ public:
         responder.writeChunk(event);
         return true;
     }
+
+    bool sendEndpoint(const QByteArray &endpoint)
+    {
+        if (responder.isResponseCanceled())
+            return false;
+
+        QByteArray event = "event: endpoint\n" + QByteArray("data: ") + endpoint + "\n\n";
+        responder.writeChunk(event);
+        return true;
+    }
 };
 
 static QJsonObject makeResponse(Schema::RequestId id, const Schema::ServerResult &result)
@@ -156,6 +166,16 @@ public:
         return {};
     }
 
+    void sendDataTo(const QByteArray &data, const QString &sessionId)
+    {
+        for (auto it = m_sseStreams.begin(); it != m_sseStreams.end();) {
+            if (!(*it)->sendData(data, sessionId))
+                it = m_sseStreams.erase(it);
+            else
+                ++it;
+        }
+    }
+
     void sendNotification(const Schema::ServerNotification &notification, const QString &sessionId)
     {
         auto data = QJsonDocument(toJson(notification)).toJson(QJsonDocument::Compact);
@@ -205,7 +225,7 @@ public:
         qCDebug(mcpServerLog) << "Received JSONRPCRequest:" << Schema::dispatchValue(request);
 
         if (std::holds_alternative<Schema::InitializeRequest>(request)) {
-            if (m_sessions.contains(sessionId)) {
+            if (m_sessions.contains(sessionId) && m_sessions[sessionId]) {
                 qCWarning(mcpServerLog)
                     << "Received initialize request with already assigned session ID" << sessionId
                     << ", rejecting";
@@ -535,7 +555,20 @@ public:
         const Responder &responder,
         const Server::ToolInterfaceCallback &cb)
     {
-        Schema::ClientCapabilities clientCapabilities = m_sessions.value(sessionId).capabilities;
+        auto sessionInfo = m_sessions.value(sessionId);
+        if (!sessionInfo) {
+            qCWarning(mcpServerLog) << "Received call for tool" << request.params().name()
+                                    << "with invalid session ID:" << sessionId;
+            responder.write(QJsonDocument(toJson(
+                Schema::JSONRPCErrorResponse()
+                    .error(
+                        Schema::Error()
+                            .code(InvalidRequest)
+                            .message("Invalid session ID: " + sessionId))
+                    .id(id))));
+            return;
+        }
+        Schema::ClientCapabilities clientCapabilities = sessionInfo->capabilities;
 
         ToolInterface toolInterface(
             shared_from_this(), clientCapabilities, request, sessionId, responder);
@@ -845,10 +878,12 @@ public:
             return false;
 
         auto it = m_sessions.find(sessionId);
-        if (it == m_sessions.end()) {
+        if (it == m_sessions.end())
             return false;
-        }
-        it->lastSeen = QDateTime::currentDateTime();
+
+        if (*it)
+            (*it)->lastSeen = QDateTime::currentDateTime();
+
         return true;
     }
 
@@ -1117,7 +1152,7 @@ public:
         QDateTime lastSeen = QDateTime::currentDateTime();
     };
 
-    QMap<QString, Client> m_sessions;
+    QMap<QString, std::optional<Client>> m_sessions;
 
     QMap<int, std::function<void(Schema::JSONRPCResponse)>> m_serverRequests;
 
@@ -1134,6 +1169,55 @@ Server::Server(Schema::Implementation serverInfo)
             responder.write(QHttpServerResponse::StatusCode::NotFound);
         });
 
+    d->m_server
+        .route("/sse", QHttpServerRequest::Method::Get, [this](QHttpServerResponder &responder) {
+            const QString sessionId = QUuid::createUuid().toString();
+            qCDebug(mcpServerLog) << "Starting new sse session with Id " << sessionId;
+            d->m_sessions.insert(sessionId, std::nullopt);
+
+            auto stream
+                = std::make_unique<SseStream>(d->corsHeaders(sessionId), std::move(responder));
+
+            stream->sendEndpoint(QString("/message?session=%1").arg(sessionId).toLatin1());
+
+            d->m_sseStreams.emplace_back(std::move(stream));
+            return;
+        });
+
+    d->m_server.route(
+        "/message",
+        QHttpServerRequest::Method::Post,
+        [this](const QHttpServerRequest &req, QHttpServerResponder &responder) {
+            const QString sessionId = req.query().queryItemValue("session");
+
+            if (!d->validateSession(sessionId)) {
+                qCWarning(mcpServerLog) << "Received message for invalid session ID:" << sessionId;
+                responder.write(d->corsHeaders({}), QHttpServerResponse::StatusCode::BadRequest);
+                return;
+            }
+
+            Responder r;
+            r.write = [sessionId, this](QJsonDocument json) {
+                const QByteArray jsonData = json.toJson(QJsonDocument::Compact);
+                qCDebug(mcpServerIOLog).noquote() << "Writing response:" << jsonData;
+                d->sendDataTo(jsonData, sessionId);
+            };
+            r.writeStatus = [](QHttpServerResponder::StatusCode status) { Q_UNUSED(status); };
+            r.writeData = [sessionId, this](
+                              const QByteArray &data,
+                              const char *contentType,
+                              QHttpServerResponder::StatusCode status) {
+                Q_UNUSED(contentType);
+                Q_UNUSED(status);
+                qCDebug(mcpServerIOLog).noquote() << "Writing data:" << data;
+                d->sendDataTo(data, sessionId);
+            };
+
+            d->onData(req.body(), r, sessionId);
+
+            responder.write(d->corsHeaders(sessionId), QHttpServerResponse::StatusCode::Ok);
+        });
+
     d->m_server.route(
         "/",
         QHttpServerRequest::Method::Options,
@@ -1142,6 +1226,21 @@ Server::Server(Schema::Implementation serverInfo)
             auto headers = d->corsHeaders({});
             responder.write(headers, QHttpServerResponse::StatusCode::Ok);
         });
+
+    d->m_server.route(
+        "/sse",
+        QHttpServerRequest::Method::Options,
+        [this](const QHttpServerRequest &req, QHttpServerResponder &responder) {
+            Q_UNUSED(req);
+            auto headers = d->corsHeaders({});
+            responder.write(headers, QHttpServerResponse::StatusCode::Ok);
+        });
+
+    d->m_server.route("/message", QHttpServerRequest::Method::Options, [this]() {
+        QHttpServerResponse response(QHttpServerResponse::StatusCode::Ok);
+        response.setHeaders(d->corsHeaders({}));
+        return response;
+    });
 
     d->m_server.route(
         "/",
