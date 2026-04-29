@@ -7,9 +7,6 @@
 
 #include <coreplugin/icontext.h>
 #include <coreplugin/iversioncontrol.h>
-#include <coreplugin/vcsmanager.h>
-
-#include <extensionsystem/iplugin.h>
 
 #include <utils/processenums.h>
 

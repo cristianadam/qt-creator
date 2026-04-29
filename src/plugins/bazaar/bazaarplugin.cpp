@@ -19,6 +19,7 @@
 #include <coreplugin/documentmanager.h>
 #include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/locator/commandlocator.h>
+#include <coreplugin/vcsmanager.h>
 
 #include <extensionsystem/iplugin.h>
 

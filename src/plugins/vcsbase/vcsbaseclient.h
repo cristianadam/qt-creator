@@ -4,7 +4,6 @@
 #pragma once
 
 #include "vcsbase_global.h"
-#include "vcsbaseclientsettings.h"
 #include "vcscommand.h"
 #include "vcsenums.h"
 
@@ -29,6 +28,7 @@ namespace VcsBase {
 
 class VcsBaseEditorConfig;
 class VcsBaseEditorWidget;
+class VcsBaseSettings;
 
 using CommandHandler = std::function<void(const CommandResult &)>;
 
