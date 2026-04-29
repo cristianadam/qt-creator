@@ -577,7 +577,7 @@ public:
         const bool toolNeedsTask = toolExecution.taskSupport()
                                    == Schema::ToolExecution::TaskSupport::required;
         const bool toolSupportsTask = toolExecution.taskSupport()
-                                      == Schema::ToolExecution::TaskSupport::optional;
+                                      != Schema::ToolExecution::TaskSupport::forbidden;
         const bool clientRequestsTask = request.params().task().has_value();
 
         if ((toolNeedsTask && !clientRequestsTask) || (!toolSupportsTask && clientRequestsTask)) {
