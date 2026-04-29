@@ -5,8 +5,8 @@
 
 #include "mcpserver_global.h"
 
+#include "../schemas/schema_2025_11_25.h"
 #include "mcpserver.h"
-#include "schemas/schema_2025_11_25.h"
 
 namespace Mcp {
 
