@@ -14,7 +14,6 @@
 
 namespace Utils {
 class ElidingLabel;
-class ProgressIndicator;
 class StyledBar;
 } // namespace Utils
 
@@ -23,7 +22,6 @@ class QHBoxLayout;
 class QLabel;
 class QLayout;
 class QMenu;
-class QTimer;
 class QToolButton;
 
 namespace AcpClient::Internal {
@@ -88,12 +86,6 @@ private:
     QLabel *m_agentLabel;
     QHBoxLayout *m_configOptionsLayout;
     QMap<QString, QComboBox*> m_configCombos; // configId -> combo
-    QLabel *m_elapsedLabel;
-    QTimer *m_elapsedTimer;
-    qint64 m_promptStartTime = 0;
-
-    // Streaming indicator
-    Utils::ProgressIndicator *m_progressIndicator = nullptr;
 
     // Message area
     AcpMessageView *m_messageView;

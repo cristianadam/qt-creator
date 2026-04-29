@@ -15,6 +15,7 @@
 #include <utils/algorithm.h>
 #include <utils/layoutbuilder.h>
 #include <utils/markdownbrowser.h>
+#include <utils/progressindicator.h>
 #include <utils/qtcassert.h>
 #include <utils/qtcwidgets.h>
 #include <utils/stylehelper.h>
@@ -26,6 +27,7 @@
 
 #include <QAbstractTextDocumentLayout>
 #include <QComboBox>
+#include <QDateTime>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QtMath>
@@ -38,6 +40,7 @@
 #include <QTextDocument>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QElapsedTimer>
 
 using namespace Acp;
 using namespace Utils::StyleHelper::SpacingTokens;
@@ -1020,7 +1023,34 @@ AcpMessageView::AcpMessageView(QWidget *parent)
     m_layout = new QVBoxLayout(m_container);
     m_layout->setContentsMargins(PaddingHXl, PaddingHXl, PaddingHXl, PaddingHXl);
     m_layout->setSpacing(GapVL);
+
+    auto *trailingRow = new QWidget(m_container);
+    auto *trailingLayout = new QHBoxLayout(trailingRow);
+    trailingLayout->setContentsMargins(0, 0, 0, 0);
+    trailingLayout->setSpacing(GapHS);
+
+    m_progressIndicator = new Utils::ProgressIndicator(
+        Utils::ProgressIndicatorSize::Small, trailingRow);
+    m_progressIndicator->setVisible(false);
+    trailingLayout->addWidget(m_progressIndicator);
+
+    m_elapsedLabel = new QLabel(trailingRow);
+    m_elapsedLabel->setVisible(false);
+    QFont elapsedFont = m_elapsedLabel->font();
+    elapsedFont.setPointSizeF(elapsedFont.pointSizeF() * 0.9);
+    elapsedFont.setFamily(QStringLiteral("monospace"));
+    m_elapsedLabel->setFont(elapsedFont);
+    trailingLayout->addWidget(m_elapsedLabel);
+
+    trailingLayout->addStretch();
+
+    m_layout->addWidget(trailingRow);
     m_layout->addStretch();
+
+    m_elapsedTimer = new QElapsedTimer();
+    m_progressUpdateTimer = new QTimer(this);
+    m_progressUpdateTimer->setInterval(1000);
+    connect(m_progressUpdateTimer, &QTimer::timeout, this, &AcpMessageView::updateElapsedTimeLabel);
 
     setWidget(m_container);
 
@@ -1043,10 +1073,23 @@ void AcpMessageView::setAgentIconUrl(const QString &iconUrl)
     m_agentIconUrl = iconUrl;
 }
 
+void AcpMessageView::setPrompting(bool prompting)
+{
+    if (prompting) {
+        m_elapsedTimer->restart();
+        updateElapsedTimeLabel();
+        m_progressUpdateTimer->start();
+    } else {
+        m_progressUpdateTimer->stop();
+    }
+    m_progressIndicator->setVisible(prompting);
+    m_elapsedLabel->setVisible(prompting);
+}
+
 void AcpMessageView::clear()
 {
-    // Remove all widgets except the bottom stretch
-    while (m_layout->count() > 1) {
+    // Remove all widgets except the trailing elapsed label and bottom stretch
+    while (m_layout->count() > 2) {
         QLayoutItem *item = m_layout->takeAt(0);
         if (item->widget())
             delete item->widget();
@@ -1349,8 +1392,8 @@ QWidget *AcpMessageView::wrapWithSpacer(QWidget *widget, Qt::Alignment side)
 
 void AcpMessageView::addWidget(QWidget *widget)
 {
-    // Insert before the bottom stretch item
-    m_layout->insertWidget(m_layout->count() - 1, widget);
+    // Insert before the trailing elapsed label and the bottom stretch
+    m_layout->insertWidget(m_layout->count() - 2, widget);
 }
 
 int AcpMessageView::contentMaxWidth() const
@@ -1369,6 +1412,17 @@ void AcpMessageView::resizeEvent(QResizeEvent *event)
     const int maxW = contentMaxWidth();
     for (ToolCallDetailWidget *detail : m_toolCallDetailWidgets)
         detail->setContentMaxWidth(maxW);
+}
+
+void AcpMessageView::updateElapsedTimeLabel()
+{
+    const qint64 elapsedMS = m_elapsedTimer->elapsed();
+    const int secs = static_cast<int>(elapsedMS / 1000);
+    const int minutes = secs / 60;
+    if (minutes)
+        m_elapsedLabel->setText(QStringLiteral("%1:%2 min").arg(minutes).arg(secs % 60, 2, 10, '0'));
+    else
+        m_elapsedLabel->setText(QStringLiteral("%1 sec").arg(secs));
 }
 
 } // namespace AcpClient::Internal

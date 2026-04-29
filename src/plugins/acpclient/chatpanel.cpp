@@ -12,8 +12,6 @@
 
 #include <utils/elidinglabel.h>
 #include <utils/fileutils.h>
-#include <utils/layoutbuilder.h>
-#include <utils/progressindicator.h>
 #include <utils/qtcwidgets.h>
 #include <utils/styledbar.h>
 #include <utils/stylehelper.h>
@@ -22,7 +20,6 @@
 
 #include <QApplication>
 #include <QComboBox>
-#include <QDateTime>
 #include <QFileDialog>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -33,7 +30,6 @@
 #include <QStringList>
 #include <QTextBlock>
 #include <QTextCursor>
-#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -169,12 +165,6 @@ ChatPanel::ChatPanel(QWidget *parent)
     toolbarLayout->setContentsMargins(PaddingHM, PaddingVXs, PaddingHM, PaddingVXs);
     toolbarLayout->setSpacing(GapHM);
 
-    m_progressIndicator = new ProgressIndicator(ProgressIndicatorSize::Small, toolbar);
-    m_progressIndicator->hide();
-    m_progressIndicator->setSizePolicy(QSizePolicy::Fixed,
-                                       m_progressIndicator->sizePolicy().verticalPolicy());
-    toolbarLayout->addWidget(m_progressIndicator);
-
     m_agentLabel = new QLabel;
     m_agentLabel->setTextFormat(Qt::RichText);
     toolbarLayout->addWidget(m_agentLabel);
@@ -185,30 +175,12 @@ ChatPanel::ChatPanel(QWidget *parent)
 
     toolbarLayout->addStretch(1);
 
-    m_elapsedLabel = new QLabel;
-    m_elapsedLabel->setVisible(false);
-    QFont elapsedFont = m_elapsedLabel->font();
-    elapsedFont.setPointSizeF(elapsedFont.pointSizeF() * 0.9);
-    elapsedFont.setFamily(QStringLiteral("monospace"));
-    m_elapsedLabel->setFont(elapsedFont);
-    toolbarLayout->addWidget(m_elapsedLabel);
-
     // --- Message view ---
     m_messageView = new AcpMessageView;
     m_messageView->setDetailedMode(true);
     layout->addWidget(m_messageView, 1);
     layout->addWidget(new Core::FindToolBarPlaceHolder(m_messageView));
     layout->addWidget(toolbar);
-
-    // Elapsed time timer
-    m_elapsedTimer = new QTimer(this);
-    m_elapsedTimer->setInterval(100);
-    connect(m_elapsedTimer, &QTimer::timeout, this, [this] {
-        const qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - m_promptStartTime;
-        const int secs = static_cast<int>(elapsed / 1000);
-        const int tenths = static_cast<int>((elapsed % 1000) / 100);
-        m_elapsedLabel->setText(QStringLiteral("%1.%2s").arg(secs).arg(tenths));
-    });
 
     // --- Input bar (rounded container) ---
     auto *inputOuter = new QWidget;
@@ -351,22 +323,7 @@ void ChatPanel::setPrompting(bool prompting)
     m_sendButton->setText(prompting ? Tr::tr("Cancel") : Tr::tr("Send"));
     m_sendButton->setPrompting(prompting);
     m_inputEdit->setEnabled(!prompting);
-
-    if (prompting) {
-        m_promptStartTime = QDateTime::currentMSecsSinceEpoch();
-        m_progressIndicator->show();
-        m_elapsedLabel->setVisible(true);
-        m_elapsedTimer->start();
-    } else {
-        m_progressIndicator->hide();
-        m_elapsedTimer->stop();
-        if (m_promptStartTime > 0) {
-            const qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - m_promptStartTime;
-            const int secs = static_cast<int>(elapsed / 1000);
-            const int tenths = static_cast<int>((elapsed % 1000) / 100);
-            m_elapsedLabel->setText(Tr::tr("Last: %1.%2s").arg(secs).arg(tenths));
-        }
-    }
+    m_messageView->setPrompting(prompting);
 }
 
 void ChatPanel::setSendEnabled(bool enabled)
