@@ -15,8 +15,3 @@ add_qtc_plugin(ZenModePlugin
     zenmodesettings.cpp
     zenmodesettings.h
 )
-
-target_sources(ZenModePlugin
-  PRIVATE
-    zenmodeplugin.h
-)
