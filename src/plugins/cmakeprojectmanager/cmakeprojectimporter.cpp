@@ -1251,6 +1251,7 @@ void CMakeProjectImporter::createKitsFromPresets()
     const Group recipe{
         For (iterator) >> Do {
             parallel,
+            finishAllAndSuccess,
             Group {
                 storage,
                 If (ProcessTask(onCompilerSetup, onCompilerDone)) >> Then {
