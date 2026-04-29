@@ -1536,8 +1536,10 @@ QStringList GitClient::setupCheckoutArguments(const FilePath &workingDirectory,
         return arguments;
     }
 
-    if (synchronousCurrentLocalBranch(workingDirectory).isEmpty())
-        localBranches.removeFirst();
+    if (synchronousCurrentLocalBranch(workingDirectory).isEmpty()) {
+        if (!localBranches.isEmpty())
+            localBranches.removeFirst();
+    }
 
     QString refSha;
     if (!synchronousRevParseCmd(workingDirectory, ref, &refSha))
