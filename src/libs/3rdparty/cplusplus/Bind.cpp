@@ -3338,6 +3338,8 @@ bool Bind::visit(ElaboratedTypeSpecifierAST *ast)
         _type = this->specifier(it->value, _type);
     }
     _type.setType(control()->namedType(this->name(ast->name)));
+    if (tokenKind(ast->classkey_token) == T_STRUCT)
+        _type.setStruct(true);
     return false;
 }
 

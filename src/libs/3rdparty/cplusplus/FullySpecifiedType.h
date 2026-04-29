@@ -94,6 +94,9 @@ public:
     bool isUnavailable() const { return f._isUnavailable; }
     void setUnavailable(bool isUnavailable) { f._isUnavailable = isUnavailable; }
 
+    bool isStruct() const { return f._isStruct; }
+    void setStruct(bool isStruct) { f._isStruct = isStruct; }
+
     Type &operator*() { return *_type; }
     const Type &operator*() const { return *_type; }
 
@@ -143,6 +146,8 @@ private:
         // speficiers from attributes
         unsigned _isDeprecated: 1;
         unsigned _isUnavailable: 1;
+
+        unsigned _isStruct: 1;
     };
     union {
         unsigned _flags;
