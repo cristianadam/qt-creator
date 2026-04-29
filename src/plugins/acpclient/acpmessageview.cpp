@@ -1091,6 +1091,8 @@ void AcpMessageView::appendAgentText(const QString &text)
 
 void AcpMessageView::appendAgentThought(const QString &text)
 {
+    if (text.isEmpty())
+        return;
     if (!m_currentThoughtWidget) {
         finishAgentMessage();
         finishToolCallGroup();
