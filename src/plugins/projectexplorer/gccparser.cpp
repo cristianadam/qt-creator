@@ -56,11 +56,14 @@ public:
         if (!match.hasMatch())
             return {};
 
-        // Quick plausability test: If there's no slashes or dots, it's probably not a file.
+        // Quick plausability test: Does it look like a file name or path?
         const QString possibleFile = match.captured("file");
-        if (!possibleFile.contains('/') && !possibleFile.contains("'\\")
-            && !possibleFile.contains('.')) {
-            return {};
+        if (!possibleFile.contains('/') && !possibleFile.contains("'\\")) {
+            const int lastDot = possibleFile.lastIndexOf('.');
+            if (lastDot == -1 || lastDot == possibleFile.size() - 1
+                || possibleFile.indexOf(' ', lastDot + 1) != -1) {
+                return {};
+            }
         }
 
         // Defer to the LdParser for some file types
@@ -326,6 +329,12 @@ private slots:
         QTest::newRow("pass-through stderr")
             << QString::fromLatin1("Sometext") << OutputParserTester::STDERR
             << QStringList() << QStringList("Sometext")
+            << Tasks();
+
+        QTest::newRow("matches regex, but fails plausability test")
+            << QString::fromLatin1("-- ZeroC ICE 3.7.10 Java API found in: /home/user/path")
+            << OutputParserTester::STDERR
+            << QStringList() << QStringList("-- ZeroC ICE 3.7.10 Java API found in: /home/user/path")
             << Tasks();
 
         QTest::newRow("ar output")
