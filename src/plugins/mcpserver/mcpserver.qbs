@@ -34,7 +34,6 @@ QtcPlugin {
         name: "schemas"
         prefix: "schemas/"
         files: [
-            "issues-schema.json",
             "search-results-schema.json",
         ]
         fileTags: "qt.core.resource_data"

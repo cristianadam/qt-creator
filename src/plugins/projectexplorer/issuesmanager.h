@@ -34,7 +34,7 @@ public:
 
     /**
      * @brief Retrieves all current issues from the Issues panel
-     * @return JSON object conforming to issues-schema.json
+     * @return JSON object conforming to s_issueSchema
      */
     QJsonObject getCurrentIssues() const;
 
