@@ -18,7 +18,6 @@ using namespace Utils;
 
 static const int PROGRESSBAR_HEIGHT = 13;
 static const int CANCELBUTTON_WIDTH = 16;
-static const int SEPARATOR_HEIGHT = 2;
 
 ProgressBar::ProgressBar(QWidget *parent)
     : QWidget(parent)
@@ -129,19 +128,6 @@ QString ProgressBar::subtitle() const
     return m_subtitle;
 }
 
-void ProgressBar::setSeparatorVisible(bool visible)
-{
-    if (m_separatorVisible == visible)
-        return;
-    m_separatorVisible = visible;
-    update();
-}
-
-bool ProgressBar::isSeparatorVisible() const
-{
-    return m_separatorVisible;
-}
-
 void ProgressBar::setCancelEnabled(bool enabled)
 {
     if (m_cancelEnabled == enabled)
@@ -164,7 +150,7 @@ void ProgressBar::setError(bool on)
 QSize ProgressBar::sizeHint() const
 {
     int width = 50;
-    int height = PROGRESSBAR_HEIGHT + 5;
+    int height = PROGRESSBAR_HEIGHT + 5 + StyleHelper::SpacingTokens::PaddingVXs;
     if (m_titleVisible) {
         const QFont font = StyleHelper::uiFont(StyleHelper::UiElementCaptionStrong);
         const QFontMetrics fm(font);
@@ -175,8 +161,6 @@ QSize ProgressBar::sizeHint() const
             height += fm.height() + 5;
         }
     }
-    if (m_separatorVisible)
-        height += SEPARATOR_HEIGHT;
     return QSize(width, height);
 }
 
@@ -218,21 +202,8 @@ void ProgressBar::paintEvent(QPaintEvent *)
 
     const int titleHeight = m_titleVisible ? fm.height() + 5 : 4;
 
-    // Draw separator
-    const int separatorHeight = m_separatorVisible ? SEPARATOR_HEIGHT : 0;
-    if (m_separatorVisible) {
-        QRectF innerRect = QRectF(this->rect()).adjusted(0.5, 0.5, -0.5, -0.5);
-        p.setPen(StyleHelper::baseColor());
-        p.drawLine(innerRect.topLeft(), innerRect.topRight());
-
-        if (creatorTheme()->flag(Theme::DrawToolBarHighlights)) {
-            p.setPen(StyleHelper::sidebarHighlight());
-            p.drawLine(innerRect.topLeft() + QPointF(1, 1), innerRect.topRight() + QPointF(0, 1));
-        }
-    }
-
     const int progressHeight = PROGRESSBAR_HEIGHT + ((PROGRESSBAR_HEIGHT % 2) + 1) % 2; // make odd
-    const int progressY = titleHeight + separatorHeight;
+    const int progressY = titleHeight + StyleHelper::SpacingTokens::PaddingVXs;
 
     if (m_titleVisible) {
         const int alignment = Qt::AlignHCenter;
@@ -241,7 +212,7 @@ void ProgressBar::paintEvent(QPaintEvent *)
         // elide the text
         const QString elidedtitle = fm.elidedText(m_title, Qt::ElideRight, textSpace);
 
-        QRect textRect = rect().adjusted(3, separatorHeight - 1, -3, 0);
+        QRect textRect = rect().adjusted(3, StyleHelper::SpacingTokens::PaddingVXs - 1, -3, 0);
         textRect.setHeight(fm.height() + 4);
 
         p.setFont(fnt);

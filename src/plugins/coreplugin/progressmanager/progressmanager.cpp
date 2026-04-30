@@ -593,7 +593,6 @@ void ProgressManagerPrivate::init()
     m_summaryProgressBar = new ProgressBar(m_summaryProgressWidget);
     m_summaryProgressBar->setMinimumWidth(70);
     m_summaryProgressBar->setTitleVisible(false);
-    m_summaryProgressBar->setSeparatorVisible(false);
     m_summaryProgressBar->setCancelEnabled(false);
     summaryProgressLayout->addWidget(m_summaryProgressBar);
     layout->addWidget(m_summaryProgressWidget);
