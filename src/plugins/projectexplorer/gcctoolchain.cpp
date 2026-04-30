@@ -2020,8 +2020,7 @@ void GccToolchainConfigWidget::handlePlatformCodeGenFlagsChange()
     QString str2 = ProcessArgs::joinArgs(splitString(str1));
     if (str1 != str2)
         m_platformCodeGenFlagsLineEdit->setText(str2);
-    else
-        handleCompilerCommandChange(Constants::C_LANGUAGE_ID);
+    handleCompilerCommandChange(Constants::C_LANGUAGE_ID);
 }
 
 void GccToolchainConfigWidget::handlePlatformLinkerFlagsChange()
