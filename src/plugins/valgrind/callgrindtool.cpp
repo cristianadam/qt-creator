@@ -39,7 +39,6 @@
 
 #include <debugger/debuggerconstants.h>
 #include <debugger/debuggermainwindow.h>
-#include <debugger/analyzer/analyzerutils.h>
 
 #include <projectexplorer/project.h>
 #include <projectexplorer/projectexplorer.h>
@@ -816,10 +815,10 @@ void CallgrindTool::setupRunControl(RunControl *runControl)
         m_loadExternalLogFile->setEnabled(false);
         clearTextMarks();
         doClear();
-        Debugger::showPermanentStatusMessage(Tr::tr("Starting Function Profiler..."));
+        DebuggerMainWindow::showPermanentStatusMessage(Tr::tr("Starting Function Profiler..."));
     });
     connect(m_runControl, &RunControl::started, this, [] {
-        Debugger::showPermanentStatusMessage(Tr::tr("Function Profiler running..."));
+        DebuggerMainWindow::showPermanentStatusMessage(Tr::tr("Function Profiler running..."));
     });
 
     connect(m_stopAction, &QAction::triggered, this, [this] { m_runControl->initiateStop(); });
@@ -882,7 +881,7 @@ static QString toOptionString(Option option)
 ExecutableItem CallgrindTool::optionRecipe(Option option) const
 {
     const auto onSetup = [this, option](Process &process) {
-        Debugger::showPermanentStatusMessage(statusMessage(option));
+        DebuggerMainWindow::showPermanentStatusMessage(statusMessage(option));
         const ProcessRunData runnable = m_runControl->runnable();
         const FilePath control = runnable.command.executable().withNewPath(CALLGRIND_CONTROL_BINARY);
         process.setCommand({control, {toOptionString(option), QString::number(m_pid)}});
@@ -894,20 +893,20 @@ ExecutableItem CallgrindTool::optionRecipe(Option option) const
     };
     const auto onDone = [option](const Process &process, DoneWith result) {
         if (result != DoneWith::Success) {
-            Debugger::showPermanentStatusMessage(Tr::tr("An error occurred while trying to run %1: %2")
+            DebuggerMainWindow::showPermanentStatusMessage(Tr::tr("An error occurred while trying to run %1: %2")
                                                      .arg(CALLGRIND_CONTROL_BINARY)
                                                      .arg(process.errorString()));
             return;
         }
         switch (option) {
         case Option::Pause:
-            Debugger::showPermanentStatusMessage(Tr::tr("Callgrind paused."));
+            DebuggerMainWindow::showPermanentStatusMessage(Tr::tr("Callgrind paused."));
             break;
         case Option::UnPause:
-            Debugger::showPermanentStatusMessage(Tr::tr("Callgrind unpaused."));
+            DebuggerMainWindow::showPermanentStatusMessage(Tr::tr("Callgrind unpaused."));
             break;
         case Option::Dump:
-            Debugger::showPermanentStatusMessage(Tr::tr("Callgrind dumped profiling info."));
+            DebuggerMainWindow::showPermanentStatusMessage(Tr::tr("Callgrind dumped profiling info."));
             break;
         default:
             break;
@@ -925,7 +924,7 @@ ExecutableItem CallgrindTool::parseRecipe()
         if (hostOutputFile.isEmpty()) {
             TemporaryFile dataFile("callgrind.out");
             if (!dataFile.open()) {
-                Debugger::showPermanentStatusMessage(Tr::tr("Failed opening temp file..."));
+                DebuggerMainWindow::showPermanentStatusMessage(Tr::tr("Failed opening temp file..."));
                 return;
             }
             hostOutputFile = dataFile.filePath();
@@ -938,7 +937,7 @@ ExecutableItem CallgrindTool::parseRecipe()
 
     const auto onParserSetup = [storage](Async<ParseDataPtr> &async) {
         async.setConcurrentCallData(parseDataFile, *storage);
-        Debugger::showPermanentStatusMessage(Tr::tr("Parsing Profile Data..."));
+        DebuggerMainWindow::showPermanentStatusMessage(Tr::tr("Parsing Profile Data..."));
     };
     const auto onParserDone = [this](const Async<ParseDataPtr> &async) {
         setParserData(async.result());
@@ -980,7 +979,7 @@ void CallgrindTool::unpause()
 void CallgrindTool::executeController(const Group &recipe)
 {
     if (m_controllerRunner.isRunning())
-        Debugger::showPermanentStatusMessage(Tr::tr("Previous command has not yet finished."));
+        DebuggerMainWindow::showPermanentStatusMessage(Tr::tr("Previous command has not yet finished."));
     else
         m_controllerRunner.start(recipe);
 }
@@ -1039,7 +1038,7 @@ void CallgrindTool::engineFinished()
     if (data)
         showParserResults(data);
     else
-        Debugger::showPermanentStatusMessage(Tr::tr("Profiling aborted."));
+        DebuggerMainWindow::showPermanentStatusMessage(Tr::tr("Profiling aborted."));
 
     setBusyCursor(false);
 }
@@ -1059,7 +1058,7 @@ void CallgrindTool::showParserResults(const ParseDataPtr &data)
     } else {
         msg = Tr::tr("Parsing failed.");
     }
-    Debugger::showPermanentStatusMessage(msg);
+    DebuggerMainWindow::showPermanentStatusMessage(msg);
 }
 
 void CallgrindTool::editorOpened(IEditor *editor)
@@ -1172,7 +1171,7 @@ void CallgrindTool::loadExternalLogFile()
         return;
     }
 
-    Debugger::showPermanentStatusMessage(Tr::tr("Parsing Profile Data..."));
+    DebuggerMainWindow::showPermanentStatusMessage(Tr::tr("Parsing Profile Data..."));
     QCoreApplication::processEvents();
 
     setParserData(parseDataFile(filePath));

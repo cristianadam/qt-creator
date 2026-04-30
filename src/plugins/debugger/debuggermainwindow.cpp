@@ -386,6 +386,17 @@ void DebuggerMainWindow::showStatusMessage(const QString &message, int timeoutMS
         theMainWindow->d->m_statusLabel->showStatusMessage(message, timeoutMS);
 }
 
+void DebuggerMainWindow::enableMainWindow(bool on)
+{
+    if (theMainWindow)
+        theMainWindow->setEnabled(on);
+}
+
+void DebuggerMainWindow::showPermanentStatusMessage(const QString &message)
+{
+    showStatusMessage(message, -1);
+}
+
 void DebuggerMainWindow::enterDebugMode()
 {
     theMainWindow->setDockActionsVisible(true);

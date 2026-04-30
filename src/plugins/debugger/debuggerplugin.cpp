@@ -27,8 +27,6 @@
 #include "shared/hostutils.h"
 #include "console/console.h"
 
-#include "analyzer/analyzerutils.h"
-
 #include <coreplugin/actionmanager/actioncontainer.h>
 #include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/actionmanager/command.h>
@@ -337,8 +335,7 @@ namespace PE = ProjectExplorer::Constants;
 
 Q_DECLARE_METATYPE(QString *)
 
-namespace Debugger {
-namespace Internal {
+namespace Debugger::Internal {
 
 // Menu Groups
 const char MENU_GROUP_GENERAL[]              = "Debugger.Group.General";
@@ -2155,20 +2152,6 @@ void DebuggerPlugin::extensionsInitialized()
     dd->extensionsInitialized();
 }
 
-} // namespace Internal
-
-void enableMainWindow(bool on)
-{
-    DebuggerMainWindow::instance()->setEnabled(on);
-}
-
-void showPermanentStatusMessage(const QString &message)
-{
-    DebuggerMainWindow::showStatusMessage(message, -1);
-}
-
-namespace Internal {
-
 Result<> DebuggerPlugin::initialize(const QStringList &arguments)
 {
     IOptionsPage::registerCategory(
@@ -2253,7 +2236,6 @@ void DebuggerPlugin::getEnginesState(QByteArray *json) const
     *json = QJsonDocument(QJsonObject::fromVariantMap(result)).toJson();
 }
 
-} // Internal
-} // Debugger
+} // Debugger::Internal
 
 #include "debuggerplugin.moc"

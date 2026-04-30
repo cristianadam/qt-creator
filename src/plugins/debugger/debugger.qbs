@@ -214,7 +214,6 @@ QtcPlugin {
         name: "Analyzer"
         prefix: "analyzer/"
         files: [
-            "analyzerutils.h",
             "detailederrorview.cpp",
             "detailederrorview.h",
         ]

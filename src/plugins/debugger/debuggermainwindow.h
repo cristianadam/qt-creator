@@ -137,6 +137,8 @@ public:
     static void doShutdown();
 
     static void showStatusMessage(const QString &message, int timeoutMS);
+    static void enableMainWindow(bool on);
+    static void showPermanentStatusMessage(const QString &message);
     static void enterDebugMode();
     static void leaveDebugMode();
 

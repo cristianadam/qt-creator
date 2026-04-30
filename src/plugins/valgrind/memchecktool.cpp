@@ -27,7 +27,6 @@
 #include <coreplugin/messagemanager.h>
 #include <coreplugin/modemanager.h>
 
-#include <debugger/analyzer/analyzerutils.h>
 #include <debugger/debuggerconstants.h>
 #include <debugger/debuggerkitaspect.h>
 #include <debugger/debuggermainwindow.h>
@@ -843,10 +842,10 @@ void MemcheckTool::setupRunControl(RunControl *runControl)
         setBusyCursor(true);
         clearErrorView();
         m_loadExternalLogFile->setDisabled(true);
-        Debugger::showPermanentStatusMessage(Tr::tr("Starting Memory Analyzer..."));
+        DebuggerMainWindow::showPermanentStatusMessage(Tr::tr("Starting Memory Analyzer..."));
     });
     connect(runControl, &RunControl::started, this, [] {
-        Debugger::showPermanentStatusMessage(Tr::tr("Memory Analyzer running..."));
+        DebuggerMainWindow::showPermanentStatusMessage(Tr::tr("Memory Analyzer running..."));
     });
 
     m_stopAction->disconnect();
@@ -902,7 +901,7 @@ void MemcheckTool::loadXmlLogFile(const QString &filePath)
         QString msg = Tr::tr("Memcheck: Failed to open file for reading: %1").arg(filePath);
         TaskHub::addTask(Task::DisruptingError, msg, Debugger::Constants::ANALYZERTASK_ID);
         if (!m_exitMsg.isEmpty())
-            Debugger::showPermanentStatusMessage(m_exitMsg);
+            DebuggerMainWindow::showPermanentStatusMessage(m_exitMsg);
         return;
     }
 
@@ -992,7 +991,7 @@ void MemcheckTool::engineFinished()
     updateRunActions();
 
     const int issuesFound = updateUiAfterFinishedHelper();
-    Debugger::showPermanentStatusMessage(
+    DebuggerMainWindow::showPermanentStatusMessage(
         Tr::tr("Memory Analyzer Tool finished. %n issues were found.", nullptr, issuesFound));
 }
 
@@ -1002,7 +1001,7 @@ void MemcheckTool::loadingExternalXmlLogFileFinished()
     QString statusMessage = Tr::tr("Log file processed. %n issues were found.", nullptr, issuesFound);
     if (!m_exitMsg.isEmpty())
         statusMessage += ' ' + m_exitMsg;
-    Debugger::showPermanentStatusMessage(statusMessage);
+    DebuggerMainWindow::showPermanentStatusMessage(statusMessage);
 }
 
 void MemcheckTool::setBusyCursor(bool busy)
