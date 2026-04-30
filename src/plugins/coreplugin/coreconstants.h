@@ -236,5 +236,13 @@ const char HELP_CATEGORY[] = "H.Help";
 
 const char QT_JIRA_URL[] = "https://qt-project.atlassian.net";
 
+// Analyzer menu and groups
+const char M_DEBUG_ANALYZER[]        = "Analyzer.Menu.StartAnalyzer";
+const char G_ANALYZER_CONTROL[]      = "Menu.Group.Analyzer.Control";
+const char G_ANALYZER_TOOLS[]        = "Menu.Group.Analyzer.Tools";
+const char G_ANALYZER_REMOTE_TOOLS[] = "Menu.Group.Analyzer.RemoteTools";
+const char G_ANALYZER_OPTIONS[]      = "Menu.Group.Analyzer.Options";
+const char ANALYZERTASK_ID[]         = "Analyzer.TaskId";
+
 } // namespace Constants
 } // namespace Core

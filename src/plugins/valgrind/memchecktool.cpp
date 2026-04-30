@@ -20,6 +20,7 @@
 #include <coreplugin/actionmanager/actioncontainer.h>
 #include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/actionmanager/command.h>
+#include <coreplugin/coreconstants.h>
 #include <coreplugin/documentmanager.h>
 #include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/helpmanager.h>
@@ -501,7 +502,7 @@ MemcheckTool::MemcheckTool(QObject *parent)
     connect(m_filterMenu, &QMenu::triggered, this, &MemcheckTool::updateErrorFilter);
     filterButton->setMenu(m_filterMenu);
 
-    ActionContainer *menu = ActionManager::actionContainer(Debugger::Constants::M_DEBUG_ANALYZER);
+    ActionContainer *menu = ActionManager::actionContainer(Core::Constants::M_DEBUG_ANALYZER);
     QString toolTip = Tr::tr("Valgrind Analyze Memory uses the Memcheck tool to find memory leaks.");
 
     if (!HostOsInfo::isWindowsHost()) {
@@ -509,11 +510,11 @@ MemcheckTool::MemcheckTool(QObject *parent)
         action->setText(Tr::tr("Valgrind Memory Analyzer"));
         action->setToolTip(toolTip);
         menu->addAction(ActionManager::registerAction(action, "Memcheck.Local"),
-                        Debugger::Constants::G_ANALYZER_TOOLS);
+                        Core::Constants::G_ANALYZER_TOOLS);
         QObject::connect(action, &QAction::triggered, this, [this, action] {
             if (!wantRunTool(DebugMode, action->text()))
                 return;
-            TaskHub::clearTasks(Debugger::Constants::ANALYZERTASK_ID);
+            TaskHub::clearTasks(Core::Constants::ANALYZERTASK_ID);
             m_perspective.select();
             ProjectExplorerPlugin::runStartupProject(MEMCHECK_RUN_MODE);
         });
@@ -528,11 +529,11 @@ MemcheckTool::MemcheckTool(QObject *parent)
             "Memcheck tool to find memory leaks.\nWhen a problem is detected, "
             "the application is interrupted and can be debugged."));
         menu->addAction(ActionManager::registerAction(action, "MemcheckWithGdb.Local"),
-                        Debugger::Constants::G_ANALYZER_TOOLS);
+                        Core::Constants::G_ANALYZER_TOOLS);
         QObject::connect(action, &QAction::triggered, this, [this, action] {
             if (!wantRunTool(DebugMode, action->text()))
                 return;
-            TaskHub::clearTasks(Debugger::Constants::ANALYZERTASK_ID);
+            TaskHub::clearTasks(Core::Constants::ANALYZERTASK_ID);
             m_perspective.select();
             ProjectExplorerPlugin::runStartupProject(MEMCHECK_WITH_GDB_RUN_MODE);
         });
@@ -545,7 +546,7 @@ MemcheckTool::MemcheckTool(QObject *parent)
         Core::Command *cmd = Core::ActionManager::registerAction(action, "Memcheck.Local");
         cmd->setDefaultKeySequence(QKeySequence(Tr::tr("Ctrl+Alt+H")));
         connect(action, &QAction::triggered, this, &MemcheckTool::heobAction);
-        menu->addAction(cmd, Debugger::Constants::G_ANALYZER_TOOLS);
+        menu->addAction(cmd, Core::Constants::G_ANALYZER_TOOLS);
         connect(m_startAction, &QAction::changed, action, [action, this] {
             action->setEnabled(m_startAction->isEnabled());
         });
@@ -555,7 +556,7 @@ MemcheckTool::MemcheckTool(QObject *parent)
     action->setText(Tr::tr("Valgrind Memory Analyzer (External Application)"));
     action->setToolTip(toolTip);
     menu->addAction(ActionManager::registerAction(action, "Memcheck.Remote"),
-                    Debugger::Constants::G_ANALYZER_REMOTE_TOOLS);
+                    Core::Constants::G_ANALYZER_REMOTE_TOOLS);
     setupExternalAnalyzer(action, &m_perspective, MEMCHECK_RUN_MODE);
 
     m_perspective.addToolBarAction(m_startAction);
@@ -596,7 +597,7 @@ void MemcheckTool::heobAction()
     }
     if (!hasLocalRc) {
         const QString msg = Tr::tr("Heob: No local run configuration available.");
-        TaskHub::addTask(Task::DisruptingError, msg, Debugger::Constants::ANALYZERTASK_ID);
+        TaskHub::addTask(Task::DisruptingError, msg, Core::Constants::ANALYZERTASK_ID);
         return;
     }
     if (abi.architecture() != Abi::X86Architecture
@@ -604,7 +605,7 @@ void MemcheckTool::heobAction()
             || abi.binaryFormat() != Abi::PEFormat
             || (abi.wordWidth() != 32 && abi.wordWidth() != 64)) {
         const QString msg = Tr::tr("Heob: No toolchain available.");
-        TaskHub::addTask(Task::DisruptingError, msg, Debugger::Constants::ANALYZERTASK_ID);
+        TaskHub::addTask(Task::DisruptingError, msg, Core::Constants::ANALYZERTASK_ID);
         return;
     }
 
@@ -616,14 +617,14 @@ void MemcheckTool::heobAction()
     // target executable
     if (executable.isEmpty()) {
         const QString msg = Tr::tr("Heob: No executable set.");
-        TaskHub::addTask(Task::DisruptingError, msg, Debugger::Constants::ANALYZERTASK_ID);
+        TaskHub::addTask(Task::DisruptingError, msg, Core::Constants::ANALYZERTASK_ID);
         return;
     }
     if (!executable.exists())
         executable = executable.withExecutableSuffix();
     if (!executable.exists()) {
         const QString msg = Tr::tr("Heob: Cannot find %1.").arg(executable.toUserOutput());
-        TaskHub::addTask(Task::DisruptingError, msg, Debugger::Constants::ANALYZERTASK_ID);
+        TaskHub::addTask(Task::DisruptingError, msg, Core::Constants::ANALYZERTASK_ID);
         return;
     }
 
@@ -722,7 +723,7 @@ void MemcheckTool::heobAction()
         const QString msg = Tr::tr("Heob: Cannot create %1 process (%2).")
                                 .arg(heob)
                                 .arg(qt_error_string(e));
-        TaskHub::addTask(Task::Error, msg, Debugger::Constants::ANALYZERTASK_ID);
+        TaskHub::addTask(Task::Error, msg, Core::Constants::ANALYZERTASK_ID);
         TaskHub::requestPopup();
         return;
     }
@@ -899,7 +900,7 @@ void MemcheckTool::loadXmlLogFile(const QString &filePath)
     QFile logFile(filePath);
     if (!logFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
         QString msg = Tr::tr("Memcheck: Failed to open file for reading: %1").arg(filePath);
-        TaskHub::addTask(Task::DisruptingError, msg, Debugger::Constants::ANALYZERTASK_ID);
+        TaskHub::addTask(Task::DisruptingError, msg, Core::Constants::ANALYZERTASK_ID);
         if (!m_exitMsg.isEmpty())
             DebuggerMainWindow::showPermanentStatusMessage(m_exitMsg);
         return;
@@ -936,7 +937,7 @@ void MemcheckTool::parserError(const Error &error)
 void MemcheckTool::internalParserError(const QString &errorString)
 {
     QString msg = Tr::tr("Memcheck: Error occurred parsing Valgrind output: %1").arg(errorString);
-    TaskHub::addTask(Task::DisruptingError, msg, Debugger::Constants::ANALYZERTASK_ID);
+    TaskHub::addTask(Task::DisruptingError, msg, Core::Constants::ANALYZERTASK_ID);
 }
 
 void MemcheckTool::clearErrorView()
@@ -1666,7 +1667,7 @@ void HeobData::processFinished()
 
     if (needErrorMsg) {
         const QString msg = Tr::tr("Heob: %1").arg(exitMsg);
-        TaskHub::addTask(Task::Error, msg, Debugger::Constants::ANALYZERTASK_ID);
+        TaskHub::addTask(Task::Error, msg, Core::Constants::ANALYZERTASK_ID);
         TaskHub::requestPopup();
     } else {
         m_mcTool->loadShowXmlLogFile(m_xmlPath, exitMsg);
@@ -1701,7 +1702,7 @@ void HeobData::sendHeobAttachPid(DWORD pid)
     }
 
     const QString msg = Tr::tr("Heob: Failure in process attach handshake (%1).").arg(qt_error_string(e));
-    TaskHub::addTask(Task::Error, msg, Debugger::Constants::ANALYZERTASK_ID);
+    TaskHub::addTask(Task::Error, msg, Core::Constants::ANALYZERTASK_ID);
     TaskHub::requestPopup();
     deleteLater();
 }

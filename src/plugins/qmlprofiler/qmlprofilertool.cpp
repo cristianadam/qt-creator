@@ -29,7 +29,6 @@
 #include <coreplugin/modemanager.h>
 #include <coreplugin/progressmanager/progressmanager.h>
 
-#include <debugger/debuggerconstants.h>
 #include <debugger/debuggericons.h>
 #include <debugger/debuggermainwindow.h>
 
@@ -73,7 +72,6 @@
 using namespace Core;
 using namespace Core::Constants;
 using namespace Debugger;
-using namespace Debugger::Constants;
 using namespace QmlDebug;
 using namespace QmlProfiler::Constants;
 using namespace ProjectExplorer;
@@ -317,10 +315,10 @@ QmlProfilerTool::QmlProfilerTool()
 
     menu->addAction(ActionManager::registerAction(d->m_runAction.get(),
                                                   "QmlProfiler.Internal"),
-                    Debugger::Constants::G_ANALYZER_TOOLS);
+                    Core::Constants::G_ANALYZER_TOOLS);
     menu->addAction(ActionManager::registerAction(d->m_attachAction.get(),
                                                   "QmlProfiler.AttachToWaitingApplication"),
-                    Debugger::Constants::G_ANALYZER_REMOTE_TOOLS);
+                    Core::Constants::G_ANALYZER_REMOTE_TOOLS);
 
     menu->addMenu(d->m_options.get(), G_ANALYZER_OPTIONS);
     d->m_options->addAction(ActionManager::registerAction(d->m_loadQmlTrace.get(),

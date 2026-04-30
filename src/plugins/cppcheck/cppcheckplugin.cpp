@@ -13,8 +13,8 @@
 
 #include <coreplugin/actionmanager/actioncontainer.h>
 #include <coreplugin/actionmanager/actionmanager.h>
+#include <coreplugin/coreconstants.h>
 
-#include <debugger/debuggerconstants.h>
 #include <debugger/debuggermainwindow.h>
 
 #include <extensionsystem/iplugin.h>
@@ -203,8 +203,7 @@ class CppcheckPlugin final : public ExtensionSystem::IPlugin
         ActionBuilder(this, Constants::MANUAL_RUN_ACTION)
             .setText(Tr::tr("Cppcheck..."))
             .bindContextAction(&d->manualRunAction)
-            .addToContainer(Debugger::Constants::M_DEBUG_ANALYZER,
-                            Debugger::Constants::G_ANALYZER_TOOLS)
+            .addToContainer(Core::Constants::M_DEBUG_ANALYZER, Core::Constants::G_ANALYZER_TOOLS)
             .addOnTriggered(d.get(), &CppcheckPluginPrivate::startManualRun);
 
         connect(ProjectExplorerPlugin::instance(), &ProjectExplorerPlugin::runActionsUpdated,

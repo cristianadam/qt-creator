@@ -11,13 +11,13 @@
 
 #include <coreplugin/actionmanager/actioncontainer.h>
 #include <coreplugin/actionmanager/actionmanager.h>
+#include <coreplugin/coreconstants.h>
 #include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/icore.h>
 #include <coreplugin/imode.h>
 #include <coreplugin/messagebox.h>
 #include <coreplugin/modemanager.h>
 
-#include <debugger/debuggerconstants.h>
 #include <debugger/debuggericons.h>
 
 #include <projectexplorer/project.h>
@@ -67,8 +67,8 @@ PerfProfilerTool::PerfProfilerTool()
     options->menu()->setTitle(Tr::tr("Performance Analyzer Options"));
     options->menu()->setEnabled(true);
 
-    ActionContainer *menu = ActionManager::actionContainer(Debugger::Constants::M_DEBUG_ANALYZER);
-    menu->addMenu(options, Debugger::Constants::G_ANALYZER_OPTIONS);
+    ActionContainer *menu = ActionManager::actionContainer(Core::Constants::M_DEBUG_ANALYZER);
+    menu->addMenu(options, Core::Constants::G_ANALYZER_OPTIONS);
 
     ActionBuilder(options, Constants::PerfProfilerTaskLoadPerf)
         .setText(Tr::tr("Load perf.data File"))
@@ -124,7 +124,7 @@ PerfProfilerTool::PerfProfilerTool()
         .setText(Tr::tr("Performance Analyzer"))
         .bindContextAction(&action)
         .setToolTip(Tr::tr("Finds performance bottlenecks."))
-        .addToContainer(Debugger::Constants::M_DEBUG_ANALYZER, Debugger::Constants::G_ANALYZER_TOOLS)
+        .addToContainer(Core::Constants::M_DEBUG_ANALYZER, Core::Constants::G_ANALYZER_TOOLS)
         .addOnTriggered(this, [this] {
             m_perspective.select();
             ProjectExplorerPlugin::runStartupProject(ProjectExplorer::Constants::PERFPROFILER_RUN_MODE);

@@ -24,6 +24,7 @@
 #include <coreplugin/actionmanager/actioncontainer.h>
 #include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/actionmanager/command.h>
+#include <coreplugin/coreconstants.h>
 #include <coreplugin/documentmanager.h>
 #include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/icore.h>
@@ -329,7 +330,7 @@ CallgrindTool::CallgrindTool(QObject *parent)
     m_stopAction = new QAction(Tr::tr("Stop"), this);
     m_stopAction->setIcon(Utils::Icons::STOP_SMALL_TOOLBAR.icon());
 
-    ActionContainer *menu = ActionManager::actionContainer(Debugger::Constants::M_DEBUG_ANALYZER);
+    ActionContainer *menu = ActionManager::actionContainer(Core::Constants::M_DEBUG_ANALYZER);
     QString toolTip = Tr::tr("Valgrind Function Profiler uses the "
         "Callgrind tool to record function calls when a program runs.");
 
@@ -338,7 +339,7 @@ CallgrindTool::CallgrindTool(QObject *parent)
         m_startAction->setParent(this);
         m_startAction->setToolTip(toolTip);
         menu->addAction(ActionManager::registerAction(m_startAction, CallgrindLocalActionId),
-                        Debugger::Constants::G_ANALYZER_TOOLS);
+                        Core::Constants::G_ANALYZER_TOOLS);
         QObject::connect(m_startAction, &QAction::triggered, this, [this] {
             if (!wantRunTool(OptimizedMode, m_startAction->text()))
                 return;
@@ -350,7 +351,7 @@ CallgrindTool::CallgrindTool(QObject *parent)
     auto action = new QAction(Tr::tr("Valgrind Function Profiler (External Application)"), this);
     action->setToolTip(toolTip);
     menu->addAction(ActionManager::registerAction(action, CallgrindRemoteActionId),
-                    Debugger::Constants::G_ANALYZER_REMOTE_TOOLS);
+                    Core::Constants::G_ANALYZER_REMOTE_TOOLS);
     setupExternalAnalyzer(action, &m_perspective, CALLGRIND_RUN_MODE);
 
     // If there is a CppEditor context menu add our own context menu actions.
@@ -1167,7 +1168,7 @@ void CallgrindTool::loadExternalLogFile()
     if (!logFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
         QString msg = Tr::tr("Callgrind: Failed to open file for reading: %1")
                 .arg(filePath.toUserOutput());
-        TaskHub::addTask(Task::DisruptingError, msg, Debugger::Constants::ANALYZERTASK_ID);
+        TaskHub::addTask(Task::DisruptingError, msg, Core::Constants::ANALYZERTASK_ID);
         return;
     }
 

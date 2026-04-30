@@ -5,9 +5,9 @@
 
 #include "valgrindtr.h"
 
+#include <coreplugin/coreconstants.h>
 #include <coreplugin/icore.h>
 
-#include <debugger/debuggerconstants.h>
 #include <debugger/debuggermainwindow.h>
 
 #include <projectexplorer/devicesupport/devicekitaspects.h>
@@ -159,7 +159,7 @@ void setupExternalAnalyzer(QAction *action, Perspective *perspective, Id runMode
         if (dlg.exec() != QDialog::Accepted)
             return;
 
-        TaskHub::clearTasks(Debugger::Constants::ANALYZERTASK_ID);
+        TaskHub::clearTasks(Core::Constants::ANALYZERTASK_ID);
         perspective->select();
         RunControl *runControl = new RunControl(runMode);
         runControl->copyDataFromRunConfiguration(runConfig);
