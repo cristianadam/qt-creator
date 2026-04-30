@@ -341,7 +341,7 @@ CallgrindTool::CallgrindTool(QObject *parent)
         menu->addAction(ActionManager::registerAction(m_startAction, CallgrindLocalActionId),
                         Debugger::Constants::G_ANALYZER_TOOLS);
         QObject::connect(m_startAction, &QAction::triggered, this, [this] {
-            if (!Debugger::wantRunTool(OptimizedMode, m_startAction->text()))
+            if (!wantRunTool(OptimizedMode, m_startAction->text()))
                 return;
             m_perspective.select();
             ProjectExplorerPlugin::runStartupProject(CALLGRIND_RUN_MODE);

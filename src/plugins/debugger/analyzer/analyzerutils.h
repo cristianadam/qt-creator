@@ -7,25 +7,6 @@
 
 namespace Debugger {
 
-/**
- * The mode in which this tool should preferably be run
- *
- * Debugging tools which try to show stack traces as close as possible to what the source code
- * looks like will prefer SymbolsMode. Profiling tools which need optimized code for realistic
- * performance, but still want to show analytical output that depends on debug symbols, will prefer
- * ProfileMode.
- */
-enum ToolMode {
-    DebugMode     = 0x1,
-    ProfileMode   = 0x2,
-    ReleaseMode   = 0x4,
-    SymbolsMode   = DebugMode   | ProfileMode,
-    OptimizedMode = ProfileMode | ReleaseMode,
-    //AnyMode       = DebugMode   | ProfileMode | ReleaseMode
-};
-
-DEBUGGER_EXPORT bool wantRunTool(ToolMode toolMode, const QString &toolName);
-
 DEBUGGER_EXPORT void enableMainWindow(bool on);
 
 // Convenience functions.

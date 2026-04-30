@@ -512,7 +512,7 @@ MemcheckTool::MemcheckTool(QObject *parent)
         menu->addAction(ActionManager::registerAction(action, "Memcheck.Local"),
                         Debugger::Constants::G_ANALYZER_TOOLS);
         QObject::connect(action, &QAction::triggered, this, [this, action] {
-            if (!Debugger::wantRunTool(DebugMode, action->text()))
+            if (!wantRunTool(DebugMode, action->text()))
                 return;
             TaskHub::clearTasks(Debugger::Constants::ANALYZERTASK_ID);
             m_perspective.select();
@@ -531,7 +531,7 @@ MemcheckTool::MemcheckTool(QObject *parent)
         menu->addAction(ActionManager::registerAction(action, "MemcheckWithGdb.Local"),
                         Debugger::Constants::G_ANALYZER_TOOLS);
         QObject::connect(action, &QAction::triggered, this, [this, action] {
-            if (!Debugger::wantRunTool(DebugMode, action->text()))
+            if (!wantRunTool(DebugMode, action->text()))
                 return;
             TaskHub::clearTasks(Debugger::Constants::ANALYZERTASK_ID);
             m_perspective.select();
