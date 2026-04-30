@@ -643,11 +643,12 @@
         },
         "DeadCodeDetection": {
             "_active": true,
-            "pre_excludes": {
+            "excludes": {
                 "$(delta:+)": [
                     "*/src/libs/acp/*",
                     "*/src/libs/mcp/schemas/*"
-                ]
+                ],
+                "($delta:-)": []
             }
         },
         "Frameworks-QtSupport": {
