@@ -4,7 +4,6 @@
 #include "debuggermainwindow.h"
 #include "debuggerconstants.h"
 #include "debuggertr.h"
-#include "enginemanager.h"
 
 #include <coreplugin/actionmanager/actioncontainer.h>
 #include <coreplugin/actionmanager/actionmanager.h>
@@ -15,8 +14,6 @@
 #include <coreplugin/modemanager.h>
 #include <coreplugin/outputpane.h>
 #include <coreplugin/rightpane.h>
-
-#include <projectexplorer/projectexplorericons.h>
 
 #include <utils/algorithm.h>
 #include <utils/styledbar.h>
@@ -960,7 +957,7 @@ void Perspective::rampDownAsCurrent()
     d->depopulatePerspective();
     theMainWindow->d->setCurrentPerspective(nullptr);
 
-    Debugger::Internal::EngineManager::updatePerspectives();
+    emit theMainWindow->perspectivesChanged();
 }
 
 void Perspective::rampUpAsCurrent()
@@ -980,12 +977,12 @@ void Perspective::rampUpAsCurrent()
 
     d->saveAsLastUsedPerspective();
 
-    Debugger::Internal::EngineManager::updatePerspectives();
+    emit theMainWindow->perspectivesChanged();
 }
 
 void Perspective::select()
 {
-    Debugger::Internal::EngineManager::activateDebugMode();
+    emit theMainWindow->debugModeRequested();
 
     if (theMainWindow->d->m_currentPerspective == this)
         return;

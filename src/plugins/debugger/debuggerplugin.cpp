@@ -2015,6 +2015,11 @@ void DebuggerPluginPrivate::extensionsInitialized()
     registerMcpTools();
 
     DebuggerMainWindow::ensureMainWindowExists();
+
+    connect(DebuggerMainWindow::instance(), &DebuggerMainWindow::perspectivesChanged,
+            &m_engineManager, &EngineManager::updatePerspectives);
+    connect(DebuggerMainWindow::instance(), &DebuggerMainWindow::debugModeRequested,
+            &m_engineManager, &EngineManager::activateDebugMode);
 }
 
 QWidget *DebuggerPluginPrivate::addSearch(BaseTreeView *treeView)

@@ -148,6 +148,10 @@ public:
 
     static Perspective *currentPerspective();
 
+signals:
+    void perspectivesChanged();
+    void debugModeRequested();
+
 private:
     DebuggerMainWindow();
     ~DebuggerMainWindow() override;
