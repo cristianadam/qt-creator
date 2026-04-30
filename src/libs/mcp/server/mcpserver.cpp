@@ -1169,8 +1169,11 @@ Server::Server(Schema::Implementation serverInfo)
             responder.write(QHttpServerResponse::StatusCode::NotFound);
         });
 
-    d->m_server
-        .route("/sse", QHttpServerRequest::Method::Get, [this](QHttpServerResponder &responder) {
+    d->m_server.route(
+        "/sse",
+        QHttpServerRequest::Method::Get,
+        [this](const QHttpServerRequest &request, QHttpServerResponder &responder) {
+            Q_UNUSED(request);
             const QString sessionId = QUuid::createUuid().toString();
             qCDebug(mcpServerLog) << "Starting new sse session with Id " << sessionId;
             d->m_sessions.insert(sessionId, std::nullopt);
