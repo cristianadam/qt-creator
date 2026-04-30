@@ -1863,10 +1863,6 @@ GccToolchainConfigWidget::GccToolchainConfigWidget(const ToolchainBundle &bundle
         if (!HostOsInfo::isWindowsHost() || bundle.type() != Constants::CLANG_TOOLCHAIN_TYPEID)
             return;
 
-        // Remove m_abiWidget row because the parent toolchain abi is going to be used.
-        m_mainLayout->removeRow(m_mainLayout->rowCount() - 3); // FIXME: Do something sane instead.
-        m_abiWidget = nullptr;
-
         m_parentToolchainCombo = new QComboBox(this);
         connect(m_parentToolchainCombo, &QComboBox::currentIndexChanged,
                 this, &ToolchainConfigWidget::dirty);
