@@ -8,9 +8,10 @@ def startQtCreatorWithNewAppAtQMLEditor(projectDir, projectName, line = None):
     if not startedWithoutPluginError():
         return None
     # create qt quick application
-    createNewQtQuickApplication(projectDir, projectName)
+    createNewQtQuickApplication(projectDir, projectName, template="Qt Quick Application (compat)",
+                                minimumQtVersion="6.2")
     # open qml file
-    qmlFile =  "%s.app%s.Source Files.Main\\.qml" % (projectName, projectName)
+    qmlFile =  "%s.app%s.Source Files.main\\.qml" % (projectName, projectName)
     if not openDocument(qmlFile):
         test.fatal("Could not open %s" % qmlFile)
         invokeMenuItem("File", "Exit")

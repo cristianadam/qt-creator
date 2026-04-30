@@ -26,7 +26,7 @@ def main():
     fileNameCombo = waitForObject(":Qt Creator_FilenameQComboBox")
     docIsMarkedAsModified = lambda: str(fileNameCombo.currentText).endswith('*')
     if test.verify(waitFor(lambda: docIsMarkedAsModified(), 2000), "File is marked modified."):
-        invokeMenuItem('File', 'Save "Main.qml"')
+        invokeMenuItem('File', 'Save "main.qml"')
     # invoke QML parsing
     invokeMenuItem("Tools", "QML/JS", "Run Checks")
     # verify that error properly reported
@@ -40,7 +40,7 @@ def main():
     type(editorArea, "c")
 
     waitFor(lambda: docIsMarkedAsModified(), 2000)
-    invokeMenuItem('File', 'Save "Main.qml"')
+    invokeMenuItem('File', 'Save "main.qml"')
     # invoke QML parsing
     invokeMenuItem("Tools", "QML/JS", "Run Checks")
     # verify that there is no error/errors cleared
