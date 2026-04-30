@@ -572,10 +572,9 @@ void MacWebKitHelpViewer::scrollToAnchor(const QString &anchor)
 void MacWebKitHelpViewer::setHtml(const QString &html)
 {
     @autoreleasepool {
-        [m_widget->webView().mainFrame
-            loadHTMLString:html.toNSString()
-                   baseURL:[NSURL
-                               fileURLWithPath:Core::ICore::resourcePath().toUrlishString().toNSString()]];
+      [m_widget->webView().mainFrame
+          loadHTMLString:html.toNSString()
+                 baseURL:[NSURL URLWithString:@"about:blank"]];
     }
 }
 
