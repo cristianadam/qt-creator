@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "acpmessageview.h"
+
+#include "acpclienttr.h"
 #include "acpsettings.h"
 #include "collapsibleframe.h"
 #include "sessionpickerwidget.h"
@@ -1417,12 +1419,13 @@ void AcpMessageView::resizeEvent(QResizeEvent *event)
 void AcpMessageView::updateElapsedTimeLabel()
 {
     const qint64 elapsedMS = m_elapsedTimer->elapsed();
-    const int secs = static_cast<int>(elapsedMS / 1000);
+    const int secs = elapsedMS / 1000;
     const int minutes = secs / 60;
-    if (minutes)
-        m_elapsedLabel->setText(QStringLiteral("%1:%2 min").arg(minutes).arg(secs % 60, 2, 10, '0'));
-    else
-        m_elapsedLabel->setText(QStringLiteral("%1 sec").arg(secs));
+    const QString text = minutes ? Tr::tr("%1:%2 minutes")
+                                       .arg(minutes)
+                                       .arg(QString::number(secs % 60).rightJustified(2, '0'))
+                                 : Tr::tr("%1 seconds").arg(secs);
+    m_elapsedLabel->setText(text);
 }
 
 } // namespace AcpClient::Internal
