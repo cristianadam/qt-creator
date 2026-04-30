@@ -84,8 +84,8 @@ public:
                    bool visibleByDefault = true,
                    Qt::DockWidgetArea area = Qt::BottomDockWidgetArea);
 
-    void addToolBarAction(QAction *action); // Perspective takes ownership.
-    void addToolBarAction(OptionalAction *action); // Perspective takes ownership.
+    void addToolBarAction(QAction *action);
+    void addToolBarAction(OptionalAction *action);
     void addToolBarWidget(QWidget *widget); // Perspecive takes ownership.
     void addToolbarSeparator();
 

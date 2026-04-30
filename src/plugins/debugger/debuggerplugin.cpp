@@ -93,7 +93,6 @@
 #include <utils/statuslabel.h>
 #include <utils/stringutils.h>
 #include <utils/temporarydirectory.h>
-#include <utils/utilsicons.h>
 #include <utils/winutils.h>
 
 #include <QAction>
@@ -2256,22 +2255,6 @@ bool wantRunTool(ToolMode toolMode, const QString &toolName)
     }
 
     return true;
-}
-
-QAction *createStartAction()
-{
-    auto action = new QAction(Tr::tr("Start"), m_instance);
-    action->setIcon(ProjectExplorer::Icons::ANALYZER_START_SMALL_TOOLBAR.icon());
-    action->setEnabled(true);
-    return action;
-}
-
-QAction *createStopAction()
-{
-    auto action = new QAction(Tr::tr("Stop"), m_instance);
-    action->setIcon(Utils::Icons::STOP_SMALL_TOOLBAR.icon());
-    action->setEnabled(true);
-    return action;
 }
 
 void enableMainWindow(bool on)

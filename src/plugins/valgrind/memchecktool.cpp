@@ -34,6 +34,7 @@
 #include <debugger/debuggerruncontrol.h>
 
 #include <projectexplorer/buildconfiguration.h>
+#include <projectexplorer/projectexplorericons.h>
 #include <projectexplorer/buildsystem.h>
 #include <projectexplorer/deploymentdata.h>
 #include <projectexplorer/devicesupport/devicekitaspects.h>
@@ -454,13 +455,18 @@ MemcheckTool::MemcheckTool(QObject *parent)
     // The Control Widget.
     //
 
-    m_startAction = Debugger::createStartAction();
-    m_startWithGdbAction = Debugger::createStartAction();
-    m_stopAction = Debugger::createStopAction();
+    m_startAction = new QAction(Tr::tr("Start"), this);
+    m_startAction->setIcon(ProjectExplorer::Icons::ANALYZER_START_SMALL_TOOLBAR.icon());
+
+    m_startWithGdbAction = new QAction(Tr::tr("Start"), this);
+    m_startWithGdbAction->setIcon(ProjectExplorer::Icons::ANALYZER_START_SMALL_TOOLBAR.icon());
+
+    m_stopAction = new QAction(Tr::tr("Stop"), this);
+    m_stopAction->setIcon(Utils::Icons::STOP_SMALL_TOOLBAR.icon());
 
     // Load external XML log file
     auto action = new QAction(this);
-    action->setIcon(Icons::OPENFILE_TOOLBAR.icon());
+    action->setIcon(Utils::Icons::OPENFILE_TOOLBAR.icon());
     action->setToolTip(Tr::tr("Load External XML Log File"));
     connect(action, &QAction::triggered, this, &MemcheckTool::loadExternalXmlLogFile);
     m_loadExternalLogFile = action;
@@ -468,7 +474,7 @@ MemcheckTool::MemcheckTool(QObject *parent)
     // Go to previous leak.
     action = new QAction(this);
     action->setDisabled(true);
-    action->setIcon(Icons::PREV_TOOLBAR.icon());
+    action->setIcon(Utils::Icons::PREV_TOOLBAR.icon());
     action->setToolTip(Tr::tr("Go to previous leak."));
     connect(action, &QAction::triggered, m_errorView, &MemcheckErrorView::goBack);
     m_goBack = action;
@@ -476,13 +482,13 @@ MemcheckTool::MemcheckTool(QObject *parent)
     // Go to next leak.
     action = new QAction(this);
     action->setDisabled(true);
-    action->setIcon(Icons::NEXT_TOOLBAR.icon());
+    action->setIcon(Utils::Icons::NEXT_TOOLBAR.icon());
     action->setToolTip(Tr::tr("Go to next leak."));
     connect(action, &QAction::triggered, m_errorView, &MemcheckErrorView::goNext);
     m_goNext = action;
 
     auto filterButton = new QToolButton;
-    filterButton->setIcon(Icons::FILTER.icon());
+    filterButton->setIcon(Utils::Icons::FILTER.icon());
     filterButton->setText(Tr::tr("Error Filter"));
     filterButton->setPopupMode(QToolButton::InstantPopup);
     filterButton->setProperty(StyleHelper::C_NO_ARROW, true);

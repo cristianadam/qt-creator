@@ -17,11 +17,11 @@
 #include <coreplugin/messagebox.h>
 #include <coreplugin/modemanager.h>
 
-#include <debugger/analyzer/analyzerutils.h>
 #include <debugger/debuggerconstants.h>
 #include <debugger/debuggericons.h>
 
 #include <projectexplorer/project.h>
+#include <projectexplorer/projectexplorericons.h>
 #include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/projectmanager.h>
@@ -39,6 +39,7 @@
 #include <utils/stylehelper.h>
 #include <utils/utilsicons.h>
 
+#include <QAction>
 #include <QMenu>
 #include <QMessageBox>
 
@@ -133,9 +134,11 @@ PerfProfilerTool::PerfProfilerTool()
             ProjectExplorerPlugin::runStartupProject(ProjectExplorer::Constants::PERFPROFILER_RUN_MODE);
         });
 
-    m_startAction = Debugger::createStartAction();
-    m_stopAction = Debugger::createStopAction();
-    m_objectsToDelete << m_startAction << m_stopAction;
+    m_startAction = new QAction(Tr::tr("Start"), this);
+    m_startAction->setIcon(ProjectExplorer::Icons::ANALYZER_START_SMALL_TOOLBAR.icon());
+
+    m_stopAction = new QAction(Tr::tr("Stop"), this);
+    m_stopAction->setIcon(Utils::Icons::STOP_SMALL_TOOLBAR.icon());
 
     QObject::connect(m_startAction, &QAction::triggered, action, &QAction::triggered);
     QObject::connect(m_startAction, &QAction::changed, action, [action, tracePointsAction, this] {

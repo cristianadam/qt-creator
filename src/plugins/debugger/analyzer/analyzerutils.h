@@ -5,10 +5,6 @@
 
 #include <debugger/debugger_global.h>
 
-QT_BEGIN_NAMESPACE
-class QAction;
-QT_END_NAMESPACE
-
 namespace Debugger {
 
 /**
@@ -35,8 +31,5 @@ DEBUGGER_EXPORT void enableMainWindow(bool on);
 
 // Convenience functions.
 DEBUGGER_EXPORT void showPermanentStatusMessage(const QString &message);
-
-DEBUGGER_EXPORT QAction *createStartAction();
-DEBUGGER_EXPORT QAction *createStopAction();
 
 } // Debugger
