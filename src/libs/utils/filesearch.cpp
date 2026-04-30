@@ -41,12 +41,19 @@ QTextDocument::FindFlags textDocumentFlagsForFindFlags(FindFlags flags)
     return textDocFlags;
 }
 
+static bool isLetter(const QChar &c)
+{
+    return c.isLetterOrNumber() || c == QLatin1Char('_');
+}
+
 static SearchResultItems searchWithoutRegExp(const QFuture<void> &future, const QString &searchTerm,
                                              FindFlags flags, const FilePath &filePath,
                                              const QString &contents)
 {
     const bool caseSensitive = (flags & QTextDocument::FindCaseSensitively);
     const bool wholeWord = (flags & QTextDocument::FindWholeWords);
+    const bool frontWithLetter = isLetter(searchTerm.front());
+    const bool backWithLetter = isLetter(searchTerm.back());
     const QString searchTermLower = searchTerm.toLower();
     const QString searchTermUpper = searchTerm.toUpper();
     const int termMaxIndex = searchTerm.size() - 1;
@@ -83,15 +90,10 @@ static SearchResultItems searchWithoutRegExp(const QFuture<void> &future, const 
                 // whole word check
                 const QChar *beforeRegion = regionPtr - 1;
                 const QChar *afterRegion = regionEnd + 1;
-                if (wholeWord
-                    && (((beforeRegion >= chunkPtr)
-                         && (beforeRegion->isLetterOrNumber()
-                             || ((*beforeRegion) == QLatin1Char('_'))))
-                        ||
-                        ((afterRegion <= chunkEnd)
-                         && (afterRegion->isLetterOrNumber()
-                             || ((*afterRegion) == QLatin1Char('_'))))
-                        )) {
+                if (wholeWord && (
+                        (frontWithLetter && (beforeRegion >= chunkPtr) && isLetter(*beforeRegion)) ||
+                        (backWithLetter && (afterRegion <= chunkEnd) && isLetter(*afterRegion))
+                    )) {
                     equal = false;
                 } else {
                     // check all chars
