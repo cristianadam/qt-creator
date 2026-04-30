@@ -1264,29 +1264,10 @@ bool CMakeBuildSettingsWidget::eventFilter(QObject *target, QEvent *event)
     return true;
 }
 
-static bool isWebAssembly(const Kit *k)
+static bool isDesktop(const Kit *k)
 {
-    return RunDeviceTypeKitAspect::deviceTypeId(k) == WebAssembly::Constants::WEBASSEMBLY_DEVICE_TYPE;
-}
-
-static bool isVxWorks(const Kit *k)
-{
-    return RunDeviceTypeKitAspect::deviceTypeId(k) == Constants::VXWORKS_DEVICE_TYPE;
-}
-
-static bool isQnx(const Kit *k)
-{
-    return RunDeviceTypeKitAspect::deviceTypeId(k) == Qnx::Constants::QNX_QNX_OS_TYPE;
-}
-
-static bool isWindowsARM64(const Kit *k)
-{
-    Toolchain *toolchain = ToolchainKitAspect::cxxToolchain(k);
-    if (!toolchain)
-        return false;
-    const Abi targetAbi = toolchain->targetAbi();
-    return targetAbi.os() == Abi::WindowsOS && targetAbi.architecture() == Abi::ArmArchitecture
-           && targetAbi.wordWidth() == 64;
+    return RunDeviceTypeKitAspect::deviceTypeId(k)
+           == ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE;
 }
 
 static CommandLine defaultInitialCMakeCommand(
@@ -1708,6 +1689,9 @@ CMakeBuildConfiguration::CMakeBuildConfiguration(Target *target, Id id)
             } else {
                 cmd.addArg("-DANDROID_SDK:PATH=" + sdkLocation.path());
             }
+        } else if (!isDesktop(k)) { // not Android & not Desktop
+            if (qt && qt->qtVersion().majorVersion() >= 6)
+                cmd.addArg(CMAKE_QT6_TOOLCHAIN_FILE_ARG);
         }
 
         const IDevice::ConstPtr device = RunDeviceKitAspect::device(k);
@@ -1722,16 +1706,10 @@ CMakeBuildConfiguration::CMakeBuildConfiguration(Target *target, Id id)
                 const QString sysroot = deviceType == Ios::Constants::IOS_DEVICE_TYPE
                                             ? QLatin1String("iphoneos")
                                             : QLatin1String("iphonesimulator");
-                cmd.addArg(CMAKE_QT6_TOOLCHAIN_FILE_ARG);
                 cmd.addArg("-DCMAKE_OSX_SYSROOT:STRING=" + sysroot);
                 cmd.addArg("%{" + QLatin1String(DEVELOPMENT_TEAM_FLAG) + "}");
                 cmd.addArg("%{" + QLatin1String(PROVISIONING_PROFILE_FLAG) + "}");
             }
-        }
-
-        if (isWebAssembly(k) || isQnx(k) || isWindowsARM64(k) || isVxWorks(k)) {
-            if (qt && qt->qtVersion().majorVersion() >= 6)
-                cmd.addArg(CMAKE_QT6_TOOLCHAIN_FILE_ARG);
         }
 
         if (extraInfoMap.contains(Constants::CMAKE_HOME_DIR))
