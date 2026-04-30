@@ -25,7 +25,6 @@ enum ToolMode {
 };
 
 DEBUGGER_EXPORT bool wantRunTool(ToolMode toolMode, const QString &toolName);
-DEBUGGER_EXPORT void showCannotStartDialog(const QString &toolName);
 
 DEBUGGER_EXPORT void enableMainWindow(bool on);
 

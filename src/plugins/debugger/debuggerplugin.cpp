@@ -2180,18 +2180,6 @@ static BuildConfiguration::BuildType startupBuildType()
     return buildType;
 }
 
-void showCannotStartDialog(const QString &text)
-{
-    auto errorDialog = new QMessageBox(ICore::dialogParent());
-    errorDialog->setAttribute(Qt::WA_DeleteOnClose);
-    errorDialog->setIcon(QMessageBox::Warning);
-    errorDialog->setWindowTitle(text);
-    errorDialog->setText(Tr::tr("Cannot start %1 without a project. Please open the project "
-                                               "and try again.").arg(text));
-    errorDialog->setStandardButtons(QMessageBox::Ok);
-    errorDialog->setDefaultButton(QMessageBox::Ok);
-    errorDialog->show();
-}
 
 bool wantRunTool(ToolMode toolMode, const QString &toolName)
 {
