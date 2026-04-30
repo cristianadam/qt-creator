@@ -10,6 +10,7 @@
 #include "hostosinfo.h"
 #include "osspecificaspects.h"
 #include "qtcassert.h"
+#include "shutdownguard.h"
 #include "textcodec.h"
 #include "utilstr.h"
 
@@ -496,10 +497,10 @@ class DesktopFilePathWatcher final : public FilePathWatcher
 
         Result<> removeWatch(DesktopFilePathWatcher *watcher) { return d.removeWatch(watcher); }
 
-        static GlobalWatcher &instance()
+        static GlobalWatcher *instance()
         {
-            static GlobalWatcher theInstance;
-            return theInstance;
+            static GuardedObject<GlobalWatcher> theInstance;
+            return theInstance.get();
         }
 
     private:
@@ -678,7 +679,7 @@ public:
     ~DesktopFilePathWatcher()
     {
         if (m_isWatched) {
-            QTC_CHECK_RESULT(GlobalWatcher::instance().removeWatch(this));
+            QTC_CHECK_RESULT(GlobalWatcher::instance()->removeWatch(this));
         }
     }
 
@@ -692,7 +693,7 @@ public:
             = Utils::transform<std::vector>(paths, [](const FilePath &path) {
                   return std::make_unique<DesktopFilePathWatcher>(path);
               });
-        const QList<Result<>> watchResults = GlobalWatcher::instance().watch(
+        const QList<Result<>> watchResults = GlobalWatcher::instance()->watch(
             Utils::transform<QList>(watchers, &std::unique_ptr<DesktopFilePathWatcher>::get));
         std::vector<Result<std::unique_ptr<FilePathWatcher>>> results;
         for (int i = 0; i < watchResults.size(); ++i) {
