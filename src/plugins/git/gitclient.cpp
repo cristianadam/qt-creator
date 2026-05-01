@@ -2656,9 +2656,17 @@ void GitClient::continuePreviousGitCommand(const FilePath &workingDirectory,
     }
 }
 
-// Quietly retrieve branch list of remote repository URL
-//
-// The branch HEAD is pointing to is always returned first.
+/**
+ * Returns a list of local or remote branches, depending on @a repositoryURL.
+ *
+ * @note The returned list may be empty if no branch was found.
+ * @note Otherwise the branch HEAD is pointing to is always returned first.
+ *
+ * @param[in] repositoryURL The path to a repository to query local branches
+ *            or a remote name like "origin".
+ * @param[in] workingDirectory The working directory within the repository
+ * @return The branch list or an empty list if no branch was found.
+ */
 QStringList GitClient::synchronousRepositoryBranches(const QString &repositoryURL,
                                                      const FilePath &workingDirectory) const
 {
