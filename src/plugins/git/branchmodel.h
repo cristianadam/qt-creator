@@ -43,6 +43,7 @@ public:
 
     QModelIndex currentBranch() const;
     QString fullName(const QModelIndex &idx, bool includePrefix = false) const;
+    QString tracking(const QModelIndex &idx) const;
     QStringList localBranchNames() const;
     QString hash(const QModelIndex &idx) const;
     QDateTime dateTime(const QModelIndex &idx) const;

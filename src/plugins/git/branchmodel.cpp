@@ -657,6 +657,16 @@ QString BranchModel::fullName(const QModelIndex &idx, bool includePrefix) const
     return node->fullRef(includePrefix);
 }
 
+QString BranchModel::tracking(const QModelIndex &idx) const
+{
+    if (!idx.isValid())
+        return {};
+    BranchNode *node = indexToNode(idx);
+    if (!node || !node->isLeaf())
+        return {};
+    return node->tracking;
+}
+
 QStringList BranchModel::localBranchNames() const
 {
     qCDebug(modelLog) << "localBranchNames() called";

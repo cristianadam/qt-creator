@@ -226,6 +226,7 @@ void BranchView::slotCustomContextMenu(const QPoint &point)
     const QString indexName = m_model->fullName(index);
     const QModelIndex currentBranch = m_model->currentBranch();
     const QString currentName = m_model->fullName(currentBranch);
+    const QString trackingName = m_model->tracking(currentBranch);
     const bool currentSelected = index.sibling(index.row(), 0) == currentBranch;
     const bool isLocal = m_model->isLocal(index);
     const bool isTag = m_model->isTag(index);
@@ -238,6 +239,27 @@ void BranchView::slotCustomContextMenu(const QPoint &point)
     QMenu contextMenu;
     if (isLocal || hasActions)
         contextMenu.addAction(Tr::tr("&Add..."), this, &BranchView::add);
+
+    auto addMergeActions = [&, this](const QString &target) {
+        mergeAction = contextMenu.addAction(Tr::tr("&Merge \"%1\" into \"%2\"")
+                                                .arg(target, currentName),
+                                                this,
+                                                [this, target] { merge(target, false); });
+        taskTreeRunner.start(fastForwardMergeRecipe([&] {
+            auto ffMerge = new QAction(
+                Tr::tr("&Merge \"%1\" into \"%2\" (Fast-Forward)").arg(target, currentName));
+            connect(ffMerge, &QAction::triggered, this, [this, target] { merge(target, true); });
+            contextMenu.insertAction(mergeAction, ffMerge);
+            mergeAction->setText(Tr::tr("Merge \"%1\" into \"%2\" (No &Fast-Forward)")
+                                     .arg(target, currentName));
+        }));
+        connect(mergeAction, &QObject::destroyed, this, [&taskTreeRunner] { taskTreeRunner.reset(); });
+
+        contextMenu.addAction(Tr::tr("&Rebase \"%1\" on \"%2\"")
+                                  .arg(currentName, target),
+                              this, [this, target] { rebase(target); });
+        contextMenu.addSeparator();
+    };
 
     const std::optional<QString> remote = m_model->remoteName(index);
     if (remote.has_value()) {
@@ -269,30 +291,19 @@ void BranchView::slotCustomContextMenu(const QPoint &point)
         contextMenu.addAction(Tr::tr("&Log"), this, [this] { log(selectedIndex()); });
         contextMenu.addAction(Tr::tr("Reflo&g"), this, [this] { reflog(selectedIndex()); });
         contextMenu.addSeparator();
+
+        if (currentSelected && !trackingName.isEmpty())
+            addMergeActions(trackingName);
+
         if (!currentSelected) {
             auto resetMenu = new QMenu(Tr::tr("Re&set"), &contextMenu);
             resetMenu->addAction(Tr::tr("&Hard"), this, [this] { reset("hard"); });
             resetMenu->addAction(Tr::tr("&Mixed"), this, [this] { reset("mixed"); });
             resetMenu->addAction(Tr::tr("&Soft"), this, [this] { reset("soft"); });
             contextMenu.addMenu(resetMenu);
-            mergeAction = contextMenu.addAction(Tr::tr("&Merge \"%1\" into \"%2\"")
-                                                    .arg(indexName, currentName),
-                                                this,
-                                                [this] { merge(false); });
-            taskTreeRunner.start(fastForwardMergeRecipe([&] {
-                auto ffMerge = new QAction(
-                    Tr::tr("&Merge \"%1\" into \"%2\" (Fast-Forward)").arg(indexName, currentName));
-                connect(ffMerge, &QAction::triggered, this, [this] { merge(true); });
-                contextMenu.insertAction(mergeAction, ffMerge);
-                mergeAction->setText(Tr::tr("Merge \"%1\" into \"%2\" (No &Fast-Forward)")
-                                         .arg(indexName, currentName));
-            }));
-            connect(mergeAction, &QObject::destroyed, this, [&taskTreeRunner] { taskTreeRunner.reset(); });
 
-            contextMenu.addAction(Tr::tr("&Rebase \"%1\" on \"%2\"")
-                                  .arg(currentName, indexName),
-                                  this, &BranchView::rebase);
-            contextMenu.addSeparator();
+            addMergeActions(indexName);
+
             contextMenu.addAction(Tr::tr("Cherry-&Pick..."), this, &BranchView::cherryPick);
         }
         if (!currentSelected && !isTag) {
@@ -575,28 +586,24 @@ Group BranchView::fastForwardMergeRecipe(const std::function<void()> &callback)
     return root;
 }
 
-void BranchView::merge(bool allowFastForward)
+void BranchView::merge(const QString &branch, bool allowFastForward)
 {
     if (!Core::DocumentManager::saveAllModifiedDocuments())
         return;
-    const QModelIndex selected = selectedIndex();
-    QTC_CHECK(selected != m_model->currentBranch());
+    QTC_ASSERT(!branch.isEmpty(), return);
 
-    const QString branch = m_model->fullName(selected, true);
     if (gitClient().beginStashScope(m_repository, "merge", AllowUnstashed))
         gitClient().synchronousMerge(m_repository, branch, allowFastForward);
 }
 
-void BranchView::rebase()
+void BranchView::rebase(const QString &branch)
 {
     if (!Core::DocumentManager::saveAllModifiedDocuments())
         return;
-    const QModelIndex selected = selectedIndex();
-    QTC_CHECK(selected != m_model->currentBranch());
+    QTC_ASSERT(!branch.isEmpty(), return);
 
-    const QString baseBranch = m_model->fullName(selected, true);
     if (gitClient().beginStashScope(m_repository, "rebase"))
-        gitClient().rebase(m_repository, baseBranch);
+        gitClient().rebase(m_repository, branch);
 }
 
 void BranchView::cherryPick()
