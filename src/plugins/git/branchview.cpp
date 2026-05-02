@@ -575,18 +575,16 @@ Group BranchView::fastForwardMergeRecipe(const std::function<void()> &callback)
     return root;
 }
 
-bool BranchView::merge(bool allowFastForward)
+void BranchView::merge(bool allowFastForward)
 {
     if (!Core::DocumentManager::saveAllModifiedDocuments())
-        return false;
+        return;
     const QModelIndex selected = selectedIndex();
     QTC_CHECK(selected != m_model->currentBranch());
 
     const QString branch = m_model->fullName(selected, true);
     if (gitClient().beginStashScope(m_repository, "merge", AllowUnstashed))
-        return gitClient().synchronousMerge(m_repository, branch, allowFastForward);
-
-    return false;
+        gitClient().synchronousMerge(m_repository, branch, allowFastForward);
 }
 
 void BranchView::rebase()

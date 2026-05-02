@@ -57,7 +57,7 @@ private:
     bool rename();
     void reset(const QByteArray &resetType);
     QtTaskTree::Group fastForwardMergeRecipe(const std::function<void()> &callback);
-    bool merge(bool allowFastForward);
+    void merge(bool allowFastForward);
     void rebase();
     void cherryPick();
     void log(const QModelIndex &idx);
