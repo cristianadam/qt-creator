@@ -1164,6 +1164,26 @@ void AppOutputPane::tabChanged(int i)
     } else {
         enableDefaultButtons();
     }
+
+    updateOutputVisibility();
+}
+
+void AppOutputPane::visibilityChanged(bool visible)
+{
+    m_paneVisible = visible;
+    updateOutputVisibility();
+}
+
+void AppOutputPane::updateOutputVisibility()
+{
+    // A run's output is "visible" only while its tab is the current one and the
+    // pane itself is shown. Consumers (e.g. Android logcat) use this to avoid
+    // doing work for output nobody is looking at.
+    const RunControlTab * const current = currentTab();
+    for (const RunControlTab &tab : std::as_const(m_runControlTabs)) {
+        if (tab.runControl)
+            tab.runControl->setOutputVisible(m_paneVisible && &tab == current);
+    }
 }
 
 void AppOutputPane::contextMenuRequested(const QPoint &pos)

@@ -216,6 +216,7 @@ public:
 
     bool printEnvironment = false;
     bool suppressApplicationOutput = false;
+    bool outputVisible = false;
     bool useDebugChannel = false;
     bool useQmlChannel = false;
     bool usePerfChannel = false;
@@ -866,6 +867,19 @@ bool RunControl::isRunning() const
 bool RunControl::isStopped() const
 {
     return !d->m_taskTreeRunner.isRunning();
+}
+
+void RunControl::setOutputVisible(bool visible)
+{
+    if (d->data.outputVisible == visible)
+        return;
+    d->data.outputVisible = visible;
+    emit outputVisibilityChanged(visible);
+}
+
+bool RunControl::isOutputVisible() const
+{
+    return d->data.outputVisible;
 }
 
 /*!

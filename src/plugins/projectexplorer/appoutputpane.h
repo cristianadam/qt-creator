@@ -103,6 +103,7 @@ private:
     void stopRunControl();
     void attachToRunControl();
     void tabChanged(int);
+    void updateOutputVisibility();
     void contextMenuRequested(const QPoint &pos);
     void runControlFinished(RunControl *runControl);
 
@@ -139,6 +140,7 @@ private:
     QWidget *outputWidget(QWidget *) final;
     QList<QWidget *> toolBarWidgets() const final;
     void clearContents() final;
+    void visibilityChanged(bool visible) final;
     bool canFocus() const final;
     bool hasFocus() const final;
     void setFocus() final;
@@ -167,6 +169,7 @@ private:
     QToolButton * const m_settingsButton;
     QWidget *m_formatterWidget;
     ShowOutputTaskHandler * const m_handler;
+    bool m_paneVisible = false;
 };
 
 AppOutputPane &appOutputPane();

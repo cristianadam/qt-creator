@@ -48,11 +48,13 @@ public:
 
     RunControl *tab() const { return m_tabContext.tab; }
     void attachTab(RunControl *tab);
+    void setStreaming(bool streaming);
 
 private:
     struct TabContext
     {
         QPointer<RunControl> tab;
+        bool streaming = false;
     };
 
     void onTabDestroyed();
@@ -88,7 +90,11 @@ void LogcatStream::attachTab(RunControl *tab)
     m_tabContext = {};
     m_tabContext.tab = tab;
     tab->setDisplayName(m_device->displayNameWithSerial());
+    // adb tails only while the tab's output is visible (current tab + pane shown)
+    QObject::connect(tab, &RunControl::outputVisibilityChanged,
+                     this, &LogcatStream::setStreaming);
     QObject::connect(tab, &QObject::destroyed, this, [this] { onTabDestroyed(); });
+    setStreaming(tab->isOutputVisible());
 }
 
 void LogcatStream::onTabDestroyed()
@@ -97,6 +103,19 @@ void LogcatStream::onTabDestroyed()
     stop();
     streamRegistry().remove(m_device->id());
     deleteLater();
+}
+
+void LogcatStream::setStreaming(bool streaming)
+{
+    if (!m_tabContext.tab)
+        return;
+    if (streaming == m_tabContext.streaming)
+        return;
+    m_tabContext.streaming = streaming;
+    if (streaming)
+        start();
+    else
+        stop();
 }
 
 void LogcatStream::start()
@@ -145,7 +164,6 @@ static RunControl *openLogcatTabForStream(LogcatStream *logcatStream)
     auto *runControl = new RunControl(ProjectExplorer::Constants::NORMAL_RUN_MODE);
     runControl->setPromptToStop([](bool *) { return true; });
     logcatStream->attachTab(runControl);
-    logcatStream->start();
 
     runControl->setRunRecipe(QBarrierTask([](QBarrier &) {}).withCancel([runControl] {
         return makeObjectSignal(runControl, &RunControl::canceled);
@@ -160,11 +178,11 @@ void showLogcatTab(const AndroidDevice::ConstPtr &device)
     if (!stream)
         return;
     RunControl *const tab = openLogcatTabForStream(stream);
-    if (tab) {
-        if (!OutputPanePlaceHolder::getCurrent())
-            ModeManager::activateMode(Core::Constants::MODE_EDIT);
-        tab->showOutputPane();
-    }
+    if (!tab || tab->isOutputVisible())
+        return;
+    if (!OutputPanePlaceHolder::getCurrent())
+        ModeManager::activateMode(Core::Constants::MODE_EDIT);
+    tab->showOutputPane();
 }
 
 } // namespace Android::Internal
