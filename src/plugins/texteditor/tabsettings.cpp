@@ -218,18 +218,6 @@ bool TabSettings::cursorIsAtBeginningOfLine(const QTextCursor &cursor)
     return (cursor.position() - cursor.block().position() <= fns);
 }
 
-int TabSettings::lineIndentPosition(const QString &text) const
-{
-    int i = 0;
-    while (i < text.size()) {
-        if (!text.at(i).isSpace())
-            break;
-        ++i;
-    }
-    int column = columnAt(text, i);
-    return i - (column % m_indentSize);
-}
-
 int TabSettings::firstNonSpace(const QString &text)
 {
     int i = 0;

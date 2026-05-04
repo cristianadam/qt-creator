@@ -4,8 +4,12 @@
 #ifdef WITH_TESTS
 
 #include "tabsettings.h"
+#include "textdocument.h"
+
+#include <utils/multitextcursor.h>
 
 #include <QTest>
+#include <QTextCursor>
 #include <QTextDocument>
 
 namespace TextEditor::Internal {
@@ -79,6 +83,8 @@ class TextEditorTest final : public QObject
 private slots:
     void testIndentationClean_data();
     void testIndentationClean();
+    void testIndentUnindent_data();
+    void testIndentUnindent();
 };
 
 void TextEditorTest::testIndentationClean_data()
@@ -147,6 +153,107 @@ void TextEditorTest::testIndentationClean()
     const QTextBlock block = doc.firstBlock();
 
     QCOMPARE(settings.isIndentationClean(block, indentSize), clean);
+}
+
+void TextEditorTest::testIndentUnindent_data()
+{
+    QTest::addColumn<QString>("input");
+    QTest::addColumn<int>("anchor");
+    QTest::addColumn<int>("position");
+    QTest::addColumn<TabSettings::TabPolicy>("policy");
+    QTest::addColumn<int>("tabSize");
+    QTest::addColumn<int>("indentSize");
+    QTest::addColumn<bool>("doIndent");
+    QTest::addColumn<QString>("expected");
+
+    const auto Spaces = TabSettings::SpacesOnlyTabPolicy;
+    const auto Tabs = TabSettings::TabsOnlyTabPolicy;
+
+    // --- indent ---
+
+    QTest::newRow("indent_emptyDocument")
+        << QString() << 0 << 0 << Spaces << 8 << 4 << true << QString("    ");
+
+    QTest::newRow("indent_singleLine_atStart_noSelection")
+        << QString("foo") << 0 << 0 << Spaces << 8 << 4 << true << QString("    foo");
+
+    QTest::newRow("indent_singleLine_fullSelection")
+        << QString("foo") << 0 << 3 << Spaces << 8 << 4 << true << QString("    foo");
+
+    QTest::newRow("indent_multiLine_selection")
+        << QString("foo\nbar") << 0 << 7 << Spaces << 8 << 4 << true << QString("    foo\n    bar");
+
+    QTest::newRow("indent_alreadyIndented_addsAnotherLevel")
+        << QString("    foo") << 0 << 7 << Spaces << 8 << 4 << true << QString("        foo");
+
+    QTest::newRow("indent_tabsOnlyPolicy")
+        << QString("foo") << 0 << 3 << Tabs << 4 << 4 << true << QString("\tfoo");
+
+    // --- unindent ---
+
+    QTest::newRow("unindent_singleLine_atStart_noSelection")
+        << QString("    foo") << 0 << 0 << Spaces << 8 << 4 << false << QString("foo");
+
+    QTest::newRow("unindent_singleLine_fullSelection")
+        << QString("    foo") << 0 << 7 << Spaces << 8 << 4 << false << QString("foo");
+
+    QTest::newRow("unindent_multiLine_selection")
+        << QString("    foo\n    bar") << 0 << 15 << Spaces << 8 << 4 << false
+        << QString("foo\nbar");
+
+    QTest::newRow("unindent_unindentedLine_isNoOp")
+        << QString("foo") << 0 << 3 << Spaces << 8 << 4 << false << QString("foo");
+
+    QTest::newRow("unindent_underAligned_stripsAllLeadingSpaces")
+        << QString("  foo") << 0 << 5 << Spaces << 8 << 4 << false << QString("foo");
+
+    QTest::newRow("unindent_overAligned_removesOneIndentStep")
+        << QString("      foo") << 0 << 9 << Spaces << 8 << 4 << false << QString("  foo");
+
+    QTest::newRow("unindent_tabIndented")
+        << QString("\tfoo") << 0 << 4 << Tabs << 4 << 4 << false << QString("foo");
+
+    // QTCREATORBUG-33260: unindent froze when m_indentSize > m_tabSize because
+    // the old TabSettings::lineIndentPosition() helper could yield a negative
+    // position, leaving the loop without forward progress.
+    QTest::newRow("unindent_wideIndent_singleTab_QTCREATORBUG-33260")
+        << QString("\trepeat") << 0 << 7 << Tabs << 8 << 16 << false << QString("repeat");
+
+    // Three tabs with tabSize=8, indentSize=16 sit at column 24, which rounds down
+    // to indent column 16; unindenting steps down to column 0 by removing two tabs.
+    QTest::newRow("unindent_wideIndent_threeTabs_QTCREATORBUG-33260")
+        << QString("\t\t\trepeat") << 0 << 9 << Tabs << 8 << 16 << false << QString("\trepeat");
+}
+
+void TextEditorTest::testIndentUnindent()
+{
+    QFETCH(QString, input);
+    QFETCH(int, anchor);
+    QFETCH(int, position);
+    QFETCH(TabSettings::TabPolicy, policy);
+    QFETCH(int, tabSize);
+    QFETCH(int, indentSize);
+    QFETCH(bool, doIndent);
+    QFETCH(QString, expected);
+
+    TextDocument doc;
+    doc.setPlainText(input);
+
+    TabSettings settings(policy, tabSize, indentSize, TabSettings::ContinuationAlignWithSpaces);
+    settings.m_autoDetect = false;
+    doc.setTabSettings(settings);
+
+    QTextCursor cursor(doc.document());
+    cursor.setPosition(anchor);
+    cursor.setPosition(position, QTextCursor::KeepAnchor);
+    Utils::MultiTextCursor multi({cursor});
+
+    if (doIndent)
+        doc.indent(multi);
+    else
+        doc.unindent(multi);
+
+    QCOMPARE(doc.plainText(), expected);
 }
 
 QObject *createTextEditorTest()
