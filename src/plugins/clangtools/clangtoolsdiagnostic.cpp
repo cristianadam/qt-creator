@@ -10,8 +10,7 @@
 
 using namespace ProjectExplorer;
 
-namespace ClangTools {
-namespace Internal {
+namespace ClangTools::Internal {
 
 bool ExplainingStep::isValid() const
 {
@@ -64,13 +63,14 @@ ProjectExplorer::Task Diagnostic::asTask() const
     return t;
 }
 
-size_t qHash(const Diagnostic &diagnostic)
+size_t qHash(const Diagnostic &diagnostic, size_t seed)
 {
-    return qHash(diagnostic.name)
-         ^ qHash(diagnostic.description)
-         ^ qHash(diagnostic.location.targetFilePath)
-         ^ diagnostic.location.target.line
-         ^ diagnostic.location.target.column;
+    return qHashMultiCommutative(seed,
+         diagnostic.name,
+         diagnostic.description,
+         diagnostic.location.targetFilePath,
+         diagnostic.location.target.line,
+         diagnostic.location.target.column);
 }
 
 bool operator==(const Diagnostic &lhs, const Diagnostic &rhs)
@@ -85,5 +85,4 @@ bool operator==(const Diagnostic &lhs, const Diagnostic &rhs)
         ;
 }
 
-} // namespace Internal
-} // namespace ClangTools
+} // namespace ClangTools::Internal

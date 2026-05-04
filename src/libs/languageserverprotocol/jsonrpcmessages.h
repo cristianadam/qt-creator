@@ -66,13 +66,13 @@ public:
     }
 
 private:
-    friend size_t qHash(const MessageId &id)
+    friend size_t qHash(const MessageId &id, size_t seed)
     {
         if (const int *iid = std::get_if<int>(&id))
-            return QT_PREPEND_NAMESPACE(qHash(*iid));
+            return qHashMulti(seed, *iid);
         if (const QString *sid = std::get_if<QString>(&id))
-            return QT_PREPEND_NAMESPACE(qHash(*sid));
-        return QT_PREPEND_NAMESPACE(qHash(0));
+            return qHashMulti(seed, *sid);
+        return seed;
     }
 
     friend QDebug operator<<(QDebug stream, const MessageId &id)

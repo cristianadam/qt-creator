@@ -43,7 +43,7 @@ public:
     QStringList importsToRemove;
 
 private:
-    friend size_t qHash(const AssetPath &asset) { return ::qHash(asset.relativePath); }
+    friend size_t qHash(const AssetPath &asset, size_t seed) { return qHashMulti(seed, asset.relativePath); }
 };
 
 class BundleHelper

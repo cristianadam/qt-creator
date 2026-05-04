@@ -83,6 +83,11 @@ public:
     bool operator!=(const SearchResultItem &other) const { return !(operator==(other)); }
 
 private:
+    friend inline size_t qHash(const SearchResultItem &item, size_t seed)
+    {
+        return (item.mainRange().begin.line << 16 | item.mainRange().begin.column) ^ seed;
+    }
+
     QStringList m_path; // hierarchy to the parent item of this item
     QString m_lineText; // text to show for the item itself
     QIcon m_icon; // icon to show in front of the item (by be null icon to hide)
@@ -95,11 +100,6 @@ private:
 };
 
 using SearchResultItems = QList<SearchResultItem>;
-
-inline size_t qHash(const SearchResultItem &item)
-{
-    return item.mainRange().begin.line << 16 | item.mainRange().begin.column;
-}
 
 } // namespace Utils
 

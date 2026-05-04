@@ -30,14 +30,14 @@ public:
     void setDepth(int depth);
 
 private:
+    friend bool operator==(const ObjectVisuals &lhs, const ObjectVisuals &rhs);
+    friend size_t qHash(const ObjectVisuals &objectVisuals, size_t seed);
+
     DObject::VisualPrimaryRole m_visualPrimaryRole = DObject::PrimaryRoleNormal;
     DObject::VisualSecondaryRole m_visualSecondaryRole = DObject::SecondaryRoleNone;
     bool m_isEmphasized = false;
     QColor m_baseColor;
     int m_depth = 0;
 };
-
-bool operator==(const ObjectVisuals &lhs, const ObjectVisuals &rhs);
-size_t qHash(const ObjectVisuals &objectVisuals);
 
 } // namespace qmt

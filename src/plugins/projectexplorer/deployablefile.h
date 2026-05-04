@@ -41,7 +41,7 @@ public:
     {
         return !(d1 == d2);
     }
-    friend PROJECTEXPLORER_EXPORT size_t qHash(const DeployableFile &d);
+    friend PROJECTEXPLORER_EXPORT size_t qHash(const DeployableFile &d, size_t seed);
 
 private:
     Utils::FilePath m_localFilePath;

@@ -1006,4 +1006,9 @@ QVariant QmlItemNode::transformOrigin(SL sl)
     return {};
 }
 
+size_t qHash(const QmlItemNode &node, size_t seed)
+{
+    return qHashMulti(seed, node.modelNode());
+}
+
 } //QmlDesigner
