@@ -126,7 +126,6 @@ FilePath manifestDir(TextEditor::TextEditorWidget *textEditorWidget, bool showWa
     return getManifestDirWithWizardOption(textEditorWidget, project->projectDirectory());
 }
 
-const char ANDROID_TOOLS_MENU_ID[] = "Android.Tools.Menu";
 const char ANDROID_GRAPHICAL_EDITOR_ID[] = "Android.Tools.Graphical.Editor.ID";
 
 class AndroidIconSplashEditorWidget : public QWidget

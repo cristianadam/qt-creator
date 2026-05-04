@@ -7,6 +7,8 @@
 
 namespace Android::Internal {
 
+inline constexpr char ANDROID_TOOLS_MENU_ID[] = "Android.Tools.Menu";
+
 void setupAndroidToolsMenu();
 Utils::FilePath manifestDir(TextEditor::TextEditorWidget *textEditorWidget, bool showWarnings = true);
 

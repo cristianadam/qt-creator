@@ -7,8 +7,14 @@
 #include "androidconfigurations.h"
 #include "androidconstants.h"
 #include "androiddevice.h"
+#include "androidtoolmenu.h"
 #include "androidtr.h"
 #include "androidutils.h"
+#include "projectexplorer/devicesupport/devicemanager.h"
+#include "utils/action.h"
+
+#include <coreplugin/actionmanager/actioncontainer.h>
+#include <coreplugin/actionmanager/actionmanager.h>
 
 #include <cstddef>
 #include <projectexplorer/projectexplorerconstants.h>
@@ -22,6 +28,7 @@
 #include <QtTaskTree/QTaskTree>
 
 #include <QHash>
+#include <QMenu>
 #include <QObject>
 #include <QPointer>
 
@@ -230,9 +237,47 @@ static RunControl *ensureVisibleTab(const IDeviceConstPtr &device)
     return openLogcatTabForStream(stream);
 }
 
+static bool hasAtLeastAndroidDeviceReady()
+{
+    bool ready = false;
+    DeviceManager::forEachDevice([&ready](const IDeviceConstPtr &device) {
+        if (!ready && isAndroidDeviceReady(device))
+            ready = true;
+    });
+    return ready;
+}
+
+static void openLogcatTab()
+{
+    DeviceManager::forEachDevice([](const IDeviceConstPtr &device) {
+        if (isAndroidDeviceReady(device))
+            ensureVisibleTab(device);
+    });
+}
+
 void initAndroidLogcat()
 {
-    // UI (Tools menu) lands in follow-up commit
+    // Tools > Android > Logcat opens a tab for every ready Android device
+    Utils::Action *action = nullptr;
+    Core::ActionBuilder(Core::ActionManager::instance(), "Android.Tools.Logcat")
+        .setText(Tr::tr("Logcat"))
+        .bindContextAction(&action)
+        .addOnTriggered(&openLogcatTab)
+        .addToContainer(ANDROID_TOOLS_MENU_ID);
+
+    QPointer<QAction> actionPtr = action;
+    if (Core::ActionContainer *container = Core::ActionManager::actionContainer(
+            ANDROID_TOOLS_MENU_ID)) {
+        QObject::connect(container->menu(), &QMenu::aboutToShow, container->menu(), [actionPtr] {
+            if (!actionPtr)
+                return;
+            const bool hasDevice = hasAtLeastAndroidDeviceReady();
+            actionPtr->setEnabled(hasDevice);
+            actionPtr->setToolTip(
+                hasDevice ? Tr::tr("Open the device's Logcat tab")
+                          : Tr::tr("No connected Android devices"));
+        });
+    }
 }
 
 } // namespace Android::Internal
