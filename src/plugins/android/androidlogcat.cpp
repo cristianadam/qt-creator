@@ -83,6 +83,7 @@ private:
     std::unique_ptr<QTaskTree> m_task;
     int m_references;
     TabContext m_tabContext;
+    bool m_didStart = false;
 
 private:
     void startTail();
@@ -98,17 +99,23 @@ static QHash<Id, LogcatStream *> &streamRegistry()
 
 void LogcatStream::retain()
 {
-    if (m_references++ == 0)
-        startTail();
+    if (m_references++ > 0)
+        return;
+    if (m_didStart) {
+        emit entryReady(
+            {QString("\n--- resumed at %1 ---\n")
+                 .arg(QDateTime::currentDateTime().toString("HH:mm:ss")),
+             Utils::NormalMessageFormat});
+    }
+    m_didStart = true;
+    startTail();
 }
 
 void LogcatStream::release()
 {
-    if (--m_references > 0)
-        return;
-    stopTail();
-    streamRegistry().remove(m_deviceId);
-    deleteLater();
+    QTC_ASSERT(m_references > 0, return);
+    if (--m_references == 0)
+        stopTail();
 }
 
 void LogcatStream::startTail()
@@ -204,7 +211,6 @@ static RunControl *openLogcatTabForStream(LogcatStream *logcatStream)
     auto *runControl = new RunControl(ProjectExplorer::Constants::NORMAL_RUN_MODE);
     runControl->setDisplayName(logcatTitle(logcatStream->serial()));
 
-    logcatStream->retain();
     logcatStream->setTab(runControl);
 
     QPointer<RunControl> rcPtr = runControl;
@@ -216,11 +222,23 @@ static RunControl *openLogcatTabForStream(LogcatStream *logcatStream)
 
     QPointer<LogcatStream> streamPtr = logcatStream;
     QObject::connect(runControl, &QObject::destroyed, [streamPtr] {
-        if (!streamPtr)
-            return;
-        streamPtr->setTab(nullptr);
-        streamPtr->release();
+        if (streamPtr)
+            streamPtr->setTab(nullptr);
     });
+    // adb tails only while the tab is the currently selected one
+    QObject::connect(
+        runControl,
+        &RunControl::tabActiveChanged,
+        logcatStream,
+        [streamPtr, prevActive = false](bool active) mutable {
+            if (!streamPtr || active == prevActive)
+                return;
+            prevActive = active;
+            if (active)
+                streamPtr->retain();
+            else
+                streamPtr->release();
+        });
     // add to keep recipe stays "running" indefinitely?
     rcPtr->setRunRecipe(QBarrierTask([](QBarrier &) {}).withCancel([rcPtr] {
         return makeObjectSignal(rcPtr.data(), &RunControl::canceled);

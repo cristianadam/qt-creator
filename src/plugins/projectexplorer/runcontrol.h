@@ -264,6 +264,8 @@ signals:
     void stopped();
     void applicationProcessHandleChanged(QPrivateSignal);
     void stdOutData(const QByteArray &data);
+    //emitted when the visible tab in AppOutputPane changes
+    void tabActiveChanged(bool active);
 
 private:
     void setDevice(const IDeviceConstPtr &device);

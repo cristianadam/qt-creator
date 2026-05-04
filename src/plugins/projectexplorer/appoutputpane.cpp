@@ -1136,6 +1136,14 @@ void AppOutputPane::enableButtons(const RunControl *rc)
 void AppOutputPane::tabChanged(int i)
 {
     RunControlTab * const controlTab = tabFor(m_tabWidget->widget(i));
+    // fire tabActiveChanged on every RunControl :
+    //  true -> current and false -> rest
+    const RunControl * newRc = controlTab ? controlTab->runControl : nullptr;
+    for (const RunControlTab &t : std::as_const(m_runControlTabs)) {
+        if (t.runControl)
+            emit t.runControl->tabActiveChanged(t.runControl == newRc);
+    }
+
     if (i != -1 && controlTab) {
         auto appwindow = qobject_cast<AppOutputWindow*>(controlTab->window);
         appwindow->updateCategoriesProperties(appwindow->registry()->categories());
