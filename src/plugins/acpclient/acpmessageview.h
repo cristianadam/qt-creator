@@ -10,9 +10,13 @@
 #include <QScrollArea>
 
 QT_BEGIN_NAMESPACE
+class QElapsedTimer;
 class QLabel;
+class QTimer;
 class QVBoxLayout;
 QT_END_NAMESPACE
+
+namespace Utils { class ProgressIndicator; }
 
 namespace AcpClient::Internal {
 
@@ -33,6 +37,8 @@ public:
 
     void setDetailedMode(bool detailed);
     void setAgentIconUrl(const QString &iconUrl);
+
+    void setPrompting(bool prompting);
 
     void clear();
     void addUserMessage(const QString &text);
@@ -63,6 +69,7 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
 
 private:
+    void updateElapsedTimeLabel();
     void scrollToBottom();
     QWidget *wrapWithSpacer(QWidget *widget, Qt::Alignment side);
     ToolCallGroupWidget *ensureToolCallGroup();
@@ -72,6 +79,10 @@ private:
 
     QWidget *m_container = nullptr;
     QVBoxLayout *m_layout = nullptr;
+    QLabel *m_elapsedLabel = nullptr;
+    Utils::ProgressIndicator *m_progressIndicator = nullptr;
+    QElapsedTimer *m_elapsedTimer = nullptr;
+    QTimer *m_progressUpdateTimer = nullptr;
     MessageWidget *m_currentAgentWidget = nullptr;
     ThoughtWidget *m_currentThoughtWidget = nullptr;
     ToolCallGroupWidget *m_currentToolCallGroup = nullptr;

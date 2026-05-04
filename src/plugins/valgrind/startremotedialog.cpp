@@ -7,7 +7,6 @@
 
 #include <coreplugin/icore.h>
 
-#include <debugger/analyzer/analyzerutils.h>
 #include <debugger/debuggerconstants.h>
 #include <debugger/debuggermainwindow.h>
 
@@ -145,7 +144,15 @@ void setupExternalAnalyzer(QAction *action, Perspective *perspective, Id runMode
     QObject::connect(action, &QAction::triggered, perspective, [action, perspective, runMode] {
         RunConfiguration *runConfig = activeRunConfigForActiveProject();
         if (!runConfig) {
-            Debugger::showCannotStartDialog(action->text());
+            auto errorDialog = new QMessageBox(Core::ICore::dialogParent());
+            errorDialog->setAttribute(Qt::WA_DeleteOnClose);
+            errorDialog->setIcon(QMessageBox::Warning);
+            errorDialog->setWindowTitle(action->text());
+            errorDialog->setText(Tr::tr("Cannot start %1 without a project. Please open the "
+                                        "project and try again.").arg(action->text()));
+            errorDialog->setStandardButtons(QMessageBox::Ok);
+            errorDialog->setDefaultButton(QMessageBox::Ok);
+            errorDialog->show();
             return;
         }
         StartRemoteDialog dlg;

@@ -320,6 +320,13 @@ QVariant ToolchainModel::variantData(int row, int column, int role) const
 {
     if (role == Qt::FontRole)
         return {};
+    if (role == Qt::DisplayRole && column == 0) {
+        const ToolchainTreeItem it = item(row);
+        if (it.bundle) {
+            if (const ToolchainConfigWidget *w = m_widgets.value(it.bundle->bundleId()))
+                return w->currentDisplayName();
+        }
+    }
     return toolchainBundleData(item(row).bundle, column, role);
 }
 

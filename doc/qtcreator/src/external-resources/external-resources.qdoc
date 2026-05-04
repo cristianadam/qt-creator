@@ -396,6 +396,10 @@
     \externalpage https://learn.microsoft.com/en-us/sysinternals/downloads/debugview
     \title DebugView for Windows
 */
+/*!
+    \externalpage https://www.kdab.com/full-stack-tracing-part-1/
+    \title KDAB: Full Stack Tracing Part 1
+*/
 
 // Version control system resources
 /*!
@@ -657,6 +661,10 @@
 /*!
     \externalpage https://cppcheck.sourceforge.io/
     \title Cppcheck
+*/
+/*!
+    \externalpage https://sourceforge.net/p/cppcheck/wiki/ListOfChecks/
+    \title Cppcheck: List of checks
 */
 /*!
     \externalpage https://www.jslint.com/

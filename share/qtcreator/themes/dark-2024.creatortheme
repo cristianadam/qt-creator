@@ -50,6 +50,8 @@ VcsBase_FileDeleted_TextColor=fffff6c6c
 VcsBase_FileRenamed_TextColor=ffffa500
 VcsBase_FileUnmerged_TextColor=ffff4040
 
+Bookmarks_TextMarkColor=Token_Notification_Neutral_Default
+
 TerminalForeground=ffffff
 TerminalSelection=3fd1d1d1
 TerminalFindMatch=7fffff00

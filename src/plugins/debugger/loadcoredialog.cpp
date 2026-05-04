@@ -203,7 +203,7 @@ int AttachCoreDialog::exec()
             QMessageBox::critical(this,
                                   Tr::tr("Error"),
                                   Tr::tr("Failed to copy symbol file to device: %1")
-                                      .arg(m_coreFileResult.error()));
+                                      .arg(m_symbolFileResult.error()));
             return;
         }
 

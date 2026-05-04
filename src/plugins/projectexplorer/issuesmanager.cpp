@@ -3,13 +3,13 @@
 
 #include "issuesmanager.h"
 
+#include "buildmanager.h"
+#include "task.h"
+#include "taskhub.h"
+
 #include <coreplugin/icore.h>
 #include <coreplugin/ioutputpane.h>
 #include <extensionsystem/pluginmanager.h>
-#include <projectexplorer/buildmanager.h>
-#include <projectexplorer/projectexplorer.h>
-#include <projectexplorer/task.h>
-#include <projectexplorer/taskhub.h>
 #include <utils/algorithm.h>
 #include <utils/id.h>
 
@@ -23,7 +23,173 @@
 
 Q_LOGGING_CATEGORY(mcpIssues, "qtc.mcpserver.issues", QtWarningMsg)
 
-namespace Mcp::Internal {
+static constexpr const char s_issuesSchema[] = R"json(
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://qt.io/qtcreator/mcpserver/issues-manager-output.schema.json",
+  "title": "Qt Creator Issues Manager Output",
+  "description": "Schema for issues passed to the MCP server from the IssuesManager, representing the current state of tracked issues and connection status to Qt Creator internals.",
+  "type": "object",
+  "required": ["issues", "summary", "status"],
+  "properties": {
+    "issues": {
+      "description": "Array of current issues/tasks tracked by Qt Creator",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "description"],
+        "properties": {
+          "type": {
+            "description": "The severity/type of the issue",
+            "type": "string",
+            "enum": ["ERROR", "WARNING", "INFO"]
+          },
+          "description": {
+            "description": "The issue description/message",
+            "type": "string",
+            "minLength": 1
+          },
+          "file": {
+            "description": "File path where the issue occurred (optional)",
+            "type": "string"
+          },
+          "line": {
+            "description": "Line number where the issue occurred (optional, -1 or absent means not specified)",
+            "type": "integer",
+            "minimum": -1
+          },
+          "id": {
+            "description": "Internal task ID (if available)",
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "summary": {
+      "description": "Summary statistics of all issues",
+      "type": "object",
+      "required": ["totalTasks", "errorCount", "warningCount", "otherCount"],
+      "properties": {
+        "totalTasks": {
+          "description": "Total number of tracked tasks",
+          "type": "integer",
+          "minimum": 0
+        },
+        "errorCount": {
+          "description": "Number of error-level issues",
+          "type": "integer",
+          "minimum": 0
+        },
+        "warningCount": {
+          "description": "Number of warning-level issues",
+          "type": "integer",
+          "minimum": 0
+        },
+        "otherCount": {
+          "description": "Number of info/other-level issues",
+          "type": "integer",
+          "minimum": 0
+        },
+        "buildManagerErrorCount": {
+          "description": "Error count from BuildManager (fallback when no tasks tracked)",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "status": {
+      "description": "Status of the IssuesManager's connection to Qt Creator internals",
+      "type": "object",
+      "required": ["accessible", "signalsConnected", "taskWindowFound"],
+      "properties": {
+        "accessible": {
+          "description": "Whether the Issues panel is accessible",
+          "type": "boolean"
+        },
+        "signalsConnected": {
+          "description": "Whether TaskHub signals are connected",
+          "type": "boolean"
+        },
+        "taskWindowFound": {
+          "description": "Whether the TaskWindow object was found",
+          "type": "boolean"
+        }
+      }
+    },
+    "errorMessage": {
+      "description": "Error message if the Issues panel is not accessible",
+      "type": "string"
+    }
+  },
+  "examples": [
+    {
+      "issues": [
+        {
+          "type": "ERROR",
+          "description": "undefined reference to 'MyClass::myMethod()'",
+          "file": "/path/to/project/main.cpp",
+          "line": 42
+        },
+        {
+          "type": "WARNING",
+          "description": "unused variable 'foo'",
+          "file": "/path/to/project/utils.cpp",
+          "line": 15
+        },
+        {
+          "type": "INFO",
+          "description": "Build completed",
+          "file": "",
+          "line": -1
+        }
+      ],
+      "summary": {
+        "totalTasks": 3,
+        "errorCount": 1,
+        "warningCount": 1,
+        "otherCount": 1
+      },
+      "status": {
+        "accessible": true,
+        "signalsConnected": true,
+        "taskWindowFound": true
+      }
+    },
+    {
+      "issues": [],
+      "summary": {
+        "totalTasks": 0,
+        "errorCount": 0,
+        "warningCount": 0,
+        "otherCount": 0,
+        "buildManagerErrorCount": 0
+      },
+      "status": {
+        "accessible": true,
+        "signalsConnected": true,
+        "taskWindowFound": true
+      }
+    },
+    {
+      "issues": [],
+      "summary": {
+        "totalTasks": 0,
+        "errorCount": 0,
+        "warningCount": 0,
+        "otherCount": 0
+      },
+      "status": {
+        "accessible": false,
+        "signalsConnected": false,
+        "taskWindowFound": false
+      },
+      "errorMessage": "ERROR:Issues panel not accessible - cannot retrieve current issues"
+    }
+  ]
+}
+)json";
+
+namespace ProjectExplorer {
 
 IssuesManager::IssuesManager(QObject *parent)
     : QObject(parent)
@@ -45,19 +211,12 @@ QJsonObject IssuesManager::getCurrentIssues(const Utils::FilePath &path) const
 Mcp::Schema::Tool::OutputSchema IssuesManager::issuesSchema()
 {
     static Mcp::Schema::Tool::OutputSchema cachedSchema = [] {
-        QFile schemaFile(":/mcpserver/schemas/issues-schema.json");
-        if (!schemaFile.open(QIODevice::ReadOnly)) {
-            qCWarning(mcpIssues) << "Failed to open schemas/issues-schema.json from resources:"
-                                 << schemaFile.errorString();
-            return Mcp::Schema::Tool::OutputSchema{};
-        }
 
         QJsonParseError parseError;
-        QJsonDocument doc = QJsonDocument::fromJson(schemaFile.readAll(), &parseError);
-        schemaFile.close();
+        QJsonDocument doc = QJsonDocument::fromJson(s_issuesSchema, &parseError);
 
         if (parseError.error != QJsonParseError::NoError) {
-            qCWarning(mcpIssues) << "Failed to parse issues-schema.json:"
+            qCWarning(mcpIssues) << "Failed to parse issues-schema:"
                                  << parseError.errorString();
             return Mcp::Schema::Tool::OutputSchema{};
         }
@@ -234,6 +393,10 @@ void IssuesManager::onTaskRemoved(const ProjectExplorer::Task &task)
 void IssuesManager::onTasksCleared(const Utils::Id &category)
 {
     qCDebug(mcpIssues) << "IssuesManager: Tasks cleared:" << category.toString();
+    if (!category.isValid()) { // invalid Id means "clear all" (TaskHub::clearTasks() with no arg)
+        m_trackedTasks.clear();
+        return;
+    }
     m_trackedTasks.removeIf(Utils::equal(&ProjectExplorer::Task::category, category));
 }
 

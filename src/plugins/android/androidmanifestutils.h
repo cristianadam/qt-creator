@@ -6,6 +6,7 @@
 #include <utils/filepath.h>
 #include <utils/result.h>
 
+#include <QMap>
 #include <QString>
 #include <QStringList>
 
@@ -17,7 +18,7 @@ public:
     struct ManifestData {
         QString iconName;
         bool hasIcon = false;
-        QStringList permissions;
+        QMap<QString, QMap<QString, QString>> permissions; // name -> {attrName: value}
         bool hasDefaultPermissionsComment = false;
         bool hasDefaultFeaturesComment = false;
     };
@@ -57,5 +58,8 @@ Utils::Result<void> updateManifestActivityMetaData(const Utils::FilePath &manife
                                                    const QString &metaDataValue);
 Utils::Result<QString> readManifestActivityMetaData(const Utils::FilePath &manifestPath,
                                                     const QString &metaDataName);
+Utils::Result<void> updateManifestPermissionAttributes(const Utils::FilePath &manifestPath,
+                                                       const QString &permission,
+                                                       const QMap<QString, QString> &attributes);
 
 } // namespace Android::Internal

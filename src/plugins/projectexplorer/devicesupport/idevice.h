@@ -232,15 +232,11 @@ public:
     enum ControlChannelHint { QmlControlChannel };
     virtual QUrl toolControlChannel(const ControlChannelHint &) const;
 
-    // Returns true when the device forwards QML debug connections via a Unix socket
-    // (e.g. Docker with cmdbridge).  Use this to decide whether to call
-    // requestQmlChannel() before starting the debug session.
-    virtual bool forwardsQmlDebugSocket() const { return false; }
-
-    // Returns the Unix socket path on the remote device to pass to the inferior's
-    // -qmljsdebugger=file: argument.  Non-empty only when the device forwards QML
-    // debug connections via Unix socket (e.g. Docker with cmdbridge).
-    virtual QString qmlDebugRemoteSocketPath() const { return {}; }
+    // Returns the bind host the inferior should use for QML debug TCP connections,
+    // or an empty string for the default (loopback).  Remote devices that require
+    // the application to bind on all interfaces so a port forwarder can reach it
+    // (e.g. Docker via docker-proxy) return "0.0.0.0" here.
+    virtual QString qmlDebugServerBindHost() const { return {}; }
 
     Utils::PortList freePorts() const;
     void setFreePorts(const Utils::PortList &freePorts);

@@ -787,7 +787,8 @@ Abis QtVersion::detectQtAbis() const
 
 Abis QtVersion::qtAbisFromJson() const
 {
-    return QtSupport::Internal::qtAbisFromJson(*this, {d->data().archDataPath, d->data().dataPath});
+    return QtSupport::Internal::qtAbisFromJson(
+        *this, {d->data().archDataPath, d->data().dataPath, d->data().hostDataPath});
 }
 
 bool QtVersion::hasAbi(ProjectExplorer::Abi::OS os, ProjectExplorer::Abi::OSFlavor flavor) const
@@ -868,9 +869,8 @@ QString QtVersion::toHtml(bool verbose) const
     str << "<tr><td><b>" << Tr::tr("Name:")
         << "</b></td><td>" << displayName() << "</td></tr>";
     if (!isValid()) {
-        str << "<tr><td colspan=2><b>"
-            << Tr::tr("Invalid Qt version")
-            << "</b></td></tr>";
+        str << "<tr><td><b>" << Tr::tr("Invalid Qt version:")
+            << "</b></td><td>" << invalidReason() << "</td></tr>";
     } else {
         str << "<tr><td><b>" << Tr::tr("ABI:")
             << "</b></td>";
@@ -1298,7 +1298,11 @@ Result<QtVersionData> dataForQMake(const FilePath m_qmakeCommand)
         {&data.examplesPath, &data.hasExamples},
         {&data.demosPath, &data.hasDemos},
     };
-    if (data.binPath.osType() != OsTypeMac)
+    // For cross builds, QT_INSTALL_HEADERS is inside the target sysroot and not
+    // necessarily available on the host. Only check it for native builds.
+    const bool isCrossBuild = !data.hostPrefixPath.isEmpty()
+                              && data.hostPrefixPath != data.prefix;
+    if (data.binPath.osType() != OsTypeMac && !isCrossBuild)
         checkDirs.push_back({&data.headerPath, &data.installed});
 
     QtConcurrent::map(checkDirs, [](CheckDir &checkDir) {
@@ -1899,7 +1903,7 @@ FilePath QtVersionPrivate::mkspecFromVersionInfo(const QHash<ProKey, ProString> 
     OsType osInfo = mkspecFullPath.osType();
     if (osInfo == OsTypeWindows) {
         if (!qt5) {
-            QFile f2(mkspecFullPath.toUrlishString() + "/qmake.conf");
+            QFile f2(mkspecFullPath.pathAppended("qmake.conf").toFSPathString());
             if (f2.exists() && f2.open(QIODevice::ReadOnly)) {
                 while (!f2.atEnd()) {
                     QByteArray line = f2.readLine();
@@ -1911,8 +1915,7 @@ FilePath QtVersionPrivate::mkspecFromVersionInfo(const QHash<ProKey, ProString> 
                                 static const QRegularExpression rex("\\binclude\\(([^)]+)/qmake\\.conf\\)");
                                 const QRegularExpressionMatch match = rex.match(QString::fromLocal8Bit(f2.readAll()));
                                 if (match.hasMatch()) {
-                                    possibleFullPath = mkspecFullPath.toUrlishString() + '/'
-                                            + match.captured(1);
+                                    possibleFullPath = mkspecFullPath.pathAppended(match.captured(1)).toFSPathString();
                                 }
                             }
                             // We sometimes get a mix of different slash styles here...
@@ -1928,7 +1931,7 @@ FilePath QtVersionPrivate::mkspecFromVersionInfo(const QHash<ProKey, ProString> 
         }
     } else {
         if (osInfo == OsTypeMac) {
-            QFile f2(mkspecFullPath.toUrlishString() + "/qmake.conf");
+            QFile f2(mkspecFullPath.pathAppended("qmake.conf").toFSPathString());
             if (f2.exists() && f2.open(QIODevice::ReadOnly)) {
                 while (!f2.atEnd()) {
                     QByteArray line = f2.readLine();
@@ -1950,10 +1953,9 @@ FilePath QtVersionPrivate::mkspecFromVersionInfo(const QHash<ProKey, ProString> 
         }
         if (!qt5) {
             //resolve mkspec link
-            QString rspec = mkspecFullPath.toFileInfo().symLinkTarget();
+            const FilePath rspec = mkspecFullPath.symLinkTarget();
             if (!rspec.isEmpty())
-                mkspecFullPath = FilePath::fromUserInput(
-                            QDir(baseMkspecDir.toUrlishString()).absoluteFilePath(rspec));
+                mkspecFullPath = baseMkspecDir.resolvePath(rspec);
         }
     }
     return mkspecFullPath;
@@ -2085,8 +2087,7 @@ bool QtVersion::isQtQuickCompilerSupported(QString *reason) const
         return false;
     }
 
-    const QString qtQuickCompilerPrf = mkspecsPath().toUrlishString() + "/features/qtquickcompiler.prf";
-    if (!QFileInfo::exists(qtQuickCompilerPrf)) {
+    if (!mkspecsPath().pathAppended("features/qtquickcompiler.prf").exists()) {
         if (reason)
             *reason = Tr::tr("This Qt Version does not contain Qt Quick Compiler.");
         return false;
@@ -2156,7 +2157,7 @@ FilePaths QtVersionPrivate::qtCorePaths()
 
 static QByteArray scanQtBinaryForBuildString(const FilePath &library)
 {
-    QFile lib(library.toUrlishString());
+    QFile lib(library.toFSPathString());
     QByteArray buildString;
 
     if (lib.open(QIODevice::ReadOnly)) {

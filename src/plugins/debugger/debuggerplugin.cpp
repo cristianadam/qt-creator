@@ -93,7 +93,6 @@
 #include <utils/statuslabel.h>
 #include <utils/stringutils.h>
 #include <utils/temporarydirectory.h>
-#include <utils/utilsicons.h>
 #include <utils/winutils.h>
 
 #include <QAction>
@@ -329,6 +328,7 @@ using namespace Debugger::Constants;
 using namespace Debugger::Internal;
 using namespace ExtensionSystem;
 using namespace ProjectExplorer;
+using namespace QtTaskTree;
 using namespace TextEditor;
 using namespace Utils;
 
@@ -1640,27 +1640,33 @@ void DebuggerPluginPrivate::onStartupProjectChanged()
 
 void DebuggerPluginPrivate::attachToLastCore()
 {
-    QGuiApplication::setOverrideCursor(Qt::WaitCursor);
-    LastCore lastCore = getLastCore();
-    QGuiApplication::restoreOverrideCursor();
-    if (!lastCore) {
-        AsynchronousMessageBox::warning(
-            Tr::tr("Warning"),
-            Tr::tr("coredumpctl did not find any cores created by systemd-coredump."));
-        return;
-    }
-
     auto runControl = new RunControl(ProjectExplorer::Constants::DEBUG_RUN_MODE);
     runControl->setKit(KitManager::defaultKit());
-    runControl->setDisplayName(Tr::tr("Last Core file \"%1\"").arg(lastCore.coreFile.toUserOutput()));
+    runControl->setDisplayName(Tr::tr("Searching Last Core file..."));
 
     DebuggerRunParameters rp = DebuggerRunParameters::fromRunControl(runControl);
-    rp.setInferiorExecutable(lastCore.binary);
-    rp.setCoreFilePath(lastCore.coreFile);
     rp.setStartMode(AttachToCore);
     rp.setCloseMode(DetachAtClose);
 
-    runControl->setRunRecipe(debuggerRecipe(runControl, rp));
+    const Storage<LastCore> storage;
+
+    const auto setDisplayName = [storage, runControl] {
+        runControl->setDisplayName(Tr::tr("Last Core file \"%1\"").arg(storage->coreFile.toUserOutput()));
+    };
+
+    const auto modifier = [storage](DebuggerRunParameters &rp) {
+        rp.setInferiorExecutable(storage->binary);
+        rp.setCoreFilePath(storage->coreFile);
+    };
+
+    const Group recipe {
+        storage,
+        lastCoreRecipe(storage).withCancel(runControl->canceler()),
+        QSyncTask(setDisplayName),
+        debuggerRecipe(runControl, rp, modifier)
+    };
+
+    runControl->setRunRecipe(recipe);
     runControl->start();
 }
 
@@ -1989,6 +1995,8 @@ void DebuggerPluginPrivate::remoteCommand(const QStringList &options)
     runScheduled();
 }
 
+void registerMcpTools();
+
 void DebuggerPluginPrivate::extensionsInitialized()
 {
     QTimer::singleShot(0, this, &DebuggerItemManager::restoreDebuggers);
@@ -2006,6 +2014,8 @@ void DebuggerPluginPrivate::extensionsInitialized()
             cmd->setAttribute(Command::CA_NonConfigurable);
         }
     }
+
+    registerMcpTools();
 
     DebuggerMainWindow::ensureMainWindowExists();
 }
@@ -2170,18 +2180,6 @@ static BuildConfiguration::BuildType startupBuildType()
     return buildType;
 }
 
-void showCannotStartDialog(const QString &text)
-{
-    auto errorDialog = new QMessageBox(ICore::dialogParent());
-    errorDialog->setAttribute(Qt::WA_DeleteOnClose);
-    errorDialog->setIcon(QMessageBox::Warning);
-    errorDialog->setWindowTitle(text);
-    errorDialog->setText(Tr::tr("Cannot start %1 without a project. Please open the project "
-                                               "and try again.").arg(text));
-    errorDialog->setStandardButtons(QMessageBox::Ok);
-    errorDialog->setDefaultButton(QMessageBox::Ok);
-    errorDialog->show();
-}
 
 bool wantRunTool(ToolMode toolMode, const QString &toolName)
 {
@@ -2245,22 +2243,6 @@ bool wantRunTool(ToolMode toolMode, const QString &toolName)
     }
 
     return true;
-}
-
-QAction *createStartAction()
-{
-    auto action = new QAction(Tr::tr("Start"), m_instance);
-    action->setIcon(ProjectExplorer::Icons::ANALYZER_START_SMALL_TOOLBAR.icon());
-    action->setEnabled(true);
-    return action;
-}
-
-QAction *createStopAction()
-{
-    auto action = new QAction(Tr::tr("Stop"), m_instance);
-    action->setIcon(Utils::Icons::STOP_SMALL_TOOLBAR.icon());
-    action->setEnabled(true);
-    return action;
 }
 
 void enableMainWindow(bool on)

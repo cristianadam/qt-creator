@@ -87,6 +87,7 @@ static void setupPreregisteredOsFlavors() {
     registerOsFlavor(Abi::NetBsdFlavor, "netbsd", {Abi::OS::BsdOS});
     registerOsFlavor(Abi::OpenBsdFlavor, "openbsd", {Abi::OS::BsdOS});
     registerOsFlavor(Abi::AndroidLinuxFlavor, "android", {Abi::OS::LinuxOS});
+    registerOsFlavor(Abi::OpenHarmonyLinuxFlavor, "ohos", {Abi::OS::LinuxOS});
     registerOsFlavor(Abi::SolarisUnixFlavor, "solaris", {Abi::OS::UnixOS});
     registerOsFlavor(Abi::WindowsMsvc2005Flavor, "msvc2005", {Abi::OS::WindowsOS});
     registerOsFlavor(Abi::WindowsMsvc2008Flavor, "msvc2008", {Abi::OS::WindowsOS});
@@ -591,6 +592,8 @@ Abi Abi::abiFromTargetTriplet(const QString &triple)
             format = ElfFormat;
         } else if (p.startsWith("android") || p.startsWith("androideabi")) {
             flavor = AndroidLinuxFlavor;
+        } else if (p == "ohos") {
+            flavor = OpenHarmonyLinuxFlavor;
         } else if (p.startsWith("freebsd")) {
             os = BsdOS;
             if (flavor == UnknownFlavor)
@@ -744,9 +747,10 @@ bool Abi::isCompatibleWith(const Abi &other) const
         isCompat = true;
     }
 
-    // Make Android matching more strict than the generic Linux matches so far:
-    if (isCompat && (osFlavor() == AndroidLinuxFlavor || other.osFlavor() == AndroidLinuxFlavor))
-        isCompat = (architecture() == other.architecture()) &&  (osFlavor() == other.osFlavor());
+    // Make Android/OHOS matching more strict than the generic Linux matches so far:
+    if (isCompat && (osFlavor() == AndroidLinuxFlavor || other.osFlavor() == AndroidLinuxFlavor
+                     || osFlavor() == OpenHarmonyLinuxFlavor || other.osFlavor() == OpenHarmonyLinuxFlavor))
+        isCompat = architecture() == other.architecture() && osFlavor() == other.osFlavor();
 
     if (!isCompat && wordWidth() == other.wordWidth()
             && compatibleMSVCFlavors(osFlavor(), other.osFlavor())) {

@@ -44,10 +44,7 @@ private slots:
     {
         MesonToolWrapper meson("name", *findMeson());
         QVERIFY(meson.isValid());
-        QVERIFY(meson.version().majorVersion() == 0);
-        QVERIFY(meson.version().minorVersion() >= 50);
-        QVERIFY(meson.version().minorVersion() <= 100);
-        QVERIFY(meson.version().microVersion() >= 0);
+        QVERIFY(!meson.version().isNull());
     }
 
     void shouldSetupGivenProjects_data()
@@ -62,7 +59,7 @@ private slots:
     void shouldSetupGivenProjects()
     {
         QFETCH(QString, src_dir);
-        QTemporaryDir build_dir{"test-meson"};
+        QTemporaryDir build_dir{src_dir + "/test-meson"};
         const MesonToolWrapper meson("name", *findMeson());
         QVERIFY(run_meson(meson.setup(Utils::FilePath::fromString(src_dir),
                                       Utils::FilePath::fromString(build_dir.path()))));

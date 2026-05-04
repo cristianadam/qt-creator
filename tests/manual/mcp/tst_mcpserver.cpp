@@ -410,9 +410,9 @@ int main(int argc, char *argv[])
 
     Mcp::Server server(
         Mcp::Schema::Implementation()
-            .description("A simple Mcp server for testing purposes")
+            .description("A simple MCP server for testing purposes")
             .name("test-mcp-server")
-            .title("Test Mcp Server")
+            .title("Test MCP Server")
             .version("0.1")
             .websiteUrl("https://www.qt.io"));
 
@@ -459,7 +459,7 @@ int main(int argc, char *argv[])
             .title("Task Echo Tool")
             .execution(
                 Mcp::Schema::ToolExecution().taskSupport(
-                    Mcp::Schema::ToolExecution::TaskSupport::required))
+                    Mcp::Schema::ToolExecution::TaskSupport::optional))
             .inputSchema(
                 Mcp::Schema::Tool::InputSchema()
                     .addProperty(

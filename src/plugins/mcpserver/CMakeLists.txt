@@ -3,14 +3,13 @@ add_qtc_plugin(mcpserver
   PLUGIN_CLASS McpServerPlugin
   PLUGIN_DEPENDS
     Core
-    Debugger
+    TextEditor
     ProjectExplorer
   DEPENDS
    ExtensionSystem
    Utils
    McpServerLib
   SOURCES
-    issuesmanager.cpp issuesmanager.h
     mcpcommands.cpp mcpcommands.h
     mcpserverplugin.cpp
     mcpserverconstants.h
@@ -36,6 +35,5 @@ qtc_add_resources(mcpserver "schemas"
   PREFIX "/mcpserver"
   BASE "."
   FILES
-    schemas/issues-schema.json
     schemas/search-results-schema.json
 )

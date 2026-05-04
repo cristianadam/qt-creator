@@ -4016,7 +4016,7 @@ void TextEditorWidgetPrivate::updateSyntaxInfoBar(const HighlighterHelper::Defin
     InfoBar *infoBar = m_document->infoBar();
 
     if (definitions.isEmpty() && infoBar->canInfoBeAdded(missing)
-        && !highlighterSettings().isIgnoredFilePattern(fileName)) {
+        && !highlighterSettings().skipUpdateCheck(fileName)) {
         InfoBarEntry info(missing,
                           Tr::tr("A highlight definition was not found for this file. "
                                  "Would you like to download additional highlight definition files?"),
@@ -10560,6 +10560,11 @@ void TextEditorWidget::invokeAssist(AssistKind kind, IAssistProvider *provider)
     ensureCursorVisible();
     d->m_codeAssistant.invoke(kind, provider);
     setOverwriteMode(previousMode);
+}
+
+void TextEditorWidget::setCompletionTriggerOverride(CompletionTrigger trigger)
+{
+    d->m_codeAssistant.setCompletionTriggerOverride(trigger);
 }
 
 std::unique_ptr<AssistInterface> TextEditorWidget::createAssistInterface(AssistKind kind,

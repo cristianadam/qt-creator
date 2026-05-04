@@ -2,47 +2,28 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "mcpcommands.h"
-#include "issuesmanager.h"
 #include "mcpservertr.h"
 
 #include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/editormanager/documentmodel.h>
 #include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/editormanager/ieditor.h>
-#include <coreplugin/find/findplugin.h>
 #include <coreplugin/icore.h>
 #include <coreplugin/idocument.h>
 #include <coreplugin/session.h>
-#include <coreplugin/vcsmanager.h>
 
-#include <debugger/breakhandler.h>
-#include <debugger/breakpoint.h>
-#include <debugger/debuggerengine.h>
-#include <debugger/debuggerruncontrol.h>
-#include <debugger/enginemanager.h>
-#include <debugger/stackhandler.h>
-#include <debugger/threadshandler.h>
-#include <debugger/watchhandler.h>
-
-#include <projectexplorer/buildconfiguration.h>
-#include <projectexplorer/buildmanager.h>
-#include <projectexplorer/editorconfiguration.h>
-#include <projectexplorer/project.h>
-#include <projectexplorer/projectexplorer.h>
-#include <projectexplorer/projectmanager.h>
-#include <projectexplorer/projectnodes.h>
-#include <projectexplorer/runconfiguration.h>
-#include <projectexplorer/runcontrol.h>
-#include <projectexplorer/target.h>
+#include <mcp/server/toolregistry.h>
 
 #include <texteditor/refactoringchanges.h>
 #include <texteditor/textdocument.h>
+#include <texteditor/texteditor.h>
 
 #include <utils/algorithm.h>
 #include <utils/async.h>
 #include <utils/filesearch.h>
 #include <utils/id.h>
 #include <utils/mimeutils.h>
+#include <utils/qtcprocess.h>
 #include <utils/savefile.h>
 
 #include <QApplication>
@@ -55,7 +36,6 @@
 #include <QTimer>
 
 using namespace Utils;
-using namespace ProjectExplorer;
 
 Q_LOGGING_CATEGORY(mcpCommands, "qtc.mcpserver.commands", QtWarningMsg)
 
@@ -70,16 +50,17 @@ Mcp::Schema::Tool::OutputSchema McpCommands::searchResultsSchema()
     static Mcp::Schema::Tool::OutputSchema cachedSchema = [] {
         QFile schemaFile(":/mcpserver/schemas/search-results-schema.json");
         if (!schemaFile.open(QIODevice::ReadOnly)) {
-            qCWarning(mcpCommands) << "Failed to open schemas/search-results-schema.json from resources:"
-                                   << schemaFile.errorString();
+            qCWarning(mcpCommands)
+                << "Failed to open schemas/search-results-schema.json from resources:"
+                << schemaFile.errorString();
             return Mcp::Schema::Tool::OutputSchema{};
         }
 
         QJsonParseError parseError;
         QJsonDocument doc = QJsonDocument::fromJson(schemaFile.readAll(), &parseError);
         if (parseError.error != QJsonParseError::NoError) {
-            qCWarning(mcpCommands) << "Failed to parse search-results-schema.json:"
-                                   << parseError.errorString();
+            qCWarning(mcpCommands)
+                << "Failed to parse search-results-schema.json:" << parseError.errorString();
             return Mcp::Schema::Tool::OutputSchema{};
         }
 
@@ -99,67 +80,9 @@ Mcp::Schema::Tool::OutputSchema McpCommands::searchResultsSchema()
     return cachedSchema;
 }
 
-QString McpCommands::stopDebug()
-{
-    QStringList results;
-    results.append("=== STOP DEBUGGING ===");
-
-    // Use ActionManager to trigger the "Stop Debugging" action
-    Core::ActionManager *actionManager = Core::ActionManager::instance();
-    if (!actionManager) {
-        results.append("ERROR: ActionManager not available");
-        return results.join("\n");
-    }
-
-    // Try different possible action IDs for stopping debugging
-    QStringList stopActionIds
-        = {"Debugger.StopDebugger",
-           "Debugger.Stop",
-           "ProjectExplorer.StopDebugging",
-           "ProjectExplorer.Stop",
-           "Debugger.StopDebugging"};
-
-    bool actionTriggered = false;
-    for (const QString &actionId : stopActionIds) {
-        results.append("Trying stop debug action: " + actionId);
-
-        Core::Command *command = actionManager->command(Id::fromString(actionId));
-        if (command && command->action()) {
-            results.append("Found stop debug action, triggering...");
-            command->action()->trigger();
-            results.append("Stop debug action triggered successfully");
-            actionTriggered = true;
-            break;
-        } else {
-            results.append("Stop debug action not found: " + actionId);
-        }
-    }
-
-    if (!actionTriggered) {
-        results.append("WARNING: No stop debug action found among tried IDs");
-        results.append(
-            "You may need to stop debugging manually from Qt Creator's debugger interface");
-    }
-
-    results.append("");
-    results.append("=== STOP DEBUG RESULT ===");
-    results.append("Stop debug command completed.");
-
-    return results.join("\n");
-}
-
 QString McpCommands::getVersion()
 {
     return QCoreApplication::applicationVersion();
-}
-
-QString McpCommands::getBuildStatus()
-{
-    const auto buildProgress = BuildManager::currentProgress();
-    if (buildProgress)
-        return QString("Building: %1% - %2").arg(buildProgress->first).arg(buildProgress->second);
-    else
-        return "Not building";
 }
 
 bool McpCommands::openFile(const QString &path)
@@ -229,18 +152,17 @@ bool McpCommands::setFilePlainText(const QString &path, const QString &contents)
         return false;
     }
 
-    auto doc = Core::DocumentModel::documentForFilePath(filePath);
-
-    if (!doc) {
-        qCDebug(mcpCommands) << "No document found for file:" << path;
-        return false;
+    // If the file is already open in a text editor, update its in-memory
+    // buffer. The caller is responsible for calling save_file afterwards.
+    if (auto *doc = Core::DocumentModel::documentForFilePath(filePath)) {
+        if (auto *textDoc = qobject_cast<TextEditor::TextDocument *>(doc)) {
+            textDoc->document()->setPlainText(contents);
+            return true;
+        }
     }
 
-    if (auto textDoc = qobject_cast<TextEditor::TextDocument *>(doc)) {
-        textDoc->document()->setPlainText(contents);
-        return true;
-    }
-
+    // Otherwise write to disk directly. Guard against non-text files to
+    // avoid corrupting binary content.
     MimeType mime = mimeTypeForFile(filePath);
     if (!mime.inherits("text/plain")) {
         qCDebug(mcpCommands) << "File is not a plain text document:" << path
@@ -254,7 +176,8 @@ bool McpCommands::setFilePlainText(const QString &path, const QString &contents)
         Core::EditorManager::defaultTextEncoding().encode(contents));
 
     if (!result)
-        qCDebug(mcpCommands) << "Failed to write file contents:" << path << "Error:" << result.error();
+        qCDebug(mcpCommands) << "Failed to write file contents:" << path
+                             << "Error:" << result.error();
     return result.has_value();
 }
 
@@ -304,6 +227,16 @@ bool McpCommands::closeFile(const QString &path)
         return false;
     }
 
+    // Refuse to silently discard unsaved edits. The Core::EditorManager
+    // variant we call below has askAboutModifiedEditors=false, so there
+    // is no user prompt — and an MCP caller can't respond to one anyway.
+    // Caller must save_file (or revert) before closing.
+    if (doc->isModified()) {
+        qCWarning(mcpCommands) << "Refusing to close modified document without save:" << path
+                               << "- call save_file first";
+        return false;
+    }
+
     qCDebug(mcpCommands) << "Closing file:" << path;
 
     bool closed = Core::EditorManager::closeDocuments({doc}, false);
@@ -311,24 +244,6 @@ bool McpCommands::closeFile(const QString &path)
         qCDebug(mcpCommands) << "Failed to close document:" << path;
 
     return closed;
-}
-
-QStringList McpCommands::findFiles(
-    const QList<ProjectExplorer::Project *> &projects, const QRegularExpression &re)
-{
-    QStringList result;
-    for (auto project : projects) {
-        const FilePaths matches = project->files([&re](const Node *n) {
-            return !n->filePath().isEmpty() && re.match(n->filePath().fileName()).hasMatch();
-        });
-        result.append(Utils::transform(matches, &FilePath::toUserOutput));
-    }
-    return result;
-}
-
-static QList<Project *> projectsForName(const QString &name)
-{
-    return Utils::filtered(ProjectManager::projects(), Utils::equal(&Project::displayName, name));
 }
 
 static FindFlags findFlags(bool regex, bool caseSensitive)
@@ -394,58 +309,13 @@ void McpCommands::searchInFile(
     }
 
     TextEncoding encoding;
-    if (auto doc = TextEditor::TextDocument::textDocumentForFilePath(filePath)) {
+    if (auto doc = TextEditor::TextDocument::textDocumentForFilePath(filePath))
         encoding = doc->encoding();
-    } else {
-        for (const Project *project : ProjectManager::projects()) {
-            const EditorConfiguration *config = project->editorConfiguration();
-            if (project->isKnownFile(filePath)) {
-                encoding = config->useGlobalSettings() ? Core::EditorManager::defaultTextEncoding()
-                                                       : config->textEncoding();
-                break;
-            }
-        }
-    }
+
     if (!encoding.isValid())
         encoding = Core::EditorManager::defaultTextEncoding();
 
     FileListContainer fileContainer({filePath}, {encoding});
-
-    findInFiles(fileContainer, regex, caseSensitive, pattern, this, callback);
-}
-
-void McpCommands::searchInFiles(
-    const QString &filePattern,
-    const std::optional<QString> &projectName,
-    const QString &pattern,
-    bool regex,
-    bool caseSensitive,
-    const ResponseCallback &callback)
-{
-    const QList<Project *> projects = projectName ? projectsForName(*projectName)
-                                                  : ProjectManager::projects();
-
-    const FilterFilesFunction filterFiles
-        = Utils::filterFilesFunction({filePattern.isEmpty() ? "*" : filePattern}, {});
-    const QMap<FilePath, TextEncoding> openEditorEncodings
-        = TextEditor::TextDocument::openedTextDocumentEncodings();
-    QMap<FilePath, TextEncoding> encodings;
-    for (const Project *project : projects) {
-        const EditorConfiguration *config = project->editorConfiguration();
-        TextEncoding projectEncoding = config->useGlobalSettings()
-                                           ? Core::EditorManager::defaultTextEncoding()
-                                           : config->textEncoding();
-        const FilePaths filteredFiles = filterFiles(project->files(
-            Core::Find::hasFindFlag(DontFindGeneratedFiles) ? Project::SourceFiles
-                                                            : Project::AllFiles));
-        for (const FilePath &fileName : filteredFiles) {
-            TextEncoding encoding = openEditorEncodings.value(fileName);
-            if (!encoding.isValid())
-                encoding = projectEncoding;
-            encodings.insert(fileName, encoding);
-        }
-    }
-    FileListContainer fileContainer(encodings.keys(), encodings.values());
 
     findInFiles(fileContainer, regex, caseSensitive, pattern, this, callback);
 }
@@ -500,7 +370,8 @@ static void replace(
                     continue;
                 TextEditor::RefactoringFilePtr refactoringFile = refactoringFiles.value(filePath);
                 if (!refactoringFile)
-                    refactoringFile = refactoringFiles.insert(filePath, changes.file(filePath)).value();
+                    refactoringFile
+                        = refactoringFiles.insert(filePath, changes.file(filePath)).value();
                 const int start = refactoringFile->position(range.begin);
                 const int end = refactoringFile->position(range.end);
                 ChangeSet changeSet = refactoringFile->changeSet();
@@ -511,7 +382,8 @@ static void replace(
 
         for (auto refactoringFile : refactoringFiles) {
             if (!refactoringFile->apply()) {
-                qCDebug(mcpCommands) << "Failed to apply changes for file:" << refactoringFile->filePath().toUserOutput();
+                qCDebug(mcpCommands) << "Failed to apply changes for file:"
+                                     << refactoringFile->filePath().toUserOutput();
                 success = false;
             }
         }
@@ -529,7 +401,7 @@ void McpCommands::replaceInFile(
     bool caseSensitive,
     const ResponseCallback &callback)
 {
-     const FilePath filePath = FilePath::fromUserInput(path);
+    const FilePath filePath = FilePath::fromUserInput(path);
     if (!filePath.exists()) {
         callback({});
         qCDebug(mcpCommands) << "File does not exist:" << path;
@@ -537,59 +409,13 @@ void McpCommands::replaceInFile(
     }
 
     TextEncoding encoding;
-    if (auto doc = TextEditor::TextDocument::textDocumentForFilePath(filePath)) {
+    if (auto doc = TextEditor::TextDocument::textDocumentForFilePath(filePath))
         encoding = doc->encoding();
-    } else {
-        for (const Project *project : ProjectManager::projects()) {
-            const EditorConfiguration *config = project->editorConfiguration();
-            if (project->isKnownFile(filePath)) {
-                encoding = config->useGlobalSettings() ? Core::EditorManager::defaultTextEncoding()
-                                                       : config->textEncoding();
-                break;
-            }
-        }
-    }
+
     if (!encoding.isValid())
         encoding = Core::EditorManager::defaultTextEncoding();
 
     FileListContainer fileContainer({filePath}, {encoding});
-
-    replace(fileContainer, regex, caseSensitive, pattern, replacement, this, callback);
-}
-
-void McpCommands::replaceInFiles(
-    const QString &filePattern,
-    const std::optional<QString> &projectName,
-    const QString &pattern,
-    const QString &replacement,
-    bool regex,
-    bool caseSensitive,
-    const ResponseCallback &callback)
-{
-    const QList<Project *> projects = projectName ? projectsForName(*projectName)
-                                                  : ProjectManager::projects();
-
-    const FilterFilesFunction filterFiles
-        = Utils::filterFilesFunction({filePattern.isEmpty() ? "*" : filePattern}, {});
-    const QMap<FilePath, TextEncoding> openEditorEncodings
-        = TextEditor::TextDocument::openedTextDocumentEncodings();
-    QMap<FilePath, TextEncoding> encodings;
-    for (const Project *project : projects) {
-        const EditorConfiguration *config = project->editorConfiguration();
-        TextEncoding projectEncoding = config->useGlobalSettings()
-                                           ? Core::EditorManager::defaultTextEncoding()
-                                           : config->textEncoding();
-        const FilePaths filteredFiles = filterFiles(project->files(
-            Core::Find::hasFindFlag(DontFindGeneratedFiles) ? Project::SourceFiles
-                                                            : Project::AllFiles));
-        for (const FilePath &fileName : filteredFiles) {
-            TextEncoding encoding = openEditorEncodings.value(fileName);
-            if (!encoding.isValid())
-                encoding = projectEncoding;
-            encodings.insert(fileName, encoding);
-        }
-    }
-    FileListContainer fileContainer(encodings.keys(), encodings.values());
 
     replace(fileContainer, regex, caseSensitive, pattern, replacement, this, callback);
 }
@@ -612,78 +438,6 @@ void McpCommands::replaceInDirectory(
     SubDirFileContainer fileContainer({dirPath}, {}, {}, {});
 
     replace(fileContainer, regex, caseSensitive, pattern, replacement, this, callback);
-}
-
-QStringList McpCommands::listProjects()
-{
-    QStringList projects;
-
-    QList<Project *> projectList = ProjectManager::projects();
-    for (Project *project : projectList) {
-        projects.append(project->displayName());
-    }
-
-    qCDebug(mcpCommands) << "Found projects:" << projects;
-
-    return projects;
-}
-
-QStringList McpCommands::listBuildConfigs()
-{
-    QStringList configs;
-
-    Project *project = ProjectManager::startupProject();
-    if (!project) {
-        qCDebug(mcpCommands) << "No current project";
-        return configs;
-    }
-
-    Target *target = project->activeTarget();
-    if (!target) {
-        qCDebug(mcpCommands) << "No active target";
-        return configs;
-    }
-
-    QList<BuildConfiguration *> buildConfigs = target->buildConfigurations();
-    for (BuildConfiguration *config : buildConfigs) {
-        configs.append(config->displayName());
-    }
-
-    qCDebug(mcpCommands) << "Found build configurations:" << configs;
-
-    return configs;
-}
-
-bool McpCommands::switchToBuildConfig(const QString &name)
-{
-    if (name.isEmpty()) {
-        qCDebug(mcpCommands) << "Empty build configuration name provided";
-        return false;
-    }
-
-    Project *project = ProjectManager::startupProject();
-    if (!project) {
-        qCDebug(mcpCommands) << "No current project";
-        return false;
-    }
-
-    Target *target = project->activeTarget();
-    if (!target) {
-        qCDebug(mcpCommands) << "No active target";
-        return false;
-    }
-
-    QList<BuildConfiguration *> buildConfigs = target->buildConfigurations();
-    for (BuildConfiguration *config : buildConfigs) {
-        if (config->displayName() == name) {
-            qCDebug(mcpCommands) << "Switching to build configuration:" << name;
-            target->setActiveBuildConfiguration(config, SetActive::Cascade);
-            return true;
-        }
-    }
-
-    qCDebug(mcpCommands) << "Build configuration not found:" << name;
-    return false;
 }
 
 bool McpCommands::quit()
@@ -713,35 +467,6 @@ void McpCommands::executeCommand(
     if (!workingDirectory.isEmpty())
         process->setWorkingDirectory(FilePath::fromUserInput(workingDirectory));
     process->start();
-}
-
-QString McpCommands::getCurrentProject()
-{
-    Project *project = ProjectManager::startupProject();
-    if (project) {
-        return project->displayName();
-    }
-    return QString();
-}
-
-QString McpCommands::getCurrentBuildConfig()
-{
-    Project *project = ProjectManager::startupProject();
-    if (!project) {
-        return QString();
-    }
-
-    Target *target = project->activeTarget();
-    if (!target) {
-        return QString();
-    }
-
-    BuildConfiguration *buildConfig = target->activeBuildConfiguration();
-    if (buildConfig) {
-        return buildConfig->displayName();
-    }
-
-    return QString();
 }
 
 QStringList McpCommands::listOpenFiles()
@@ -810,449 +535,73 @@ bool McpCommands::saveSession()
     return successB;
 }
 
-QJsonObject McpCommands::listIssues()
+bool McpCommands::createNewFile(const QString &path, const QString &text)
 {
-    return m_issuesManager.getCurrentIssues();
-}
+    if (path.isEmpty()) {
+        qCDebug(mcpCommands) << "Empty file path provided";
+        return false;
+    }
 
-QJsonObject McpCommands::listIssues(const QString &path)
-{
-    return m_issuesManager.getCurrentIssues(Utils::FilePath::fromUserInput(path));
-}
+    FilePath filePath = FilePath::fromUserInput(path);
 
-Utils::Result<QStringList> McpCommands::projectDependencies(const QString &projectName)
-{
-    for (Project * candidate : ProjectManager::projects()) {
-        if (candidate->displayName() == projectName) {
-            QStringList projects;
-            const QList<Project *> projectList = ProjectManager::dependencies(candidate);
-            for (Project *project : projectList)
-                projects.append(project->displayName());
-            return projects;
+    if (filePath.exists()) {
+        qCDebug(mcpCommands) << "File already exists:" << path;
+        return false;
+    }
+
+    // Create parent directories if needed
+    const FilePath parentDir = filePath.parentDir();
+    if (!parentDir.exists()) {
+        if (!parentDir.createDir()) {
+            qCDebug(mcpCommands) << "Failed to create parent directories:"
+                                 << parentDir.toUserOutput();
+            return false;
         }
     }
 
-    return Utils::ResultError("No project found with name: " + projectName);
-}
-
-QMap<QString, QSet<QString>> McpCommands::knownRepositoriesInProject(const QString &projectName)
-{
-    const FilePaths projectDirectories
-        = Utils::transform(projectsForName(projectName), &Project::projectDirectory);
-    if (projectDirectories.isEmpty())
-        return {};
-    QMap<QString, QSet<QString>> repos;
-    const QList<Core::IVersionControl *> versionControls = Core::VcsManager::versionControls();
-    for (const Core::IVersionControl *vcs : versionControls) {
-        const FilePaths repositories = Utils::filteredUnique(Core::VcsManager::repositories(vcs));
-        for (const FilePath &repo : repositories) {
-            if (Utils::anyOf(projectDirectories, [repo](const FilePath &projectDir) {
-                    return repo == projectDir || repo.isChildOf(projectDir);
-                })) {
-                repos[vcs->displayName()].insert(repo.toUserOutput());
-            }
-        }
+    Result<qint64> result = filePath.writeFileContents(
+        Core::EditorManager::defaultTextEncoding().encode(text));
+    if (!result) {
+        qCDebug(mcpCommands) << "Failed to create file:" << path << "Error:" << result.error();
+        return false;
     }
-
-    return repos;
-}
-
-static Utils::Result<Debugger::Internal::WatchHandler *> getWatchHandler()
-{
-    using namespace Debugger::Internal;
-    const QPointer<DebuggerEngine> engine = EngineManager::currentEngine();
-    if (!engine)
-        return Utils::ResultError("No active debug session");
-    if (engine->state() != Debugger::InferiorStopOk)
-        return Utils::ResultError("Debugger is not paused (current state: "
-                                  + DebuggerEngine::stateName(engine->state()) + ")");
-    return engine->watchHandler();
-}
-
-static QJsonObject watchItemToJson(const Debugger::Internal::WatchItem *item)
-{
-    QJsonObject obj;
-    obj["iname"] = item->iname;
-    obj["name"] = item->name;
-    obj["value"] = item->value;
-    obj["type"] = item->type;
-    obj["valueEditable"] = item->valueEditable;
-    obj["hasChildren"] = item->wantsChildren || item->childCount() > 0;
-    if (item->address != 0)
-        obj["address"] = QString("0x%1").arg(item->address, 0, 16);
-    return obj;
-}
-
-void McpCommands::getVariables(bool includeWatchers,
-                                std::function<void(Utils::Result<QJsonArray>)> callback)
-{
-    using namespace Debugger::Internal;
-    const Utils::Result<WatchHandler *> handler = getWatchHandler();
-    if (!handler) {
-        callback(Utils::ResultError(handler.error()));
-        return;
-    }
-
-    QStringList rootInames = {"local"};
-    if (includeWatchers)
-        rootInames.append("watch");
-
-    const auto buildResult = [handler, rootInames]() -> Utils::Result<QJsonArray> {
-        QJsonArray result;
-        for (const QString &rootIname : rootInames) {
-            WatchItem *root = (*handler)->findItem(rootIname);
-            if (!root)
-                continue;
-            root->forFirstLevelChildren([&](WatchItem *item) {
-                QJsonObject obj = watchItemToJson(item);
-                // Include children that are already loaded in the model.
-                // Do NOT call fetchMore here: it adds inames to m_expandedINames,
-                // causing notifyUpdateFinished to prematurely clear wantsChildren
-                // for all expanded items regardless of whether their children arrived.
-                if (item->childCount() > 0) {
-                    QJsonArray children;
-                    item->forFirstLevelChildren([&](WatchItem *child) {
-                        children.append(watchItemToJson(child));
-                    });
-                    obj["children"] = children;
-                }
-                result.append(obj);
-            });
-        }
-        return result;
-    };
-
-    // Check if any root has its children loaded already.
-    const bool anyLoaded = std::any_of(rootInames.begin(), rootInames.end(),
-                                       [&handler](const QString &rootIname) {
-                                           const WatchItem *root = (*handler)->findItem(rootIname);
-                                           return root && root->childCount() > 0;
-                                       });
-    if (anyLoaded) {
-        callback(buildResult());
-        return;
-    }
-
-    // Locals not loaded yet — connect first, then trigger updateLocalsWindow so
-    // we don't miss the signal if it already fired before this call.
-    WatchModelBase *model = (*handler)->model();
-    QObject::connect(model, &WatchModelBase::updateFinished,
-                     this, [callback, buildResult]() { callback(buildResult()); },
-                     Qt::SingleShotConnection);
-    (*handler)->updateLocalsWindow();
-}
-
-void McpCommands::getVariable(const QString &iname,
-                               std::function<void(Utils::Result<QJsonObject>)> callback)
-{
-    using namespace Debugger::Internal;
-    const Utils::Result<WatchHandler *> handler = getWatchHandler();
-    if (!handler) {
-        callback(Utils::ResultError(handler.error()));
-        return;
-    }
-
-    WatchItem *item = (*handler)->findItem(iname);
-    if (!item) {
-        callback(Utils::ResultError("No variable with iname: " + iname));
-        return;
-    }
-
-    const auto buildResult = [handler, iname]() -> Utils::Result<QJsonObject> {
-        WatchItem *item = (*handler)->findItem(iname);
-        if (!item)
-            return Utils::ResultError("Variable no longer available: " + iname);
-        QJsonObject obj = watchItemToJson(item);
-        if (item->wantsChildren || item->childCount() > 0) {
-            QJsonArray children;
-            item->forFirstLevelChildren([&](WatchItem *child) {
-                children.append(watchItemToJson(child));
-            });
-            obj["children"] = children;
-        }
-        return obj;
-    };
-
-    if (item->childCount() > 0 || !item->wantsChildren) {
-        callback(buildResult());
-        return;
-    }
-
-    // Children not yet fetched — request them and wait for the model to update.
-    (*handler)->fetchMore(iname);
-    WatchModelBase *model = (*handler)->model();
-    QObject::connect(model, &WatchModelBase::updateFinished,
-                     this, [callback, buildResult]() { callback(buildResult()); },
-                     Qt::SingleShotConnection);
-}
-
-Utils::Result<bool> McpCommands::setVariable(const QString &iname, const QString &value)
-{
-    using namespace Debugger::Internal;
-    const Utils::Result<WatchHandler *> handler = getWatchHandler();
-    if (!handler)
-        return Utils::ResultError(handler.error());
-
-    WatchItem *item = (*handler)->findItem(iname);
-    if (!item)
-        return Utils::ResultError("No variable with iname: " + iname);
-    if (!item->valueEditable)
-        return Utils::ResultError("Variable is not editable: " + iname);
-
-    EngineManager::currentEngine()->assignValueInDebugger(item, item->expression(), QVariant(value));
     return true;
 }
 
-Utils::Result<QString> McpCommands::addWatchExpression(const QString &expression,
-                                                        const QString &name)
+bool McpCommands::reformatFile(const QString &path)
 {
-    using namespace Debugger::Internal;
-    const Utils::Result<WatchHandler *> handler = getWatchHandler();
-    if (!handler)
-        return Utils::ResultError(handler.error());
-    if (expression.isEmpty())
-        return Utils::ResultError("Expression must not be empty");
-    (*handler)->watchExpression(expression, name);
-    return (*handler)->watcherName(expression);
-}
+    if (path.isEmpty())
+        return false;
 
-Utils::Result<bool> McpCommands::removeWatchExpression(const QString &iname)
-{
-    using namespace Debugger::Internal;
-    const Utils::Result<WatchHandler *> handler = getWatchHandler();
-    if (!handler)
-        return Utils::ResultError(handler.error());
-    WatchItem *item = (*handler)->findItem(iname);
-    if (!item)
-        return Utils::ResultError("No watch expression with iname: " + iname);
-    if (!item->isWatcher())
-        return Utils::ResultError("Item is not a watch expression: " + iname);
-    (*handler)->removeItemByIName(iname);
+    const FilePath filePath = FilePath::fromUserInput(path);
+
+    // If not already open, open it
+    Core::IEditor *editor = Core::EditorManager::openEditor(filePath);
+    if (!editor)
+        return false;
+
+    auto *textEditor = qobject_cast<TextEditor::TextEditorWidget *>(editor->widget());
+    if (!textEditor)
+        return false;
+
+    // Select all text and reformat
+    QTextCursor cursor = textEditor->textCursor();
+    cursor.select(QTextCursor::Document);
+    textEditor->setTextCursor(cursor);
+
+    // Trigger the TextEditor.ReformatFile action
+    Core::Command *cmd = Core::ActionManager::command(Utils::Id("TextEditor.ReformatFile"));
+    if (cmd && cmd->action() && cmd->action()->isEnabled()) {
+        cmd->action()->trigger();
+        return true;
+    }
+
+    // Fallback: use auto-indent on the whole document
+    textEditor->autoIndent();
     return true;
 }
 
-static Utils::Result<Debugger::Internal::ThreadsHandler *> getThreadsHandler()
-{
-    using namespace Debugger::Internal;
-    const QPointer<DebuggerEngine> engine = EngineManager::currentEngine();
-    if (!engine)
-        return Utils::ResultError("No active debug session");
-    if (engine->state() != Debugger::InferiorStopOk)
-        return Utils::ResultError("Debugger is not paused (current state: "
-                                  + DebuggerEngine::stateName(engine->state()) + ")");
-    return engine->threadsHandler();
-}
-
-Utils::Result<QJsonArray> McpCommands::getThreads()
-{
-    using namespace Debugger::Internal;
-    const Utils::Result<ThreadsHandler *> handler = getThreadsHandler();
-    if (!handler)
-        return Utils::ResultError(handler.error());
-
-    const Thread current = (*handler)->currentThread();
-    QJsonArray result;
-    (*handler)->forItemsAtLevel<1>([&](ThreadItem *item) {
-        const ThreadData &d = item->threadData;
-        QJsonObject obj;
-        obj["id"] = d.id;
-        obj["current"] = (current && current->id() == d.id);
-        if (!d.name.isEmpty())
-            obj["name"] = d.name;
-        if (!d.state.isEmpty())
-            obj["state"] = d.state;
-        if (!d.targetId.isEmpty())
-            obj["targetId"] = d.targetId;
-        if (!d.details.isEmpty())
-            obj["details"] = d.details;
-        if (!d.function.isEmpty())
-            obj["function"] = d.function;
-        if (!d.fileName.isEmpty())
-            obj["file"] = d.fileName;
-        if (d.lineNumber >= 0)
-            obj["line"] = d.lineNumber;
-        if (d.address != 0)
-            obj["address"] = QString("0x%1").arg(d.address, 0, 16);
-        result.append(obj);
-    });
-    return result;
-}
-
-Utils::Result<bool> McpCommands::selectThread(const QString &id)
-{
-    using namespace Debugger::Internal;
-    const Utils::Result<ThreadsHandler *> handler = getThreadsHandler();
-    if (!handler)
-        return Utils::ResultError(handler.error());
-
-    const Thread thread = (*handler)->threadForId(id);
-    if (!thread)
-        return Utils::ResultError("No thread with id: " + id);
-
-    (*handler)->setCurrentThread(thread);
-    EngineManager::currentEngine()->selectThread(thread);
-    return true;
-}
-
-Utils::Result<QJsonArray> McpCommands::getCallStack()
-{
-    using namespace Debugger::Internal;
-    const QPointer<DebuggerEngine> engine = EngineManager::currentEngine();
-    if (!engine)
-        return Utils::ResultError("No active debug session");
-
-    if (engine->state() != Debugger::InferiorStopOk)
-        return Utils::ResultError("Debugger is not paused (current state: "
-                                  + DebuggerEngine::stateName(engine->state()) + ")");
-
-    const StackHandler *handler = engine->stackHandler();
-    if (!handler || !handler->isContentsValid())
-        return Utils::ResultError("Call stack is not available");
-
-    QJsonArray frames;
-    const int count = handler->stackSize();
-    const int currentIndex = handler->currentIndex();
-    for (int i = 0; i < count; ++i) {
-        const StackFrame frame = handler->frameAt(i);
-        QJsonObject obj;
-        obj["level"] = i;
-        obj["current"] = (i == currentIndex);
-        if (!frame.function.isEmpty())
-            obj["function"] = frame.function;
-        if (!frame.file.isEmpty())
-            obj["file"] = frame.file.toUserOutput();
-        if (frame.line >= 0)
-            obj["line"] = frame.line;
-        if (frame.address != 0)
-            obj["address"] = QString("0x%1").arg(frame.address, 0, 16);
-        if (!frame.module.isEmpty())
-            obj["module"] = frame.module;
-        frames.append(obj);
-    }
-    return frames;
-}
-
-static QString breakpointTypeToString(Debugger::Internal::BreakpointType type)
-{
-    using namespace Debugger::Internal;
-    switch (type) {
-    case BreakpointByFileAndLine:      return "fileAndLine";
-    case BreakpointByFunction:         return "function";
-    case BreakpointByAddress:          return "address";
-    case BreakpointAtThrow:            return "throw";
-    case BreakpointAtCatch:            return "catch";
-    case BreakpointAtMain:             return "main";
-    case BreakpointAtFork:             return "fork";
-    case BreakpointAtExec:             return "exec";
-    case BreakpointAtSysCall:          return "syscall";
-    case WatchpointAtAddress:          return "watchAddress";
-    case WatchpointAtExpression:       return "watchExpression";
-    case BreakpointOnQmlSignalEmit:    return "qmlSignal";
-    case BreakpointAtJavaScriptThrow:  return "jsThrow";
-    default:                           return "unknown";
-    }
-}
-
-bool McpCommands::deleteBreakpoint(int id)
-{
-    using namespace Debugger::Internal;
-    const GlobalBreakpoints bps = BreakpointManager::globalBreakpoints();
-    for (const GlobalBreakpoint &gbp : bps) {
-        if (gbp && gbp->modelId() == id) {
-            gbp->deleteBreakpoint();
-            return true;
-        }
-    }
-    return false;
-}
-
-QJsonArray McpCommands::getBreakpoints()
-{
-    using namespace Debugger::Internal;
-    QJsonArray result;
-    const GlobalBreakpoints bps = BreakpointManager::globalBreakpoints();
-    for (const GlobalBreakpoint &gbp : bps) {
-        if (!gbp)
-            continue;
-        const BreakpointParameters &p = gbp->requestedParameters();
-        QJsonObject obj;
-        obj["id"] = gbp->modelId();
-        obj["type"] = breakpointTypeToString(p.type);
-        obj["enabled"] = p.enabled;
-        if (!p.fileName.isEmpty())
-            obj["file"] = p.fileName.toUserOutput();
-        if (p.textPosition.line > 0)
-            obj["line"] = p.textPosition.line;
-        if (!p.functionName.isEmpty())
-            obj["function"] = p.functionName;
-        if (p.address != 0)
-            obj["address"] = QString("0x%1").arg(p.address, 0, 16);
-        if (!p.condition.isEmpty())
-            obj["condition"] = p.condition;
-        if (p.ignoreCount != 0)
-            obj["ignoreCount"] = p.ignoreCount;
-        if (p.oneShot)
-            obj["oneShot"] = true;
-        if (!p.message.isEmpty())
-            obj["message"] = p.message;
-        result.append(obj);
-    }
-    return result;
-}
-
-QJsonObject McpCommands::addBreakpoint(
-    const QString &type,
-    const QString &file,
-    int line,
-    const QString &functionName,
-    quint64 address,
-    const QString &condition,
-    int ignoreCount,
-    bool enabled,
-    bool oneShot)
-{
-    using namespace Debugger::Internal;
-
-    BreakpointType bpType = BreakpointByFileAndLine;
-    if (type == "function")
-        bpType = BreakpointByFunction;
-    else if (type == "address")
-        bpType = BreakpointByAddress;
-    else if (type == "throw")
-        bpType = BreakpointAtThrow;
-    else if (type == "catch")
-        bpType = BreakpointAtCatch;
-    else if (type == "main")
-        bpType = BreakpointAtMain;
-    else if (type == "watchAddress")
-        bpType = WatchpointAtAddress;
-    else if (type == "watchExpression")
-        bpType = WatchpointAtExpression;
-
-    BreakpointParameters params(bpType);
-    params.enabled = enabled;
-    params.oneShot = oneShot;
-    if (!file.isEmpty())
-        params.fileName = FilePath::fromUserInput(file);
-    if (line > 0)
-        params.textPosition.line = line;
-    if (!functionName.isEmpty())
-        params.functionName = functionName;
-    if (address != 0)
-        params.address = address;
-    if (!condition.isEmpty())
-        params.condition = condition;
-    if (ignoreCount > 0)
-        params.ignoreCount = ignoreCount;
-
-    const GlobalBreakpoint gbp = BreakpointManager::createBreakpoint(params);
-    if (!gbp)
-        return QJsonObject{{"success", false}, {"error", "Failed to create breakpoint"}};
-
-    return QJsonObject{{"success", true}, {"id", gbp->modelId()}};
-}
-
-void McpCommands::registerCommands(Mcp::Server &server)
+void McpCommands::registerCommands()
 {
     using namespace Mcp::Schema;
 
@@ -1280,83 +629,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
         };
     };
 
-    server.addTool(
-        Schema::Tool()
-            .name("build")
-            .title("Build project")
-            .description(
-                "Builds the chosen project, or the currently active project if no name is provided")
-            .execution(ToolExecution().taskSupport(ToolExecution::TaskSupport::optional))
-            .inputSchema(
-                Tool::InputSchema().addProperty(
-                    "projectName",
-                    QJsonObject{{"description", "Name of the project to build"}, {"type", "string"}}))
-            .outputSchema(IssuesManager::issuesSchema())
-            .annotations(
-                Schema::ToolAnnotations()
-                    .destructiveHint(false)
-                    .idempotentHint(true)
-                    .openWorldHint(false)
-                    .readOnlyHint(false)),
-        [](const Schema::CallToolRequestParams &params,
-           const ToolInterface &toolInterface) -> Utils::Result<> {
-            const QString projectName = params.arguments()->value("projectName").toString();
-
-            QList<Project *> projects{ProjectManager::startupProject()};
-            if (!projectName.isEmpty())
-                projects = projectsForName(projectName);
-
-            projects.removeIf([](Project *p) { return !p; });
-
-            if (projects.isEmpty()) {
-                qCDebug(mcpCommands) << "No project found, cannot build";
-                return ResultError("No project named '" + projectName + "' found");
-            }
-
-            BuildManager::buildProjects(projects, ConfigSelection::Active);
-
-            using namespace std::chrono_literals;
-
-            toolInterface.startTask(
-                1s,
-                [](Schema::Task task) -> Schema::Task {
-                    auto progress = BuildManager::currentProgress();
-                    if (!progress) {
-                        task.status(Schema::TaskStatus::completed);
-                        task.statusMessage("Build finished");
-
-                        letTaskDieIn(task, 1min);
-                        return task;
-                    }
-                    task.statusMessage(
-                        QString("%1 (%2%)").arg(progress->second).arg(progress->first));
-                    return task;
-                },
-                []() -> Utils::Result<Schema::CallToolResult> {
-                    auto issues = commands.listIssues();
-                    return CallToolResult{}.structuredContent(issues).isError(false);
-                },
-                []() { BuildManager::cancel(); },
-                Mcp::progressToken(params));
-
-            return ResultOk;
-        });
-
-    server.addTool(
-        Tool{}
-            .name("get_build_status")
-            .title("Get current build status")
-            .description("Get current build progress and status")
-            .annotations(ToolAnnotations{}.readOnlyHint(true))
-            .outputSchema(
-                Tool::OutputSchema{}
-                    .addProperty("status", QJsonObject{{"type", "string"}})
-                    .addRequired("status")),
-        wrap([](const QJsonObject &) {
-            return QJsonObject{{"status", commands.getBuildStatus()}};
-        }));
-
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("open_file")
             .title("Open a file in Qt Creator")
@@ -1381,11 +654,13 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"success", ok}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("file_plain_text")
             .title("file plain text")
-            .description("Returns the content of the file as plain text")
+            .description(
+                "Returns the content of the file as plain text. This also supports files on remote "
+                "devices with uris like docker://... or ssh:// and others.")
             .annotations(ToolAnnotations{}.readOnlyHint(true))
             .inputSchema(
                 Tool::InputSchema{}
@@ -1406,13 +681,14 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"text", text}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("set_file_plain_text")
             .title("set file plain text")
             .description(
                 "overrided the content of the file with the provided plain text. If the "
-                "file is currently open it is not saved!")
+                "file is currently open it is not saved! This also supports files on remote "
+                "devices with uris like docker://... or ssh:// and others.")
             .annotations(ToolAnnotations{}.readOnlyHint(false))
             .inputSchema(
                 Tool::InputSchema{}
@@ -1438,7 +714,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"success", ok}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("save_file")
             .title("Save a file in Qt Creator")
@@ -1463,7 +739,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"success", ok}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("close_file")
             .title("Close a file in Qt Creator")
@@ -1488,65 +764,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"success", ok}};
         }));
 
-    server.addTool(
-        Tool{}
-            .name("find_files_in_projects")
-            .title("Find files in project")
-            .description("Find all files matching the pattern in a given project")
-            .annotations(ToolAnnotations{}.readOnlyHint(true))
-            .inputSchema(
-                Tool::InputSchema{}
-                    .addProperty(
-                        "projectName",
-                        QJsonObject{
-                            {"type", "string"},
-                            {"description",
-                             "Name of the project to limit the search to (optional)"}})
-                    .addProperty(
-                        "pattern",
-                        QJsonObject{
-                            {"type", "string"},
-                            {"description",
-                             "Pattern for finding the file, either a glob pattern or a regex"}})
-                    .addProperty(
-                        "regex",
-                        QJsonObject{
-                            {"type", "boolean"},
-                            {"description", "Whether the pattern is a regex (default is false)"}})
-                    .addRequired("pattern"))
-            .outputSchema(
-                Tool::OutputSchema{}
-                    .addProperty(
-                        "files",
-                        QJsonObject{
-                            {"type", "array"},
-                            {"description", "List of file paths matching the pattern"},
-                            {"items", QJsonObject{{"type", "string"}}}})
-                    .addRequired("files")),
-        [](const Schema::CallToolRequestParams &params) -> Utils::Result<Schema::CallToolResult> {
-            const QJsonObject &p = params.argumentsAsObject();
-            const QString projectName = p.value("projectName").toString();
-            const QString pattern = p.value("pattern").toString();
-            const bool isRegex = p.value("regex").toBool();
-
-            QRegularExpression re(
-                isRegex ? pattern : QRegularExpression::wildcardToRegularExpression(pattern));
-            if (!re.isValid()) {
-                qCDebug(mcpCommands) << "Invalid regex pattern:" << pattern;
-                return CallToolResult{}.isError(true).structuredContent(
-                    QJsonObject{{"error", "Invalid regex pattern"}});
-            }
-
-            const QList<Project *> projects = projectName.isEmpty() ? ProjectManager::projects()
-                                                                    : projectsForName(projectName);
-
-            const QStringList files = commands.findFiles(projects, re);
-            return CallToolResult{}
-                .structuredContent(QJsonObject{{"files", QJsonArray::fromStringList(files)}})
-                .isError(false);
-        });
-
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("search_in_file")
             .title("Search for pattern in a single file")
@@ -1586,60 +804,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             commands.searchInFile(path, pattern, isRegex, caseSensitive, callback);
         }));
 
-    server.addTool(
-        Tool{}
-            .name("search_in_files")
-            .title("Search for pattern in project files")
-            .description(
-                "Search for a text pattern in files matching a file pattern within a "
-                "project (or all projects) and return all matches")
-            .annotations(ToolAnnotations{}.readOnlyHint(true))
-            .inputSchema(
-                Tool::InputSchema{}
-                    .addProperty(
-                        "filePattern",
-                        QJsonObject{
-                            {"type", "string"},
-                            {"description",
-                             "File pattern to filter which files to search (e.g., '*.cpp', "
-                             "'*.h')"}})
-                    .addProperty(
-                        "projectName",
-                        QJsonObject{
-                            {"type", "string"},
-                            {"description",
-                             "Optional: name of the project to search in (searches all projects if "
-                             "not specified)"}})
-                    .addProperty(
-                        "pattern",
-                        QJsonObject{{"type", "string"}, {"description", "Text pattern to search for"}})
-                    .addProperty(
-                        "regex",
-                        QJsonObject{
-                            {"type", "boolean"},
-                            {"description", "Whether the pattern is a regular expression"}})
-                    .addProperty(
-                        "caseSensitive",
-                        QJsonObject{
-                            {"type", "boolean"},
-                            {"description", "Whether the search should be case sensitive"}})
-                    .addRequired("filePattern")
-                    .addRequired("pattern"))
-            .outputSchema(McpCommands::searchResultsSchema()),
-        wrapAsync([](const QJsonObject &p, const Callback &callback) {
-            const QString filePattern = p.value("filePattern").toString();
-            const QString pattern = p.value("pattern").toString();
-            const bool isRegex = p.value("regex").toBool(false);
-            const bool caseSensitive = p.value("caseSensitive").toBool(false);
-            const std::optional<QString> projectName = p.contains("projectName")
-                                                           ? std::optional<QString>(
-                                                                 p.value("projectName").toString())
-                                                           : std::nullopt;
-            commands
-                .searchInFiles(filePattern, projectName, pattern, isRegex, caseSensitive, callback);
-        }));
-
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("search_in_directory")
             .title("Search for pattern in a directory")
@@ -1679,7 +844,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             commands.searchInDirectory(directory, pattern, isRegex, caseSensitive, callback);
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("replace_in_file")
             .title("Replace pattern in a single file")
@@ -1726,68 +891,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             commands.replaceInFile(path, pattern, replacement, isRegex, caseSensitive, callback);
         }));
 
-    server.addTool(
-        Tool{}
-            .name("replace_in_files")
-            .title("Replace pattern in project files")
-            .description(
-                "Replace all matches of a text pattern in files matching a file pattern "
-                "within a project (or all projects) with replacement text")
-            .annotations(ToolAnnotations{}.readOnlyHint(false))
-            .inputSchema(
-                Tool::InputSchema{}
-                    .addProperty(
-                        "filePattern",
-                        QJsonObject{
-                            {"type", "string"},
-                            {"description",
-                             "File pattern to filter which files to modify (e.g., '*.cpp', "
-                             "'*.h')"}})
-                    .addProperty(
-                        "projectName",
-                        QJsonObject{
-                            {"type", "string"},
-                            {"description",
-                             "Optional: name of the project to search in (searches all projects if "
-                             "not specified)"}})
-                    .addProperty(
-                        "pattern",
-                        QJsonObject{{"type", "string"}, {"description", "Text pattern to search for"}})
-                    .addProperty(
-                        "replacement",
-                        QJsonObject{{"type", "string"}, {"description", "Replacement text"}})
-                    .addProperty(
-                        "regex",
-                        QJsonObject{
-                            {"type", "boolean"},
-                            {"description", "Whether the pattern is a regular expression"}})
-                    .addProperty(
-                        "caseSensitive",
-                        QJsonObject{
-                            {"type", "boolean"},
-                            {"description", "Whether the search should be case sensitive"}})
-                    .addRequired("filePattern")
-                    .addRequired("pattern")
-                    .addRequired("replacement"))
-            .outputSchema(
-                Tool::OutputSchema{}
-                    .addProperty("ok", QJsonObject{{"type", "boolean"}})
-                    .addRequired("ok")),
-        wrapAsync([](const QJsonObject &p, const Callback &callback) {
-            const QString filePattern = p.value("filePattern").toString();
-            const QString pattern = p.value("pattern").toString();
-            const QString replacement = p.value("replacement").toString();
-            const bool isRegex = p.value("regex").toBool(false);
-            const bool caseSensitive = p.value("caseSensitive").toBool(false);
-            const std::optional<QString> projectName = p.contains("projectName")
-                                                           ? std::optional<QString>(
-                                                                 p.value("projectName").toString())
-                                                           : std::nullopt;
-            commands.replaceInFiles(
-                filePattern, projectName, pattern, replacement, isRegex, caseSensitive, callback);
-        }));
-
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("replace_in_directory")
             .title("Replace pattern in a directory")
@@ -1836,71 +940,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
                 directory, pattern, replacement, isRegex, caseSensitive, callback);
         }));
 
-    server.addTool(
-        Tool{}
-            .name("list_projects")
-            .title("List all available projects")
-            .description("List all available projects")
-            .annotations(ToolAnnotations{}.readOnlyHint(true))
-            .outputSchema(
-                Tool::OutputSchema{}
-                    .addProperty(
-                        "projects",
-                        QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}}})
-                    .addRequired("projects")),
-        wrap([](const QJsonObject &) {
-            const QStringList projects = commands.listProjects();
-            QJsonArray arr;
-            for (const QString &pr : projects)
-                arr.append(pr);
-            return QJsonObject{{"projects", arr}};
-        }));
-
-    server.addTool(
-        Tool{}
-            .name("list_build_configs")
-            .title("List available build configurations")
-            .description("List available build configurations")
-            .annotations(ToolAnnotations{}.readOnlyHint(true))
-            .outputSchema(
-                Tool::OutputSchema{}
-                    .addProperty(
-                        "buildConfigs",
-                        QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}}})
-                    .addRequired("buildConfigs")),
-        wrap([](const QJsonObject &) {
-            const QStringList configs = commands.listBuildConfigs();
-            QJsonArray arr;
-            for (const QString &c : configs)
-                arr.append(c);
-            return QJsonObject{{"buildConfigs", arr}};
-        }));
-
-    server.addTool(
-        Tool{}
-            .name("switch_build_config")
-            .title("Switch to a specific build configuration")
-            .description("Switch to a specific build configuration")
-            .annotations(ToolAnnotations{}.readOnlyHint(false))
-            .inputSchema(
-                Tool::InputSchema{}
-                    .addProperty(
-                        "name",
-                        QJsonObject{
-                            {"type", "string"},
-                            {"description", "Name of the build configuration to switch to"}})
-                    .addRequired("name"))
-            .outputSchema(
-                Tool::OutputSchema{}
-                    .addProperty("success", QJsonObject{{"type", "boolean"}})
-                    .addRequired("success")),
-        wrap([](const QJsonObject &p) {
-            const QString name = p.value("name").toString();
-            bool ok = commands.switchToBuildConfig(name);
-            return QJsonObject{{"success", ok}};
-        }));
-
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("list_open_files")
             .title("List currently open files")
@@ -1920,7 +960,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"openFiles", arr}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("list_visible_files")
             .title("List currently visible files")
@@ -1940,7 +980,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"visibleFiles", arr}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("list_sessions")
             .title("List available sessions")
@@ -1960,7 +1000,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"sessions", arr}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("load_session")
             .title("Load a specific session")
@@ -1983,37 +1023,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"success", ok}};
         }));
 
-    server.addTool(
-        Tool{}
-            .name("list_issues")
-            .title("List current issues (warnings and errors)")
-            .description("List current issues (warnings and errors)")
-            .annotations(ToolAnnotations{}.readOnlyHint(true))
-            .outputSchema(IssuesManager::issuesSchema()),
-        wrap([](const QJsonObject &) { return commands.listIssues(); }));
-
-    server.addTool(
-        Tool{}
-            .name("list_file_issues")
-            .title("List current issues for file (warnings and errors)")
-            .description("List current issues for file (warnings and errors)")
-            .annotations(ToolAnnotations{}.readOnlyHint(true))
-            .inputSchema(
-                Tool::InputSchema{}
-                    .addProperty(
-                        "path",
-                        QJsonObject{
-                            {"type", "string"},
-                            {"format", "uri"},
-                            {"description", "Absolute path of the file to open"}})
-                    .addRequired("path"))
-            .outputSchema(IssuesManager::issuesSchema()),
-        wrap([](const QJsonObject &p) {
-            const QString path = p.value("path").toString();
-            return commands.listIssues(path);
-        }));
-
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("quit")
             .title("Quit Qt Creator")
@@ -2028,37 +1038,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"success", ok}};
         }));
 
-    server.addTool(
-        Tool{}
-            .name("get_current_project")
-            .title("Get the currently active project")
-            .description("Get the currently active project")
-            .annotations(ToolAnnotations{}.readOnlyHint(true))
-            .outputSchema(
-                Tool::OutputSchema{}
-                    .addProperty("project", QJsonObject{{"type", "string"}})
-                    .addRequired("project")),
-        wrap([](const QJsonObject &) {
-            QString proj = commands.getCurrentProject();
-            return QJsonObject{{"project", proj}};
-        }));
-
-    server.addTool(
-        Tool{}
-            .name("get_current_build_config")
-            .title("Get the currently active build configuration")
-            .description("Get the currently active build configuration")
-            .annotations(ToolAnnotations{}.readOnlyHint(true))
-            .outputSchema(
-                Tool::OutputSchema{}
-                    .addProperty("buildConfig", QJsonObject{{"type", "string"}})
-                    .addRequired("buildConfig")),
-        wrap([](const QJsonObject &) {
-            QString cfg = commands.getCurrentBuildConfig();
-            return QJsonObject{{"buildConfig", cfg}};
-        }));
-
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("get_current_session")
             .title("Get the currently active session")
@@ -2073,7 +1053,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"session", sess}};
         }));
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("save_session")
             .title("Save the current session")
@@ -2088,532 +1068,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
             return QJsonObject{{"success", ok}};
         }));
 
-    server.addTool(
-        Tool()
-            .name("known_repositories_in_projects")
-            .title("Get known version control repositories in all projects")
-            .description(
-                "List all known version control repositories (e.g., Git, Subversion) that are "
-                "within the directories of all open projects")
-            .annotations(ToolAnnotations{}.readOnlyHint(true))
-            .inputSchema(
-                Tool::InputSchema()
-                    .addProperty(
-                        "name",
-                        QJsonObject{
-                            {"type", "string"},
-                            {"description", "Name of the project to query repositories for"}})
-                    .addRequired("name"))
-            .outputSchema(
-                Tool::OutputSchema()
-                    .addProperty(
-                        "repositories",
-                        QJsonObject{
-                            {"type", "object"},
-                            {"description",
-                             "Map of version control system names to lists of repository paths"}})
-                    .addRequired("repositories")),
-        wrap([](const QJsonObject &p) {
-            const QString projectName = p.value("name").toString();
-            const QMap<QString, QSet<QString>> repos = commands.knownRepositoriesInProject(
-                projectName);
-
-            // Convert QMap<QString, QStringList> to QJsonObject
-            QJsonObject reposJson;
-            for (auto it = repos.constBegin(); it != repos.constEnd(); ++it) {
-                reposJson[it.key()] = QJsonArray::fromStringList(Utils::toList(it.value()));
-            }
-
-            return QJsonObject{{"repositories", reposJson}};
-        }));
-
-    server.addTool(
-        Tool()
-            .name("project_dependencies")
-            .title("List project dependencies for all projects")
-            .description("List project dependencies for all projects")
-            .annotations(ToolAnnotations{}.readOnlyHint(true))
-            .inputSchema(
-                Tool::InputSchema{}
-                    .addProperty(
-                        "name",
-                        QJsonObject{
-                            {"type", "string"},
-                            {"description", "Name of the project to query dependencies for"}})
-                    .addRequired("name"))
-            .outputSchema(
-                Tool::OutputSchema{}
-                    .addProperty(
-                        "dependencies",
-                        QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}}})
-                    .addRequired("dependencies")),
-        wrap([](const QJsonObject &p) {
-            const Utils::Result<QStringList> projects = commands.projectDependencies(
-                p["name"].toString());
-            QJsonArray arr;
-            for (const QString &pr : projects.value_or(QStringList{})) // TODO: proper error handling
-                arr.append(pr);
-            return QJsonObject{{"dependencies", arr}};
-        }));
-
-    server.addTool(
-        Tool{}
-            .name("get_breakpoints")
-            .title("Get current breakpoints")
-            .description("Returns all breakpoints currently set in Qt Creator's debugger")
-            .annotations(ToolAnnotations{}.readOnlyHint(true).destructiveHint(false))
-            .outputSchema(
-                Tool::OutputSchema{}
-                    .addProperty(
-                        "breakpoints",
-                        QJsonObject{
-                            {"type", "array"},
-                            {"items", QJsonObject{{"type", "object"}}},
-                            {"description", "List of breakpoints"}})
-                    .addRequired("breakpoints")),
-        wrap([](const QJsonObject &) {
-            return QJsonObject{{"breakpoints", commands.getBreakpoints()}};
-        }));
-
-    server.addTool(
-        Tool{}
-            .name("get_threads")
-            .title("Get current threads")
-            .description(
-                "Returns all threads of the current debug session. "
-                "Returns an error if no debug session is active or the debugger is not paused.")
-            .annotations(ToolAnnotations{}.readOnlyHint(true))
-            .outputSchema([] {
-                const QJsonObject threadProperties{
-                    {"id",       QJsonObject{{"type", "string"},  {"description", "Thread ID"}}},
-                    {"current",  QJsonObject{{"type", "boolean"}, {"description", "True for the currently selected thread"}}},
-                    {"name",     QJsonObject{{"type", "string"},  {"description", "Thread name"}}},
-                    {"state",    QJsonObject{{"type", "string"},  {"description", "Thread state, e.g. \"stopped\""}}},
-                    {"targetId", QJsonObject{{"type", "string"},  {"description", "Target-level thread identifier"}}},
-                    {"details",  QJsonObject{{"type", "string"},  {"description", "Additional details from the debugger"}}},
-                    {"function", QJsonObject{{"type", "string"},  {"description", "Current function name"}}},
-                    {"file",     QJsonObject{{"type", "string"},  {"description", "Current source file"}}},
-                    {"line",     QJsonObject{{"type", "integer"}, {"description", "Current line number"}}},
-                    {"address",  QJsonObject{{"type", "string"},  {"description", "Current instruction address"}}},
-                };
-                const QJsonObject threadItem{
-                    {"type", "object"},
-                    {"required", QJsonArray{"id", "current"}},
-                    {"properties", threadProperties},
-                };
-                return Tool::OutputSchema{}
-                    .addProperty(
-                        "threads",
-                        QJsonObject{
-                            {"type", "array"},
-                            {"description", "List of threads"},
-                            {"items", threadItem}})
-                    .addRequired("threads");
-            }()),
-        [](const Schema::CallToolRequestParams &) -> Utils::Result<CallToolResult> {
-            const Utils::Result<QJsonArray> threads = commands.getThreads();
-            if (!threads)
-                return CallToolResult{}.isError(true).addContent(Schema::TextContent{}.text(threads.error()));
-            return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"threads", *threads}});
-        });
-
-    server.addTool(
-        Tool{}
-            .name("select_thread")
-            .title("Select a thread")
-            .description(
-                "Switches the current thread in the active debug session. "
-                "Returns an error if no debug session is active or the debugger is not paused.")
-            .annotations(ToolAnnotations{}.readOnlyHint(false).idempotentHint(true))
-            .inputSchema(
-                Tool::InputSchema{}
-                    .addProperty(
-                        "id",
-                        QJsonObject{
-                            {"type", "string"},
-                            {"description", "Thread ID to select (as returned by get_threads)"}})
-                    .addRequired("id"))
-            .outputSchema(
-                Tool::OutputSchema{}
-                    .addProperty("success", QJsonObject{{"type", "boolean"}})
-                    .addRequired("success")),
-        [](const Schema::CallToolRequestParams &params) -> Utils::Result<CallToolResult> {
-            const Utils::Result<bool> ok = commands.selectThread(params.argumentsAsObject().value("id").toString());
-            if (!ok)
-                return CallToolResult{}.isError(true).addContent(Schema::TextContent{}.text(ok.error()));
-            return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"success", true}});
-        });
-
-    const auto varItemSchema = [] {
-        return QJsonObject{
-            {"type", "object"},
-            {"required", QJsonArray{"iname", "name", "value", "type", "valueEditable", "hasChildren"}},
-            {"properties", QJsonObject{
-                {"iname",         QJsonObject{{"type", "string"},  {"description", "Internal name, e.g. \"local.myVar\". Use as key for get_variable / set_variable."}}},
-                {"name",          QJsonObject{{"type", "string"},  {"description", "Display name"}}},
-                {"value",         QJsonObject{{"type", "string"},  {"description", "Current value as a string"}}},
-                {"type",          QJsonObject{{"type", "string"},  {"description", "Type name"}}},
-                {"address",       QJsonObject{{"type", "string"},  {"description", "Memory address, e.g. \"0x1234\""}}},
-                {"valueEditable", QJsonObject{{"type", "boolean"}, {"description", "Whether the value can be changed via set_variable"}}},
-                {"hasChildren",   QJsonObject{{"type", "boolean"}, {"description", "Whether the variable has child members"}}},
-            }},
-        };
-    };
-
-    server.addTool(
-        Tool{}
-            .name("get_variables")
-            .title("List local variables")
-            .description(
-                "Returns local variables for the current stack frame. "
-                "Optionally includes watch expressions. "
-                "Variables with hasChildren=true may include a children array if already expanded; "
-                "otherwise call get_variable with the variable's iname to retrieve sub-fields. "
-                "Returns an error if no debug session is active or the debugger is not paused.")
-            .annotations(ToolAnnotations{}.readOnlyHint(true))
-            .inputSchema(
-                Tool::InputSchema{}
-                    .addProperty(
-                        "includeWatchers",
-                        QJsonObject{
-                            {"type", "boolean"},
-                            {"description", "Also return watch expressions (default: false)"},
-                            {"default", false}}))
-            .outputSchema(
-                Tool::OutputSchema{}
-                    .addProperty(
-                        "variables",
-                        QJsonObject{
-                            {"type", "array"},
-                            {"description", "List of variables"},
-                            {"items", varItemSchema()}})
-                    .addRequired("variables")),
-        [](const Schema::CallToolRequestParams &params,
-           const ToolInterface &toolInterface) -> Utils::Result<> {
-            const bool includeWatchers = params.argumentsAsObject().value("includeWatchers").toBool(false);
-            commands.getVariables(includeWatchers, [toolInterface](Utils::Result<QJsonArray> vars) {
-                if (!vars)
-                    toolInterface.finish(CallToolResult{}.isError(true).addContent(
-                        Schema::TextContent{}.text(vars.error())));
-                else
-                    toolInterface.finish(CallToolResult{}.isError(false).structuredContent(
-                        QJsonObject{{"variables", *vars}}));
-            });
-            return ResultOk;
-        });
-
-    server.addTool(
-        Tool{}
-            .name("get_variable")
-            .title("Get a variable")
-            .description(
-                "Returns the details of a single variable by its iname, including its children "
-                "if it has any (e.g. struct members or array elements). "
-                "If a child also has hasChildren=true, call get_variable again with that child's iname "
-                "to retrieve its sub-fields. "
-                "Returns an error if no debug session is active or the debugger is not paused.")
-            .annotations(ToolAnnotations{}.readOnlyHint(true))
-            .inputSchema(
-                Tool::InputSchema{}
-                    .addProperty(
-                        "iname",
-                        QJsonObject{
-                            {"type", "string"},
-                            {"description", "Internal name of the variable (e.g. \"local.myVar\")"}})
-                    .addRequired("iname"))
-            .outputSchema([] {
-                QJsonObject schema = [] {
-                    QJsonObject s;
-                    s["type"] = "object";
-                    s["required"] = QJsonArray{"iname", "name", "value", "type", "valueEditable", "hasChildren"};
-                    s["properties"] = QJsonObject{
-                        {"iname",         QJsonObject{{"type", "string"}}},
-                        {"name",          QJsonObject{{"type", "string"}}},
-                        {"value",         QJsonObject{{"type", "string"}}},
-                        {"type",          QJsonObject{{"type", "string"}}},
-                        {"address",       QJsonObject{{"type", "string"}}},
-                        {"valueEditable", QJsonObject{{"type", "boolean"}}},
-                        {"hasChildren",   QJsonObject{{"type", "boolean"}}},
-                        {"children",      QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "object"}}},
-                                                      {"description", "Child members, present when hasChildren is true"}}},
-                    };
-                    return s;
-                }();
-                return Tool::OutputSchema{}.addProperty("variable", schema).addRequired("variable");
-            }()),
-        [](const Schema::CallToolRequestParams &params,
-           const ToolInterface &toolInterface) -> Utils::Result<> {
-            commands.getVariable(
-                params.argumentsAsObject().value("iname").toString(),
-                [toolInterface](Utils::Result<QJsonObject> var) {
-                    if (!var)
-                        toolInterface.finish(CallToolResult{}.isError(true).addContent(
-                            Schema::TextContent{}.text(var.error())));
-                    else
-                        toolInterface.finish(CallToolResult{}.isError(false).structuredContent(
-                            QJsonObject{{"variable", *var}}));
-                });
-            return ResultOk;
-        });
-
-    server.addTool(
-        Tool{}
-            .name("set_variable")
-            .title("Set a variable value")
-            .description(
-                "Changes the value of a variable in the current debug session. "
-                "Only works for variables where valueEditable is true. "
-                "Returns an error if no debug session is active or the debugger is not paused.")
-            .annotations(ToolAnnotations{}.readOnlyHint(false))
-            .inputSchema(
-                Tool::InputSchema{}
-                    .addProperty(
-                        "iname",
-                        QJsonObject{
-                            {"type", "string"},
-                            {"description", "Internal name of the variable (e.g. \"local.myVar\")"}})
-                    .addProperty(
-                        "value",
-                        QJsonObject{
-                            {"type", "string"},
-                            {"description", "New value to assign"}})
-                    .addRequired("iname")
-                    .addRequired("value"))
-            .outputSchema(
-                Tool::OutputSchema{}
-                    .addProperty("success", QJsonObject{{"type", "boolean"}})
-                    .addRequired("success")),
-        [](const Schema::CallToolRequestParams &params) -> Utils::Result<CallToolResult> {
-            const QJsonObject p = params.argumentsAsObject();
-            const Utils::Result<bool> ok = commands.setVariable(p.value("iname").toString(), p.value("value").toString());
-            if (!ok)
-                return CallToolResult{}.isError(true).addContent(Schema::TextContent{}.text(ok.error()));
-            return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"success", true}});
-        });
-
-    server.addTool(
-        Tool{}
-            .name("add_watch_expression")
-            .title("Add a watch expression")
-            .description(
-                "Adds an expression to the watch list in the current debug session. "
-                "The expression is evaluated and its value updated as execution progresses. "
-                "Returns the iname of the new watch entry (e.g. \"watch.0\"), which can be used "
-                "with get_variable, set_variable, and remove_watch_expression. "
-                "Returns an error if no debug session is active or the debugger is not paused.")
-            .annotations(ToolAnnotations{}.readOnlyHint(false))
-            .inputSchema(
-                Tool::InputSchema{}
-                    .addProperty(
-                        "expression",
-                        QJsonObject{
-                            {"type", "string"},
-                            {"description", "Expression to watch (e.g. \"myVar\", \"ptr->field\")"}})
-                    .addProperty(
-                        "name",
-                        QJsonObject{
-                            {"type", "string"},
-                            {"description", "Optional display name; defaults to the expression"}})
-                    .addRequired("expression"))
-            .outputSchema(
-                Tool::OutputSchema{}
-                    .addProperty(
-                        "iname",
-                        QJsonObject{{"type", "string"},
-                                    {"description", "Internal name of the watch entry (e.g. \"watch.0\")"}})
-                    .addRequired("iname")),
-        [](const Schema::CallToolRequestParams &params) -> Utils::Result<CallToolResult> {
-            const QJsonObject p = params.argumentsAsObject();
-            const Utils::Result<QString> iname = commands.addWatchExpression(
-                p.value("expression").toString(), p.value("name").toString());
-            if (!iname)
-                return CallToolResult{}.isError(true).addContent(Schema::TextContent{}.text(iname.error()));
-            return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"iname", *iname}});
-        });
-
-    server.addTool(
-        Tool{}
-            .name("remove_watch_expression")
-            .title("Remove a watch expression")
-            .description(
-                "Removes a watch expression from the current debug session by its iname. "
-                "Returns an error if the iname is not found or is not a watch expression, "
-                "or if no debug session is active or the debugger is not paused.")
-            .annotations(ToolAnnotations{}.readOnlyHint(false))
-            .inputSchema(
-                Tool::InputSchema{}
-                    .addProperty(
-                        "iname",
-                        QJsonObject{
-                            {"type", "string"},
-                            {"description",
-                             "Internal name of the watch entry to remove (e.g. \"watch.0\")"}})
-                    .addRequired("iname"))
-            .outputSchema(
-                Tool::OutputSchema{}
-                    .addProperty("success", QJsonObject{{"type", "boolean"}})
-                    .addRequired("success")),
-        [](const Schema::CallToolRequestParams &params) -> Utils::Result<CallToolResult> {
-            const Utils::Result<bool> ok = commands.removeWatchExpression(
-                params.argumentsAsObject().value("iname").toString());
-            if (!ok)
-                return CallToolResult{}.isError(true).addContent(Schema::TextContent{}.text(ok.error()));
-            return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"success", true}});
-        });
-
-    server.addTool(
-        Tool{}
-            .name("get_call_stack")
-            .title("Get current call stack")
-            .description(
-                "Returns the call stack (stack frames) of the current debug session. "
-                "Returns an error if no debug session is active or the debugger is not paused.")
-            .annotations(ToolAnnotations{}.readOnlyHint(true))
-            .outputSchema([] {
-                const QJsonObject frameProperties{
-                    {"level",    QJsonObject{{"type", "integer"}, {"description", "Frame index, 0 = innermost"}}},
-                    {"current",  QJsonObject{{"type", "boolean"}, {"description", "True for the currently active frame"}}},
-                    {"function", QJsonObject{{"type", "string"},  {"description", "Function or method name"}}},
-                    {"file",     QJsonObject{{"type", "string"},  {"description", "Absolute path to the source file"}}},
-                    {"line",     QJsonObject{{"type", "integer"}, {"description", "Line number in the source file"}}},
-                    {"address",  QJsonObject{{"type", "string"},  {"description", "Instruction address, e.g. \"0x1234abcd\""}}},
-                    {"module",   QJsonObject{{"type", "string"},  {"description", "Module or shared library name"}}},
-                };
-                const QJsonObject frameItem{
-                    {"type", "object"},
-                    {"required", QJsonArray{"level", "current"}},
-                    {"properties", frameProperties},
-                };
-                return Tool::OutputSchema{}
-                    .addProperty(
-                        "frames",
-                        QJsonObject{
-                            {"type", "array"},
-                            {"description", "Stack frames, innermost first"},
-                            {"items", frameItem}})
-                    .addRequired("frames");
-            }()),
-        [](const Schema::CallToolRequestParams &) -> Utils::Result<CallToolResult> {
-            const Utils::Result<QJsonArray> frames = commands.getCallStack();
-            if (!frames)
-                return CallToolResult{}.isError(true).addContent(Schema::TextContent{}.text(frames.error()));
-            return CallToolResult{}.isError(false).structuredContent(QJsonObject{{"frames", *frames}});
-        });
-
-    server.addTool(
-        Tool{}
-            .name("delete_breakpoint")
-            .title("Delete a breakpoint")
-            .description(
-                "Deletes a breakpoint by its ID (as returned by get_breakpoints or add_breakpoint)")
-            .annotations(ToolAnnotations().destructiveHint(true).idempotentHint(true))
-            .inputSchema(
-                Tool::InputSchema{}
-                    .addProperty(
-                        "id",
-                        QJsonObject{
-                            {"type", "integer"}, {"description", "ID of the breakpoint to delete"}})
-                    .addRequired("id"))
-            .outputSchema(
-                Tool::OutputSchema{}
-                    .addProperty("success", QJsonObject{{"type", "boolean"}})
-                    .addRequired("success")),
-        wrap([](const QJsonObject &p) {
-            const bool ok = commands.deleteBreakpoint(p.value("id").toInt());
-            return QJsonObject{{"success", ok}};
-        }));
-
-    server.addTool(
-        Tool{}
-            .name("add_breakpoint")
-            .title("Add a breakpoint")
-            .description("Adds a new breakpoint in Qt Creator's debugger.")
-            .annotations(ToolAnnotations{}.readOnlyHint(false).destructiveHint(false))
-            .inputSchema(
-                Tool::InputSchema{}
-                    .addProperty(
-                        "type",
-                        QJsonObject{
-                            {"type", "string"},
-                            {"enum",
-                             QJsonArray{
-                                 "fileAndLine",
-                                 "function",
-                                 "address",
-                                 "throw",
-                                 "catch",
-                                 "main",
-                                 "watchAddress",
-                                 "watchExpression"}},
-                            {"description", "Breakpoint type. Defaults to fileAndLine."},
-                            {"default", "fileAndLine"}})
-                    .addProperty(
-                        "file",
-                        QJsonObject{
-                            {"type", "string"},
-                            {"description",
-                             "Absolute path to the source file (for fileAndLine type)"}})
-                    .addProperty(
-                        "line",
-                        QJsonObject{
-                            {"type", "integer"},
-                            {"description",
-                             "Line number in the source file (for fileAndLine type)"}})
-                    .addProperty(
-                        "function",
-                        QJsonObject{
-                            {"type", "string"},
-                            {"description", "Function name (for function type)"}})
-                    .addProperty(
-                        "address",
-                        QJsonObject{
-                            {"type", "integer"},
-                            {"description", "Memory address (for address or watchAddress type)"}})
-                    .addProperty(
-                        "condition",
-                        QJsonObject{
-                            {"type", "string"}, {"description", "Optional condition expression"}})
-                    .addProperty(
-                        "ignoreCount",
-                        QJsonObject{
-                            {"type", "integer"},
-                            {"description", "Number of hits to ignore before breaking"}})
-                    .addProperty(
-                        "enabled",
-                        QJsonObject{
-                            {"type", "boolean"},
-                            {"description", "Whether the breakpoint is enabled. Defaults to true."},
-                            {"default", true}})
-                    .addProperty(
-                        "oneShot",
-                        QJsonObject{
-                            {"type", "boolean"},
-                            {"description",
-                             "If true, the breakpoint is removed after the first hit"},
-                            {"default", false}}))
-            .outputSchema(
-                Tool::OutputSchema{}
-                    .addProperty("success", QJsonObject{{"type", "boolean"}})
-                    .addProperty(
-                        "id",
-                        QJsonObject{
-                            {"type", "integer"}, {"description", "ID of the created breakpoint"}})
-                    .addProperty("error", QJsonObject{{"type", "string"}})
-                    .addRequired("success")),
-        wrap([](const QJsonObject &p) {
-            return commands.addBreakpoint(
-                p.value("type").toString("fileAndLine"),
-                p.value("file").toString(),
-                p.value("line").toInt(0),
-                p.value("function").toString(),
-                static_cast<quint64>(p.value("address").toInteger(0)),
-                p.value("condition").toString(),
-                p.value("ignoreCount").toInt(0),
-                p.value("enabled").toBool(true),
-                p.value("oneShot").toBool(false));
-        }));
-
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool()
             .name("execute_command")
             .title("executes the command")
@@ -2663,288 +1118,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
                 callback);
         }));
 
-    // Shared output schema for run/debug tools.
-    const auto runToolOutputSchema = [] {
-        const Tool::OutputSchema issSchema = IssuesManager::issuesSchema();
-        QJsonObject issuesField{
-            {"type", "object"},
-            {"description",
-             "Build issues — present when the build failed; same format as list_issues"}};
-        if (issSchema._properties) {
-            QJsonObject props;
-            for (auto it = issSchema._properties->cbegin();
-                 it != issSchema._properties->cend();
-                 ++it)
-                props[it.key()] = it.value();
-            issuesField["properties"] = props;
-        }
-        if (issSchema._required)
-            issuesField["required"] = QJsonArray::fromStringList(*issSchema._required);
-
-        return Tool::OutputSchema{}
-            .addProperty(
-                "output",
-                QJsonObject{
-                    {"type", "string"},
-                    {"description", "Collected output from the run (present on success)"}})
-            .addProperty("issues", issuesField);
-    }();
-
-    // Shared callback factory for run/debug tools.
-    const auto makeRunCallback =
-        [](Utils::Id runMode, const QString &finishedMessage)
-        -> Server::ToolInterfaceCallback {
-        return [runMode, finishedMessage](
-                   const Schema::CallToolRequestParams &params,
-                   const ToolInterface &toolInterface) -> Utils::Result<> {
-            const Utils::Result<> canRun
-                = ProjectExplorer::ProjectExplorerPlugin::canRunStartupProject(runMode);
-            if (!canRun) {
-                toolInterface.finish(CallToolResult{}.isError(true).addContent(
-                    Schema::TextContent{}.text(canRun.error())));
-                return ResultOk;
-            }
-
-            struct State
-            {
-                QStringList output;
-                bool finished = false;
-                QJsonObject failureIssues; // non-empty when build failed
-                QPointer<ProjectExplorer::RunControl> rc;
-            };
-            auto state = std::make_shared<State>();
-
-            using namespace std::chrono_literals;
-
-            const Utils::Result<ToolInterface::TaskProgressNotify> task = toolInterface.startTask(
-                500ms,
-                [state](Schema::Task t) {
-                    if (state->finished)
-                        letTaskDieIn(t, 1min);
-                    const bool failed = !state->failureIssues.isEmpty();
-                    return t
-                        .status(
-                            !state->finished  ? Schema::TaskStatus::working
-                            : failed          ? Schema::TaskStatus::failed
-                                              : Schema::TaskStatus::completed)
-                        .statusMessage(
-                            state->output.isEmpty() ? std::nullopt
-                                                    : std::optional{state->output.last()});
-                },
-                [state]() -> Utils::Result<CallToolResult> {
-                    if (!state->failureIssues.isEmpty())
-                        return CallToolResult{}.isError(true).structuredContent(
-                            QJsonObject{{"issues", state->failureIssues}});
-                    return CallToolResult{}.isError(false).structuredContent(
-                        QJsonObject{{"output", state->output.join('\n')}});
-                },
-                [state]() {
-                    if (state->rc)
-                        state->rc->initiateStop();
-                },
-                progressToken(params));
-
-            if (!task) {
-                toolInterface.finish(CallToolResult{}.isError(true).addContent(
-                    Schema::TextContent{}.text(task.error())));
-                return ResultOk;
-            }
-
-            const ToolInterface::TaskProgressNotify notify = *task;
-
-            // rcStartedConn is shared between the runControlStarted and
-            // buildQueueFinished handlers so each can disconnect the other.
-            auto rcStartedConn = std::make_shared<QMetaObject::Connection>();
-
-            // Grab the RunControl we're about to start. Use a plain (non-single-shot)
-            // connection so a RunControl with a different mode starting first doesn't
-            // consume it prematurely; disconnect manually once we find ours.
-            *rcStartedConn = QObject::connect(
-                ProjectExplorer::ProjectExplorerPlugin::instance(),
-                &ProjectExplorer::ProjectExplorerPlugin::runControlStarted,
-                ProjectExplorer::ProjectExplorerPlugin::instance(),
-                [state, notify, rcStartedConn, runMode, finishedMessage](
-                    ProjectExplorer::RunControl *rc) {
-                    if (rc->runMode() != runMode)
-                        return;
-                    QObject::disconnect(*rcStartedConn);
-                    state->rc = rc;
-                    QObject::connect(
-                        rc,
-                        &ProjectExplorer::RunControl::appendMessage,
-                        rc,
-                        [state, notify](const QString &msg, Utils::OutputFormat) {
-                            const QString trimmed = msg.trimmed();
-                            if (trimmed.isEmpty())
-                                return;
-                            state->output.append(trimmed);
-                            if (notify)
-                                notify(Schema::TaskStatus::working, trimmed, std::nullopt);
-                        });
-                    QObject::connect(
-                        rc,
-                        &ProjectExplorer::RunControl::stopped,
-                        rc,
-                        [state, notify, finishedMessage]() {
-                            state->finished = true;
-                            if (notify)
-                                notify(Schema::TaskStatus::completed, finishedMessage, std::nullopt);
-                        },
-                        Qt::SingleShotConnection);
-                });
-
-            // If the build fails before the RunControl starts, abort the task.
-            QObject::connect(
-                ProjectExplorer::BuildManager::instance(),
-                &ProjectExplorer::BuildManager::buildQueueFinished,
-                ProjectExplorer::BuildManager::instance(),
-                [state, notify, rcStartedConn](bool success) {
-                    if (success || state->rc)
-                        return;
-                    QObject::disconnect(*rcStartedConn);
-                    state->finished = true;
-
-                    state->failureIssues = commands.listIssues();
-                    const int errorCount = state->failureIssues.value("summary")
-                                               .toObject()
-                                               .value("errorCount")
-                                               .toInt();
-                    const QString statusMsg
-                        = errorCount > 0
-                              ? QString("Build failed with %1 error(s)").arg(errorCount)
-                              : QString("Build failed");
-                    if (notify)
-                        notify(Schema::TaskStatus::failed, statusMsg, std::nullopt);
-                },
-                Qt::SingleShotConnection);
-
-            ProjectExplorer::ProjectExplorerPlugin::runStartupProject(runMode, false);
-            return ResultOk;
-        };
-    };
-
-    server.addTool(
-        Tool{}
-            .name("run_project")
-            .title("Run project")
-            .description(
-                "Runs the current startup project and waits for it to finish. "
-                "Progress messages from the application are streamed during execution. "
-                "On success, returns the full output. "
-                "On build failure, returns isError=true with structured content in the same "
-                "format as list_issues (issues array + summary). "
-                "Returns an error if there is no startup project, no active build configuration, "
-                "or the project cannot currently be run.")
-            .execution(ToolExecution().taskSupport(ToolExecution::TaskSupport::optional))
-            .outputSchema(runToolOutputSchema),
-        makeRunCallback(ProjectExplorer::Constants::NORMAL_RUN_MODE, "Run finished"));
-
-    server.addTool(
-        Tool{}
-            .name("debug")
-            .title("Start debugging")
-            .description(
-                "Starts a debug session for the current startup project and returns immediately "
-                "once the session has launched. "
-                "On build failure, returns isError=true with structured content in the same "
-                "format as list_issues (issues array + summary). "
-                "Returns an error if there is no startup project, no active build configuration, "
-                "or the project cannot currently be run in debug mode.")
-            .execution(ToolExecution().taskSupport(ToolExecution::TaskSupport::optional))
-            .outputSchema(runToolOutputSchema),
-        [](const Schema::CallToolRequestParams &params,
-           const ToolInterface &toolInterface) -> Utils::Result<> {
-            const Utils::Id runMode = ProjectExplorer::Constants::DEBUG_RUN_MODE;
-            const Utils::Result<> canRun
-                = ProjectExplorer::ProjectExplorerPlugin::canRunStartupProject(runMode);
-            if (!canRun) {
-                toolInterface.finish(
-                    CallToolResult{}.isError(true).addContent(
-                        Schema::TextContent{}.text(canRun.error())));
-                return ResultOk;
-            }
-
-            struct State
-            {
-                bool finished = false;
-                QJsonObject failureIssues;
-            };
-            auto state = std::make_shared<State>();
-
-            using namespace std::chrono_literals;
-
-            const Utils::Result<ToolInterface::TaskProgressNotify> task = toolInterface.startTask(
-                500ms,
-                [state](Schema::Task t) {
-                    if (state->finished)
-                        letTaskDieIn(t, 1min);
-                    const bool failed = !state->failureIssues.isEmpty();
-                    return t.status(
-                        !state->finished ? Schema::TaskStatus::working
-                        : failed         ? Schema::TaskStatus::failed
-                                         : Schema::TaskStatus::completed);
-                },
-                [state]() -> Utils::Result<CallToolResult> {
-                    if (!state->failureIssues.isEmpty())
-                        return CallToolResult{}.isError(true).structuredContent(
-                            QJsonObject{{"issues", state->failureIssues}});
-                    return CallToolResult{}.isError(false).structuredContent(
-                        QJsonObject{{"output", QString("Debug session started")}});
-                },
-                []() {},
-                progressToken(params));
-
-            if (!task) {
-                toolInterface.finish(
-                    CallToolResult{}.isError(true).addContent(
-                        Schema::TextContent{}.text(task.error())));
-                return ResultOk;
-            }
-
-            const ToolInterface::TaskProgressNotify notify = *task;
-
-            auto rcStartedConn = std::make_shared<QMetaObject::Connection>();
-
-            *rcStartedConn = QObject::connect(
-                ProjectExplorer::ProjectExplorerPlugin::instance(),
-                &ProjectExplorer::ProjectExplorerPlugin::runControlStarted,
-                ProjectExplorer::ProjectExplorerPlugin::instance(),
-                [state, notify, rcStartedConn, runMode](ProjectExplorer::RunControl *rc) {
-                    if (rc->runMode() != runMode)
-                        return;
-                    QObject::disconnect(*rcStartedConn);
-                    state->finished = true;
-                    if (notify)
-                        notify(Schema::TaskStatus::completed, "Debug session started", std::nullopt);
-                });
-
-            QObject::connect(
-                ProjectExplorer::BuildManager::instance(),
-                &ProjectExplorer::BuildManager::buildQueueFinished,
-                ProjectExplorer::BuildManager::instance(),
-                [state, notify, rcStartedConn](bool success) {
-                    if (success || state->finished)
-                        return;
-                    QObject::disconnect(*rcStartedConn);
-                    state->finished = true;
-                    state->failureIssues = commands.listIssues();
-                    const int errorCount = state->failureIssues.value("summary")
-                                               .toObject()
-                                               .value("errorCount")
-                                               .toInt();
-                    const QString statusMsg
-                        = errorCount > 0 ? QString("Build failed with %1 error(s)").arg(errorCount)
-                                         : QString("Build failed");
-                    if (notify)
-                        notify(Schema::TaskStatus::failed, statusMsg, std::nullopt);
-                },
-                Qt::SingleShotConnection);
-
-            ProjectExplorer::ProjectExplorerPlugin::runStartupProject(runMode, false);
-            return ResultOk;
-        });
-
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("find_actions")
             .title("Find actions")
@@ -2991,7 +1165,7 @@ void McpCommands::registerCommands(Mcp::Server &server)
                 QJsonObject{{"actions", actions}});
         });
 
-    server.addTool(
+    ToolRegistry::registerTool(
         Tool{}
             .name("call_action")
             .title("Call an action")
@@ -3015,5 +1189,64 @@ void McpCommands::registerCommands(Mcp::Server &server)
             cmd->action()->trigger();
             return CallToolResult{}.isError(false);
         });
+
+    ToolRegistry::registerTool(
+        Tool{}
+            .name("create_new_file")
+            .title("Create a new file")
+            .description(
+                "Creates a new file at the specified path and optionally populates it with text. "
+                "Creates parent directories automatically. Fails if the file already exists.")
+            .annotations(ToolAnnotations{}.readOnlyHint(false).destructiveHint(false))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "path",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description", "Absolute path where the file should be created"}})
+                    .addProperty(
+                        "text",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description", "Optional content to write into the new file"}})
+                    .addRequired("path"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("success", QJsonObject{{"type", "boolean"}})
+                    .addRequired("success")),
+        wrap([](const QJsonObject &p) {
+            const QString path = p.value("path").toString();
+            const QString text = p.value("text").toString();
+            bool ok = commands.createNewFile(path, text);
+            return QJsonObject{{"success", ok}};
+        }));
+
+    ToolRegistry::registerTool(
+        Tool{}
+            .name("reformat_file")
+            .title("Reformat a file")
+            .description(
+                "Reformats a specified file using Qt Creator's code formatting rules. "
+                "Opens the file if not already open.")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "path",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description", "Absolute path to the file to reformat"}})
+                    .addRequired("path"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("success", QJsonObject{{"type", "boolean"}})
+                    .addRequired("success")),
+        wrap([](const QJsonObject &p) {
+            const QString path = p.value("path").toString();
+            bool ok = commands.reformatFile(path);
+            return QJsonObject{{"success", ok}};
+        }));
 }
+
 } // namespace Mcp::Internal

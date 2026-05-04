@@ -1040,10 +1040,11 @@ public:
 class StringListAspectPrivate
 {
 public:
-    UndoableValue<QStringList> undoable;
-    bool allowAdding{true};
-    bool allowRemoving{true};
-    bool allowEditing{true};
+    UndoableValue<QStringList> m_undoable;
+    bool m_allowAdding{true};
+    bool m_allowRemoving{true};
+    bool m_allowEditing{true};
+    StringListAspect::DisplayStyle m_displayStyle{StringListAspect::DisplayStyle::ListView};
 };
 
 class FilePathListAspectPrivate
@@ -3027,7 +3028,7 @@ StringListAspect::~StringListAspect() = default;
 
 bool StringListAspect::guiToVolatileValue()
 {
-    const QStringList newValue = d->undoable.get();
+    const QStringList newValue = d->m_undoable.get();
     if (newValue != m_volatileValue) {
         m_volatileValue = newValue;
         return true;
@@ -3037,19 +3038,57 @@ bool StringListAspect::guiToVolatileValue()
 
 void StringListAspect::volatileValueToGui()
 {
-    d->undoable.setWithoutUndo(m_volatileValue);
+    d->m_undoable.setWithoutUndo(m_volatileValue);
+}
+
+void StringListAspect::setDisplayStyle(DisplayStyle displayStyle)
+{
+    d->m_displayStyle = displayStyle;
 }
 
 void StringListAspect::addToLayoutImpl(Layout &parent)
 {
+    if (d->m_displayStyle == DisplayStyle::CommaSeparatedLineEdit) {
+        auto lineEdit = createSubWidget<FancyLineEdit>();
+
+        auto listToText = [](const QStringList &list) { return list.join(","); };
+        auto textToList = [](const QString &text) {
+            QStringList parts = text.split(',', Qt::SkipEmptyParts);
+            for (QString &p : parts)
+                p = p.trimmed();
+            parts.removeAll({});
+            return parts;
+        };
+
+        lineEdit->setText(listToText(d->m_undoable.get()));
+        lineEdit->setReadOnly(isReadOnly());
+
+        connect(lineEdit, &QLineEdit::textEdited, this, [this, lineEdit, textToList] {
+            d->m_undoable.set(undoStack(), textToList(lineEdit->text()));
+        });
+
+        connect(
+            &d->m_undoable.m_signal,
+            &UndoSignaller::changed,
+            lineEdit,
+            [this, lineEdit, listToText, textToList] {
+                if (textToList(lineEdit->text()) != d->m_undoable.get())
+                    lineEdit->setText(listToText(d->m_undoable.get()));
+                handleGuiChanged();
+            });
+
+        addLabeledItem(parent, lineEdit);
+        return;
+    }
+
     auto editor = createSubWidget<QTreeWidget>();
     editor->setHeaderHidden(true);
     editor->setRootIsDecorated(false);
     editor->setEditTriggers(
-        d->allowEditing ? QAbstractItemView::AllEditTriggers : QAbstractItemView::NoEditTriggers);
+        d->m_allowEditing ? QAbstractItemView::AllEditTriggers : QAbstractItemView::NoEditTriggers);
 
-    QPushButton *add = d->allowAdding ? createSubWidget<QPushButton>(Tr::tr("Add")) : nullptr;
-    QPushButton *remove = d->allowRemoving ? createSubWidget<QPushButton>(Tr::tr("Remove")) : nullptr;
+    QPushButton *add = d->m_allowAdding ? createSubWidget<QPushButton>(Tr::tr("Add")) : nullptr;
+    QPushButton *remove = d->m_allowRemoving ? createSubWidget<QPushButton>(Tr::tr("Remove")) : nullptr;
 
     auto itemsToStringList = [editor] {
         QStringList items;
@@ -3063,7 +3102,7 @@ void StringListAspect::addToLayoutImpl(Layout &parent)
 
     auto populate = [editor, this] {
         editor->clear();
-        for (const QString &entry : d->undoable.get()) {
+        for (const QString &entry : d->m_undoable.get()) {
             auto item = new QTreeWidgetItem(editor, {entry});
             item->setData(0, Qt::ToolTipRole, entry);
             item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable);
@@ -3072,7 +3111,7 @@ void StringListAspect::addToLayoutImpl(Layout &parent)
 
     if (add) {
         connect(add, &QPushButton::clicked, this, [this, populate, editor] {
-            d->undoable.setSilently(d->undoable.get() << "");
+            d->m_undoable.setSilently(d->m_undoable.get() << "");
             populate();
             const QTreeWidgetItem *root = editor->invisibleRootItem();
             QTreeWidgetItem *lastChild = root->child(root->childCount() - 1);
@@ -3087,13 +3126,13 @@ void StringListAspect::addToLayoutImpl(Layout &parent)
             QTC_ASSERT(selected.size() == 1, return);
             editor->invisibleRootItem()->removeChild(selected.first());
             delete selected.first();
-            d->undoable.set(undoStack(), itemsToStringList());
+            d->m_undoable.set(undoStack(), itemsToStringList());
         });
     }
 
     connect(
-        &d->undoable.m_signal, &UndoSignaller::changed, editor, [this, populate, itemsToStringList] {
-            if (itemsToStringList() != d->undoable.get())
+        &d->m_undoable.m_signal, &UndoSignaller::changed, editor, [this, populate, itemsToStringList] {
+            if (itemsToStringList() != d->m_undoable.get())
                 populate();
 
             handleGuiChanged();
@@ -3109,7 +3148,7 @@ void StringListAspect::addToLayoutImpl(Layout &parent)
                 return;
             if (tl != br)
                 return;
-            d->undoable.set(undoStack(), itemsToStringList());
+            d->m_undoable.set(undoStack(), itemsToStringList());
         });
 
     populate();
@@ -3119,10 +3158,10 @@ void StringListAspect::addToLayoutImpl(Layout &parent)
         Row {
             noMargin,
             editor,
-            If (d->allowAdding || d->allowRemoving) >> Then {
+            If (d->m_allowAdding || d->m_allowRemoving) >> Then {
                 Column {
-                    If (d->allowAdding) >> Then {add},
-                    If (d->allowRemoving) >> Then {remove},
+                    If (d->m_allowAdding) >> Then {add},
+                    If (d->m_allowRemoving) >> Then {remove},
                     st,
                 }
             },
@@ -3171,28 +3210,28 @@ void StringListAspect::removeValues(const QStringList &values)
 
 void StringListAspect::setUiAllowAdding(bool allowAdding)
 {
-    d->allowAdding = allowAdding;
+    d->m_allowAdding = allowAdding;
 }
 void StringListAspect::setUiAllowRemoving(bool allowRemoving)
 {
-    d->allowRemoving = allowRemoving;
+    d->m_allowRemoving = allowRemoving;
 }
 void StringListAspect::setUiAllowEditing(bool allowEditing)
 {
-    d->allowEditing = allowEditing;
+    d->m_allowEditing = allowEditing;
 }
 
 bool StringListAspect::uiAllowAdding() const
 {
-    return d->allowAdding;
+    return d->m_allowAdding;
 }
 bool StringListAspect::uiAllowRemoving() const
 {
-    return d->allowRemoving;
+    return d->m_allowRemoving;
 }
 bool StringListAspect::uiAllowEditing() const
 {
-    return d->allowEditing;
+    return d->m_allowEditing;
 }
 
 /*!
@@ -3820,18 +3859,15 @@ class AspectListModelItem : public TypedTreeItem<AspectListModelItem>
 {
     std::shared_ptr<BaseAspect> m_aspect;
     QObject guard;
-    std::function<QString(BaseAspect *)> m_displayFunction;
-    std::function<QVariant(BaseAspect *)> m_decorationFunction;
+    std::function<QVariant(BaseAspect *, int role)> m_dataFunction;
 
 public:
     AspectListModelItem() = default;
     AspectListModelItem(
         const std::shared_ptr<BaseAspect> &aspect,
-        const std::function<QString(BaseAspect *)> &displayFunction,
-        const std::function<QVariant(BaseAspect *)> &decorationFunction)
+        const std::function<QVariant(BaseAspect *, int role)> &dataFunction)
         : m_aspect(aspect)
-        , m_displayFunction(displayFunction)
-        , m_decorationFunction(decorationFunction)
+        , m_dataFunction(dataFunction)
 
     {
         auto upd = [this] { update(); };
@@ -3843,19 +3879,26 @@ public:
     {
         if (column != 0)
             return {};
-        if (role == Qt::DecorationRole) {
-            return m_decorationFunction(m_aspect.get());
-        }
-        if (role == Qt::DisplayRole) {
-            return m_displayFunction(m_aspect.get());
-        }
         if (role == Qt::FontRole) {
             QFont f;
             f.setBold(m_aspect->isDirty() || added);
             f.setStrikeOut(deleted);
             return f;
         }
-        return {};
+
+        QVariant data = m_dataFunction(m_aspect.get(), role);
+        if (data.canConvert<QFuture<QVariant>>()) {
+            QFuture<QVariant> future = data.value<QFuture<QVariant>>();
+            if (!future.isFinished()) {
+                future.then(model(), [m = model(), idx = index(), role](const QFuture<QVariant> &f) {
+                    if (f.isFinished())
+                        m->dataChanged(idx, idx, {role});
+                });
+                return {};
+            }
+            return future.result();
+        }
+        return data;
     }
 
     bool hasAspect(const std::shared_ptr<BaseAspect> &aspect) const { return aspect == m_aspect; }
@@ -3881,12 +3924,9 @@ public:
 class AspectListModel : public TreeModel<AspectListModelItem, AspectListModelItem>
 {
 public:
-    AspectListModel(
-        const std::function<QString(BaseAspect *)> &displayFunction,
-        const std::function<QVariant(BaseAspect *)> &decorationFunction)
+    AspectListModel(const std::function<QVariant(BaseAspect *, int role)> &dataFunction)
         : TreeModel<AspectListModelItem, AspectListModelItem>()
-        , m_displayFunction(displayFunction)
-        , m_decorationFunction(decorationFunction)
+        , m_dataFunction(dataFunction)
     {
     }
 
@@ -3932,8 +3972,7 @@ public:
                     }
                 } else {
                     // The item in the aspect is not in the model, add it.
-                    modelItem
-                        = new AspectListModelItem(*itAspect, m_displayFunction, m_decorationFunction);
+                    modelItem = new AspectListModelItem(*itAspect, m_dataFunction);
                     modelItem->setStatus(newItems.contains(*itAspect), !inVolatile);
                     rootItem()->insertChild(modelIdx, modelItem);
                     ++modelIdx;
@@ -3959,8 +3998,7 @@ public:
         // Add remaining items in aspect to model.
         if (itAspect != volatileItems.end()) {
             for (; itAspect != volatileItems.end(); ++itAspect) {
-                auto item
-                    = new AspectListModelItem(*itAspect, m_displayFunction, m_decorationFunction);
+                auto item = new AspectListModelItem(*itAspect, m_dataFunction);
                 item->setStatus(newItems.contains(*itAspect), false);
                 rootItem()->appendChild(item);
             }
@@ -3968,8 +4006,7 @@ public:
     }
 
 private:
-    std::function<QString(BaseAspect *)> m_displayFunction;
-    std::function<QVariant(BaseAspect *)> m_decorationFunction;
+    std::function<QVariant(BaseAspect *, int)> m_dataFunction;
 };
 
 class Internal::AspectListPrivate
@@ -4001,10 +4038,8 @@ public:
 
     AspectListModel model;
 
-    AspectListPrivate(
-        std::function<QString(BaseAspect *)> displayFunction,
-        std::function<QVariant(BaseAspect *)> decorationFunction)
-        : model(displayFunction, decorationFunction)
+    AspectListPrivate(std::function<QVariant(BaseAspect *, int)> dataFunction)
+        : model(dataFunction)
     {}
 
     void addToLayoutImplInlineList(Layouting::Layout &parent, AspectList *aspect)
@@ -4156,14 +4191,9 @@ public:
 AspectList::AspectList(Utils::AspectContainer *container)
     : Utils::BaseAspect(container)
     , d(std::make_unique<Internal::AspectListPrivate>(
-          [this](BaseAspect *aspect) -> QString {
-              QTC_ASSERT(listViewDisplayCallback, return QString("No listViewDisplayCallback set"));
-              return listViewDisplayCallback(aspect);
-          },
-          [this](BaseAspect *aspect) -> QVariant {
-              if (listViewDecorationCallback)
-                  return listViewDecorationCallback(aspect);
-              return QVariant();
+          [this](BaseAspect *aspect, int role) -> QVariant {
+              QTC_ASSERT(listViewDataCallback, return QString("No listViewDataCallback set"));
+              return listViewDataCallback(aspect, role);
           }))
 {}
 

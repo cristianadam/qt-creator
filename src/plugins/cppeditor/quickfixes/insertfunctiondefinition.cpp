@@ -2840,10 +2840,12 @@ foo::foo2::MyType<int> foo::foo2::bar()
     void testRequiredStructKeyword()
     {
         const QByteArray header = "struct S {};\n"
-                                  "void h@andle(struct S *s);\n";
+                                  "typedef struct S TheStruct;\n"
+                                  "typedef int MyInt;\n"
+                                  "TheStruct h@andle(struct S *s, MyInt i);\n";
         const QByteArray originalSource = "#include \"s.h\"\n";
         const QByteArray expectedSource = "#include \"s.h\"\n\n"
-                                          "void handle(struct S *s)\n"
+                                          "TheStruct handle(struct S *s, MyInt i)\n"
                                           "{\n\n"
                                           "}\n";
         const QList<TestDocumentPtr> testDocuments{

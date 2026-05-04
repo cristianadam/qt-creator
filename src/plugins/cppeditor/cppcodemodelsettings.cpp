@@ -120,7 +120,7 @@ CppCodeModelSettings &CppCodeModelSettings::global()
 
 CppCodeModelSettingsData CppCodeModelSettings::settingsForProject(const Utils::FilePath &projectFile)
 {
-    return settingsForProject(ProjectManager::projectWithProjectFilePath(projectFile));
+    return settingsForProject(ProjectManager::projectWithProjectFile(projectFile, true));
 }
 
 CppCodeModelSettingsData CppCodeModelSettings::settingsForFile(const Utils::FilePath &file)

@@ -210,7 +210,9 @@ void VcsBaseSubmitEditor::setParameters(const VcsBaseSubmitEditorParameters &par
         updateFileModel();
     });
 
-    Aggregation::aggregate({this, new BaseTextFind(descriptionEdit)});
+    auto textFind = new BaseTextFind(descriptionEdit);
+    textFind->setResultHighlightingEnabled(false);
+    Aggregation::aggregate({this, textFind});
 }
 
 VcsBaseSubmitEditor::~VcsBaseSubmitEditor()

@@ -26,6 +26,7 @@
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QUrl>
+#include <QUrlQuery>
 
 #include <functional>
 #include <memory>
@@ -154,6 +155,7 @@ public:
     }
 
     QUrl url() const { return m_url; }
+    QUrlQuery query() const { return QUrlQuery(m_url); }
     Method method() const { return m_method; }
     const HttpHeaders &headers() const { return m_headers; }
     QByteArray body() const { return m_body; }
@@ -362,26 +364,36 @@ public:
 
     HttpResponse(const QByteArray &data, const char *contentType, StatusCode status)
         : m_data(data)
-        , m_contentType(contentType)
         , m_status(status)
-    {}
+    {
+        m_headers.append("Content-Type:", contentType);
+    }
 
     // Convenience for HTML strings
     HttpResponse(const char *html, StatusCode status)
         : m_data(html)
-        , m_contentType("text/html")
         , m_status(status)
-    {}
+    {
+        m_headers.append("Content-Type:", "text/html");
+    }
+
+    HttpResponse(StatusCode status)
+        : m_status(status)
+    {
+        m_headers.append("Content-Type:", "text/plain");
+    }
 
     void writeTo(HttpResponder &responder) const
     {
-        responder.write(m_data, m_contentType.constData(), m_status);
+        responder.write(m_data, m_headers, m_status);
     }
+
+    void setHeaders(const HttpHeaders &headers) { m_headers = headers; }
 
 private:
     QByteArray m_data;
-    QByteArray m_contentType;
     StatusCode m_status;
+    HttpHeaders m_headers;
 };
 
 // Minimal routing HTTP/1.1 server built on QTcpServer.

@@ -6,6 +6,7 @@ QtcPlugin {
     Depends { name: "Aggregation" }
     Depends { name: "CPlusPlus" }
     Depends { name: "LanguageUtils" }
+    Depends { name: "McpServerLib" }
     Depends { name: "QmlDebug" }
     Depends { name: "QmlJS" }
     Depends { name: "Utils" }
@@ -56,6 +57,7 @@ QtcPlugin {
             "localsandexpressionswindow.cpp", "localsandexpressionswindow.h",
             "logwindow.cpp", "logwindow.h",
             "memoryagent.cpp", "memoryagent.h",
+            "mcpsupport.cpp",
             "moduleshandler.cpp", "moduleshandler.h",
             "outputcollector.cpp", "outputcollector.h",
             "peripheralregisterhandler.cpp", "peripheralregisterhandler.h",

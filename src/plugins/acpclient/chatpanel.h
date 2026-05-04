@@ -14,7 +14,7 @@
 
 namespace Utils {
 class ElidingLabel;
-class ProgressIndicator;
+class QtcButton;
 class StyledBar;
 } // namespace Utils
 
@@ -23,7 +23,6 @@ class QHBoxLayout;
 class QLabel;
 class QLayout;
 class QMenu;
-class QTimer;
 class QToolButton;
 
 namespace AcpClient::Internal {
@@ -47,15 +46,13 @@ public:
                       const QString &iconUrl = {});
     void setPrompting(bool prompting);
     void setSendEnabled(bool enabled);
-    bool isPrompting() const { return m_prompting; }
 
     void updateConfigOptions(const QList<Acp::SessionConfigOption> &configOptions);
     void clear();
     void clearConfigOptions();
 
     void updateAvailableCommands(const QList<Acp::AvailableCommand> &commands);
-    void setAutoContextItems(const QStringList &names);
-    bool isAutoContextItemActive(const QString &name) const;
+    bool includeCurrentEditorContext() const { return m_includeCurrentEditorContext; }
     QList<Utils::FilePath> manualContextFiles() const { return m_manualContextFiles; }
 
     // Delegate to message view
@@ -89,26 +86,18 @@ private:
     QLabel *m_agentLabel;
     QHBoxLayout *m_configOptionsLayout;
     QMap<QString, QComboBox*> m_configCombos; // configId -> combo
-    QLabel *m_elapsedLabel;
-    QTimer *m_elapsedTimer;
-    qint64 m_promptStartTime = 0;
-
-    // Streaming indicator
-    Utils::ProgressIndicator *m_progressIndicator = nullptr;
 
     // Message area
     AcpMessageView *m_messageView;
 
     // Input
     ChatInputEdit *m_inputEdit;
-    SendButton *m_sendButton;
-    QToolButton *m_commandsButton;
+    Utils::QtcButton *m_sendButton;
+    Utils::QtcButton *m_commandsButton;
+    QMenu *m_commandsMenu = nullptr;
     QWidget *m_contextBar = nullptr;
     QLayout *m_contextBarLayout = nullptr;
-    QLabel *m_contextLabel = nullptr;
-    QWidget *m_addContextButton = nullptr;
-    QStringList m_offeredAutoContextNames;
-    QStringList m_removedAutoContextNames;
+    bool m_includeCurrentEditorContext = true;
     QList<Utils::FilePath> m_manualContextFiles;
 
     void updateContextBar();

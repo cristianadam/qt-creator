@@ -30,6 +30,7 @@ public:
     explicit ToolchainConfigWidget(const ToolchainBundle &bundle);
 
     ToolchainBundle bundle() const { return m_bundle; }
+    QString currentDisplayName() const;
 
     void apply();
     void makeReadOnly();

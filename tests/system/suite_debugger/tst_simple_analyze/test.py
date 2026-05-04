@@ -9,7 +9,8 @@ def main():
         return
     # using a temporary directory won't mess up a potentially existing
     workingDir = tempDir()
-    projectName = createNewQtQuickApplication(workingDir)[1]
+    projectName = createNewQtQuickApplication(workingDir, template="Qt Quick Application (compat)",
+                                              minimumQtVersion="6.2")[1]
     editor = waitForObject(":Qt Creator_QmlJSEditor::QmlJSTextEditorWidget")
     if placeCursorToLine(editor, "}"):
         type(editor, '<Left>')
@@ -82,8 +83,10 @@ def performTest(workingDir, projectName, availableConfigs):
                                   "Internal::QmlProfilerStatisticsMainView").model()
             targetStr = Targets.getStringForTarget(kit)
             versionStr = re.match("Desktop ([56]\.\d+\.\d+).*", targetStr)
+            test.log("Using Qt %s" % targetStr)
             tsv = "events_qt6.9.2.tsv"
-            if versionStr and versionStr.group(1) < "6.8":
+            # surprisingly it looks like some versions between 6.3 and 6.8 have different results
+            if versionStr and versionStr.group(1) < "6.8" and versionStr.group(1) > "6.3":
                 tsv = "events_qt6.7.3.tsv"
             compareEventsTab(model, tsv)
             test.compare(dumpItems(model, column=colPercent)[0], '100 %')

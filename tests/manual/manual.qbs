@@ -13,7 +13,6 @@ Project {
         "proparser/testreader.qbs",
         "remotelinux/remotelinux.qbs",
         "scripts/scripts.qbs",
-        "shootout/shootout.qbs",
         "spinner/spinner.qbs",
         "subdirfilecontainer/subdirfilecontainer.qbs",
         "terminal/terminal.qbs",

@@ -66,6 +66,7 @@ def qtcreator_prefix_path(qt_creator_path):
     candidates = [qt_creator_path, os.path.join(qt_creator_path, 'Contents', 'Resources')]
     candidates += [os.path.join(path, 'Contents', 'Resources')
                    for path in glob.glob(os.path.join(qt_creator_path, '*.app'))]
+    candidates += glob.glob(os.path.join(qt_creator_path, '*.sdk'))
     for path in candidates:
         if os.path.exists(os.path.join(path, 'lib', 'cmake')):
             return [path]

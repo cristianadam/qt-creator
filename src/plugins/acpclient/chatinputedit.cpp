@@ -6,6 +6,7 @@
 #include "chatinputcompletion.h"
 
 #include <utils/historycompleter.h>
+#include <utils/plaintextedit/texteditorlayout.h>
 #include <utils/textutils.h>
 
 #include <texteditor/displaysettings.h>
@@ -37,6 +38,7 @@ ChatInputEdit::ChatInputEdit(QWidget *parent)
     setLineNumbersVisible(false);
     setMarksVisible(false);
     setMinimapVisible(false);
+    setCompletionTriggerOverride(ManualCompletion);
 
     auto applyWidgetColors = [this] {
         FontSettings fontSettings = textDocument()->fontSettings();
@@ -70,6 +72,7 @@ void ChatInputEdit::setDisplaySettings(const DisplaySettingsData &settings)
     overridden.m_visualizeIndent = false;
     overridden.m_textWrapping = true;
     overridden.m_scrollBarHighlights = false;
+    overridden.m_centerCursorOnScroll = false;
     TextEditorWidget::setDisplaySettings(overridden);
 }
 
@@ -118,14 +121,7 @@ void ChatInputEdit::keyPressEvent(QKeyEvent *event)
 void ChatInputEdit::updateHeight()
 {
     // Count visual (wrapped) lines across all blocks
-    int visualLines = 0;
-    QTextBlock block = document()->begin();
-    while (block.isValid()) {
-        const QTextLayout *layout = block.layout();
-        visualLines += layout ? qMax(1, layout->lineCount()) : 1;
-        block = block.next();
-    }
-
+    const int visualLines = editorLayout()->lineCount();
     const int lineCount = qBound(1, visualLines, 5);
     const QMargins cm = contentsMargins();
     const int docMargin = static_cast<int>(document()->documentMargin());

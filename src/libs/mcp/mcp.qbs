@@ -14,11 +14,13 @@ QtcLibrary {
     Group {
         prefix: "server/"
         files: [
+            "../schemas/schema_2025_11_25.cpp",
+            "../schemas/schema_2025_11_25.h",
             "mcpserver.cpp",
             "mcpserver.h",
             "mcpserver_global.h",
-            "../schemas/schema_2025_11_25.cpp",
-            "../schemas/schema_2025_11_25.h",
+            "toolregistry.cpp",
+            "toolregistry.h",
         ]
     }
     Group {

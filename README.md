@@ -18,8 +18,8 @@ The standalone binary packages support the following platforms:
 
 * Windows 10 (x86_64) or later
 * Windows 11 (ARM64) or later
-* (K)Ubuntu Linux 22.04 (x86_64) or later
-* (K)Ubuntu Linux 24.04 (arm64) or later
+* (K)Ubuntu Linux 22.04 (x86_64) or later (glibc 2.34)
+* (K)Ubuntu Linux 24.04 (arm64) or later (glibc 2.39)
 * macOS 13 or later
 
 When you compile Qt Creator yourself, the Qt version that you build with

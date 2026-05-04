@@ -393,6 +393,10 @@ bool CppHighlighter::isPPKeyword(QStringView text) const
 
     case 7:
         switch (text.at(0).toLatin1()) {
+        case 'e':
+            if (text == QLatin1String("elifdef"))
+                return true;
+            break;
         case 'i':
             if (text == QLatin1String("include"))
                 return true;
@@ -402,6 +406,11 @@ bool CppHighlighter::isPPKeyword(QStringView text) const
                 return true;
             break;
         }
+        break;
+
+    case 8:
+        if (text.at(0) == QLatin1Char('e') && text == QLatin1String("elifndef"))
+            return true;
         break;
 
     case 12:

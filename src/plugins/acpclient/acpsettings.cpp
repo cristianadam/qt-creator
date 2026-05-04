@@ -241,6 +241,22 @@ public:
 
         setLayouter([this]() -> Layouting::Layout {
             using namespace Layouting;
+
+            InfoLabel *templateCmdInfo = new InfoLabel();
+            templateCmdInfo->setWordWrap(true);
+            templateCmdInfo->setElideMode(Qt::ElideNone);
+            templateCmdInfo->setToolTip(Tr::tr("The command that will spawn the ACP server"));
+            templateCmdInfo->setType(InfoLabel::Information);
+            templateCmdInfo->setTextInteractionFlags(Qt::TextSelectableByMouse);
+            const auto updateCmdInfo = [templateCmdInfo, this]() {
+                const bool isCustom = registryBrowser.volatileValue().isEmpty();
+                const QString info = QString("%1 %2")
+                                         .arg(launchCommand.expandedValue().toUserOutput())
+                                         .arg(launchArguments());
+                templateCmdInfo->setText(info);
+                templateCmdInfo->setVisible(!isCustom);
+            };
+
             const auto updateVisible = [this]() {
                 const bool isCustom = registryBrowser.volatileValue().isEmpty();
                 name.setVisible(isCustom);
@@ -249,11 +265,18 @@ public:
                 environment.setVisible(isCustom);
             };
             updateVisible();
+            updateCmdInfo();
             connect(
                 &registryBrowser,
                 &AcpRegistryBrowser::volatileValueChanged,
                 this,
                 updateVisible);
+            connect(
+                &registryBrowser,
+                &AcpRegistryBrowser::volatileValueChanged,
+                templateCmdInfo,
+                updateCmdInfo);
+
             // clang-format off
             return Form{
                 noMargin,
@@ -262,6 +285,7 @@ public:
                 launchCommand, br,
                 launchArguments, br,
                 environment, br,
+                templateCmdInfo, br,
             };
             // clang-format on
         });
@@ -370,11 +394,6 @@ public:
     EnvironmentChangesAspect environment{this};
 };
 
-static QString displayFunc(AcpServerAspect *aspect)
-{
-    return aspect->name.volatileValue();
-}
-
 class AcpManagerSettings : public AspectContainer
 {
 public:
@@ -387,14 +406,20 @@ public:
         acpServers.setDisplayStyle(AspectList::DisplayStyle::ListViewWithDetails);
         acpServers.setCreateItemFunction([] { return std::make_shared<AcpServerAspect>(); });
 
-        acpServers.listViewDisplayCallback = displayFunc;
-        acpServers.listViewDecorationCallback = [](AcpServerAspect *aspect) {
-            const QString iconUrl = aspect->iconUrl.volatileValue();
-            if (iconUrl.isEmpty())
-                return QVariant();
+        acpServers.listViewDataCallback = [](AcpServerAspect *aspect, int role) -> QVariant {
+            if (role == Qt::DisplayRole)
+                return aspect->name.volatileValue();
 
-            QIcon icon = AcpSettings::iconForUrl(iconUrl).result();
-            return QVariant(icon);
+            if (role == Qt::DecorationRole) {
+                const QString iconUrl = aspect->iconUrl.volatileValue();
+                if (iconUrl.isEmpty())
+                    return QVariant();
+
+                return QVariant::fromValue(
+                    AcpSettings::iconForUrl(iconUrl).then(
+                        [](const QIcon &icon) -> QVariant { return icon; }));
+            }
+            return {};
         };
 
         setLayouter([this]() {
@@ -478,8 +503,12 @@ void setupAcpSettings()
 {
     (void) settingsPage();
     (void) AcpSettings::instance();
-    QObject::connect(Core::ICore::instance(), &Core::ICore::coreOpened, [] {
-        AcpRegistryBrowser::prefetch([] {
+}
+
+void prefetchAcpRegistry()
+{
+    AcpRegistryBrowser::prefetch(
+        [] {
             AcpManagerSettings::instance().acpServers.forEachItem(
                 [](const std::shared_ptr<AcpServerAspect> &server) {
                     server->applyRegistryTemplate();
@@ -487,7 +516,6 @@ void setupAcpSettings()
             AcpManagerSettings::instance().acpServers.writeSettings();
             emit AcpSettings::instance().serversChanged();
         });
-    });
 }
 
 } // namespace AcpClient::Internal

@@ -23,7 +23,6 @@
 #include <coreplugin/session.h>
 
 #include <utils/algorithm.h>
-#include <utils/fileutils.h>
 #include <utils/mimeutils.h>
 #include <utils/persistentsettings.h>
 #include <utils/qtcassert.h>
@@ -603,10 +602,15 @@ bool ProjectManager::isInProjectSourceDir(const Utils::FilePath &filePath, const
     return false;
 }
 
-Project *ProjectManager::projectWithProjectFilePath(const FilePath &filePath)
+Project *ProjectManager::projectWithProjectFile(const FilePath &projectFile, bool shouldExist)
 {
-    return Utils::findOrDefault(ProjectManager::projects(),
-            [&filePath](const Project *p) { return p->projectFilePath() == filePath; });
+    Project * const project = Utils::findOrDefault(projects(), [&projectFile](const Project *p) {
+        return p->projectFilePath() == projectFile;
+    });
+    if (shouldExist) {
+        QTC_ASSERT(project, qDebug() << projectFile);
+    }
+    return project;
 }
 
 bool ProjectManager::isKnownFile(const Utils::FilePath &filePath)

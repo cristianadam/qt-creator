@@ -38,7 +38,7 @@ def main():
         previous = filenames[-1]
         for filename in filenames:
             tempFiletype = filetype
-            if filetype == "QML" and not fileExtMatchesQml(previous):
+            if filetype == "QML" and not previous.lower().endswith(".qml"):
                 tempFiletype = "Other files"
             renameFile(templateDir, usedProFile, projectName + "." + tempFiletype,
                        previous, filename)
@@ -60,14 +60,6 @@ def verifyRenamedIncludes(templateDir, file, oldname, newname):
             test.verify('#include "%s"' % newname in fileText,
                         'Verify that new filename is included in %s' % file)):
         test.log(grep("include", fileText))
-
-
-def fileExtMatchesQml(fileName):
-    if platform.system() == "Linux":
-        return fileName.endswith(".qml")
-    else:
-        # On case ignoring file systems, ".QML" is the same as ".qml"
-        return fileName.lower().endswith(".qml")
 
 
 def renameFile(projectDir, proFile, branch, oldname, newname):
@@ -124,7 +116,7 @@ def renameFile(projectDir, proFile, branch, oldname, newname):
         test.verify(oldname not in os.listdir(projectDir),
                     "Verify that file with old name does not exist: %s" % oldFilePath)
 
-    if fileExtMatchesQml(newItemText):
+    if newItemText.lower().endswith(".qml"):
         newItemText = newItemText.replace(".Other files.", ".QML.")
     else:
         newItemText = newItemText.replace(".QML.", ".Other files.")

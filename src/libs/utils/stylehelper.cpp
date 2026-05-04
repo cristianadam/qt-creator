@@ -984,7 +984,7 @@ static const UiFontMetrics& uiFontMetrics(StyleHelper::UiElement element)
     static const std::map<StyleHelper::UiElement, UiFontMetrics> metrics {
         {StyleHelper::UiElementH1,                  {36, 54, QFont::DemiBold}},
         {StyleHelper::UiElementH2,                  {28, 44, QFont::DemiBold}},
-        {StyleHelper::UiElementH3,                  {16, 20, QFont::Bold}},
+        {StyleHelper::UiElementH3,                  {18, 24, QFont::DemiBold}},
         {StyleHelper::UiElementH4,                  {16, 20, QFont::Bold}},
         {StyleHelper::UiElementH5,                  {14, 16, QFont::DemiBold}},
         {StyleHelper::UiElementH6,                  {12, 14, QFont::DemiBold}},
@@ -1016,7 +1016,6 @@ QFont StyleHelper::uiFont(UiElement element)
     case UiElementH2:
         font.setFamilies(brandFontFamilies());
         break;
-    case UiElementH3:
     case UiElementH6Capital:
         font.setCapitalization(QFont::AllUppercase);
         [[fallthrough]];

@@ -6,16 +6,12 @@
 #include "qmlprofilertr.h"
 #include "qmlprofilerviewmanager.h"
 
-#include <debugger/analyzer/analyzerutils.h>
 #include <debugger/debuggermainwindow.h>
 
 #include <projectexplorer/projectexplorerconstants.h>
 
 #include <utils/qtcassert.h>
 
-#include <QDockWidget>
-
-using namespace Debugger;
 using namespace Utils;
 
 namespace QmlProfiler::Internal {

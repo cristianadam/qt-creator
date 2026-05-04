@@ -35,6 +35,7 @@
 #include <debugger/debuggermainwindow.h>
 
 #include <projectexplorer/buildconfiguration.h>
+#include <projectexplorer/projectexplorericons.h>
 #include <projectexplorer/devicesupport/devicekitaspects.h>
 #include <projectexplorer/devicesupport/idevice.h>
 #include <projectexplorer/environmentaspect.h>
@@ -220,8 +221,11 @@ QmlProfilerTool::QmlProfilerTool()
     // is available, then we can populate the file finder
     d->m_profilerModelManager->populateFileFinder();
 
-    d->m_startAction = Debugger::createStartAction();
-    d->m_stopAction = Debugger::createStopAction();
+    d->m_startAction = new QAction(Tr::tr("Start"), this);
+    d->m_startAction->setIcon(ProjectExplorer::Icons::ANALYZER_START_SMALL_TOOLBAR.icon());
+
+    d->m_stopAction = new QAction(Tr::tr("Stop"), this);
+    d->m_stopAction->setIcon(Utils::Icons::STOP_SMALL_TOOLBAR.icon());
 
     QObject::connect(d->m_startAction, &QAction::triggered, this, &QmlProfilerTool::profileStartupProject);
 

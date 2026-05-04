@@ -300,7 +300,6 @@ public:
 private:
     const QString _name;
     const Type *_returnType;
-    const List<Type *> *_args;
 };
 
 class GLSL_EXPORT OverloadSet: public Type, public Scope

@@ -276,7 +276,6 @@ protected:
             //     intId = IntegerType::Char;
             //     break;
             // }
-            QString packageName;
             const StringLiteral *lit = translationUnit()->stringLiteral(ast->literal_token);
             out << '"' <<  QString::fromUtf8(lit->chars(), lit->size()) << '"';
         }

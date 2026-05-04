@@ -64,6 +64,9 @@ public:
 
     bool eventFilter(QObject *o, QEvent *e) override;
 
+    CompletionTrigger completionTrigger() const;
+    std::optional<CompletionTrigger> m_completionTriggerOverride;
+
 private:
     bool requestActivationCharProposal();
     void processProposalItem(AssistProposalItemInterface *proposalItem);
@@ -129,7 +132,7 @@ bool CodeAssistantPrivate::requestActivationCharProposal()
 {
     if (m_editorWidget->multiTextCursor().hasMultipleCursors())
         return false;
-    if (m_assistKind == Completion && completionSettings().completionTrigger() != ManualCompletion) {
+    if (m_assistKind == Completion && completionTrigger() != ManualCompletion) {
         for (CompletionAssistProvider *provider : identifyActivationSequence()) {
             requestProposal(ActivationCharacter, Completion, provider);
             if (isDisplayingProposal() || isWaitingForProposal())
@@ -447,7 +450,7 @@ void CodeAssistantPrivate::setUserData(const QVariant &data)
 
 void CodeAssistantPrivate::startAutomaticProposalTimer()
 {
-    if (completionSettings().completionTrigger() == AutomaticCompletion)
+    if (completionTrigger() == AutomaticCompletion)
         m_automaticProposalTimer.start();
 }
 
@@ -514,6 +517,11 @@ bool CodeAssistantPrivate::eventFilter(QObject *o, QEvent *e)
     return false;
 }
 
+CompletionTrigger CodeAssistantPrivate::completionTrigger() const
+{
+    return m_completionTriggerOverride.value_or(completionSettings().completionTrigger());
+}
+
 // -------------
 // CodeAssistant
 // -------------
@@ -561,6 +569,11 @@ void CodeAssistant::setUserData(const QVariant &data)
 void CodeAssistant::invoke(AssistKind kind, IAssistProvider *provider)
 {
     d->invoke(kind, provider);
+}
+
+void CodeAssistant::setCompletionTriggerOverride(CompletionTrigger trigger)
+{
+    d->m_completionTriggerOverride = trigger;
 }
 
 } // namespace TextEditor

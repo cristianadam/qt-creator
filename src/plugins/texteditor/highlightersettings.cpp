@@ -10,6 +10,7 @@
 #include <coreplugin/dialogs/ioptionspage.h>
 #include <coreplugin/icore.h>
 
+#include <utils/algorithm.h>
 #include <utils/layoutbuilder.h>
 
 using namespace Utils;
@@ -20,18 +21,6 @@ HighlighterSettings &highlighterSettings()
 {
     static HighlighterSettings theHighlighterSettings;
     return theHighlighterSettings;
-}
-
-static QString expressionsFromList(const QStringList &patterns)
-{
-    QStringList list;
-    QRegularExpression regExp;
-    regExp.setPatternOptions(QRegularExpression::CaseInsensitiveOption);
-    for (const QString &pattern : patterns) {
-        regExp.setPattern(QRegularExpression::wildcardToRegularExpression(pattern));
-        list.append(regExp.pattern());
-    }
-    return list.join(',');
 }
 
 HighlighterSettings::HighlighterSettings()
@@ -47,16 +36,18 @@ HighlighterSettings::HighlighterSettings()
     if (path.exists() || path.ensureWritableDir())
         definitionFilesPath.setDefaultPathValue(path);
 
-    ignoredFiles.setSettingsKey("IgnoredFilesPatterns");
-    ignoredFiles.setLabelText(Tr::tr("Ignored file patterns:"));
-    ignoredFiles.setDisplayStyle(StringAspect::LineEditDisplay);
-    ignoredFiles.setDefaultValue(expressionsFromList({"*.txt",
-                                                       "LICENSE*",
-                                                       "README",
-                                                       "INSTALL",
-                                                       "COPYING",
-                                                       "NEWS",
-                                                       "qmldir"}));
+    skipUpdateCheckForFilesPattern.setSettingsKey("skipUpdateCheckForFilesPatterns");
+    skipUpdateCheckForFilesPattern.setLabelText(Tr::tr("Skip update check for files matching:"));
+    skipUpdateCheckForFilesPattern.setDisplayStyle(
+        StringListAspect::DisplayStyle::CommaSeparatedLineEdit);
+    skipUpdateCheckForFilesPattern.setDefaultValue(
+        {"*.txt", "LICENSE*", "README", "INSTALL", "COPYING", "NEWS", "qmldir"});
+
+    skipFilesPattern.setSettingsKey("skipFilesPatterns");
+    skipFilesPattern.setLabelText(Tr::tr("Skip syntax highlighting for files matching:"));
+    skipFilesPattern.setDisplayStyle(StringListAspect::DisplayStyle::CommaSeparatedLineEdit);
+    skipFilesPattern.setDefaultValue({});
+    connect(&skipFilesPattern, &StringListAspect::changed, this, []{ HighlighterHelper::reload(); });
 
     setLayouter([this] {
 
@@ -117,7 +108,10 @@ HighlighterSettings::HighlighterSettings()
                     }
                 },
             },
-            Row { ignoredFiles },
+            Form {
+                skipUpdateCheckForFilesPattern, br,
+                skipFilesPattern, br,
+            },
             st
         };
 
@@ -126,17 +120,23 @@ HighlighterSettings::HighlighterSettings()
     readSettings();
 }
 
-bool HighlighterSettings::isIgnoredFilePattern(const QString &fileName) const
+static bool matchesPattern(const QString &fileName, const QStringList &patterns)
 {
-    const QStringList list = ignoredFiles().split(',', Qt::SkipEmptyParts);
+    return Utils::anyOf(patterns, [&fileName](const QString &pattern) {
+        QRegularExpression regExp(QRegularExpression::wildcardToRegularExpression(pattern),
+                                  QRegularExpression::CaseInsensitiveOption);
+        return fileName.indexOf(regExp) != -1;
+    });
+}
 
-    for (const QString &pattern : list) {
-        const QRegularExpression regExp(pattern);
-        if (fileName.indexOf(regExp) != -1)
-            return true;
-    }
+bool HighlighterSettings::skipUpdateCheck(const QString &fileName) const
+{
+    return matchesPattern(fileName, skipUpdateCheckForFilesPattern());
+}
 
-    return false;
+bool HighlighterSettings::skipHighlighting(const QString &fileName) const
+{
+    return matchesPattern(fileName, skipFilesPattern());
 }
 
 // HighlighterSettingsPage

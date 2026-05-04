@@ -9,7 +9,6 @@
 #include <coreplugin/progressmanager/progressmanager.h>
 
 #include <utils/async.h>
-#include <utils/globaltasktree.h>
 #include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
 
@@ -233,7 +232,7 @@ void DockerApi::refreshNetworks()
         emit networksChanged();
     };
 
-    Utils::GlobalTaskTree::start({ProcessTask(setupNetworkFetch, onDone)});
+    m_taskTreeRunner.start({ProcessTask(setupNetworkFetch, onDone)});
 }
 
 } // Docker::Internal

@@ -134,6 +134,7 @@ AcpChatTab::AcpChatTab(QWidget *parent)
             m_connectionErrorLabel = new QLabel;
             m_connectionErrorLabel->setWordWrap(true);
             m_connectionErrorLabel->setTextFormat(Qt::RichText);
+            m_connectionErrorLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
             m_connectionErrorLabel->hide();
             QPalette errorPal = m_connectionErrorLabel->palette();
             errorPal.setColor(QPalette::WindowText, QColor(0xfc, 0x8c, 0x8c));
@@ -246,18 +247,6 @@ AcpChatTab::AcpChatTab(QWidget *parent)
             this, &AcpChatTab::populateServerCombo);
 
     // --- Connections: Editor context ---
-    auto updateContextItems = [this](Core::IEditor *editor) {
-        if (qobject_cast<TextEditor::BaseTextEditor *>(editor)) {
-            m_chatPanel->setAutoContextItems(
-                {editor->document() ? editor->document()->filePath().fileName()
-                                    : Tr::tr("Current Editor")});
-        } else {
-            m_chatPanel->setAutoContextItems({});
-        }
-    };
-    connect(Core::EditorManager::instance(), &Core::EditorManager::currentEditorChanged,
-            this, updateContextItems);
-    updateContextItems(Core::EditorManager::currentEditor());
 
     // --- Connections: Config page ---
     connect(m_connectButton, &QPushButton::clicked, this, &AcpChatTab::connectToAgent);
@@ -274,8 +263,8 @@ AcpChatTab::AcpChatTab(QWidget *parent)
         }
         m_chatPanel->addUserMessage(text);
         m_chatPanel->setPrompting(true);
-        const bool includeEditor = m_chatPanel->isAutoContextItemActive(Tr::tr("Current Editor"));
-        m_controller->sendPrompt(text, m_chatPanel->manualContextFiles(), includeEditor);
+        m_controller->sendPrompt(
+            text, m_chatPanel->manualContextFiles(), m_chatPanel->includeCurrentEditorContext());
     });
     connect(m_chatPanel, &ChatPanel::cancelRequested, m_controller, &AcpChatController::cancelPrompt);
     connect(m_chatPanel, &ChatPanel::configOptionChanged,
@@ -324,8 +313,8 @@ AcpChatTab::AcpChatTab(QWidget *parent)
             m_pendingPrompt.clear();
             m_chatPanel->addUserMessage(text);
             m_chatPanel->setPrompting(true);
-            const bool includeEditor = m_chatPanel->isAutoContextItemActive(Tr::tr("Current Editor"));
-            m_controller->sendPrompt(text, m_chatPanel->manualContextFiles(), includeEditor);
+            m_controller->sendPrompt(
+                text, m_chatPanel->manualContextFiles(), m_chatPanel->includeCurrentEditorContext());
         }
     });
     connect(m_controller, &AcpChatController::configOptionsReceived,

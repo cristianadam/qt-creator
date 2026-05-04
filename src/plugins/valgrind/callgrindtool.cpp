@@ -324,8 +324,11 @@ CallgrindTool::CallgrindTool(QObject *parent)
     connect(EditorManager::instance(), &EditorManager::editorOpened,
             this, &CallgrindTool::editorOpened);
 
-    m_startAction = Debugger::createStartAction();
-    m_stopAction = Debugger::createStopAction();
+    m_startAction = new QAction(Tr::tr("Start"), this);
+    m_startAction->setIcon(ProjectExplorer::Icons::ANALYZER_START_SMALL_TOOLBAR.icon());
+
+    m_stopAction = new QAction(Tr::tr("Stop"), this);
+    m_stopAction->setIcon(Utils::Icons::STOP_SMALL_TOOLBAR.icon());
 
     ActionContainer *menu = ActionManager::actionContainer(Debugger::Constants::M_DEBUG_ANALYZER);
     QString toolTip = Tr::tr("Valgrind Function Profiler uses the "

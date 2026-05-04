@@ -22,7 +22,7 @@
 
     \note You can install and run Memcheck locally on Linux. You can run
     it on a remote host or device from any computer. On Windows,
-    you can use the \l{Detecting Memory Leaks with Heob}{Heob} heap observer to
+    you can use the \l{Detect memory leaks with Heob}{Heob} heap observer to
     receive similar results.
 
     After you download and install Valgrind tools, you can use Memcheck from
@@ -376,7 +376,7 @@
 
     \endlist
 
-    \sa {Analyzing CPU Usage}, {Detect memory leaks with Memcheck},
+    \sa {Detect memory leaks with Memcheck},
     {Detach views}, {Profile function execution},
     {Run Valgrind tools on external applications},
     {Specify Valgrind settings for a project},

@@ -25,7 +25,6 @@
 
 #include <cppeditor/cppmodelmanager.h>
 
-#include <debugger/analyzer/analyzerutils.h>
 #include <debugger/debuggerconstants.h>
 
 #include <projectexplorer/buildconfiguration.h>
@@ -377,7 +376,8 @@ ClangTool::ClangTool(const QString &name, Id id, ClangToolType type)
     action->setIcon(Utils::Icons::RUN_FILE.icon());
     m_startOnCurrentFileAction = action;
 
-    m_stopAction = Debugger::createStopAction();
+    m_stopAction = new QAction(Tr::tr("Stop"), this);
+    m_stopAction->setIcon(Utils::Icons::STOP_SMALL_TOOLBAR.icon());
 
     m_diagnosticFilterModel = new DiagnosticFilterModel(this);
     m_diagnosticFilterModel->setSourceModel(m_diagnosticModel);

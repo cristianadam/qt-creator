@@ -1399,7 +1399,7 @@ const CppQmlTypesLoader::BuiltinObjects &CppQmlTypesLoader::defaultQtObjects()
             init = {};
         }
     });
-    return sDefaultLibraryObjects;
+    return sDefaultQtObjects;
 }
 const CppQmlTypesLoader::BuiltinObjects &CppQmlTypesLoader::defaultLibraryObjects()
 {
@@ -1409,7 +1409,7 @@ const CppQmlTypesLoader::BuiltinObjects &CppQmlTypesLoader::defaultLibraryObject
             init = {};
         }
     });
-    return sDefaultQtObjects;
+    return sDefaultLibraryObjects;
 }
 
 CppQmlTypesLoader::BuiltinObjects CppQmlTypesLoader::loadQmlTypes(const QFileInfoList &qmlTypeFiles,

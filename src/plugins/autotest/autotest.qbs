@@ -4,6 +4,7 @@ QtcPlugin {
     Depends { name: "Core" }
     Depends { name: "CppEditor" }
     Depends { name: "CPlusPlus" }
+    Depends { name: "McpServerLib" }
     Depends { name: "ProjectExplorer" }
     Depends { name: "QmlJS" }
     Depends { name: "QmlJSTools" }
@@ -27,6 +28,8 @@ QtcPlugin {
         "autotestplugin.cpp",
         "autotestplugin.h",
         "itemdatacache.h",
+        "mcptools.cpp",
+        "mcptools.h",
         "projectsettingswidget.cpp",
         "projectsettingswidget.h",
         "testcodeparser.cpp",
@@ -43,6 +46,8 @@ QtcPlugin {
         "testresultdelegate.h",
         "testresultmodel.cpp",
         "testresultmodel.h",
+        "testresultsmanager.cpp",
+        "testresultsmanager.h",
         "testresultspane.cpp",
         "testresultspane.h",
         "testrunner.cpp",

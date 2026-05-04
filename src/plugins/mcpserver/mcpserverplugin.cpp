@@ -16,7 +16,7 @@
 
 #include <extensionsystem/iplugin.h>
 
-#include <mcp/server/mcpserver.h>
+#include <mcp/server/toolregistry.h>
 
 #include <texteditor/textdocument.h>
 
@@ -127,7 +127,7 @@ public:
     McpServerSettingsPage(McpServerPluginSettings *settings)
     {
         setId(Constants::SETTINGS_PAGE_ID);
-        setDisplayName("Qt Creator Mcp Server");
+        setDisplayName("Qt Creator MCP Server");
         setCategory(Core::Constants::SETTINGS_CATEGORY_AI);
         setSettingsProvider([settings] { return settings; });
     }
@@ -154,7 +154,7 @@ public:
     void extensionsInitialized() final
     {
         // Initialize the server
-        McpCommands::registerCommands(m_server);
+        McpCommands::registerCommands();
         setupResources(this, m_server, &m_taskRunner);
     }
 
@@ -166,7 +166,7 @@ public:
 
     void restartServer()
     {
-        qCDebug(mcpPlugin) << "(Re)-starting Mcp server...";
+        qCDebug(mcpPlugin) << "(Re)-starting MCP server...";
         qDeleteAll(m_server.boundTcpServers());
 
         m_server.setCorsEnabled(settings.enableCors());
@@ -174,7 +174,7 @@ public:
         McpManager::removeMcpServer(QT_MCPSERVER_MANAGER_ID);
 
         if (!settings.enabled()) {
-            qCInfo(mcpPlugin) << "Mcp server is disabled in settings, not starting.";
+            qCInfo(mcpPlugin) << "MCP server is disabled in settings, not starting.";
             return;
         }
 
@@ -183,15 +183,15 @@ public:
             || !m_server.bind(tcpServer)) {
             delete tcpServer;
             MessageManager::writeFlashing(
-                Tr::tr("Failed to start Mcp server on \"%1:%2\".")
+                Tr::tr("Failed to start MCP server on \"%1:%2\".")
                     .arg(settings.listenAddress.hostAddress().toString())
                     .arg(settings.port()));
         } else {
-            qCInfo(mcpPlugin) << "Mcp server started successfully on" << tcpServer->serverAddress()
+            qCInfo(mcpPlugin) << "MCP server started successfully on" << tcpServer->serverAddress()
                               << ":" << tcpServer->serverPort();
             // Show startup message in General Messages panel
             MessageManager::writeSilently(
-                Tr::tr("The Mcp server is listening on \"%1:%2\".")
+                Tr::tr("The MCP server is listening on \"%1:%2\".")
                     .arg(tcpServer->serverAddress().toString())
                     .arg(tcpServer->serverPort()));
 
@@ -226,12 +226,12 @@ public:
 private:
     QParallelTaskTreeRunner m_taskRunner;
 
-    Mcp::Server m_server{
+    Mcp::AutoRegisteringServer m_server{
         Mcp::Schema::Implementation()
             .name("qt-creator-mcp-server")
-            .title("Qt Creator Mcp Server")
+            .title("Qt Creator MCP Server")
             .description(
-                "Mcp server for Qt Creator to allow external tools to interact with the IDE.")
+                "MCP server for Qt Creator to allow external tools to interact with the IDE.")
             .version(QCoreApplication::applicationVersion())};
 
     McpServerPluginSettings settings{this};
@@ -244,13 +244,13 @@ McpServerPluginSettings::McpServerPluginSettings(McpServerPlugin *plugin)
 
     setSettingsGroup("McpServer");
 
-    enabled.setLabel(Tr::tr("Enable Mcp Server"));
+    enabled.setLabel(Tr::tr("Enable MCP Server"));
     enabled.setDefaultValue(true);
 
     listenAddress.setSettingsGroup("Listen");
     listenAddress.setEnabler(&enabled);
     listenAddress.setToolTip(
-        Tr::tr("The address the Mcp Server should listen on for incoming connections"));
+        Tr::tr("The address the MCP Server should listen on for incoming connections"));
 
     port.setSettingsKey("Port");
     port.setLabel(Tr::tr("Port:"));
@@ -258,7 +258,7 @@ McpServerPluginSettings::McpServerPluginSettings(McpServerPlugin *plugin)
     port.setSpecialValueText(Tr::tr("Automatic"));
     port.setRange(0, 65535);
     port.setToolTip(
-        Tr::tr("The port for the Mcp Server to listen on. Leave on 0 to auto-select a free port."));
+        Tr::tr("The port for the MCP Server to listen on. Leave on 0 to auto-select a free port."));
     port.setEnabler(&enabled);
 
     enableCors.setSettingsKey("EnableCors");
@@ -266,7 +266,7 @@ McpServerPluginSettings::McpServerPluginSettings(McpServerPlugin *plugin)
     enableCors.setLabel(Tr::tr("Enable Cross Origin access:"));
     enableCors.setToolTip(
         Tr::tr(
-            "Enable Cross-Origin Resource Sharing (CORS) for the Mcp Server. "
+            "Enable Cross-Origin Resource Sharing (CORS) for the MCP Server. "
             "This is necessary if you want to connect to the server from a web application."));
     enableCors.setDefaultValue(false);
 
@@ -293,10 +293,10 @@ McpServerPluginSettings::McpServerPluginSettings(McpServerPlugin *plugin)
 
             if (isRunning) {
                 statusLabel->setText(
-                    Tr::tr("The Mcp Server is running, listening on: %1")
+                    Tr::tr("The MCP Server is running, listening on: %1")
                         .arg(plugin->listenAddresses()));
             } else {
-                statusLabel->setText(Tr::tr("The Mcp Server is not running"));
+                statusLabel->setText(Tr::tr("The MCP Server is not running"));
             }
         };
 

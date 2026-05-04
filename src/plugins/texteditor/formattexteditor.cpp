@@ -326,7 +326,8 @@ void formatEditorAsync(TextEditorWidget *editor, const Command &command, int sta
             checkAndApplyTask(editor, input, task.result());
     };
     const auto onTreeSetup = [doc](QTaskTree &taskTree) {
-        QObject::connect(doc, &TextDocument::contentsChanged, &taskTree, &QTaskTree::cancel);
+        QObject::connect(doc, &TextDocument::contentsChanged, &taskTree, &QTaskTree::cancel,
+                         Qt::QueuedConnection);
     };
     GlobalTaskTree::start({AsyncTask<FormatOutput>(onSetup, onDone)}, onTreeSetup);
 }

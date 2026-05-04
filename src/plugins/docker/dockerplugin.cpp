@@ -39,11 +39,11 @@ public:
                 const QmlDebugServicesPreset services =
                     servicesForRunMode(runControl->runMode());
                 CommandLine cmd = runControl->commandLine();
-                const QString remotePath = runControl->device()->qmlDebugRemoteSocketPath();
-                if (!remotePath.isEmpty())
-                    cmd.addArg(qmlDebugLocalArguments(services, remotePath));
-                else
-                    cmd.addArg(qmlDebugTcpArguments(services, runControl->qmlChannel()));
+                QUrl bindServer = runControl->qmlChannel();
+                const QString bindHost = runControl->device()->qmlDebugServerBindHost();
+                if (!bindHost.isEmpty())
+                    bindServer.setHost(bindHost);
+                cmd.addArg(qmlDebugTcpArguments(services, bindServer));
                 process.setCommand(cmd);
             };
             const ProcessTask processTask(
@@ -91,7 +91,6 @@ private:
 #ifdef WITH_TESTS
         addTestCreator(createDockerQmlChannelTest);
         addTestCreator(createDockerPortsGatheringTest);
-        addTestCreator(createDockerQmlForwardingTest);
 #endif
     }
 

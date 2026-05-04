@@ -778,7 +778,7 @@ public:
             const DebuggerRunParameters rp = DebuggerRunParameters::fromRunControl(runControl);
             if (rp.isQmlDebugging()) {
                 const IDevice::ConstPtr device = runControl->device();
-                if (device && device->forwardsQmlDebugSocket())
+                if (device && device->type() != ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE)
                     runControl->requestQmlChannel();
             }
             return debuggerRecipe(runControl, rp);

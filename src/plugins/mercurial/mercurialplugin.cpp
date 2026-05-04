@@ -284,7 +284,8 @@ void MercurialPluginPrivate::addCurrentFile()
 {
     const VcsBasePluginState state = currentState();
     QTC_ASSERT(state.hasFile(), return);
-    mercurialClient().synchronousAdd(state.currentFileTopLevel(), state.relativeCurrentFile());
+    mercurialClient().enqueueCommand({state.currentFileTopLevel(),
+                                      {"add", state.relativeCurrentFile()}});
 }
 
 void MercurialPluginPrivate::annotateCurrentFile()

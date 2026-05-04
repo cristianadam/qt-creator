@@ -59,11 +59,9 @@ namespace Internal {
 class KitPrivate : public KitData
 {
 public:
-    KitPrivate(Id id, Kit *kit) :
-        m_id(id)
+    KitPrivate(Id id, Kit *kit)
     {
-        if (!id.isValid())
-            m_id = Id::generate();
+        m_id = id.isValid() ? id : Id::generate();
 
         m_macroExpander.setDisplayName(Tr::tr("Kit"));
         m_macroExpander.setAccumulating(true);
@@ -87,7 +85,6 @@ public:
             [kit] { return kit->id().toString(); });
     }
 
-    Id m_id;
     int m_nestedBlockingLevel = 0;
     bool m_hasError = false;
     bool m_hasWarning = false;
@@ -199,10 +196,13 @@ Kit *Kit::clone(bool keepName) const
 {
     auto k = new Kit;
     copyKitCommon(k, this);
-    if (keepName)
+    if (keepName) {
         k->d->m_unexpandedDisplayName = d->m_unexpandedDisplayName;
-    else
-        k->d->m_unexpandedDisplayName.setValue(newKitName(KitManager::kits()));
+    } else {
+        const QString baseName = Tr::tr("Clone of %1").arg(unexpandedDisplayName());
+        const QStringList allNames = transform(KitManager::kits(), &Kit::unexpandedDisplayName);
+        k->d->m_unexpandedDisplayName.setValue(Utils::makeUniquelyNumbered(baseName, allNames));
+    }
     k->d->m_detectionSource = DetectionSource::Manual;
     // Do not clone m_fileSystemFriendlyName, needs to be unique
     k->d->m_hasError = d->m_hasError;  // TODO: Is this intentionally not done for copyFrom()?
@@ -218,7 +218,9 @@ void Kit::copyFrom(const Kit *k)
 
 void Kit::copyFrom(const KitData &src)
 {
+    const Id savedId = d->m_id;
     static_cast<KitData &>(*d) = src;
+    d->m_id = savedId;
     d->m_hasValidityInfo = false;
     d->m_cachedIcon = {};
 }
@@ -783,24 +785,6 @@ MacroExpander *Kit::macroExpander() const
     return &d->m_macroExpander;
 }
 
-QString Kit::newKitName(const QList<Kit *> &allKits) const
-{
-    return newKitName(unexpandedDisplayName(), allKits);
-}
-
-QString Kit::newKitName(const QString &name, const QList<Kit *> &allKits)
-{
-    return newKitName(name, transform(allKits, &Kit::unexpandedDisplayName));
-}
-
-QString Kit::newKitName(const QString &name, const QStringList &existingNames)
-{
-    const QString baseName = name.isEmpty()
-            ? Tr::tr("Unnamed")
-            : Tr::tr("Clone of %1").arg(name);
-    return Utils::makeUniquelyNumbered(baseName, existingNames);
-}
-
 void Kit::kitUpdated()
 {
     if (d->m_nestedBlockingLevel > 0) {
@@ -812,7 +796,6 @@ void Kit::kitUpdated()
     KitManager::notifyAboutUpdate(this);
     d->m_mustNotify = false;
 }
-
 
 static Id replacementKey() { return "IsReplacementKit"; }
 

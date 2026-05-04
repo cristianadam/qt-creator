@@ -40,7 +40,8 @@ RemoteDebuggerConfiguration::RemoteDebuggerConfiguration(BuildConfiguration *bc,
     executable.setReadOnly(false);
     executable.setSettingsKey("RemoteDebugger.Executable");
     executable.setHistoryCompleter("RemoteDebugger.Executable.History");
-    executable.setPlaceHolderText(Tr::tr("Script/Command which will set up the gdb server connection"));
+    executable.setPlaceHolderText(
+        Tr::tr("Script or command that will set up the gdb server connection"));
     executable.setExpectedKind(PathChooser::Command);
 
     arguments.setSettingsKey("RemoteDebugger.Arguments");
@@ -63,7 +64,8 @@ RemoteDebuggerConfiguration::RemoteDebuggerConfiguration(BuildConfiguration *bc,
 
     extended.setId(Constants::GdbServerExtendedModeAspectId);
     extended.setSettingsKey("RemoteDebugger.ExtendedMode");
-    extended.setLabelText(Tr::tr("Use target extended-remote to connect"));
+    //: %1 = "target extended-remote"
+    extended.setLabelText(Tr::tr("Use \"%1\" to connect").arg("target extended-remote"));
 
     setDefaultDisplayName(runConfigDefaultDisplayName());
     setUsesEmptyBuildKeys();
@@ -92,7 +94,7 @@ class RemoteDebuggerConfigurationFactory : public FixedRunConfigurationFactory
 {
 public:
     RemoteDebuggerConfigurationFactory()
-        : FixedRunConfigurationFactory(Tr::tr("RemoteDebugger Runner"), true)
+        : FixedRunConfigurationFactory(Tr::tr("Remote Debugger"), true)
     {
         registerRunConfiguration<RemoteDebuggerConfiguration>(Constants::RunConfigId);
     }

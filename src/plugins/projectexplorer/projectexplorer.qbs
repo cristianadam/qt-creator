@@ -3,6 +3,7 @@ QtcPlugin {
 
     Depends { name: "Qt"; submodules: ["widgets", "xml", "network", "qml"] }
     Depends { name: "Aggregation" }
+    Depends { name: "McpServerLib" }
     Depends { name: "Utils" }
 
     Depends { name: "Core" }
@@ -72,6 +73,7 @@ QtcPlugin {
             "headerpath.h",
             "importwidget.cpp", "importwidget.h",
             "ioutputparser.cpp", "ioutputparser.h",
+            "issuesmanager.cpp", "issuesmanager.h",
             "kit.cpp", "kit.h",
             "kitdata.cpp", "kitdata.h",
             "kitaspect.cpp", "kitaspect.h",
@@ -83,6 +85,7 @@ QtcPlugin {
             "lldparser.cpp", "lldparser.h",
             "linuxiccparser.cpp", "linuxiccparser.h",
             "makestep.cpp", "makestep.h",
+            "mcpsupport.cpp",
             "miniprojecttargetselector.cpp", "miniprojecttargetselector.h",
             "msvcparser.cpp", "msvcparser.h",
             "msvctoolchain.cpp", "msvctoolchain.h",

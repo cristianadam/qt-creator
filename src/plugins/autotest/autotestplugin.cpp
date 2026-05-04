@@ -6,6 +6,7 @@
 #include "autotestconstants.h"
 #include "autotesticons.h"
 #include "autotesttr.h"
+#include "mcptools.h"
 #include "projectsettingswidget.h"
 #include "testcodeparser.h"
 #include "testframeworkmanager.h"
@@ -547,6 +548,8 @@ public:
 
     void extensionsInitialized()
     {
+        registerMcpTools();
+
         ActionContainer *contextMenu = ActionManager::actionContainer(CppEditor::Constants::M_CONTEXT);
         if (!contextMenu) // if QC is started without CppEditor plugin
             return;

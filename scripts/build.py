@@ -317,19 +317,20 @@ def package_qtcreator(args, paths):
         if args.with_standalone_qmltraceviewer:
             common.check_print_call(command + [paths.qmltraceviewer_install])
 
-    zip_command = common.sevenzip_command(args.zip_threads)
+    sevenzip = common.sevenzip_command(threads=args.zip_threads)
+    zip = common.sevenzip_command(threads=args.zip_threads, targets_7zip=False)
     if not args.no_zip:
         if not args.no_qtcreator:
-            common.check_print_call(zip_command
+            common.check_print_call(sevenzip
                                     + [os.path.join(paths.result, 'qtcreator' + args.zip_infix + '.7z'),
                                        zip_pattern_for_app(paths)],
                                     paths.install)
-            common.check_print_call(zip_command
+            common.check_print_call(sevenzip
                                     + [os.path.join(paths.result, 'qtcreator' + args.zip_infix + '_dev.7z'),
                                        '*'],
                                     paths.dev_install)
             if args.with_debug_info:
-                common.check_print_call(zip_command
+                common.check_print_call(sevenzip
                                         + [os.path.join(paths.result, 'qtcreator' + args.zip_infix + '-debug.7z'),
                                            '*'],
                                         paths.debug_install)
@@ -340,22 +341,22 @@ def package_qtcreator(args, paths):
                     cmdbridge_dir = os.path.join(paths.install, 'bin')
                 else:
                     cmdbridge_dir = os.path.join(paths.install, 'Qt Creator.app', 'Contents', 'Resources', 'libexec')
-                common.check_print_call(zip_command
+                common.check_print_call(sevenzip
                                         + [os.path.join(paths.result, 'cmdbridge' + args.zip_infix + '.7z'),
                                            'cmdbridge-*'],
                                         cmdbridge_dir)
             if args.with_standalone_qmltraceviewer:
-                common.check_print_call(zip_command
-                                        + [os.path.join(paths.result, 'qmltraceviewer' + args.zip_infix + '.7z'),
+                common.check_print_call(zip
+                                        + [os.path.join(paths.result, 'qmltraceviewer' + args.zip_infix + '.zip'),
                                            '*'],
                                         paths.qmltraceviewer_install)
         if common.is_windows_platform():
-            common.check_print_call(zip_command
+            common.check_print_call(sevenzip
                                     + [os.path.join(paths.result, 'wininterrupt' + args.zip_infix + '.7z'),
                                        '*'],
                                     paths.wininterrupt_install)
             if not args.no_cdb:
-                common.check_print_call(zip_command
+                common.check_print_call(sevenzip
                                         + [os.path.join(paths.result, 'qtcreatorcdbext' + args.zip_infix + '.7z'),
                                            '*'],
                                         paths.qtcreatorcdbext_install)
@@ -365,11 +366,11 @@ def package_qtcreator(args, paths):
             common.check_print_call([args.keychain_unlock_script], paths.install)
         sign_app_bundle(paths.install,
                         os.path.join(paths.result, 'qtcreator' + args.zip_infix + '-signed.7z'),
-                        None if args.no_zip else zip_command)
+                        None if args.no_zip else sevenzip)
         if args.with_standalone_qmltraceviewer:
             sign_app_bundle(paths.qmltraceviewer_install,
-                            os.path.join(paths.result, 'qmltraceviewer' + args.zip_infix + '-signed.7z'),
-                            None if args.no_zip else zip_command)
+                            os.path.join(paths.result, 'qmltraceviewer' + args.zip_infix + '-signed.zip'),
+                            None if args.no_zip else zip)
         if not args.no_dmg:
             common.check_print_call([args.python3, '-u',
                                      os.path.join(paths.src, 'scripts', 'makedmg.py'),

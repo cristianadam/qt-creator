@@ -549,15 +549,13 @@ CPlusPlus::Symbol *CppFindReferences::findSymbol(const CppFindReferencesParamete
     return nullptr;
 }
 
-static void displayResults(SearchResult *search,
-                           QFutureWatcher<CPlusPlus::Usage> *watcher,
-                           int first,
-                           int last)
+static void displayResults(SearchResult *search, const QFuture<CPlusPlus::Usage> &future,
+                           int first, int last)
 {
     CppFindReferencesParameters parameters = search->userData().value<CppFindReferencesParameters>();
 
     for (int index = first; index != last; ++index) {
-        const CPlusPlus::Usage result = watcher->future().resultAt(index);
+        const CPlusPlus::Usage result = future.resultAt(index);
         SearchResultItem item;
         item.setFilePath(result.path);
         item.setMainRange(result.line, result.col, result.len);
@@ -589,13 +587,13 @@ static void displayResults(SearchResult *search,
     search->setUserData(QVariant::fromValue(parameters));
 }
 
-static void searchFinished(SearchResult *search, QFutureWatcher<CPlusPlus::Usage> *watcher)
+static void searchFinished(SearchResult *search, const QFuture<CPlusPlus::Usage> &future)
 {
-    if (!watcher->isCanceled() && search->supportsReplace()) {
+    if (!future.isCanceled() && search->supportsReplace()) {
         search->addResults(symbolOccurrencesInDeclarationComments(search->allItems()),
                            SearchResult::AddSortedByPosition);
     }
-    search->finishSearch(watcher->isCanceled());
+    search->finishSearch(future.isCanceled());
 
     CppFindReferencesParameters parameters = search->userData().value<CppFindReferencesParameters>();
     if (!parameters.filesToRename.isEmpty()) {
@@ -831,15 +829,15 @@ void CppFindReferences::checkUnused(Core::SearchResult *search, const Link &link
 void CppFindReferences::createWatcher(const QFuture<CPlusPlus::Usage> &future, SearchResult *search)
 {
     auto watcher = new QFutureWatcher<CPlusPlus::Usage>();
-    connect(watcher, &QFutureWatcherBase::finished, watcher, [search, watcher] {
-        searchFinished(search, watcher);
+    connect(watcher, &QFutureWatcherBase::finished, search, [search, watcher, future] {
+        searchFinished(search, future);
         watcher->deleteLater();
     });
     connect(watcher, &QFutureWatcherBase::resultsReadyAt, search,
-            [search, watcher](int first, int last) {
-        displayResults(search, watcher, first, last);
+            [search, future](int first, int last) {
+        displayResults(search, future, first, last);
     });
-    connect(search, &SearchResult::canceled, watcher, [watcher]() { watcher->cancel(); });
+    connect(search, &SearchResult::canceled, watcher, &QFutureWatcherBase::cancel);
     connect(search, &SearchResult::paused, watcher, [watcher](bool paused) {
         if (!paused || watcher->isRunning()) // guard against pausing when the search is finished
             watcher->setSuspended(paused);

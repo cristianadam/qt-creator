@@ -309,8 +309,11 @@ void FutureProgress::paintEvent(QPaintEvent *)
 {
     QPainter p(this);
     if (creatorTheme()->flag(Theme::FlatToolBars)) {
-        p.fillRect(rect(), StyleHelper::baseColor());
-        p.fillRect(rect(), creatorColor(Theme::FancyToolButtonSelectedColor));
+        const int m = StyleHelper::SpacingTokens::PaddingVXxs;
+        StyleHelper::drawCardBg(&p, QRectF(rect()).adjusted(0, m, 0, 0),
+                                creatorColor(Theme::Token_Background_Muted),
+                                creatorColor(Theme::Token_Stroke_Subtle),
+                                StyleHelper::SpacingTokens::RadiusM);
     } else {
         QLinearGradient grad = StyleHelper::statusBarGradient(rect());
         p.fillRect(rect(), grad);

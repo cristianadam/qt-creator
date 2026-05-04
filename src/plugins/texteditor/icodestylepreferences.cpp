@@ -23,12 +23,12 @@ public:
     TabSettings m_tabSettings;
     QByteArray m_id;
     QString m_displayName;
-    const void *project = nullptr;
+    FilePath m_projectFile;
     bool m_readOnly = false;
     Key m_settingsSuffix;
 };
 
-}
+} // Internal
 
 ICodeStylePreferences::ICodeStylePreferences(QObject *parent) :
     QObject(parent),
@@ -221,14 +221,14 @@ void ICodeStylePreferences::fromMap(const Store &map)
     }
 }
 
-void ICodeStylePreferences::setProject(const void *project)
+void ICodeStylePreferences::setProject(const FilePath &projectFile)
 {
-    d->project = project;
+    d->m_projectFile = projectFile;
 }
 
-const void *ICodeStylePreferences::project() const
+FilePath ICodeStylePreferences::project() const
 {
-    return d->project;
+    return d->m_projectFile;
 }
 
 Id ICodeStylePreferences::globalSettingsCategory()

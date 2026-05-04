@@ -533,9 +533,11 @@ void GenericProposalWidget::updatePositionAndSize()
     QPoint pos = d->m_displayRect.bottomLeft();
     pos.rx() -= 16 + fw;    // Space for the icons
     if (pos.y() + height > screen.bottom())
-        pos.setY(qMax(0, d->m_displayRect.top() - height));
+        pos.setY(qMax(screen.top(), d->m_displayRect.top() - height));
     if (pos.x() + width > screen.right())
-        pos.setX(qMax(0, screen.right() - width));
+        pos.setX(qMax(screen.left(), screen.right() - width));
+    if (pos.x() < screen.left())
+        pos.setX(screen.left());
     setGeometry(pos.x(), pos.y(), qMin(width, screen.width()), qMin(height, screen.height()));
 }
 

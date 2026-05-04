@@ -7,7 +7,6 @@
 #include "squishtr.h"
 #include "squishxmloutputhandler.h"
 
-#include <debugger/analyzer/analyzerutils.h>
 #include <debugger/debuggericons.h>
 #include <coreplugin/icore.h>
 
@@ -16,6 +15,7 @@
 #include <utils/theme/theme.h>
 #include <utils/utilsicons.h>
 
+#include <QAction>
 #include <QDialog>
 #include <QLabel>
 #include <QProgressBar>
@@ -285,7 +285,8 @@ void SquishPerspective::initPerspective()
     m_stepOutAction->setIcon(iconForType(IconType::StepReturn));
     m_stepOutAction->setToolTip(Tr::tr("Step Out"));
     m_stepOutAction->setEnabled(false);
-    m_stopAction = Debugger::createStopAction();
+    m_stopAction = new QAction(Tr::tr("Stop"), this);
+    m_stopAction->setIcon(Utils::Icons::STOP_SMALL_TOOLBAR.icon());
     m_stopAction->setEnabled(false);
     m_inspectAction = new QAction(this);
     m_inspectAction->setIcon(iconForType(IconType::Inspect));

@@ -1602,18 +1602,6 @@ void Project::addVariablesToMacroExpander(const QByteArray &prefix,
                                });
 }
 
-TextEditor::ProjectWrapper wrapProject(Project *p)
-{
-    return TextEditor::ProjectWrapper(p, [](const void *p) {
-        return reinterpret_cast<const Project *>(p)->projectFilePath();
-    });
-}
-
-Project *unwrapProject(const TextEditor::ProjectWrapper &w)
-{
-    return reinterpret_cast<Project *>(w.project());
-}
-
 static Project::QmlCodeModelInfoFromQtVersionHook s_qtversionExtraProjectInfoHook;
 
 void Project::setQmlCodeModelInfoFromQtVersionHook(QmlCodeModelInfoFromQtVersionHook hook)
@@ -2211,6 +2199,8 @@ private slots:
 
         // Load Project.
         QFETCH(QString, projectFileName);
+        struct ProjectCloser { void operator()(Project *p) { ProjectManager::removeProject(p); }};
+        std::unique_ptr<Project, ProjectCloser> projectHolder;
         const auto theProject = ProjectExplorerPlugin::openProject(projectDir.pathAppended(projectFileName));
         if (!theProject
             && !ProjectManager::canOpenProjectForMimeType(Utils::mimeTypeForFile(projectFileName))) {
@@ -2219,6 +2209,7 @@ private slots:
         }
 
         QVERIFY2(theProject, qPrintable(theProject.errorMessage()));
+        projectHolder.reset(theProject.project());
         QVERIFY(theProject.project()->configureAsExampleProject(kit));
         QCOMPARE(theProject.project()->targets().size(), 1);
         BuildSystem * const bs = theProject.project()->activeBuildSystem();

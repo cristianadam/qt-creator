@@ -698,11 +698,11 @@
         "Path": "@SOURCE_DIR@/src/libs/3rdparty/xz",
         "Description": "XZ is a lossless data-compression library.",
         "Homepage": "https://tukaani.org/xz/",
-        "Version": "5.8.2",
+        "Version": "5.8.3",
         "License": "BSD Zero Clause License (0BSD)",
         "LicenseFile": "@SOURCE_DIR@/src/libs/3rdparty/xz/COPYING",
         "Copyright": "Copyright (C) The XZ Utils authors and contributors",
-        "DownloadLocation": "https://github.com/tukaani-project/xz/tree/v5.8.2",
+        "DownloadLocation": "https://github.com/tukaani-project/xz/tree/v5.8.3",
         "SecurityCritical": true
     },
     {
@@ -714,11 +714,11 @@
         "Path": "@SOURCE_DIR@/src/libs/3rdparty/libarchive",
         "Description": "Libarchive is a programming library that can create and read several different streaming archive formats, including most popular tar variants, several cpio formats, and both BSD and GNU ar variants.",
         "Homepage": "https://www.libarchive.org",
-        "Version": "3.8.5",
+        "Version": "3.8.7",
         "License": "BSD 2-Clause \"Simplified\" License",
         "LicenseFile": "@SOURCE_DIR@/src/libs/3rdparty/libarchive/COPYING",
         "Copyright": "Copyright (c) 2003-2018 <author(s)>",
-        "DownloadLocation": "https://github.com/libarchive/libarchive/tree/v3.8.5",
+        "DownloadLocation": "https://github.com/libarchive/libarchive/tree/v3.8.7",
         "SecurityCritical": true
     },
     {

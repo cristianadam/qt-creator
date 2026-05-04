@@ -11,28 +11,25 @@
 #include <coreplugin/findplaceholder.h>
 
 #include <utils/elidinglabel.h>
-#include <utils/layoutbuilder.h>
 #include <utils/fileutils.h>
-#include <utils/progressindicator.h>
 #include <utils/qtcwidgets.h>
 #include <utils/styledbar.h>
 #include <utils/stylehelper.h>
 #include <utils/theme/theme.h>
 #include <utils/utilsicons.h>
 
+#include <QApplication>
 #include <QComboBox>
-#include <QDateTime>
 #include <QFileDialog>
 #include <QHBoxLayout>
-#include <QStringList>
 #include <QLabel>
 #include <QMenu>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QPushButton>
+#include <QStringList>
 #include <QTextBlock>
 #include <QTextCursor>
-#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -61,64 +58,6 @@ protected:
     }
 };
 
-class SendButton : public QPushButton
-{
-public:
-    explicit SendButton(const QString &text, QWidget *parent = nullptr)
-        : QPushButton(text, parent)
-    {
-        setContentsMargins(12, 4, 12, 4);
-    }
-
-    void setPrompting(bool prompting)
-    {
-        m_prompting = prompting;
-        update();
-    }
-
-protected:
-    void paintEvent(QPaintEvent *) override
-    {
-        QPainter p(this);
-        p.setRenderHint(QPainter::Antialiasing);
-        QColor bg, fg;
-        if (m_prompting) {
-            bg = underMouse() ? QColor{0xaa, 0x22, 0x22} : QColor{0xcc, 0x33, 0x33};
-            fg = Qt::white;
-        } else if (!isEnabled()) {
-            bg = palette().color(QPalette::Disabled, QPalette::Mid);
-            fg = palette().color(QPalette::Disabled, QPalette::Midlight);
-        } else {
-            bg = palette().color(QPalette::Highlight);
-            fg = palette().color(QPalette::HighlightedText);
-        }
-        StyleHelper::drawCardBg(&p, rect(), bg, QPen(Qt::NoPen), RadiusS);
-        p.setPen(fg);
-        p.drawText(rect(), Qt::AlignCenter, text());
-    }
-
-private:
-    bool m_prompting = false;
-};
-
-class ContextBarButton : public QtcIconButton
-{
-public:
-    explicit ContextBarButton(const Utils::Icon &icon, const QString &tooltip, QWidget *parent = nullptr)
-        : QtcIconButton(parent)
-    {
-        setIcon(icon.icon());
-        setToolTip(tooltip);
-        static int size = [](){
-            QLabel label("XOW");
-            label.setMargin(2);
-            return label.sizeHint().height();
-        }();
-        setMaximumSize(size, size);
-    }
-};
-
-
 class ContextItem : public QWidget
 {
     Q_OBJECT
@@ -126,18 +65,17 @@ public:
     explicit ContextItem(const QString &text, QWidget *parent = nullptr)
         : QWidget(parent)
     {
-        setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
-        setAttribute(Qt::WA_Hover);
-
         auto *layout = new QHBoxLayout(this);
         layout->setContentsMargins(PaddingHM, 0, 0, 0);
-        layout->setSpacing(PaddingHXxs);
+        layout->setSpacing(0);
 
         auto *label = new QLabel(text);
-        label->setMargin(2);
         layout->addWidget(label);
 
-        auto *closeBtn = new ContextBarButton(Icons::CLOSE_TOOLBAR, Tr::tr("Remove context"));
+        auto *closeBtn = new QtcIconButton();
+        closeBtn->setIcon(Icons::CLOSE_TOOLBAR.icon());
+        closeBtn->setContentsMargins(0, 0, 0, 0);
+        closeBtn->setToolTip(Tr::tr("Remove context"));
         connect(closeBtn, &QToolButton::clicked, this, &ContextItem::removeRequested);
         layout->addWidget(closeBtn);
     }
@@ -151,7 +89,7 @@ protected:
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing);
         StyleHelper::drawCardBg(
-            &p, rect(), palette().color(QPalette::Highlight), QPen(Qt::NoPen), RadiusS);
+            &p, rect(), creatorColor(Theme::Token_Foreground_Subtle), QPen(Qt::NoPen), RadiusS);
     }
 };
 
@@ -168,12 +106,6 @@ ChatPanel::ChatPanel(QWidget *parent)
     toolbarLayout->setContentsMargins(PaddingHM, PaddingVXs, PaddingHM, PaddingVXs);
     toolbarLayout->setSpacing(GapHM);
 
-    m_progressIndicator = new ProgressIndicator(ProgressIndicatorSize::Small, toolbar);
-    m_progressIndicator->hide();
-    m_progressIndicator->setSizePolicy(QSizePolicy::Fixed,
-                                       m_progressIndicator->sizePolicy().verticalPolicy());
-    toolbarLayout->addWidget(m_progressIndicator);
-
     m_agentLabel = new QLabel;
     m_agentLabel->setTextFormat(Qt::RichText);
     toolbarLayout->addWidget(m_agentLabel);
@@ -184,14 +116,6 @@ ChatPanel::ChatPanel(QWidget *parent)
 
     toolbarLayout->addStretch(1);
 
-    m_elapsedLabel = new QLabel;
-    m_elapsedLabel->setVisible(false);
-    QFont elapsedFont = m_elapsedLabel->font();
-    elapsedFont.setPointSizeF(elapsedFont.pointSizeF() * 0.9);
-    elapsedFont.setFamily(QStringLiteral("monospace"));
-    m_elapsedLabel->setFont(elapsedFont);
-    toolbarLayout->addWidget(m_elapsedLabel);
-
     // --- Message view ---
     m_messageView = new AcpMessageView;
     m_messageView->setDetailedMode(true);
@@ -199,39 +123,45 @@ ChatPanel::ChatPanel(QWidget *parent)
     layout->addWidget(new Core::FindToolBarPlaceHolder(m_messageView));
     layout->addWidget(toolbar);
 
-    // Elapsed time timer
-    m_elapsedTimer = new QTimer(this);
-    m_elapsedTimer->setInterval(100);
-    connect(m_elapsedTimer, &QTimer::timeout, this, [this] {
-        const qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - m_promptStartTime;
-        const int secs = static_cast<int>(elapsed / 1000);
-        const int tenths = static_cast<int>((elapsed % 1000) / 100);
-        m_elapsedLabel->setText(QStringLiteral("%1.%2s").arg(secs).arg(tenths));
-    });
-
     // --- Input bar (rounded container) ---
     auto *inputOuter = new QWidget;
     auto *inputOuterLayout = new QVBoxLayout(inputOuter);
     inputOuterLayout->setContentsMargins(PaddingHM, PaddingVXs, PaddingHM, PaddingVM);
     inputOuterLayout->setSpacing(GapVXs);
 
+    auto *inputContainer = new InputContainerWidget;
+    auto *inputContainerLayout = new QVBoxLayout(inputContainer);
+    inputContainerLayout->setContentsMargins(PaddingHM, PaddingVXs, PaddingHM, PaddingVXs);
+    inputContainerLayout->setSpacing(GapVXs);
+
+    m_inputEdit = new ChatInputEdit;
+    inputContainerLayout->addWidget(m_inputEdit);
+
+    auto *bottomRow = new QWidget;
+    auto *bottomRowLayout = new QHBoxLayout(bottomRow);
+    bottomRowLayout->setContentsMargins(0, 0, 0, 0);
+    bottomRowLayout->setSpacing(GapHS);
+
     m_contextBar = new QWidget;
     Layouting::Flow{}.attachTo(m_contextBar);
     m_contextBarLayout = m_contextBar->layout();
-    m_contextBarLayout->setContentsMargins(0, PaddingVXxs, 0, PaddingVXxs);
+    m_contextBarLayout->setContentsMargins(0, 0, 0, 0);
     m_contextBarLayout->setSpacing(GapHS);
 
-    m_contextLabel = new QLabel(Tr::tr("Context:"));
-    {
-        QPalette pal = m_contextLabel->palette();
-        pal.setColor(QPalette::WindowText, creatorColor(Theme::Token_Text_Muted));
-        m_contextLabel->setPalette(pal);
-    }
-    m_contextBarLayout->addWidget(m_contextLabel);
+    connect(Core::EditorManager::instance(), &Core::EditorManager::currentEditorChanged, this, [this] {
+        updateContextBar();
+    });
 
-    auto addContextButton = new ContextBarButton(Utils::Icons::PLUS_TOOLBAR, Tr::tr("Add context"));
-    connect(addContextButton, &QtcIconButton::released, this, [this] {
-        auto menu = new QMenu(m_addContextButton);
+    QVBoxLayout *verticalCenter = new QVBoxLayout;
+    verticalCenter->addStretch();
+    verticalCenter->addWidget(m_contextBar);
+    verticalCenter->addStretch();
+    bottomRowLayout->addLayout(verticalCenter, 1);
+
+    auto addContextButton = new QtcButton("+", QtcButton::MediumTertiary);
+    addContextButton->setToolTip(Tr::tr("Add Context"));
+    connect(addContextButton, &QtcIconButton::released, this, [this, addContextButton] {
+        auto menu = new QMenu(addContextButton);
         menu->setAttribute(Qt::WA_DeleteOnClose);
 
         menu->clear();
@@ -259,45 +189,43 @@ ChatPanel::ChatPanel(QWidget *parent)
             }
         });
 
-        if (!m_removedAutoContextNames.isEmpty()) {
+        if (!m_includeCurrentEditorContext) {
             menu->addSeparator();
-            for (const QString &name : std::as_const(m_removedAutoContextNames)) {
-                auto *action = menu->addAction(Tr::tr("Current Editor (%1)").arg(name));
-                connect(action, &QAction::triggered, this, [this, name] {
-                    m_removedAutoContextNames.removeOne(name);
-                    updateContextBar();
-                });
-            }
+            auto *action = menu->addAction(Tr::tr("Current Editor"));
+            connect(action, &QAction::triggered, this, [this] {
+                m_includeCurrentEditorContext = true;
+                updateContextBar();
+            });
         }
 
         menu->popup(QCursor::pos());
     });
 
-    m_addContextButton = addContextButton;
-    m_contextBarLayout->addWidget(m_addContextButton);
-    inputOuterLayout->addWidget(m_contextBar);
+    auto bottomRowButtonLayout = new QHBoxLayout;
+    bottomRowButtonLayout->addWidget(addContextButton);
 
-    auto *inputContainer = new InputContainerWidget;
-    auto *inputLayout = new QHBoxLayout(inputContainer);
-    inputLayout->setContentsMargins(PaddingHM, PaddingVXs, PaddingVXs, PaddingVXs);
-    inputLayout->setSpacing(GapHS);
-
-    m_inputEdit = new ChatInputEdit;
-    inputLayout->addWidget(m_inputEdit, 1);
-
-    m_commandsButton = new QToolButton;
-    m_commandsButton->setText(Tr::tr("/"));
+    m_commandsButton = new QtcButton("/", QtcButton::MediumTertiary);
     m_commandsButton->setToolTip(Tr::tr("Insert Command"));
-    m_commandsButton->setPopupMode(QToolButton::InstantPopup);
-    m_commandsButton->setAutoRaise(true);
     m_commandsButton->hide();
-    inputLayout->addWidget(m_commandsButton);
+    connect(m_commandsButton, &QAbstractButton::clicked, this, [this] {
+        if (!m_commandsMenu)
+            return;
+        const QPoint topLeft = m_commandsButton->mapToGlobal(QPoint(0, 0));
+        const QSize menuSize = m_commandsMenu->sizeHint();
+        m_commandsMenu->popup(QPoint(topLeft.x(), topLeft.y() - menuSize.height()));
+    });
+    bottomRowButtonLayout->addWidget(m_commandsButton);
 
-    m_sendButton = new SendButton(Tr::tr("Send"));
+    m_sendButton = new QtcButton(Tr::tr("Send"), QtcButton::MediumPrimary);
     m_sendButton->setEnabled(false);
-    inputLayout->addWidget(m_sendButton);
+    bottomRowButtonLayout->addWidget(m_sendButton);
+    auto alignTop = new QVBoxLayout;
+    alignTop->addLayout(bottomRowButtonLayout);
+    alignTop->addStretch();
+    bottomRowLayout->addLayout(alignTop);
 
     inputOuterLayout->addWidget(inputContainer);
+    inputOuterLayout->addWidget(bottomRow);
     layout->addWidget(inputOuter);
 
     // --- Connections ---
@@ -322,6 +250,7 @@ ChatPanel::ChatPanel(QWidget *parent)
     });
 
     // Config option combo connections are made dynamically in updateConfigOptions()
+    updateContextBar();
 }
 
 void ChatPanel::setAgentInfo(const QString &name, const QString &version,
@@ -342,24 +271,9 @@ void ChatPanel::setPrompting(bool prompting)
 {
     m_prompting = prompting;
     m_sendButton->setText(prompting ? Tr::tr("Cancel") : Tr::tr("Send"));
-    m_sendButton->setPrompting(prompting);
+    m_sendButton->setRole(prompting ? QtcButton::MediumTertiary : QtcButton::MediumPrimary);
     m_inputEdit->setEnabled(!prompting);
-
-    if (prompting) {
-        m_promptStartTime = QDateTime::currentMSecsSinceEpoch();
-        m_progressIndicator->show();
-        m_elapsedLabel->setVisible(true);
-        m_elapsedTimer->start();
-    } else {
-        m_progressIndicator->hide();
-        m_elapsedTimer->stop();
-        if (m_promptStartTime > 0) {
-            const qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - m_promptStartTime;
-            const int secs = static_cast<int>(elapsed / 1000);
-            const int tenths = static_cast<int>((elapsed % 1000) / 100);
-            m_elapsedLabel->setText(Tr::tr("Last: %1.%2s").arg(secs).arg(tenths));
-        }
-    }
+    m_messageView->setPrompting(prompting);
 }
 
 void ChatPanel::setSendEnabled(bool enabled)
@@ -496,6 +410,8 @@ void ChatPanel::addPermissionRequest(const QJsonValue &id,
                                      const Acp::RequestPermissionRequest &request)
 {
     m_messageView->addPermissionRequest(id, request);
+    QApplication::alert(m_messageView);
+
     connect(m_messageView, &AcpMessageView::permissionOptionSelected,
             this, &ChatPanel::permissionOptionSelected, Qt::UniqueConnection);
     connect(m_messageView, &AcpMessageView::permissionCancelled,
@@ -526,16 +442,17 @@ SessionPickerWidget *ChatPanel::addSessionPicker()
 
 void ChatPanel::updateAvailableCommands(const QList<AvailableCommand> &commands)
 {
-    delete m_commandsButton->menu();
+    delete m_commandsMenu;
+    m_commandsMenu = nullptr;
     m_commandsButton->setVisible(!commands.isEmpty());
 
     if (commands.isEmpty())
         return;
 
-    auto *menu = new QMenu(m_commandsButton);
-    menu->setToolTipsVisible(true);
+    m_commandsMenu = new QMenu(m_commandsButton);
+    m_commandsMenu->setToolTipsVisible(true);
     for (const AvailableCommand &cmd : commands) {
-        QAction *action = menu->addAction(cmd.name());
+        QAction *action = m_commandsMenu->addAction(cmd.name());
         action->setToolTip(cmd.description());
         connect(action, &QAction::triggered, this, [this, cmd] {
             m_inputEdit->setPlainText('/' + cmd.name() + QLatin1Char(' '));
@@ -543,45 +460,28 @@ void ChatPanel::updateAvailableCommands(const QList<AvailableCommand> &commands)
             m_inputEdit->setFocus();
         });
     }
-    m_commandsButton->setMenu(menu);
-}
-
-void ChatPanel::setAutoContextItems(const QStringList &names)
-{
-    // Drop any dismissed names that are no longer being offered
-    m_removedAutoContextNames.removeIf([&names](const QString &n) {
-        return !names.contains(n);
-    });
-    m_offeredAutoContextNames = names;
-    updateContextBar();
-}
-
-bool ChatPanel::isAutoContextItemActive(const QString &name) const
-{
-    return m_offeredAutoContextNames.contains(name)
-           && !m_removedAutoContextNames.contains(name);
 }
 
 void ChatPanel::updateContextBar()
 {
     while (QLayoutItem *item = m_contextBarLayout->takeAt(0)) {
-        QWidget *w = item->widget();
-        if (w && w != m_addContextButton && w != m_contextLabel)
-            delete w;
+        delete item->widget();
         delete item;
     }
 
-    m_contextBarLayout->addWidget(m_contextLabel);
-
-    for (const QString &name : std::as_const(m_offeredAutoContextNames)) {
-        if (m_removedAutoContextNames.contains(name))
-            continue;
-        auto *item = new ContextItem(name, m_contextBar);
-        connect(item, &ContextItem::removeRequested, this, [this, name] {
-            m_removedAutoContextNames.append(name);
-            QMetaObject::invokeMethod(this, [this] { updateContextBar(); }, Qt::QueuedConnection);
-        });
-        m_contextBarLayout->addWidget(item);
+    if (m_includeCurrentEditorContext) {
+        if (auto editor = TextEditor::BaseTextEditor::currentTextEditor()) {
+            Utils::FilePath filePath = editor->document()->filePath();
+            if (!filePath.isEmpty()) {
+                const QString name = filePath.fileName();
+                auto *item = new ContextItem(name, m_contextBar);
+                connect(item, &ContextItem::removeRequested, this, [this, name] {
+                    m_includeCurrentEditorContext = false;
+                    QMetaObject::invokeMethod(this, [this] { updateContextBar(); }, Qt::QueuedConnection);
+                });
+                m_contextBarLayout->addWidget(item);
+            }
+        }
     }
 
     for (const Utils::FilePath &file : std::as_const(m_manualContextFiles)) {
@@ -592,8 +492,6 @@ void ChatPanel::updateContextBar()
         });
         m_contextBarLayout->addWidget(item);
     }
-
-    m_contextBarLayout->addWidget(m_addContextButton);
 }
 
 } // namespace AcpClient::Internal

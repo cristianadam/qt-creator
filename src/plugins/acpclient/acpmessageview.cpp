@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "acpmessageview.h"
+
+#include "acpclienttr.h"
 #include "acpsettings.h"
 #include "collapsibleframe.h"
 #include "sessionpickerwidget.h"
@@ -13,17 +15,21 @@
 #include <coreplugin/find/ifindsupport.h>
 
 #include <utils/algorithm.h>
+#include <utils/layoutbuilder.h>
 #include <utils/markdownbrowser.h>
+#include <utils/progressindicator.h>
 #include <utils/qtcassert.h>
 #include <utils/qtcwidgets.h>
 #include <utils/stylehelper.h>
 #include <utils/theme/theme.h>
+#include <utils/elidinglabel.h>
 #include <utils/utilsicons.h>
 
 #include <limits>
 
 #include <QAbstractTextDocumentLayout>
 #include <QComboBox>
+#include <QDateTime>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QtMath>
@@ -36,6 +42,7 @@
 #include <QTextDocument>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QElapsedTimer>
 
 using namespace Acp;
 using namespace Utils::StyleHelper::SpacingTokens;
@@ -244,7 +251,7 @@ public:
         : CollapsibleFrame(parent)
     {
         setFrameShape(QFrame::NoFrame);
-        setCollapsible(false);
+        setCollapsible(true);
 
         auto *header = new QLabel(QStringLiteral("<i>Thought</i>"), this);
         QPalette hpal = header->palette();
@@ -296,7 +303,7 @@ class ToolCallWidget : public CollapsibleFrame
 {
 public:
     explicit ToolCallWidget(ToolCallStatus status, const QString &title,
-                            const QString &kindText = {}, QWidget *parent = nullptr)
+                            std::optional<ToolKind> kind = {}, QWidget *parent = nullptr)
         : CollapsibleFrame(parent)
     {
         setFrameShape(QFrame::NoFrame);
@@ -304,11 +311,13 @@ public:
         m_statusWidget = toolCallStatusWidget(status, this);
         m_headerLayout->addWidget(m_statusWidget);
 
-        QString labelHtml = QStringLiteral("<b>%1</b>").arg(title.toHtmlEscaped());
-        if (!kindText.isEmpty())
-            labelHtml += QStringLiteral(" <small>[%1]</small>").arg(kindText.toHtmlEscaped());
-        m_titleLabel = new QLabel(labelHtml, this);
-        m_titleLabel->setTextFormat(Qt::RichText);
+        if (const auto icon = iconForToolKind(kind)) {
+            auto *kindIcon = new Utils::QtcIconDisplay(this);
+            kindIcon->setIcon(*icon);
+            m_headerLayout->addWidget(kindIcon);
+        }
+
+        m_titleLabel = new Utils::ElidingLabel(title, this);
         m_headerLayout->addWidget(m_titleLabel, 1);
 
         m_status = status;
@@ -349,7 +358,7 @@ protected:
 
 private:
     QWidget *m_statusWidget = nullptr;
-    QLabel *m_titleLabel = nullptr;
+    Utils::ElidingLabel *m_titleLabel = nullptr;
     ToolCallStatus m_status = ToolCallStatus::pending;
 };
 
@@ -583,26 +592,33 @@ public:
         m_iconDisplay->setIcon(Utils::Icons::WARNING);
         m_headerLayout->addWidget(m_iconDisplay);
 
-        QString labelHtml = QStringLiteral("<b>Permission Request</b>");
-        if (!kindText.isEmpty())
-            labelHtml += QStringLiteral(" <small>[%1]</small>").arg(kindText.toHtmlEscaped());
-        auto *headerLabel = new QLabel(labelHtml, this);
-        headerLabel->setTextFormat(Qt::RichText);
+        auto *headerLabel = new QLabel(tr("Permission Request"), this);
+        QFont boldFont = headerLabel->font();
+        boldFont.setBold(true);
+        headerLabel->setFont(boldFont);
         headerLabel->setWordWrap(true);
         m_headerLayout->addWidget(headerLabel, 1);
 
+        if (!kindText.isEmpty()) {
+            auto *kindLabel = new QLabel(QStringLiteral("[%1]").arg(kindText), this);
+            QFont smallFont = kindLabel->font();
+            smallFont.setPointSizeF(smallFont.pointSizeF() * 0.85);
+            kindLabel->setFont(smallFont);
+            kindLabel->setWordWrap(true);
+            m_headerLayout->addWidget(kindLabel);
+        }
+
         if (!title.isEmpty()) {
-            auto *titleLabel = new QLabel(title, this);
-            titleLabel->setTextFormat(Qt::RichText);
+            auto *titleLabel = new Utils::ElidingLabel(title, this);
             titleLabel->setWordWrap(true);
             m_bodyLayout->addWidget(titleLabel);
         }
-        m_buttonLayout = new QHBoxLayout;
-        m_buttonLayout->setSpacing(6);
-        m_bodyLayout->addLayout(m_buttonLayout);
+        auto *buttonWidget = new QWidget(this);
+        Layouting::Flow{}.attachTo(buttonWidget);
+        m_buttonLayout = buttonWidget->layout();
+        m_bodyLayout->addWidget(buttonWidget);
 
-        m_statusLabel = new QLabel(this);
-        m_statusLabel->setTextFormat(Qt::RichText);
+        m_statusLabel = new Utils::ElidingLabel(this);
         m_statusLabel->hide();
         m_headerLayout->addWidget(m_statusLabel);
     }
@@ -618,11 +634,6 @@ public:
         m_buttonLayout->addWidget(button);
         m_buttons.append(button);
         return button;
-    }
-
-    void finishButtonLayout()
-    {
-        m_buttonLayout->addStretch();
     }
 
     void setResolved(const QString &text, bool accepted)
@@ -656,8 +667,8 @@ protected:
 
 private:
     Utils::QtcIconDisplay *m_iconDisplay = nullptr;
-    QHBoxLayout *m_buttonLayout = nullptr;
-    QLabel *m_statusLabel = nullptr;
+    QLayout *m_buttonLayout = nullptr;
+    Utils::ElidingLabel *m_statusLabel = nullptr;
     QList<QPushButton *> m_buttons;
 };
 
@@ -1014,7 +1025,34 @@ AcpMessageView::AcpMessageView(QWidget *parent)
     m_layout = new QVBoxLayout(m_container);
     m_layout->setContentsMargins(PaddingHXl, PaddingHXl, PaddingHXl, PaddingHXl);
     m_layout->setSpacing(GapVL);
+
+    auto *trailingRow = new QWidget(m_container);
+    auto *trailingLayout = new QHBoxLayout(trailingRow);
+    trailingLayout->setContentsMargins(0, 0, 0, 0);
+    trailingLayout->setSpacing(GapHS);
+
+    m_progressIndicator = new Utils::ProgressIndicator(
+        Utils::ProgressIndicatorSize::Small, trailingRow);
+    m_progressIndicator->setVisible(false);
+    trailingLayout->addWidget(m_progressIndicator);
+
+    m_elapsedLabel = new QLabel(trailingRow);
+    m_elapsedLabel->setVisible(false);
+    QFont elapsedFont = m_elapsedLabel->font();
+    elapsedFont.setPointSizeF(elapsedFont.pointSizeF() * 0.9);
+    elapsedFont.setFamily(QStringLiteral("monospace"));
+    m_elapsedLabel->setFont(elapsedFont);
+    trailingLayout->addWidget(m_elapsedLabel);
+
+    trailingLayout->addStretch();
+
+    m_layout->addWidget(trailingRow);
     m_layout->addStretch();
+
+    m_elapsedTimer = new QElapsedTimer();
+    m_progressUpdateTimer = new QTimer(this);
+    m_progressUpdateTimer->setInterval(1000);
+    connect(m_progressUpdateTimer, &QTimer::timeout, this, &AcpMessageView::updateElapsedTimeLabel);
 
     setWidget(m_container);
 
@@ -1037,10 +1075,23 @@ void AcpMessageView::setAgentIconUrl(const QString &iconUrl)
     m_agentIconUrl = iconUrl;
 }
 
+void AcpMessageView::setPrompting(bool prompting)
+{
+    if (prompting) {
+        m_elapsedTimer->restart();
+        updateElapsedTimeLabel();
+        m_progressUpdateTimer->start();
+    } else {
+        m_progressUpdateTimer->stop();
+    }
+    m_progressIndicator->setVisible(prompting);
+    m_elapsedLabel->setVisible(prompting);
+}
+
 void AcpMessageView::clear()
 {
-    // Remove all widgets except the bottom stretch
-    while (m_layout->count() > 1) {
+    // Remove all widgets except the trailing elapsed label and bottom stretch
+    while (m_layout->count() > 2) {
         QLayoutItem *item = m_layout->takeAt(0);
         if (item->widget())
             delete item->widget();
@@ -1070,6 +1121,8 @@ void AcpMessageView::addUserMessage(const QString &text)
 
 void AcpMessageView::appendAgentText(const QString &text)
 {
+    if (m_currentThoughtWidget)
+        m_currentThoughtWidget->setCollapsed(true);
     m_currentThoughtWidget = nullptr;
     finishToolCallGroup();
     if (!m_currentAgentWidget) {
@@ -1083,6 +1136,8 @@ void AcpMessageView::appendAgentText(const QString &text)
 
 void AcpMessageView::appendAgentThought(const QString &text)
 {
+    if (text.isEmpty())
+        return;
     if (!m_currentThoughtWidget) {
         finishAgentMessage();
         finishToolCallGroup();
@@ -1126,8 +1181,7 @@ void AcpMessageView::addToolCall(const ToolCall &toolCall)
         group->addChildWidget(detail);
         m_toolCallDetailWidgets[toolCall.toolCallId()] = detail;
     } else {
-        const QString kindText = toolCall.kind() ? toString(*toolCall.kind()) : QString();
-        auto *widget = new ToolCallWidget(status, toolCall.title(), kindText, group);
+        auto *widget = new ToolCallWidget(status, toolCall.title(), toolCall.kind(), group);
         widget->setCollapsible(false);
         group->addChildWidget(widget);
         m_toolCallWidgets[toolCall.toolCallId()] = widget;
@@ -1174,12 +1228,11 @@ void AcpMessageView::updateToolCall(const ToolCallUpdate &update)
     if (!widget) {
         const ToolCallStatus status = update.status().value_or(ToolCallStatus::in_progress);
         const QString title = update.title().value_or(QStringLiteral("Tool Call"));
-        const QString kindText = update.kind() ? toString(*update.kind()) : QString();
         auto *group = ensureToolCallGroup();
         group->trackStatus(update.toolCallId(), status);
         group->trackTitle(update.toolCallId(), title);
         m_toolCallGroups[update.toolCallId()] = group;
-        widget = new ToolCallWidget(status, title, kindText, group);
+        widget = new ToolCallWidget(status, title, update.kind(), group);
         widget->setCollapsible(false);
         group->addChildWidget(widget);
         m_toolCallWidgets[update.toolCallId()] = widget;
@@ -1235,7 +1288,6 @@ void AcpMessageView::addPermissionRequest(const QJsonValue &id,
         });
     }
 
-    widget->finishButtonLayout();
     addWidget(widget);
 }
 
@@ -1303,6 +1355,8 @@ void AcpMessageView::finishAgentMessage()
     if (m_currentAgentWidget)
         m_currentAgentWidget->flush();
     m_currentAgentWidget = nullptr;
+    if (m_currentThoughtWidget)
+        m_currentThoughtWidget->setCollapsed(true);
     m_currentThoughtWidget = nullptr;
 }
 
@@ -1340,8 +1394,8 @@ QWidget *AcpMessageView::wrapWithSpacer(QWidget *widget, Qt::Alignment side)
 
 void AcpMessageView::addWidget(QWidget *widget)
 {
-    // Insert before the bottom stretch item
-    m_layout->insertWidget(m_layout->count() - 1, widget);
+    // Insert before the trailing elapsed label and the bottom stretch
+    m_layout->insertWidget(m_layout->count() - 2, widget);
 }
 
 int AcpMessageView::contentMaxWidth() const
@@ -1360,6 +1414,18 @@ void AcpMessageView::resizeEvent(QResizeEvent *event)
     const int maxW = contentMaxWidth();
     for (ToolCallDetailWidget *detail : m_toolCallDetailWidgets)
         detail->setContentMaxWidth(maxW);
+}
+
+void AcpMessageView::updateElapsedTimeLabel()
+{
+    const qint64 elapsedMS = m_elapsedTimer->elapsed();
+    const int secs = elapsedMS / 1000;
+    const int minutes = secs / 60;
+    const QString text = minutes ? Tr::tr("%1:%2 minutes")
+                                       .arg(minutes)
+                                       .arg(QString::number(secs % 60).rightJustified(2, '0'))
+                                 : Tr::tr("%1 seconds").arg(secs);
+    m_elapsedLabel->setText(text);
 }
 
 } // namespace AcpClient::Internal

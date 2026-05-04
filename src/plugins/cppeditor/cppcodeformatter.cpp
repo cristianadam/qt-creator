@@ -563,7 +563,9 @@ void CodeFormatter::recalculateStateAfter(const QTextBlock &block)
                     QStack<State>::iterator end = m_currentState.begin() + previousMarker + 1;
                     m_currentState.erase(begin, end);
                 } else if (tokenText == QLatin1String("else")
-                        || tokenText == QLatin1String("elif")) {
+                        || tokenText == QLatin1String("elif")
+                        || tokenText == QLatin1String("elifdef")
+                        || tokenText == QLatin1String("elifndef")) {
                     m_currentState.resize(previousMarker + 1);
                     for (int i = previousPreviousMarker + 1; i < previousMarker; ++i)
                         m_currentState += m_currentState.at(i);

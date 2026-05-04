@@ -24,6 +24,7 @@
 #include <projectexplorer/buildpropertiessettings.h>
 #include <projectexplorer/devicesupport/devicekitaspects.h>
 #include <projectexplorer/devicesupport/idevice.h>
+#include <projectexplorer/environmentkitaspect.h>
 #include <projectexplorer/gcctoolchain.h>
 #include <projectexplorer/kitmanager.h>
 #include <projectexplorer/projectexplorerconstants.h>
@@ -37,6 +38,8 @@
 
 #include <qnx/qnxconstants.h>
 #include <qtsupport/qtkitaspect.h>
+#include <qtsupport/qtversionfactory.h>
+#include <qtsupport/qtversionmanager.h>
 
 #include <utils/algorithm.h>
 #include <utils/qtcprocess.h>
@@ -478,14 +481,13 @@ FilePaths CMakeProjectImporter::presetCandidates()
     return candidates;
 }
 
-class DebuggerCMakeExpander
+struct PresetMacroExpander
 {
     const PresetsDetails::ConfigurePreset &preset;
     const Environment &env;
     const FilePath &projectDirectory;
 
-public:
-    DebuggerCMakeExpander(
+    PresetMacroExpander(
         const PresetsDetails::ConfigurePreset &p, const Environment &e, const FilePath &projectDir)
         : preset(p)
         , env(e)
@@ -510,8 +512,11 @@ public:
 };
 
 static QVariant findOrRegisterDebugger(
-    Environment &env, const PresetsDetails::ConfigurePreset &preset, const DebuggerCMakeExpander& expander)
+    const PresetMacroExpander &expander, const QString &projectName)
 {
+    Environment env = expander.env;
+    const PresetsDetails::ConfigurePreset &preset = expander.preset;
+
     const QString debuggerKey("debugger");
     if (!preset.vendor || !preset.vendor->contains(debuggerKey))
         return {};
@@ -522,12 +527,13 @@ static QVariant findOrRegisterDebugger(
         if (debuggerPath.isRelativePath())
             debuggerPath = env.searchInPath(debuggerPath.fileName());
 
-        const QString mainName = Tr::tr("CMake Preset (%1) %2 Debugger");
+        const QString mainName = Tr::tr("%1: %2 %3 Debugger");
         DebuggerItem debugger;
         debugger.setCommand(debuggerPath);
-        debugger.setUnexpandedDisplayName(
-            mainName.arg(preset.name).arg(debuggerPath.completeBaseName()));
-        debugger.setDetectionSource(DetectionSource::Manual);
+        debugger.setUnexpandedDisplayName(mainName.arg(projectName)
+                                              .arg(preset.displayName.value_or(preset.name))
+                                              .arg(debuggerPath.completeBaseName()));
+        debugger.setDetectionSource(DetectionSource::Temporary);
         QString errorMessage;
         debugger.reinitializeFromFile(&errorMessage, &env);
         if (!errorMessage.isEmpty())
@@ -546,9 +552,168 @@ static QVariant findOrRegisterDebugger(
 
         auto store = storeFromMap(expander.expand(debuggerMap));
         DebuggerItem debugger(store);
-
+        debugger.setDetectionSource(DetectionSource::Temporary);
         return DebuggerItemManager::registerDebugger(debugger);
     }
+}
+
+static QtProjectImporter::QtVersionData findOrRegisterQtVersion(
+    const PresetMacroExpander &expander, const QString &projectName)
+{
+    const PresetsDetails::ConfigurePreset &preset = expander.preset;
+    const Environment &env = expander.env;
+
+    const QString qtKey("qt");
+    if (!preset.vendor || !preset.vendor->contains(qtKey))
+        return {};
+
+    const QVariant qtVariant = preset.vendor->value(qtKey);
+    FilePath qmakePath;
+    QtVersion *version = nullptr;
+
+    if (qtVariant.canConvert<QString>()) {
+        qmakePath = FilePath::fromUserInput(expander.expand(qtVariant.toString()));
+        if (qmakePath.isEmpty())
+            return {};
+
+        if (qmakePath.isRelativePath())
+            qmakePath = env.searchInPath(qmakePath.fileName());
+
+        // Check if this Qt version is already known to the manager
+        for (QtVersion *v : QtVersionManager::versions()) {
+            if (v->qmakeFilePath() == qmakePath) {
+                version = v;
+                break;
+            }
+        }
+
+        if (version)
+            return {version, false}; // Not a temporary version
+
+        // If not known, create it as a temporary version
+        version
+            = QtVersionFactory::createQtVersionFromQMakePath(qmakePath, DetectionSource::Temporary);
+    } else {
+        QVariantMap qtMap = qtVariant.toMap();
+        if (qtMap.isEmpty())
+            return {};
+
+        qtMap.insert("DetectionSource.type", int(DetectionSource::Temporary));
+        qtMap.insert("DetectionSource.id", -1);
+
+        const Store store = storeFromMap(expander.expand(qtMap));
+
+        const QString type = qtMap.value("QtVersion.Type").toString();
+        const FilePath qmakePath = FilePath::fromUserInput(qtMap.value("QMakePath").toString());
+
+        const QList<QtVersionFactory *> factories = QtVersionFactory::allQtVersionFactories();
+        QtVersionFactory *factory = Utils::findOrDefault(factories, [type](QtVersionFactory *f) {
+            return f->canRestore(type);
+        });
+        if (!factory)
+            return {};
+
+        version = factory->restore(type, store, qmakePath);
+    }
+
+    if (version) {
+        version->setUnexpandedDisplayName(projectName + ": " + version->unexpandedDisplayName());
+        QtVersionManager::addVersion(version);
+        return {version, true}; // Is a temporary version
+    }
+    return {};
+}
+
+static QList<Toolchain *> findOrRegisterToolchains(
+    const PresetMacroExpander &expander, const QString &projectName)
+{
+    const PresetsDetails::ConfigurePreset &preset = expander.preset;
+
+    if (!preset.vendor || !preset.vendor->contains("compiler"))
+        return {};
+
+    QVariantMap compilerMap = preset.vendor->value("compiler").toMap();
+    if (compilerMap.isEmpty())
+        return {};
+
+    QList<Toolchain *> result;
+    const QMap<QString, Id> langMapping
+        = {{"c", ProjectExplorer::Constants::C_LANGUAGE_ID},
+           {"cxx", ProjectExplorer::Constants::CXX_LANGUAGE_ID}};
+
+    bool doRegisterToolchains = false;
+    for (auto it = langMapping.begin(); it != langMapping.end(); ++it) {
+        const QString key = it.key();
+        if (!compilerMap.contains(key))
+            continue;
+
+        const QVariant value = compilerMap.value(key);
+
+        if (value.canConvert<QString>()) {
+            FilePath path = FilePath::fromUserInput(expander.expand(value.toString()));
+            if (path.isEmpty())
+                continue;
+
+            Id language = it.value();
+
+            Toolchain *existingTc = ToolchainManager::instance()->toolchain(
+                [path, language](const Toolchain *tc) {
+                    return tc->language() == language && tc->matchesCompilerCommand(path);
+                });
+
+            if (existingTc) {
+                result.append(existingTc);
+                continue;
+            }
+
+            ToolchainDescription tcd{path, language};
+            Toolchains detected;
+            for (ToolchainFactory *factory : ToolchainFactory::allToolchainFactories()) {
+                const Toolchains tcs = factory->detectForImport(tcd);
+                if (!tcs.isEmpty()) {
+                    detected = tcs;
+                    break;
+                }
+            }
+
+            if (!detected.isEmpty()) {
+                Toolchain *tc = detected.at(0);
+                tc->setDetectionSource(DetectionSource::Temporary);
+                tc->setDisplayName(QString("%1: %2").arg(projectName).arg(tc->displayName()));
+                doRegisterToolchains = true;
+                result.append(tc);
+            }
+        } else if (value.canConvert<QVariantMap>()) {
+            QVariantMap map = value.toMap();
+            if (map.isEmpty())
+                continue;
+
+            const Store store = storeFromMap(expander.expand(map));
+
+            Toolchain *restoredTc = nullptr;
+            for (ToolchainFactory *factory : ToolchainFactory::allToolchainFactories()) {
+                Toolchain *tc = factory->restore(store);
+                if (tc) {
+                    restoredTc = tc;
+                    break;
+                }
+            }
+
+            if (restoredTc) {
+                restoredTc->setLanguage(it.value());
+                restoredTc->setDetectionSource(DetectionSource::Temporary);
+                restoredTc->setDisplayName(
+                    QString("%1: %2").arg(projectName).arg(restoredTc->displayName()));
+                doRegisterToolchains = true;
+                result.append(restoredTc);
+            }
+        }
+    }
+
+    if (doRegisterToolchains)
+        ToolchainManager::instance()->registerToolchains(result);
+
+    return result;
 }
 
 Target *CMakeProjectImporter::preferredTarget(const QList<Target *> &possibleTargets)
@@ -805,7 +970,7 @@ struct InternalStorage
     Environment env;
     FilePath qmakePath;
     QString cmakePrefixPath;
-    std::unique_ptr<TemporaryDirectory> qtcQMakeProbeDir;
+    FilePath qtcQMakeProbeDir;
 };
 
 static SetupResult setupCompilerProcess(Process &process, InternalStorage &storage,
@@ -887,11 +1052,17 @@ static SetupResult setupCompilerProcess(Process &process, InternalStorage &stora
                                               data.buildDirectory);
     CMakePresets::Macros::updateCacheVariables(configurePreset, env, projectDirectory);
 
-    cache = configurePreset.cacheVariables ? configurePreset.cacheVariables.value()
-                                           : CMakeConfig();
-    const bool noCompilers = cache.valueOf("CMAKE_C_COMPILER").isEmpty()
+    cache = configurePreset.cacheVariables.value_or(CMakeConfig());
+    const bool noCompilersInCache = cache.valueOf("CMAKE_C_COMPILER").isEmpty()
                              && cache.valueOf("CMAKE_CXX_COMPILER").isEmpty();
-    if (noCompilers || !configurePreset.generator) {
+    bool vendorCompilersProvided = false;
+    if (configurePreset.vendor && configurePreset.vendor->contains("compiler")) {
+        QVariantMap compilerMap = configurePreset.vendor->value("compiler").toMap();
+        if (compilerMap.contains("c") || compilerMap.contains("cxx")) {
+            vendorCompilersProvided = true;
+        }
+    }
+    if ((noCompilersInCache && !vendorCompilersProvided) || !configurePreset.generator) {
         const FilePath cmakeListTxt = presetPath / Constants::CMAKE_LISTS_TXT;
         cmakeListTxt.writeFileContents(s_presetCompilerProbeCMakeScript);
 
@@ -961,7 +1132,8 @@ static SetupResult setupCompilerProcess(Process &process, InternalStorage &stora
     return SetupResult::StopWithSuccess;
 }
 
-static SetupResult setupQMakeProcess(Process &process, InternalStorage &storage)
+static SetupResult setupQMakeProcess(
+    Process &process, InternalStorage &storage, const FilePath &presetPath)
 {
     DirectoryData &data = storage.directoryData;
     CMakeConfig &config = storage.config;
@@ -974,6 +1146,9 @@ static SetupResult setupQMakeProcess(Process &process, InternalStorage &storage)
     data.cmakeSystemName = config.stringValueOf("CMAKE_SYSTEM_NAME");
     data.androidNdk = config.filePathValueOf("ANDROID_NDK");
     data.androidSdk = config.filePathValueOf("ANDROID_SDK");
+
+    if (data.qt.qt)
+        return SetupResult::StopWithSuccess;
 
     // Qt4 way to define things (more convenient for us, so try this first;-)
     qmake = config.filePathValueOf("QT_QMAKE_EXECUTABLE");
@@ -1021,10 +1196,11 @@ static SetupResult setupQMakeProcess(Process &process, InternalStorage &storage)
         return SetupResult::StopWithSuccess;
 
     // Run a CMake project that would do qmake probing
-    std::unique_ptr<TemporaryDirectory> &qtcQMakeProbeDir = storage.qtcQMakeProbeDir;
-    qtcQMakeProbeDir = std::make_unique<TemporaryDirectory>("qtc-cmake-qmake-probe-XXXXXXXX");
+    FilePath &qtcQMakeProbeDir = storage.qtcQMakeProbeDir;
+    qtcQMakeProbeDir = presetPath.pathAppended("qtc-cmake-qmake-probe");
+    qtcQMakeProbeDir.ensureWritableDir();
 
-    const FilePath cmakeListTxt(qtcQMakeProbeDir->filePath(Constants::CMAKE_LISTS_TXT));
+    const FilePath cmakeListTxt(qtcQMakeProbeDir.pathAppended(Constants::CMAKE_LISTS_TXT));
 
     cmakeListTxt.writeFileContents(s_qmakeProbeCMakeScript);
 
@@ -1046,9 +1222,9 @@ static SetupResult setupQMakeProcess(Process &process, InternalStorage &storage)
 
     QStringList args;
     args.push_back("-S");
-    args.push_back(qtcQMakeProbeDir->path().path());
+    args.push_back(qtcQMakeProbeDir.path());
     args.push_back("-B");
-    args.push_back(qtcQMakeProbeDir->filePath("build").path());
+    args.push_back(qtcQMakeProbeDir.pathAppended("build").path());
     if (!cmakeGenerator.isEmpty()) {
         args.push_back("-G");
         args.push_back(cmakeGenerator);
@@ -1080,6 +1256,36 @@ static SetupResult setupQMakeProcess(Process &process, InternalStorage &storage)
     return SetupResult::Continue;
 }
 
+static void applyRunEnvironmentToKit(
+    const PresetsDetails::ConfigurePreset &preset, Kit *kit, const FilePath &projectDir)
+{
+    if (!preset.vendor)
+        return;
+
+    const QVariantMap runEnvMap = preset.vendor->value("runEnvironment").toMap();
+    if (runEnvMap.isEmpty())
+        return;
+
+    // Treat the "runEnvironment" as the normal Presets "environment"
+    EnvironmentItems items;
+    for (auto it = runEnvMap.constBegin(); it != runEnvMap.constEnd(); ++it)
+        items.append({it.key(), it.value().toString()});
+
+    PresetsDetails::ConfigurePreset runPreset(preset);
+    runPreset.environment = Environment();
+    runPreset.environment->modify(items);
+
+    Environment env = projectDir.deviceEnvironment();
+
+    // Expand any macros present
+    items.clear();
+    CMakePresets::Macros::expand(runPreset, items, projectDir);
+
+    EnvironmentChanges changes;
+    changes.setItemsFromUser(items);
+    EnvironmentKitAspect::setRunEnvChanges(kit, changes);
+}
+
 void CMakeProjectImporter::createKitsFromPresets()
 {
     const ListIterator iterator(presetCandidates());
@@ -1090,14 +1296,24 @@ void CMakeProjectImporter::createKitsFromPresets()
                                     m_project->presetsData().configurePresets);
     };
 
-    const auto onCompilerDone = [iterator, storage](const Process &process) {
+    const auto onCompilerDone = [iterator, storage](const Process &process, DoneWith doneWith) {
+        PresetsDetails::ConfigurePreset &configurePreset = storage->configurePreset;
+        DirectoryData &data = storage->directoryData;
+
         qCDebug(cmInputLog).noquote() << process.cleanedStdOut() << process.cleanedStdErr();
+        if (doneWith == DoneWith::Error) {
+            TaskHub::addTask<BuildSystemTask>(
+                Task::TaskType::DisruptingError,
+                Tr::tr("CMake Preset: \"%1\" failure.\n%2\n%3")
+                    .arg(
+                        configurePreset.displayName.value_or(configurePreset.name),
+                        process.cleanedStdOut(),
+                        process.cleanedStdErr()));
+            return;
+        }
 
         const CMakeConfig config
             = CMakeConfig::fromFile(iterator->pathAppended("build/CMakeCache.txt"), nullptr);
-
-        DirectoryData &data = storage->directoryData;
-        PresetsDetails::ConfigurePreset &configurePreset = storage->configurePreset;
 
         if (!configurePreset.generator) {
             const QString cmakeGenerator = config.stringValueOf(QByteArray("CMAKE_GENERATOR"));
@@ -1110,20 +1326,40 @@ void CMakeProjectImporter::createKitsFromPresets()
         storage->config = config;
     };
 
-    const auto onQMakeSetup = [storage](Process &process) {
-        return setupQMakeProcess(process, *storage);
+    const auto onQMakeSetup = [this, iterator, storage](Process &process) {
+        DirectoryData &data = storage->directoryData;
+        Environment &env = storage->env;
+        PresetsDetails::ConfigurePreset &configurePreset = storage->configurePreset;
+
+        data.qt = findOrRegisterQtVersion(
+            PresetMacroExpander(configurePreset, env, projectDirectory()), m_project->displayName());
+
+        return setupQMakeProcess(process, *storage, *iterator);
     };
 
-    const auto onQMakeDone = [iterator, storage] {
-        std::unique_ptr<TemporaryDirectory> &qtcQMakeProbeDir = storage->qtcQMakeProbeDir;
+    const auto onQMakeDone = [storage](const Process &process, DoneWith doneWith) {
+        FilePath &qtcQMakeProbeDir = storage->qtcQMakeProbeDir;
         FilePath &qmakeLocation = storage->qmakePath;
         QString &resultedPrefixPath = storage->cmakePrefixPath;
+        PresetsDetails::ConfigurePreset &configurePreset = storage->configurePreset;
 
-        const FilePath qmakeLocationTxt = qtcQMakeProbeDir->filePath("qmake-location.txt");
+        qCDebug(cmInputLog).noquote() << process.cleanedStdOut() << process.cleanedStdErr();
+        if (doneWith == DoneWith::Error) {
+            TaskHub::addTask<BuildSystemTask>(
+                Task::TaskType::DisruptingError,
+                Tr::tr("CMake Preset: \"%1\" failure.\n%2\n%3")
+                    .arg(
+                        configurePreset.displayName.value_or(configurePreset.name),
+                        process.cleanedStdOut(),
+                        process.cleanedStdErr()));
+            return;
+        }
+
+        const FilePath qmakeLocationTxt = qtcQMakeProbeDir.pathAppended("qmake-location.txt");
         qmakeLocation = FilePath::fromUtf8(qmakeLocationTxt.fileContents().value_or(QByteArray()));
         qCDebug(cmInputLog) << "qmake location: " << qmakeLocation.toUserOutput();
 
-        const FilePath prefixPathTxt = qtcQMakeProbeDir->filePath("cmake-prefix-path.txt");
+        const FilePath prefixPathTxt = qtcQMakeProbeDir.pathAppended("cmake-prefix-path.txt");
         resultedPrefixPath = QString::fromUtf8(prefixPathTxt.fileContents().value_or(QByteArray()));
         qCDebug(cmInputLog) << "PrefixPath [after qmake probe]: " << resultedPrefixPath;
     };
@@ -1147,7 +1383,10 @@ void CMakeProjectImporter::createKitsFromPresets()
                 CMakeConfigItem("CMAKE_PREFIX_PATH", CMakeConfigItem::PATH, cmakePrefixPath.toUtf8()));
 
         // Toolchains:
-        data.toolchains = extractToolchainsFromCache(config);
+        const QList<Toolchain *> vendorToolchains = findOrRegisterToolchains(
+            PresetMacroExpander(configurePreset, env, projectDirectory()), m_project->displayName());
+        if (vendorToolchains.isEmpty())
+            data.toolchains = extractToolchainsFromCache(config);
 
         // Update QT_QMAKE_EXECUTABLE and CMAKE_C|XX_COMPILER config values
         updateConfigWithDirectoryData(config, data);
@@ -1155,7 +1394,8 @@ void CMakeProjectImporter::createKitsFromPresets()
         data.hasQmlDebugging = CMakeBuildConfiguration::hasQmlDebugging(config);
 
         data.debugger = findOrRegisterDebugger(
-            env, configurePreset, DebuggerCMakeExpander(configurePreset, env, projectDirectory()));
+            PresetMacroExpander(configurePreset, env, projectDirectory()),
+            m_project->displayName());
 
         QByteArrayList buildConfigurationTypes = {cache.valueOf("CMAKE_BUILD_TYPE")};
         if (buildConfigurationTypes.front().isEmpty()) {
@@ -1194,7 +1434,7 @@ void CMakeProjectImporter::createKitsFromPresets()
 
         Kit *kit = KitManager::kit(kitId);
         if (!kit || !kit->isValid()) {
-            KitManager::registerKit(
+            kit = KitManager::registerKit(
                 [this, data, buildInfos](Kit *kit) {
                     KitGuard kitGuard(kit);
 
@@ -1206,6 +1446,17 @@ void CMakeProjectImporter::createKitsFromPresets()
                     kit->fix();
                 },
                 kitId);
+            applyRunEnvironmentToKit(configurePreset, kit, projectDirectory());
+
+            if (!vendorToolchains.isEmpty()) {
+                for (Toolchain *tc : vendorToolchains)
+                    ToolchainKitAspect::setToolchain(kit, tc);
+
+                const QList<ToolchainBundle> bundles = ToolchainBundle::collectBundles(
+                    vendorToolchains, ToolchainBundle::HandleMissing::CreateAndRegister);
+                if (!bundles.isEmpty())
+                    ToolchainKitAspect::setBundle(kit, bundles.first());
+            }
         }
     };
 
@@ -1213,12 +1464,12 @@ void CMakeProjectImporter::createKitsFromPresets()
     const Group recipe{
         For (iterator) >> Do {
             parallel,
+            continueOnError,
             Group {
                 storage,
-                If (ProcessTask(onCompilerSetup, onCompilerDone)) >> Then {
-                    ProcessTask(onQMakeSetup, onQMakeDone),
-                    QSyncTask(onPresetDone)
-                }
+                ProcessTask(onCompilerSetup, onCompilerDone),
+                ProcessTask(onQMakeSetup, onQMakeDone),
+                QSyncTask(onPresetDone)
             }
         }
     };
@@ -1525,13 +1776,16 @@ Kit *CMakeProjectImporter::createKit(void *directoryData) const
 
 void CMakeProjectImporter::applyDirectoryDataToKit(const DirectoryData &data, ProjectExplorer::Kit *k) const
 {
+    const DetectionSource detectionSource = !data.cmakePreset.isEmpty() ? DetectionSource::Temporary
+                                                                        : DetectionSource::Manual;
+
     CMakeTool *cmakeTool = CMakeToolManager::findByCommand(data.cmakeBinary);
     if (!cmakeTool) {
         qCDebug(cmInputLog) << "Creating temporary CMakeTool for" << data.cmakeBinary.toUserOutput();
 
         UpdateGuard guard(*this);
 
-        auto newTool = std::make_unique<CMakeTool>(DetectionSource::Manual, CMakeTool::createId());
+        auto newTool = std::make_unique<CMakeTool>(detectionSource, CMakeTool::createId());
         newTool->setFilePath(data.cmakeBinary);
         newTool->setDisplayName(uniqueCMakeToolDisplayName(*newTool));
 
@@ -1580,8 +1834,7 @@ void CMakeProjectImporter::applyDirectoryDataToKit(const DirectoryData &data, Pr
                 }
             }
 
-            // Mark CMake presets toolchains as manual
-            toolchain->setDetectionSource(DetectionSource::Manual);
+            toolchain->setDetectionSource(detectionSource);
         }
 
         ToolchainKitAspect::setToolchain(k, toolchain);

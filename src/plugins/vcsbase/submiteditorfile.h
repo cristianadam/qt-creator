@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include "vcsbasesubmiteditor.h"
-
 #include <coreplugin/idocument.h>
 
 namespace VcsBase {

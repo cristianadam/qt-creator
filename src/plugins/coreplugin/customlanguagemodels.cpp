@@ -112,8 +112,10 @@ CustomLanguageModels::CustomLanguageModels()
     models.setCreateItemFunction([] { return std::make_shared<CustomLanguageModel>(); });
     models.setSettingsKey("ModelList");
     models.setDisplayStyle(AspectList::DisplayStyle::ListViewWithDetails);
-    models.listViewDisplayCallback = [](CustomLanguageModel *aspect) {
-        return aspect->name.volatileValue();
+    models.listViewDataCallback = [](CustomLanguageModel *aspect, int role)->QVariant {
+        if (role == Qt::DisplayRole)
+            return aspect->name.volatileValue();
+        return {};
     };
 
     setLayouter([this] {

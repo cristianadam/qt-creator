@@ -86,9 +86,16 @@ public:
         connect(showSidePanelAction, &QAction::triggered, this, [this] {
             createRightPaneChatWidget();
             ModeManager::activateMode(Core::Constants::MODE_EDIT);
-            RightPaneWidget::instance()->setWidget(m_rightPaneChatWidget);
-            RightPaneWidget::instance()->setShown(true);
-            m_rightPaneChatWidget->setFocus();
+            if (RightPaneWidget::instance()->widget() == m_rightPaneChatWidget) {
+                bool show = !RightPaneWidget::instance()->isShown();
+                RightPaneWidget::instance()->setShown(show);
+                if (show)
+                    m_rightPaneChatWidget->setFocus();
+            } else {
+                RightPaneWidget::instance()->setWidget(m_rightPaneChatWidget);
+                RightPaneWidget::instance()->setShown(true);
+                m_rightPaneChatWidget->setFocus();
+            }
         });
 
         // Inspect action
@@ -102,6 +109,12 @@ public:
     }
 
     void extensionsInitialized() final {}
+
+    bool delayedInitialize() final
+    {
+        prefetchAcpRegistry();
+        return true;
+    }
 
     ShutdownFlag aboutToShutdown() final
     {

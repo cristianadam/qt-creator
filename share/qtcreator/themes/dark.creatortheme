@@ -149,7 +149,7 @@ VcsBase_FileDeleted_TextColor=ffff6c6c
 VcsBase_FileRenamed_TextColor=ffffa500
 VcsBase_FileUnmerged_TextColor=ffff4040
 
-Bookmarks_TextMarkColor=ff8080ff
+Bookmarks_TextMarkColor=Token_Notification_Neutral_Default
 
 TextEditor_SearchResult_ScrollBarColor=ff00c000
 TextEditor_Selection_ScrollBarColor=ff888888

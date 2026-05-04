@@ -6,6 +6,7 @@
 #include "texteditor_global.h"
 
 #include "codeassist/assistenums.h"
+#include "completionsettings.h"
 #include "indenter.h"
 #include "refactoroverlay.h"
 #include "snippets/snippetparser.h"
@@ -300,6 +301,7 @@ public:
                               const TextMark *mainTextMark = nullptr) const;
 
     void invokeAssist(AssistKind assistKind, IAssistProvider *provider = nullptr);
+    void setCompletionTriggerOverride(CompletionTrigger trigger);
 
     virtual std::unique_ptr<AssistInterface> createAssistInterface(AssistKind assistKind,
                                                                    AssistReason assistReason) const;

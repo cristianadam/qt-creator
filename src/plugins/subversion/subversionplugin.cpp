@@ -19,6 +19,7 @@
 #include <coreplugin/icore.h>
 #include <coreplugin/locator/commandlocator.h>
 #include <coreplugin/messagemanager.h>
+#include <coreplugin/vcsmanager.h>
 
 #include <extensionsystem/iplugin.h>
 

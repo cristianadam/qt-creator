@@ -10,13 +10,22 @@
 
 #include <utils/fileutils.h>
 
+#include <QAbstractListModel>
+#include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+#include <QFrame>
 #include <QGridLayout>
 #include <QGroupBox>
+#include <QHeaderView>
+#include <QLineEdit>
 #include <QListView>
+#include <QListWidget>
 #include <QPushButton>
-#include <QAbstractListModel>
+
 
 using namespace Utils;
 
@@ -27,21 +36,23 @@ class PermissionsModel : public QAbstractListModel
 public:
     PermissionsModel(QObject *parent = nullptr) : QAbstractListModel(parent) {}
 
-    void setPermissions(const QStringList &permissions)
+    void setPermissions(const QMap<QString, QMap<QString, QString>> &permissions)
     {
         beginResetModel();
         m_permissions = permissions;
         endResetModel();
     }
 
-    const QStringList &permissions() const { return m_permissions; }
+    const QMap<QString, QMap<QString, QString>> &permissions() const { return m_permissions; }
+
 
     QModelIndex addPermission(const QString &permission)
     {
         if (!m_permissions.contains(permission)) {
-            int row = m_permissions.size();
+            const int row = std::distance(m_permissions.begin(),
+                                          m_permissions.lowerBound(permission));
             beginInsertRows(QModelIndex(), row, row);
-            m_permissions.append(permission);
+            m_permissions.insert(permission, {});
             endInsertRows();
             return index(row, 0);
         }
@@ -52,30 +63,93 @@ public:
     {
         if (row >= 0 && row < m_permissions.size()) {
             beginRemoveRows(QModelIndex(), row, row);
-            m_permissions.removeAt(row);
+            auto it = std::next(m_permissions.begin(), row);
+            m_permissions.erase(it);
             endRemoveRows();
         }
     }
 
-    QVariant data(const QModelIndex &index, int role) const override
+    int columnCount(const QModelIndex &parent = QModelIndex()) const override
     {
-        if (!index.isValid() || index.row() >= m_permissions.size())
-            return QVariant();
+        return parent.isValid() ? 0 : 2;
+    }
 
-        if (role == Qt::DisplayRole)
-            return m_permissions.at(index.row());
-
+    QVariant headerData(int section, Qt::Orientation orientation, int role) const override
+    {
+        if (orientation == Qt::Horizontal && role == Qt::DisplayRole) {
+            if (section == 0)
+                return Tr::tr("Permission");
+            if (section == 1)
+                return Tr::tr("Attributes");
+        }
         return QVariant();
     }
 
-protected:
-    int rowCount(const QModelIndex &parent) const override
+    void setAttributes(const QString &permission, const QMap<QString, QString> &attributes)
+    {
+        auto it = m_permissions.find(permission);
+        if (it != m_permissions.end() && it.value() != attributes) {
+            it.value() = attributes;
+            const int row = std::distance(m_permissions.begin(), it);
+            emit dataChanged(index(row, 1), index(row, 1));
+        }
+    }
+
+    void removeAttribute(const QString &permission, const QString &attrName)
+    {
+        auto it = m_permissions.find(permission);
+        if (it != m_permissions.end()) {
+            if (it.value().remove(attrName) > 0) {
+                const int row = std::distance(m_permissions.begin(), it);
+                emit dataChanged(index(row, 1), index(row, 1));
+            }
+        }
+    }
+
+    QVariant data(const QModelIndex &idx, int role) const override
+    {
+        if (!idx.isValid() || idx.row() >= m_permissions.size())
+            return QVariant();
+
+        auto it = std::next(m_permissions.cbegin(), idx.row());
+
+        switch (role) {
+        case Qt::DisplayRole: {
+            switch (idx.column()) {
+            case 0:
+                return it.key();
+            case 1: {
+                if (it.value().isEmpty())
+                    return Tr::tr("No attributes");
+
+                QStringList parts;
+                for (auto ait = it.value().cbegin(); ait != it.value().cend(); ++ait) {
+                    parts.append(ait.key() + ": " + ait.value());
+                }
+                return parts.join(", ");
+            }
+            default:
+                return QVariant();
+            }
+        }
+        case Qt::ForegroundRole: {
+            if (idx.column() == 1 && it.value().isEmpty()) {
+                return QApplication::palette().color(QPalette::PlaceholderText);
+            }
+            return QVariant();
+        }
+        default:
+            return QVariant();
+        }
+    }
+
+    int rowCount(const QModelIndex &parent = QModelIndex()) const override
     {
         return parent.isValid() ? 0 : m_permissions.size();
     }
 
 private:
-    QStringList m_permissions;
+    QMap<QString, QMap<QString, QString>> m_permissions; // key = permission, value = <attrName: Value>
 };
 
 PermissionsContainerWidget::PermissionsContainerWidget(QWidget *parent)
@@ -245,13 +319,21 @@ bool PermissionsContainerWidget::initialize(TextEditor::TextEditorWidget *textEd
 
     m_permissionsModel = new PermissionsModel(this);
 
-    m_permissionsListView = new QListView(permissionsGroupBox);
+    m_permissionsListView = new QTreeView(permissionsGroupBox);
+    m_permissionsListView->setRootIsDecorated(false);
+    m_permissionsListView->header()->setStretchLastSection(true);
     m_permissionsListView->setModel(m_permissionsModel);
-    layout->addWidget(m_permissionsListView, 3, 0, 3, 1);
+    m_permissionsListView->header()->setSectionResizeMode(0, QHeaderView::Stretch);
+    m_permissionsListView->header()->setSectionResizeMode(1, QHeaderView::Stretch);
+    layout->addWidget(m_permissionsListView, 4, 0, 3, 1);
+
+    m_editAttributesButton = new QPushButton(permissionsGroupBox);
+    m_editAttributesButton->setText(Android::Tr::tr("Edit Attributes"));
+    layout->addWidget(m_editAttributesButton, 4, 1);
 
     m_removePermissionButton = new QPushButton(permissionsGroupBox);
     m_removePermissionButton->setText(Android::Tr::tr("Remove"));
-    layout->addWidget(m_removePermissionButton, 3, 1);
+    layout->addWidget(m_removePermissionButton, 5, 1);
 
     permissionsGroupBox->setLayout(layout);
     mainLayout->addWidget(permissionsGroupBox);
@@ -268,9 +350,13 @@ bool PermissionsContainerWidget::initialize(TextEditor::TextEditorWidget *textEd
             this, &PermissionsContainerWidget::addPermission);
     connect(m_removePermissionButton, &QAbstractButton::clicked,
             this, &PermissionsContainerWidget::removePermission);
+    connect(m_editAttributesButton, &QAbstractButton::clicked,
+            this, &PermissionsContainerWidget::editAttributes);
     connect(m_permissionsComboBox, &QComboBox::currentTextChanged,
             this, &PermissionsContainerWidget::updateAddRemovePermissionButtons);
     connect(m_permissionsListView->selectionModel(), &QItemSelectionModel::selectionChanged,
+            this, &PermissionsContainerWidget::updateAddRemovePermissionButtons);
+    connect(m_permissionsModel, &QAbstractItemModel::modelReset,
             this, &PermissionsContainerWidget::updateAddRemovePermissionButtons);
 
     return true;
@@ -280,10 +366,102 @@ void PermissionsContainerWidget::addPermission()
 {
     QString permission = m_permissionsComboBox->currentText().trimmed();
     if (!permission.isEmpty()) {
-        m_permissionsModel->addPermission(permission);
-        updateManifestPermissions();
-        emit permissionsModified();
+        if (m_permissionsModel->addPermission(permission).isValid()) {
+            updateManifestPermissions();
+            emit permissionsModified();
+        }
     }
+}
+
+void PermissionsContainerWidget::editAttributes()
+{
+    const QModelIndex index = m_permissionsListView->currentIndex();
+    if (!index.isValid())
+        return;
+
+    auto it = std::next(m_permissionsModel->permissions().cbegin(), index.row());
+    const QString permission = it.key();
+    QMap<QString, QString> attributes = it.value();
+
+    QDialog dialog(this);
+    QVBoxLayout *dialogLayout = new QVBoxLayout(&dialog);
+
+    QLabel *permissionLabel = new QLabel(Tr::tr("Permission: <b>%1</b>").arg(permission), &dialog);
+    dialogLayout->addWidget(permissionLabel);
+
+    QListWidget *attrListWidget = new QListWidget(&dialog);
+    auto refreshAttrList = [&]() {
+        attrListWidget->clear();
+        for (auto ait = attributes.cbegin(); ait != attributes.cend(); ++ait)
+            attrListWidget->addItem(ait.key() + " = " + ait.value());
+    };
+    refreshAttrList();
+    dialogLayout->addWidget(attrListWidget);
+
+    QPushButton *removeAttrButton = new QPushButton(Tr::tr("Remove selected"), &dialog);
+    removeAttrButton->setEnabled(false);
+    connect(attrListWidget, &QListWidget::itemSelectionChanged, &dialog, [&]() {
+        const bool hasSelection = attrListWidget->currentItem() != nullptr;
+        removeAttrButton->setEnabled(hasSelection);
+    });
+    connect(removeAttrButton, &QPushButton::clicked, &dialog, [&]() {
+        const int row = attrListWidget->currentRow();
+        if (row < 0)
+            return;
+        auto attIt = std::next(attributes.begin(), row);
+        attributes.erase(attIt);
+        refreshAttrList();
+    });
+    dialogLayout->addWidget(removeAttrButton);
+
+    QFrame *line = new QFrame(&dialog);
+    line->setFrameShape(QFrame::HLine);
+    line->setFrameShadow(QFrame::Sunken);
+    dialogLayout->addWidget(line);
+
+    QFormLayout *addRowLayout = new QFormLayout;
+    QComboBox *attributeCombo = new QComboBox(&dialog);
+    attributeCombo->addItems({QStringLiteral("android:minSdkVersion"),
+                              QStringLiteral("android:maxSdkVersion"),
+                              QStringLiteral("android:usesPermissionFlags")});
+    attributeCombo->setEditable(true);
+    addRowLayout->addRow(Tr::tr("Attribute:"), attributeCombo);
+
+    QLineEdit *valueEdit = new QLineEdit(&dialog);
+    addRowLayout->addRow(Tr::tr("Value:"), valueEdit);
+    dialogLayout->addLayout(addRowLayout);
+
+    QPushButton *addRowButton = new QPushButton(Tr::tr("Add"), &dialog);
+    connect(addRowButton, &QPushButton::clicked, &dialog, [&]() {
+        const QString name = attributeCombo->currentText().trimmed();
+        const QString val = valueEdit->text().trimmed();
+        if (name.isEmpty() || val.isEmpty())
+            return;
+        attributes.insert(name, val);
+        refreshAttrList();
+        valueEdit->clear();
+    });
+
+    dialogLayout->addWidget(addRowButton);
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    dialogLayout->addWidget(buttons);
+
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    m_permissionsModel->setAttributes(permission, attributes);
+
+    if (m_textEditorWidget && m_textEditorWidget->textDocument()) {
+        const Utils::FilePath manifestPath = m_textEditorWidget->textDocument()->filePath();
+        if (manifestPath.exists())
+            updateManifestPermissionAttributes(manifestPath, permission, attributes);
+    }
+
+    emit permissionsModified();
+
 }
 
 void PermissionsContainerWidget::removePermission()
@@ -299,7 +477,12 @@ void PermissionsContainerWidget::removePermission()
 void PermissionsContainerWidget::updateAddRemovePermissionButtons()
 {
     m_addPermissionButton->setEnabled(!m_permissionsComboBox->currentText().trimmed().isEmpty());
-    m_removePermissionButton->setEnabled(m_permissionsListView->currentIndex().isValid());
+    const bool hasSelection = m_permissionsListView->selectionModel()
+                              && m_permissionsListView->selectionModel()->hasSelection();
+
+    m_removePermissionButton->setEnabled(hasSelection);
+    m_editAttributesButton->setEnabled(hasSelection);
+
 }
 
 void PermissionsContainerWidget::defaultPermissionOrFeatureCheckBoxClicked()
@@ -321,7 +504,7 @@ void PermissionsContainerWidget::updateManifestPermissions()
 
     Android::Internal::updateManifestPermissions(
         manifestPath,
-        m_permissionsModel->permissions(),
+        m_permissionsModel->permissions().keys(),
         includeDefaultPermissions,
         includeDefaultFeatures);
 
@@ -356,5 +539,4 @@ void PermissionsContainerWidget::loadPermissionsFromManifest()
     m_defaultPermissonsCheckBox->setChecked(data.hasDefaultPermissionsComment);
     m_defaultFeaturesCheckBox->setChecked(data.hasDefaultFeaturesComment);
 }
-
 } // namespace Android::Internal

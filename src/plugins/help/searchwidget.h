@@ -6,7 +6,6 @@
 #include <coreplugin/sidebar.h>
 
 #include <QFutureInterface>
-#include <QFutureWatcher>
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -63,8 +62,7 @@ private:
     void contextMenuEvent(QContextMenuEvent *contextMenuEvent) override;
     QStringList currentSearchTerms() const;
 
-    QFutureWatcher<void> m_watcher;
-    QFutureInterface<void> *m_progress = nullptr;
+    QFutureInterface<void> m_progress;
 
     QHelpSearchEngine *searchEngine = nullptr;
     QHelpSearchResultWidget *resultWidget = nullptr;

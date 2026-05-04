@@ -1707,35 +1707,6 @@ static Result<Group> downRecipe(
         *config.containerConfig);
 }
 
-Result<> Instance::up(const RunningInstance &runningInstance)
-{
-    if (!d->config.containerConfig)
-        return ResultOk;
-
-    const Utils::Result<Group> recipeResult = upRecipe(runningInstance);
-    if (!recipeResult)
-        return ResultError(recipeResult.error());
-
-    d->taskTree.setRecipe(std::move(*recipeResult));
-    d->taskTree.start();
-
-    return ResultOk;
-}
-
-Result<> Instance::down()
-{
-    if (!d->config.containerConfig)
-        return ResultOk;
-
-    const Utils::Result<Group> recipeResult = downRecipe(false);
-    if (!recipeResult)
-        return ResultError(recipeResult.error());
-    d->taskTree.setRecipe(std::move(*recipeResult));
-    d->taskTree.start();
-
-    return ResultOk;
-}
-
 Result<Group> Instance::upRecipe(const RunningInstance &runningInstance) const
 {
     if (!runningInstance)

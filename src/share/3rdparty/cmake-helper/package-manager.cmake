@@ -121,8 +121,15 @@ macro(qtc_auto_setup_conan)
         if (${conan_version} VERSION_GREATER_EQUAL 2.0)
           set(CONAN_COMMAND \"${conan_program}\")
           include(\"${CMAKE_CURRENT_LIST_DIR}/conan_provider.cmake\")
-          conan_profile_detect_default()
-          detect_host_profile(\"${CMAKE_BINARY_DIR}/conan-dependencies/conan_host_profile\")
+
+          if(\"default\" IN_LIST CONAN_HOST_PROFILE OR \"default\" IN_LIST CONAN_BUILD_PROFILE)
+              conan_profile_detect_default()
+          endif()
+          if(\"auto-cmake\" IN_LIST CONAN_HOST_PROFILE)
+              detect_host_profile(\"${CMAKE_BINARY_DIR}/conan-dependencies/build/conan_host_profile\")
+          endif()
+          construct_profile_argument(host_profile_flags CONAN_HOST_PROFILE)
+          construct_profile_argument(build_profile_flags CONAN_BUILD_PROFILE)
 
           set(build_types \${CMAKE_BUILD_TYPE})
           if (CMAKE_CONFIGURATION_TYPES)
@@ -131,7 +138,8 @@ macro(qtc_auto_setup_conan)
 
           foreach(type \${build_types})
             conan_install(
-              -pr \"${CMAKE_BINARY_DIR}/conan-dependencies/conan_host_profile\"
+              \${host_profile_flags}
+              \${build_profile_flags}
               --build=${QT_CREATOR_CONAN_BUILD_POLICY}
               -s build_type=\${type}
             )

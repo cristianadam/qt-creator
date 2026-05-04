@@ -24,8 +24,6 @@ public:
     bool isTitleVisible() const;
     void setSubtitle(const QString &subtitle);
     QString subtitle() const;
-    void setSeparatorVisible(bool visible);
-    bool isSeparatorVisible() const;
     void setCancelEnabled(bool enabled);
     bool isCancelEnabled() const;
     void setError(bool on);
@@ -58,7 +56,6 @@ private:
     QString m_title;
     QString m_subtitle;
     bool m_titleVisible = true;
-    bool m_separatorVisible = true;
     bool m_cancelEnabled = true;
     bool m_finished = false;
     bool m_error = false;

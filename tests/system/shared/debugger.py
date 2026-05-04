@@ -133,7 +133,7 @@ def doSimpleDebugging(currentKit, currentConfigName, expectedBPOrder=[], enableQ
     statusLabel = findObject(":Debugger Toolbar.StatusText_Utils::StatusLabel")
     test.log("Continuing debugging %d times..." % len(expectedBPOrder))
     for expectedBP in expectedBPOrder:
-        if waitFor("regexVerify(str(statusLabel.text), expectedLabelTexts)", 20000):
+        if waitFor("regexVerify(str(statusLabel.text), expectedLabelTexts)", 30000):
             verifyBreakPoint(expectedBP)
         else:
             test.fail('%s' % str(statusLabel.text))

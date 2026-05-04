@@ -179,37 +179,34 @@ void TestNavigationWidget::contextMenuEvent(QContextMenuEvent *event)
     const QModelIndexList list = m_view->selectionModel()->selectedIndexes();
     if (list.size() == 1) {
         const QModelIndex index = list.first();
-        QRect rect(m_view->visualRect(index));
-        if (rect.contains(event->pos())) {
-            ITestTreeItem *item = static_cast<ITestTreeItem *>(
-                        m_model->itemForIndex(m_sortFilterModel.mapToSource(index)));
-            if (item->canProvideTestConfiguration()) {
-                runThisTest = new QAction(Tr::tr("Run This Test"), &menu);
-                runThisTest->setEnabled(enabled);
-                connect(runThisTest, &QAction::triggered, this, [this] {
-                    onRunThisTestTriggered(TestRunMode::Run);
-                });
-                runWithoutDeploy = new QAction(Tr::tr("Run Without Deployment"), &menu);
-                runWithoutDeploy->setEnabled(enabled);
-                connect(runWithoutDeploy, &QAction::triggered, this, [this] {
-                    onRunThisTestTriggered(TestRunMode::RunWithoutDeploy);
-                });
-            }
-            auto ttitem = item->testBase()->type() == ITestBase::Framework
-                              ? static_cast<TestTreeItem *>(item)
-                              : nullptr;
-            if (ttitem && ttitem->canProvideDebugConfiguration()) {
-                debugThisTest = new QAction(Tr::tr("Debug This Test"), &menu);
-                debugThisTest->setEnabled(enabled);
-                connect(debugThisTest, &QAction::triggered, this, [this] {
-                    onRunThisTestTriggered(TestRunMode::Debug);
-                });
-                debugWithoutDeploy = new QAction(Tr::tr("Debug Without Deployment"), &menu);
-                debugWithoutDeploy->setEnabled(enabled);
-                connect(debugWithoutDeploy, &QAction::triggered, this, [this] {
-                    onRunThisTestTriggered(TestRunMode::DebugWithoutDeploy);
-                });
-            }
+        ITestTreeItem *item = static_cast<ITestTreeItem *>(
+                    m_model->itemForIndex(m_sortFilterModel.mapToSource(index)));
+        if (item->canProvideTestConfiguration()) {
+            runThisTest = new QAction(Tr::tr("Run This Test"), &menu);
+            runThisTest->setEnabled(enabled);
+            connect(runThisTest, &QAction::triggered, this, [this] {
+                onRunThisTestTriggered(TestRunMode::Run);
+            });
+            runWithoutDeploy = new QAction(Tr::tr("Run Without Deployment"), &menu);
+            runWithoutDeploy->setEnabled(enabled);
+            connect(runWithoutDeploy, &QAction::triggered, this, [this] {
+                onRunThisTestTriggered(TestRunMode::RunWithoutDeploy);
+            });
+        }
+        auto ttitem = item->testBase()->type() == ITestBase::Framework
+                ? static_cast<TestTreeItem *>(item)
+                : nullptr;
+        if (ttitem && ttitem->canProvideDebugConfiguration()) {
+            debugThisTest = new QAction(Tr::tr("Debug This Test"), &menu);
+            debugThisTest->setEnabled(enabled);
+            connect(debugThisTest, &QAction::triggered, this, [this] {
+                onRunThisTestTriggered(TestRunMode::Debug);
+            });
+            debugWithoutDeploy = new QAction(Tr::tr("Debug Without Deployment"), &menu);
+            debugWithoutDeploy->setEnabled(enabled);
+            connect(debugWithoutDeploy, &QAction::triggered, this, [this] {
+                onRunThisTestTriggered(TestRunMode::DebugWithoutDeploy);
+            });
         }
     }
 

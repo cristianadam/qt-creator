@@ -5,6 +5,8 @@
 
 #include <utils/filepath.h>
 
+#include <QtTaskTree/QTaskTree>
+
 /* Helper functions to get the last core from systemd/coredumpctl */
 namespace Debugger::Internal {
 
@@ -16,6 +18,6 @@ struct LastCore
     Utils::FilePath coreFile;
 };
 
-LastCore getLastCore();
+QtTaskTree::Group lastCoreRecipe(const QtTaskTree::Storage<LastCore> &storage);
 
 } // namespace Debugger::Internal

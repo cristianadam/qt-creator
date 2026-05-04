@@ -107,6 +107,11 @@ extend_qtc_plugin(Debugger
   DEFINES UNICODE _UNICODE
 )
 
+extend_qtc_plugin(Debugger
+  SOURCES mcpsupport.cpp
+  DEPENDS McpServerLib
+)
+
 file(GLOB_RECURSE images RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} images/*)
 qtc_add_resources(Debugger "images"
   PREFIX "/debugger"

@@ -995,7 +995,7 @@ QString reformatUnsignedInteger128(unsigned __int128 value, int format)
 
 QString reformatCharacter(int code, int size, bool isSigned)
 {
-    if (uint32_t(code) > 0xffff) {
+    if (code > 0xffff) {
         std::array<char, sizeof(char32_t)> buf;
         memcpy(buf.data(), &code, sizeof(char32_t));
         QByteArrayView view(buf);
@@ -1029,13 +1029,21 @@ QString reformatCharacter(int code, int size, bool isSigned)
     out += '\t';
 
     if (isSigned) {
+        switch (size) {
+        case 1: code = int8_t(code);  break;
+        case 2: code = int16_t(code); break;
+        case 4: code = int32_t(code); break;
+        }
+
         out += QString::number(code);
         if (code < 0)
             out += QString("/%1    ").arg((1ULL << (8*size)) + code).left(2 + 2 * size);
         else
             out += QString(2 + 2 * size, ' ');
     } else {
-        if (size == 2)
+        if (size == 1)
+            out += QString::number(uint8_t(code));
+        else if (size == 2)
             out += QString::number(char16_t(code));
         else
             out += QString::number(unsigned(code));
@@ -1045,6 +1053,13 @@ QString reformatCharacter(int code, int size, bool isSigned)
     out += QString("0x%1").arg(uint(code & ((1ULL << (8*size)) - 1)),
                                2 * size, 16, QLatin1Char('0'));
     return out;
+}
+
+QString reformatCharacterWithFormat(int code, int size, bool isSigned, int format)
+{
+    if (format == AutomaticFormat)
+        return reformatCharacter(code, size, isSigned);
+    return reformatInteger(quint64(code), format, size, isSigned);
 }
 
 } // Debugger::Internal

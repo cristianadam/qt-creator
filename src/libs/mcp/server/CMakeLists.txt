@@ -9,6 +9,8 @@ add_qtc_library(McpServerLib
     minihttpserver.h
     ../schemas/schema_2025_11_25.cpp
     ../schemas/schema_2025_11_25.h
+    toolregistry.cpp
+    toolregistry.h
 )
 
 extend_qtc_library(McpServerLib

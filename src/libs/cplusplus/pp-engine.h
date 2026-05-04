@@ -215,6 +215,7 @@ private:
     void handleElseDirective(PPToken *tk, const PPToken &poundToken);
     void handleEndIfDirective(PPToken *tk, const PPToken &poundToken);
     void handleIfDefDirective(bool checkUndefined, PPToken *tk);
+    void handleElifDefDirective(bool checkUndefined, PPToken *tk, PPToken &poundToken);
     void handleUndefDirective(PPToken *tk);
     void trackExpansionCycles(PPToken *tk);
 

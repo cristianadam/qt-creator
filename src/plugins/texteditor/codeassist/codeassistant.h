@@ -4,6 +4,7 @@
 #pragma once
 
 #include "assistenums.h"
+#include "completionsettings.h"
 
 #include <texteditor/texteditor_global.h>
 
@@ -32,6 +33,7 @@ public:
     void setUserData(const QVariant &data);
 
     void invoke(AssistKind assistKind, IAssistProvider *provider = nullptr);
+    void setCompletionTriggerOverride(CompletionTrigger trigger);
 
 signals:
     void finished();

@@ -138,7 +138,7 @@ void TypePrettyPrinter::visit(NamedType *type)
     prependCv(_fullySpecifiedType);
     if (_fullySpecifiedType.isAuto() && _overview->combineAutoAndName)
         _text.append(" auto"); // Constrained function parameters.
-    else if (_overview->language == Utils::Language::C)
+    else if (_fullySpecifiedType.isStruct() && _overview->language == Utils::Language::C)
         _text.prepend("struct ");
 }
 

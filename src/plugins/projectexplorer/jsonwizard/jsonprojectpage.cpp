@@ -66,7 +66,7 @@ bool JsonProjectPage::validatePage()
         const FilePath preferred = FilePath::fromVariant(property(UserPreferredPath));
 
         ProjectIntroPage::ProjectInfo info = currentProjectInfo();
-        Project *project = ProjectManager::projectWithProjectFilePath(info.projectFile);
+        Project *project = ProjectManager::projectWithProjectFile(info.projectFile, false);
         wiz->setProperty("BuildSystem", info.buildSystem);
         wiz->setProperty(Constants::PROJECT_POINTER, QVariant::fromValue(static_cast<void *>(project)));
         // only if destination path and parent project hasn't changed keep original preferred
@@ -115,14 +115,15 @@ void JsonProjectPage::initUiForSubProject()
     if (void *storedNode = property(UserPreferredNode).value<void *>()) {
         // fixup stored contextNode / node path
         Node *node = static_cast<Node *>(storedNode);
-        if (auto p = ProjectManager::projectWithProjectFilePath(node->filePath()))
+        if (auto p = ProjectManager::projectWithProjectFile(node->filePath(), false))
             contextNode = p->rootProjectNode();
     } else {
         contextNode = static_cast<Node *>(wiz->value(Constants::PREFERRED_PROJECT_NODE).value<void *>());
         if (!contextNode) {
             const QVariant prefProjPath = wiz->value(Constants::PREFERRED_PROJECT_NODE_PATH);
             if (prefProjPath.isValid()) {
-                if (auto project = ProjectManager::projectWithProjectFilePath(FilePath::fromVariant(prefProjPath)))
+                if (auto project = ProjectManager::projectWithProjectFile(
+                        FilePath::fromVariant(prefProjPath), false))
                     contextNode = project->rootProjectNode();
             }
         }

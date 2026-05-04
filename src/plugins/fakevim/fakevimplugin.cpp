@@ -1962,8 +1962,7 @@ void FakeVimPlugin::handleExCommand(FakeVimHandler *handler, bool *handled, cons
         IEditor *editor = editorFromHandler();
         const QString fileName = handler->currentFileName();
         if (editor && editor->document()->filePath().toUrlishString() == fileName) {
-            triggerAction(Core::Constants::SAVE);
-            saved = !editor->document()->isModified();
+            saved = EditorManager::saveDocument(editor->document());
             if (saved) {
                 QFile file3(fileName);
                 if (file3.open(QIODevice::ReadOnly)) {

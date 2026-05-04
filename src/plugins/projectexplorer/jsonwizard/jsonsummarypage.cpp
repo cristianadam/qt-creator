@@ -142,7 +142,7 @@ void JsonSummaryPage::initializePage()
     const auto updateProjectTree = [this, files, kind, currentAction, preferredNodePath] {
         Node *node = currentNode();
         if (!node) {
-            if (auto p = ProjectManager::projectWithProjectFilePath(preferredNodePath))
+            if (auto p = ProjectManager::projectWithProjectFile(preferredNodePath, false))
                 node = p->rootProjectNode();
         }
         initializeProjectTree(findWizardContextNode(node), files, kind, currentAction,

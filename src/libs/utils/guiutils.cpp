@@ -8,6 +8,7 @@
 #include "pathchooser.h"
 #include "plaintextedit/plaintextedit.h"
 #include "qtcolorbutton.h"
+#include "shutdownguard.h"
 
 #include <QAbstractButton>
 #include <QCheckBox>
@@ -55,10 +56,10 @@ public:
 
 void QTCREATOR_UTILS_EXPORT setWheelScrollingWithoutFocusBlocked(QWidget *widget)
 {
-    static Internal::WheelEventFilter instance;
+    static GuardedObject<Internal::WheelEventFilter> instance;
     // Installing duplicated event filter for the same objects just brings the event filter
     // to the front and is otherwise no-op (the second event filter isn't installed).
-    widget->installEventFilter(&instance);
+    widget->installEventFilter(instance.get());
     if (widget->focusPolicy() == Qt::WheelFocus)
         widget->setFocusPolicy(Qt::StrongFocus);
 }
@@ -128,7 +129,9 @@ void checkSettingsDirty()
     if (s_suppressSettingsDirtyTrigger)
         return;
 
-    QTC_ASSERT(s_checkSettingDirtyHook, return);
+    if (!s_checkSettingDirtyHook)
+        return;
+
     s_checkSettingDirtyHook();
 }
 
