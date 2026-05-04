@@ -37,8 +37,10 @@
 #include <QHBoxLayout>
 #include <QLibraryInfo>
 #include <QMessageBox>
+#include <QCryptographicHash>
 #include <QNetworkProxyFactory>
 #include <QPixmapCache>
+#include <QSslConfiguration>
 #include <QProcess>
 #include <QPushButton>
 #include <QScopeGuard>
@@ -866,6 +868,13 @@ int main(int argc, char **argv)
         TextEncoding::setEncodingForLocale(overrideCodecForLocale);
 
     app.setDesktopFileName(IDE_APP_ID);
+
+    // Hack/Workaround for QTBUG-136223:
+    // Hold QCryptographicHash to pin OpenSSL provider during TLS init
+    {
+        const QCryptographicHash h(QCryptographicHash::Sha256);
+        QSslConfiguration::defaultConfiguration();
+    }
 
     // Make sure we honor the system's proxy settings
     QNetworkProxyFactory::setUseSystemConfiguration(true);
