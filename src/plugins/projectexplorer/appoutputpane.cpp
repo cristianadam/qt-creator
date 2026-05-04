@@ -1146,6 +1146,14 @@ void AppOutputPane::tabChanged(int i)
     } else {
         enableDefaultButtons();
     }
+
+    // fire tabActiveChanged on every RunControl:
+    //  true -> current and false -> rest
+    const RunControl *newRc = controlTab ? controlTab->runControl : nullptr;
+    for (const RunControlTab &t : std::as_const(m_runControlTabs)) {
+        if (t.runControl)
+            emit t.runControl->tabActiveChanged(t.runControl == newRc);
+    }
 }
 
 void AppOutputPane::contextMenuRequested(const QPoint &pos)

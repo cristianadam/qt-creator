@@ -84,11 +84,13 @@ public:
 
     RunControl *tab() const { return m_tabContext.tab; }
     void attachTab(RunControl *tab);
+    void setTabActive(bool active);
 
 private:
     struct TabContext
     {
         QPointer<RunControl> tab;
+        bool active = false;
     };
 
     void onTabDestroyed();
@@ -118,6 +120,10 @@ void LogcatStream::attachTab(RunControl *tab)
     m_tabContext = {};
     m_tabContext.tab = tab;
     tab->setDisplayName(deviceLabel(m_device));
+    // adb tails only while the tab is the currently selected one
+    QObject::connect(tab, &RunControl::tabActiveChanged, this, [this](bool active) {
+        setTabActive(active);
+    });
     QObject::connect(tab, &QObject::destroyed, this, [this] { onTabDestroyed(); });
 }
 
@@ -129,6 +135,19 @@ void LogcatStream::onTabDestroyed()
     stopAdbTail();
     streamRegistry().remove(deviceId());
     deleteLater();
+}
+
+void LogcatStream::setTabActive(bool active)
+{
+    if (!m_tabContext.tab)
+        return;
+    if (active == m_tabContext.active)
+        return;
+    m_tabContext.active = active;
+    if (active)
+        startAdbTail();
+    else
+        stopAdbTail();
 }
 
 void LogcatStream::startAdbTail()
@@ -176,7 +195,6 @@ static RunControl *openLogcatTabForStream(LogcatStream *logcatStream)
         return existing;
     auto *runControl = new RunControl(ProjectExplorer::Constants::NORMAL_RUN_MODE);
     logcatStream->attachTab(runControl);
-    logcatStream->startAdbTail();
 
     runControl->setRunRecipe(QBarrierTask([](QBarrier &) {}).withCancel([runControl] {
         return makeObjectSignal(runControl, &RunControl::canceled);
