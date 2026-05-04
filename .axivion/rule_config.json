@@ -648,7 +648,7 @@
                     "*/src/libs/acp/*",
                     "*/src/libs/mcp/schemas/*"
                 ],
-                "($delta:-)": []
+                "$(delta:-)": []
             }
         },
         "Frameworks-QtSupport": {
