@@ -1221,10 +1221,8 @@ Result<> ProjectExplorerPlugin::initialize(const QStringList &arguments)
     // open action
     dd->m_loadAction = new QAction(Tr::tr("Open Project..."), this);
     cmd = ActionManager::registerAction(dd->m_loadAction, Core::Constants::OPEN_PROJECT);
-    auto keys = QList<QKeySequence>{QKeySequence(QKeySequence::Open)};
     if (!HostOsInfo::isMacHost())
-        keys.append(QKeySequence(Tr::tr("Ctrl+Shift+O")));
-    cmd->setDefaultKeySequences(keys);
+        cmd->setDefaultKeySequence(QKeySequence(Tr::tr("Ctrl+Shift+O")));
     msessionContextMenu->addAction(cmd, Constants::G_SESSION_FILES);
 
     // load workspace action
