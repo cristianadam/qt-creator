@@ -676,7 +676,8 @@ void KitOptionsPageWidget::load(Kit *originalKit, const KitData &workingCopySrc,
     // If the row had no prior user changes, update the committed baseline so the
     // normalization doesn't register as a user edit.
     if (row >= 0 && !m_model.isDirty(row)) {
-        const KitData normalizedData = m_modifiedKit.kitData();
+        KitData normalizedData = m_modifiedKit.kitData();
+        normalizedData.m_id = workingCopySrc.m_id;
         if (normalizedData != workingCopySrc)
             m_model.resetItem(row, normalizedData);
     }
