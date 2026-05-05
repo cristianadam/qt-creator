@@ -1855,8 +1855,7 @@ Utils::Result<ToolInterface::TaskProgressNotify> ToolInterface::startTask(
                 headers, QHttpServerResponder::StatusCode::Ok);
             d->_responder.write = [http = d->_responder.httpResponder](QJsonDocument json) {
                 const QByteArray data = json.toJson(QJsonDocument::Compact);
-                http->writeChunk("data: " + data + "\n\n");
-                http->writeEndChunked({});
+                http->writeEndChunked("data: " + data + "\n\n");
             };
         }
 
@@ -1904,7 +1903,9 @@ Utils::Result<ToolInterface::TaskProgressNotify> ToolInterface::startTask(
                     return;
                 }
 
-                if (task.status() == Schema::TaskStatus::completed) {
+                if (task.status() == Schema::TaskStatus::completed
+                    || task.status() == Schema::TaskStatus::failed
+                    || task.status() == Schema::TaskStatus::cancelled) {
                     auto result = onResultCallback();
                     if (!result) {
                         qCWarning(mcpServerLog) << "Task completed with error:" << result.error();
