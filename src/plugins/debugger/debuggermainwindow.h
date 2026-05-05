@@ -39,9 +39,6 @@ public:
 
     void useSubPerspectiveSwitcher(QWidget *widget); // No ownership passed.
 
-    using ShouldPersistChecker = std::function<bool()>;
-    void setShouldPersistChecker(const ShouldPersistChecker &checker);
-
     QString id() const; // Currently used by GammaRay plugin.
     QString parentPerspectiveId() const;
     QString name() const;
