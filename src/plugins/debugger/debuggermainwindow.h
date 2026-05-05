@@ -10,28 +10,10 @@
 #include <utils/storekey.h>
 
 #include <QAction>
-#include <QPointer>
-#include <QToolButton>
 
 #include <functional>
 
 namespace Utils {
-
-// To be used for actions that need hideable toolbuttons.
-class DEBUGGER_EXPORT OptionalAction : public QAction
-{
-    Q_OBJECT
-
-public:
-    OptionalAction(const QString &text = QString());
-    ~OptionalAction() override;
-
-    void setVisible(bool on);
-    void setToolButtonStyle(Qt::ToolButtonStyle style);
-
-public:
-    QPointer<QToolButton> m_toolButton;
-};
 
 class PerspectiveState
 {
@@ -84,8 +66,7 @@ public:
                    bool visibleByDefault = true,
                    Qt::DockWidgetArea area = Qt::BottomDockWidgetArea);
 
-    void addToolBarAction(QAction *action);
-    void addToolBarAction(OptionalAction *action);
+    void addToolBarAction(QAction *action, Qt::ToolButtonStyle style = Qt::ToolButtonIconOnly);
     void addToolBarWidget(QWidget *widget); // Perspecive takes ownership.
     void addToolbarSeparator();
 

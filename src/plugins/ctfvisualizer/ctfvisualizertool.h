@@ -7,13 +7,13 @@
 
 #include <debugger/debuggermainwindow.h>
 
-#include <QtTaskTree/QSingleTaskTreeRunner>
-
 #include <tracing/timelinemodelaggregator.h>
 #include <tracing/timelinezoomcontrol.h>
 
 #include <QCoreApplication>
 #include <QScopedPointer>
+#include <QtTaskTree/QSingleTaskTreeRunner>
+#include <QToolButton>
 
 namespace CtfVisualizer::Internal {
 
