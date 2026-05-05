@@ -38,9 +38,7 @@ namespace Android::Internal {
 class LogcatStream : public QObject
 {
 public:
-    LogcatStream(AndroidDevice::ConstPtr device)
-        : m_device(std::move(device))
-    {}
+    LogcatStream(AndroidDevice::ConstPtr device);
     ~LogcatStream() override;
 
     void start();
@@ -59,6 +57,15 @@ private:
 
     void onTabDestroyed();
 
+    void postMessage(const QString &msg, Utils::OutputFormat fmt)
+    {
+        if (m_tabContext.tab)
+            m_tabContext.tab->postMessage(msg, fmt, false);
+    }
+
+    void onDisconnected();
+    void onConnected();
+
     const AndroidDevice::ConstPtr m_device;
     std::unique_ptr<QTaskTree> m_task;
     TabContext m_tabContext;
@@ -74,6 +81,25 @@ static QHash<Id, LogcatStream *> &streamRegistry()
 {
     static QHash<Id, LogcatStream *> map;
     return map;
+}
+
+LogcatStream::LogcatStream(AndroidDevice::ConstPtr device)
+    : m_device(std::move(device))
+{
+    DeviceManager *dm = DeviceManager::instance();
+    QObject::connect(dm, &DeviceManager::deviceRemoved, this, [this](Id removedId) {
+        if (removedId == m_device->id())
+            onDisconnected();
+    });
+    QObject::connect(dm, &DeviceManager::deviceUpdated, this, [this](Id id) {
+        if (id != m_device->id())
+            return;
+        const auto state = m_device->deviceState();
+        if (state == IDevice::DeviceDisconnected)
+            onDisconnected();
+        else if (state == IDevice::DeviceReadyToUse)
+            onConnected();
+    });
 }
 
 LogcatStream::~LogcatStream()
@@ -120,6 +146,10 @@ void LogcatStream::setStreaming(bool streaming)
 
 void LogcatStream::start()
 {
+    if (m_task)
+        return;
+    if (m_device->deviceState() != IDevice::DeviceReadyToUse)
+        return;
     const auto onSetup = [this](Process &process) {
         const auto post = [this](const QString &line, Utils::OutputFormat fmt) {
             if (m_tabContext.tab)
@@ -140,6 +170,26 @@ void LogcatStream::start()
 void LogcatStream::stop()
 {
     m_task.reset();
+}
+
+static QString banner(const QString &label, const QString &state)
+{
+    return QString("**** %1 - %2 ****\n").arg(label, state);
+}
+
+void LogcatStream::onDisconnected()
+{
+    if (!m_task)
+        return;
+    postMessage(banner(m_device->displayNameWithSerial(), QLatin1String("disconnected")),
+                Utils::NormalMessageFormat);
+    stop();
+}
+
+void LogcatStream::onConnected()
+{
+    if (m_tabContext.tab && m_tabContext.streaming)
+        start();
 }
 
 static LogcatStream *ensureStream(const AndroidDevice::ConstPtr &device)
