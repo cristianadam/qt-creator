@@ -88,7 +88,7 @@ public:
     Context context() const;
 
     QString settingsId() const;
-    QToolButton *setupToolButton(QAction *action);
+    void setupToolButton(QAction *action, Qt::ToolButtonStyle style);
 
     QString m_id;
     QString m_name;
@@ -827,27 +827,25 @@ void Perspective::setEnabled(bool enabled)
     item->setFlags(enabled ? item->flags() | Qt::ItemIsEnabled : item->flags() & ~Qt::ItemIsEnabled );
 }
 
-QToolButton *PerspectivePrivate::setupToolButton(QAction *action)
+void PerspectivePrivate::setupToolButton(QAction *action, Qt::ToolButtonStyle style)
 {
-    QTC_ASSERT(action, return nullptr);
+    QTC_ASSERT(action, return);
     auto toolButton = new QToolButton(m_innerToolBar);
     StyleHelper::setPanelWidget(toolButton);
     toolButton->setDefaultAction(action);
     toolButton->setToolTip(action->toolTip());
+    toolButton->setToolButtonStyle(style);
+    toolButton->setVisible(action->isVisible());
+    QObject::connect(action, &QAction::changed, toolButton, [action, toolButton] {
+        toolButton->setVisible(action->isVisible());
+    });
     m_innerToolBarLayout->addWidget(toolButton);
-    return toolButton;
 }
 
-void Perspective::addToolBarAction(QAction *action)
+void Perspective::addToolBarAction(QAction *action, Qt::ToolButtonStyle style)
 {
     QTC_ASSERT(action, return);
-    d->setupToolButton(action);
-}
-
-void Perspective::addToolBarAction(OptionalAction *action)
-{
-    QTC_ASSERT(action, return);
-    action->m_toolButton = d->setupToolButton(action);
+    d->setupToolButton(action, style);
 }
 
 void Perspective::addToolBarWidget(QWidget *widget)
@@ -1071,31 +1069,6 @@ void PerspectivePrivate::saveLayout()
 QString PerspectivePrivate::settingsId() const
 {
     return m_settingsId.isEmpty() ? m_id : m_settingsId;
-}
-
-// ToolbarAction
-
-OptionalAction::OptionalAction(const QString &text)
-    : QAction(text)
-{
-}
-
-OptionalAction::~OptionalAction()
-{
-    delete m_toolButton;
-}
-
-void OptionalAction::setVisible(bool on)
-{
-    QAction::setVisible(on);
-    if (m_toolButton)
-        m_toolButton->setVisible(on);
-}
-
-void OptionalAction::setToolButtonStyle(Qt::ToolButtonStyle style)
-{
-    QTC_ASSERT(m_toolButton, return);
-    m_toolButton->setToolButtonStyle(style);
 }
 
 const char *PerspectiveState::savesHeaderKey()

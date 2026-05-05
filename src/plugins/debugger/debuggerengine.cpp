@@ -806,9 +806,9 @@ public:
     bool m_isDying = false;
 
     QAction m_detachAction;
-    OptionalAction m_continueAction{Tr::tr("Continue")};
+    QAction m_continueAction{Tr::tr("Continue")};
     QAction m_exitAction{Tr::tr("Stop Debugger")}; // On application output button if "Stop" is possible
-    OptionalAction m_interruptAction{Tr::tr("Interrupt")}; // On the fat debug button if "Pause" is possible
+    QAction m_interruptAction{Tr::tr("Interrupt")}; // On the fat debug button if "Pause" is possible
     QAction m_abortAction{Tr::tr("Abort Debugging")};
     QAction m_stepIntoAction{Tr::tr("Step Into")};
     QAction m_stepOutAction{Tr::tr("Step Out")};
@@ -826,10 +826,10 @@ public:
     QAction m_setOrRemoveBreakpointAction{Tr::tr("Set or Remove Breakpoint")};
     QAction m_enableOrDisableBreakpointAction{Tr::tr("Enable or Disable Breakpoint")};
     QAction m_resetAction{Tr::tr("Restart Debugging")};
-    OptionalAction m_operateByInstructionAction{Tr::tr("Operate by Instruction")};
+    QAction m_operateByInstructionAction{Tr::tr("Operate by Instruction")};
     QAction m_recordForReverseOperationAction{Tr::tr("Record Information to Allow Reversal of Direction")};
-    OptionalAction m_operateInReverseDirectionAction{Tr::tr("Reverse Direction")};
-    OptionalAction m_snapshotAction{Tr::tr("Take Snapshot of Process State")};
+    QAction m_operateInReverseDirectionAction{Tr::tr("Reverse Direction")};
+    QAction m_snapshotAction{Tr::tr("Take Snapshot of Process State")};
 
     DebuggerToolTipManager m_toolTipManager;
     Context m_context;
