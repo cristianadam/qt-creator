@@ -8,8 +8,6 @@
 #include <utils/fancymainwindow.h>
 #include <utils/statuslabel.h>
 
-#include <QAction>
-
 #include <functional>
 
 namespace Utils {
@@ -24,7 +22,6 @@ public:
 
     enum OperationType { SplitVertical, SplitHorizontal, AddToTab, Raise };
 
-    void setCentralWidget(QWidget *centralWidget);
     void addWindow(QWidget *widget, // Perspective takes ownership.
                    OperationType op,
                    QWidget *anchorWidget,
@@ -42,7 +39,6 @@ public:
     QString id() const; // Currently used by GammaRay plugin.
     QString parentPerspectiveId() const;
     QString name() const;
-    QWidget *centralWidget() const;
 
     using Callback = std::function<void()>;
     void setAboutToActivateCallback(const Callback &cb);

@@ -146,7 +146,6 @@ public:
     QString m_parentPerspectiveId;
     QString m_settingsId;
     QList<DockOperation> m_dockOperations;
-    QPointer<QWidget> m_centralWidget;
     Perspective::Callback m_aboutToActivateCallback;
     QPointer<QWidget> m_innerToolBar;
     QHBoxLayout *m_innerToolBarLayout = nullptr;
@@ -613,20 +612,15 @@ void DebuggerMainWindowPrivate::resetCurrentPerspective()
 {
     QTC_ASSERT(m_currentPerspective, return);
     cleanDocks();
-    setCentralWidget(m_currentPerspective->d->m_centralWidget);
+    setCentralWidget(m_editorPlaceHolder);
     q->showCentralWidget(true);
     m_currentPerspective->d->resetPerspective();
 }
 
 void DebuggerMainWindowPrivate::setCentralWidget(QWidget *widget)
 {
-    if (widget) {
-        m_centralWidgetStack->addWidget(widget);
-        q->showCentralWidgetAction()->setText(widget->windowTitle());
-    } else {
-        m_centralWidgetStack->addWidget(m_editorPlaceHolder);
-        q->showCentralWidgetAction()->setText(Tr::tr("Editor"));
-    }
+    m_centralWidgetStack->addWidget(widget);
+    q->showCentralWidgetAction()->setText(widget->windowTitle());
 }
 
 void PerspectivePrivate::resetPerspective()
@@ -761,8 +755,7 @@ void DebuggerMainWindowPrivate::cleanDocks()
 void PerspectivePrivate::depopulatePerspective()
 {
     ICore::removeAdditionalContext(context());
-    theMainWindow->d->m_centralWidgetStack
-            ->removeWidget(m_centralWidget ? m_centralWidget : theMainWindow->d->m_editorPlaceHolder);
+    theMainWindow->d->m_centralWidgetStack->removeWidget(theMainWindow->d->m_editorPlaceHolder);
 
     theMainWindow->d->m_statusLabel->clear();
 
@@ -791,22 +784,15 @@ void PerspectivePrivate::populatePerspective()
 {
     showInnerToolBar();
 
-    if (m_centralWidget) {
-        theMainWindow->d->m_centralWidgetStack->addWidget(m_centralWidget);
-        theMainWindow->showCentralWidgetAction()->setText(m_centralWidget->windowTitle());
-    } else {
-        theMainWindow->d->m_centralWidgetStack->addWidget(theMainWindow->d->m_editorPlaceHolder);
-        theMainWindow->showCentralWidgetAction()->setText(Tr::tr("Editor"));
-    }
+    theMainWindow->d->m_centralWidgetStack->addWidget(theMainWindow->d->m_editorPlaceHolder);
+    theMainWindow->showCentralWidgetAction()->setText(Tr::tr("Editor"));
 
     ICore::addAdditionalContext(context());
 
     restoreLayout();
 
-    if (!m_centralWidget) {
-        if (IEditor *editor = EditorManager::currentEditor())
-            editor->widget()->setFocus();
-    }
+    if (IEditor *editor = EditorManager::currentEditor())
+        editor->widget()->setFocus();
 }
 
 // Perspective
@@ -840,12 +826,6 @@ Perspective::~Perspective()
         d->m_innerToolBar = nullptr;
     }
     delete d;
-}
-
-void Perspective::setCentralWidget(QWidget *centralWidget)
-{
-    QTC_ASSERT(d->m_centralWidget == nullptr, return);
-    d->m_centralWidget = centralWidget;
 }
 
 QString Perspective::id() const
@@ -937,11 +917,6 @@ void Perspective::registerNextPrevShortcuts(QAction *next, QAction *prev)
     Command * const prevCmd = ActionManager::registerAction(prev, prevId,
                                                             Context(Id::fromString(id())));
     prevCmd->augmentActionWithShortcutToolTip(prev);
-}
-
-QWidget *Perspective::centralWidget() const
-{
-    return d->m_centralWidget;
 }
 
 Context PerspectivePrivate::context() const
