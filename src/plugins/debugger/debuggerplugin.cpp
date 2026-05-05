@@ -114,7 +114,6 @@
 #include <QScopeGuard>
 #include <QStackedWidget>
 #include <QTextBlock>
-#include <QToolButton>
 #include <QVBoxLayout>
 #include <QVariant>
 
@@ -693,8 +692,8 @@ public:
     ProxyAction m_visibleStartAction; // The fat debug button
     ProxyAction m_hiddenStopAction;
     QAction m_undisturbableAction;
-    OptionalAction m_startAction;
-    OptionalAction m_startDapAction;
+    QAction m_startAction;
+    QAction m_startDapAction;
     QAction m_debugWithoutDeployAction{Tr::tr("Start Debugging Without Deployment")};
     QAction m_startAndDebugApplicationAction{Tr::tr("Start and Debug External Application...")};
     QAction m_attachToRunningApplication{Tr::tr("Attach to Running Application...")};
@@ -1252,7 +1251,7 @@ DebuggerPluginPrivate::DebuggerPluginPrivate(const QStringList &arguments)
                                               Constants::PRESET_PERSPECTIVE_ID);
 
     m_perspective.useSubPerspectiveSwitcher(EngineManager::engineChooser());
-    m_perspective.addToolBarAction(&m_startAction);
+    m_perspective.addToolBarAction(&m_startAction, Qt::ToolButtonTextBesideIcon);
 
     m_perspective.addWindow(engineManagerWindow, Perspective::SplitVertical, nullptr);
     m_perspective.addWindow(breakpointManagerWindow, Perspective::SplitHorizontal, engineManagerWindow);
@@ -1312,12 +1311,11 @@ void DebuggerPluginPrivate::createDapDebuggerPerspective(QWidget *globalLogWindo
                                                          Tr::tr("DAP Debugger Perspectives"),
                                                          "DAPDebugger.Docks.Snapshots");
 
-    m_perspectiveDap.addToolBarAction(&m_startDapAction);
+    m_perspectiveDap.addToolBarAction(&m_startDapAction, Qt::ToolButtonTextBesideIcon);
     m_startDapAction.setToolTip(Tr::tr("Start DAP Debugging"));
     m_startDapAction.setText(Tr::tr("Start DAP Debugging"));
     m_startDapAction.setEnabled(true);
     m_startDapAction.setIcon(startIcon(true));
-    m_startDapAction.setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     m_startDapAction.setVisible(true);
 
     m_perspectiveDap.useSubPerspectiveSwitcher(EngineManager::dapEngineChooser());
@@ -1546,7 +1544,6 @@ void DebuggerPluginPrivate::updatePresetState()
         // correspond to the current start up project.
         m_startAction.setEnabled(canRun.has_value());
         m_startAction.setIcon(startIcon(true));
-        m_startAction.setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
         m_startAction.setVisible(true);
         m_debugWithoutDeployAction.setEnabled(canRun.has_value());
         m_visibleStartAction.setAction(&m_startAction);
