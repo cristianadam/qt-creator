@@ -69,6 +69,11 @@ static QString deviceLabel(const AndroidDeviceConstPtr &device)
     return QString("%1 - %2").arg(device->displayName(), device->serialNumber());
 }
 
+static QString banner(const QString &label, const QString &state)
+{
+    return QString("**** %1 - %2 ****").arg(label, state);
+}
+
 static AndroidDeviceConstPtr asReadyAndroidDevice(const IDeviceConstPtr &device)
 {
     if (!device || device->type() != Constants::ANDROID_DEVICE_TYPE
@@ -82,20 +87,24 @@ static AndroidDeviceConstPtr asReadyAndroidDevice(const IDeviceConstPtr &device)
 class LogcatStream : public QObject
 {
 public:
-    LogcatStream(AndroidDeviceConstPtr device)
-        : m_device(std::move(device))
-    {}
-    ~LogcatStream() override { stopAdbTail(); }
+    LogcatStream(AndroidDeviceConstPtr device);
+    ~LogcatStream() override { stop(); }
     Id deviceId() const { return m_device->id(); }
     QString serial() const { return m_device->serialNumber(); }
     QString tabLabel() const;
 
-    void startAdbTail();
-    void stopAdbTail();
+    void start();
+    void stop();
 
     RunControl *tab() const { return m_tabContext.tab; }
     void setTab(RunControl *tab);
     void setTabActive(bool active);
+
+    void postMessage(const QString &msg, Utils::OutputFormat fmt)
+    {
+        if (m_tabContext.tab)
+            m_tabContext.tab->postMessage(msg, fmt, false);
+    }
 
 private:
     struct TabContext
@@ -103,18 +112,46 @@ private:
         QPointer<RunControl> tab;
         bool active = false;
     };
+    enum class Lifecycle { Stop, Start };
+
+    void startAdbTail();
+    void stopAdbTail();
 
     void parseLine(const QString &raw);
+
+    void onDisconnected();
+    void onConnected();
 
     const AndroidDeviceConstPtr m_device;
     std::unique_ptr<QTaskTree> m_task;
     TabContext m_tabContext;
+    Lifecycle m_lifecycle = Lifecycle::Stop;
 };
 
 static QHash<Id, LogcatStream *> &streamRegistry()
 {
     static QHash<Id, LogcatStream *> map;
     return map;
+}
+
+LogcatStream::LogcatStream(AndroidDeviceConstPtr device)
+    : m_device(std::move(device))
+{
+    DeviceManager *dm = DeviceManager::instance();
+    QObject::connect(dm, &DeviceManager::deviceRemoved, this, [this](Id removedId) {
+        if (removedId != deviceId())
+            return;
+        onDisconnected();
+    });
+    connect(dm, &DeviceManager::deviceUpdated, this, [this](Id id) {
+        if (id != deviceId())
+            return;
+        const auto state = m_device->deviceState();
+        if (state == IDevice::DeviceDisconnected)
+            onDisconnected();
+        else if (state == IDevice::DeviceReadyToUse)
+            onConnected();
+    });
 }
 
 QString LogcatStream::tabLabel() const
@@ -129,7 +166,7 @@ void LogcatStream::setTab(RunControl *tab)
 
     if (!tab) {
         const Id id = deviceId();
-        stopAdbTail();
+        stop();
         streamRegistry().remove(id);
         return;
     }
@@ -152,9 +189,41 @@ void LogcatStream::setTabActive(bool active)
         return;
     m_tabContext.active = active;
     if (active)
-        startAdbTail();
+        start();
     else
-        stopAdbTail();
+        stop();
+}
+
+void LogcatStream::start()
+{
+    if (m_lifecycle == Lifecycle::Start)
+        return;
+    if (m_device->deviceState() != IDevice::DeviceReadyToUse)
+        return;
+    startAdbTail();
+    m_lifecycle = Lifecycle::Start;
+}
+
+void LogcatStream::stop()
+{
+    if (m_lifecycle == Lifecycle::Stop)
+        return;
+    stopAdbTail();
+    m_lifecycle = Lifecycle::Stop;
+}
+
+void LogcatStream::onDisconnected()
+{
+    if (m_lifecycle == Lifecycle::Stop)
+        return;
+    postMessage(banner(tabLabel(), QLatin1String("disconnected")), Utils::NormalMessageFormat);
+    stop();
+}
+
+void LogcatStream::onConnected()
+{
+    if (m_tabContext.tab && m_tabContext.active)
+        start();
 }
 
 void LogcatStream::startAdbTail()
@@ -223,6 +292,7 @@ static RunControl *openLogcatTabForStream(LogcatStream *logcatStream)
         return existing;
     auto *runControl = new RunControl(ProjectExplorer::Constants::NORMAL_RUN_MODE);
     runControl->setDisplayName(logcatTitle(logcatStream->tabLabel()));
+    runControl->setPromptToStop([](bool *) { return true; });
     logcatStream->setTab(runControl);
 
     QPointer<RunControl> rcPtr = runControl;
