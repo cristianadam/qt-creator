@@ -293,6 +293,7 @@ static RunControl *openLogcatTabForStream(LogcatStream *logcatStream)
     auto *runControl = new RunControl(ProjectExplorer::Constants::NORMAL_RUN_MODE);
     runControl->setDisplayName(logcatTitle(logcatStream->tabLabel()));
     runControl->setPromptToStop([](bool *) { return true; });
+    runControl->setRunControlsEnabled(false);
     logcatStream->setTab(runControl);
 
     QPointer<RunControl> rcPtr = runControl;
