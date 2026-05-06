@@ -198,6 +198,7 @@ public:
     std::optional<int> exitCode;
     IDevice::ConstPtr device;
     Icon icon;
+    bool runControlsEnabled = true;
     const MacroExpander *macroExpander = nullptr;
     AspectContainerData aspectData;
     QString buildKey;
@@ -720,6 +721,16 @@ void RunControl::setIcon(const Icon &icon)
 Icon RunControl::icon() const
 {
     return d->data.icon;
+}
+
+void RunControl::setRunControlsEnabled(bool enabled)
+{
+    d->data.runControlsEnabled = enabled;
+}
+
+bool RunControl::runControlsEnabled() const
+{
+    return d->data.runControlsEnabled;
 }
 
 IDevice::ConstPtr RunControl::device() const

@@ -171,6 +171,10 @@ public:
     void setIcon(const Utils::Icon &icon);
     Utils::Icon icon() const;
 
+    // Enables/disables the pane's Re-run/Stop/Attach buttons for this tab.
+    void setRunControlsEnabled(bool enabled);
+    bool runControlsEnabled() const;
+
     Utils::ProcessHandle applicationProcessHandle() const;
     void setApplicationProcessHandle(const Utils::ProcessHandle &handle);
     IDeviceConstPtr device() const;
