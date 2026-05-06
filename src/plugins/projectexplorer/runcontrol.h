@@ -171,6 +171,9 @@ public:
     void setIcon(const Utils::Icon &icon);
     Utils::Icon icon() const;
 
+    void setRunControlsEnabled(bool enabled);
+    bool runControlsEnabled() const;
+
     Utils::ProcessHandle applicationProcessHandle() const;
     void setApplicationProcessHandle(const Utils::ProcessHandle &handle);
     IDeviceConstPtr device() const;

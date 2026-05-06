@@ -1127,12 +1127,13 @@ void AppOutputPane::resetZoom()
 void AppOutputPane::enableButtons(const RunControl *rc)
 {
     if (rc) {
+        const bool runControlsEnabled = rc->runControlsEnabled();
         const bool isRunning = rc->isRunning();
-        m_reRunButton->setEnabled(rc->isStopped());
+        m_reRunButton->setEnabled(rc->isStopped() && runControlsEnabled);
         m_reRunButton->setIcon(rc->icon().icon());
-        m_stopAction->setEnabled(isRunning);
+        m_stopAction->setEnabled(isRunning && runControlsEnabled);
         if (isRunning && debuggerPlugin() && rc->applicationProcessHandle().isValid()) {
-            m_attachButton->setEnabled(true);
+            m_attachButton->setEnabled(runControlsEnabled);
             const QString tip = Tr::tr("PID %1").arg(rc->applicationProcessHandle().pid());
             m_attachButton->setToolTip(msgAttachDebuggerTooltip(tip));
         } else {
