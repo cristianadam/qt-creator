@@ -50,6 +50,22 @@
         \li Select the icon of an issue type.
     \endlist
 
+    The list of issues can be explicitly sorted by one or more columns.
+    To sort for a column ascending click on the up arrow at the right
+    of the column.
+    To sort for a column descending click on the down arrow at the right
+    of the column.
+    Clicking on the up arrow when already sorting ascending removes the
+    sorting of this column. Similar for the down arrow and sorting
+    descending.
+    As alternative it is possible to click the header of the column to
+    cycle through the different sort modes.
+    To be able to sort for multiple columns hold Shift while changing
+    the sorting of a column. The last modified column will always get
+    added at the end of the list of columns to be sorted.
+    Toggling sorting of a column without holding Shift clears any
+    former sort configuration.
+
     To refresh the list, select \imagereload (\uicontrol {Reload}).
 
     To get help, select \inlineimage {icons/info.png} {Show Online Filter Help}.
