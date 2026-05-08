@@ -479,6 +479,21 @@ void registerMcpTools()
     // Persistent issues manager for all PE mcp tools
     static ProjectExplorer::IssuesManager issuesManager;
 
+    // Slot guard for serializing concurrent build() tool calls.  Qt Creator's
+    // BuildManager queues projects internally but emits a single
+    // buildQueueFinished signal for the whole queue — two concurrent MCP
+    // build() tasks would both receive the first queue's verdict.  This struct
+    // ensures only one MCP-initiated build task has live signal connections at
+    // a time; other callers wait in the heartbeat or refuse immediately,
+    // depending on the on_busy parameter.
+    struct BuildSlot
+    {
+        bool inProgress = false;
+        QPointer<Project> project;
+        QElapsedTimer elapsed;
+    };
+    static BuildSlot buildSlot;
+
     // Output schema for `build`. Designed so the AI doesn't have to inspect
     // `issues` to guess the build verdict — `succeeded` is the single source
     // of truth, mirrored by the tool's TaskStatus (completed vs failed).
@@ -554,16 +569,40 @@ void registerMcpTools()
                 "\n\n"
                 "Use `succeeded` to decide success/failure — don't try to infer it from "
                 "the issues array, and don't call get_build_status afterwards (that tool "
-                "reports current activity, not the verdict of a finished build).")
+                "reports current activity, not the verdict of a finished build)."
+                "\n\n"
+                "When two build() calls arrive concurrently, on_busy controls the "
+                "behaviour: \"queue\" (default) waits for the in-progress build to finish "
+                "before starting this one; \"refuse\" returns immediately with "
+                "succeeded:false and reason:\"build_in_progress\" so the caller can "
+                "decide when to retry.")
             .execution(ToolExecution().taskSupport(ToolExecution::TaskSupport::optional))
             .inputSchema(
-                Tool::InputSchema().addProperty(
-                    "projectName",
-                    QJsonObject{
-                        {"description",
-                         "Name of the project to build. Defaults to the active startup "
-                         "project."},
-                        {"type", "string"}}))
+                Tool::InputSchema{}
+                    .addProperty(
+                        "projectName",
+                        QJsonObject{
+                            {"description",
+                             "Name of the project to build. Pass projectPath as well when "
+                             "multiple loaded projects share this name."},
+                            {"type", "string"}})
+                    .addProperty(
+                        "projectPath",
+                        QJsonObject{
+                            {"description",
+                             "Absolute path to the project file (CMakeLists.txt, .pro, …). "
+                             "Unambiguously identifies the project when several share the "
+                             "same display name."},
+                            {"type", "string"}})
+                    .addProperty(
+                        "on_busy",
+                        QJsonObject{
+                            {"description",
+                             "Behaviour when another MCP-initiated build is already running. "
+                             "\"queue\" (default): wait for it to finish, then build. "
+                             "\"refuse\": return immediately with reason \"build_in_progress\"."},
+                            {"type", "string"},
+                            {"enum", QJsonArray{"queue", "refuse"}}}))
             .outputSchema(buildOutputSchema)
             .annotations(
                 Schema::ToolAnnotations()
@@ -574,46 +613,75 @@ void registerMcpTools()
         [](const Schema::CallToolRequestParams &params,
            const ToolInterface &toolInterface) -> Utils::Result<> {
             const QString projectName = params.arguments()->value("projectName").toString();
+            const QString projectPath = params.arguments()->value("projectPath").toString();
+            const QString onBusy = params.arguments()->value("on_busy").toString("queue");
 
-            QList<Project *> projects{ProjectManager::startupProject()};
-            if (!projectName.isEmpty())
-                projects = projectsForName(projectName);
+            QList<Project *> projects;
+            if (projectName.isEmpty() && projectPath.isEmpty()) {
+                if (auto *p = ProjectManager::startupProject())
+                    projects.append(p);
+                if (projects.isEmpty())
+                    return ResultError("No active startup project");
+            } else {
+                const ResolvedProjects resolved = resolveProjects(projectName, projectPath);
+                if (resolved.projects.isEmpty()) {
+                    return ResultError(
+                        projectPath.isEmpty()
+                            ? QString("No project named '%1' found").arg(projectName)
+                            : QString("No project at path '%1' found").arg(projectPath));
+                }
+                if (resolved.projects.size() > 1) {
+                    // Return a structured error so the AI can pick a path and retry.
+                    const QJsonObject body{
+                        {"succeeded", false},
+                        {"reason", "ambiguous_name"},
+                        {"message",
+                         QString("Multiple projects named '%1' are loaded. Pass projectPath "
+                                 "(one of the listed candidates) to disambiguate.")
+                             .arg(projectName)},
+                        {"candidates", resolved.candidates},
+                        {"error_count", 0},
+                        {"warning_count", 0},
+                        {"duration_ms", 0},
+                        {"issues", QJsonArray{}},
+                        {"summary_text",
+                         QString("Ambiguous project name '%1'").arg(projectName)}};
+                    toolInterface.finish(
+                        CallToolResult{}.isError(true).structuredContent(body));
+                    return ResultOk;
+                }
+                projects = resolved.projects;
+            }
 
-            projects.removeIf([](Project *p) { return !p; });
+            Project *targetProject = projects.first();
 
-            if (projects.isEmpty())
-                return ResultError("No project named '" + projectName + "' found");
-
-            // Shared state between the buildQueueFinished signal handler and
-            // the heartbeat. Both are needed: the signal carries the
-            // success/failure boolean (BuildManager::currentProgress can only
-            // tell us "still running" vs "not running", never "the most
-            // recent build failed"); the heartbeat is what transitions the
-            // task to `completed` or `failed`. The `timer` is used so the
-            // duration we report is wall-clock from the buildProjects() call
-            // — including dependency resolution and pre-build steps — rather
-            // than just the compile phase.
-            struct State {
+            // State shared between the heartbeat, the buildQueueFinished
+            // handler, and the finishFn.
+            //
+            // buildStarted:  has buildProjects() been called for this invocation?
+            //   The heartbeat sets this once it has claimed the BuildSlot and
+            //   kicked off the build, so that subsequent heartbeats skip the
+            //   slot-acquisition phase.
+            //
+            // refused: set when on_busy=="refuse" and the slot was taken.
+            //   The finishFn returns a structured build_in_progress response
+            //   rather than a real build verdict.
+            //
+            // succeeded: pessimistic default.  Set to true only when
+            //   buildQueueFinished(true) fires.  If the nested loop exits
+            //   without the signal (cancellation, quit, stale wakeup), the
+            //   function correctly reports failure rather than a phantom success.
+            struct State
+            {
+                bool buildStarted = false;
                 bool finished = false;
-                bool succeeded = true;
+                bool refused = false;
+                bool succeeded = false; // pessimistic — true only on explicit signal
+                QJsonObject refusedBlockingInfo;
+                qint64 refusedElapsedMs = 0;
                 QElapsedTimer timer;
             };
             auto state = std::make_shared<State>();
-            state->timer.start();
-
-            // Connect BEFORE buildProjects() to avoid losing a synchronously
-            // emitted buildQueueFinished — e.g. when everything is already
-            // up-to-date and the queue drains in one tick. SingleShotConnection
-            // ensures we capture exactly one verdict per tool invocation.
-            QObject::connect(
-                BuildManager::instance(),
-                &BuildManager::buildQueueFinished,
-                BuildManager::instance(),
-                [state](bool success) {
-                    state->succeeded = success;
-                    state->finished = true;
-                },
-                Qt::SingleShotConnection);
 
             struct Output
             {
@@ -641,20 +709,70 @@ void registerMcpTools()
 
             auto output = std::make_shared<Output>();
 
-            if (BuildManager::buildProjects(projects, ConfigSelection::Active) <= 0) {
-                if (!output->text.isEmpty())
-                    return ResultError(QString("Build failed to start.\n%1").arg(output->text));
-
-                return ResultError(
-                    "Build failed to start. Check that the project is properly configured and try "
-                    "again.");
-            }
-
             using namespace std::chrono_literals;
 
-            toolInterface.startTask(
+            const auto buildTask = toolInterface.startTask(
                 1s,
-                [state](Schema::Task task) -> Schema::Task {
+                [state, targetProject, onBusy](Schema::Task task) -> Schema::Task {
+                    // Phase 1 — slot acquisition (runs each heartbeat tick until
+                    // the slot is free and the build has been launched).
+                    if (!state->buildStarted && !state->refused) {
+                        if (buildSlot.inProgress) {
+                            // Reclaim a stale slot: if BuildManager is no longer building
+                            // (e.g. shutdown, external cancel, or missed signal), don't
+                            // block indefinitely.
+                            if (!BuildManager::isBuilding()) {
+                                buildSlot = {};
+                            } else if (onBusy == QLatin1String("refuse")) {
+                                state->refused = true;
+                                if (buildSlot.project)
+                                    state->refusedBlockingInfo = projectInfoObject(
+                                        buildSlot.project);
+                                state->refusedElapsedMs = buildSlot.elapsed.elapsed();
+                                task.status(Schema::TaskStatus::failed);
+                                task.statusMessage("Refused: another build is in progress");
+                                Mcp::letTaskDieIn(task, 1min);
+                                return task;
+                            } else {
+                                // on_busy=="queue": report wait status and come back next tick.
+                                const QString blockName = buildSlot.project
+                                                              ? buildSlot.project->displayName()
+                                                              : QStringLiteral("?");
+                                task.statusMessage(
+                                    QString("Waiting for '%1' build to finish (%2 ms)…")
+                                        .arg(blockName)
+                                        .arg(buildSlot.elapsed.elapsed()));
+                                return task.status(Schema::TaskStatus::working);
+                            }
+                        }
+
+                        // Slot is free — claim it and launch the build.
+                        buildSlot.inProgress = true;
+                        buildSlot.project = targetProject;
+                        buildSlot.elapsed.start();
+                        state->buildStarted = true;
+                        state->timer.start();
+
+                        // Connect BEFORE buildProjects() to avoid losing a
+                        // synchronously-emitted buildQueueFinished (e.g. when
+                        // everything is already up-to-date and the queue drains in
+                        // one tick).  SingleShotConnection ensures exactly one
+                        // verdict per invocation.
+                        QObject::connect(
+                            BuildManager::instance(),
+                            &BuildManager::buildQueueFinished,
+                            BuildManager::instance(),
+                            [state](bool success) {
+                                state->succeeded = success;
+                                state->finished = true;
+                                buildSlot = {}; // release immediately so queued callers unblock
+                            },
+                            Qt::SingleShotConnection);
+
+                        BuildManager::buildProjects({targetProject}, ConfigSelection::Active);
+                    }
+
+                    // Phase 2 — build is running; poll for completion.
                     if (state->finished) {
                         task.status(state->succeeded ? Schema::TaskStatus::completed
                                                      : Schema::TaskStatus::failed);
@@ -670,6 +788,28 @@ void registerMcpTools()
                     return task.status(Schema::TaskStatus::working);
                 },
                 [state, output]() -> Utils::Result<Schema::CallToolResult> {
+                    if (state->refused) {
+                        const QString blockName
+                            = state->refusedBlockingInfo.value("name").toString("?");
+                        return CallToolResult{}
+                            .structuredContent(QJsonObject{
+                                {"succeeded", false},
+                                {"reason", "build_in_progress"},
+                                {"blocking_project", state->refusedBlockingInfo},
+                                {"blocking_running_for_ms", state->refusedElapsedMs},
+                                {"error_count", 0},
+                                {"warning_count", 0},
+                                {"duration_ms", 0},
+                                {"issues", QJsonArray{}},
+                                {"summary_text",
+                                 QString("Build in progress for '%1' (%2 ms). Pass "
+                                         "on_busy:\"queue\" to wait, or retry later.")
+                                     .arg(blockName)
+                                     .arg(state->refusedElapsedMs)},
+                            })
+                            .isError(true);
+                    }
+
                     const QJsonObject issuesData = issuesManager.getCurrentIssues();
                     const QJsonObject issuesSummary = issuesData.value("summary").toObject();
                     const int errorCount = issuesSummary.value("errorCount").toInt();
@@ -678,12 +818,11 @@ void registerMcpTools()
 
                     QString summaryText;
                     if (state->succeeded) {
-                        summaryText
-                            = warningCount == 0
-                                  ? QString("Build succeeded in %1 ms").arg(durationMs)
-                                  : QString("Build succeeded with %1 warning(s) in %2 ms")
-                                        .arg(warningCount)
-                                        .arg(durationMs);
+                        summaryText = warningCount == 0
+                                          ? QString("Build succeeded in %1 ms").arg(durationMs)
+                                          : QString("Build succeeded with %1 warning(s) in %2 ms")
+                                                .arg(warningCount)
+                                                .arg(durationMs);
                     } else {
                         summaryText
                             = QString("Build failed with %1 error(s), %2 warning(s) in %3 ms")
@@ -705,9 +844,20 @@ void registerMcpTools()
                             })
                         .isError(!state->succeeded);
                 },
-                []() { BuildManager::cancel(); },
+                [state]() {
+                    if (state->buildStarted && !state->finished)
+                        BuildManager::cancel();
+                    if (state->buildStarted)
+                        buildSlot = {};
+                },
                 Mcp::progressToken(params));
 
+            if (!buildTask) {
+                toolInterface.finish(
+                    CallToolResult{}.isError(true).addContent(
+                        Schema::TextContent{}.text(buildTask.error())));
+                return ResultOk;
+            }
             return ResultOk;
         });
 
