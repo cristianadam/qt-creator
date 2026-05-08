@@ -330,6 +330,10 @@ public:
         const QString negotiatedVersion = "2025-11-25";
         const QStringList supportedVersions = {negotiatedVersion, "2024-11-05"};
         if (!supportedVersions.contains(request.params().protocolVersion())) {
+            qCWarning(mcpServerLog)
+                << "Rejected Initialize for session" << sessionId
+                << "— unsupported protocol version:" << request.params().protocolVersion()
+                << "(supported:" << supportedVersions.join(", ") + ")";
             auto errorResponse = Schema::JSONRPCErrorResponse().id(id).error(
                 Schema::Error()
                     .code(InvalidRequest)
@@ -606,7 +610,8 @@ public:
         auto sessionInfo = m_sessions.value(sessionId);
         if (!sessionInfo) {
             qCWarning(mcpServerLog) << "Received call for tool" << request.params().name()
-                                    << "with invalid session ID:" << sessionId;
+                                    << "with invalid session ID:" << sessionId
+                                    << "— known sessions:" << m_sessions.keys();
             responder.write(QJsonDocument(toJson(
                 Schema::JSONRPCErrorResponse()
                     .error(
@@ -1431,15 +1436,31 @@ Server::Server(Schema::Implementation serverInfo)
                 return;
             }
 
-            const QString sessionId = req.headers().contains("mcp-session-id")
+            const bool hasSessionHeader = req.headers().contains("mcp-session-id");
+            const QString sessionId = hasSessionHeader
                                           ? QString::fromUtf8(req.headers().value("mcp-session-id"))
                                           : d->createNewSessionId();
 
-            if (req.headers().contains("mcp-session-id")) {
+            if (!hasSessionHeader) {
+                // No mcp-session-id header: this is either a new Initialize or a client
+                // that forgot to include the header. Log the body type so we can tell which.
+                const auto body = QJsonDocument::fromJson(req.body());
+                const QString method = body.object()
+                                           .value("method")
+                                           .toString("(non-JSON or missing method)");
+                if (method != "initialize")
+                    qCWarning(mcpServerLog)
+                        << "Streamable HTTP request missing mcp-session-id header — method:"
+                        << method << "new ephemeral session:" << sessionId
+                        << "known sessions:" << d->m_sessions.keys();
+            }
+
+            if (hasSessionHeader) {
                 bool validSessionId = !sessionId.isNull();
                 if (!validSessionId || !d->validateSession(sessionId)) {
-                    qCInfo(mcpServerLog) << "Received request with invalid session ID:"
-                                         << req.headers().value("mcp-session-id");
+                    qCWarning(mcpServerLog) << "Received request with invalid session ID:"
+                                            << req.headers().value("mcp-session-id")
+                                            << "— known sessions:" << d->m_sessions.keys();
 
                     responder.write(
                         "Invalid session ID",
