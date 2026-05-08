@@ -325,7 +325,11 @@ public:
         const Responder &responder,
         const QString &sessionId)
     {
-        if (request.params().protocolVersion() != "2025-11-25") {
+        // Accept "2025-11-25" (current) and "2024-11-05" (legacy SSE transport).
+        // Per MCP spec, negotiate up: always respond with the highest version we support.
+        const QString negotiatedVersion = "2025-11-25";
+        const QStringList supportedVersions = {negotiatedVersion, "2024-11-05"};
+        if (!supportedVersions.contains(request.params().protocolVersion())) {
             auto errorResponse = Schema::JSONRPCErrorResponse().id(id).error(
                 Schema::Error()
                     .code(InvalidRequest)
@@ -356,7 +360,7 @@ public:
             caps = caps.completions(QJsonObject());
 
         auto initResult = Schema::InitializeResult()
-                              .protocolVersion(request.params().protocolVersion())
+                              .protocolVersion(negotiatedVersion)
                               .serverInfo(serverInfo)
                               .capabilities(caps);
 
