@@ -234,9 +234,7 @@
 
     \section1 Show Git status in the Projects view
 
-    To show changed files in the \l {Projects} view in a different color, go to
-    \preferences > \uicontrol {Version Control} > \uicontrol {General} and select
-    \uicontrol {Show VCS file status}.
+    See \l {Show file status}
 
     \section1 Stage and unstage changes
 
@@ -774,8 +772,7 @@
     files. The availability of other actions depends on the state of the selected file.
 
     \note You can apply these actions also from the context menu in
-    \uicontrol {Projects}, \uicontrol {File System}, and
-    \uicontrol {Open Documents}.
+    \l {Projects}, \l {File System}, and \l {Open Documents}.
 
     \table
     \header

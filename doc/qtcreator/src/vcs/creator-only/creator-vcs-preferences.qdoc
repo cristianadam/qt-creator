@@ -79,13 +79,11 @@
             from the command line, for example.
     \endlist
 
-    \section1 Show file status in Projects
+    \section1 Show file status
 
-    Requesting file status updates from files and showing them in \l {Projects}
-    might slow down \QC.
-
-    To show file status, go to \preferences > \uicontrol {Version Control}
-    > \uicontrol General, and then select \uicontrol {Show VCS file status}.
+    To show changed files in the \l {Projects}, \l {File System} or \l {Open Documents}
+    view in a different color, go to \preferences > \uicontrol {Version Control} >
+    \uicontrol {General} and select \uicontrol {Show VCS file status with refresh interval}
 
     \sa {Use Git}{How to: Use Git}, {Version control systems}
 */
