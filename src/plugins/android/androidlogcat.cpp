@@ -14,6 +14,7 @@
 #include <coreplugin/coreconstants.h>
 #include <coreplugin/modemanager.h>
 #include <coreplugin/outputpane.h>
+#include <coreplugin/outputwindow.h>
 
 #include <projectexplorer/devicesupport/devicemanager.h>
 #include <projectexplorer/devicesupport/idevice.h>
@@ -51,6 +52,40 @@ static CommandLine adbLogcat(const QString &serialNumber, const QStringList &ext
 {
     return {AndroidConfig::adbToolPath(), adbSelector(serialNumber) + QStringList{"logcat"} + extra};
 }
+// Cap on the per-device entry history kept for re-rendering on filter changes.
+// 10k entries of typical line length occupy a few megabytes.(10K entries per device = 2~3MB of memory)
+static constexpr int maxBufferedLines = 10000;
+
+struct LogcatEntry
+{
+    QString line; // raw 'adb logcat -v brief' line, ANSI color kept
+    Utils::OutputFormat fmt;
+    qint32 pid = -1;
+    bool bypassFilter = false;
+};
+
+static const QRegularExpression regExpLogcat(
+    "(?:\\x1b\\[[0-9;]*m)?"   // optional ANSI color
+    "([VDIWEF])"             // 1: log level
+    "(/[^(]*)"               // 2: /tag
+    "(\\(\\s*(\\d+)\\s*\\))"  // 3: (pid)   4: pid digits
+);
+
+// Keep the line as received; only extract the PID so the filter can match it.
+static LogcatEntry parseLogcat(const QString &raw)
+{
+    LogcatEntry entry{.line = raw};
+    QChar level;
+    const auto match = regExpLogcat.match(raw);
+    if (match.hasMatch()) {
+        level = match.captured(1).at(0);
+        entry.pid = match.captured(4).toInt();
+    }
+    const bool isError = level == QLatin1Char('W') || level == QLatin1Char('E')
+                         || level == QLatin1Char('F');
+    entry.fmt = isError ? Utils::StdErrFormat : Utils::StdOutFormat;
+    return entry;
+}
 
 // User-facing device identity: "<displayName> (<serial>)". Used in
 // the Tools > Android > Logcat submenu and composed into the tab title.
@@ -72,8 +107,40 @@ static AndroidDeviceConstPtr asReadyAndroidDevice(const IDeviceConstPtr &device)
     return std::dynamic_pointer_cast<const AndroidDevice>(device);
 }
 
-//LogcatStream
+//LogcatFilter
+class LogcatFilter
+{
+public:
+    void setFromText(const QString &text);
+    bool accepts(const LogcatEntry &entry) const;
 
+    QString cachedText() const { return m_cachedText; }
+    bool isActive() const { return !m_predicates.isEmpty(); }
+
+    using FilterPredicate = std::function<bool(const LogcatEntry &)>;
+
+private:
+    QList<FilterPredicate> m_predicates;
+    QString m_cachedText;
+};
+
+void LogcatFilter::setFromText(const QString &text)
+{
+    m_cachedText = text;
+    m_predicates.clear();
+}
+
+bool LogcatFilter::accepts(const LogcatEntry &entry) const
+{
+    if (entry.bypassFilter)
+        return true;
+    for (const FilterPredicate &filterPredicate : m_predicates)
+        if (!filterPredicate(entry))
+            return false;
+    return true;
+}
+
+//LogcatStream
 class LogcatStream : public QObject
 {
 public:
@@ -94,6 +161,17 @@ private:
     {
         QPointer<RunControl> tab;
         bool active = false;
+        QList<LogcatEntry> buffer;
+        LogcatFilter filter;
+
+        void appendEntry(const LogcatEntry &entry);
+        void applyFilter() const;
+        void renderFromBuffer() const;
+
+        QString windowFilterText() const
+        {
+            return filter.isActive() ? QString() : filter.cachedText();
+        }
     };
     enum class Lifecycle { Stop, Start };
 
@@ -102,14 +180,12 @@ private:
 
     void onTabDestroyed();
 
-    void postMessage(const QString &msg, Utils::OutputFormat fmt)
-    {
-        if (m_tabContext.tab)
-            m_tabContext.tab->postMessage(msg, fmt, false);
-    }
+    void postMessage(const QString &msg, Utils::OutputFormat fmt);
 
     void onDisconnected();
     void onConnected();
+
+    void onOutputFilterTextChanged(const QString &text);
 
     const AndroidDeviceConstPtr m_device;
     std::unique_ptr<QTaskTree> m_task;
@@ -160,6 +236,11 @@ void LogcatStream::attachTab(RunControl *tab)
     QObject::connect(tab, &RunControl::tabActiveChanged, this, [this](bool active) {
         setTabActive(active);
     });
+
+    QObject::connect(tab, &RunControl::outputFilterChanged, this, [this](const QString &text) {
+        onOutputFilterTextChanged(text);
+    });
+
     QObject::connect(tab, &QObject::destroyed, this, [this] { onTabDestroyed(); });
 }
 
@@ -218,16 +299,64 @@ void LogcatStream::onConnected()
         start();
 }
 
+void LogcatStream::postMessage(const QString &msg, Utils::OutputFormat fmt)
+{
+    m_tabContext.appendEntry({.line = msg, .fmt = fmt, .bypassFilter = true});
+}
+
+void LogcatStream::TabContext::appendEntry(const LogcatEntry &entry)
+{
+    buffer.append(entry);
+    if (buffer.size() > maxBufferedLines)
+        buffer.removeFirst();
+    if (tab && filter.accepts(entry))
+        tab->postMessage(entry.line, entry.fmt, false);
+}
+
+void LogcatStream::TabContext::applyFilter() const
+{
+    if (!tab)
+        return;
+    tab->setOutputFilterText(filter.cachedText());
+    if (OutputWindow *const w = tab->outputWindow())
+        w->updateFilterProperties(windowFilterText(), Qt::CaseInsensitive, false, false, 0, 0);
+}
+
+void LogcatStream::TabContext::renderFromBuffer() const
+{
+    applyFilter();
+    OutputWindow *const w = tab ? tab->outputWindow() : nullptr;
+    if (!w)
+        return;
+    w->clear();
+    for (const LogcatEntry &entry : buffer) {
+        if (filter.accepts(entry))
+            tab->postMessage(entry.line, entry.fmt, false);
+    }
+}
+
+void LogcatStream::onOutputFilterTextChanged(const QString &text)
+{
+    m_tabContext.filter.setFromText(text);
+    // Keyword-only changes filter in place via the OutputWindow; replay the
+    // buffer only when the entry predicates change.
+    if (m_tabContext.filter.isActive())
+        m_tabContext.renderFromBuffer();
+    else
+        m_tabContext.applyFilter();
+}
+
 void LogcatStream::startAdbTail()
 {
     const QString serialNumber = serial();
     const auto onSetup = [this, serialNumber](Process &process) {
-        const auto post = [this](const QString &line, Utils::OutputFormat fmt) {
-            if (m_tabContext.tab)
-                m_tabContext.tab->postMessage(line, fmt, false);
-        };
-        process.setStdOutLineCallback([post](const QString &line) { post(line, Utils::StdOutFormat); });
-        process.setStdErrLineCallback([post](const QString &line) { post(line, Utils::StdErrFormat); });
+        process.setStdOutLineCallback([this](const QString &line) {
+            m_tabContext.appendEntry(parseLogcat(line));
+        });
+        // Buffered with bypassFilter so adb's own errors survive re-renders.
+        process.setStdErrLineCallback([this](const QString &line) {
+            postMessage(line, Utils::StdErrFormat);
+        });
         // -T 1 starts the tail at the current head, skipping the device's existing ring buffer (live tail only)
         process.setCommand(adbLogcat(serialNumber, {"-T", "1", "-v", "color", "-v", "brief"}));
     };
