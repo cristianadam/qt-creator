@@ -619,6 +619,8 @@ void AppOutputPane::updateFilter()
                 afterContext())) {
             tab->window->filterNewContent();
         }
+        if (tab->runControl)
+            emit tab->runControl->outputFilterChanged(filterText());
     }
 }
 
@@ -630,6 +632,31 @@ const QList<Core::OutputWindow *> AppOutputPane::outputWindows() const
             windows << tab.window;
     }
     return windows;
+}
+
+void AppOutputPane::clearForRunControl(const RunControl *runControl)
+{
+    if (const RunControlTab * const tab = tabFor(runControl); tab && tab->window)
+        tab->window->clear();
+}
+
+void AppOutputPane::setContentFilterForRunControl(
+    const RunControl *runControl, const QString &pattern)
+{
+    if (const RunControlTab * const tab = tabFor(runControl); tab && tab->window)
+        tab->window->updateFilterProperties(pattern, Qt::CaseInsensitive, false, false, 0, 0);
+}
+
+void AppOutputPane::setFilterTextForRunControl(const RunControl *runControl, const QString &text)
+{
+    const RunControlTab * const ct = currentTab();
+    if (!ct || ct->runControl != runControl)
+        return;
+    auto * const edit = qobject_cast<QLineEdit *>(filterWidget());
+    if (!edit || edit->text() == text)
+        return;
+    QSignalBlocker blocker(edit);
+    edit->setText(text);
 }
 
 void AppOutputPane::ensureWindowVisible(Core::OutputWindow *ow)

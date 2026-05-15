@@ -82,6 +82,10 @@ public:
     void prepareRunControlStart(RunControl *runControl);
     void showOutputPaneForRunControl(RunControl *runControl);
 
+    void clearForRunControl(const RunControl *runControl);
+    void setFilterTextForRunControl(const RunControl *runControl, const QString &text);
+    void setContentFilterForRunControl(const RunControl *runControl, const QString &pattern);
+
     void closeTabsWithoutPrompt();
 
 private:

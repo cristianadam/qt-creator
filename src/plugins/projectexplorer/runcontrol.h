@@ -238,6 +238,11 @@ public:
     static bool canRun(
         Utils::Id runMode, Utils::Id deviceType, Utils::Id runConfigId, Utils::Id executionType);
     void postMessage(const QString &msg, Utils::OutputFormat format, bool appendNewLine = true);
+    void clearOutput();
+    // Sets the App Output filter field text (what the user sees/types).
+    void setOutputFilterText(const QString &text);
+    // Applies a live, case-insensitive content filter to this run's output view.
+    void setOutputContentFilter(const QString &pattern);
 
     void requestDebugChannel();
     bool usesDebugChannel() const;
@@ -274,6 +279,7 @@ public:
 
 signals:
     void appendMessage(const QString &msg, Utils::OutputFormat format);
+    void outputFilterChanged(const QString &text);
     void aboutToStart();
     void started();
     void canceled();
