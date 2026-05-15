@@ -516,6 +516,11 @@ AppOutputPane::RunControlTab *AppOutputPane::tabFor(const RunControl *rc)
     return &*it;
 }
 
+const AppOutputPane::RunControlTab *AppOutputPane::tabFor(const RunControl *rc) const
+{
+    return const_cast<AppOutputPane *>(this)->tabFor(rc);
+}
+
 AppOutputPane::RunControlTab *AppOutputPane::tabFor(const QWidget *outputWindow)
 {
     const auto it = std::find_if(m_runControlTabs.begin(), m_runControlTabs.end(),
@@ -601,6 +606,8 @@ void AppOutputPane::updateFilter()
                 afterContext())) {
             tab->window->filterNewContent();
         }
+        if (tab->runControl)
+            emit tab->runControl->outputFilterChanged(filterText());
     }
 }
 
@@ -612,6 +619,24 @@ const QList<Core::OutputWindow *> AppOutputPane::outputWindows() const
             windows << tab.window;
     }
     return windows;
+}
+
+Core::OutputWindow *AppOutputPane::outputWindowFor(const RunControl *runControl) const
+{
+    const RunControlTab * const tab = tabFor(runControl);
+    return tab ? tab->window.data() : nullptr;
+}
+
+void AppOutputPane::setFilterTextForRunControl(const RunControl *runControl, const QString &text)
+{
+    const RunControlTab * const ct = currentTab();
+    if (!ct || ct->runControl != runControl)
+        return;
+    auto * const edit = qobject_cast<QLineEdit *>(filterWidget());
+    if (!edit || edit->text() == text)
+        return;
+    QSignalBlocker blocker(edit);
+    edit->setText(text);
 }
 
 void AppOutputPane::ensureWindowVisible(Core::OutputWindow *ow)

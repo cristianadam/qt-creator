@@ -21,6 +21,10 @@
 #include <functional>
 #include <memory>
 
+namespace Core {
+class OutputWindow;
+}
+
 namespace Utils {
 class Icon;
 class MacroExpander;
@@ -225,6 +229,8 @@ public:
     static bool canRun(
         Utils::Id runMode, Utils::Id deviceType, Utils::Id runConfigId, Utils::Id executionType);
     void postMessage(const QString &msg, Utils::OutputFormat format, bool appendNewLine = true);
+    Core::OutputWindow *outputWindow() const;
+    void setOutputFilterText(const QString &text);
 
     void requestDebugChannel();
     bool usesDebugChannel() const;
@@ -249,7 +255,6 @@ public:
     Utils::ProcessHandle attachPid() const;
 
     void showOutputPane();
-
     Canceler canceler();
     void handleProcessCancellation(Utils::Process *process);
 
@@ -261,6 +266,7 @@ public:
 
 signals:
     void appendMessage(const QString &msg, Utils::OutputFormat format);
+    void outputFilterChanged(const QString &text);
     void aboutToStart();
     void started();
     void canceled();

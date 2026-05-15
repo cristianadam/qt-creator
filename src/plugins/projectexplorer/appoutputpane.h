@@ -81,6 +81,9 @@ public:
     void prepareRunControlStart(RunControl *runControl);
     void showOutputPaneForRunControl(RunControl *runControl);
 
+    Core::OutputWindow *outputWindowFor(const RunControl *runControl) const;
+    void setFilterTextForRunControl(const RunControl *runControl, const QString &text);
+
     void closeTabsWithoutPrompt();
 
 private:
@@ -128,6 +131,7 @@ private:
     bool optionallyPromptToStop(RunControl *runControl);
 
     RunControlTab *tabFor(const RunControl *rc);
+    const RunControlTab *tabFor(const RunControl *rc) const;
     RunControlTab *tabFor(const QWidget *outputWindow);
     const RunControlTab *tabFor(const QWidget *outputWindow) const;
     RunControlTab *currentTab();
