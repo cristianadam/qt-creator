@@ -515,6 +515,11 @@ AppOutputPane::RunControlTab *AppOutputPane::tabFor(const RunControl *rc)
     return &*it;
 }
 
+const AppOutputPane::RunControlTab *AppOutputPane::tabFor(const RunControl *rc) const
+{
+    return const_cast<AppOutputPane *>(this)->tabFor(rc);
+}
+
 AppOutputPane::RunControlTab *AppOutputPane::tabFor(const QWidget *outputWindow)
 {
     const auto it = std::find_if(m_runControlTabs.begin(), m_runControlTabs.end(),
@@ -600,6 +605,8 @@ void AppOutputPane::updateFilter()
                 afterContext())) {
             tab->window->filterNewContent();
         }
+        if (tab->runControl)
+            emit tab->runControl->outputFilterChanged(filterText());
     }
 }
 
@@ -611,6 +618,24 @@ const QList<Core::OutputWindow *> AppOutputPane::outputWindows() const
             windows << tab.window;
     }
     return windows;
+}
+
+Core::OutputWindow *AppOutputPane::outputWindowFor(const RunControl *runControl) const
+{
+    const RunControlTab * const tab = tabFor(runControl);
+    return tab ? tab->window.data() : nullptr;
+}
+
+void AppOutputPane::setFilterTextForRunControl(const RunControl *runControl, const QString &text)
+{
+    const RunControlTab * const ct = currentTab();
+    if (!ct || ct->runControl != runControl)
+        return;
+    auto * const edit = qobject_cast<QLineEdit *>(filterWidget());
+    if (!edit || edit->text() == text)
+        return;
+    QSignalBlocker blocker(edit);
+    edit->setText(text);
 }
 
 void AppOutputPane::ensureWindowVisible(Core::OutputWindow *ow)
@@ -1136,14 +1161,6 @@ void AppOutputPane::enableButtons(const RunControl *rc)
 void AppOutputPane::tabChanged(int i)
 {
     RunControlTab * const controlTab = tabFor(m_tabWidget->widget(i));
-    // fire tabActiveChanged on every RunControl :
-    //  true -> current and false -> rest
-    const RunControl * newRc = controlTab ? controlTab->runControl : nullptr;
-    for (const RunControlTab &t : std::as_const(m_runControlTabs)) {
-        if (t.runControl)
-            emit t.runControl->tabActiveChanged(t.runControl == newRc);
-    }
-
     if (i != -1 && controlTab) {
         auto appwindow = qobject_cast<AppOutputWindow*>(controlTab->window);
         appwindow->updateCategoriesProperties(appwindow->registry()->categories());
@@ -1154,6 +1171,13 @@ void AppOutputPane::tabChanged(int i)
         enableButtons(controlTab->runControl);
     } else {
         enableDefaultButtons();
+    }
+
+    // Emit after the toolbar filter is applied so plugin handlers run last.
+    const RunControl * newRc = controlTab ? controlTab->runControl : nullptr;
+    for (const RunControlTab &t : std::as_const(m_runControlTabs)) {
+        if (t.runControl)
+            emit t.runControl->tabActiveChanged(t.runControl == newRc);
     }
 }
 
