@@ -583,8 +583,13 @@ QList<QWidget *> AppOutputPane::toolBarWidgets() const
 void AppOutputPane::clearContents()
 {
     auto *currentWindow = qobject_cast<Core::OutputWindow *>(m_tabWidget->currentWidget());
-    if (currentWindow)
-        currentWindow->clear();
+    if (!currentWindow)
+        return;
+    // clear() would leave already-queued chunks to drain in afterwards.
+    currentWindow->flush();
+    currentWindow->clear();
+    if (RunControl *runControl = currentRunControl())
+        emit runControl->outputCleared();
 }
 
 bool AppOutputPane::hasFocus() const
@@ -608,6 +613,8 @@ void AppOutputPane::setFocus()
 
 void AppOutputPane::updateFilter()
 {
+    if (m_injectingFilterText)
+        return;
     if (RunControlTab * const tab = currentTab()) {
         QTC_ASSERT(tab->window, return);
         tab->window->updateCategoriesProperties(tab->window->registry()->categories());
@@ -620,6 +627,8 @@ void AppOutputPane::updateFilter()
                 afterContext())) {
             tab->window->filterNewContent();
         }
+        if (tab->runControl)
+            emit tab->runControl->outputFilterChanged(filterText());
     }
 }
 
@@ -631,6 +640,29 @@ const QList<Core::OutputWindow *> AppOutputPane::outputWindows() const
             windows << tab.window;
     }
     return windows;
+}
+
+void AppOutputPane::clearForRunControl(const RunControl *runControl)
+{
+    const RunControlTab * const tab = tabFor(runControl);
+    if (!tab || !tab->window)
+        return;
+    tab->window->flush();
+    tab->window->clear();
+}
+
+void AppOutputPane::setFilterTextForRunControl(const RunControl *runControl, const QString &text)
+{
+    const RunControlTab * const ct = currentTab();
+    if (!ct || ct->runControl != runControl)
+        return;
+    auto * const edit = qobject_cast<QLineEdit *>(filterWidget());
+    if (!edit || edit->text() == text)
+        return;
+    // Only the pane's reaction is suppressed; the edit's own clear button must run.
+    m_injectingFilterText = true;
+    edit->setText(text);
+    m_injectingFilterText = false;
 }
 
 void AppOutputPane::ensureWindowVisible(Core::OutputWindow *ow)

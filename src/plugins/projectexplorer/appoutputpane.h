@@ -80,6 +80,9 @@ public:
     void prepareRunControlStart(RunControl *runControl);
     void showOutputPaneForRunControl(RunControl *runControl);
 
+    void clearForRunControl(const RunControl *runControl);
+    void setFilterTextForRunControl(const RunControl *runControl, const QString &text);
+
     void closeTabsWithoutPrompt();
 
 private:
@@ -170,6 +173,7 @@ private:
     QWidget *m_formatterWidget;
     ShowOutputTaskHandler * const m_handler;
     bool m_paneVisible = false;
+    bool m_injectingFilterText = false;
 };
 
 AppOutputPane &appOutputPane();
