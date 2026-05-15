@@ -23,6 +23,7 @@
 #include <QtTaskTree/QBarrier>
 #include <QtTaskTree/QTaskTree>
 
+#include <QChar>
 #include <QHash>
 #include <QMenu>
 #include <QObject>
@@ -34,6 +35,55 @@ using namespace QtTaskTree;
 using namespace ProjectExplorer;
 
 namespace Android::Internal {
+
+// Cap on the per-device entry history kept for re-rendering on filter changes.
+static constexpr int maxBufferedLines = 1000;
+
+struct LogcatEntry
+{
+    QString line;
+    bool bypassFilter = false;
+
+    static LogcatEntry fromLine(const QString &raw);
+};
+
+// Keep the line as received; coloring comes from adb's -v color.
+LogcatEntry LogcatEntry::fromLine(const QString &raw)
+{
+    return {.line = raw};
+}
+
+class LogcatFilter
+{
+public:
+    void setFromText(const QString &text);
+    bool accepts(const LogcatEntry &entry) const;
+
+    QString filterText() const { return m_filterText; }
+    bool isActive() const { return !m_predicates.isEmpty(); }
+
+    using FilterPredicate = std::function<bool(const LogcatEntry &)>;
+
+private:
+    QList<FilterPredicate> m_predicates;
+    QString m_filterText;
+};
+
+void LogcatFilter::setFromText(const QString &text)
+{
+    m_filterText = text;
+    m_predicates.clear();
+}
+
+bool LogcatFilter::accepts(const LogcatEntry &entry) const
+{
+    if (entry.bypassFilter)
+        return true;
+    for (const FilterPredicate &filterPredicate : m_predicates)
+        if (!filterPredicate(entry))
+            return false;
+    return true;
+}
 
 class LogcatStream : public QObject
 {
@@ -53,18 +103,27 @@ private:
     {
         QPointer<RunControl> tab;
         bool streaming = false;
+        QList<LogcatEntry> buffer;
+        LogcatFilter filter;
+
+        void appendEntry(const LogcatEntry &entry);
+        void applyFilter() const;
+        void renderFromBuffer() const;
+
+        QString windowFilterText() const
+        {
+            return filter.isActive() ? QString() : filter.filterText();
+        }
     };
 
     void onTabDestroyed();
 
-    void postMessage(const QString &msg, Utils::OutputFormat fmt)
-    {
-        if (m_tabContext.tab)
-            m_tabContext.tab->postMessage(msg, fmt, false);
-    }
+    void postMessage(const QString &msg);
 
     void onDisconnected();
     void onConnected();
+
+    void onOutputFilterTextChanged(const QString &text);
 
     const AndroidDevice::ConstPtr m_device;
     std::unique_ptr<QTaskTree> m_task;
@@ -119,6 +178,9 @@ void LogcatStream::attachTab(RunControl *tab)
     // adb tails only while the tab's output is visible (current tab + pane shown)
     QObject::connect(tab, &RunControl::outputVisibilityChanged,
                      this, &LogcatStream::setStreaming);
+    QObject::connect(tab, &RunControl::outputFilterChanged, this, [this](const QString &text) {
+        onOutputFilterTextChanged(text);
+    });
     QObject::connect(tab, &QObject::destroyed, this, [this] { onTabDestroyed(); });
     setStreaming(tab->isOutputVisible());
 }
@@ -151,14 +213,15 @@ void LogcatStream::start()
     if (m_device->deviceState() != IDevice::DeviceReadyToUse)
         return;
     const auto onSetup = [this](Process &process) {
-        const auto post = [this](const QString &line, Utils::OutputFormat fmt) {
-            if (m_tabContext.tab)
-                m_tabContext.tab->postMessage(line, fmt, false);
-        };
-        process.setStdOutLineCallback(
-            [post](const QString &line) { post(line, Utils::StdOutFormat); });
+        process.setStdOutLineCallback([this](const QString &line) {
+            // A flaky device/connection can make adb dump a corrupt binary chunk
+            // (NUL-padded log records) that renders as boxes, so drop any that does.
+            if (line.contains(QChar(u'\0')))
+                return;
+            m_tabContext.appendEntry(LogcatEntry::fromLine(line));
+        });
         process.setStdErrLineCallback(
-            [post](const QString &line) { post(line, Utils::StdErrFormat); });
+            [this](const QString &line) { postMessage(line); });
         // -T 1 starts the tail at the current head, skipping the device's existing
         // ring buffer (live tail only).
         process.setCommand(adbCommand({"logcat", "-T", "1", "-v", "color", "-v", "brief"}));
@@ -181,8 +244,7 @@ void LogcatStream::onDisconnected()
 {
     if (!m_task)
         return;
-    postMessage(banner(m_device->displayNameWithSerial(), QLatin1String("disconnected")),
-                Utils::NormalMessageFormat);
+    postMessage(banner(m_device->displayNameWithSerial(), QLatin1String("disconnected")));
     stop();
 }
 
@@ -190,6 +252,49 @@ void LogcatStream::onConnected()
 {
     if (m_tabContext.tab && m_tabContext.streaming)
         start();
+}
+
+void LogcatStream::postMessage(const QString &msg)
+{
+    m_tabContext.appendEntry({.line = msg, .bypassFilter = true});
+}
+
+void LogcatStream::TabContext::appendEntry(const LogcatEntry &entry)
+{
+    buffer.append(entry);
+    if (buffer.size() > maxBufferedLines)
+        buffer.removeFirst();
+    if (tab && filter.accepts(entry))
+        tab->postMessage(entry.line, Utils::StdOutFormat, false);
+}
+
+void LogcatStream::TabContext::applyFilter() const
+{
+    if (!tab)
+        return;
+    tab->setOutputFilterText(filter.filterText());
+    tab->setOutputContentFilter(windowFilterText());
+}
+
+void LogcatStream::TabContext::renderFromBuffer() const
+{
+    if (!tab)
+        return;
+    applyFilter();
+    tab->clearOutput();
+    for (const LogcatEntry &entry : buffer) {
+        if (filter.accepts(entry))
+            tab->postMessage(entry.line, Utils::StdOutFormat, false);
+    }
+}
+
+void LogcatStream::onOutputFilterTextChanged(const QString &text)
+{
+    m_tabContext.filter.setFromText(text);
+    if (m_tabContext.filter.isActive())
+        m_tabContext.renderFromBuffer();
+    else
+        m_tabContext.applyFilter();
 }
 
 static LogcatStream *ensureStream(const AndroidDevice::ConstPtr &device)
