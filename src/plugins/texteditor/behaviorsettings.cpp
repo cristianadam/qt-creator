@@ -3,9 +3,8 @@
 
 #include "behaviorsettings.h"
 
-#include "codestylepool.h"
 #include "extraencodingsettings.h"
-#include "simplecodestylepreferences.h"
+#include "icodestylepreferences.h"
 #include "storagesettings.h"
 #include "tabsettings.h"
 #include "texteditorconstants.h"
@@ -32,8 +31,6 @@
 using namespace Utils;
 
 namespace TextEditor {
-
-const char SettingsPrefix[] = "text";
 
 BehaviorSettings::BehaviorSettings(const Key &keyPrefix)
 {
@@ -219,7 +216,7 @@ void BehaviorSettingsWidget::apply()
     if (m_tabSettings.isDirty()) {
         m_tabSettings.apply();
         m_codeStyle->setTabSettings(m_tabSettings.data());
-        m_codeStyle->toSettings(SettingsPrefix);
+        m_codeStyle->toSettings(Constants::CODE_STYLE_SETTINGS_PREFIX);
     }
 }
 
@@ -233,40 +230,14 @@ public:
         setId(Constants::TEXT_EDITOR_BEHAVIOR_SETTINGS);
         setDisplayName(Tr::tr("Behavior"));
         setCategory(TextEditor::Constants::TEXT_EDITOR_SETTINGS_CATEGORY);
-        setWidgetCreator([this] { return new BehaviorSettingsWidget(&m_codeStyle); });
-
-        m_codeStyle.setDisplayName(Tr::tr("Global", "Settings"));
-        m_codeStyle.setId(Constants::GLOBAL_SETTINGS_ID);
-        m_codeStyle.fromSettings(SettingsPrefix);
-
-        m_defaultCodeStylePool.addCodeStyle(&m_codeStyle);
+        setWidgetCreator([] { return new BehaviorSettingsWidget(TextEditorSettings::codeStyle()); });
     }
-
-    CodeStylePool m_defaultCodeStylePool{nullptr};
-    SimpleCodeStylePreferences m_codeStyle;
 };
-
-
-static BehaviorSettingsPage &behaviorSettingsPage()
-{
-    static BehaviorSettingsPage theBehaviorSettingsPage;
-    return theBehaviorSettingsPage;
-}
-
-ICodeStylePreferences *globalCodeStyle()
-{
-    return &behaviorSettingsPage().m_codeStyle;
-}
-
-CodeStylePool *globalCodeStylePool()
-{
-    return &behaviorSettingsPage().m_defaultCodeStylePool;
-}
 
 void Internal::setupBehaviorSettings()
 {
+    static BehaviorSettingsPage theBehaviorSettingsPage;
     globalBehaviorSettings().readSettings();
-    (void) behaviorSettingsPage();
 }
 
 } // namespace TextEditor
