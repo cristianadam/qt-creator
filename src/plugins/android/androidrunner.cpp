@@ -6,6 +6,7 @@
 
 #include "androidconstants.h"
 #include "androiddevice.h"
+#include "androidlogcat.h"
 #include "androidrunnerworker.h"
 #include "androidtr.h"
 #include "androidutils.h"
@@ -114,6 +115,17 @@ Group androidKicker(const QStoredBarrier &barrier, RunControl *runControl)
             if (runControl->isRunning())
                 runControl->initiateStop();
         });
+        QObject::connect(glue, &RunnerInterface::started, runControl, [runControl] {
+            const qint64 pid = runControl->attachPid().pid();
+            BuildConfiguration * const bc = runControl->buildConfiguration();
+            if (pid <= 0 || !bc)
+                return;
+            bindRunningAppToLogcat(runControl, pid, packageName(bc));
+        });
+        // Recreated on every (re)start; self-disconnects so handlers do not stack.
+        QObject::connect(runControl, &RunControl::stopped, runControl, [runControl] {
+            unbindRunningAppFromLogcat(runControl);
+        }, Qt::SingleShotConnection);
     };
 
     return {
