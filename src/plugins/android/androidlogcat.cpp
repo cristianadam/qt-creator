@@ -105,32 +105,85 @@ QString LogcatEntry::displayText() const
     return result;
 }
 
+static bool matchesFreeText(const LogcatEntry &entry, const QString &term)
+{
+    return entry.line.contains(term, Qt::CaseInsensitive)
+           || entry.packageName.contains(term, Qt::CaseInsensitive);
+}
+
 class LogcatFilter
 {
 public:
     void setFromText(const QString &text);
+    void bindToPackage(qint64 pid, const QString &packageName);
+    void unbindFromApp()
+    {
+        m_pid = -1;
+        setFromText(m_filterText);
+    }
     bool accepts(const LogcatEntry &entry) const;
 
     QString filterText() const { return m_filterText; }
-    bool isActive() const { return !m_predicates.isEmpty(); }
+    bool isBoundToApp() const { return m_pid > 0; }
 
     using FilterPredicate = std::function<bool(const LogcatEntry &)>;
 
 private:
     QList<FilterPredicate> m_predicates;
+    qint64 m_pid = -1;
+    QString m_boundPackage;
     QString m_filterText;
+    QString m_keyword; // tail after "package:mine", forwarded to OutputWindow as a literal
 };
+
+static LogcatFilter::FilterPredicate minePredicate(qint64 pid, const QString &packageName)
+{
+    const QString processPrefix = packageName + u':';
+    return [pid, packageName, processPrefix](const LogcatEntry &e) {
+        return (pid > 0 && e.pid == pid)
+               || (!packageName.isEmpty()
+                   && (e.packageName.compare(packageName, Qt::CaseInsensitive) == 0
+                       || e.packageName.startsWith(processPrefix, Qt::CaseInsensitive)));
+    };
+}
 
 void LogcatFilter::setFromText(const QString &text)
 {
     m_filterText = text;
+    m_keyword.clear();
     m_predicates.clear();
+    const QString trimmed = text.trimmed();
+    if (trimmed.isEmpty())
+        return;
+    const QLatin1String pkgPrefix("package:");
+    if (trimmed.startsWith(pkgPrefix, Qt::CaseInsensitive)) {
+        const QString rest = trimmed.mid(pkgPrefix.size()).trimmed();
+        const int sp = rest.indexOf(QChar::Space);
+        const QString name = sp < 0 ? rest : rest.left(sp);
+        m_keyword = sp < 0 ? QString() : rest.mid(sp + 1).trimmed();
+        if (name.compare(QLatin1String("mine"), Qt::CaseInsensitive) == 0
+            && (m_pid > 0 || !m_boundPackage.isEmpty())) {
+            m_predicates.append(minePredicate(m_pid, m_boundPackage));
+        }
+    }
+}
+
+void LogcatFilter::bindToPackage(qint64 pid, const QString &packageName)
+{
+    m_pid = pid;
+    m_boundPackage = packageName;
+    m_filterText = QStringLiteral("package:mine");
+    m_keyword.clear();
+    m_predicates.clear();
+    m_predicates.append(minePredicate(pid, packageName));
 }
 
 bool LogcatFilter::accepts(const LogcatEntry &entry) const
 {
     if (entry.bypassFilter || !entry.parsed) // never hide unparsed lines
         return true;
+    if (!m_keyword.isEmpty() && !matchesFreeText(entry, m_keyword))
+        return false;
     for (const FilterPredicate &filterPredicate : m_predicates) {
         if (!filterPredicate(entry))
             return false;
@@ -154,6 +207,9 @@ public:
 
     RunControl *tab() const { return m_tabContext.tab; }
     void attachTab(RunControl *tab);
+
+    void bindToApp(qint64 pid, const QString &packageName);
+    void unbindFromApp();
 
 private:
     void start();
@@ -277,7 +333,33 @@ void LogcatStream::setStreaming(bool streaming)
     if (streaming == m_tabContext.streaming)
         return;
     m_tabContext.streaming = streaming;
-    streaming ? start() : stop();
+    if (streaming) {
+        start();
+        // window already has the content from before
+        m_tabContext.applyFilter();
+    } else {
+        if (!m_tabContext.streaming && !m_tabContext.filter.isBoundToApp())
+            stop();
+    }
+}
+
+void LogcatStream::bindToApp(qint64 pid, const QString &packageName)
+{
+    if (pid <= 0 || !m_tabContext.tab)
+        return;
+    setStreaming(true);
+    m_tabContext.processNames.insert(pid, packageName);
+    m_tabContext.filter.bindToPackage(pid, packageName);
+    m_tabContext.renderFromBuffer();
+}
+
+void LogcatStream::unbindFromApp()
+{
+    if (!m_tabContext.tab)
+        return;
+    m_tabContext.filter.unbindFromApp();
+    if (!m_tabContext.streaming)
+        stop();
 }
 
 void LogcatStream::populateProcesses()
@@ -464,6 +546,13 @@ void LogcatStream::onOutputFilterTextChanged(const QString &text)
     m_filterDebounce.start();
 }
 
+static AndroidDevice::ConstPtr deviceForRun(const RunControl *runControl)
+{
+    const auto snapshot = runControl->device();
+    return snapshot ? std::dynamic_pointer_cast<const AndroidDevice>(
+                          DeviceManager::find(snapshot->id())) : nullptr;
+}
+
 static LogcatStream *ensureStream(const AndroidDevice::ConstPtr &device)
 {
     if (!device)
@@ -475,6 +564,14 @@ static LogcatStream *ensureStream(const AndroidDevice::ConstPtr &device)
     auto *stream = new LogcatStream(device);
     reg.insert(id, stream);
     return stream;
+}
+
+static LogcatStream *findStream(RunControl *runControl)
+{
+    if (!runControl)
+        return nullptr;
+    const IDeviceConstPtr device = runControl->device();
+    return device ? streamRegistry().value(device->id()) : nullptr;
 }
 
 static RunControl *openLogcatTabForStream(LogcatStream *logcatStream)
@@ -493,6 +590,26 @@ static RunControl *openLogcatTabForStream(LogcatStream *logcatStream)
     }));
     runControl->start();
     return runControl;
+}
+
+void bindRunningAppToLogcat(RunControl *runControl, qint64 pid, const QString &packageName)
+{
+    if (!runControl || pid <= 0)
+        return;
+    const auto device = AndroidDevice::asReady(deviceForRun(runControl));
+    if (!device)
+        return;
+    showLogcatTab(device);
+    LogcatStream *stream = streamRegistry().value(device->id());
+    if (!stream)
+        return;
+    stream->bindToApp(pid, packageName);
+}
+
+void unbindRunningAppFromLogcat(RunControl *runControl)
+{
+    if (LogcatStream *stream = findStream(runControl))
+        stream->unbindFromApp();
 }
 
 void showLogcatTab(const AndroidDevice::ConstPtr &device)

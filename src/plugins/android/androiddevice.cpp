@@ -695,17 +695,9 @@ void AndroidDevice::startAvd()
 {
     const Storage<QString> serialNumberStorage;
 
-    const auto onDone = [this, serialNumberStorage] {
-        if (!serialNumberStorage->isEmpty()) {
-            DeviceManager::setDeviceState(id(), IDevice::DeviceReadyToUse);
-            updateDeviceFileAccess();
-        }
-    };
-
     const Group recipe {
         serialNumberStorage,
-        startAvdRecipe(avdName(), serialNumberStorage),
-        onGroupDone(onDone, CallDoneFlag::OnSuccess)
+        startAvdRecipe(avdName(), serialNumberStorage)
     };
 
     d->m_taskTreeRunner.start(recipe);
@@ -913,6 +905,15 @@ static void routeEmulatorEvent(const QString &serial, const Id &avdId,
     }
     DeviceManager::setDeviceState(avdId, state);
     updateDeviceFileAccess(avdId);
+}
+
+void markAvdDeviceReady(const QString &avdName, const QString &serialNumber)
+{
+    const Id avdId = androidDeviceId(avdName);
+    if (!DeviceManager::find(avdId))
+        return;
+    s_trackedAvdSerialIds.insert(serialNumber, avdId);
+    routeEmulatorEvent(serialNumber, avdId, IDevice::DeviceReadyToUse);
 }
 
 static void handleDevicesListChange(const QString &event)

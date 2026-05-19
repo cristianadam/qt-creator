@@ -6,6 +6,7 @@
 #include "androidbuildapkstep.h"
 #include "androidconfigurations.h"
 #include "androidconstants.h"
+#include "androiddevice.h"
 #include "androidqtversion.h"
 #include "androidsdkmanager.h"
 #include "androidtr.h"
@@ -749,12 +750,17 @@ static ExecutableItem waitForAvdRecipe(const QString &avdName, const Storage<QSt
 
 ExecutableItem startAvdRecipe(const QString &avdName, const Storage<QString> &serialNumberStorage)
 {
+    const auto onDone = [avdName, serialNumberStorage] {
+        if (!serialNumberStorage->isEmpty())
+            markAvdDeviceReady(avdName, *serialNumberStorage);
+    };
     return Group {
         If (serialNumberRecipe(avdName, serialNumberStorage) || startAvdAsyncRecipe(avdName)) >> Then {
             waitForAvdRecipe(avdName, serialNumberStorage)
         } >> Else {
             errorItem
-        }
+        },
+        onGroupDone(onDone, CallDoneFlag::OnSuccess)
     };
 }
 
