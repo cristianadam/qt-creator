@@ -147,10 +147,10 @@ BehaviorSettings &globalBehaviorSettings()
 class BehaviorSettingsWidget : public Core::IOptionsPageWidget
 {
 public:
-    BehaviorSettingsWidget(ICodeStylePreferences *codeStyle)
-        : m_codeStyle(codeStyle)
+    BehaviorSettingsWidget()
     {
-        m_tabSettings.setData(codeStyle->tabSettings());
+        m_tabSettings.setData(TextEditorSettings::codeStyle()->tabSettings());
+        m_tabSettings.setCodingStyleWarningVisible(true);
 
         using namespace Layouting;
         Column {
@@ -162,7 +162,6 @@ public:
             st,
         }.attachTo(this);
 
-        m_tabSettings.setCodingStyleWarningVisible(true);
         connect(&m_tabSettings, &TabSettings::codingStyleLinkClicked,
                 this, [] (TabSettings::CodingStyleLink link) {
             switch (link) {
@@ -182,10 +181,9 @@ public:
         installCheckSettingsDirtyTrigger(&globalExtraEncodingSettings());
     }
 
-    bool isDirty() const;
+    bool isDirty() const final;
     void apply() final;
 
-    ICodeStylePreferences *m_codeStyle;
     TabSettings m_tabSettings;
 };
 
@@ -215,8 +213,8 @@ void BehaviorSettingsWidget::apply()
 
     if (m_tabSettings.isDirty()) {
         m_tabSettings.apply();
-        m_codeStyle->setTabSettings(m_tabSettings.data());
-        m_codeStyle->toSettings(Constants::CODE_STYLE_SETTINGS_PREFIX);
+        TextEditorSettings::codeStyle()->setTabSettings(m_tabSettings.data());
+        TextEditorSettings::codeStyle()->toSettings(Constants::CODE_STYLE_SETTINGS_PREFIX);
     }
 }
 
@@ -230,7 +228,7 @@ public:
         setId(Constants::TEXT_EDITOR_BEHAVIOR_SETTINGS);
         setDisplayName(Tr::tr("Behavior"));
         setCategory(TextEditor::Constants::TEXT_EDITOR_SETTINGS_CATEGORY);
-        setWidgetCreator([] { return new BehaviorSettingsWidget(TextEditorSettings::codeStyle()); });
+        setWidgetCreator([] { return new BehaviorSettingsWidget; });
     }
 };
 
