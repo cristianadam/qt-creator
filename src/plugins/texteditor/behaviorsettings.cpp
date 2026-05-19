@@ -165,12 +165,11 @@ public:
     BehaviorSettingsWidgetImpl(BehaviorSettingsPage *page)
         : m_page(page)
     {
-        m_pageCodeStyle.setTabSettings(page->m_codeStyle.tabSettings());
-        m_tabSettingsWidget.setPreferences(&m_pageCodeStyle);
+        m_tabSettings.setData(page->m_codeStyle.tabSettings());
 
         using namespace Layouting;
         Column {
-            &m_tabSettingsWidget,
+            &m_tabSettings,
             &globalTypingSettings(),
             &globalStorageSettings(),
             &globalExtraEncodingSettings(),
@@ -178,8 +177,8 @@ public:
             st,
         }.attachTo(this);
 
-        m_tabSettingsWidget.setCodingStyleWarningVisible(true);
-        connect(&m_tabSettingsWidget, &TabSettings::codingStyleLinkClicked,
+        m_tabSettings.setCodingStyleWarningVisible(true);
+        connect(&m_tabSettings, &TabSettings::codingStyleLinkClicked,
                 this, [] (TabSettings::CodingStyleLink link) {
             switch (link) {
             case TabSettings::CppLink:
@@ -191,7 +190,7 @@ public:
             }
         });
 
-        installMarkSettingsDirtyTriggerRecursively(&m_pageCodeStyle);
+        installCheckSettingsDirtyTrigger(&m_tabSettings);
         installCheckSettingsDirtyTrigger(&globalTypingSettings());
         installCheckSettingsDirtyTrigger(&globalStorageSettings());
         installCheckSettingsDirtyTrigger(&globalBehaviorSettings());
@@ -202,8 +201,7 @@ public:
     void apply() final;
 
     BehaviorSettingsPage *m_page;
-    TabSettings m_tabSettingsWidget;
-    SimpleCodeStylePreferences m_pageCodeStyle;
+    TabSettings m_tabSettings;
 };
 
 BehaviorSettingsPage::BehaviorSettingsPage()
@@ -231,7 +229,7 @@ bool BehaviorSettingsWidgetImpl::isDirty() const
     if (globalExtraEncodingSettings().isDirty())
         return true;
 
-    if (m_page->m_codeStyle.tabSettings() != m_pageCodeStyle.tabSettings())
+    if (m_tabSettings.isDirty())
         return true;
 
     return false;
@@ -244,8 +242,9 @@ void BehaviorSettingsWidgetImpl::apply()
     globalStorageSettings().apply();
     globalExtraEncodingSettings().apply();
 
-    if (m_page->m_codeStyle.tabSettings() != m_pageCodeStyle.tabSettings()) {
-        m_page->m_codeStyle.setTabSettings(m_pageCodeStyle.tabSettings());
+    if (m_tabSettings.isDirty()) {
+        m_tabSettings.apply();
+        m_page->m_codeStyle.setTabSettings(m_tabSettings.data());
         m_page->m_codeStyle.toSettings(m_page->m_settingsPrefix);
     }
 }
