@@ -627,6 +627,11 @@ void RunControl::showOutputPane()
     appOutputPane().showOutputPaneForRunControl(this);
 }
 
+void RunControl::detachOutputPaneTab()
+{
+    appOutputPane().detachTabForRunControl(this);
+}
+
 void RunControl::setupFormatter(OutputFormatter *formatter) const
 {
     QList<OutputLineParser *> parsers = createOutputParsers(buildConfiguration());
@@ -734,7 +739,10 @@ Icon RunControl::icon() const
 
 void RunControl::setRunControlsEnabled(bool enabled)
 {
+    if (d->data.runControlsEnabled == enabled)
+        return;
     d->data.runControlsEnabled = enabled;
+    emit runControlsEnabledChanged();
 }
 
 bool RunControl::runControlsEnabled() const

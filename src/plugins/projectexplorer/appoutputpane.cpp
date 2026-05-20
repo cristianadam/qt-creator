@@ -688,6 +688,8 @@ void AppOutputPane::createNewOutputWindow(RunControl *rc)
     });
     connect(rc, &RunControl::applicationProcessHandleChanged,
             this, &AppOutputPane::enableDefaultButtons);
+    connect(rc, &RunControl::runControlsEnabledChanged,
+            this, &AppOutputPane::enableDefaultButtons);
     connect(rc, &RunControl::appendMessage,
             this, [this, rc](const QString &out, OutputFormat format) {
                 appendMessage(rc, out, format);
@@ -1001,6 +1003,28 @@ void AppOutputPane::showOutputPaneForRunControl(RunControl *runControl)
 void AppOutputPane::closeTabsWithoutPrompt()
 {
     closeTabs(CloseTabNoPrompt);
+}
+
+void AppOutputPane::detachTabForRunControl(RunControl *runControl)
+{
+    if (!runControl)
+        return;
+    RunControlTab * const tab = tabFor(runControl);
+    if (!tab)
+        return;
+    QWidget * const window = tab->window;
+    const int idx = m_tabWidget->indexOf(window);
+    if (idx < 0)
+        return;
+    m_tabWidget->removeTab(idx);
+    delete window;
+    Utils::erase(m_runControlTabs, [runControl](const RunControlTab &t) {
+        return t.runControl == runControl;
+    });
+    updateCloseActions();
+    setFilteringEnabled(m_tabWidget->count() > 0);
+    if (m_runControlTabs.isEmpty())
+        hide();
 }
 
 void AppOutputPane::showTabFor(RunControl *rc)

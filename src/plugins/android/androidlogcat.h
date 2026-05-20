@@ -17,6 +17,7 @@ namespace Android::Internal {
 
 void showLogcatTab(const AndroidDevice::ConstPtr &device);
 
+void prepareForLogcatTab(ProjectExplorer::RunControl *runControl);
 void bindRunningAppToLogcat(
     ProjectExplorer::RunControl *runControl, qint64 pid, const QString &packageName);
 void unbindRunningAppFromLogcat(ProjectExplorer::RunControl *runControl);

@@ -138,6 +138,7 @@ Group androidKicker(const QStoredBarrier &barrier, RunControl *runControl)
 
 Group androidRecipe(RunControl *runControl)
 {
+    prepareForLogcatTab(runControl);
     const auto kicker = [runControl](const QStoredBarrier &barrier) {
         return androidKicker(barrier, runControl);
     };

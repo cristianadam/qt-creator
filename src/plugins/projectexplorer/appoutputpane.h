@@ -102,6 +102,7 @@ public:
     void setContentFilterForRunControl(const RunControl *runControl, const QString &pattern);
 
     void closeTabsWithoutPrompt();
+    void detachTabForRunControl(RunControl *runControl);
 
 private:
     enum CloseTabMode {
