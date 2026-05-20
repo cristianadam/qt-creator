@@ -392,3 +392,61 @@
     \sa {Manage language servers}{How to: Manage language servers},
     {Managing language servers}, {Building and running projects}
 */
+
+/*!
+    \page creator-how-to-set-up-vale.html
+    \previouspage creator-how-tos.html
+
+    \ingroup creator-how-to-lsp
+
+    \title Set up Vale
+
+    Vale is a linter that checks documentation source files for style, grammar,
+    and terminology issues. The \uicontrol {Vale Language Server} extension
+    integrates Vale into \QC using the
+    \l{Language Server Protocol}{language server protocol (LSP)}.
+
+    \section1 Install the Vale Language Server extension
+
+    \list 1
+        \li Go to the \uicontrol Extensions mode.
+        \li Select \uicontrol {Use external repository}.
+        \li Select \uicontrol {Vale Language Server}.
+        \li Select \uicontrol Install.
+        \li Follow the instructions in the installation dialog to complete
+            the installation.
+    \endlist
+
+    \section1 Install Vale binaries
+
+    After installing the extension, open a text file that you want to check
+    with Vale in the editor. \QC asks whether to allow the extension to fetch
+    data from the internet to check for new versions of the Vale language
+    server and to download and install the Vale binaries automatically. Select
+    \uicontrol {Show Details} to review what is downloaded before confirming.
+
+    To use an existing Vale installation instead, go to
+    \preferences > \uicontrol Vale and set the path of the Vale executable
+    in \uicontrol {Binary}.
+
+    \section1 Set a Vale configuration file
+
+    You need a \c {.vale.ini} configuration file to use Vale. For more
+    information about Vale configuration, see \l{Vale: .vale.ini}.
+
+    To set your \c {.vale.ini} configuration file path, go to \preferences >
+    \uicontrol Vale > \uicontrol {Config Path} and specify the path of the
+    configuration file.
+
+    \section1 Set Vale preferences
+
+    You can set additional Vale preferences in \preferences > \uicontrol Vale.
+
+    To automatically install Vale, select \uicontrol {Auto Install Vale}.
+
+    To run \c {vale sync} automatically when the server starts, select
+    \uicontrol {Sync On Startup}.
+
+    \sa {Manage language servers}{How to: Manage language servers},
+    {Managing language servers}, {Install extensions}
+*/
