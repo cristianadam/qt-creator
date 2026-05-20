@@ -34,6 +34,8 @@
 #include <QRegularExpression>
 #include <QTimer>
 
+#include <utility>
+
 using namespace Utils;
 using namespace Core;
 using namespace QtTaskTree;
@@ -211,10 +213,63 @@ public:
     void bindToApp(qint64 pid, const QString &packageName);
     void unbindFromApp();
 
+    void setJdbCallbacks(RunControl *owner, JdbCallback onWaitChunk, JdbCallback onSettled);
+    void clearJdbCallbacks(RunControl *requester);
+
 private:
     void start();
     void stop();
     void setStreaming(bool streaming);
+
+    bool shouldKeepRunning() const;
+
+    struct JdbHandshakeWatcher
+    {
+        JdbCallback onWaitChunk;
+        JdbCallback onSettled;
+        QPointer<RunControl> owner;
+        qint64 pid = -1;
+        QList<qint64> pendingWaitPids;
+
+        bool isListening() const { return bool(onWaitChunk) || bool(onSettled); }
+        bool ownerDied() const { return owner.isNull(); }
+        void firePendingWaitFor(qint64 boundPid)
+        {
+            if (ownerDied()) {
+                *this = {};
+                return;
+            }
+            pid = boundPid;
+            const bool waitSeen = pendingWaitPids.contains(boundPid);
+            pendingWaitPids.clear();
+            if (waitSeen && onWaitChunk) {
+                auto callback = std::move(onWaitChunk);
+                callback();
+            }
+        }
+        void observe(const LogcatEntry &entry)
+        {
+            if (!isListening() || !entry.parsed)
+                return;
+            if (ownerDied()) {
+                *this = {};
+                return;
+            }
+            if (onWaitChunk && entry.line.contains(QLatin1String("Sending WAIT chunk"))) {
+                if (pid <= 0) {
+                    pendingWaitPids.append(entry.pid);
+                } else if (entry.pid == pid) {
+                    auto callback = std::move(onWaitChunk);
+                    callback();
+                }
+            }
+            if (onSettled && entry.pid == pid
+                && entry.line.contains(QLatin1String("debugger has settled"))) {
+                auto callback = std::move(onSettled);
+                callback();
+            }
+        }
+    };
 
     struct TabContext
     {
@@ -252,6 +307,7 @@ private:
     TabContext m_tabContext;
     QTimer m_filterDebounce;
     bool m_adbFailedBannered = false;
+    JdbHandshakeWatcher m_jdb;
 
     CommandLine adbCommand(const QStringList &args) const
     {
@@ -335,10 +391,9 @@ void LogcatStream::setStreaming(bool streaming)
     m_tabContext.streaming = streaming;
     if (streaming) {
         start();
-        // window already has the content from before
         m_tabContext.applyFilter();
     } else {
-        if (!m_tabContext.streaming && !m_tabContext.filter.isBoundToApp())
+        if (!shouldKeepRunning())
             stop();
     }
 }
@@ -348,6 +403,8 @@ void LogcatStream::bindToApp(qint64 pid, const QString &packageName)
     if (pid <= 0 || !m_tabContext.tab)
         return;
     setStreaming(true);
+    if (m_jdb.isListening())
+        m_jdb.firePendingWaitFor(pid);
     m_tabContext.processNames.insert(pid, packageName);
     m_tabContext.filter.bindToPackage(pid, packageName);
     m_tabContext.renderFromBuffer();
@@ -358,7 +415,33 @@ void LogcatStream::unbindFromApp()
     if (!m_tabContext.tab)
         return;
     m_tabContext.filter.unbindFromApp();
-    if (!m_tabContext.streaming)
+    if (!shouldKeepRunning())
+        stop();
+}
+
+bool LogcatStream::shouldKeepRunning() const
+{
+    return m_tabContext.streaming || m_tabContext.filter.isBoundToApp() || m_jdb.isListening();
+}
+
+void LogcatStream::setJdbCallbacks(
+    RunControl *owner, JdbCallback onWaitChunk, JdbCallback onSettled)
+{
+    m_jdb = {.onWaitChunk = std::move(onWaitChunk),
+             .onSettled = std::move(onSettled),
+             .owner = owner};
+    QObject::connect(owner, &RunControl::stopped, this,
+                     [this, owner] { clearJdbCallbacks(owner); },
+                     Qt::SingleShotConnection);
+    start();
+}
+
+void LogcatStream::clearJdbCallbacks(RunControl *requester)
+{
+    if (requester != m_jdb.owner)
+        return;
+    m_jdb = {};
+    if (!shouldKeepRunning())
         stop();
 }
 
@@ -412,10 +495,10 @@ void LogcatStream::start()
             if (entry.pid > 0 && !m_tabContext.processNames.contains(entry.pid))
                 populateProcesses();
             m_tabContext.appendEntry(entry);
+            m_jdb.observe(entry);
         });
         process.setStdErrLineCallback([this](const QString &line) {
-            // adb noise while it waits to re-attach the serial; the
-            // disconnect banner already tells the story.
+            // adb re-attach noise; the disconnect banner already tells the story.
             if (line.contains(QLatin1String("- waiting for device -")))
                 return;
             postMessage(line);
@@ -442,10 +525,9 @@ void LogcatStream::stop()
 {
     // Deleting the tree kills the tail. Defer that past this event loop
     // pass: a synchronous kill can race the tail's in-flight output.
-    // The tab's visibility flickers while the pane rearranges: only tear
-    // down if streaming stayed off.
+    // Visibility flickers while the pane rearranges: re-check before tearing down.
     QTimer::singleShot(0, this, [this] {
-        if (!m_tabContext.streaming)
+        if (!shouldKeepRunning())
             m_task.reset();
     });
 }
@@ -496,7 +578,7 @@ void LogcatStream::onConnected()
     if (m_disconnected)
         postMessage(banner(m_device->displayNameWithSerial(), QLatin1String("connected")));
     m_disconnected = false;
-    if (m_tabContext.tab && m_tabContext.streaming)
+    if (shouldKeepRunning())
         start();
 }
 
@@ -610,6 +692,25 @@ void unbindRunningAppFromLogcat(RunControl *runControl)
 {
     if (LogcatStream *stream = findStream(runControl))
         stream->unbindFromApp();
+}
+
+bool setJdbCallbacksForLogcat(
+    RunControl *runControl, JdbCallback onWaitChunk, JdbCallback onSettled)
+{
+    if (!runControl)
+        return false;
+    LogcatStream *stream = ensureStream(deviceForRun(runControl));
+    if (!stream)
+        return false;
+    openLogcatTabForStream(stream);
+    stream->setJdbCallbacks(runControl, std::move(onWaitChunk), std::move(onSettled));
+    return true;
+}
+
+void clearJdbCallbacksForLogcat(RunControl *runControl)
+{
+    if (LogcatStream *stream = findStream(runControl))
+        stream->clearJdbCallbacks(runControl);
 }
 
 void showLogcatTab(const AndroidDevice::ConstPtr &device)
