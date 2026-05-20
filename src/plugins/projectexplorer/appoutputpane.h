@@ -99,6 +99,7 @@ public:
     void setFilterTextForRunControl(const RunControl *runControl, const QString &text);
 
     void closeTabsWithoutPrompt();
+    void detachTabForRunControl(const RunControl *runControl);
 
 private:
     enum CloseTabMode {
@@ -188,6 +189,8 @@ private:
     QWidget *m_formatterWidget;
     ShowOutputTaskHandler * const m_handler;
     bool m_paneVisible = false;
+    QString m_stashedUserFilter;
+    bool m_onSourceFilteredTab = false;
     bool m_injectingFilterText = false;
 };
 
@@ -197,6 +200,9 @@ void setupAppOutputPane();
 void destroyAppOutputPane();
 
 } // namespace Internal
+
+// Whether the pane still lists a tab; a closing tab is unlisted before it stops.
+PROJECTEXPLORER_EXPORT bool appOutputPaneHasTab(RunControl *runControl);
 
 // Exposes the Android Logcat block of the Application Output settings
 PROJECTEXPLORER_EXPORT const Internal::LogcatSettings &logcatSettings();

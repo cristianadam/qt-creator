@@ -199,6 +199,7 @@ public:
     IDevice::ConstPtr device;
     Icon icon;
     bool runControlsEnabled = true;
+    bool filtersOutputAtSource = false;
     const MacroExpander *macroExpander = nullptr;
     AspectContainerData aspectData;
     QString buildKey;
@@ -465,6 +466,16 @@ void RunControl::clearOutput()
     appOutputPane().clearForRunControl(this);
 }
 
+void RunControl::setFiltersOutputAtSource(bool enabled)
+{
+    d->data.filtersOutputAtSource = enabled;
+}
+
+bool RunControl::filtersOutputAtSource() const
+{
+    return d->data.filtersOutputAtSource;
+}
+
 void RunControl::setOutputFilterText(const QString &text)
 {
     appOutputPane().setFilterTextForRunControl(this, text);
@@ -623,6 +634,11 @@ void RunControl::showOutputPane()
     appOutputPane().showOutputPaneForRunControl(this);
 }
 
+void RunControl::detachOutputPaneTab()
+{
+    appOutputPane().detachTabForRunControl(this);
+}
+
 void RunControl::setupFormatter(OutputFormatter *formatter) const
 {
     QList<OutputLineParser *> parsers = createOutputParsers(buildConfiguration());
@@ -735,7 +751,10 @@ Icon RunControl::icon() const
 
 void RunControl::setRunControlsEnabled(bool enabled)
 {
+    if (d->data.runControlsEnabled == enabled)
+        return;
     d->data.runControlsEnabled = enabled;
+    emit runControlsEnabledChanged();
 }
 
 bool RunControl::runControlsEnabled() const

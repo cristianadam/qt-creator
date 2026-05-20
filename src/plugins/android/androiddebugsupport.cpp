@@ -6,6 +6,7 @@
 #include "androidconfigurations.h"
 #include "androidconstants.h"
 #include "androiddevice.h"
+#include "androidlogcat.h"
 #include "androidrunner.h"
 #include "androidqtversion.h"
 #include "androidutils.h"
@@ -167,6 +168,9 @@ public:
     {
         setId("AndroidDebugWorkerFactory");
         setRecipeProducer([](RunControl *runControl) {
+            prepareForLogcatTab(runControl);
+            QObject::connect(runControl, &RunControl::aboutToStart, runControl,
+                             [runControl] { adoptRunControlForLogcat(runControl); });
             const auto kicker = [runControl](const QStoredBarrier &barrier) {
                 return androidKicker(barrier, runControl);
             };

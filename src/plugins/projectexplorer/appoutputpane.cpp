@@ -621,14 +621,16 @@ void AppOutputPane::updateFilter()
     if (RunControlTab * const tab = currentTab()) {
         QTC_ASSERT(tab->window, return);
         tab->window->updateCategoriesProperties(tab->window->registry()->categories());
-        if (!tab->window->updateFilterProperties(
-                filterText(),
-                filterCaseSensitivity(),
-                filterUsesRegexp(),
-                filterIsInverted(),
-                beforeContext(),
-                afterContext())) {
-            tab->window->filterNewContent();
+        if (!tab->runControl || !tab->runControl->filtersOutputAtSource()) {
+            if (!tab->window->updateFilterProperties(
+                    filterText(),
+                    filterCaseSensitivity(),
+                    filterUsesRegexp(),
+                    filterIsInverted(),
+                    beforeContext(),
+                    afterContext())) {
+                tab->window->filterNewContent();
+            }
         }
         if (tab->runControl)
             emit tab->runControl->outputFilterChanged(filterText());
@@ -696,6 +698,8 @@ void AppOutputPane::createNewOutputWindow(RunControl *rc)
         }
     });
     connect(rc, &RunControl::applicationProcessHandleChanged,
+            this, &AppOutputPane::enableDefaultButtons);
+    connect(rc, &RunControl::runControlsEnabledChanged,
             this, &AppOutputPane::enableDefaultButtons);
     connect(rc, &RunControl::appendMessage,
             this, [this, rc](const QString &out, OutputFormat format) {
@@ -789,8 +793,8 @@ void AppOutputPane::createNewOutputWindow(RunControl *rc)
     qtInternal->setToolTip(Tr::tr("Filter Qt Internal Log Categories"));
     qtInternal->setCheckable(false);
 
-    LoggingCategoryModel *categoryModel = new LoggingCategoryModel(this);
-    QSortFilterProxyModel *sortFilterModel = new QSortFilterProxyModel(this);
+    LoggingCategoryModel *categoryModel = new LoggingCategoryModel(ow);
+    QSortFilterProxyModel *sortFilterModel = new QSortFilterProxyModel(ow);
     sortFilterModel->setSourceModel(categoryModel);
     sortFilterModel->sort(LoggingCategoryModel::Column::Name);
     sortFilterModel->setFilterKeyColumn(LoggingCategoryModel::Column::Name);
@@ -1014,6 +1018,30 @@ void AppOutputPane::closeTabsWithoutPrompt()
     closeTabs(CloseTabNoPrompt);
 }
 
+void AppOutputPane::detachTabForRunControl(const RunControl *runControl)
+{
+    if (!runControl)
+        return;
+    RunControlTab * const tab = tabFor(runControl);
+    if (!tab)
+        return;
+    const int idx = m_tabWidget->indexOf(tab->window);
+    if (idx < 0)
+        return;
+    QWidget * const page = m_tabWidget->QTabWidget::widget(idx);
+    m_tabWidget->removeTab(idx);
+    delete page;
+    if (tab->runControl)
+        tab->runControl->setOutputVisible(false);
+    Utils::erase(m_runControlTabs, [runControl](const RunControlTab &t) {
+        return t.runControl == runControl;
+    });
+    updateCloseActions();
+    setFilteringEnabled(m_tabWidget->count() > 0);
+    if (m_runControlTabs.isEmpty())
+        hide();
+}
+
 void AppOutputPane::showTabFor(RunControl *rc)
 {
     if (RunControlTab * const tab = tabFor(rc))
@@ -1036,6 +1064,8 @@ void AppOutputPane::reRunRunControl()
     // Queued chunks survive clear() and would drain into the fresh run.
     tab->window->flush();
     handleOldOutput(tab->window);
+    if (settings().cleanOldOutput() && tab->runControl->filtersOutputAtSource())
+        emit tab->runControl->outputCleared();
     tab->window->scrollToBottom();
     tab->runControl->initiateStart();
 }
@@ -1209,10 +1239,25 @@ void AppOutputPane::tabChanged(int i)
     RunControlTab * const controlTab = tabFor(m_tabWidget->widget(i));
     if (i != -1 && controlTab && QTC_GUARD(controlTab->window)) {
         controlTab->window->updateCategoriesProperties(controlTab->window->registry()->categories());
-        if (!controlTab->window->updateFilterProperties(filterText(), filterCaseSensitivity(),
-                                                    filterUsesRegexp(), filterIsInverted(),
-                                                    beforeContext(), afterContext()))
-            controlTab->window->filterNewContent();
+        const bool sourceTab = controlTab->runControl
+                               && controlTab->runControl->filtersOutputAtSource();
+        if (sourceTab && !m_onSourceFilteredTab) {
+            m_stashedUserFilter = filterText();
+        } else if (!sourceTab && m_onSourceFilteredTab) {
+            if (auto *edit = qobject_cast<QLineEdit *>(filterWidget())) {
+                m_injectingFilterText = true;
+                edit->setText(m_stashedUserFilter);
+                m_injectingFilterText = false;
+            }
+        }
+        m_onSourceFilteredTab = sourceTab;
+        if (!sourceTab) {
+            const bool changed = controlTab->window->updateFilterProperties(
+                filterText(), filterCaseSensitivity(), filterUsesRegexp(), filterIsInverted(),
+                beforeContext(), afterContext());
+            if (!changed)
+                controlTab->window->filterNewContent();
+        }
         enableButtons(controlTab->runControl);
     } else {
         enableDefaultButtons();
@@ -1552,6 +1597,11 @@ static const AppOutputSettingsPage settingsPage;
 } // namespace ProjectExplorer::Internal
 
 namespace ProjectExplorer {
+
+bool appOutputPaneHasTab(RunControl *runControl)
+{
+    return Internal::appOutputPane().allRunControls().contains(runControl);
+}
 
 const Internal::LogcatSettings &logcatSettings()
 {

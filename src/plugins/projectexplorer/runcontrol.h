@@ -245,6 +245,10 @@ public:
     // Sets the App Output filter field text without triggering filtering;
     // no-op unless this run control's tab is current.
     void setOutputFilterText(const QString &text);
+    // The pane skips its own document filtering for this run control's tab
+    // and only reports the filter text; the owner filters and replays.
+    void setFiltersOutputAtSource(bool enabled);
+    bool filtersOutputAtSource() const;
 
     void requestDebugChannel();
     bool usesDebugChannel() const;
@@ -269,6 +273,7 @@ public:
     Utils::ProcessHandle attachPid() const;
 
     void showOutputPane();
+    void detachOutputPaneTab();
 
     Canceler canceler();
     void handleProcessCancellation(Utils::Process *process);
@@ -290,6 +295,7 @@ signals:
     void canceled();
     void stopped();
     void applicationProcessHandleChanged(QPrivateSignal);
+    void runControlsEnabledChanged();
     void stdOutData(const QByteArray &data);
     void outputVisibilityChanged(bool visible);
 
