@@ -31,6 +31,8 @@
 #include <QObject>
 #include <QPointer>
 
+#include <utility>
+
 using namespace Utils;
 using namespace Core;
 using namespace QtTaskTree;
@@ -190,7 +192,33 @@ public:
     void bindToApp(qint64 pid, const QString &packageName);
     void unbindFromApp();
 
+    void setJdbCallbacks(JdbCallback onWaitChunk, JdbCallback onSettled);
+    void clearJdbCallbacks();
+
 private:
+    bool shouldKeepRunning() const;
+
+    struct JdbHandshakeWatcher
+    {
+        JdbCallback onWaitChunk;
+        JdbCallback onSettled;
+
+        bool isListening() const { return bool(onWaitChunk) || bool(onSettled); }
+        void observe(const QString &line)
+        {
+            if (!isListening())
+                return;
+            if (onWaitChunk && line.contains(QLatin1String("Sending WAIT chunk"))) {
+                auto callback = std::move(onWaitChunk);
+                callback();
+            }
+            if (onSettled && line.contains(QLatin1String("debugger has settled"))) {
+                auto callback = std::move(onSettled);
+                callback();
+            }
+        }
+    };
+
     struct TabContext
     {
         QPointer<RunControl> tab;
@@ -222,6 +250,7 @@ private:
     const AndroidDevice::ConstPtr m_device;
     std::unique_ptr<QTaskTree> m_task;
     TabContext m_tabContext;
+    JdbHandshakeWatcher m_jdb;
 
     CommandLine adbCommand(const QStringList &args) const
     {
@@ -298,7 +327,7 @@ void LogcatStream::setStreaming(bool streaming)
         start();
         // window already has the content from before
         m_tabContext.applyFilter();
-    } else if (!m_tabContext.filter.isBoundToApp()) {
+    } else if (!shouldKeepRunning()) {
         stop();
     }
 }
@@ -317,7 +346,25 @@ void LogcatStream::unbindFromApp()
         return;
     m_tabContext.filter.clear();
     m_tabContext.renderFromBuffer();
-    if (!m_tabContext.streaming)
+    if (!shouldKeepRunning())
+        stop();
+}
+
+bool LogcatStream::shouldKeepRunning() const
+{
+    return m_tabContext.streaming || m_tabContext.filter.isBoundToApp() || m_jdb.isListening();
+}
+
+void LogcatStream::setJdbCallbacks(JdbCallback onWaitChunk, JdbCallback onSettled)
+{
+    m_jdb = {std::move(onWaitChunk), std::move(onSettled)};
+    start();
+}
+
+void LogcatStream::clearJdbCallbacks()
+{
+    m_jdb = {};
+    if (!shouldKeepRunning())
         stop();
 }
 
@@ -369,6 +416,7 @@ void LogcatStream::start()
                 refreshProcessNames();
             }
             m_tabContext.appendEntry(entry);
+            m_jdb.observe(line);
         });
         process.setStdErrLineCallback(
             [this](const QString &line) { postMessage(line); });
@@ -401,7 +449,7 @@ void LogcatStream::onDisconnected()
 
 void LogcatStream::onConnected()
 {
-    if (m_tabContext.tab && m_tabContext.streaming)
+    if (shouldKeepRunning())
         start();
 }
 
@@ -520,6 +568,24 @@ void unbindRunningAppFromLogcat(RunControl *runControl)
 {
     if (LogcatStream *const stream = findStream(runControl))
         stream->unbindFromApp();
+}
+
+void setJdbCallbacksForLogcat(
+    RunControl *runControl, JdbCallback onWaitChunk, JdbCallback onSettled)
+{
+    if (!runControl)
+        return;
+    LogcatStream *const stream = ensureStream(AndroidDevice::asReady(runControl->device()));
+    if (!stream)
+        return;
+    openLogcatTabForStream(stream);
+    stream->setJdbCallbacks(std::move(onWaitChunk), std::move(onSettled));
+}
+
+void clearJdbCallbacksForLogcat(RunControl *runControl)
+{
+    if (LogcatStream *const stream = findStream(runControl))
+        stream->clearJdbCallbacks();
 }
 
 void showLogcatTab(const AndroidDevice::ConstPtr &device)
