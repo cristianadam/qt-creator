@@ -563,15 +563,19 @@ AndroidDeviceInfo AndroidDevice::androidDeviceInfoFromDevice(const ConstPtr &dev
     return info;
 }
 
+static Id androidDeviceId(const QString &suffix)
+{
+    return Id(Constants::ANDROID_DEVICE_ID).withSuffix(':').withSuffix(suffix);
+}
+
 Id AndroidDevice::idFromDeviceInfo(const AndroidDeviceInfo &info)
 {
-    const QString id = (info.type == IDevice::Hardware ? info.serialNumber : info.avdName);
-    return  Id(Constants::ANDROID_DEVICE_ID).withSuffix(':').withSuffix(id);
+    return androidDeviceId(info.type == IDevice::Hardware ? info.serialNumber : info.avdName);
 }
 
 Id AndroidDevice::idFromAvdInfo(const CreateAvdInfo &info)
 {
-    return Id(Constants::ANDROID_DEVICE_ID).withSuffix(':').withSuffix(info.name);
+    return androidDeviceId(info.name);
 }
 
 QStringList AndroidDevice::supportedAbis() const
@@ -926,7 +930,7 @@ static void handleDevicesListChange(const QString &serialNumber)
 
     if (isEmulator) {
         const QString avdName = emulatorName(serial);
-        const Id avdId = Id(Constants::ANDROID_DEVICE_ID).withSuffix(':').withSuffix(avdName);
+        const Id avdId = androidDeviceId(avdName);
         DeviceManager::setDeviceState(avdId, state);
         if (IDevice::Ptr dev = DeviceManager::find(avdId)) {
             AndroidDevice *androidDev = static_cast<AndroidDevice *>(dev.get());
@@ -935,7 +939,7 @@ static void handleDevicesListChange(const QString &serialNumber)
         }
         updateDeviceFileAccess(avdId);
     } else {
-        const Id id = Id(Constants::ANDROID_DEVICE_ID).withSuffix(':').withSuffix(serial);
+        const Id id = androidDeviceId(serial);
         QString displayName = AndroidConfig::getProductModel(serial);
         // Check if the device is connected via WiFi. A sample serial of such devices can be
         // like: "192.168.1.190:5555"
