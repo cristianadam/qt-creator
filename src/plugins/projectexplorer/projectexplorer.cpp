@@ -2880,7 +2880,10 @@ bool ProjectExplorerPlugin::renameFile(const Utils::FilePath &source, const Util
 
 void ProjectExplorerPluginPrivate::startRunControl(RunControl *runControl)
 {
-    appOutputPane().prepareRunControlStart(runControl);
+    if (runControl->suppressApplicationOutput())
+        connect(runControl, &RunControl::stopped, runControl, &RunControl::deleteLater);
+    else
+        appOutputPane().prepareRunControlStart(runControl);
     connect(runControl, &QObject::destroyed, this, &ProjectExplorerPluginPrivate::checkForShutdown,
             Qt::QueuedConnection);
     ++m_activeRunControlCount;
