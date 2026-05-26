@@ -224,7 +224,7 @@ public:
 
     void setLinks(const QList<LinkWithColumns> &links) { m_links = links; }
 
-    QVariant data(int column, int role) const
+    QVariant data(int column, int role) const final
     {
         if (role == Qt::DisplayRole && column >= 0 && column < m_data.size())
             return m_data.at(column);
@@ -645,7 +645,7 @@ void IssuesWidget::updateUi(const QString &kind)
             if (id > 0 && id <= int(info.issueKinds.size()))
                 m_currentPrefix = info.issueKinds.at(id - 1).prefix;
             else
-                m_currentPrefix = info.issueKinds.size() ? info.issueKinds.front().prefix : QString{};
+                m_currentPrefix = !info.issueKinds.empty() ? info.issueKinds.front().prefix : QString{};
         }
     }
     fetchTable();
@@ -846,8 +846,8 @@ static QList<LinkWithColumns> linksForIssue(const std::map<QString, Dto::Any> &i
     auto end = issueRow.end();
     auto findColumn = [columnInfos](const QString &columnKey) {
         int col = 0;
-        for (auto it = columnInfos.cbegin(), end = columnInfos.cend(); it != end; ++it) {
-            if (it->key == columnKey)
+        for (const auto &columnInfo : columnInfos) {
+            if (columnInfo.key == columnKey)
                 return col;
             ++col;
         }
