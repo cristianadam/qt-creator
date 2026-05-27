@@ -21,6 +21,7 @@ add_subdirectory(qmljs)
 add_subdirectory(qtcreatorcdbext)
 add_subdirectory(solutions)
 add_subdirectory(tracing)
+add_subdirectory(tracing-qml)
 add_subdirectory(utils)
 
 if (WITH_QMLDESIGNER)
