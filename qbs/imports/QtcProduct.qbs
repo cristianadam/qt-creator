@@ -1,7 +1,21 @@
 import qbs.FileInfo
+import qbs.TextFile
 import qbs.Utilities
 
 Product {
+    Probe {
+        id: qtMinVersion
+        readonly property string filePath: path + "/../../cmake/QtCreatorAPI.cmake"
+        property string result
+        configure: {
+            var f = new TextFile(filePath);
+            var content = f.readAll();
+            f.close();
+            result = content.match(/set\(IDE_QT_VERSION_MIN "([^"]+)"\)/)[1];
+            found = true;
+        }
+    }
+
     version: qtc.qtcreator_version
 
     property bool install: true
@@ -22,7 +36,7 @@ Product {
         name: "Qt"
         condition: useQt
         submodules: ["core", "core5compat"]
-        versionAtLeast: "6.5.3"
+        versionAtLeast: qtMinVersion.result
     }
 
     Depends { name: "qtc" }
