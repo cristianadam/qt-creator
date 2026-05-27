@@ -1054,6 +1054,10 @@ ProcessTask RunControl::processTask(const std::function<SetupResult(Process &)> 
 
     const auto onDone = [this](const Process &process) {
         postMessage(process.exitMessage(), NormalMessageFormat);
+        // Hack, using extraData as out data storage, used by AutoTest::TestRunner
+        QVariantHash extraData = d->data.extraData;
+        extraData.insert("ProcessRunner.ExitCode", process.exitCode());
+        d->data.extraData = extraData;
         if (process.usesTerminal()) {
             Process &mutableProcess = const_cast<Process &>(process);
             auto processInterface = mutableProcess.takeProcessInterface();

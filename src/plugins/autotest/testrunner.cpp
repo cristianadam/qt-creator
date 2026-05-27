@@ -716,7 +716,10 @@ void TestRunner::runNextViaRunControl()
             [this, outputReader, name] {
         m_cancelTimer.stop();
         if (outputReader) {
-            outputReader->onDone(0); // FIXME get exit code from run control somehow
+            const int exitCode = m_currentRunControl
+                    ? m_currentRunControl->extraData().value("ProcessRunner.ExitCode", 0).toInt()
+                    : 0;
+            outputReader->onDone(exitCode);
             const int disabled = outputReader->disabledTests();
             if (disabled > 0)
                 emit hadDisabledTests(disabled);
