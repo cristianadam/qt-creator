@@ -15,6 +15,7 @@
 #include <tracing/timelineformattime.h>
 #include <tracing/timelinezoomcontrol.h>
 #include <tracing/timeruler.h>
+#include <tracing/tracklabels.h>
 
 #include "../common/themeselector.h"
 
@@ -169,6 +170,47 @@ int main(int argc, char *argv[])
                      });
 
     rulerWindow->show();
+
+    // TrackLabels sidebar widget
+    auto labelsWindow = new QWidget;
+    labelsWindow->setWindowTitle("TrackLabels (QPainter)");
+    labelsWindow->resize(200, 300);
+
+    auto labelsLayout = new QVBoxLayout(labelsWindow);
+    labelsLayout->setContentsMargins(0, 0, 0, 0);
+
+    auto trackLabels = new Timeline::TrackLabels(labelsWindow);
+    labelsLayout->addWidget(trackLabels);
+    labelsLayout->addStretch();
+
+    // Build TrackInfo from the dummy model — collapsed and expanded variants
+    {
+        using namespace Timeline;
+        const int defaultH = 30;
+
+        TrackInfo collapsed;
+        collapsed.name = "Dummy Category (collapsed)";
+        collapsed.color = Qt::yellow;
+        collapsed.expanded = false;
+        collapsed.rowHeights = {defaultH};
+
+        TrackInfo expanded;
+        expanded.name = "Dummy Category (expanded)";
+        expanded.color = Qt::cyan;
+        expanded.expanded = true;
+        expanded.rowLabels = {"Dummy sub category 1", "Dummy sub category 2"};
+        expanded.rowHeights = {defaultH, defaultH, defaultH};
+
+        TrackInfo another;
+        another.name = "Another Track";
+        another.color = QColor::fromHsl(200, 128, 128);
+        another.expanded = false;
+        another.rowHeights = {defaultH};
+
+        trackLabels->setTracks({collapsed, expanded, another});
+    }
+
+    labelsWindow->show();
 
     return app.exec();
 }
