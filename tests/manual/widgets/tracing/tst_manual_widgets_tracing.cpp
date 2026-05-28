@@ -16,6 +16,7 @@
 #include <tracing/timelinezoomcontrol.h>
 #include <tracing/timeruler.h>
 #include <tracing/tracklabels.h>
+#include <tracing/trackpainter.h>
 
 #include "../common/themeselector.h"
 
@@ -211,6 +212,37 @@ int main(int argc, char *argv[])
     }
 
     labelsWindow->show();
+
+    // TrackPainter — single track event renderer
+    auto painterWindow = new QWidget;
+    painterWindow->setWindowTitle("TrackPainter (QPainter)");
+    painterWindow->resize(700, 120);
+
+    auto painterLayout = new QVBoxLayout(painterWindow);
+    painterLayout->setContentsMargins(0, 0, 0, 0);
+
+    auto trackPainter = new Timeline::TrackPainter(painterWindow);
+    trackPainter->setModel(view->m_model);
+    trackPainter->setRange(0, oneMs * 1000 / 3);
+    painterLayout->addWidget(trackPainter);
+    painterLayout->addStretch();
+
+    QObject::connect(view->m_zoomControl, &Timeline::TimelineZoomControl::rangeChanged,
+                     trackPainter, [trackPainter](qint64 start, qint64 end) {
+                         trackPainter->setRange(start, end);
+                     });
+
+    QObject::connect(trackPainter, &Timeline::TrackPainter::itemHovered,
+                     trackPainter, [trackPainter](int index) {
+                         trackPainter->setHoveredItem(index);
+                     });
+
+    QObject::connect(trackPainter, &Timeline::TrackPainter::itemClicked,
+                     trackPainter, [trackPainter](int index) {
+                         trackPainter->setSelectedItem(index);
+                     });
+
+    painterWindow->show();
 
     return app.exec();
 }

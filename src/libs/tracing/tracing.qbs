@@ -16,6 +16,7 @@ QtcLibrary {
             "timelineabstractrenderer.cpp", "timelineabstractrenderer.h",
             "timelinecoordinates.h",
             "timelineformattime.cpp", "timelineformattime.h",
+            "trackpainter.cpp", "trackpainter.h",
             "tracklabels.cpp", "tracklabels.h",
             "timeruler.cpp", "timeruler.h",
             "timelineitemsrenderpass.cpp", "timelineitemsrenderpass.h",
