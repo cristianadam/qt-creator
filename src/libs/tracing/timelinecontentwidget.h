@@ -6,6 +6,7 @@
 #include "tracing_global.h"
 
 #include <QList>
+#include <QString>
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -32,8 +33,14 @@ public:
 
     QSize sizeHint() const override;
 
+    QString currentFile() const { return m_currentFile; }
+    int currentLine() const { return m_currentLine; }
+    int currentColumn() const { return m_currentColumn; }
+    int currentTypeId() const { return m_currentTypeId; }
+
 private:
     void rebuildTracks();
+    void selectItem(int modelIndex, int itemIndex);
 
     TimelineModelAggregator *m_aggregator;
     TimelineZoomControl *m_zoom;
@@ -44,6 +51,13 @@ private:
     QWidget *m_trackContainer;
     QVBoxLayout *m_trackLayout;
     QList<TrackPainter *> m_painters;
+
+    int m_selectedModelIndex = -1;
+    int m_selectedItemIndex = -1;
+    QString m_currentFile;
+    int m_currentLine = -1;
+    int m_currentColumn = 0;
+    int m_currentTypeId = -1;
 };
 
 } // namespace Timeline

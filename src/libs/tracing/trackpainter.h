@@ -18,6 +18,8 @@ public:
     explicit TrackPainter(QWidget *parent = nullptr);
 
     void setModel(TimelineModel *model);
+    const TimelineModel *model() const { return m_model; }
+
     void setRange(qint64 rangeStart, qint64 rangeEnd);
 
     qint64 rangeStart() const { return m_rangeStart; }
