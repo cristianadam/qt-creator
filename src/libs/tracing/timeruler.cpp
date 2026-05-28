@@ -12,8 +12,6 @@
 #include <QPainter>
 #include <QPaintEvent>
 
-#include <cmath>
-
 namespace Timeline {
 
 static constexpr int kInitialBlockLength = 120; // target pixels per major block
@@ -55,10 +53,8 @@ void TimeRuler::paintEvent(QPaintEvent *)
 
     const double spacing = double(width()) / double(rangeDuration);
 
-    // Snap major-block duration to the nearest power of 2 (in ns).
-    const double idealTimePerBlock = kInitialBlockLength / spacing;
-    const qint64 timePerBlock = qMax(qint64(1),
-                                     qint64(std::pow(2.0, std::floor(std::log2(idealTimePerBlock)))));
+    const qint64 timePerBlock = rulerBlockDuration(rangeDuration, double(width()),
+                                                   kInitialBlockLength);
 
     // Align the first block to a timePerBlock boundary at or before rangeStart.
     const qint64 alignedStart = m_rangeStart - (m_rangeStart % timePerBlock);

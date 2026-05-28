@@ -17,6 +17,7 @@
 #include <tracing/timeruler.h>
 #include <tracing/tracklabels.h>
 #include <tracing/trackpainter.h>
+#include <tracing/timelinecontentwidget.h>
 
 #include "../common/themeselector.h"
 
@@ -243,6 +244,17 @@ int main(int argc, char *argv[])
                      });
 
     painterWindow->show();
+
+    // Composed TimelineContentWidget — full sidebar + ruler + track painters
+    auto contentWindow = new QWidget;
+    contentWindow->setWindowTitle("TimelineContentWidget (QPainter)");
+    contentWindow->resize(900, 300);
+    auto contentLayout = new QVBoxLayout(contentWindow);
+    contentLayout->setContentsMargins(0, 0, 0, 0);
+    auto contentWidget = new Timeline::TimelineContentWidget(
+        view->m_modelAggregator, view->m_zoomControl, contentWindow);
+    contentLayout->addWidget(contentWidget);
+    contentWindow->show();
 
     return app.exec();
 }

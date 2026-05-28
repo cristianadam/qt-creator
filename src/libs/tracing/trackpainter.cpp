@@ -100,6 +100,30 @@ void TrackPainter::paintEvent(QPaintEvent *)
         p.fillRect(0, rowY, width(), rowH, (row % 2 == 0) ? bg1 : bg2);
     }
 
+    // Draw vertical grid lines (same block geometry as TimeRuler)
+    {
+        const double scale = double(width()) / double(rangeDuration);
+        const qint64 timePerBlock = rulerBlockDuration(rangeDuration, double(width()));
+        const double pixelsPerBlock = double(timePerBlock) * scale;
+        const double pixelsPerSection = pixelsPerBlock / 5.0;
+        const qint64 alignedStart = m_rangeStart - (m_rangeStart % timePerBlock);
+        const QColor gridColor = themeColor(Utils::Theme::Timeline_DividerColor);
+        p.setPen(QPen(gridColor, 1));
+        for (qint64 t = alignedStart; ; t += timePerBlock) {
+            const double x = timeToPixel(t, m_rangeStart, m_rangeEnd, double(width()));
+            if (x > double(width()))
+                break;
+            for (int s = 1; s <= 4; ++s) {
+                const double sx = x + s * pixelsPerSection;
+                if (sx >= 0.0 && sx <= double(width()))
+                    p.drawLine(qRound(sx), 0, qRound(sx), height() - 1);
+            }
+            const double tickX = x + pixelsPerBlock;
+            if (tickX >= 0.0 && tickX <= double(width()))
+                p.drawLine(qRound(tickX), 0, qRound(tickX), height() - 1);
+        }
+    }
+
     // Draw events
     const int first = m_model->firstIndex(m_rangeStart);
     const int last = m_model->lastIndex(m_rangeEnd);

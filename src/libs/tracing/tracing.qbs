@@ -20,6 +20,7 @@ QtcLibrary {
             "tracklabels.cpp", "tracklabels.h",
             "timeruler.cpp", "timeruler.h",
             "timelinescrollsync.cpp", "timelinescrollsync.h",
+            "timelinecontentwidget.cpp", "timelinecontentwidget.h",
             "timelineitemsrenderpass.cpp", "timelineitemsrenderpass.h",
             "timelinemodel.cpp", "timelinemodel.h", "timelinemodel_p.h",
             "timelinemodelaggregator.cpp", "timelinemodelaggregator.h",
