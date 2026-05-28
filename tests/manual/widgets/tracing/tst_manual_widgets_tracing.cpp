@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include <QApplication>
+#include <QLabel>
 #include <QQuickView>
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QVBoxLayout>
 
 #include <tracing/timelinerenderer.h>
 #include <tracing/timelineoverviewrenderer.h>
@@ -12,6 +14,7 @@
 #include <tracing/timelinetheme.h>
 #include <tracing/timelineformattime.h>
 #include <tracing/timelinezoomcontrol.h>
+#include <tracing/timeruler.h>
 
 #include "../common/themeselector.h"
 
@@ -136,9 +139,36 @@ int main(int argc, char *argv[])
 
     ManualTest::ThemeSelector::setTheme(":/themes/flat.creatortheme");
 
+    // QML reference view
     auto view = new TraceView;
     view->resize(700, 300);
     view->show();
+
+    // QPainter ruler widget connected to the same zoom control
+    auto rulerWindow = new QWidget;
+    rulerWindow->setWindowTitle("TimeRuler (QPainter)");
+    rulerWindow->resize(700, 60);
+
+    auto layout = new QVBoxLayout(rulerWindow);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(2);
+
+    auto ruler = new Timeline::TimeRuler(rulerWindow);
+    ruler->setRange(0, oneMs * 1000 / 3);
+    layout->addWidget(ruler);
+
+    auto label = new QLabel("(resize or interact with QML view to update range)", rulerWindow);
+    label->setAlignment(Qt::AlignCenter);
+    layout->addWidget(label);
+
+    QObject::connect(view->m_zoomControl, &Timeline::TimelineZoomControl::rangeChanged,
+                     ruler, [ruler, label](qint64 start, qint64 end) {
+                         ruler->setRange(start, end);
+                         label->setText(QString("range: %1 .. %2 ns")
+                                            .arg(start).arg(end));
+                     });
+
+    rulerWindow->show();
 
     return app.exec();
 }

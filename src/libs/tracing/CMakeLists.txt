@@ -6,6 +6,7 @@ set(TRACING_CPP_SOURCES
   timelineabstractrenderer.cpp timelineabstractrenderer.h
   timelinecoordinates.h
   timelineformattime.cpp timelineformattime.h
+  timeruler.cpp timeruler.h
   timelineitemsrenderpass.cpp timelineitemsrenderpass.h
   timelinemodel.cpp timelinemodel.h timelinemodel_p.h
   timelinemodelaggregator.cpp timelinemodelaggregator.h
