@@ -17,6 +17,9 @@ public:
 
     void setRange(qint64 rangeStart, qint64 rangeEnd);
 
+    qint64 rangeStart() const { return m_rangeStart; }
+    qint64 rangeEnd() const { return m_rangeEnd; }
+
     QSize sizeHint() const override;
 
 protected:

@@ -86,7 +86,6 @@ void TrackPainter::paintEvent(QPaintEvent *)
         return;
 
     QPainter p(this);
-    const double scale = double(width()) / double(rangeDuration);
 
     const QColor bg1 = themeColor(Utils::Theme::Timeline_BackgroundColor1);
     const QColor bg2 = themeColor(Utils::Theme::Timeline_BackgroundColor2);
@@ -156,7 +155,6 @@ int TrackPainter::indexAt(const QPoint &pos) const
         return -1;
 
     const qint64 t = pixelToTime(pos.x(), double(width()), m_rangeStart, m_rangeEnd);
-    const double scale = double(width()) / double(rangeDuration);
 
     // Search around bestIndex for the smallest item that contains the cursor
     int best = -1;

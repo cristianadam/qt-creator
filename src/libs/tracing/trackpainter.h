@@ -19,6 +19,10 @@ public:
 
     void setModel(TimelineModel *model);
     void setRange(qint64 rangeStart, qint64 rangeEnd);
+
+    qint64 rangeStart() const { return m_rangeStart; }
+    qint64 rangeEnd() const { return m_rangeEnd; }
+
     void setSelectedItem(int index);  // -1 = none
     void setHoveredItem(int index);   // -1 = none
     void setSelectionLocked(bool locked);

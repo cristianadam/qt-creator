@@ -30,6 +30,8 @@ public:
     void setTracks(const QList<TrackInfo> &tracks);
     void setScrollOffset(int y);
 
+    int scrollOffset() const { return m_scrollOffset; }
+
     QSize sizeHint() const override;
 
 protected:
