@@ -296,12 +296,8 @@ void TimelineContentWidget::onItemHovered(int modelIndex, int itemIndex)
     m_hoveredItemIndex = itemIndex;
     emit itemHovered(modelIndex, itemIndex);
 
-    if (!m_details->locked()) {
-        if (itemIndex >= 0)
-            showItemDetails(modelIndex, itemIndex);
-        else
-            showItemDetails(m_selectedModelIndex, m_selectedItemIndex);
-    }
+    if (!m_details->locked() && itemIndex >= 0)
+        showItemDetails(modelIndex, itemIndex);
 }
 
 void TimelineContentWidget::selectItem(int modelIndex, int itemIndex)

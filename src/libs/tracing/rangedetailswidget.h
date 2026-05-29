@@ -9,8 +9,8 @@
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
+class QFormLayout;
 class QFrame;
-class QGridLayout;
 class QLabel;
 class QPlainTextEdit;
 class QTimer;
@@ -53,7 +53,8 @@ private:
     QToolButton *m_lockBtn;
     QToolButton *m_collapseBtn;
     QFrame *m_contentFrame;
-    QGridLayout *m_grid;
+    QWidget *m_formWidget;
+    QFormLayout *m_form;
     QPlainTextEdit *m_noteEdit;
     QTimer *m_saveTimer;
 

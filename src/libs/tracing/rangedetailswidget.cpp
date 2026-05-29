@@ -10,7 +10,7 @@
 
 #include <QFont>
 #include <QFrame>
-#include <QGridLayout>
+#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMouseEvent>
@@ -197,6 +197,16 @@ RangeDetailsWidget::RangeDetailsWidget(QWidget *parent)
 
     outerLayout->addWidget(m_titleBar);
 
+    auto separator = new QWidget;
+    separator->setFixedHeight(1);
+    separator->setAutoFillBackground(true);
+    {
+        auto pal = separator->palette();
+        pal.setColor(QPalette::Window, themeColor(Utils::Theme::PanelTextColorMid));
+        separator->setPalette(pal);
+    }
+    outerLayout->addWidget(separator);
+
     // Content frame (key-value grid + note)
     m_contentFrame = new QFrame;
     m_contentFrame->setFrameShape(QFrame::NoFrame);
@@ -206,12 +216,12 @@ RangeDetailsWidget::RangeDetailsWidget(QWidget *parent)
     contentLayout->setContentsMargins(10, 5, 10, 0);
     contentLayout->setSpacing(5);
 
-    auto gridWidget = new QWidget;
-    m_grid = new QGridLayout(gridWidget);
-    m_grid->setContentsMargins(0, 0, 0, 0);
-    m_grid->setSpacing(5);
-    m_grid->setColumnStretch(1, 1);
-    contentLayout->addWidget(gridWidget);
+    m_formWidget = new QWidget;
+    m_form = new QFormLayout(m_formWidget);
+    m_form->setContentsMargins(0, 0, 0, 0);
+    m_form->setSpacing(5);
+    m_form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    contentLayout->addWidget(m_formWidget);
 
     m_noteEdit = new QPlainTextEdit;
     m_noteEdit->setPlaceholderText("Add note...");
@@ -274,9 +284,12 @@ void RangeDetailsWidget::setData(const QString &title, const QVariantList &conte
     m_noteEdit->setVisible(!noteText.isEmpty());
     m_saveTimer->stop();
 
-    fitHeight();
+    // show() before fitHeight() so that inserting m_formWidget into a visible
+    // parent triggers polishing of the child labels; without it, font metrics
+    // are wrong on the first hover and the height comes out incorrect.
     show();
     raise();
+    fitHeight();
 }
 
 void RangeDetailsWidget::setLocked(bool locked)
@@ -310,21 +323,27 @@ void RangeDetailsWidget::paintEvent(QPaintEvent *)
 
 void RangeDetailsWidget::fitHeight()
 {
-    // Preserve user-resized width (or start at 300).  Drive height straight from
-    // the layout's sizeHint so we never hit adjustSize()'s expandedTo(minimumSizeHint())
-    // path, which inflates height via QAbstractScrollArea::minimumSizeHint() even when
-    // the note editor is hidden.
     const int w = qMax(minimumWidth(), width() > 0 ? width() : 300);
-    layout()->activate();
-    resize(w, layout()->sizeHint().height());
+    layout()->invalidate();
+    const int h = layout()->hasHeightForWidth()
+                  ? layout()->heightForWidth(w)
+                  : layout()->sizeHint().height();
+    resize(w, h);
     setMinimumWidth(150);
     setMaximumWidth(QWIDGETSIZE_MAX);
 }
 
 void RangeDetailsWidget::rebuildRows(const QVariantList &content)
 {
-    while (m_grid->count() > 0)
-        delete m_grid->takeAt(0)->widget();
+    auto *cl = static_cast<QVBoxLayout *>(m_contentFrame->layout());
+    const int idx = cl->indexOf(m_formWidget);
+    delete m_formWidget; // deletes m_form and all child labels
+    m_formWidget = new QWidget(m_contentFrame);
+    m_form = new QFormLayout(m_formWidget);
+    m_form->setContentsMargins(0, 0, 0, 0);
+    m_form->setSpacing(5);
+    m_form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    cl->insertWidget(idx, m_formWidget);
 
     const int pairs = content.size() / 2;
     for (int i = 0; i < pairs; ++i) {
@@ -332,7 +351,7 @@ void RangeDetailsWidget::rebuildRows(const QVariantList &content)
         const QString val = content.at(i * 2 + 1).toString();
 
         auto keyLabel = new QLabel(key + ":");
-        keyLabel->setAlignment(Qt::AlignRight | Qt::AlignTop);
+        keyLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
         keyLabel->setTextFormat(Qt::PlainText);
         keyLabel->setAutoFillBackground(false);
         QFont boldFont = keyLabel->font();
@@ -345,8 +364,7 @@ void RangeDetailsWidget::rebuildRows(const QVariantList &content)
         valLabel->setWordWrap(true);
         valLabel->setAutoFillBackground(false);
 
-        m_grid->addWidget(keyLabel, i, 0);
-        m_grid->addWidget(valLabel, i, 1);
+        m_form->addRow(keyLabel, valLabel);
     }
 }
 
