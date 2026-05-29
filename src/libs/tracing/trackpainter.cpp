@@ -12,7 +12,10 @@
 #include <QMouseEvent>
 #include <QPaintEvent>
 #include <QPainter>
+#include <QString>
 #include <QWheelEvent>
+
+#include <cmath>
 
 namespace Timeline {
 
@@ -93,6 +96,29 @@ static QColor themeColor(Utils::Theme::Color role)
     return QColor();
 }
 
+// Matches QML TimeMarks prettyPrintScale/roundTo3Digits (units: " kMGT", base 1024).
+static QString prettyPrintScale(qint64 amount)
+{
+    static const char units[] = " kMGT";
+    const bool negative = amount < 0;
+    double a = double(qAbs(amount));
+    int unitIdx = 0;
+    while (unitIdx + 1 < int(sizeof(units)) - 1 && a > 1024.0) {
+        ++unitIdx;
+        a /= 1024.0;
+    }
+    int decimals;
+    if (a < 10.0) decimals = 2;
+    else if (a < 100.0) decimals = 1;
+    else decimals = 0;
+    QString result = QString::number(a, 'f', decimals);
+    if (negative)
+        result.prepend(QLatin1Char('-'));
+    if (units[unitIdx] != ' ')
+        result.append(QLatin1Char(units[unitIdx]));
+    return result;
+}
+
 void TrackPainter::paintEvent(QPaintEvent *)
 {
     const QColor bg1 = themeColor(Utils::Theme::Timeline_BackgroundColor1);
@@ -116,6 +142,66 @@ void TrackPainter::paintEvent(QPaintEvent *)
     const qint64 rangeDuration = m_rangeEnd - m_rangeStart;
     if (m_model->isEmpty() || rangeDuration <= 0 || width() == 0)
         return;
+
+    // Value scale for expanded rows with min/max values (TimeMarks.qml equivalent)
+    if (m_model->expanded()) {
+        static const int kScaleMinH = 60;
+        static const int kScaleStep = 30;
+        static const int kFontPx = 8;
+        static const int kMarg = 2;
+
+        p.save();
+        QFont sf = p.font();
+        sf.setPixelSize(kFontPx);
+        p.setFont(sf);
+        const QColor scaleText = themeColor(Utils::Theme::Timeline_TextColor);
+        const QColor scaleDiv  = themeColor(Utils::Theme::Timeline_DividerColor);
+
+        for (int row = 0; row < rowCount; ++row) {
+            const int rowH = m_model->rowHeight(row);
+            const int rowY = m_model->rowOffset(row);
+            if (rowH < kScaleMinH)
+                continue;
+            const qint64 minVal = m_model->rowMinValue(row);
+            const qint64 maxVal = m_model->rowMaxValue(row);
+            if (maxVal <= minVal)
+                continue;
+            const qint64 valDiff = maxVal - minVal;
+
+            // Smallest power-of-2 step that yields at most rowH/kScaleStep lines
+            const int numSteps = qMax(1, rowH / kScaleStep);
+            double ugly = std::ceil(double(valDiff) / double(numSteps));
+            qint64 stepVal = 1;
+            while (ugly > 1.0) {
+                ugly /= 2.0;
+                stepVal *= 2;
+            }
+            const double stepH = double(stepVal) * double(rowH) / double(valDiff);
+
+            // Top label: maxVal
+            p.setPen(scaleText);
+            p.drawText(QRect(kMarg, rowY + kMarg,
+                             width() - kMarg * 2, kFontPx + kMarg),
+                       Qt::AlignLeft | Qt::AlignTop, prettyPrintScale(maxVal));
+
+            const int topLabelBottom = rowY + kFontPx + kMarg * 2 + 2;
+            const int numLines = int(valDiff / stepVal);
+            for (int i = 0; i < numLines; ++i) {
+                // Skip items whose top would overlap the top label
+                if (rowY + qRound(double(rowH) - double(i + 1) * stepH) <= topLabelBottom)
+                    break;
+                const int lineY = rowY + rowH - qRound(double(i) * stepH);
+                p.setPen(scaleDiv);
+                p.drawLine(0, lineY, width() - 1, lineY);
+                p.setPen(scaleText);
+                p.drawText(QRect(kMarg, lineY - kFontPx - kMarg,
+                                 width() - kMarg * 2, kFontPx),
+                           Qt::AlignLeft | Qt::AlignBottom,
+                           prettyPrintScale(minVal + qint64(i) * stepVal));
+            }
+        }
+        p.restore();
+    }
 
     const QColor selectionColor = m_selectionLocked ? QColor(96, 0, 255) : Qt::blue;
     const QColor hoverColor = Qt::white;
