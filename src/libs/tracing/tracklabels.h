@@ -7,6 +7,7 @@
 
 #include <QColor>
 #include <QList>
+#include <QPoint>
 #include <QString>
 #include <QWidget>
 
@@ -36,15 +37,22 @@ public:
 
 signals:
     void expandToggled(int trackIndex);
+    void moveCategories(int sourceIndex, int targetIndex);
 
 protected:
     void paintEvent(QPaintEvent *) override;
-    void mousePressEvent(QMouseEvent *) override;
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
 
 private:
     QList<TrackInfo> m_tracks;
     int m_scrollOffset = 0;
     int m_totalHeight = 0;
+    int m_dragSource = -1;
+    int m_dragInsertSlot = -1;
+    QPoint m_dragPressPos;
+    bool m_dragging = false;
 
     void updateTotalHeight();
 };

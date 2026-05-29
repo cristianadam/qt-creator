@@ -59,6 +59,16 @@ void TrackLabels::updateTotalHeight()
     }
 }
 
+static int insertionSlotY(const QList<TrackInfo> &tracks, int slot, int scrollOffset)
+{
+    int y = -scrollOffset;
+    for (int i = 0; i < slot && i < tracks.size(); ++i) {
+        for (int h : tracks[i].rowHeights)
+            y += h;
+    }
+    return y;
+}
+
 void TrackLabels::paintEvent(QPaintEvent *)
 {
     QPainter p(this);
@@ -144,6 +154,12 @@ void TrackLabels::paintEvent(QPaintEvent *)
 
         y += trackHeight;
     }
+
+    if (m_dragging && m_dragInsertSlot >= 0) {
+        const int lineY = insertionSlotY(m_tracks, m_dragInsertSlot, m_scrollOffset);
+        p.fillRect(0, lineY - 1, width(), 2,
+                   themeColor(Utils::Theme::Timeline_HandleColor));
+    }
 }
 
 void TrackLabels::mousePressEvent(QMouseEvent *event)
@@ -166,14 +182,74 @@ void TrackLabels::mousePressEvent(QMouseEvent *event)
             trackHeight += h;
 
         if (clickY >= y && clickY < y + titleHeight) {
-            if (clickX >= iconLeft)
+            if (clickX >= iconLeft) {
                 emit expandToggled(i);
+            } else {
+                m_dragSource = i;
+                m_dragPressPos = event->pos();
+                m_dragging = false;
+                m_dragInsertSlot = -1;
+                setCursor(Qt::OpenHandCursor);
+            }
             event->accept();
             return;
         }
         y += trackHeight;
     }
     event->ignore();
+}
+
+void TrackLabels::mouseMoveEvent(QMouseEvent *event)
+{
+    if (m_dragSource == -1) {
+        event->ignore();
+        return;
+    }
+    if (!m_dragging) {
+        if ((event->pos() - m_dragPressPos).manhattanLength() > 4)
+            m_dragging = true;
+    }
+    if (m_dragging) {
+        setCursor(Qt::ClosedHandCursor);
+        const int dragY = event->pos().y() + m_scrollOffset;
+        int slot = 0;
+        int cumY = 0;
+        for (int i = 0; i < m_tracks.size(); ++i) {
+            int trackHeight = 0;
+            for (int h : m_tracks[i].rowHeights)
+                trackHeight += h;
+            if (dragY < cumY + trackHeight / 2)
+                break;
+            slot = i + 1;
+            cumY += trackHeight;
+        }
+        if (m_dragInsertSlot != slot) {
+            m_dragInsertSlot = slot;
+            update();
+        }
+    }
+    event->accept();
+}
+
+void TrackLabels::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() != Qt::LeftButton || m_dragSource == -1) {
+        event->ignore();
+        return;
+    }
+    if (m_dragging && m_dragInsertSlot >= 0) {
+        const int targetIndex = (m_dragInsertSlot > m_dragSource)
+                                ? m_dragInsertSlot - 1
+                                : m_dragInsertSlot;
+        if (targetIndex != m_dragSource)
+            emit moveCategories(m_dragSource, targetIndex);
+    }
+    m_dragSource = -1;
+    m_dragging = false;
+    m_dragInsertSlot = -1;
+    unsetCursor();
+    update();
+    event->accept();
 }
 
 } // namespace Timeline

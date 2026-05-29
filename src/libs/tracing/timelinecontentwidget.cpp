@@ -203,6 +203,10 @@ TimelineContentWidget::TimelineContentWidget(TimelineModelAggregator *aggregator
         rebuildTracks();
     });
 
+    connect(m_labels, &TrackLabels::moveCategories, this, [this](int from, int to) {
+        m_aggregator->moveModel(from, to);
+    });
+
     connect(aggregator, &TimelineModelAggregator::modelsChanged,
             this, &TimelineContentWidget::rebuildTracks);
     connect(aggregator, &TimelineModelAggregator::notesChanged,
