@@ -9,8 +9,11 @@ set(TRACING_CPP_SOURCES
   trackpainter.cpp trackpainter.h
   tracklabels.cpp tracklabels.h
   timeruler.cpp timeruler.h
+  rangedetailswidget.cpp rangedetailswidget.h
+  selectionrangeoverlay.cpp selectionrangeoverlay.h
   timelinescrollsync.cpp timelinescrollsync.h
   timelinecontentwidget.cpp timelinecontentwidget.h
+  timelineoverviewwidget.cpp timelineoverviewwidget.h
   timelineitemsrenderpass.cpp timelineitemsrenderpass.h
   timelinemodel.cpp timelinemodel.h timelinemodel_p.h
   timelinemodelaggregator.cpp timelinemodelaggregator.h

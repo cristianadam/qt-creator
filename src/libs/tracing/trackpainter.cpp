@@ -5,12 +5,14 @@
 
 #include "timelinecoordinates.h"
 #include "timelinemodel.h"
+#include "timelinenotesmodel.h"
 
 #include <utils/theme/theme.h>
 
-#include <QPainter>
-#include <QPaintEvent>
 #include <QMouseEvent>
+#include <QPaintEvent>
+#include <QPainter>
+#include <QWheelEvent>
 
 namespace Timeline {
 
@@ -24,6 +26,24 @@ TrackPainter::TrackPainter(QWidget *parent)
 void TrackPainter::setModel(TimelineModel *model)
 {
     m_model = model;
+    update();
+}
+
+void TrackPainter::setMarkers(const QList<qint64> &markers)
+{
+    m_markers = markers;
+    update();
+}
+
+void TrackPainter::setNotes(const TimelineNotesModel *notes)
+{
+    if (m_notes == notes)
+        return;
+    if (m_notes)
+        disconnect(m_notes, nullptr, this, nullptr);
+    m_notes = notes;
+    if (m_notes)
+        connect(m_notes, &TimelineNotesModel::changed, this, [this] { update(); });
     update();
 }
 
@@ -75,22 +95,15 @@ static QColor themeColor(Utils::Theme::Color role)
 
 void TrackPainter::paintEvent(QPaintEvent *)
 {
-    if (!m_model || m_model->isEmpty() || m_model->hidden()) {
-        QPainter p(this);
-        p.fillRect(rect(), themeColor(Utils::Theme::Timeline_BackgroundColor1));
-        return;
-    }
-
-    const qint64 rangeDuration = m_rangeEnd - m_rangeStart;
-    if (rangeDuration <= 0 || width() == 0)
-        return;
+    const QColor bg1 = themeColor(Utils::Theme::Timeline_BackgroundColor1);
+    const QColor bg2 = themeColor(Utils::Theme::Timeline_BackgroundColor2);
 
     QPainter p(this);
 
-    const QColor bg1 = themeColor(Utils::Theme::Timeline_BackgroundColor1);
-    const QColor bg2 = themeColor(Utils::Theme::Timeline_BackgroundColor2);
-    const QColor selectionColor = m_selectionLocked ? QColor(96, 0, 255) : Qt::blue;
-    const QColor hoverColor = Qt::white;
+    if (!m_model || m_model->hidden()) {
+        p.fillRect(rect(), bg1);
+        return;
+    }
 
     // Draw alternating row backgrounds
     const int rowCount = m_model->rowCount();
@@ -99,6 +112,13 @@ void TrackPainter::paintEvent(QPaintEvent *)
         const int rowH = m_model->rowHeight(row);
         p.fillRect(0, rowY, width(), rowH, (row % 2 == 0) ? bg1 : bg2);
     }
+
+    const qint64 rangeDuration = m_rangeEnd - m_rangeStart;
+    if (m_model->isEmpty() || rangeDuration <= 0 || width() == 0)
+        return;
+
+    const QColor selectionColor = m_selectionLocked ? QColor(96, 0, 255) : Qt::blue;
+    const QColor hoverColor = Qt::white;
 
     // Draw vertical grid lines (same block geometry as TimeRuler)
     {
@@ -169,6 +189,43 @@ void TrackPainter::paintEvent(QPaintEvent *)
             p.drawRect(itemRect.adjusted(0.5, 0.5, -0.5, -0.5));
         }
     }
+
+    // Draw time ruler marker lines — 2px vertical lines in Timeline_HandleColor
+    if (!m_markers.isEmpty()) {
+        const QColor handleColor = themeColor(Utils::Theme::Timeline_HandleColor);
+        p.setPen(QPen(handleColor, 2));
+        for (qint64 ts : m_markers) {
+            const double mx = timeToPixel(ts, m_rangeStart, m_rangeEnd, double(width()));
+            p.drawLine(QPointF(mx, 0), QPointF(mx, height()));
+        }
+    }
+
+    // Draw note markers: exclamation mark shape matching the QSG notes shader.
+    // The shader draws d < 2/3 (stick) and d > 5/6 (dot), masking the gap between them.
+    if (m_notes && m_model) {
+        const QColor noteColor = themeColor(Utils::Theme::Timeline_HighlightColor);
+        p.setPen(QPen(noteColor, 3));
+        const int modelId = m_model->modelId();
+        for (int i = 0; i < m_notes->count(); ++i) {
+            if (m_notes->timelineModel(i) != modelId)
+                continue;
+            const int idx = m_notes->timelineIndex(i);
+            if (m_model->startTime(idx) > m_rangeEnd || m_model->endTime(idx) < m_rangeStart)
+                continue;
+            const int row = m_model->row(idx);
+            const double rowH = m_model->rowHeight(row);
+            const double rowY = m_model->rowOffset(row);
+            const qint64 center = (m_model->startTime(idx) + m_model->endTime(idx)) / 2;
+            const double cx = timeToPixel(center, m_rangeStart, m_rangeEnd, double(width()));
+            const double span = 0.8 * rowH;
+            const double top = rowY + 0.1 * rowH;
+            const double stickEnd = top + (2.0 / 3.0) * span;
+            const double dotStart = top + (5.0 / 6.0) * span;
+            const double dotEnd   = top + span;
+            p.drawLine(QPointF(cx, top), QPointF(cx, stickEnd));
+            p.drawPoint(QPointF(cx, (dotStart + dotEnd) / 2.0));
+        }
+    }
 }
 
 int TrackPainter::indexAt(const QPoint &pos) const
@@ -192,6 +249,8 @@ int TrackPainter::indexAt(const QPoint &pos) const
     // Check a window of items around the candidate
     const int first = m_model->firstIndex(m_rangeStart);
     const int last = m_model->lastIndex(m_rangeEnd);
+    if (first < 0 || last < first)
+        return -1;
     const int lo = qMax(first, candidate - 10);
     const int hi = qMin(last, candidate + 10);
 
@@ -230,6 +289,24 @@ int TrackPainter::indexAt(const QPoint &pos) const
 
 void TrackPainter::mouseMoveEvent(QMouseEvent *event)
 {
+    if ((event->buttons() & Qt::LeftButton) && !m_panning) {
+        const int dx = event->pos().x() - m_pressPos.x();
+        const int dy = event->pos().y() - m_pressPos.y();
+        if (qAbs(dx) + qAbs(dy) > 4)
+            m_panning = true;
+    }
+
+    if (m_panning) {
+        const int dx = event->pos().x() - m_pressPos.x();
+        const int dy = event->pos().y() - m_pressPos.y();
+        m_pressPos = event->pos();
+        if (dx != 0)
+            emit horizontalPan(dx);
+        if (dy != 0)
+            emit verticalPan(dy);
+        return;
+    }
+
     const int idx = indexAt(event->pos());
     if (idx != m_hoveredItem) {
         m_hoveredItem = idx;
@@ -241,8 +318,42 @@ void TrackPainter::mouseMoveEvent(QMouseEvent *event)
 void TrackPainter::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
-        const int idx = indexAt(event->pos());
-        emit itemClicked(idx);
+        m_pressPos = event->pos();
+        m_panning = false;
+    }
+}
+
+void TrackPainter::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton) {
+        if (!m_panning)
+            emit itemClicked(indexAt(event->pos()));
+        m_panning = false;
+    }
+}
+
+void TrackPainter::wheelEvent(QWheelEvent *event)
+{
+    const QPoint pixelDelta = event->pixelDelta();
+    const QPoint angleDelta = event->angleDelta();
+
+    if (event->modifiers() & Qt::ControlModifier) {
+        const int dy = pixelDelta.y() != 0 ? pixelDelta.y() : angleDelta.y() / 8;
+        if (dy == 0) {
+            event->ignore();
+            return;
+        }
+        emit zoomRequested(event->position().x(), dy);
+        event->accept();
+        return;
+    }
+
+    const int dx = pixelDelta.x() != 0 ? pixelDelta.x() : angleDelta.x() / 8;
+    if (dx != 0) {
+        emit horizontalPan(-dx);
+        event->accept();
+    } else {
+        event->ignore();
     }
 }
 

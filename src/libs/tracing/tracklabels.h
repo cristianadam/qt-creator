@@ -34,8 +34,12 @@ public:
 
     QSize sizeHint() const override;
 
+signals:
+    void expandToggled(int trackIndex);
+
 protected:
     void paintEvent(QPaintEvent *) override;
+    void mousePressEvent(QMouseEvent *) override;
 
 private:
     QList<TrackInfo> m_tracks;

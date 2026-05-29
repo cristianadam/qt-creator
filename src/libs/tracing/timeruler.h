@@ -5,6 +5,7 @@
 
 #include "tracing_global.h"
 
+#include <QList>
 #include <QWidget>
 
 namespace Timeline {
@@ -22,12 +23,27 @@ public:
 
     QSize sizeHint() const override;
 
+signals:
+    void markersChanged(const QList<qint64> &markers);
+
 protected:
     void paintEvent(QPaintEvent *) override;
+    void mousePressEvent(QMouseEvent *) override;
+    void mouseMoveEvent(QMouseEvent *) override;
+    void mouseReleaseEvent(QMouseEvent *) override;
 
 private:
+    int markerAt(int x) const;
+    double markerPixel(qint64 timestamp) const;
+
     qint64 m_rangeStart = 0;
     qint64 m_rangeEnd = 0;
+    QList<qint64> m_markers;
+
+    int m_dragIndex = -1;
+    int m_dragStartX = 0;
+    qint64 m_dragStartTime = 0;
+    bool m_dragged = false;
 };
 
 } // namespace Timeline

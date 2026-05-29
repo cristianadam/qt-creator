@@ -6,6 +6,7 @@
 #include <utils/theme/theme.h>
 #include <utils/utilsicons.h>
 
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPaintEvent>
 
@@ -26,7 +27,7 @@ static QColor themeColor(Utils::Theme::Color role)
 TrackLabels::TrackLabels(QWidget *parent)
     : QWidget(parent)
 {
-    setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 }
 
 void TrackLabels::setTracks(const QList<TrackInfo> &tracks)
@@ -143,6 +144,36 @@ void TrackLabels::paintEvent(QPaintEvent *)
 
         y += trackHeight;
     }
+}
+
+void TrackLabels::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() != Qt::LeftButton) {
+        event->ignore();
+        return;
+    }
+
+    const int clickX = event->pos().x();
+    const int clickY = event->pos().y();
+    const int iconLeft = width() - kTextRightMargin;
+
+    int y = -m_scrollOffset;
+    for (int i = 0; i < m_tracks.size(); ++i) {
+        const TrackInfo &track = m_tracks[i];
+        const int titleHeight = track.rowHeights.isEmpty() ? 30 : track.rowHeights[0];
+        int trackHeight = 0;
+        for (int h : track.rowHeights)
+            trackHeight += h;
+
+        if (clickY >= y && clickY < y + titleHeight) {
+            if (clickX >= iconLeft)
+                emit expandToggled(i);
+            event->accept();
+            return;
+        }
+        y += trackHeight;
+    }
+    event->ignore();
 }
 
 } // namespace Timeline

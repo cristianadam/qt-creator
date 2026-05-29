@@ -5,11 +5,13 @@
 
 #include "tracing_global.h"
 
+#include <QList>
 #include <QWidget>
 
 namespace Timeline {
 
 class TimelineModel;
+class TimelineNotesModel;
 
 class TRACING_EXPORT TrackPainter : public QWidget
 {
@@ -19,6 +21,9 @@ public:
 
     void setModel(TimelineModel *model);
     const TimelineModel *model() const { return m_model; }
+
+    void setNotes(const TimelineNotesModel *notes);
+    void setMarkers(const QList<qint64> &markers);
 
     void setRange(qint64 rangeStart, qint64 rangeEnd);
 
@@ -34,22 +39,32 @@ public:
 signals:
     void itemHovered(int index);
     void itemClicked(int index);
+    void horizontalPan(int dx);
+    void verticalPan(int dy);
+    void zoomRequested(double cursorX, int dy);
 
 protected:
     void paintEvent(QPaintEvent *) override;
     void mouseMoveEvent(QMouseEvent *) override;
     void mousePressEvent(QMouseEvent *) override;
+    void mouseReleaseEvent(QMouseEvent *) override;
+    void wheelEvent(QWheelEvent *) override;
     void leaveEvent(QEvent *) override;
 
 private:
     int indexAt(const QPoint &pos) const;
 
     TimelineModel *m_model = nullptr;
+    const TimelineNotesModel *m_notes = nullptr;
+    QList<qint64> m_markers;
     qint64 m_rangeStart = 0;
     qint64 m_rangeEnd = 0;
     int m_selectedItem = -1;
     int m_hoveredItem = -1;
     bool m_selectionLocked = true;
+
+    QPoint m_pressPos;
+    bool m_panning = false;
 };
 
 } // namespace Timeline

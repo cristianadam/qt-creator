@@ -3,6 +3,7 @@
 
 #include <QApplication>
 #include <QLabel>
+#include <QPushButton>
 #include <QQuickView>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -14,6 +15,7 @@
 #include <tracing/timelinetheme.h>
 #include <tracing/timelineformattime.h>
 #include <tracing/timelinezoomcontrol.h>
+#include <tracing/timelinenotesmodel.h>
 #include <tracing/timeruler.h>
 #include <tracing/tracklabels.h>
 #include <tracing/trackpainter.h>
@@ -120,6 +122,12 @@ public:
         rootContext()->setContextProperty(QLatin1String("timelineModelAggregator"),
                                           m_modelAggregator);
 
+        m_notes = new Timeline::TimelineNotesModel(this);
+        m_notes->addTimelineModel(m_model);
+        m_notes->add(m_model->modelId(), 0, "Note on item 0");
+        m_notes->add(m_model->modelId(), 2, "Note on item 2");
+        m_modelAggregator->setNotes(m_notes);
+
         m_zoomControl = new TimelineZoomControl(this);
         m_zoomControl->setTrace(0, oneMs * 1000); // Total timeline length
         rootContext()->setContextProperty("zoomControl", m_zoomControl);
@@ -132,6 +140,7 @@ public:
    ~TraceView() override = default;
 
     DummyModel *m_model;
+    Timeline::TimelineNotesModel *m_notes;
     TimelineModelAggregator *m_modelAggregator;
     TimelineZoomControl *m_zoomControl;
 };
@@ -224,6 +233,7 @@ int main(int argc, char *argv[])
 
     auto trackPainter = new Timeline::TrackPainter(painterWindow);
     trackPainter->setModel(view->m_model);
+    trackPainter->setNotes(view->m_notes);
     trackPainter->setRange(0, oneMs * 1000 / 3);
     painterLayout->addWidget(trackPainter);
     painterLayout->addStretch();
@@ -248,12 +258,20 @@ int main(int argc, char *argv[])
     // Composed TimelineContentWidget — full sidebar + ruler + track painters
     auto contentWindow = new QWidget;
     contentWindow->setWindowTitle("TimelineContentWidget (QPainter)");
-    contentWindow->resize(900, 300);
+    contentWindow->resize(900, 330);
     auto contentLayout = new QVBoxLayout(contentWindow);
     contentLayout->setContentsMargins(0, 0, 0, 0);
+    contentLayout->setSpacing(0);
     auto contentWidget = new Timeline::TimelineContentWidget(
         view->m_modelAggregator, view->m_zoomControl, contentWindow);
-    contentLayout->addWidget(contentWidget);
+    contentLayout->addWidget(contentWidget, 1);
+
+    auto rangeBtn = new QPushButton("Selection Range", contentWindow);
+    rangeBtn->setCheckable(true);
+    contentLayout->addWidget(rangeBtn);
+    QObject::connect(rangeBtn, &QPushButton::toggled, contentWidget,
+                     &Timeline::TimelineContentWidget::setSelectionRangeMode);
+
     contentWindow->show();
 
     return app.exec();
