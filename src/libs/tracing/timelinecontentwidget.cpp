@@ -4,6 +4,7 @@
 #include "timelinecontentwidget.h"
 
 #include "rangedetailswidget.h"
+#include "selectionrangedetailswidget.h"
 #include "selectionrangeoverlay.h"
 #include "timelinemodel.h"
 #include "timelinemodelaggregator.h"
@@ -124,6 +125,33 @@ TimelineContentWidget::TimelineContentWidget(TimelineModelAggregator *aggregator
         }
     });
 
+    m_selectionDetails = new SelectionRangeDetailsWidget(this);
+    m_selectionDetails->move(200, 50);
+    connect(zoom, &TimelineZoomControl::selectionChanged, this,
+            [this](qint64 start, qint64 end) {
+        if (!m_overlay->isActive()) {
+            m_selectionDetails->hide();
+            return;
+        }
+        m_selectionDetails->setData(start, end, m_zoom->rangeDuration(),
+                                        m_zoom->selectionDuration() > 0);
+    });
+    connect(m_selectionDetails, &SelectionRangeDetailsWidget::closeRequested,
+            this, [this] { setSelectionRangeMode(false); });
+    connect(m_selectionDetails, &SelectionRangeDetailsWidget::recenterRequested,
+            this, [this] {
+        // Match QML MainView onRecenter: only recenter when exactly one endpoint
+        // is outside the current range (XOR), centering on the selection midpoint.
+        const bool startOut = m_zoom->selectionStart() < m_zoom->rangeStart();
+        const bool endOut = m_zoom->selectionEnd() > m_zoom->rangeEnd();
+        if (startOut != endOut) {
+            const qint64 center = (m_zoom->selectionStart() + m_zoom->selectionEnd()) / 2;
+            const qint64 halfDur = qMax(m_zoom->selectionDuration(),
+                                        m_zoom->rangeDuration()) / 2;
+            m_zoom->setRange(center - halfDur, center + halfDur);
+        }
+    });
+
     m_sync->registerLabels(m_labels);
     m_sync->setVerticalScrollBar(m_scrollArea->verticalScrollBar());
 
@@ -211,6 +239,8 @@ void TimelineContentWidget::setSelectionRangeMode(bool active)
 {
     m_overlay->reset();
     m_overlay->setActive(active);
+    if (!active)
+        m_selectionDetails->hide();
 }
 
 bool TimelineContentWidget::selectionRangeMode() const
@@ -420,6 +450,7 @@ void TimelineContentWidget::clear()
 {
     selectItem(-1, -1);
     m_details->clear();
+    setSelectionRangeMode(false);
 }
 
 bool TimelineContentWidget::selectionLocked() const

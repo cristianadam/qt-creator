@@ -21,6 +21,7 @@ class TimelineModelAggregator;
 class TimelineZoomControl;
 class TimelineScrollSync;
 class RangeDetailsWidget;
+class SelectionRangeDetailsWidget;
 class SelectionRangeOverlay;
 class TimeRuler;
 class TrackLabels;
@@ -88,6 +89,7 @@ private:
     QVBoxLayout *m_leftLayout = nullptr;
     QWidget *m_leftHeader = nullptr;
     SelectionRangeOverlay *m_overlay;
+    SelectionRangeDetailsWidget *m_selectionDetails;
     RangeDetailsWidget *m_details;
     QList<TrackPainter *> m_painters;
 
