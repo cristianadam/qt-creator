@@ -94,6 +94,8 @@ void TimelineContentWidget::rebuildTracks()
     m_painters.clear();
     m_selectedModelIndex = -1;
     m_selectedItemIndex = -1;
+    m_hoveredModelIndex = -1;
+    m_hoveredItemIndex = -1;
     // Remove any remaining non-widget items (e.g. the trailing stretch)
     while (m_trackLayout->count() > 0)
         delete m_trackLayout->takeAt(0);
@@ -112,6 +114,8 @@ void TimelineContentWidget::rebuildTracks()
         const int modelIndex = m_painters.size() - 1;
         connect(painter, &TrackPainter::itemClicked, this,
                 [this, modelIndex](int itemIndex) { selectItem(modelIndex, itemIndex); });
+        connect(painter, &TrackPainter::itemHovered, this,
+                [this, modelIndex](int itemIndex) { onItemHovered(modelIndex, itemIndex); });
 
         TrackInfo info;
         info.name = model->displayName();
@@ -127,6 +131,15 @@ void TimelineContentWidget::rebuildTracks()
     }
     m_trackLayout->addStretch(1);
     m_labels->setTracks(tracks);
+}
+
+void TimelineContentWidget::onItemHovered(int modelIndex, int itemIndex)
+{
+    if (m_hoveredModelIndex == modelIndex && m_hoveredItemIndex == itemIndex)
+        return;
+    m_hoveredModelIndex = modelIndex;
+    m_hoveredItemIndex = itemIndex;
+    emit itemHovered(modelIndex, itemIndex);
 }
 
 void TimelineContentWidget::selectItem(int modelIndex, int itemIndex)

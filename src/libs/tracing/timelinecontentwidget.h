@@ -38,9 +38,16 @@ public:
     int currentColumn() const { return m_currentColumn; }
     int currentTypeId() const { return m_currentTypeId; }
 
+    int hoveredModelIndex() const { return m_hoveredModelIndex; }
+    int hoveredItemIndex() const { return m_hoveredItemIndex; }
+
+signals:
+    void itemHovered(int modelIndex, int itemIndex);
+
 private:
     void rebuildTracks();
     void selectItem(int modelIndex, int itemIndex);
+    void onItemHovered(int modelIndex, int itemIndex);
 
     TimelineModelAggregator *m_aggregator;
     TimelineZoomControl *m_zoom;
@@ -58,6 +65,9 @@ private:
     int m_currentLine = -1;
     int m_currentColumn = 0;
     int m_currentTypeId = -1;
+
+    int m_hoveredModelIndex = -1;
+    int m_hoveredItemIndex = -1;
 };
 
 } // namespace Timeline
