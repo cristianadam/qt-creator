@@ -13,9 +13,11 @@
 namespace Timeline {
 
 static constexpr int kAccentWidth = 3;
-static constexpr int kTextLeftMargin = 5; // left margin after the accent strip
-static constexpr int kTextRightMargin = 20; // room for the expand indicator
+static constexpr int kTextLeftMargin = 5;
+static constexpr int kTextRightMargin = 20;
 static constexpr int kIndicatorSize = 16;
+static constexpr int kResizeZone = 5;
+static constexpr int kMinRowHeight = 30;
 
 static QColor themeColor(Utils::Theme::Color role)
 {
@@ -28,6 +30,7 @@ TrackLabels::TrackLabels(QWidget *parent)
     : QWidget(parent)
 {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    setMouseTracking(true);
 }
 
 void TrackLabels::setTracks(const QList<TrackInfo> &tracks)
@@ -164,7 +167,7 @@ void TrackLabels::paintEvent(QPaintEvent *)
 
 void TrackLabels::mousePressEvent(QMouseEvent *event)
 {
-    if (event->button() != Qt::LeftButton) {
+    if (event->button() != Qt::LeftButton && event->button() != Qt::RightButton) {
         event->ignore();
         return;
     }
@@ -182,18 +185,42 @@ void TrackLabels::mousePressEvent(QMouseEvent *event)
             trackHeight += h;
 
         if (clickY >= y && clickY < y + titleHeight) {
-            if (clickX >= iconLeft) {
-                emit expandToggled(i);
-            } else {
-                m_dragSource = i;
-                m_dragPressPos = event->pos();
-                m_dragging = false;
-                m_dragInsertSlot = -1;
-                setCursor(Qt::OpenHandCursor);
+            if (event->button() == Qt::LeftButton) {
+                if (clickX >= iconLeft) {
+                    emit expandToggled(i);
+                } else {
+                    m_dragSource = i;
+                    m_dragPressPos = event->pos();
+                    m_dragging = false;
+                    m_dragInsertSlot = -1;
+                    setCursor(Qt::OpenHandCursor);
+                }
             }
             event->accept();
             return;
         }
+
+        if (track.expanded && track.rowLabels.size() == track.rowHeights.size() - 1) {
+            int subRowY = y + titleHeight;
+            for (int row = 0; row < track.rowLabels.size(); ++row) {
+                const int rowH = track.rowHeights[row + 1];
+                if (clickY >= subRowY && clickY < subRowY + rowH) {
+                    if (event->button() == Qt::LeftButton
+                            && clickY >= subRowY + rowH - kResizeZone) {
+                        m_resizeTrack = i;
+                        m_resizeRow = row;
+                        m_resizeStartY = clickY;
+                        m_resizeOrigHeight = rowH;
+                    } else {
+                        emit rowLabelClicked(i, row, event->button() == Qt::RightButton);
+                    }
+                    event->accept();
+                    return;
+                }
+                subRowY += rowH;
+            }
+        }
+
         y += trackHeight;
     }
     event->ignore();
@@ -201,38 +228,89 @@ void TrackLabels::mousePressEvent(QMouseEvent *event)
 
 void TrackLabels::mouseMoveEvent(QMouseEvent *event)
 {
-    if (m_dragSource == -1) {
-        event->ignore();
+    if (m_dragSource != -1) {
+        if (!m_dragging) {
+            if ((event->pos() - m_dragPressPos).manhattanLength() > 4)
+                m_dragging = true;
+        }
+        if (m_dragging) {
+            setCursor(Qt::ClosedHandCursor);
+            const int dragY = event->pos().y() + m_scrollOffset;
+            int slot = 0;
+            int cumY = 0;
+            for (int i = 0; i < m_tracks.size(); ++i) {
+                int trackHeight = 0;
+                for (int h : m_tracks[i].rowHeights)
+                    trackHeight += h;
+                if (dragY < cumY + trackHeight / 2)
+                    break;
+                slot = i + 1;
+                cumY += trackHeight;
+            }
+            if (m_dragInsertSlot != slot) {
+                m_dragInsertSlot = slot;
+                update();
+            }
+        }
+        event->accept();
         return;
     }
-    if (!m_dragging) {
-        if ((event->pos() - m_dragPressPos).manhattanLength() > 4)
-            m_dragging = true;
-    }
-    if (m_dragging) {
-        setCursor(Qt::ClosedHandCursor);
-        const int dragY = event->pos().y() + m_scrollOffset;
-        int slot = 0;
-        int cumY = 0;
-        for (int i = 0; i < m_tracks.size(); ++i) {
-            int trackHeight = 0;
-            for (int h : m_tracks[i].rowHeights)
-                trackHeight += h;
-            if (dragY < cumY + trackHeight / 2)
-                break;
-            slot = i + 1;
-            cumY += trackHeight;
-        }
-        if (m_dragInsertSlot != slot) {
-            m_dragInsertSlot = slot;
+
+    if (m_resizeRow >= 0) {
+        const int delta = event->pos().y() - m_resizeStartY;
+        const int newH = qMax(kMinRowHeight, m_resizeOrigHeight + delta);
+        if (m_tracks[m_resizeTrack].rowHeights[m_resizeRow + 1] != newH) {
+            m_tracks[m_resizeTrack].rowHeights[m_resizeRow + 1] = newH;
             update();
+            emit rowHeightChangeRequested(m_resizeTrack, m_resizeRow, newH);
         }
+        event->accept();
+        return;
     }
+
+    // Hover: update cursor based on what's under the mouse
+    const int hoverY = event->pos().y();
+    int y = -m_scrollOffset;
+    for (int i = 0; i < m_tracks.size(); ++i) {
+        const TrackInfo &track = m_tracks[i];
+        const int titleHeight = track.rowHeights.isEmpty() ? 30 : track.rowHeights[0];
+        int trackHeight = 0;
+        for (int h : track.rowHeights)
+            trackHeight += h;
+        if (hoverY < y)
+            break;
+        if (hoverY < y + trackHeight) {
+            if (track.expanded && hoverY >= y + titleHeight) {
+                int subRowY = y + titleHeight;
+                for (int row = 0; row < track.rowLabels.size()
+                        && row + 1 < track.rowHeights.size(); ++row) {
+                    const int rowH = track.rowHeights[row + 1];
+                    if (hoverY >= subRowY + rowH - kResizeZone && hoverY < subRowY + rowH) {
+                        setCursor(Qt::SizeVerCursor);
+                        event->accept();
+                        return;
+                    }
+                    subRowY += rowH;
+                }
+            }
+            break;
+        }
+        y += trackHeight;
+    }
+    unsetCursor();
     event->accept();
 }
 
 void TrackLabels::mouseReleaseEvent(QMouseEvent *event)
 {
+    if (m_resizeRow >= 0 && event->button() == Qt::LeftButton) {
+        m_resizeTrack = -1;
+        m_resizeRow = -1;
+        unsetCursor();
+        event->accept();
+        return;
+    }
+
     if (event->button() != Qt::LeftButton || m_dragSource == -1) {
         event->ignore();
         return;

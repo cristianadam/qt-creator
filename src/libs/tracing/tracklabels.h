@@ -19,6 +19,7 @@ struct TrackInfo
     QColor color;         // category accent strip color
     bool expanded = false;
     QStringList rowLabels; // sub-row names when expanded (empty when collapsed)
+    QList<int> rowLabelIds; // selection IDs parallel to rowLabels
     QList<int> rowHeights; // rowHeights[0] = title row; [1..] = sub-rows
 };
 
@@ -38,6 +39,8 @@ public:
 signals:
     void expandToggled(int trackIndex);
     void moveCategories(int sourceIndex, int targetIndex);
+    void rowLabelClicked(int trackIndex, int rowIndex, bool reverse);
+    void rowHeightChangeRequested(int trackIndex, int rowIndex, int newHeight);
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -53,6 +56,10 @@ private:
     int m_dragInsertSlot = -1;
     QPoint m_dragPressPos;
     bool m_dragging = false;
+    int m_resizeTrack = -1;
+    int m_resizeRow = -1;
+    int m_resizeStartY = 0;
+    int m_resizeOrigHeight = 0;
 
     void updateTotalHeight();
 };

@@ -207,6 +207,46 @@ TimelineContentWidget::TimelineContentWidget(TimelineModelAggregator *aggregator
         m_aggregator->moveModel(from, to);
     });
 
+    connect(m_labels, &TrackLabels::rowLabelClicked,
+            this, [this](int trackIndex, int rowIndex, bool reverse) {
+        if (trackIndex < 0 || trackIndex >= m_painters.size())
+            return;
+        const int modelId = m_painters[trackIndex]->model()->modelId();
+        for (const QVariant &v : m_aggregator->models()) {
+            auto model = qvariant_cast<TimelineModel *>(v);
+            if (!model || model->modelId() != modelId)
+                continue;
+            if (model->hasMixedTypesInExpandedState())
+                return;
+            const QVariantList labels = model->labels();
+            if (rowIndex < 0 || rowIndex >= labels.size())
+                return;
+            const int selId = labels.at(rowIndex).toMap().value("id").toInt();
+            const qint64 time = m_zoom->rangeStart();
+            const int item = reverse
+                ? model->prevItemBySelectionId(selId, time, -1)
+                : model->nextItemBySelectionId(selId, time, -1);
+            if (item >= 0)
+                selectItem(trackIndex, item);
+            return;
+        }
+    });
+
+    connect(m_labels, &TrackLabels::rowHeightChangeRequested,
+            this, [this](int trackIndex, int rowIndex, int newHeight) {
+        if (trackIndex < 0 || trackIndex >= m_painters.size())
+            return;
+        const int modelId = m_painters[trackIndex]->model()->modelId();
+        for (const QVariant &v : m_aggregator->models()) {
+            auto model = qvariant_cast<TimelineModel *>(v);
+            if (model && model->modelId() == modelId) {
+                model->setExpandedRowHeight(rowIndex + 1, newHeight);
+                m_painters[trackIndex]->updateGeometry();
+                return;
+            }
+        }
+    });
+
     connect(aggregator, &TimelineModelAggregator::modelsChanged,
             this, &TimelineContentWidget::rebuildTracks);
     connect(aggregator, &TimelineModelAggregator::notesChanged,
@@ -307,8 +347,11 @@ void TimelineContentWidget::rebuildTracks()
         for (int row = 0; row < model->rowCount(); ++row)
             info.rowHeights.append(model->rowHeight(row));
         if (model->expanded()) {
-            for (const QVariant &label : model->labels())
-                info.rowLabels.append(label.toMap().value("description").toString());
+            for (const QVariant &label : model->labels()) {
+                const QVariantMap m = label.toMap();
+                info.rowLabels.append(m.value("description").toString());
+                info.rowLabelIds.append(m.value("id").toInt());
+            }
         }
         tracks.append(info);
     }
