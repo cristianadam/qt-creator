@@ -161,10 +161,11 @@ void TrackPainter::paintEvent(QPaintEvent *)
         p.fillRect(itemRect, color);
 
         // Draw selection / hover border on top
-        if (i == m_selectedItem || i == m_hoveredItem) {
-            const QColor borderColor = (i == m_selectedItem) ? selectionColor : hoverColor;
-            const int penW = (i == m_selectedItem) ? 2 : 1;
-            p.setPen(QPen(borderColor, penW));
+        if (i == m_selectedItem) {
+            p.setPen(QPen(selectionColor, 4));
+            p.drawRect(itemRect.adjusted(2.0, 2.0, -2.0, -2.0));
+        } else if (i == m_hoveredItem) {
+            p.setPen(QPen(hoverColor, 1));
             p.drawRect(itemRect.adjusted(0.5, 0.5, -0.5, -0.5));
         }
     }
