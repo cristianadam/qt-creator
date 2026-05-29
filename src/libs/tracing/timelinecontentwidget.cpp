@@ -247,6 +247,10 @@ TimelineContentWidget::TimelineContentWidget(TimelineModelAggregator *aggregator
         }
     });
 
+    connect(m_labels, &TrackLabels::noteClicked, this, [this](int trackIndex, int eventId) {
+        selectItem(trackIndex, eventId);
+    });
+
     connect(aggregator, &TimelineModelAggregator::modelsChanged,
             this, &TimelineContentWidget::rebuildTracks);
     connect(aggregator, &TimelineModelAggregator::notesChanged,
@@ -353,6 +357,14 @@ void TimelineContentWidget::rebuildTracks()
                 info.rowLabelIds.append(m.value("id").toInt());
             }
         }
+        if (const TimelineNotesModel *notes = m_aggregator->notes()) {
+            const QVariantList noteIds = notes->byTimelineModel(model->modelId());
+            for (const QVariant &nv : noteIds) {
+                const int noteId = nv.toInt();
+                info.noteEventIds.append(notes->timelineIndex(noteId));
+                info.noteTexts.append(notes->text(noteId));
+            }
+        }
         tracks.append(info);
     }
     m_trackLayout->addStretch(1);
@@ -361,8 +373,19 @@ void TimelineContentWidget::rebuildTracks()
 
 void TimelineContentWidget::updateNotes()
 {
+    TimelineNotesModel *notes = m_aggregator->notes();
+    if (m_notes != notes) {
+        if (m_notes)
+            disconnect(m_notes, &TimelineNotesModel::changed, this,
+                       &TimelineContentWidget::rebuildTracks);
+        m_notes = notes;
+        if (m_notes)
+            connect(m_notes, &TimelineNotesModel::changed, this,
+                    &TimelineContentWidget::rebuildTracks);
+    }
     for (auto painter : m_painters)
-        painter->setNotes(m_aggregator->notes());
+        painter->setNotes(notes);
+    rebuildTracks();
 }
 
 void TimelineContentWidget::onItemHovered(int modelIndex, int itemIndex)

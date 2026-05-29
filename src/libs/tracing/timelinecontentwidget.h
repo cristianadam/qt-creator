@@ -18,6 +18,7 @@ QT_END_NAMESPACE
 namespace Timeline {
 
 class TimelineModelAggregator;
+class TimelineNotesModel;
 class TimelineZoomControl;
 class TimelineScrollSync;
 class RangeDetailsWidget;
@@ -91,6 +92,7 @@ private:
     SelectionRangeOverlay *m_overlay;
     SelectionRangeDetailsWidget *m_selectionDetails;
     RangeDetailsWidget *m_details;
+    TimelineNotesModel *m_notes = nullptr;
     QList<TrackPainter *> m_painters;
 
     int m_selectedModelIndex = -1;

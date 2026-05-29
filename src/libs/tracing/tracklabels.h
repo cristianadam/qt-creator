@@ -21,6 +21,8 @@ struct TrackInfo
     QStringList rowLabels; // sub-row names when expanded (empty when collapsed)
     QList<int> rowLabelIds; // selection IDs parallel to rowLabels
     QList<int> rowHeights; // rowHeights[0] = title row; [1..] = sub-rows
+    QList<int> noteEventIds; // timeline event indices for notes on this model
+    QStringList noteTexts;   // note texts parallel to noteEventIds
 };
 
 class TRACING_EXPORT TrackLabels : public QWidget
@@ -41,6 +43,7 @@ signals:
     void moveCategories(int sourceIndex, int targetIndex);
     void rowLabelClicked(int trackIndex, int rowIndex, bool reverse);
     void rowHeightChangeRequested(int trackIndex, int rowIndex, int newHeight);
+    void noteClicked(int trackIndex, int eventId);
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -60,6 +63,7 @@ private:
     int m_resizeRow = -1;
     int m_resizeStartY = 0;
     int m_resizeOrigHeight = 0;
+    QList<int> m_noteCurrentIdx;
 
     void updateTotalHeight();
 };

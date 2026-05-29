@@ -15,6 +15,7 @@ namespace Timeline {
 static constexpr int kAccentWidth = 3;
 static constexpr int kTextLeftMargin = 5;
 static constexpr int kTextRightMargin = 20;
+static constexpr int kNoteButtonWidth = 20;
 static constexpr int kIndicatorSize = 16;
 static constexpr int kResizeZone = 5;
 static constexpr int kMinRowHeight = 30;
@@ -36,6 +37,8 @@ TrackLabels::TrackLabels(QWidget *parent)
 void TrackLabels::setTracks(const QList<TrackInfo> &tracks)
 {
     m_tracks = tracks;
+    m_noteCurrentIdx.resize(tracks.size());
+    m_noteCurrentIdx.fill(-1);
     updateTotalHeight();
     update();
 }
@@ -115,18 +118,31 @@ void TrackLabels::paintEvent(QPaintEvent *)
         p.fillRect(0, y, kAccentWidth, trackHeight, track.color);
 
         // Title row
+        const bool hasNotes = !track.noteEventIds.isEmpty();
         const int textX = kAccentWidth + kTextLeftMargin;
-        const int textW = width() - textX - kTextRightMargin;
+        const int expandLeft = width() - kTextRightMargin;
+        const int noteLeft = hasNotes ? expandLeft - kNoteButtonWidth : expandLeft;
+        const int textW = noteLeft - textX;
         const QRectF titleRect(textX, y, textW, titleHeight);
         p.setPen(textColor);
         p.drawText(titleRect, Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine,
                    p.fontMetrics().elidedText(track.name, Qt::ElideRight, textW));
 
+        // Notes indicator button (shown when model has notes)
+        if (hasNotes) {
+            static const QIcon noteIcon = Utils::Icon(
+                {{":/qt/qml/QtCreator/Tracing/ico_edit.png",
+                  Utils::Theme::IconsBaseColor}}).icon();
+            const int ix = noteLeft + (kNoteButtonWidth - kIndicatorSize) / 2;
+            const int iy = y + (titleHeight - kIndicatorSize) / 2;
+            noteIcon.paint(&p, ix, iy, kIndicatorSize, kIndicatorSize);
+        }
+
         // Expand/collapse indicator (right-aligned in title row)
         {
             const QIcon icon = track.expanded ? Utils::Icons::CLOSE_SPLIT_TOP.icon()
                                               : Utils::Icons::SPLIT_HORIZONTAL_TOOLBAR.icon();
-            const int ix = width() - kTextRightMargin + (kTextRightMargin - kIndicatorSize) / 2;
+            const int ix = expandLeft + (kTextRightMargin - kIndicatorSize) / 2;
             const int iy = y + (titleHeight - kIndicatorSize) / 2;
             icon.paint(&p, ix, iy, kIndicatorSize, kIndicatorSize);
         }
@@ -186,8 +202,15 @@ void TrackLabels::mousePressEvent(QMouseEvent *event)
 
         if (clickY >= y && clickY < y + titleHeight) {
             if (event->button() == Qt::LeftButton) {
-                if (clickX >= iconLeft) {
+                const int expandLeft = width() - kTextRightMargin;
+                const int noteLeft = expandLeft - kNoteButtonWidth;
+                if (clickX >= expandLeft) {
                     emit expandToggled(i);
+                } else if (!track.noteEventIds.isEmpty() && clickX >= noteLeft) {
+                    auto &idx = m_noteCurrentIdx[i];
+                    if (++idx >= track.noteEventIds.size())
+                        idx = 0;
+                    emit noteClicked(i, track.noteEventIds.at(idx));
                 } else {
                     m_dragSource = i;
                     m_dragPressPos = event->pos();
