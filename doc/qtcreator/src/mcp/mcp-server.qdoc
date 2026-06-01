@@ -166,3 +166,29 @@
 
     \sa {Activate extensions}, {Use AI}{How to: Use AI}
 */
+
+/*!
+    \page creator-how-to-inspect-mcp-server.html
+    \previouspage creator-how-tos.html
+
+    \ingroup creator-how-to-ai
+
+    \title Inspect MCP communication
+
+    To inspect the communication between MCP clients and servers, go to
+    \uicontrol Tools > \uicontrol {Debug \QC} > \uicontrol {Inspect MCP Servers}.
+
+    \image qtcreator-mcp-server-inspector.webp {MCP Server Inspector dialog}
+
+    In \uicontrol {Session}, select a session between an MPC client and server,
+    or \uicontrol {Global} to show general messages.
+
+    In \uicontrol {Client Message}, select a message to view more information in
+    \uicontrol {Server Message}.
+
+    To remove old entries, select \uicontrol Clear.
+
+    To save messages as a file, select \uicontrol Save.
+
+    \sa {Activate extensions}, {Use AI}{How to: Use AI}
+*/
