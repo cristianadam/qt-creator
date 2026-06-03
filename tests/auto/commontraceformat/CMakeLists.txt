@@ -1,0 +1,7 @@
+add_subdirectory(tst_leb128)
+add_subdirectory(tst_bitbuffer)
+add_subdirectory(tst_metadataroundtrip)
+add_subdirectory(tst_fieldclass)
+add_subdirectory(tst_packetroundtrip)
+add_subdirectory(tst_traceroundtrip)
+add_subdirectory(tst_tracedata)
