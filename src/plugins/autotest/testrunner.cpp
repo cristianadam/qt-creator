@@ -168,11 +168,10 @@ void TestRunner::cancelCurrent(TestRunner::CancelReason reason)
         reportResult(ResultType::MessageFatal, Tr::tr("Test case canceled due to timeout.\nMaybe raise the timeout?"));
     else if (reason == UserCanceled)
         reportResult(ResultType::MessageFatal, Tr::tr("Test run canceled by user."));
-    // Debug is handled internally and calls onFinished() on its own
     if (m_currentRunControl) {
         m_runControlIndex = m_selectedTests.size();
         m_currentRunControl->initiateStop();
-    } else if (m_runMode != TestRunMode::Debug && m_runMode != TestRunMode::DebugWithoutDeploy) {
+    } else if (m_taskTreeRunner.isRunning()) {
         m_taskTreeRunner.reset();
         onFinished();
     }
@@ -298,7 +297,7 @@ bool TestRunner::cancelAfterPreRunCheck()
             continue;
         }
         TestConfiguration *config = static_cast<TestConfiguration *>(itc);
-        config->completeTestInformation(TestRunMode::Run);
+        config->completeTestInformation(isDebugMode() ? TestRunMode::Debug : TestRunMode::Run);
         if (!config->project()) {
             projectChanged = true;
             toBeRemoved.append(config);
@@ -339,7 +338,7 @@ int TestRunner::precheckTestConfigurations()
             continue;
         }
         TestConfiguration *config = static_cast<TestConfiguration *>(itc);
-        config->completeTestInformation(TestRunMode::Run);
+        config->completeTestInformation(isDebugMode() ? TestRunMode::Debug : TestRunMode::Run);
         if (config->project()) {
             testCaseCount += config->testCaseCount();
             if (!omitWarnings && config->isDeduced()) {
@@ -631,9 +630,16 @@ RunControl *TestRunner::runControlFor(ITestConfiguration *itc)
             reportResult(ResultType::MessageFatal, fatalMessage);
             return nullptr;
         }
-        return createRunControl(ProjectExplorer::Constants::NORMAL_RUN_MODE, config);
+        const Id mode = isDebugMode() ? Id{ProjectExplorer::Constants::DEBUG_RUN_MODE}
+                                      : Id{ProjectExplorer::Constants::NORMAL_RUN_MODE};
+        return createRunControl(mode, config);
     }
     case ITestBase::Tool: {
+        if (isDebugMode()) {
+            reportResult(ResultType::MessageWarn,
+                         Tr::tr("Debugging is not supported for this test. (%1)").arg(name));
+            return nullptr;
+        }
         auto *toolConfig = static_cast<TestToolConfiguration *>(itc);
         if (toolConfig->isInvalid()) {
             reportResult(ResultType::MessageWarn, toolConfig->errorMessage());
@@ -696,7 +702,28 @@ void TestRunner::runNextViaRunControl()
         return;
     }
 
-    std::shared_ptr<TestOutputReader> outputReader(itc->createOutputReader(nullptr));
+    // Some debugger backends cannot forward the test output to our reader.
+    bool useOutputProcessor = true;
+    if (isDebugMode()) {
+        QString message;
+        if (Kit *kit = itc->project()->activeKit()) {
+            if (Debugger::DebuggerKitAspect::engineType(kit) == Debugger::CdbEngineType) {
+                message = Tr::tr("Unable to display test results when using CDB.");
+                useOutputProcessor = false;
+            } else if (auto devType = RunDeviceTypeKitAspect::deviceTypeId(kit);
+                       devType != ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE
+                       && devType != RemoteLinux::Constants::GenericLinuxOsType) {
+                message = Tr::tr("Unable to display test results when debugging on device.");
+                useOutputProcessor = false;
+            }
+        }
+        if (m_runControlIndex == 0 && !message.isEmpty()) // only report once
+            reportResult(ResultType::MessageWarn, message);
+    }
+
+    std::shared_ptr<TestOutputReader> outputReader;
+    if (useOutputProcessor)
+        outputReader.reset(itc->createOutputReader(nullptr));
     if (outputReader) {
         outputReader->setId(runControl->commandLine().executable().toUserOutput());
         connect(outputReader.get(), &TestOutputReader::newResult,
@@ -739,112 +766,12 @@ void TestRunner::runNextViaRunControl()
         QMetaObject::invokeMethod(this, &TestRunner::runNextViaRunControl, Qt::QueuedConnection);
     });
 
-    if (testSettings().useTimeout()) {
+    // Do not time out while debugging - the user drives the session.
+    if (!isDebugMode() && testSettings().useTimeout()) {
         m_cancelTimer.setInterval(testSettings().timeout());
         m_cancelTimer.start();
     }
     runControl->start();
-}
-
-void TestRunner::onDebugSingleFinished()
-{
-    disconnect(m_debugRunControlConnect);
-    disconnect(m_stopDebugConnect);
-    QTC_ASSERT(m_selectedTests.size(), onFinished(); return);
-    QMetaObject::invokeMethod(this, [this] { debugTests(true); }, Qt::QueuedConnection);
-}
-
-void TestRunner::debugTests(bool followUp)
-{
-    if (followUp) {
-        QTC_ASSERT(m_selectedTests.size(), onFinished(); return);
-        delete m_selectedTests.takeFirst();
-    }
-    if (m_debugTestRunCanceled || m_selectedTests.size() == 0) {
-        onFinished();
-        return;
-    }
-
-    ITestConfiguration *itc = m_selectedTests.first();
-    QTC_ASSERT(itc->testBase()->type() == ITestBase::Framework, onDebugSingleFinished(); return);
-
-    TestConfiguration *config = static_cast<TestConfiguration *>(itc);
-    config->completeTestInformation(TestRunMode::Debug);
-    if (!config->project()) {
-        reportResult(ResultType::MessageWarn,
-                     Tr::tr("Startup project has changed. Canceling test run."));
-        onFinished();
-        return;
-    }
-    if (!config->hasExecutable()) {
-        if (auto *rc = getRunConfiguration(firstNonEmptyTestCaseTarget(config)))
-            config->completeTestInformation(rc, TestRunMode::Debug);
-    }
-
-    if (!config->runConfiguration()) {
-        reportResult(ResultType::MessageFatal, Tr::tr("Failed to get run configuration."));
-        onDebugSingleFinished();
-        return;
-    }
-
-    if (config->executableFilePath().isEmpty()) {
-        reportResult(
-            ResultType::MessageFatal,
-            Tr::tr("Could not find command \"%1\". (%2)")
-                .arg(config->executableFilePath().toUserOutput(), config->displayName()));
-        onDebugSingleFinished();
-        return;
-    }
-
-    RunControl *runControl = createRunControl(ProjectExplorer::Constants::DEBUG_RUN_MODE, config);
-    if (!runControl) {
-        reportResult(ResultType::MessageFatal,
-                     Tr::tr("Failed to create run configuration. (%1)").arg(config->displayName()));
-        onFinished();
-        return;
-    }
-    bool useOutputProcessor = true;
-    if (!followUp) {
-        if (Kit *kit = config->project()->activeKit()) {
-            if (DebuggerKitAspect::engineType(kit) == CdbEngineType) {
-                reportResult(ResultType::MessageWarn,
-                             Tr::tr("Unable to display test results when using CDB."));
-                useOutputProcessor = false;
-            }
-            if (auto devType = RunDeviceTypeKitAspect::deviceTypeId(kit);
-                    devType != ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE
-                    && devType != RemoteLinux::Constants::GenericLinuxOsType) {
-                reportResult(ResultType::MessageWarn,
-                             Tr::tr("Unable to display test results when debugging on device."));
-                useOutputProcessor = false;
-            }
-        }
-    }
-
-    if (useOutputProcessor) {
-        TestOutputReader *outputreader = config->createOutputReader(nullptr);
-        connect(outputreader, &TestOutputReader::newResult, this, &TestRunner::testResultReady);
-        outputreader->setId(runControl->commandLine().executable().toUserOutput());
-        connect(outputreader, &TestOutputReader::newOutputLineAvailable,
-                TestResultsPane::instance(), &TestResultsPane::addOutputLine);
-        connect(runControl, &RunControl::appendMessage,
-                this, [outputreader](const QString &msg, OutputFormat format) {
-            processOutput(outputreader, msg, format);
-        });
-        connect(runControl, &RunControl::stopped, outputreader, &QObject::deleteLater);
-    }
-
-    m_stopDebugConnect = connect(this, &TestRunner::requestStopTestRun,
-                                 this, [this, runControl] {
-        m_debugTestRunCanceled = true;
-        runControl->initiateStop();
-    });
-
-    m_debugRunControlConnect = connect(runControl, &RunControl::stopped,
-                                       this, &TestRunner::onDebugSingleFinished);
-    runControl->start();
-    if (useOutputProcessor && testSettings().popupOnStart())
-        popupResultsPane();
 }
 
 static bool executablesEmpty()
@@ -891,8 +818,7 @@ void TestRunner::runOrDebugTests()
     }
     case TestRunMode::Debug:
     case TestRunMode::DebugWithoutDeploy:
-        m_debugTestRunCanceled = false;
-        debugTests(false);
+        runTestsHelperViaRunControl();
         return;
     default:
         break;
@@ -1026,8 +952,6 @@ void TestRunner::onBuildQueueFinished(bool success)
 void TestRunner::onFinished()
 {
     m_taskTreeRunner.reset();
-    disconnect(m_debugRunControlConnect);
-    disconnect(m_stopDebugConnect);
     disconnect(m_targetConnect);
     qDeleteAll(m_selectedTests);
     m_selectedTests.clear();
