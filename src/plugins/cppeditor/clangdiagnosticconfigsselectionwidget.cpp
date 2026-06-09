@@ -9,6 +9,8 @@
 #include <coreplugin/icore.h>
 
 #include <utils/guiutils.h>
+#include <utils/layoutbuilder.h>
+#include <utils/store.h>
 
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -16,6 +18,8 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+
+using namespace Utils;
 
 namespace CppEditor {
 
@@ -33,7 +37,7 @@ ClangDiagnosticConfigsSelectionWidget::ClangDiagnosticConfigsSelectionWidget(
 }
 
 void ClangDiagnosticConfigsSelectionWidget::refresh(const ClangDiagnosticConfigsModel &model,
-                                                    const Utils::Id &configToSelect,
+                                                    const Id &configToSelect,
                                                     const CreateEditWidget &createEditWidget)
 {
     m_diagnosticConfigsModel = model;
@@ -44,7 +48,7 @@ void ClangDiagnosticConfigsSelectionWidget::refresh(const ClangDiagnosticConfigs
     m_button->setText(config.displayName());
 }
 
-Utils::Id ClangDiagnosticConfigsSelectionWidget::currentConfigId() const
+Id ClangDiagnosticConfigsSelectionWidget::currentConfigId() const
 {
     return m_currentConfigId;
 }
@@ -91,7 +95,7 @@ void ClangDiagnosticConfigsSelectionWidget::onButtonClicked()
     connect(buttonsBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 
     if (dialog.exec() == QDialog::Accepted) {
-        const Utils::Id origId = m_currentConfigId;
+        const Id origId = m_currentConfigId;
         m_diagnosticConfigsModel = ClangDiagnosticConfigsModel(widget->configs());
         m_currentConfigId = widget->currentConfig().id();
         const QString origDisplayName = m_button->text();
@@ -105,4 +109,73 @@ void ClangDiagnosticConfigsSelectionWidget::onButtonClicked()
     }
 }
 
-} // CppEditor namespace
+// DiagnosticConfigIdAspect
+
+DiagnosticConfigIdAspect::DiagnosticConfigIdAspect(AspectContainer *container)
+    : TypedAspect(container)
+{}
+
+void DiagnosticConfigIdAspect::setModelFactory(ModelFactory factory)
+{
+    m_modelFactory = std::move(factory);
+}
+
+void DiagnosticConfigIdAspect::setEditWidgetFactory(EditWidgetFactory factory)
+{
+    m_editFactory = std::move(factory);
+}
+
+void DiagnosticConfigIdAspect::addToLayoutImpl(Layouting::Layout &parent)
+{
+    m_widget = createSubWidget<ClangDiagnosticConfigsSelectionWidget>();
+    if (m_modelFactory && m_editFactory) {
+        m_widget->refresh(m_modelFactory(), volatileValue(), m_editFactory);
+        m_customConfigs = m_widget->customConfigs();
+    }
+    connect(m_widget, &ClangDiagnosticConfigsSelectionWidget::changed,
+            this, [this] {
+                if (m_widget) {
+                    m_customConfigs = m_widget->customConfigs();
+                    handleGuiChanged();
+                }
+            });
+    parent.addItem(m_widget.data());
+}
+
+bool DiagnosticConfigIdAspect::guiToVolatileValue()
+{
+    if (!m_widget)
+        return false;
+    const Id newId = m_widget->currentConfigId();
+    if (newId == m_volatileValue)
+        return false;
+    m_volatileValue = newId;
+    return true;
+}
+
+void DiagnosticConfigIdAspect::volatileValueToGui()
+{
+    if (!m_widget || !m_modelFactory || !m_editFactory)
+        return;
+    const ClangDiagnosticConfigsModel model = m_modelFactory();
+    const Id id = model.hasConfigWithId(m_volatileValue) ? m_volatileValue : defaultValue();
+    m_widget->refresh(model, id, m_editFactory);
+    m_customConfigs = m_widget->customConfigs();
+}
+
+void DiagnosticConfigIdAspect::fromMap(const Store &map)
+{
+    if (!settingsKey().isEmpty()) {
+        const auto it = map.find(settingsKey());
+        if (it != map.end())
+            setValue(Id::fromSetting(it.value()), BeQuiet);
+    }
+}
+
+void DiagnosticConfigIdAspect::toMap(Store &map) const
+{
+    if (!settingsKey().isEmpty())
+        map.insert(settingsKey(), value().toSetting());
+}
+
+} // namespace CppEditor
