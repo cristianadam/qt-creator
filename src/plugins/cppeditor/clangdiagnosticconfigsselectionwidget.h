@@ -85,9 +85,15 @@ public:
 
     void addToLayoutImpl(Layouting::Layout &parent) final;
 
+    void refresh();
+    bool hasWidget() const { return m_widget != nullptr; }
+
 private:
     bool guiToVolatileValue() final;
     void volatileValueToGui() final;
+
+    QVariant toSettingsValue(const QVariant &v) const final;
+    QVariant fromSettingsValue(const QVariant &v) const final;
 
     ModelFactory      m_modelFactory;
     EditWidgetFactory m_editFactory;

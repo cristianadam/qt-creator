@@ -132,13 +132,10 @@ void DiagnosticConfigIdAspect::addToLayoutImpl(Layouting::Layout &parent)
         m_widget->refresh(m_modelFactory(), volatileValue(), m_editFactory);
         m_customConfigs = m_widget->customConfigs();
     }
-    connect(m_widget, &ClangDiagnosticConfigsSelectionWidget::changed,
-            this, [this] {
-                if (m_widget) {
-                    m_customConfigs = m_widget->customConfigs();
-                    handleGuiChanged();
-                }
-            });
+    connect(m_widget, &ClangDiagnosticConfigsSelectionWidget::changed, this, [this] {
+        if (m_widget)
+            handleGuiChanged();
+    });
     parent.addItem(m_widget.data());
 }
 
@@ -147,10 +144,16 @@ bool DiagnosticConfigIdAspect::guiToVolatileValue()
     if (!m_widget)
         return false;
     const Id newId = m_widget->currentConfigId();
-    if (newId == m_volatileValue)
-        return false;
+    const ClangDiagnosticConfigs newConfigs = m_widget->customConfigs();
+    const bool changed = (newId != m_volatileValue) || (newConfigs != m_customConfigs);
     m_volatileValue = newId;
-    return true;
+    m_customConfigs = newConfigs;
+    return changed;
+}
+
+void DiagnosticConfigIdAspect::refresh()
+{
+    volatileValueToGui();
 }
 
 void DiagnosticConfigIdAspect::volatileValueToGui()
@@ -176,6 +179,16 @@ void DiagnosticConfigIdAspect::toMap(Store &map) const
 {
     if (!settingsKey().isEmpty())
         map.insert(settingsKey(), value().toSetting());
+}
+
+QVariant DiagnosticConfigIdAspect::toSettingsValue(const QVariant &v) const
+{
+    return v.value<Id>().toSetting();
+}
+
+QVariant DiagnosticConfigIdAspect::fromSettingsValue(const QVariant &v) const
+{
+    return QVariant::fromValue(Id::fromSetting(v));
 }
 
 } // namespace CppEditor

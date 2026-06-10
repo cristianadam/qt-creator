@@ -218,6 +218,7 @@ static Layouting::Layout clangdSettingsLayout(ClangdSettings *s)
             s->sizeThresholdEnabled,
                 Row { s->sizeThresholdInKb, st }, br,
         },
+        s->diagnosticConfigId,
         noMargin,
     };
     // clang-format on
@@ -306,6 +307,14 @@ ClangdSettings::ClangdSettings()
     completionStyle.setDefaultValue(CompletionStyle::Default);
     for (Style s : {Style::Default, Style::Detailed, Style::Bundled})
         completionStyle.addOption(completionStyleToDisplayString(s));
+
+    diagnosticConfigId.setSettingsKey(diagnosticConfigIdKey());
+    diagnosticConfigId.setDefaultValue(initialClangDiagnosticConfigId());
+    diagnosticConfigId.setModelFactory([this] { return diagnosticConfigsModel(); });
+    diagnosticConfigId.setEditWidgetFactory(
+        [](const ClangDiagnosticConfigs &configs, const Id &id) {
+            return new ClangDiagnosticConfigsWidget(configs, id);
+        });
 
     for (BaseAspect *aspect : aspects()) {
         if (aspect != &useClangd)
@@ -460,7 +469,7 @@ ClangdSettings::Data ClangdSettings::data() const
     d.completionStyle = completionStyle();
     d.sessionsWithOneClangd = m_data.sessionsWithOneClangd;
     d.customDiagnosticConfigs = m_data.customDiagnosticConfigs;
-    d.diagnosticConfigId = m_data.diagnosticConfigId;
+    d.diagnosticConfigId = diagnosticConfigId();
     d.haveCheckedHardwareReqirements = m_data.haveCheckedHardwareReqirements;
     return d;
 }
@@ -484,9 +493,9 @@ void ClangdSettings::setData(const Data &data, bool saveAndEmitSignal)
         headerSourceSwitchMode.setValue(data.headerSourceSwitchMode);
         completionRankingModel.setValue(data.completionRankingModel);
         completionStyle.setValue(data.completionStyle);
+        diagnosticConfigId.setValue(data.diagnosticConfigId);
         m_data.sessionsWithOneClangd = data.sessionsWithOneClangd;
         m_data.customDiagnosticConfigs = data.customDiagnosticConfigs;
-        m_data.diagnosticConfigId = data.diagnosticConfigId;
         m_data.haveCheckedHardwareReqirements = data.haveCheckedHardwareReqirements;
         if (saveAndEmitSignal) {
             saveSettings();
@@ -580,9 +589,6 @@ void ClangdSettings::loadSettings()
     const Store store = storeFromSettings(clangdSettingsKey(), settings);
     m_data.sessionsWithOneClangd =
         store.value(sessionsWithOneClangdKey()).toStringList();
-    m_data.diagnosticConfigId =
-        Id::fromSetting(store.value(diagnosticConfigIdKey(),
-                                    initialClangDiagnosticConfigId().toSetting()));
     m_data.haveCheckedHardwareReqirements =
         store.value(checkedHardwareKey(), false).toBool();
 
@@ -593,7 +599,7 @@ void ClangdSettings::loadSettings()
     static const Key oldKey("ClangDiagnosticConfig");
     const QVariant configId = settings->value(oldKey);
     if (configId.isValid()) {
-        m_data.diagnosticConfigId = Id::fromSetting(configId);
+        diagnosticConfigId.setValue(Id::fromSetting(configId));
         settings->setValue(oldKey, {});
     }
 
@@ -610,7 +616,6 @@ void ClangdSettings::saveSettings()
     // Complex fields alongside aspect data
     settings->beginGroup(clangdSettingsKey());
     settings->setValue(sessionsWithOneClangdKey(), m_data.sessionsWithOneClangd);
-    settings->setValue(diagnosticConfigIdKey(), m_data.diagnosticConfigId.toSetting());
     settings->setValue(checkedHardwareKey(), m_data.haveCheckedHardwareReqirements);
     settings->endGroup();
 
@@ -733,7 +738,7 @@ public:
             headerSourceSwitchMode.setValue(d.headerSourceSwitchMode);
             completionRankingModel.setValue(d.completionRankingModel);
             completionStyle.setValue(d.completionStyle);
-            m_data.diagnosticConfigId = d.diagnosticConfigId;
+            diagnosticConfigId.setValue(d.diagnosticConfigId);
             m_data.customDiagnosticConfigs = d.customDiagnosticConfigs;
         }
 
@@ -748,10 +753,26 @@ public:
             if (!useGlobalSettings())
                 save();
         });
+
+        connect(&diagnosticConfigId, &BaseAspect::changed, this, [this] {
+            m_ownDiagConfigChange = true;
+            emit ClangdSettings::instance().changed();
+            m_ownDiagConfigChange = false;
+        });
+        connect(&ClangdSettings::instance(), &ClangdSettings::changed, this, [this] {
+            if (data().isSessionMode())
+                useGlobalSettings.setValue(true);
+            if (!m_ownDiagConfigChange)
+                diagnosticConfigId.refresh();
+        });
     }
 
     void save()
     {
+        // Only sync customConfigs from the widget when it has been shown;
+        // otherwise keep whatever was loaded from settings.
+        if (diagnosticConfigId.hasWidget())
+            m_data.customDiagnosticConfigs = diagnosticConfigId.customConfigs();
         Store store;
         store.insert(useGlobalSettingsKey(), useGlobalSettings());
         if (!useGlobalSettings()) {
@@ -765,6 +786,7 @@ public:
 
 private:
     Project * const m_project;
+    bool m_ownDiagConfigChange = false;
 };
 
 static ClangdProjectSettings *projectClangdSettings(Project *project)
@@ -813,8 +835,8 @@ void clangdSetDiagnosticConfigId(Project *project, Id id)
 {
     QTC_ASSERT(project, return);
     ClangdProjectSettings *ps = projectClangdSettings(project);
-    ps->m_data.diagnosticConfigId = id;
-    ps->useGlobalSettings.setValue(false);
+    ps->diagnosticConfigId.setValue(id, BaseAspect::BeQuiet);
+    ps->useGlobalSettings.setValue(false, BaseAspect::BeQuiet);
     ps->save();
     emit ClangdSettings::instance().changed();
 }
@@ -827,14 +849,6 @@ public:
     ClangdSettingsPageWidget()
     {
         ClangdSettings &s = ClangdSettings::instance();
-
-        m_configWidget = new ClangDiagnosticConfigsSelectionWidget;
-        m_configWidget->refresh(
-            ClangdSettings::diagnosticConfigsModel(),
-            s.m_data.diagnosticConfigId,
-            [](const ClangDiagnosticConfigs &configs, const Id &id) {
-                return new CppEditor::ClangDiagnosticConfigsWidget(configs, id);
-            });
 
         m_sessionsModel.setStringList(s.m_data.sessionsWithOneClangd);
         m_sessionsModel.sort(0);
@@ -904,7 +918,6 @@ public:
         using namespace Layouting;
         Column {
             s,
-            m_configWidget,
             createHr(),
             Group {
                 title(Tr::tr("Sessions with a Single Clangd Instance")),
@@ -927,14 +940,12 @@ private:
     {
         ClangdSettings &s = ClangdSettings::instance();
         s.apply();
-        s.m_data.customDiagnosticConfigs = m_configWidget->customConfigs();
-        s.m_data.diagnosticConfigId = m_configWidget->currentConfigId();
+        s.m_data.customDiagnosticConfigs = s.diagnosticConfigId.customConfigs();
         s.m_data.sessionsWithOneClangd = m_sessionsModel.stringList();
         s.saveSettings();
         emit s.changed();
     }
 
-    ClangDiagnosticConfigsSelectionWidget *m_configWidget = nullptr;
     QStringListModel m_sessionsModel;
 };
 
@@ -963,39 +974,6 @@ public:
     {
         ClangdProjectSettings *ps = projectClangdSettings(project);
 
-        auto diagConfigs = new ClangDiagnosticConfigsSelectionWidget;
-        diagConfigs->refresh(
-            ClangdSettings::diagnosticConfigsModel(),
-            ps->data().diagnosticConfigIdOrDefault(),
-            [](const ClangDiagnosticConfigs &configs, const Id &id) {
-                return new CppEditor::ClangDiagnosticConfigsWidget(configs, id);
-            });
-        connect(diagConfigs,
-                &ClangDiagnosticConfigsSelectionWidget::changed,
-                this, [ps, diagConfigs] {
-                    ps->m_data.customDiagnosticConfigs =
-                        diagConfigs->customConfigs();
-                    ps->m_data.diagnosticConfigId =
-                        diagConfigs->currentConfigId();
-                    if (!ps->useGlobalSettings())
-                        ps->save();
-                    emit ClangdSettings::instance().changed();
-                });
-
-        connect(&ClangdSettings::instance(), &ClangdSettings::changed,
-                this, [ps, diagConfigs] {
-                    if (ps->data().isSessionMode())
-                        ps->useGlobalSettings.setValue(true);
-                    diagConfigs->refresh(
-                        ClangdSettings::diagnosticConfigsModel(),
-                        ps->data().diagnosticConfigIdOrDefault(),
-                        [](const ClangDiagnosticConfigs &configs,
-                           const Id &id) {
-                            return new CppEditor::ClangDiagnosticConfigsWidget( configs, id);
-                        }
-                    );
-                });
-
         using namespace Layouting;
         Column {
             Row {
@@ -1005,7 +983,6 @@ public:
             },
             createHr(),
             *ps,
-            diagConfigs,
             noMargin,
         }.attachTo(this);
     }
