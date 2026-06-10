@@ -647,6 +647,8 @@ void QtcIconButton::paintEvent(QPaintEvent *e)
     QPainter p(this);
     QRect r(QPoint(), size());
 
+    qDebug() << "QtcIconButton::paintEvent" << r;
+
     if (underMouse() && isEnabled()) {
         QColor c = creatorColor(Theme::TextColorDisabled);
         c.setAlphaF(c.alphaF() * .5);
@@ -662,6 +664,8 @@ QSize QtcIconButton::sizeHint() const
 
     if (StyleHelper::toolbarStyle() == StyleHelper::ToolbarStyle::Relaxed)
         s += QSize(5, 5);
+
+    qDebug() << "QtcIconButton::sizeHint" << s;
 
     return s;
 }
