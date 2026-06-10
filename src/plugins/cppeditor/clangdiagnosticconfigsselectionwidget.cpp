@@ -10,6 +10,7 @@
 
 #include <utils/guiutils.h>
 #include <utils/layoutbuilder.h>
+#include <utils/qtcsettings.h>
 #include <utils/store.h>
 
 #include <QDialog>
@@ -190,6 +191,20 @@ void DiagnosticConfigIdAspect::toMap(Store &map) const
 {
     if (!settingsKey().isEmpty())
         map.insert(settingsKey(), value().toSetting());
+}
+
+void DiagnosticConfigIdAspect::readSettings()
+{
+    TypedAspect<Id>::readSettings();
+    if (m_persistCustomConfigs)
+        m_customConfigs = diagnosticConfigsFromSettings(&Utils::userSettings());
+}
+
+void DiagnosticConfigIdAspect::writeSettings() const
+{
+    TypedAspect<Id>::writeSettings();
+    if (m_persistCustomConfigs)
+        diagnosticConfigsToSettings(&Utils::userSettings(), m_customConfigs);
 }
 
 QVariant DiagnosticConfigIdAspect::toSettingsValue(const QVariant &v) const

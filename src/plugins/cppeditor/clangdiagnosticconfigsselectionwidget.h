@@ -79,9 +79,14 @@ public:
     void setEditWidgetFactory(EditWidgetFactory factory);
 
     ClangDiagnosticConfigs customConfigs() const { return m_customConfigs; }
+    void setCustomConfigs(const ClangDiagnosticConfigs &configs) { m_customConfigs = configs; }
+
+    void setPersistCustomConfigs(bool persist) { m_persistCustomConfigs = persist; }
 
     void fromMap(const Utils::Store &map) final;
     void toMap(Utils::Store &map) const final;
+    void readSettings() final;
+    void writeSettings() const final;
 
     void addToLayoutImpl(Layouting::Layout &parent) final;
 
@@ -101,6 +106,7 @@ private:
     EditWidgetFactory m_editFactory;
     ClangDiagnosticConfigs m_customConfigs;
     ClangDiagnosticConfigs m_committedCustomConfigs;
+    bool m_persistCustomConfigs = false;
     QPointer<ClangDiagnosticConfigsSelectionWidget> m_widget;
 };
 
