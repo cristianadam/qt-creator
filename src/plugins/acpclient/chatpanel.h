@@ -13,6 +13,7 @@
 
 namespace Utils {
 class QtcButton;
+class QtcIconButton;
 class StyledBar;
 } // namespace Utils
 
@@ -94,7 +95,7 @@ private:
     // Input
     ChatInputEdit *m_inputEdit;
     Utils::QtcButton *m_sendButton;
-    Utils::QtcButton *m_commandsButton;
+    Utils::QtcIconButton *m_commandsButton;
     QMenu *m_commandsMenu = nullptr;
     QWidget *m_contextBar = nullptr;
     QLayout *m_contextBarLayout = nullptr;
