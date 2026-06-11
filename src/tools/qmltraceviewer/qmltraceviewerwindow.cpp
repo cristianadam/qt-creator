@@ -6,6 +6,7 @@
 #include "qmltraceviewerrpc.h"
 #include "qmltraceviewersettings.h"
 #include "mainsidebar.h"
+#include "welcomepage.h"
 
 #include <qmlprofiler/ctfplainviewmanager.h>
 #include <qmlprofiler/profilertr.h>
@@ -23,6 +24,7 @@
 #include <QDockWidget>
 #include <QMessageBox>
 #include <QSplitter>
+#include <QStackedWidget>
 #include <QTime>
 #include <QTimer>
 #include <QToolBar>
@@ -76,6 +78,8 @@ public:
     static void openHelpInBrowser();
 
     Window *q = nullptr;
+    QStackedWidget *rightPane = nullptr;  // Welcome page or trace area (right pane).
+    WelcomePage *welcomePage = nullptr;   // Shown while no trace is loaded.
     FancyMainWindow *traceArea = nullptr; // Hosts the trace view docks (right pane).
     MainSidebar *sidebar = nullptr;       // List of opened traces (left pane).
     QmlProfilerPlainViewManager *qmlManager;
@@ -97,6 +101,17 @@ WindowPrivate::WindowPrivate(Window *window)
     traceArea->setDocumentMode(true);
 
     sidebar = new MainSidebar(q);
+
+    welcomePage = new WelcomePage(q);
+
+    rightPane = new QStackedWidget(q);
+    rightPane->addWidget(welcomePage);
+    rightPane->addWidget(traceArea);
+    rightPane->setCurrentWidget(welcomePage);
+
+    // Recording is not implemented yet; it will be wired up later.
+    connect(welcomePage, &WelcomePage::openTraceRequested,
+            this, &WindowPrivate::showOpenFileDialog);
 
     qmlManager = new QmlProfilerPlainViewManager(traceArea);
     ctfManager = new CtfPlainViewManager(traceArea);
@@ -244,15 +259,23 @@ void WindowPrivate::setActiveFormat(Format format)
 
 void WindowPrivate::clearTrace()
 {
+    // Removing the current trace selects a neighbour, which reloads it via
+    // traceActivated(). Only when nothing remains do we clear and show the
+    // welcome page.
+    if (sidebar->removeCurrentTrace())
+        return;
+
     setTraceDuration(milliseconds{0});
     qmlManager->clear();
     ctfManager->clear();
+    rightPane->setCurrentWidget(welcomePage);
     RPC::notifyTraceDiscarded();
 }
 
 void WindowPrivate::doLoad(const FilePath &filePath)
 {
     settings().lastTraceFile.setValue(filePath);
+    rightPane->setCurrentWidget(traceArea);
     setTraceDuration(milliseconds{0});
     progressIndicator->show();
     lastLoadError.clear();
@@ -338,7 +361,7 @@ Window::Window(QWidget *parent)
 
     auto splitter = new QSplitter(Qt::Horizontal);
     splitter->addWidget(d->sidebar);
-    splitter->addWidget(d->traceArea);
+    splitter->addWidget(d->rightPane);
     splitter->setStretchFactor(0, 0);
     splitter->setStretchFactor(1, 1);
     splitter->setSizes({200, 800});
