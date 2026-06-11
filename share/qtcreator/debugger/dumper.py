@@ -178,6 +178,7 @@ class DumperBase():
         self.qtPropertyFunc = 0
         self.passExceptions = False
         self.isTesting = False
+        self.allowInferiorCalls = False
         self.qtLoaded = False
 
         self.isBigEndian = False
@@ -2824,6 +2825,16 @@ typename))
         value = struct.unpack_from('!I', buf, offset)[0]
         return (value, offset + 4)
 
+    def parseAndEvaluateAllowingCalls(self, exp):
+        # The communication with the interpreter relies on inferior calls,
+        # independently of whether they are allowed for value display.
+        savedAllowInferiorCalls = self.allowInferiorCalls
+        self.allowInferiorCalls = True
+        try:
+            return self.parseAndEvaluate(exp)
+        finally:
+            self.allowInferiorCalls = savedAllowInferiorCalls
+
     def handleInterpreterMessage(self):
         """ Return True if inferior stopped """
         resdict = self.fetchInterpreterResult()
@@ -2858,7 +2869,7 @@ typename))
         self.reportInterpreterResult(resdict, args)
 
     def resolvePendingInterpreterBreakpoint(self, args):
-        self.parseAndEvaluate('qt_qmlDebugEnableService("NativeQmlDebugger")')
+        self.parseAndEvaluateAllowingCalls('qt_qmlDebugEnableService("NativeQmlDebugger")')
         response = self.sendInterpreterRequest('setbreakpoint', args)
         bp = None if response is None else response.get('breakpoint', None)
         resdict = args.copy()
@@ -2872,8 +2883,8 @@ typename))
         self.reportInterpreterAsync(resdict, 'breakpointmodified')
 
     def fetchInterpreterResult(self):
-        buf = self.parseAndEvaluate('qt_qmlDebugMessageBuffer')
-        size = self.parseAndEvaluate('qt_qmlDebugMessageLength')
+        buf = self.parseAndEvaluateAllowingCalls('qt_qmlDebugMessageBuffer')
+        size = self.parseAndEvaluateAllowingCalls('qt_qmlDebugMessageLength')
         msg = self.hexdecode(self.readMemory(buf, size))
         # msg is a sequence of 'servicename<space>msglen<space>msg' items.
         resdict = {}  # Native payload.
@@ -2896,7 +2907,7 @@ typename))
                       % {'service': service, 'payload': self.hexencode(payload)})
         try:
             expr = 'qt_qmlDebugClearBuffer()'
-            res = self.parseAndEvaluate(expr)
+            res = self.parseAndEvaluateAllowingCalls(expr)
         except RuntimeError as error:
             self.warn('Cleaning buffer failed: %s: %s' % (expr, error))
 
@@ -2907,7 +2918,7 @@ typename))
         hexdata = self.hexencode(encoded)
         expr = 'qt_qmlDebugSendDataToService("NativeQmlDebugger","%s")' % hexdata
         try:
-            res = self.parseAndEvaluate(expr)
+            res = self.parseAndEvaluateAllowingCalls(expr)
         except RuntimeError as error:
             self.warn('Interpreter command failed: %s: %s' % (encoded, error))
             return {}

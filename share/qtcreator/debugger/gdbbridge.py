@@ -1364,15 +1364,13 @@ class Dumper(DumperBase):
                 interpreterStack = self.extractInterpreterStack()
                 #print('EXTRACTED INTEPRETER STACK: %s' % interpreterStack)
                 for interpreterFrame in interpreterStack.get('frames', []):
-                    function = interpreterFrame.get('function', '')
-                    fileName = interpreterFrame.get('file', '')
-                    language = interpreterFrame.get('language', '')
-                    lineNumber = interpreterFrame.get('line', 0)
-                    context = interpreterFrame.get('context', 0)
-
                     self.put(('frame={function="%s",file="%s",'
                               'line="%s",language="%s",context="%s"}')
-                             % (function, self.hexencode(fileName), lineNumber, language, context))
+                             % (interpreterFrame.get('function', ''),
+                                interpreterFrame.get('file', ''),
+                                interpreterFrame.get('line', 0),
+                                interpreterFrame.get('language', ''),
+                                interpreterFrame.get('context', 0)))
 
                 if False and self.isInternalInterpreterFrame(functionName):
                     frame = frame.older()

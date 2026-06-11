@@ -1318,14 +1318,13 @@ class Dumper(DumperBase):
             if isNativeMixed and functionName == '::qt_qmlDebugMessageAvailable()':
                 interpreterStack = self.extractInterpreterStack()
                 for interpreterFrame in interpreterStack.get('frames', []):
-                    function = interpreterFrame.get('function', '')
-                    fileName = toCString(interpreterFrame.get('file', ''))
-                    language = interpreterFrame.get('language', '')
-                    lineNumber = interpreterFrame.get('line', 0)
-                    context = interpreterFrame.get('context', 0)
                     result += ('frame={function="%s",file="%s",'
                                'line="%s",language="%s",context="%s"}'
-                               % (function, fileName, lineNumber, language, context))
+                               % (interpreterFrame.get('function', ''),
+                                  toCString(interpreterFrame.get('file', '')),
+                                  interpreterFrame.get('line', 0),
+                                  interpreterFrame.get('language', ''),
+                                  interpreterFrame.get('context', 0)))
 
             fileName = fileNameAsString(lineEntry.file)
             result += '{pc="0x%x"' % pc
