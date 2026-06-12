@@ -74,7 +74,11 @@ QVariant StackFrameItem::data(int column, int role) const
     if (role == Qt::DisplayRole) {
         switch (column) {
         case StackLevelColumn:
-            return row >= 0 ? QString::number(row + 1) : QString();
+            // The real backend frame level, not the row number. The two
+            // differ in native mixed stacks: QML frames are spliced in
+            // without a backend level, and collapsed machinery frames
+            // leave gaps.
+            return frame.level;
         case StackFunctionNameColumn:
             return simplifyType(frame.function);
         case StackFileNameColumn:
