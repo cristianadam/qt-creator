@@ -198,6 +198,47 @@ check('cross step from C++ lands on the JS statement',
       and frames[0].get('line') in (BREAK_LINE - 1, BREAK_LINE)
       and frames[0].get('language') == 'js')
 
+# Prototype for QML to C++ step-into: race the service's 'next JS
+# statement' request against native breakpoints on the JS-to-C++
+# transition choke points. Whichever fires first defines what 'into'
+# means for the current statement. The stop handler disarms the
+# service stepping when the native side wins.
+def qmlStepInto():
+    d.sendInterpreterRequest('stepin', {})
+    d.interpreterStepArmed = True
+    chokepoints = []
+    for spec in ('QV4::QObjectMethod::callInternal',
+                 'QV4::QObjectWrapper::setProperty'):
+        try:
+            chokepoints.append(gdb.Breakpoint(spec))
+        except Exception:
+            pass
+    gdb.execute('continue')
+    for bp in chokepoints:
+        bp.delete()
+    name = gdb.newest_frame().name() or ''
+    if name == 'qt_qmlDebugMessageAvailable':
+        frames = d.extractInterpreterStack().get('frames', [{}])
+        return ('js', frames[0].get('line', -1))
+    return ('cpp', name)
+
+jsLines = []
+cppLanding = None
+for attempt in range(4):
+    (kind, where) = qmlStepInto()
+    if kind == 'cpp':
+        cppLanding = where
+        break
+    jsLines.append(where)
+
+check('step into walks the JS statements first',
+      jsLines and all(BREAK_LINE - 1 <= line <= BREAK_LINE + 1
+                      for line in jsLines))
+check('step into a statement with a C++ transition lands in C++',
+      cppLanding is not None and cppLanding.find('setProperty') >= 0)
+check('interpreter stepping is disarmed after the C++ landing',
+      not d.interpreterStepArmed)
+
 d.reportInterpreterAsync = savedReportAsync
 gdb.execute('kill')
 

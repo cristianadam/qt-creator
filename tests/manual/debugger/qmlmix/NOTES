@@ -114,10 +114,33 @@ stale stepping request fires on a later continue. Note the skips also
 change plain C++ stepping in native mixed sessions: stepping into
 QV4, QQml*, QtPrivate or QMetaObject internals is suppressed.
 
-QML to C++ (stepping into a Q_INVOKABLE from JS) remains unsupported;
-the service has no hook for leaving the interpreter. A native 'step'
-issued from the dispatch with the skips active could work, but needs
-a decision on which user gesture requests it.
+QML to C++ stepping is prototyped in qmlmix-gdb-test.py
+(qmlStepInto): arm the service with 'stepin' and additionally set
+native breakpoints on the JS-to-C++ transition choke points
+(QV4::QObjectMethod::callInternal for method calls,
+QV4::QObjectWrapper::setProperty for property writes). Whichever
+fires first defines what 'into' means for the current statement:
+the next JS statement boundary comes after the current statement's
+C++ calls, so a statement that calls C++ stops at the transition,
+and a pure JS statement stops at the next statement. The existing
+stop handler disarms the service when the native side wins.
+
+The choke point breakpoints are the makeshift variant: they need
+debug info for private symbols, are version-fragile, and stop at the
+engine's dispatch rather than in the callee. The clean mechanism
+would be a small qtdeclarative addition in the style of the existing
+native debugger hooks: an exported flag plus an exported empty
+function called from the dispatch when the flag is set, e.g.
+
+    Q_QML_EXPORT bool qt_qmlDebugNativeCallHookEnabled = false;
+    Q_QML_EXPORT void qt_qmlDebugAboutToCallNativeMethod() {}
+
+The debugger arms it by poking the flag via plain memory write, no
+inferior call needed, and breaks on the hook; from there a native
+step with the machinery skips lands in the callee behind the
+metacall. The AOT-compiled call paths (QQmlPrivate::AOTCompiledContext)
+would need the same treatment for completeness, though native mixed
+forces the interpreter anyway.
 
 Suggested design
 ----------------
