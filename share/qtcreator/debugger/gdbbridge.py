@@ -1407,9 +1407,16 @@ class Dumper(DumperBase):
                     __init__(spec, gdb.BP_BREAKPOINT, internal=True, temporary=False)
 
             def stop(self):
-                self.dumper.resolvePendingInterpreterBreakpoint(args)
+                # Inferior calls are not allowed from within stop() and
+                # can leave the inferior's other threads suspended, e.g.
+                # deadlocking the xcb event thread. Stop for real; the
+                # work happens in interpreterStopHandler().
                 self.enabled = False
-                return False
+                return True
+
+            def interpreterEventHandler(self):
+                self.dumper.resolvePendingInterpreterBreakpoint(self.args)
+                return False  # Do not stay stopped.
 
         self.interpreterBreakpointResolvers.append(Resolver(self, args))
 
@@ -1589,7 +1596,14 @@ class InterpreterMessageBreakpoint(gdb.Breakpoint):
             __init__(spec, gdb.BP_BREAKPOINT, internal=True)
 
     def stop(self):
+        # See the interpreter breakpoint resolver: no inferior calls
+        # from within stop(). The work happens in
+        # interpreterStopHandler().
+        return True
+
+    def interpreterEventHandler(self):
         print('Interpreter event received.')
+        # Stay stopped if the interpreter reported a 'break' event.
         return theDumper.handleInterpreterMessage()
 
 
@@ -1604,3 +1618,22 @@ def new_objfile_handler(event):
 
 
 gdb.events.new_objfile.connect(new_objfile_handler)
+
+
+def interpreterStopHandler(event):
+    # Performs the work for the interpreter breakpoint resolver and
+    # InterpreterMessageBreakpoint. This runs with the inferior fully
+    # stopped, where inferior calls are safe, unlike in
+    # gdb.Breakpoint.stop().
+    if not isinstance(event, gdb.BreakpointEvent):
+        return
+    for bp in event.breakpoints:
+        handler = getattr(bp, 'interpreterEventHandler', None)
+        if handler is None:
+            continue
+        if not handler():
+            gdb.execute('continue')
+        return
+
+
+gdb.events.stop.connect(interpreterStopHandler)
