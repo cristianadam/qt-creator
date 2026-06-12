@@ -163,11 +163,40 @@ res = d.removeInterpreterBreakpoint({'id': bp2})
 check('breakpoint removal acknowledged', res.get('id') == bp2)
 
 d.sendInterpreterRequest('stepin', {})
+d.interpreterStepArmed = True  # As executeStep() would do.
 gdb.execute('continue')
 frames = d.extractInterpreterStack().get('frames', [])
 check('step lands on the next line',
       gdb.newest_frame().name() == 'qt_qmlDebugMessageAvailable'
       and bool(frames) and frames[0].get('line') == BREAK_LINE + 1)
+
+# C++ to QML cross stepping: remove the remaining breakpoint, stop in
+# C++ right before the timer fires the handler, arm and do a native
+# step. The step must pass through the machinery and stop on the JS
+# statement.
+bp1 = -1
+for report in asyncReports:
+    if report.get('token') == 1:
+        bp1 = report.get('number', -1)
+res = d.removeInterpreterBreakpoint({'id': bp1})
+check('first breakpoint removed', res.get('id') == bp1)
+
+cppbp = gdb.Breakpoint('QQmlTimer::triggered')
+gdb.execute('continue')
+check('stopped in C++ before the handler',
+      (gdb.newest_frame().name() or '').find('QQmlTimer::triggered') >= 0)
+cppbp.delete()
+
+d.armInterpreterStepIn({'token': 77})
+gdb.execute('step')
+frames = d.extractInterpreterStack().get('frames', [])
+# The first statement boundary of the handler is attributed to the
+# 'onTriggered:' line itself.
+check('cross step from C++ lands on the JS statement',
+      gdb.newest_frame().name() == 'qt_qmlDebugMessageAvailable'
+      and bool(frames)
+      and frames[0].get('line') in (BREAK_LINE - 1, BREAK_LINE)
+      and frames[0].get('language') == 'js')
 
 d.reportInterpreterAsync = savedReportAsync
 gdb.execute('kill')

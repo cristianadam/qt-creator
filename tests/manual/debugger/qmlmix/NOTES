@@ -104,16 +104,20 @@ by service id. Both are covered by qmlmix-gdb-test.py. Stepping past
 the last statement of a handler degrades to 'continue' by design of
 NativeDebugger::leavingFunction().
 
-Cross-language stepping is not supported:
+C++ to QML stepping works with GDB: a step from a C++ frame arms the
+service with 'stepin' and relies on session-wide GDB 'skip' entries
+for the V4 dispatch and the generic signal plumbing, so the native
+step passes through the machinery while the armed service pauses at
+the next executed JS statement. Whichever stops first wins; the stop
+handler disarms the service if the native stop comes first, so no
+stale stepping request fires on a later continue. Note the skips also
+change plain C++ stepping in native mixed sessions: stepping into
+QV4, QQml*, QtPrivate or QMetaObject internals is suppressed.
 
-- C++ to QML could be built cheaply: arm the service with 'stepin'
-  before a native step or continue, which pauses at the next executed
-  JS statement regardless of frames; disarm with 'continue' if the
-  native stop comes first. Needs care to not leave the service armed.
-- QML to C++ (stepping into a Q_INVOKABLE from JS) has no service
-  support. A possible native approach: GDB 'skip' entries for the V4
-  machinery plus a native step from the dispatch, stopping at the
-  first non-skipped function, i.e. the callee.
+QML to C++ (stepping into a Q_INVOKABLE from JS) remains unsupported;
+the service has no hook for leaving the interpreter. A native 'step'
+issued from the dispatch with the skips active could work, but needs
+a decision on which user gesture requests it.
 
 Suggested design
 ----------------

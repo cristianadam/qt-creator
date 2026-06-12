@@ -179,6 +179,7 @@ class DumperBase():
         self.passExceptions = False
         self.isTesting = False
         self.allowInferiorCalls = False
+        self.interpreterStepArmed = False
         self.qtLoaded = False
 
         self.isBigEndian = False
@@ -2934,22 +2935,47 @@ typename))
     def executeStep(self, args):
         if self.nativeMixed:
             response = self.sendInterpreterRequest('stepin', args)
+            self.interpreterStepArmed = True
         self.doContinue()
 
     def executeStepOut(self, args):
         if self.nativeMixed:
             response = self.sendInterpreterRequest('stepout', args)
+            self.interpreterStepArmed = True
         self.doContinue()
 
     def executeNext(self, args):
         if self.nativeMixed:
             response = self.sendInterpreterRequest('stepover', args)
+            self.interpreterStepArmed = True
         self.doContinue()
 
     def executeContinue(self, args):
         if self.nativeMixed:
             response = self.sendInterpreterRequest('continue', args)
+            self.interpreterStepArmed = False
         self.doContinue()
+
+    def armInterpreterStepIn(self, args):
+        # Crossing from C++ into QML: pause at the next executed JS
+        # statement, while the native step proceeds. Whichever stops
+        # first wins; disarmInterpreterStep() resolves the race.
+        self.setupMachinerySkips()
+        self.sendInterpreterRequest('stepin', args)
+        self.interpreterStepArmed = True
+        self.reportResult('', args)
+
+    def setupMachinerySkips(self):
+        # Overridden in the GDB bridge.
+        pass
+
+    def disarmInterpreterStep(self):
+        # The native part of a mixed step stopped first; take back the
+        # interpreter stepping request so that it does not fire on some
+        # later continue.
+        if self.interpreterStepArmed:
+            self.interpreterStepArmed = False
+            self.sendInterpreterRequest('continue', {})
 
     def doInsertInterpreterBreakpoint(self, args, wasPending):
         #self.warn('DO INSERT INTERPRETER BREAKPOINT, WAS PENDING: %s' % wasPending)

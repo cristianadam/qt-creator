@@ -1822,6 +1822,10 @@ void GdbEngine::executeStepIn(bool byInstruction)
             cmd.function += "--reverse";
         cmd.callback = CB(handleExecuteContinue);
     } else {
+        // Crossing from C++ into QML: pause at the next executed JS
+        // statement in case the native step reaches the interpreter.
+        if (isNativeMixedActive())
+            runCommand({"armInterpreterStepIn"});
         cmd.flags = RunRequest|NeedsFlush;
         cmd.function = "-exec-step";
         if (isReverseDebugging())

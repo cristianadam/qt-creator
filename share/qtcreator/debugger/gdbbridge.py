@@ -194,6 +194,7 @@ class Dumper(DumperBase):
         self.isGdb = True
         self.interpreterBreakpointResolvers = []
         self.interpreterMessageBreakpoint = None
+        self.machinerySkipsDone = False
 
     def warn(self, message):
         print('bridgemessage={msg="%s"},' % message.replace('"', '$').encode('latin1'))
@@ -1422,7 +1423,7 @@ class Dumper(DumperBase):
 
         self.interpreterBreakpointResolvers.append(Resolver(self, args))
 
-    def insertInterpreterBreakpoint(self, args):
+    def ensureInterpreterMessageBreakpoint(self):
         # The interpreter signals events worth stopping for by calling
         # qt_qmlDebugMessageAvailable(). Make sure we break there.
         if self.interpreterMessageBreakpoint is None:
@@ -1430,6 +1431,28 @@ class Dumper(DumperBase):
                 self.interpreterMessageBreakpoint = InterpreterMessageBreakpoint()
             except Exception as error:
                 self.warn('Cannot set interpreter message breakpoint: %s' % error)
+
+    def setupMachinerySkips(self):
+        # Cross stepping pauses in qt_qmlDebugMessageAvailable() even
+        # when no interpreter breakpoint was ever inserted.
+        self.ensureInterpreterMessageBreakpoint()
+        # Stepping from C++ should pass through the V4 dispatch and the
+        # generic signal plumbing rather than stop at their entries;
+        # while passing through, an armed interpreter step pauses at
+        # the next JS statement. Session-wide, only set up in native
+        # mixed sessions.
+        if self.machinerySkipsDone:
+            return
+        self.machinerySkipsDone = True
+        for pattern in ('^QV4::', '^QQml', '^QtPrivate::', '^doActivate',
+                        '^QMetaObject::', '^qt_qmlDebug', '^debug_slowPath'):
+            try:
+                gdb.execute("skip -rfu %s" % pattern, to_string=True)
+            except Exception as error:
+                self.warn('Cannot set up machinery skip %s: %s' % (pattern, error))
+
+    def insertInterpreterBreakpoint(self, args):
+        self.ensureInterpreterMessageBreakpoint()
         DumperBase.insertInterpreterBreakpoint(self, args)
 
     def exitGdb(self, _):
@@ -1627,21 +1650,28 @@ def interpreterStopHandler(event):
     # InterpreterMessageBreakpoint. This runs with the inferior fully
     # stopped, where inferior calls are safe, unlike in
     # gdb.Breakpoint.stop().
-    if not isinstance(event, gdb.BreakpointEvent):
-        return
-    # Several of our breakpoints can sit on the same location, e.g. one
-    # resolver per pending interpreter breakpoint. Run all handlers.
-    handled = False
-    stay_stopped = False
-    for bp in event.breakpoints:
-        handler = getattr(bp, 'interpreterEventHandler', None)
-        if handler is None:
-            continue
-        handled = True
-        if handler():
-            stay_stopped = True
-    if handled and not stay_stopped:
-        gdb.execute('continue')
+    if isinstance(event, gdb.BreakpointEvent):
+        # Several of our breakpoints can sit on the same location, e.g.
+        # one resolver per pending interpreter breakpoint. Run all
+        # handlers.
+        handled = False
+        stay_stopped = False
+        for bp in event.breakpoints:
+            handler = getattr(bp, 'interpreterEventHandler', None)
+            if handler is None:
+                continue
+            handled = True
+            if handler():
+                stay_stopped = True
+        if handled:
+            if stay_stopped:
+                theDumper.disarmInterpreterStep()
+            else:
+                gdb.execute('continue')
+            return
+    # A stop somewhere else, e.g. a finished native step or an ordinary
+    # breakpoint. If interpreter stepping was armed, it lost the race.
+    theDumper.disarmInterpreterStep()
 
 
 gdb.events.stop.connect(interpreterStopHandler)
