@@ -51,6 +51,12 @@ gdb.execute('set args -qmljsdebugger=native,services:NativeQmlDebugger')
 gdb.execute('set environment QV4_FORCE_INTERPRETER 1')
 gdb.execute('set environment QT_QPA_PLATFORM offscreen')
 
+# Capture the asynchronous breakpoint resolution reports; they carry
+# the service breakpoint ids needed for removal.
+asyncReports = []
+savedReportAsync = d.reportInterpreterAsync
+d.reportInterpreterAsync = lambda resdict, asyncclass: asyncReports.append(dict(resdict))
+
 # Insertion before the program runs is expected to fail directly and to
 # create one pending resolver breakpoint on qt_qmlDebugConnectorOpen()
 # per interpreter breakpoint. Both must get resolved on the single stop
@@ -74,6 +80,9 @@ gdb.execute('run')
 frame = gdb.newest_frame()
 check('stopped at qt_qmlDebugMessageAvailable',
       frame.name() == 'qt_qmlDebugMessageAvailable')
+check('both breakpoints were resolved',
+      len([r for r in asyncReports
+           if not r.get('pending') and r.get('number', -1) != -1]) == 2)
 
 stack = d.extractInterpreterStack()
 frames = stack.get('frames', [])
@@ -138,6 +147,29 @@ frames = d.extractInterpreterStack().get('frames', [])
 check('second breakpoint is on the next line',
       bool(frames) and frames[0].get('line') == BREAK_LINE + 1)
 
+# Stepping: back at the first breakpoint, remove the second breakpoint,
+# then a single step must stop on its line nevertheless.
+gdb.execute('continue')
+frames = d.extractInterpreterStack().get('frames', [])
+check('first breakpoint hits again',
+      bool(frames) and frames[0].get('line') == BREAK_LINE)
+
+bp2 = -1
+for report in asyncReports:
+    if report.get('token') == 2:
+        bp2 = report.get('number', -1)
+check('second breakpoint has a service id', bp2 != -1)
+res = d.removeInterpreterBreakpoint({'id': bp2})
+check('breakpoint removal acknowledged', res.get('id') == bp2)
+
+d.sendInterpreterRequest('stepin', {})
+gdb.execute('continue')
+frames = d.extractInterpreterStack().get('frames', [])
+check('step lands on the next line',
+      gdb.newest_frame().name() == 'qt_qmlDebugMessageAvailable'
+      and bool(frames) and frames[0].get('line') == BREAK_LINE + 1)
+
+d.reportInterpreterAsync = savedReportAsync
 gdb.execute('kill')
 
 if failures:

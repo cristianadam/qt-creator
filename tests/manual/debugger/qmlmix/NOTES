@@ -94,6 +94,27 @@ code - a click handler running a hundred statements still reacts in
 in-process filtering costs nothing measurable and only traps on
 actual hits.
 
+Stepping status (June 2026)
+---------------------------
+
+QML-to-QML stepping works through the service: 'stepin', 'stepover',
+and 'stepout' arm NativeDebugger's statement hooks, the next matching
+statement pauses via the usual break event. Breakpoint removal works
+by service id. Both are covered by qmlmix-gdb-test.py. Stepping past
+the last statement of a handler degrades to 'continue' by design of
+NativeDebugger::leavingFunction().
+
+Cross-language stepping is not supported:
+
+- C++ to QML could be built cheaply: arm the service with 'stepin'
+  before a native step or continue, which pauses at the next executed
+  JS statement regardless of frames; disarm with 'continue' if the
+  native stop comes first. Needs care to not leave the service armed.
+- QML to C++ (stepping into a Q_INVOKABLE from JS) has no service
+  support. A possible native approach: GDB 'skip' entries for the V4
+  machinery plus a native step from the dispatch, stopping at the
+  first non-skipped function, i.e. the callee.
+
 Suggested design
 ----------------
 
