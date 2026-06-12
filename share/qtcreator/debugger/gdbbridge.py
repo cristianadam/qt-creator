@@ -1374,18 +1374,19 @@ class Dumper(DumperBase):
                                 interpreterFrame.get('language', ''),
                                 interpreterFrame.get('context', 0)))
 
-            # De-emphasize the contiguous block of debugger machinery
-            # frames on top of the stack.
-            usable = ''
+            # Mark the contiguous block of debugger machinery frames on
+            # top of the stack. The frontend de-emphasizes or collapses
+            # them.
+            extra = ''
             if inMachineryBlock:
                 if self.isInterpreterMachineryFrame(functionName):
-                    usable = 'usable="0",'
+                    extra = 'usable="0",machinery="1",'
                 else:
                     inMachineryBlock = False
 
             self.put(('frame={level="%s",address="0x%x",function="%s",'
                       'file="%s",line="%s",module="%s",%slanguage="c"}') %
-                     (i, pc, functionName, fileName, line, objfile, usable))
+                     (i, pc, functionName, fileName, line, objfile, extra))
 
             try:
                 # This may fail with something like

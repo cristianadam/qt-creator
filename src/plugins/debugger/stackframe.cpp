@@ -96,6 +96,7 @@ StackFrame StackFrame::parseFrame(const GdbMi &frameMi, const DebuggerRunParamet
         frame.usable = usable.data().toInt();
     else
         frame.usable = frame.file.isReadableFile();
+    frame.machinery = frameMi["machinery"].toInt();
     return frame;
 }
 

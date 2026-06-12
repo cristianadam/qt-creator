@@ -39,6 +39,7 @@ DebuggerSettings::DebuggerSettings() :
     breakpointsFullPathByDefault{commonSettings().breakpointsFullPathByDefault},
     warnOnReleaseBuilds{commonSettings().warnOnReleaseBuilds},
     nativeMixedMode{commonSettings().nativeMixedMode},
+    collapseMachineryFrames{commonSettings().collapseMachineryFrames},
     maximalStackDepth{commonSettings().maximalStackDepth},
 
     fontSizeFollowsEditor{commonSettings().fontSizeFollowsEditor},

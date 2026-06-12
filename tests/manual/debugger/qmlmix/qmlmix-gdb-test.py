@@ -117,17 +117,18 @@ stackFrames = (reports[0] if reports else '').split('frame={')[1:]
 def frames_matching(needle):
     return [f for f in stackFrames if f.find(needle) >= 0]
 
-check('machinery frames are de-emphasized',
-      all(f.find('usable="0"') >= 0
+check('machinery frames are marked',
+      all(f.find('usable="0",machinery="1"') >= 0
           for f in frames_matching('qt_qmlDebug')
                  + frames_matching('NativeDebugger::')
                  + frames_matching('QV4::Moth::'))
-      and len(frames_matching('usable="0"')) >= 3)
-check('QML frame is not de-emphasized',
-      all(f.find('usable="0"') < 0 for f in frames_matching('language="js"'))
+      and len(frames_matching('machinery="1"')) >= 3)
+check('QML frame is not marked',
+      all(f.find('machinery="1"') < 0 for f in frames_matching('language="js"'))
       and len(frames_matching('language="js"')) >= 1)
-check('application frames are not de-emphasized',
-      all(f.find('usable="0"') < 0 for f in frames_matching('QTimer')))
+check('application frames are not marked',
+      len(frames_matching('QQmlTimer')) >= 1
+      and all(f.find('machinery="1"') < 0 for f in frames_matching('QQmlTimer')))
 
 # The second breakpoint, on the next line, must be hit as well.
 gdb.execute('continue')

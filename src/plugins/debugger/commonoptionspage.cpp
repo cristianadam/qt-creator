@@ -140,6 +140,18 @@ CommonSettings::CommonSettings()
                  "connection. The QTC_DEBUGGER_NATIVE_MIXED environment "
                  "variable overrides this setting."));
 
+    collapseMachineryFrames.setSettingsKey(debugModeGroup, "CollapseDebuggerMachineryFrames");
+    collapseMachineryFrames.setDefaultValue(true);
+    collapseMachineryFrames.setLabelText(
+        Tr::tr("Collapse debugger machinery stack frames"));
+    collapseMachineryFrames.setToolTip(
+        "<p>"
+        + Tr::tr("In native combined debugging, replaces the frames between "
+                 "a QML frame and the application code, which only execute "
+                 "debugger machinery, with a single placeholder frame in the "
+                 "stack view."));
+    collapseMachineryFrames.setEnabler(&nativeMixedMode);
+
     useToolTipsInMainEditor.setSettingsKey(debugModeGroup, "UseToolTips");
     useToolTipsInMainEditor.setLabelText(Tr::tr("Use tooltips in main editor when debugging"));
     useToolTipsInMainEditor.setToolTip(
@@ -161,6 +173,7 @@ CommonSettings::CommonSettings()
                 breakpointsFullPathByDefault,
                 forceLoggingToConsole,
                 nativeMixedMode,
+                collapseMachineryFrames,
                 Row { maximalStackDepth, st },
                 st
             }

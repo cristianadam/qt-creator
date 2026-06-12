@@ -3142,13 +3142,20 @@ void GdbEngine::activateFrame(int frameIndex)
     handler->setCurrentIndex(frameIndex);
     gotoCurrentLocation();
 
-    if (handler->frameAt(frameIndex).language != QmlLanguage) {
+    const StackFrame &frame = handler->frameAt(frameIndex);
+    if (frame.language != QmlLanguage) {
+        // With native mixed stacks the row index does not correspond to
+        // the debugger's frame level: QML frames are spliced in, and
+        // machinery frames may be collapsed. Use the reported level.
+        bool ok = false;
+        const int level = frame.level.toInt(&ok);
         // Assuming the command always succeeds this saves a roundtrip.
         // Otherwise the lines below would need to get triggered
         // after a response to this -stack-select-frame here.
         //if (!m_currentThread.isEmpty())
         //    cmd += " --thread " + m_currentThread;
-        runCommand({"-stack-select-frame " + QString::number(frameIndex), Discardable});
+        runCommand({"-stack-select-frame " + QString::number(ok ? level : frameIndex),
+                    Discardable});
     }
 
     updateLocals();

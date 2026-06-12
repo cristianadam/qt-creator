@@ -510,8 +510,14 @@ void LldbEngine::activateFrame(int frameIndex)
     handler->setCurrentIndex(frameIndex);
     gotoCurrentLocation();
 
+    // With native mixed stacks the row index does not correspond to the
+    // debugger's frame level: QML frames are spliced in, and machinery
+    // frames may be collapsed. Use the reported level.
+    bool ok = false;
+    const int level = handler->frameAt(frameIndex).level.toInt(&ok);
+
     DebuggerCommand cmd("activateFrame");
-    cmd.arg("index", frameIndex);
+    cmd.arg("index", ok ? level : frameIndex);
     if (Thread thread = threadsHandler()->currentThread())
         cmd.arg("thread", thread->id());
     runCommand(cmd);
