@@ -104,6 +104,31 @@ if ctx:
     check('this.parent expands one level deeper',
           res.find('iname="local.this.parent.children"') >= 0)
 
+# The full mixed stack report must de-emphasize the debugger machinery
+# frames between the QML frame and the application code.
+reports = []
+savedReportResult = d.reportResult
+d.reportResult = lambda result, args: reports.append(result)
+d.fetchStack({'limit': 40, 'nativemixed': 1, 'token': 99,
+              'allowinferiorcalls': 1})
+d.reportResult = savedReportResult
+stackFrames = (reports[0] if reports else '').split('frame={')[1:]
+
+def frames_matching(needle):
+    return [f for f in stackFrames if f.find(needle) >= 0]
+
+check('machinery frames are de-emphasized',
+      all(f.find('usable="0"') >= 0
+          for f in frames_matching('qt_qmlDebug')
+                 + frames_matching('NativeDebugger::')
+                 + frames_matching('QV4::Moth::'))
+      and len(frames_matching('usable="0"')) >= 3)
+check('QML frame is not de-emphasized',
+      all(f.find('usable="0"') < 0 for f in frames_matching('language="js"'))
+      and len(frames_matching('language="js"')) >= 1)
+check('application frames are not de-emphasized',
+      all(f.find('usable="0"') < 0 for f in frames_matching('QTimer')))
+
 # The second breakpoint, on the next line, must be hit as well.
 gdb.execute('continue')
 check('stopped at second breakpoint',

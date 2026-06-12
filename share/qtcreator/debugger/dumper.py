@@ -2984,6 +2984,33 @@ typename))
     def isReportableInterpreterFrame(self, functionName):
         return functionName and functionName.find('QV4::Moth::VME::exec') >= 0
 
+    # Recognizes frames executing debugger or interpreter machinery
+    # rather than application code, e.g. the qmldbg service plumbing
+    # between a QML breakpoint hit and the interpreter dispatch. The
+    # stack reports mark them as not 'usable' to de-emphasize them.
+    # The generic signal dispatch entries only count as machinery here
+    # because the check is limited to the contiguous block on top of
+    # the stack.
+    def isInterpreterMachineryFrame(self, functionName):
+        if not functionName:
+            return False
+        if functionName.startswith('::'):
+            functionName = functionName[2:]
+        if functionName.startswith('qt_qmlDebug') or functionName.startswith('qt_v4'):
+            return True
+        if functionName.startswith('debug_slowPath'):
+            return True
+        for needle in ('QV4::Moth::VME::', 'QV4::doCall', 'QV4::Function::call',
+                       'QV4::convertAndCall',
+                       'QQmlNativeDebugConnector::', 'DebugService',
+                       'NativeDebugger::', 'QtPrivate::',
+                       'QMetaObject::activate', 'doActivate'):
+            if functionName.find(needle) >= 0:
+                return True
+        # Lambdas in the V4 dispatch. Only sensible because the check
+        # is limited to the block below the interpreter hook.
+        return functionName == 'operator()'
+
     def extractInterpreterStack(self):
         return self.sendInterpreterRequest('backtrace', {'limit': 10})
 

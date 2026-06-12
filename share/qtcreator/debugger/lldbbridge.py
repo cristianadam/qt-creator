@@ -1299,6 +1299,7 @@ class Dumper(DumperBase):
                 DumperBase.warn("Failed to fetch qml stack - you need Qt debug information")
                 ii = 0
 
+        inMachineryBlock = False
         for i in range(n - ii):
             frame = thread.GetFrameAtIndex(i)
             if not frame.IsValid():
@@ -1316,6 +1317,7 @@ class Dumper(DumperBase):
             module = frame.GetModule()
 
             if isNativeMixed and functionName == '::qt_qmlDebugMessageAvailable()':
+                inMachineryBlock = True
                 interpreterStack = self.extractInterpreterStack()
                 for interpreterFrame in interpreterStack.get('frames', []):
                     result += ('frame={function="%s",file="%s",'
@@ -1326,6 +1328,15 @@ class Dumper(DumperBase):
                                   interpreterFrame.get('language', ''),
                                   interpreterFrame.get('context', 0)))
 
+            # De-emphasize the contiguous block of debugger machinery
+            # frames on top of the stack.
+            usable = ''
+            if inMachineryBlock:
+                if self.isInterpreterMachineryFrame(functionName):
+                    usable = ',usable="0"'
+                else:
+                    inMachineryBlock = False
+
             fileName = fileNameAsString(lineEntry.file)
             result += '{pc="0x%x"' % pc
             result += ',level="%d"' % level
@@ -1333,6 +1344,7 @@ class Dumper(DumperBase):
             result += ',function="%s"' % functionName
             result += ',line="%d"' % lineNumber
             result += ',module="%s"' % toCString(module)
+            result += usable
             result += ',file="%s"},' % fileName
         result += ']'
         result += ',hasmore="%d"' % isLimited

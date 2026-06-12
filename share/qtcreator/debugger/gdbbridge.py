@@ -1340,6 +1340,7 @@ class Dumper(DumperBase):
 
         frame = gdb.newest_frame()
         self.currentCallContext = None
+        inMachineryBlock = False
         while i < limit and frame:
             name = frame.name()
             functionName = '??' if name is None else name
@@ -1361,6 +1362,7 @@ class Dumper(DumperBase):
                         fileName = fromNativePath(fullname)
 
             if self.nativeMixed and functionName == 'qt_qmlDebugMessageAvailable':
+                inMachineryBlock = True
                 interpreterStack = self.extractInterpreterStack()
                 #print('EXTRACTED INTEPRETER STACK: %s' % interpreterStack)
                 for interpreterFrame in interpreterStack.get('frames', []):
@@ -1372,19 +1374,18 @@ class Dumper(DumperBase):
                                 interpreterFrame.get('language', ''),
                                 interpreterFrame.get('context', 0)))
 
-                if False and self.isInternalInterpreterFrame(functionName):
-                    frame = frame.older()
-                    self.put(('frame={address="0x%x",function="%s",'
-                              'file="%s",line="%s",'
-                              'module="%s",language="c",usable="0"}') %
-                             (pc, functionName, fileName, line, objfile))
-                    i += 1
-                    frame = frame.older()
-                    continue
+            # De-emphasize the contiguous block of debugger machinery
+            # frames on top of the stack.
+            usable = ''
+            if inMachineryBlock:
+                if self.isInterpreterMachineryFrame(functionName):
+                    usable = 'usable="0",'
+                else:
+                    inMachineryBlock = False
 
             self.put(('frame={level="%s",address="0x%x",function="%s",'
-                      'file="%s",line="%s",module="%s",language="c"}') %
-                     (i, pc, functionName, fileName, line, objfile))
+                      'file="%s",line="%s",module="%s",%slanguage="c"}') %
+                     (i, pc, functionName, fileName, line, objfile, usable))
 
             try:
                 # This may fail with something like
