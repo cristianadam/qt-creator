@@ -1621,19 +1621,25 @@ gdb.events.new_objfile.connect(new_objfile_handler)
 
 
 def interpreterStopHandler(event):
-    # Performs the work for the interpreter breakpoint resolver and
+    # Performs the work for the interpreter breakpoint resolvers and
     # InterpreterMessageBreakpoint. This runs with the inferior fully
     # stopped, where inferior calls are safe, unlike in
     # gdb.Breakpoint.stop().
     if not isinstance(event, gdb.BreakpointEvent):
         return
+    # Several of our breakpoints can sit on the same location, e.g. one
+    # resolver per pending interpreter breakpoint. Run all handlers.
+    handled = False
+    stay_stopped = False
     for bp in event.breakpoints:
         handler = getattr(bp, 'interpreterEventHandler', None)
         if handler is None:
             continue
-        if not handler():
-            gdb.execute('continue')
-        return
+        handled = True
+        if handler():
+            stay_stopped = True
+    if handled and not stay_stopped:
+        gdb.execute('continue')
 
 
 gdb.events.stop.connect(interpreterStopHandler)

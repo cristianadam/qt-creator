@@ -52,14 +52,22 @@ gdb.execute('set environment QV4_FORCE_INTERPRETER 1')
 gdb.execute('set environment QT_QPA_PLATFORM offscreen')
 
 # Insertion before the program runs is expected to fail directly and to
-# create the pending resolver breakpoint on qt_qmlDebugConnectorOpen().
+# create one pending resolver breakpoint on qt_qmlDebugConnectorOpen()
+# per interpreter breakpoint. Both must get resolved on the single stop
+# there.
 d.insertInterpreterBreakpoint({
     'file': os.path.join(test_dir, 'Main.qml'),
     'line': BREAK_LINE,
     'type': 'breakpoint',
     'token': 1,
 })
-check('pending resolver created', len(d.interpreterBreakpointResolvers) == 1)
+d.insertInterpreterBreakpoint({
+    'file': os.path.join(test_dir, 'Main.qml'),
+    'line': BREAK_LINE + 1,
+    'type': 'breakpoint',
+    'token': 2,
+})
+check('pending resolvers created', len(d.interpreterBreakpointResolvers) == 2)
 
 gdb.execute('run')
 
@@ -95,6 +103,14 @@ if ctx:
           res.find('iname="local.this.interval"') >= 0)
     check('this.parent expands one level deeper',
           res.find('iname="local.this.parent.children"') >= 0)
+
+# The second breakpoint, on the next line, must be hit as well.
+gdb.execute('continue')
+check('stopped at second breakpoint',
+      gdb.newest_frame().name() == 'qt_qmlDebugMessageAvailable')
+frames = d.extractInterpreterStack().get('frames', [])
+check('second breakpoint is on the next line',
+      bool(frames) and frames[0].get('line') == BREAK_LINE + 1)
 
 gdb.execute('kill')
 
