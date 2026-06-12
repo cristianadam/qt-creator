@@ -38,6 +38,7 @@ DebuggerSettings::DebuggerSettings() :
     raiseOnInterrupt{commonSettings().raiseOnInterrupt},
     breakpointsFullPathByDefault{commonSettings().breakpointsFullPathByDefault},
     warnOnReleaseBuilds{commonSettings().warnOnReleaseBuilds},
+    nativeMixedMode{commonSettings().nativeMixedMode},
     maximalStackDepth{commonSettings().maximalStackDepth},
 
     fontSizeFollowsEditor{commonSettings().fontSizeFollowsEditor},

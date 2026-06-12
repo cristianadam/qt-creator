@@ -192,6 +192,7 @@ DebuggerRunParameters DebuggerRunParameters::fromRunControl(RunControl *runContr
 
     params.m_toolChainAbi = ToolchainKitAspect::targetAbi(kit);
 
+    params.m_nativeMixedEnabled = settings().nativeMixedMode();
     bool ok = false;
     const int nativeMixedOverride = qtcEnvironmentVariableIntValue("QTC_DEBUGGER_NATIVE_MIXED", &ok);
     if (ok)

@@ -40,9 +40,11 @@ configured, and print build instructions otherwise.
 Interactive use in Qt Creator
 -----------------------------
 
-Start Qt Creator with the QTC_DEBUGGER_NATIVE_MIXED environment
-variable set to 1, open this project, and enable both C++ and QML
-debugging in Projects > Run > Debugger Settings.
+Enable "Use native combined debugging" in Preferences > Debugger >
+General, or start Qt Creator with the QTC_DEBUGGER_NATIVE_MIXED
+environment variable set to 1 (the variable overrides the setting).
+Open this project and enable both C++ and QML debugging in
+Projects > Run > Debugger Settings.
 
 Set a breakpoint on one of the lines inside onTriggered in Main.qml
 and start debugging with the GDB or LLDB engine. The breakpoint
