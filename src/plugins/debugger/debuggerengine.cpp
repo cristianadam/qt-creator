@@ -392,9 +392,9 @@ bool DebuggerRunParameters::isNativeMixedDebugging() const
     return m_nativeMixedEnabled && isCppDebugging() && m_isQmlDebugging;
 }
 
-FilePaths DebuggerRunParameters::findQmlFile(const QUrl &url) const
+FilePaths DebuggerRunParameters::findQmlFile(const QUrl &url, bool *success) const
 {
-    return m_qmlFileFinder.findFile(url);
+    return m_qmlFileFinder.findFile(url, success);
 }
 
 void DebuggerRunParameters::populateQmlFileFinder(const RunControl *runControl)
