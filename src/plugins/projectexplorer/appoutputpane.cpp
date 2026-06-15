@@ -1052,6 +1052,11 @@ AppOutputSettings &AppOutputPane::settings()
     return theSettings;
 }
 
+AppOutputSettings &appOutputSettings()
+{
+    return AppOutputPane::settings();
+}
+
 void AppOutputPane::closeTab(int tabIndex, CloseTabMode closeTabMode)
 {
     QWidget * const tabWidget = m_tabWidget->widget(tabIndex);
@@ -1355,6 +1360,22 @@ AppOutputSettings::AppOutputSettings()
     backgroundColor.setDefaultValue(QColor{});
     backgroundColor.setEnabler(&overwriteBackground);
 
+    logcatShowTimestamp.setSettingsKey("ProjectExplorer/Settings/LogcatShowTimestamp");
+    logcatShowTimestamp.setDefaultValue(false);
+    logcatShowTimestamp.setLabelText(Tr::tr("Show timestamps"));
+
+    logcatShowPid.setSettingsKey("ProjectExplorer/Settings/LogcatShowPid");
+    logcatShowPid.setDefaultValue(false);
+    logcatShowPid.setLabelText(Tr::tr("Show PID"));
+
+    logcatShowTag.setSettingsKey("ProjectExplorer/Settings/LogcatShowTag");
+    logcatShowTag.setDefaultValue(true);
+    logcatShowTag.setLabelText(Tr::tr("Show tag"));
+
+    logcatBufferedLines.setSettingsKey("ProjectExplorer/Settings/LogcatBufferedLines");
+    logcatBufferedLines.setRange(100, 1000000);
+    logcatBufferedLines.setDefaultValue(10000);
+
     setLayouter([this] {
         // clang-format off
         using namespace Layouting;
@@ -1371,6 +1392,11 @@ AppOutputSettings::AppOutputSettings()
             },
             Row { parts.at(0).trimmed(), maxCharCount, parts.at(1).trimmed(), st },
             Row { overwriteBackground, backgroundColor, st },
+            Label { text(QString("<b>%1</b>").arg(Tr::tr("Android Logcat"))) },
+            logcatShowTimestamp,
+            logcatShowPid,
+            logcatShowTag,
+            Row { Tr::tr("Keep the last"), logcatBufferedLines, Tr::tr("lines"), st },
             st,
         };
         // clang-format on

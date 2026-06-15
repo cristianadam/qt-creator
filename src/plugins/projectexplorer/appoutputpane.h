@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "projectexplorer_export.h"
+
 #include <coreplugin/coreconstants.h>
 #include <coreplugin/dialogs/ioptionspage.h>
 #include <coreplugin/ioutputpane.h>
@@ -64,7 +66,17 @@ public:
     OutputMaxCharCountAspect maxCharCount{this};
     Utils::BoolAspect overwriteBackground{this};
     OutputColorAspect backgroundColor{this};
+
+    // Android Logcat display columns and buffer (consumed by the Android plugin).
+    Utils::BoolAspect logcatShowTimestamp{this};
+    Utils::BoolAspect logcatShowPid{this};
+    Utils::BoolAspect logcatShowTag{this};
+    Utils::IntegerAspect logcatBufferedLines{this};
 };
+
+// Exposes the shared Application Output settings (incl. the Logcat display
+// toggles) to other plugins; emits AspectContainer::applied() on change.
+PROJECTEXPLORER_EXPORT AppOutputSettings &appOutputSettings();
 
 class AppOutputPane final : public Core::IOutputPane
 {

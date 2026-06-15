@@ -16,11 +16,13 @@
 #include <coreplugin/outputpane.h>
 #include <coreplugin/outputwindow.h>
 
+#include <projectexplorer/appoutputpane.h>
 #include <projectexplorer/devicesupport/devicemanager.h>
 #include <projectexplorer/devicesupport/idevice.h>
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/runcontrol.h>
 
+#include <utils/aspects.h>
 #include <utils/commandline.h>
 #include <utils/outputformat.h>
 #include <utils/qtcassert.h>
@@ -52,9 +54,6 @@ static CommandLine adbLogcat(const QString &serialNumber, const QStringList &ext
 {
     return {AndroidConfig::adbToolPath(), adbSelector(serialNumber) + QStringList{"logcat"} + extra};
 }
-// Cap on the per-device entry history kept for re-rendering on filter changes.
-// 10k entries of typical line length occupy a few megabytes.(10K entries per device = 2~3MB of memory)
-static constexpr int maxBufferedLines = 10000;
 
 struct LogcatEntry
 {
@@ -85,6 +84,37 @@ static LogcatEntry parseLogcat(const QString &raw)
                          || level == QLatin1Char('F');
     entry.fmt = isError ? Utils::StdErrFormat : Utils::StdOutFormat;
     return entry;
+}
+
+// The leading "MM-DD HH:MM:SS.mmm " stamp from 'adb logcat -v time'.
+static const QRegularExpression regExpTimestamp(
+    "^(?:\\x1b\\[[0-9;]*m)?"                       // optional ANSI color
+    "(\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d\\.\\d+ )"  // 1: timestamp incl. trailing space
+);
+
+// Hide the timestamp, "/tag" and "(pid)" segments of the raw line unless the
+// matching Application Output > Android Logcat toggle is on, keeping ANSI color.
+static QString logcatDisplayText(const LogcatEntry &entry)
+{
+    if (entry.bypassFilter)
+        return entry.line;
+    const auto match = regExpLogcat.match(entry.line);
+    if (!match.hasMatch())
+        return entry.line;
+    const ProjectExplorer::Internal::AppOutputSettings &settings
+        = ProjectExplorer::Internal::appOutputSettings();
+    QString line = entry.line;
+    // Remove right-to-left so the earlier capture offsets stay valid.
+    if (!settings.logcatShowPid())
+        line.remove(match.capturedStart(3), match.capturedLength(3));
+    if (!settings.logcatShowTag())
+        line.remove(match.capturedStart(2), match.capturedLength(2));
+    if (!settings.logcatShowTimestamp()) {
+        const auto ts = regExpTimestamp.match(line);
+        if (ts.hasMatch())
+            line.remove(ts.capturedStart(1), ts.capturedLength(1));
+    }
+    return line;
 }
 
 // User-facing device identity: "<displayName> (<serial>)". Used in
@@ -216,6 +246,9 @@ LogcatStream::LogcatStream(AndroidDeviceConstPtr device)
         else if (state == IDevice::DeviceReadyToUse)
             onConnected();
     });
+    // Re-render the buffer when the Logcat display columns are changed.
+    QObject::connect(&ProjectExplorer::Internal::appOutputSettings(), &AspectContainer::applied,
+                     this, [this] { m_tabContext.renderFromBuffer(); });
 }
 
 LogcatStream::~LogcatStream()
@@ -307,10 +340,12 @@ void LogcatStream::postMessage(const QString &msg, Utils::OutputFormat fmt)
 void LogcatStream::TabContext::appendEntry(const LogcatEntry &entry)
 {
     buffer.append(entry);
-    if (buffer.size() > maxBufferedLines)
+    // Bound the re-render history; the cap is the per-device entry count kept
+    // for replaying on filter/display changes.
+    while (buffer.size() > ProjectExplorer::Internal::appOutputSettings().logcatBufferedLines())
         buffer.removeFirst();
     if (tab && filter.accepts(entry))
-        tab->postMessage(entry.line, entry.fmt, false);
+        tab->postMessage(logcatDisplayText(entry), entry.fmt, false);
 }
 
 void LogcatStream::TabContext::applyFilter() const
@@ -331,7 +366,7 @@ void LogcatStream::TabContext::renderFromBuffer() const
     w->clear();
     for (const LogcatEntry &entry : buffer) {
         if (filter.accepts(entry))
-            tab->postMessage(entry.line, entry.fmt, false);
+            tab->postMessage(logcatDisplayText(entry), entry.fmt, false);
     }
 }
 
@@ -358,7 +393,7 @@ void LogcatStream::startAdbTail()
             postMessage(line, Utils::StdErrFormat);
         });
         // -T 1 starts the tail at the current head, skipping the device's existing ring buffer (live tail only)
-        process.setCommand(adbLogcat(serialNumber, {"-T", "1", "-v", "color", "-v", "brief"}));
+        process.setCommand(adbLogcat(serialNumber, {"-T", "1", "-v", "color", "-v", "time"}));
     };
     m_task = std::make_unique<QTaskTree>(Group{Forever{ProcessTask(onSetup) || successItem}});
     m_task->start();
