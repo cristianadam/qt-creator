@@ -34,6 +34,7 @@
 #include <utils/algorithm.h>
 #include <utils/async.h>
 #include <utils/basetreeview.h>
+#include <utils/infolabel.h>
 #include <utils/layoutbuilder.h>
 #include <utils/outputformatter.h>
 #include <utils/qtcassert.h>
@@ -53,9 +54,11 @@
 #include <QTextBlock>
 #include <QTimer>
 #include <QToolButton>
+#include <QValidator>
 #include <QVBoxLayout>
 
 #include <climits>
+#include <optional>
 
 static Q_LOGGING_CATEGORY(appOutputLog, "qtc.projectexplorer.appoutput", QtWarningMsg);
 
@@ -1030,6 +1033,8 @@ void AppOutputPane::reRunRunControl()
     QTC_ASSERT(tab->runControl, return);
     QTC_ASSERT(!tab->runControl->isRunning(), return);
 
+    // Queued chunks survive clear() and would drain into the fresh run.
+    tab->window->flush();
     handleOldOutput(tab->window);
     tab->window->scrollToBottom();
     tab->runControl->initiateStart();
@@ -1353,6 +1358,73 @@ QVariant OutputMaxCharCountAspect::toSettingsValue(const QVariant &valueToSave) 
     return valueToSave.toInt() / 100;
 }
 
+constexpr int logcatBufferMinKb = 1;
+constexpr int logcatBufferMaxKb = 102400; // 100 MB
+
+static QString logcatBufferSizeError()
+{
+    return Tr::tr("Invalid. Please enter an integer between %1 and %2 (%1KB-%3MB).")
+        .arg(logcatBufferMinKb)
+        .arg(logcatBufferMaxKb)
+        .arg(logcatBufferMaxKb / 1024);
+}
+
+LogcatSettings::LogcatSettings(AspectContainer *container)
+    : showTimestamp{container}
+    , showPid{container}
+    , showTag{container}
+    , showPackage{container}
+    , bufferSize{container}
+{
+    showTimestamp.setSettingsKey("ProjectExplorer/Settings/LogcatShowTimestamp");
+    showTimestamp.setDefaultValue(true);
+    showTimestamp.setLabelText(Tr::tr("Show date and time"));
+    showTimestamp.setToolTip(Tr::tr("When the line was logged, as yyyy-MM-dd hh:mm:ss.zzz."));
+
+    showPid.setSettingsKey("ProjectExplorer/Settings/LogcatShowPid");
+    showPid.setDefaultValue(true);
+    showPid.setLabelText(Tr::tr("Show process and thread IDs"));
+    showPid.setToolTip(Tr::tr("The emitting process and thread, like \"1483-1507\"."));
+
+    showTag.setSettingsKey("ProjectExplorer/Settings/LogcatShowTag");
+    showTag.setDefaultValue(true);
+    showTag.setLabelText(Tr::tr("Show tag"));
+    showTag.setToolTip(Tr::tr("The line's log tag, like \"ActivityManager\"."));
+
+    showPackage.setSettingsKey("ProjectExplorer/Settings/LogcatShowPackage");
+    showPackage.setDefaultValue(true);
+    showPackage.setLabelText(Tr::tr("Show package name"));
+    showPackage.setToolTip(Tr::tr("The emitting app's package, like \"do.main.mypackage\"."));
+
+    bufferSize.setSettingsKey("ProjectExplorer/Settings/LogcatBufferSize");
+    bufferSize.setDisplayStyle(StringAspect::LineEditDisplay);
+    bufferSize.setDefaultValue("1024");
+    bufferSize.setValidatorFactory([](QObject *parent) {
+        return new QIntValidator(logcatBufferMinKb, logcatBufferMaxKb, parent);
+    });
+    bufferSize.setValidationFunction([](const QString &text) -> Result<> {
+        const auto kb = text.toLongLong();
+        if (kb < logcatBufferMinKb || kb > logcatBufferMaxKb)
+            return ResultError(logcatBufferSizeError());
+        return ResultOk;
+    });
+    bufferSize.setValueAcceptor(
+        [this](const QString &oldValue, const QString &newValue) -> std::optional<QString> {
+            const auto kb = newValue.toLongLong();
+            if (kb >= logcatBufferMinKb && kb <= logcatBufferMaxKb)
+                return newValue;
+            // Rejected: restore the surviving value after the apply pass finished.
+            QMetaObject::invokeMethod(
+                &bufferSize,
+                [this, oldValue] { bufferSize.setVolatileValue(oldValue); },
+                Qt::QueuedConnection);
+            return std::nullopt;
+        });
+    bufferSize.setLabelText(Tr::tr("Logcat cycle buffer size:"));
+    bufferSize.setToolTip(
+        Tr::tr("Recent output kept per device, so filters can bring older lines back."));
+}
+
 AppOutputSettings::AppOutputSettings()
 {
     setAutoApply(false);
@@ -1412,6 +1484,16 @@ AppOutputSettings::AppOutputSettings()
     backgroundColor.setEnabler(&overwriteBackground);
 
     setLayouter([this] {
+        const auto bufferSizeInvalid = [this] {
+            const auto kb = logcat.bufferSize.volatileValue().toLongLong();
+            return kb < logcatBufferMinKb || kb > logcatBufferMaxKb;
+        };
+        auto bufferSizeError = new InfoLabel(logcatBufferSizeError(), InfoLabelType::Error);
+        bufferSizeError->setVisible(bufferSizeInvalid());
+        connect(&logcat.bufferSize, &BaseAspect::volatileValueChanged, bufferSizeError,
+                [bufferSizeInvalid, bufferSizeError] {
+                    bufferSizeError->setVisible(bufferSizeInvalid());
+                });
         // clang-format off
         using namespace Layouting;
         const QString msg = Tr::tr("Limit output to %1 characters");
@@ -1427,6 +1509,13 @@ AppOutputSettings::AppOutputSettings()
             },
             Row { parts.at(0).trimmed(), maxCharCount, parts.at(1).trimmed(), st },
             Row { overwriteBackground, backgroundColor, st },
+            Label { text(QString("<b>%1</b>").arg(Tr::tr("Android Logcat"))) },
+            logcat.showTimestamp,
+            logcat.showPid,
+            logcat.showTag,
+            logcat.showPackage,
+            Row { logcat.bufferSize, Tr::tr("KB"), st },
+            bufferSizeError,
             st,
         };
         // clang-format on
@@ -1461,5 +1550,14 @@ public:
 static const AppOutputSettingsPage settingsPage;
 
 } // namespace ProjectExplorer::Internal
+
+namespace ProjectExplorer {
+
+const Internal::LogcatSettings &logcatSettings()
+{
+    return Internal::AppOutputPane::settings().logcat;
+}
+
+} // namespace ProjectExplorer
 
 #include "appoutputpane.moc"

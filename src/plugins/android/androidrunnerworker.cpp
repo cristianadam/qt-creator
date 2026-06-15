@@ -339,7 +339,11 @@ static ExecutableItem jdbRecipe(const Storage<RunnerStorage> &storage,
 
     return Group {
         onGroupSetup(onSetup),
-        barrierAwaiterTask(startBarrier),
+        barrierAwaiterTask(startBarrier).withTimeout(60s, [storage] {
+            storage->m_glue->runControl()->postMessage(
+                Tr::tr("Timed out waiting for the debugger handshake in logcat."),
+                Utils::ErrorMessageFormat);
+        }),
         QTaskTreeTask(onTaskTreeSetup),
         ProcessTask(onJdbSetup, onJdbDone).withTimeout(60s)
     };
