@@ -1898,6 +1898,11 @@ void GdbEngine::executeStepOut()
     showStatusMessage(Tr::tr("Finish function requested..."), 5000);
     if (isNativeMixedActiveFrame()) {
         runCommand({"executeStepOut", RunRequest});
+    } else if (isNativeMixedActive()) {
+        // A C++ frame in a native mixed session. The dumper returns to
+        // the QML caller if the frame sits right on the C++/QML boundary,
+        // and steps out in C++ otherwise.
+        runCommand({"executeNativeMixedStepOut", RunRequest});
     } else {
         // -exec-finish in 'main' results (correctly) in
         //  40^error,msg="\"finish\" not meaningful in the outermost frame."

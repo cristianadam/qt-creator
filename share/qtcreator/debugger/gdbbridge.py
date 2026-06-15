@@ -1532,6 +1532,40 @@ class Dumper(DumperBase):
     def leaveInternalStepping(self):
         print('nativemixedstep={state="left"}')
 
+    def doFinish(self):
+        gdb.execute('finish')
+
+    def isQmlCallMachineryFrame(self, frame):
+        # A frame on the metacall path between a C++ method and the QML
+        # interpreter: the generated qt_(static_)metacall trampolines, or
+        # anything inside the Qt libraries (recognized by source path, or
+        # by having no source at all in a release build).
+        name = frame.name() or ''
+        if 'qt_static_metacall' in name or 'qt_metacall' in name:
+            return True
+        sal = frame.find_sal()
+        fileName = sal.symtab.fullname() if sal and sal.symtab else ''
+        if not fileName:
+            return True
+        return '/qtbase/' in fileName or '/qtdeclarative/' in fileName
+
+    def atNativeToQmlBoundary(self):
+        # True if the current C++ frame was called straight from the QML
+        # interpreter through the metacall machinery, with no intervening
+        # user C++ frame. Stepping out then returns to the QML caller.
+        frame = gdb.newest_frame()
+        frame = frame.older() if frame else None
+        limit = 24
+        while frame is not None and limit > 0:
+            limit -= 1
+            name = frame.name() or ''
+            if 'QV4::Moth::VME::' in name or 'callInternal' in name:
+                return True
+            if not self.isQmlCallMachineryFrame(frame):
+                return False
+            frame = frame.older()
+        return False
+
     def insertInterpreterBreakpoint(self, args):
         self.ensureInterpreterMessageBreakpoint()
         DumperBase.insertInterpreterBreakpoint(self, args)

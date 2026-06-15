@@ -149,6 +149,12 @@ d.executeStep({'token': 50})
 if hookAvailable():
     check('step into from QML lands in the C++ method',
           gdb.newest_frame().name() == 'Backend::process')
+    # Step out of the C++ method back to the QML caller.
+    d.executeNativeMixedStepOut({'token': 51})
+    outFrames = d.extractInterpreterStack().get('frames', [{}])
+    check('step out from C++ returns to the QML caller',
+          gdb.newest_frame().name() == 'qt_qmlDebugMessageAvailable'
+          and outFrames and outFrames[0].get('function') == 'compute')
 else:
     check('step over the C++ call stays in QML',
           gdb.newest_frame().name() == 'qt_qmlDebugMessageAvailable')

@@ -2948,6 +2948,27 @@ typename))
             self.interpreterStepArmed = True
         self.doContinue()
 
+    def executeNativeMixedStepOut(self, args):
+        # Stepping out of a C++ frame in a native mixed session. If the
+        # frame was called straight from the QML interpreter, return to
+        # the QML caller by pausing at the next JS statement; otherwise
+        # step out normally in C++.
+        if self.atNativeToQmlBoundary():
+            self.sendInterpreterRequest('stepin', args)
+            self.interpreterStepArmed = True
+            self.setupMachinerySkips()
+            self.doContinue()
+        else:
+            self.doFinish()
+
+    def atNativeToQmlBoundary(self):
+        # Overridden in the GDB bridge.
+        return False
+
+    def doFinish(self):
+        # Overridden in the GDB bridge.
+        self.doContinue()
+
     def executeNext(self, args):
         if self.nativeMixed:
             response = self.sendInterpreterRequest('stepover', args)
