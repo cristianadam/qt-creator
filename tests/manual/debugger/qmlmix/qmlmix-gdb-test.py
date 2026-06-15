@@ -21,8 +21,22 @@ sys.path.insert(0, os.path.normpath(
 
 import gdbbridge
 
-# The 'var message' line in Main.qml.
-BREAK_LINE = 19
+
+def line_of(marker):
+    # Resolves a 'MARKER: <name>' comment in Main.qml to its line number,
+    # so the test does not hardcode line numbers of the test app.
+    path = os.path.join(test_dir, 'Main.qml')
+    with open(path) as qml:
+        for number, text in enumerate(qml, 1):
+            if ('MARKER: ' + marker) in text:
+                return number
+    raise RuntimeError('marker not found in Main.qml: ' + marker)
+
+
+# First and second executable statement of the timer handler. The first
+# is JS only, the second writes a property.
+HANDLER_JS = line_of('handler-js')
+HANDLER_WRITE = line_of('handler-write')
 
 failures = []
 
@@ -57,32 +71,68 @@ asyncReports = []
 savedReportAsync = d.reportInterpreterAsync
 d.reportInterpreterAsync = lambda resdict, asyncclass: asyncReports.append(dict(resdict))
 
+def serviceId(token):
+    for report in asyncReports:
+        if report.get('token') == token:
+            return report.get('number', -1)
+    return -1
+
+
 # Insertion before the program runs is expected to fail directly and to
 # create one pending resolver breakpoint on qt_qmlDebugConnectorOpen()
-# per interpreter breakpoint. Both must get resolved on the single stop
-# there.
+# per interpreter breakpoint. All must get resolved on the single stop
+# there. Breakpoint 3 sits in the nested square() function.
 d.insertInterpreterBreakpoint({
     'file': os.path.join(test_dir, 'Main.qml'),
-    'line': BREAK_LINE,
+    'line': HANDLER_JS,
     'type': 'breakpoint',
     'token': 1,
 })
 d.insertInterpreterBreakpoint({
     'file': os.path.join(test_dir, 'Main.qml'),
-    'line': BREAK_LINE + 1,
+    'line': HANDLER_WRITE,
     'type': 'breakpoint',
     'token': 2,
 })
-check('pending resolvers created', len(d.interpreterBreakpointResolvers) == 2)
+d.insertInterpreterBreakpoint({
+    'file': os.path.join(test_dir, 'Main.qml'),
+    'line': line_of('deep-js'),
+    'type': 'breakpoint',
+    'token': 3,
+})
+check('pending resolvers created', len(d.interpreterBreakpointResolvers) == 3)
 
 gdb.execute('run')
+
+check('all breakpoints were resolved',
+      len([r for r in asyncReports
+           if not r.get('pending') and r.get('number', -1) != -1]) == 3)
+
+# Component.onCompleted runs first and calls compute(3), so the first
+# stop is in the nested square() function.
+mframes = d.extractInterpreterStack().get('frames', [])
+mfuncs = [f.get('function', '') for f in mframes]
+check('multi-frame JS stack: square <- compute <- onCompleted',
+      len(mframes) >= 3
+      and mfuncs[0] == 'square'
+      and mfuncs[1] == 'compute'
+      and mfuncs[2].find('onCompleted') >= 0)
+
+# Remove the square breakpoint (it would hit thrice) and run to the C++
+# method that compute() calls, reached through QObjectMethod dispatch.
+d.removeInterpreterBreakpoint({'id': serviceId(3)})
+backendBreakpoint = gdb.Breakpoint('Backend::process')
+gdb.execute('continue')
+check('QML call reaches C++ user code',
+      gdb.newest_frame().name() == 'Backend::process')
+backendBreakpoint.delete()
+
+# Resynchronize with the timer handler for the remaining checks.
+gdb.execute('continue')
 
 frame = gdb.newest_frame()
 check('stopped at qt_qmlDebugMessageAvailable',
       frame.name() == 'qt_qmlDebugMessageAvailable')
-check('both breakpoints were resolved',
-      len([r for r in asyncReports
-           if not r.get('pending') and r.get('number', -1) != -1]) == 2)
 
 stack = d.extractInterpreterStack()
 frames = stack.get('frames', [])
@@ -94,7 +144,7 @@ if frames:
     ctx = top.get('context', '')
     check('top frame is the onTriggered expression',
           top.get('language') == 'js'
-          and top.get('line') == BREAK_LINE
+          and top.get('line') == HANDLER_JS
           and top.get('function', '').find('onTriggered') >= 0)
     check('top frame has a context', bool(ctx))
 
@@ -145,19 +195,16 @@ check('stopped at second breakpoint',
       gdb.newest_frame().name() == 'qt_qmlDebugMessageAvailable')
 frames = d.extractInterpreterStack().get('frames', [])
 check('second breakpoint is on the next line',
-      bool(frames) and frames[0].get('line') == BREAK_LINE + 1)
+      bool(frames) and frames[0].get('line') == HANDLER_WRITE)
 
 # Stepping: back at the first breakpoint, remove the second breakpoint,
 # then a single step must stop on its line nevertheless.
 gdb.execute('continue')
 frames = d.extractInterpreterStack().get('frames', [])
 check('first breakpoint hits again',
-      bool(frames) and frames[0].get('line') == BREAK_LINE)
+      bool(frames) and frames[0].get('line') == HANDLER_JS)
 
-bp2 = -1
-for report in asyncReports:
-    if report.get('token') == 2:
-        bp2 = report.get('number', -1)
+bp2 = serviceId(2)
 check('second breakpoint has a service id', bp2 != -1)
 res = d.removeInterpreterBreakpoint({'id': bp2})
 check('breakpoint removal acknowledged', res.get('id') == bp2)
@@ -168,16 +215,13 @@ gdb.execute('continue')
 frames = d.extractInterpreterStack().get('frames', [])
 check('step lands on the next line',
       gdb.newest_frame().name() == 'qt_qmlDebugMessageAvailable'
-      and bool(frames) and frames[0].get('line') == BREAK_LINE + 1)
+      and bool(frames) and frames[0].get('line') == HANDLER_WRITE)
 
 # C++ to QML cross stepping: remove the remaining breakpoint, stop in
 # C++ right before the timer fires the handler, arm and do a native
 # step. The step must pass through the machinery and stop on the JS
 # statement.
-bp1 = -1
-for report in asyncReports:
-    if report.get('token') == 1:
-        bp1 = report.get('number', -1)
+bp1 = serviceId(1)
 res = d.removeInterpreterBreakpoint({'id': bp1})
 check('first breakpoint removed', res.get('id') == bp1)
 
@@ -195,7 +239,7 @@ frames = d.extractInterpreterStack().get('frames', [])
 check('cross step from C++ lands on the JS statement',
       gdb.newest_frame().name() == 'qt_qmlDebugMessageAvailable'
       and bool(frames)
-      and frames[0].get('line') in (BREAK_LINE - 1, BREAK_LINE)
+      and frames[0].get('line') in (HANDLER_JS - 1, HANDLER_JS)
       and frames[0].get('language') == 'js')
 
 # Prototype for QML to C++ step-into: race the service's 'next JS
@@ -232,7 +276,7 @@ for attempt in range(4):
     jsLines.append(where)
 
 check('step into walks the JS statements first',
-      jsLines and all(BREAK_LINE - 1 <= line <= BREAK_LINE + 1
+      jsLines and all(HANDLER_JS - 1 <= line <= HANDLER_WRITE
                       for line in jsLines))
 check('step into a statement with a C++ transition lands in C++',
       cppLanding is not None and cppLanding.find('setProperty') >= 0)

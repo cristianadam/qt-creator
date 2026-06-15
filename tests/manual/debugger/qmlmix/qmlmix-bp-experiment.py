@@ -27,7 +27,18 @@ test_dir = os.path.dirname(os.path.abspath(__file__))
 EXECUTABLE = os.environ.get('QMLMIX_EXECUTABLE',
                             os.path.join(test_dir, 'build', 'qmlmixtest'))
 ENGINE_NAME = 'qrc:/qt/qml/MixTest/Main.qml'
-LOOP_BODY_LINE = 32
+
+
+def line_of(marker):
+    # Resolves a 'MARKER: <name>' comment in Main.qml to its line number.
+    with open(os.path.join(test_dir, 'Main.qml')) as qml:
+        for number, text in enumerate(qml, 1):
+            if ('MARKER: ' + marker) in text:
+                return number
+    raise RuntimeError('marker not found in Main.qml: ' + marker)
+
+
+LOOP_BODY_LINE = line_of('hot-loop-body')
 
 mode = os.environ.get('EXP_MODE', 'baseline')
 

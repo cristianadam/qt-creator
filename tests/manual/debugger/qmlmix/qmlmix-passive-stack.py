@@ -158,6 +158,16 @@ class QmlFrameFilter():
 
 test_dir = os.path.dirname(os.path.abspath(__file__))
 
+
+def line_of(marker):
+    # Resolves a 'MARKER: <name>' comment in Main.qml to its line number.
+    with open(os.path.join(test_dir, 'Main.qml')) as qml:
+        for number, text in enumerate(qml, 1):
+            if ('MARKER: ' + marker) in text:
+                return number
+    raise RuntimeError('marker not found in Main.qml: ' + marker)
+
+
 failures = []
 
 def check(name, cond):
@@ -213,13 +223,13 @@ if stack:
     check('top frame is the executing QML statement',
           top['function'].find('onTriggered') >= 0
           and top['file'].endswith('Main.qml')
-          and top['line'] == 20
+          and top['line'] == line_of('handler-write')
           and top['kind'] == 'js')
 
 QmlFrameFilter()
 bt = gdb.execute('bt', to_string=True)
 check('frame filter decorates bt', bt.find('[QML] expression for onTriggered') >= 0
-      and bt.find('Main.qml:20') >= 0)
+      and bt.find('Main.qml:%d' % line_of('handler-write')) >= 0)
 
 gdb.execute('kill')
 

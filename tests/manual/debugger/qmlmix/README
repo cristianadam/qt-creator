@@ -1,12 +1,23 @@
 Manual test for native combined (C++ + QML) debugging.
 
-The application is a minimal Qt Quick program: a repeating timer
-drives a JS handler (Main.qml, onTriggered, lines 19/20), and a
-20000 iteration JS hot loop runs once at startup, delimited by two
-property writes so its duration can be measured from outside
-(lines 29-33). Several scripts in this directory exercise different
-QML debugging mechanisms against it. See the NOTES file for
-measurements and design findings.
+The application is a small Qt Quick program covering the cases the
+debugging machinery needs to handle:
+
+- a repeating timer with a JS handler, for QML breakpoints, stepping,
+  and a property write as a QML-to-C++ transition;
+- nested JS functions (square() called from compute() called from
+  Component.onCompleted), for multi-frame JS stacks;
+- a C++ type 'Backend' with a Q_INVOKABLE process() that compute()
+  calls, as a genuine user-code target for stepping into C++;
+- a 20000 iteration JS hot loop, delimited by two property writes so
+  its duration can be measured from outside, for the breakpoint cost
+  experiment.
+
+The interesting source lines carry 'MARKER: <name>' comments; the
+scripts resolve those to line numbers rather than hardcoding them, so
+the app can be edited without breaking them. Several scripts exercise
+different QML debugging mechanisms against the app. See the NOTES file
+for measurements and design findings.
 
 Prerequisites
 -------------
