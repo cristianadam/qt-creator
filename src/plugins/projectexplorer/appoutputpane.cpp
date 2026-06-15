@@ -1329,6 +1329,34 @@ QVariant OutputMaxCharCountAspect::toSettingsValue(const QVariant &valueToSave) 
     return valueToSave.toInt() / 100;
 }
 
+LogcatSettings::LogcatSettings(AspectContainer *container)
+    : showTimestamp{container}
+    , showPid{container}
+    , showTag{container}
+    , showPackage{container}
+    , bufferedLines{container}
+{
+    showTimestamp.setSettingsKey("ProjectExplorer/Settings/LogcatShowTimestamp");
+    showTimestamp.setDefaultValue(true);
+    showTimestamp.setLabelText(Tr::tr("Show timestamps"));
+
+    showPid.setSettingsKey("ProjectExplorer/Settings/LogcatShowPid");
+    showPid.setDefaultValue(true);
+    showPid.setLabelText(Tr::tr("Show PID and TID"));
+
+    showPackage.setSettingsKey("ProjectExplorer/Settings/LogcatShowPackage");
+    showPackage.setDefaultValue(true);
+    showPackage.setLabelText(Tr::tr("Show package name"));
+
+    showTag.setSettingsKey("ProjectExplorer/Settings/LogcatShowTag");
+    showTag.setDefaultValue(true);
+    showTag.setLabelText(Tr::tr("Show tag"));
+
+    bufferedLines.setSettingsKey("ProjectExplorer/Settings/LogcatBufferedLines");
+    bufferedLines.setRange(100, 1000000);
+    bufferedLines.setDefaultValue(1000);
+}
+
 AppOutputSettings::AppOutputSettings()
 {
     setAutoApply(false);
@@ -1403,6 +1431,18 @@ AppOutputSettings::AppOutputSettings()
             },
             Row { parts.at(0).trimmed(), maxCharCount, parts.at(1).trimmed(), st },
             Row { overwriteBackground, backgroundColor, st },
+            Label { text(QString("<b>%1</b>").arg(Tr::tr("Android Logcat"))) },
+            logcat.showTimestamp,
+            logcat.showPid,
+            logcat.showTag,
+            logcat.showPackage,
+            Row { Tr::tr("Keep the last"), logcat.bufferedLines, Tr::tr("lines"), st },
+            Label {
+                text(Tr::tr("Recent logcat lines kept per device, so the Logcat tab's filter "
+                            "can show older lines without re-running adb. Larger values use "
+                            "more memory.")),
+                wordWrap(true),
+            },
             st,
         };
         // clang-format on
@@ -1437,5 +1477,14 @@ public:
 static const AppOutputSettingsPage settingsPage;
 
 } // namespace ProjectExplorer::Internal
+
+namespace ProjectExplorer {
+
+Internal::LogcatSettings &logcatSettings()
+{
+    return Internal::AppOutputPane::settings().logcat;
+}
+
+} // namespace ProjectExplorer
 
 #include "appoutputpane.moc"

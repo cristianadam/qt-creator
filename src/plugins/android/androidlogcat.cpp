@@ -11,10 +11,12 @@
 #include <coreplugin/modemanager.h>
 #include <coreplugin/outputpane.h>
 
+#include <projectexplorer/appoutputpane.h>
 #include <projectexplorer/devicesupport/devicemanager.h>
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/runcontrol.h>
 
+#include <utils/aspects.h>
 #include <utils/commandline.h>
 #include <utils/outputformat.h>
 #include <utils/qtcassert.h>
@@ -36,21 +38,59 @@ using namespace ProjectExplorer;
 
 namespace Android::Internal {
 
-// Cap on the per-device entry history kept for re-rendering on filter changes.
-static constexpr int maxBufferedLines = 1000;
-
 struct LogcatEntry
 {
     QString line;
+    qint32 pid = -1;
+    QString packageName; // resolved from the pid when the entry is buffered
     bool bypassFilter = false;
 
     static LogcatEntry fromLine(const QString &raw);
+    QString displayText() const;
 };
 
-// Keep the line as received; coloring comes from adb's -v color.
+// The '-v threadtime -v year' line layout; the tag runs up to the first ": ".
+static const QRegularExpression regExpLogcat(
+    "(?:\\x1b\\[[0-9;]*m)?"                                                // optional ANSI color
+    "(?<timestamp>(?:\\d{4}-)?\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d\\.\\d+) +"
+    "(?<pid>\\d+) +"
+    "(?<tid>\\d+) +"
+    "(?<level>[VDIWEF]) "
+    "(?<tag>.*?) *: ");
+
+// Keep the line as received (adb's -v color paints it); parse the pid for
+// the pid-tid and package-name columns.
 LogcatEntry LogcatEntry::fromLine(const QString &raw)
 {
-    return {.line = raw};
+    LogcatEntry entry{.line = raw};
+    const auto match = regExpLogcat.match(raw);
+    if (match.hasMatch())
+        entry.pid = match.captured("pid").toInt();
+    return entry;
+}
+
+QString LogcatEntry::displayText() const
+{
+    if (bypassFilter)
+        return line;
+    const auto match = regExpLogcat.match(line);
+    if (!match.hasMatch())
+        return line;
+    const auto &settings = logcatSettings();
+    QString result = line.left(match.capturedStart("timestamp"));
+    if (settings.showTimestamp())
+        result += match.captured("timestamp") + QLatin1Char(' ');
+    if (settings.showPid()) {
+        result += match.captured("pid") + QLatin1Char('-') + match.captured("tid")
+                  + QLatin1Char(' ');
+    }
+    if (settings.showTag())
+        result += match.captured("tag") + QLatin1Char(' ');
+    if (settings.showPackage() && !packageName.isEmpty())
+        result += packageName + QLatin1Char(' ');
+    result += match.captured("level") + QLatin1String("  ");
+    result += line.mid(match.capturedEnd());
+    return result;
 }
 
 class LogcatFilter
@@ -93,6 +133,7 @@ public:
 
     void start();
     void stop();
+    void refreshProcessNames();
 
     RunControl *tab() const { return m_tabContext.tab; }
     void attachTab(RunControl *tab);
@@ -104,9 +145,11 @@ private:
         QPointer<RunControl> tab;
         bool streaming = false;
         QList<LogcatEntry> buffer;
+        QHash<qint32, QString> processNames;
         LogcatFilter filter;
 
-        void appendEntry(const LogcatEntry &entry);
+        void appendEntry(LogcatEntry entry);
+        void fillPackageNames();
         void applyFilter() const;
         void renderFromBuffer() const;
 
@@ -206,6 +249,36 @@ void LogcatStream::setStreaming(bool streaming)
         stop();
 }
 
+// Fill the package-name column: pids resolve through "adb shell ps", run
+// once per newly seen pid (the placeholder inserted by the caller keeps a
+// pid that ps does not know from asking again).
+void LogcatStream::refreshProcessNames()
+{
+    if (m_device->deviceState() != IDevice::DeviceReadyToUse)
+        return;
+    const auto ps = new Process(this);
+    ps->setCommand(adbCommand({"shell", "ps", "-A", "-o", "PID,NAME"}));
+    QObject::connect(ps, &Process::done, this, [this, ps] {
+        const QStringList psLines = ps->cleanedStdOut().split('\n', Qt::SkipEmptyParts);
+        bool changed = false;
+        for (const auto &psLine : psLines) {
+            const auto fields = psLine.simplified().split(QChar::Space);
+            auto ok = false;
+            const auto pid = fields.size() == 2 ? fields.first().toInt(&ok) : 0;
+            if (ok && m_tabContext.processNames.value(pid) != fields.last()) {
+                m_tabContext.processNames.insert(pid, fields.last());
+                changed = true;
+            }
+        }
+        if (changed) {
+            m_tabContext.fillPackageNames();
+            m_tabContext.renderFromBuffer();
+        }
+        ps->deleteLater();
+    });
+    ps->start();
+}
+
 void LogcatStream::start()
 {
     if (m_task)
@@ -218,13 +291,19 @@ void LogcatStream::start()
             // (NUL-padded log records) that renders as boxes, so drop any that does.
             if (line.contains(QChar(u'\0')))
                 return;
-            m_tabContext.appendEntry(LogcatEntry::fromLine(line));
+            const LogcatEntry entry = LogcatEntry::fromLine(line);
+            if (entry.pid > 0 && !m_tabContext.processNames.contains(entry.pid)) {
+                m_tabContext.processNames.insert(entry.pid, QString()); // ask ps once per pid
+                refreshProcessNames();
+            }
+            m_tabContext.appendEntry(entry);
         });
         process.setStdErrLineCallback(
             [this](const QString &line) { postMessage(line); });
         // -T 1 starts the tail at the current head, skipping the device's existing
         // ring buffer (live tail only).
-        process.setCommand(adbCommand({"logcat", "-T", "1", "-v", "color", "-v", "brief"}));
+        process.setCommand(
+            adbCommand({"logcat", "-T", "1", "-v", "color", "-v", "threadtime", "-v", "year"}));
     };
     m_task = std::make_unique<QTaskTree>(Group{Forever{ProcessTask(onSetup) || successItem}});
     m_task->start();
@@ -259,13 +338,25 @@ void LogcatStream::postMessage(const QString &msg)
     m_tabContext.appendEntry({.line = msg, .bypassFilter = true});
 }
 
-void LogcatStream::TabContext::appendEntry(const LogcatEntry &entry)
+void LogcatStream::TabContext::appendEntry(LogcatEntry entry)
 {
+    entry.packageName = processNames.value(entry.pid);
     buffer.append(entry);
-    if (buffer.size() > maxBufferedLines)
+
+    while (buffer.size() > logcatSettings().bufferedLines())
         buffer.removeFirst();
+
     if (tab && filter.accepts(entry))
-        tab->postMessage(entry.line, Utils::StdOutFormat, false);
+        tab->postMessage(entry.displayText(), Utils::StdOutFormat, false);
+}
+
+// A pid can outrun ps: entries buffered before its answer get their name here.
+void LogcatStream::TabContext::fillPackageNames()
+{
+    for (LogcatEntry &entry : buffer) {
+        if (entry.packageName.isEmpty())
+            entry.packageName = processNames.value(entry.pid);
+    }
 }
 
 void LogcatStream::TabContext::applyFilter() const
@@ -284,7 +375,7 @@ void LogcatStream::TabContext::renderFromBuffer() const
     tab->clearOutput();
     for (const LogcatEntry &entry : buffer) {
         if (filter.accepts(entry))
-            tab->postMessage(entry.line, Utils::StdOutFormat, false);
+            tab->postMessage(entry.displayText(), Utils::StdOutFormat, false);
     }
 }
 

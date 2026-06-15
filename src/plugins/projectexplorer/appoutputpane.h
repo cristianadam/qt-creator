@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "projectexplorer_export.h"
+
 #include <coreplugin/coreconstants.h>
 #include <coreplugin/dialogs/ioptionspage.h>
 #include <coreplugin/ioutputpane.h>
@@ -49,6 +51,17 @@ public:
     QVariant toSettingsValue(const QVariant &valueToSave) const override;
 };
 
+struct LogcatSettings
+{
+    explicit LogcatSettings(Utils::AspectContainer *container);
+
+    Utils::BoolAspect showTimestamp;
+    Utils::BoolAspect showPid;
+    Utils::BoolAspect showTag;
+    Utils::BoolAspect showPackage;
+    Utils::IntegerAspect bufferedLines;
+};
+
 class AppOutputSettings : public Utils::AspectContainer
 {
 public:
@@ -65,6 +78,8 @@ public:
     OutputMaxCharCountAspect maxCharCount{this};
     Utils::BoolAspect overwriteBackground{this};
     OutputColorAspect backgroundColor{this};
+
+    LogcatSettings logcat{this};
 };
 
 class AppOutputPane final : public Core::IOutputPane
@@ -182,4 +197,8 @@ void setupAppOutputPane();
 void destroyAppOutputPane();
 
 } // namespace Internal
+
+// Exposes the shared Application Output settings
+PROJECTEXPLORER_EXPORT Internal::LogcatSettings &logcatSettings();
+
 } // namespace ProjectExplorer
