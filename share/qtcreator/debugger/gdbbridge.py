@@ -1509,16 +1509,28 @@ class Dumper(DumperBase):
             return True
         if address == 0:
             return True
-        gdb.Breakpoint('*0x%x' % address, internal=True, temporary=True)
-        gdb.execute('continue')
-        # Step out of the generated qt_static_metacall trampoline into
-        # the actual method.
-        for _ in range(32):
-            gdb.execute('step')
-            name = gdb.newest_frame().name() or ''
-            if 'qt_static_metacall' not in name:
-                break
+        # The descent below runs the inferior several times. Bracket it
+        # so the engine ignores the intermediate run/stop cycles and only
+        # surfaces the final landing reported after this returns.
+        self.enterInternalStepping()
+        try:
+            gdb.Breakpoint('*0x%x' % address, internal=True, temporary=True)
+            gdb.execute('continue')
+            # Step out of the generated qt_static_metacall trampoline into
+            # the actual method.
+            for _ in range(32):
+                gdb.execute('step')
+                if 'qt_static_metacall' not in (gdb.newest_frame().name() or ''):
+                    break
+        finally:
+            self.leaveInternalStepping()
         return True
+
+    def enterInternalStepping(self):
+        print('nativemixedstep={state="entered"}')
+
+    def leaveInternalStepping(self):
+        print('nativemixedstep={state="left"}')
 
     def insertInterpreterBreakpoint(self, args):
         self.ensureInterpreterMessageBreakpoint()

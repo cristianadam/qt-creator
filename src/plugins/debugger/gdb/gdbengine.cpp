@@ -328,6 +328,17 @@ void GdbEngine::handleResponse(const QString &buff)
                     handleInterpreterBreakpointModified(allData["interpreterasync"]);
                 break;
             }
+            if (data.startsWith("nativemixedstep={")) {
+                // The dumper internally steps from QML into a C++ method.
+                // Ignore the intermediate run/stop cycles it produces; only
+                // the final landing, reported after the 'left' marker,
+                // should surface.
+                GdbMi allData;
+                allData.fromStringMultiple(data, m_gdbOutputDecoder);
+                m_inNativeMixedStep =
+                    allData["nativemixedstep"]["state"].data() == "entered";
+                break;
+            }
             if (data.startsWith("tracepointhit={")) {
                 GdbMi allData;
                 allData.fromStringMultiple(data, m_gdbOutputDecoder);
@@ -467,16 +478,16 @@ void GdbEngine::handleResponse(const QString &buff)
 void GdbEngine::handleAsyncOutput(const QStringView asyncClass, const GdbMi &result)
 {
     if (asyncClass == u"stopped") {
-        if (m_inUpdateLocals) {
-            showMessage("UNEXPECTED *stopped NOTIFICATION IGNORED", LogWarning);
+        if (m_inUpdateLocals || m_inNativeMixedStep) {
+            showMessage("INTERMEDIATE *stopped NOTIFICATION IGNORED", LogWarning);
         } else {
             handleStopResponse(result);
             m_pendingLogStreamOutput.clear();
             m_pendingConsoleStreamOutput.clear();
         }
     } else if (asyncClass == u"running") {
-        if (m_inUpdateLocals) {
-            showMessage("UNEXPECTED *running NOTIFICATION IGNORED", LogWarning);
+        if (m_inUpdateLocals || m_inNativeMixedStep) {
+            showMessage("INTERMEDIATE *running NOTIFICATION IGNORED", LogWarning);
         } else {
             GdbMi threads = result["thread-id"];
             threadsHandler()->notifyRunning(threads.data());
