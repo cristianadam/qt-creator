@@ -149,6 +149,17 @@ d.executeStep({'token': 50})
 if hookAvailable():
     check('step into from QML lands in the C++ method',
           gdb.newest_frame().name() == 'Backend::process')
+    # The stack while in the C++ method splices in the QML caller chain.
+    cppStackReports = []
+    saved = d.reportResult
+    d.reportResult = lambda result, args: cppStackReports.append(result)
+    d.fetchStack({'limit': 40, 'nativemixed': 1, 'token': 52,
+                  'allowinferiorcalls': 1})
+    d.reportResult = saved
+    cppStack = cppStackReports[0] if cppStackReports else ''
+    check('C++ stack shows the QML caller',
+          cppStack.find('function="compute"') >= 0
+          and cppStack.find('language="js"') >= 0)
     # Step out of the C++ method back to the QML caller.
     d.executeNativeMixedStepOut({'token': 51})
     outFrames = d.extractInterpreterStack().get('frames', [{}])

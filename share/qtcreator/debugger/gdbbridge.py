@@ -1345,6 +1345,7 @@ class Dumper(DumperBase):
         frame = gdb.newest_frame()
         self.currentCallContext = None
         inMachineryBlock = False
+        splicedQml = False
         while i < limit and frame:
             name = frame.name()
             functionName = '??' if name is None else name
@@ -1365,7 +1366,15 @@ class Dumper(DumperBase):
                     else:
                         fileName = fromNativePath(fullname)
 
-            if self.nativeMixed and functionName == 'qt_qmlDebugMessageAvailable':
+            # Splice the QML frames into the C++ stack. At a QML breakpoint
+            # this happens at the qt_qmlDebugMessageAvailable notification;
+            # when stopped in a C++ method called from QML there is no such
+            # frame, so splice at the QML interpreter frame instead, which
+            # shows the QML caller chain. Do it once.
+            if (self.nativeMixed and not splicedQml
+                    and (functionName == 'qt_qmlDebugMessageAvailable'
+                         or functionName.startswith('QV4::Moth::VME::'))):
+                splicedQml = True
                 inMachineryBlock = True
                 interpreterStack = self.extractInterpreterStack()
                 #print('EXTRACTED INTEPRETER STACK: %s' % interpreterStack)
