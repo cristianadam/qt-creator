@@ -53,6 +53,7 @@ if not os.path.isfile(executable):
     gdb.execute('quit 1')
 
 d = gdbbridge.theDumper
+d.nativeMixed = 1  # This is a native combined debugging session.
 
 gdb.execute('set confirm off')
 gdb.execute('set breakpoint pending on')
@@ -100,13 +101,19 @@ d.insertInterpreterBreakpoint({
     'type': 'breakpoint',
     'token': 3,
 })
-check('pending resolvers created', len(d.interpreterBreakpointResolvers) == 3)
+d.insertInterpreterBreakpoint({
+    'file': os.path.join(test_dir, 'Main.qml'),
+    'line': line_of('qml-to-cpp'),
+    'type': 'breakpoint',
+    'token': 4,
+})
+check('pending resolvers created', len(d.interpreterBreakpointResolvers) == 4)
 
 gdb.execute('run')
 
 check('all breakpoints were resolved',
       len([r for r in asyncReports
-           if not r.get('pending') and r.get('number', -1) != -1]) == 3)
+           if not r.get('pending') and r.get('number', -1) != -1]) == 4)
 
 # Component.onCompleted runs first and calls compute(3), so the first
 # stop is in the nested square() function.
@@ -118,9 +125,14 @@ check('multi-frame JS stack: square <- compute <- onCompleted',
       and mfuncs[1] == 'compute'
       and mfuncs[2].find('onCompleted') >= 0)
 
-# Remove the square breakpoint (it would hit thrice) and run to the C++
-# method compute() calls, reached through the QObjectMethod dispatch.
+# Remove the square breakpoint (it would hit thrice) and run to the
+# statement that calls a C++ method.
 d.removeInterpreterBreakpoint({'id': serviceId(3)})
+gdb.execute('continue')
+check('stopped at the QML statement calling C++',
+      d.extractInterpreterStack().get('frames', [{}])[0].get('line')
+      == line_of('qml-to-cpp'))
+d.removeInterpreterBreakpoint({'id': serviceId(4)})
 
 
 def hookAvailable():
@@ -130,38 +142,16 @@ def hookAvailable():
         return False
 
 
+# Drive the production Step-Into. With the native call hook it descends
+# into the C++ method; without it the step falls back to a step over the
+# call and lands at the next JS statement.
+d.executeStep({'token': 50})
 if hookAvailable():
-    # Step into C++ from QML using the native call hook: break on the
-    # hook, read the receiver meta object it passes, find the receiver's
-    # qt_static_metacall through meta->d.static_metacall (a plain memory
-    # read), break there, and step into the about-to-be-called method.
-    gdb.execute('set variable qt_v4NativeCallHookEnabled = 1')
-    hook = gdb.Breakpoint('qt_v4AboutToCallNativeMethodHook')
-    gdb.execute('continue')
-    check('native call hook fires before dispatch',
-          gdb.newest_frame().name() == 'qt_v4AboutToCallNativeMethodHook')
-    hook.delete()
-    gdb.execute('set variable qt_v4NativeCallHookEnabled = 0')
-
-    meta = gdb.newest_frame().read_var('receiverMeta')
-    staticMetacall = int(meta['d']['static_metacall'].cast(
-        gdb.lookup_type('unsigned long')))
-    trampoline = gdb.Breakpoint('*0x%x' % staticMetacall, internal=True)
-    gdb.execute('continue')
-    trampoline.delete()
-    landed = False
-    for _ in range(12):
-        gdb.execute('step')
-        if (gdb.newest_frame().name() or '').find('Backend::process') >= 0:
-            landed = True
-            break
-    check('step into from QML lands in the C++ method', landed)
-else:
-    backendBreakpoint = gdb.Breakpoint('Backend::process')
-    gdb.execute('continue')
-    check('QML call reaches C++ user code',
+    check('step into from QML lands in the C++ method',
           gdb.newest_frame().name() == 'Backend::process')
-    backendBreakpoint.delete()
+else:
+    check('step over the C++ call stays in QML',
+          gdb.newest_frame().name() == 'qt_qmlDebugMessageAvailable')
 
 # Resynchronize with the timer handler for the remaining checks.
 gdb.execute('continue')

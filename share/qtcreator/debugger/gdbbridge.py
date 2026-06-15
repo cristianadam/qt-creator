@@ -195,6 +195,9 @@ class Dumper(DumperBase):
         self.interpreterBreakpointResolvers = []
         self.interpreterMessageBreakpoint = None
         self.machinerySkipsDone = False
+        self.nativeCallHookBreakpoint = None
+        self.nativeCallHookChecked = False
+        self.nativeCallHookSymbol = None
 
     def warn(self, message):
         print('bridgemessage={msg="%s"},' % message.replace('"', '$').encode('latin1'))
@@ -1451,6 +1454,72 @@ class Dumper(DumperBase):
             except Exception as error:
                 self.warn('Cannot set up machinery skip %s: %s' % (pattern, error))
 
+    def nativeCallHookAvailable(self):
+        # The hook only exists in a Qt that carries the qtdeclarative
+        # change; without it QML-to-C++ step-in degrades to a step over.
+        if self.nativeCallHookChecked:
+            return self.nativeCallHookSymbol is not None
+        self.nativeCallHookChecked = True
+        try:
+            self.nativeCallHookSymbol = \
+                gdb.lookup_global_symbol('qt_v4AboutToCallNativeMethodHook')
+        except Exception:
+            self.nativeCallHookSymbol = None
+        return self.nativeCallHookSymbol is not None
+
+    def armNativeCallStepIn(self):
+        # Make the interpreter call qt_v4AboutToCallNativeMethodHook()
+        # right before a JS-to-C++ method dispatch, and break there.
+        if not self.nativeCallHookAvailable():
+            return
+        if self.nativeCallHookBreakpoint is None:
+            try:
+                self.nativeCallHookBreakpoint = NativeMethodCallBreakpoint()
+            except Exception as error:
+                self.warn('Cannot set native call hook breakpoint: %s' % error)
+                return
+        self.setupMachinerySkips()
+        try:
+            gdb.execute('set variable qt_v4NativeCallHookEnabled = 1')
+        except gdb.error as error:
+            self.warn('Cannot arm native call hook: %s' % error)
+
+    def disarmNativeCallStepIn(self):
+        if not self.nativeCallHookAvailable():
+            return
+        try:
+            gdb.execute('set variable qt_v4NativeCallHookEnabled = 0')
+        except gdb.error:
+            pass
+
+    def handleNativeCallHook(self):
+        # Stopped at qt_v4AboutToCallNativeMethodHook, right before a
+        # JS-to-C++ method dispatch. We are leaving QML for C++, so take
+        # back the racing interpreter step, then break in the method via
+        # the receiver's generated qt_static_metacall and step into it.
+        # Return True to stay stopped in the method.
+        self.disarmNativeCallStepIn()
+        self.disarmInterpreterStep()
+        try:
+            meta = gdb.newest_frame().read_var('receiverMeta')
+            address = int(meta['d']['static_metacall'].cast(
+                gdb.lookup_type('unsigned long')))
+        except Exception as error:
+            self.warn('Cannot resolve native method target: %s' % error)
+            return True
+        if address == 0:
+            return True
+        gdb.Breakpoint('*0x%x' % address, internal=True, temporary=True)
+        gdb.execute('continue')
+        # Step out of the generated qt_static_metacall trampoline into
+        # the actual method.
+        for _ in range(32):
+            gdb.execute('step')
+            name = gdb.newest_frame().name() or ''
+            if 'qt_static_metacall' not in name:
+                break
+        return True
+
     def insertInterpreterBreakpoint(self, args):
         self.ensureInterpreterMessageBreakpoint()
         DumperBase.insertInterpreterBreakpoint(self, args)
@@ -1630,6 +1699,22 @@ class InterpreterMessageBreakpoint(gdb.Breakpoint):
         print('Interpreter event received.')
         # Stay stopped if the interpreter reported a 'break' event.
         return theDumper.handleInterpreterMessage()
+
+
+class NativeMethodCallBreakpoint(gdb.Breakpoint):
+    def __init__(self):
+        spec = 'qt_v4AboutToCallNativeMethodHook'
+        super(NativeMethodCallBreakpoint, self).\
+            __init__(spec, gdb.BP_BREAKPOINT, internal=True)
+
+    def stop(self):
+        # See the interpreter breakpoint resolver: no inferior calls
+        # from within stop(). The work happens in
+        # interpreterStopHandler().
+        return True
+
+    def interpreterEventHandler(self):
+        return theDumper.handleNativeCallHook()
 
 
 #######################################################################

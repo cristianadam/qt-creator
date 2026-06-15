@@ -2936,6 +2936,10 @@ typename))
         if self.nativeMixed:
             response = self.sendInterpreterRequest('stepin', args)
             self.interpreterStepArmed = True
+            # Stepping from a QML frame into a C++ method, if the running
+            # Qt has the native call hook. Without it this is a no-op and
+            # the step behaves like a step over the C++ call.
+            self.armNativeCallStepIn()
         self.doContinue()
 
     def executeStepOut(self, args):
@@ -2969,6 +2973,14 @@ typename))
         # Overridden in the GDB bridge.
         pass
 
+    def armNativeCallStepIn(self):
+        # Overridden in the GDB bridge.
+        pass
+
+    def disarmNativeCallStepIn(self):
+        # Overridden in the GDB bridge.
+        pass
+
     def disarmInterpreterStep(self):
         # The native part of a mixed step stopped first; take back the
         # interpreter stepping request so that it does not fire on some
@@ -2976,6 +2988,7 @@ typename))
         if self.interpreterStepArmed:
             self.interpreterStepArmed = False
             self.sendInterpreterRequest('continue', {})
+        self.disarmNativeCallStepIn()
 
     def doInsertInterpreterBreakpoint(self, args, wasPending):
         #self.warn('DO INSERT INTERPRETER BREAKPOINT, WAS PENDING: %s' % wasPending)
