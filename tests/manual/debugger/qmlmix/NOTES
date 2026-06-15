@@ -114,6 +114,20 @@ stale stepping request fires on a later continue. Note the skips also
 change plain C++ stepping in native mixed sessions: stepping into
 QV4, QQml*, QtPrivate or QMetaObject internals is suppressed.
 
+Stepping out of a C++ method back to the QML caller works too: step
+out from a C++ frame whose caller is the QML interpreter (reached
+through nothing but the metacall machinery) arms the service and
+resumes, landing at the next JS statement; from a deeper C++ frame a
+normal finish is used. Confirmed working in Qt Creator.
+
+Run-control note: the dumper resumes the inferior from stop handlers
+(the breakpoint resolver, and the QML-to-C++ descent that breaks at
+the receiver's qt_static_metacall and steps into the method). The
+GDB engine treats a *running while InferiorStopOk in a native mixed
+session as a proper run request, and ignores the *running/*stopped of
+the descent via an m_inNativeMixedStep flag set by nativemixedstep
+markers the dumper prints, so only the final landing surfaces.
+
 QML to C++ stepping (stepping into a C++ method called from JS) needs
 a qtdeclarative hook, because the call dispatches through the generic
 metacall and is unreachable by stepping: a plain step drowns in
