@@ -502,6 +502,13 @@ void GdbEngine::handleAsyncOutput(const QStringView asyncClass, const GdbMi &res
                 // We get multiple *running after thread creation and in Windows terminals.
                 showMessage(QString("NOTE: INFERIOR STILL RUNNING IN STATE %1.").
                             arg(DebuggerEngine::stateName(state())));
+            } else if (state() == InferiorStopOk && isNativeMixedActive()) {
+                // Native combined debugging resumes the inferior internally,
+                // e.g. when resolving a pending QML breakpoint from a stop
+                // handler. Model it as a proper run request rather than a
+                // bare, and therefore illegal, transition to InferiorRunOk.
+                notifyInferiorRunRequested();
+                notifyInferiorRunOk();
             } else {
                 notifyInferiorRunOk();
             }
