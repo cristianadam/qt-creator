@@ -119,13 +119,49 @@ check('multi-frame JS stack: square <- compute <- onCompleted',
       and mfuncs[2].find('onCompleted') >= 0)
 
 # Remove the square breakpoint (it would hit thrice) and run to the C++
-# method that compute() calls, reached through QObjectMethod dispatch.
+# method compute() calls, reached through the QObjectMethod dispatch.
 d.removeInterpreterBreakpoint({'id': serviceId(3)})
-backendBreakpoint = gdb.Breakpoint('Backend::process')
-gdb.execute('continue')
-check('QML call reaches C++ user code',
-      gdb.newest_frame().name() == 'Backend::process')
-backendBreakpoint.delete()
+
+
+def hookAvailable():
+    try:
+        return gdb.lookup_global_symbol('qt_v4AboutToCallNativeMethodHook') is not None
+    except Exception:
+        return False
+
+
+if hookAvailable():
+    # Step into C++ from QML using the native call hook: break on the
+    # hook, read the receiver meta object it passes, find the receiver's
+    # qt_static_metacall through meta->d.static_metacall (a plain memory
+    # read), break there, and step into the about-to-be-called method.
+    gdb.execute('set variable qt_v4NativeCallHookEnabled = 1')
+    hook = gdb.Breakpoint('qt_v4AboutToCallNativeMethodHook')
+    gdb.execute('continue')
+    check('native call hook fires before dispatch',
+          gdb.newest_frame().name() == 'qt_v4AboutToCallNativeMethodHook')
+    hook.delete()
+    gdb.execute('set variable qt_v4NativeCallHookEnabled = 0')
+
+    meta = gdb.newest_frame().read_var('receiverMeta')
+    staticMetacall = int(meta['d']['static_metacall'].cast(
+        gdb.lookup_type('unsigned long')))
+    trampoline = gdb.Breakpoint('*0x%x' % staticMetacall, internal=True)
+    gdb.execute('continue')
+    trampoline.delete()
+    landed = False
+    for _ in range(12):
+        gdb.execute('step')
+        if (gdb.newest_frame().name() or '').find('Backend::process') >= 0:
+            landed = True
+            break
+    check('step into from QML lands in the C++ method', landed)
+else:
+    backendBreakpoint = gdb.Breakpoint('Backend::process')
+    gdb.execute('continue')
+    check('QML call reaches C++ user code',
+          gdb.newest_frame().name() == 'Backend::process')
+    backendBreakpoint.delete()
 
 # Resynchronize with the timer handler for the remaining checks.
 gdb.execute('continue')

@@ -114,33 +114,40 @@ stale stepping request fires on a later continue. Note the skips also
 change plain C++ stepping in native mixed sessions: stepping into
 QV4, QQml*, QtPrivate or QMetaObject internals is suppressed.
 
-QML to C++ stepping is prototyped in qmlmix-gdb-test.py
-(qmlStepInto): arm the service with 'stepin' and additionally set
-native breakpoints on the JS-to-C++ transition choke points
-(QV4::QObjectMethod::callInternal for method calls,
-QV4::QObjectWrapper::setProperty for property writes). Whichever
-fires first defines what 'into' means for the current statement:
-the next JS statement boundary comes after the current statement's
-C++ calls, so a statement that calls C++ stops at the transition,
-and a pure JS statement stops at the next statement. The existing
-stop handler disarms the service when the native side wins.
+QML to C++ stepping (stepping into a C++ method called from JS) needs
+a qtdeclarative hook, because the call dispatches through the generic
+metacall and is unreachable by stepping: a plain step drowns in
+argument marshalling (>400 steps), and skip-stepping steps over the
+whole native call (gdb 'skip' is step-over and does not stop in a
+non-skipped callee reached through skipped frames).
 
-The choke point breakpoints are the makeshift variant: they need
-debug info for private symbols, are version-fragile, and stop at the
-engine's dispatch rather than in the callee. The clean mechanism
-would be a small qtdeclarative addition in the style of the existing
-native debugger hooks: an exported flag plus an exported empty
-function called from the dispatch when the flag is set, e.g.
+The hook is qt_v4AboutToCallNativeMethodHook(const QMetaObject *), in
+the qt_v4* family in qv4qobjectwrapper.cpp, gated by the exported flag
+qt_v4NativeCallHookEnabled and called from QObjectMethod::callInternal
+right before dispatch (interpreter path only; native mixed forces the
+interpreter anyway). The whole recipe is free of inferior calls:
 
-    Q_QML_EXPORT bool qt_qmlDebugNativeCallHookEnabled = false;
-    Q_QML_EXPORT void qt_qmlDebugAboutToCallNativeMethod() {}
+- arm by writing qt_v4NativeCallHookEnabled (plain memory write);
+- break on qt_v4AboutToCallNativeMethodHook;
+- read its receiverMeta argument (a parameter read at entry);
+- read receiverMeta->d.static_metacall (a struct-field memory read) to
+  get the receiver's generated qt_static_metacall;
+- break there and step into the about-to-be-called method.
 
-The debugger arms it by poking the flag via plain memory write, no
-inferior call needed, and breaks on the hook; from there a native
-step with the machinery skips lands in the callee behind the
-metacall. The AOT-compiled call paths (QQmlPrivate::AOTCompiledContext)
-would need the same treatment for completeness, though native mixed
-forces the interpreter anyway.
+Passing the QMetaObject as an argument is what avoids the inferior
+call: without it the debugger would have to call receiver->metaObject()
+(a virtual call) to reach the same pointer.
+
+Validated end to end in qmlmix-gdb-test.py, which falls back to a
+direct breakpoint on the method when the hook symbol is absent, so it
+also passes against a Qt without the hook. The AOT-compiled call paths
+(QQmlPrivate::AOTCompiledContext) would need the same treatment for
+completeness.
+
+The earlier makeshift (native breakpoints on the QObjectMethod and
+property-write choke points, racing the service 'stepin') only stops
+at the engine dispatch, not in the callee, and needs debug info for
+version-fragile private symbols. The hook supersedes it.
 
 Suggested design
 ----------------
