@@ -174,10 +174,11 @@ void DebugServerProviderModel::apply()
     if (!skippedProviders.isEmpty()) {
         QMessageBox::warning(Core::ICore::dialogParent(),
                              Tr::tr("Duplicate Providers Detected"),
-                             Tr::tr("The following providers were already configured:<br>"
-                                "&nbsp;%1<br>"
-                                "They were not configured again.")
-                             .arg(skippedProviders.join(",<br>&nbsp;")));
+                             Tr::tr("The following providers were already configured:")
+                                 + "<br>&nbsp;" + skippedProviders.join(",<br>&nbsp;")
+                                 + "<br>" +
+                                 //: Continues "The following providers were already configured:"
+                                 Tr::tr("They were not configured again."));
     }
 }
 
