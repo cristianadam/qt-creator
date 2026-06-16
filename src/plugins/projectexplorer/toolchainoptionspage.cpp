@@ -63,7 +63,9 @@ QVariant toolchainBundleData(const std::optional<ToolchainBundle> &bundle, int c
         QString toolTip;
         const ToolchainBundle::Valid validity = bundle->validity();
         if (validity != ToolchainBundle::Valid::None) {
-            toolTip = Tr::tr("<nobr><b>ABI:</b> %1").arg(bundle->targetAbi().toString());
+            //: %1 is "ABI" formatted in bold, %2 is the ABI name
+            toolTip = Tr::tr("%1: %2").arg("<nobr><b>" + Tr::tr("ABI") + "</b>",
+                                           bundle->targetAbi().toString());
             if (validity == ToolchainBundle::Valid::Some)
                 toolTip.append("<br/>").append(Tr::tr("Not all compilers are set up correctly."));
         } else {
