@@ -1135,7 +1135,8 @@ KitAspectFactory::ItemList CMakeGeneratorKitAspectFactory::toUserOutput(const Ki
     if (info.generator.isEmpty()) {
         message = Tr::tr("<Use Default Generator>");
     } else {
-        message = Tr::tr("Generator: %1<br>Extra generator: %2").arg(info.generator).arg(info.extraGenerator);
+        message = Tr::tr("Generator: %1").arg(info.generator)
+            + "<br>" + Tr::tr("Extra generator: %1").arg(info.extraGenerator);
         if (!info.platform.isEmpty())
             message += "<br/>" + Tr::tr("Platform: %1").arg(info.platform);
         if (!info.toolset.isEmpty())
