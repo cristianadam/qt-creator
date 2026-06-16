@@ -179,9 +179,9 @@ QtKitAspectFactory::QtKitAspectFactory()
     setId(QtKitAspect::id());
     setJsonKeys({"qt", "qmake"});
     setDisplayName(Tr::tr("Qt version"));
-    setDescription(Tr::tr("The Qt library to use for all projects using this kit.<br>"
-                          "A Qt version is required for qmake-based projects "
-                          "and optional when using other build systems."));
+    setDescription(Tr::tr("The Qt library to use for all projects using this kit.")
+                       + "<br>" + Tr::tr("A Qt version is required for qmake-based projects "
+                                         "and optional when using other build systems."));
     setPriority(26000);
     setEmbeddableAspects({QmakeProjectManager::Constants::KIT_INFORMATION_ID});
 }

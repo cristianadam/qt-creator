@@ -115,8 +115,8 @@ public:
     {
         setId(QmakeKitAspect::id());
         setDisplayName(Tr::tr("Qt mkspec"));
-        setDescription(Tr::tr("The mkspec to use when building the project with qmake.<br>"
-                              "This setting is ignored when using other build systems."));
+        setDescription(Tr::tr("The mkspec to use when building the project with qmake.")
+                           + "<br>" + Tr::tr("This setting is ignored when using other build systems."));
         setPriority(24000);
     }
 

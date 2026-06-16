@@ -74,8 +74,8 @@ SysRootKitAspectFactory::SysRootKitAspectFactory()
 {
     setId(SysRootKitAspect::id());
     setDisplayName(Tr::tr("Sysroot"));
-    setDescription(Tr::tr("The root directory of the system image to use.<br>"
-                          "Leave empty when building for the desktop."));
+    setDescription(Tr::tr("The root directory of the system image to use.")
+                       + "<br>" + Tr::tr("Leave empty when building for the desktop."));
     setPriority(27000);
 }
 

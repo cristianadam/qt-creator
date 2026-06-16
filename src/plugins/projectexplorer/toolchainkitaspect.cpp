@@ -201,9 +201,9 @@ ToolchainKitAspectFactory::ToolchainKitAspectFactory()
     setId(ToolchainKitAspect::id());
     setJsonKeys({"compiler"});
     setDisplayName(Tr::tr("Compiler"));
-    setDescription(Tr::tr("The compiler to use for building.<br>"
-                          "Make sure the compiler will produce binaries compatible "
-                          "with the target device, Qt version and other libraries used."));
+    setDescription(Tr::tr("The compiler to use for building.")
+                       + "<br>" + Tr::tr("Make sure the compiler will produce binaries compatible "
+                                         "with the target device, Qt version and other libraries used."));
     setPriority(30000);
 }
 

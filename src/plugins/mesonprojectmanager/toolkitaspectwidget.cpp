@@ -121,8 +121,8 @@ public:
     {
         setId(MESON_TOOL_ID);
         setDisplayName(Tr::tr("Meson Tool"));
-        setDescription(Tr::tr("The Meson tool to use when building a project with Meson.<br>"
-                              "This setting is ignored when using other build systems."));
+        setDescription(Tr::tr("The Meson tool to use when building a project with Meson.")
+                           + "<br>" + Tr::tr("This setting is ignored when using other build systems."));
         setPriority(9000);
     }
 

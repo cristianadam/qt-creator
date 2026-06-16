@@ -254,8 +254,8 @@ CMakeKitAspectFactory::CMakeKitAspectFactory()
     setId(Constants::TOOL_ID);
     setJsonKeys({"cmake", "cmake-tool"});
     setDisplayName(Tr::tr("CMake Tool"));
-    setDescription(Tr::tr("The CMake Tool to use when building a project with CMake.<br>"
-                      "This setting is ignored when using other build systems."));
+    setDescription(Tr::tr("The CMake Tool to use when building a project with CMake.")
+                       + "<br>" + Tr::tr("This setting is ignored when using other build systems."));
     setPriority(20000);
 
     auto updateKits = [this] {
@@ -861,8 +861,8 @@ CMakeGeneratorKitAspectFactory::CMakeGeneratorKitAspectFactory()
 {
     setId(GENERATOR_ID);
     setDisplayName(Tr::tr("CMake <a href=\"generator\">generator</a>"));
-    setDescription(Tr::tr("CMake generator defines how a project is built when using CMake.<br>"
-                      "This setting is ignored when using other build systems."));
+    setDescription(Tr::tr("CMake generator defines how a project is built when using CMake.")
+                       + "<br>" + Tr::tr("This setting is ignored when using other build systems."));
     setPriority(19000);
 
     auto updateKits = [this] {
