@@ -194,8 +194,8 @@ JsonWizard::GeneratorFiles JsonWizard::generateFileList()
 
     if (!errorMessage.isEmpty()) {
         QMessageBox::critical(this, Tr::tr("File Generation Failed"),
-                              Tr::tr("The wizard failed to generate files.<br>"
-                                 "The error message was: \"%1\".").arg(errorMessage));
+                              Tr::tr("The wizard failed to generate files.")
+                                  + "<br>" + Tr::tr("The error message was: \"%1\".").arg(errorMessage));
         reject();
         return {};
     }

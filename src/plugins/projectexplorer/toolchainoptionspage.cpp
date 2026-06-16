@@ -413,17 +413,17 @@ void ToolchainModel::apply()
     if (removedTcs.count() == 1) {
         QMessageBox::warning(Core::ICore::dialogParent(),
                              Tr::tr("Duplicate Compilers Detected"),
-                             Tr::tr("The following compiler was already configured:<br>"
-                                    "&nbsp;%1<br>"
-                                    "It was not configured again.")
-                                 .arg(removedTcs.at(0)));
+                             Tr::tr("The following compiler was already configured:")
+                                 + "<br>&nbsp;" + removedTcs.at(0) + "<br>" +
+                                 //: Continues "The following compiler was already configured:"
+                                 Tr::tr("It was not configured again."));
     } else if (!removedTcs.isEmpty()) {
         QMessageBox::warning(Core::ICore::dialogParent(),
                              Tr::tr("Duplicate Compilers Detected"),
-                             Tr::tr("The following compilers were already configured:<br>"
-                                    "&nbsp;%1<br>"
-                                    "They were not configured again.")
-                                 .arg(removedTcs.join(QLatin1String(",<br>&nbsp;"))));
+                             Tr::tr("The following compilers were already configured:")
+                                 + "<br>&nbsp;" + removedTcs.join(QLatin1String(",<br>&nbsp;")) + "<br>" +
+                                 //: Continues "The following compilers were already configured:"
+                                 Tr::tr("They were not configured again."));
     }
 }
 

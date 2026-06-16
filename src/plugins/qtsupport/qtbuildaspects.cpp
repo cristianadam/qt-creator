@@ -50,8 +50,8 @@ void QmlDebuggingAspect::addToLayoutImpl(Layouting::Layout &parent)
         if (!supported) {
             self->setValue(TriState::Default);
         } else if (self->value() == TriState::Enabled) {
-            warningText = Tr::tr("Might make your application vulnerable.<br/>"
-                                 "Only use in a safe environment.");
+            warningText = Tr::tr("Might make your application vulnerable.")
+                              + "<br/>" + Tr::tr("Only use in a safe environment.");
         }
         warningLabel->setText(warningText);
         self->setEnabled(supported);

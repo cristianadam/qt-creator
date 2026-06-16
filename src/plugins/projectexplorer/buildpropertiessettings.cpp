@@ -65,10 +65,9 @@ BuildPropertiesSettings::BuildPropertiesSettings()
     buildDirectoryTemplate.setDefaultValue(defaultBuildDirectoryTemplate());
     buildDirectoryTemplate.setLabelText(Tr::tr("Default build directory:"));
     buildDirectoryTemplate.setToolTip(
-        Tr::tr("Template used to construct the default build directory.<br><br>"
-               "The default value can be set using the environment variable "
-               "<tt>%1</tt>.")
-            .arg(Constants::QTC_DEFAULT_BUILD_DIRECTORY_TEMPLATE));
+        Tr::tr("Template used to construct the default build directory.")
+            + "<br><br>" + Tr::tr("The default value can be set using the environment variable %1.")
+                               .arg("<tt>" + QLatin1String(Constants::QTC_DEFAULT_BUILD_DIRECTORY_TEMPLATE) + "</tt>"));
     buildDirectoryTemplate.setUseResetButton();
     BuildConfiguration::setupBuildDirMacroExpander(
         *buildDirectoryTemplate.macroExpander(), {}, {}, {}, {}, {}, {}, true);
