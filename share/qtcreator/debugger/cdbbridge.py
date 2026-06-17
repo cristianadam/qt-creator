@@ -260,20 +260,23 @@ class Dumper(DumperBase):
         return ''
 
     def marshalString(self, text: str) -> int:
-        # Write 'text' plus a terminating NUL into target memory and return
-        # its address (used as a char*). FIXME: qtcreatorcdbext exposes
-        # readRawMemory but no memory-write or allocation primitive, and
-        # '.call malloc(...)' has no usable prototype. This needs new
-        # extension APIs (e.g. cdbext.allocate(size) + cdbext.writeRawMemory(
-        # address, bytes)); the experiment used the '.dvalloc'/'eb' commands.
-        raise NotImplementedError(
-            'CDB string marshalling needs cdbext.allocate/writeRawMemory '
-            '(see cdb-reference.md)')
+        # Write 'text' plus a terminating NUL into freshly allocated target
+        # memory and return its address (used as a char*); cdb rejects string
+        # literals in .call. Uses the cdbext.allocate/writeRawMemory primitives
+        # added for this. NOTE: each call leaks the allocation for the session
+        # lifetime - fine for the low call volume; revisit with a reused
+        # scratch buffer if it matters.
+        data = text.encode('utf-8') + b'\x00'
+        address = cdbext.allocate(len(data))
+        if not address:
+            raise RuntimeError('cdbext.allocate failed')
+        cdbext.writeRawMemory(address, data)
+        return address
 
     def callServiceFunction(self, function, args=None):
         module = self.serviceModuleName()
         qualified = ('%s!%s' % (module, function)) if module else function
-        pointers = ['0x%x' % self.marshalString(arg) for arg in (args or [])]
+        pointers = ['(char *)0x%x' % self.marshalString(arg) for arg in (args or [])]
         return cdbext.call('%s(%s)' % (qualified, ', '.join(pointers)))
 
     def readServiceVariable(self, name):
