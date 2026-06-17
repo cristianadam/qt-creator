@@ -67,6 +67,24 @@ if (WITH_DEBUGGER_DUMPERS)
   )
 endif()
 
+option(WITH_DEBUGGER_NATIVE_MIXED "Include test for native combined C++/QML debugging" ON)
+if (WITH_DEBUGGER_NATIVE_MIXED)
+  get_target_property(qmake_binary Qt::qmake IMPORTED_LOCATION)
+
+  add_qtc_test(tst_debugger_nativemixed
+    EXCLUDE_FROM_PRECHECK
+    TIMEOUT 0
+    DEPENDS Qt::Test
+    DEFINES
+      DUMPERDIR="${PROJECT_SOURCE_DIR}/share/qtcreator/debugger"
+      DEFAULT_QMAKE_BINARY="${qmake_binary}"
+      NATIVEMIXED_DRIVER="${CMAKE_CURRENT_SOURCE_DIR}/nativemixed_driver.py"
+      QMLMIX_SOURCE_DIR="${PROJECT_SOURCE_DIR}/tests/manual/debugger/qmlmix"
+    SOURCES
+      tst_nativemixed.cpp
+  )
+endif()
+
 add_qtc_test(tst_debugger_gdb
   DEPENDS Qt::Network Utils
   INCLUDES "${DEBUGGERDIR}"
