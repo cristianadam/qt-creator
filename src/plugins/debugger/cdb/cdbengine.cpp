@@ -1659,6 +1659,23 @@ unsigned CdbEngine::examineStopReason(const GdbMi &stopReason,
         return rc;
     }
     const int threadId = stopReason["threadId"].toInt();
+    // Native combined: the two internal hooks armed in runEngine() drive the
+    // QML side. They are not user breakpoints, so intercept them by the
+    // stopped function name and handle them asynchronously without notifying
+    // a user-visible stop. The conditionalBreakPointTriggered guard prevents
+    // re-entry when handleQmlDebugMessageAvailable() decides to stop for real.
+    if (isNativeMixedActive() && !conditionalBreakPointTriggered) {
+        const QString stopFunction = stopReason["stack"].childAt(0)["function"].data();
+        if (stopFunction.endsWith("qt_qmlDebugConnectorOpen")) {
+            *message = Tr::tr("Native QML debug connector opened.");
+            handleQmlDebugConnectorOpen();
+            return StopReportLog;
+        }
+        if (stopFunction.endsWith("qt_qmlDebugMessageAvailable")) {
+            handleQmlDebugMessageAvailable(stopReason);
+            return StopReportLog;
+        }
+    }
     if (reason == "breakpoint") {
         // Note: Internal breakpoints (run to line) are reported with id=0.
         // Step out creates temporary breakpoints with id 10000.
@@ -2480,6 +2497,21 @@ unsigned BreakpointCorrectionContext::fixLineNumber(const FilePath &filePath,
 void CdbEngine::insertBreakpoint(const Breakpoint &bp)
 {
     BreakpointParameters parameters = bp->requestedParameters();
+    if (!parameters.isCppBreakpoint()) {
+        // Native combined: a QML breakpoint is handled by the in-process
+        // NativeQmlDebugger service via the bridge. Direct insertion fails
+        // while the service connector is not yet up; the bridge then queues it
+        // as pending and the qt_qmlDebugConnectorOpen hook resolves it later
+        // (see runEngine() and handleQmlDebugConnectorOpen()).
+        DebuggerCommand cmd("theDumper.insertInterpreterBreakpoint", ScriptCommand);
+        bp->addToCommand(runParameters().buildDirectory(), &cmd);
+        cmd.callback = [this, bp](const DebuggerResponse &r) {
+            handleInsertInterpreterBreakpoint(r, bp);
+        };
+        notifyBreakpointInsertProceeding(bp);
+        runCommand(cmd);
+        return;
+    }
     const auto handleBreakInsertCB = [this, bp](const DebuggerResponse &r) { handleBreakInsert(r, bp); };
     BreakpointParameters response = parameters;
     const QString responseId = breakPointCdbId(bp);
@@ -2869,6 +2901,58 @@ void CdbEngine::handleExpression(const DebuggerResponse &response, const Breakpo
         processStop(stopReason, true);
     else
         doContinueInferior();
+}
+
+void CdbEngine::handleInsertInterpreterBreakpoint(const DebuggerResponse &response,
+                                                  const Breakpoint &bp)
+{
+    QTC_ASSERT(bp, return);
+    const GdbMi data = response.data["interpreterresult"];
+    if (!data["pending"].toInt()) {
+        bp->setResponseId(data["number"].data());
+        bp->updateFromGdbOutput(data, runParameters());
+    }
+    notifyBreakpointInsertOk(bp);
+}
+
+void CdbEngine::handleInterpreterBreakpointModified(const DebuggerResponse &response,
+                                                    const Breakpoint &bp)
+{
+    QTC_ASSERT(bp, return);
+    bp->updateFromGdbOutput(response.data["interpreterasync"], runParameters());
+}
+
+void CdbEngine::handleQmlDebugConnectorOpen()
+{
+    // The in-process service connector is now up. Resolve all pending QML
+    // breakpoints (this also enables the NativeQmlDebugger service), then
+    // continue - this hook is not a user-visible stop.
+    const Breakpoints bps = breakHandler()->breakpoints();
+    for (const Breakpoint &bp : bps) {
+        if (bp->requestedParameters().isCppBreakpoint())
+            continue;
+        DebuggerCommand cmd("theDumper.resolvePendingInterpreterBreakpoint", ScriptCommand);
+        bp->addToCommand(runParameters().buildDirectory(), &cmd);
+        cmd.callback = [this, bp](const DebuggerResponse &r) {
+            handleInterpreterBreakpointModified(r, bp);
+        };
+        runCommand(cmd);
+    }
+    doContinueInferior();
+}
+
+void CdbEngine::handleQmlDebugMessageAvailable(const GdbMi &stopReason)
+{
+    // Ask the bridge to decode the pending QML debug event and decide whether
+    // it warrants a real stop (e.g. a QML breakpoint hit) or is just machinery
+    // to be continued past.
+    runCommand({"theDumper.reportInterpreterMessage", ScriptCommand,
+                [this, stopReason](const DebuggerResponse &r) {
+        if (r.data["interpretermessage"]["event"].data() == "break")
+            processStop(stopReason, true);
+        else
+            doContinueInferior();
+    }});
 }
 
 void CdbEngine::handleWidgetAt(const DebuggerResponse &response)
