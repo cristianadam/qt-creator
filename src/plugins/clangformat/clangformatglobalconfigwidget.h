@@ -53,6 +53,7 @@ private:
     void initUseGlobalSettingsCheckBox();
     void initFileSizeThresholdSpinBox();
     void initCurrentProjectLabel();
+    void updateCustomSettingsIndent();
 
     bool projectClangFormatFileExists();
 
@@ -61,6 +62,9 @@ private:
     Utils::Guard m_ignoreChanges;
     bool m_useCustomSettings = false;
 
+    QCheckBox *m_useClangFormat = nullptr;
+    QWidget *m_clangFormatOptions = nullptr;
+    QWidget *m_customSettingsDetails = nullptr;
     QLabel *m_projectHasClangFormat = nullptr;
     QLabel *m_formattingModeLabel = nullptr;
     QLabel *m_fileSizeThresholdLabel = nullptr;
