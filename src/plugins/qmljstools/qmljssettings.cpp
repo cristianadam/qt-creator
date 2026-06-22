@@ -1289,7 +1289,6 @@ public:
     {
         m_selector.setCodeStyle(codeStyle);
         addSelector(&m_selector);
-        addInfoLabel();
         m_widget.setPreferences(codeStyle);
         addEditorWidget(&m_widget);
     }

@@ -57,7 +57,7 @@ private:
     QPushButton *m_removeButton;
     QPushButton *m_exportButton;
     QPushButton *m_importButton;
-    Utils::InfoLabel *m_readonlyLabel;
+    Utils::InfoLabel *m_infoLabel;
 };
 
 } // namespace TextEditor

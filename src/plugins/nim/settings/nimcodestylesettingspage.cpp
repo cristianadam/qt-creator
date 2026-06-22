@@ -114,7 +114,6 @@ public:
     {
         m_selector.setCodeStyle(codeStyle);
         addSelector(&m_selector);
-        addInfoLabel();
         addEditorWidget(&m_widget);
     }
 

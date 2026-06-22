@@ -53,7 +53,6 @@ public:
     {
         m_selector.setCodeStyle(codeStyle);
         addSelector(&m_selector);
-        addInfoLabel();
         m_widget.layout()->setContentsMargins(0, 0, 0, 0);
         addEditorWidget(&m_widget);
     }

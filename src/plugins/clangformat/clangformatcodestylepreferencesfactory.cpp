@@ -528,12 +528,11 @@ public:
         addHeaderWidget(&m_globalSettings);
         m_selector.setCodeStyle(codeStyle);
         addSelector(&m_selector);
-        QWidget *infoLabel = addInfoLabel();
         addEditorWidget(&m_widget);
         QWidget *filler = addExpandingFiller();
 
         const ClangFormatSettings::Mode currentMode = m_globalSettings.mode();
-        const auto updateSelectorVisibility = [this, infoLabel, filler] {
+        const auto updateSelectorVisibility = [this, filler] {
             // The selector and editor are relevant when ClangFormat is off (to
             // pick a built-in code style) or when "Use custom settings" lets the
             // user manage a ClangFormat style. They are hidden when ClangFormat
@@ -544,14 +543,12 @@ public:
                 m_globalSettings.mode() != ClangFormatSettings::Mode::Disable;
             const bool visible = !clangFormatActive || m_globalSettings.useCustomSettings();
             m_selector.setVisible(visible);
-            infoLabel->setVisible(visible);
             m_widget.setVisible(visible);
             filler->setVisible(!visible);
             // Nest these under "Use custom settings" when that is what reveals
             // them, aligning them with the indented detail labels in the box.
             const int indent = (clangFormatActive && m_globalSettings.useCustomSettings()) ? 40 : 0;
             m_selector.setContentsMargins(indent, 0, 0, 0);
-            infoLabel->setContentsMargins(indent, 0, 0, 0);
             m_widget.setContentsMargins(indent, 0, 0, 0);
         };
         updateSelectorVisibility();
@@ -605,7 +602,6 @@ public:
         addHeaderWidget(&m_globalSettings);
         m_selector.setCodeStyle(codeStyle);
         addSelector(&m_selector);
-        QWidget *infoLabel = addInfoLabel();
 
         DisplaySettingsData displaySettings = m_preview.displaySettings();
         displaySettings.m_visualizeWhitespace = true;
@@ -621,7 +617,7 @@ public:
         QWidget *filler = addExpandingFiller();
 
         const ClangFormatSettings::Mode currentMode = m_globalSettings.mode();
-        const auto updateSelectorVisibility = [this, infoLabel, previewLabel, filler] {
+        const auto updateSelectorVisibility = [this, previewLabel, filler] {
             // The selector and preview are relevant when ClangFormat is off (to
             // pick a built-in code style) or when "Use custom settings" lets the
             // user manage a ClangFormat style. They are hidden when ClangFormat
@@ -632,7 +628,6 @@ public:
                 m_globalSettings.mode() != ClangFormatSettings::Mode::Disable;
             const bool visible = !clangFormatActive || m_globalSettings.useCustomSettings();
             m_selector.setVisible(visible);
-            infoLabel->setVisible(visible);
             m_preview.setVisible(visible);
             previewLabel->setVisible(visible);
             filler->setVisible(!visible);
@@ -640,7 +635,6 @@ public:
             // them, aligning them with the indented detail labels in the box.
             const int indent = (clangFormatActive && m_globalSettings.useCustomSettings()) ? 40 : 0;
             m_selector.setContentsMargins(indent, 0, 0, 0);
-            infoLabel->setContentsMargins(indent, 0, 0, 0);
             m_preview.setContentsMargins(indent, 0, 0, 0);
             previewLabel->setContentsMargins(indent, 0, 0, 0);
         };

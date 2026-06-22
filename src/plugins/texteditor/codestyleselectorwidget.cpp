@@ -43,10 +43,8 @@ CodeStyleSelectorWidget::CodeStyleSelectorWidget(const FilePath &projectFile, QW
     m_importButton = new QPushButton(Tr::tr("Import..."));
     m_importButton->setEnabled(false);
 
-    m_readonlyLabel = new InfoLabel(
-        Tr::tr("The selected configuration is read-only. Copy the configuration for editing."),
-        Utils::InfoLabel::Warning);
-    m_readonlyLabel->setVisible(false);
+    m_infoLabel = new InfoLabel(
+        Tr::tr("All changes below take effect immediately."), Utils::InfoLabel::Information);
 
     using namespace Layouting;
 
@@ -59,7 +57,7 @@ CodeStyleSelectorWidget::CodeStyleSelectorWidget(const FilePath &projectFile, QW
             m_exportButton,
             m_importButton
         },
-        m_readonlyLabel,
+        m_infoLabel,
         noMargin,
     }.attachTo(this);
 
@@ -145,9 +143,20 @@ void CodeStyleSelectorWidget::slotCurrentDelegateChanged(ICodeStylePreferences *
         m_delegateComboBox->setToolTip(m_delegateComboBox->currentText());
     }
 
-    const bool removeEnabled = delegate && !delegate->isReadOnly() && !delegate->currentDelegate();
+    const bool readOnly = delegate && delegate->isReadOnly();
+    const bool removeEnabled = delegate && !readOnly && !delegate->currentDelegate();
     m_removeButton->setEnabled(removeEnabled);
-    m_readonlyLabel->setVisible(delegate && delegate->isReadOnly());
+
+    // A read-only built-in style cannot be edited, so the "takes effect
+    // immediately" hint does not apply; show how to make it editable instead.
+    if (readOnly) {
+        m_infoLabel->setType(Utils::InfoLabel::Warning);
+        m_infoLabel->setText(
+            Tr::tr("The selected configuration is read-only. Copy the configuration for editing."));
+    } else {
+        m_infoLabel->setType(Utils::InfoLabel::Information);
+        m_infoLabel->setText(Tr::tr("All changes below take effect immediately."));
+    }
 }
 
 void CodeStyleSelectorWidget::slotCopyClicked()
