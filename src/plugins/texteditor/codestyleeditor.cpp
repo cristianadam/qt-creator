@@ -44,19 +44,12 @@ void CodeStyleEditor::addSelector(CodeStyleSelectorWidget *selector)
     Utils::installMarkSettingsDirtyTriggerRecursively(selector);
 }
 
-QWidget *CodeStyleEditor::addInfoLabel()
+void CodeStyleEditor::addInfoLabel()
 {
     auto infoLabel = new InfoLabel(Tr::tr("All changes below take effect immediately."),
-                                   Utils::InfoLabel::Information);
+                                   InfoLabel::Information);
     infoLabel->setFilled(true);
-    // Wrap in a plain container: InfoLabel uses its own contentsMargins to place
-    // its icon, so callers indent the container instead of the label itself.
-    auto container = new QWidget;
-    auto layout = new QVBoxLayout(container);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->addWidget(infoLabel);
-    m_layout->addWidget(container);
-    return container;
+    m_layout->addWidget(infoLabel);
 }
 
 void CodeStyleEditor::addHeaderWidget(QWidget *widget)
@@ -135,7 +128,6 @@ public:
     {
         m_selector.setCodeStyle(codeStyle);
         addSelector(&m_selector);
-        addInfoLabel();
 
         DisplaySettingsData displaySettings = m_preview.displaySettings();
         displaySettings.m_visualizeWhitespace = true;

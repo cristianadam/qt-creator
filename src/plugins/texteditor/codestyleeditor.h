@@ -28,9 +28,12 @@ public:
     virtual void cancel();
 
 protected:
+    // Adds a hint that edits apply to the live preferences right away. Only
+    // call this on the plain global pages where that is actually true, not on
+    // the per-project pages or the ClangFormat editor (saved on Apply/OK).
+    void addInfoLabel();
     void addHeaderWidget(QWidget *widget);
     void addSelector(CodeStyleSelectorWidget *selector);
-    QWidget *addInfoLabel();
     void addEditorWidget(QWidget *editor);
     // Adds a vertically expanding empty widget at the end of the layout. Toggle
     // its visibility opposite to the editor area so that the remaining widgets
