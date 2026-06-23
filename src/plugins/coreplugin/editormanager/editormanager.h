@@ -89,6 +89,9 @@ public:
     static bool openExternalEditor(const Utils::FilePath &filePath, Utils::Id editorId);
     static void addCloseEditorListener(const std::function<bool(IEditor *)> &listener);
 
+    using ExtraToolBarWidgetGenerator = std::function<QWidget *()>;
+    static void addExtraToolBarWidgetGenerator(const ExtraToolBarWidgetGenerator &generator);
+
     static Utils::FilePaths getOpenFilePaths(QFileDialog::Options options = {});
 
     static IDocument *currentDocument();

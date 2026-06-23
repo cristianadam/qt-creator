@@ -3665,6 +3665,30 @@ void EditorManager::addCloseEditorListener(const std::function<bool (IEditor *)>
 }
 
 /*!
+    Registers \a generator, which is called for every editor view to create an
+    extra widget that is inserted into the editor toolbar between the center
+    toolbar and the split button.
+*/
+void EditorManager::addExtraToolBarWidgetGenerator(const ExtraToolBarWidgetGenerator &generator)
+{
+    EditorManagerPrivate::addExtraToolBarWidgetGenerator(generator);
+}
+
+void EditorManagerPrivate::addExtraToolBarWidgetGenerator(
+    const EditorManager::ExtraToolBarWidgetGenerator &generator)
+{
+    d->m_extraToolBarWidgetGenerators.append(generator);
+    for (EditorView *view : allEditorViews())
+        view->addExtraToolBarWidget(generator);
+}
+
+const QList<EditorManager::ExtraToolBarWidgetGenerator> &
+EditorManagerPrivate::extraToolBarWidgetGenerators()
+{
+    return d->m_extraToolBarWidgetGenerators;
+}
+
+/*!
     Asks the user for a list of files to open and returns the choice.
 
     The \a options argument holds various options about how to run the dialog.

@@ -145,6 +145,8 @@ public:
     void saveTabState(QDataStream *stream) const;
     void restoreTabState(QDataStream *stream);
 
+    void addExtraToolBarWidget(const std::function<QWidget *()> &generator);
+
 signals:
     void currentEditorChanged(Core::IEditor *editor);
 

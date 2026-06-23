@@ -56,6 +56,11 @@ public:
       */
     void addCenterToolBar(QWidget *toolBar);
 
+    /**
+      * Inserts an extra widget infront of the split button.
+      */
+    void insertExtraWidget(QWidget *widget);
+
     void setNavigationVisible(bool isVisible);
     void setCanGoBack(bool canGoBack);
     void setCanGoForward(bool canGoForward);
