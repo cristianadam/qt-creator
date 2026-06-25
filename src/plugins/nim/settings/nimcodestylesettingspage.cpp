@@ -23,12 +23,12 @@
 #include <texteditor/tabsettings.h>
 #include <texteditor/textdocument.h>
 
+#include <utils/aspects.h>
 #include <utils/id.h>
 #include <utils/layoutbuilder.h>
 #include <utils/shutdownguard.h>
 
 #include <QTextDocument>
-#include <QVBoxLayout>
 
 using namespace TextEditor;
 using namespace Utils;
@@ -166,40 +166,77 @@ private:
     }
 };
 
-class NimCodeStyleSettingsWidget final : public Core::IOptionsPageWidget
+// Drives the global Nim code style settings page. The selector and tab-settings
+// editor operate on a page-local copy of the style; edits are committed to the
+// real style only on apply() and discarded on cancel(), giving the page proper
+// apply/cancel semantics without an IOptionsPageWidget subclass.
+class NimCodeStyleSettings final : public AspectContainer
 {
 public:
-    explicit NimCodeStyleSettingsWidget(ICodeStylePreferences *codeStyle)
+    explicit NimCodeStyleSettings(ICodeStylePreferences *codeStyle)
         : m_codeStyle(codeStyle)
     {
-        m_nimCodeStylePreferences.setDelegatingPool(m_codeStyle->delegatingPool());
-        m_nimCodeStylePreferences.setTabSettings(m_codeStyle->tabSettings());
-        m_nimCodeStylePreferences.setCurrentDelegate(m_codeStyle->currentDelegate());
-        m_nimCodeStylePreferences.setId(m_codeStyle->id());
+        const auto markDirty = [this] {
+            if (m_syncing)
+                return;
+            m_dirty = true;
+            emit volatileValueChanged();
+        };
+        // Edits may land on the selected delegate rather than on the page-local
+        // copy itself, so track any change to the current settings or delegate
+        // instead of comparing the copy's own values.
+        connect(&m_pageCodeStyle, &ICodeStylePreferences::currentTabSettingsChanged,
+                this, markDirty);
+        connect(&m_pageCodeStyle, &ICodeStylePreferences::currentDelegateChanged,
+                this, markDirty);
 
-        auto factory = codeStyleFactory(Nim::Constants::C_NIMLANGUAGE_ID);
-        CodeStyleEditor *editor
-            = factory->createSettingsEditor(&m_nimCodeStylePreferences);
+        setLayouter([this] {
+            m_pageCodeStyle.setDelegatingPool(m_codeStyle->delegatingPool());
+            m_pageCodeStyle.setId(m_codeStyle->id());
+            syncFromGlobal();
 
-        auto layout = new QVBoxLayout(this);
-        layout->addWidget(editor);
+            CodeStyleEditor *editor = codeStyleFactory(Nim::Constants::C_NIMLANGUAGE_ID)
+                                          ->createSettingsEditor(&m_pageCodeStyle);
+            using namespace Layouting;
+            return Column { editor };
+        });
     }
 
     void apply() final
     {
-        if (m_codeStyle->tabSettings() != m_nimCodeStylePreferences.tabSettings()) {
-            m_codeStyle->setTabSettings(m_nimCodeStylePreferences.tabSettings());
+        if (m_codeStyle->tabSettings() != m_pageCodeStyle.tabSettings()) {
+            m_codeStyle->setTabSettings(m_pageCodeStyle.tabSettings());
             m_codeStyle->toSettings(Nim::Constants::C_NIMLANGUAGE_ID);
         }
-        if (m_codeStyle->currentDelegate() != m_nimCodeStylePreferences.currentDelegate()) {
-            m_codeStyle->setCurrentDelegate(m_nimCodeStylePreferences.currentDelegate());
+        if (m_codeStyle->currentDelegate() != m_pageCodeStyle.currentDelegate()) {
+            m_codeStyle->setCurrentDelegate(m_pageCodeStyle.currentDelegate());
             m_codeStyle->toSettings(Nim::Constants::C_NIMLANGUAGE_ID);
         }
+        m_dirty = false;
+        emit volatileValueChanged();
     }
 
+    void cancel() final
+    {
+        syncFromGlobal();
+        m_dirty = false;
+    }
+
+    bool isDirty() const final { return m_dirty; }
+
 private:
+    void syncFromGlobal()
+    {
+        m_syncing = true;
+        m_pageCodeStyle.setTabSettings(m_codeStyle->tabSettings());
+        m_pageCodeStyle.setCurrentDelegate(m_codeStyle->currentDelegate());
+        m_syncing = false;
+    }
+
     ICodeStylePreferences *m_codeStyle;
-    ICodeStylePreferences m_nimCodeStylePreferences;
+    ICodeStylePreferences m_pageCodeStyle;
+    bool m_syncing = false;
+    bool m_dirty = false;
 };
 
 // NimCodeStyleSettingsPage
@@ -212,7 +249,7 @@ public:
         setId(Nim::Constants::C_NIMCODESTYLESETTINGSPAGE_ID);
         setDisplayName(Tr::tr("Code Style"));
         setCategory(Nim::Constants::C_NIMCODESTYLESETTINGSPAGE_CATEGORY);
-        setWidgetCreator([this] { return new NimCodeStyleSettingsWidget(&m_globalCodeStyle); });
+        setSettingsProvider([this] { return &m_settings; });
 
         m_globalCodeStyle.setSettingsSuffix("TabPreferences");
         m_globalCodeStyle.setDelegatingPool(&m_pool);
@@ -255,6 +292,7 @@ private:
     CodeStylePool m_pool{&m_factory, Nim::Constants::C_NIMLANGUAGE_ID};
     ICodeStylePreferences m_globalCodeStyle;
     ICodeStylePreferences m_nimCodeStyle;
+    NimCodeStyleSettings m_settings{&m_globalCodeStyle};
 };
 
 void Internal::setupNimCodeStyle()
