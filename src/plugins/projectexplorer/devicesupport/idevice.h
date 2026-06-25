@@ -303,7 +303,7 @@ public:
 
     virtual bool supportsQtTargetDeviceType(const QSet<Utils::Id> &targetDeviceTypes) const;
 
-    Utils::FilePaths toolSearchPaths() const;
+    virtual Utils::FilePaths toolSearchPaths() const;
 
     QtTaskTree::Group autoDetectDeviceToolsRecipe(
         std::function<void(const QString &)> logger = {});

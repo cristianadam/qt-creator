@@ -130,6 +130,10 @@ public:
                 result.m_exitStatus = ProcessExitStatus::CrashExit;
                 result.m_error = ProcessError::Crashed;
             }
+            if (!m_envScript.isEmpty()) {
+                m_envScript.removeFile();
+                m_envScript.clear();
+            }
             emit done(result);
         });
     }
@@ -138,9 +142,12 @@ private:
     void start() final;
     qint64 write(const QByteArray &data) final { return m_process.writeRaw(data); }
     void sendControlSignal(ControlSignal controlSignal) final;
-    CommandLine fullLocalCommandLine() const;
+    CommandLine fullLocalCommandLine();
 
     IDevice::ConstPtr m_device;
+    // A PowerShell script written to the device's temp dir to apply the build environment
+    // before running the command (see fullLocalCommandLine); removed when the process is done.
+    FilePath m_envScript;
     // Parented to this so it moves along when Process::waitForFinished() relocates the
     // interface to its blocking worker thread; otherwise nested blocking calls (e.g. a
     // device-rooted Process run via runBlocking) would never see the inner process's
@@ -188,7 +195,7 @@ void WindowsProcessInterface::sendControlSignal(ControlSignal controlSignal)
     }
 }
 
-CommandLine WindowsProcessInterface::fullLocalCommandLine() const
+CommandLine WindowsProcessInterface::fullLocalCommandLine()
 {
     const FilePath sshBinary = sshSettings().sshFilePath();
     const SshParameters sshParameters = m_device->sshParameters();
@@ -213,20 +220,76 @@ CommandLine WindowsProcessInterface::fullLocalCommandLine() const
     // sshd hands the resulting string to the default shell, so a self-contained
     // "powershell -EncodedCommand ..." works regardless of which shell that is.
     const CommandLine remoteCommand = m_setup.m_commandLine;
-    // Quote the executable for the remote (Windows) shell: native backslash path, wrapped
-    // in double quotes when it contains spaces, e.g.
-    // "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe".
-    QString remote = remoteCommand.executable().nativePath();
-    if (remote.contains(' '))
-        remote = '"' + remote + '"';
     const QString args = remoteCommand.arguments();
-    if (!args.isEmpty())
-        remote += ' ' + args;
 
-    // TODO: honor m_setup.rawWorkingDirectory(). A "cd" prefix would be shell-specific
-    // (cmd.exe vs PowerShell), which contradicts the shell-agnostic approach used for file
-    // access. Proper working-directory and arbitrary-command launching belong to the
-    // run/debug milestone; for now the working directory is ignored.
+    // A process that carries an explicit environment (e.g. a build run with the kit's
+    // build environment: MSVC vcvars putting INCLUDE/LIB in the env and the SDK bin on
+    // PATH) needs that environment applied on the device, the way SshProcessInterface
+    // prefixes "KEY=value cmd" on Unix. We do it through a PowerShell script that sets
+    // $env:KEY for each entry, then runs the command and propagates its exit code. The
+    // build environment is too large to inline on the remote command line (Windows caps it
+    // around 32 KB), so the script is written to the device's temp directory and run via
+    // "-File", mirroring how the MSVC vcvars environment capture stages a .bat there.
+    // The streaming CmdBridge process (ProcessMode::Writer, binary protocol on stdin/stdout)
+    // is excluded - a PowerShell wrapper would corrupt its byte stream; it keeps the plain
+    // direct invocation below.
+    const bool injectEnvironment = m_setup.m_processMode != ProcessMode::Writer
+                                   && !m_setup.m_environment.toStringList().isEmpty();
+
+    QString remote;
+    if (injectEnvironment) {
+        const Environment &env = m_setup.m_environment;
+        QString script;
+        env.forEachEntry([&](const QString &key, const QString &value, bool enabled) {
+            // Use SetEnvironmentVariable rather than "$env:KEY = ...": some Windows variable
+            // names contain characters PowerShell cannot parse after "$env:", e.g. the "(x86)"
+            // in "ProgramFiles(x86)" / "CommonProgramFiles(x86)".
+            if (enabled && !key.trimmed().isEmpty() && !value.contains('\n')) {
+                script += "[Environment]::SetEnvironmentVariable(" + psQuote(key) + ", "
+                          + psQuote(env.expandVariables(value)) + ")\n";
+            }
+        });
+        const FilePath workingDirectory = m_setup.rawWorkingDirectory();
+        if (!workingDirectory.isEmpty())
+            script += "Set-Location -LiteralPath " + psPath(workingDirectory) + "\n";
+        // "--%" (the PowerShell stop-parsing token) passes the already-quoted Windows
+        // arguments to the program verbatim, so PowerShell does not re-interpret them.
+        script += "& " + psPath(remoteCommand.executable());
+        if (!args.isEmpty())
+            script += " --% " + args;
+        script += "\nexit $LASTEXITCODE\n";
+
+        // Stage the script in the device user's temp directory (taken from the build
+        // environment, so no extra remote round-trip), then run it by path.
+        QString tempDir = env.value("TEMP");
+        if (tempDir.isEmpty())
+            tempDir = env.value("TMP");
+        if (tempDir.isEmpty())
+            tempDir = "C:/Windows/Temp";
+        tempDir.replace('\\', '/');
+        const FilePath scriptPath = m_device->rootPath().withNewPath(tempDir)
+                / ("qtc-run-" + QUuid::createUuid().toString(QUuid::Id128) + ".ps1");
+        if (const Result<qint64> res = scriptPath.writeFileContents(script.toUtf8()); res) {
+            m_envScript = scriptPath;
+            remote = "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \""
+                     + scriptPath.nativePath() + "\"";
+        } else {
+            // Could not stage the script; fall back to running without the environment.
+            qCWarning(windowsDeviceLog) << "Failed to write env script" << scriptPath.toUserOutput()
+                                        << ":" << res.error();
+        }
+    }
+
+    if (remote.isEmpty()) {
+        // Quote the executable for the remote (Windows) shell: native backslash path,
+        // wrapped in double quotes when it contains spaces, e.g.
+        // "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe".
+        remote = remoteCommand.executable().nativePath();
+        if (remote.contains(' '))
+            remote = '"' + remote + '"';
+        if (!args.isEmpty())
+            remote += ' ' + args;
+    }
 
     if (!remote.isEmpty())
         cmd.addArg(remote);
@@ -967,6 +1030,28 @@ FilePath WindowsDevice::rootPath() const
     return FilePath::fromParts(u"ssh", userAtHostAndPort(), u"/");
 }
 
+FilePaths WindowsDevice::toolSearchPaths() const
+{
+    FilePaths paths = IDevice::toolSearchPaths();
+
+    // Qt bundles build tools (ninja, cmake, ...) under C:\Qt\Tools\<tool>[\bin] rather than on
+    // PATH, so the generic search paths (PATH plus the Qt version bin directories) miss them.
+    // Add each tool directory and its bin subdirectory so the device tool detection finds e.g.
+    // ninja at C:\Qt\Tools\Ninja and cmake at C:\Qt\Tools\CMake_64\bin.
+    const FilePath toolsRoot = rootPath().withNewPath("C:/Qt/Tools");
+    if (toolsRoot.isDir()) {
+        const FilePaths toolDirs = toolsRoot.dirEntries(
+            FileFilter({}, DirFilterFlag::Dirs | DirFilterFlag::NoDotAndDotDot));
+        for (const FilePath &toolDir : toolDirs) {
+            paths.append(toolDir);
+            const FilePath binDir = toolDir / "bin";
+            if (binDir.isDir())
+                paths.append(binDir);
+        }
+    }
+    return paths;
+}
+
 Result<> WindowsDevice::handlesFile(const FilePath &filePath) const
 {
     if (filePath.scheme() == u"ssh" && filePath.host() == userAtHostAndPort())
@@ -1161,64 +1246,96 @@ static void detectAndRegisterToolchains(const WindowsDevice::Ptr &device)
     for (Kit *k : stale)
         KitManager::deregisterKit(k);
 
-    Toolchains filtered = found;
-    if (Result<OsArch> arch = device->osArch()) {
-        const std::optional<MsvcToolchain::Platform> preferredPlatform
-            = MsvcToolchain::preferredPlatform(*arch, *arch);
-        filtered = Utils::filtered(found, [preferredPlatform](Toolchain *tc) {
-            auto msvcTc = dynamic_cast<MsvcToolchain *>(tc);
-            return msvcTc ? msvcTc->platform() == preferredPlatform : false;
-        });
-        if (filtered.isEmpty()) { // no preferredPlatform found, fallback to one kit per ABI
-            QMap<QString, Toolchains> toolchainsForAbi;
-            for (auto tc : found) {
-                if (auto msvcTc = dynamic_cast<MsvcToolchain *>(tc);
-                    msvcTc && MsvcToolchain::archPrefersPlatform(*arch, msvcTc->platform())) {
-                    toolchainsForAbi[tc->targetAbi().toString()].prepend(tc);
-                } else {
-                    toolchainsForAbi[tc->targetAbi().toString()].append(tc);
+    const auto createKits = [device, found, sourceId] {
+        Toolchains filtered = found;
+        if (Result<OsArch> arch = device->osArch()) {
+            const std::optional<MsvcToolchain::Platform> preferredPlatform
+                = MsvcToolchain::preferredPlatform(*arch, *arch);
+            filtered = Utils::filtered(found, [preferredPlatform](Toolchain *tc) {
+                auto msvcTc = dynamic_cast<MsvcToolchain *>(tc);
+                return msvcTc ? msvcTc->platform() == preferredPlatform : false;
+            });
+            if (filtered.isEmpty()) { // no preferredPlatform found, fallback to one kit per ABI
+                QMap<QString, Toolchains> toolchainsForAbi;
+                for (auto tc : found) {
+                    if (auto msvcTc = dynamic_cast<MsvcToolchain *>(tc);
+                        msvcTc && MsvcToolchain::archPrefersPlatform(*arch, msvcTc->platform())) {
+                        toolchainsForAbi[tc->targetAbi().toString()].prepend(tc);
+                    } else {
+                        toolchainsForAbi[tc->targetAbi().toString()].append(tc);
+                    }
                 }
+                for (const Toolchains &tcs : toolchainsForAbi)
+                    filtered.append(tcs.first());
             }
-            for (const Toolchains &tcs : toolchainsForAbi)
-                filtered.append(tcs.first());
         }
-    }
 
-    const QList<ToolchainBundle> bundles = ToolchainBundle::collectBundles(
-        filtered, ToolchainBundle::HandleMissing::CreateAndRegister);
-    // Create at most one kit per ABI display name. abiDisplayName() differentiates
-    // by MSVC year and word width, but not by host/cross toolset, so two same-year
-    // toolsets targeting the same ABI (e.g. amd64 and x86_amd64) would otherwise
-    // produce colliding kit names. This is reachable when osArch() fails and no
-    // filtering happened above.
-    QSet<QString> seenAbis;
-    for (const ToolchainBundle &bundle : bundles) {
-        const QString abiName = abiDisplayName(bundle.targetAbi());
-        if (!Utils::insert(seenAbis, abiName))
-            continue;
-        Kit *kit = KitManager::registerKit([device, bundle, sourceId, abiName](Kit *k) {
-            k->setDetectionSource({DetectionSource::FromSystem, sourceId});
-            k->setUnexpandedDisplayName("%{Device:Name} " + abiName);
-            RunDeviceTypeKitAspect::setDeviceTypeId(k, device->type());
-            RunDeviceKitAspect::setDevice(k, device);
-            BuildDeviceTypeKitAspect::setDeviceTypeId(k, device->type());
-            BuildDeviceKitAspect::setDevice(k, device);
-            k->setSticky(BuildDeviceKitAspect::id(), true);
-            k->setSticky(BuildDeviceTypeKitAspect::id(), true);
-            ToolchainKitAspect::setBundle(k, bundle);
+        const QList<ToolchainBundle> bundles = ToolchainBundle::collectBundles(
+            filtered, ToolchainBundle::HandleMissing::CreateAndRegister);
+        // Create at most one kit per ABI display name. abiDisplayName() differentiates
+        // by MSVC year and word width, but not by host/cross toolset, so two same-year
+        // toolsets targeting the same ABI (e.g. amd64 and x86_amd64) would otherwise
+        // produce colliding kit names. This is reachable when osArch() fails and no
+        // filtering happened above.
+        QSet<QString> seenAbis;
+        for (const ToolchainBundle &bundle : bundles) {
+            const QString abiName = abiDisplayName(bundle.targetAbi());
+            if (!Utils::insert(seenAbis, abiName))
+                continue;
+            Kit *kit = KitManager::registerKit([device, bundle, sourceId, abiName](Kit *k) {
+                k->setDetectionSource({DetectionSource::FromSystem, sourceId});
+                k->setUnexpandedDisplayName("%{Device:Name} " + abiName);
+                RunDeviceTypeKitAspect::setDeviceTypeId(k, device->type());
+                RunDeviceKitAspect::setDevice(k, device);
+                BuildDeviceTypeKitAspect::setDeviceTypeId(k, device->type());
+                BuildDeviceKitAspect::setDevice(k, device);
+                k->setSticky(BuildDeviceKitAspect::id(), true);
+                k->setSticky(BuildDeviceTypeKitAspect::id(), true);
+                ToolchainKitAspect::setBundle(k, bundle);
+            });
+            // Attach the matching device Qt and CMake if installed (asynchronous, may complete
+            // after the kit appears). The kit is usable without them; missing Qt only shows a
+            // "no Qt" warning. Each is an empty path -> skipped when not found.
+            const FilePath qtBinDir = findMsvcQtBinDir(device, bundle.targetAbi());
+            const FilePath cmakeBinDir = findDeviceCMakeBinDir(device);
+            detectAndAttachKitTools(device, kit, {
+                {"QtSupport.QtInformation", qtBinDir.isEmpty() ? FilePaths{} : FilePaths{qtBinDir}},
+                {"CMakeProjectManager.CMakeKitInformation",
+                 cmakeBinDir.isEmpty() ? FilePaths{} : FilePaths{cmakeBinDir}},
+            });
+        }
+        qCDebug(windowsDeviceLog) << "Created" << bundles.size() << "kit(s) for the device";
+    };
+
+    // Detect the device build tools (ninja, ...) through the generic device-tool facility, so
+    // CMake can use the Ninja generator: this populates the device's ninja tool aspect, which
+    // CMake's generator selection (isNinjaPresent) and CMAKE_MAKE_PROGRAM rely on. It runs in
+    // parallel with the asynchronous MSVC environment capture; the kit is created only once both
+    // have completed, so the generator default already sees ninja and the kit has a valid
+    // compiler instead of an empty one.
+    const auto toolsReady = std::make_shared<bool>(false);
+    const auto conn = std::make_shared<QMetaObject::Connection>();
+    const auto maybeCreateKits = [found, toolsReady, conn, createKits] {
+        const bool msvcReady = Utils::allOf(found, [](Toolchain *tc) {
+            return !tc->compilerCommand().isEmpty();
         });
-        // Attach the matching device Qt and CMake if installed (asynchronous, may complete
-        // after the kit appears). The kit is usable without them; missing Qt only shows a
-        // "no Qt" warning. Each is an empty path -> skipped when not found.
-        const FilePath qtBinDir = findMsvcQtBinDir(device, bundle.targetAbi());
-        const FilePath cmakeBinDir = findDeviceCMakeBinDir(device);
-        detectAndAttachKitTools(device, kit, {
-            {"QtSupport.QtInformation", qtBinDir.isEmpty() ? FilePaths{} : FilePaths{qtBinDir}},
-            {"CMakeProjectManager.CMakeKitInformation",
-             cmakeBinDir.isEmpty() ? FilePaths{} : FilePaths{cmakeBinDir}},
-        });
-    }
-    qCDebug(windowsDeviceLog) << "Created" << bundles.size() << "kit(s) for the device";
+        if (!*toolsReady || !msvcReady)
+            return;
+        if (*conn)
+            QObject::disconnect(*conn);
+        createKits();
+    };
+
+    *conn = QObject::connect(
+        ToolchainManager::instance(), &ToolchainManager::toolchainUpdated, device.get(),
+        [maybeCreateKits](Toolchain *) { maybeCreateKits(); });
+
+    qCDebug(windowsDeviceLog) << "Detecting device build tools";
+    GlobalTaskTree::start(device->autoDetectDeviceToolsRecipe(), {},
+                          [toolsReady, maybeCreateKits] {
+                              *toolsReady = true;
+                              maybeCreateKits();
+                          });
 }
 
 WindowsDeviceConfigurationWidget::WindowsDeviceConfigurationWidget(const IDevicePtr &device)

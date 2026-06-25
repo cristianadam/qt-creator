@@ -36,6 +36,8 @@ public:
 
     Utils::FilePath rootPath() const override;
 
+    Utils::FilePaths toolSearchPaths() const override;
+
     Utils::Result<> handlesFile(const Utils::FilePath &filePath) const override;
 
     Utils::ProcessInterface *createProcessInterface() const override;
