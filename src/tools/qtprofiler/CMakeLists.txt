@@ -17,6 +17,35 @@ add_qtc_executable(qtprofiler
     schema/api.h
 )
 
+# qtprofiler now lives in its own bundle, so it can no longer fall back to
+# "Qt Creator.app"'s resources at runtime (ICore::resourcePath() resolves to
+# the bundle's Contents/Resources). Copy the resources it needs into the
+# bundle for dev builds.
+if (APPLE AND TARGET qtprofiler)
+  qtc_output_binary_dir(_output_binary_dir)
+  set(qtprofiler_resource_dest
+    "${_output_binary_dir}/${IDE_APP_PATH}/${qtprofiler_bundle_name}.app/Contents/Resources")
+
+  # Themes are copied straight from their source location. Translations are
+  # generated at build time, so they are taken from the build tree instead.
+  # Runs before the codesigning step below, so the signature seals the resources.
+  add_custom_command(TARGET qtprofiler POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory
+      "${PROJECT_SOURCE_DIR}/share/qtcreator/themes"
+      "${qtprofiler_resource_dest}/themes"
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory
+      "${_output_binary_dir}/${IDE_DATA_PATH}/translations"
+      "${qtprofiler_resource_dest}/translations"
+    VERBATIM
+    COMMENT "Copying qtprofiler resources into the app bundle"
+  )
+
+  # The generated translations must exist in the build tree before we copy them.
+  if (TARGET generate_qm_files)
+    add_dependencies(qtprofiler generate_qm_files)
+  endif()
+endif()
+
 qtc_add_resources(qtprofiler "schema"
   PREFIX "/qtprofiler"
   BASE "."
