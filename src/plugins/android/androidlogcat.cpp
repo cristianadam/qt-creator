@@ -171,9 +171,15 @@ void LogcatFilter::setFromText(const QString &text)
             continue;
         const LogcatLevel level = key == QLatin1String("level")
                                       ? logcatLevel(value) : LogcatLevel::Unknown;
-        if (key == QLatin1String("package") && m_pid > 0
-            && value.compare(QLatin1String("mine"), Qt::CaseInsensitive) == 0) {
-            m_predicates.append(pidPredicate(m_pid));
+        if (key == QLatin1String("package")) {
+            if (value.compare(QLatin1String("mine"), Qt::CaseInsensitive) == 0) {
+                if (m_pid > 0)
+                    m_predicates.append(pidPredicate(m_pid));
+            } else {
+                m_predicates.append([value](const LogcatEntry &e) {
+                    return e.packageName.contains(value, Qt::CaseInsensitive);
+                });
+            }
         } else if (level != LogcatLevel::Unknown) {
             m_predicates.append(levelPredicate(level));
         } else {
@@ -467,6 +473,10 @@ void LogcatStream::refreshProcessNames()
             m_tabContext.fillPackageNames();
             m_tabContext.renderFromBuffer();
         }
+        // New names can complete a package: query and the package column of
+        // lines already posted.
+        if (changed)
+            m_tabContext.renderFromBuffer();
         ps->deleteLater();
     });
     ps->start();
