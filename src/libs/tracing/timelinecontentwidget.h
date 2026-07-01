@@ -10,6 +10,7 @@
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
+class QLabel;
 class QScrollArea;
 class QVBoxLayout;
 class QWidget;
@@ -84,6 +85,8 @@ private:
     void recenterOnItem(int modelIndex, int itemIndex);
     void onItemHovered(int modelIndex, int itemIndex);
     void showItemDetails(int modelIndex, int itemIndex);
+    void onFramePainted(qint64 renderNs);
+    void updateFrameTime();
 
     // Translate between painter index (into m_painters) and aggregator model index.
     int painterToAggregator(int painterIdx) const;
@@ -118,6 +121,13 @@ private:
     int m_hoveredItemIndex = -1;
 
     bool m_selectionLocked = false;
+
+    // Frame-time overlay: shows the worst full-frame render time, i.e. the
+    // per-repaint-cycle sum of the track widgets' paint durations.
+    QLabel *m_frameTimeLabel = nullptr;
+    qint64 m_frameAccumNs = 0;       // paint time accumulated for the current cycle
+    qint64 m_maxRenderNs = 0;        // worst full-frame render time this sample window
+    bool m_frameFlushScheduled = false;
 };
 
 } // namespace Timeline
