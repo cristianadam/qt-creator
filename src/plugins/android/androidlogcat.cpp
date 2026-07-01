@@ -40,10 +40,33 @@ using namespace ProjectExplorer;
 
 namespace Android::Internal {
 
+enum class LogcatLevel { Unknown, Verbose, Debug, Info, Warning, Error, Fatal };
+
+static LogcatLevel logcatLevel(const QString &text)
+{
+    if (text.isEmpty())
+        return LogcatLevel::Unknown;
+    static const std::pair<QLatin1String, LogcatLevel> levels[] = {
+        {QLatin1String("verbose"), LogcatLevel::Verbose},
+        {QLatin1String("debug"), LogcatLevel::Debug},
+        {QLatin1String("info"), LogcatLevel::Info},
+        {QLatin1String("warning"), LogcatLevel::Warning},
+        {QLatin1String("error"), LogcatLevel::Error},
+        {QLatin1String("fatal"), LogcatLevel::Fatal},
+        {QLatin1String("assert"), LogcatLevel::Fatal},
+    };
+    for (const auto &[name, level] : levels) {
+        if (name.startsWith(text, Qt::CaseInsensitive))
+            return level;
+    }
+    return LogcatLevel::Unknown;
+}
+
 struct LogcatEntry
 {
     QString line;
     qint32 pid = -1;
+    LogcatLevel level = LogcatLevel::Unknown;
     QString packageName; // resolved from the pid when the entry is buffered
     bool bypassFilter = false;
 
@@ -66,8 +89,10 @@ LogcatEntry LogcatEntry::fromLine(const QString &raw)
 {
     LogcatEntry entry{.line = raw};
     const auto match = regExpLogcat.match(raw);
-    if (match.hasMatch())
+    if (match.hasMatch()) {
         entry.pid = match.captured("pid").toInt();
+        entry.level = logcatLevel(match.captured("level"));
+    }
     return entry;
 }
 
@@ -115,7 +140,7 @@ private:
     qint64 m_pid = -1;
     QString m_boundPackage;
     QString m_filterText;
-    QString m_keyword; // tail after "package:mine", forwarded to OutputWindow as a literal
+    QString m_keyword; // free-text terms (non key:value), applied as the live filter
 };
 
 static LogcatFilter::FilterPredicate pidPredicate(qint64 pid)
@@ -123,23 +148,39 @@ static LogcatFilter::FilterPredicate pidPredicate(qint64 pid)
     return [pid](const LogcatEntry &e) { return e.pid == pid; };
 }
 
+static LogcatFilter::FilterPredicate levelPredicate(LogcatLevel min)
+{
+    return [min](const LogcatEntry &e) { return e.level >= min; };
+}
+
 void LogcatFilter::setFromText(const QString &text)
 {
     m_filterText = text;
     m_keyword.clear();
     m_predicates.clear();
-    const QString trimmed = text.trimmed();
-    if (trimmed.isEmpty())
-        return;
-    const QLatin1String pkgPrefix("package:");
-    if (trimmed.startsWith(pkgPrefix, Qt::CaseInsensitive)) {
-        const QString rest = trimmed.mid(pkgPrefix.size()).trimmed();
-        const int sp = rest.indexOf(QChar::Space);
-        const QString name = sp < 0 ? rest : rest.left(sp);
-        m_keyword = sp < 0 ? QString() : rest.mid(sp + 1).trimmed();
-        if (m_pid > 0 && name.compare(QLatin1String("mine"), Qt::CaseInsensitive) == 0)
+    QStringList keywords;
+    const QStringList tokens = text.split(QChar::Space, Qt::SkipEmptyParts);
+    for (const QString &token : tokens) {
+        const int colon = token.indexOf(u':');
+        const QString key = colon > 0 ? token.left(colon).toLower() : QString();
+        const QString value = colon > 0 ? token.mid(colon + 1) : QString();
+        const bool queryKey = key == QLatin1String("package") || key == QLatin1String("level");
+        // An incomplete "key:" whose value is still being typed filters nothing,
+        // rather than becoming keyword text that matches no line.
+        if (queryKey && value.isEmpty())
+            continue;
+        const LogcatLevel level = key == QLatin1String("level")
+                                      ? logcatLevel(value) : LogcatLevel::Unknown;
+        if (key == QLatin1String("package") && m_pid > 0
+            && value.compare(QLatin1String("mine"), Qt::CaseInsensitive) == 0) {
             m_predicates.append(pidPredicate(m_pid));
+        } else if (level != LogcatLevel::Unknown) {
+            m_predicates.append(levelPredicate(level));
+        } else {
+            keywords << token;
+        }
     }
+    m_keyword = keywords.join(QChar::Space);
 }
 
 void LogcatFilter::bindToPackage(qint64 pid, const QString &packageName)
