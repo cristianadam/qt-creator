@@ -142,6 +142,8 @@ public:
     virtual Utils::CommandLine commandLineForTests(const QStringList &tests,
                                                    const QStringList &options) const;
 
+    virtual Utils::FilePath activeBuildTool() const;
+
     class PROJECTEXPLORER_EXPORT ParseGuard
     {
         friend class BuildSystem;

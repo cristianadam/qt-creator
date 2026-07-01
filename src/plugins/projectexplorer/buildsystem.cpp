@@ -441,6 +441,11 @@ CommandLine BuildSystem::commandLineForTests(const QStringList & /*tests*/,
     return {};
 }
 
+FilePath BuildSystem::activeBuildTool() const
+{
+    return {};
+}
+
 BuildSystem *activeBuildSystem(const Project *project)
 {
     return project ? project->activeBuildSystem() : nullptr;
