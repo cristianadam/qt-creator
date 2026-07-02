@@ -151,11 +151,6 @@ TextEditor::Indenter *ClangFormatForwardingIndenter::currentIndenter() const
     return m_clangFormatIndenter.get();
 }
 
-bool ClangFormatForwardingIndenter::isElectricCharacter(const QChar &ch) const
-{
-    return currentIndenter()->isElectricCharacter(ch);
-}
-
 void ClangFormatForwardingIndenter::setCodeStylePreferences(
     TextEditor::ICodeStylePreferences *preferences)
 {

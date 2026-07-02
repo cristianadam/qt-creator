@@ -29,7 +29,6 @@ public:
     ~ClangFormatForwardingIndenter() override;
 
     void setFileName(const Utils::FilePath &fileName) override;
-    bool isElectricCharacter(const QChar &ch) const override;
     void setCodeStylePreferences(TextEditor::ICodeStylePreferences *preferences) override;
     void invalidateCache() override;
     int indentFor(const QTextBlock &block,

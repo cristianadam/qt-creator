@@ -40,7 +40,7 @@ public:
     virtual ~Indenter() = default;
 
     // Returns true if key triggers an indent.
-    virtual bool isElectricCharacter(const QChar & /*ch*/) const { return false; }
+    bool isElectricCharacter(const QChar &ch) const { return m_electricCharacters.contains(ch); }
 
     virtual void setCodeStylePreferences(ICodeStylePreferences * /*preferences*/) {}
 
@@ -111,8 +111,13 @@ public:
     virtual bool respectsTabSettings() const { return true; }
 
 protected:
+    void setElectricCharacters(const QString &chars) { m_electricCharacters = chars; }
+
     QTextDocument *m_doc;
     Utils::FilePath m_fileName;
+
+private:
+    QString m_electricCharacters;
 };
 
 } // namespace TextEditor
