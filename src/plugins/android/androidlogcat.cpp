@@ -160,6 +160,11 @@ static LogcatFilter::FilterPredicate tagPredicate(const QString &tag)
     return [tag](const LogcatEntry &e) { return e.tag.contains(tag, Qt::CaseInsensitive); };
 }
 
+static LogcatFilter::FilterPredicate negate(LogcatFilter::FilterPredicate predicate)
+{
+    return [predicate = std::move(predicate)](const LogcatEntry &e) { return !predicate(e); };
+}
+
 void LogcatFilter::setFromText(const QString &text)
 {
     m_filterText = text;
@@ -168,9 +173,11 @@ void LogcatFilter::setFromText(const QString &text)
     QStringList keywords;
     const QStringList tokens = text.split(QChar::Space, Qt::SkipEmptyParts);
     for (const QString &token : tokens) {
-        const int colon = token.indexOf(u':');
-        const QString key = colon > 0 ? token.left(colon).toLower() : QString();
-        const QString value = colon > 0 ? token.mid(colon + 1) : QString();
+        const bool negated = token.startsWith(u'-');
+        const QString bare = negated ? token.mid(1) : token;
+        const int colon = bare.indexOf(u':');
+        const QString key = colon > 0 ? bare.left(colon).toLower() : QString();
+        const QString value = colon > 0 ? bare.mid(colon + 1) : QString();
         const bool queryKey = key == QLatin1String("package") || key == QLatin1String("level")
                               || key == QLatin1String("tag");
         // An incomplete "key:" whose value is still being typed filters nothing,
@@ -179,19 +186,22 @@ void LogcatFilter::setFromText(const QString &text)
             continue;
         const LogcatLevel level = key == QLatin1String("level")
                                       ? logcatLevel(value) : LogcatLevel::Unknown;
+        const auto append = [this, negated](FilterPredicate predicate) {
+            m_predicates.append(negated ? negate(std::move(predicate)) : std::move(predicate));
+        };
         if (key == QLatin1String("package")) {
             if (value.compare(QLatin1String("mine"), Qt::CaseInsensitive) == 0) {
                 if (m_pid > 0)
-                    m_predicates.append(pidPredicate(m_pid));
+                    append(pidPredicate(m_pid));
             } else {
-                m_predicates.append([value](const LogcatEntry &e) {
+                append([value](const LogcatEntry &e) {
                     return e.packageName.contains(value, Qt::CaseInsensitive);
                 });
             }
         } else if (level != LogcatLevel::Unknown) {
-            m_predicates.append(levelPredicate(level));
+            append(levelPredicate(level));
         } else if (key == QLatin1String("tag")) {
-            m_predicates.append(tagPredicate(value));
+            append(tagPredicate(value));
         } else {
             keywords << token;
         }
