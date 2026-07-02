@@ -47,7 +47,9 @@
 #include <projectexplorer/runcontrol.h>
 #include <projectexplorer/target.h>
 
+#ifndef __EMSCRIPTEN__ // QtSupport is excluded from the WebAssembly build
 #include <qtsupport/qtkitaspect.h>
+#endif
 
 #include <texteditor/texteditor.h>
 
