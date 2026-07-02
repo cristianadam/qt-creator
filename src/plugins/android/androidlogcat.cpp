@@ -67,6 +67,7 @@ struct LogcatEntry
     QString line;
     qint32 pid = -1;
     LogcatLevel level = LogcatLevel::Unknown;
+    QString tag;
     QString packageName; // resolved from the pid when the entry is buffered
     bool bypassFilter = false;
 
@@ -92,6 +93,7 @@ LogcatEntry LogcatEntry::fromLine(const QString &raw)
     if (match.hasMatch()) {
         entry.pid = match.captured("pid").toInt();
         entry.level = logcatLevel(match.captured("level"));
+        entry.tag = match.captured("tag");
     }
     return entry;
 }
@@ -153,6 +155,11 @@ static LogcatFilter::FilterPredicate levelPredicate(LogcatLevel min)
     return [min](const LogcatEntry &e) { return e.level >= min; };
 }
 
+static LogcatFilter::FilterPredicate tagPredicate(const QString &tag)
+{
+    return [tag](const LogcatEntry &e) { return e.tag.contains(tag, Qt::CaseInsensitive); };
+}
+
 void LogcatFilter::setFromText(const QString &text)
 {
     m_filterText = text;
@@ -164,7 +171,8 @@ void LogcatFilter::setFromText(const QString &text)
         const int colon = token.indexOf(u':');
         const QString key = colon > 0 ? token.left(colon).toLower() : QString();
         const QString value = colon > 0 ? token.mid(colon + 1) : QString();
-        const bool queryKey = key == QLatin1String("package") || key == QLatin1String("level");
+        const bool queryKey = key == QLatin1String("package") || key == QLatin1String("level")
+                              || key == QLatin1String("tag");
         // An incomplete "key:" whose value is still being typed filters nothing,
         // rather than becoming keyword text that matches no line.
         if (queryKey && value.isEmpty())
@@ -182,6 +190,8 @@ void LogcatFilter::setFromText(const QString &text)
             }
         } else if (level != LogcatLevel::Unknown) {
             m_predicates.append(levelPredicate(level));
+        } else if (key == QLatin1String("tag")) {
+            m_predicates.append(tagPredicate(value));
         } else {
             keywords << token;
         }
