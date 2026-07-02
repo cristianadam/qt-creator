@@ -78,7 +78,7 @@ public:
         connect(&stubConnectTimeoutTimer, &QTimer::timeout, this, [this] {
             q->killInferiorProcess();
             q->killStubProcess();
-            q->emitFinished(-1, QProcess::ExitStatus::CrashExit);
+            q->emitFinished(-1, Utils::ProcessExitStatus::CrashExit);
         });
     }
 
@@ -165,9 +165,9 @@ void TerminalInterface::onStubExited()
     d->envListFile.close();
 
     if (d->inferiorProcessId)
-        emitFinished(-1, QProcess::CrashExit);
+        emitFinished(-1, Utils::CrashExit);
     else if (!d->didInferiorRun) {
-        emitError(QProcess::FailedToStart,
+        emitError(Utils::FailedToStart,
                   Tr::tr("Failed to start terminal process. The stub exited before the inferior "
                          "was started."));
     }
@@ -179,11 +179,11 @@ void TerminalInterface::onStubReadyRead()
         QByteArray out = d->stubSocket->readLine();
         out.chop(1); // remove newline
         if (out.startsWith("err:chdir ")) {
-            emitError(QProcess::FailedToStart,
+            emitError(Utils::FailedToStart,
                       msgCannotChangeToWorkDir(m_setup.rawWorkingDirectory(),
                                                errnoToString(out.mid(10).toInt())));
         } else if (out.startsWith("err:exec ")) {
-            emitError(QProcess::FailedToStart,
+            emitError(Utils::FailedToStart,
                       msgCannotExecute(m_setup.m_commandLine.executable(),
                                        errnoToString(out.mid(9).toInt())));
         } else if (out.startsWith("spid ")) {
@@ -195,13 +195,13 @@ void TerminalInterface::onStubReadyRead()
         } else if (out.startsWith("thread ")) { // Windows only
             d->inferiorThreadId = out.mid(7).toLongLong();
         } else if (out.startsWith("exit ")) {
-            emitFinished(out.mid(5).toInt(), QProcess::NormalExit);
+            emitFinished(out.mid(5).toInt(), Utils::NormalExit);
         } else if (out.startsWith("crash ")) {
-            emitFinished(out.mid(6).toInt(), QProcess::CrashExit);
+            emitFinished(out.mid(6).toInt(), Utils::CrashExit);
         } else if (out.startsWith("ack ")) {
             qCDebug(terminalInterfaceLog) << "Received ack from stub: " << out;
         } else {
-            emitError(QProcess::UnknownError, msgUnexpectedOutput(out));
+            emitError(Utils::UnknownError, msgUnexpectedOutput(out));
             break;
         }
     }
@@ -255,15 +255,15 @@ void TerminalInterface::shutdownStubServer()
         d->stubServer.close();
 }
 
-void TerminalInterface::emitError(QProcess::ProcessError error, const QString &errorString)
+void TerminalInterface::emitError(Utils::ProcessError error, const QString &errorString)
 {
     d->processResultData.m_error = error;
     d->processResultData.m_errorString = errorString;
-    if (error == QProcess::FailedToStart)
+    if (error == Utils::FailedToStart)
         emit done(d->processResultData);
 }
 
-void TerminalInterface::emitFinished(int exitCode, QProcess::ExitStatus exitStatus)
+void TerminalInterface::emitFinished(int exitCode, Utils::ProcessExitStatus exitStatus)
 {
     d->inferiorProcessId = 0;
     d->inferiorThreadId = 0;
@@ -280,7 +280,7 @@ bool TerminalInterface::isRunning() const
 void TerminalInterface::cleanupAfterStartFailure(const QString &errorMessage)
 {
     shutdownStubServer();
-    emitError(QProcess::FailedToStart, errorMessage);
+    emitError(Utils::FailedToStart, errorMessage);
     d->envListFile.close();
 }
 
@@ -297,7 +297,7 @@ void TerminalInterface::killInferiorProcess()
     sendCommand('k');
     if (d->stubSocket) {
         d->stubSocket->waitForReadyRead();
-        emitFinished(-1, QProcess::CrashExit);
+        emitFinished(-1, Utils::CrashExit);
     }
 }
 
@@ -327,16 +327,16 @@ void TerminalInterface::start()
 
         if (result) {
             emit started(*result, 0);
-            emitFinished(0, QProcess::NormalExit);
+            emitFinished(0, Utils::NormalExit);
         } else {
-            emitError(QProcess::FailedToStart, result.error());
+            emitError(Utils::FailedToStart, result.error());
         }
         return;
     }
 
     const Result<> result = startStubServer();
     if (!result) {
-        emitError(QProcess::FailedToStart, msgCommChannelFailed(result.error()));
+        emitError(Utils::FailedToStart, msgCommChannelFailed(result.error()));
         return;
     }
 

@@ -4,10 +4,49 @@
 #pragma once
 
 #include <QMetaType>
+#include <QProcess>
 
 #include <functional>
 
 namespace Utils {
+
+// Process state / exit-status / error / channel-mode enums.
+//
+// Where Qt provides QProcess (QT_CONFIG(process)) these are kept as aliases of the
+// matching QProcess enums, and the enumerators are pulled into the Utils namespace via
+// "using enum". That way the large body of existing desktop code that spells these
+// "QProcess::NormalExit" keeps compiling unchanged and stays type-compatible with the
+// Process API, while code may also use the platform-independent "Utils::" spelling.
+//
+// On WebAssembly QProcess (and its enums) are compiled out (QT_FEATURE_process == -1),
+// so we provide Utils-owned equivalents with identical underlying values. These are
+// intentionally *unscoped* (unlike the scoped enums below) to stay drop-in compatible
+// with the unscoped QProcess enums on desktop.
+#if QT_CONFIG(process)
+
+using ProcessState = QProcess::ProcessState;
+using ProcessExitStatus = QProcess::ExitStatus;
+using ProcessError = QProcess::ProcessError;
+using ProcessChannelMode = QProcess::ProcessChannelMode;
+using enum QProcess::ProcessState;       // NotRunning, Starting, Running
+using enum QProcess::ExitStatus;         // NormalExit, CrashExit
+using enum QProcess::ProcessError;       // FailedToStart, Crashed, Timedout, ReadError, WriteError, UnknownError
+using enum QProcess::ProcessChannelMode; // SeparateChannels, MergedChannels, Forwarded*
+
+#else // WebAssembly: QProcess is unavailable.
+
+enum ProcessState { NotRunning, Starting, Running };
+enum ProcessExitStatus { NormalExit, CrashExit };
+enum ProcessError { FailedToStart, Crashed, Timedout, ReadError, WriteError, UnknownError };
+enum ProcessChannelMode {
+    SeparateChannels,
+    MergedChannels,
+    ForwardedChannels,
+    ForwardedOutputChannel,
+    ForwardedErrorChannel
+};
+
+#endif // QT_CONFIG(process)
 
 enum class ProcessMode {
     Reader, // This opens in ReadOnly mode if no write data or in ReadWrite mode otherwise,

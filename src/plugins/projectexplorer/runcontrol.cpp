@@ -925,7 +925,7 @@ ProcessTask RunControl::processTask(const std::function<SetupResult(Process &)> 
 {
     const auto onSetup = [this, startModifier, config](Process &process) {
         process.setProcessChannelMode(appOutputPane().settings().mergeChannels()
-                                          ? QProcess::MergedChannels : QProcess::SeparateChannels);
+                                          ? Utils::MergedChannels : Utils::SeparateChannels);
         process.setCommand(commandLine());
         process.setWorkingDirectory(workingDirectory());
         process.setEnvironment(environment());

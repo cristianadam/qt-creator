@@ -496,8 +496,8 @@ void WindowsSettingsWidget::downloadWindowsAppSdk()
             this,
             [this, winAppSdkProgressDialog, nugetDownloader, failDialog, downloadPath] {
         winAppSdkProgressDialog->close();
-        if (nugetDownloader->error() != QProcess::UnknownError) {
-            if (nugetDownloader->error() == QProcess::FailedToStart) {
+        if (nugetDownloader->error() != Utils::UnknownError) {
+            if (nugetDownloader->error() == Utils::FailedToStart) {
                 failDialog();
                 return;
             } else {

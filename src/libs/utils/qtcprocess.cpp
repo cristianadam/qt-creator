@@ -7,7 +7,9 @@
 #include "environment.h"
 #include "guard.h"
 #include "hostosinfo.h"
+#ifndef __EMSCRIPTEN__
 #include "processhelper.h"
+#endif
 #include "processinterface.h"
 #include "processreaper.h"
 #include "stringutils.h"
@@ -15,8 +17,10 @@
 #include "textcodec.h"
 #include "utilstr.h"
 
+#ifndef __EMSCRIPTEN__
 #include <iptyprocess.h>
 #include <ptyqt.h>
+#endif
 
 #include <QCoreApplication>
 #include <QDebug>
@@ -275,8 +279,8 @@ bool DefaultImpl::dissolveCommand(QString *program, QStringList *arguments)
     } else {
         if (!success) {
             const ProcessResultData result = {0,
-                                              QProcess::NormalExit,
-                                              QProcess::FailedToStart,
+                                              Utils::NormalExit,
+                                              Utils::FailedToStart,
                                               Tr::tr("Error in command line.")};
             emit done(result);
             return false;
@@ -307,12 +311,13 @@ bool DefaultImpl::ensureProgramExists(const QString &program)
 
     const QString errorString
         = Tr::tr("The program \"%1\" does not exist or is not executable.").arg(program);
-    const ProcessResultData result = { 0, QProcess::NormalExit, QProcess::FailedToStart,
+    const ProcessResultData result = { 0, Utils::NormalExit, Utils::FailedToStart,
                                        errorString };
     emit done(result);
     return false;
 }
 
+#ifndef __EMSCRIPTEN__
 class PtyProcessImpl final : public DefaultImpl
 {
 public:
@@ -356,8 +361,8 @@ public:
             if (path.isEmpty()) {
                 const ProcessResultData result
                     = {0,
-                       QProcess::CrashExit,
-                       QProcess::FailedToStart,
+                       Utils::CrashExit,
+                       Utils::FailedToStart,
                        Tr::tr("The program \"%1\" could not be found.").arg(program)};
                 emit done(result);
                 return;
@@ -374,8 +379,8 @@ public:
         m_ptyProcess.reset(PtyQt::createPtyProcess(IPtyProcess::AutoPty));
         if (!m_ptyProcess) {
             const ProcessResultData result = {-1,
-                                              QProcess::CrashExit,
-                                              QProcess::FailedToStart,
+                                              Utils::CrashExit,
+                                              Utils::FailedToStart,
                                               "Failed to create pty process"};
             emit done(result);
             return;
@@ -402,7 +407,7 @@ public:
         connect(m_ptyProcess->notifier(), &QIODevice::aboutToClose, this, [this] {
             if (m_ptyProcess) {
                 const ProcessResultData result
-                    = {m_ptyProcess->exitCode(), QProcess::NormalExit, QProcess::UnknownError, {}};
+                    = {m_ptyProcess->exitCode(), Utils::NormalExit, Utils::UnknownError, {}};
 
                 const QByteArray restOfOutput = m_ptyProcess->readAll();
                 if (!restOfOutput.isEmpty()) {
@@ -414,7 +419,7 @@ public:
                 return;
             }
 
-            const ProcessResultData result = {0, QProcess::NormalExit, QProcess::UnknownError, {}};
+            const ProcessResultData result = {0, Utils::NormalExit, Utils::UnknownError, {}};
             emit done(result);
         });
 
@@ -430,8 +435,8 @@ public:
         if (!startResult) {
             const ProcessResultData result
                 = {-1,
-                   QProcess::CrashExit,
-                   QProcess::FailedToStart,
+                   Utils::CrashExit,
+                   Utils::FailedToStart,
                    "Failed to start pty process: " + m_ptyProcess->lastError()};
             emit done(result);
             return;
@@ -439,7 +444,7 @@ public:
 
         if (!m_ptyProcess->lastError().isEmpty()) {
             const ProcessResultData result
-                = {-1, QProcess::CrashExit, QProcess::FailedToStart, m_ptyProcess->lastError()};
+                = {-1, Utils::CrashExit, Utils::FailedToStart, m_ptyProcess->lastError()};
             emit done(result);
             return;
         }
@@ -451,7 +456,9 @@ private:
     std::unique_ptr<IPtyProcess> m_ptyProcess;
     IPtyProcess::PtyInputFlags m_inputFlags;
 };
+#endif // __EMSCRIPTEN__
 
+#ifndef __EMSCRIPTEN__
 class QProcessImpl final : public DefaultImpl
 {
 public:
@@ -528,16 +535,16 @@ private:
         emit started(m_process->processId());
     }
 
-    void handleError(QProcess::ProcessError error)
+    void handleError(Utils::ProcessError error)
     {
-        if (error != QProcess::FailedToStart)
+        if (error != Utils::FailedToStart)
             return;
         const ProcessResultData result = { m_process->exitCode(), m_process->exitStatus(),
                                            error, m_process->errorString() };
         emit done(result);
     }
 
-    void handleFinished(int exitCode, QProcess::ExitStatus exitStatus)
+    void handleFinished(int exitCode, Utils::ProcessExitStatus exitStatus)
     {
         const ProcessResultData result = { exitCode, exitStatus,
                                            m_process->error(), m_process->errorString() };
@@ -547,6 +554,7 @@ private:
     ProcessHelper *m_process = nullptr;
     // QProcessBlockingImpl *m_blockingImpl = nullptr;
 };
+#endif // __EMSCRIPTEN__
 
 class ProcessInterfaceSignal
 {
@@ -687,11 +695,17 @@ public:
     {
         if (m_processInterfaceCreator)
             return m_processInterfaceCreator();
+#ifdef __EMSCRIPTEN__
+        // Launching local processes is unsupported on WebAssembly (QProcess is disabled).
+        // A browser-compatible ProcessInterface can be injected via m_processInterfaceCreator.
+        return nullptr;
+#else
         if (m_setup.m_ptyData)
             return new PtyProcessImpl;
         if (m_setup.m_terminalMode != TerminalMode::Off)
             return Terminal::Hooks::instance().createTerminalProcessInterface();
         return new QProcessImpl;
+#endif
     }
 
     void setProcessInterface(ProcessInterface *process)
@@ -733,7 +747,7 @@ public:
     void sendControlSignal(ControlSignal controlSignal);
 
     QTimer m_killTimer;
-    QProcess::ProcessState m_state = QProcess::NotRunning;
+    Utils::ProcessState m_state = Utils::NotRunning;
     qint64 m_processId = 0;
     qint64 m_applicationMainThreadId = 0;
     ProcessResultData m_resultData;
@@ -982,7 +996,7 @@ Qt::ConnectionType ProcessPrivate::connectionType() const
 void ProcessPrivate::sendControlSignal(ControlSignal controlSignal)
 {
     QTC_ASSERT(QThread::currentThread() == thread(), return);
-    if (!m_process || (m_state == QProcess::NotRunning))
+    if (!m_process || (m_state == Utils::NotRunning))
         return;
 
     if (controlSignal == ControlSignal::Terminate || controlSignal == ControlSignal::Kill) {
@@ -1012,7 +1026,7 @@ void ProcessPrivate::clearForRun()
     m_doneTimestamp = {};
 
     m_killTimer.stop();
-    m_state = QProcess::NotRunning;
+    m_state = Utils::NotRunning;
     m_processId = 0;
     m_applicationMainThreadId = 0;
     m_resultData = {};
@@ -1034,8 +1048,8 @@ Process::Process(QObject *parent)
     d(new ProcessPrivate(this))
 {
     qRegisterMetaType<ProcessResultData>("ProcessResultData");
-    static int qProcessExitStatusMeta = qRegisterMetaType<QProcess::ExitStatus>();
-    static int qProcessProcessErrorMeta = qRegisterMetaType<QProcess::ProcessError>();
+    static int qProcessExitStatusMeta = qRegisterMetaType<Utils::ProcessExitStatus>();
+    static int qProcessProcessErrorMeta = qRegisterMetaType<Utils::ProcessError>();
     Q_UNUSED(qProcessExitStatusMeta)
     Q_UNUSED(qProcessProcessErrorMeta)
 }
@@ -1152,7 +1166,7 @@ void Process::setAllowCoreDumps(bool enabled)
 
 void Process::start()
 {
-    QTC_ASSERT(state() == QProcess::NotRunning, return);
+    QTC_ASSERT(state() == Utils::NotRunning, return);
     QTC_ASSERT(!(d->m_process && d->m_guard.isLocked()),
                qWarning("Restarting the Process directly from one of its signal handlers will "
                         "lead to crash! Consider calling close() prior to direct restart."));
@@ -1163,9 +1177,9 @@ void Process::start()
         && d->m_setup.m_commandLine.executable().host().isEmpty()) {
         d->m_result = ProcessResult::StartFailed;
         d->m_resultData.m_exitCode = 255;
-        d->m_resultData.m_exitStatus = QProcess::CrashExit;
+        d->m_resultData.m_exitStatus = Utils::CrashExit;
         d->m_resultData.m_errorString = Tr::tr("No executable specified.");
-        d->m_resultData.m_error = QProcess::FailedToStart;
+        d->m_resultData.m_error = Utils::FailedToStart;
         d->emitGuardedSignal(&Process::done);
         return;
     }
@@ -1182,16 +1196,16 @@ void Process::start()
         // This happens if a device does not implement the createProcessInterface() function.
         d->m_result = ProcessResult::StartFailed;
         d->m_resultData.m_exitCode = 255;
-        d->m_resultData.m_exitStatus = QProcess::CrashExit;
+        d->m_resultData.m_exitStatus = Utils::CrashExit;
         d->m_resultData.m_errorString = Tr::tr("Failed to create process interface for \"%1\".")
                                             .arg(d->m_setup.m_commandLine.toUserOutput());
-        d->m_resultData.m_error = QProcess::FailedToStart;
+        d->m_resultData.m_error = Utils::FailedToStart;
         d->emitGuardedSignal(&Process::done);
         return;
     }
 
     d->setProcessInterface(processImpl);
-    d->m_state = QProcess::Starting;
+    d->m_state = Utils::Starting;
     d->m_process->m_setup = d->m_setup;
     d->m_startTimestamp = system_clock::now();
     d->emitGuardedSignal(&Process::starting);
@@ -1226,6 +1240,14 @@ void Process::closeWriteChannel()
 bool Process::startDetached(const CommandLine &cmd, const FilePath &workingDirectory,
                             DetachedChannelMode channelMode, qint64 *pid)
 {
+#ifdef __EMSCRIPTEN__
+    // Launching detached processes is unsupported on WebAssembly (QProcess is disabled).
+    Q_UNUSED(cmd)
+    Q_UNUSED(workingDirectory)
+    Q_UNUSED(channelMode)
+    Q_UNUSED(pid)
+    return false;
+#else
     QProcess process;
     process.setProgram(cmd.executable().toUserOutput());
     process.setArguments(cmd.splitArguments());
@@ -1235,6 +1257,7 @@ bool Process::startDetached(const CommandLine &cmd, const FilePath &workingDirec
         process.setStandardErrorFile(QProcess::nullDevice());
     }
     return process.startDetached(pid);
+#endif
 }
 
 void Process::setLowPriority()
@@ -1309,7 +1332,7 @@ bool Process::forceDefaultErrorModeOnWindows() const
 ProcessInterface *Process::takeProcessInterface()
 {
     QTC_ASSERT(QThread::currentThread() == thread(), return nullptr);
-    QTC_ASSERT(state() == QProcess::NotRunning, return nullptr);
+    QTC_ASSERT(state() == Utils::NotRunning, return nullptr);
     QTC_ASSERT(d->m_process, return nullptr);
     QTC_ASSERT(d->m_process->thread() == thread(), return nullptr);
     if (d->m_blockingInterface) {
@@ -1393,7 +1416,7 @@ bool Process::readDataFromProcess(QByteArray *stdOut, QByteArray *stdErr, int ti
     enum { syncDebug = 0 };
     if (syncDebug)
         qDebug() << ">readDataFromProcess" << timeoutS;
-    if (state() != QProcess::Running) {
+    if (state() != Utils::Running) {
         qWarning("readDataFromProcess: Process in non-running state passed in.");
         return false;
     }
@@ -1403,7 +1426,7 @@ bool Process::readDataFromProcess(QByteArray *stdOut, QByteArray *stdErr, int ti
     bool hasData = false;
     do {
         finished = waitForFinished(timeoutS > 0 ? seconds(timeoutS) : seconds(-1))
-                || state() == QProcess::NotRunning;
+                || state() == Utils::NotRunning;
         // First check 'stdout'
         const QByteArray newStdOut = readAllRawStandardOutput();
         if (!newStdOut.isEmpty()) {
@@ -1443,12 +1466,12 @@ int Process::exitCode() const
     return resultData().m_exitCode;
 }
 
-QProcess::ExitStatus Process::exitStatus() const
+Utils::ProcessExitStatus Process::exitStatus() const
 {
     return resultData().m_exitStatus;
 }
 
-QProcess::ProcessError Process::error() const
+Utils::ProcessError Process::error() const
 {
     return resultData().m_error;
 }
@@ -1463,24 +1486,24 @@ qint64 Process::applicationMainThreadId() const
     return d->m_applicationMainThreadId;
 }
 
-QProcess::ProcessChannelMode Process::processChannelMode() const
+Utils::ProcessChannelMode Process::processChannelMode() const
 {
     return d->m_setup.m_processChannelMode;
 }
 
-void Process::setProcessChannelMode(QProcess::ProcessChannelMode mode)
+void Process::setProcessChannelMode(Utils::ProcessChannelMode mode)
 {
     d->m_setup.m_processChannelMode = mode;
 }
 
-QProcess::ProcessState Process::state() const
+Utils::ProcessState Process::state() const
 {
     return d->m_state;
 }
 
 bool Process::isRunning() const
 {
-    return state() == QProcess::Running;
+    return state() == Utils::Running;
 }
 
 qint64 Process::processId() const
@@ -1491,9 +1514,9 @@ qint64 Process::processId() const
 bool Process::waitForStarted(QDeadlineTimer timeout)
 {
     QTC_ASSERT(d->m_process, return false);
-    if (d->m_state == QProcess::Running)
+    if (d->m_state == Utils::Running)
         return true;
-    if (d->m_state == QProcess::NotRunning)
+    if (d->m_state == Utils::NotRunning)
         return false;
     return s_waitForStarted.measureAndRun(&ProcessPrivate::waitForSignal, d,
                                           ProcessSignalType::Started, timeout);
@@ -1502,7 +1525,7 @@ bool Process::waitForStarted(QDeadlineTimer timeout)
 bool Process::waitForReadyRead(QDeadlineTimer timeout)
 {
     QTC_ASSERT(d->m_process, return false);
-    if (d->m_state == QProcess::NotRunning)
+    if (d->m_state == Utils::NotRunning)
         return false;
     return d->waitForSignal(ProcessSignalType::ReadyRead, timeout);
 }
@@ -1510,7 +1533,7 @@ bool Process::waitForReadyRead(QDeadlineTimer timeout)
 bool Process::waitForFinished(QDeadlineTimer timeout)
 {
     QTC_ASSERT(d->m_process, return false);
-    if (d->m_state == QProcess::NotRunning)
+    if (d->m_state == Utils::NotRunning)
         return false;
     return d->waitForSignal(ProcessSignalType::Done, timeout);
 }
@@ -1544,7 +1567,7 @@ qint64 Process::writeRaw(const QByteArray &input)
 {
     QTC_ASSERT(processMode() == ProcessMode::Writer, return -1);
     QTC_ASSERT(d->m_process, return -1);
-    QTC_ASSERT(state() == QProcess::Running, return -1);
+    QTC_ASSERT(state() == Utils::Running, return -1);
     QTC_ASSERT(QThread::currentThread() == thread(), return -1);
     qint64 result = -1;
     QMetaObject::invokeMethod(
@@ -1577,13 +1600,13 @@ void Process::close()
 */
 void Process::stop()
 {
-    if (state() == QProcess::NotRunning)
+    if (state() == Utils::NotRunning)
         return;
 
     d->sendControlSignal(ControlSignal::Terminate);
 
     // done() signal could have been sent synchronously - see TerminalInterface::killInferiorProcess()
-    if (state() == QProcess::NotRunning)
+    if (state() == Utils::NotRunning)
         return;
 
     d->m_killTimer.start(d->m_process->m_setup.m_reaperTimeout);
@@ -1861,7 +1884,7 @@ void Process::runBlocking(seconds timeout)
     // Remove the dynamic property so that it's not reused in subseqent start()
     d->storeEventLoopDebugInfo({});
 
-    if (state() != QProcess::NotRunning && !waitForFinished(timeout)) {
+    if (state() != Utils::NotRunning && !waitForFinished(timeout)) {
         stop();
         // TODO: This arbitrary 2s causes flakiness of:
         //       tst_Process::runBlockingStdOut:"Short timeout without end of line".
@@ -1947,8 +1970,8 @@ TextChannelMode Process::textChannelMode(Channel channel) const
 
 void ProcessPrivate::handleStarted(qint64 processId, qint64 applicationMainThreadId)
 {
-    QTC_CHECK(m_state == QProcess::Starting);
-    m_state = QProcess::Running;
+    QTC_CHECK(m_state == Utils::Starting);
+    m_state = Utils::Running;
 
     m_processId = processId;
     m_applicationMainThreadId = applicationMainThreadId;
@@ -1957,14 +1980,14 @@ void ProcessPrivate::handleStarted(qint64 processId, qint64 applicationMainThrea
 
 void ProcessPrivate::handleReadyRead(const QByteArray &outputData, const QByteArray &errorData)
 {
-    QTC_CHECK(m_state == QProcess::Running);
+    QTC_CHECK(m_state == Utils::Running);
 
     // TODO: store a copy of m_processChannelMode on start()? Currently we assert that state
     // is NotRunning when setting the process channel mode.
 
     if (!outputData.isEmpty()) {
-        if (m_process->m_setup.m_processChannelMode == QProcess::ForwardedOutputChannel
-                || m_process->m_setup.m_processChannelMode == QProcess::ForwardedChannels) {
+        if (m_process->m_setup.m_processChannelMode == Utils::ForwardedOutputChannel
+                || m_process->m_setup.m_processChannelMode == Utils::ForwardedChannels) {
             std::cout << outputData.constData() << std::flush;
         } else {
             m_stdOut.append(outputData);
@@ -1972,8 +1995,8 @@ void ProcessPrivate::handleReadyRead(const QByteArray &outputData, const QByteAr
         }
     }
     if (!errorData.isEmpty()) {
-        if (m_process->m_setup.m_processChannelMode == QProcess::ForwardedErrorChannel
-                || m_process->m_setup.m_processChannelMode == QProcess::ForwardedChannels) {
+        if (m_process->m_setup.m_processChannelMode == Utils::ForwardedErrorChannel
+                || m_process->m_setup.m_processChannelMode == Utils::ForwardedChannels) {
             std::cerr << errorData.constData() << std::flush;
         } else {
             m_stdErr.append(errorData);
@@ -1990,36 +2013,36 @@ void ProcessPrivate::handleDone(const ProcessResultData &data)
     m_resultData = data;
 
     switch (m_state) {
-    case QProcess::NotRunning:
+    case Utils::NotRunning:
         QTC_ASSERT(false, return); // Can't happen
         break;
-    case QProcess::Starting:
-        QTC_CHECK(m_resultData.m_error == QProcess::FailedToStart);
+    case Utils::Starting:
+        QTC_CHECK(m_resultData.m_error == Utils::FailedToStart);
         break;
-    case QProcess::Running:
-        QTC_CHECK(m_resultData.m_error != QProcess::FailedToStart);
+    case Utils::Running:
+        QTC_CHECK(m_resultData.m_error != Utils::FailedToStart);
         break;
     }
-    m_state = QProcess::NotRunning;
+    m_state = Utils::NotRunning;
 
     // This code (255) is being returned by QProcess when FailedToStart error occurred
-    if (m_resultData.m_error == QProcess::FailedToStart)
+    if (m_resultData.m_error == Utils::FailedToStart)
         m_resultData.m_exitCode = 0xFF;
 
     // HACK: See QIODevice::errorString() implementation.
-    if (m_resultData.m_error == QProcess::UnknownError)
+    if (m_resultData.m_error == Utils::UnknownError)
         m_resultData.m_errorString.clear();
-    if (m_resultData.m_error == QProcess::FailedToStart && m_resultData.m_errorString.isEmpty())
+    if (m_resultData.m_error == Utils::FailedToStart && m_resultData.m_errorString.isEmpty())
         m_resultData.m_errorString = Tr::tr("Either the invoked program is missing, or you may have "
                                             "insufficient permissions to invoke the program.");
 
-    if (m_result != ProcessResult::Canceled && m_resultData.m_error != QProcess::FailedToStart) {
+    if (m_result != ProcessResult::Canceled && m_resultData.m_error != Utils::FailedToStart) {
         switch (m_resultData.m_exitStatus) {
-        case QProcess::NormalExit:
+        case Utils::NormalExit:
             m_result = m_resultData.m_exitCode ? ProcessResult::FinishedWithError
                                                : ProcessResult::FinishedWithSuccess;
             break;
-        case QProcess::CrashExit:
+        case Utils::CrashExit:
             m_result = ProcessResult::TerminatedAbnormally;
             break;
         }
