@@ -31,8 +31,6 @@ public:
     int indentFor(const QTextBlock &block,
                   const TextEditor::TabSettingsData &tabSettings,
                   int cursorPositionInEditor = -1) final;
-    int visualIndentFor(const QTextBlock &block,
-                        const TextEditor::TabSettingsData &tabSettings) final;
     TextEditor::IndentationForBlock indentationForBlocks(const QVector<QTextBlock> &blocks,
                                                          const TextEditor::TabSettingsData &tabSettings,
                                                          int cursorPositionInEditor = -1) final;
@@ -82,11 +80,6 @@ int QmlJsIndenter::indentFor(const QTextBlock &block,
     QmlJSTools::CreatorCodeFormatter codeFormatter(tabSettings);
     codeFormatter.updateStateUntil(block);
     return codeFormatter.indentFor(block);
-}
-
-int QmlJsIndenter::visualIndentFor(const QTextBlock &block, const TextEditor::TabSettingsData &tabSettings)
-{
-    return indentFor(block, tabSettings);
 }
 
 TextEditor::IndentationForBlock QmlJsIndenter::indentationForBlocks(
