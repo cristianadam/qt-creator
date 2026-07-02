@@ -301,6 +301,12 @@ extend_qtc_library(Utils
           fsengine/fsenginehandler.cpp
           fsengine/fsenginehandler.h
           fsengine/filepathinfocache.h
+)
+
+# On WebAssembly ptyqt is an empty stub target, so do not claim libptyqt's
+# attributions there.
+extend_qtc_library(Utils
+  CONDITION TARGET Qt::CorePrivate AND (NOT EMSCRIPTEN)
   SBOM_ARGS
     ATTRIBUTION_FILE_PATHS
       "${QtCreator_SOURCE_DIR}/qt_attributions.json"

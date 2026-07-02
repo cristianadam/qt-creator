@@ -8,12 +8,28 @@
 
 #include <QSettings>
 
+#ifndef QTC_WITHOUT_LIBARCHIVE
 #include <archive.h>
 #include <archive_entry.h>
+#endif
 
 using namespace QtTaskTree;
 
 namespace Utils {
+
+#ifdef QTC_WITHOUT_LIBARCHIVE
+
+// Without libarchive (WebAssembly) archive extraction is not supported.
+static Result<> unarchive(
+    QPromise<Result<>> &promise, const Utils::FilePath &archive, const Utils::FilePath &destination)
+{
+    Q_UNUSED(promise)
+    Q_UNUSED(archive)
+    Q_UNUSED(destination)
+    return ResultError(Tr::tr("Archive extraction is not supported on this platform."));
+}
+
+#else
 
 static Result<> copy_data(struct archive *ar, struct archive *aw, QPromise<Result<>> &promise)
 {
@@ -203,6 +219,8 @@ static Result<> unarchive(
     return ResultOk;
 }
 
+#endif // QTC_WITHOUT_LIBARCHIVE
+
 static void unarchivePromised(
     QPromise<Result<>> &promise, const Utils::FilePath &archive, const Utils::FilePath &destination)
 {
@@ -258,6 +276,11 @@ bool Unarchiver::isCanceled() const
 
 Result<QByteArray> gzipDecompress(const QByteArray &compressed)
 {
+#ifdef QTC_WITHOUT_LIBARCHIVE
+    // Without libarchive (WebAssembly) gzip decompression is not supported.
+    Q_UNUSED(compressed)
+    return ResultError(Tr::tr("gzip decompression is not supported on this platform."));
+#else
     std::unique_ptr<struct archive, decltype(&readFree)> a(archive_read_new(), readFree);
     if (!a)
         return ResultError(QString("archive_read_new failed"));
@@ -287,6 +310,7 @@ Result<QByteArray> gzipDecompress(const QByteArray &compressed)
         out.append(buf, int(n));
     }
     return out;
+#endif
 }
 
 } // namespace Utils
