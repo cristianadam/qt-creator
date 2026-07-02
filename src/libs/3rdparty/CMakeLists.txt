@@ -1,13 +1,26 @@
 add_subdirectory(cplusplus)
 add_subdirectory(syntax-highlighting)
 add_subdirectory(libvterm)
-add_subdirectory(libptyqt)
+if(EMSCRIPTEN)
+    # libptyqt has no WebAssembly backend (no pseudo-terminals under Emscripten).
+    # Provide a stub INTERFACE target so dependents (Utils) still resolve their link deps.
+    add_library(ptyqt INTERFACE)
+else()
+    add_subdirectory(libptyqt)
+endif()
 add_subdirectory(qtkeychain)
 add_subdirectory(lua)
 add_subdirectory(sol2)
 
 if(WIN32)
     add_subdirectory(winpty)
+endif()
+
+if(EMSCRIPTEN)
+    # libarchive relies on POSIX disk-walking APIs unavailable under Emscripten.
+    # Provide a stub INTERFACE target; unarchiver.cpp is guarded to a no-op on wasm.
+    add_library(QtCLibArchive INTERFACE)
+    return()
 endif()
 
 find_package(LibArchive QUIET)

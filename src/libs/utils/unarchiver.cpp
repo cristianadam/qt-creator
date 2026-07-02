@@ -8,12 +8,28 @@
 
 #include <QSettings>
 
+#ifndef __EMSCRIPTEN__
 #include <archive.h>
 #include <archive_entry.h>
+#endif
 
 using namespace QtTaskTree;
 
 namespace Utils {
+
+#ifdef __EMSCRIPTEN__
+
+// libarchive is unavailable under Emscripten; archive extraction is not supported on wasm.
+static Result<> unarchive(
+    QPromise<Result<>> &promise, const Utils::FilePath &archive, const Utils::FilePath &destination)
+{
+    Q_UNUSED(promise)
+    Q_UNUSED(archive)
+    Q_UNUSED(destination)
+    return ResultError(Tr::tr("Archive extraction is not supported on this platform."));
+}
+
+#else
 
 static Result<> copy_data(struct archive *ar, struct archive *aw, QPromise<Result<>> &promise)
 {
@@ -203,6 +219,8 @@ static Result<> unarchive(
     return ResultOk;
 }
 
+#endif // __EMSCRIPTEN__
+
 static void unarchivePromised(
     QPromise<Result<>> &promise, const Utils::FilePath &archive, const Utils::FilePath &destination)
 {
@@ -256,6 +274,17 @@ bool Unarchiver::isCanceled() const
     return m_async.isCanceled();
 }
 
+#ifdef __EMSCRIPTEN__
+
+// libarchive is unavailable under Emscripten; gzip decompression is not supported on wasm.
+Result<QByteArray> gzipDecompress(const QByteArray &compressed)
+{
+    Q_UNUSED(compressed)
+    return ResultError(Tr::tr("gzip decompression is not supported on this platform."));
+}
+
+#else
+
 Result<QByteArray> gzipDecompress(const QByteArray &compressed)
 {
     std::unique_ptr<struct archive, decltype(&readFree)> a(archive_read_new(), readFree);
@@ -288,5 +317,7 @@ Result<QByteArray> gzipDecompress(const QByteArray &compressed)
     }
     return out;
 }
+
+#endif // __EMSCRIPTEN__
 
 } // namespace Utils
