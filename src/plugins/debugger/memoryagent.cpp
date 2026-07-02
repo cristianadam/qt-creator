@@ -195,6 +195,7 @@ MemoryAgent::MemoryAgent(const MemoryViewSetupData &data, DebuggerEngine *engine
     } else {
         // Editor: Register tracking not supported.
         m_service = factory->createEditorService(title, true);
+        m_isEditor = true;
     }
 
     if (!m_service)
@@ -254,7 +255,15 @@ MemoryAgent::MemoryAgent(const MemoryViewSetupData &data, DebuggerEngine *engine
 
 MemoryAgent::~MemoryAgent()
 {
-    delete m_service;
+    if (!m_service)
+        return;
+    // An editor was handed over to the EditorManager, which owns it. Deleting
+    // it directly would leave a dangling editor behind and crash later, so let
+    // the EditorManager close it. A separate view is owned by us.
+    if (m_isEditor)
+        EditorManager::closeEditors({m_service->editor()});
+    else
+        delete m_service;
 }
 
 void MemoryAgent::updateContents()
