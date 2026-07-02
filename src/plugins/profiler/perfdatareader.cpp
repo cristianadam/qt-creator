@@ -48,14 +48,30 @@ PerfDataReader::PerfDataReader(QObject *parent) :
     m_remoteProcessStart(std::numeric_limits<qint64>::max()),
     m_lastRemoteTimestamp(0)
 {
-    connect(&m_input, &QProcess::finished, this, [this](int exitCode) {
+    connect(&m_input, &Process::done, this, [this] {
+        if (m_input.result() == ProcessResult::StartFailed) {
+            // The process never ran: there is no output to drain, and emitting finished()
+            // here would finalize a trace that was never initialized. Report the failure
+            // only.
+            emit processFailed(Tr::tr("perfparser failed to start."));
+            Core::MessageManager::writeDisrupting(
+                Tr::tr("Could not start the perfparser utility program. "
+                       "Make sure a working Perf parser is available at the "
+                       "location given by the PERFPROFILER_PARSER_FILEPATH "
+                       "environment variable."));
+            return;
+        }
+
         // process any remaining input before signaling finished()
-        readFromDevice();
+        readFromProcess();
         if (m_recording || future().isRunning()) {
             m_localRecordingEnd = 0;
             emit finished();
         }
-        if (exitCode != 0) {
+        if (m_input.result() == ProcessResult::TerminatedAbnormally) {
+            Core::MessageManager::writeDisrupting(Tr::tr("Perf Data Parser Crashed"));
+        } else if (const int exitCode = m_input.exitCode();
+                   exitCode != 0 && m_input.result() != ProcessResult::Canceled) {
             Core::MessageManager::writeDisrupting(
                 Tr::tr("The Perf data parser failed to process all the samples. "
                        "Your trace is incomplete. The exit code was %1.")
@@ -64,14 +80,15 @@ PerfDataReader::PerfDataReader(QObject *parent) :
         emit processFinished();
     });
 
-    connect(&m_input, &QIODevice::bytesWritten, this, &PerfDataReader::writeChunk);
-    connect(&m_input, &QProcess::started, this, [this] {
+    connect(&m_input, &Process::started, this, [this] {
         emit processStarted();
-        if (m_input.isWritable()) {
+        if (m_input.processMode() == ProcessMode::Writer) {
+            // Flush whatever was buffered before the process started running.
             writeChunk();
 
-            // if !writable, we're loading from a file.
-            // The timestamp calculations don't make any sense then.
+            // The delay/timestamp bookkeeping only applies while we feed live data. In
+            // Reader mode we're loading from a file, where these calculations make no sense,
+            // so the timer stays off.
             startTimer(100);
         }
         if (m_recording) {
@@ -80,38 +97,14 @@ PerfDataReader::PerfDataReader(QObject *parent) :
         }
     });
 
-    connect(&m_input, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e){
-        switch (e) {
-        case QProcess::FailedToStart:
-            emit processFailed(Tr::tr("perfparser failed to start."));
-            Core::MessageManager::writeDisrupting(
-                Tr::tr("Could not start the perfparser utility program. "
-                       "Make sure a working Perf parser is available at the "
-                       "location given by the PERFPROFILER_PARSER_FILEPATH "
-                       "environment variable."));
-            break;
-        case QProcess::Crashed:
-            Core::MessageManager::writeDisrupting(Tr::tr("Perf Data Parser Crashed"));
-            break;
-        case QProcess::ReadError:
-            qWarning() << "Cannot receive data from perfparser";
-            break;
-        case QProcess::WriteError:
-            qWarning() << "Cannot send data to perfparser";
-            break;
-        case QProcess::Timedout:
-            qWarning() << "QProcess::Timedout";
-        default:
-            break;
-        }
+    connect(&m_input, &Process::readyReadStandardOutput,
+            this, &PerfDataReader::readFromProcess);
+    connect(&m_input, &Process::readyReadStandardError, this, [this] {
+        Core::MessageManager::writeSilently(m_input.readAllStandardError());
     });
 
-    connect(&m_input, &QProcess::readyReadStandardOutput, this, &PerfDataReader::readFromDevice);
-    connect(&m_input, &QProcess::readyReadStandardError, this, [this] {
-        Core::MessageManager::writeSilently(QString::fromLocal8Bit(m_input.readAllStandardError()));
-    });
-
-    setDevice(&m_input);
+    m_output.open(QIODevice::ReadOnly | QIODevice::Unbuffered);
+    setDevice(&m_output);
 }
 
 PerfDataReader::~PerfDataReader()
@@ -133,32 +126,34 @@ void PerfDataReader::loadFromFile(const FilePath &filePath, const QString &execu
     createParser(cmd);
 
     m_remoteProcessStart = 0; // Don't try to guess the timestamps
-    m_input.start(QIODevice::ReadOnly);
+    // Reader mode: perfparser reads the input file itself; we only read its stdout.
+    m_input.setProcessMode(ProcessMode::Reader);
+    m_input.start();
 }
 
 void PerfDataReader::createParser(const CommandLine &cmd)
 {
     clear();
-    const QString program = cmd.executable().path();
-    m_input.setProgram(program);
-    m_input.setArguments(cmd.splitArguments());
-    m_input.setWorkingDirectory(QFileInfo(program).dir().absolutePath());
+    m_input.setCommand(cmd);
+    m_input.setWorkingDirectory(cmd.executable().parentDir());
 }
 
 void PerfDataReader::startParser()
 {
     traceManager()->clearAll();
-    m_input.start(QIODevice::ReadWrite);
+    // Writer mode: we stream perf data into perfparser's stdin and read its stdout.
+    m_input.setProcessMode(ProcessMode::Writer);
+    m_input.start();
 }
 
 void PerfDataReader::stopParser()
 {
     m_dataFinished = true;
-    if (m_input.state() != QProcess::NotRunning) {
+    if (m_input.state() != ProcessState::NotRunning) {
         if (m_recording || future().isRunning()) {
             m_localRecordingEnd = QDateTime::currentMSecsSinceEpoch() * million;
             emit finishing();
-            if (m_buffer.isEmpty() && m_input.isOpen())
+            if (m_buffer.isEmpty() && m_input.isRunning())
                 m_input.closeWriteChannel();
         } else if (m_buffer.isEmpty()) {
             m_input.closeWriteChannel();
@@ -176,7 +171,7 @@ qint64 PerfDataReader::delay(qint64 currentTime)
 void PerfDataReader::triggerRecordingStateChange(bool recording)
 {
     if (recording != m_recording) {
-        if (m_input.state() != QProcess::NotRunning) {
+        if (m_input.state() != ProcessState::NotRunning) {
             qint64 currentTime = QDateTime::currentMSecsSinceEpoch() * million;
             if (recording) {
                 m_localRecordingStart = currentTime;
@@ -228,9 +223,14 @@ void PerfDataReader::setRecording(bool recording)
 void PerfDataReader::timerEvent(QTimerEvent *event)
 {
     qint64 currentTime = QDateTime::currentMSecsSinceEpoch() * million;
-    if (m_input.state() != QProcess::NotRunning) {
+    if (m_input.state() != ProcessState::NotRunning) {
+        // Heartbeat for the disk-spill drain: writeRaw() has no bytesWritten() signal to
+        // pump us, so keep flushing any spilled backlog as perfparser catches up.
+        if (!m_buffer.isEmpty())
+            writeChunk();
+
         bool waitingForEndDelay = (m_localRecordingEnd != 0 && !m_dataFinished &&
-                m_input.isWritable());
+                m_input.processMode() == ProcessMode::Writer);
         bool waitingForStartDelay = m_localRecordingStart != 0;
         qint64 endTime = (m_localRecordingEnd == 0 || waitingForEndDelay) ?
                     currentTime : m_localRecordingEnd;
@@ -323,27 +323,54 @@ static bool checkedWrite(QIODevice *device, const QByteArray &input)
     return true;
 }
 
+void PerfDataReader::readFromProcess()
+{
+    // Utils::Process is not a QIODevice, so funnel its stdout into m_output, which the
+    // streaming reader in PerfProfilerTraceFile consumes via the QIODevice interface.
+    // ProcessOutputBuffer reclaims its memory as the reader drains it.
+    m_output.append(m_input.readAllRawStandardOutput());
+    readFromDevice();
+}
+
 void PerfDataReader::writeChunk()
 {
-    if (!m_buffer.isEmpty()) {
-        if (m_input.bytesToWrite() < s_maxBufferSize) {
-            std::unique_ptr<Utils::TemporaryFile> file(m_buffer.takeFirst());
-            file->reset();
-            const QByteArray data(file->readAll());
-            if (!checkedWrite(&m_input, data)) {
-                m_input.disconnect();
-                m_input.kill();
-                emit finished();
-                QMessageBox::warning(Core::ICore::dialogParent(),
-                                     Tr::tr("Cannot Send Data to Perf Data Parser"),
-                                     Tr::tr("The Perf data parser does not accept further input. "
-                                            "Your trace is incomplete."));
-            }
+    if (!m_input.isRunning())
+        return;
+
+    // Drain the spilled backlog into perfparser's stdin, but only while it keeps up: once
+    // its in-memory write queue grows past the threshold we stop and leave the rest on disk,
+    // so Creator's memory stays bounded when the parser falls behind.
+    while (!m_buffer.isEmpty()) {
+        const qint64 pending = m_input.bytesToWrite();
+        if (pending >= 0 && pending >= s_maxBufferSize)
+            break;
+
+        std::unique_ptr<Utils::TemporaryFile> file(m_buffer.takeFirst());
+        file->reset();
+        const QByteArray data(file->readAll());
+        if (m_input.writeRaw(data) != data.size()) {
+            m_input.disconnect();
+            m_input.kill();
+            emit finished();
+            QMessageBox::warning(Core::ICore::dialogParent(),
+                                 Tr::tr("Cannot Send Data to Perf Data Parser"),
+                                 Tr::tr("The Perf data parser does not accept further input. "
+                                        "Your trace is incomplete."));
+            return;
         }
-    } else if (m_dataFinished && m_input.isWritable()) {
-        // Delay closing of the write channel. Closing the channel from within a handler
-        // for bytesWritten() is dangerous on windows.
-        QTimer::singleShot(0, &m_input, &QProcess::closeWriteChannel);
+    }
+
+    if (!m_buffer.isEmpty()) {
+        // perfparser is not keeping up. Retry shortly; the periodic timer would eventually
+        // pump us too, but a dedicated retry drains the backlog faster once it catches up.
+        QTimer::singleShot(50, this, &PerfDataReader::writeChunk);
+        return;
+    }
+
+    if (m_dataFinished && m_input.processMode() == ProcessMode::Writer) {
+        // Delay closing of the write channel. Closing the channel from within a write
+        // handler is dangerous on Windows.
+        QTimer::singleShot(0, &m_input, &Process::closeWriteChannel);
     }
 }
 
@@ -351,6 +378,10 @@ void PerfDataReader::clear()
 {
     // not closing the buffer here as input may arrive before createParser()
     m_input.kill();
+    // Drop any leftover parser output from an aborted run. PerfProfilerTraceFile::clear()
+    // below resets the stream version, so a stale prefix would fail the magic-header check
+    // and abort the next run with a spurious "Invalid data format".
+    m_output.clearData();
     qDeleteAll(m_buffer);
     m_buffer.clear();
     m_dataFinished = false;
@@ -364,20 +395,30 @@ void PerfDataReader::clear()
 
 bool PerfDataReader::feedParser(const QByteArray &input)
 {
+    // While there is no backlog and perfparser keeps up, hand data straight to its stdin.
+    // Utils::Process queues writes in memory, so once its write queue grows past the
+    // threshold we spill to a temporary file instead and let writeChunk() drain it as the
+    // process catches up. This keeps Creator's memory footprint bounded.
+    if (m_buffer.isEmpty() && m_input.isRunning()) {
+        const qint64 pending = m_input.bytesToWrite();
+        if (pending < 0 || pending < s_maxBufferSize)
+            return m_input.writeRaw(input) == input.size();
+    }
+
     if (!m_buffer.isEmpty()) {
         auto *file = m_buffer.last();
         if (file->pos() < s_maxBufferSize)
             return checkedWrite(file, input);
-    } else if (m_input.isOpen() && m_input.bytesToWrite() < s_maxBufferSize) {
-        return checkedWrite(&m_input, input);
     }
 
     auto file = std::make_unique<Utils::TemporaryFile>("perfdatareader");
-    connect(file.get(), &QIODevice::bytesWritten, this, &PerfDataReader::writeChunk);
     if (!file->open() || !checkedWrite(file.get(), input))
         return false;
 
     m_buffer.append(file.release());
+
+    // Kick the drain so the freshly spilled data is flushed once the process catches up.
+    writeChunk();
     return true;
 }
 
