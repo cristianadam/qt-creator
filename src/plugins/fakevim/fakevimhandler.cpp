@@ -1866,6 +1866,7 @@ public:
     void scrollToLine(int line);
     void scrollUp(int count);
     void scrollDown(int count) { scrollUp(-count); }
+    void scrollViewLines(int count);
     void updateScrollOffset();
     void alignViewportToCursor(Qt::AlignmentFlag align, int line = -1,
         bool moveToNonBlank = false);
@@ -4161,10 +4162,7 @@ bool FakeVimHandler::Private::handleMovement(const Input &input)
     } else if (input.is('E')) {
         moveToNextWordEnd(count, true, true, false);
     } else if (input.isControl('e')) {
-        // FIXME: this should use the "scroll" option, and "count"
-        if (cursorLineOnScreen() == 0)
-            moveDown(1);
-        scrollDown(1);
+        scrollViewLines(count);
     } else if (input.is('f')) {
         g.subsubmode = FtSubSubMode;
         g.movetype = MoveInclusive;
@@ -4725,10 +4723,7 @@ bool FakeVimHandler::Private::handleNoSubMode(const Input &input)
     } else if (input.is('Y') && isNoVisualMode())  {
         handleAs("%1yy");
     } else if (input.isControl('y')) {
-        // FIXME: this should use the "scroll" option, and "count"
-        if (cursorLineOnScreen() == linesOnScreen() - 1)
-            moveUp(1);
-        scrollUp(1);
+        scrollViewLines(-count());
     } else if (input.is('y') && isVisualCharMode()) {
         g.rangemode = RangeCharMode;
         g.movetype = MoveInclusive;
@@ -7437,6 +7432,46 @@ int FakeVimHandler::Private::lineOnBottom(int count) const
 void FakeVimHandler::Private::scrollUp(int count)
 {
     scrollToLine(cursorLine() - cursorLineOnScreen() - count);
+}
+
+void FakeVimHandler::Private::scrollViewLines(int count)
+{
+    // Scroll the viewport by "count" lines (down for count > 0, i.e. Ctrl-E,
+    // up for count < 0, i.e. Ctrl-Y) by driving the editor's vertical scroll
+    // bar directly. The scroll bar moves in whole lines and honors the editor's
+    // own limits, including scrolling past the last line when "center cursor on
+    // scroll" is enabled (so the last line can reach the top of the window, as
+    // in Vim). Using it keeps the result monotonic and predictable regardless
+    // of that setting; going through scrollToLine() instead desynchronizes with
+    // a centering editor and makes the scrolling jitter.
+    //
+    // Once the cursor would come closer to an edge than "scrolloff", it is
+    // dragged along so that scrolling continues past that point the way Vim
+    // does, instead of stopping there.
+    QScrollBar *vbar = EDITOR(verticalScrollBar());
+    if (!vbar)
+        return;
+
+    updateFirstVisibleLine();
+    const int oldTopLine = firstVisibleLine();
+
+    vbar->setValue(vbar->value() + count);
+
+    // Re-read the real first visible line rather than assuming the request took
+    // effect; the scroll bar clamps at the edges and may quantize differently.
+    updateFirstVisibleLine();
+    const int topLine = firstVisibleLine();
+    if (topLine == oldTopLine)
+        return; // Nothing scrolled (already at an edge); leave the cursor be.
+
+    const int scrollOffset = windowScrollOffset();
+    const int cursor = cursorLine();
+    const int firstAllowed = topLine + scrollOffset;
+    const int lastAllowed = topLine + linesOnScreen() - 1 - scrollOffset;
+    if (cursor < firstAllowed)
+        moveDown(firstAllowed - cursor);
+    else if (cursor > lastAllowed)
+        moveUp(cursor - lastAllowed);
 }
 
 void FakeVimHandler::Private::updateScrollOffset()
