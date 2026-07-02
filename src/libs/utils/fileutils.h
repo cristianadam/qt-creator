@@ -10,6 +10,7 @@
 
 #ifdef QT_WIDGETS_LIB
 #include <QFileDialog>
+#include <QFuture>
 #endif
 
 #include <functional>
@@ -87,6 +88,16 @@ QTCREATOR_UTILS_EXPORT FilePath getOpenFilePath(
         QFileDialog::Options options = {},
         bool fromDeviceIfShiftIsPressed = false,
         bool forceNonNativeDialog = false);
+
+// Non-blocking variant of getOpenFilePath: shows the dialog (no nested event loop) and
+// returns immediately with a QFuture that resolves to the chosen path, or an empty
+// FilePath if the user cancels. Required on platforms (e.g. WebAssembly without asyncify)
+// where blocking the calling thread in QDialog::exec() is not allowed.
+QTCREATOR_UTILS_EXPORT QFuture<FilePath> getOpenFilePathAsync(
+        const QString &caption,
+        const FilePath &dir = {},
+        const QString &filter = {},
+        QFileDialog::Options options = {});
 
 QTCREATOR_UTILS_EXPORT FilePath getSaveFilePath(
         const QString &caption,

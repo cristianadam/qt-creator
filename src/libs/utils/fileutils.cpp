@@ -8,6 +8,7 @@
 #include "environment.h"
 #include "filedialog.h"
 #include "qtcassert.h"
+#include "temporarydirectory.h"
 #include "utilstr.h"
 
 #include "fsengine/fileiconprovider.h"
@@ -27,6 +28,7 @@
 
 #include <QMessageBox>
 #include <QGuiApplication>
+#include <QPromise>
 #endif
 
 #ifdef Q_OS_WIN
@@ -376,6 +378,63 @@ FilePath getOpenFilePath(const QString &caption,
                                      forceNonNativeDialog,
                                      QFileDialog::ExistingFile,
                                      QFileDialog::AcceptOpen));
+}
+
+QFuture<FilePath> getOpenFilePathAsync(const QString &caption,
+                                       const FilePath &dir,
+                                       const QString &filter,
+                                       QFileDialog::Options options)
+{
+    auto promise = std::make_shared<QPromise<FilePath>>();
+    promise->start();
+    QFuture<FilePath> future = promise->future();
+
+#ifdef Q_OS_WASM
+    Q_UNUSED(caption)
+    Q_UNUSED(dir)
+    Q_UNUSED(options)
+    // On WebAssembly the browser hands us the file *content*, not a path that can be read
+    // back later (a QFileDialog selection is only a JS File handle, unreadable from worker
+    // threads). Materialize the bytes into a real file in the in-memory filesystem and
+    // resolve with that path, keeping the original name so suffix-based handling still works.
+    QFileDialog::getOpenFileContent(
+        filter, [promise](const QString &fileName, const QByteArray &content) {
+            if (fileName.isEmpty()) { // user cancelled
+                promise->addResult(FilePath());
+                promise->finish();
+                return;
+            }
+            FilePath target = TemporaryDirectory::masterDirectoryFilePath();
+            if (target.isEmpty())
+                target = FilePath::fromString(QDir::tempPath());
+            target = target / FilePath::fromString(fileName).fileName();
+            const Result<qint64> written = target.writeFileContents(content);
+            promise->addResult(written ? target : FilePath());
+            promise->finish();
+        });
+    return future;
+#else
+    // Heap-allocated and self-deleting: the dialog outlives this call and is shown
+    // non-modally (show(), not exec()), so it must not live on the stack.
+    auto dialog = new QFileDialog(dialogParent(), caption, dir.toFSPathString(), filter);
+    dialog->setFileMode(QFileDialog::ExistingFile);
+    dialog->setAcceptMode(QFileDialog::AcceptOpen);
+    dialog->setOptions(options);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+
+    QObject::connect(dialog, &QFileDialog::finished, dialog, [promise, dialog](int result) {
+        if (result == QDialog::Accepted) {
+            const QList<QUrl> urls = dialog->selectedUrls();
+            promise->addResult(urls.isEmpty() ? FilePath() : FilePath::fromUrl(urls.constFirst()));
+        } else {
+            promise->addResult(FilePath());
+        }
+        promise->finish();
+    });
+
+    dialog->show();
+    return future;
+#endif
 }
 
 FilePath getSaveFilePath(const QString &caption,
