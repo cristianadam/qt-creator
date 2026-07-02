@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace QmlEditorWidgets {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::QmlEditorWidgets)
-};
-
-} // QmlEditorWidgets
+QTC_DECLARE_TR(QmlEditorWidgets)

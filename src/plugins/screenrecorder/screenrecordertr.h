@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace ScreenRecorder {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::ScreenRecorder)
-};
-
-} // namespace ScreenRecorder
+QTC_DECLARE_TR(ScreenRecorder)

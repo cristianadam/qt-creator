@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace SilverSearcher {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::SilverSearcher)
-};
-
-} // namespace SilverSearcher
+QTC_DECLARE_TR(SilverSearcher)

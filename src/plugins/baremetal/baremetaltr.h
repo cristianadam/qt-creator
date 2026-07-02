@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace BareMetal {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::BareMetal)
-};
-
-} // namespace BareMetal
+QTC_DECLARE_TR(BareMetal)

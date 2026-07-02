@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Swift {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Swift)
-};
-
-} // namespace Swift
+QTC_DECLARE_TR(Swift)

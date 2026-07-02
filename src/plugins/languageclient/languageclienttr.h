@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace LanguageClient {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::LanguageClient)
-};
-
-} // namespace LanguageClient
+QTC_DECLARE_TR(LanguageClient)

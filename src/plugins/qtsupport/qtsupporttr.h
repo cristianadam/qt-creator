@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace QtSupport {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::QtSupport)
-};
-
-} // namespace QtSupport
+QTC_DECLARE_TR(QtSupport)

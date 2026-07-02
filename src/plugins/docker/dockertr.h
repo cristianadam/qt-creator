@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Docker {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Docker)
-};
-
-} // namespace Docker
+QTC_DECLARE_TR(Docker)

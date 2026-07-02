@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace WebAssembly {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::WebAssembly)
-};
-
-} // namespace WebAssembly
+QTC_DECLARE_TR(WebAssembly)

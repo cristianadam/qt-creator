@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace GitLab {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::GitLab)
-};
-
-} // namespace GitLab
+QTC_DECLARE_TR(GitLab)

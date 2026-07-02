@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace CompilationDatabaseProjectManager {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::CompilationDatabaseProjectManager)
-};
-
-} // namespace CompilationDatabaseProjectManager
+QTC_DECLARE_TR(CompilationDatabaseProjectManager)

@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Utils {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Utils)
-};
-
-} // Utils
+QTC_DECLARE_TR(Utils)

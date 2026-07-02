@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace GenericProjectManager {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::GenericProjectManager)
-};
-
-} // namespace GenericProjectManager
+QTC_DECLARE_TR(GenericProjectManager)

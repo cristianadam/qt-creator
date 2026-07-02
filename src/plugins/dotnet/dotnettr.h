@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Dotnet {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Dotnet)
-};
-
-} // namespace Dotnet
+QTC_DECLARE_TR(Dotnet)

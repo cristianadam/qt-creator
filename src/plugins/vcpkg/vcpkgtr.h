@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Vcpkg {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Vcpkg)
-};
-
-} // namespace Vcpkg
+QTC_DECLARE_TR(Vcpkg)

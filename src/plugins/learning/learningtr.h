@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Learning {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Learning)
-};
-
-} // namespace Learning
+QTC_DECLARE_TR(Learning)

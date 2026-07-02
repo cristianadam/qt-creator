@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Git {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Git)
-};
-
-} // namespace Git
+QTC_DECLARE_TR(Git)

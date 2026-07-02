@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Terminal {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Terminal)
-};
-
-} // namespace Terminal
+QTC_DECLARE_TR(Terminal)

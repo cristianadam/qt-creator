@@ -177,6 +177,7 @@ add_qtc_library(Utils
     touchbar/touchbar.h
     treemodel.cpp treemodel.h
     treeviewcombobox.cpp treeviewcombobox.h
+    trutils.h
     unarchiver.cpp unarchiver.h
     uncommentselection.cpp uncommentselection.h
     uniqueobjectptr.h

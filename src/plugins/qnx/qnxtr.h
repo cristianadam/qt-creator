@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Qnx {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Qnx)
-};
-
-} // namespace Qnx
+QTC_DECLARE_TR(Qnx)

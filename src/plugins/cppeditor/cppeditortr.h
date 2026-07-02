@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace CppEditor {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::CppEditor)
-};
-
-} // namespace CppEditor
+QTC_DECLARE_TR(CppEditor)

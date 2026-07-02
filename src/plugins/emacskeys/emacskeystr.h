@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace EmacsKeys {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::EmacsKeys)
-};
-
-} // namespace EmacsKeys
+QTC_DECLARE_TR(EmacsKeys)

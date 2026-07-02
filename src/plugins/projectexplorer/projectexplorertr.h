@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace ProjectExplorer {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::ProjectExplorer)
-};
-
-} // namespace ProjectExplorer
+QTC_DECLARE_TR(ProjectExplorer)

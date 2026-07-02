@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace DesignerCore {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::DesignerCore)
-};
-
-} // namespace DesignerCore
+QTC_DECLARE_TR(DesignerCore)

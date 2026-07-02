@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace FakeVim {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::FakeVim)
-};
-
-} // namespace FakeVim
+QTC_DECLARE_TR(FakeVim)

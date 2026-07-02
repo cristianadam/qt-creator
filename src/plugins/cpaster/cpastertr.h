@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace CodePaster {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::CodePaster)
-};
-
-} // namespace CodePaster
+QTC_DECLARE_TR(CodePaster)

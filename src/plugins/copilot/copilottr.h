@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Copilot {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Copilot)
-};
-
-} // namespace Copilot
+QTC_DECLARE_TR(Copilot)

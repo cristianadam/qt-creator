@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Subversion {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Subversion)
-};
-
-} // namespace Subversion
+QTC_DECLARE_TR(Subversion)

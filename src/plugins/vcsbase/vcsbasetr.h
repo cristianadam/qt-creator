@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace VcsBase {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::VcsBase)
-};
-
-} // namespace VcsBase
+QTC_DECLARE_TR(VcsBase)

@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace GlslEditor {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::GlslEditor)
-};
-
-} // namespace GLSLEditor
+QTC_DECLARE_TR(GlslEditor)

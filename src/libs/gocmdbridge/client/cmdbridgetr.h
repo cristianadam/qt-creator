@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace CmdBridge {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::CmdBridge)
-};
-
-} // namespace CmdBridge
+QTC_DECLARE_TR(CmdBridge)

@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Axivion {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Axivion)
-};
-
-} // Axivion
+QTC_DECLARE_TR(Axivion)

@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace MesonProjectManager {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::MesonProjectManager)
-};
-
-} // namespace MesonProjectManager
+QTC_DECLARE_TR(MesonProjectManager)

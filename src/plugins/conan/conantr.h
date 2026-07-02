@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Conan {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Conan)
-};
-
-} // Conan
+QTC_DECLARE_TR(Conan)

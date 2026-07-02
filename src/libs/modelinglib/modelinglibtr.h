@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace qmt {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::qmt)
-};
-
-} // qmt
+QTC_DECLARE_TR(qmt)

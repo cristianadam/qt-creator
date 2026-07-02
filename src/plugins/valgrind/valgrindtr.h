@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Valgrind {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Valgrind)
-};
-
-} // namespace Valgrind
+QTC_DECLARE_TR(Valgrind)

@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Perforce {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Perforce)
-};
-
-} // Perforce
+QTC_DECLARE_TR(Perforce)

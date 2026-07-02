@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Bazaar {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Bazaar)
-};
-
-} // namespace Bazaar
+QTC_DECLARE_TR(Bazaar)

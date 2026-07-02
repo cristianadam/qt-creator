@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Qdb {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Qdb)
-};
-
-} // namespace Qdb
+QTC_DECLARE_TR(Qdb)

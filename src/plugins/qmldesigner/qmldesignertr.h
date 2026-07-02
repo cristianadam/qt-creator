@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace QmlDesigner {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::QmlDesigner)
-};
-
-} // namespace QmlDesigner
+QTC_DECLARE_TR(QmlDesigner)

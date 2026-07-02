@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace ClassView {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::ClassView)
-};
-
-} // namespace ClassView
+QTC_DECLARE_TR(ClassView)

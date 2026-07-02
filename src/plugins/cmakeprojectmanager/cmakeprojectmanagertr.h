@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace CMakeProjectManager {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::CMakeProjectManager)
-};
-
-} // namespace CMakeProjectManager
+QTC_DECLARE_TR(CMakeProjectManager)

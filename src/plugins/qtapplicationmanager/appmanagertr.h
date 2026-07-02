@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace AppManager {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::AppManager)
-};
-
-} // namespace AppManager
+QTC_DECLARE_TR(AppManager)

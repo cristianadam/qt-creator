@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Beautifier {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Beautifier)
-};
-
-} // namespace Beautifier
+QTC_DECLARE_TR(Beautifier)

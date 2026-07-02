@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace ScxmlEditor {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::ScxmlEditor)
-};
-
-} // namespace ScxmlEditor
+QTC_DECLARE_TR(ScxmlEditor)

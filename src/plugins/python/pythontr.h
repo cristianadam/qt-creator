@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Python {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Python)
-};
-
-} // namespace Python
+QTC_DECLARE_TR(Python)

@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace McuSupport {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::McuSupport)
-};
-
-} // namespace McuSupport
+QTC_DECLARE_TR(McuSupport)

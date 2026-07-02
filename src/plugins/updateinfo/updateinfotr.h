@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace UpdateInfo {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::UpdateInfo)
-};
-
-} // namespace UpdateInfo
+QTC_DECLARE_TR(UpdateInfo)

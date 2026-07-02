@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Welcome {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Welcome)
-};
-
-} // namespace Welcome
+QTC_DECLARE_TR(Welcome)

@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace HelloWorld {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::HelloWorld)
-};
-
-} // namespace HelloWorld
+QTC_DECLARE_TR(HelloWorld)

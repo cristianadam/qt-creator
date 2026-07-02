@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Debugger {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Debugger)
-};
-
-} // namespace Debugger
+QTC_DECLARE_TR(Debugger)

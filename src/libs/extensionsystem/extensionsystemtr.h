@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace ExtensionSystem {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::ExtensionSystem)
-};
-
-} // ExtensionSystem
+QTC_DECLARE_TR(ExtensionSystem)

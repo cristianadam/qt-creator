@@ -4,13 +4,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace GNProjectManager {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::GNProjectManager)
-};
-
-} // namespace GNProjectManager
+QTC_DECLARE_TR(GNProjectManager)

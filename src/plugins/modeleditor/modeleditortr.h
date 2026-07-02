@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace ModelEditor {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::ModelEditor)
-};
-
-} // namespace ModelEditor
+QTC_DECLARE_TR(ModelEditor)

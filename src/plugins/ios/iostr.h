@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Ios {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Ios)
-};
-
-} // namespace Ios
+QTC_DECLARE_TR(Ios)

@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace QmlJSEditor {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::QmlJSEditor)
-};
-
-} // namespace QmlJSEditor
+QTC_DECLARE_TR(QmlJSEditor)

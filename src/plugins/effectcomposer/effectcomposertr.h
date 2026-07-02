@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace EffectComposer {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::EffectComposer)
-};
-
-} // namespace EffectComposee
+QTC_DECLARE_TR(EffectComposer)

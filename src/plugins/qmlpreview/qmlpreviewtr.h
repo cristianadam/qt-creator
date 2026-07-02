@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace QmlPreview {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::QmlPreview)
-};
-
-} // namespace QmlPreview
+QTC_DECLARE_TR(QmlPreview)

@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Autotest {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Autotest)
-};
-
-} // namespace Autotest
+QTC_DECLARE_TR(Autotest)

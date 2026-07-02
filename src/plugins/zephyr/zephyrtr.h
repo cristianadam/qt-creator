@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Zephyr {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Zephyr)
-};
-
-} // namespace Zephyr
+QTC_DECLARE_TR(Zephyr)

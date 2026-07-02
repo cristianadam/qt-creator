@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Coco {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Coco)
-};
-
-} // namespace Coco
+QTC_DECLARE_TR(Coco)

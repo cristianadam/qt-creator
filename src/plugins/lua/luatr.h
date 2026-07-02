@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Lua {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Lua)
-};
-
-} // namespace Lua
+QTC_DECLARE_TR(Lua)

@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Macros {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Macros)
-};
-
-} // namespace Macros
+QTC_DECLARE_TR(Macros)

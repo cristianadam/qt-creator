@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace ClearCase {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::ClearCase)
-};
-
-} // namespace ClearCase
+QTC_DECLARE_TR(ClearCase)

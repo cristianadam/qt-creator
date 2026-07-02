@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Core {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Core)
-};
-
-} // namespace Core
+QTC_DECLARE_TR(Core)

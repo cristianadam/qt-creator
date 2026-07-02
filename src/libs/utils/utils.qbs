@@ -328,6 +328,7 @@ QtcLibrary {
         "treemodel.h",
         "treeviewcombobox.cpp",
         "treeviewcombobox.h",
+        "trutils.h",
         "unarchiver.cpp",
         "unarchiver.h",
         "uncommentselection.cpp",

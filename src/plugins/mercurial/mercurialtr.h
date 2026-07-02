@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Mercurial {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Mercurial)
-};
-
-} // namespace Mercurial
+QTC_DECLARE_TR(Mercurial)

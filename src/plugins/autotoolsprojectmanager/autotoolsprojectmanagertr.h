@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace AutotoolsProjectManager {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::AutotoolsProjectManager)
-};
-
-} // namespace AutotoolsProjectManager
+QTC_DECLARE_TR(AutotoolsProjectManager)

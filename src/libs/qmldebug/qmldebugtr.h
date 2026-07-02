@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace QmlDebug {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::QmlDebug)
-};
-
-} // QmlDebug
+QTC_DECLARE_TR(QmlDebug)

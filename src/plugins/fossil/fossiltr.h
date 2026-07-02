@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Fossil {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Fossil)
-};
-
-} // namespace Fossil
+QTC_DECLARE_TR(Fossil)

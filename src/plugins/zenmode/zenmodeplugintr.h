@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace ZenMode{
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::ZenMode)
-};
-
-} // namespace ZenMode
+QTC_DECLARE_TR(ZenMode)

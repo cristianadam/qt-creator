@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace Mcp {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::Mcp)
-};
-
-} // namespace Mcp
+QTC_DECLARE_TR(Mcp)

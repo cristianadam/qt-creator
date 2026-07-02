@@ -3,13 +3,6 @@
 
 #pragma once
 
-#include <QCoreApplication>
+#include <utils/trutils.h>
 
-namespace ClangFormat {
-
-struct Tr
-{
-    Q_DECLARE_TR_FUNCTIONS(QtC::ClangFormat)
-};
-
-} // namespace ClangFormat
+QTC_DECLARE_TR(ClangFormat)
