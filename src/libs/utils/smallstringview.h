@@ -57,14 +57,34 @@ public:
     }
 };
 
-inline constexpr auto operator<=>(const SmallStringView &first, const SmallStringView &second)
-{
-    return std::string_view{first} <=> std::string_view{second};
-}
-
 inline constexpr bool operator==(const SmallStringView &first, const SmallStringView &second)
 {
     return std::string_view{first} == std::string_view{second};
+}
+
+inline constexpr bool operator!=(const SmallStringView &first, const SmallStringView &second)
+{
+    return !(first == second);
+}
+
+inline constexpr bool operator<(const SmallStringView &first, const SmallStringView &second)
+{
+    return std::string_view{first} < std::string_view{second};
+}
+
+inline constexpr bool operator>(const SmallStringView &first, const SmallStringView &second)
+{
+    return second < first;
+}
+
+inline constexpr bool operator<=(const SmallStringView &first, const SmallStringView &second)
+{
+    return !(second < first);
+}
+
+inline constexpr bool operator>=(const SmallStringView &first, const SmallStringView &second)
+{
+    return !(first < second);
 }
 
 constexpr int compare(SmallStringView first, SmallStringView second) noexcept
