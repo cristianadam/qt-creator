@@ -12,12 +12,19 @@
     The Zen Mode extension provides modes that hide UI elements so you
     can focus on editing code.
 
+    \image {qtcreator-zen-mode-off.webp} {Edit mode with mode selector and sidebars}
+    \caption Edit mode with mode selector (1) and sidebars (2 and 3) visible.
+
     Activate the \uicontrol {Zen Mode} extension in the \uicontrol {Extensions}
     mode. For more information about extensions, see \l {Activate extensions}.
 
     \section1 Toggle distraction free mode
 
-    The distraction free mode closes the sidebars and other views.
+    The distraction free mode closes the mode selector (1), left and right
+    sidebar (2 and 3), and other views.
+
+    \image {qtcreator-distraction-free-mode-on.webp} {Distraction free mode on}
+    \caption Distraction free mode on.
 
     To toggle the distraction free mode:
 
@@ -30,8 +37,11 @@
 
     \section1 Toggle zen mode
 
-    The zen mode closes the sidebars and other views, switches \QC to full
-    screen, and hides the main menu bar.
+    The zen mode closes the mode selector (1), left and right sidebar (2 and 3)
+    and other views, switches \QC to full screen, and hides the main menu bar.
+
+    \image {qtcreator-zen-mode-on.webp} {Zen mode on}
+    \caption Zen mode on.
 
     To toggle the zen mode:
 
