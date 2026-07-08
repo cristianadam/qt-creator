@@ -28,6 +28,8 @@ Changed
 
 Fixed
 
+### Agent Client Protocol (ACP)
+
 ### Model Context Protocol
 
 Help
