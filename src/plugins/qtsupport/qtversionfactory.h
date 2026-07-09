@@ -50,6 +50,10 @@ protected:
     void setSupportedType(const QString &type);
     void setPriority(int priority);
 
+    // Additional stored type strings this factory also restores, e.g. to migrate a retired
+    // QtVersion type to the one this factory creates.
+    void addLegacyRestoreType(const QString &type);
+
 private:
     friend class QtVersion;
     QtVersion *create() const;
@@ -57,6 +61,7 @@ private:
     std::function<QtVersion *()> m_creator;
     std::function<bool(const SetupData &)> m_restrictionChecker;
     QString m_supportedType;
+    QStringList m_legacyTypes;
     int m_priority = 0;
 };
 

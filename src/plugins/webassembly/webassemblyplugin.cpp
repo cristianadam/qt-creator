@@ -12,7 +12,6 @@
 
 #include <extensionsystem/iplugin.h>
 
-using namespace ProjectExplorer;
 using namespace Utils;
 
 namespace WebAssembly::Internal {

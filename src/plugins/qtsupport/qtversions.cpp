@@ -26,6 +26,11 @@ class DesktopQtVersion final : public QtVersion
 public:
     QString description() const final
     {
+        // A Qt whose ABI a device plugin claims (e.g. WebAssembly) is described by that plugin,
+        // even though it is stored as a plain desktop Qt version.
+        const QString abiDescription = deviceDescriptionForQtAbis(qtAbis());
+        if (!abiDescription.isEmpty())
+            return abiDescription;
         return Tr::tr("Desktop", "Qt Version is meant for the desktop");
     }
 
@@ -48,6 +53,7 @@ public:
                 return a.os() == ProjectExplorer::Abi::DarwinOS;
             }))
             result.insert(Remote::Constants::GenericMacOsType);
+        result.unite(deviceTypesForQtAbis(qtAbis()));
         return result;
     }
 };
@@ -63,6 +69,14 @@ public:
         setSupportedType(QtSupport::Constants::DESKTOPQT);
         setPriority(0); // Lowest of all, we want to be the fallback
         // No further restrictions. We are the fallback :) so we don't care what kind of qt it is.
+
+        // Migrate the retired WebAssembly Qt version type: it is now a plain desktop Qt whose
+        // WebAssembly target device type is derived from its Emscripten ABI. Restoring it here
+        // (instead of dropping it when the WebAssembly plugin is not loaded) rewrites it as a
+        // desktop Qt on the next save.
+        // The type was written by Qt Creator up to and including 20; retired in 21. This legacy
+        // entry can be removed once settings from Qt Creator 20 or earlier are no longer expected.
+        addLegacyRestoreType("Qt4ProjectManager.QtVersion.WebAssembly");
     }
 };
 

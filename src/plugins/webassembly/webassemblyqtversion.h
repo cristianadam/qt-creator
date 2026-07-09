@@ -3,26 +3,20 @@
 
 #pragma once
 
-#include <qtsupport/baseqtversion.h>
+#include <QVersionNumber>
+
+namespace QtSupport { class QtVersion; }
 
 namespace WebAssembly::Internal {
 
-class WebAssemblyQtVersion final : public QtSupport::QtVersion
-{
-public:
-    WebAssemblyQtVersion();
+// A WebAssembly Qt is recognized by its Emscripten ABI, not by a dedicated QtVersion type, so
+// that it is recognized regardless of whether the (soft-loadable) plugin was loaded when the Qt
+// version was detected.
+bool isWebAssemblyQtVersion(const QtSupport::QtVersion *qtVersion);
 
-    QString description() const final;
-
-    QSet<Utils::Id> targetDeviceTypes() const final;
-
-    bool isValid() const final;
-    QString invalidReason() const final;
-
-    static const QVersionNumber &minimumSupportedQtVersion();
-    static bool isQtVersionInstalled();
-    static bool isUnsupportedQtVersionInstalled();
-};
+const QVersionNumber &minimumSupportedQtVersion();
+bool isQtVersionInstalled();
+bool isUnsupportedQtVersionInstalled();
 
 void setupWebAssemblyQtVersion();
 

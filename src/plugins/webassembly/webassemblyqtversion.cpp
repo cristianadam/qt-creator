@@ -6,95 +6,50 @@
 #include "webassemblyconstants.h"
 #include "webassemblytr.h"
 
-#include <coreplugin/featureprovider.h>
-#include <coreplugin/icore.h>
-
 #include <projectexplorer/abi.h>
-#include <projectexplorer/projectexplorerconstants.h>
 
-#include <qtsupport/qtversionfactory.h>
+#include <qtsupport/baseqtversion.h>
 #include <qtsupport/qtversionmanager.h>
 
-#include <remote/remotelinux_constants.h>
-
 #include <utils/algorithm.h>
-#include <utils/hostosinfo.h>
-#include <utils/qtcassert.h>
 
-#include <QCoreApplication>
-#include <QVersionNumber>
-
+using namespace ProjectExplorer;
 using namespace QtSupport;
 using namespace Utils;
 
 namespace WebAssembly::Internal {
 
-WebAssemblyQtVersion::WebAssemblyQtVersion() = default;
-
-QString WebAssemblyQtVersion::description() const
+bool isWebAssemblyQtVersion(const QtVersion *qtVersion)
 {
-    return Tr::tr("WebAssembly", "Qt Version is meant for WebAssembly");
+    return qtVersion && anyOf(qtVersion->qtAbis(), [](const Abi &abi) {
+        return abi.binaryFormat() == Abi::EmscriptenFormat;
+    });
 }
 
-QSet<Id> WebAssemblyQtVersion::targetDeviceTypes() const
-{
-    return {Constants::WEBASSEMBLY_DEVICE_TYPE};
-}
-
-bool WebAssemblyQtVersion::isValid() const
-{
-    return QtVersion::isValid() && qtVersion() >= minimumSupportedQtVersion();
-}
-
-QString WebAssemblyQtVersion::invalidReason() const
-{
-    const QString baseReason = QtVersion::invalidReason();
-    if (!baseReason.isEmpty())
-        return baseReason;
-
-    return Tr::tr("%1 does not support Qt for WebAssembly below version %2.")
-            .arg(Core::ICore::versionString())
-            .arg(minimumSupportedQtVersion().toString());
-}
-
-const QVersionNumber &WebAssemblyQtVersion::minimumSupportedQtVersion()
+const QVersionNumber &minimumSupportedQtVersion()
 {
     const static QVersionNumber number(5, 15);
     return number;
 }
 
-bool WebAssemblyQtVersion::isQtVersionInstalled()
+bool isQtVersionInstalled()
 {
-    return anyOf(QtVersionManager::versions(), [](const QtVersion *v) {
-        return v->type() == Constants::WEBASSEMBLY_QT_VERSION;
-    });
+    return anyOf(QtVersionManager::versions(), &isWebAssemblyQtVersion);
 }
 
-bool WebAssemblyQtVersion::isUnsupportedQtVersionInstalled()
+bool isUnsupportedQtVersionInstalled()
 {
     return anyOf(QtVersionManager::versions(), [](const QtVersion *v) {
-        return v->type() == Constants::WEBASSEMBLY_QT_VERSION
-                && v->qtVersion() < WebAssemblyQtVersion::minimumSupportedQtVersion();
+        return isWebAssemblyQtVersion(v) && v->qtVersion() < minimumSupportedQtVersion();
     });
 }
-
-class WebAssemblyQtVersionFactory final : public QtVersionFactory
-{
-public:
-    WebAssemblyQtVersionFactory()
-    {
-        setQtVersionCreator([] { return new WebAssemblyQtVersion; });
-        setSupportedType(Constants::WEBASSEMBLY_QT_VERSION);
-        setPriority(1);
-        setRestrictionChecker([](const SetupData &setup) {
-            return setup.platforms.contains("wasm");
-        });
-    }
-};
 
 void setupWebAssemblyQtVersion()
 {
-    static WebAssemblyQtVersionFactory theWebAssemblyQtVersionFactory;
+    registerDeviceTypeForQtAbi(
+        [](const Abi &abi) { return abi.binaryFormat() == Abi::EmscriptenFormat; },
+        Constants::WEBASSEMBLY_DEVICE_TYPE,
+        Tr::tr("WebAssembly", "Qt Version is meant for WebAssembly"));
 }
 
 } // WebAssembly::Internal

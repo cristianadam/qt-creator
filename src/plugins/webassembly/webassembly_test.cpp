@@ -3,10 +3,17 @@
 
 #include "webassembly_test.h"
 
+#include "webassemblyconstants.h"
 #include "webassemblyemsdk.h"
+#include "webassemblyqtversion.h"
 #include "webassemblyrunconfiguration.h"
 
+#include <projectexplorer/abi.h>
+
+#include <qtsupport/baseqtversion.h>
+
 #include <utils/environment.h>
+#include <utils/id.h>
 
 #include <QTest>
 
@@ -115,6 +122,20 @@ Even if your browser was not detected, you can use --browser /path/to/browser/ex
             << WebBrowserEntries({
                 {QLatin1String("firefox"), QLatin1String("Mozilla Firefox 96.0.0.8041")},
                 {QLatin1String("chrome"), QLatin1String("Google Chrome 97.0.4692.71")}});
+}
+
+void WebAssemblyTest::testDeviceTypeFromAbi()
+{
+    // The plugin registers the Emscripten ABI -> WebAssembly device type mapping on setup, so a
+    // wasm Qt is recognized by its ABI regardless of its stored QtVersion type.
+    using namespace ProjectExplorer;
+    const Abi emscriptenAbi(Abi::AsmJsArchitecture, Abi::UnknownOS, Abi::UnknownFlavor,
+                            Abi::EmscriptenFormat, 32);
+
+    QVERIFY(QtSupport::deviceTypesForQtAbis({emscriptenAbi})
+                .contains(Constants::WEBASSEMBLY_DEVICE_TYPE));
+    QVERIFY(!QtSupport::deviceTypesForQtAbis({Abi::hostAbi()})
+                .contains(Constants::WEBASSEMBLY_DEVICE_TYPE));
 }
 
 } // namespace WebAssembly::Internal

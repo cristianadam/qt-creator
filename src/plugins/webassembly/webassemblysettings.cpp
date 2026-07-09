@@ -89,12 +89,12 @@ WebAssemblySettings::WebAssemblySettings()
         m_emSdkEnvDisplay = new QTextBrowser;
         m_emSdkEnvDisplay->setLineWrapMode(QTextBrowser::NoWrap);
 
-        const QString minimumSupportedQtVersion =
-            WebAssemblyQtVersion::minimumSupportedQtVersion().toString();
+        const QString minimumSupportedQtVersionString =
+            minimumSupportedQtVersion().toString();
         m_qtVersionDisplay = new InfoLabel(
             Tr::tr("Note: %1 supports Qt %2 for WebAssembly and higher. "
                    "Your installed lower Qt version(s) are not supported.")
-                .arg(Core::ICore::versionString(), minimumSupportedQtVersion),
+                .arg(Core::ICore::versionString(), minimumSupportedQtVersionString),
             InfoLabel::Warning);
         m_qtVersionDisplay->setElideMode(Qt::ElideNone);
         m_qtVersionDisplay->setWordWrap(true);
@@ -198,7 +198,7 @@ void WebAssemblySettings::updateStatus()
         m_emSdkEnvDisplay->clear();
     }
 
-    m_qtVersionDisplay->setVisible(WebAssemblyQtVersion::isUnsupportedQtVersionInstalled());
+    m_qtVersionDisplay->setVisible(isUnsupportedQtVersionInstalled());
 }
 
 // WebAssemblySettingsPage

@@ -11,7 +11,6 @@ inline constexpr char SETTINGS_ID[] = "CC.WebAssembly.Configuration";
 inline constexpr char WEBASSEMBLY_TOOLCHAIN_TYPEID[] = "WebAssembly.ToolChain.Emscripten";
 inline constexpr char WEBASSEMBLY_DEVICE_TYPE[] = "WebAssemblyDeviceType";
 inline constexpr char WEBASSEMBLY_DEVICE_DEVICE_ID[] = "WebAssembly Device";
-inline constexpr char WEBASSEMBLY_QT_VERSION[] = "Qt4ProjectManager.QtVersion.WebAssembly";
 inline constexpr char WEBASSEMBLY_RUNCONFIGURATION_EMRUN[] = "WebAssembly.RunConfiguration.Emrun";
 
 inline constexpr char WEBASSEMBLY_EMSDK_CONFIG_FILE[] = ".emscripten";

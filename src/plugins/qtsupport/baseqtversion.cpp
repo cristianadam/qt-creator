@@ -2412,7 +2412,7 @@ const QList<QtVersionFactory *> QtVersionFactory::allQtVersionFactories()
 
 bool QtVersionFactory::canRestore(const QString &type)
 {
-    return type == m_supportedType;
+    return type == m_supportedType || m_legacyTypes.contains(type);
 }
 
 QtVersion *QtVersionFactory::restore(const QString &type, const Store &data, const FilePath &filePath)
@@ -2472,6 +2472,49 @@ void QtVersionFactory::setSupportedType(const QString &type)
 void QtVersionFactory::setPriority(int priority)
 {
     m_priority = priority;
+}
+
+void QtVersionFactory::addLegacyRestoreType(const QString &type)
+{
+    m_legacyTypes.append(type);
+}
+
+// ABI -> device type registry
+
+namespace {
+struct AbiDeviceType
+{
+    std::function<bool(const Abi &)> matcher;
+    Id deviceType;
+    QString description;
+};
+} // namespace
+
+static QList<AbiDeviceType> g_abiDeviceTypes;
+
+void registerDeviceTypeForQtAbi(
+    const std::function<bool(const Abi &)> &abiMatcher, Id deviceType, const QString &description)
+{
+    g_abiDeviceTypes.append({abiMatcher, deviceType, description});
+}
+
+QSet<Id> deviceTypesForQtAbis(const Abis &abis)
+{
+    QSet<Id> result;
+    for (const AbiDeviceType &entry : std::as_const(g_abiDeviceTypes)) {
+        if (Utils::anyOf(abis, entry.matcher))
+            result.insert(entry.deviceType);
+    }
+    return result;
+}
+
+QString deviceDescriptionForQtAbis(const Abis &abis)
+{
+    for (const AbiDeviceType &entry : std::as_const(g_abiDeviceTypes)) {
+        if (!entry.description.isEmpty() && Utils::anyOf(abis, entry.matcher))
+            return entry.description;
+    }
+    return {};
 }
 
 } // QtSupport

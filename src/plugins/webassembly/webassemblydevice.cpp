@@ -66,7 +66,7 @@ static void askUserAboutEmSdkSetup()
 
     InfoBar *infoBar = ICore::popupInfoBar();
     if (!infoBar->canInfoBeAdded(setupWebAssemblyEmSdk)
-            || !WebAssemblyQtVersion::isQtVersionInstalled()
+            || !isQtVersionInstalled()
             || areToolChainsRegistered())
         return;
 

@@ -16,6 +16,7 @@ private slots:
     void testEmSdkEnvParsing_data();
     void testEmrunBrowserListParsing();
     void testEmrunBrowserListParsing_data();
+    void testDeviceTypeFromAbi();
 };
 
 } // WebAssembly::Internal

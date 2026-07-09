@@ -5,6 +5,7 @@
 
 #include "webassemblyconstants.h"
 #include "webassemblyemsdk.h"
+#include "webassemblyqtversion.h"
 #include "webassemblysettings.h"
 #include "webassemblytr.h"
 
@@ -161,7 +162,7 @@ void registerToolChains()
         if (!kit->detectionSource().isAutoDetected())
             continue;
         const QtVersion *qtVersion = QtKitAspect::qtVersion(kit);
-        if (!qtVersion || qtVersion->type() != Constants::WEBASSEMBLY_QT_VERSION)
+        if (!isWebAssemblyQtVersion(qtVersion))
             continue;
         kit->fix();
     }

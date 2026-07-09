@@ -17,6 +17,8 @@
 #include <QStringList>
 #include <QVersionNumber>
 
+#include <functional>
+
 QT_BEGIN_NAMESPACE
 class ProFileEvaluator;
 class QMakeGlobals;
@@ -226,6 +228,16 @@ private:
 };
 
 using QtVersions = QList<QtVersion *>;
+
+// Registry that lets device plugins make their device type derivable from a Qt version's ABI,
+// independently of the QtVersion subclass. A Qt version whose ABIs match \a abiMatcher then
+// additionally targets \a deviceType (see DesktopQtVersion::targetDeviceTypes()).
+QTSUPPORT_EXPORT void registerDeviceTypeForQtAbi(
+    const std::function<bool(const ProjectExplorer::Abi &)> &abiMatcher,
+    Utils::Id deviceType,
+    const QString &description = {});
+QTSUPPORT_EXPORT QSet<Utils::Id> deviceTypesForQtAbis(const ProjectExplorer::Abis &abis);
+QTSUPPORT_EXPORT QString deviceDescriptionForQtAbis(const ProjectExplorer::Abis &abis);
 
 #ifdef WITH_TESTS
 namespace Internal { QObject *createQtBuildStringParserTest(); }
