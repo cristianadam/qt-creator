@@ -460,6 +460,12 @@ public:
 
     void start();
 
+    // Whether backends should be composed via GenericDebuggerEngine plus a
+    // DebuggerEngineInterface implementation (opt-in via the
+    // QTC_USE_GENERIC_DEBUGGER env var) instead of subclassing DebuggerEngine
+    // directly. Shared across all engines' xxxImpl classes, not just gdb's.
+    static bool isUsingGenericDebugger();
+
     enum {
         // Remove need to qualify each use.
         NeedsTemporaryStop = DebuggerCommand::NeedsTemporaryStop,

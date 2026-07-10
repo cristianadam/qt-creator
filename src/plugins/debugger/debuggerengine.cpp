@@ -63,6 +63,7 @@
 #include <utils/algorithm.h>
 #include <utils/basetreeview.h>
 #include <utils/checkablemessagebox.h>
+#include <utils/environment.h>
 #include <utils/fancymainwindow.h>
 #include <utils/fileutils.h>
 #include <utils/macroexpander.h>
@@ -1396,6 +1397,23 @@ void DebuggerEngine::start()
     setState(EngineSetupRequested);
     showMessage("CALL: SETUP ENGINE");
     setupEngine();
+}
+
+bool DebuggerEngine::isUsingGenericDebugger()
+{
+    static const bool result = [] {
+        const bool isSet = Utils::qtcEnvironmentVariableIsSet("QTC_USE_GENERIC_DEBUGGER");
+        // Visible, one-time confirmation that the env var was actually read
+        // as set - this only gets checked lazily, on the first debug launch
+        // (see createGdbEngine()), not at startup, so a silent typo here
+        // would otherwise look identical to just forgetting to set it.
+        // Inside this lambda, not a plain "if (result)" after the static
+        // local below, so it only ever runs once - not on every call.
+        if (isSet)
+            qWarning("QTC_USE_GENERIC_DEBUGGER is set: using GenericDebuggerEngine + GdbImpl instead of GdbEngine.");
+        return isSet;
+    }();
+    return result;
 }
 
 void DebuggerEngine::resetLocation()

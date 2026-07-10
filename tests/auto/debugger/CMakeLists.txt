@@ -30,7 +30,10 @@ if (NOT QT_CREATOR_API_DEFINED)
 
   find_package(Qt6
     COMPONENTS
-      Gui Core Widgets Network Qml Concurrent Test Xml MODULE)
+      Gui Core Widgets Network Qml Concurrent Test Xml
+    OPTIONAL_COMPONENTS
+      Quick
+    MODULE)
   find_package(Threads)
 
   add_subdirectory(${QtCreator_SOURCE_DIR}/src/libs/utils ${CMAKE_CURRENT_BINARY_DIR}/utils)
@@ -113,6 +116,82 @@ add_qtc_test(tst_debugger_gdb
     tst_gdb.cpp
     "${DEBUGGERDIR}/debuggertr.h"
     "${DEBUGGERDIR}/debuggerprotocol.cpp" "${DEBUGGERDIR}/debuggerprotocol.h"
+)
+
+# Real gdb + a real compiled test binary, driving DebuggerEngineInterface
+# backend implementations (GdbImpl, and future ones) directly - see
+# project_debugger_redesign_proposal.md's testing strategy. No build-time
+# opt-in gate: initTestCase() below already QSKIPs the whole suite at
+# runtime if gdb, a C++ compiler, or the dumper scripts aren't found
+# (same self-contained "degrade gracefully" shape as tst_debugger_dumpers,
+# which has never needed one either).
+set(BACKENDS_TEST_DEFINES DUMPERDIR="${PROJECT_SOURCE_DIR}/share/qtcreator/debugger")
+# The .qml inferiors are checked in rather than generated, so their breakpoint
+# lines are found by scanning for marker comments (same as the generated C++/
+# Python ones) instead of being hardcoded - that needs the source dir, since
+# only the compiled executable lives in the build dir. Mirrors
+# tst_debugger_nativemixed's own QMLMIX_SOURCE_DIR.
+list(APPEND BACKENDS_TEST_DEFINES
+  "BACKENDS_TEST_SOURCE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
+if (TARGET Qt::Quick)
+  qt_add_executable(qmlstack_inferior
+    qmlstack_inferior/qmlentrypoint.h qmlstack_inferior/qmlentrypoint.cpp
+    qmlstack_inferior/main.cpp qmlstack_inferior/main.qrc
+  )
+  target_link_libraries(qmlstack_inferior PRIVATE Qt::Quick Qt::Qml)
+  # Needed for QQmlDebuggingEnabler's static initializer (see main.cpp) to
+  # actually run - without it, -qmljsdebugger is silently ignored.
+  target_compile_definitions(qmlstack_inferior PRIVATE QT_QML_DEBUG)
+  list(APPEND BACKENDS_TEST_DEFINES
+    "QMLSTACK_INFERIOR_EXECUTABLE=\"$<TARGET_FILE_DIR:qmlstack_inferior>\"")
+
+  # A local copy of tests/manual/debugger/qmlmix's sources - a Window-
+  # rooted app with non-trivial QML initialization before its C++ call,
+  # unlike qmlstack_inferior's bare QtObject with a zero-delay startup
+  # call. Needed specifically for
+  # stepsWithinQmlFrameAfterNativeMixedStepOut(): qmlstack_inferior could
+  # never reliably reach a second stop after chaining a step-out with a
+  # further step, while this inferior does so reliably both through real
+  # GdbEngine and through GdbImpl - see project_debugger_redesign_proposal.md's
+  # 4d entry.
+  qt_add_executable(qmlmix_inferior qmlmix_inferior/main.cpp)
+  # Without this, the resource path keeps the qmlmix_inferior/ subdirectory
+  # prefix, so the auto-generated QML type ends up named something other
+  # than "Main" - main.cpp's loadFromModule("MixTest", "Main") needs it
+  # to be exactly "Main.qml" at the module's resource root.
+  set_source_files_properties(qmlmix_inferior/Main.qml PROPERTIES
+    QT_RESOURCE_ALIAS "Main.qml")
+  qt_add_qml_module(qmlmix_inferior
+    URI MixTest
+    VERSION 1.0
+    RESOURCE_PREFIX "/qt/qml"
+    QML_FILES qmlmix_inferior/Main.qml
+    SOURCES qmlmix_inferior/qmlentrypoint.h qmlmix_inferior/qmlentrypoint.cpp
+  )
+  target_compile_definitions(qmlmix_inferior PRIVATE QT_QML_DEBUG)
+  target_link_libraries(qmlmix_inferior PRIVATE Qt::Quick)
+  # The generated qml type registration file does
+  # "#if __has_include(<qmlentrypoint.h>)".
+  target_include_directories(qmlmix_inferior PRIVATE qmlmix_inferior)
+  list(APPEND BACKENDS_TEST_DEFINES
+    "QMLMIX_INFERIOR_EXECUTABLE=\"$<TARGET_FILE_DIR:qmlmix_inferior>\"")
+endif()
+
+add_qtc_test(tst_debugger_backends
+  TIMEOUT 0
+  DEPENDS Qt::Network Utils Debugger
+  DEFINES ${BACKENDS_TEST_DEFINES}
+  INCLUDES
+    "${DEBUGGERDIR}"
+  SOURCES
+    # GdbMi/DisassemblerLines aren't DEBUGGER_EXPORT, so their methods
+    # aren't visible across the libDebugger.so boundary - compiled
+    # directly into this test binary instead, same reason
+    # tst_debugger_dumpers/tst_debugger_disassembler do the same.
+    "${DEBUGGERDIR}/debuggerprotocol.cpp" "${DEBUGGERDIR}/debuggerprotocol.h"
+    "${DEBUGGERDIR}/disassemblerlines.cpp" "${DEBUGGERDIR}/disassemblerlines.h"
+    tst_backends.cpp
 )
 
 add_qtc_test(tst_debugger_protocol

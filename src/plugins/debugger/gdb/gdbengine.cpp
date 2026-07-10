@@ -3,7 +3,10 @@
 
 #include "gdbengine.h"
 
+#include "gdbimpl.h"
+
 #include <debugger/breakhandler.h>
+#include <debugger/genericdebuggerengine.h>
 #include <debugger/debuggeractions.h>
 #include <debugger/debuggercore.h>
 #include <debugger/debuggerinternalconstants.h>
@@ -5223,8 +5226,28 @@ QString GdbEngine::mainFunction() const
 // Factory
 //
 
-DebuggerEngine *createGdbEngine()
+DebuggerEngine *createGdbEngine(const DebuggerRunParameters &rp)
 {
+    // Opt-in alternative path (see genericdebuggerengine.h): a
+    // GenericDebuggerEngine backed by GdbImpl instead of the GdbEngine
+    // subclass, to try the new interface's shape against a real run. This is
+    // the only place that knows GdbImpl exists - GenericDebuggerEngine
+    // itself is backend-agnostic. Off by default, opt in via
+    // QTC_USE_GENERIC_DEBUGGER (see isUsingGenericDebugger()'s own comment).
+    if (DebuggerEngine::isUsingGenericDebugger()) {
+        // Same condition as mainFunction() above, computed inline since
+        // that's a GdbEngine member (needs an instance to call), and this
+        // is exactly the "no DebuggerRunParameters, precompute for me"
+        // case GdbImplStartData::mainFunctionName's own comment describes.
+        const QString mainFunctionName = QLatin1String(
+            rp.toolChainAbi().os() == Abi::WindowsOS && !rp.useTerminal() ? "qMain" : "main");
+        return new GenericDebuggerEngine("GDB (GdbImpl)",
+                                          new GdbImpl({rp.debugger(), rp.inferior(),
+                                                       ICore::resourcePath("debugger"),
+                                                       mainFunctionName,
+                                                       rp.isNativeMixedDebugging(),
+                                                       rp.isElfTarget()}));
+    }
     return new GdbEngine;
 }
 
