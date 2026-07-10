@@ -52,6 +52,16 @@ const char QTVERSION_FILENAME[] = "qtversion.xml";
 using VersionMap = QMap<int, QtVersion *>;
 static VersionMap m_versions;
 
+// Raw data of stored Qt versions that no registered factory could restore (typically because the
+// providing plugin was not loaded). Retained so that they can be restored later, when a matching
+// factory is registered at runtime (e.g. by a soft-loaded plugin), instead of being lost.
+struct UnrestoredQtVersion
+{
+    Store data;
+    FilePath filePath;
+};
+static QList<UnrestoredQtVersion> m_unrestoredVersions;
+
 const char DOCUMENTATION_SETTING_KEY[] = "QtSupport/DocumentationSetting";
 
 QVector<ExampleSetModel::ExtraExampleSet> m_pluginRegisteredExampleSets;
@@ -120,6 +130,7 @@ public:
     void triggerQtVersionRestore();
 
     bool restoreQtVersions();
+    void retryUnrestoredVersions();
     void findSystemQt(const IDeviceConstPtr &device);
     void addQtVersionsFromFilePaths(const FilePaths &filePaths);
     void handleDeviceToolDetectionRequest(
@@ -209,6 +220,31 @@ void QtVersionManager::initialized()
     qtVersionManagerImpl();
 }
 
+void QtVersionManager::qtVersionFactoryAdded()
+{
+    // A factory was registered after the versions were loaded (e.g. by a soft-loaded plugin). Try
+    // to restore Qt versions that could not be restored during loading for lack of a factory.
+    // This runs from the QtVersionFactory base-class constructor, before the derived class has set
+    // its supported type, and several factories may be added in one batch; defer the retry to the
+    // event loop so all newly registered factories are fully constructed first.
+    static bool scheduled = false;
+    if (scheduled)
+        return;
+    scheduled = true;
+    QMetaObject::invokeMethod(
+        &qtVersionManagerImpl(),
+        [] {
+            scheduled = false;
+            // Recover versions from the user settings that were deferred for lack of a factory...
+            qtVersionManagerImpl().retryUnrestoredVersions();
+            // ...and re-read the SDK/installer-provided versions, which the new factory can now
+            // restore (updateFromInstaller() only skips versions of unknown type, so re-running it
+            // with the factory present adds them).
+            qtVersionManagerImpl().updateFromInstaller();
+        },
+        Qt::QueuedConnection);
+}
+
 void QtVersionManager::shutdown()
 {
     qtVersionManagerImpl().shutdown();
@@ -265,14 +301,52 @@ bool QtVersionManagerImpl::restoreQtVersions()
                 }
             }
         }
-        if (!restored)
-            qWarning("Warning: Unable to restore Qt version '%s' stored in %s.",
-                     qPrintable(type),
-                     qPrintable(filename.toUserOutput()));
+        if (!restored) {
+            // No factory (yet). Keep the raw data so a factory registered later can restore it.
+            m_unrestoredVersions.append({qtversionMap, reader.filePath()});
+            qCDebug(log) << "Deferring restore of Qt version of unknown type" << type
+                         << "stored in" << filename.toUserOutput();
+        }
     }
     ++m_idcount;
 
     return true;
+}
+
+void QtVersionManagerImpl::retryUnrestoredVersions()
+{
+    if (m_unrestoredVersions.isEmpty())
+        return;
+
+    const QList<QtVersionFactory *> factories = QtVersionFactory::allQtVersionFactories();
+    QList<int> added;
+    for (int i = m_unrestoredVersions.size() - 1; i >= 0; --i) {
+        const UnrestoredQtVersion entry = m_unrestoredVersions.at(i);
+        const QString type = entry.data.value(QTVERSION_TYPE_KEY).toString();
+        for (QtVersionFactory *f : factories) {
+            if (!f->canRestore(type))
+                continue;
+            QtVersion *qtv = f->restore(type, entry.data, entry.filePath);
+            if (!qtv)
+                continue;
+            m_unrestoredVersions.removeAt(i);
+            if (m_versions.contains(qtv->uniqueId())) {
+                delete qtv;
+            } else {
+                m_versions.insert(qtv->uniqueId(), qtv);
+                m_idcount = qtv->uniqueId() > m_idcount ? qtv->uniqueId() : m_idcount;
+                added.append(qtv->uniqueId());
+            }
+            break;
+        }
+    }
+
+    if (!added.isEmpty()) {
+        qCInfo(log) << "Restored" << added.size()
+                    << "previously unrestorable Qt version(s) after a factory was registered";
+        saveQtVersions();
+        emit QtVersionManager::instance()->qtVersionsChanged(added);
+    }
 }
 
 void QtVersionManagerImpl::updateFromInstaller(bool emitSignal)

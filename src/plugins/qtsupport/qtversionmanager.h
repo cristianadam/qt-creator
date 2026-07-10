@@ -64,6 +64,10 @@ private:
     static void initialized();
     static void shutdown();
 
+    // Called when a QtVersionFactory is registered after the versions were loaded, so that Qt
+    // versions deferred for lack of a factory can be restored.
+    static void qtVersionFactoryAdded();
+
     enum class DocumentationSetting { HighestOnly, All, None };
 
     // Used by QtOptionsPage
