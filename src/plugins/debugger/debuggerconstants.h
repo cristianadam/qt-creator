@@ -3,9 +3,15 @@
 
 #pragma once
 
+#include "debugger_global.h"
+
 #include <QFlags>
+#include <QMetaObject>
 
 namespace Debugger {
+
+Q_NAMESPACE_EXPORT(DEBUGGER_EXPORT)
+
 namespace Constants {
 
 // Debug mode
@@ -52,6 +58,11 @@ enum class ToolTipHandling
     IfStoppedInferiorAndCppEditor, // default
 };
 
+// Historical (not alphabetical) order - not worth reordering/renumbering
+// existing entries just for tidiness. DebuggerExtraCapabilities below is
+// the one place this project asks devs to add new entries alphabetically -
+// its own bit values don't carry any meaning to keep in a particular
+// order, so there's no reason not to.
 enum DebuggerCapabilities
 {
     ReverseSteppingCapability         = 1 <<  0,
@@ -83,6 +94,24 @@ enum DebuggerCapabilities
     ResetInferiorCapability           = 1 << 26, //!< restart program while debugging
     BreakIndividualLocationsCapability= 1 << 27  //!< Allows to enable/disable individual location for multi-location bps
 };
+Q_ENUM_NS(DebuggerCapabilities)
+
+// Separate bitmask, not folded into DebuggerCapabilities above: that enum
+// is capped at 32 bits by real-engine code relying on plain int/unsigned.
+// Backs DebuggerEngineInterface::hasExtraCapability() only, not
+// DebuggerEngine::hasCapability(). New entries: add alphabetically.
+enum class DebuggerExtraCapability : unsigned // TODO: change to quint64 when min Qt >= 6.9
+{
+    Detach             = 1u << 0, //!< Detach from the inferior without killing it
+    LibraryEvent       = 1u << 1, //!< Reports shared library load/unload events
+    RunCommandDeferral = 1u << 2, //!< Can defer a command while the inferior is running
+    SignalReceived     = 1u << 3, //!< Reports the OS-level signal that stopped the inferior
+    SourceFiles        = 1u << 4, //!< Can list the inferior's source files
+    Threads            = 1u << 5  //!< Can list and switch between inferior threads
+};
+Q_DECLARE_FLAGS(DebuggerExtraCapabilities, DebuggerExtraCapability)
+Q_DECLARE_OPERATORS_FOR_FLAGS(DebuggerExtraCapabilities)
+Q_FLAG_NS(DebuggerExtraCapabilities)
 
 enum LogChannel
 {

@@ -52,6 +52,14 @@ enum { debug = 0 };
 namespace Debugger {
 namespace Internal {
 
+DebuggerEngine *createCdbEngine();
+DebuggerEngine *createGdbEngine(const DebuggerRunParameters &rp);
+DebuggerEngine *createPdbEngine();
+DebuggerEngine *createQmlEngine();
+DebuggerEngine *createLldbEngine();
+DebuggerEngine *createUvscEngine();
+DebuggerEngine *createDapEngine(Id runMode = ProjectExplorer::Constants::NO_RUN_MODE);
+
 static QString noEngineMessage()
 {
    return Tr::tr("Unable to create a debugging engine.");
@@ -549,7 +557,7 @@ static Result<QList<QPointer<Internal::DebuggerEngine>>> createEngines(
     if (rp.isCppDebugging()) {
         switch (rp.cppEngineType()) {
         case GdbEngineType:
-            engines << createGdbEngine();
+            engines << createGdbEngine(rp);
             break;
         case CdbEngineType:
             if (rp.debugger().command.executable().osType() != OsTypeWindows)

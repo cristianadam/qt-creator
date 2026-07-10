@@ -36,6 +36,7 @@ QtcPlugin {
             "debuggercore.h",
             "debuggerdialogs.cpp", "debuggerdialogs.h",
             "debuggerengine.cpp", "debuggerengine.h",
+            "debuggerengineinterface.cpp", "debuggerengineinterface.h",
             "debuggerinternalconstants.h",
             "debuggeritem.cpp", "debuggeritem.h",
             "debuggeritemmanager.cpp", "debuggeritemmanager.h",
@@ -50,6 +51,7 @@ QtcPlugin {
             "disassembleragent.cpp", "disassembleragent.h",
             "disassemblerlines.cpp", "disassemblerlines.h",
             "enginemanager.cpp", "enginemanager.h",
+            "genericdebuggerengine.cpp", "genericdebuggerengine.h",
             "imageviewer.cpp", "imageviewer.h",
             "loadcoredialog.cpp", "loadcoredialog.h",
             "localsandexpressionswindow.cpp", "localsandexpressionswindow.h",
@@ -98,6 +100,7 @@ QtcPlugin {
         prefix: "gdb/"
         files: [
             "gdbengine.cpp", "gdbengine.h",
+            "gdbimpl.cpp", "gdbimpl.h",
             "gdbsettings.cpp", "gdbsettings.h",
         ]
     }
