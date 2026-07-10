@@ -33,6 +33,7 @@ add_qtc_plugin(Debugger
     debuggercore.h
     debuggerdialogs.cpp debuggerdialogs.h
     debuggerengine.cpp debuggerengine.h
+    debuggerengineinterface.cpp debuggerengineinterface.h
     debuggericons.cpp debuggericons.h
     debuggerinternalconstants.h
     debuggeritem.cpp debuggeritem.h
@@ -50,6 +51,7 @@ add_qtc_plugin(Debugger
     disassemblerlines.cpp disassemblerlines.h
     gdb/gdbengine.cpp gdb/gdbengine.h
     gdb/gdbsettings.cpp gdb/gdbsettings.h
+    genericdebuggerengine.cpp genericdebuggerengine.h
     imageviewer.cpp imageviewer.h
     enginemanager.cpp enginemanager.h
     lldb/lldbengine.cpp lldb/lldbengine.h
