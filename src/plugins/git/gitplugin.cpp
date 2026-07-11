@@ -40,6 +40,7 @@
 
 #include <extensionsystem/iplugin.h>
 
+#include <texteditor/textdocument.h>
 #include <texteditor/texteditor.h>
 
 #include <utils/action.h>
@@ -228,6 +229,7 @@ public:
     void discardCommit() override { cleanCommitMessageFile(); }
 
     void diffCurrentFile(GitClient::DiffMode diffMode);
+    void inlineDiffCurrentFile();
     void diffUnstagedCurrentFile() { diffCurrentFile(GitClient::Unstaged); }
     void diffStagedCurrentFile() { diffCurrentFile(GitClient::Staged); }
     void diffProjectDirectory(GitClient::DiffMode diffMode);
@@ -625,6 +627,14 @@ GitPluginPrivate::GitPluginPrivate()
                      Tr::tr("Diff Staged Changes in \"%1\""),
                      "Git.DiffStaged", context, true,
                      std::bind(&GitPluginPrivate::diffStagedCurrentFile, this));
+
+    createFileAction(currentFileMenu,
+                     //: Avoid translating "Diff"
+                     Tr::tr("Inline Diff of Current File"),
+                     //: Avoid translating "Diff"
+                     Tr::tr("Inline Diff of \"%1\""),
+                     "Git.InlineDiff", context, true,
+                     std::bind(&GitPluginPrivate::inlineDiffCurrentFile, this));
 
     createFileAction(currentFileMenu,
                      //: Avoid translating "Log"
@@ -1053,6 +1063,13 @@ void GitPluginPrivate::diffCurrentFile(GitClient::DiffMode diffMode)
     const VcsBasePluginState state = currentState();
     QTC_ASSERT(state.hasFile(), return);
     gitClient().diffFile(state.currentFileTopLevel(), state.relativeCurrentFile(), diffMode);
+}
+
+void GitPluginPrivate::inlineDiffCurrentFile()
+{
+    const VcsBasePluginState state = currentState();
+    QTC_ASSERT(state.hasFile(), return);
+    gitClient().inlineDiffFile(state.currentFileTopLevel(), state.relativeCurrentFile());
 }
 
 void GitPluginPrivate::diffProjectDirectory(GitClient::DiffMode diffMode)
