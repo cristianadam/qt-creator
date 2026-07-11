@@ -6,6 +6,7 @@
 #include "diffeditordocument.h"
 #include "diffeditor.h"
 #include "diffeditortr.h"
+#include "inlinediff.h"
 
 #include <coreplugin/actionmanager/actioncontainer.h>
 #include <coreplugin/actionmanager/actionmanager.h>
@@ -16,6 +17,7 @@
 #include <extensionsystem/iplugin.h>
 
 #include <texteditor/textdocument.h>
+#include <texteditor/texteditor.h>
 
 #include <utils/async.h>
 #include <utils/differ.h>
@@ -371,18 +373,30 @@ void DiffEditorPlugin::updateDiffOpenFilesAction()
 
 void DiffEditorPlugin::diffCurrentFile()
 {
-    auto textDocument = currentTextDocument();
-    if (!textDocument)
+    auto textEditor = qobject_cast<BaseTextEditor *>(EditorManager::currentEditor());
+    if (!textEditor || !textEditor->editorWidget())
         return;
+    const TextDocumentPtr document = textEditor->editorWidget()->textDocumentPtr();
 
-    const FilePath filePath = textDocument->filePath();
+    const FilePath filePath = document->filePath();
     if (filePath.isEmpty())
         return;
 
-    const QString documentId = Constants::DIFF_EDITOR_PLUGIN + QLatin1String(".Diff.")
-            + filePath.toUrlishString();
-    const QString title = Tr::tr("Diff \"%1\"").arg(filePath.toUserOutput());
-    reload(documentId, title, [filePath] { return reloadInputHelper(filePath); });
+    InlineDiffBaseline baseline;
+    baseline.id = "saved";
+    baseline.displayName = Tr::tr("Saved");
+    baseline.fetchText = [filePath, format = document->format()](
+                             const InlineDiffBaseline::TextCallback &callback) mutable {
+        const TextFileFormat::ReadResult result = format.readFile(filePath, format.encoding());
+        if (result.code == TextFileFormat::ReadSuccess)
+            callback(result.content);
+        else if (result.code == TextFileFormat::ReadIOError)
+            callback(QString()); // file not saved yet, everything is added
+        else
+            callback(Utils::ResultError(Tr::tr("Cannot read \"%1\".").arg(filePath.toUserOutput())));
+    };
+    openInlineDiffEditor(document, baseline,
+                         Tr::tr("%1 (Modified vs Saved)").arg(filePath.fileName()));
 }
 
 void DiffEditorPlugin::diffOpenFiles()
