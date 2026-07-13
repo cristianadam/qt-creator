@@ -294,12 +294,33 @@ Toolchains ToolchainSettingsAccessor::toolChains(const Store &data) const
                 }
             }
         }
-        if (!restored)
-            qWarning("Warning: Unable to restore compiler type '%s' for tool chain %s.",
-                     qPrintable(tcType.toString()),
-                     qPrintable(ToolchainFactory::idFromMap(tcMap).toString()));
+        if (!restored) {
+            // No factory (yet). Keep the raw data so a factory registered later (e.g. by a
+            // soft-loaded plugin) can restore it, instead of dropping the toolchain.
+            m_deferredToolchains.append(tcMap);
+            qCDebug(Log, "Deferring restore of toolchain of unknown compiler type '%s'.",
+                    qPrintable(tcType.toString()));
+        }
     }
 
+    return result;
+}
+
+Toolchains ToolchainSettingsAccessor::retryDeferredToolchains()
+{
+    Toolchains result;
+    for (int i = m_deferredToolchains.size() - 1; i >= 0; --i) {
+        const Store tcMap = m_deferredToolchains.at(i);
+        const Utils::Id tcType = ToolchainFactory::typeIdFromMap(tcMap);
+        ToolchainFactory * const f = tcType.isValid() ? ToolchainFactory::factoryForType(tcType)
+                                                      : nullptr;
+        if (!f)
+            continue;
+        if (Toolchain *tc = f->restore(tcMap)) {
+            result.append(tc);
+            m_deferredToolchains.removeAt(i);
+        }
+    }
     return result;
 }
 

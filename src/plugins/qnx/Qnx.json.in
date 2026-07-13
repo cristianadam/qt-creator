@@ -4,6 +4,8 @@
     "Name" : "Qnx",
     "Version" : "${IDE_VERSION}",
     "CompatVersion" : "${IDE_VERSION_COMPAT}",
+    "DisabledByDefault" : true,
+    "SoftLoadable" : true,
     "VendorId" : "blackberry",
     "Vendor" : "BlackBerry",
     "Copyright" : "(C) 2017 BlackBerry, ${IDE_COPYRIGHT}",

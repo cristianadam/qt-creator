@@ -49,6 +49,10 @@ public:
 
     static bool isLoaded();
 
+    // Called when a ToolchainFactory is registered after loading (e.g. by a soft-loaded plugin),
+    // so that toolchains deferred for lack of a factory can be restored.
+    static void toolchainFactoryAdded();
+
     static Toolchains registerToolchains(const Toolchains &toolchains);
     static void deregisterToolchains(const Toolchains &toolchains);
 

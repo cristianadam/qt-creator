@@ -654,6 +654,11 @@ void Toolchain::setExplicitCodeModelTargetTriple(const QString &triple)
 ToolchainFactory::ToolchainFactory()
 {
     toolchainFactories().append(this);
+
+    // If the toolchains were already loaded, this factory is registered at runtime (e.g. by a
+    // soft-loaded plugin). Give the manager a chance to restore toolchains it had to defer.
+    if (ToolchainManager::isLoaded())
+        ToolchainManager::toolchainFactoryAdded();
 }
 
 ToolchainFactory::~ToolchainFactory()

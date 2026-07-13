@@ -18,9 +18,13 @@
 
 #include <nanotrace/nanotrace.h>
 
+#include <QLoggingCategory>
+
 using namespace Utils;
 
 namespace ProjectExplorer {
+
+static Q_LOGGING_CATEGORY(tcLog, "qtc.projectexplorer.toolchains", QtWarningMsg)
 namespace Internal {
 
 // --------------------------------------------------------------------------
@@ -210,7 +214,34 @@ Toolchain *ToolchainManager::findToolchain(Id id)
 
 bool ToolchainManager::isLoaded()
 {
-    return d->m_loaded;
+    // May be called from a ToolchainFactory constructor before the manager itself exists.
+    return d && d->m_loaded;
+}
+
+void ToolchainManager::toolchainFactoryAdded()
+{
+    // A factory was registered after the toolchains were loaded (e.g. by a soft-loaded plugin).
+    // This runs from the ToolchainFactory base-class constructor, before the derived class has set
+    // its supported type, and several factories may be added in one batch; defer the retry to the
+    // event loop so all newly registered factories are fully constructed first.
+    static bool scheduled = false;
+    if (scheduled)
+        return;
+    scheduled = true;
+    QMetaObject::invokeMethod(
+        m_instance,
+        [] {
+            scheduled = false;
+            if (!d->m_accessor)
+                return;
+            const Toolchains recovered = d->m_accessor->retryDeferredToolchains();
+            if (!recovered.isEmpty()) {
+                qCInfo(tcLog) << "Restored" << recovered.size()
+                              << "previously unrestorable toolchain(s) after a factory was registered";
+                registerToolchains(recovered);
+            }
+        },
+        Qt::QueuedConnection);
 }
 
 void ToolchainManager::notifyAboutUpdate(Toolchain *tc)
