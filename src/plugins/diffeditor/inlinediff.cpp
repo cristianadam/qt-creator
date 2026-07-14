@@ -28,10 +28,10 @@
 #include <utils/utilsicons.h>
 
 #include <QEvent>
+#include <QLabel>
 #include <QPainter>
 #include <QVBoxLayout>
 #include <QPointer>
-#include <QScopeGuard>
 #include <QScrollBar>
 #include <QSplitter>
 #include <QTextDocument>
@@ -220,6 +220,78 @@ static void computeRenderModel(QPromise<InlineDiffRenderModel> &promise,
 }
 
 namespace {
+
+// A merge conflict in the editor contents, as 1-based line numbers of its
+// marker lines.
+class ConflictRegion
+{
+public:
+    int startLine = -1;     // <<<<<<<
+    int baseLine = -1;      // |||||||, only with merge.conflictStyle diff3
+    int separatorLine = -1; // =======
+    int endLine = -1;       // >>>>>>>
+};
+
+static QList<ConflictRegion> findConflictRegions(const QTextDocument *doc)
+{
+    enum class State { Outside, CurrentSide, IncomingSide };
+
+    QList<ConflictRegion> result;
+    ConflictRegion current;
+    State state = State::Outside;
+    for (QTextBlock block = doc->firstBlock(); block.isValid(); block = block.next()) {
+        const QString text = block.text();
+        const int line = block.blockNumber() + 1;
+        if (text.startsWith("<<<<<<<")) {
+            current = {};
+            current.startLine = line;
+            state = State::CurrentSide;
+        } else if (state == State::CurrentSide) {
+            if (text.startsWith("|||||||"))
+                current.baseLine = line;
+            else if (text == "=======") {
+                current.separatorLine = line;
+                state = State::IncomingSide;
+            }
+        } else if (state == State::IncomingSide && text.startsWith(">>>>>>>")) {
+            current.endLine = line;
+            result.append(current);
+            state = State::Outside;
+        }
+    }
+    return result;
+}
+
+// Replaces the blocks firstLine..lastLine (1-based, inclusive) with the given
+// lines, as a single undo step.
+static void replaceLines(QTextDocument *doc, int firstLine, int lastLine,
+                         const QStringList &lines)
+{
+    const QTextBlock first = doc->findBlockByNumber(firstLine - 1);
+    const QTextBlock last = doc->findBlockByNumber(lastLine - 1);
+    QTC_ASSERT(first.isValid() && last.isValid(), return);
+    QString replacement = lines.join('\n');
+    QTextCursor cursor(doc);
+    cursor.beginEditBlock();
+    cursor.setPosition(first.position());
+    if (last.next().isValid()) {
+        // include the trailing newline of the replaced lines
+        cursor.setPosition(last.next().position(), QTextCursor::KeepAnchor);
+        if (!replacement.isEmpty())
+            replacement += '\n';
+    } else if (replacement.isEmpty() && first.previous().isValid()) {
+        // removing the last lines removes the preceding newline, too
+        const QTextBlock previous = first.previous();
+        cursor.setPosition(previous.position() + previous.length() - 1);
+        cursor.setPosition(last.position() + qMax(0, last.length() - 1),
+                           QTextCursor::KeepAnchor);
+    } else {
+        cursor.setPosition(last.position() + qMax(0, last.length() - 1),
+                           QTextCursor::KeepAnchor);
+    }
+    cursor.insertText(replacement);
+    cursor.endEditBlock();
+}
 
 // A slim vertical bracket next to the text, marking the lines that a hunk's
 // stage/revert buttons apply to. The horizontal end markers are only drawn
@@ -479,6 +551,136 @@ private:
     bool m_repositionScheduled = false;
 };
 
+// One row of resolution buttons per merge conflict, floating on a reserved
+// line directly above the conflict's "<<<<<<<" marker.
+class ConflictControls final : public QObject
+{
+public:
+    enum class Choice { Current, Incoming, Both };
+    using Resolver = std::function<void(const ConflictRegion &, Choice)>;
+
+    explicit ConflictControls(TextEditorWidget *widget)
+        : QObject(widget)
+        , m_widget(widget)
+    {
+        // updateRequest also fires on scrolling
+        connect(m_widget, &PlainTextEdit::updateRequest, this, [this] { scheduleReposition(); });
+        connect(m_widget->textDocument(), &TextDocument::fontSettingsChanged,
+                this, [this] { rebuild(); });
+    }
+
+    ~ConflictControls() override
+    {
+        // Deliberately no cleanup here: the destructor may run during the
+        // teardown of the widget. The rows die with the widget.
+    }
+
+    void setConflicts(const QList<ConflictRegion> &conflicts, const Resolver &resolver)
+    {
+        m_conflicts = conflicts;
+        m_resolver = resolver;
+        rebuild();
+    }
+
+    // Drops the rows, e.g. while the conflicts' line numbers are stale
+    // during an edit. The next setConflicts() rebuilds.
+    void invalidate()
+    {
+        m_conflicts.clear();
+        m_resolver = {};
+        clearRows();
+    }
+
+private:
+    void clearRows()
+    {
+        for (const Row &row : std::as_const(m_rows)) {
+            if (row.widget) {
+                row.widget->hide();
+                row.widget->deleteLater(); // a resolution button may be the caller
+            }
+        }
+        m_rows.clear();
+    }
+
+    void rebuild()
+    {
+        clearRows();
+        if (m_conflicts.isEmpty() || !m_resolver)
+            return;
+        const int lineHeight = m_widget->fontMetrics().lineSpacing();
+        for (const ConflictRegion &conflict : std::as_const(m_conflicts)) {
+            auto row = new QLabel(m_widget->viewport());
+            row->setText(QString("<a href=\"current\">%1</a> | <a href=\"incoming\">%2</a>"
+                                 " | <a href=\"both\">%3</a>")
+                             .arg(Tr::tr("Choose Current Change"),
+                                  Tr::tr("Choose Incoming Change"),
+                                  Tr::tr("Choose Both")));
+            connect(row, &QLabel::linkActivated, this, [this, conflict](const QString &link) {
+                const Choice choice = link == "current"   ? Choice::Current
+                                      : link == "incoming" ? Choice::Incoming
+                                                           : Choice::Both;
+                // all rows' line numbers are stale after this edit until the
+                // conflicts are rescanned
+                const Resolver resolver = m_resolver;
+                clearRows();
+                resolver(conflict, choice);
+            });
+            row->adjustSize();
+            row->setFixedHeight(lineHeight);
+            m_rows.append({row, conflict.startLine});
+        }
+        reposition();
+    }
+
+    void reposition()
+    {
+        if (!m_widget)
+            return;
+        QTextDocument *doc = m_widget->document();
+        for (const Row &row : std::as_const(m_rows)) {
+            if (!row.widget)
+                continue;
+            const QTextBlock block = doc->findBlockByNumber(row.anchorLine - 1);
+            if (!block.isValid() || !block.isVisible()) {
+                row.widget->hide();
+                continue;
+            }
+            // the rows float on the spacer line reserved above the marker
+            const int top = m_widget->cursorRect(QTextCursor(block)).top()
+                            - m_widget->editorLayout()->mainLayoutOffset(block);
+            row.widget->move(int(doc->documentMargin()), top);
+            row.widget->show();
+        }
+    }
+
+    // updateRequest fires on every repaint, scroll, and incremental
+    // rehighlight; coalesce the repositions into one per event loop pass.
+    void scheduleReposition()
+    {
+        if (m_repositionScheduled)
+            return;
+        m_repositionScheduled = true;
+        QMetaObject::invokeMethod(this, [this] {
+            m_repositionScheduled = false;
+            reposition();
+        }, Qt::QueuedConnection);
+    }
+
+    class Row
+    {
+    public:
+        QPointer<QWidget> widget;
+        int anchorLine = -1;
+    };
+
+    QPointer<TextEditorWidget> m_widget;
+    QList<Row> m_rows;
+    QList<ConflictRegion> m_conflicts;
+    Resolver m_resolver;
+    bool m_repositionScheduled = false;
+};
+
 // A thin document for the inline diff editor: it carries the diff title and
 // forwards the modified state and saving to the source document, whose text
 // buffer the inline diff editor shares.
@@ -549,6 +751,7 @@ public:
             m_widget->setupGenericHighlighter();
         } else {
             m_hunkControls = new HunkControls(m_widget);
+            m_conflictControls = new ConflictControls(m_widget);
         }
         m_splitter->setChildrenCollapsible(false);
         m_splitter->addWidget(m_widget);
@@ -569,9 +772,12 @@ public:
         m_updateTimer.setInterval(500);
         connect(&m_updateTimer, &QTimer::timeout, this, &InlineDiffEditor::startUpdate);
         connect(source->document(), &QTextDocument::contentsChanged, this, [this] {
-            // the hunks' line numbers are stale until the diff is recomputed
+            // the hunks' and conflicts' line numbers are stale until the
+            // diff is recomputed
             if (m_hunkControls)
                 m_hunkControls->invalidate();
+            if (m_conflictControls)
+                m_conflictControls->invalidate();
             m_updateTimer.start();
         });
 
@@ -794,15 +1000,37 @@ private:
     {
         if (!m_decorator)
             return;
+        // each merge conflict gets a line reserved above its "<<<<<<<"
+        // marker, where the resolution buttons float
+        m_conflicts = m_conflictControls ? findConflictRegions(m_source->document())
+                                         : QList<ConflictRegion>();
+        QList<InlineDiffDecorator::Spacer> conflictSpacers;
+        for (const ConflictRegion &conflict : std::as_const(m_conflicts))
+            conflictSpacers.append({conflict.startLine, 1});
+
         if (m_viewMode == InlineDiffViewMode::Inline) {
-            m_decorator->apply(m_model.ghosts, m_model.changes);
+            m_decorator->apply(m_model.ghosts, m_model.changes, conflictSpacers);
             if (m_baselineDecorator)
                 m_baselineDecorator->clear();
         } else {
-            m_decorator->apply({}, m_model.changes, m_model.editorSpacers);
+            m_decorator->apply({}, m_model.changes,
+                               m_model.editorSpacers + conflictSpacers);
             if (m_baselineDecorator) {
-                m_baselineDecorator->apply({}, m_model.baselineChanges,
-                                           m_model.baselineSpacers);
+                // compensate the conflict lines on the baseline side to keep
+                // both sides the same height
+                QList<InlineDiffDecorator::Spacer> baselineSpacers = m_model.baselineSpacers;
+                for (const ConflictRegion &conflict : std::as_const(m_conflicts)) {
+                    for (const InlineDiffChunk &hunk : std::as_const(m_model.hunks)) {
+                        if (conflict.startLine >= hunk.editorStartLine
+                            && conflict.startLine < hunk.editorStartLine
+                                                        + qMax(hunk.editorLineCount, 1)) {
+                            baselineSpacers.append(
+                                {hunk.baselineStartLine + int(hunk.baselineLines.size()), 1});
+                            break;
+                        }
+                    }
+                }
+                m_baselineDecorator->apply({}, m_model.baselineChanges, baselineSpacers);
             }
         }
         updateHunkControls();
@@ -821,8 +1049,21 @@ private:
 
     void updateHunkControls()
     {
+        if (m_conflictControls) {
+            m_conflictControls->setConflicts(
+                m_conflicts,
+                [this](const ConflictRegion &region, ConflictControls::Choice choice) {
+                    resolveConflict(region, choice);
+                    m_updateTimer.start();
+                });
+        }
         if (!m_hunkControls)
             return;
+        if (!m_conflicts.isEmpty()) {
+            // resolving the conflicts replaces staging and reverting
+            m_hunkControls->setHunks({}, {}, {});
+            return;
+        }
         const int requestId = ++m_actionableRequestId;
         if (m_baseline.fetchActionableLines && !m_model.hunks.isEmpty()) {
             m_hunkControls->setHunks({}, {}, {});
@@ -871,48 +1112,54 @@ private:
         // state, which has no visible line of its own
         const bool touchesEnd = hunk.editorStartLine + qMax(hunk.editorLineCount, 1) - 1
                                 >= doc->blockCount();
-        QString replacement = hunk.baselineLines.join('\n');
         QTextCursor cursor(doc);
         cursor.beginEditBlock();
-        const QScopeGuard endEditBlock([&cursor, &doc, touchesEnd, this] {
-            if (touchesEnd)
-                alignTrailingNewline(doc);
-            cursor.endEditBlock();
-        });
         if (hunk.editorLineCount > 0) {
-            const QTextBlock first = doc->findBlockByNumber(hunk.editorStartLine - 1);
-            const QTextBlock last = doc->findBlockByNumber(hunk.editorStartLine - 1
-                                                           + hunk.editorLineCount - 1);
-            QTC_ASSERT(first.isValid() && last.isValid(), return);
-            cursor.setPosition(first.position());
-            if (last.next().isValid()) {
-                // include the trailing newline of the hunk
-                cursor.setPosition(last.next().position(), QTextCursor::KeepAnchor);
-                if (!replacement.isEmpty())
-                    replacement += '\n';
-            } else if (replacement.isEmpty() && first.previous().isValid()) {
-                // removing the last lines removes the preceding newline, too
-                const QTextBlock previous = first.previous();
-                cursor.setPosition(previous.position() + previous.length() - 1);
-                cursor.setPosition(last.position() + qMax(0, last.length() - 1),
-                                   QTextCursor::KeepAnchor);
-            } else {
-                cursor.setPosition(last.position() + qMax(0, last.length() - 1),
-                                   QTextCursor::KeepAnchor);
-            }
-            cursor.insertText(replacement);
-        } else if (!replacement.isEmpty()) {
+            replaceLines(doc, hunk.editorStartLine,
+                         hunk.editorStartLine + hunk.editorLineCount - 1,
+                         hunk.baselineLines);
+        } else if (!hunk.baselineLines.isEmpty()) {
             // pure removal: re-insert the baseline lines above the anchor
+            const QString replacement = hunk.baselineLines.join('\n');
             if (hunk.editorStartLine > doc->blockCount()) {
                 cursor.movePosition(QTextCursor::End);
                 cursor.insertText('\n' + replacement);
             } else {
                 const QTextBlock block = doc->findBlockByNumber(hunk.editorStartLine - 1);
-                QTC_ASSERT(block.isValid(), return);
+                QTC_ASSERT(block.isValid(), cursor.endEditBlock(); return);
                 cursor.setPosition(block.position());
                 cursor.insertText(replacement + '\n');
             }
         }
+        if (touchesEnd)
+            alignTrailingNewline(doc);
+        cursor.endEditBlock();
+    }
+
+    void resolveConflict(const ConflictRegion &region, ConflictControls::Choice choice)
+    {
+        QTextDocument *doc = m_source->document();
+        const auto lineText = [doc](int line) {
+            return doc->findBlockByNumber(line - 1).text();
+        };
+        // the rows are dropped on edits, but be defensive about staleness
+        QTC_ASSERT(region.endLine <= doc->blockCount()
+                       && lineText(region.startLine).startsWith("<<<<<<<")
+                       && lineText(region.endLine).startsWith(">>>>>>>"),
+                   return);
+        QStringList lines;
+        using Choice = ConflictControls::Choice;
+        if (choice == Choice::Current || choice == Choice::Both) {
+            const int currentEnd
+                = (region.baseLine > 0 ? region.baseLine : region.separatorLine) - 1;
+            for (int line = region.startLine + 1; line <= currentEnd; ++line)
+                lines.append(lineText(line));
+        }
+        if (choice == Choice::Incoming || choice == Choice::Both) {
+            for (int line = region.separatorLine + 1; line <= region.endLine - 1; ++line)
+                lines.append(lineText(line));
+        }
+        replaceLines(doc, region.startLine, region.endLine, lines);
     }
 
     // makes reverts of hunks at the end of the file converge on the
@@ -939,6 +1186,8 @@ private:
     QPointer<TextEditorWidget> m_widget;
     QPointer<InlineDiffDecorator> m_decorator;
     QPointer<HunkControls> m_hunkControls;
+    QPointer<ConflictControls> m_conflictControls;
+    QList<ConflictRegion> m_conflicts;
     QPointer<TextEditorWidget> m_baselineWidget;
     QPointer<InlineDiffDecorator> m_baselineDecorator;
     TextDocumentPtr m_baselineDocument;

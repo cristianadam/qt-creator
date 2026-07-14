@@ -49,6 +49,7 @@
 #include <utils/fileutils.h>
 #include <utils/macroexpander.h>
 #include <utils/pathchooser.h>
+#include <utils/environment.h>
 #include <utils/infobar.h>
 #include <utils/qtcassert.h>
 #include <utils/stringutils.h>
@@ -68,6 +69,7 @@
 #include <QAbstractButton>
 #include <QAction>
 #include <QApplication>
+#include <QLabel>
 #include <QClipboard>
 #include <QDebug>
 #include <QDir>
@@ -2841,11 +2843,32 @@ void GitTest::testInlineDiffConflictedFile()
     Core::IEditor *diffEditor = EditorManager::currentEditor();
     TextEditor::TextEditorWidget *diffWidget = DiffEditor::inlineDiffEditorWidget(diffEditor);
     QVERIFY(diffWidget);
-    // the conflict markers differ from "ours", so a hunk with controls shows
-    // up once the baseline arrived and the diff is computed
-    QTRY_VERIFY(!diffWidget->findChildren<QAbstractButton *>().isEmpty());
+    // conflicts replace the stage/revert buttons with the resolution choices
+    const auto findChoices = [diffWidget]() -> QLabel * {
+        const QList<QLabel *> labels = diffWidget->findChildren<QLabel *>();
+        for (QLabel *label : labels) {
+            if (label->text().contains("Choose Incoming Change"))
+                return label;
+        }
+        return nullptr;
+    };
+    QLabel *choices = nullptr;
+    QTRY_VERIFY((choices = findChoices()) != nullptr);
+    QVERIFY(diffWidget->findChildren<QAbstractButton *>().isEmpty());
     QVERIFY(!diffEditor->document()->infoBar()->containsInfo(
         Utils::Id("DiffEditor.InlineDiff.BaselineError")));
+    const QString grabPath = Utils::qtcEnvironmentVariable("QTC_INLINE_DIFF_CONFLICT_GRAB");
+    if (!grabPath.isEmpty()) {
+        diffWidget->window()->resize(940, 400);
+        QApplication::processEvents();
+        diffWidget->grab().save(grabPath);
+    }
+    QVERIFY(QMetaObject::invokeMethod(choices, "linkActivated",
+                                      Q_ARG(QString, QString("incoming"))));
+    QTRY_COMPARE(diffWidget->toPlainText(), QString("side\n"));
+    // with the conflict resolved, the hunk controls return: the buffer still
+    // differs from "ours"
+    QTRY_VERIFY(diffWidget->findChildren<QAbstractButton *>().size() == 2);
 
     Core::IDocument *sourceDocument = Core::DocumentModel::documentForFilePath(file);
     QVERIFY(sourceDocument);
