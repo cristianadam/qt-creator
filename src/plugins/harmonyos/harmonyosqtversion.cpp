@@ -1,0 +1,70 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
+
+#include "harmonyosqtversion.h"
+
+#include "harmonyosconstants.h"
+#include "harmonyossdk.h"
+#include "harmonyossettings.h"
+#include "harmonyostr.h"
+
+#include <qtsupport/qtsupportconstants.h>
+#include <qtsupport/qtversionfactory.h>
+
+#include <utils/environment.h>
+
+using namespace ProjectExplorer;
+using namespace QtSupport;
+using namespace Utils;
+
+namespace HarmonyOs::Internal {
+
+HarmonyOsQtVersion::HarmonyOsQtVersion() = default;
+
+QString HarmonyOsQtVersion::description() const
+{
+    //: Qt Version is meant for HarmonyOS
+    return Tr::tr("HarmonyOS");
+}
+
+QSet<Id> HarmonyOsQtVersion::targetDeviceTypes() const
+{
+    return {Constants::HARMONYOS_DEVICE_TYPE};
+}
+
+QSet<Id> HarmonyOsQtVersion::availableFeatures() const
+{
+    QSet<Id> features = QtVersion::availableFeatures();
+    features.insert(QtSupport::Constants::FEATURE_MOBILE);
+    features.remove(QtSupport::Constants::FEATURE_QT_CONSOLE);
+    features.remove(QtSupport::Constants::FEATURE_QT_WEBKIT);
+    return features;
+}
+
+void HarmonyOsQtVersion::addToBuildEnvironment(const Kit *k, Environment &env) const
+{
+    QtVersion::addToBuildEnvironment(k, env);
+    // The ohos-clang mkspec reads NATIVE_OHOS_SDK to locate the sysroot and the compiler.
+    Sdk::addToEnvironment(settings().sdkLocation(), env);
+}
+
+class HarmonyOsQtVersionFactory final : public QtVersionFactory
+{
+public:
+    HarmonyOsQtVersionFactory()
+    {
+        setQtVersionCreator([] { return new HarmonyOsQtVersion; });
+        setSupportedType(Constants::HARMONYOS_QT_TYPE);
+        setPriority(90);
+        setRestrictionChecker([](const SetupData &setup) {
+            return setup.platforms.contains("ohos");
+        });
+    }
+};
+
+void setupHarmonyOsQtVersion()
+{
+    static HarmonyOsQtVersionFactory theHarmonyOsQtVersionFactory;
+}
+
+} // namespace HarmonyOs::Internal
