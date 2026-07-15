@@ -45,6 +45,26 @@ public:
         addSupportedRunMode(ProjectExplorer::Constants::NORMAL_RUN_MODE);
         addSupportedDeviceType(Constants::GenericLinuxOsType);
         addSupportedDeviceType(Constants::GenericMacOsType);
+        setSupportedRunConfigs(supportedRunConfigs());
+        setExecutionType(Constants::ExecutionType);
+    }
+};
+
+// The native Windows device runs the application on its interactive desktop session (so a GUI
+// is visible), not the invisible SSH session; flag the process so WindowsProcessInterface takes
+// that path. A dedicated factory keeps this off the Linux/Mac run path.
+class WindowsRunWorkerFactory final : public RunWorkerFactory
+{
+public:
+    WindowsRunWorkerFactory()
+    {
+        setId("WindowsRunWorkerFactory");
+        setRecipeProducer([](RunControl *runControl) {
+            return runControl->processRecipe([](Process &process) {
+                process.setExtraData(Constants::RunInInteractiveSession, true);
+            });
+        });
+        addSupportedRunMode(ProjectExplorer::Constants::NORMAL_RUN_MODE);
         addSupportedDeviceType(Constants::GenericWindowsOsType);
         setSupportedRunConfigs(supportedRunConfigs());
         setExecutionType(Constants::ExecutionType);
@@ -118,6 +138,7 @@ public:
 void setupRemoteLinuxRunAndDebugSupport()
 {
     static RemoteLinuxRunWorkerFactory runWorkerFactory;
+    static WindowsRunWorkerFactory windowsRunWorkerFactory;
     static RemoteLinuxDebugWorkerFactory debugWorkerFactory;
     static RemoteLinuxQmlToolingWorkerFactory qmlToolingWorkerFactory;
 }
