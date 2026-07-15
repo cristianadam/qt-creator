@@ -130,8 +130,11 @@ public:
             result << BuildSystemTask(Task::Warning, Tr::tr("No Qt version set, so mkspec is ignored."));
         if (version && !version->hasMkspec(mkspec))
             result << BuildSystemTask(Task::Error, Tr::tr("Mkspec not found for Qt version."));
-        if (version && !version->qmakeFilePath().fileName().contains("qmake"))
-            result << BuildSystemTask(Task::Error, Tr::tr("qmake not found for Qt version."));
+        if (version) {
+            const QString queryToolName = version->qmakeFilePath().fileName();
+            if (!queryToolName.contains("qmake") && !queryToolName.contains("qtpaths"))
+                result << BuildSystemTask(Task::Error, Tr::tr("qmake not found for Qt version."));
+        }
 
         return result;
     }
