@@ -21,6 +21,7 @@
 #include "highlighterhelper.h"
 #include "highlightersettings.h"
 #include "icodestylepreferences.h"
+#include "inlinediffdecorator.h"
 #include "linenumberfilter.h"
 #include "marginsettings.h"
 #include "refactoroverlay.h"
@@ -816,6 +817,12 @@ public:
                           const QRectF &blockBoundingRect) const;
     void paintRevisionMarker(QPainter &painter, const ExtraAreaPaintEventData &data,
                              const QRectF &blockBoundingRect) const;
+    void paintDiffChangeSigns(QPainter &painter, const ExtraAreaPaintEventData &data,
+                              const QRectF &blockBoundingRect) const;
+    // width of the +/- diff sign column in the extra area, 0 when the feature
+    // is off or the editor shows no inline diff
+    int diffChangeSignWidth(const QFontMetrics &fm) const;
+    bool hasDiffChangeSigns() const;
 
     void toggleBlockVisible(const QTextBlock &block);
     QRect foldBox();
@@ -946,6 +953,11 @@ public:
 
     Id m_tabSettingsId;
     DisplaySettingsData m_displaySettings;
+    // per 0-based block number, the +/- sign for a changed (added or removed)
+    // main line published by an InlineDiffDecorator; ghost (removed) rows carry
+    // their own sign and are detected from the layout instead
+    QHash<int, QChar> m_diffChangeSigns;
+    bool m_diffHasRemovedRows = false;
     bool m_annotationsrRight = true;
     MarginSettingsData m_marginSettings;
     // apply when making visible the first time, for the split case
@@ -6645,8 +6657,10 @@ int TextEditorWidget::extraAreaWidth(int *markWidthPtr) const
     if (!d->m_marksVisible && documentLayout->hasMarks)
         d->m_marksVisible = true;
 
-    if (!d->m_marksVisible && !d->m_lineNumbersVisible && !d->m_codeFoldingVisible)
+    if (!d->m_marksVisible && !d->m_lineNumbersVisible && !d->m_codeFoldingVisible
+        && !(d->m_displaySettings.m_markDiffChangeSigns && d->hasDiffChangeSigns())) {
         return 0;
+    }
 
     int space = 0;
     const QFontMetrics fm(d->m_extraArea->fontMetrics());
@@ -6682,6 +6696,8 @@ int TextEditorWidget::extraAreaWidth(int *markWidthPtr) const
         *markWidthPtr = markWidth;
 
     space += 4;
+
+    space += d->diffChangeSignWidth(fm);
 
     if (d->m_codeFoldingVisible) {
         if (globalFontSettings().lineSpacing() == 100)
@@ -6770,6 +6786,7 @@ struct Internal::ExtraAreaPaintEventData
         , fontMetrics(d->m_extraArea->font())
         , lineSpacing(fontMetrics.lineSpacing())
         , markWidth(d->m_marksVisible ? lineSpacing : 0)
+        , signWidth(d->diffChangeSignWidth(fontMetrics))
         , collapseColumnWidth(d->m_codeFoldingVisible ? foldBoxWidth(fontMetrics) : 0)
         , extraAreaWidth(d->m_extraArea->width() - collapseColumnWidth)
         , currentLineNumberFormat(
@@ -6791,6 +6808,7 @@ struct Internal::ExtraAreaPaintEventData
     const QFontMetrics fontMetrics;
     int lineSpacing;
     int markWidth;
+    int signWidth;
     int collapseColumnWidth;
     const int extraAreaWidth;
     const QTextCharFormat currentLineNumberFormat;
@@ -6827,7 +6845,8 @@ void TextEditorWidgetPrivate::paintLineNumbers(QPainter &painter,
     QRectF rect;
     rect.setX(data.markWidth);
     rect.setY(blockBoundingRect.top() + q->editorLayout()->mainLayoutOffset(data.block));
-    rect.setWidth(data.extraAreaWidth - data.markWidth - 4);
+    // leave room on the right for the +/- diff sign column, when present
+    rect.setWidth(data.extraAreaWidth - data.markWidth - 4 - data.signWidth);
     rect.setHeight(blockBoundingRect.height());
     painter.drawText(rect, Qt::AlignRight, number);
     if (selected)
@@ -7003,6 +7022,69 @@ void TextEditorWidgetPrivate::paintRevisionMarker(QPainter &painter,
     }
 }
 
+bool TextEditorWidgetPrivate::hasDiffChangeSigns() const
+{
+    return !m_diffChangeSigns.isEmpty() || m_diffHasRemovedRows;
+}
+
+int TextEditorWidgetPrivate::diffChangeSignWidth(const QFontMetrics &fm) const
+{
+    if (!m_displaySettings.m_markDiffChangeSigns || !hasDiffChangeSigns())
+        return 0;
+    // room for a single glyph plus padding, with a wider gap towards the text
+    using namespace StyleHelper::SpacingTokens;
+    return PaddingHXs + fm.horizontalAdvance(QLatin1Char('+')) + PaddingHM;
+}
+
+void TextEditorWidgetPrivate::paintDiffChangeSigns(QPainter &painter,
+                                                   const ExtraAreaPaintEventData &data,
+                                                   const QRectF &blockBoundingRect) const
+{
+    if (data.signWidth == 0)
+        return;
+    TextEditorLayout *layout = q->editorLayout();
+    if (!layout)
+        return;
+
+    // inset by the left padding and left-align, so the wider padding towards
+    // the text stays to the right of the glyph
+    const qreal x = data.extraAreaWidth - data.signWidth + StyleHelper::SpacingTokens::PaddingHXs;
+    const qreal width = data.signWidth - StyleHelper::SpacingTokens::PaddingHXs;
+    const auto drawSign = [&](QChar sign, qreal top, qreal height) {
+        painter.drawText(QRectF(x, top, width, height),
+                         Qt::AlignLeft | Qt::AlignVCenter, QString(sign));
+    };
+
+    // '-' next to each removed line shown as a ghost row. Ghost and spacer
+    // items sit above the main line (or below it for the last block), so walk
+    // the block's layout items in paint order and mark the ghost rows only.
+    if (m_diffHasRemovedRows) {
+        qreal top = blockBoundingRect.top();
+        const QList<Utils::LayoutItem *> items = layout->layoutItems(data.block);
+        for (Utils::LayoutItem *item : items) {
+            if (item->category() == inlineDiffGhostCategory()) {
+                if (auto *textItem = dynamic_cast<Utils::TextLayoutItem *>(item)) {
+                    if (QTextLayout *ghostLayout = textItem->layout()) {
+                        for (int i = 0; i < ghostLayout->lineCount(); ++i) {
+                            const QTextLine line = ghostLayout->lineAt(i);
+                            drawSign(u'-', top + line.y(), line.height());
+                        }
+                    }
+                }
+            }
+            top += item->height();
+        }
+    }
+
+    // '+' (or '-' on the baseline side) next to the block's own changed line
+    const QChar mainSign = m_diffChangeSigns.value(data.block.blockNumber());
+    if (!mainSign.isNull()) {
+        drawSign(mainSign,
+                 blockBoundingRect.top() + layout->mainLayoutOffset(data.block),
+                 data.lineSpacing);
+    }
+}
+
 void TextEditorWidget::extraAreaPaintEvent(QPaintEvent *e)
 {
     ExtraAreaPaintEventData data(this, d.get());
@@ -7034,6 +7116,7 @@ void TextEditorWidget::extraAreaPaintEvent(QPaintEvent *e)
             }
 
             d->paintRevisionMarker(painter, data, boundingRect);
+            d->paintDiffChangeSigns(painter, data, boundingRect);
         }
 
         offset.ry() += boundingRect.height();
@@ -9510,7 +9593,24 @@ void TextEditorWidget::setDisplaySettings(const DisplaySettingsData &ds)
     d->updateHighlights();
     d->setupScrollBar();
     d->updateCursorSelections();
+    // the +/- diff sign column may have appeared or disappeared
+    d->slotUpdateExtraAreaWidth();
     viewport()->update();
+    extraArea()->update();
+}
+
+void TextEditorWidget::setDiffChangeSigns(const QHash<int, QChar> &blockSigns, bool hasRemovedRows)
+{
+    if (d->m_diffChangeSigns == blockSigns && d->m_diffHasRemovedRows == hasRemovedRows)
+        return;
+
+    const bool hadColumn = d->m_displaySettings.m_markDiffChangeSigns && d->hasDiffChangeSigns();
+    d->m_diffChangeSigns = blockSigns;
+    d->m_diffHasRemovedRows = hasRemovedRows;
+    const bool hasColumn = d->m_displaySettings.m_markDiffChangeSigns && d->hasDiffChangeSigns();
+
+    if (hadColumn != hasColumn)
+        d->slotUpdateExtraAreaWidth();
     extraArea()->update();
 }
 
