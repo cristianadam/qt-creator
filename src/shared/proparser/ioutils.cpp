@@ -88,7 +88,10 @@ bool IoUtils::isRelativePath(const QString &device, const QString &path)
         return false;
 #endif
 
-    if (isWindows(device)) {
+    // A remote device may use Windows path semantics even when the local host does not, so a
+    // drive-letter or UNC prefix must be recognized as absolute for any non-local device too.
+    // (A remote Unix device never produces such paths, so this stays safe there.)
+    if (isWindows(device) || !device.isEmpty()) {
         // Unlike QFileInfo, this considers only paths with both a drive prefix and
         // a subsequent (back-)slash absolute:
         if (path.size() >= 3 && path.at(1) == QLatin1Char(':') && path.at(0).isLetter()
@@ -101,9 +104,9 @@ bool IoUtils::isRelativePath(const QString &device, const QString &path)
             && path.at(1) == path.at(0)) {
                 return false;
         }
-    } else if (path.startsWith(QLatin1Char('/'))) {
-        return false;
     }
+    if (!isWindows(device) && path.startsWith(QLatin1Char('/')))
+        return false;
     return true;
 }
 

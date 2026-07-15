@@ -2354,11 +2354,13 @@ QtVersion *QtVersionFactory::createQtVersionFromQMakePath(
     QMakeVfs vfs;
     QMakeGlobals globals;
     globals.setProperties(versionInfo);
+    if (!qmakePath.isLocal())
+        globals.device_root = qmakePath.withNewPath("/").toFSPathString(); // Empty for host!
     ProMessageHandler msgHandler(false);
     ProFileCacheManager::instance()->incRefCount();
     QMakeParser parser(ProFileCacheManager::instance()->cache(), &vfs, &msgHandler);
     ProFileEvaluator evaluator(&globals, &parser, &vfs, &msgHandler);
-    evaluator.loadNamedSpec(mkspec.toFSPathString(), false);
+    evaluator.loadNamedSpec(mkspec.path(), false);
 
     const QList<QtVersionFactory *> factories = Utils::sorted(g_qtVersionFactories,
             [](const QtVersionFactory *l, const QtVersionFactory *r) {
