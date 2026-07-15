@@ -134,6 +134,10 @@ public:
                 m_envScript.removeFile();
                 m_envScript.clear();
             }
+            if (!m_runTempDir.isEmpty()) {
+                m_runTempDir.removeRecursively();
+                m_runTempDir.clear();
+            }
             emit done(result);
         });
     }
@@ -143,11 +147,15 @@ private:
     qint64 write(const QByteArray &data) final { return m_process.writeRaw(data); }
     void sendControlSignal(ControlSignal controlSignal) final;
     CommandLine fullLocalCommandLine();
+    QString buildInteractiveRunRemoteCommand();
 
     IDevice::ConstPtr m_device;
     // A PowerShell script written to the device's temp dir to apply the build environment
     // before running the command (see fullLocalCommandLine); removed when the process is done.
     FilePath m_envScript;
+    // A temp dir on the device holding the interactive-run orchestration script and its
+    // output/exit files (see buildInteractiveRunRemoteCommand); removed when done.
+    FilePath m_runTempDir;
     // Parented to this so it moves along when Process::waitForFinished() relocates the
     // interface to its blocking worker thread; otherwise nested blocking calls (e.g. a
     // device-rooted Process run via runBlocking) would never see the inner process's
@@ -222,6 +230,14 @@ CommandLine WindowsProcessInterface::fullLocalCommandLine()
     const CommandLine remoteCommand = m_setup.m_commandLine;
     const QString args = remoteCommand.arguments();
 
+    QString remote;
+
+    // A GUI run must appear on the device's interactive desktop, not the (invisible) SSH
+    // session; WindowsRunWorkerFactory flags such processes. The launch is orchestrated by a
+    // staged script that starts the app in the interactive session and waits for it.
+    if (m_setup.m_extraData.value(Constants::RunInInteractiveSession).toBool())
+        remote = buildInteractiveRunRemoteCommand();
+
     // A process that carries an explicit environment (e.g. a build run with the kit's
     // build environment: MSVC vcvars putting INCLUDE/LIB in the env and the SDK bin on
     // PATH) needs that environment applied on the device, the way SshProcessInterface
@@ -233,10 +249,10 @@ CommandLine WindowsProcessInterface::fullLocalCommandLine()
     // The streaming CmdBridge process (ProcessMode::Writer, binary protocol on stdin/stdout)
     // is excluded - a PowerShell wrapper would corrupt its byte stream; it keeps the plain
     // direct invocation below.
-    const bool injectEnvironment = m_setup.m_processMode != ProcessMode::Writer
+    const bool injectEnvironment = remote.isEmpty()
+                                   && m_setup.m_processMode != ProcessMode::Writer
                                    && !m_setup.m_environment.toStringList().isEmpty();
 
-    QString remote;
     if (injectEnvironment) {
         const Environment &env = m_setup.m_environment;
         QString script;
@@ -295,6 +311,96 @@ CommandLine WindowsProcessInterface::fullLocalCommandLine()
         cmd.addArg(remote);
 
     return cmd;
+}
+
+// Builds the remote command for a GUI run: stages a PowerShell orchestrator on the device and
+// returns the "powershell -File <script>" invocation to run over SSH (in the invisible session 0).
+// Run in its default mode the script creates an interactive scheduled task (schtasks /it) that
+// re-invokes it in "app" mode inside the logged-on user's desktop session, where it applies the
+// run environment and starts the application (so its window is actually visible), waits for it,
+// and reports the exit code back. Returns an empty string on staging failure (caller falls back).
+QString WindowsProcessInterface::buildInteractiveRunRemoteCommand()
+{
+    const CommandLine remoteCommand = m_setup.m_commandLine;
+    const Environment &env = m_setup.m_environment;
+
+    QString envScript;
+    env.forEachEntry([&](const QString &key, const QString &value, bool enabled) {
+        if (enabled && !key.trimmed().isEmpty() && !value.contains('\n')) {
+            envScript += "    [Environment]::SetEnvironmentVariable(" + psQuote(key) + ", "
+                         + psQuote(env.expandVariables(value)) + ")\n";
+        }
+    });
+
+    QString tempDir = env.value("TEMP");
+    if (tempDir.isEmpty())
+        tempDir = env.value("TMP");
+    if (tempDir.isEmpty())
+        tempDir = "C:/Windows/Temp";
+    tempDir.replace('\\', '/');
+
+    const QString id = QUuid::createUuid().toString(QUuid::Id128);
+    const FilePath dir = m_device->rootPath().withNewPath(tempDir) / ("qtc-run-" + id);
+    if (const Result<> res = dir.ensureWritableDir(); !res) {
+        qCWarning(windowsDeviceLog) << "Failed to create interactive-run dir"
+                                    << dir.toUserOutput() << ":" << res.error();
+        return {};
+    }
+
+    const FilePath scriptPath = dir / "run.ps1";
+    const QString self = scriptPath.nativePath();
+    const QString workingDir = m_setup.rawWorkingDirectory().isEmpty()
+            ? QString() : m_setup.rawWorkingDirectory().nativePath();
+
+    QString script;
+    script += "param([string]$Mode = 'run')\n";
+    script += "$ErrorActionPreference = 'SilentlyContinue'\n";
+    script += "$out = " + psQuote((dir / "out.txt").nativePath()) + "\n";
+    script += "$err = " + psQuote((dir / "err.txt").nativePath()) + "\n";
+    script += "$done = " + psQuote((dir / "exit.txt").nativePath()) + "\n";
+    script += "$exe = " + psQuote(remoteCommand.executable().nativePath()) + "\n";
+    script += "$tn = " + psQuote("qtc_run_" + id) + "\n";
+    script += "$self = " + psQuote(self) + "\n\n";
+
+    // "app" mode: runs inside the interactive session, applies the env and starts the app.
+    script += "if ($Mode -eq 'app') {\n";
+    script += envScript;
+    script += "    $a = @{ FilePath = $exe; PassThru = $true; Wait = $true;\n";
+    script += "            RedirectStandardOutput = $out; RedirectStandardError = $err }\n";
+    if (!workingDir.isEmpty())
+        script += "    $a['WorkingDirectory'] = " + psQuote(workingDir) + "\n";
+    if (!remoteCommand.arguments().isEmpty())
+        script += "    $a['ArgumentList'] = " + psQuote(remoteCommand.arguments()) + "\n";
+    script += "    $code = 1\n";
+    script += "    try { $p = Start-Process @a; $code = $p.ExitCode } catch { }\n";
+    script += "    Set-Content -Path $done -Value $code\n";
+    script += "    return\n";
+    script += "}\n\n";
+
+    // Default ("run") mode: orchestrate the interactive task, wait, relay output + exit code.
+    // -WindowStyle Hidden keeps the task's own PowerShell console off the desktop (only the
+    // application window should show). schtasks warns that /st 00:00 is in the past, but /run
+    // launches it immediately regardless, so that warning is swallowed (2>&1 | Out-Null).
+    script += "$tr = 'powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"'"
+              " + $self + '\" -Mode app'\n";
+    script += "schtasks /create /f /tn $tn /tr $tr /sc once /st 00:00 /ru "
+              + psQuote(m_device->sshParameters().userName()) + " /it 2>&1 | Out-Null\n";
+    script += "schtasks /run /tn $tn | Out-Null\n";
+    script += "while (-not (Test-Path $done)) { Start-Sleep -Milliseconds 300 }\n";
+    script += "schtasks /delete /f /tn $tn | Out-Null\n";
+    script += "if (Test-Path $out) { [Console]::Out.Write((Get-Content -Raw $out)) }\n";
+    script += "if (Test-Path $err) { [Console]::Error.Write((Get-Content -Raw $err)) }\n";
+    script += "exit [int](Get-Content $done)\n";
+
+    if (const Result<qint64> res = scriptPath.writeFileContents(script.toUtf8()); !res) {
+        qCWarning(windowsDeviceLog) << "Failed to write interactive-run script"
+                                    << scriptPath.toUserOutput() << ":" << res.error();
+        dir.removeRecursively();
+        return {};
+    }
+
+    m_runTempDir = dir;
+    return "powershell -NoProfile -ExecutionPolicy Bypass -File \"" + self + "\"";
 }
 
 // WindowsDeviceAccess
