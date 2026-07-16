@@ -125,6 +125,14 @@ class DapServer():
             except gdb.error:
                 pass
 
+        # Register the Qt/stdlib type dumpers so qtc/fetchVariables produces
+        # Qt-aware output (the C++ engine no longer sends a separate
+        # loadDumpers command).
+        try:
+            self.dumper.setupDumpers()
+        except Exception as error:
+            self.dumper.warn('setupDumpers failed: %s' % error)
+
         self.running = True
         while self.running:
             try:
@@ -139,7 +147,8 @@ class DapServer():
 
     def _dispatch(self, request):
         command = request.get('command', '')
-        handler = getattr(self, 'cmd_' + command, None)
+        # qtc/ extension requests map to cmd_qtc_<name> handlers.
+        handler = getattr(self, 'cmd_' + command.replace('/', '_'), None)
         if handler is None:
             self.sendResponse(request, success=False,
                               message='unhandled request: %s' % command)
@@ -392,6 +401,32 @@ class DapServer():
             if frame is not None and frame.is_valid():
                 variables = self._localsOfFrame(frame)
         self.sendResponse(request, body={'variables': variables})
+
+    def cmd_qtc_fetchVariables(self, request):
+        # Native, dumper-aware variables (bridge-protocol-design.md, 5.5). Run
+        # the real Qt dumpers for the requested frame and return their
+        # structured output verbatim; the C++ side parses it with GdbMi and
+        # feeds the shared updateLocalsView(). We capture the dumper's report
+        # rather than let it print to the (DAP-owned) stdout.
+        args = request.get('arguments', {})
+
+        frame = self.frameForId.get(args.get('frameid'))
+        if frame is not None and frame.is_valid():
+            frame.select()
+
+        captured = {}
+        original = self.dumper.reportResult
+
+        def capture(result, unused):
+            captured['result'] = result
+
+        self.dumper.reportResult = capture
+        try:
+            self.dumper.fetchVariables(dict(args))
+        finally:
+            self.dumper.reportResult = original
+
+        self.sendResponse(request, body={'dumperResult': captured.get('result', '')})
 
     def cmd_evaluate(self, request):
         arguments = request.get('arguments', {})
