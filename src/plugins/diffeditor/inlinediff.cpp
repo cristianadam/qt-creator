@@ -1015,11 +1015,10 @@ private:
 // layout items (so measuring one view's rows from the other view's spacers
 // does not recurse). Blocks that are not laid out yet report a one line
 // estimate, matching how the editor sizes not-yet-laid-out blocks.
-static qreal naturalBlockHeight(const QPointer<TextEditorWidget> &widget, int line1)
+static qreal naturalBlockHeight(const QPointer<TextEditorWidget> &widget, const QTextBlock &block)
 {
     if (!widget)
         return 0.0;
-    const QTextBlock block = widget->document()->findBlockByNumber(line1 - 1);
     if (!block.isValid() || !block.isVisible())
         return 0.0;
     TextEditorLayout *layout = widget->editorLayout();
@@ -1171,10 +1170,16 @@ private:
         const QTextBlock block = own->document()->findBlockByNumber(ownLine - 1);
         if (!block.isValid())
             return;
+        const QTextBlock otherBlock = other->document()->findBlockByNumber(otherLine - 1);
         const QPointer<TextEditorWidget> ownPtr(own);
         const QPointer<TextEditorWidget> otherPtr(other);
-        auto heightFn = [ownPtr, ownLine, otherPtr, otherLine] {
-            return naturalBlockHeight(otherPtr, otherLine) - naturalBlockHeight(ownPtr, ownLine);
+        // capture the blocks (not line numbers) so the per-frame height query
+        // skips the block lookup. A QTextBlock is a (document, fragment)
+        // pair, so an edit above it resolves it to a different line rather
+        // than invalidating it - the pads are rebuilt on the next diff, and
+        // until then a stale one only misaligns a row.
+        auto heightFn = [ownPtr, block, otherPtr, otherBlock] {
+            return naturalBlockHeight(otherPtr, otherBlock) - naturalBlockHeight(ownPtr, block);
         };
         own->editorLayout()->appendLayoutItem(
             block, std::make_unique<DynamicSpacerItem>(heightFn, INLINE_DIFF_ALIGN_CATEGORY));
@@ -1191,8 +1196,9 @@ private:
                                            : doc->findBlockByNumber(anchorLine - 1);
         if (!block.isValid())
             return;
+        const QTextBlock otherBlock = other->document()->findBlockByNumber(otherLine - 1);
         const QPointer<TextEditorWidget> otherPtr(other);
-        auto heightFn = [otherPtr, otherLine] { return naturalBlockHeight(otherPtr, otherLine); };
+        auto heightFn = [otherPtr, otherBlock] { return naturalBlockHeight(otherPtr, otherBlock); };
         auto item = std::make_unique<DynamicSpacerItem>(heightFn, INLINE_DIFF_ALIGN_CATEGORY,
                                                         background);
         if (afterLast)
