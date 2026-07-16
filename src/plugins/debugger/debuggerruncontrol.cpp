@@ -3,6 +3,7 @@
 
 #include "debuggerruncontrol.h"
 
+#include "bridge/bridgeengine.h"
 #include "cdb/cdbengine.h"
 #include "console/console.h"
 #include "dap/dapengine.h"
@@ -548,6 +549,9 @@ static Result<QList<QPointer<Internal::DebuggerEngine>>> createEngines(
             break;
         case LldbDapEngineType:
             engines << createDapEngine(ProjectExplorer::Constants::DAP_LLDB_DEBUG_RUN_MODE);
+            break;
+        case BridgeEngineType:
+            engines << createBridgeEngine();
             break;
         case UvscEngineType:
             engines << createUvscEngine();
