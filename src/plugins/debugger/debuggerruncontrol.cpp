@@ -52,6 +52,7 @@ DebuggerEngine *createQmlEngine();
 DebuggerEngine *createLldbEngine();
 DebuggerEngine *createUvscEngine();
 DebuggerEngine *createDapEngine(Id runMode = ProjectExplorer::Constants::NO_RUN_MODE);
+DebuggerEngine *createBridgeEngine();
 
 static QString noEngineMessage()
 {
@@ -549,6 +550,9 @@ static Result<QList<QPointer<Internal::DebuggerEngine>>> createEngines(
             break;
         case LldbDapEngineType:
             engines << createDapEngine(ProjectExplorer::Constants::DAP_LLDB_DEBUG_RUN_MODE);
+            break;
+        case BridgeEngineType:
+            engines << createBridgeEngine();
             break;
         case UvscEngineType:
             engines << createUvscEngine();
