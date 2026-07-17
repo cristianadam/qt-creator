@@ -91,10 +91,7 @@ private:
     void handleDapEventInitialized();
     void handleDapConfigurationDone();
 
-    void dapRemoveBreakpoint(const Breakpoint &bp);
-    void dapInsertBreakpoint(const Breakpoint &bp);
-    void dapRemoveFunctionBreakpoint(const Breakpoint &bp);
-    void dapInsertFunctionBreakpoint(const Breakpoint &bp);
+    void handleBkpt(const GdbMi &bkpt, const Breakpoint &bp);
 
     void handleDapDone();
     void readDapStandardError();
@@ -102,7 +99,9 @@ private:
     void handleResponse(DapResponseType type, const QJsonObject &response);
     void handleStackTraceResponse(const QJsonObject &response);
     void handleThreadsResponse(const QJsonObject &response);
-    void handleBreakpointResponse(const QJsonObject &response);
+    void handleInsertBreakpointResponse(const QJsonObject &response);
+    void handleUpdateBreakpointResponse(const QJsonObject &response);
+    void handleRemoveBreakpointResponse(const QJsonObject &response);
     void handleFetchVariablesResponse(const QJsonObject &response);
 
     void handleEvent(DapEventType type, const QJsonObject &event);

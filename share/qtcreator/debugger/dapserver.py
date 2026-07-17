@@ -29,9 +29,13 @@ class DapServer():
         self.running = False
 
         # Per-source list of gdb.Breakpoint objects we created, so setBreakpoints
-        # can implement DAP's declarative whole-source replace.
+        # can implement DAP's declarative whole-source replace. Unused by the
+        # native qtc/ breakpoint path below; kept as the DAP floor.
         self.sourceBreakpoints = {}
         self.functionBreakpoints = []
+
+        # Native qtc/ breakpoints: gdb.Breakpoint by its (stringified) number.
+        self.breakpointById = {}
 
         # Rebuilt on every stop: maps a DAP frame id to a gdb.Frame, and a
         # variablesReference to what it refers to.
@@ -119,7 +123,8 @@ class DapServer():
     def run(self):
         # Keep gdb quiet and non-interactive; this loop owns stdio.
         for command in ['set pagination off', 'set confirm off',
-                        'set width 0', 'set height 0']:
+                        'set width 0', 'set height 0',
+                        'set breakpoint pending on']:
             try:
                 gdb.execute(command, to_string=True)
             except gdb.error:
@@ -291,6 +296,120 @@ class DapServer():
     #######################################################################
     # Breakpoint requests
     #######################################################################
+
+    # Native, incremental, tree-shaped breakpoints (bridge-protocol-design.md,
+    # 5.4). Each request maps 1:1 to Creator's insert/update/remove and returns
+    # the breakpoint in the MI 'bkpt' shape (plus sub-location list), which the
+    # C++ side feeds to the shared updateFromGdbOutput()/handleBkpt() logic.
+    # Correlation is by the stable modelid echoed back, never by file:line.
+
+    # BreakpointType enum values shared with breakpoint.h.
+    BP_BY_FILE_AND_LINE = 1
+    BP_BY_FUNCTION = 2
+    BP_BY_ADDRESS = 3
+    BP_WATCH_ADDRESS = 10
+    BP_WATCH_EXPRESSION = 11
+
+    def _createGdbBreakpoint(self, args):
+        bptype = args.get('type', self.BP_BY_FILE_AND_LINE)
+        temporary = bool(args.get('oneshot'))
+        if bptype == self.BP_BY_FUNCTION:
+            bp = gdb.Breakpoint(args.get('function', ''), gdb.BP_BREAKPOINT,
+                                temporary=temporary)
+        elif bptype == self.BP_BY_ADDRESS:
+            bp = gdb.Breakpoint('*0x%x' % args.get('address', 0), gdb.BP_BREAKPOINT,
+                                temporary=temporary)
+        elif bptype in (self.BP_WATCH_ADDRESS, self.BP_WATCH_EXPRESSION):
+            expr = args.get('expression') or ('*0x%x' % args.get('address', 0))
+            bp = gdb.Breakpoint(expr, gdb.BP_WATCHPOINT)
+        else:
+            spec = '%s:%d' % (args.get('file', ''), args.get('line', 0))
+            bp = gdb.Breakpoint(spec, gdb.BP_BREAKPOINT, temporary=temporary)
+
+        condition = args.get('condition', '')
+        if condition:
+            bp.condition = self.dumper.hexdecode(condition)
+        ignore = args.get('ignorecount', 0)
+        if ignore:
+            bp.ignore_count = int(ignore)
+        if not args.get('enabled', True):
+            bp.enabled = False
+        return bp
+
+    def _fillLocationDict(self, target, location):
+        if location.address is not None:
+            target['addr'] = '0x%x' % location.address
+        if location.function:
+            target['func'] = location.function
+        source = location.source
+        if source:
+            target['file'] = source[0]
+            target['line'] = source[1]
+        if location.fullname:
+            target['fullname'] = location.fullname
+
+    def _breakpointToMi(self, bp):
+        result = {
+            'number': bp.number,
+            'enabled': 'y' if bp.enabled else 'n',
+            'disp': 'del' if bp.temporary else 'keep',
+            'type': 'breakpoint',
+        }
+        if bp.condition:
+            result['cond'] = bp.condition
+        try:
+            locations = list(bp.locations)
+        except Exception:
+            locations = []
+        if len(locations) == 1:
+            self._fillLocationDict(result, locations[0])
+        elif len(locations) > 1:
+            result['addr'] = '<MULTIPLE>'
+            subs = []
+            for index, location in enumerate(locations, start=1):
+                sub = {'number': '%d.%d' % (bp.number, index),
+                       'enabled': 'y' if location.enabled else 'n'}
+                self._fillLocationDict(sub, location)
+                subs.append(sub)
+            result['locations'] = subs
+        else:
+            result['pending'] = bp.location or ''
+        return self.dumper.resultToMi(result)
+
+    def cmd_qtc_insertBreakpoint(self, request):
+        args = request.get('arguments', {})
+        body = {'modelid': args.get('modelid')}
+        try:
+            bp = self._createGdbBreakpoint(args)
+            self.breakpointById[str(bp.number)] = bp
+            body['bkpt'] = self._breakpointToMi(bp)
+        except Exception as error:
+            self.dumper.warn('insertBreakpoint failed: %s' % error)
+            body['bkpt'] = ''
+            body['error'] = str(error)
+        self.sendResponse(request, body=body)
+
+    def cmd_qtc_updateBreakpoint(self, request):
+        args = request.get('arguments', {})
+        body = {'modelid': args.get('modelid'), 'bkpt': ''}
+        bp = self.breakpointById.get(str(args.get('id')))
+        if bp is not None:
+            bp.condition = self.dumper.hexdecode(args.get('condition', '')) \
+                if args.get('condition') else ''
+            bp.enabled = bool(args.get('enabled', True))
+            bp.ignore_count = int(args.get('ignorecount', 0))
+            body['bkpt'] = self._breakpointToMi(bp)
+        self.sendResponse(request, body=body)
+
+    def cmd_qtc_removeBreakpoint(self, request):
+        args = request.get('arguments', {})
+        bp = self.breakpointById.pop(str(args.get('id')), None)
+        if bp is not None:
+            try:
+                bp.delete()
+            except gdb.error:
+                pass
+        self.sendResponse(request, body={'modelid': args.get('modelid')})
 
     def cmd_setBreakpoints(self, request):
         arguments = request.get('arguments', {})
