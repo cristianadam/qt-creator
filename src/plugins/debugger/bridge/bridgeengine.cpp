@@ -12,6 +12,7 @@
 #include <debugger/debuggerprotocol.h>
 #include <debugger/debuggertr.h>
 #include <debugger/moduleshandler.h>
+#include <debugger/registerhandler.h>
 #include <debugger/stackhandler.h>
 #include <debugger/threaddata.h>
 #include <debugger/watchhandler.h>
@@ -590,6 +591,8 @@ void BridgeEngine::handleResponse(DapResponseType type, const QJsonObject &respo
     default:
         if (command == "qtc/fetchVariables")
             handleFetchVariablesResponse(response);
+        else if (command == "qtc/fetchRegisters")
+            handleFetchRegistersResponse(response);
         else if (command == "qtc/insertBreakpoint")
             handleInsertBreakpointResponse(response);
         else if (command == "qtc/updateBreakpoint")
@@ -657,6 +660,36 @@ void BridgeEngine::handleFetchVariablesResponse(const QJsonObject &response)
     updateLocalsView(all);
     watchHandler()->notifyUpdateFinished();
     updateToolTips();
+}
+
+void BridgeEngine::reloadRegisters()
+{
+    if (!isRegistersWindowVisible())
+        return;
+
+    if (state() != InferiorStopOk && state() != InferiorUnrunnable)
+        return;
+
+    QJsonObject args;
+    args.insert("frameId", m_currentStackFrameId);
+    m_dapClient->postRequest("qtc/fetchRegisters", args);
+}
+
+void BridgeEngine::handleFetchRegistersResponse(const QJsonObject &response)
+{
+    RegisterHandler *handler = registerHandler();
+    const QJsonArray registers = response.value("body").toObject().value("registers").toArray();
+    for (const QJsonValue &item : registers) {
+        const QJsonObject obj = item.toObject();
+        Register reg;
+        reg.name = obj.value("name").toString();
+        reg.size = obj.value("size").toInt();
+        const QString value = obj.value("value").toString();
+        if (value.startsWith("0x"))
+            reg.value.fromString(value, HexadecimalFormat);
+        handler->updateRegister(reg);
+    }
+    handler->commitUpdates();
 }
 
 static GdbMi parseBkpt(const QJsonObject &body)
@@ -805,12 +838,14 @@ void BridgeEngine::updateAll()
     // which drives doUpdateLocals() -> qtc/fetchVariables.
     if (m_currentThreadId != -1)
         m_dapClient->stackTrace(m_currentThreadId);
+
+    reloadRegisters();
 }
 
 bool BridgeEngine::hasCapability(unsigned cap) const
 {
     return cap & (ReloadModuleCapability | BreakConditionCapability | ShowModuleSymbolsCapability
-                  | RunToLineCapability | AddWatcherCapability);
+                  | RunToLineCapability | AddWatcherCapability | RegisterCapability);
 }
 
 void BridgeEngine::claimInitialBreakpoints()

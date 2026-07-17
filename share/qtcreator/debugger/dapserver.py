@@ -547,6 +547,43 @@ class DapServer():
 
         self.sendResponse(request, body={'dumperResult': captured.get('result', '')})
 
+    def cmd_qtc_fetchRegisters(self, request):
+        # Enumerate the selected frame's registers via gdb's Python API and
+        # return name/value(hex)/size. The C++ side (handleFetchRegistersResponse)
+        # feeds them into the RegisterHandler. See bridge-protocol-design.md.
+        registers = []
+        try:
+            frame = gdb.selected_frame()
+        except gdb.error:
+            self.sendResponse(request, body={'registers': registers})
+            return
+
+        try:
+            descriptors = list(frame.architecture().registers())
+        except Exception:
+            descriptors = []
+
+        for desc in descriptors:
+            try:
+                value = frame.read_register(desc)
+            except Exception:
+                continue
+            size = 0
+            try:
+                size = int(value.type.sizeof)
+            except Exception:
+                pass
+            try:
+                text = '0x%x' % (int(value) & ((1 << (size * 8)) - 1) if size else int(value))
+            except Exception:
+                try:
+                    text = str(value)
+                except Exception:
+                    text = ''
+            registers.append({'name': desc.name, 'value': text, 'size': size})
+
+        self.sendResponse(request, body={'registers': registers})
+
     def cmd_evaluate(self, request):
         arguments = request.get('arguments', {})
         expression = arguments.get('expression', '')

@@ -66,6 +66,7 @@ private:
     void loadSymbols(const Utils::FilePath &moduleName) override;
     void loadAllSymbols() override;
     void reloadModules() override;
+    void reloadRegisters() override;
     void reloadSourceFiles() override {}
     void reloadFullStack() override;
 
@@ -103,6 +104,7 @@ private:
     void handleUpdateBreakpointResponse(const QJsonObject &response);
     void handleRemoveBreakpointResponse(const QJsonObject &response);
     void handleFetchVariablesResponse(const QJsonObject &response);
+    void handleFetchRegistersResponse(const QJsonObject &response);
 
     void handleEvent(DapEventType type, const QJsonObject &event);
     void handleStoppedEvent(const QJsonObject &event);
