@@ -11,6 +11,7 @@
 #include <debugger/debuggerinternalconstants.h>
 #include <debugger/debuggerprotocol.h>
 #include <debugger/debuggertr.h>
+#include <debugger/memoryagent.h>
 #include <debugger/moduleshandler.h>
 #include <debugger/registerhandler.h>
 #include <debugger/stackhandler.h>
@@ -593,6 +594,10 @@ void BridgeEngine::handleResponse(DapResponseType type, const QJsonObject &respo
             handleFetchVariablesResponse(response);
         else if (command == "qtc/fetchRegisters")
             handleFetchRegistersResponse(response);
+        else if (command == "qtc/readMemory")
+            handleReadMemoryResponse(response);
+        else if (command == "qtc/writeMemory")
+            handleWriteMemoryResponse(response);
         else if (command == "qtc/insertBreakpoint")
             handleInsertBreakpointResponse(response);
         else if (command == "qtc/updateBreakpoint")
@@ -690,6 +695,47 @@ void BridgeEngine::handleFetchRegistersResponse(const QJsonObject &response)
         handler->updateRegister(reg);
     }
     handler->commitUpdates();
+}
+
+void BridgeEngine::fetchMemory(MemoryAgent *agent, quint64 addr, quint64 length)
+{
+    // Async read; the response is correlated back to the agent via the token.
+    const int token = m_nextMemoryToken++;
+    m_memoryAgents.insert(token, agent);
+
+    QJsonObject args;
+    args.insert("token", token);
+    args.insert("address", QString("0x%1").arg(addr, 0, 16));
+    args.insert("length", int(length));
+    m_dapClient->postRequest("qtc/readMemory", args);
+}
+
+void BridgeEngine::changeMemory(MemoryAgent *agent, quint64 addr, const QByteArray &data)
+{
+    Q_UNUSED(agent)
+    QJsonObject args;
+    args.insert("address", QString("0x%1").arg(addr, 0, 16));
+    args.insert("data", QString::fromLatin1(data.toBase64()));
+    m_dapClient->postRequest("qtc/writeMemory", args);
+}
+
+void BridgeEngine::handleReadMemoryResponse(const QJsonObject &response)
+{
+    const QJsonObject body = response.value("body").toObject();
+    const QPointer<MemoryAgent> agent = m_memoryAgents.take(body.value("token").toInt());
+    if (!agent)
+        return;
+    const quint64 address = body.value("address").toString().toULongLong(nullptr, 0);
+    const QByteArray data = QByteArray::fromBase64(body.value("data").toString().toLatin1());
+    agent->addData(address, data);
+}
+
+void BridgeEngine::handleWriteMemoryResponse(const QJsonObject &response)
+{
+    // Values elsewhere may have changed; refresh the views (as the var-assign
+    // path does in GdbEngine).
+    if (response.value("success").toBool())
+        updateAll();
 }
 
 static GdbMi parseBkpt(const QJsonObject &body)
@@ -845,7 +891,8 @@ void BridgeEngine::updateAll()
 bool BridgeEngine::hasCapability(unsigned cap) const
 {
     return cap & (ReloadModuleCapability | BreakConditionCapability | ShowModuleSymbolsCapability
-                  | RunToLineCapability | AddWatcherCapability | RegisterCapability);
+                  | RunToLineCapability | AddWatcherCapability | RegisterCapability
+                  | ShowMemoryCapability | MemoryAddressCapability);
 }
 
 void BridgeEngine::claimInitialBreakpoints()

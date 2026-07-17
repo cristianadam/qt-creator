@@ -16,6 +16,7 @@
 #     variables use gdb's own formatting, not the Qt dumpers. Both are follow-up
 #     steps (native qtc/ variables, async transport).
 
+import base64
 import json
 import os
 
@@ -583,6 +584,34 @@ class DapServer():
             registers.append({'name': desc.name, 'value': text, 'size': size})
 
         self.sendResponse(request, body={'registers': registers})
+
+    def cmd_qtc_readMemory(self, request):
+        # Read inferior memory and return it base64-encoded. The token echoes
+        # back so the C++ side can route the data to the requesting MemoryAgent.
+        args = request.get('arguments', {})
+        token = args.get('token', 0)
+        address = int(str(args.get('address', '0')), 0)
+        length = int(args.get('length', 0))
+        try:
+            mem = gdb.selected_inferior().read_memory(address, length)
+            data = base64.b64encode(bytes(mem)).decode('ascii')
+        except Exception as error:
+            self.sendResponse(request, success=False, message=str(error))
+            return
+        self.sendResponse(request, body={'token': token,
+                                         'address': '0x%x' % address,
+                                         'data': data})
+
+    def cmd_qtc_writeMemory(self, request):
+        args = request.get('arguments', {})
+        address = int(str(args.get('address', '0')), 0)
+        try:
+            raw = base64.b64decode(args.get('data', ''))
+            gdb.selected_inferior().write_memory(address, raw)
+        except Exception as error:
+            self.sendResponse(request, success=False, message=str(error))
+            return
+        self.sendResponse(request)
 
     def cmd_evaluate(self, request):
         arguments = request.get('arguments', {})
