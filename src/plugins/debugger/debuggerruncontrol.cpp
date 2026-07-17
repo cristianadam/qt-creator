@@ -534,7 +534,13 @@ static Result<QList<QPointer<Internal::DebuggerEngine>>> createEngines(
     if (rp.isCppDebugging()) {
         switch (rp.cppEngineType()) {
         case GdbEngineType:
-            engines << createGdbEngine();
+            // Experimental opt-in: route gdb debugging through the DAP-shaped
+            // BridgeEngine instead, for testing it against a real gdb kit.
+            // See bridge-protocol-design.md.
+            if (qtcEnvironmentVariableIsSet("QTC_DEBUGGER_USE_BRIDGE"))
+                engines << createBridgeEngine();
+            else
+                engines << createGdbEngine();
             break;
         case CdbEngineType:
             if (!HostOsInfo::isWindowsHost())
