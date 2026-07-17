@@ -16,6 +16,7 @@
 #     variables use gdb's own formatting, not the Qt dumpers. Both are follow-up
 #     steps (native qtc/ variables, async transport).
 
+import base64
 import json
 import os
 import sys
@@ -318,11 +319,57 @@ class DapServer():
         self.sendResponse(request)
         self._execute('finish')
 
-    def cmd_pause(self, request):
-        # TODO: not supported by the synchronous transport yet - while the
-        # inferior runs we are blocked in gdb.execute() and not reading stdin.
-        self.sendResponse(request, success=False,
-                          message='pause is not supported yet')
+    def cmd_qtc_jumpToLine(self, request):
+        # Move the execution point without resuming: set $pc to the target
+        # address. The C++ side stays stopped and refreshes the views.
+        args = request.get('arguments', {})
+        address = args.get('address')
+        try:
+            if address:
+                pc = int(str(address), 0)
+            else:
+                # Resolve via a throwaway breakpoint rather than a linespec,
+                # so a source path containing spaces still resolves.
+                probe = gdb.Breakpoint(source=args.get('file', ''),
+                                       line=int(args.get('line', 0)),
+                                       temporary=True)
+                locations = probe.locations
+                pc = int(locations[0].address) if locations else 0
+                probe.delete()
+                if not pc:
+                    raise gdb.error('cannot resolve the target location')
+            gdb.execute('set $pc = 0x%x' % pc, to_string=True)
+        except gdb.error as error:
+            self.sendResponse(request, success=False, message=str(error))
+            return
+        self.sendResponse(request)
+
+    def cmd_qtc_runToFunction(self, request):
+        # Temporary breakpoint at the function, then continue until it is hit.
+        func = request.get('arguments', {}).get('function', '')
+        try:
+            gdb.Breakpoint(function=func, temporary=True)
+        except (gdb.error, RuntimeError) as error:
+            self.sendResponse(request, success=False, message=str(error))
+            return
+        self.sendResponse(request)
+        self._execute('continue')
+
+    def cmd_qtc_runToLine(self, request):
+        # Temporary breakpoint at the location, then continue until it is hit.
+        args = request.get('arguments', {})
+        address = args.get('address')
+        try:
+            if address:
+                gdb.Breakpoint('*%s' % address, gdb.BP_BREAKPOINT, temporary=True)
+            else:
+                gdb.Breakpoint(source=args.get('file', ''),
+                               line=int(args.get('line', 0)), temporary=True)
+        except (gdb.error, RuntimeError) as error:
+            self.sendResponse(request, success=False, message=str(error))
+            return
+        self.sendResponse(request)
+        self._execute('continue')
 
     #######################################################################
     # Breakpoint requests
@@ -585,6 +632,119 @@ class DapServer():
             self.dumper.reportResult = original
 
         self.sendResponse(request, body={'dumperResult': captured.get('result', '')})
+
+    def cmd_qtc_fetchRegisters(self, request):
+        # Enumerate the selected frame's registers via gdb's Python API and
+        # return name/value(hex)/size. The C++ side (handleFetchRegistersResponse)
+        # feeds them into the RegisterHandler.
+        registers = []
+        try:
+            frame = gdb.selected_frame()
+        except gdb.error:
+            self.sendResponse(request, body={'registers': registers})
+            return
+
+        try:
+            descriptors = list(frame.architecture().registers())
+        except Exception:
+            descriptors = []
+
+        for desc in descriptors:
+            try:
+                value = frame.read_register(desc)
+            except Exception:
+                continue
+            size = 0
+            try:
+                size = int(value.type.sizeof)
+            except Exception:
+                pass
+            try:
+                text = '0x%x' % (int(value) & ((1 << (size * 8)) - 1) if size else int(value))
+            except Exception:
+                try:
+                    text = str(value)
+                except Exception:
+                    text = ''
+            registers.append({'name': desc.name, 'value': text, 'size': size})
+
+        self.sendResponse(request, body={'registers': registers})
+
+    def cmd_qtc_readMemory(self, request):
+        # Read inferior memory and return it base64-encoded. The token echoes
+        # back so the C++ side can route the data to the requesting MemoryAgent.
+        args = request.get('arguments', {})
+        token = args.get('token', 0)
+        address = int(str(args.get('address', '0')), 0)
+        length = int(args.get('length', 0))
+        try:
+            mem = gdb.selected_inferior().read_memory(address, length)
+            data = base64.b64encode(bytes(mem)).decode('ascii')
+        except Exception as error:
+            self.sendResponse(request, success=False, message=str(error))
+            return
+        self.sendResponse(request, body={'token': token,
+                                         'address': '0x%x' % address,
+                                         'data': data})
+
+    def cmd_qtc_writeMemory(self, request):
+        args = request.get('arguments', {})
+        address = int(str(args.get('address', '0')), 0)
+        try:
+            raw = base64.b64decode(args.get('data', ''))
+            gdb.selected_inferior().write_memory(address, raw)
+        except Exception as error:
+            self.sendResponse(request, success=False, message=str(error))
+            return
+        self.sendResponse(request)
+
+    def cmd_qtc_disassemble(self, request):
+        # Disassemble the enclosing function (or a window) around the address
+        # via gdb's Python API, returning address/bytes/asm per instruction.
+        args = request.get('arguments', {})
+        token = args.get('token', 0)
+        address = int(str(args.get('address', '0')), 0)
+        lines = []
+        try:
+            arch = gdb.selected_frame().architecture()
+        except gdb.error:
+            self.sendResponse(request, body={'token': token, 'lines': lines})
+            return
+
+        start, end, func = address, address + 64, ''
+        try:
+            block = gdb.block_for_pc(address)
+            while block and not block.function:
+                block = block.superblock
+            if block and block.function:
+                func = block.function.name
+                start, end = int(block.start), int(block.end)
+        except Exception:
+            pass
+
+        try:
+            insns = arch.disassemble(start, end - 1)
+        except Exception as error:
+            self.sendResponse(request, success=False, message=str(error))
+            return
+
+        inferior = gdb.selected_inferior()
+        for insn in insns:
+            addr = int(insn['addr'])
+            length = int(insn.get('length', 0))
+            rawbytes = ''
+            try:
+                mem = inferior.read_memory(addr, length)
+                rawbytes = ' '.join('%02x' % b for b in bytes(mem))
+            except Exception:
+                pass
+            lines.append({'address': '0x%x' % addr,
+                          'bytes': rawbytes,
+                          'data': insn.get('asm', ''),
+                          'function': func,
+                          'offset': addr - start if func else 0})
+
+        self.sendResponse(request, body={'token': token, 'lines': lines})
 
     def cmd_evaluate(self, request):
         arguments = request.get('arguments', {})
