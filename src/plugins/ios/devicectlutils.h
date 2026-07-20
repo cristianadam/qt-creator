@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "deviceinfo.h"
+
 #include <utils/result.h>
 
 #include <QJsonValue>
@@ -27,8 +29,8 @@ inline constexpr char vYes[] = "YES";
 
 Utils::Result<QJsonValue> parseDevicectlResult(const QByteArray &rawOutput);
 Utils::Result<> checkDevicectlResult(const QByteArray &rawOutput);
-Utils::Result<QMap<QString, QString>> parseDeviceInfo(const QByteArray &rawOutput,
-                                                            const QString &deviceUsbId);
+Utils::Result<IosDeviceInfo> parseDeviceInfo(const QByteArray &rawOutput,
+                                              const QString &deviceUsbId);
 Utils::Result<QUrl> parseAppInfo(const QByteArray &rawOutput, const QString &bundleIdentifier);
 Utils::Result<qint64> parseProcessIdentifier(const QByteArray &rawOutput);
 Utils::Result<qint64> parseLaunchResult(const QByteArray &rawOutput);

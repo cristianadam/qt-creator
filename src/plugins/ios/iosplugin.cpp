@@ -63,7 +63,7 @@ class IosPlugin final : public ExtensionSystem::IPlugin
 
     void initialize() final
     {
-        qRegisterMetaType<Ios::IosToolHandler::Dict>("Ios::IosToolHandler::Dict");
+        qRegisterMetaType<Ios::IosToolHandler::Info>("Ios::IosToolHandler::Info");
 
         setupIosToolchain();
         setupIosBuildConfiguration();
