@@ -1861,10 +1861,30 @@ class Dumper(DumperBase):
         if result is False:
             d.reportState("continueafternextstop")
         if tracepoint:
-            d.report(f'tracepointhit={{message="{d.hexencode(message)}"}}')
+            d.reportBreakpointUpdate(bp_loc.GetBreakpoint())
+            formatted = d.substituteTracepointCaptures(message, frame)
+            d.report(f'tracepointhit={{message="{d.hexencode(formatted)}"}}')
             d.reportState("continueafternextstop")
 
         return True
+
+    def substituteTracepointCaptures(self, message, frame):
+        # Replaces each "{expr}" with its value via the same putItem()
+        # machinery fetchVariables() uses for Locals.
+        def substitute(match):
+            expr = match.group(1)
+            value = frame.EvaluateExpression(expr)
+            if value.GetError().Fail():
+                return '{value="<N/A>"}'
+            try:
+                self.setVariableFetchingOptions({'fancy': 1, 'autoderef': 1})
+                self.output = []
+                with TopLevelItem(self, expr):
+                    self.putItem(self.fromNativeValue(value))
+                return self.takeOutput()
+            except Exception:
+                return '{value="<N/A>"}'
+        return re.sub(r'\{([^}]+)\}', substitute, message)
 
     def insertBreakpoint(self, args):
         bpType = args['type']
