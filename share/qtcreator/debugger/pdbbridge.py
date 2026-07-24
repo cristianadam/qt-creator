@@ -1276,6 +1276,12 @@ class QtcInternalDumper():
             try:
                 self._previous_sigint_handler = \
                     signal.signal(signal.SIGINT, self.sigint_handler)
+                # Confirms sigint_handler is installed - a caller sending
+                # SIGINT any earlier races this command's own line still
+                # being read off stdin, where it's caught by Python's
+                # default handler and lost instead (silently, with no
+                # report at all) - see the caller-side comment on this.
+                self.report('state="running"')
             except ValueError:
                 # ValueError happens when do_continue() is invoked from
                 # a non-main thread in which case we just continue without
