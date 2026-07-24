@@ -3,6 +3,7 @@
 
 #include "gdb/gdbimpl.h"
 #include "lldb/lldbimpl.h"
+#include "pdb/pdbimpl.h"
 
 #include <utils/algorithm.h>
 #include <utils/elfreader.h>
@@ -90,18 +91,33 @@ static const char s_qtDeclarativeDebugInfoMissing[] =
 // current slice (plain local run, execute()/changeBreakpoint()/
 // refresh(Locals) - see lldbimpl.h's class comment); attach/remote/core
 // tests QSKIP for it rather than adding a case that can't work yet.
+//
+// Pdb is different in kind, not just degree: it debugs an interpreted
+// Python script, not a compiled native binary, so it gets its own entry in
+// m_backendData instead of sharing Gdb/Lldb's - and genuinely has no
+// memory/register/disassembly access, watchpoints/
+// catchpoints, attach/remote/core modes, native-mixed QML debugging, or
+// reverse execution at all (matches real PdbEngine's own scope - Python
+// has nothing resembling an address or a CPU register to expose, and pdb
+// has no attach-to-a-running-process mechanism). Every test exercising one
+// of those QSKIPs for Pdb up front, with a reason specific to what's
+// actually missing - the same treatment already given to the two lldb
+// gaps above, just for a longer, principled list rather than a confirmed
+// upstream bug.
 // Declared at file scope (not nested in the test class) so
 // Q_DECLARE_METATYPE below can see it.
 enum class Backend {
     Gdb,
     Lldb,
+    Pdb,
 };
 Q_DECLARE_METATYPE(Backend)
 
-// Per-backend test fixture: what to debug, and which lines matter. source
-// and executable coincide for a backend with no separate compile step;
-// they differ for Gdb/Lldb (source is the .cpp, executable is the compiled
-// binary debug info maps it to).
+// Per-backend test fixture: what to debug, and which lines matter.
+// source and executable coincide for Pdb (no compile step - the .py file
+// is simultaneously what breakpoints are set in and what actually runs);
+// they differ for Gdb/Lldb (source is the .cpp, executable is the
+// compiled binary debug info maps it to).
 struct InferiorTestData
 {
     FilePath source;
@@ -370,6 +386,8 @@ static QString backendName(Backend backend)
         return "gdb";
     case Backend::Lldb:
         return "lldb";
+    case Backend::Pdb:
+        return "pdb";
     }
     return {};
 }
@@ -378,7 +396,11 @@ static QString backendName(Backend backend)
 // backend-dialect-specific string is unavoidable, since
 // executeDebuggerCommand() is deliberately a pass-through escape hatch
 // (see its own test's comment). Every other test body stays fully
-// backend-agnostic.
+// backend-agnostic. Not actually reachable for Pdb - its only caller,
+// executesRawCommandAndAssignsValue(), QSKIPs for Pdb (verified via
+// accessMemory(), which pdb has nothing to back at all) - kept here anyway
+// (a bare expression, evaluated by pdbbridge.py's default() handler)
+// purely so this switch stays exhaustive.
 static QString printCommand(Backend backend, const QString &expression)
 {
     switch (backend) {
@@ -386,6 +408,8 @@ static QString printCommand(Backend backend, const QString &expression)
         return "print " + expression;
     case Backend::Lldb:
         return "expr " + expression;
+    case Backend::Pdb:
+        return expression;
     }
     return {};
 }
@@ -763,21 +787,20 @@ private:
     // The generated C++/Python inferiors scan their own in-memory source the
     // same way; these files are on disk instead, so they're read back.
     static int qmlMarkerLine(const QString &relativePath, const QString &marker);
-    // Looked up via m_backendData - a future backend debugging a
-    // fundamentally different kind of target (e.g. an interpreted script
-    // rather than a compiled native binary) gets its own row instead of
-    // sharing Gdb's, the same kind of unavoidable per-backend seam
-    // printCommand() already is, so the tests that call it
-    // (launchAndStopAtBreakpoint() and the handful inserting a second
-    // breakpoint directly) stay otherwise backend-agnostic.
+    // Pdb's own inferior is a different file with different line numbers
+    // (see the Backend enum's own comment) - looked up via m_backendData,
+    // the same kind of unavoidable per-backend seam printCommand() already
+    // is, so the tests that call it (launchAndStopAtBreakpoint() and the
+    // handful inserting a second breakpoint directly) stay otherwise
+    // backend-agnostic.
     InferiorTestData inferiorTestData(Backend backend) const;
     // Lets a Continue-past-spin()'s-infinite-loop test reach a real,
     // natural exit instead of hanging forever - via a plain memory write
-    // where the backend actually supports one; otherwise via
-    // assignValueInDebugger() instead, picked by capability rather than
-    // backend identity, the same way a real capability-aware client would
-    // (e.g. deciding whether to even show the Memory view). backend is
-    // only used to look up the shared inferior's address via
+    // (mirrors testDetachCapability()'s own comment) where the
+    // backend actually supports one; otherwise via assignValueInDebugger()
+    // instead (a real client would likewise pick based on capability, not
+    // backend identity - see the accessMemory() branch's own comment).
+    // backend is only used to look up the shared inferior's address via
     // symbolAddress(), not for that capability decision.
     void stopInferiorSpinLoop(Backend backend, DebuggerEngineInterface *engine);
 
@@ -937,6 +960,17 @@ std::unique_ptr<DebuggerBackend> tst_backends::createEngine(Backend backend,
                 ProcessRunData{{inferiorTestData(backend).executable, {}}, {}, Environment::systemEnvironment()}),
             .dumperScriptsDir = FilePath::fromUserInput(DUMPERDIR),
             .nativeMixedDebugging = nativeMixed}));
+    case Backend::Pdb:
+        // nativeMixed has no meaning for Pdb (no QML involved at all - see
+        // the Backend enum's own comment) - silently ignored, same as
+        // GdbImplStartData/LldbImplStartData would ignore an argument they
+        // don't have a field for, if PdbImplStartData had one either.
+        return std::make_unique<DebuggerBackend>(std::make_unique<PdbImpl>(PdbImplStartData{
+            .debuggerRunData = debuggerRunDataOverride.value_or(
+                ProcessRunData{{m_backendData[backend].path, {}}, {}, Environment::systemEnvironment()}),
+            .inferiorStartData = inferiorRunDataOverride.value_or(
+                ProcessRunData{{inferiorTestData(backend).executable, {}}, {}, Environment::systemEnvironment()}),
+            .dumperScriptsDir = FilePath::fromUserInput(DUMPERDIR)}));
     }
     return nullptr;
 }
@@ -957,6 +991,8 @@ std::unique_ptr<DebuggerBackend> tst_backends::createAttachEngine(
                                               Environment::systemEnvironment()},
             .inferiorStartData = inferiorStartData,
             .dumperScriptsDir = FilePath::fromUserInput(DUMPERDIR)}));
+    case Backend::Pdb:
+        break;
     }
     return nullptr;
 }
@@ -968,6 +1004,11 @@ InferiorTestData tst_backends::inferiorTestData(Backend backend) const
 
 void tst_backends::stopInferiorSpinLoop(Backend backend, DebuggerEngineInterface *engine)
 {
+    // Picks the mechanism by what the backend actually supports (the same
+    // ShowMemoryCapability a real caller would check before even showing
+    // the Memory view) - never by asking which concrete backend this is,
+    // matching every other DebuggerEngineInterface caller in this file
+    // (see the Backend enum's own comment on why that matters).
     if (!engine->hasCapability(Debugger::ShowMemoryCapability)) {
         WatchItemData item;
         item.isLocal = false; // keepSpinning is a module-level global
@@ -1031,6 +1072,16 @@ void tst_backends::initTestCase()
             m_backendData[Backend::Lldb].path = lldbPath;
             lldbVersionLine = versionLine(lldbPath);
         }
+    }
+
+    const QString envPython = qtcEnvironmentVariable("QTC_PYTHON_PATH_FOR_TEST");
+    const FilePath pythonPath = envPython.isEmpty()
+        ? findPythonOnPath()
+        : FilePath::fromUserInput(envPython);
+    QString pythonVersionLine;
+    if (pythonPath.isExecutableFile()) {
+        m_backendData[Backend::Pdb].path = pythonPath;
+        pythonVersionLine = versionLine(pythonPath);
     }
 
     if (m_backendData.isEmpty())
@@ -1338,6 +1389,103 @@ void tst_backends::initTestCase()
         m_backendData[Backend::Lldb].inferiorData.moduleListMarker = "libc";
         m_backendData[Backend::Lldb].inferiorData.moduleSymbolsPath = cppInferiorData.executable;
     }
+
+    if (!m_backendData.contains(Backend::Pdb))
+        return;
+
+    // Pdb's own inferior - mirrors the C++ one's own bump()/spin() shape
+    // (same marker-comment convention for finding the breakpoint lines) as
+    // closely as a fundamentally different kind of debuggee allows: no
+    // dlopen()/dlclose() (no shared-library-load events for pdb to report
+    // at all - see testLibraryEventCapability()'s own QSKIP), no "crash"
+    // argument (Python has nothing resembling testSignalReceivedCapability()'s
+    // real SIGSEGV), but the same globalValue/keepSpinning pair, updated
+    // and read the same way, so stepsContinuesAndInterrupts()/
+    // testBreakConditionCapability()/etc. can stay fully
+    // backend-agnostic.
+    InferiorTestData pdbInferiorData;
+    // source and executable coincide - see InferiorTestData's own comment.
+    pdbInferiorData.source = pdbInferiorData.executable =
+        FilePath::fromString(m_tempDir.path()) / "inferior.py";
+    // localValue is a parameter, not a plain local assigned on the
+    // breakpoint line itself (unlike the C++ inferior's "int localValue =
+    // globalValue + 1;") - deliberately, for two reasons found the hard
+    // way: refreshesLocalsAndStack() checks for "localValue" in a Locals
+    // refresh taken *at* the breakpoint line, before it executes - a
+    // plain "localValue = ..." assignment wouldn't exist as a real local
+    // yet at that exact instant (Python only creates a local once it's
+    // actually assigned to; C++'s own static scoping has no such
+    // concept, so the two inferiors need different structures to match
+    // here). A parameter is bound from function entry regardless. Second,
+    // and more seriously: executesRunToLineFunctionAndJumpsToLine()'s own
+    // JumpToLine test jumps forward past this line - with a plain local,
+    // that left "localValue" genuinely unbound, and the *next* line
+    // ("globalValue = localValue") crashed the whole script outright
+    // (TypeError: %d format: a real number is required, not NoneType) once
+    // resumed - a parameter can never be left in that state.
+    const QStringList pdbInferiorLines = {
+        "globalValue = 41",
+        "keepSpinning = True",
+        "",
+        "",
+        "def bump(localValue):",
+        "    global globalValue",
+        "    globalValue = localValue  # first breakpoint line",
+        "    print(\"value=%d\" % globalValue)",
+        "",
+        "",
+        "def spin():",
+        "    while keepSpinning:",
+        "        pass  # spin body line",
+        "",
+        "",
+        "def main():",
+        "    bump(globalValue + 1)",
+        "    print(\"after bump\")",
+        "    spin()  # second breakpoint line",
+        "",
+        "",
+        "if __name__ == \"__main__\":",
+        "    main()",
+        "",
+    };
+    for (int i = 0; i < pdbInferiorLines.size(); ++i) {
+        // Neither marker is a substring of the other, so order doesn't matter.
+        if (pdbInferiorLines.at(i).contains("first breakpoint line"))
+            pdbInferiorData.breakpointLine = i + 1;
+        if (pdbInferiorLines.at(i).contains("second breakpoint line"))
+            pdbInferiorData.secondBreakpointLine = i + 1;
+        if (pdbInferiorLines.at(i).contains("spin body line"))
+            pdbInferiorData.spinBodyLine = i + 1;
+    }
+    QVERIFY(pdbInferiorData.breakpointLine > 0);
+    pdbInferiorData.localMarker = "localValue";
+    pdbInferiorData.functionMarker = "bump";
+    QVERIFY(pdbInferiorData.secondBreakpointLine > 0);
+    QVERIFY(pdbInferiorData.spinBodyLine > 0);
+
+    QFile pdbFile(pdbInferiorData.source.toFSPathString());
+    QVERIFY(pdbFile.open(QIODevice::WriteOnly | QIODevice::Text));
+    pdbFile.write(pdbInferiorLines.join('\n').toUtf8());
+    pdbFile.close();
+
+    // See enableToggleWireMarker.
+    pdbInferiorData.enableToggleWireMarker = "disable";
+    m_backendData[Backend::Pdb].inferiorData = pdbInferiorData;
+    // Python, unlike the C++ inferiors, spells it "False" - see
+    // InferiorTestData::falseLiteral.
+    m_backendData[Backend::Pdb].inferiorData.falseLiteral = "False";
+    m_backendData[Backend::Pdb].inferiorData.versionLine = pythonVersionLine;
+    // pdb has no native/shared-library concept at all, but always has
+    // some of Python's own standard-library modules loaded, "sys"
+    // among them.
+    m_backendData[Backend::Pdb].inferiorData.moduleListMarker = "sys";
+    // pdbbridge.py's own listSymbols() takes a sys.modules key
+    // ("__main__", the running script's own module name), not a file
+    // path, unlike GdbImpl/LldbImpl's ModuleSymbols (a real
+    // module/shared-library path) - see PdbImpl::refresh()'s
+    // RefreshKind::ModuleSymbols comment.
+    m_backendData[Backend::Pdb].inferiorData.moduleSymbolsPath = FilePath::fromString("__main__");
 }
 
 void tst_backends::cleanupTestCase()
@@ -3336,6 +3484,26 @@ void tst_backends::stepsContinuesAndInterrupts()
     debuggerBackend->clearEvents();
     debuggerBackend->execute({ExecutionCommand::Continue});
     QTRY_VERIFY_WITH_TIMEOUT(debuggerBackend->contains(InferiorEvent::RunOk), s_timeout);
+
+    // Interrupting a *running* pdb inferior cannot work on Windows:
+    // pdbbridge.py waits on a plain signal.SIGINT handler (installed by
+    // do_continue(), which reports state="running" once it is), but
+    // interruptProcess() sends DebugBreakProcess() there - an API for a real
+    // attached Windows debugger breaking into its debuggee, which never
+    // produces a Python-level SIGINT (on Windows that only ever arrives via a
+    // console CTRL_C_EVENT). sigint_handler() therefore never runs, no
+    // state="stopped" is ever reported, and StopOk never arrives.
+    // Pre-existing and not introduced by PdbImpl - shipped
+    // PdbEngine::interruptInferior() makes the identical call. A real fix
+    // needs either a targeted CTRL_BREAK_EVENT (Utils::Process has no
+    // CREATE_NEW_PROCESS_GROUP support to make that possible yet) or an
+    // interrupt channel not relying on OS signals at all; both are their own
+    // change, well outside this series, so this is skipped rather than left
+    // failing. Note interruptWhileStoppedReportsStopOkImmediately() is
+    // unaffected: PdbImpl answers that from its own "already stopped" fast
+    // path, without ever signaling the process.
+    if (backend == Backend::Pdb && HostOsInfo::isWindowsHost())
+        QSKIP("Interrupting a running inferior is not supported by pdb on Windows.");
 
     // An explicitly requested interrupt is a StopOk, not a SpontaneousStop -
     // see m_interruptRequested's comment in gdbimpl.h.

@@ -29,6 +29,10 @@ namespace Utils { class ProcessResultData; }
 // tests/auto/debugger/tst_backends.cpp - see the friend grant on
 // DebuggerEngineInterface below for why.
 class tst_backends;
+// tests/auto/debugger/tst_pdbimpl.cpp - same reason as tst_backends above,
+// for PdbImpl specifically (see that file's own class comment on why it's
+// a separate suite rather than a Backend::Pdb row in tst_backends.cpp).
+class tst_pdbimpl;
 // tests/auto/debugger/tst_backends.cpp's DebuggerBackend - same reason as
 // tst_backends above.
 class DebuggerBackend;
@@ -748,6 +752,7 @@ private:
     // reason (calling start()/changeBreakpoint()/execute()/etc.
     // itself instead of through a DebuggerEngine).
     friend class ::tst_backends;
+    friend class ::tst_pdbimpl;
     // DebuggerBackend (tst_backends.cpp) wraps a backend instance and
     // forwards a few calls (e.g. execute()) on tst_backends' behalf.
     friend class ::DebuggerBackend;

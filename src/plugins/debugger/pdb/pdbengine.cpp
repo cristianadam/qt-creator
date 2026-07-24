@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "pdbengine.h"
+#include "pdbimpl.h"
 
 #include <debugger/breakhandler.h>
+#include <debugger/genericdebuggerengine.h>
 #include <debugger/debuggeractions.h>
 #include <debugger/debuggerprotocol.h>
 #include <debugger/debuggertooltipmanager.h>
@@ -570,8 +572,35 @@ bool PdbEngine::hasCapability(unsigned cap) const
               | ShowModuleSymbolsCapability);
 }
 
-DebuggerEngine *createPdbEngine()
+DebuggerEngine *createPdbEngine(const DebuggerRunParameters &rp)
 {
+    // Opt-in alternative path (see genericdebuggerengine.h), mirroring
+    // createGdbEngine()/createLldbEngine()'s identical branch: a
+    // GenericDebuggerEngine backed by PdbImpl instead of the PdbEngine
+    // subclass. Off by default, opt in via QTC_USE_GENERIC_DEBUGGER.
+    if (DebuggerEngine::isUsingGenericDebugger()) {
+        // Mirrors PdbEngine::setupEngine()'s own argument handling: the
+        // inferior's command line is a run-configuration-constructed
+        // "python3 -u scriptfile.py arg1 arg2..." string - strip the
+        // interpreter's own "-u" flag and the script filename token
+        // (already carried separately as rp.mainScript()) before what
+        // remains is passed through as the script's own arguments.
+        ProcessRunData scriptRunData = rp.inferior();
+        QStringList arguments = scriptRunData.command.splitArguments();
+        if (!arguments.isEmpty() && arguments.constFirst() == "-u")
+            arguments.removeFirst();
+        if (!arguments.isEmpty())
+            arguments.removeFirst(); // file added by run config
+        scriptRunData.command = CommandLine(rp.mainScript(), arguments);
+
+        ProcessRunData debuggerRunData;
+        debuggerRunData.command = CommandLine(rp.interpreter());
+        debuggerRunData.environment = rp.debugger().environment;
+
+        return new GenericDebuggerEngine("PDB (PdbImpl)",
+                                          new PdbImpl({debuggerRunData, scriptRunData,
+                                                       ICore::resourcePath("debugger")}));
+    }
     return new PdbEngine;
 }
 
