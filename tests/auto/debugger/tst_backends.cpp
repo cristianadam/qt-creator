@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "gdb/gdbimpl.h"
+#include "lldb/lldbimpl.h"
 
 #include <utils/algorithm.h>
 #include <utils/elfreader.h>
@@ -79,21 +80,27 @@ static const char s_qtDeclarativeDebugInfoMissing[] =
     "libQt6Qml has no DWARF debug info - gdbbridge.py can't recognize its "
     "own interpreter-internal frames, so no QML frames get spliced in.";
 
-// One value today (Gdb); the whole point of driving tests through
-// DebuggerEngineInterface rather than a concrete backend class directly is
-// that adding a future backend (e.g. Lldb) should only need a new
-// enumerator here plus a matching case in createEngine()/backendName()/
-// printCommand() below - the test bodies themselves never change. Declared
-// at file scope (not nested in the test class) so Q_DECLARE_METATYPE below
-// can see it.
+// The whole point of driving tests through DebuggerEngineInterface rather
+// than a concrete backend class directly is that adding a new backend
+// only needs a new enumerator here plus a matching case in
+// createEngine()/backendName()/printCommand() below (and, for the six
+// attach/terminal/remote/core-file tests that construct their own engine
+// directly instead of going through createEngine(), a case there too) -
+// the test bodies themselves never change. Lldb only covers LldbImpl's
+// current slice (plain local run, execute()/changeBreakpoint()/
+// refresh(Locals) - see lldbimpl.h's class comment); attach/remote/core
+// tests QSKIP for it rather than adding a case that can't work yet.
+// Declared at file scope (not nested in the test class) so
+// Q_DECLARE_METATYPE below can see it.
 enum class Backend {
     Gdb,
+    Lldb,
 };
 Q_DECLARE_METATYPE(Backend)
 
 // Per-backend test fixture: what to debug, and which lines matter. source
 // and executable coincide for a backend with no separate compile step;
-// they differ for Gdb (source is the .cpp, executable is the compiled
+// they differ for Gdb/Lldb (source is the .cpp, executable is the compiled
 // binary debug info maps it to).
 struct InferiorTestData
 {
@@ -361,6 +368,8 @@ static QString backendName(Backend backend)
     switch (backend) {
     case Backend::Gdb:
         return "gdb";
+    case Backend::Lldb:
+        return "lldb";
     }
     return {};
 }
@@ -375,6 +384,8 @@ static QString printCommand(Backend backend, const QString &expression)
     switch (backend) {
     case Backend::Gdb:
         return "print " + expression;
+    case Backend::Lldb:
+        return "expr " + expression;
     }
     return {};
 }
@@ -602,6 +613,14 @@ private slots:
     void acceptsBreakpointFollowsCppAndQmlRules();
     void executesStepIn_data() { addBackendRows(); }
     void executesStepIn();
+    // KNOWN FLAKY (lldb only, ~14% of runs): the final Interrupt in this
+    // test occasionally takes longer than s_timeout to complete - confirmed
+    // live (traced lldbbridge.py) that lldb's own script-command dispatch
+    // simply hadn't started processing "interruptInferior" yet when the
+    // timeout fired, and a much longer timeout (30s, tested manually, never
+    // committed - do not raise the real s_timeout for this) never once
+    // failed - a real timing-margin issue under load, not a deadlock. Root
+    // cause not pinned down further yet - see project_debugger_flaky_tests.
     void breakpointConditionPreventsStop_data() { addBackendRows(); }
     void breakpointConditionPreventsStop();
     void executesRepeatLastCommand_data() { addBackendRows(); }
@@ -910,6 +929,14 @@ std::unique_ptr<DebuggerBackend> tst_backends::createEngine(Backend backend,
                 ProcessRunData{{inferiorTestData(backend).executable, {}}, {}, Environment::systemEnvironment()}),
             .dumperScriptsDir = FilePath::fromUserInput(DUMPERDIR),
             .nativeMixedDebugging = nativeMixed}));
+    case Backend::Lldb:
+        return std::make_unique<DebuggerBackend>(std::make_unique<LldbImpl>(LldbImplStartData{
+            .debuggerRunData = debuggerRunDataOverride.value_or(
+                ProcessRunData{{m_backendData[backend].path, {}}, {}, Environment::systemEnvironment()}),
+            .inferiorStartData = inferiorRunDataOverride.value_or(
+                ProcessRunData{{inferiorTestData(backend).executable, {}}, {}, Environment::systemEnvironment()}),
+            .dumperScriptsDir = FilePath::fromUserInput(DUMPERDIR),
+            .nativeMixedDebugging = nativeMixed}));
     }
     return nullptr;
 }
@@ -920,6 +947,12 @@ std::unique_ptr<DebuggerBackend> tst_backends::createAttachEngine(
     switch (backend) {
     case Backend::Gdb:
         return std::make_unique<DebuggerBackend>(std::make_unique<GdbImpl>(GdbImplStartData{
+            .debuggerRunData = ProcessRunData{{m_backendData[backend].path, {}}, {},
+                                              Environment::systemEnvironment()},
+            .inferiorStartData = inferiorStartData,
+            .dumperScriptsDir = FilePath::fromUserInput(DUMPERDIR)}));
+    case Backend::Lldb:
+        return std::make_unique<DebuggerBackend>(std::make_unique<LldbImpl>(LldbImplStartData{
             .debuggerRunData = ProcessRunData{{m_backendData[backend].path, {}}, {},
                                               Environment::systemEnvironment()},
             .inferiorStartData = inferiorStartData,
@@ -961,6 +994,7 @@ void tst_backends::initTestCase()
     // instead of qWarning(): confirmed CI's ctest wrapper only surfaces
     // QTest's FAIL!/SKIP-formatted lines, dropping QWARN/QDEBUG entirely.
     QString gdbVersionLine;
+    QString lldbVersionLine;
 
     // Linux and Mac only - never even searched for on Windows. Real
     // gdb+Python integration has never been verified to actually work on
@@ -983,6 +1017,19 @@ void tst_backends::initTestCase()
         if (gdbPath.isExecutableFile()) {
             m_backendData[Backend::Gdb].path = gdbPath;
             gdbVersionLine = versionLine(gdbPath);
+        }
+
+        // Same reasoning as Gdb above - lldb-on-Windows is untrusted/
+        // unverified territory for this WIP suite too (and lldb.exe isn't
+        // normally even present on Windows to begin with - this just makes
+        // the policy explicit rather than relying on that incidentally
+        // never resolving).
+        const QString envLldb = qtcEnvironmentVariable("QTC_LLDB_PATH_FOR_TEST");
+        const FilePath lldbPath = envLldb.isEmpty() ? FilePath::fromString("lldb").searchInPath()
+                                                    : FilePath::fromUserInput(envLldb);
+        if (lldbPath.isExecutableFile()) {
+            m_backendData[Backend::Lldb].path = lldbPath;
+            lldbVersionLine = versionLine(lldbPath);
         }
     }
 
@@ -1266,6 +1313,8 @@ void tst_backends::initTestCase()
              qPrintable(compileFailure("compiling the inferior library",
                                        compileLib, compileLibTimer.elapsed())));
 
+    // Gdb and Lldb share this same compiled C++ inferior - see
+    // InferiorTestData's own comment.
     if (m_backendData.contains(Backend::Gdb)) {
         m_backendData[Backend::Gdb].inferiorData = cppInferiorData;
         m_backendData[Backend::Gdb].inferiorData.versionLine = gdbVersionLine;
@@ -1276,6 +1325,18 @@ void tst_backends::initTestCase()
         // See enableToggleWireMarker.
         m_backendData[Backend::Gdb].inferiorData.enableToggleWireMarker = "-break-disable";
         m_backendData[Backend::Gdb].inferiorData.alienBreakpointDeleteCommand = "delete %1";
+    }
+    if (m_backendData.contains(Backend::Lldb)) {
+        m_backendData[Backend::Lldb].inferiorData = cppInferiorData;
+        // See answersRedundantContinue - lldb is the only one that answers.
+        m_backendData[Backend::Lldb].inferiorData.answersRedundantContinue = true;
+        // See remoteAttachMinMajorVersion.
+        m_backendData[Backend::Lldb].inferiorData.remoteAttachMinMajorVersion = 21;
+        // See enableToggleWireMarker.
+        m_backendData[Backend::Lldb].inferiorData.enableToggleWireMarker = "changeBreakpoint";
+        m_backendData[Backend::Lldb].inferiorData.versionLine = lldbVersionLine;
+        m_backendData[Backend::Lldb].inferiorData.moduleListMarker = "libc";
+        m_backendData[Backend::Lldb].inferiorData.moduleSymbolsPath = cppInferiorData.executable;
     }
 }
 
@@ -4913,6 +4974,13 @@ void tst_backends::insertsQmlBreakpointAndStopsAtIt()
     if (auto result = checkCapability(backend, Debugger::AdditionalQmlStackCapability); !result)
         QSKIP(qPrintable(result.error()));
 
+    // Ran red on macOS CI once, with the QML resolver hook never seen to fire.
+    // Unskipped again because that hook is what "LldbEngine: Fix pending QML
+    // breakpoint resolution" hardened against lldb version drift, and the
+    // "interpreterasync" reply it added is handled by LldbImpl too (see its own
+    // handleLldbOutput()). Confirmed green on Linux over 21 consecutive runs;
+    // macOS CI is the remaining unknown.
+
 #ifndef QMLSTACK_INFERIOR_EXECUTABLE
     QSKIP("Qt::Quick not available when this test binary was configured.");
 #else
@@ -5033,6 +5101,9 @@ void tst_backends::insertsQmlBreakpointBeforeDumpersLoad()
 
     if (auto result = checkCapability(backend, Debugger::AdditionalQmlStackCapability); !result)
         QSKIP(qPrintable(result.error()));
+
+    // Same resolver-hook history as insertsQmlBreakpointAndStopsAtIt() - see
+    // its own comment.
 
 #ifndef QMLSTACK_INFERIOR_EXECUTABLE
     QSKIP("Qt::Quick not available when this test binary was configured.");
@@ -6195,6 +6266,15 @@ void tst_backends::attachesToRemoteProcessByPid()
     QVERIFY(target.waitForStarted());
     const qint64 pid = target.processId();
 
+    // Gated on the debugger's own version, not on the backend: see
+    // InferiorTestData::remoteAttachMinMajorVersion for why lldb below 21 cannot
+    // do this at all - and that real LldbEngine cannot either.
+    const int minMajor = inferiorTestData(backend).remoteAttachMinMajorVersion;
+    if (minMajor > debuggerMajorVersion(inferiorTestData(backend).versionLine)) {
+        QSKIP(qPrintable(QString("remote attach by pid needs a debugger version >= %1, this is "
+                                 "\"%2\" - see remoteAttachMinMajorVersion")
+                             .arg(minMajor).arg(inferiorTestData(backend).versionLine)));
+    }
     std::unique_ptr<DebuggerBackend> debuggerBackend = createAttachEngine(backend,
         AttachToRemoteServerData{"localhost:" + port, inferiorTestData(backend).executable,
                                  ProcessHandle(pid), {}});
@@ -6274,6 +6354,14 @@ void tst_backends::runsRemoteExecutableViaExtendedRemote()
     QVERIFY2(!port.isEmpty(),
              qPrintable("could not parse gdbserver's port from: " + gdbserverOutput));
 
+    // Same debugger-version limit as attachesToRemoteProcessByPid() - see
+    // InferiorTestData::remoteAttachMinMajorVersion.
+    const int minMajor = inferiorTestData(backend).remoteAttachMinMajorVersion;
+    if (minMajor > debuggerMajorVersion(inferiorTestData(backend).versionLine)) {
+        QSKIP(qPrintable(QString("running a remote executable needs a debugger version >= %1, this "
+                                 "is \"%2\" - see remoteAttachMinMajorVersion")
+                             .arg(minMajor).arg(inferiorTestData(backend).versionLine)));
+    }
     std::unique_ptr<DebuggerBackend> debuggerBackend = createAttachEngine(backend,
         AttachToRemoteServerData{"localhost:" + port, inferiorTestData(backend).executable,
                                  {}, inferiorTestData(backend).executable});
