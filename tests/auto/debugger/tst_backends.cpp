@@ -4,6 +4,7 @@
 #include "gdb/gdbimpl.h"
 #include "lldb/lldbimpl.h"
 #include "pdb/pdbimpl.h"
+#include "qml/qmlimpl.h"
 
 #include <utils/algorithm.h>
 #include <utils/elfreader.h>
@@ -104,12 +105,25 @@ static const char s_qtDeclarativeDebugInfoMissing[] =
 // actually missing - the same treatment already given to the two lldb
 // gaps above, just for a longer, principled list rather than a confirmed
 // upstream bug.
+// Qml is different in kind again, from a different angle than Pdb: it
+// attaches over a plain TCP connection to an already-running app's QML/JS
+// interpreter (see AttachToQmlServerData's own comment) rather than
+// spawning anything itself, and talks V8-debugger-style JSON rather than
+// GdbMi wire syntax - see QmlImpl's own class comment. Availability is
+// gated on Qt::Quick/QMLSTACK_INFERIOR_EXECUTABLE being built (see
+// initTestCase()), not a PATH search - there's no external "qml" debugger
+// binary the way gdb/lldb/python3 are. No memory/register/disassembly
+// access, watchpoints/catchpoints, attach-by-pid/remote/core modes, or
+// reverse execution either (same bucket as Pdb, but for yet another
+// reason: an interpreted JS engine embedded in the app itself, not a
+// separate debugger process with its own attach/remote story at all).
 // Declared at file scope (not nested in the test class) so
 // Q_DECLARE_METATYPE below can see it.
 enum class Backend {
     Gdb,
     Lldb,
     Pdb,
+    Qml,
 };
 Q_DECLARE_METATYPE(Backend)
 
@@ -388,6 +402,8 @@ static QString backendName(Backend backend)
         return "lldb";
     case Backend::Pdb:
         return "pdb";
+    case Backend::Qml:
+        return "qml";
     }
     return {};
 }
@@ -396,11 +412,11 @@ static QString backendName(Backend backend)
 // backend-dialect-specific string is unavoidable, since
 // executeDebuggerCommand() is deliberately a pass-through escape hatch
 // (see its own test's comment). Every other test body stays fully
-// backend-agnostic. Not actually reachable for Pdb - its only caller,
-// executesRawCommandAndAssignsValue(), QSKIPs for Pdb (verified via
-// accessMemory(), which pdb has nothing to back at all) - kept here anyway
-// (a bare expression, evaluated by pdbbridge.py's default() handler)
-// purely so this switch stays exhaustive.
+// backend-agnostic. Not actually reachable for Pdb/Qml - its only caller,
+// executesRawCommandAndAssignsValue(), QSKIPs for both (verified via
+// accessMemory(), which neither has anything to back at all) - kept here
+// anyway (a bare expression, evaluated by pdbbridge.py's default() handler
+// or QmlImpl's own evaluate()) purely so this switch stays exhaustive.
 static QString printCommand(Backend backend, const QString &expression)
 {
     switch (backend) {
@@ -409,6 +425,7 @@ static QString printCommand(Backend backend, const QString &expression)
     case Backend::Lldb:
         return "expr " + expression;
     case Backend::Pdb:
+    case Backend::Qml:
         return expression;
     }
     return {};
@@ -971,6 +988,20 @@ std::unique_ptr<DebuggerBackend> tst_backends::createEngine(Backend backend,
             .inferiorStartData = inferiorRunDataOverride.value_or(
                 ProcessRunData{{inferiorTestData(backend).executable, {}}, {}, Environment::systemEnvironment()}),
             .dumperScriptsDir = FilePath::fromUserInput(DUMPERDIR)}));
+    case Backend::Qml:
+        // Attach-only this slice - QmlImpl never spawns anything itself
+        // (see AttachToQmlServerData's own comment), so there's no real
+        // "launch fresh" mode to build here. Still returns a real engine
+        // rather than nullptr, though, so every existing createEngine()
+        // caller written before Qml existed (QVERIFY(debuggerBackend) then
+        // engine->start()) gets a clean EngineSetupFailed if it actually
+        // tries to run this (an empty AttachToQmlServerData can never
+        // connect) instead of a null-pointer crash - debuggerRunDataOverride/
+        // inferiorRunDataOverride/nativeMixed don't apply to Qml at all, so
+        // they're silently ignored, same reasoning as PdbImplStartData
+        // ignoring nativeMixed above.
+        return std::make_unique<DebuggerBackend>(std::make_unique<QmlImpl>(QmlImplStartData{
+            .inferiorStartData = AttachToQmlServerData{}}));
     }
     return nullptr;
 }
@@ -993,6 +1024,12 @@ std::unique_ptr<DebuggerBackend> tst_backends::createAttachEngine(
             .dumperScriptsDir = FilePath::fromUserInput(DUMPERDIR)}));
     case Backend::Pdb:
         break;
+    case Backend::Qml:
+        // No debuggerRunData/path at all - QmlImpl attaches over a plain
+        // TCP connection instead of spawning a local process (see
+        // QmlImplStartData's own comment).
+        return std::make_unique<DebuggerBackend>(std::make_unique<QmlImpl>(QmlImplStartData{
+            .inferiorStartData = inferiorStartData}));
     }
     return nullptr;
 }
@@ -1121,6 +1158,78 @@ void tst_backends::initTestCase()
     m_hasNativeCallHook = hasNativeCallHook();
     qWarning("qt_v4AboutToCallNativeMethodHook: %s",
              m_hasNativeCallHook ? "found" : "NOT found");
+
+    // Qml has no external debugger binary at all (see the Backend enum's
+    // own comment) - "available" here means Qt::Quick was present when
+    // this test binary was configured (QMLSERVER_INFERIOR_EXECUTABLE gets
+    // defined - see CMakeLists.txt/backends.qbs) and the compiled inferior
+    // actually exists. m_hasQmlNativeDebuggerPlugin/m_hasQtDeclarativeDebugInfo
+    // above are irrelevant here - those gate GdbImpl's/LldbImpl's own
+    // native-mixed dumper-bridge QML recognition, not a real, standalone
+    // QML/JS interpreter's own V8 debug service, which QmlImpl talks to
+    // directly.
+#ifdef QMLSERVER_INFERIOR_EXECUTABLE
+    const FilePath qmlInferior = (FilePath::fromUserInput(QMLSERVER_INFERIOR_EXECUTABLE)
+                                  / "qmlserver_inferior").withExecutableSuffix();
+    if (qmlInferior.isExecutableFile()) {
+        InferiorTestData qmlInferiorData;
+        // "main.qml" alone is enough: v8's own "scriptRegExp" breakpoint
+        // type matches by regex against the script's full qrc:/ URL, and
+        // the bare basename matches as a substring - same "directory is
+        // irrelevant" reasoning as insertsQmlBreakpointAndStopsAtIt()'s own
+        // NativeDebugger-service breakpoint, just a different QML debug
+        // service (see QmlImpl's own class comment on why it's a
+        // completely separate connection).
+        qmlInferiorData.source = FilePath::fromUserInput("main.qml");
+        // The real, spawnable native binary hosting the QML/JS interpreter -
+        // what startQmlServer() actually launches. Unlike Gdb/Lldb/Pdb,
+        // "source" and "executable" here are two different things
+        // entirely (an interpreted resource path vs. the native host
+        // binary), not just two names for the same file (Pdb) or a
+        // compile-time pairing (Gdb/Lldb).
+        qmlInferiorData.executable = qmlInferior;
+        // compute()'s own first statement (see qmlserver_inferior/main.qml,
+        // a dedicated inferior with a deliberate delay before calling into
+        // QML at all - unlike qmlstack_inferior's own zero-delay
+        // Component.onCompleted call, which races ahead of a real
+        // V8Debugger connect+insert-breakpoint round trip every time,
+        // confirmed live).
+        // Scanned for marker comments, like the generated C++/Python inferiors
+        // above - main.qml is checked in rather than generated, so it's read
+        // from BACKENDS_TEST_SOURCE_DIR (see CMakeLists.txt). Hardcoding these
+        // was a standing trap: adding the copyright header alone shifted both
+        // by three lines.
+        qmlInferiorData.breakpointLine = qmlMarkerLine("qmlserver_inferior/main.qml",
+                                                      "// breakpoint line");
+        // "return doubled" - one line further in the same compute() call, the
+        // only meaningful RunToLine target main.qml has (unlike gdb/lldb/pdb's
+        // bump()->spin(), there's no second invocation to run forward into -
+        // see testRunToLineCapability()'s own attach branch).
+        qmlInferiorData.secondBreakpointLine = qmlMarkerLine("qmlserver_inferior/main.qml",
+                                                            "// second breakpoint line");
+        QVERIFY(qmlInferiorData.breakpointLine > 0);
+        QVERIFY(qmlInferiorData.secondBreakpointLine > 0);
+        // compute()'s own parameter, in scope at breakpointLine.
+        qmlInferiorData.localMarker = "value";
+        qmlInferiorData.functionMarker = "compute";
+        qmlInferiorData.expandableLocal = "nested";
+        qmlInferiorData.expandableChild = "inner";
+        // main.qml's root QtObject carries "id: root", which is what the
+        // QmlDebugger service reports as an object's idString, and its own
+        // declared property.
+        qmlInferiorData.inspectorObject = "root";
+        qmlInferiorData.inspectorProperty = "globalValue";
+        // The QML console evaluates a bare JS expression against the selected
+        // object, so reading a property is just its name.
+        qmlInferiorData.inspectorPropertyExpression = "globalValue";
+        // See enableToggleWireMarker - needs the service's own "version"
+        // handshake to be negotiated first.
+        qmlInferiorData.enableToggleWireMarker = "changebreakpoint";
+        // main.qml's own createObject(null) - see its comment there.
+        qmlInferiorData.inspectorOrphanObject = "orphanObject";
+        m_backendData[Backend::Qml].inferiorData = qmlInferiorData;
+    }
+#endif
 
     const FilePath dumperDir = FilePath::fromUserInput(DUMPERDIR);
     if (!dumperDir.exists())
