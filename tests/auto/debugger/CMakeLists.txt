@@ -146,6 +146,18 @@ if (TARGET Qt::Quick)
   list(APPEND BACKENDS_TEST_DEFINES
     "QMLSTACK_INFERIOR_EXECUTABLE=\"$<TARGET_FILE_DIR:qmlstack_inferior>\"")
 
+  # QmlImpl's own standalone (not native-mixed) attach tests need a
+  # deliberate delay before calling into QML (see main.qml's own comment) -
+  # qmlstack_inferior's zero-delay Component.onCompleted call races ahead
+  # of a real V8Debugger connect+insert-breakpoint round trip every time.
+  qt_add_executable(qmlserver_inferior
+    qmlserver_inferior/main.cpp qmlserver_inferior/main.qrc
+  )
+  target_link_libraries(qmlserver_inferior PRIVATE Qt::Quick Qt::Qml)
+  target_compile_definitions(qmlserver_inferior PRIVATE QT_QML_DEBUG)
+  list(APPEND BACKENDS_TEST_DEFINES
+    "QMLSERVER_INFERIOR_EXECUTABLE=\"$<TARGET_FILE_DIR:qmlserver_inferior>\"")
+
   # A local copy of tests/manual/debugger/qmlmix's sources - a Window-
   # rooted app with non-trivial QML initialization before its C++ call,
   # unlike qmlstack_inferior's bare QtObject with a zero-delay startup
