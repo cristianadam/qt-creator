@@ -75,7 +75,18 @@ RemoteLinuxEnvironmentAspect::RemoteLinuxEnvironmentAspect(AspectContainer *cont
     : EnvironmentAspect(container)
 {
     addSupportedBaseEnvironment(Tr::tr("Clean Environment"), {});
-    addPreferredBaseEnvironment(Tr::tr("System Environment"), [this] { return m_remoteEnvironment; });
+    addPreferredBaseEnvironment(Tr::tr("System Environment"), [this] {
+        // Populate the base from the device on first use, so a remote run starts with the
+        // device's actual environment rather than an empty one (this previously required a
+        // manual "Fetch Device Environment"). Cached until the kit or device changes.
+        if (!m_remoteEnvironmentFetched) {
+            if (const IDevice::ConstPtr device = this->device()) {
+                m_remoteEnvironment = device->systemEnvironment();
+                m_remoteEnvironmentFetched = true;
+            }
+        }
+        return m_remoteEnvironment;
+    });
 
     setConfigWidgetCreator([this] { return new RemoteLinuxEnvironmentAspectWidget(this); });
 }
@@ -86,6 +97,7 @@ void RemoteLinuxEnvironmentAspect::setRemoteEnvironment(const Utils::Environment
         m_remoteEnvironment = env;
         emit environmentChanged();
     }
+    m_remoteEnvironmentFetched = true;
 }
 
 void RemoteLinuxEnvironmentAspect::fromMap(const Store &map)
@@ -115,7 +127,9 @@ void RemoteLinuxEnvironmentAspect::toMap(Store &map) const
 void RemoteLinuxEnvironmentAspect::handleKitUpdate()
 {
     const IDevice::ConstPtr device = this->device();
-    setRemoteEnvironment(Environment(device ? device->osType() : OsTypeLinux));
+    m_remoteEnvironment = Environment(device ? device->osType() : OsTypeLinux);
+    m_remoteEnvironmentFetched = false;
+    emit environmentChanged();
 }
 
 } // namespace Remote
