@@ -232,6 +232,7 @@ private slots:
     void test_vim_script_scriptlocal();
     void test_vim_script_if_chain();
     void test_vim_script_error_numbers();
+    void test_vim_pattern_buffer_position();
     void test_vim_set_showmatch_name();
     void test_vim_set_add_remove();
     void test_vim_set_escaped_value();
@@ -6900,6 +6901,62 @@ void FakeVimTester::test_vim_script_error_numbers()
     // "v:exception" holds it in the shape a script reports or matches on.
     QCOMPARE(echo("g:ex"), QLatin1String("Vim:E121: Undefined variable: g:nosuchvar"));
     data.doCommand("unlet g:hit | unlet g:ok | unlet g:ex");
+}
+
+void FakeVimTester::test_vim_pattern_buffer_position()
+{
+    // "\%23l" and its kin say where in the buffer a match may sit rather than
+    // anything about the text. Values taken from Vim 9.1.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) {
+            if (!msg.startsWith("--"))
+                message = msg;
+        });
+    auto echo = [&](const char *expr) -> QString {
+        message.clear();
+        data.doCommand(QLatin1String("echo ") + QLatin1String(expr));
+        return message;
+    };
+    const char *const start = "aa" X "a" N "bbb" N "ccc" N "ddd";
+    data.doCommand("set wrapscan");
+
+    // A search stops only where the position is allowed. "<" is left out of the
+    // keys here because the notation would take it for the start of a key name.
+    data.setText(start);
+    data.doKeys("/\\%3lc<CR>");
+    QCOMPARE(data.handler->textCursor().blockNumber() + 1, 3);
+    data.setText(start);
+    data.doKeys("/\\%>2l\\a<CR>");
+    QCOMPARE(data.handler->textCursor().blockNumber() + 1, 3);
+
+    // search() answers the same way, and takes the forms with a "<" as well.
+    data.setText(start);
+    QCOMPARE(echo("search('\\%3lc', 'w')"), QLatin1String("3"));
+    data.setText(start);
+    QCOMPARE(echo("search('\\%<2l\\a', 'w')"), QLatin1String("1"));
+    data.setText(start);
+    QCOMPARE(echo("search('\\%2cb', 'w')"), QLatin1String("2"));
+    // A substitution leaves alone what sits elsewhere.
+    data.setText(start);
+    data.doCommand("%s/\\%2l./X/");
+    QCOMPARE(data.text(), QByteArray("aaa" N "Xbb" N "ccc" N "ddd"));
+    data.setText(start);
+    data.doCommand("%s/\\%<2l./X/");
+    QCOMPARE(data.text(), QByteArray("Xaa" N "bbb" N "ccc" N "ddd"));
+
+    // "\%V" is the area the last selection covered, which for a linewise one is
+    // whole lines and for an ordinary one runs from the one end to the other.
+    data.setText(start);
+    data.doKeys("Vj<Esc>");
+    data.doCommand("%s/\\%V./Y/g");
+    QCOMPARE(data.text(), QByteArray("YYY" N "YYY" N "ccc" N "ddd"));
+    data.setText("a" X "aa" N "bbb" N "ccc" N "ddd");
+    data.doKeys("vj<Esc>");
+    data.doCommand("%s/\\%V./Z/g");
+    QCOMPARE(data.text(), QByteArray("aZZ" N "ZZb" N "ccc" N "ddd"));
 }
 
 void FakeVimTester::test_vim_set_showmatch_name()

@@ -391,7 +391,26 @@ static bool eatString(const QString &prefix, QString *str)
     return true;
 }
 
-static QRegularExpression vimPatternToQtPattern(const QString &needle)
+// Where in the buffer a match is allowed to sit: "\%23l" and its "<" and ">"
+// forms for the line, the same for the column as "c" or "v", "\%V" for inside
+// the visual area and "\%#" for the cursor. These say nothing about the text,
+// so they are taken out of the pattern and checked against the place a match
+// was found instead.
+struct PatternPosition
+{
+    bool isSet() const { return lineOp != 0 || columnOp != 0 || visual || cursor; }
+
+    // Which way to compare, as '=', '<' or '>', and against what. 0 for neither.
+    char lineOp = 0;
+    int line = 0;
+    char columnOp = 0;
+    int column = 0;
+    bool visual = false;
+    bool cursor = false;
+};
+
+static QRegularExpression vimPatternToQtPattern(const QString &needle,
+                                                PatternPosition *wanted = nullptr)
 {
     /* Transformations (Vim regexp -> QRegularExpression):
      *   \a -> [A-Za-z]
@@ -464,6 +483,9 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
         numberBase = 0;
         numberDigits.clear();
     };
+    // A "\%" position being read: the way to compare and the number so far.
+    char positionOp = 0;
+    QString positionDigits;
     // "\%[abc]" is a sequence in which each character may be the last.
     bool optionalSeq = false;
     QString optionalChars;
@@ -483,6 +505,28 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
         lastAtomStart = -1;
     };
     for (const QChar &c : needle) {
+        if (positionOp != 0) {
+            if (c.isDigit()) {
+                positionDigits.append(c);
+                continue;
+            }
+            // "l" counts lines, "c" characters and "v" screen columns, which
+            // are the same here as there is no measuring of tabs to do.
+            if (c == 'l' || c == 'c' || c == 'v') {
+                if (wanted) {
+                    if (c == 'l') {
+                        wanted->lineOp = positionOp;
+                        wanted->line = positionDigits.toInt();
+                    } else {
+                        wanted->columnOp = positionOp;
+                        wanted->column = positionDigits.toInt();
+                    }
+                }
+                positionOp = 0;
+                continue;
+            }
+            positionOp = 0; // no position after all, so handle c below
+        }
         if (lookaround != 0) {
             if (lookaround == 1 && c == '<') {
                 lookaround = 2;
@@ -565,6 +609,20 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
             if (c == '[') { // "%[abc]" holds a sequence of optional characters
                 optionalSeq = true;
                 optionalChars.clear();
+                continue;
+            }
+            if (c == 'V' || c == '#') { // inside the visual area / at the cursor
+                if (wanted) {
+                    if (c == 'V')
+                        wanted->visual = true;
+                    else
+                        wanted->cursor = true;
+                }
+                continue;
+            }
+            if (c == '<' || c == '>' || c.isDigit()) { // "%23l", "%>3c", ...
+                positionOp = c.isDigit() ? '=' : c.toLatin1();
+                positionDigits = c.isDigit() ? QString(c) : QString();
                 continue;
             }
             // "%d123" in decimal, "%x62" in hex, "%o142" in octal and "%u0062"
@@ -961,7 +1019,8 @@ static QChar applyReplacementLetterCases(QChar repl,
 static bool substituteText(QString *text,
                            const QRegularExpression &pattern,
                            const QString &replacement,
-                           bool global)
+                           bool global,
+                           const std::function<bool(int)> &allowed = {})
 {
     bool substituted = false;
     int pos = 0;
@@ -972,6 +1031,14 @@ static bool substituteText(QString *text,
             break;
 
         pos = match.capturedStart();
+
+        // Leave alone what the pattern said had to sit elsewhere.
+        if (allowed && !allowed(pos)) {
+            pos = match.capturedEnd() > pos ? match.capturedEnd() : pos + 1;
+            if (pos > text->size())
+                break;
+            continue;
+        }
 
         // ensure that substitution is advancing towards end of line
         if (right == text->size() - pos) {
@@ -2777,6 +2844,7 @@ public:
 
     // marks
     Mark mark(QChar code) const;
+    bool positionAllowed(const PatternPosition &wanted, int pos) const;
     void setMark(QChar code, CursorPosition position);
     void removeMark(QChar code);
     // jump to valid mark return true if mark is valid and local
@@ -7138,7 +7206,8 @@ bool FakeVimHandler::Private::handleExSubstituteCommand(const ExCommand &cmd)
     if (g.lastSubstituteFlags.contains('i'))
         needle.prepend("\\c");
 
-    const QRegularExpression pattern = vimPatternToQtPattern(needle);
+    PatternPosition wanted;
+    const QRegularExpression pattern = vimPatternToQtPattern(needle, &wanted);
 
     QTextBlock lastBlock;
     QTextBlock firstBlock;
@@ -7148,7 +7217,13 @@ bool FakeVimHandler::Private::handleExSubstituteCommand(const ExCommand &cmd)
             block.isValid() && block.position() + block.length() > cmd.range.beginPos;
             block = block.previous()) {
             QString text = block.text();
-            if (substituteText(&text, pattern, g.lastSubstituteReplacement, global)) {
+            const int blockPos = block.position();
+            const std::function<bool(int)> allowed
+                = wanted.isSet() ? [this, &wanted, blockPos](int column) {
+                      return positionAllowed(wanted, blockPos + column);
+                  }
+                                 : std::function<bool(int)>();
+            if (substituteText(&text, pattern, g.lastSubstituteReplacement, global, allowed)) {
                 firstBlock = block;
                 if (!lastBlock.isValid()) {
                     lastBlock = block;
@@ -10249,7 +10324,8 @@ bool FakeVimHandler::Private::searchFunction(const QList<VimValue> &args,
     const bool haveSkip = args.size() > 4;
     const VimValue skip = arg(4);
 
-    QRegularExpression re = vimPatternToQtPattern(arg(0).toString());
+    PatternPosition wanted;
+    QRegularExpression re = vimPatternToQtPattern(arg(0).toString(), &wanted);
     if (!re.isValid()) {
         *error = Tr::tr("Invalid pattern: %1").arg(arg(0).toString());
         return false;
@@ -10294,6 +10370,11 @@ bool FakeVimHandler::Private::searchFunction(const QList<VimValue> &args,
         const int line = block.blockNumber() + 1;
         if (stopLine > 0 && (backward ? line < stopLine : line > stopLine))
             break;
+
+        // Asked before the cursor is moved, so that "\%#" still means where it
+        // was rather than the candidate being looked at.
+        if (wanted.isSet() && !positionAllowed(wanted, offset))
+            continue;
 
         // Vim evaluates {skip} with the cursor on the candidate.
         setCursorPosition(CursorPosition(block.blockNumber(), offset - block.position()));
@@ -12309,7 +12390,62 @@ void FakeVimHandler::Private::searchBalanced(bool forward, QChar needle, QChar o
 QTextCursor FakeVimHandler::Private::search(const SearchData &sd, int startPos, int count,
     bool showMessages)
 {
-    const QRegularExpression needleExp = vimPatternToQtPattern(sd.needle);
+    PatternPosition wanted;
+    const QRegularExpression needleExp = vimPatternToQtPattern(sd.needle, &wanted);
+
+    if (wanted.isSet() && needleExp.isValid()) {
+        // Walk the matches one at a time and count only those sitting where the
+        // pattern allows them to; rare enough to be done the plain way.
+        const auto step = [&](int probe, bool fromEnd) {
+            QTextCursor tc;
+            int one = 1;
+            if (fromEnd) {
+                tc = QTextCursor(document());
+                tc.movePosition(sd.forward ? StartOfDocument : EndOfDocument);
+            } else if (probe >= 0 && probe < document()->characterCount()) {
+                tc = QTextCursor(document());
+                tc.setPosition(probe);
+                if (sd.forward && afterEndOfLine(document(), probe))
+                    tc.movePosition(Right);
+            } else {
+                return tc;
+            }
+            if (sd.forward)
+                searchForward(&tc, needleExp, &one);
+            else
+                searchBackward(&tc, needleExp, &one);
+            return tc;
+        };
+
+        QTextCursor result;
+        int from = startPos;
+        int found = 0;
+        bool wrapped = false;
+        while (found < count) {
+            QTextCursor tc = step(from + (sd.forward ? 1 : -1), false);
+            if (tc.isNull()) {
+                if (wrapped || !s.wrapScan())
+                    break;
+                wrapped = true;
+                tc = step(0, true);
+                if (tc.isNull())
+                    break;
+            }
+            const int at = tc.anchor();
+            if (wrapped && ((sd.forward && at > startPos) || (!sd.forward && at < startPos)))
+                break; // all the way round to where it started
+            from = at;
+            if (positionAllowed(wanted, at)) {
+                result = tc;
+                ++found;
+            }
+        }
+        if (result.isNull() && showMessages)
+            showMessage(MessageError, Tr::tr("Pattern not found: %1").arg(sd.needle));
+        if (sd.highlightMatches)
+            highlightMatches(needleExp.pattern());
+        return result;
+    }
 
     if (!needleExp.isValid()) {
         if (showMessages) {
@@ -15095,6 +15231,55 @@ bool FakeVimHandler::Private::selectTagTextObject(bool inner)
         --p2;
     setAnchorAndPosition(p1, p2);
 
+    return true;
+}
+
+// Whether a match found at pos sits where the pattern said it had to. Vim asks
+// this where the position stands in the pattern; it is asked here of where the
+// match begins, which is where such an atom is written in practice.
+bool FakeVimHandler::Private::positionAllowed(const PatternPosition &wanted, int pos) const
+{
+    const auto holds = [](char op, int wantedValue, int actual) {
+        switch (op) {
+        case '=': return actual == wantedValue;
+        case '<': return actual < wantedValue;
+        case '>': return actual > wantedValue;
+        default: return true;
+        }
+    };
+
+    const QTextBlock block = document()->findBlock(pos);
+    if (!block.isValid())
+        return false;
+    if (!holds(wanted.lineOp, wanted.line, block.blockNumber() + 1))
+        return false;
+    if (!holds(wanted.columnOp, wanted.column, pos - block.position() + 1))
+        return false;
+    if (wanted.cursor && pos != position())
+        return false;
+    if (wanted.visual) {
+        if (!mark('<').isValid() || !mark('>').isValid())
+            return false;
+        const CursorPosition from = markLessPosition();
+        const CursorPosition to = markGreaterPosition();
+        const int line = block.blockNumber();
+        if (line < qMin(from.line, to.line) || line > qMax(from.line, to.line))
+            return false;
+        // What the area takes in depends on how it was drawn: whole lines for a
+        // linewise selection, a rectangle of columns for a blockwise one, and
+        // from the one end to the other for the ordinary kind.
+        const int column = pos - block.position();
+        const VisualMode drawn = isVisualMode() ? g.visualMode : m_buffer->lastVisualMode;
+        if (drawn == VisualBlockMode) {
+            if (column < qMin(from.column, to.column) || column > qMax(from.column, to.column))
+                return false;
+        } else if (drawn != VisualLineMode) {
+            if (line == from.line && column < from.column)
+                return false;
+            if (line == to.line && column > to.column)
+                return false;
+        }
+    }
     return true;
 }
 
