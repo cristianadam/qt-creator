@@ -231,6 +231,7 @@ private slots:
     void test_vim_script_autoload();
     void test_vim_script_scriptlocal();
     void test_vim_script_if_chain();
+    void test_vim_script_trailing_comment();
     void test_vim_script_dict_dot();
     void test_vim_script_command();
     void test_vim_script_positions();
@@ -6830,6 +6831,44 @@ void FakeVimTester::test_vim_script_funcref()
 
 
 
+
+
+void FakeVimTester::test_vim_script_trailing_comment()
+{
+    // A '"' where an expression has already ended begins a comment, which is
+    // how a script explains the line it is setting something on. Values taken
+    // from Vim 9.1.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) { message = msg; });
+    auto echo = [&](const char *expr) -> QString {
+        message.clear();
+        data.doCommand(QLatin1String("echo ") + QLatin1String(expr));
+        return message;
+    };
+
+    data.doCommand("let g:x = 'v'   \" a trailing comment");
+    QCOMPARE(echo("g:x"), QLatin1String("v"));
+    // A '"' that opens the expression is still a string, not a comment.
+    data.doCommand("let g:s = \"str\"");
+    QCOMPARE(echo("g:s"), QLatin1String("str"));
+    // ... and one inside a string is just a character.
+    data.doCommand("let g:q = 'has \" inside'");
+    QCOMPARE(echo("g:q"), QLatin1String("has \" inside"));
+    // A condition may carry one too.
+    data.doCommand("let g:n = 0");
+    data.doCommand("if 1   \" a comment on the condition");
+    data.doCommand("let g:n = 5");
+    data.doCommand("endif");
+    QCOMPARE(echo("g:n"), QLatin1String("5"));
+    // ":echo" is the exception: it takes several expressions, so a '"' there
+    // opens another string rather than a comment.
+    QCOMPARE(echo("'a' 'b'"), QLatin1String("a b"));
+    QCOMPARE(echo("\"a\" \"b\""), QLatin1String("a b"));
+    data.doCommand("unlet g:x | unlet g:s | unlet g:q | unlet g:n");
+}
 
 void FakeVimTester::test_vim_script_if_chain()
 {

@@ -8163,6 +8163,13 @@ public:
     }
 
     bool atEnd() { skipBlanks(); return m_pos >= m_in.size(); }
+    // A '"' where an expression has already ended begins a comment, which is
+    // how a script explains a line it is setting something on.
+    bool atEndOrComment()
+    {
+        skipBlanks();
+        return m_pos >= m_in.size() || m_in.at(m_pos) == '"';
+    }
     bool ok() const { return m_ok; }
     QString error() const { return m_error; }
     void setTrailingError() { setError(Tr::tr("Trailing characters: %1").arg(m_in.mid(m_pos))); }
@@ -9158,7 +9165,7 @@ bool FakeVimHandler::Private::evaluateExpression(const QString &expr,
         return false;
     }
     const VimValue v = e.parseExpr();
-    if (e.ok() && !e.atEnd())
+    if (e.ok() && !e.atEndOrComment())
         e.setTrailingError();
     if (!e.ok()) {
         if (error)
