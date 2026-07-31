@@ -9,6 +9,7 @@
 #include "alientr.h"
 
 #include <coreplugin/actionmanager/actionmanager.h>
+#include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/icore.h>
 #include <coreplugin/messagemanager.h>
 
@@ -20,7 +21,10 @@
 #include <QPointer>
 
 #ifdef WITH_TESTS
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTest>
 #endif
 
@@ -49,6 +53,165 @@ private slots:
 
         QVERIFY(spy.wait(15000));
         QVERIFY(host.registeredCommands().contains("alien.hello"));
+    }
+
+    void testLanguageClientInterception()
+    {
+        const FilePath node = FilePath("node").searchInPath();
+        if (!node.isExecutableFile())
+            QSKIP("node.js not found in PATH");
+
+        ExtensionHost host(node);
+        QSignalSpy spy(&host, &ExtensionHost::languageClientStarted);
+
+        const Result<> result = host.activateBundledLspTestExtension();
+        QVERIFY2(result.has_value(), qPrintable(result ? QString() : result.error()));
+
+        QVERIFY(spy.wait(15000));
+        const QString id = spy.first().first().toString();
+        AlienClient *client = host.languageClient(id);
+        QVERIFY(client);
+
+        // The mock server answers "initialize", so the client becomes reachable.
+        QTRY_VERIFY_WITH_TIMEOUT(client->reachable(), 15000);
+    }
+
+    void testDocumentSync()
+    {
+        const FilePath node = FilePath("node").searchInPath();
+        if (!node.isExecutableFile())
+            QSKIP("node.js not found in PATH");
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const FilePath file = FilePath::fromString(dir.path()) / "foo.txt";
+        QVERIFY(file.writeFileContents("hello").has_value());
+
+        ExtensionHost host(node);
+        QSignalSpy spy(&host, &ExtensionHost::messageShown);
+
+        const Result<> result = host.activateBundledDocSyncTestExtension();
+        QVERIFY2(result.has_value(), qPrintable(result ? QString() : result.error()));
+
+        QTRY_VERIFY_WITH_TIMEOUT(host.isRunning(), 10000);
+        QVERIFY(EditorManager::openEditor(file));
+
+        auto sawOpened = [&spy] {
+            for (const QList<QVariant> &args : spy) {
+                const QString text = args.first().toString();
+                if (text.startsWith("opened:") && text.contains("foo.txt"))
+                    return true;
+            }
+            return false;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(sawOpened(), 15000);
+
+        EditorManager::closeAllEditors(false);
+    }
+
+    void testDiagnostics()
+    {
+        const FilePath node = FilePath("node").searchInPath();
+        if (!node.isExecutableFile())
+            QSKIP("node.js not found in PATH");
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const FilePath file = FilePath::fromString(dir.path()) / "foo.txt";
+        QVERIFY(file.writeFileContents("hello").has_value());
+
+        ExtensionHost host(node);
+        QSignalSpy spy(&host, &ExtensionHost::diagnosticsPublished);
+
+        const Result<> result = host.activateBundledDiagnosticsTestExtension();
+        QVERIFY2(result.has_value(), qPrintable(result ? QString() : result.error()));
+
+        QTRY_VERIFY_WITH_TIMEOUT(host.isRunning(), 10000);
+        QVERIFY(EditorManager::openEditor(file));
+
+        auto sawDiagnostic = [&spy] {
+            for (const QList<QVariant> &args : spy) {
+                if (args.at(0).toString().contains("foo.txt") && args.at(1).toInt() >= 1)
+                    return true;
+            }
+            return false;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(sawDiagnostic(), 15000);
+
+        EditorManager::closeAllEditors(false);
+    }
+
+    void testCompletion()
+    {
+        const FilePath node = FilePath("node").searchInPath();
+        if (!node.isExecutableFile())
+            QSKIP("node.js not found in PATH");
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const FilePath file = FilePath::fromString(dir.path()) / "foo.txt";
+        QVERIFY(file.writeFileContents("a").has_value());
+
+        ExtensionHost host(node);
+        const Result<> result = host.activateBundledCompletionTestExtension();
+        QVERIFY2(result.has_value(), qPrintable(result ? QString() : result.error()));
+
+        QTRY_VERIFY_WITH_TIMEOUT(host.isRunning(), 10000);
+        QVERIFY(EditorManager::openEditor(file));
+
+        // Re-issue the request while activation settles; assert the in-host
+        // provider's items come back.
+        QStringList labels;
+        auto poll = [&] {
+            host.requestCompletion(file, 0, 1, [&labels](const QJsonArray &items) {
+                labels.clear();
+                for (const QJsonValue &item : items)
+                    labels << item.toObject().value("label").toString();
+            });
+            return labels.contains("alienComplete");
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(poll(), 15000);
+
+        EditorManager::closeAllEditors(false);
+    }
+
+    void testHoverAndDefinition()
+    {
+        const FilePath node = FilePath("node").searchInPath();
+        if (!node.isExecutableFile())
+            QSKIP("node.js not found in PATH");
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const FilePath file = FilePath::fromString(dir.path()) / "foo.txt";
+        QVERIFY(file.writeFileContents("abc").has_value());
+
+        ExtensionHost host(node);
+        const Result<> result = host.activateBundledHoverDefinitionTestExtension();
+        QVERIFY2(result.has_value(), qPrintable(result ? QString() : result.error()));
+
+        QTRY_VERIFY_WITH_TIMEOUT(host.isRunning(), 10000);
+        QVERIFY(EditorManager::openEditor(file));
+
+        QString hover;
+        auto hoverPoll = [&] {
+            host.requestHover(file, 0, 1, [&hover](const QString &text) { hover = text; });
+            return hover.contains("Alien hover");
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(hoverPoll(), 15000);
+
+        QString target;
+        auto definitionPoll = [&] {
+            host.requestDefinition(file, 0, 1, [&target](const QJsonArray &locations) {
+                target = locations.isEmpty()
+                    ? QString()
+                    : locations.first().toObject().value("uri").toString();
+            });
+            return target.contains("foo.txt");
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(definitionPoll(), 15000);
+
+        EditorManager::closeAllEditors(false);
     }
 };
 #endif

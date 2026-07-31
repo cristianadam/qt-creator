@@ -107,7 +107,76 @@ Implemented: `commands.registerCommand`, `commands.executeCommand`,
 `window.createOutputChannel`, minimal `workspace.getConfiguration` and `Uri`,
 and an `ExtensionContext` with `subscriptions`.
 
+Document sync (Qt Creator -> host): `workspace.textDocuments`,
+`workspace.onDidOpenTextDocument`/`onDidChangeTextDocument`/`onDidCloseText`
+`Document`, `window.activeTextEditor` and `onDidChangeActiveTextEditor`. The
+`ExtensionHost` mirrors Creator's open editors into the host's `vscode.workspace`
+so an in-host extension (and the language client it runs) sees the documents,
+tagged with a `languageId` derived from the activated extensions' contributed
+languages. Full-text sync for now (each edit sends the whole document).
+
+Diagnostics (host -> Qt Creator): `languages.createDiagnosticCollection` plus
+the `Diagnostic`/`Range`/`Position`/`DiagnosticSeverity` types. When an in-host
+extension sets diagnostics, the host sends `diagnostics/publish` and the
+`ExtensionHost` renders them as `TextEditor::TextMark`s (colored by severity,
+with the message as tooltip and line annotation) on the matching document.
+
+Completion (Qt Creator -> host): `languages.registerCompletionItemProvider`
+plus `CompletionItem`/`CompletionItemKind`/`SnippetString`/`MarkdownString`.
+When a provider registers for a language, `ExtensionHost` attaches an
+`AlienCompletionAssistProvider` to matching documents. On a completion request
+its async processor sends `completion/provide`; the host calls the in-host
+providers whose documentSelector matches and returns the items, which become a
+`GenericProposal` in Creator's completion popup.
+
+Hover + go-to-definition (Qt Creator -> host): `languages.registerHoverProvider`
+and `registerDefinitionProvider` plus the `Hover` type. When these register,
+`ExtensionHost` attaches an `AlienHoverHandler` to matching editors and enables
+Follow Symbol, wiring `TextEditorWidget::requestLinkAt`. Hovering sends
+`hover/provide` (shown as a tooltip); following a symbol sends
+`definition/provide` and jumps to the returned `Utils::Link`. Other
+`languages.register*Provider` calls are still accepted as no-ops.
+
+## Running unmodified bundled extensions (the chosen direction)
+
+The `qt-qml` guinea pig is esbuild-bundled, so it never `require()`s
+vscode-languageclient at runtime and the interception below cannot catch it.
+Rather than modify the extension, the plan is the Theia-style host: run the
+extension (and its inlined language client) in Node and implement the `vscode`
+API it uses, bridging editor state to Creator. Document sync, diagnostics,
+completion and hover/definition above are the first slices of that. Remaining
+slices: commands and UI (quick pick, tree views), then webviews.
+
+Remote-readiness: the host's runtime directory is created on the same device as
+`node` (via `FilePath::tmpDir()`), and the transport is a device-transparent
+`Utils::Process`. Launching the host on a remote device (like VS Code's remote
+extension host, needed so the extension's raw `fs`/`child_process` see the
+project's files) is then mostly a matter of passing a device `node` path.
+
+## vscode-languageclient interception
+
+Language extensions start their server through `vscode-languageclient` rather
+than talking LSP themselves. The host intercepts `require('vscode-languageclient')`
+(and `.../node`) with a shim `LanguageClient`. On `.start()` it resolves the
+`ServerOptions` to a concrete command (the `Executable` and `NodeModule` shapes;
+function-valued options are not supported yet) and the `clientOptions.document`
+`Selector` to file patterns - mapping language ids through the activating
+extension's contributed languages - and sends `languageclient/start` to Qt
+Creator. The C++ side then runs the server with a real `LanguageClient::Client`
+(`AlienClient`), so document sync, diagnostics, completion, etc. all go through
+Creator's mature LSP stack instead of a second one in Node.
+
+A bundled LSP test extension (`host/lsptestextension`) starts a minimal mock
+server (`host/mockserver/server.js`) this way; a plugin test asserts the
+resulting client reaches `reachable()` (i.e. completes `initialize`).
+
+Caveat: interception fires only when the extension `require()`s
+vscode-languageclient at runtime. Extensions bundled with esbuild/webpack
+(including the `qt-qml` guinea pig) inline it, so this hook does not catch them
+yet; that needs either building them with vscode-languageclient marked external,
+or implementing the vscode API surface vscode-languageclient consumes so it can
+run in the host (the Theia approach).
+
 Next, toward the guinea pig: `workspace` documents/fs/events, `languages`
-(diagnostics, code actions), text editor edits/decorations, and intercepting
-`vscode-languageclient` so `qt-qml`'s `qmlls` server surfaces through the
-existing `LanguageClient`. Then webviews (Phase 2).
+(diagnostics, code actions), text editor edits/decorations, and handling the
+bundled-extension case above. Then webviews (Phase 2).

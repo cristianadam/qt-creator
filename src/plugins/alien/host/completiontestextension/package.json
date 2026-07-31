@@ -1,0 +1,15 @@
+{
+    "name": "alien-completion-test",
+    "publisher": "theqtcompany",
+    "displayName": "Alien Completion Test Extension",
+    "description": "Registers a completion provider through vscode.languages.",
+    "version": "0.0.1",
+    "engines": { "vscode": "^1.0.0" },
+    "main": "./extension.js",
+    "activationEvents": [ "*" ],
+    "contributes": {
+        "languages": [
+            { "id": "plaintext", "extensions": [ ".txt", ".alientxt" ] }
+        ]
+    }
+}
