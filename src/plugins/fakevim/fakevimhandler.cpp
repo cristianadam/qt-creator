@@ -441,6 +441,10 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
     bool curly = false;
     bool zmark = false; // saw "\z", waiting for the "s" or "e"
     bool lookahead = false; // a "\ze" opened a "(?=" that has to be closed
+    // "\_x" is the atom x with a line break allowed as well.
+    bool anyNewline = false; // saw "\_", waiting for the atom it applies to
+    bool newlineAtom = false; // the atom being read has to take in a line break
+    int classNewline = -1; // where a "\_[" class starts, so it can take one too
     // How much punctuation carries meaning, set by "\v", "\m", "\M" and "\V".
     // Very magic is close to what QRegularExpression already reads, magic is
     // Vim's default and wants a backslash on "(){}+|?", and the nomagic levels
@@ -449,6 +453,28 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
     MagicLevel magic = Magic;
     bool percent = false; // saw "%" in very magic, waiting for the "("
     for (const QChar &c : needle) {
+        if (anyNewline) {
+            // "\_." is any character or a line break, "\_$" the end of any
+            // line, and "\_s" or "\_[...]" the class with a line break in it.
+            anyNewline = false;
+            if (c == '.') {
+                pattern.append("[\\s\\S]");
+                continue;
+            }
+            if (c == '^' || c == '$') {
+                // Only where a line really ends, which for a string is its end,
+                // as Vim also has it: "\_$" does not hold at an embedded "\n".
+                pattern.append(c);
+                continue;
+            }
+            if (c == '[') {
+                classNewline = 0; // set once the class is known to open
+                brace = true;
+                continue;
+            }
+            newlineAtom = true;
+            escape = true; // the atom that follows is read as if it were escaped
+        }
         if (zmark) {
             zmark = false;
             if (c == 's') { // \zs: the match starts here
@@ -476,6 +502,8 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
                 pattern.append("\\[\\]");
                 continue;
             }
+            if (classNewline == 0)
+                classNewline = pattern.size();
             pattern.append('[');
             escape = true;
             embraced = true;
@@ -495,6 +523,14 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
             } else if (c == ']') {
                 pattern.append(']');
                 embraced = false;
+                if (classNewline > 0) {
+                    // Adding "\n" inside the class would take it away again if
+                    // the class is a negated one, so offer it beside the class.
+                    const QString cls = pattern.mid(classNewline);
+                    pattern.truncate(classNewline);
+                    pattern.append("(?:" + cls + "|\\n)");
+                    classNewline = -1;
+                }
             } else if (c == '-') {
                 range = ignorecase && pattern[pattern.size() - 1].isLetter();
                 pattern.append('-');
@@ -532,7 +568,10 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
         } else if (escape) {
             // escape expression
             escape = false;
-            if (c == '<' || c == '>')
+            const int atomStart = pattern.size();
+            if (c == '_')
+                anyNewline = true;
+            else if (c == '<' || c == '>')
                 pattern.append("\\b");
             else if (c == 'a')
                 pattern.append("[a-zA-Z]");
@@ -589,6 +628,14 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
             else {
                 pattern.append('\\');
                 pattern.append(c);
+            }
+            if (newlineAtom) {
+                newlineAtom = false;
+                if (pattern.size() > atomStart) {
+                    const QString atom = pattern.mid(atomStart);
+                    pattern.truncate(atomStart);
+                    pattern.append("(?:" + atom + "|\\n)");
+                }
             }
         } else {
             // unescaped expression

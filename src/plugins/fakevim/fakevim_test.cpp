@@ -231,6 +231,7 @@ private slots:
     void test_vim_script_autoload();
     void test_vim_script_scriptlocal();
     void test_vim_script_if_chain();
+    void test_vim_script_pattern_newline();
     void test_vim_script_known_options();
     void test_vim_script_trailing_comment();
     void test_vim_script_dict_dot();
@@ -6833,6 +6834,40 @@ void FakeVimTester::test_vim_script_funcref()
 
 
 
+
+void FakeVimTester::test_vim_script_pattern_newline()
+{
+    // "\_x" is the atom x with a line break allowed as well. Values taken from
+    // Vim 9.1.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) { message = msg; });
+    auto echo = [&](const char *expr) -> QString {
+        message.clear();
+        data.doCommand(QLatin1String("echo ") + QLatin1String(expr));
+        return message;
+    };
+
+    // "\_." is any character or a line break.
+    QCOMPARE(echo("match(\"a\\nb\", 'a\\_.b')"), QLatin1String("0"));
+    QCOMPARE(echo("match('abc', 'a\\_.c')"), QLatin1String("0"));
+    // "\_$" is the end of a line, which for a string is its end only.
+    QCOMPARE(echo("match('abc', '\\_$')"), QLatin1String("3"));
+    QCOMPARE(echo("match('abc', 'a\\_$')"), QLatin1String("-1"));
+    QCOMPARE(echo("match(\"ab\\ncd\", 'b\\_$')"), QLatin1String("-1"));
+    QCOMPARE(echo("match(\"a\\nb\", '\\_^b')"), QLatin1String("-1"));
+    // A class takes one in as well, negated or not.
+    QCOMPARE(echo("match('abc', '\\_[xy]')"), QLatin1String("-1"));
+    QCOMPARE(echo("match('abc', '\\_[^x]')"), QLatin1String("0"));
+    QCOMPARE(echo("match('abc', '\\_s')"), QLatin1String("-1"));
+    // Very magic reads them the same way. This is the shape the editorconfig
+    // plugin matches a file name against a section of its configuration with.
+    QCOMPARE(echo("match('abc', '\\v\\_.*c\\_$')"), QLatin1String("0"));
+    QCOMPARE(echo("match('/tmp/x/t.cpp', '\\v\\/tmp\\/x\\_.*\\/[^/]*\\_$')"),
+             QLatin1String("0"));
+}
 
 void FakeVimTester::test_vim_script_known_options()
 {
