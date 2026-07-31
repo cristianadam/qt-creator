@@ -6876,6 +6876,7 @@ void FakeVimTester::test_vim_script_error_numbers()
             "  echo g:nosuchvar\n"
             "catch /^Vim\\%((\\a\\+)\\)\\=:E121/\n"
             "  let g:hit = 'caught'\n"
+            "  let g:ex = v:exception\n"
             "endtry\n"
             // This is what lets a plugin tell whether the work it wrapped went
             // through: the line after the error is not reached.
@@ -6890,7 +6891,9 @@ void FakeVimTester::test_vim_script_error_numbers()
     data.doCommand("source " + path);
     QCOMPARE(echo("g:hit"), QLatin1String("caught"));
     QCOMPARE(echo("g:ok"), QLatin1String("0"));
-    data.doCommand("unlet g:hit | unlet g:ok");
+    // "v:exception" holds it in the shape a script reports or matches on.
+    QCOMPARE(echo("g:ex"), QLatin1String("Vim:E121: Undefined variable: g:nosuchvar"));
+    data.doCommand("unlet g:hit | unlet g:ok | unlet g:ex");
 }
 
 void FakeVimTester::test_vim_pattern_very_magic()
