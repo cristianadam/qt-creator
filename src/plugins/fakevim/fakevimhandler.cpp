@@ -8906,6 +8906,10 @@ private:
 
     VimValue exprPostfix()
     {
+        // What follows an atom is read past as well when the expression is only
+        // being skipped: the atom is 0 then, so subscripting or calling it would
+        // be an error where Vim never looks at it at all.
+        const auto skipped = [this] { return VimValue(qlonglong(0)); };
         VimValue v = exprAtom();
         while (m_ok) {
             if (cur() == '[') { // subscript v[i] or slice v[a:b]
@@ -8924,18 +8928,18 @@ private:
                         setError(Tr::tr("Missing ']' in slice"));
                         return {};
                     }
-                    v = slice(v, haveStart, start, haveEnd, end);
+                    v = m_skip ? skipped() : slice(v, haveStart, start, haveEnd, end);
                 } else {
                     if (!eatOp("]")) {
                         setError(Tr::tr("Missing ']' in subscript"));
                         return {};
                     }
-                    v = subscript(v, start);
+                    v = m_skip ? skipped() : subscript(v, start);
                 }
             } else if (cur() == '-' && at(1) == '>') { // method call v->f(...)
                 m_pos += 2;
                 v = parseMethodCall(v);
-            } else if (cur() == '.' && at(1) != '.' && v.isDict()
+            } else if (cur() == '.' && at(1) != '.' && (v.isDict() || m_skip)
                        && (at(1).isLetter() || at(1) == '_')) {
                 // "d.key" dictionary access: only when v is a dictionary, so a
                 // "." after a string/number stays the concatenation operator.
@@ -8943,8 +8947,9 @@ private:
                 const int keyStart = m_pos;
                 while (cur().isLetterOrNumber() || cur() == '_')
                     ++m_pos;
-                v = subscript(v, VimValue(m_in.mid(keyStart, m_pos - keyStart)));
-            } else if (cur() == '(' && v.isFunc()) {
+                v = m_skip ? skipped()
+                           : subscript(v, VimValue(m_in.mid(keyStart, m_pos - keyStart)));
+            } else if (cur() == '(' && (v.isFunc() || m_skip)) {
                 // Calling a funcref value obtained above, e.g. "list[0](x)" or
                 // "ns.Func(x)" (module import namespace access).
                 v = parseFuncrefCall(v);
@@ -9015,6 +9020,8 @@ private:
             setError(Tr::tr("Missing ')' in method call"));
             return {};
         }
+        if (m_skip)
+            return VimValue(qlonglong(0)); // not called, only read past
         VimValue result;
         QString error;
         if (!m_h->callFunction(name, args, &result, &error)) {

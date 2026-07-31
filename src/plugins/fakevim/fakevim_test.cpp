@@ -232,6 +232,7 @@ private slots:
     void test_vim_script_scriptlocal();
     void test_vim_script_if_chain();
     void test_vim_script_error_numbers();
+    void test_vim_script_skipped_subscript();
     void test_vim_search_wraps_to_cursor();
     void test_vim_pattern_buffer_position();
     void test_vim_set_showmatch_name();
@@ -6902,6 +6903,49 @@ void FakeVimTester::test_vim_script_error_numbers()
     // "v:exception" holds it in the shape a script reports or matches on.
     QCOMPARE(echo("g:ex"), QLatin1String("Vim:E121: Undefined variable: g:nosuchvar"));
     data.doCommand("unlet g:hit | unlet g:ok | unlet g:ex");
+}
+
+void FakeVimTester::test_vim_script_skipped_subscript()
+{
+    // What "&&" and "||" pass over is not looked at at all, which is how a
+    // script guards an index against a list that is too short. Values taken
+    // from Vim 9.1.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) {
+            if (!msg.startsWith("--"))
+                message = msg;
+        });
+    auto echo = [&](const char *expr) -> QString {
+        message.clear();
+        data.doCommand(QLatin1String("echo ") + QLatin1String(expr));
+        return message;
+    };
+
+    data.doCommand("let g:l = ['a', 'b'] | let g:i = 4 | let g:d = {'k': 1}");
+    // The guarded forms take the other branch and say nothing.
+    message.clear();
+    data.doCommand("if g:i < len(g:l) && g:l[g:i] ==# 'x' | let g:r = 'taken' "
+                   "| else | let g:r = 'not taken' | endif");
+    QCOMPARE(message, QLatin1String(""));
+    QCOMPARE(echo("g:r"), QLatin1String("not taken"));
+    data.doCommand("if 0 && g:l[g:i] ==# 'x' | let g:r = 'taken' "
+                   "| else | let g:r = 'not taken' | endif");
+    QCOMPARE(echo("g:r"), QLatin1String("not taken"));
+    // A key that is not there, guarded the same way.
+    data.doCommand("if has_key(g:d, 'zz') && g:d['zz'] == 1 | let g:r = 'taken' "
+                   "| else | let g:r = 'not taken' | endif");
+    QCOMPARE(echo("g:r"), QLatin1String("not taken"));
+    data.doCommand("if has_key(g:d, 'zz') && g:d.zz == 1 | let g:r = 'taken' "
+                   "| else | let g:r = 'not taken' | endif");
+    QCOMPARE(echo("g:r"), QLatin1String("not taken"));
+    // "||" does look at what follows a false left side, so this one does fail.
+    QCOMPARE(echo("0 || g:l[g:i] ==# 'x'"),
+             QLatin1String("E684: List index out of range: 4"));
+
+    data.doCommand("unlet g:l | unlet g:i | unlet g:d | unlet g:r");
 }
 
 void FakeVimTester::test_vim_search_wraps_to_cursor()
