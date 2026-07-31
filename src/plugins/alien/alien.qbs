@@ -8,6 +8,23 @@ QtcPlugin {
     Depends { name: "TextEditor" }
     Depends { name: "Utils" }
     Depends { name: "Qt"; submodules: ["widgets"] }
+    Depends { name: "qlitehtml"; required: false }
+
+    cpp.defines: {
+        var defines = base;
+        if (qlitehtml.present)
+            defines.push("ALIEN_WITH_LITEHTML");
+        return defines;
+    }
+
+    Group {
+        name: "litehtml webview backend"
+        condition: qlitehtml.present
+        files: [
+            "litehtmlwebviewrenderer.cpp",
+            "litehtmlwebviewrenderer.h",
+        ]
+    }
 
     files: [
         "alien.qrc",
@@ -24,11 +41,14 @@ QtcPlugin {
         "alienconstants.h",
         "alienhover.cpp",
         "alienhover.h",
+        "alientreeview.cpp",
+        "alientreeview.h",
         "alienplugin.cpp",
         "aliensettings.cpp",
         "aliensettings.h",
         "alientr.h",
         "vscodemanifest.cpp",
         "vscodemanifest.h",
+        "webviewrenderer.h",
     ]
 }

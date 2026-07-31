@@ -248,11 +248,71 @@ class Hover {
     }
 }
 
+// vscode.EventEmitter: extensions do `new EventEmitter(); this.onX = e.event`.
+class EventEmitter {
+    constructor() {
+        this._emitter = eventEmitter();
+        this.event = this._emitter;
+    }
+    fire(data) { this._emitter.fire(data); }
+    dispose() {}
+}
+
+class TreeItem {
+    constructor(label, collapsibleState) {
+        this.label = label;
+        this.collapsibleState = collapsibleState || 0;
+        this.description = undefined;
+        this.tooltip = undefined;
+        this.contextValue = undefined;
+        this.command = undefined;
+        this.iconPath = undefined;
+        this.id = undefined;
+    }
+}
+
 // --- language feature providers ---------------------------------------------
 
 const completionProviders = []; // {selector, provider}
 const hoverProviders = [];
 const definitionProviders = [];
+const treeDataProviders = new Map(); // viewId -> {provider, elements: Map, counter}
+const webviews = new Map(); // id -> {onMessage, onDispose}
+let nextStatusBarItemId = 1;
+let nextWebviewId = 1;
+
+function registerTreeProvider(viewId, provider) {
+    const entry = {provider, elements: new Map(), counter: 0};
+    treeDataProviders.set(viewId, entry);
+    if (provider.onDidChangeTreeData)
+        provider.onDidChangeTreeData(() => notify('treeview/refresh', {viewId}));
+    notify('treeview/register', {viewId});
+    return disposable(() => treeDataProviders.delete(viewId));
+}
+
+async function treeChildren(viewId, id) {
+    const entry = treeDataProviders.get(viewId);
+    if (!entry)
+        return [];
+    const parent = id ? entry.elements.get(id) : undefined;
+    const children = (await entry.provider.getChildren(parent)) || [];
+    const nodes = [];
+    for (const child of children) {
+        const item = await entry.provider.getTreeItem(child);
+        const nodeId = viewId + ':' + (entry.counter++);
+        entry.elements.set(nodeId, child);
+        const label = (item.label && typeof item.label === 'object') ? item.label.label : item.label;
+        nodes.push({
+            id: nodeId,
+            label: label || '',
+            description: item.description === true ? '' : (item.description || ''),
+            tooltip: textOf(item.tooltip) || '',
+            collapsibleState: item.collapsibleState || 0,
+            contextValue: item.contextValue || '',
+        });
+    }
+    return nodes;
+}
 
 function normalizeSelector(selector) {
     return Array.isArray(selector) ? selector : [selector];
@@ -386,6 +446,73 @@ const vscode = {
             request('window/showMessage', {level: 'warn', message, items: flattenItems(items)}),
         showErrorMessage: (message, ...items) =>
             request('window/showMessage', {level: 'error', message, items: flattenItems(items)}),
+        async showQuickPick(items, options) {
+            const resolved = await items;
+            const labels = resolved.map(i => (typeof i === 'string' ? i : i.label));
+            const index = await request('window/showQuickPick', {
+                items: labels,
+                placeholder: (options && options.placeHolder) || '',
+            });
+            return index >= 0 ? resolved[index] : undefined;
+        },
+        async showInputBox(options) {
+            const value = await request('window/showInputBox', {
+                prompt: (options && options.prompt) || '',
+                value: (options && options.value) || '',
+                placeholder: (options && options.placeHolder) || '',
+            });
+            return value === null ? undefined : value;
+        },
+        registerTreeDataProvider(viewId, provider) {
+            return registerTreeProvider(viewId, provider);
+        },
+        createWebviewPanel(viewType, title, showOptions, options) {
+            const id = 'webview-' + (nextWebviewId++);
+            const onDidReceiveMessage = eventEmitter();
+            const onDidDispose = eventEmitter();
+            let html = '';
+            const webview = {
+                options: options || {},
+                cspSource: 'alien-webview:',
+                onDidReceiveMessage,
+                get html() { return html; },
+                set html(value) { html = value; notify('webview/setHtml', {id, html: value}); },
+                postMessage(message) {
+                    notify('webview/postMessage', {id, message});
+                    return Promise.resolve(true);
+                },
+                asWebviewUri(uri) { return uri; },
+            };
+            const panel = {
+                viewType, title, webview,
+                active: true, visible: true,
+                viewColumn: typeof showOptions === 'number' ? showOptions : 1,
+                onDidDispose,
+                onDidChangeViewState: eventEmitter(),
+                reveal() { notify('webview/reveal', {id}); },
+                dispose() {
+                    notify('webview/dispose', {id});
+                    onDidDispose.fire();
+                    webviews.delete(id);
+                },
+            };
+            webviews.set(id, {onMessage: onDidReceiveMessage, onDispose: onDidDispose});
+            notify('webview/create', {id, viewType, title, options: options || {}});
+            return panel;
+        },
+        createTreeView(viewId, options) {
+            const registration = registerTreeProvider(viewId, options.treeDataProvider);
+            return {
+                visible: false,
+                selection: [],
+                onDidChangeSelection: eventEmitter(),
+                onDidChangeVisibility: eventEmitter(),
+                onDidExpandElement: eventEmitter(),
+                onDidCollapseElement: eventEmitter(),
+                reveal() { return Promise.resolve(); },
+                dispose() { registration.dispose(); },
+            };
+        },
         createOutputChannel(name) {
             return {
                 name,
@@ -397,6 +524,42 @@ const vscode = {
                 replace() {},
                 dispose() {},
             };
+        },
+        setStatusBarMessage(text, hideAfterTimeout) {
+            const message = typeof text === 'string' ? text : '';
+            notify('statusbar/setMessage', {text: message});
+            if (typeof hideAfterTimeout === 'number')
+                setTimeout(() => notify('statusbar/setMessage', {text: ''}), hideAfterTimeout);
+            return disposable(() => notify('statusbar/setMessage', {text: ''}));
+        },
+        createStatusBarItem(alignmentOrOptions, priority) {
+            const id = 'statusbar-' + (nextStatusBarItemId++);
+            let alignment = 1; // Left
+            if (typeof alignmentOrOptions === 'number')
+                alignment = alignmentOrOptions;
+            else if (alignmentOrOptions && alignmentOrOptions.alignment)
+                alignment = alignmentOrOptions.alignment;
+            const sync = item => notify('statusbar/update', {
+                id,
+                text: item._text,
+                tooltip: textOf(item._tooltip) || '',
+                alignment,
+                visible: item._visible,
+            });
+            const item = {
+                id, alignment, priority: priority || 0,
+                _text: '', _tooltip: '', _command: undefined, _visible: false,
+                get text() { return this._text; },
+                set text(v) { this._text = v; if (this._visible) sync(this); },
+                get tooltip() { return this._tooltip; },
+                set tooltip(v) { this._tooltip = v; if (this._visible) sync(this); },
+                get command() { return this._command; },
+                set command(v) { this._command = v; },
+                show() { this._visible = true; sync(this); },
+                hide() { this._visible = false; sync(this); },
+                dispose() { this._visible = false; notify('statusbar/remove', {id}); },
+            };
+            return item;
         },
     },
     workspace: {
@@ -514,6 +677,9 @@ const vscode = {
     SnippetString,
     MarkdownString,
     Hover,
+    EventEmitter,
+    TreeItem,
+    TreeItemCollapsibleState: {None: 0, Collapsed: 1, Expanded: 2},
     DiagnosticSeverity: {Error: 0, Warning: 1, Information: 2, Hint: 3},
     DiagnosticTag: {Unnecessary: 1, Deprecated: 2},
     EndOfLine: {LF: 1, CRLF: 2},
@@ -525,6 +691,8 @@ const vscode = {
         Operator: 23, TypeParameter: 24,
     },
     CompletionTriggerKind: {Invoke: 0, TriggerCharacter: 1, TriggerForIncompleteCompletions: 2},
+    StatusBarAlignment: {Left: 1, Right: 2},
+    ViewColumn: {Active: -1, Beside: -2, One: 1, Two: 2, Three: 3},
     Disposable: {from: (...items) => disposable(() => items.forEach(i => i && i.dispose && i.dispose()))},
 };
 
@@ -847,6 +1015,25 @@ onRequest('definition/provide', async params => {
         }
     }
     return {locations};
+});
+
+onRequest('treeview/getChildren', async params => {
+    return {nodes: await treeChildren(params.viewId, params.id)};
+});
+
+// Webview bridge (Qt Creator -> host).
+onRequest('webview/onMessage', params => {
+    const entry = webviews.get(params.id);
+    if (entry)
+        entry.onMessage.fire(params.message);
+});
+
+onRequest('webview/onDidDispose', params => {
+    const entry = webviews.get(params.id);
+    if (!entry)
+        return;
+    entry.onDispose.fire();
+    webviews.delete(params.id);
 });
 
 notify('host/ready', {pid: process.pid, node: process.version});
