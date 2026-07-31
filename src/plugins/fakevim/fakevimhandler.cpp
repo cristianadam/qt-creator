@@ -10436,7 +10436,7 @@ static bool isBuiltinFunction(const QString &name)
         "fnamemodify", "funcref", "function", "get", "getbufvar", "getcurpos",
         "getcwd", "getline", "getpos", "has", "has_key", "iconv", "indent",
         "index", "insert", "isdirectory", "items", "join", "keys", "len",
-        "line", "map", "match", "matchlist", "matchstr", "max", "min",
+        "line", "map", "match", "matchlist", "matchstr", "max", "min", "mode",
         "nr2char", "printf", "range", "readfile", "remove", "repeat", "reverse",
         "search", "setbufvar", "setline", "setpos", "shellescape", "sort",
         "split", "str2nr", "strftime", "stridx", "string", "strlen", "strpart",
@@ -10937,6 +10937,27 @@ bool FakeVimHandler::Private::callFunction(const QString &name,
             ex = variableValue(a, &tmp);
         }
         *result = VimValue(qlonglong(ex ? 1 : 0));
+    } else if (name == "mode") {
+        // What Vim answers for each of them was taken from Vim 9.1. Only the
+        // first letter unless something is passed, where operator-pending is
+        // the one that has more to say for itself.
+        const bool full = !args.isEmpty() && arg(0).toBool();
+        QString answer = QLatin1String("n");
+        if (isVisualCharMode())
+            answer = QLatin1String("v");
+        else if (isVisualLineMode())
+            answer = QLatin1String("V");
+        else if (isVisualBlockMode())
+            answer = QString(QChar(0x16)); // CTRL-V
+        else if (g.mode == ExMode)
+            answer = QLatin1String("c");
+        else if (g.mode == InsertMode)
+            answer = QLatin1String("i");
+        else if (g.mode == ReplaceMode)
+            answer = QLatin1String("R");
+        else if (isOperatorPending() && full)
+            answer = QLatin1String("no");
+        *result = VimValue(answer);
     } else if (name == "line") {
         *result = VimValue(qlonglong(lineColArg(arg(0).toString()).line + 1));
     } else if (name == "col") {

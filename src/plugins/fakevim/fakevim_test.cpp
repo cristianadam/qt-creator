@@ -232,6 +232,7 @@ private slots:
     void test_vim_script_scriptlocal();
     void test_vim_script_if_chain();
     void test_vim_script_error_numbers();
+    void test_vim_script_mode();
     void test_vim_script_skipped_subscript();
     void test_vim_search_wraps_to_cursor();
     void test_vim_pattern_buffer_position();
@@ -6903,6 +6904,75 @@ void FakeVimTester::test_vim_script_error_numbers()
     // "v:exception" holds it in the shape a script reports or matches on.
     QCOMPARE(echo("g:ex"), QLatin1String("Vim:E121: Undefined variable: g:nosuchvar"));
     data.doCommand("unlet g:hit | unlet g:ok | unlet g:ex");
+}
+
+void FakeVimTester::test_vim_script_mode()
+{
+    // mode() says which mode is current, and with something passed has more to
+    // say about operator-pending. Values taken from Vim 9.1, read there through
+    // mappings of the same shape, since asking on the command line would only
+    // ever answer "c". Vim answers "c" for that too, which is what happens here
+    // when the question is put in an ex command.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) {
+            if (!msg.startsWith("--"))
+                message = msg;
+        });
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QFile f(dir.path() + "/m.vim");
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("function! Mark()\n"
+            "  let g:tag = mode() . '/' . mode(1)\n"
+            "  return ''\n"
+            "endfunction\n"
+            "nnoremap <expr> Q Mark()\n"
+            "xnoremap <expr> Q Mark()\n"
+            "inoremap <expr> Q Mark()\n"
+            "onoremap <expr> Q Mark()\n");
+    f.close();
+    data.doCommand("source " + dir.path() + "/m.vim");
+
+    const auto after = [&](const char *keys) -> QString {
+        data.setText("aa" X "a" N "bbb");
+        data.doCommand("let g:tag = 'none'");
+        data.doKeys(keys);
+        message.clear();
+        data.doCommand("echo g:tag");
+        return message;
+    };
+
+    // Read them all before comparing: an assertion that gives up in between
+    // would leave the mappings behind for other tests to trip over, the map
+    // table being shared.
+    const QString normal = after("Q");
+    const QString charwise = after("vQ");
+    const QString linewise = after("VQ");
+    const QString blockwise = after("<C-v>Q");
+    const QString insert = after("iQ");
+    const QString replace = after("RQ");
+    const QString pending = after("dQ");
+    message.clear();
+    data.doCommand("echo mode() . '/' . mode(1)");
+    const QString fromExCommand = message;
+    data.doCommand("nunmap Q | xunmap Q | iunmap Q | ounmap Q");
+    data.doCommand("delfunction Mark | unlet g:tag");
+
+    QCOMPARE(normal, QLatin1String("n/n"));
+    QCOMPARE(charwise, QLatin1String("v/v"));
+    QCOMPARE(linewise, QLatin1String("V/V"));
+    QCOMPARE(blockwise, QLatin1String("\x16/\x16"));
+    QCOMPARE(insert, QLatin1String("i/i"));
+    QCOMPARE(replace, QLatin1String("R/R"));
+    // Only with something passed does operator-pending give itself away.
+    QCOMPARE(pending, QLatin1String("n/no"));
+    // A command that has been given already runs in normal mode; "c" is what
+    // mode() answers while the line is still being typed, which is a mapping
+    // away from here.
+    QCOMPARE(fromExCommand, QLatin1String("n/n"));
 }
 
 void FakeVimTester::test_vim_script_skipped_subscript()
