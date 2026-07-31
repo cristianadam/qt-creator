@@ -6957,14 +6957,24 @@ void FakeVimTester::test_vim_script_lockvar()
     data.doCommand("lockvar 3 g:y");
     data.doCommand("let g:y = 9");
     QCOMPARE(echo("g:y"), QLatin1String("4"));
-    // A script can catch the attempt, as in Vim.
-    data.doCommand("let g:caught = 0");
-    data.doCommand("try");
-    data.doCommand("let g:y = 9");
-    data.doCommand("catch");
-    data.doCommand("let g:caught = 1");
-    data.doCommand("endtry");
-    QCOMPARE(echo("g:caught"), QLatin1String("1"));
+    // A script can catch the attempt, as in Vim. A block spans several lines,
+    // so this runs as a script: driven one line at a time every line runs,
+    // block or no block, and the catch would prove nothing.
+    QTemporaryDir lockDir;
+    QVERIFY(lockDir.isValid());
+    QFile lf(lockDir.path() + "/l.vim");
+    QVERIFY(lf.open(QIODevice::WriteOnly));
+    lf.write("let g:caught = 'no'\n"
+             "try\n"
+             "  let g:y = 9\n"
+             "  let g:caught = 'assigned'\n"
+             "catch /locked/\n"
+             "  let g:caught = 'caught'\n"
+             "endtry\n");
+    lf.close();
+    data.doCommand("source " + lockDir.path() + "/l.vim");
+    QCOMPARE(echo("g:caught"), QLatin1String("caught"));
+    QCOMPARE(echo("g:y"), QLatin1String("4"));
     data.doCommand("unlockvar! g:y");
     data.doCommand("let g:y = 5");
     QCOMPARE(echo("g:y"), QLatin1String("5"));
@@ -7137,12 +7147,22 @@ void FakeVimTester::test_vim_script_trailing_comment()
     // ... and one inside a string is just a character.
     data.doCommand("let g:q = 'has \" inside'");
     QCOMPARE(echo("g:q"), QLatin1String("has \" inside"));
-    // A condition may carry one too.
-    data.doCommand("let g:n = 0");
-    data.doCommand("if 1   \" a comment on the condition");
-    data.doCommand("let g:n = 5");
-    data.doCommand("endif");
-    QCOMPARE(echo("g:n"), QLatin1String("5"));
+    // A condition may carry one too, which only a block shows: a false one has
+    // to skip its body, so this runs as a script rather than line by line.
+    QTemporaryDir ifDir;
+    QVERIFY(ifDir.isValid());
+    QFile cf(ifDir.path() + "/c.vim");
+    QVERIFY(cf.open(QIODevice::WriteOnly));
+    cf.write("let g:n = 0\n"
+             "if 0   \" a comment on the condition\n"
+             "  let g:n = 5\n"
+             "endif\n"
+             "if 1   \" and on one that holds\n"
+             "  let g:n = 7\n"
+             "endif\n");
+    cf.close();
+    data.doCommand("source " + ifDir.path() + "/c.vim");
+    QCOMPARE(echo("g:n"), QLatin1String("7"));
     // ":echo" is the exception: it takes several expressions, so a '"' there
     // opens another string rather than a comment.
     QCOMPARE(echo("'a' 'b'"), QLatin1String("a b"));
