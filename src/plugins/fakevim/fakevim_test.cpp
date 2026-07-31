@@ -232,6 +232,7 @@ private slots:
     void test_vim_script_scriptlocal();
     void test_vim_script_if_chain();
     void test_vim_script_error_numbers();
+    void test_vim_pattern_lookaround();
     void test_vim_pattern_percent_atoms();
     void test_vim_pattern_very_magic();
     void test_vim_script_lockvar();
@@ -6895,6 +6896,55 @@ void FakeVimTester::test_vim_script_error_numbers()
     // "v:exception" holds it in the shape a script reports or matches on.
     QCOMPARE(echo("g:ex"), QLatin1String("Vim:E121: Undefined variable: g:nosuchvar"));
     data.doCommand("unlet g:hit | unlet g:ok | unlet g:ex");
+}
+
+void FakeVimTester::test_vim_pattern_lookaround()
+{
+    // "\@=" and its kin make the atom before them something that has to stand
+    // there without being part of the match. Values taken from Vim 9.1.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) { message = msg; });
+    auto echo = [&](const char *expr) -> QString {
+        message.clear();
+        data.doCommand(QLatin1String("echo string(") + QLatin1String(expr) + ')');
+        return message;
+    };
+
+    // What has to follow, and what must not.
+    QCOMPARE(echo("matchstr('foobar', 'foo\\%(bar\\)\\@=')"), QLatin1String("'foo'"));
+    QCOMPARE(echo("matchstr('foobaz', 'foo\\%(bar\\)\\@=')"), QLatin1String("''"));
+    QCOMPARE(echo("matchstr('foobaz', 'foo\\%(bar\\)\\@!')"), QLatin1String("'foo'"));
+    QCOMPARE(echo("matchstr('foobar', 'foo\\%(bar\\)\\@!')"), QLatin1String("''"));
+    // What has to stand before, and what must not.
+    QCOMPARE(echo("matchstr('foobar', '\\%(foo\\)\\@<=bar')"), QLatin1String("'bar'"));
+    QCOMPARE(echo("matchstr('xxbar', '\\%(foo\\)\\@<=bar')"), QLatin1String("''"));
+    QCOMPARE(echo("matchstr('xxbar', '\\%(foo\\)\\@<!bar')"), QLatin1String("'bar'"));
+    QCOMPARE(echo("matchstr('foobar', '\\%(foo\\)\\@<!bar')"), QLatin1String("''"));
+    // A group that gives nothing back once it has matched.
+    QCOMPARE(echo("match('aaa', '\\%(a*\\)\\@>a')"), QLatin1String("-1"));
+    // The operator applies to a single character as well as to a group.
+    QCOMPARE(echo("matchstr('foobar', 'a\\@!foo')"), QLatin1String("'foo'"));
+    // What stands before may be of more than one length, as long as there is a
+    // longest one.
+    QCOMPARE(echo("matchstr('foobar', '\\%(fo\\{1,2}\\)\\@<=bar')"), QLatin1String("'bar'"));
+    QCOMPARE(echo("matchstr('foobar', '\\%(foo\\|xx\\)\\@<=bar')"), QLatin1String("'bar'"));
+    // With no longest one it cannot be looked for at all here, where Vim finds
+    // it: QRegularExpression wants a bounded length behind the match.
+    QCOMPARE(echo("matchstr('foobar', '\\%(fo*\\)\\@<=bar')"), QLatin1String("''"));
+
+    // Very magic writes the operator without the backslash, and a backslash
+    // makes the "@" itself literal, leaving the "=" to quantify it.
+    QCOMPARE(echo("matchstr('foobar', '\\vfoo(bar)@=')"), QLatin1String("'foo'"));
+    QCOMPARE(echo("matchstr('foobar', '\\v(foo)@<=bar')"), QLatin1String("'bar'"));
+    QCOMPARE(echo("matchstr('foobaz', '\\vfoo(bar)@!')"), QLatin1String("'foo'"));
+    QCOMPARE(echo("matchstr('foobar', '\\vfoo(bar)\\@=')"), QLatin1String("'foobar'"));
+
+    // A group inside one is still counted, so what follows keeps its number.
+    QCOMPARE(echo("matchlist('foobar', '\\(foo\\)\\@<=\\(bar\\)')[0:2]"),
+             QLatin1String("['bar', 'foo', 'bar']"));
 }
 
 void FakeVimTester::test_vim_pattern_percent_atoms()

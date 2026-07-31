@@ -467,7 +467,36 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
     // "\%[abc]" is a sequence in which each character may be the last.
     bool optionalSeq = false;
     QString optionalChars;
+    // "\@=" and its kin make the atom before them something that has to stand
+    // there without being part of the match. Vim writes the operator after the
+    // atom where QRegularExpression wants it in front, so the atom already
+    // emitted is taken back out and put inside.
+    QList<int> groupStack;  // where each group still open starts in pattern
+    int lastAtomStart = -1; // where the atom such an operator would apply to starts
+    int lookaround = 0;     // 0 none, 1 saw the "@", 2 saw "@<"
+    const auto wrapLastAtom = [&](const QString &kind) {
+        if (lastAtomStart < 0 || lastAtomStart > pattern.size())
+            return;
+        const QString atom = pattern.mid(lastAtomStart);
+        pattern.truncate(lastAtomStart);
+        pattern.append("(?" + kind + atom + ')');
+        lastAtomStart = -1;
+    };
     for (const QChar &c : needle) {
+        if (lookaround != 0) {
+            if (lookaround == 1 && c == '<') {
+                lookaround = 2;
+                continue;
+            }
+            const bool back = lookaround == 2;
+            if (c == '=' || c == '!' || (!back && c == '>')) {
+                lookaround = 0;
+                wrapLastAtom(QLatin1String(back ? "<" : "")
+                             + QLatin1String(c == '=' ? "=" : c == '!' ? "!" : ">"));
+                continue;
+            }
+            lookaround = 0; // no operator after all, so handle c below
+        }
         if (optionalSeq) {
             if (c != ']') {
                 optionalChars.append(c);
@@ -529,6 +558,7 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
         if (percent) {
             percent = false;
             if (c == '(') { // "%(" groups without capturing
+                groupStack.append(pattern.size());
                 pattern.append("(?:");
                 continue;
             }
@@ -617,7 +647,11 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
             escape = false;
             if (!special)
                 pattern.append('\\');
+            if (special && c == '(')
+                groupStack.append(pattern.size());
             pattern.append(c);
+            if (special && c == ')' && !groupStack.isEmpty())
+                lastAtomStart = groupStack.takeLast(); // the group is now an atom
         } else if (escape) {
             // escape expression
             escape = false;
@@ -629,8 +663,11 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
                 percent = true;
             // Where very magic gives punctuation a meaning, a backslash takes
             // it away again: "\=" is an "=" and "\<" a "<", not an operator.
-            else if (magic == VeryMagic && QString("=<>").indexOf(c) != -1)
+            else if (magic == VeryMagic && QString("=<>@").indexOf(c) != -1)
                 pattern.append(c);
+            // "\@=" and its kin; very magic writes them without the backslash.
+            else if (c == '@')
+                lookaround = 1;
             else if (c == '<' || c == '>')
                 pattern.append("\\b");
             else if (c == 'a')
@@ -697,10 +734,15 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
                     pattern.append("(?:" + atom + "|\\n)");
                 }
             }
+            if (pattern.size() > atomStart)
+                lastAtomStart = atomStart;
         } else {
             // unescaped expression
+            const int atomStart = pattern.size();
             if (c == '\\')
                 escape = true;
+            else if (magic == VeryMagic && c == '@')
+                lookaround = 1;
             else if (magic == VeryMagic && c == '%')
                 percent = true; // "%(" is a group that does not capture
             else if (magic == VeryMagic && (c == '<' || c == '>'))
@@ -715,6 +757,8 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
                 pattern.append('\\').append(c); // no meaning at these levels
             else
                 pattern.append(c);
+            if (pattern.size() > atomStart)
+                lastAtomStart = atomStart;
         }
     }
     flushNumber();
