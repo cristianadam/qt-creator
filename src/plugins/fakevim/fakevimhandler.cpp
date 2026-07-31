@@ -12425,7 +12425,9 @@ QTextCursor FakeVimHandler::Private::search(const SearchData &sd, int startPos, 
         bool wrapped = false;
         while (found < count) {
             QTextCursor tc = step(from + (sd.forward ? 1 : -1), false);
-            if (tc.isNull()) {
+            // At the end of the document the search can answer with the place
+            // it started from and nothing selected, which is no new match.
+            if (tc.isNull() || tc.anchor() == from) {
                 if (wrapped || !s.wrapScan())
                     break;
                 wrapped = true;

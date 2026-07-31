@@ -6960,6 +6960,18 @@ void FakeVimTester::test_vim_pattern_buffer_position()
     data.doKeys("/\\%>2l\\a<CR>");
     QCOMPARE(data.handler->textCursor().blockNumber() + 1, 3);
 
+    // The "<" form, which finds nothing ahead of the cursor and so walks to the
+    // end of the buffer, where the search used to answer with the place it
+    // started from over and over.
+    data.setText(start);
+    data.doKeys("/\\%<2l\\a<CR>");
+    QCOMPARE(data.handler->textCursor().blockNumber() + 1, 1);
+    data.setText(start);
+    data.doCommand("nnoremap Q /\\%<2l\\a<CR>");
+    data.doKeys("Q");
+    QCOMPARE(data.handler->textCursor().blockNumber() + 1, 1);
+    data.doCommand("nunmap Q");
+
     // search() answers the same way, and takes the forms with a "<" as well.
     data.setText(start);
     QCOMPARE(echo("search('\\%3lc', 'w')"), QLatin1String("3"));
