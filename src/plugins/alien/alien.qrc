@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/alien">
+        <file>host/host.js</file>
+        <file>host/testextension/package.json</file>
+        <file>host/testextension/extension.js</file>
+    </qresource>
+</RCC>
