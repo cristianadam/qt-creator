@@ -10,8 +10,19 @@ add_qtc_plugin(Alien
     aliencompletion.cpp aliencompletion.h
     alienconstants.h
     alienhover.cpp alienhover.h
+    alientreeview.cpp alientreeview.h
     alienplugin.cpp
     aliensettings.cpp aliensettings.h
     alientr.h
     vscodemanifest.cpp vscodemanifest.h
+    webviewrenderer.h
+)
+
+# Optional static-HTML webview backend (no QtWebEngine dependency).
+extend_qtc_plugin(Alien
+  CONDITION TARGET qlitehtml
+  DEPENDS qlitehtml
+  DEFINES ALIEN_WITH_LITEHTML
+  SOURCES
+    litehtmlwebviewrenderer.cpp litehtmlwebviewrenderer.h
 )
