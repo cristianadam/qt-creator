@@ -10356,7 +10356,9 @@ bool FakeVimHandler::Private::searchFunction(const QList<VimValue> &args,
         it = re.globalMatch(text);
         while (it.hasNext()) {
             const int offset = it.next().capturedStart();
-            if (backward ? offset > start : offset < start)
+            // Up to and including where the cursor is: coming all the way
+            // round, that is the last place left to look.
+            if (backward ? offset >= start : offset <= start)
                 wrapped.append(offset);
         }
         if (backward)

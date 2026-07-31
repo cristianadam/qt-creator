@@ -232,6 +232,7 @@ private slots:
     void test_vim_script_scriptlocal();
     void test_vim_script_if_chain();
     void test_vim_script_error_numbers();
+    void test_vim_search_wraps_to_cursor();
     void test_vim_pattern_buffer_position();
     void test_vim_set_showmatch_name();
     void test_vim_set_add_remove();
@@ -6903,6 +6904,33 @@ void FakeVimTester::test_vim_script_error_numbers()
     data.doCommand("unlet g:hit | unlet g:ok | unlet g:ex");
 }
 
+void FakeVimTester::test_vim_search_wraps_to_cursor()
+{
+    // Coming all the way round, the place the cursor sits is the last one left
+    // to look at, so a match there is found. Values taken from Vim 9.1.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) {
+            if (!msg.startsWith("--"))
+                message = msg;
+        });
+    auto echo = [&](const char *expr) -> QString {
+        message.clear();
+        data.doCommand(QLatin1String("echo ") + QLatin1String(expr));
+        return message;
+    };
+
+    data.setText("x" X "ax" N "yyy");
+    QCOMPARE(echo("search('a', 'w')"), QLatin1String("1"));
+    // Without wrapping there is nothing after the cursor to find.
+    data.setText("x" X "ax" N "yyy");
+    QCOMPARE(echo("search('a', 'W')"), QLatin1String("0"));
+    data.setText("x" X "ax" N "yyy");
+    QCOMPARE(echo("search('a', 'bw')"), QLatin1String("1"));
+}
+
 void FakeVimTester::test_vim_pattern_buffer_position()
 {
     // "\%23l" and its kin say where in the buffer a match may sit rather than
@@ -6939,6 +6967,11 @@ void FakeVimTester::test_vim_pattern_buffer_position()
     QCOMPARE(echo("search('\\%<2l\\a', 'w')"), QLatin1String("1"));
     data.setText(start);
     QCOMPARE(echo("search('\\%2cb', 'w')"), QLatin1String("2"));
+    // "\%#" is where the cursor is, which is asked before it is moved. A
+    // wrapped search reaches it by coming round.
+    data.setText("aaa" N "bbb" N "c" X "cc" N "ddd");
+    QCOMPARE(echo("search('\\%#', 'wn')"), QLatin1String("3"));
+
     // A substitution leaves alone what sits elsewhere.
     data.setText(start);
     data.doCommand("%s/\\%2l./X/");
