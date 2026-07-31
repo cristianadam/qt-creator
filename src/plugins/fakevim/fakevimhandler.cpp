@@ -7186,6 +7186,118 @@ static bool isFileTypeOption(const QString &name)
     return name == "filetype" || name == "ft";
 }
 
+enum class OptionKind { Boolean, Number, String };
+
+static QSet<QString> optionNames(const char *names)
+{
+    const QStringList list = QString::fromLatin1(names).split(' ', Qt::SkipEmptyParts);
+    return QSet<QString>(list.cbegin(), list.cend());
+}
+
+// Every option Vim has, with the type Vim gives it, long names and abbreviations
+// alike. Vim keeps an option's name even where the feature behind it is missing,
+// as 'shellslash' is on a system with one kind of slash only: reading it gives 0
+// or an empty string, and setting it is accepted and does nothing. Scripts
+// consult such an option freely, so failing on one stops them for no reason. Only
+// a name Vim does not have at all is an error. The ones implemented here are
+// looked up before this, so what is left is what is merely known by name.
+static bool unimplementedOption(const QString &name, OptionKind *kind)
+{
+    static const QSet<QString> booleans = optionNames(
+    "ac acd ai akm allowrevins altkeymap anti antialias ar arab arabic arabicshape ari "
+    "arshape asd autochdir autocomplete autoindent autoread autoshelldir autowrite "
+    "autowriteall aw awa backup ballooneval balloonevalterm beval bevalterm bin binary "
+    "biosk bioskey bk bl bomb breakindent bri buflisted cdh cdhome cf ci cin cindent "
+    "compatible confirm consk conskey copyindent cp crb cscoperelative cscopetag "
+    "cscopeverbose csre cst csverb cuc cul cursorbind cursorcolumn cursorline deco "
+    "delcombine dg diff digraph ea eb ed edcompatible ek emo emoji endoffile endofline "
+    "eof eol equalalways errorbells esckeys et ex expandtab exrc fen fic fileignorecase "
+    "fixendofline fixeol fk fkmap foldenable fs fsync gd gdefault guipty hid hidden hk "
+    "hkmap hkmapp hkp hls hlsearch ic icon ignorecase im imc imcmdline imd imdisable "
+    "incsearch inf infercase insertmode is joinspaces js langnoremap langremap lazyredraw "
+    "lbr linebreak lisp list lnr loadplugins lpl lrm lz ma macatsui magic mh ml mle mod "
+    "modeline modelineexpr modifiable modified more mousef mousefocus mousehide mousemev "
+    "mousemoveevent nu number odev opendevice paste pi preserveindent previewwindow "
+    "prompt pvw readonly relativenumber remap restorescreen revins ri rightleft rl rnu ro "
+    "rs ru ruler sb sc scb scf scrollbind scrollfocus scs secure sft shellslash shelltemp "
+    "shiftround shortname showcmd showfulltag showmatch showmode si sm smartcase "
+    "smartindent smarttab smd smoothscroll sms sn sol spell splitbelow splitright spr sr "
+    "ssl sta startofline stmp swapfile swf ta tagbsearch tagrelative tagstack tbi tbidi "
+    "tbs termbidi termguicolors terse textauto textmode tf tgc tgst tildeop timeout title "
+    "to top tr ttimeout ttybuiltin ttyfast tx udf undofile vb visualbell wa warn wb "
+    "weirdinvert wfb wfh wfw wic wildignorecase wildmenu winfixbuf winfixheight "
+    "winfixwidth wiv wlsteal wmnu wrap wrapscan write writeany writebackup ws wst "
+    "xtermcodes");
+    static const QSet<QString> numbers = optionNames(
+    "acl act al aleph autocompletedelay autocompletetimeout balloondelay bdlay ch chi "
+    "chistory cmdheight cmdwinheight co cole columns completetimeout conceallevel "
+    "cscopepathcomp cscopetagorder cspc csto cto cwh fdc fdl fdls fdn fml foldcolumn "
+    "foldlevel foldlevelstart foldminlines foldnestmax ghr guiheadroom helpheight hh hi "
+    "history imi iminsert ims imsearch imst imstyle laststatus lhi lhistory lines "
+    "linespace ls lsp mat matchtime maxcombine maxfuncdepth maxmapdepth maxmem "
+    "maxmempattern maxmemtot maxsearchcount mco menuitems mfd mis mls mm mmd mmp mmt "
+    "modelines mouset mousetime msc mzq mzquantum numberwidth nuw osctimeoutlen ost ph "
+    "pmw previewheight pumheight pummaxwidth pumwidth pvh pw pyx pyxversion rdt re "
+    "redrawtime regexpengine report scr scroll scrolljump scrolloff shelltype shiftwidth "
+    "showtabline showtabpanel sidescroll sidescrolloff siso sj smc so softtabstop ss st "
+    "stal stpl sts sw synmaxcol tabpagemax tabstop taglength termwinscroll textwidth "
+    "timeoutlen titlelen tl tm tpm ts tsl ttimeoutlen ttm ttyscroll tw twsl uc ul "
+    "undolevels undoreload updatecount updatetime ur ut vbs verbose wc wcm wd wh wi "
+    "wildchar wildcharm window winheight winminheight winminwidth winwidth wiw "
+    "wltimeoutlen wm wmh wmw wrapmargin writedelay wtm");
+    static const QSet<QString> strings = optionNames(
+    "ambiwidth ambw background backspace backupcopy backupdir backupext backupskip "
+    "balloonexpr bdir belloff bex bexpr bg bh bkc bo breakat breakindentopt briopt brk "
+    "browsedir bs bsdir bsk bt bufhidden buftype casemap cb cc ccv cd cdpath cedit cfc "
+    "cfu charconvert cia cink cinkeys cino cinoptions cinscopedecls cinsd cinw cinwords "
+    "clipboard clipmethod cm cmp cms cocu colorcolumn com comments commentstring complete "
+    "completefunc completefuzzycollect completeitemalign completeopt completepopup "
+    "completeslash concealcursor cot cpm cpo cpoptions cpp cpt cryptmethod cscopeprg "
+    "cscopequickfix csl csprg csqf culopt cursorlineopt debug def define dex dia dict "
+    "dictionary diffanchors diffexpr diffopt dip dir directory display dy ead eadirection "
+    "ef efm ei eiw enc encoding ep equalprg errorfile errorformat eventignore "
+    "eventignorewin fcl fcs fde fdi fdm fdo fdt fenc fencs fex ff ffs ffu fileencoding "
+    "fileencodings fileformat fileformats filetype fillchars findfunc flp fmr fo "
+    "foldclose foldexpr foldignore foldmarker foldmethod foldopen foldtext formatexpr "
+    "formatlistpat formatoptions formatprg fp ft gcr gfm gfn gfs gfw gli go gp grepformat "
+    "grepprg gtl gtt guicursor guifont guifontset guifontwide guiligatures guioptions "
+    "guitablabel guitabtooltip helpfile helplang hf highlight hl hlg iconstring "
+    "imactivatefunc imactivatekey imaf imak imsf imstatusfunc inc include includeexpr "
+    "inde indentexpr indentkeys indk inex isf isfname isi isident isk iskeyword isp "
+    "isprint jop jumpoptions key keymap keymodel keyprotocol keywordprg km kmp kp kpc "
+    "langmap langmenu lcs lispoptions lispwords listchars lm lmap lop luadll lw makeef "
+    "makeencoding makeprg matchpairs mef menc messagesopt mkspellmem mopt mouse mousem "
+    "mousemodel mouses mouseshape mp mps msm mzschemedll mzschemegcdll nf nrformats oft "
+    "ofu omnifunc operatorfunc opfunc osfiletype pa packpath para paragraphs pastetoggle "
+    "patchexpr patchmode path pb pdev penc perldll pex pexpr pfn pheader pm pmbcs pmbfn "
+    "popt pp previewpopup printdevice printencoding printexpr printfont printheader "
+    "printmbcharset printmbfont printoptions pt pumborder pvp pythondll pythonhome "
+    "pythonthreedll pythonthreehome qe qftf quickfixtextfunc quoteescape renderoptions "
+    "rightleftcmd rlc rop rtp rubydll ruf rulerformat runtimepath sbo sbr scl scrollopt "
+    "sect sections sel selection selectmode sessionoptions sh shcf shell shellcmdflag "
+    "shellpipe shellquote shellredir shellxescape shellxquote shm shortmess showbreak "
+    "showcmdloc shq signcolumn slm sloc sp spc spellcapcheck spellfile spelllang "
+    "spelloptions spellsuggest spf spk spl splitkeep spo sps srr ssop statusline stl su "
+    "sua suffixes suffixesadd swapsync swb switchbuf sws sxe sxq syn syntax tabclose "
+    "tabline tabpanel tabpanelopt tag tagcase tagfunc tags tal tb tbis tc tcl tcldll tenc "
+    "term termencoding termwinkey termwinsize termwintype tfu thesaurus thesaurusfunc "
+    "titleold titlestring toolbar toolbariconsize tpl tplo tsr tsrfu tty ttym ttymouse "
+    "ttytype twk tws twt udir undodir varsofttabstop vartabstop vdir ve verbosefile vfile "
+    "vi viewdir viewoptions vif viminfo viminfofile virtualedit vop vsts vts wak wcr "
+    "whichwrap wig wildignore wildmode wildoptions wim winaltkeys wincolor winptydll "
+    "wlseat wop wse ww");
+
+    if (booleans.contains(name))
+        *kind = OptionKind::Boolean;
+    else if (numbers.contains(name))
+        *kind = OptionKind::Number;
+    else if (strings.contains(name))
+        *kind = OptionKind::String;
+    else
+        return false;
+    return true;
+}
+
 bool FakeVimHandler::Private::handleExSetCommand(const ExCommand &cmd)
 {
     // :se[t]
@@ -7230,6 +7342,9 @@ bool FakeVimHandler::Private::handleExSetCommand(const ExCommand &cmd)
             m_commentString = cmd.args.mid(p + 1);
             return true;
         }
+        OptionKind kind = OptionKind::Boolean;
+        if (!s.item(Utils::keyFromString(optionName)) && unimplementedOption(optionName, &kind))
+            return true;
         QString error = s.trySetValue(optionName, cmd.args.mid(p + 1));
         if (!error.isEmpty())
             showMessage(MessageError, error);
@@ -7241,9 +7356,10 @@ bool FakeVimHandler::Private::handleExSetCommand(const ExCommand &cmd)
         // default rather than Vi's; there is only one default here.
         QString optionName = cmd.args;
         optionName.chop(optionName.endsWith("&vim") ? 4 : 1);
+        OptionKind kind = OptionKind::Boolean;
         if (FvBaseAspect *act = s.item(Utils::keyFromString(optionName)))
             act->setVariantValue(act->defaultVariantValue());
-        else
+        else if (!unimplementedOption(optionName, &kind))
             showMessage(MessageError, Tr::tr("Unknown option:") + ' ' + cmd.args);
     } else {
         QString optionName = cmd.args;
@@ -7258,7 +7374,16 @@ bool FakeVimHandler::Private::handleExSetCommand(const ExCommand &cmd)
             optionName.remove(0, 2);
 
         FvBaseAspect *act = s.item(Utils::keyFromString(optionName));
-        if (!act) {
+        OptionKind kind = OptionKind::Boolean;
+        if (!act && unimplementedOption(optionName, &kind)) {
+            if (printOption) {
+                const QString shown = kind == OptionKind::Boolean
+                                          ? QString("no" + optionName)
+                                          : optionName + QLatin1String(
+                                                kind == OptionKind::Number ? "=0" : "=");
+                showMessage(MessageInfo, shown);
+            }
+        } else if (!act) {
             showMessage(MessageError, Tr::tr("Unknown option:") + ' ' + cmd.args);
         } else if (act->defaultVariantValue().typeId() == QMetaType::Bool) {
             bool oldValue = act->variantValue().toBool();
@@ -9520,8 +9645,13 @@ bool FakeVimHandler::Private::optionValue(const QString &name, VimValue *result)
         return true;
     }
     FvBaseAspect *act = s.item(Utils::keyFromString(name));
-    if (!act)
-        return false;
+    if (!act) {
+        OptionKind kind = OptionKind::Boolean;
+        if (!unimplementedOption(name, &kind))
+            return false;
+        *result = kind == OptionKind::String ? VimValue(QString()) : VimValue(qlonglong(0));
+        return true;
+    }
     const QVariant v = act->variantValue();
     if (v.typeId() == QMetaType::Bool)
         *result = VimValue(qlonglong(v.toBool() ? 1 : 0));
@@ -9543,8 +9673,10 @@ bool FakeVimHandler::Private::setOption(const QString &name, const VimValue &val
         return true;
     }
     FvBaseAspect *act = s.item(Utils::keyFromString(name));
-    if (!act)
-        return false;
+    if (!act) {
+        OptionKind kind = OptionKind::Boolean;
+        return unimplementedOption(name, &kind);
+    }
     const QVariant v = act->variantValue();
     if (v.typeId() == QMetaType::Bool)
         act->setVariantValue(value.toBool());
@@ -10353,9 +10485,16 @@ bool FakeVimHandler::Private::callFunction(const QString &name,
     } else if (name == "exists") {
         const QString a = arg(0).toString();
         bool ex;
-        if (a.startsWith('&'))
-            ex = s.item(Utils::keyFromString(optionNameFromLet(a))) != nullptr;
-        else if (a.startsWith('$'))
+        if (a.startsWith('&') || a.startsWith('+')) {
+            // "&opt" asks whether Vim has the option at all, "+opt" whether it
+            // can be used, which for an option only known by name it cannot.
+            const QString opt = optionNameFromLet(a);
+            OptionKind kind = OptionKind::Boolean;
+            ex = s.item(Utils::keyFromString(opt)) != nullptr
+                 || isCommentStringOption(opt) || isFileTypeOption(opt);
+            if (!ex && a.startsWith('&'))
+                ex = unimplementedOption(opt, &kind);
+        } else if (a.startsWith('$'))
             ex = qEnvironmentVariableIsSet(a.mid(1).toLatin1().constData());
         else if (a.startsWith('*') || a.startsWith('?')) {
             // "*name" asks whether a function is there to be called, whether

@@ -231,6 +231,7 @@ private slots:
     void test_vim_script_autoload();
     void test_vim_script_scriptlocal();
     void test_vim_script_if_chain();
+    void test_vim_script_known_options();
     void test_vim_script_trailing_comment();
     void test_vim_script_dict_dot();
     void test_vim_script_command();
@@ -6832,6 +6833,50 @@ void FakeVimTester::test_vim_script_funcref()
 
 
 
+
+void FakeVimTester::test_vim_script_known_options()
+{
+    // Vim keeps the name of every option even where the feature behind it is
+    // missing, as 'shellslash' is on a system with one kind of slash only:
+    // reading it gives 0 or an empty string and setting it does nothing, so a
+    // script that consults it runs anyway. Values taken from Vim 9.1 on Linux.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) { message = msg; });
+    auto echo = [&](const char *expr) -> QString {
+        message.clear();
+        data.doCommand(QLatin1String("echo ") + QLatin1String(expr));
+        return message;
+    };
+
+    QCOMPARE(echo("&shellslash"), QLatin1String("0"));
+    QCOMPARE(echo("&ssl"), QLatin1String("0"));            // by abbreviation too
+    QCOMPARE(echo("string(&guifont)"), QLatin1String("''"));
+    // Which is what makes the common guarded form work at all.
+    QCOMPARE(echo("exists('+shellslash') && !&shellslash ? 'a' : 'b'"),
+             QLatin1String("b"));
+    // "&opt" asks whether Vim has the option, "+opt" whether it can be used.
+    QCOMPARE(echo("exists('&shellslash')"), QLatin1String("1"));
+    QCOMPARE(echo("exists('+shellslash')"), QLatin1String("0"));
+    QCOMPARE(echo("exists('&shiftwidth')"), QLatin1String("1"));
+    QCOMPARE(echo("exists('+shiftwidth')"), QLatin1String("1"));
+    // A name Vim does not have is still an error.
+    QCOMPARE(echo("exists('&nosuchoption')"), QLatin1String("0"));
+    message.clear();
+    data.doCommand("echo &nosuchoption");
+    QVERIFY(message.contains("nosuchoption"));
+
+    // Setting one is accepted and leaves it as it was.
+    data.doCommand("set shellslash");
+    QCOMPARE(echo("&shellslash"), QLatin1String("0"));
+    data.doCommand("let &guifont = 'zz'");
+    QCOMPARE(echo("string(&guifont)"), QLatin1String("''"));
+    message.clear();
+    data.doCommand("set nosuchoption");
+    QVERIFY(message.contains("nosuchoption"));
+}
 
 void FakeVimTester::test_vim_script_trailing_comment()
 {
