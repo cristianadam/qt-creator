@@ -3,5 +3,16 @@
         <file>host/host.js</file>
         <file>host/testextension/package.json</file>
         <file>host/testextension/extension.js</file>
+        <file>host/mockserver/server.js</file>
+        <file>host/lsptestextension/package.json</file>
+        <file>host/lsptestextension/extension.js</file>
+        <file>host/docsynctestextension/package.json</file>
+        <file>host/docsynctestextension/extension.js</file>
+        <file>host/diagnosticstestextension/package.json</file>
+        <file>host/diagnosticstestextension/extension.js</file>
+        <file>host/completiontestextension/package.json</file>
+        <file>host/completiontestextension/extension.js</file>
+        <file>host/hoverdeftestextension/package.json</file>
+        <file>host/hoverdeftestextension/extension.js</file>
     </qresource>
 </RCC>

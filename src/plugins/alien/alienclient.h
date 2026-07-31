@@ -6,8 +6,11 @@
 #include "vscodemanifest.h"
 
 #include <languageclient/client.h>
+#include <languageclient/languageclientsettings.h>
 
 #include <utils/commandline.h>
+
+#include <QJsonObject>
 
 #include <optional>
 
@@ -15,18 +18,27 @@ namespace Alien::Internal {
 
 // A Language Client backed by a VS Code extension's language server.
 //
-// This reuses Qt Creator's existing LSP machinery: it launches a resolved
-// stdio server command and wires it to the documents whose file patterns
-// match the extension's contributed languages.
+// This reuses Qt Creator's existing LSP machinery: it launches a stdio server
+// command and wires it to the documents matching a language filter. The filter
+// comes either from an extension manifest's contributed languages (Phase 0) or
+// from a documentSelector resolved by the extension host (vscode-languageclient
+// interception).
 class AlienClient final : public LanguageClient::Client
 {
 public:
+    AlienClient(const QString &name,
+                const Utils::CommandLine &serverCommand,
+                const LanguageClient::LanguageFilter &filter,
+                const Utils::FilePath &workingDirectory = {},
+                const QJsonObject &initializationOptions = {});
     AlienClient(const VscodeManifest &manifest, const Utils::CommandLine &serverCommand);
 
     const VscodeManifest &manifest() const { return m_manifest; }
 
 private:
-    const VscodeManifest m_manifest;
+    void wireDocuments();
+
+    VscodeManifest m_manifest;
 };
 
 // Resolves the stdio server command line for an extension, or nullopt if none

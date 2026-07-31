@@ -3,19 +3,40 @@
 
 #include "extensionhost.h"
 
+#include "alienclient.h"
+#include "aliencompletion.h"
+#include "alienhover.h"
 #include "alientr.h"
 #include "hostconnection.h"
 
+#include <coreplugin/editormanager/documentmodel.h>
+#include <coreplugin/editormanager/editormanager.h>
+#include <coreplugin/editormanager/ieditor.h>
+#include <coreplugin/idocument.h>
 #include <coreplugin/messagemanager.h>
 
-#include <utils/commandline.h>
+#include <languageclient/languageclientmanager.h>
+#include <languageclient/languageclientsettings.h>
 
+#include <texteditor/textdocument.h>
+#include <texteditor/texteditor.h>
+#include <texteditor/textmark.h>
+
+#include <utils/commandline.h>
+#include <utils/link.h>
+#include <utils/theme/theme.h>
+
+#include <QTextBlock>
+
+#include <QCoreApplication>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QLoggingCategory>
 
 using namespace Core;
+using namespace LanguageClient;
+using namespace TextEditor;
 using namespace Utils;
 
 static Q_LOGGING_CATEGORY(logHost, "qtc.alien.host", QtWarningMsg)
@@ -42,7 +63,31 @@ ExtensionHost::ExtensionHost(const FilePath &nodePath, QObject *parent)
     , m_nodePath(nodePath)
 {}
 
-ExtensionHost::~ExtensionHost() = default;
+ExtensionHost::~ExtensionHost()
+{
+    for (const QPointer<AlienClient> &client : std::as_const(m_lspClients)) {
+        if (client)
+            LanguageClientManager::shutdownClient(client);
+    }
+    for (const QList<TextMark *> &marks : std::as_const(m_diagnosticMarks))
+        qDeleteAll(marks);
+
+    // Detach our completion provider before it is destroyed with this object.
+    for (const QPointer<TextDocument> &document : std::as_const(m_completionDocuments)) {
+        if (document && document->completionAssistProvider() == m_completionProvider)
+            document->setCompletionAssistProvider(nullptr);
+    }
+
+    // Remove our hover handler from editors before deleting it.
+    for (const QPointer<TextEditorWidget> &widget : std::as_const(m_hoverWidgets)) {
+        if (widget && m_hoverHandler)
+            widget->removeHoverHandler(m_hoverHandler);
+    }
+    delete m_hoverHandler;
+
+    if (!m_runtimeDir.isEmpty())
+        m_runtimeDir.removeRecursively();
+}
 
 bool ExtensionHost::isRunning() const
 {
@@ -57,18 +102,23 @@ Result<> ExtensionHost::ensureStarted()
     if (!m_nodePath.isExecutableFile())
         return make_unexpected(Tr::tr("Node.js was not found. Set its path in the settings."));
 
-    if (!m_runtimeDir.isValid())
-        return make_unexpected(Tr::tr("Cannot create a temporary directory for the host."));
+    // The runtime directory lives on the same device as node, so the host can
+    // later be launched on a remote device without changing this code.
+    const Result<FilePath> tmp = m_nodePath.tmpDir();
+    if (!tmp)
+        return make_unexpected(tmp.error());
+    m_runtimeDir = *tmp / ("qtc-alien-" + QString::number(QCoreApplication::applicationPid()));
+    if (const Result<> dir = m_runtimeDir.ensureWritableDir(); !dir)
+        return dir;
 
-    const FilePath runtime = FilePath::fromString(m_runtimeDir.path());
-    const FilePath hostJs = runtime / "host.js";
+    const FilePath hostJs = m_runtimeDir / "host.js";
     if (const Result<> extracted = extractResource(":/alien/host/host.js", hostJs); !extracted)
         return extracted;
 
     m_connection = new HostConnection(this);
     installHandlers();
     m_connection->setCommand({m_nodePath, {hostJs.toFSPathString()}});
-    m_connection->setWorkingDirectory(runtime);
+    m_connection->setWorkingDirectory(m_runtimeDir);
 
     connect(m_connection, &HostConnection::started, this, [this] {
         const QList<std::function<void()>> deferred = std::exchange(m_deferred, {});
@@ -87,7 +137,7 @@ void ExtensionHost::installHandlers()
 {
     m_connection->setRequestHandler(
         "window/showMessage",
-        [](const QJsonValue &params, const HostConnection::Responder &respond) {
+        [this](const QJsonValue &params, const HostConnection::Responder &respond) {
             const QJsonObject object = params.toObject();
             const QString level = object.value("level").toString();
             const QString message = object.value("message").toString();
@@ -95,6 +145,7 @@ void ExtensionHost::installHandlers()
                                    : level == "warn" ? Tr::tr("Warning")
                                                      : Tr::tr("Info");
             MessageManager::writeFlashing(QString("Alien [%1]: %2").arg(prefix, message));
+            emit messageShown(message);
             // No message-box UI yet: report that no item was selected.
             respond(QJsonValue(QJsonValue::Null), {});
         });
@@ -119,6 +170,70 @@ void ExtensionHost::installHandlers()
         if (m_commands.removeAll(command) > 0)
             emit commandsChanged();
     });
+
+    m_connection->setRequestHandler(
+        "languageclient/start",
+        [this](const QJsonValue &params, const HostConnection::Responder &respond) {
+            const QJsonObject object = params.toObject();
+            const QString id = object.value("id").toString();
+            const QString name = object.value("name").toString();
+
+            const QJsonObject command = object.value("command").toObject();
+            QStringList args;
+            for (const QJsonValue &arg : command.value("args").toArray())
+                args << arg.toString();
+            const CommandLine commandLine(FilePath::fromUserInput(command.value("path").toString()),
+                                          args);
+
+            LanguageFilter filter;
+            for (const QJsonValue &pattern : object.value("filePatterns").toArray())
+                filter.filePattern << pattern.toString();
+
+            const FilePath cwd = FilePath::fromUserInput(object.value("cwd").toString());
+            const QJsonObject initOptions = object.value("initializationOptions").toObject();
+
+            if (auto existing = m_lspClients.take(id))
+                LanguageClientManager::shutdownClient(existing);
+
+            m_lspClients.insert(
+                id, new AlienClient(name.isEmpty() ? id : name, commandLine, filter, cwd, initOptions));
+            emit languageClientStarted(id);
+            respond(QJsonValue(QJsonValue::Null), {});
+        });
+
+    m_connection->setNotificationHandler("languageclient/stop", [this](const QJsonValue &params) {
+        const QString id = params.toObject().value("id").toString();
+        if (auto client = m_lspClients.take(id))
+            LanguageClientManager::shutdownClient(client);
+    });
+
+    m_connection->setNotificationHandler("diagnostics/publish", [this](const QJsonValue &params) {
+        publishDiagnostics(params);
+    });
+
+    m_connection->setNotificationHandler("completion/registerProvider",
+                                         [this](const QJsonValue &params) {
+        for (const QJsonValue &language : params.toObject().value("languageIds").toArray())
+            m_completionLanguageIds.insert(language.toString());
+        // Attach to documents that are already open.
+        for (IDocument *document : DocumentModel::openedDocuments()) {
+            if (auto textDocument = qobject_cast<TextDocument *>(document))
+                maybeAttachCompletion(textDocument);
+        }
+    });
+
+    auto registerLanguageFeature = [this](QSet<QString> &target) {
+        return [this, &target](const QJsonValue &params) {
+            for (const QJsonValue &language : params.toObject().value("languageIds").toArray())
+                target.insert(language.toString());
+            for (IEditor *editor : DocumentModel::editorsForOpenedDocuments())
+                attachEditorFeatures(editor);
+        };
+    };
+    m_connection->setNotificationHandler("hover/registerProvider",
+                                         registerLanguageFeature(m_hoverLanguageIds));
+    m_connection->setNotificationHandler("definition/registerProvider",
+                                         registerLanguageFeature(m_definitionLanguageIds));
 
     m_connection->setNotificationHandler("log", [](const QJsonValue &params) {
         qCDebug(logHost).noquote() << params.toObject().value("message").toString();
@@ -147,10 +262,26 @@ void ExtensionHost::activate(const VscodeManifest &manifest)
     }
 
     const QString id = manifest.qualifiedId();
+
+    // Pass the language -> file-extension map so the host can resolve a
+    // vscode-languageclient documentSelector (language ids) to file patterns,
+    // and remember it here to tag synced documents with a languageId.
+    QJsonArray languages;
+    for (const VscodeLanguage &language : manifest.languages) {
+        QJsonArray extensions;
+        for (const QString &extension : language.extensions) {
+            extensions.append(extension);
+            const QString suffix = extension.startsWith('.') ? extension.mid(1) : extension;
+            m_languageBySuffix.insert(suffix.toLower(), language.id);
+        }
+        languages.append(QJsonObject{{"id", language.id}, {"extensions", extensions}});
+    }
+
     const QJsonObject params{
         {"id", id},
         {"path", manifest.rootDir.toFSPathString()},
         {"main", manifest.mainPath().toFSPathString()},
+        {"languages", languages},
     };
     whenReady([this, id, params] {
         m_connection->sendRequest(
@@ -161,6 +292,8 @@ void ExtensionHost::activate(const VscodeManifest &manifest)
                         Tr::tr("Activation of \"%1\" failed: %2").arg(id, error));
                 }
             });
+        ensureDocumentSync();
+        ensureEditorFeatures();
     });
 }
 
@@ -169,7 +302,7 @@ Result<> ExtensionHost::activateBundledTestExtension()
     if (const Result<> started = ensureStarted(); !started)
         return started;
 
-    const FilePath dir = FilePath::fromString(m_runtimeDir.path()) / "testextension";
+    const FilePath dir = m_runtimeDir / "testextension";
     const FilePath packageJson = dir / "package.json";
     const FilePath extensionJs = dir / "extension.js";
 
@@ -184,6 +317,402 @@ Result<> ExtensionHost::activateBundledTestExtension()
 
     activate(*manifest);
     return {};
+}
+
+Result<> ExtensionHost::activateBundledLspTestExtension()
+{
+    if (const Result<> started = ensureStarted(); !started)
+        return started;
+
+    const FilePath extDir = m_runtimeDir / "lsptestextension";
+    const FilePath packageJson = extDir / "package.json";
+
+    const QList<std::pair<QString, FilePath>> resources = {
+        {":/alien/host/lsptestextension/package.json", packageJson},
+        {":/alien/host/lsptestextension/extension.js", extDir / "extension.js"},
+        {":/alien/host/mockserver/server.js", m_runtimeDir / "mockserver" / "server.js"},
+    };
+    for (const auto &[resource, dest] : resources) {
+        if (const Result<> r = extractResource(resource, dest); !r)
+            return r;
+    }
+
+    const Result<VscodeManifest> manifest = VscodeManifest::fromPackageJson(packageJson);
+    if (!manifest)
+        return make_unexpected(manifest.error());
+
+    activate(*manifest);
+    return {};
+}
+
+Result<> ExtensionHost::activateBundledDocSyncTestExtension()
+{
+    if (const Result<> started = ensureStarted(); !started)
+        return started;
+
+    const FilePath extDir = m_runtimeDir / "docsynctestextension";
+    const FilePath packageJson = extDir / "package.json";
+
+    const QList<std::pair<QString, FilePath>> resources = {
+        {":/alien/host/docsynctestextension/package.json", packageJson},
+        {":/alien/host/docsynctestextension/extension.js", extDir / "extension.js"},
+    };
+    for (const auto &[resource, dest] : resources) {
+        if (const Result<> r = extractResource(resource, dest); !r)
+            return r;
+    }
+
+    const Result<VscodeManifest> manifest = VscodeManifest::fromPackageJson(packageJson);
+    if (!manifest)
+        return make_unexpected(manifest.error());
+
+    activate(*manifest);
+    return {};
+}
+
+Result<> ExtensionHost::activateBundledDiagnosticsTestExtension()
+{
+    if (const Result<> started = ensureStarted(); !started)
+        return started;
+
+    const FilePath extDir = m_runtimeDir / "diagnosticstestextension";
+    const FilePath packageJson = extDir / "package.json";
+
+    const QList<std::pair<QString, FilePath>> resources = {
+        {":/alien/host/diagnosticstestextension/package.json", packageJson},
+        {":/alien/host/diagnosticstestextension/extension.js", extDir / "extension.js"},
+    };
+    for (const auto &[resource, dest] : resources) {
+        if (const Result<> r = extractResource(resource, dest); !r)
+            return r;
+    }
+
+    const Result<VscodeManifest> manifest = VscodeManifest::fromPackageJson(packageJson);
+    if (!manifest)
+        return make_unexpected(manifest.error());
+
+    activate(*manifest);
+    return {};
+}
+
+Result<> ExtensionHost::activateBundledCompletionTestExtension()
+{
+    if (const Result<> started = ensureStarted(); !started)
+        return started;
+
+    const FilePath extDir = m_runtimeDir / "completiontestextension";
+    const FilePath packageJson = extDir / "package.json";
+
+    const QList<std::pair<QString, FilePath>> resources = {
+        {":/alien/host/completiontestextension/package.json", packageJson},
+        {":/alien/host/completiontestextension/extension.js", extDir / "extension.js"},
+    };
+    for (const auto &[resource, dest] : resources) {
+        if (const Result<> r = extractResource(resource, dest); !r)
+            return r;
+    }
+
+    const Result<VscodeManifest> manifest = VscodeManifest::fromPackageJson(packageJson);
+    if (!manifest)
+        return make_unexpected(manifest.error());
+
+    activate(*manifest);
+    return {};
+}
+
+Result<> ExtensionHost::activateBundledHoverDefinitionTestExtension()
+{
+    if (const Result<> started = ensureStarted(); !started)
+        return started;
+
+    const FilePath extDir = m_runtimeDir / "hoverdeftestextension";
+    const FilePath packageJson = extDir / "package.json";
+
+    const QList<std::pair<QString, FilePath>> resources = {
+        {":/alien/host/hoverdeftestextension/package.json", packageJson},
+        {":/alien/host/hoverdeftestextension/extension.js", extDir / "extension.js"},
+    };
+    for (const auto &[resource, dest] : resources) {
+        if (const Result<> r = extractResource(resource, dest); !r)
+            return r;
+    }
+
+    const Result<VscodeManifest> manifest = VscodeManifest::fromPackageJson(packageJson);
+    if (!manifest)
+        return make_unexpected(manifest.error());
+
+    activate(*manifest);
+    return {};
+}
+
+AlienClient *ExtensionHost::languageClient(const QString &id) const
+{
+    return m_lspClients.value(id);
+}
+
+QString ExtensionHost::languageIdFor(const FilePath &filePath) const
+{
+    return m_languageBySuffix.value(filePath.suffix().toLower(), "plaintext");
+}
+
+void ExtensionHost::ensureDocumentSync()
+{
+    if (m_documentSyncStarted)
+        return;
+    m_documentSyncStarted = true;
+
+    connect(EditorManager::instance(), &EditorManager::documentOpened,
+            this, &ExtensionHost::onDocumentOpened);
+    connect(EditorManager::instance(), &EditorManager::documentClosed,
+            this, &ExtensionHost::onDocumentClosed);
+    connect(EditorManager::instance(), &EditorManager::currentEditorChanged,
+            this, [this] { syncActiveEditor(); });
+
+    for (IDocument *document : DocumentModel::openedDocuments())
+        onDocumentOpened(document);
+    syncActiveEditor();
+}
+
+void ExtensionHost::onDocumentOpened(IDocument *document)
+{
+    auto textDocument = qobject_cast<TextDocument *>(document);
+    if (!textDocument)
+        return;
+
+    const FilePath filePath = textDocument->filePath();
+    if (filePath.isEmpty())
+        return;
+
+    m_documentVersions.insert(filePath, 1);
+    m_connection->sendNotification("document/didOpen", QJsonObject{
+        {"uri", filePath.toFSPathString()},
+        {"languageId", languageIdFor(filePath)},
+        {"version", 1},
+        {"text", textDocument->plainText()},
+    });
+
+    maybeAttachCompletion(textDocument);
+
+    connect(textDocument, &TextDocument::contentsChangedWithPosition, this,
+            [this, textDocument] {
+                const FilePath path = textDocument->filePath();
+                const int version = m_documentVersions.value(path) + 1;
+                m_documentVersions.insert(path, version);
+                m_connection->sendNotification("document/didChange", QJsonObject{
+                    {"uri", path.toFSPathString()},
+                    {"version", version},
+                    {"text", textDocument->plainText()},
+                });
+            });
+}
+
+void ExtensionHost::onDocumentClosed(IDocument *document)
+{
+    auto textDocument = qobject_cast<TextDocument *>(document);
+    if (!textDocument)
+        return;
+    const FilePath filePath = textDocument->filePath();
+    m_documentVersions.remove(filePath);
+    m_connection->sendNotification("document/didClose",
+                                   QJsonObject{{"uri", filePath.toFSPathString()}});
+}
+
+void ExtensionHost::syncActiveEditor()
+{
+    IDocument *document = EditorManager::currentDocument();
+    auto textDocument = qobject_cast<TextDocument *>(document);
+    const QJsonValue uri = textDocument ? QJsonValue(textDocument->filePath().toFSPathString())
+                                        : QJsonValue(QJsonValue::Null);
+    m_connection->sendNotification("editor/didChangeActive", QJsonObject{{"uri", uri}});
+}
+
+void ExtensionHost::publishDiagnostics(const QJsonValue &params)
+{
+    const QJsonObject object = params.toObject();
+    const QString uri = object.value("uri").toString();
+    const QString collection = object.value("collection").toString();
+    const QJsonArray diagnostics = object.value("diagnostics").toArray();
+    const QString key = collection + '\n' + uri;
+
+    // Replace the previous marks for this collection/uri.
+    qDeleteAll(m_diagnosticMarks.take(key));
+
+    const FilePath filePath = FilePath::fromUserInput(uri);
+    const TextMarkCategory category{Tr::tr("Alien"), "Alien.Diagnostics"};
+
+    QList<TextMark *> marks;
+    for (const QJsonValue &value : diagnostics) {
+        const QJsonObject diagnostic = value.toObject();
+        const QJsonObject start = diagnostic.value("range").toObject().value("start").toObject();
+        const int line = start.value("line").toInt() + 1;
+
+        auto mark = new TextMark(filePath, line, category);
+        mark->setToolTip(diagnostic.value("message").toString());
+        mark->setLineAnnotation(diagnostic.value("message").toString());
+
+        switch (diagnostic.value("severity").toInt()) {
+        case 0: mark->setColor(Theme::CodeModel_Error_TextMarkColor); break;
+        case 1: mark->setColor(Theme::CodeModel_Warning_TextMarkColor); break;
+        default: mark->setColor(Theme::CodeModel_Info_TextMarkColor); break;
+        }
+        marks.append(mark);
+    }
+
+    if (!marks.isEmpty())
+        m_diagnosticMarks.insert(key, marks);
+
+    emit diagnosticsPublished(uri, int(diagnostics.size()));
+}
+
+AlienCompletionAssistProvider *ExtensionHost::completionProvider()
+{
+    if (!m_completionProvider)
+        m_completionProvider = new AlienCompletionAssistProvider(this);
+    return m_completionProvider;
+}
+
+void ExtensionHost::maybeAttachCompletion(TextDocument *document)
+{
+    if (!document || !m_completionLanguageIds.contains(languageIdFor(document->filePath())))
+        return;
+    if (document->completionAssistProvider() == completionProvider())
+        return;
+
+    document->setCompletionAssistProvider(completionProvider());
+    m_completionDocuments.append(document);
+}
+
+void ExtensionHost::requestCompletion(const FilePath &uri, int line, int character,
+                                      const std::function<void(const QJsonArray &)> &callback)
+{
+    if (!m_connection) {
+        callback({});
+        return;
+    }
+    const QJsonObject params{
+        {"uri", uri.toFSPathString()},
+        {"position", QJsonObject{{"line", line}, {"character", character}}},
+    };
+    whenReady([this, params, callback] {
+        m_connection->sendRequest(
+            "completion/provide", params,
+            [callback](const QJsonValue &result, const QString &error) {
+                if (!error.isEmpty())
+                    callback({});
+                else
+                    callback(result.toObject().value("items").toArray());
+            });
+    });
+}
+
+void ExtensionHost::requestHover(const FilePath &uri, int line, int character,
+                                 const std::function<void(const QString &)> &callback)
+{
+    if (!m_connection) {
+        callback({});
+        return;
+    }
+    const QJsonObject params{
+        {"uri", uri.toFSPathString()},
+        {"position", QJsonObject{{"line", line}, {"character", character}}},
+    };
+    whenReady([this, params, callback] {
+        m_connection->sendRequest(
+            "hover/provide", params, [callback](const QJsonValue &result, const QString &error) {
+                callback(error.isEmpty() ? result.toObject().value("contents").toString() : QString());
+            });
+    });
+}
+
+void ExtensionHost::requestDefinition(const FilePath &uri, int line, int character,
+                                      const std::function<void(const QJsonArray &)> &callback)
+{
+    if (!m_connection) {
+        callback({});
+        return;
+    }
+    const QJsonObject params{
+        {"uri", uri.toFSPathString()},
+        {"position", QJsonObject{{"line", line}, {"character", character}}},
+    };
+    whenReady([this, params, callback] {
+        m_connection->sendRequest(
+            "definition/provide", params,
+            [callback](const QJsonValue &result, const QString &error) {
+                if (!error.isEmpty())
+                    callback({});
+                else
+                    callback(result.toObject().value("locations").toArray());
+            });
+    });
+}
+
+AlienHoverHandler *ExtensionHost::hoverHandler()
+{
+    if (!m_hoverHandler)
+        m_hoverHandler = new AlienHoverHandler(this);
+    return m_hoverHandler;
+}
+
+void ExtensionHost::ensureEditorFeatures()
+{
+    if (m_editorFeaturesStarted)
+        return;
+    m_editorFeaturesStarted = true;
+
+    connect(EditorManager::instance(), &EditorManager::editorOpened,
+            this, &ExtensionHost::attachEditorFeatures);
+    for (IEditor *editor : DocumentModel::editorsForOpenedDocuments())
+        attachEditorFeatures(editor);
+}
+
+void ExtensionHost::attachEditorFeatures(IEditor *editor)
+{
+    TextEditorWidget *widget = TextEditorWidget::fromEditor(editor);
+    if (!widget)
+        return;
+    const QString languageId = languageIdFor(widget->textDocument()->filePath());
+
+    if (m_hoverLanguageIds.contains(languageId) && !m_hoverWidgets.contains(widget)) {
+        widget->addHoverHandler(hoverHandler());
+        m_hoverWidgets.append(widget);
+    }
+
+    if (m_definitionLanguageIds.contains(languageId)) {
+        widget->setOptionalActions(widget->optionalActions()
+                                   | TextEditor::OptionalActions::FollowSymbolUnderCursor);
+        connect(widget, &TextEditorWidget::requestLinkAt, this,
+                [this, widget](const QTextCursor &cursor, const Utils::LinkHandler &callback,
+                               bool resolveTarget) {
+                    Q_UNUSED(resolveTarget)
+                    const FilePath path = widget->textDocument()->filePath();
+                    const int line = cursor.blockNumber();
+                    const int character = cursor.positionInBlock();
+
+                    // Source range to highlight: the word under the cursor.
+                    QTextCursor wordCursor = cursor;
+                    wordCursor.select(QTextCursor::WordUnderCursor);
+
+                    requestDefinition(path, line, character,
+                        [callback, start = wordCursor.selectionStart(),
+                         end = wordCursor.selectionEnd()](const QJsonArray &locations) {
+                            if (locations.isEmpty()) {
+                                callback(Utils::Link());
+                                return;
+                            }
+                            const QJsonObject location = locations.first().toObject();
+                            const QJsonObject startPos
+                                = location.value("range").toObject().value("start").toObject();
+                            Utils::Link link(
+                                FilePath::fromUserInput(location.value("uri").toString()),
+                                startPos.value("line").toInt() + 1,
+                                startPos.value("character").toInt());
+                            link.linkTextStart = start;
+                            link.linkTextEnd = end;
+                            callback(link);
+                        });
+                });
+    }
 }
 
 void ExtensionHost::executeCommand(const QString &command)

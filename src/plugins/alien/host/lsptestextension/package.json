@@ -1,0 +1,15 @@
+{
+    "name": "alien-lsp-test",
+    "publisher": "theqtcompany",
+    "displayName": "Alien LSP Test Extension",
+    "description": "Starts a mock language server through vscode-languageclient.",
+    "version": "0.0.1",
+    "engines": { "vscode": "^1.0.0" },
+    "main": "./extension.js",
+    "activationEvents": [ "*" ],
+    "contributes": {
+        "languages": [
+            { "id": "plaintext", "extensions": [ ".txt", ".alientxt" ] }
+        ]
+    }
+}
