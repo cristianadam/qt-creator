@@ -5,6 +5,7 @@ Project {
 
     references: [
         "acpclient/acpclient.qbs",
+        "alien/alien.qbs",
         "android/android.qbs",
         "ant/ant.qbs",
         "appstatisticsmonitor/appstatisticsmonitor.qbs",
