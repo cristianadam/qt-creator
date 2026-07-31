@@ -90,6 +90,8 @@ class Dumper(DumperBase):
         DumperBase.__init__(self)
         self.outputLock = threading.Lock()
         self.isCdb = True
+        # QML breakpoints the service was not up for yet; the engine retries them.
+        self.pendingInterpreterBreakpoints = []
 
     #FIXME
     def register_known_qt_types(self):
@@ -285,6 +287,18 @@ class Dumper(DumperBase):
             raise RuntimeError('Wrote only %s of %d bytes at 0x%x'
                                % (written, len(encoded), address))
         return address
+
+    def createResolvePendingBreakpointsHookBreakpoint(self, args):
+        # cdbext has no breakpoint API, so unlike gdb/lldb the engine owns the
+        # hook breakpoint and calls resolvePendingInterpreterBreakpoints().
+        self.pendingInterpreterBreakpoints.append(args)
+
+    def resolvePendingInterpreterBreakpoints(self):
+        # The engine's qt_qmlDebugConnectorOpen hook has been hit by now.
+        pending = self.pendingInterpreterBreakpoints
+        self.pendingInterpreterBreakpoints = []
+        for args in pending:
+            self.resolvePendingInterpreterBreakpoint(args)
 
     def callServiceFunction(self, function, args=None):
         module = self.serviceModuleName()

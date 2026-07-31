@@ -23,8 +23,9 @@ namespace Debugger::Internal {
 // concrete DebuggerEngineInterface is built by the caller (which already has
 // the DebuggerRunParameters a backend needs - see createGdbEngine()) and
 // handed to the constructor already-constructed; m_backend is never
-// downcast. Today only GdbImpl is wired up (see gdb/gdbengine.cpp's
-// createGdbEngine()); this class itself has no gdb-specific knowledge at all.
+// downcast. Gdb/Lldb/Pdb/Cdb are wired up this way today (see each one's
+// own createXEngine()); Qml isn't yet. This class itself has no
+// backend-specific knowledge at all.
 //
 // Only overrides what a DebuggerEngineInterface actually exposes -
 // insertBreakpoint/removeBreakpoint/updateBreakpoint/selectThread are pure

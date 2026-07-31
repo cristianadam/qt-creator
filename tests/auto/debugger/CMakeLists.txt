@@ -134,6 +134,21 @@ set(BACKENDS_TEST_DEFINES DUMPERDIR="${PROJECT_SOURCE_DIR}/share/qtcreator/debug
 list(APPEND BACKENDS_TEST_DEFINES
   "BACKENDS_TEST_SOURCE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
+# CdbImpl needs the qtcreatorcdbext extension DLL this build produced. Passed
+# as its full, generator-resolved path rather than reconstructed in the test:
+# real CdbEngine::extensionLibraryName() derives the same file relative to
+# QCoreApplication::applicationDirPath(), which only resolves correctly from
+# the real qtcreator executable's own directory tree - not this standalone
+# test binary's - and the layout it builds ("lib/qtcreatorcdbext<arm><64|32>/
+# qtcreatorcdbext.dll") puts the bitness suffix on the *directory* only, not
+# on the DLL, which is easy to get wrong by hand. The target only exists on
+# Windows, and only when BUILD_LIBRARY_QTCREATORCDBEXT is on.
+if (TARGET qtcreatorcdbext)
+  list(APPEND BACKENDS_TEST_DEFINES
+    "CDBEXT_LIBRARY=\"$<TARGET_FILE:qtcreatorcdbext>\"")
+endif()
+
+
 if (TARGET Qt::Quick)
   qt_add_executable(qmlstack_inferior
     qmlstack_inferior/qmlentrypoint.h qmlstack_inferior/qmlentrypoint.cpp

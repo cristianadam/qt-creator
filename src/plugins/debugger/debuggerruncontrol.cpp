@@ -52,7 +52,7 @@ enum { debug = 0 };
 namespace Debugger {
 namespace Internal {
 
-DebuggerEngine *createCdbEngine();
+DebuggerEngine *createCdbEngine(const DebuggerRunParameters &rp);
 DebuggerEngine *createGdbEngine(const DebuggerRunParameters &rp);
 DebuggerEngine *createPdbEngine(const DebuggerRunParameters &rp);
 DebuggerEngine *createQmlEngine();
@@ -562,7 +562,7 @@ static Result<QList<QPointer<Internal::DebuggerEngine>>> createEngines(
         case CdbEngineType:
             if (rp.debugger().command.executable().osType() != OsTypeWindows)
                 return make_unexpected(Tr::tr("Unsupported CDB host system."));
-            engines << createCdbEngine();
+            engines << createCdbEngine(rp);
             break;
         case LldbEngineType:
             engines << createLldbEngine(rp);

@@ -1,15 +1,18 @@
 // Copyright (C) 2026 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
+#include "cdb/cdbimpl.h"
 #include "gdb/gdbimpl.h"
 #include "lldb/lldbimpl.h"
 #include "pdb/pdbimpl.h"
 #include "qml/qmlimpl.h"
 
 #include <utils/algorithm.h>
+#include <utils/commandline.h> // for Utils::ProcessArgs
 #include <utils/elfreader.h>
 #include <utils/environment.h>
 #include <utils/filepath.h>
+#include <utils/fileutils.h> // for Utils::TempFileSaver
 #include <utils/hostosinfo.h>
 #include <utils/processreaper.h>
 #include <utils/qtcprocess.h>
@@ -30,10 +33,13 @@
 #include <QMap>
 #include <QMetaEnum>
 #include <QPoint>
+#include <QProcess>
+#include <QRegularExpression>
 #include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTcpServer>
 #include <QTemporaryDir>
+#include <QTemporaryFile>
 #include <QTest>
 
 using namespace Debugger::Internal;
@@ -73,6 +79,89 @@ static QString compileFailure(const QString &what, const Process &process, qint6
 // Its own request id, so symbolAddressFromDebugger()'s reply is told apart from
 // whatever refresh(Locals) the calling test is doing.
 static constexpr quint64 s_symbolAddressRequestId = 999000;
+
+// Copied from msvctoolchain.cpp (via tst_dumpers.cpp's own copy) to avoid a
+// plugin dependency. Runs a vcvars-style batch file and captures the
+// resulting environment - the only way to get a real cl.exe/INCLUDE/LIB
+// setup without requiring this standalone test binary to already be
+// launched from an MSVC developer command prompt.
+static bool generateEnvironmentSettings(Environment &env,
+                                        const QString &batchFile,
+                                        const QString &batchArgs,
+                                        QMap<QString, QString> &envPairs)
+{
+    QString tempOutFile;
+    QTemporaryFile *pVarsTempFile = new QTemporaryFile(QDir::tempPath() + "/XXXXXX.txt");
+    pVarsTempFile->setAutoRemove(false);
+    QTC_CHECK(pVarsTempFile->open());
+    pVarsTempFile->close();
+    tempOutFile = pVarsTempFile->fileName();
+    delete pVarsTempFile;
+
+    TempFileSaver saver(QDir::tempPath() + "/XXXXXX.bat");
+
+    QByteArray call = "call ";
+    call += ProcessArgs::quoteArg(batchFile).toLocal8Bit();
+    if (!batchArgs.isEmpty()) {
+        call += ' ';
+        call += batchArgs.toLocal8Bit();
+    }
+    saver.write(QByteArray(call + "\r\n"));
+
+    const QByteArray redirect = "set > " + ProcessArgs::quoteArg(
+                                    QDir::toNativeSeparators(tempOutFile)).toLocal8Bit() + "\r\n";
+    saver.write(redirect);
+    if (const Result<> res = saver.finalize(); !res) {
+        qWarning("%s: %s", Q_FUNC_INFO, qPrintable(res.error()));
+        return false;
+    }
+
+    QProcess run;
+    // As of WinSDK 7.1, there is logic preventing the path from being set
+    // correctly if "ORIGINALPATH" is already set.
+    env.unset("ORIGINALPATH");
+    run.setEnvironment(env.toStringList());
+    const QString cmdPath = QString::fromLocal8Bit(qgetenv("COMSPEC"));
+    QStringList cmdArguments{"/E:ON", "/V:ON", "/c",
+                             ProcessArgs::quoteArg(saver.filePath().toUserOutput())};
+    run.start(cmdPath, cmdArguments);
+
+    if (!run.waitForStarted()) {
+        qWarning("%s: Unable to run '%s': %s", Q_FUNC_INFO, qPrintable(batchFile),
+                 qPrintable(run.errorString()));
+        return false;
+    }
+    if (!run.waitForFinished()) {
+        qWarning("%s: Timeout running '%s'", Q_FUNC_INFO, qPrintable(batchFile));
+        run.terminate();
+        if (!run.waitForFinished())
+            run.kill();
+        return false;
+    }
+    const QByteArray stdOut = run.readAllStandardOutput();
+    if (!stdOut.isEmpty() && (stdOut.contains("Unknown") || stdOut.contains("Error")))
+        qWarning("%s: '%s' reports:\n%s", Q_FUNC_INFO, call.constData(), stdOut.constData());
+
+    QFile varsFile(tempOutFile);
+    if (!varsFile.open(QIODevice::ReadOnly))
+        return false;
+
+    const QRegularExpression regexp("^(\\w*)=(.*)$");
+    while (!varsFile.atEnd()) {
+        const QString line = QString::fromLocal8Bit(varsFile.readLine()).trimmed();
+        const QRegularExpressionMatch match = regexp.match(line);
+        if (match.hasMatch()) {
+            const QString varName = match.captured(1);
+            const QString varValue = match.captured(2);
+            if (!varValue.isEmpty())
+                envPairs.insert(varName, varValue);
+        }
+    }
+
+    varsFile.close();
+    varsFile.remove();
+    return true;
+}
 
 static const char s_qmlNativeDebuggerPluginMissing[] =
     "Qt's qmldbg_native plugin not found - can't establish a live "
@@ -117,6 +206,15 @@ static const char s_qtDeclarativeDebugInfoMissing[] =
 // reverse execution either (same bucket as Pdb, but for yet another
 // reason: an interpreted JS engine embedded in the app itself, not a
 // separate debugger process with its own attach/remote story at all).
+// Cdb is the first Windows-only backend - wraps real cdb.exe the same way
+// Gdb/Lldb wrap gdb/lldb, but with no MI-like wire syntax at all (see
+// CdbImpl's own class comment) and no attach modes ported yet (Launch
+// only this slice). Availability needs both cdb.exe on PATH/
+// QTC_CDB_PATH_FOR_TEST *and* the qtcreatorcdbext extension DLL found via
+// QTC_CDB_EXTENSION_DIR_FOR_TEST (see initTestCase()'s own comment on why
+// there's no PATH-relative default the way the other three have) - never
+// available on non-Windows hosts at all.
+//
 // Declared at file scope (not nested in the test class) so
 // Q_DECLARE_METATYPE below can see it.
 enum class Backend {
@@ -124,6 +222,7 @@ enum class Backend {
     Lldb,
     Pdb,
     Qml,
+    Cdb,
 };
 Q_DECLARE_METATYPE(Backend)
 
@@ -239,9 +338,8 @@ struct InferiorTestData
     // stopInferiorSpinLoop()'s assignment into keepSpinning. Data, not a
     // per-backend switch: the mechanism there is chosen by capability, but
     // the *literal* depends on the inferior's language - Python needs
-    // "False", C++ needs "0" (a C++ debugger's expression evaluator
-    // rejects "False" as an unknown symbol, so the spin loop would simply
-    // never stop).
+    // "False", C++ needs "0" (cdb's expression evaluator rejects "False"
+    // as an unknown symbol, so the spin loop simply never stopped).
     QString falseLiteral = "0";
 };
 
@@ -249,6 +347,10 @@ struct BackendData
 {
     FilePath path;
     InferiorTestData inferiorData;
+    // Cdb only - see initTestCase()'s own comment on why these can't be
+    // derived the same way real CdbEngine::extensionLibraryName() does.
+    FilePath cdbExtensionDir;
+    QString cdbExtensionFileName;
 };
 
 // Plain "gdb"/"gdb.exe" is what Qt's own bundled MinGW packages expose,
@@ -322,6 +424,94 @@ static FilePath findPythonOnPath()
             && versionProcess.cleanedStdOut().startsWith("Python ")) {
             return path;
         }
+    }
+    return {};
+}
+
+// Only the Windows SDK's "Debugging Tools for Windows" component installs a
+// plain "cdb.exe" (into Windows Kits\<ver>\Debuggers\<arch>). The standalone
+// WinDbg package - what "winget install Microsoft.WinDbg" gives, and the
+// easiest way to get a debugger onto a machine that has just the SDK headers -
+// installs per-architecture App Execution Aliases named "cdbX64.exe" /
+// "cdbX86.exe" / "cdbARM64.exe" instead, with no "cdb.exe" anywhere. Searching
+// for the bare name alone therefore finds nothing on such a machine and drops
+// Cdb entirely, which is exactly what happened here until this was added.
+// Verified by running the alias: it is a real, working debugger
+// ("cdb version 10.0.29617.1000"), not a dead stub like python3's own alias -
+// but the "--version"-style check below is kept anyway for the same reason
+// findPythonOnPath() needs it, since an alias existing proves nothing.
+// QTC_CDB_PATH_FOR_TEST still overrides all of this.
+static FilePath findCdbOnPath()
+{
+    // Plain "cdb" first: an SDK install is the canonical one, and on an x86 or
+    // ARM host the X64 alias would be the wrong architecture to prefer.
+    // Rejects anything that cannot actually report its own version. Necessary
+    // for the same reason findPythonOnPath() needs it, and then some: a broken
+    // WinDbg alias is still a perfectly valid-looking executable file.
+    const auto usable = [](const FilePath &path) {
+        if (!path.isExecutableFile())
+            return false;
+        Process versionProcess;
+        versionProcess.setCommand({path, {"-version"}});
+        versionProcess.runBlocking();
+        return versionProcess.result() == ProcessResult::FinishedWithSuccess
+               && versionProcess.cleanedStdOut().contains("cdb version");
+    };
+
+    // The SDK's "Debugging Tools for Windows" install first, by absolute path,
+    // *before* anything on PATH - and deliberately so. That component is not on
+    // PATH by default, while %LOCALAPPDATA%\Microsoft\WindowsApps (where the
+    // WinDbg package's aliases live) always is, so a plain PATH search finds the
+    // alias and never the real thing. Preferring the alias is actively harmful:
+    // it is an AppExecLink whose activation needs ClipSVC to validate the MSIX
+    // licence, and when that service happens to be stopped the alias fails with
+    // "Access is denied" - or, worse, starts but then cannot create a *debugged*
+    // process at all, failing every launch with Win32 error 0n50
+    // (ERROR_NOT_SUPPORTED). Both were hit live, and the second looks exactly
+    // like a backend bug. The SDK build is a plain exe with no packaging,
+    // aliasing or licence service in the way, so it cannot fail either way.
+    for (const char *rootVar : {"ProgramFiles(x86)", "ProgramFiles", "ProgramW6432"}) {
+        const QString root = qtcEnvironmentVariable(rootVar);
+        if (root.isEmpty())
+            continue;
+        const FilePath kitsRoot = FilePath::fromUserInput(root) / "Windows Kits";
+        if (!kitsRoot.isDir())
+            continue;
+        const QDir kitsDir(kitsRoot.toFSPathString());
+        // Newest SDK version first.
+        QStringList versions = kitsDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+        std::sort(versions.begin(), versions.end());
+        std::reverse(versions.begin(), versions.end());
+        for (const QString &version : versions) {
+            // Host architecture only - a cdb of the wrong bitness cannot debug
+            // the inferior this suite compiles.
+            for (const char *arch :
+#ifdef Q_PROCESSOR_ARM
+                 {"arm64", "x64"}
+#else
+                 {"x64", "x86"}
+#endif
+                 ) {
+                const FilePath candidate = kitsRoot / version / "Debuggers" / arch / "cdb.exe";
+                if (usable(candidate))
+                    return candidate;
+            }
+        }
+    }
+
+    // Only then PATH. Plain "cdb" first: on an x86 or ARM host the X64 alias
+    // would be the wrong architecture to prefer anyway.
+    static const QStringList candidates = {
+        "cdb", "cdb.exe",
+#ifdef Q_PROCESSOR_ARM
+        "cdbARM64.exe",
+#endif
+        "cdbX64.exe", "cdbX86.exe",
+    };
+    for (const QString &candidate : candidates) {
+        const FilePath path = FilePath::fromString(candidate).searchInPath();
+        if (usable(path))
+            return path;
     }
     return {};
 }
@@ -404,6 +594,8 @@ static QString backendName(Backend backend)
         return "pdb";
     case Backend::Qml:
         return "qml";
+    case Backend::Cdb:
+        return "cdb";
     }
     return {};
 }
@@ -427,6 +619,8 @@ static QString printCommand(Backend backend, const QString &expression)
     case Backend::Pdb:
     case Backend::Qml:
         return expression;
+    case Backend::Cdb:
+        return "? " + expression;
     }
     return {};
 }
@@ -1002,6 +1196,16 @@ std::unique_ptr<DebuggerBackend> tst_backends::createEngine(Backend backend,
         // ignoring nativeMixed above.
         return std::make_unique<DebuggerBackend>(std::make_unique<QmlImpl>(QmlImplStartData{
             .inferiorStartData = AttachToQmlServerData{}}));
+    case Backend::Cdb:
+        return std::make_unique<DebuggerBackend>(std::make_unique<CdbImpl>(CdbImplStartData{
+            .debuggerRunData = debuggerRunDataOverride.value_or(
+                ProcessRunData{{m_backendData[backend].path, {}}, {}, Environment::systemEnvironment()}),
+            .inferiorStartData = inferiorRunDataOverride.value_or(
+                ProcessRunData{{inferiorTestData(backend).executable, {}}, {}, Environment::systemEnvironment()}),
+            .extensionDir = m_backendData[backend].cdbExtensionDir,
+            .extensionFileName = m_backendData[backend].cdbExtensionFileName,
+            .dumperScriptsDir = FilePath::fromUserInput(DUMPERDIR),
+            .nativeMixed = nativeMixed}));
     }
     return nullptr;
 }
@@ -1030,6 +1234,10 @@ std::unique_ptr<DebuggerBackend> tst_backends::createAttachEngine(
         // QmlImplStartData's own comment).
         return std::make_unique<DebuggerBackend>(std::make_unique<QmlImpl>(QmlImplStartData{
             .inferiorStartData = inferiorStartData}));
+    case Backend::Cdb:
+        // No attach modes ported this slice - see the Backend enum's own
+        // comment.
+        break;
     }
     return nullptr;
 }
@@ -1119,6 +1327,58 @@ void tst_backends::initTestCase()
     if (pythonPath.isExecutableFile()) {
         m_backendData[Backend::Pdb].path = pythonPath;
         pythonVersionLine = versionLine(pythonPath);
+    }
+
+    // Windows-only, real cdb.exe - the counterpart to Gdb/Lldb's own
+    // Linux/Mac-only policy above, never even searched for elsewhere
+    // (already implied in practice, since cdb.exe/QTC_CDB_PATH_FOR_TEST
+    // wouldn't resolve on Linux/Mac anyway, but stated explicitly here
+    // rather than left incidental). The extension DLL is taken from
+    // CDBEXT_LIBRARY - the full path to the qtcreatorcdbext this very build
+    // produced, handed over by CMakeLists.txt/backends.qbs. Reconstructing it
+    // here instead (as this used to, via a hardcoded "qtcreatorcdbext64.dll")
+    // is what real CdbEngine::extensionLibraryName() does relative to
+    // QCoreApplication::applicationDirPath(), and it only resolves from the
+    // real qtcreator executable's own directory tree, never this standalone
+    // test binary's. Worse, that layout puts the bitness suffix on the
+    // *directory* only - "lib/qtcreatorcdbext64/qtcreatorcdbext.dll" - so the
+    // hardcoded name never matched any real build output and silently dropped
+    // Cdb even where cdb.exe was present. Letting the build system name its
+    // own artifact also means no architecture detection is needed here (see
+    // cdbengine.cpp's Abi::abisOfBinary() for what real CdbEngine does).
+    // QTC_CDB_EXTENSION_DIR_FOR_TEST still overrides the directory, for
+    // pointing at a prebuilt extension from elsewhere.
+    QString cdbVersionLine;
+    if (HostOsInfo::isWindowsHost()) {
+        const QString envCdb = qtcEnvironmentVariable("QTC_CDB_PATH_FOR_TEST");
+        const FilePath cdbPath = envCdb.isEmpty()
+            ? findCdbOnPath()
+            : FilePath::fromUserInput(envCdb);
+        FilePath extensionLibrary;
+#ifdef CDBEXT_LIBRARY
+        extensionLibrary = FilePath::fromUserInput(QLatin1String(CDBEXT_LIBRARY));
+#endif
+        const QString envCdbExtDir = qtcEnvironmentVariable("QTC_CDB_EXTENSION_DIR_FOR_TEST");
+        if (!envCdbExtDir.isEmpty()) {
+            // Same name real CdbEngine uses (QT_CREATOR_CDB_EXT ".dll") when
+            // this build produced no extension of its own to take it from.
+            const QString fileName = extensionLibrary.isEmpty()
+                ? QString("qtcreatorcdbext.dll") : extensionLibrary.fileName();
+            extensionLibrary = FilePath::fromUserInput(envCdbExtDir) / fileName;
+        }
+        if (cdbPath.isExecutableFile() && extensionLibrary.isFile()) {
+            m_backendData[Backend::Cdb].path = cdbPath;
+            m_backendData[Backend::Cdb].cdbExtensionDir = extensionLibrary.parentDir();
+            m_backendData[Backend::Cdb].cdbExtensionFileName = extensionLibrary.fileName();
+            cdbVersionLine = versionLine(cdbPath);
+        } else if (cdbPath.isExecutableFile() != extensionLibrary.isFile()) {
+            // Exactly one half present - always a setup problem worth naming,
+            // never just "this machine has no cdb".
+            qWarning("Cdb not tested: cdb.exe %s, extension DLL %s (%s).",
+                     cdbPath.isExecutableFile() ? "found" : "NOT found",
+                     extensionLibrary.isFile() ? "found" : "NOT found",
+                     qPrintable(extensionLibrary.toUserOutput()));
+        }
     }
 
     if (m_backendData.isEmpty())
@@ -1273,6 +1533,37 @@ void tst_backends::initTestCase()
                              : QString("No usable C++ compiler to build the test inferior - "
                                        "found, but unable to even run \"--version\":\n  ")
                                    + probeFailures.join("\n  ")));
+    }
+
+    // Cdb needs its own, separately-compiled inferior: cdb.exe only
+    // understands PDB debug info, never DWARF, so it can't share the
+    // MinGW g++-built binary above (chosen for gdb/DWARF compatibility).
+    // Mirrors tst_dumpers.cpp's own CdbEngine-specific handling: prefer a
+    // real cl.exe (paired with a proper INCLUDE/LIB setup via
+    // QTC_MSVC_ENV_BAT, same env var tst_dumpers.cpp already uses for its
+    // own MSVC detection) rather than requiring any new install - clang++
+    // could in principle also emit PDB when targeting the MSVC ABI, but
+    // that would tie Cdb's inferior to whatever clang happens to be on
+    // PATH for gdb's sake above, which is exactly the fragile "whichever
+    // compiler wins the search" coupling this avoids.
+    FilePath cdbCompiler;
+    Environment cdbCompileEnv = Environment::systemEnvironment();
+    if (HostOsInfo::isWindowsHost() && m_backendData.contains(Backend::Cdb)) {
+        const QString envBat = qtcEnvironmentVariable("QTC_MSVC_ENV_BAT");
+        if (!envBat.isEmpty()) {
+            QMap<QString, QString> envPairs;
+            if (generateEnvironmentSettings(cdbCompileEnv, envBat, {}, envPairs)) {
+                for (auto it = envPairs.begin(); it != envPairs.end(); ++it)
+                    cdbCompileEnv.set(it.key(), it.value());
+            }
+        }
+        cdbCompiler = cdbCompileEnv.searchInPath("cl.exe");
+        if (!cdbCompiler.isExecutableFile()) {
+            qWarning("cl.exe not found (checked PATH and QTC_MSVC_ENV_BAT) - "
+                     "Cdb needs a real MSVC compiler for PDB debug info; "
+                     "g++/clang++ above produce DWARF, which cdb.exe can't read.");
+            m_backendData.remove(Backend::Cdb);
+        }
     }
 
     QVERIFY(m_tempDir.isValid());
@@ -1436,21 +1727,29 @@ void tst_backends::initTestCase()
     // -ldl fails the link outright with "library not found"), and its
     // toolchain won't disable PIE either. Passing them there is what broke
     // the macOS/clang bot - the compile failed before any test ran.
-    QStringList compileArgs = {"-g", "-O0"};
-    if (HostOsInfo::isLinuxHost())
-        compileArgs << "-no-pie";
-    compileArgs << "-o" << cppInferiorData.executable.nativePath()
-                << cppInferiorData.source.nativePath();
-    if (HostOsInfo::isLinuxHost())
-        compileArgs << "-ldl";
-    Process compile;
-    compile.setCommand({compiler, compileArgs});
-    QElapsedTimer compileTimer;
-    compileTimer.start();
-    compile.runBlocking(s_compileTimeout);
-    QVERIFY2(compile.result() == ProcessResult::FinishedWithSuccess,
-             qPrintable(compileFailure("compiling the test inferior",
-                                       compile, compileTimer.elapsed())));
+    //
+    // Only Gdb/Lldb actually consume this binary (Cdb compiles its own,
+    // separate one via cl.exe above) - don't require this compile to
+    // succeed, e.g. on a Cdb-only Windows machine with no MinGW g++ and
+    // only a too-old clang++ for MSVC's STL, when nothing here would even
+    // use the result.
+    if (m_backendData.contains(Backend::Gdb) || m_backendData.contains(Backend::Lldb)) {
+        QStringList compileArgs = {"-g", "-O0"};
+        if (HostOsInfo::isLinuxHost())
+            compileArgs << "-no-pie";
+        compileArgs << "-o" << cppInferiorData.executable.nativePath()
+                    << cppInferiorData.source.nativePath();
+        if (HostOsInfo::isLinuxHost())
+            compileArgs << "-ldl";
+        Process compile;
+        compile.setCommand({compiler, compileArgs});
+        QElapsedTimer compileTimer;
+        compileTimer.start();
+        compile.runBlocking(s_compileTimeout);
+        QVERIFY2(compile.result() == ProcessResult::FinishedWithSuccess,
+                 qPrintable(compileFailure("compiling the test inferior",
+                                           compile, compileTimer.elapsed())));
+    }
 
     const FilePath inferiorLibSource = FilePath::fromString(m_tempDir.path()) / "inferiorlib.cpp";
     QFile libFile(inferiorLibSource.toFSPathString());
@@ -1497,6 +1796,40 @@ void tst_backends::initTestCase()
         m_backendData[Backend::Lldb].inferiorData.versionLine = lldbVersionLine;
         m_backendData[Backend::Lldb].inferiorData.moduleListMarker = "libc";
         m_backendData[Backend::Lldb].inferiorData.moduleSymbolsPath = cppInferiorData.executable;
+    }
+    if (m_backendData.contains(Backend::Cdb)) {
+        // Same source text/breakpoint-line markers as cppInferiorData
+        // above, recompiled with cl.exe (see the cdbCompiler detection
+        // above) so the binary carries PDB debug info instead of DWARF.
+        // The already-built m_inferiorLib is reused as-is: LoadLibraryW()
+        // doesn't care which compiler produced the DLL, and no test
+        // inspects debug info inside the library itself.
+        InferiorTestData msvcInferiorData = cppInferiorData;
+        msvcInferiorData.executable = (FilePath::fromString(m_tempDir.path()) / "inferior_msvc")
+                                     .withExecutableSuffix();
+        const FilePath pdbPath = FilePath::fromString(m_tempDir.path()) / "inferior_msvc.pdb";
+        const QStringList cdbCompileArgs = {
+            "/nologo", "/Zi", "/Od", "/EHsc",
+            "/Fe:" + msvcInferiorData.executable.nativePath(),
+            "/Fd:" + pdbPath.nativePath(),
+            cppInferiorData.source.nativePath(),
+        };
+        Process cdbCompile;
+        cdbCompile.setCommand({cdbCompiler, cdbCompileArgs});
+        cdbCompile.setEnvironment(cdbCompileEnv);
+        QElapsedTimer cdbCompileTimer;
+        cdbCompileTimer.start();
+        cdbCompile.runBlocking(s_compileTimeout);
+        QVERIFY2(cdbCompile.result() == ProcessResult::FinishedWithSuccess,
+                 qPrintable(compileFailure("compiling the Cdb test inferior",
+                                           cdbCompile, cdbCompileTimer.elapsed())));
+
+        m_backendData[Backend::Cdb].inferiorData = msvcInferiorData;
+        m_backendData[Backend::Cdb].inferiorData.versionLine = cdbVersionLine;
+        // kernel32, not libc - real cdbparsehelpers.cpp's own module-list
+        // example uses the same marker (see breakPointCdbId()'s neighbor).
+        m_backendData[Backend::Cdb].inferiorData.moduleListMarker = "kernel32";
+        m_backendData[Backend::Cdb].inferiorData.moduleSymbolsPath = msvcInferiorData.executable;
     }
 
     if (!m_backendData.contains(Backend::Pdb))
@@ -2167,7 +2500,10 @@ void tst_backends::testBreakOnThrowAndCatchCapability()
     // inferior never actually throws, so this only exercises insertion
     // (GdbImpl's "__cxa_throw"/"__cxa_begin_catch" function breakpoints,
     // LldbImpl's/lldbbridge.py's BreakpointCreateForException()), not an
-    // actual stop.
+    // actual stop. Insertion is all CdbImpl can promise for the catch half:
+    // "bl" confirms the throw breakpoint binds (to the statically linked
+    // "_CxxThrowException"), while the catch one stays deferred/unresolved
+    // ("eu"), this inferior having no catch block to pull that CRT function in.
     BreakpointChangeRequest throwRequest;
     throwRequest.op = BreakpointOp::Insert;
     throwRequest.requestId = 74;
@@ -2621,6 +2957,10 @@ void tst_backends::testReloadModuleCapability()
     modulesRequest.requestId = 81;
     engine->refresh(modulesRequest);
     QTRY_VERIFY_WITH_TIMEOUT(responses.contains(int(RefreshKind::Modules)), s_timeout);
+    // Case-insensitively: Windows module names have no canonical case and cdb
+    // reports them as the loader saw them - name="KERNEL32" for what the marker
+    // spells "kernel32". The Linux markers only matched by luck, being lowercase
+    // in the paths gdb/lldb report.
     QVERIFY(responses.value(int(RefreshKind::Modules)).toString()
                 .contains(inferiorTestData(backend).moduleListMarker, Qt::CaseInsensitive));
 }
@@ -3614,6 +3954,26 @@ void tst_backends::stepsContinuesAndInterrupts()
     if (backend == Backend::Pdb && HostOsInfo::isWindowsHost())
         QSKIP("Interrupting a running inferior is not supported by pdb on Windows.");
 
+    // Cdb cannot be interrupted from *this* host, for a quite different
+    // reason - the backend itself is right. CdbImpl routes cdb.exe through
+    // qtcreator_ctrlc_stub.exe (setUseCtrlCStub(), exactly as real CdbEngine
+    // does), because that stub is the only thing Process::interrupt() can
+    // reach on Windows. The stub then calls
+    // GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0), and that API cannot target
+    // one process: it broadcasts to *every* process sharing the console. The
+    // real qtcreator.exe is a console-less GUI binary, so Windows gives the
+    // stub a fresh console of its own and the broadcast stays contained -
+    // whereas this test is a console application, so the Ctrl+C comes straight
+    // back and kills the test runner itself. Confirmed live: the process dies
+    // with STATUS_CONTROL_C_EXIT (0xC000013A) part-way through, taking every
+    // later test in the run with it, which is far worse than one failure.
+    // Making this testable needs the interrupt aimed at a single process -
+    // i.e. CREATE_NEW_PROCESS_GROUP plus a targeted CTRL_BREAK_EVENT, which
+    // Utils::Process has no support for today (same missing piece the pdb note
+    // above describes).
+    if (backend == Backend::Cdb && HostOsInfo::isWindowsHost())
+        QSKIP("Interrupting a running inferior cannot be tested from a console host - see comment.");
+
     // An explicitly requested interrupt is a StopOk, not a SpontaneousStop -
     // see m_interruptRequested's comment in gdbimpl.h.
     debuggerBackend->clearEvents();
@@ -3709,7 +4069,7 @@ static bool canInterruptRunningInferior(Backend backend)
 {
     if (!HostOsInfo::isWindowsHost())
         return true;
-    static const QList<Backend> uninterruptibleOnWindows = {Backend::Pdb};
+    static const QList<Backend> uninterruptibleOnWindows = {Backend::Pdb, Backend::Cdb};
     return !uninterruptibleOnWindows.contains(backend);
 }
 
@@ -4031,7 +4391,9 @@ void tst_backends::refreshesRegisters()
     // fetchRegisterValues()'s m_registerNamesListed fast path (skips
     // "maintenance print register-groups" and goes straight to
     // "-data-list-register-values r") - the first call above only ever
-    // exercises the "not yet listed" slow path.
+    // exercises the "not yet listed" slow path. Nothing to distinguish for
+    // CdbImpl, whose reply carries name/size/type alongside the values, so
+    // both calls are the same single extension "registers" command.
     responses.remove(int(RefreshKind::Registers));
     RefreshRequest secondRegistersRequest;
     secondRegistersRequest.kind = RefreshKind::Registers;
@@ -4510,6 +4872,16 @@ void tst_backends::insertsWatchpointAndCatchpoint()
 {
     QFETCH(Backend, backend);
 
+    // TODO(cdb): not a missing implementation - the watchpoint half works here
+    // (WatchpointAtAddress is a real "ba" break-on-access, exercised on its own
+    // by testWatchpointByAddressCapability), but the BreakpointAtFork half
+    // cannot: Windows has no fork/vfork, so there is nothing for cdb to catch.
+    // Real CdbEngine refuses that type in acceptsBreakpoint(), which CdbImpl
+    // mirrors - so this test's second assertion is unreachable for cdb by
+    // platform, not by omission.
+    if (backend == Backend::Cdb)
+        QSKIP("BreakpointAtFork has no Windows equivalent - unsupportable for cdb.");
+
     if (auto result = checkStartMode(backend, DebuggerStartModeFlag::Launch); !result)
         QSKIP(qPrintable(result.error()));
 
@@ -4656,6 +5028,14 @@ void tst_backends::reportsEngineSetupFailure()
 void tst_backends::refreshesPeripherals()
 {
     QFETCH(Backend, backend);
+
+    // TODO(cdb): refresh(Registers) is implemented now, but
+    // refresh(PeripheralRegisters) - a different RefreshKind, unrelated to the
+    // CPU registers above despite the shared capability flag - is not, and it
+    // could not run here anyway: this test needs symbolAddress() plus
+    // accessMemory(), both unavailable for cdb (see the memory-family skips).
+    if (backend == Backend::Cdb)
+        QSKIP("refresh(PeripheralRegisters) is not implemented - not implemented yet for cdb.");
 
     if (auto result = checkCapability(backend, Debugger::RegisterCapability); !result)
         QSKIP(qPrintable(result.error()));
@@ -5375,7 +5755,6 @@ void tst_backends::insertsQmlBreakpointAndStopsAtIt()
 void tst_backends::insertsQmlBreakpointBeforeDumpersLoad()
 {
     QFETCH(Backend, backend);
-
     if (auto result = checkCapability(backend, Debugger::AdditionalQmlStackCapability); !result)
         QSKIP(qPrintable(result.error()));
 
@@ -5830,6 +6209,11 @@ void tst_backends::stepsWithinQmlFrameAfterNativeMixedStepOut()
 void tst_backends::continuesPastNativeMixedCppBreakpoint()
 {
     QFETCH(Backend, backend);
+    // TODO(cdb): not the native mixed part, which works (see
+    // staysStoppedWithoutExplicitContinue()) - the final Interrupt is what cannot
+    // be answered here, the blocker stepsContinuesAndInterrupts() documents.
+    if (backend == Backend::Cdb)
+        QSKIP("Interrupting a running inferior cannot be tested from a console host - see stepsContinuesAndInterrupts().");
 
     if (auto result = checkCapability(backend, Debugger::AdditionalQmlStackCapability); !result)
         QSKIP(qPrintable(result.error()));

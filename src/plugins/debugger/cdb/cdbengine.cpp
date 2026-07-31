@@ -3,6 +3,7 @@
 
 #include "cdbengine.h"
 
+#include "cdbimpl.h"
 #include "cdboptionspage.h"
 #include "cdbparsehelpers.h"
 #include "stringinputstream.h"
@@ -18,6 +19,7 @@
 #include <debugger/disassembleragent.h>
 #include <debugger/disassemblerlines.h>
 #include <debugger/enginemanager.h>
+#include <debugger/genericdebuggerengine.h>
 #include <debugger/memoryagent.h>
 #include <debugger/moduleshandler.h>
 #include <debugger/registerhandler.h>
@@ -137,8 +139,32 @@ namespace Debugger::Internal {
 static const char localsPrefixC[] = "local.";
 
 // Accessed by debuggerRecipe()
-DebuggerEngine *createCdbEngine()
+DebuggerEngine *createCdbEngine(const DebuggerRunParameters &rp)
 {
+    // Opt-in alternative path (see genericdebuggerengine.h), mirroring
+    // createGdbEngine()'s identical branch: a GenericDebuggerEngine backed
+    // by CdbImpl instead of the CdbEngine subclass, to try the new
+    // interface's shape against a real cdb.exe run. This is the only
+    // place that knows CdbImpl exists - GenericDebuggerEngine itself is
+    // backend-agnostic. Off by default, opt in via QTC_USE_GENERIC_DEBUGGER.
+    if (DebuggerEngine::isUsingGenericDebugger()) {
+        // Local-only branch of setupEngine()'s own extension-DLL discovery
+        // (its remote-device branch doesn't apply - CdbImpl has no
+        // remote/attach support yet, see its own class comment).
+        bool cdbIs64Bit = true;
+        bool cdbIsArm = false;
+        const Abis abisOfCdb = Abi::abisOfBinary(rp.debugger().command.executable());
+        if (abisOfCdb.size() == 1) {
+            const Abi abi = abisOfCdb.at(0);
+            cdbIs64Bit = abi.wordWidth() == 64;
+            cdbIsArm = abi.architecture() == Abi::Architecture::ArmArchitecture;
+        }
+        const QFileInfo extensionFi(CdbEngine::extensionLibraryName(cdbIs64Bit, cdbIsArm));
+        return new GenericDebuggerEngine("CDB (CdbImpl)",
+                                          new CdbImpl({rp.debugger(), rp.inferior(),
+                                                       FilePath::fromString(extensionFi.absolutePath()),
+                                                       extensionFi.fileName()}));
+    }
     return new CdbEngine;
 }
 

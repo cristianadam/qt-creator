@@ -44,6 +44,15 @@ Project {
                 defines.push('QMLMIX_INFERIOR_EXECUTABLE="'
                              + FileInfo.joinPaths(destinationDirectory, "qmlmix_inferior") + '"');
             }
+            // Keep in sync with CMakeLists.txt's own CDBEXT_LIBRARY - see the
+            // reasoning there on why the extension DLL's full path is passed
+            // in rather than reconstructed inside the test.
+            if (qbs.targetOS.contains("windows")) {
+                defines.push('CDBEXT_LIBRARY="'
+                             + FileInfo.joinPaths(project.buildDirectory, "lib",
+                                                  "qtcreatorcdbext64",
+                                                  "qtcreatorcdbext.dll") + '"');
+            }
             return defines;
         }
         cpp.includePaths: base.concat([project.debuggerDir])
