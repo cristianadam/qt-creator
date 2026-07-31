@@ -32,23 +32,41 @@ static LanguageFilter languageFilter(const VscodeManifest &manifest)
     return filter;
 }
 
-static BaseClientInterface *clientInterface(const CommandLine &serverCommand)
+static BaseClientInterface *clientInterface(const CommandLine &serverCommand,
+                                            const FilePath &workingDirectory)
 {
     auto interface = new StdIOClientInterface;
     interface->setCommandLine(serverCommand);
+    if (!workingDirectory.isEmpty())
+        interface->setWorkingDirectory(workingDirectory);
     return interface;
 }
 
-AlienClient::AlienClient(const VscodeManifest &manifest,
-                                             const CommandLine &serverCommand)
-    : Client(clientInterface(serverCommand))
-    , m_manifest(manifest)
+AlienClient::AlienClient(const QString &name,
+                         const CommandLine &serverCommand,
+                         const LanguageFilter &filter,
+                         const FilePath &workingDirectory,
+                         const QJsonObject &initializationOptions)
+    : Client(clientInterface(serverCommand, workingDirectory))
 {
-    setName(manifest.displayName.isEmpty() ? manifest.qualifiedId() : manifest.displayName);
-    setSupportedLanguage(languageFilter(manifest));
+    setName(name);
+    setSupportedLanguage(filter);
+    if (!initializationOptions.isEmpty())
+        setInitializationOptions(initializationOptions);
 
     start();
+    wireDocuments();
+}
 
+AlienClient::AlienClient(const VscodeManifest &manifest, const CommandLine &serverCommand)
+    : AlienClient(manifest.displayName.isEmpty() ? manifest.qualifiedId() : manifest.displayName,
+                  serverCommand, languageFilter(manifest))
+{
+    m_manifest = manifest;
+}
+
+void AlienClient::wireDocuments()
+{
     auto openDoc = [this](IDocument *document) {
         if (auto textDocument = qobject_cast<TextDocument *>(document))
             openDocument(textDocument);

@@ -7,7 +7,9 @@ add_qtc_plugin(Alien
     extensionregistry.cpp extensionregistry.h
     hostconnection.cpp hostconnection.h
     alienclient.cpp alienclient.h
+    aliencompletion.cpp aliencompletion.h
     alienconstants.h
+    alienhover.cpp alienhover.h
     alienplugin.cpp
     aliensettings.cpp aliensettings.h
     alientr.h
