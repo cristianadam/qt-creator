@@ -571,6 +571,10 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
             const int atomStart = pattern.size();
             if (c == '_')
                 anyNewline = true;
+            // Where very magic gives punctuation a meaning, a backslash takes
+            // it away again: "\=" is an "=" and "\<" a "<", not an operator.
+            else if (magic == VeryMagic && QString("=<>").indexOf(c) != -1)
+                pattern.append(c);
             else if (c == '<' || c == '>')
                 pattern.append("\\b");
             else if (c == 'a')

@@ -231,6 +231,7 @@ private slots:
     void test_vim_script_autoload();
     void test_vim_script_scriptlocal();
     void test_vim_script_if_chain();
+    void test_vim_pattern_very_magic();
     void test_vim_script_lockvar();
     void test_vim_script_messages();
     void test_vim_script_split();
@@ -6837,6 +6838,37 @@ void FakeVimTester::test_vim_script_funcref()
 
 
 
+
+void FakeVimTester::test_vim_pattern_very_magic()
+{
+    // Where very magic gives punctuation a meaning, a backslash takes it away
+    // again. Values taken from Vim 9.1.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) { message = msg; });
+    auto echo = [&](const char *expr) -> QString {
+        message.clear();
+        data.doCommand(QLatin1String("echo ") + QLatin1String(expr));
+        return message;
+    };
+
+    // "\=" is an "=" here, not "0 or 1 of the atom before it". Reading it the
+    // other way put the wrong text in the groups around it.
+    QCOMPARE(echo("string(matchlist('a=b', '\\v^(\\w+)\\s*(\\=)\\s*(.*)$'))"),
+             QLatin1String("['a=b', 'a', '=', 'b', '', '', '', '', '', '']"));
+    QCOMPARE(echo("match('a=b', '\\v\\=')"), QLatin1String("1"));
+    QCOMPARE(echo("match('ab', '\\va\\=b')"), QLatin1String("-1"));
+    QCOMPARE(echo("match('a=b', '\\va\\=b')"), QLatin1String("0"));
+    // Magic is the other way round: there "\=" is the quantifier.
+    QCOMPARE(echo("match('ab', 'a\\=b')"), QLatin1String("0"));
+    // The same holds for "\<" and "\>", a word boundary only where "<" and ">"
+    // do not already mean one.
+    QCOMPARE(echo("match('a<b', '\\v\\<')"), QLatin1String("1"));
+    QCOMPARE(echo("match('word here', '\\v\\<here\\>')"), QLatin1String("-1"));
+    QCOMPARE(echo("match('word here', '\\<here\\>')"), QLatin1String("5"));
+}
 
 void FakeVimTester::test_vim_script_lockvar()
 {
