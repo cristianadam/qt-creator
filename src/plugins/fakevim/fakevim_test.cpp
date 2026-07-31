@@ -232,6 +232,7 @@ private slots:
     void test_vim_script_scriptlocal();
     void test_vim_script_if_chain();
     void test_vim_script_error_numbers();
+    void test_vim_set_add_remove();
     void test_vim_set_escaped_value();
     void test_vim_script_throwpoint();
     void test_vim_pattern_lookaround();
@@ -6898,6 +6899,48 @@ void FakeVimTester::test_vim_script_error_numbers()
     // "v:exception" holds it in the shape a script reports or matches on.
     QCOMPARE(echo("g:ex"), QLatin1String("Vim:E121: Undefined variable: g:nosuchvar"));
     data.doCommand("unlet g:hit | unlet g:ok | unlet g:ex");
+}
+
+void FakeVimTester::test_vim_set_add_remove()
+{
+    // ":set {option}+=" puts a comma between the parts of a list and nothing
+    // between the letters of a flag-style option. Values taken from Vim 9.1.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) { message = msg; });
+    auto echo = [&](const char *expr) -> QString {
+        message.clear();
+        data.doCommand(QLatin1String("echo ") + QLatin1String(expr));
+        return message;
+    };
+
+    // Flag-style: the letters stand side by side.
+    data.doCommand("set formatoptions=tc | set formatoptions+=j");
+    QCOMPARE(echo("&fo"), QLatin1String("tcj"));
+    data.doCommand("set formatoptions=tcj | set formatoptions-=c");
+    QCOMPARE(echo("&fo"), QLatin1String("tj"));
+    data.doCommand("set cpoptions=aA | set cpoptions+=B");
+    QCOMPARE(echo("&cpo"), QLatin1String("aAB"));
+    data.doCommand("set cpoptions=aAB | set cpoptions^=x");
+    QCOMPARE(echo("&cpo"), QLatin1String("xaAB"));
+    data.doCommand("set commentstring=#%s | set commentstring+=x");
+    QCOMPARE(echo("&cms"), QLatin1String("#%sx"));
+
+    // A list: the parts are separated by commas.
+    data.doCommand("set backspace=indent | set backspace+=eol");
+    QCOMPARE(echo("&bs"), QLatin1String("indent,eol"));
+    data.doCommand("set backspace=indent,eol,start | set backspace-=eol");
+    QCOMPARE(echo("&bs"), QLatin1String("indent,start"));
+    data.doCommand("set backspace=eol,start | set backspace^=indent");
+    QCOMPARE(echo("&bs"), QLatin1String("indent,eol,start"));
+    data.doCommand("set iskeyword=a-z | set iskeyword+=A-Z | set iskeyword-=a-z");
+    QCOMPARE(echo("&isk"), QLatin1String("A-Z"));
+
+    data.doCommand("set formatoptions=tcq | set backspace=indent,eol,start");
+    data.doCommand("set commentstring=/*%s*/");
+    data.doCommand("set iskeyword=@,48-57,_,192-255,a-z,A-Z");
 }
 
 void FakeVimTester::test_vim_set_escaped_value()

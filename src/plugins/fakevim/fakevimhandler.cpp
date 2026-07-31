@@ -7436,6 +7436,28 @@ static QSet<QString> optionNames(const char *names)
     return QSet<QString>(list.cbegin(), list.cend());
 }
 
+// The options whose value is a comma separated list, as against the flag-style
+// ones ('formatoptions', 'cpoptions', ...) whose letters stand side by side.
+// ":set {option}+=" puts a comma between the parts of the former and nothing
+// between those of the latter. Taken from what Vim does to each of them.
+static bool commaListOption(const QString &name)
+{
+    static const QSet<QString> lists = optionNames(
+    "backspace backupcopy backupdir backupskip bdir belloff bkc bo breakindentopt briopt "
+    "bs bsk casemap cb cd cdpath cink cinkeys cino cinoptions cinscopedecls cinsd cinw "
+    "cinwords clipboard cmp com comments complete completeopt cot cpt dict dictionary "
+    "diffopt dip dir directory display dy efm ei errorformat eventignore fcl fcs fdo "
+    "fencs fileencodings fillchars foldclose foldopen gcr gfm grepformat guicursor "
+    "helplang hlg indentkeys indk isf isfname isi isident isk iskeyword isp isprint "
+    "keymodel km langmap lcs lispwords listchars lmap lw matchpairs mkspellmem mps msm nf "
+    "nrformats pa packpath path popt pp printoptions rtp runtimepath sbo scrollopt "
+    "selectmode sessionoptions slm spellfile spelllang spelloptions spellsuggest spf spl "
+    "spo sps ssop su sua suffixes suffixesadd swb switchbuf tabline tag tags tal "
+    "termguicolors thesaurus tsr udir undodir ve viewoptions vif viminfofile virtualedit "
+    "vop whichwrap wig wildignore wildmode wim ww");
+    return lists.contains(name);
+}
+
 // Every option Vim has, with the type Vim gives it, long names and abbreviations
 // alike. Vim keeps an option's name even where the feature behind it is missing,
 // as 'shellslash' is on a system with one kind of slash only: reading it gives 0
@@ -7567,13 +7589,21 @@ bool FakeVimHandler::Private::handleExSetCommand(const ExCommand &cmd)
         } else {
             QString value = current.toString();
             const QChar how = add.captured(2).at(0);
+            const bool list = commaListOption(optionName);
+            const QString sep = list && !value.isEmpty() ? QString(',') : QString();
             if (how == '+')
-                value += (value.isEmpty() ? QString() : QString(',')) + what;
+                value += sep + what;
             else if (how == '^')
-                value = what + (value.isEmpty() ? QString() : QString(',')) + value;
+                value = what + sep + value;
+            else if (list) {
+                // Take the part out wherever it stands, leaving no comma of its
+                // own behind.
+                QStringList parts = value.split(',');
+                parts.removeAll(what);
+                value = parts.join(',');
+            }
             else
-                value.remove(QRegularExpression("(^|,)" + QRegularExpression::escape(what)
-                                                + "(?=,|$)"));
+                value.remove(what);
             setOption(optionName, VimValue(value));
         }
     } else if (cmd.args.contains('=')) {
