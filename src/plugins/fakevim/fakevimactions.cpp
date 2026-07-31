@@ -60,7 +60,9 @@ FakeVimSettings::FakeVimSettings()
     // Specific FakeVim settings
     setup(&readVimRc,      false, "ReadVimRc",      {},    Tr::tr("Read .vimrc from location:"));
     setup(&vimRcPath,      QString(), "VimRcPath",  {},    {}); // Tr::tr("Path to .vimrc")
-    setup(&showMarks,      false, "ShowMarks",      "sm",  Tr::tr("Show position of text marks"));
+    // No short name: "sm" is Vim's abbreviation for 'showmatch', and there is
+    // no 'showmarks' in Vim to take one from.
+    setup(&showMarks,      false, "ShowMarks",      {},    Tr::tr("Show position of text marks"));
     setup(&passControlKey, false, "PassControlKey", "pck", Tr::tr("Pass control keys"));
     setup(&passKeys,       true,  "PassKeys",       "pk",  Tr::tr("Pass keys in insert mode"));
     setup(&commaPassesShortcuts, false, "CommaPassesShortcuts", {},

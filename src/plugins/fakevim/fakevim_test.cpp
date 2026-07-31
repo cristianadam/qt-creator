@@ -232,6 +232,7 @@ private slots:
     void test_vim_script_scriptlocal();
     void test_vim_script_if_chain();
     void test_vim_script_error_numbers();
+    void test_vim_set_showmatch_name();
     void test_vim_set_add_remove();
     void test_vim_set_escaped_value();
     void test_vim_script_throwpoint();
@@ -6899,6 +6900,40 @@ void FakeVimTester::test_vim_script_error_numbers()
     // "v:exception" holds it in the shape a script reports or matches on.
     QCOMPARE(echo("g:ex"), QLatin1String("Vim:E121: Undefined variable: g:nosuchvar"));
     data.doCommand("unlet g:hit | unlet g:ok | unlet g:ex");
+}
+
+void FakeVimTester::test_vim_set_showmatch_name()
+{
+    // "sm" is Vim's abbreviation for 'showmatch', which is not implemented
+    // here, so it reads as 0 and setting it does nothing. It used to reach
+    // 'showmarks', an option of this editor's own that Vim has no name for.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) {
+            if (!msg.startsWith("--"))
+                message = msg;
+        });
+    auto echo = [&](const char *expr) -> QString {
+        message.clear();
+        data.doCommand(QLatin1String("echo ") + QLatin1String(expr));
+        return message;
+    };
+
+    data.doCommand("set noshowmarks");
+    // Setting "sm" is taken and passed over, and leaves 'showmarks' alone.
+    message.clear();
+    data.doCommand("set sm");
+    QCOMPARE(message, QLatin1String(""));
+    QCOMPARE(echo("&sm"), QLatin1String("0"));
+    QCOMPARE(echo("&showmarks"), QLatin1String("0"));
+    // The option itself still answers to its own name.
+    data.doCommand("set showmarks");
+    QCOMPARE(echo("&showmarks"), QLatin1String("1"));
+    QCOMPARE(echo("&sm"), QLatin1String("0"));
+    QCOMPARE(echo("exists('&showmatch')"), QLatin1String("1"));
+    data.doCommand("set noshowmarks");
 }
 
 void FakeVimTester::test_vim_set_add_remove()
