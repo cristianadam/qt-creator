@@ -231,6 +231,7 @@ private slots:
     void test_vim_script_autoload();
     void test_vim_script_scriptlocal();
     void test_vim_script_if_chain();
+    void test_vim_script_split();
     void test_vim_script_pattern_newline();
     void test_vim_script_known_options();
     void test_vim_script_trailing_comment();
@@ -6834,6 +6835,35 @@ void FakeVimTester::test_vim_script_funcref()
 
 
 
+
+void FakeVimTester::test_vim_script_split()
+{
+    // Values taken from Vim 9.1.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) { message = msg; });
+    auto echo = [&](const char *expr) -> QString {
+        message.clear();
+        data.doCommand(QLatin1String("echo string(") + QLatin1String(expr) + ')');
+        return message;
+    };
+
+    // A separator that matches nothing at all still separates: every place it
+    // matches ends a piece, which is how a string is taken apart character by
+    // character. Plugins do this to walk a pattern.
+    QCOMPARE(echo("split('a*b', '\\zs')"), QLatin1String("['a', '*', 'b']"));
+    // An empty separator is not one that matches everywhere; it is the default,
+    // a run of whitespace.
+    QCOMPARE(echo("split('ab', '')"), QLatin1String("['ab']"));
+    QCOMPARE(echo("split('  a b  ')"), QLatin1String("['a', 'b']"));
+    // Only the first and last piece are dropped when empty, not one in between.
+    QCOMPARE(echo("split('a,,b', ',')"), QLatin1String("['a', '', 'b']"));
+    QCOMPARE(echo("split('a,,b', ',', 1)"), QLatin1String("['a', '', 'b']"));
+    // The separator is a pattern, not a string.
+    QCOMPARE(echo("split('a1b22c', '\\d\\+')"), QLatin1String("['a', 'b', 'c']"));
+}
 
 void FakeVimTester::test_vim_script_pattern_newline()
 {

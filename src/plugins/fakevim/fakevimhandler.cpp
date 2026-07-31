@@ -10379,11 +10379,39 @@ bool FakeVimHandler::Private::callFunction(const QString &name,
         *result = args.size() > 2 ? VimValue(str.mid(int(arg(1).toNumber()), int(arg(2).toNumber())))
                                   : VimValue(str.mid(int(arg(1).toNumber())));
     } else if (name == "split") {
-        const QRegularExpression sep(args.size() > 1 ? arg(1).toString() : QString("\\s+"));
-        const QStringList parts = arg(0).toString().split(sep, Qt::SkipEmptyParts);
+        // An empty separator is not one that matches everywhere; Vim takes it
+        // as the default, a run of whitespace. One that matches nothing at all,
+        // as "\zs" does, still separates: every place it matches ends a piece,
+        // which is how a string is taken apart character by character. The
+        // third argument keeps the first and last piece when they are empty,
+        // which is all that is dropped: an empty piece in between stays.
+        const QString text = arg(0).toString();
+        const QString pattern = args.size() > 1 ? arg(1).toString() : QString();
+        const QRegularExpression sep = vimPatternToQtPattern(
+            pattern.isEmpty() ? QString("\\s\\+") : pattern);
+        const bool keepEmpty = args.size() > 2 && arg(2).toNumber() != 0;
+        QStringList pieces;
+        int done = 0; // what is already accounted for by a piece or a separator
+        int from = 0; // where to look for the next separator
+        while (from <= text.size()) {
+            const QRegularExpressionMatch m = sep.match(text, from);
+            if (!m.hasMatch())
+                break;
+            pieces.append(text.mid(done, m.capturedStart() - done));
+            const bool empty = m.capturedLength() == 0;
+            done = empty ? m.capturedStart() : m.capturedEnd();
+            from = empty ? m.capturedStart() + 1 : done;
+        }
+        pieces.append(text.mid(done));
+        if (!keepEmpty) {
+            if (!pieces.isEmpty() && pieces.constLast().isEmpty())
+                pieces.removeLast();
+            if (!pieces.isEmpty() && pieces.constFirst().isEmpty())
+                pieces.removeFirst();
+        }
         QList<VimValue> items;
-        for (const QString &p : parts)
-            items.append(VimValue(p));
+        for (const QString &piece : pieces)
+            items.append(VimValue(piece));
         *result = VimValue::list(items);
     } else if (name == "join") {
         const QString sep = args.size() > 1 ? arg(1).toString() : QString(" ");
