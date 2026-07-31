@@ -232,6 +232,7 @@ private slots:
     void test_vim_script_scriptlocal();
     void test_vim_script_if_chain();
     void test_vim_script_error_numbers();
+    void test_vim_pattern_percent_atoms();
     void test_vim_pattern_very_magic();
     void test_vim_script_lockvar();
     void test_vim_script_messages();
@@ -6894,6 +6895,29 @@ void FakeVimTester::test_vim_script_error_numbers()
     // "v:exception" holds it in the shape a script reports or matches on.
     QCOMPARE(echo("g:ex"), QLatin1String("Vim:E121: Undefined variable: g:nosuchvar"));
     data.doCommand("unlet g:hit | unlet g:ok | unlet g:ex");
+}
+
+void FakeVimTester::test_vim_pattern_percent_atoms()
+{
+    // "\%" opens several atoms of its own. Values taken from Vim 9.1.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) { message = msg; });
+    auto echo = [&](const char *expr) -> QString {
+        message.clear();
+        data.doCommand(QLatin1String("echo ") + QLatin1String(expr));
+        return message;
+    };
+
+    // A character by its number, in decimal, hex, octal and as a code point.
+    QCOMPARE(echo("match('abc', '\\%d98')"), QLatin1String("1"));
+    QCOMPARE(echo("match('abc', '\\%x62')"), QLatin1String("1"));
+    QCOMPARE(echo("match('abc', '\\%o142')"), QLatin1String("1"));
+    QCOMPARE(echo("match('abc', '\\%u0062')"), QLatin1String("1"));
+    // A group that does not capture.
+    QCOMPARE(echo("match('abcabc', '\\%(abc\\)\\{2}')"), QLatin1String("0"));
 }
 
 void FakeVimTester::test_vim_pattern_very_magic()

@@ -452,7 +452,30 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
     enum MagicLevel { VeryMagic, Magic, NoMagic, VeryNoMagic };
     MagicLevel magic = Magic;
     bool percent = false; // saw "%" in very magic, waiting for the "("
+    // "\%d123" and its kin name a character by its number.
+    int numberBase = 0; // which base is being read, 0 for none
+    int numberMax = 0;  // how many digits it takes at most
+    QString numberDigits;
+    const auto flushNumber = [&] {
+        if (numberBase == 0)
+            return;
+        const QChar named(numberDigits.toInt(nullptr, numberBase));
+        pattern.append(QRegularExpression::escape(QString(named)));
+        numberBase = 0;
+        numberDigits.clear();
+    };
     for (const QChar &c : needle) {
+        if (numberBase != 0) {
+            const bool isDigit = numberBase == 10  ? c.isDigit()
+                                 : numberBase == 8 ? (c >= '0' && c <= '7')
+                                 : (c.isDigit()
+                                    || (c.toLower() >= 'a' && c.toLower() <= 'f'));
+            if (isDigit && numberDigits.size() < numberMax) {
+                numberDigits.append(c);
+                continue;
+            }
+            flushNumber(); // the number has ended, c belongs to what follows
+        }
         if (anyNewline) {
             // "\_." is any character or a line break, "\_$" the end of any
             // line, and "\_s" or "\_[...]" the class with a line break in it.
@@ -492,6 +515,16 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
             percent = false;
             if (c == '(') { // "%(" groups without capturing
                 pattern.append("(?:");
+                continue;
+            }
+            // "%d123" in decimal, "%x62" in hex, "%o142" in octal and "%u0062"
+            // or "%U" as a code point.
+            numberBase = c == 'd' ? 10 : (c == 'o' || c == 'O') ? 8
+                         : (c == 'x' || c == 'X' || c == 'u' || c == 'U') ? 16 : 0;
+            if (numberBase != 0) {
+                numberMax = c == 'd' ? 10 : (c == 'x' || c == 'X') ? 2
+                            : (c == 'o' || c == 'O') ? 4 : c == 'u' ? 4 : 8;
+                numberDigits.clear();
                 continue;
             }
             pattern.append("%"); // a "%" of its own, then handle c below
@@ -664,6 +697,7 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
                 pattern.append(c);
         }
     }
+    flushNumber();
     if (escape)
         pattern.append('\\');
     else if (brace)
