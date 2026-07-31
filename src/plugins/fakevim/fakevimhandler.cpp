@@ -7408,6 +7408,20 @@ static bool isCommentStringOption(const QString &name)
     return name == "commentstring" || name == "cms";
 }
 
+// In ":set {option}={value}" a backslash takes the character after it as it
+// stands, which is how a value holds a space of its own, as "//\ %s" does.
+static QString unescapedSetValue(const QString &value)
+{
+    QString result;
+    result.reserve(value.size());
+    for (int i = 0; i < value.size(); ++i) {
+        if (value.at(i) == '\\' && i + 1 < value.size())
+            ++i;
+        result.append(value.at(i));
+    }
+    return result;
+}
+
 // 'filetype' is not stored either; it drives the FileType autocommands.
 static bool isFileTypeOption(const QString &name)
 {
@@ -7546,7 +7560,7 @@ bool FakeVimHandler::Private::handleExSetCommand(const ExCommand &cmd)
         // ":set {option}+=" adds to what is there, "-=" takes away and "^="
         // puts in front, which is how a path option is added to.
         const QString optionName = add.captured(1);
-        const QString what = add.captured(3);
+        const QString what = unescapedSetValue(add.captured(3));
         VimValue current;
         if (!optionValue(optionName, &current)) {
             showMessage(MessageError, Tr::tr("E518: Unknown option:") + ' ' + optionName);
@@ -7566,14 +7580,15 @@ bool FakeVimHandler::Private::handleExSetCommand(const ExCommand &cmd)
         // Non-boolean config to set.
         int p = cmd.args.indexOf('=');
         const QString optionName = cmd.args.left(p);
+        const QString value = unescapedSetValue(cmd.args.mid(p + 1));
         if (isCommentStringOption(optionName)) {
-            m_commentString = cmd.args.mid(p + 1);
+            m_commentString = value;
             return true;
         }
         OptionKind kind = OptionKind::Boolean;
         if (!s.item(Utils::keyFromString(optionName)) && unimplementedOption(optionName, &kind))
             return true;
-        QString error = s.trySetValue(optionName, cmd.args.mid(p + 1));
+        QString error = s.trySetValue(optionName, value);
         if (!error.isEmpty())
             showMessage(MessageError, error);
     } else if (cmd.args == "commentstring?" || cmd.args == "cms?") {

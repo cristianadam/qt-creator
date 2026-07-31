@@ -232,6 +232,7 @@ private slots:
     void test_vim_script_scriptlocal();
     void test_vim_script_if_chain();
     void test_vim_script_error_numbers();
+    void test_vim_set_escaped_value();
     void test_vim_script_throwpoint();
     void test_vim_pattern_lookaround();
     void test_vim_pattern_percent_atoms();
@@ -6897,6 +6898,35 @@ void FakeVimTester::test_vim_script_error_numbers()
     // "v:exception" holds it in the shape a script reports or matches on.
     QCOMPARE(echo("g:ex"), QLatin1String("Vim:E121: Undefined variable: g:nosuchvar"));
     data.doCommand("unlet g:hit | unlet g:ok | unlet g:ex");
+}
+
+void FakeVimTester::test_vim_set_escaped_value()
+{
+    // In ":set {option}={value}" a backslash takes the character after it as it
+    // stands, which is how a value holds a space of its own. Every ftplugin and
+    // vimrc sets 'commentstring' this way. Values taken from Vim 9.1.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) { message = msg; });
+    auto echo = [&](const char *expr) -> QString {
+        message.clear();
+        data.doCommand(QLatin1String("echo ") + QLatin1String(expr));
+        return message;
+    };
+
+    data.doCommand("set commentstring=//\\ %s");
+    QCOMPARE(echo("&cms"), QLatin1String("// %s"));
+    data.doCommand("set commentstring=/*\\ %s\\ */");
+    QCOMPARE(echo("&cms"), QLatin1String("/* %s */"));
+    // A backslash before anything else is dropped just the same.
+    data.doCommand("set commentstring=x\\%sy");
+    QCOMPARE(echo("&cms"), QLatin1String("x%sy"));
+    // A value with no backslash is left alone.
+    data.doCommand("set commentstring=plain%s");
+    QCOMPARE(echo("&cms"), QLatin1String("plain%s"));
+    data.doCommand("set commentstring=/*%s*/");
 }
 
 void FakeVimTester::test_vim_script_throwpoint()
