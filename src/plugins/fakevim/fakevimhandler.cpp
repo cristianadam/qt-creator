@@ -10149,16 +10149,12 @@ QString FakeVimHandler::Private::expandKeyword(const QString &what) const
 
     QString value;
     if (base == "<stack>") {
-        // Vim reports the source chain, e.g.
+        // The chain of frames that are running, e.g.
         // "command line..function comment#Toggle[2]". Plugins pick the
         // innermost function name out of it with a pattern anchored on the
         // "[", most notably to set 'operatorfunc' to their own function, so
         // the name here has to be one callFunction() can resolve again.
-        value = m_scriptFileStack.isEmpty()
-            ? QStringLiteral("command line") : m_scriptFileStack.last();
-        for (const QString &fn : m_callStack)
-            value += "..function " + fn + "[0]";
-        return value; // not a path, so no modifiers
+        return sourceChain(false); // not a path, so no modifiers
     }
     if (base == "<sfile>" || base == "<script>") {
         value = m_scriptFileStack.isEmpty() ? QString() : m_scriptFileStack.last();

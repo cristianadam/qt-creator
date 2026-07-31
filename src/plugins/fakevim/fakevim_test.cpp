@@ -8090,8 +8090,9 @@ void FakeVimTester::test_vim_script_expand()
                    "| let g:sfile = expand('<sfile>') | endfunction");
     data.doCommand("call Where()");
     // Outside a script the chain starts at the command line, and the innermost
-    // entry is the function name followed by "[".
-    QCOMPARE(echo("g:stack"), QLatin1String("command line..function Where[0]"));
+    // entry is the function name followed by the statement it is at, in
+    // brackets, as Vim reports it ("function probe#Toggle[1]").
+    QCOMPARE(echo("g:stack"), QLatin1String("command line..function Where[1]"));
     QCOMPARE(echo("matchstr(g:stack, '[^. ]*\\ze[')"), QLatin1String("Where"));
     QCOMPARE(echo("'[' . g:sfile . ']'"), QLatin1String("[]"));
 
