@@ -2714,6 +2714,8 @@ public:
     bool handleExJoinCommand(const ExCommand &cmd);
     bool handleExGotoCommand(const ExCommand &cmd);
     bool handleExHistoryCommand(const ExCommand &cmd);
+    bool handleExMessagesCommand(const ExCommand &cmd);
+    void rememberMessage(const QString &msg);
     bool handleExRegisterCommand(const ExCommand &cmd);
     bool handleExMapCommand(const ExCommand &cmd);
     bool handleExMultiRepeatCommand(const ExCommand &cmd);
@@ -2915,6 +2917,9 @@ public:
         QString currentMessage;
         MessageLevel currentMessageLevel = MessageInfo;
         QString currentCommand;
+        // What ":messages" reports. Only one message fits in the mini buffer,
+        // so a script that has something to say is otherwise heard once only.
+        QStringList messageHistory;
 
         // Search state.
         QString lastSearch; // last search expression as entered by user
@@ -4616,6 +4621,19 @@ void FakeVimHandler::Private::showMessage(MessageLevel level, const QString &msg
         return;
     g.currentMessage = msg;
     g.currentMessageLevel = level;
+    // An error or a warning is worth keeping; what ":echo" prints is not, as
+    // Vim also has it. ":echomsg" adds itself.
+    if (level == MessageError || level == MessageWarning)
+        rememberMessage(msg);
+}
+
+void FakeVimHandler::Private::rememberMessage(const QString &msg)
+{
+    if (msg.isEmpty())
+        return;
+    g.messageHistory.append(msg);
+    while (g.messageHistory.size() > 200)
+        g.messageHistory.removeFirst();
 }
 
 void FakeVimHandler::Private::notImplementedYet()
@@ -7171,6 +7189,20 @@ bool FakeVimHandler::Private::handleExMapCommand(const ExCommand &cmd0) // :map
             break;
         }
     }
+    return true;
+}
+
+bool FakeVimHandler::Private::handleExMessagesCommand(const ExCommand &cmd)
+{
+    // :mes[sages] [clear]
+    if (!cmd.matches("mes", "messages"))
+        return false;
+
+    if (cmd.args.trimmed() == "clear") {
+        g.messageHistory.clear();
+        return true;
+    }
+    q->extraInformationChanged(g.messageHistory.join('\n') + '\n');
     return true;
 }
 
@@ -10980,7 +11012,11 @@ bool FakeVimHandler::Private::handleExEchoCommand(const ExCommand &cmd)
         }
         parts.append(v.toString());
     }
-    showMessage(isError ? MessageError : MessageInfo, parts.join(' '));
+    const QString msg = parts.join(' ');
+    showMessage(isError ? MessageError : MessageInfo, msg);
+    // ":silent" keeps a message out of the history as well as off the screen.
+    if (cmd.matches("echom", "echomsg") && m_messageSilence == 0)
+        rememberMessage(msg);
     return true;
 }
 
@@ -11921,6 +11957,7 @@ bool FakeVimHandler::Private::handleExCommandHelper(ExCommand &cmd)
         || handleExGotoCommand(cmd)
         || handleExBangCommand(cmd)
         || handleExHistoryCommand(cmd)
+        || handleExMessagesCommand(cmd)
         || handleExRegisterCommand(cmd)
         || handleExDelMarksCommand(cmd)
         || handleExYankDeleteCommand(cmd)

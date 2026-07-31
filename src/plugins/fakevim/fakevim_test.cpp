@@ -231,6 +231,7 @@ private slots:
     void test_vim_script_autoload();
     void test_vim_script_scriptlocal();
     void test_vim_script_if_chain();
+    void test_vim_script_messages();
     void test_vim_script_split();
     void test_vim_script_pattern_newline();
     void test_vim_script_known_options();
@@ -6835,6 +6836,37 @@ void FakeVimTester::test_vim_script_funcref()
 
 
 
+
+void FakeVimTester::test_vim_script_messages()
+{
+    // Only one message fits in the mini buffer, so a script that has several
+    // things to say was heard once only. ":messages" reports them all, and what
+    // it keeps is what Vim keeps. Values taken from Vim 9.1.
+    TestData data;
+    setup(&data);
+    QString info;
+    data.handler->extraInformationChanged.set([&](const QString &text) { info = text; });
+    auto messages = [&]() -> QString {
+        info.clear();
+        data.doCommand("messages");
+        return info;
+    };
+
+    data.doCommand("messages clear");
+    QCOMPARE(messages(), QLatin1String("\n"));
+    data.doCommand("echomsg 'first'");
+    data.doCommand("echomsg 'second'");
+    QCOMPARE(messages(), QLatin1String("first\nsecond\n"));
+    // What ":echo" prints is not kept, nor is a message ":silent" swallowed.
+    data.doCommand("echo 'printed'");
+    data.doCommand("silent echomsg 'hushed'");
+    QCOMPARE(messages(), QLatin1String("first\nsecond\n"));
+    // An error is kept.
+    data.doCommand("echoerr 'went wrong'");
+    QVERIFY(messages().contains("went wrong"));
+    data.doCommand("messages clear");
+    QCOMPARE(messages(), QLatin1String("\n"));
+}
 
 void FakeVimTester::test_vim_script_split()
 {
