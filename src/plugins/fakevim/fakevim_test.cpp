@@ -6916,6 +6916,14 @@ void FakeVimTester::test_vim_pattern_percent_atoms()
     QCOMPARE(echo("match('abc', '\\%x62')"), QLatin1String("1"));
     QCOMPARE(echo("match('abc', '\\%o142')"), QLatin1String("1"));
     QCOMPARE(echo("match('abc', '\\%u0062')"), QLatin1String("1"));
+    // A sequence in which each character may be the last.
+    QCOMPARE(echo("match('abc', '\\%[abc]')"), QLatin1String("0"));
+    QCOMPARE(echo("match('abc', 'a\\%[bc]')"), QLatin1String("0"));
+    QCOMPARE(echo("match('xa', 'a\\%[bc]')"), QLatin1String("1"));
+    QCOMPARE(echo("match('xab', 'a\\%[bc]')"), QLatin1String("1"));
+    QCOMPARE(echo("matchstr('abcd', 'a\\%[bc]')"), QLatin1String("abc"));
+    QCOMPARE(echo("match('xyz', 'a\\%[bc]')"), QLatin1String("-1"));
+
     // A group that does not capture.
     QCOMPARE(echo("match('abcabc', '\\%(abc\\)\\{2}')"), QLatin1String("0"));
 }

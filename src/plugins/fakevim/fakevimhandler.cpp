@@ -464,7 +464,22 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
         numberBase = 0;
         numberDigits.clear();
     };
+    // "\%[abc]" is a sequence in which each character may be the last.
+    bool optionalSeq = false;
+    QString optionalChars;
     for (const QChar &c : needle) {
+        if (optionalSeq) {
+            if (c != ']') {
+                optionalChars.append(c);
+                continue;
+            }
+            optionalSeq = false;
+            // "a", "ab" and "abc" all match "\%[abc]", and so does nothing.
+            for (const QChar &oc : std::as_const(optionalChars))
+                pattern.append("(?:" + QRegularExpression::escape(QString(oc)));
+            pattern.append(QString(")?").repeated(optionalChars.size()));
+            continue;
+        }
         if (numberBase != 0) {
             const bool isDigit = numberBase == 10  ? c.isDigit()
                                  : numberBase == 8 ? (c >= '0' && c <= '7')
@@ -515,6 +530,11 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
             percent = false;
             if (c == '(') { // "%(" groups without capturing
                 pattern.append("(?:");
+                continue;
+            }
+            if (c == '[') { // "%[abc]" holds a sequence of optional characters
+                optionalSeq = true;
+                optionalChars.clear();
                 continue;
             }
             // "%d123" in decimal, "%x62" in hex, "%o142" in octal and "%u0062"
