@@ -2689,7 +2689,12 @@ public:
     QStringList m_syntaxNames;
     bool m_vim9 = false; // Vim9-script semantics are active
     QStringList m_scriptFileStack; // scripts currently sourcing, innermost last
+    // Which statement each frame is running, for <stack> and v:throwpoint.
+    QList<int> m_scriptLines;
+    QList<int> m_functionLines;
+    QString m_throwpoint; // where the exception being carried was thrown
     QStringList m_callStack; // user functions currently running, for <stack>
+    QString sourceChain(bool asThrowPoint) const;
     QSet<QString> m_sourcesInFlight; // guards against :source/:import cycles
     QList<QHash<QString, VimValue>> m_localScopes;
     bool m_returning = false;
@@ -4733,6 +4738,7 @@ void FakeVimHandler::Private::showMessage(MessageLevel level, const QString &msg
     if (level == MessageError && m_tryDepth > 0) {
         m_throwing = true;
         m_exception = "Vim:" + msg;
+        m_throwpoint = sourceChain(true);
         return;
     }
     g.currentMessage = msg;
@@ -8401,10 +8407,12 @@ bool FakeVimHandler::Private::handleExSourceCommand(const ExCommand &cmd)
     const bool savedVim9 = m_vim9;
     m_vim9 = fileVim9;
     m_scriptFileStack.append(canonicalPath);
+    m_scriptLines.append(0);
     m_sourcesInFlight.insert(canonicalPath);
     runExCommands(cmds);
     m_sourcesInFlight.remove(canonicalPath);
     m_scriptFileStack.removeLast();
+    m_scriptLines.removeLast();
     m_vim9 = savedVim9;
 
     if (fileVim9 && !exportedNames.isEmpty() && !canonicalPath.isEmpty()) {
@@ -9614,6 +9622,7 @@ void FakeVimHandler::Private::setVariable(const QString &name, const VimValue &v
         // Thrown rather than just reported, so a script can catch it as in Vim.
         m_throwing = true;
         m_exception = Tr::tr("E741: Value is locked: %1").arg(name);
+        m_throwpoint = sourceChain(true);
         return;
     }
     store->insert(key, value);
@@ -10095,6 +10104,36 @@ int FakeVimHandler::Private::bufferNumber()
 }
 
 // expand(): the handful of "<...>" keywords and "%" that scripts rely on.
+// The chain Vim reports for "<stack>" and "v:throwpoint": the frame that is
+// running, and what called it. Every frame but the innermost is followed by the
+// statement it stopped at; the innermost carries ", line N" in a throw point
+// and "[N]" in a stack. The word "function" stands before the first function
+// only. Scripts sourced from a function are listed before it rather than in
+// call order, there being one stack for each kind here.
+QString FakeVimHandler::Private::sourceChain(bool asThrowPoint) const
+{
+    QStringList frames;
+    QList<int> lines;
+    for (int i = 0; i < m_scriptFileStack.size(); ++i) {
+        frames.append("script " + m_scriptFileStack.at(i));
+        lines.append(i < m_scriptLines.size() ? m_scriptLines.at(i) : 0);
+    }
+    for (int i = 0; i < m_callStack.size(); ++i) {
+        frames.append((i == 0 ? QString("function ") : QString()) + m_callStack.at(i));
+        lines.append(i < m_functionLines.size() ? m_functionLines.at(i) : 0);
+    }
+
+    QString value = "command line";
+    for (int i = 0; i < frames.size(); ++i) {
+        value += ".." + frames.at(i);
+        if (asThrowPoint && i == frames.size() - 1)
+            value += ", line " + QString::number(lines.at(i));
+        else
+            value += '[' + QString::number(lines.at(i)) + ']';
+    }
+    return value;
+}
+
 QString FakeVimHandler::Private::expandKeyword(const QString &what) const
 {
     // What is being asked about comes first, then any ":" modifiers, so
@@ -11641,6 +11680,13 @@ void FakeVimHandler::Private::execSequence(const QList<ExCommand> &cmds,
 {
     while (index < cmds.size()) {
         const ExCommand c = cmds.at(index);
+        // Which statement of the frame this is, as far as the frame's command
+        // list stands for its lines - a line holding several commands separated
+        // by "|" counts as more than one.
+        if (!m_functionLines.isEmpty())
+            m_functionLines.last() = index + 1;
+        else if (!m_scriptLines.isEmpty())
+            m_scriptLines.last() = index + 1;
         if (c.cmd == "if") {
             ++index;
             execIf(cmds, index, active, active && evalCondition(exprText(c)));
@@ -11660,6 +11706,7 @@ void FakeVimHandler::Private::execSequence(const QList<ExCommand> &cmds,
                 if (evaluateExpression(exprText(c), &v, &error)) {
                     m_throwing = true;
                     m_exception = v.toString();
+                    m_throwpoint = sourceChain(true);
                 } else {
                     showMessage(MessageError, error);
                 }
@@ -11834,13 +11881,15 @@ void FakeVimHandler::Private::execTry(const QList<ExCommand> &cmds,
     struct Pending {
         bool thrown = false;
         QString exception;
+        QString throwpoint;
         bool returning = false;
         VimValue returnValue;
         LoopSignal signal = NoSignal;
         bool empty() const { return !thrown && !returning && signal == NoSignal; }
     };
     const auto capture = [this]() {
-        Pending p{m_throwing, m_exception, m_returning, m_returnValue, m_loopSignal};
+        Pending p{m_throwing, m_exception, m_throwpoint, m_returning, m_returnValue,
+                  m_loopSignal};
         m_throwing = false;
         m_returning = false;
         m_loopSignal = NoSignal;
@@ -11854,6 +11903,16 @@ void FakeVimHandler::Private::execTry(const QList<ExCommand> &cmds,
             pat = pat.mid(1, pat.size() - 2);
         return vimPatternToQtPattern(pat).match(ex).hasMatch();
     };
+
+    // Vim puts these back to what they were when the ":try" is left, so a
+    // nested one does not leave its exception behind in the outer clause.
+    VimValue savedException{QString()}; // unset reads as empty, as in Vim
+    VimValue savedThrowPoint{QString()};
+    VimValue saved;
+    if (variableValue("v:exception", &saved))
+        savedException = saved;
+    if (variableValue("v:throwpoint", &saved))
+        savedThrowPoint = saved;
 
     ++m_tryDepth;
     execSequence(cmds, index, active); // the :try body
@@ -11869,6 +11928,7 @@ void FakeVimHandler::Private::execTry(const QList<ExCommand> &cmds,
                            && catchMatches(c.args, pending.exception);
         if (match)
             setVariable("v:exception", VimValue(pending.exception));
+            setVariable("v:throwpoint", VimValue(pending.throwpoint));
         execSequence(cmds, index, match);
         if (match)
             handled = true;
@@ -11892,10 +11952,14 @@ void FakeVimHandler::Private::execTry(const QList<ExCommand> &cmds,
     if (index < cmds.size() && cmds.at(index).cmd == "endtry")
         ++index;
 
+    setVariable("v:exception", savedException);
+    setVariable("v:throwpoint", savedThrowPoint);
+
     // Re-raise whatever survived unhandled.
     if (pending.thrown && !handled) {
         m_throwing = true;
         m_exception = pending.exception;
+        m_throwpoint = pending.throwpoint;
     } else if (pending.returning) {
         m_returning = true;
         m_returnValue = pending.returnValue;
@@ -12039,9 +12103,11 @@ VimValue FakeVimHandler::Private::callUserFunction(const QString &name,
 
     m_localScopes.append(frame);
     m_callStack.append(name);
+    m_functionLines.append(0);
     int index = 0;
     execSequence(fn.body, index, true);
     m_callStack.removeLast();
+    m_functionLines.removeLast();
     m_localScopes.removeLast();
 
     const VimValue result = m_returning ? m_returnValue : VimValue();

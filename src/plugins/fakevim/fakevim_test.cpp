@@ -232,6 +232,7 @@ private slots:
     void test_vim_script_scriptlocal();
     void test_vim_script_if_chain();
     void test_vim_script_error_numbers();
+    void test_vim_script_throwpoint();
     void test_vim_pattern_lookaround();
     void test_vim_pattern_percent_atoms();
     void test_vim_pattern_very_magic();
@@ -6896,6 +6897,81 @@ void FakeVimTester::test_vim_script_error_numbers()
     // "v:exception" holds it in the shape a script reports or matches on.
     QCOMPARE(echo("g:ex"), QLatin1String("Vim:E121: Undefined variable: g:nosuchvar"));
     data.doCommand("unlet g:hit | unlet g:ok | unlet g:ex");
+}
+
+void FakeVimTester::test_vim_script_throwpoint()
+{
+    // "v:throwpoint" says where the exception a ":catch" took was thrown, as
+    // the chain of frames that were running, and is put back when the ":try" is
+    // left. Values taken from Vim 9.1 running this very script.
+    TestData data;
+    setup(&data);
+    QString message;
+    // The mode line arrives after the echo, so it has to be left out or an
+    // empty value cannot be told apart from it.
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) {
+            if (!msg.startsWith("--"))
+                message = msg;
+        });
+    auto echo = [&](const char *expr) -> QString {
+        message.clear();
+        data.doCommand(QLatin1String("echo ") + QLatin1String(expr));
+        return message;
+    };
+
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.path() + "/t.vim";
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("try\n"                              // line 1
+            "  throw 'a'\n"                      // line 2
+            "catch\n"
+            "  let g:atScript = v:throwpoint\n"
+            "endtry\n"
+            "let g:afterScript = v:throwpoint\n"  // put back on leaving
+            "function! Foo()\n"                   // line 7
+            "  throw 'b'\n"                       // line 1 of Foo
+            "endfunction\n"
+            "try\n"
+            "  call Foo()\n"                      // line 11
+            "catch\n"
+            "  let g:atFunc = v:throwpoint\n"
+            "endtry\n"
+            "try\n"
+            "  echo g:nosuchvar\n"                // line 16, an error not a throw
+            "catch\n"
+            "  let g:atError = v:throwpoint\n"
+            "endtry\n"
+            "function! Outer()\n"                 // line 20
+            "  call Foo()\n"                      // line 1 of Outer
+            "endfunction\n"
+            "try\n"
+            "  call Outer()\n"                    // line 24
+            "catch\n"
+            "  let g:atNested = v:throwpoint\n"
+            "endtry\n");
+    f.close();
+    data.doCommand("source " + path);
+    const QString script = "command line..script " + path;
+
+    // The frame that threw carries the line, the ones that called it the
+    // statement they stopped at.
+    QCOMPARE(echo("g:atScript"), script + ", line 2");
+    QCOMPARE(echo("g:atFunc"), script + "[11]..function Foo, line 1");
+    // An error is thrown from where it happened, like ":throw".
+    QCOMPARE(echo("g:atError"), script + ", line 16");
+    // The word "function" stands before the first one only.
+    QCOMPARE(echo("g:atNested"), script + "[24]..function Outer[1]..Foo, line 1");
+    // Leaving the ":try" puts it back to what it was, which was nothing.
+    QCOMPARE(echo("g:afterScript"), QLatin1String(""));
+    QCOMPARE(echo("v:throwpoint"), QLatin1String(""));
+    QCOMPARE(echo("v:exception"), QLatin1String(""));
+
+    data.doCommand("unlet g:atScript | unlet g:afterScript | unlet g:atFunc");
+    data.doCommand("unlet g:atError | unlet g:atNested");
+    data.doCommand("delfunction Foo | delfunction Outer");
 }
 
 void FakeVimTester::test_vim_pattern_lookaround()
