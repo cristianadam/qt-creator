@@ -7,7 +7,9 @@
 #include "aliencompletion.h"
 #include "alienhover.h"
 #include "alientr.h"
+#include "alientreeview.h"
 #include "hostconnection.h"
+#include "webviewrenderer.h"
 
 #include <coreplugin/editormanager/documentmodel.h>
 #include <coreplugin/editormanager/editormanager.h>
@@ -31,6 +33,7 @@
 #include <QCoreApplication>
 #include <QFile>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
 
@@ -84,6 +87,8 @@ ExtensionHost::~ExtensionHost()
             widget->removeHoverHandler(m_hoverHandler);
     }
     delete m_hoverHandler;
+
+    qDeleteAll(m_treeFactories);
 
     if (!m_runtimeDir.isEmpty())
         m_runtimeDir.removeRecursively();
@@ -149,6 +154,99 @@ void ExtensionHost::installHandlers()
             // No message-box UI yet: report that no item was selected.
             respond(QJsonValue(QJsonValue::Null), {});
         });
+
+    m_connection->setRequestHandler(
+        "window/showQuickPick",
+        [this](const QJsonValue &params, const HostConnection::Responder &respond) {
+            const QJsonObject object = params.toObject();
+            QStringList items;
+            for (const QJsonValue &item : object.value("items").toArray())
+                items << item.toString();
+            const int id = m_nextPromptId++;
+            m_pendingPrompts.insert(id, respond);
+            emit quickPickRequested(id, items, object.value("placeholder").toString());
+        });
+
+    m_connection->setRequestHandler(
+        "window/showInputBox",
+        [this](const QJsonValue &params, const HostConnection::Responder &respond) {
+            const QJsonObject object = params.toObject();
+            const int id = m_nextPromptId++;
+            m_pendingPrompts.insert(id, respond);
+            emit inputBoxRequested(id, object.value("prompt").toString(),
+                                   object.value("value").toString(),
+                                   object.value("placeholder").toString());
+        });
+
+    m_connection->setNotificationHandler("statusbar/setMessage", [this](const QJsonValue &params) {
+        emit statusBarMessageChanged(params.toObject().value("text").toString());
+    });
+
+    m_connection->setNotificationHandler("statusbar/update", [this](const QJsonValue &params) {
+        const QJsonObject object = params.toObject();
+        emit statusBarItemChanged(object.value("id").toString(),
+                                  object.value("text").toString(),
+                                  object.value("tooltip").toString(),
+                                  object.value("alignment").toInt(),
+                                  object.value("visible").toBool());
+    });
+
+    m_connection->setNotificationHandler("statusbar/remove", [this](const QJsonValue &params) {
+        emit statusBarItemRemoved(params.toObject().value("id").toString());
+    });
+
+    m_connection->setNotificationHandler("treeview/register", [this](const QJsonValue &params) {
+        const QString viewId = params.toObject().value("viewId").toString();
+        if (!m_treeFactories.contains(viewId))
+            m_treeFactories.insert(viewId, new AlienTreeViewFactory(this, viewId, viewId));
+        emit treeViewRegistered(viewId);
+    });
+
+    m_connection->setNotificationHandler("treeview/refresh", [this](const QJsonValue &params) {
+        emit treeViewRefreshed(params.toObject().value("viewId").toString());
+    });
+
+    m_connection->setNotificationHandler("webview/create", [this](const QJsonValue &params) {
+        const QJsonObject object = params.toObject();
+        const QString id = object.value("id").toString();
+        const QString viewType = object.value("viewType").toString();
+        const QString title = object.value("title").toString();
+        if (m_webviewRenderer)
+            m_webviewRenderer->createPanel(id, viewType, title);
+        emit webviewCreated(id, viewType, title);
+    });
+
+    m_connection->setNotificationHandler("webview/setHtml", [this](const QJsonValue &params) {
+        const QJsonObject object = params.toObject();
+        const QString id = object.value("id").toString();
+        const QString html = object.value("html").toString();
+        if (m_webviewRenderer)
+            m_webviewRenderer->setHtml(id, html);
+        emit webviewHtmlChanged(id, html);
+    });
+
+    m_connection->setNotificationHandler("webview/postMessage", [this](const QJsonValue &params) {
+        const QJsonObject object = params.toObject();
+        const QString id = object.value("id").toString();
+        const QJsonValue message = object.value("message");
+        if (m_webviewRenderer)
+            m_webviewRenderer->postMessage(id, message);
+        const QByteArray json = QJsonDocument(QJsonObject{{"message", message}})
+                                    .toJson(QJsonDocument::Compact);
+        emit webviewMessagePosted(id, QString::fromUtf8(json));
+    });
+
+    m_connection->setNotificationHandler("webview/reveal", [this](const QJsonValue &params) {
+        if (m_webviewRenderer)
+            m_webviewRenderer->reveal(params.toObject().value("id").toString());
+    });
+
+    m_connection->setNotificationHandler("webview/dispose", [this](const QJsonValue &params) {
+        const QString id = params.toObject().value("id").toString();
+        if (m_webviewRenderer)
+            m_webviewRenderer->disposePanel(id);
+        emit webviewDisposed(id);
+    });
 
     m_connection->setNotificationHandler("output/append", [](const QJsonValue &params) {
         const QJsonObject object = params.toObject();
@@ -445,6 +543,149 @@ Result<> ExtensionHost::activateBundledHoverDefinitionTestExtension()
     return {};
 }
 
+Result<> ExtensionHost::activateBundledQuickPickTestExtension()
+{
+    if (const Result<> started = ensureStarted(); !started)
+        return started;
+
+    const FilePath extDir = m_runtimeDir / "quickpicktestextension";
+    const FilePath packageJson = extDir / "package.json";
+
+    const QList<std::pair<QString, FilePath>> resources = {
+        {":/alien/host/quickpicktestextension/package.json", packageJson},
+        {":/alien/host/quickpicktestextension/extension.js", extDir / "extension.js"},
+    };
+    for (const auto &[resource, dest] : resources) {
+        if (const Result<> r = extractResource(resource, dest); !r)
+            return r;
+    }
+
+    const Result<VscodeManifest> manifest = VscodeManifest::fromPackageJson(packageJson);
+    if (!manifest)
+        return make_unexpected(manifest.error());
+
+    activate(*manifest);
+    return {};
+}
+
+Result<> ExtensionHost::activateBundledStatusBarTestExtension()
+{
+    if (const Result<> started = ensureStarted(); !started)
+        return started;
+
+    const FilePath extDir = m_runtimeDir / "statusbartestextension";
+    const FilePath packageJson = extDir / "package.json";
+
+    const QList<std::pair<QString, FilePath>> resources = {
+        {":/alien/host/statusbartestextension/package.json", packageJson},
+        {":/alien/host/statusbartestextension/extension.js", extDir / "extension.js"},
+    };
+    for (const auto &[resource, dest] : resources) {
+        if (const Result<> r = extractResource(resource, dest); !r)
+            return r;
+    }
+
+    const Result<VscodeManifest> manifest = VscodeManifest::fromPackageJson(packageJson);
+    if (!manifest)
+        return make_unexpected(manifest.error());
+
+    activate(*manifest);
+    return {};
+}
+
+Result<> ExtensionHost::activateBundledTreeViewTestExtension()
+{
+    if (const Result<> started = ensureStarted(); !started)
+        return started;
+
+    const FilePath extDir = m_runtimeDir / "treeviewtestextension";
+    const FilePath packageJson = extDir / "package.json";
+
+    const QList<std::pair<QString, FilePath>> resources = {
+        {":/alien/host/treeviewtestextension/package.json", packageJson},
+        {":/alien/host/treeviewtestextension/extension.js", extDir / "extension.js"},
+    };
+    for (const auto &[resource, dest] : resources) {
+        if (const Result<> r = extractResource(resource, dest); !r)
+            return r;
+    }
+
+    const Result<VscodeManifest> manifest = VscodeManifest::fromPackageJson(packageJson);
+    if (!manifest)
+        return make_unexpected(manifest.error());
+
+    activate(*manifest);
+    return {};
+}
+
+void ExtensionHost::requestTreeChildren(const QString &viewId, const QString &id,
+                                        const std::function<void(const QJsonArray &)> &callback)
+{
+    if (!m_connection) {
+        callback({});
+        return;
+    }
+    QJsonObject params{{"viewId", viewId}};
+    if (!id.isEmpty())
+        params.insert("id", id);
+    whenReady([this, params, callback] {
+        m_connection->sendRequest(
+            "treeview/getChildren", params,
+            [callback](const QJsonValue &result, const QString &error) {
+                if (!error.isEmpty())
+                    callback({});
+                else
+                    callback(result.toObject().value("nodes").toArray());
+            });
+    });
+}
+
+Result<> ExtensionHost::activateBundledWebviewTestExtension()
+{
+    if (const Result<> started = ensureStarted(); !started)
+        return started;
+
+    const FilePath extDir = m_runtimeDir / "webviewtestextension";
+    const FilePath packageJson = extDir / "package.json";
+
+    const QList<std::pair<QString, FilePath>> resources = {
+        {":/alien/host/webviewtestextension/package.json", packageJson},
+        {":/alien/host/webviewtestextension/extension.js", extDir / "extension.js"},
+    };
+    for (const auto &[resource, dest] : resources) {
+        if (const Result<> r = extractResource(resource, dest); !r)
+            return r;
+    }
+
+    const Result<VscodeManifest> manifest = VscodeManifest::fromPackageJson(packageJson);
+    if (!manifest)
+        return make_unexpected(manifest.error());
+
+    activate(*manifest);
+    return {};
+}
+
+void ExtensionHost::setWebviewRenderer(WebviewRenderer *renderer)
+{
+    m_webviewRenderer = renderer;
+    if (!renderer)
+        return;
+    renderer->onMessage = [this](const QString &id, const QJsonValue &message) {
+        deliverWebviewMessage(id, message);
+    };
+    renderer->onDisposed = [this](const QString &id) {
+        if (m_connection)
+            m_connection->sendNotification("webview/onDidDispose", QJsonObject{{"id", id}});
+    };
+}
+
+void ExtensionHost::deliverWebviewMessage(const QString &id, const QJsonValue &message)
+{
+    if (m_connection)
+        m_connection->sendNotification("webview/onMessage",
+                                       QJsonObject{{"id", id}, {"message", message}});
+}
+
 AlienClient *ExtensionHost::languageClient(const QString &id) const
 {
     return m_lspClients.value(id);
@@ -713,6 +954,18 @@ void ExtensionHost::attachEditorFeatures(IEditor *editor)
                         });
                 });
     }
+}
+
+void ExtensionHost::resolveQuickPick(int id, int index)
+{
+    if (const auto respond = m_pendingPrompts.take(id))
+        respond(QJsonValue(index), {});
+}
+
+void ExtensionHost::resolveInputBox(int id, const QString &value, bool accepted)
+{
+    if (const auto respond = m_pendingPrompts.take(id))
+        respond(accepted ? QJsonValue(value) : QJsonValue(QJsonValue::Null), {});
 }
 
 void ExtensionHost::executeCommand(const QString &command)

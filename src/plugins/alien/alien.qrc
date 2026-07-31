@@ -14,5 +14,13 @@
         <file>host/completiontestextension/extension.js</file>
         <file>host/hoverdeftestextension/package.json</file>
         <file>host/hoverdeftestextension/extension.js</file>
+        <file>host/quickpicktestextension/package.json</file>
+        <file>host/quickpicktestextension/extension.js</file>
+        <file>host/statusbartestextension/package.json</file>
+        <file>host/statusbartestextension/extension.js</file>
+        <file>host/treeviewtestextension/package.json</file>
+        <file>host/treeviewtestextension/extension.js</file>
+        <file>host/webviewtestextension/package.json</file>
+        <file>host/webviewtestextension/extension.js</file>
     </qresource>
 </RCC>

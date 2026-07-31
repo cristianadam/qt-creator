@@ -1,0 +1,10 @@
+{
+    "name": "alien-treeview-test",
+    "publisher": "theqtcompany",
+    "displayName": "Alien Tree View Test Extension",
+    "description": "Registers a tree data provider through vscode.window.",
+    "version": "0.0.1",
+    "engines": { "vscode": "^1.0.0" },
+    "main": "./extension.js",
+    "activationEvents": [ "*" ]
+}

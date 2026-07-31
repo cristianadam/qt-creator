@@ -7,18 +7,26 @@
 #include "alienconstants.h"
 #include "aliensettings.h"
 #include "alientr.h"
+#ifdef ALIEN_WITH_LITEHTML
+#include "litehtmlwebviewrenderer.h"
+#endif
 
 #include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/icore.h>
 #include <coreplugin/messagemanager.h>
+#include <coreplugin/statusbarmanager.h>
 
 #include <extensionsystem/iplugin.h>
 
 #include <languageclient/languageclientmanager.h>
 
 #include <QInputDialog>
+#include <QLabel>
+#include <QLineEdit>
 #include <QPointer>
+
+#include <memory>
 
 #ifdef WITH_TESTS
 #include <QJsonArray>
@@ -213,6 +221,162 @@ private slots:
 
         EditorManager::closeAllEditors(false);
     }
+
+    void testQuickPick()
+    {
+        const FilePath node = FilePath("node").searchInPath();
+        if (!node.isExecutableFile())
+            QSKIP("node.js not found in PATH");
+
+        ExtensionHost host(node);
+        // Answer the quick pick programmatically (pick "Beta").
+        connect(&host, &ExtensionHost::quickPickRequested, &host,
+                [&host](int id, const QStringList &, const QString &) {
+                    host.resolveQuickPick(id, 1);
+                });
+
+        QSignalSpy spy(&host, &ExtensionHost::messageShown);
+        const Result<> result = host.activateBundledQuickPickTestExtension();
+        QVERIFY2(result.has_value(), qPrintable(result ? QString() : result.error()));
+
+        QTRY_VERIFY_WITH_TIMEOUT(host.registeredCommands().contains("alien.pick"), 10000);
+        host.executeCommand("alien.pick");
+
+        auto sawPick = [&spy] {
+            for (const QList<QVariant> &args : spy) {
+                if (args.first().toString() == "picked:Beta")
+                    return true;
+            }
+            return false;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(sawPick(), 15000);
+    }
+
+    void testStatusBar()
+    {
+        const FilePath node = FilePath("node").searchInPath();
+        if (!node.isExecutableFile())
+            QSKIP("node.js not found in PATH");
+
+        ExtensionHost host(node);
+        QSignalSpy messageSpy(&host, &ExtensionHost::statusBarMessageChanged);
+        QSignalSpy itemSpy(&host, &ExtensionHost::statusBarItemChanged);
+
+        const Result<> result = host.activateBundledStatusBarTestExtension();
+        QVERIFY2(result.has_value(), qPrintable(result ? QString() : result.error()));
+
+        auto sawMessage = [&messageSpy] {
+            for (const QList<QVariant> &args : messageSpy) {
+                if (args.first().toString() == "Alien ready")
+                    return true;
+            }
+            return false;
+        };
+        auto sawItem = [&itemSpy] {
+            for (const QList<QVariant> &args : itemSpy) {
+                if (args.at(1).toString() == "AlienItem" && args.at(4).toBool())
+                    return true;
+            }
+            return false;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(sawMessage(), 15000);
+        QTRY_VERIFY_WITH_TIMEOUT(sawItem(), 15000);
+    }
+
+    void testTreeView()
+    {
+        const FilePath node = FilePath("node").searchInPath();
+        if (!node.isExecutableFile())
+            QSKIP("node.js not found in PATH");
+
+        ExtensionHost host(node);
+        QSignalSpy spy(&host, &ExtensionHost::treeViewRegistered);
+
+        const Result<> result = host.activateBundledTreeViewTestExtension();
+        QVERIFY2(result.has_value(), qPrintable(result ? QString() : result.error()));
+
+        QTRY_VERIFY_WITH_TIMEOUT(!spy.isEmpty(), 10000);
+        QCOMPARE(spy.first().first().toString(), QString("alienExplorer"));
+
+        // Root level.
+        QStringList rootLabels;
+        QString rootAId;
+        auto rootPoll = [&] {
+            host.requestTreeChildren("alienExplorer", {}, [&](const QJsonArray &nodes) {
+                rootLabels.clear();
+                for (const QJsonValue &n : nodes) {
+                    rootLabels << n.toObject().value("label").toString();
+                    if (n.toObject().value("label").toString() == "Root A")
+                        rootAId = n.toObject().value("id").toString();
+                }
+            });
+            return rootLabels.contains("Root A") && rootLabels.contains("Root B");
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(rootPoll(), 15000);
+
+        // Children of Root A.
+        QStringList childLabels;
+        auto childPoll = [&] {
+            host.requestTreeChildren("alienExplorer", rootAId, [&](const QJsonArray &nodes) {
+                childLabels.clear();
+                for (const QJsonValue &n : nodes)
+                    childLabels << n.toObject().value("label").toString();
+            });
+            return childLabels.contains("Child A1");
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(childPoll(), 15000);
+    }
+
+    void testWebview()
+    {
+        const FilePath node = FilePath("node").searchInPath();
+        if (!node.isExecutableFile())
+            QSKIP("node.js not found in PATH");
+
+        // No renderer set: exercise the API and bridge via signals only.
+        ExtensionHost host(node);
+        QSignalSpy createdSpy(&host, &ExtensionHost::webviewCreated);
+        QSignalSpy htmlSpy(&host, &ExtensionHost::webviewHtmlChanged);
+        QSignalSpy postSpy(&host, &ExtensionHost::webviewMessagePosted);
+        QSignalSpy messageSpy(&host, &ExtensionHost::messageShown);
+
+        const Result<> result = host.activateBundledWebviewTestExtension();
+        QVERIFY2(result.has_value(), qPrintable(result ? QString() : result.error()));
+
+        QTRY_VERIFY_WITH_TIMEOUT(!createdSpy.isEmpty(), 10000);
+        const QString id = createdSpy.first().first().toString();
+        QCOMPARE(createdSpy.first().at(1).toString(), QString("alienDemo"));
+
+        auto sawHtml = [&htmlSpy] {
+            for (const QList<QVariant> &args : htmlSpy) {
+                if (args.at(1).toString().contains("Alien Webview"))
+                    return true;
+            }
+            return false;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(sawHtml(), 15000);
+
+        // Extension -> webview postMessage.
+        auto sawPost = [&postSpy] {
+            for (const QList<QVariant> &args : postSpy) {
+                if (args.at(1).toString().contains("extension"))
+                    return true;
+            }
+            return false;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(sawPost(), 15000);
+
+        // Webview -> extension message (delivered as a JS renderer would).
+        host.deliverWebviewMessage(id, QJsonObject{{"text", "hi"}});
+        auto sawGot = [&messageSpy] {
+            for (const QList<QVariant> &args : messageSpy) {
+                if (args.first().toString() == "got:hi")
+                    return true;
+            }
+            return false;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(sawGot(), 15000);
+    }
 };
 #endif
 
@@ -283,8 +447,66 @@ public:
 private:
     ExtensionHost *host()
     {
-        if (!m_host)
+        if (!m_host) {
             m_host = new ExtensionHost(settings().nodeJsPath(), this);
+
+            connect(m_host, &ExtensionHost::quickPickRequested, this,
+                    [this](int id, const QStringList &items, const QString &placeholder) {
+                        bool ok = false;
+                        const QString choice = QInputDialog::getItem(
+                            ICore::dialogParent(), Tr::tr("Select"),
+                            placeholder.isEmpty() ? Tr::tr("Select an item:") : placeholder,
+                            items, 0, false, &ok);
+                        m_host->resolveQuickPick(id, ok ? int(items.indexOf(choice)) : -1);
+                    });
+
+            connect(m_host, &ExtensionHost::inputBoxRequested, this,
+                    [this](int id, const QString &prompt, const QString &value,
+                           const QString &placeholder) {
+                        bool ok = false;
+                        const QString text = QInputDialog::getText(
+                            ICore::dialogParent(),
+                            prompt.isEmpty() ? Tr::tr("Input") : prompt,
+                            placeholder, QLineEdit::Normal, value, &ok);
+                        m_host->resolveInputBox(id, text, ok);
+                    });
+
+            connect(m_host, &ExtensionHost::statusBarMessageChanged, this,
+                    [this](const QString &text) {
+                        if (!m_statusMessage) {
+                            m_statusMessage = new QLabel;
+                            StatusBarManager::addStatusBarWidget(
+                                m_statusMessage, StatusBarManager::LastLeftAligned);
+                        }
+                        m_statusMessage->setText(text);
+                    });
+
+            connect(m_host, &ExtensionHost::statusBarItemChanged, this,
+                    [this](const QString &id, const QString &text, const QString &tooltip,
+                           int alignment, bool visible) {
+                        QLabel *label = m_statusItems.value(id);
+                        if (!label) {
+                            label = new QLabel;
+                            StatusBarManager::addStatusBarWidget(
+                                label, alignment == 2 ? StatusBarManager::RightCorner
+                                                      : StatusBarManager::First);
+                            m_statusItems.insert(id, label);
+                        }
+                        label->setText(text);
+                        label->setToolTip(tooltip);
+                        label->setVisible(visible);
+                    });
+
+            connect(m_host, &ExtensionHost::statusBarItemRemoved, this, [this](const QString &id) {
+                if (QLabel *label = m_statusItems.take(id))
+                    StatusBarManager::destroyStatusBarWidget(label);
+            });
+
+#ifdef ALIEN_WITH_LITEHTML
+            m_webviewRenderer = std::make_unique<LiteHtmlWebviewRenderer>();
+            m_host->setWebviewRenderer(m_webviewRenderer.get());
+#endif
+        }
         return m_host;
     }
 
@@ -336,6 +558,11 @@ private:
 
     QList<QPointer<AlienClient>> m_clients;
     QPointer<ExtensionHost> m_host;
+    QPointer<QLabel> m_statusMessage;
+    QHash<QString, QLabel *> m_statusItems;
+#ifdef ALIEN_WITH_LITEHTML
+    std::unique_ptr<LiteHtmlWebviewRenderer> m_webviewRenderer;
+#endif
 };
 
 } // namespace Alien::Internal

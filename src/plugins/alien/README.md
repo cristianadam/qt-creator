@@ -137,6 +137,41 @@ Follow Symbol, wiring `TextEditorWidget::requestLinkAt`. Hovering sends
 `definition/provide` and jumps to the returned `Utils::Link`. Other
 `languages.register*Provider` calls are still accepted as no-ops.
 
+Interactive prompts (host -> Qt Creator): `window.showQuickPick` and
+`window.showInputBox`. The host sends `window/showQuickPick`/`showInputBox`;
+`ExtensionHost` keeps the UI-agnostic by emitting `quickPickRequested`/
+`inputBoxRequested` with a request id, and the plugin answers with
+`resolveQuickPick`/`resolveInputBox` after showing a dialog (tests answer the
+signal directly). The host maps the chosen index back to the original item.
+
+Status bar (host -> Qt Creator): `window.setStatusBarMessage` and
+`window.createStatusBarItem` (with `StatusBarAlignment`). `ExtensionHost` emits
+`statusBarMessageChanged`/`statusBarItemChanged`/`statusBarItemRemoved`; the
+plugin renders `QLabel`s via `Core::StatusBarManager` (left slot for messages,
+First/RightCorner for items by alignment).
+
+Tree views (Qt Creator <-> host): `window.registerTreeDataProvider` /
+`createTreeView` plus `TreeItem`, `TreeItemCollapsibleState` and `EventEmitter`.
+On registration `ExtensionHost` creates an `AlienTreeViewFactory` (a sidebar
+`Core::INavigationWidgetFactory`) whose `QTreeView` fetches children lazily via
+`treeview/getChildren` as nodes are expanded; `onDidChangeTreeData` maps to
+`treeview/refresh`. Elements stay in the host (opaque JS objects) and are
+referenced by assigned ids.
+
+Webviews (Qt Creator <-> host): `window.createWebviewPanel` plus the
+`webview.html` setter, `postMessage` and `onDidReceiveMessage` bridge and
+`ViewColumn`. To keep the core free of any HTML-engine dependency, rendering is
+behind a `WebviewRenderer` interface: `ExtensionHost` routes `webview/create`/
+`setHtml`/`postMessage`/`dispose` to whatever renderer is set (and emits signals
+either way), and delivers `webview -> extension` messages via
+`deliverWebviewMessage`. The bundled default is `LiteHtmlWebviewRenderer`, which
+renders **static** HTML with the in-tree `qlitehtml` widget (no JavaScript, so
+`postMessage` into the page is inert) - built only when the optional `qlitehtml`
+target is present (`ALIEN_WITH_LITEHTML`), exactly like the Help viewer. An
+interactive QtWebEngine backend can be added as another `WebviewRenderer`
+without touching the core; with no renderer, panels degrade to no-ops so
+extensions still activate.
+
 ## Running unmodified bundled extensions (the chosen direction)
 
 The `qt-qml` guinea pig is esbuild-bundled, so it never `require()`s
@@ -144,8 +179,10 @@ vscode-languageclient at runtime and the interception below cannot catch it.
 Rather than modify the extension, the plan is the Theia-style host: run the
 extension (and its inlined language client) in Node and implement the `vscode`
 API it uses, bridging editor state to Creator. Document sync, diagnostics,
-completion and hover/definition above are the first slices of that. Remaining
-slices: commands and UI (quick pick, tree views), then webviews.
+completion, hover/definition, interactive prompts, status bar, tree views and
+webviews above are the slices done so far. The webview backend is pluggable and
+QtWebEngine-free by default (static HTML via litehtml); an interactive
+QtWebEngine renderer is the main remaining optional add-on.
 
 Remote-readiness: the host's runtime directory is created on the same device as
 `node` (via `FilePath::tmpDir()`), and the transport is a device-transparent
