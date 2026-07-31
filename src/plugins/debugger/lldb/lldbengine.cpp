@@ -475,7 +475,17 @@ void LldbEngine::handleResponse(const QString &response)
             notifyInferiorPid(item.toProcessHandle());
         else if (name == "breakpointmodified")
             handleInterpreterBreakpointModified(item);
-        else if (name == "signal-received")
+        else if (name == "interpreterasync") {
+            // A pending QML breakpoint resolved - matched by modelid, not
+            // lldbid (there's no real lldb breakpoint yet), so this can't
+            // reuse handleInterpreterBreakpointModified() above. Mirrors
+            // GdbEngine::handleInterpreterBreakpointModified()'s own lookup.
+            if (all["asyncclass"].data() == "breakpointmodified") {
+                Breakpoint bp = breakHandler()->findBreakpointByModelId(item["modelid"].toInt());
+                if (bp)
+                    bp->updateFromGdbOutput(item, runParameters());
+            }
+        } else if (name == "signal-received")
             handleSignalReceived(item);
         else if (name == "bridgemessage")
             showMessage(item["msg"].data(), item["channel"].toInt());
