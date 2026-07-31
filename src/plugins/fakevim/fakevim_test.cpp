@@ -231,6 +231,7 @@ private slots:
     void test_vim_script_autoload();
     void test_vim_script_scriptlocal();
     void test_vim_script_if_chain();
+    void test_vim_script_error_numbers();
     void test_vim_pattern_very_magic();
     void test_vim_script_lockvar();
     void test_vim_script_messages();
@@ -5678,10 +5679,10 @@ void FakeVimTester::test_vim_script_variables()
     QCOMPARE(echo("v:false"), QLatin1String("0"));
 
     // Undefined variable is reported as an error.
-    QCOMPARE(echo("nosuchvar"), QLatin1String("Undefined variable: nosuchvar"));
+    QCOMPARE(echo("nosuchvar"), QLatin1String("E121: Undefined variable: nosuchvar"));
 
     data.doCommand("unlet g:x");
-    QCOMPARE(echo("x"), QLatin1String("Undefined variable: x"));
+    QCOMPARE(echo("x"), QLatin1String("E121: Undefined variable: x"));
 }
 
 void FakeVimTester::test_vim_script_options_registers()
@@ -6137,7 +6138,7 @@ void FakeVimTester::test_vim_script_if()
 
     // A skipped branch has no side effects.
     data.doCommand("if 0 | let g:d = 99 | endif");
-    QCOMPARE(echo("g:d"), QLatin1String("Undefined variable: g:d"));
+    QCOMPARE(echo("g:d"), QLatin1String("E121: Undefined variable: g:d"));
 
     // Multi-line block from a sourced file.
     QTemporaryFile file;
@@ -6839,6 +6840,59 @@ void FakeVimTester::test_vim_script_funcref()
 
 
 
+void FakeVimTester::test_vim_script_error_numbers()
+{
+    // An error carries the number Vim gives it, and inside a ":try" it arrives
+    // as an exception a script can catch. Values taken from Vim 9.1.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) { message = msg; });
+    auto echo = [&](const char *expr) -> QString {
+        message.clear();
+        data.doCommand(QLatin1String("echo ") + QLatin1String(expr));
+        return message;
+    };
+
+    // Outside a ":try" the error is reported as before, now with its number.
+    QCOMPARE(echo("g:nosuchvar"), QLatin1String("E121: Undefined variable: g:nosuchvar"));
+    QCOMPARE(echo("NoSuchFunc()"), QLatin1String("E117: Unknown function: NoSuchFunc"));
+    QCOMPARE(echo("&nosuchoption"), QLatin1String("E113: Unknown option: nosuchoption"));
+    QCOMPARE(echo("[1, 2][9]"), QLatin1String("E684: List index out of range: 9"));
+    message.clear();
+    data.doCommand("call NoSuchFunc()");
+    QCOMPARE(message, QLatin1String("E117: Unknown function: NoSuchFunc"));
+
+    // Inside a ":try" it arrives as an exception. A block spans several lines,
+    // so this runs as a script rather than one line at a time.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.path() + "/t.vim";
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("let g:hit = 'no'\n"
+            "try\n"
+            "  echo g:nosuchvar\n"
+            "catch /^Vim\\%((\\a\\+)\\)\\=:E121/\n"
+            "  let g:hit = 'caught'\n"
+            "endtry\n"
+            // This is what lets a plugin tell whether the work it wrapped went
+            // through: the line after the error is not reached.
+            "let g:ok = 1\n"
+            "try\n"
+            "  echo g:nosuchvar\n"
+            "  let g:ok = 2\n"
+            "catch\n"
+            "  let g:ok = 0\n"
+            "endtry\n");
+    f.close();
+    data.doCommand("source " + path);
+    QCOMPARE(echo("g:hit"), QLatin1String("caught"));
+    QCOMPARE(echo("g:ok"), QLatin1String("0"));
+    data.doCommand("unlet g:hit | unlet g:ok");
+}
+
 void FakeVimTester::test_vim_pattern_very_magic()
 {
     // Where very magic gives punctuation a meaning, a backslash takes it away
@@ -7232,7 +7286,7 @@ void FakeVimTester::test_vim_script_autoload()
     // A deeper name lives a directory further down.
     QCOMPARE(echo("deep#nested#answer()"), QLatin1String("42"));
     // One that is nowhere to be found says so rather than searching forever.
-    QCOMPARE(echo("nosuchlib#nope()"), QLatin1String("Unknown function: nosuchlib#nope"));
+    QCOMPARE(echo("nosuchlib#nope()"), QLatin1String("E117: Unknown function: nosuchlib#nope"));
     data.doCommand("set runtimepath=");
 }
 

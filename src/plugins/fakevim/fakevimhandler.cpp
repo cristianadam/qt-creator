@@ -571,6 +571,9 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle)
             const int atomStart = pattern.size();
             if (c == '_')
                 anyNewline = true;
+            // "\%(" groups without capturing; very magic writes it as "%(".
+            else if (c == '%' && magic != VeryMagic)
+                percent = true;
             // Where very magic gives punctuation a meaning, a backslash takes
             // it away again: "\=" is an "=" and "\<" a "<", not an operator.
             else if (magic == VeryMagic && QString("=<>").indexOf(c) != -1)
@@ -2595,6 +2598,7 @@ public:
     VimValue m_returnValue;
     bool m_throwing = false; // an exception raised by :throw is in flight
     QString m_exception;
+    int m_tryDepth = 0; // how many ":try" bodies are being run
     bool m_finishing = false; // :finish - stop running the current command list
     int m_messageSilence = 0; // >0 while inside :silent
     bool m_silenceErrors = false; // :silent! also suppresses errors
@@ -4626,6 +4630,13 @@ void FakeVimHandler::Private::showMessage(MessageLevel level, const QString &msg
     // ":silent" suppresses ordinary messages; ":silent!" also suppresses errors.
     if (m_messageSilence > 0 && (level != MessageError || m_silenceErrors))
         return;
+    // Inside a ":try" an error is an exception a script can catch, which is
+    // the shape Vim reports it in. Outside one nothing changes.
+    if (level == MessageError && m_tryDepth > 0) {
+        m_throwing = true;
+        m_exception = "Vim:" + msg;
+        return;
+    }
     g.currentMessage = msg;
     g.currentMessageLevel = level;
     // An error or a warning is worth keeping; what ":echo" prints is not, as
@@ -7434,7 +7445,7 @@ bool FakeVimHandler::Private::handleExSetCommand(const ExCommand &cmd)
         const QString what = add.captured(3);
         VimValue current;
         if (!optionValue(optionName, &current)) {
-            showMessage(MessageError, Tr::tr("Unknown option:") + ' ' + optionName);
+            showMessage(MessageError, Tr::tr("E518: Unknown option:") + ' ' + optionName);
         } else {
             QString value = current.toString();
             const QChar how = add.captured(2).at(0);
@@ -7473,7 +7484,7 @@ bool FakeVimHandler::Private::handleExSetCommand(const ExCommand &cmd)
         if (FvBaseAspect *act = s.item(Utils::keyFromString(optionName)))
             act->setVariantValue(act->defaultVariantValue());
         else if (!unimplementedOption(optionName, &kind))
-            showMessage(MessageError, Tr::tr("Unknown option:") + ' ' + cmd.args);
+            showMessage(MessageError, Tr::tr("E518: Unknown option:") + ' ' + cmd.args);
     } else {
         QString optionName = cmd.args;
 
@@ -7497,7 +7508,7 @@ bool FakeVimHandler::Private::handleExSetCommand(const ExCommand &cmd)
                 showMessage(MessageInfo, shown);
             }
         } else if (!act) {
-            showMessage(MessageError, Tr::tr("Unknown option:") + ' ' + cmd.args);
+            showMessage(MessageError, Tr::tr("E518: Unknown option:") + ' ' + cmd.args);
         } else if (act->defaultVariantValue().typeId() == QMetaType::Bool) {
             bool oldValue = act->variantValue().toBool();
             if (printOption) {
@@ -8824,7 +8835,7 @@ private:
             if (i < 0)
                 i += n;
             if (i < 0 || i >= n) {
-                setError(Tr::tr("List index out of range: %1").arg(index.toNumber()));
+                setError(Tr::tr("E684: List index out of range: %1").arg(index.toNumber()));
                 return {};
             }
             return l->at(i);
@@ -8839,7 +8850,7 @@ private:
             const QString key = index.toString();
             QMap<QString, VimValue> *d = v.dictData();
             if (!d->contains(key)) {
-                setError(Tr::tr("Key not present in dictionary: %1").arg(key));
+                setError(Tr::tr("E716: Key not present in Dictionary: %1").arg(key));
                 return {};
             }
             return d->value(key);
@@ -8883,7 +8894,7 @@ private:
         if (c.isLetter() || c == '_')
             return parseVariable();
 
-        setError(Tr::tr("Invalid expression: %1").arg(m_in.mid(m_pos)));
+        setError(Tr::tr("E15: Invalid expression: %1").arg(m_in.mid(m_pos)));
         return {};
     }
 
@@ -8927,7 +8938,7 @@ private:
             return VimValue::func(name);
         if (m_skip)
             return VimValue(qlonglong(0)); // only being read past
-        setError(Tr::tr("Undefined variable: %1").arg(name));
+        setError(Tr::tr("E121: Undefined variable: %1").arg(name));
         return {};
     }
 
@@ -9362,7 +9373,7 @@ private:
         VimValue v;
         if (m_h->optionValue(name, &v))
             return v;
-        setError(Tr::tr("Unknown option: %1").arg(name));
+        setError(Tr::tr("E113: Unknown option: %1").arg(name));
         return {};
     }
 
@@ -9504,7 +9515,7 @@ void FakeVimHandler::Private::setVariable(const QString &name, const VimValue &v
     if (g.lockedVariables.contains(key)) {
         // Thrown rather than just reported, so a script can catch it as in Vim.
         m_throwing = true;
-        m_exception = Tr::tr("Value is locked: %1").arg(name);
+        m_exception = Tr::tr("E741: Value is locked: %1").arg(name);
         return;
     }
     store->insert(key, value);
@@ -9607,7 +9618,7 @@ bool FakeVimHandler::Private::handleExLetCommand(const ExCommand &cmd)
         else
             haveOld = variableValue(name, &old);
         if (!haveOld) {
-            showMessage(MessageError, Tr::tr("Undefined variable: %1").arg(name));
+            showMessage(MessageError, Tr::tr("E121: Undefined variable: %1").arg(name));
             return true;
         }
         value = applyCompound(old, op.at(0), value);
@@ -9615,7 +9626,7 @@ bool FakeVimHandler::Private::handleExLetCommand(const ExCommand &cmd)
 
     if (kind == '&') {
         if (!setOption(optionNameFromLet(name), value))
-            showMessage(MessageError, Tr::tr("Unknown option: %1").arg(optionNameFromLet(name)));
+            showMessage(MessageError, Tr::tr("E355: Unknown option: %1").arg(optionNameFromLet(name)));
     } else if (kind == '@') {
         setRegister(name.at(1).unicode(), value.toString(), RangeCharMode);
     } else if (kind == '$') {
@@ -9689,7 +9700,7 @@ bool FakeVimHandler::Private::letAssignIndexed(const QString &args)
         if (i < 0)
             i += l->size();
         if (i < 0 || i >= l->size()) {
-            showMessage(MessageError, Tr::tr("List index out of range: %1").arg(index.toNumber()));
+            showMessage(MessageError, Tr::tr("E684: List index out of range: %1").arg(index.toNumber()));
             return true;
         }
         (*l)[i] = op == "=" ? value : applyCompound(l->at(i), op.at(0), value);
@@ -10969,7 +10980,7 @@ bool FakeVimHandler::Private::callFunction(const QString &name,
             *result = callUserFunction(name, g.userFunctions.value(name), args);
             return true;
         }
-        *error = Tr::tr("Unknown function: %1").arg(name);
+        *error = Tr::tr("E117: Unknown function: %1").arg(name);
         return false;
     }
     return true;
@@ -11013,7 +11024,7 @@ bool FakeVimHandler::Private::handleExUnletCommand(const ExCommand &cmd)
     const QStringList names = cmd.args.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
     for (const QString &name : names) {
         if (!unsetVariable(name) && !cmd.hasBang) {
-            showMessage(MessageError, Tr::tr("Undefined variable: %1").arg(name));
+            showMessage(MessageError, Tr::tr("E121: Undefined variable: %1").arg(name));
             return true;
         }
     }
@@ -11429,7 +11440,7 @@ bool FakeVimHandler::Private::handleExUserCommand(const ExCommand &cmd)
     ExCommand sub;
     while (parseExCommand(&line, &sub)) {
         if (!handleExCommandHelper(sub)) {
-            showMessage(MessageError, Tr::tr("Not an editor command: %1").arg(sub.cmd));
+            showMessage(MessageError, Tr::tr("E492: Not an editor command: %1").arg(sub.cmd));
             break;
         }
     }
@@ -11490,7 +11501,7 @@ bool FakeVimHandler::Private::handleExExecuteCommand(const ExCommand &cmd)
     ExCommand sub;
     while (parseExCommand(&line, &sub)) {
         if (!handleExCommandHelper(sub)) {
-            showMessage(MessageError, Tr::tr("Not an editor command: %1").arg(sub.cmd));
+            showMessage(MessageError, Tr::tr("E492: Not an editor command: %1").arg(sub.cmd));
             break;
         }
     }
@@ -11583,7 +11594,7 @@ void FakeVimHandler::Private::execSequence(const QList<ExCommand> &cmds,
             if (active) {
                 ExCommand cmd = c;
                 if (!handleExCommandHelper(cmd))
-                    showMessage(MessageError, Tr::tr("Not an editor command: %1").arg(c.cmd));
+                    showMessage(MessageError, Tr::tr("E492: Not an editor command: %1").arg(c.cmd));
             }
             ++index;
         }
@@ -11746,7 +11757,9 @@ void FakeVimHandler::Private::execTry(const QList<ExCommand> &cmds,
         return vimPatternToQtPattern(pat).match(ex).hasMatch();
     };
 
+    ++m_tryDepth;
     execSequence(cmds, index, active); // the :try body
+    --m_tryDepth;
     Pending pending = capture();
     bool handled = !pending.thrown;
     execSequence(cmds, index, false); // skip the rest of the body to the clauses
