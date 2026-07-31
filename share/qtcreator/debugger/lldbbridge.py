@@ -1724,7 +1724,8 @@ class Dumper(DumperBase):
                     functionName = function.GetName()
                     if self.handleNativeMethodStepInto(stoppedThread, functionName):
                         return
-                    if functionName == "::qt_qmlDebugConnectorOpen()":
+                    # Substring, not "==": demangled formatting can vary.
+                    if "qt_qmlDebugConnectorOpen" in (functionName or ''):
                         self.report("RESOLVER HIT")
                         for resolver in self.interpreterBreakpointResolvers:
                             resolver()
@@ -1732,7 +1733,7 @@ class Dumper(DumperBase):
                         self.reportState("inferiorstopok")
                         self.process.Continue()
                         return
-                    if functionName == "::qt_qmlDebugMessageAvailable()":
+                    if "qt_qmlDebugMessageAvailable" in (functionName or ''):
                         self.report("ASYNC MESSAGE FROM SERVICE")
                         # The interpreter step won the race (possibly a
                         # C++-to-QML crossing); the armed interpreter step
