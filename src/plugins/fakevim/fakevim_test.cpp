@@ -231,6 +231,7 @@ private slots:
     void test_vim_script_autoload();
     void test_vim_script_scriptlocal();
     void test_vim_script_if_chain();
+    void test_vim_script_lockvar();
     void test_vim_script_messages();
     void test_vim_script_split();
     void test_vim_script_pattern_newline();
@@ -6836,6 +6837,54 @@ void FakeVimTester::test_vim_script_funcref()
 
 
 
+
+void FakeVimTester::test_vim_script_lockvar()
+{
+    // ":lockvar" holds a variable against being given another value, which is
+    // how a script keeps a constant. Values taken from Vim 9.1.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) { message = msg; });
+    auto echo = [&](const char *expr) -> QString {
+        message.clear();
+        data.doCommand(QLatin1String("echo ") + QLatin1String(expr));
+        return message;
+    };
+
+    data.doCommand("let g:y = 1");
+    data.doCommand("lockvar g:y");
+    data.doCommand("let g:y = 2");
+    QCOMPARE(echo("g:y"), QLatin1String("1"));
+    data.doCommand("unlockvar g:y");
+    data.doCommand("let g:y = 3");
+    QCOMPARE(echo("g:y"), QLatin1String("3"));
+    // Abbreviated, and with the depth a script asks for.
+    data.doCommand("lockv g:y");
+    data.doCommand("unlo g:y");
+    data.doCommand("let g:y = 4");
+    QCOMPARE(echo("g:y"), QLatin1String("4"));
+    data.doCommand("lockvar 3 g:y");
+    data.doCommand("let g:y = 9");
+    QCOMPARE(echo("g:y"), QLatin1String("4"));
+    // A script can catch the attempt, as in Vim.
+    data.doCommand("let g:caught = 0");
+    data.doCommand("try");
+    data.doCommand("let g:y = 9");
+    data.doCommand("catch");
+    data.doCommand("let g:caught = 1");
+    data.doCommand("endtry");
+    QCOMPARE(echo("g:caught"), QLatin1String("1"));
+    data.doCommand("unlockvar! g:y");
+    data.doCommand("let g:y = 5");
+    QCOMPARE(echo("g:y"), QLatin1String("5"));
+    // Locking does not stand in the way of ":unlet".
+    data.doCommand("lockvar g:y");
+    data.doCommand("unlet g:y");
+    QCOMPARE(echo("exists('g:y')"), QLatin1String("0"));
+    data.doCommand("unlockvar g:y | unlet g:caught");
+}
 
 void FakeVimTester::test_vim_script_messages()
 {

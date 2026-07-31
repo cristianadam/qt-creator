@@ -2715,6 +2715,7 @@ public:
     bool handleExGotoCommand(const ExCommand &cmd);
     bool handleExHistoryCommand(const ExCommand &cmd);
     bool handleExMessagesCommand(const ExCommand &cmd);
+    bool handleExLockVarCommand(const ExCommand &cmd);
     void rememberMessage(const QString &msg);
     bool handleExRegisterCommand(const ExCommand &cmd);
     bool handleExMapCommand(const ExCommand &cmd);
@@ -2920,6 +2921,8 @@ public:
         // What ":messages" reports. Only one message fits in the mini buffer,
         // so a script that has something to say is otherwise heard once only.
         QStringList messageHistory;
+        // What ":lockvar" holds against being given another value.
+        QSet<QString> lockedVariables;
 
         // Search state.
         QString lastSearch; // last search expression as entered by user
@@ -7192,6 +7195,33 @@ bool FakeVimHandler::Private::handleExMapCommand(const ExCommand &cmd0) // :map
     return true;
 }
 
+bool FakeVimHandler::Private::handleExLockVarCommand(const ExCommand &cmd)
+{
+    // :lock[var] [depth] {name} .. / :unlo[ckvar] [depth] {name} ..
+    const bool lock = cmd.matches("lock", "lockvar");
+    if (!lock && !cmd.matches("unlo", "unlockvar"))
+        return false;
+
+    // Only the whole variable is held here, so the depth a script asks for is
+    // read and passed over.
+    QStringList names = cmd.args.split(' ', Qt::SkipEmptyParts);
+    if (!names.isEmpty()) {
+        bool isDepth = false;
+        names.constFirst().toInt(&isDepth);
+        if (isDepth)
+            names.removeFirst();
+    }
+    for (const QString &name : names) {
+        QString key;
+        variableStore(name, &key);
+        if (lock)
+            g.lockedVariables.insert(key);
+        else
+            g.lockedVariables.remove(key);
+    }
+    return true;
+}
+
 bool FakeVimHandler::Private::handleExMessagesCommand(const ExCommand &cmd)
 {
     // :mes[sages] [clear]
@@ -9466,7 +9496,14 @@ bool FakeVimHandler::Private::variableValue(const QString &name, VimValue *resul
 void FakeVimHandler::Private::setVariable(const QString &name, const VimValue &value)
 {
     QString key;
-    variableStore(name, &key)->insert(key, value);
+    QHash<QString, VimValue> *store = variableStore(name, &key);
+    if (g.lockedVariables.contains(key)) {
+        // Thrown rather than just reported, so a script can catch it as in Vim.
+        m_throwing = true;
+        m_exception = Tr::tr("Value is locked: %1").arg(name);
+        return;
+    }
+    store->insert(key, value);
 }
 
 bool FakeVimHandler::Private::unsetVariable(const QString &name)
@@ -11958,6 +11995,7 @@ bool FakeVimHandler::Private::handleExCommandHelper(ExCommand &cmd)
         || handleExBangCommand(cmd)
         || handleExHistoryCommand(cmd)
         || handleExMessagesCommand(cmd)
+        || handleExLockVarCommand(cmd)
         || handleExRegisterCommand(cmd)
         || handleExDelMarksCommand(cmd)
         || handleExYankDeleteCommand(cmd)
