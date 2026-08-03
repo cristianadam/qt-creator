@@ -12,6 +12,8 @@
 'use strict';
 
 const Module = require('module');
+const nodeFs = require('fs');
+const nodePath = require('path');
 
 // Keep stdout clean for the protocol: route all console output to stderr.
 const logToStderr = (...args) => process.stderr.write('[alien-host] ' + args.join(' ') + '\n');
@@ -19,6 +21,20 @@ console.log = logToStderr;
 console.info = logToStderr;
 console.warn = logToStderr;
 console.error = logToStderr;
+
+// console is not the only way out: bundled libraries write to stdout directly
+// (bugsnag, shipped inside several extensions, prints a banner), which lands
+// in the middle of the protocol. Keep the real stdout private and let anything
+// else that writes there end up on stderr.
+const writeToStdout = process.stdout.write.bind(process.stdout);
+process.stdout.write = (chunk, encoding, callback) =>
+    process.stderr.write(chunk, encoding, callback);
+
+// One extension's bug must not take the host down, and with it every other
+// extension: an async throw anywhere would otherwise end the process, leaving
+// the main side waiting for answers that never come.
+process.on('uncaughtException', e => logToStderr('uncaught exception:', (e && e.stack) || e));
+process.on('unhandledRejection', e => logToStderr('unhandled rejection:', (e && e.stack) || e));
 
 // --- JSON-RPC transport -----------------------------------------------------
 
@@ -28,7 +44,7 @@ const requestHandlers = new Map(); // method -> (params) => result|Promise
 
 function send(message) {
     message.jsonrpc = '2.0';
-    process.stdout.write(JSON.stringify(message) + '\n');
+    writeToStdout(JSON.stringify(message) + '\n');
 }
 
 function notify(method, params) {
@@ -153,6 +169,7 @@ const onDidOpenTextDocument = eventEmitter();
 const onDidChangeTextDocument = eventEmitter();
 const onDidCloseTextDocument = eventEmitter();
 const onDidChangeActiveTextEditor = eventEmitter();
+const onDidChangeTextEditorSelection = eventEmitter();
 const onDidChangeConfiguration = eventEmitter();
 
 function makeTextDocument(params) {
@@ -172,8 +189,23 @@ function makeTextDocument(params) {
             const text = this._text.split('\n')[line] || '';
             return {lineNumber: line, text, isEmptyOrWhitespace: text.trim() === ''};
         },
-        offsetAt() { return 0; },
-        positionAt() { return {line: 0, character: 0}; },
+        // Real conversions returning a real Position: extensions do arithmetic
+        // on the result (positionAt(o).translate(...)), so a plain object with
+        // the right fields is not enough - it throws, and an unhandled throw
+        // here takes the whole host down.
+        offsetAt(position) {
+            const lines = this._text.split('\n');
+            let offset = 0;
+            for (let line = 0; line < position.line && line < lines.length; ++line)
+                offset += lines[line].length + 1; // + the newline
+            return offset + position.character;
+        },
+        positionAt(offset) {
+            const clamped = Math.max(0, Math.min(offset, this._text.length));
+            const before = this._text.slice(0, clamped);
+            const line = (before.match(/\n/g) || []).length;
+            return new Position(line, clamped - before.lastIndexOf('\n') - 1);
+        },
         save() { return Promise.resolve(true); },
     };
 }
@@ -357,9 +389,13 @@ class ThemeColor {
     constructor(id) { this.id = id; }
 }
 class RelativePattern {
+    // The base is a WorkspaceFolder, a Uri or a plain path. Extensions pass the
+    // folder itself as often as a Uri, and then base has to be resolved through
+    // folder.uri or it ends up an object where a path is expected.
     constructor(base, pattern) {
-        this.baseUri = base;
-        this.base = (base && base.fsPath) || base;
+        const uri = (base && base.uri) || base;
+        this.baseUri = typeof uri === 'string' ? vscode.Uri.file(uri) : uri;
+        this.base = typeof uri === 'string' ? uri : (uri && uri.fsPath);
         this.pattern = pattern;
     }
 }
@@ -369,6 +405,115 @@ class CancellationTokenSource {
     }
     cancel() {}
     dispose() {}
+}
+
+// Task and test classes. Extensions subclass and instantiate these while their
+// module is still loading, i.e. before any API call, so they have to exist even
+// though nothing runs tasks or tests yet -- cmake-tools does
+// `class CMakeTask extends vscode.Task` at load time and dies without it. They
+// are plain data holders, exactly as the real ones are.
+class Task {
+    // Two signatures are in use: the current one takes a scope second, the
+    // pre-1.30 one goes straight to name. Detect by whether the second
+    // argument is a string.
+    constructor(taskDefinition, ...rest) {
+        this.definition = taskDefinition;
+        if (typeof rest[0] === 'string')
+            [this.name, this.source, this.execution, this.problemMatchers] = rest;
+        else
+            [this.scope, this.name, this.source, this.execution, this.problemMatchers] = rest;
+        this.problemMatchers = this.problemMatchers || [];
+        this.isBackground = false;
+        this.detail = undefined;
+        this.group = undefined;
+        this.presentationOptions = {};
+        this.runOptions = {};
+    }
+}
+class CustomExecution {
+    constructor(callback) { this.callback = callback; }
+}
+class TestMessage {
+    constructor(message) { this.message = message; }
+    static diff(message, expected, actual) {
+        const m = new TestMessage(message);
+        m.expectedOutput = expected;
+        m.actualOutput = actual;
+        return m;
+    }
+}
+class TestRunRequest {
+    constructor(include, exclude, profile, continuous) {
+        this.include = include;
+        this.exclude = exclude;
+        this.profile = profile;
+        this.continuous = !!continuous;
+    }
+}
+class TestTag {
+    constructor(id) { this.id = id; }
+}
+class TestCoverageCount {
+    constructor(covered, total) { this.covered = covered; this.total = total; }
+}
+class FileCoverage {
+    constructor(uri, statementCoverage, branchCoverage, declarationCoverage) {
+        this.uri = uri;
+        this.statementCoverage = statementCoverage;
+        this.branchCoverage = branchCoverage;
+        this.declarationCoverage = declarationCoverage;
+    }
+    static fromDetails(uri, details) {
+        const coverage = new FileCoverage(uri, new TestCoverageCount(0, 0));
+        coverage.detailedCoverage = details;
+        return coverage;
+    }
+}
+class StatementCoverage {
+    constructor(executed, location, branches) {
+        this.executed = executed;
+        this.location = location;
+        this.branches = branches || [];
+    }
+}
+class BranchCoverage {
+    constructor(executed, location, label) {
+        this.executed = executed;
+        this.location = location;
+        this.label = label;
+    }
+}
+class DeclarationCoverage {
+    constructor(name, executed, location) {
+        this.name = name;
+        this.executed = executed;
+        this.location = location;
+    }
+}
+class DebugAdapterNamedPipeServer {
+    constructor(path) { this.path = path; }
+}
+class SemanticTokensLegend {
+    constructor(tokenTypes, tokenModifiers) {
+        this.tokenTypes = tokenTypes || [];
+        this.tokenModifiers = tokenModifiers || [];
+    }
+}
+class SemanticTokens {
+    constructor(data, resultId) { this.data = data; this.resultId = resultId; }
+}
+class SemanticTokensBuilder {
+    constructor(legend) {
+        this.legend = legend;
+        this._data = [];
+    }
+    // Only the numeric overload is recorded: resolving the (range, type,
+    // modifiers) one needs the legend, and no provider is run yet anyway.
+    push(line, char, length, tokenType, tokenModifiers) {
+        if (typeof line === 'number')
+            this._data.push(line, char, length, tokenType || 0, tokenModifiers || 0);
+    }
+    build(resultId) { return new SemanticTokens(new Uint32Array(this._data), resultId); }
 }
 
 function makeCodeActionKind(value) {
@@ -381,10 +526,62 @@ function uriToString(uri) {
     return (uri && (uri.fsPath || uri.path)) || String(uri);
 }
 
+// vscode.Uri. A class, because extensions do "x instanceof vscode.Uri"
+// (redhat.java) and read the parts of a remote authority (remote-ssh).
+class Uri {
+    constructor(scheme, authority, path, query, fragment) {
+        this.scheme = scheme || '';
+        this.authority = authority || '';
+        this.path = path || '';
+        this.query = query || '';
+        this.fragment = fragment || '';
+    }
+    get fsPath() { return this.path; }
+    with(change) {
+        const part = (name) => (change && change[name] !== undefined ? change[name] : this[name]);
+        return new Uri(part('scheme'), part('authority'), part('path'), part('query'),
+                       part('fragment'));
+    }
+    toString() {
+        if (!this.scheme)
+            return this.path;
+        return this.scheme + '://' + this.authority + this.path
+               + (this.query ? '?' + this.query : '') + (this.fragment ? '#' + this.fragment : '');
+    }
+    toJSON() {
+        return {scheme: this.scheme, authority: this.authority, path: this.path,
+                query: this.query, fragment: this.fragment, fsPath: this.path};
+    }
+    static file(path) { return new Uri('file', '', path); }
+    static joinPath(base, ...segments) {
+        // Normalizing matters: extensions use joinPath(file, '..') to get at
+        // the parent and then mkdir it, which without this would create the
+        // file itself as a directory (redhat.java).
+        const joined = nodePath.posix.join(base.path, ...segments.map(String));
+        return new Uri(base.scheme, base.authority, joined, base.query, base.fragment);
+    }
+    static parse(value) {
+        const parts = /^([a-zA-Z][\w+.-]*):(?:\/\/([^/?#]*))?([^?#]*)(?:\?([^#]*))?(?:#(.*))?$/
+                          .exec(value);
+        if (!parts)
+            return new Uri('', '', value);
+        return new Uri(parts[1], parts[2], parts[3], parts[4], parts[5]);
+    }
+}
+
 class Hover {
     constructor(contents, range) {
         this.contents = contents;
         this.range = range;
+    }
+}
+
+class FileDecoration {
+    constructor(badge, tooltip, color) {
+        this.badge = badge;
+        this.tooltip = tooltip;
+        this.color = color;
+        this.propagate = false;
     }
 }
 
@@ -393,8 +590,10 @@ class EventEmitter {
     constructor() {
         this._emitter = eventEmitter();
         this.event = this._emitter;
+        // Bound, because extensions hand it out detached: cmake-tools passes
+        // emitter.fire as a plain callback argument.
+        this.fire = data => this._emitter.fire(data);
     }
-    fire(data) { this._emitter.fire(data); }
     dispose() {}
 }
 
@@ -420,6 +619,23 @@ const treeDataProviders = new Map(); // viewId -> {provider, elements: Map, coun
 const webviews = new Map(); // id -> {onMessage, onDispose}
 const registeredExtensions = new Map(); // id -> {exports, path, packageJSON}
 let configuration = {}; // flat dotted-key configuration pushed from Qt Creator
+
+// Defaults declared by extensions in contributes.configuration. VS Code hands
+// these out for any setting the user has not overridden, and extensions rely on
+// it: cmake-tools reads config.options.advanced straight out of its own
+// declared default and crashes on undefined without it.
+const configurationDefaults = new Map(); // dotted key -> default value
+
+function registerConfigurationDefaults(packageJson) {
+    const contributed = (packageJson && packageJson.contributes
+                         && packageJson.contributes.configuration) || [];
+    for (const block of Array.isArray(contributed) ? contributed : [contributed]) {
+        for (const [key, schema] of Object.entries((block && block.properties) || {})) {
+            if (schema && Object.prototype.hasOwnProperty.call(schema, 'default'))
+                configurationDefaults.set(key, schema.default);
+        }
+    }
+}
 let nextStatusBarItemId = 1;
 let nextWebviewId = 1;
 
@@ -454,6 +670,9 @@ async function treeChildren(viewId, id) {
             tooltip: textOf(item.tooltip) || '',
             collapsibleState: item.collapsibleState || 0,
             contextValue: item.contextValue || '',
+            // What VS Code runs when the item is picked, arguments and all.
+            command: item.command ? item.command.command : '',
+            commandArguments: (item.command && item.command.arguments) || [],
         });
     }
     return nodes;
@@ -613,6 +832,7 @@ const vscode = {
         registerTreeDataProvider(viewId, provider) {
             return registerTreeProvider(viewId, provider);
         },
+        registerFileDecorationProvider: () => disposable(() => {}),
         createWebviewPanel(viewType, title, showOptions, options) {
             const id = 'webview-' + (nextWebviewId++);
             const onDidReceiveMessage = eventEmitter();
@@ -620,7 +840,13 @@ const vscode = {
             let html = '';
             const webview = {
                 options: options || {},
-                cspSource: 'alien-webview:',
+                // Must match what asWebviewUri() below hands out, which is the
+                // file: URI unchanged. Extensions build their
+                // Content-Security-Policy from cspSource, so claiming a scheme
+                // we do not actually serve makes them block their own
+                // stylesheets and scripts. litehtml ignores CSP and so never
+                // showed this; QtWebEngine enforces it.
+                cspSource: 'file:',
                 onDidReceiveMessage,
                 get html() { return html; },
                 set html(value) { html = value; notify('webview/setHtml', {id, html: value}); },
@@ -726,20 +952,49 @@ const vscode = {
         onDidCloseTextDocument,
         getConfiguration(section) {
             const fullKey = key => (section ? section + '.' + key : key);
+            const override = full =>
+                Object.prototype.hasOwnProperty.call(configuration, full)
+                    ? configuration[full] : undefined;
             const lookup = key => {
                 const full = fullKey(key);
-                return Object.prototype.hasOwnProperty.call(configuration, full)
-                    ? configuration[full] : undefined;
+                const value = override(full);
+                return value === undefined ? configurationDefaults.get(full) : value;
             };
-            return {
+            const config = {
                 get: (key, defaultValue) => {
                     const value = lookup(key);
                     return value === undefined ? defaultValue : value;
                 },
                 has: key => lookup(key) !== undefined,
                 update: () => Promise.resolve(),
-                inspect: key => ({key: fullKey(key), globalValue: lookup(key)}),
+                inspect: key => ({
+                    key: fullKey(key),
+                    defaultValue: configurationDefaults.get(fullKey(key)),
+                    globalValue: override(fullKey(key)),
+                }),
             };
+
+            // VS Code also exposes the settings of a section as plain
+            // properties, so `getConfiguration('cmake').options.advanced`
+            // works alongside get('options.advanced'). Build that tree from
+            // every key we know about, without shadowing the methods above.
+            const prefix = section ? section + '.' : '';
+            for (const full of new Set([...configurationDefaults.keys(),
+                                        ...Object.keys(configuration)])) {
+                if (!full.startsWith(prefix))
+                    continue;
+                const parts = full.slice(prefix.length).split('.');
+                let node = config;
+                for (const part of parts.slice(0, -1)) {
+                    if (typeof node[part] !== 'object' || node[part] === null)
+                        node[part] = {};
+                    node = node[part];
+                }
+                const leaf = parts[parts.length - 1];
+                if (!(leaf in node))
+                    node[leaf] = lookup(full.slice(prefix.length));
+            }
+            return config;
         },
         onDidChangeConfiguration,
     },
@@ -855,10 +1110,7 @@ const vscode = {
         onDidChangeDiagnostics: () => disposable(() => {}),
         match: () => 10,
     },
-    Uri: {
-        file: p => ({scheme: 'file', path: p, fsPath: p, toString: () => 'file://' + p}),
-        parse: s => ({scheme: '', path: s, fsPath: s, toString: () => s}),
-    },
+    Uri,
     Position,
     Range,
     Location,
@@ -867,6 +1119,7 @@ const vscode = {
     SnippetString,
     MarkdownString,
     Hover,
+    FileDecoration,
     EventEmitter,
     TreeItem,
     CodeLens,
@@ -891,6 +1144,34 @@ const vscode = {
     ThemeIcon,
     ThemeColor,
     RelativePattern,
+    Task,
+    CustomExecution,
+    TestMessage,
+    TestRunRequest,
+    TestTag,
+    TestCoverageCount,
+    FileCoverage,
+    StatementCoverage,
+    BranchCoverage,
+    DeclarationCoverage,
+    DebugAdapterNamedPipeServer,
+    SemanticTokensLegend,
+    SemanticTokens,
+    SemanticTokensBuilder,
+    TaskGroup: {
+        Clean: {id: 'clean'},
+        Build: {id: 'build'},
+        Rebuild: {id: 'rebuild'},
+        Test: {id: 'test'},
+    },
+    TaskScope: {Global: 1, Workspace: 2},
+    IndentAction: {None: 0, Indent: 1, IndentOutdent: 2, Outdent: 3},
+    ExtensionMode: {Production: 1, Development: 2, Test: 3},
+    LogLevel: {Off: 0, Trace: 1, Debug: 2, Info: 3, Warning: 4, Error: 5},
+    // Proposed API, but remote-ssh reads it at construction time.
+    CandidatePortSource: {None: 0, Process: 1, Output: 2, Hybrid: 3},
+    TestRunProfileKind: {Run: 1, Debug: 2, Coverage: 3},
+    DebugConfigurationProviderTriggerKind: {Initial: 1, Dynamic: 2},
     TreeItemCollapsibleState: {None: 0, Collapsed: 1, Expanded: 2},
     CodeActionKind: {
         Empty: makeCodeActionKind(''),
@@ -938,6 +1219,7 @@ const vscode = {
 // These are stubs (no-ops, empty results, live events) so activation succeeds;
 // behaviour is filled in slice by slice.
 const noopDisposable = () => disposable(() => {});
+let nextDecorationKey = 1;
 
 Object.assign(vscode.commands, {
     registerTextEditorCommand(command, callback, thisArg) {
@@ -971,7 +1253,21 @@ Object.assign(vscode.workspace, {
         }
         return full;
     },
-    findFiles: () => Promise.resolve([]),
+    // Qt Creator does the searching: it owns the workspace, and its FilePath
+    // handles a remote one the same way. A GlobPattern is either a plain
+    // string, searched under every workspace folder, or a RelativePattern
+    // carrying its own base.
+    findFiles: (include, exclude, maxResults) => {
+        const patternOf = glob => (glob && typeof glob === 'object' ? glob.pattern : glob) || '';
+        const baseOf = glob => (glob && typeof glob === 'object'
+            ? (glob.base || (glob.baseUri && glob.baseUri.fsPath)) : undefined);
+        return request('workspace/findFiles', {
+            include: patternOf(include),
+            exclude: patternOf(exclude),
+            base: baseOf(include),
+            maxResults: maxResults || 0,
+        }).then(paths => (paths || []).map(p => vscode.Uri.file(p)));
+    },
     saveAll: () => Promise.resolve(true),
     applyEdit: () => Promise.resolve(true),
     openTextDocument: () => Promise.reject(new Error('openTextDocument is not supported yet.')),
@@ -984,15 +1280,27 @@ Object.assign(vscode.workspace, {
         onDidDelete: eventEmitter(),
         dispose() {},
     }),
+    // The host is a local node process, so this is the real file system - which
+    // is what extensions assume (redhat.java reads its own package.json here).
     fs: {
-        readFile: () => Promise.resolve(new Uint8Array()),
-        writeFile: () => Promise.resolve(),
-        stat: () => Promise.reject(new Error('not found')),
-        readDirectory: () => Promise.resolve([]),
-        createDirectory: () => Promise.resolve(),
-        delete: () => Promise.resolve(),
-        rename: () => Promise.resolve(),
-        copy: () => Promise.resolve(),
+        readFile: uri => nodeFs.promises.readFile(uriToString(uri)),
+        writeFile: (uri, content) =>
+            nodeFs.promises.writeFile(uriToString(uri), Buffer.from(content)),
+        stat: uri => nodeFs.promises.stat(uriToString(uri)).then(stat => ({
+            type: stat.isDirectory() ? 2 : (stat.isSymbolicLink() ? 64 : 1),
+            ctime: stat.ctimeMs,
+            mtime: stat.mtimeMs,
+            size: stat.size,
+        })),
+        readDirectory: uri =>
+            nodeFs.promises.readdir(uriToString(uri), {withFileTypes: true})
+                .then(entries => entries.map(e => [e.name, e.isDirectory() ? 2 : 1])),
+        createDirectory: uri => nodeFs.promises.mkdir(uriToString(uri), {recursive: true}),
+        delete: (uri, options) => nodeFs.promises.rm(uriToString(uri),
+                                                     {recursive: !!(options && options.recursive),
+                                                      force: true}),
+        rename: (from, to) => nodeFs.promises.rename(uriToString(from), uriToString(to)),
+        copy: (from, to) => nodeFs.promises.copyFile(uriToString(from), uriToString(to)),
     },
 });
 
@@ -1003,7 +1311,7 @@ Object.assign(vscode.window, {
     visibleTextEditors: [],
     activeColorTheme: {kind: 2},
     onDidChangeVisibleTextEditors: eventEmitter(),
-    onDidChangeTextEditorSelection: eventEmitter(),
+    onDidChangeTextEditorSelection,
     onDidChangeTextEditorVisibleRanges: eventEmitter(),
     onDidChangeWindowState: eventEmitter(),
     onDidChangeActiveColorTheme: eventEmitter(),
@@ -1019,6 +1327,10 @@ Object.assign(vscode.window, {
     registerUriHandler: noopDisposable,
     registerTerminalLinkProvider: noopDisposable,
     createTerminal: () => ({sendText() {}, show() {}, hide() {}, dispose() {}}),
+    createTextEditorDecorationType: () => ({
+        key: 'alien-decoration-' + nextDecorationKey++,
+        dispose() {},
+    }),
     withProgress: (options, task) =>
         Promise.resolve(task({report() {}},
                              {isCancellationRequested: false, onCancellationRequested: noopDisposable})),
@@ -1042,12 +1354,44 @@ vscode.env = {
     uiKind: 1,
     onDidChangeTelemetryEnabled: eventEmitter(),
     clipboard: {readText: () => Promise.resolve(''), writeText: () => Promise.resolve()},
-    openExternal: () => Promise.resolve(true),
+    openExternal: async uri => {
+        // A real hand-off: extensions use this to show a page in the browser
+        // (gerrit-ai opens a change from its dashboard this way).
+        await request('window/openExternal',
+                      {uri: typeof uri === 'string' ? uri : String(uri)});
+        return true;
+    },
     asExternalUri: uri => Promise.resolve(uri),
     createTelemetryLogger: () => ({
         logUsage() {}, logError() {}, dispose() {},
         onDidChangeEnableStates: eventEmitter(),
     }),
+};
+
+// Extensions call l10n.t() for every user-visible string, often hundreds of
+// times, and at module scope. With no translation bundle the message itself is
+// the result; only the placeholders have to be filled in.
+vscode.l10n = {
+    bundle: undefined,
+    uri: undefined,
+    t(...args) {
+        let message = args[0];
+        let values = args.slice(1);
+        if (message && typeof message === 'object') {
+            // t({message, args, comment})
+            values = message.args || [];
+            message = message.message;
+        }
+        const named = values.length === 1 && values[0] && typeof values[0] === 'object'
+            && !Array.isArray(values[0]);
+        if (named) {
+            const record = values[0];
+            return String(message).replace(/\{(\w+)\}/g,
+                (all, key) => (key in record ? String(record[key]) : all));
+        }
+        return String(message).replace(/\{(\d+)\}/g,
+            (all, index) => (values[index] === undefined ? all : String(values[index])));
+    },
 };
 
 function extensionApi(id) {
@@ -1068,8 +1412,19 @@ function extensionApi(id) {
 
 vscode.extensions = {
     get all() { return [...registeredExtensions.keys()].map(extensionApi); },
+    // Proposed API, used by remote-explorer; there is only one host here.
+    get allAcrossExtensionHosts() { return this.all; },
     getExtension: id => extensionApi(id),
     onDidChange: eventEmitter(),
+};
+
+vscode.lm = {
+    tools: [],
+    registerTool: noopDisposable,
+    registerMcpServerDefinitionProvider: noopDisposable,
+    selectChatModels: () => Promise.resolve([]),
+    invokeTool: () => Promise.resolve({content: []}),
+    onDidChangeChatModels: eventEmitter(),
 };
 
 vscode.debug = {
@@ -1101,6 +1456,44 @@ vscode.tasks = {
     onDidStartTaskProcess: eventEmitter(),
     onDidEndTaskProcess: eventEmitter(),
 };
+
+// --- API call tracing --------------------------------------------------------
+//
+// Much of the surface above is a stub, so an extension activates happily and
+// then quietly does nothing. With ALIEN_TRACE_API=1 every shim member an
+// extension touches is logged once, which turns "what does this extension
+// actually need?" into a measurement rather than a reading of this file.
+if (process.env.ALIEN_TRACE_API) {
+    const seen = new Set();
+    const traceNamespace = (nsName, ns) => {
+        if (!ns)
+            return;
+        for (const key of Object.keys(ns)) {
+            // Accessors would run their getter just by being read here.
+            const descriptor = Object.getOwnPropertyDescriptor(ns, key);
+            if (!descriptor || !descriptor.writable)
+                continue;
+            const value = descriptor.value;
+            // An event is a callable carrying .fire(); wrapping it would drop
+            // that and silently break every listener.
+            if (typeof value !== 'function' || typeof value.fire === 'function')
+                continue;
+            const traced = function (...args) {
+                const name = nsName + '.' + key;
+                if (!seen.has(name)) {
+                    seen.add(name);
+                    logToStderr('[api] ' + name);
+                }
+                return value.apply(this, args);
+            };
+            Object.assign(traced, value);
+            ns[key] = traced;
+        }
+    };
+    for (const nsName of ['commands', 'window', 'workspace', 'languages', 'env',
+                          'extensions', 'debug', 'tasks'])
+        traceNamespace(nsName, vscode[nsName]);
+}
 
 function flattenItems(items) {
     // showInformationMessage(message, options?, ...items) - we ignore an
@@ -1269,6 +1662,17 @@ async function doActivate(params) {
     for (const language of (params.languages || []))
         langMap.set(language.id, language.extensions || []);
 
+    // Both of these have to be in place before the module runs, not after
+    // activate() returns: extensions read their own declared defaults during
+    // load, and look themselves up through vscode.extensions.getExtension()
+    // while activating (cmake-tools does, and fails with "Extension is
+    // undefined!"). In VS Code the Extension object exists from load; only
+    // exports fill in later, which the registration at the end of this
+    // function then does.
+    registerConfigurationDefaults(params.packageJSON);
+    registeredExtensions.set(id, {exports: undefined, path: params.path,
+                                  packageJSON: params.packageJSON});
+
     const exports = require(main);
 
     const os = require('os');
@@ -1389,13 +1793,23 @@ onRequest('document/didChange', params => {
     const document = documents.get(params.uri);
     if (!document)
         return;
-    document._text = params.text || '';
+    // We sync full text, but express it as one ranged edit replacing the whole
+    // previous document, so vscode-languageclient works with servers that use
+    // incremental sync (it reads change.range for those).
+    const oldText = document._text;
+    const newText = params.text || '';
+    const lines = oldText.split('\n');
+    const endLine = lines.length - 1;
+    const change = {
+        range: {start: {line: 0, character: 0},
+                end: {line: endLine, character: lines[endLine].length}},
+        rangeOffset: 0,
+        rangeLength: oldText.length,
+        text: newText,
+    };
+    document._text = newText;
     document.version = params.version;
-    onDidChangeTextDocument.fire({
-        document,
-        contentChanges: [{text: document._text}],
-        reason: undefined,
-    });
+    onDidChangeTextDocument.fire({document, contentChanges: [change], reason: undefined});
 });
 
 onRequest('document/didClose', params => {
@@ -1408,6 +1822,27 @@ onRequest('document/didClose', params => {
         vscode.workspace.textDocuments.splice(index, 1);
     document.isClosed = true;
     onDidCloseTextDocument.fire(document);
+});
+
+// The caret moved in Qt Creator. Extensions that follow it - a preview
+// scrolling with the cursor - listen for this.
+onRequest('editor/didChangeSelection', params => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || !editor.document)
+        return;
+    if (uriToString(editor.document.uri) !== params.uri)
+        return; // a stale notification for an editor that is no longer active
+
+    const selection = new Selection(
+        new Position(params.anchorLine, params.anchorCharacter),
+        new Position(params.activeLine, params.activeCharacter));
+    editor.selection = selection;
+    editor.selections = [selection];
+    onDidChangeTextEditorSelection.fire({
+        textEditor: editor,
+        selections: [selection],
+        kind: undefined,
+    });
 });
 
 onRequest('editor/didChangeActive', params => {

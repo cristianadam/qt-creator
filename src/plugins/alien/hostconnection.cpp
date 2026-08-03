@@ -99,6 +99,7 @@ void HostConnection::readOutput()
             qCWarning(logHost) << "Cannot parse host message:" << error.errorString() << line;
             continue;
         }
+        qCDebug(logHost) << "<--" << line.left(200);
         handleMessage(document.object());
     }
 }
@@ -158,6 +159,7 @@ void HostConnection::writeMessage(QJsonObject message)
         return;
     message.insert("jsonrpc", "2.0");
     const QByteArray data = QJsonDocument(message).toJson(QJsonDocument::Compact) + '\n';
+    qCDebug(logHost) << "-->" << data.left(200).trimmed();
     m_process->writeRaw(data);
 }
 
