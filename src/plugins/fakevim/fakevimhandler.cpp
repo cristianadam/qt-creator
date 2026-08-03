@@ -1639,11 +1639,15 @@ public:
         // mode, so the right-hand side is not keys either. "<ScriptCmd>" only
         // differs in which script the command belongs to, which does not matter
         // while everything shares one namespace.
-        static const QRegularExpression cmdRe("^<(?:Cmd|ScriptCmd)>",
+        // Whatever is written before it is keys, and they happen first: the
+        // comment plugin leaves visual mode with an "<esc>" that way before
+        // asking for its own text object.
+        static const QRegularExpression cmdRe("<(?:Cmd|ScriptCmd)>",
                                               QRegularExpression::CaseInsensitiveOption);
         const QRegularExpressionMatch cmd = cmdRe.match(str);
         if (cmd.hasMatch()) {
-            QString rest = str.mid(cmd.capturedLength());
+            m_leadingKeys = str.left(cmd.capturedStart());
+            QString rest = str.mid(cmd.capturedEnd());
             // The command ends at the <CR>; whatever follows is keys again.
             static const QRegularExpression endRe("<(?:CR|Return|Enter)>",
                                                   QRegularExpression::CaseInsensitiveOption);
@@ -1677,6 +1681,7 @@ public:
 
     bool isExCommand() const { return !m_exCommand.isEmpty(); }
     QString exCommand() const { return m_exCommand; }
+    QString leadingKeys() const { return m_leadingKeys; }
     // "<ScriptCmd>" runs in the script that defined the mapping, so a command
     // from a Vim9 script is read with Vim9 rules.
     bool vim9() const { return m_vim9; }
@@ -1697,6 +1702,7 @@ private:
     bool m_vim9 = false;
     QString m_expr;
     QString m_exCommand;
+    QString m_leadingKeys; // keys written before the "<Cmd>", to run before it
 };
 
 static Input parseVimKeyName(const QString &keyName)
@@ -3839,6 +3845,9 @@ bool FakeVimHandler::Private::expandCompleteMapping()
             g.submode = NoSubMode;
             g.subsubmode = NoSubSubMode;
         }
+
+        if (!inputs.leadingKeys().isEmpty())
+            replay(inputs.leadingKeys());
 
         const bool savedVim9 = m_vim9;
         m_vim9 = inputs.vim9();

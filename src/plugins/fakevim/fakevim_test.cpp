@@ -234,6 +234,7 @@ private slots:
     void test_vim_script_error_numbers();
     void test_vim_script_mode();
     void test_vim_ex_command_own_selection();
+    void test_vim9_comment_text_object();
     void test_vim_script_skipped_subscript();
     void test_vim_search_wraps_to_cursor();
     void test_vim_pattern_buffer_position();
@@ -7007,6 +7008,47 @@ void FakeVimTester::test_vim_ex_command_own_selection()
     QCOMPARE(data.text(), QByteArray("one" N "two" N "three"));
 
     data.doCommand("delfunction Sel");
+}
+
+void FakeVimTester::test_vim9_comment_text_object()
+{
+    // The comment plugin's "ic" and "ac" ask what the syntax is at a place,
+    // which Qt Creator answers from the document's language. Standing in for it
+    // here is a reply of "Comment" on the lines that are one, which is enough to
+    // drive the plugin's own reckoning of where the comment block ends.
+    // Values taken from Vim 9.1 with the same buffer and keys.
+    const QString D = "/usr/share/vim/vim91/pack/dist/opt/comment";
+    if (!QFileInfo::exists(D + "/plugin/comment.vim"))
+        QSKIP("Vim 9.1's comment plugin is not installed");
+
+    const auto check = [&](const char *keys) {
+        TestData data;
+        setup(&data);
+        data.handler->syntaxNamesRequested.set([&](int line, int, QStringList *names) {
+            const QTextBlock block = data.handler->textCursor().document()
+                                         ->findBlockByNumber(line - 1);
+            if (block.isValid() && block.text().startsWith("//"))
+                names->append("Comment");
+        });
+        data.doCommand("set runtimepath+=" + D);
+        data.doCommand("source " + D + "/plugin/comment.vim");
+        data.doCommand("set commentstring=//\\ %s");
+        data.doCommand("let g:syntax_on = 1");
+        data.setText("/" X "/ one" N "// two" N "int a;" N "// three");
+        data.doKeys(keys);
+        const QString text = QString::fromUtf8(data.text())
+                                 .replace(QLatin1Char(0x0a), QLatin1String(" / "));
+        data.doCommand("nunmap gc | nunmap gcc | nunmap gC | xunmap gc");
+        data.doCommand("ounmap ic | ounmap ac | xunmap ic | xunmap ac");
+        data.doCommand("unlet g:syntax_on | set opfunc=");
+        return text;
+    };
+
+    // The whole comment block goes, from either mode and by either name.
+    QCOMPARE(check("dic"), QLatin1String("int a; / // three"));
+    QCOMPARE(check("dac"), QLatin1String("int a; / // three"));
+    QCOMPARE(check("vicd"), QLatin1String("int a; / // three"));
+    QCOMPARE(check("vacd"), QLatin1String("int a; / // three"));
 }
 
 void FakeVimTester::test_vim_script_skipped_subscript()
