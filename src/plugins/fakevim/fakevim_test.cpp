@@ -233,6 +233,7 @@ private slots:
     void test_vim_script_if_chain();
     void test_vim_script_error_numbers();
     void test_vim_script_mode();
+    void test_vim_ex_command_own_selection();
     void test_vim_script_skipped_subscript();
     void test_vim_search_wraps_to_cursor();
     void test_vim_pattern_buffer_position();
@@ -6973,6 +6974,39 @@ void FakeVimTester::test_vim_script_mode()
     // mode() answers while the line is still being typed, which is a mapping
     // away from here.
     QCOMPARE(fromExCommand, QLatin1String("n/n"));
+}
+
+void FakeVimTester::test_vim_ex_command_own_selection()
+{
+    // A selection an ex command puts there itself stays for the next command to
+    // work on, which is how a script offers a text object of its own. A ":"
+    // typed in visual mode still goes back to normal mode. Values taken from
+    // Vim 9.1.
+    TestData data;
+    setup(&data);
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QFile f(dir.path() + "/s.vim");
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("function! Sel()\n"
+            "  normal! V\n"
+            "endfunction\n");
+    f.close();
+    data.doCommand("source " + dir.path() + "/s.vim");
+
+    data.setText("on" X "e" N "two" N "three");
+    data.doKeys(":call Sel()<CR>");
+    data.doKeys("d");
+    QCOMPARE(data.text(), QByteArray("two" N "three"));
+
+    // The other way round: what the ":" was typed in is left behind.
+    data.setText("on" X "e" N "two" N "three");
+    data.doKeys("V");
+    data.doCommand("echo 1");
+    data.doKeys("d");
+    QCOMPARE(data.text(), QByteArray("one" N "two" N "three"));
+
+    data.doCommand("delfunction Sel");
 }
 
 void FakeVimTester::test_vim_script_skipped_subscript()

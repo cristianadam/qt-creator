@@ -12284,6 +12284,10 @@ void FakeVimHandler::Private::handleExCommand(const QString &line0)
 
     //qDebug() << "CMD: " << cmd;
 
+    // Whether there was a selection to begin with, so that one the command puts
+    // there itself can be told apart from the one a ":" was typed in.
+    const bool hadSelection = isVisualMode();
+
     enterCommandMode(g.returnToMode);
 
     beginLargeEditBlock();
@@ -12299,9 +12303,19 @@ void FakeVimHandler::Private::handleExCommand(const QString &line0)
 
     endEditBlock();
 
-    if (isVisualMode())
+    // A ":" typed in visual mode goes back to normal mode when it is done. A
+    // selection the command made itself stays, which is how a script offers a
+    // text object of its own for the next command to work on.
+    if (isVisualMode() && hadSelection) {
         leaveVisualMode();
-    leaveCurrentMode();
+        leaveCurrentMode();
+    } else if (!isVisualMode()) {
+        leaveCurrentMode();
+    } else {
+        g.mode = CommandMode; // out of ex mode, keeping what was selected
+        clearCurrentMode();
+        updateMiniBuffer();
+    }
 }
 
 // Run an ex command line without touching the mode. ":" leaves insert or
