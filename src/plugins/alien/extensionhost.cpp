@@ -126,6 +126,12 @@ Result<> ExtensionHost::ensureStarted()
     m_connection->setWorkingDirectory(m_runtimeDir);
 
     connect(m_connection, &HostConnection::started, this, [this] {
+        // Push configuration and workspace folders before any extension
+        // activates and reads them.
+        m_connection->sendNotification("configuration/update",
+                                       QJsonObject{{"config", m_configuration}});
+        m_connection->sendNotification("workspace/updateFolders",
+                                       QJsonObject{{"folders", m_workspaceFolders}});
         const QList<std::function<void()>> deferred = std::exchange(m_deferred, {});
         for (const std::function<void()> &action : deferred)
             action();
@@ -206,6 +212,11 @@ void ExtensionHost::installHandlers()
         emit treeViewRefreshed(params.toObject().value("viewId").toString());
     });
 
+    m_connection->setNotificationHandler("treeview/unregister", [this](const QJsonValue &params) {
+        const QString viewId = params.toObject().value("viewId").toString();
+        delete m_treeFactories.take(viewId); // unregisters from the navigation pool
+    });
+
     m_connection->setNotificationHandler("webview/create", [this](const QJsonValue &params) {
         const QJsonObject object = params.toObject();
         const QString id = object.value("id").toString();
@@ -250,9 +261,11 @@ void ExtensionHost::installHandlers()
 
     m_connection->setNotificationHandler("output/append", [](const QJsonValue &params) {
         const QJsonObject object = params.toObject();
-        MessageManager::writeSilently(
-            QString("Alien <%1>: %2")
-                .arg(object.value("channel").toString(), object.value("value").toString()));
+        const QString text = QString("Alien <%1>: %2")
+                                 .arg(object.value("channel").toString(),
+                                      object.value("value").toString());
+        MessageManager::writeSilently(text);
+        qCDebug(logHost).noquote() << text; // also visible with qtc.alien.host logging
     });
 
     m_connection->setNotificationHandler("commands/register", [this](const QJsonValue &params) {
@@ -380,6 +393,7 @@ void ExtensionHost::activate(const VscodeManifest &manifest)
         {"path", manifest.rootDir.toFSPathString()},
         {"main", manifest.mainPath().toFSPathString()},
         {"languages", languages},
+        {"packageJSON", manifest.rawPackageJson},
     };
     whenReady([this, id, params] {
         m_connection->sendRequest(
@@ -393,6 +407,25 @@ void ExtensionHost::activate(const VscodeManifest &manifest)
         ensureDocumentSync();
         ensureEditorFeatures();
     });
+}
+
+void ExtensionHost::deactivate(const QString &id)
+{
+    // Stop the language servers this extension started, even if it did not
+    // dispose them itself. Their key is "<extensionId>:<clientId>".
+    const QString prefix = id + ':';
+    for (const QString &key : m_lspClients.keys()) {
+        if (key.startsWith(prefix)) {
+            if (auto client = m_lspClients.take(key))
+                LanguageClientManager::shutdownClient(client);
+        }
+    }
+
+    if (!isRunning())
+        return;
+
+    m_connection->sendRequest("deactivate", QJsonObject{{"id", id}},
+                              [](const QJsonValue &, const QString &) {});
 }
 
 Result<> ExtensionHost::activateBundledTestExtension()
@@ -684,6 +717,22 @@ void ExtensionHost::deliverWebviewMessage(const QString &id, const QJsonValue &m
     if (m_connection)
         m_connection->sendNotification("webview/onMessage",
                                        QJsonObject{{"id", id}, {"message", message}});
+}
+
+void ExtensionHost::setConfiguration(const QJsonObject &configuration)
+{
+    m_configuration = configuration;
+    if (m_connection && m_connection->isRunning())
+        m_connection->sendNotification("configuration/update", QJsonObject{{"config", configuration}});
+}
+
+void ExtensionHost::setWorkspaceFolders(const QJsonArray &folders)
+{
+    if (folders == m_workspaceFolders)
+        return;
+    m_workspaceFolders = folders;
+    if (m_connection && m_connection->isRunning())
+        m_connection->sendNotification("workspace/updateFolders", QJsonObject{{"folders", folders}});
 }
 
 AlienClient *ExtensionHost::languageClient(const QString &id) const

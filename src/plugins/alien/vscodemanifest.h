@@ -6,6 +6,7 @@
 #include <utils/filepath.h>
 #include <utils/result.h>
 
+#include <QJsonObject>
 #include <QString>
 #include <QStringList>
 
@@ -45,12 +46,21 @@ public:
     Utils::FilePath rootDir; // install location (the folder holding package.json)
     QString main;            // relative JS entry point, may be empty (declarative-only)
     QStringList activationEvents;
+    QStringList extensionDependencies; // e.g. { "theqtcompany.qt-core" }
 
     // Contributions (subset)
     QList<VscodeLanguage> languages;
     QList<VscodeCommand> commands;
     bool hasGrammars = false;
     bool hasDebuggers = false;
+
+    // The full parsed package.json, passed to the host as the extension's
+    // packageJSON.
+    QJsonObject rawPackageJson;
+
+    // Default values from contributes.configuration, keyed by dotted setting
+    // name (e.g. "qt-qml.qmlls.customExePath").
+    QJsonObject configurationDefaults;
 
     QString qualifiedId() const; // "publisher.name"
     Utils::FilePath mainPath() const; // rootDir / main, or empty

@@ -3,16 +3,22 @@
 
 #include "extensionregistry.h"
 
+#include <QHash>
+#include <QVersionNumber>
+
 using namespace Utils;
 
 namespace Alien::Internal {
 
 QList<VscodeManifest> ExtensionRegistry::scan(const FilePath &dir, QStringList *errors)
 {
-    QList<VscodeManifest> result;
     if (!dir.isReadableDir())
-        return result;
+        return {};
 
+    // ~/.vscode/extensions keeps every installed version in its own folder, so
+    // the same publisher.name shows up repeatedly. Keep only the newest version
+    // of each extension.
+    QHash<QString, VscodeManifest> byId;
     const FilePaths subDirs = dir.dirEntries(
         FileFilter({}, DirFilterFlag::Dirs | DirFilterFlag::NoDotAndDotDot));
     for (const FilePath &subDir : subDirs) {
@@ -21,11 +27,23 @@ QList<VscodeManifest> ExtensionRegistry::scan(const FilePath &dir, QStringList *
             continue;
 
         const Result<VscodeManifest> manifest = VscodeManifest::fromPackageJson(packageJson);
-        if (manifest)
-            result << *manifest;
-        else if (errors)
-            *errors << manifest.error();
+        if (!manifest) {
+            if (errors)
+                *errors << manifest.error();
+            continue;
+        }
+
+        const auto it = byId.constFind(manifest->qualifiedId());
+        if (it == byId.constEnd()
+            || QVersionNumber::fromString(it->version) < QVersionNumber::fromString(manifest->version)) {
+            byId.insert(manifest->qualifiedId(), *manifest);
+        }
     }
+
+    QList<VscodeManifest> result = byId.values();
+    std::sort(result.begin(), result.end(), [](const VscodeManifest &a, const VscodeManifest &b) {
+        return a.qualifiedId() < b.qualifiedId();
+    });
     return result;
 }
 

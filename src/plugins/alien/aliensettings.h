@@ -23,7 +23,31 @@ public:
     Utils::BoolAspect assumeMainIsStdioServer{this};
 };
 
+// Which discovered extensions to activate. Stored as the set of *disabled* ids
+// so newly installed extensions default to enabled.
+class AlienExtensionSettings final : public Utils::AspectContainer
+{
+    Q_OBJECT
+
+public:
+    AlienExtensionSettings();
+
+    Utils::StringAspect disabledExtensions{this}; // ids, one per line
+
+    QStringList disabledIds() const;
+    void setDisabledIds(const QStringList &ids);
+    bool isEnabled(const QString &id) const;
+
+    // Persist and notify. Used by the settings page instead of the aspect
+    // container's own apply(), since the page uses a custom widget.
+    void save();
+
+signals:
+    void changed();
+};
+
 AlienSettings &settings();
+AlienExtensionSettings &extensionSettings();
 
 void setupAlienSettings();
 

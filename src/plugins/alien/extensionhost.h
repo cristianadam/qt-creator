@@ -9,6 +9,8 @@
 #include <utils/result.h>
 
 #include <QHash>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QObject>
 #include <QPointer>
 #include <QSet>
@@ -17,7 +19,6 @@
 #include <functional>
 
 QT_BEGIN_NAMESPACE
-class QJsonArray;
 class QJsonValue;
 QT_END_NAMESPACE
 
@@ -50,6 +51,11 @@ public:
 
     // Activates an on-disk extension in the host.
     void activate(const VscodeManifest &manifest);
+
+    // Deactivates a running extension: runs its deactivate() hook, disposes what
+    // it registered, and stops any language servers it started. Takes effect
+    // without a restart.
+    void deactivate(const QString &id);
 
     // Extracts the bundled test extension to a temporary directory and
     // activates it. Used to exercise the host without an installed extension.
@@ -98,6 +104,14 @@ public:
 
     // Delivers a webview -> extension message (used by a JS renderer, or tests).
     void deliverWebviewMessage(const QString &id, const QJsonValue &message);
+
+    // Sets the configuration the host exposes through vscode.workspace
+    // .getConfiguration(). Keys are dotted (e.g. "qt-qml.qmlls.customExePath").
+    void setConfiguration(const QJsonObject &configuration);
+
+    // Sets the folders exposed as vscode.workspace.workspaceFolders. Each entry
+    // is {"path": <fs path>, "name": <display name>}.
+    void setWorkspaceFolders(const QJsonArray &folders);
 
     QStringList registeredCommands() const { return m_commands; }
     void executeCommand(const QString &command);
@@ -195,6 +209,8 @@ private:
     QHash<QString, Core::INavigationWidgetFactory *> m_treeFactories;
 
     WebviewRenderer *m_webviewRenderer = nullptr;
+    QJsonObject m_configuration;
+    QJsonArray m_workspaceFolders;
 };
 
 } // namespace Alien::Internal
