@@ -233,6 +233,7 @@ private slots:
     void test_vim_script_if_chain();
     void test_vim_script_error_numbers();
     void test_vim_pattern_lookbehind_limit();
+    void test_vim_script_block_abbreviations();
     void test_vim_softtabstop();
     void test_vim_script_mode();
     void test_vim_ex_command_own_selection();
@@ -6950,6 +6951,50 @@ void FakeVimTester::test_vim_pattern_lookbehind_limit()
     // An escaped colon is passed over, which is the point of the pattern.
     QCOMPARE(echo("g:d"), QLatin1String("-1"));
     data.doCommand("unlet g:a | unlet g:b | unlet g:c | unlet g:d");
+}
+
+void FakeVimTester::test_vim_script_block_abbreviations()
+{
+    // Vim lets the block commands be shortened, and scripts do: matchit closes
+    // an "if" with "end". Values taken from Vim 9.1, which accepts every one of
+    // these.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) {
+            if (!msg.startsWith("--"))
+                message = msg;
+        });
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const auto ran = [&](const QByteArray &script) {
+        const QString path = dir.path() + "/b.vim";
+        QFile f(path);
+        f.open(QIODevice::WriteOnly | QIODevice::Truncate);
+        f.write("let g:hit = 0\n" + script);
+        f.close();
+        data.doCommand("source " + path);
+        message.clear();
+        data.doCommand("echo g:hit");
+        return message;
+    };
+
+    QCOMPARE(ran("if 1\n let g:hit = 1\nen\n"), QLatin1String("1"));
+    QCOMPARE(ran("if 1\n let g:hit = 1\nend\n"), QLatin1String("1"));
+    QCOMPARE(ran("if 1\n let g:hit = 1\nendi\n"), QLatin1String("1"));
+    QCOMPARE(ran("if 0\nel\n let g:hit = 1\nendif\n"), QLatin1String("1"));
+    QCOMPARE(ran("if 0\nelsei 1\n let g:hit = 1\nendif\n"), QLatin1String("1"));
+    QCOMPARE(ran("let i = 0\nwh i < 1\n let g:hit = 1\n let i = 1\nendw\n"), QLatin1String("1"));
+    QCOMPARE(ran("for x in [1]\n let g:hit = 1\nendfo\n"), QLatin1String("1"));
+    QCOMPARE(ran("try\n let g:hit = 1\nendt\n"), QLatin1String("1"));
+    QCOMPARE(ran("try\n throw 'x'\ncat\n let g:hit = 1\nendtry\n"), QLatin1String("1"));
+    QCOMPARE(ran("try\n let g:x = 1\nfina\n let g:hit = 1\nendtry\n"), QLatin1String("1"));
+    QCOMPARE(ran("fu! F()\n let g:hit = 1\nendfunction\ncall F()\n"), QLatin1String("1"));
+    QCOMPARE(ran("function! G()\n let g:hit = 1\nendf\ncall G()\n"), QLatin1String("1"));
+    // A block that does not hold is still skipped, shortened or not.
+    QCOMPARE(ran("if 0\n let g:hit = 1\nend\n"), QLatin1String("0"));
+    data.doCommand("unlet g:hit | unlet! g:x | delfunction! F | delfunction! G");
 }
 
 void FakeVimTester::test_vim_softtabstop()

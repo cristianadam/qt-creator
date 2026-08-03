@@ -11877,22 +11877,45 @@ bool FakeVimHandler::Private::evalCondition(const QString &expr)
 }
 
 // Command names that end a control-flow block; handled by the enclosing level.
+// Vim lets these be shortened, and scripts do: "end" for "endif" is what the
+// matchit plugin writes. The shortest each may be is what Vim documents.
+static bool isCommand(const QString &cmd, const QString &shortest, const QString &full)
+{
+    return cmd.size() >= shortest.size() && full.startsWith(cmd);
+}
+
+// "endf" is Vim's "endfunction" rather than "endfor", so ask about it first;
+// "elsei" likewise stands for "elseif" and not for "else".
 static bool isFunctionStart(const QString &cmd)
 {
-    return cmd == "function" || cmd == "func" || cmd == "fun" || cmd == "fu"
-        || cmd == "def";
+    return isCommand(cmd, "fu", "function") || cmd == "def";
 }
 
 static bool isFunctionEnd(const QString &cmd)
 {
-    return cmd == "endfunction" || cmd == "endfunc" || cmd == "enddef";
+    return isCommand(cmd, "endf", "endfunction") || cmd == "enddef";
 }
+
+static bool isElseIf(const QString &cmd) { return isCommand(cmd, "elsei", "elseif"); }
+static bool isElse(const QString &cmd)
+{
+    return !isElseIf(cmd) && isCommand(cmd, "el", "else");
+}
+static bool isEndIf(const QString &cmd) { return isCommand(cmd, "en", "endif"); }
+static bool isWhile(const QString &cmd) { return isCommand(cmd, "wh", "while"); }
+static bool isEndWhile(const QString &cmd) { return isCommand(cmd, "endw", "endwhile"); }
+static bool isEndFor(const QString &cmd)
+{
+    return !isFunctionEnd(cmd) && isCommand(cmd, "endfo", "endfor");
+}
+static bool isCatch(const QString &cmd) { return isCommand(cmd, "cat", "catch"); }
+static bool isFinally(const QString &cmd) { return isCommand(cmd, "fina", "finally"); }
+static bool isEndTry(const QString &cmd) { return isCommand(cmd, "endt", "endtry"); }
 
 static bool isBlockTerminator(const QString &cmd)
 {
-    return cmd == "endif" || cmd == "else" || cmd == "elseif"
-        || cmd == "endwhile" || cmd == "endfor" || isFunctionEnd(cmd)
-        || cmd == "catch" || cmd == "finally" || cmd == "endtry";
+    return isEndIf(cmd) || isElse(cmd) || isElseIf(cmd) || isEndWhile(cmd) || isEndFor(cmd)
+        || isFunctionEnd(cmd) || isCatch(cmd) || isFinally(cmd) || isEndTry(cmd);
 }
 
 void FakeVimHandler::Private::execSequence(const QList<ExCommand> &cmds,
@@ -11910,7 +11933,7 @@ void FakeVimHandler::Private::execSequence(const QList<ExCommand> &cmds,
         if (c.cmd == "if") {
             ++index;
             execIf(cmds, index, active, active && evalCondition(exprText(c)));
-        } else if (c.cmd == "while") {
+        } else if (isWhile(c.cmd)) {
             ++index;
             execWhile(cmds, index, active, exprText(c));
         } else if (c.cmd == "for") {
@@ -11977,16 +12000,16 @@ void FakeVimHandler::Private::execIf(const QList<ExCommand> &cmds,
     execSequence(cmds, index, anyTaken);
     while (index < cmds.size() && !interpreterInterrupted()) {
         const ExCommand c = cmds.at(index);
-        if (c.cmd == "endif") {
+        if (isEndIf(c.cmd)) {
             ++index;
             return;
         }
-        if (c.cmd == "elseif") {
+        if (isElseIf(c.cmd)) {
             ++index;
             const bool take = active && !anyTaken && evalCondition(exprText(c));
             anyTaken = anyTaken || take;
             execSequence(cmds, index, take);
-        } else if (c.cmd == "else") {
+        } else if (isElse(c.cmd)) {
             ++index;
             const bool take = active && !anyTaken;
             anyTaken = anyTaken || take;
@@ -12030,7 +12053,7 @@ void FakeVimHandler::Private::execWhile(const QList<ExCommand> &cmds,
     }
 
     index = endIndex;
-    if (index < cmds.size() && cmds.at(index).cmd == "endwhile")
+    if (index < cmds.size() && isEndWhile(cmds.at(index).cmd))
         ++index;
 }
 
@@ -12089,7 +12112,7 @@ void FakeVimHandler::Private::execFor(const QList<ExCommand> &cmds,
     }
 
     index = endIndex;
-    if (index < cmds.size() && cmds.at(index).cmd == "endfor")
+    if (index < cmds.size() && isEndFor(cmds.at(index).cmd))
         ++index;
 }
 
@@ -12141,7 +12164,7 @@ void FakeVimHandler::Private::execTry(const QList<ExCommand> &cmds,
     bool handled = !pending.thrown;
     execSequence(cmds, index, false); // skip the rest of the body to the clauses
 
-    while (index < cmds.size() && cmds.at(index).cmd == "catch") {
+    while (index < cmds.size() && isCatch(cmds.at(index).cmd)) {
         const ExCommand c = cmds.at(index);
         ++index;
         const bool match = active && pending.thrown && !handled
@@ -12159,7 +12182,7 @@ void FakeVimHandler::Private::execTry(const QList<ExCommand> &cmds,
         }
     }
 
-    if (index < cmds.size() && cmds.at(index).cmd == "finally") {
+    if (index < cmds.size() && isFinally(cmds.at(index).cmd)) {
         ++index;
         execSequence(cmds, index, active);
         if (interpreterInterrupted()) { // :finally replaces any pending interrupt
@@ -12169,7 +12192,7 @@ void FakeVimHandler::Private::execTry(const QList<ExCommand> &cmds,
         }
     }
 
-    if (index < cmds.size() && cmds.at(index).cmd == "endtry")
+    if (index < cmds.size() && isEndTry(cmds.at(index).cmd))
         ++index;
 
     setVariable("v:exception", savedException);
