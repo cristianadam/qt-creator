@@ -2931,6 +2931,7 @@ public:
     bool handleExNormalCommand(const ExCommand &cmd);
     bool handleExReadCommand(const ExCommand &cmd);
     bool handleExUndoRedoCommand(const ExCommand &cmd);
+    bool handleExRetabCommand(const ExCommand &cmd);
     bool handleExSetCommand(const ExCommand &cmd);
     void applySetOption(const QString &arg);
     bool handleExSortCommand(const ExCommand &cmd);
@@ -7682,6 +7683,81 @@ static bool unimplementedOption(const QString &name, OptionKind *kind)
         *kind = OptionKind::String;
     else
         return false;
+    return true;
+}
+
+// The white space that reaches from one column to another: tabs and spaces where
+// 'expandtab' is off, spaces alone where it is on.
+static QString whitespaceTo(int fromColumn, int toColumn, int tabStop, bool expand)
+{
+    if (expand || tabStop <= 0)
+        return QString(qMax(0, toColumn - fromColumn), ' ');
+    QString result;
+    int column = fromColumn;
+    while ((column / tabStop + 1) * tabStop <= toColumn) {
+        result.append('\t');
+        column = (column / tabStop + 1) * tabStop;
+    }
+    result.append(QString(toColumn - column, ' '));
+    return result;
+}
+
+bool FakeVimHandler::Private::handleExRetabCommand(const ExCommand &cmd)
+{
+    // :[range]ret[ab][!] [{tabstop}] - write the white space of each line out
+    // again for the tab stop, which the argument may change. Without a "!" only
+    // a run that holds a tab is touched; with one a run of spaces is as well.
+    // The whole file unless a range says otherwise.
+    if (!cmd.matches("ret", "retab"))
+        return false;
+
+    const int wanted = cmd.args.trimmed().toInt(); // 0 where nothing was given
+    const int oldTabStop = tabStop();
+    const int newTabStop = wanted > 0 ? wanted : oldTabStop;
+    const bool expand = expandTab();
+    const int firstLine = cmd.hasRange ? blockAt(cmd.range.beginPos).blockNumber() + 1 : 1;
+    const int lastLine = cmd.hasRange ? blockAt(cmd.range.endPos).blockNumber() + 1
+                                      : document()->blockCount();
+
+    beginEditBlock();
+    for (int line = firstLine; line <= lastLine; ++line) {
+        const QString text = lineContents(line);
+        QString result;
+        int column = 0; // where the text stands on screen
+        int i = 0;
+        while (i < text.size()) {
+            if (text.at(i) != ' ' && text.at(i) != '\t') {
+                result.append(text.at(i));
+                ++column;
+                ++i;
+                continue;
+            }
+            // How far this run of white space reaches, and whether it holds a tab.
+            int end = i;
+            int endColumn = column;
+            bool hasTab = false;
+            while (end < text.size() && (text.at(end) == ' ' || text.at(end) == '\t')) {
+                if (text.at(end) == '\t') {
+                    hasTab = true;
+                    endColumn = (endColumn / oldTabStop + 1) * oldTabStop;
+                } else {
+                    ++endColumn;
+                }
+                ++end;
+            }
+            result.append(hasTab || cmd.hasBang
+                              ? whitespaceTo(column, endColumn, newTabStop, expand)
+                              : text.mid(i, end - i));
+            column = endColumn;
+            i = end;
+        }
+        if (result != text)
+            setLineContents(line, result);
+    }
+    endEditBlock();
+
+    if (wanted > 0)
+        setOption("tabstop", VimValue(qlonglong(wanted)));
     return true;
 }
 
@@ -12648,6 +12724,7 @@ bool FakeVimHandler::Private::handleExCommandHelper(ExCommand &cmd)
         || handleExNormalCommand(cmd)
         || handleExReadCommand(cmd)
         || handleExUndoRedoCommand(cmd)
+        || handleExRetabCommand(cmd)
         || handleExSetCommand(cmd)
         || handleExShiftCommand(cmd)
         || handleExSortCommand(cmd)

@@ -238,6 +238,7 @@ private slots:
     void test_vim_script_searchpair();
     void test_vim9_matchit();
     void test_vim_script_range_function();
+    void test_vim_ex_retab();
     void test_vim_softtabstop();
     void test_vim_script_mode();
     void test_vim_ex_command_own_selection();
@@ -7183,6 +7184,55 @@ void FakeVimTester::test_vim_script_range_function()
     QCOMPARE(data.handler->textCursor().positionInBlock(), 1);
 
     data.doCommand("delfunction WithRange | delfunction NoRange | unlet g:seen");
+}
+
+void FakeVimTester::test_vim_ex_retab()
+{
+    // ":retab" writes the white space of each line out again for the tab stop.
+    // Without a "!" only a run that holds a tab is touched. Values taken from
+    // Vim 9.1. Everything is read before anything is compared, so that a
+    // comparison giving up in between does not leave the options behind for
+    // other tests to trip over.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) {
+            if (!msg.startsWith("--"))
+                message = msg;
+        });
+    const auto retabbed = [&](const char *options, const char *text, const char *command) {
+        data.doCommand(QLatin1String("set ") + QLatin1String(options));
+        data.setText(text);
+        data.doCommand(QLatin1String(command));
+        return QString::fromUtf8(data.text())
+            .replace(QLatin1Char('\t'), QLatin1String("<T>"))
+            .replace(QLatin1Char('\n'), QLatin1String("/"));
+    };
+
+    // Spaces are left alone unless "!" says otherwise.
+    const QString spaces = retabbed("noet ts=8", "" X "a               b", "retab");
+    const QString bang = retabbed("noet ts=8", "" X "a               b", "retab!");
+    // With 'expandtab' the tabs become spaces.
+    const QString expanded = retabbed("et ts=8", "" X "\ta", "retab");
+    // The whole file where no range says otherwise, and only the lines a range
+    // does name.
+    const QString whole = retabbed("et ts=8", "" X "\tone" N "\ttwo" N "\tthree", "retab");
+    const QString ranged = retabbed("et ts=8", "" X "\tone" N "\ttwo", "2retab");
+    // An argument is the new tab stop, and stays as one.
+    const QString newStop = retabbed("noet ts=8", "" X "\ta", "retab 4");
+    message.clear();
+    data.doCommand("echo &ts");
+    const QString tabStopAfter = message;
+    data.doCommand("set ts=8 | set noet");
+
+    QCOMPARE(spaces, QLatin1String("a               b"));
+    QCOMPARE(bang, QLatin1String("a<T><T>b"));
+    QCOMPARE(expanded, QLatin1String("        a"));
+    QCOMPARE(whole, QLatin1String("        one/        two/        three"));
+    QCOMPARE(ranged, QLatin1String("<T>one/        two"));
+    QCOMPARE(newStop, QLatin1String("<T><T>a"));
+    QCOMPARE(tabStopAfter, QLatin1String("4"));
 }
 
 void FakeVimTester::test_vim_softtabstop()
