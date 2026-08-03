@@ -232,6 +232,7 @@ private slots:
     void test_vim_script_scriptlocal();
     void test_vim_script_if_chain();
     void test_vim_script_error_numbers();
+    void test_vim_softtabstop();
     void test_vim_script_mode();
     void test_vim_ex_command_own_selection();
     void test_vim9_comment_text_object();
@@ -6906,6 +6907,50 @@ void FakeVimTester::test_vim_script_error_numbers()
     // "v:exception" holds it in the shape a script reports or matches on.
     QCOMPARE(echo("g:ex"), QLatin1String("Vim:E121: Undefined variable: g:nosuchvar"));
     data.doCommand("unlet g:hit | unlet g:ok | unlet g:ex");
+}
+
+void FakeVimTester::test_vim_softtabstop()
+{
+    // 'softtabstop' sets how far a tab reaches in insert mode where that is not
+    // the same as 'tabstop', and a backspace takes back just as much. Where
+    // 'expandtab' is off the whitespace is written out as tabs as far as a real
+    // tab stop takes it. Values taken from Vim 9.1.
+    TestData data;
+    setup(&data);
+    const auto typed = [&](const char *options, const char *keys) {
+        data.doCommand(QLatin1String("set ") + QLatin1String(options));
+        data.setText("" X "x");
+        data.doKeys(keys);
+        data.doKeys("<Esc>");
+        return QString::fromUtf8(data.text()).replace(QLatin1Char('\t'),
+                                                      QLatin1String("<TAB>"));
+    };
+
+    QCOMPARE(typed("sts=4 et ts=8 sw=8", "i<Tab>"), QLatin1String("    x"));
+    QCOMPARE(typed("sts=4 et ts=8 sw=8", "i<Tab><Tab>"), QLatin1String("        x"));
+    QCOMPARE(typed("sts=4 noet ts=8 sw=8", "i<Tab>"), QLatin1String("    x"));
+    // Two of them reach a real tab stop, so a tab is what is left there.
+    QCOMPARE(typed("sts=4 noet ts=8 sw=8", "i<Tab><Tab>"), QLatin1String("<TAB>x"));
+    // A backspace takes back one soft tab stop, not one character.
+    QCOMPARE(typed("sts=4 noet ts=8 sw=8", "i<Tab><Tab><BS>"), QLatin1String("    x"));
+    QCOMPARE(typed("sts=4 et ts=8 sw=8", "i<Tab><Tab><BS>"), QLatin1String("    x"));
+    // Without it 'tabstop' is in charge, as before.
+    QCOMPARE(typed("sts=0 et ts=8 sw=8", "i<Tab>"), QLatin1String("        x"));
+    // A tab reaches the next stop, counting from where the cursor stands.
+    QCOMPARE(typed("sts=3 et ts=8 sw=8", "iab<Tab>"), QLatin1String("ab x"));
+    // What ":set" reports is what was asked for.
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) {
+            if (!msg.startsWith("--"))
+                message = msg;
+        });
+    data.doCommand("set sts=7");
+    message.clear();
+    data.doCommand("echo &sts");
+    QCOMPARE(message, QLatin1String("7"));
+
+    data.doCommand("set sts=0 | set ts=8 | set sw=8 | set noet");
 }
 
 void FakeVimTester::test_vim_script_mode()

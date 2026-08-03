@@ -110,6 +110,9 @@ public:
 
     FvBoolAspect startOfLine;
     FvIntegerAspect tabStop;
+    // How far a tab reaches in insert mode when that is not the same as
+    // 'tabstop'. 0 leaves 'tabstop' in charge. Set from a script or a vimrc.
+    FvIntegerAspect softTabStop;
     FvBoolAspect hlSearch;
     FvBoolAspect smartTab;
     FvIntegerAspect shiftWidth;

@@ -2448,6 +2448,13 @@ public:
             return qMax(1, ts);
         return qMax(1, s.tabStop());
     }
+    // How far a tab reaches in insert mode: 'softtabstop' where it is set, and
+    // 'tabstop' otherwise, as in Vim.
+    int softTabStop() const
+    {
+        const int sts = s.softTabStop();
+        return sts > 0 ? sts : tabStop();
+    }
     int shiftWidth() const
     {
         int sw;
@@ -6652,7 +6659,7 @@ void FakeVimHandler::Private::handleInsertMode(const Input &input)
                 const Column ind = indentation(data);
                 if (col.logical <= ind.logical && col.logical
                         && startsWithWhitespace(data, col.physical)) {
-                    const int ts = tabStop();
+                    const int ts = softTabStop();
                     const int newl = col.logical - 1 - (col.logical - 1) % ts;
                     const QString prefix = tabExpand(newl);
                     setLineContents(line, prefix + data.mid(col.physical));
@@ -6686,11 +6693,25 @@ void FakeVimHandler::Private::handleInsertMode(const Input &input)
             setTargetColumn();
         } else if (q->tabPressedInInsertMode()) {
             m_buffer->insertState.insertingSpaces = true;
+            const int ts = softTabStop();
+            const int col = logicalCursorColumn();
+            const int target = col + ts - col % ts;
             if (expandTab()) {
-                const int ts = tabStop();
-                const int col = logicalCursorColumn();
-                QString str = QString(ts - col % ts, ' ');
-                insertInInsertMode(str);
+                insertInInsertMode(QString(target - col, ' '));
+            } else if (s.softTabStop() > 0) {
+                // The whitespace reaches the next soft tab stop, and is written
+                // out as tabs as far as a real tab stop takes it.
+                const int line = cursorLine() + 1;
+                const Column here = cursorColumn();
+                const QString data = lineContents(line);
+                if (here.logical <= indentation(data).logical) {
+                    const QString prefix = tabExpand(target);
+                    setLineContents(line, prefix + data.mid(here.physical));
+                    moveToStartOfLine();
+                    moveRight(prefix.size());
+                } else {
+                    insertInInsertMode(QString(target - col, ' '));
+                }
             } else {
                 insertInInsertMode(input.raw());
             }
