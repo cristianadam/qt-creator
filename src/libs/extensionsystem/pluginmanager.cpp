@@ -2185,6 +2185,8 @@ bool PluginManager::isShuttingDown()
 
 QObject *PluginManager::getObjectByName(const QString &name)
 {
+    if (!d)
+        return nullptr; // object pool is gone (shutdown)
     QReadLocker lock(&d->m_lock);
     return Utils::findOrDefault(allObjects(), [&name](const QObject *obj) {
         return obj->objectName() == name;
