@@ -9047,20 +9047,21 @@ void FakeVimTester::test_vim_commentstring()
     data.doCommand("setf python");
     QCOMPARE(echo("&cms"), QLatin1String("# %s"));
 
-    // An explicit ":set" wins over both, and stays with this buffer.
-    data.doCommand("set commentstring=;; %s");
+    // An explicit ":set" wins over both, and stays with this buffer. The space
+    // is escaped, as Vim wants it: unescaped it would end the value there.
+    data.doCommand("set commentstring=;;\\ %s");
     QCOMPARE(echo("&cms"), QLatin1String(";; %s"));
     data.handler->setCurrentFileName("Other.cpp");
     QCOMPARE(echo("&cms"), QLatin1String(";; %s"));
 
     // "gc" uses the same value, including a trailing part.
     data.doCommand("set commentary");
-    data.doCommand("set commentstring=<!-- %s -->");
+    data.doCommand("set commentstring=<!--\\ %s\\ -->");
     data.setText("abc");
     KEYS("gcc", X "<!-- abc -->");
     KEYS("gcc", X "abc");
     // A file type with a line comment keeps the previous behavior.
-    data.doCommand("set commentstring=# %s");
+    data.doCommand("set commentstring=#\\ %s");
     data.setText("abc");
     KEYS("gcc", X "# abc");
     KEYS("gcc", X "abc");

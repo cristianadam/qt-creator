@@ -2910,6 +2910,7 @@ public:
     bool handleExReadCommand(const ExCommand &cmd);
     bool handleExUndoRedoCommand(const ExCommand &cmd);
     bool handleExSetCommand(const ExCommand &cmd);
+    void applySetOption(const QString &arg);
     bool handleExSortCommand(const ExCommand &cmd);
     bool handleExShiftCommand(const ExCommand &cmd);
     bool handleExSourceCommand(const ExCommand &cmd);
@@ -7654,14 +7655,48 @@ bool FakeVimHandler::Private::handleExSetCommand(const ExCommand &cmd)
 
     clearMessage();
 
+    // Vim takes any number of options on one line, as a vimrc writes them:
+    // "set ai et sw=4". A backslash keeps a space inside a value from ending it.
+    QStringList options;
+    QString current;
+    bool escaped = false;
+    for (const QChar &c : cmd.args) {
+        if (escaped) {
+            escaped = false;
+            current.append(c);
+            continue;
+        }
+        if (c == '\\') {
+            escaped = true;
+            current.append(c);
+        } else if (c.isSpace()) {
+            if (!current.isEmpty())
+                options.append(current);
+            current.clear();
+        } else {
+            current.append(c);
+        }
+    }
+    if (!current.isEmpty())
+        options.append(current);
+
+    for (const QString &option : options)
+        applySetOption(option);
+
+    return true;
+}
+
+// One option of a ":set", which may hold several.
+void FakeVimHandler::Private::applySetOption(const QString &arg)
+{
     // "filetype"/"ft" is not a stored option; it drives FileType autocommands.
-    if (cmd.args.startsWith("filetype=") || cmd.args.startsWith("ft=")) {
-        setFileType(cmd.args.section('=', 1));
-        return true;
+    if (arg.startsWith("filetype=") || arg.startsWith("ft=")) {
+        setFileType(arg.section('=', 1));
+        return;
     }
 
     static const QRegularExpression addRe("^([a-zA-Z]+)([-+^])=(.*)$");
-    const QRegularExpressionMatch add = addRe.match(cmd.args);
+    const QRegularExpressionMatch add = addRe.match(arg);
     if (add.hasMatch()) {
         // ":set {option}+=" adds to what is there, "-=" takes away and "^="
         // puts in front, which is how a path option is added to.
@@ -7690,36 +7725,36 @@ bool FakeVimHandler::Private::handleExSetCommand(const ExCommand &cmd)
                 value.remove(what);
             setOption(optionName, VimValue(value));
         }
-    } else if (cmd.args.contains('=')) {
+    } else if (arg.contains('=')) {
         // Non-boolean config to set.
-        int p = cmd.args.indexOf('=');
-        const QString optionName = cmd.args.left(p);
-        const QString value = unescapedSetValue(cmd.args.mid(p + 1));
+        int p = arg.indexOf('=');
+        const QString optionName = arg.left(p);
+        const QString value = unescapedSetValue(arg.mid(p + 1));
         if (isCommentStringOption(optionName)) {
             m_commentString = value;
-            return true;
+            return;
         }
         OptionKind kind = OptionKind::Boolean;
         if (!s.item(Utils::keyFromString(optionName)) && unimplementedOption(optionName, &kind))
-            return true;
+            return;
         QString error = s.trySetValue(optionName, value);
         if (!error.isEmpty())
             showMessage(MessageError, error);
-    } else if (cmd.args == "commentstring?" || cmd.args == "cms?") {
+    } else if (arg == "commentstring?" || arg == "cms?") {
         showMessage(MessageInfo, "commentstring=" + commentString());
-    } else if (cmd.args.endsWith('&') || cmd.args.endsWith("&vim")) {
+    } else if (arg.endsWith('&') || arg.endsWith("&vim")) {
         // ":set {option}&" puts an option back to what it started as, which is
         // how a script leaves one as it found it. Vim's "&vim" asks for its own
         // default rather than Vi's; there is only one default here.
-        QString optionName = cmd.args;
+        QString optionName = arg;
         optionName.chop(optionName.endsWith("&vim") ? 4 : 1);
         OptionKind kind = OptionKind::Boolean;
         if (FvBaseAspect *act = s.item(Utils::keyFromString(optionName)))
             act->setVariantValue(act->defaultVariantValue());
         else if (!unimplementedOption(optionName, &kind))
-            showMessage(MessageError, Tr::tr("E518: Unknown option:") + ' ' + cmd.args);
+            showMessage(MessageError, Tr::tr("E518: Unknown option:") + ' ' + arg);
     } else {
-        QString optionName = cmd.args;
+        QString optionName = arg;
 
         bool toggleOption = optionName.endsWith('!');
         bool printOption = !toggleOption && optionName.endsWith('?');
@@ -7741,7 +7776,7 @@ bool FakeVimHandler::Private::handleExSetCommand(const ExCommand &cmd)
                 showMessage(MessageInfo, shown);
             }
         } else if (!act) {
-            showMessage(MessageError, Tr::tr("E518: Unknown option:") + ' ' + cmd.args);
+            showMessage(MessageError, Tr::tr("E518: Unknown option:") + ' ' + arg);
         } else if (act->defaultVariantValue().typeId() == QMetaType::Bool) {
             bool oldValue = act->variantValue().toBool();
             if (printOption) {
@@ -7751,9 +7786,9 @@ bool FakeVimHandler::Private::handleExSetCommand(const ExCommand &cmd)
                 act->setVariantValue(!oldValue);
             }
         } else if (negateOption && !printOption) {
-            showMessage(MessageError, Tr::tr("Invalid argument:") + ' ' + cmd.args);
+            showMessage(MessageError, Tr::tr("Invalid argument:") + ' ' + arg);
         } else if (toggleOption) {
-            showMessage(MessageError, Tr::tr("Trailing characters:") + ' ' + cmd.args);
+            showMessage(MessageError, Tr::tr("Trailing characters:") + ' ' + arg);
         } else {
             showMessage(MessageInfo, act->settingsKey().toByteArray().toLower() + "="
                         + act->variantValue().toString());
@@ -7761,7 +7796,6 @@ bool FakeVimHandler::Private::handleExSetCommand(const ExCommand &cmd)
     }
     updateEditor();
     updateHighlights();
-    return true;
 }
 
 bool FakeVimHandler::Private::handleExNormalCommand(const ExCommand &cmd)
