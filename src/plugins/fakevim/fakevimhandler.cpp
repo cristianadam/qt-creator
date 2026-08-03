@@ -9774,6 +9774,14 @@ bool FakeVimHandler::Private::variableValue(const QString &name, VimValue *resul
         return true;
     }
     if (name == "v:version") { *result = VimValue(qlonglong(900)); return true; }
+    // The count a command was given: "v:count" is 0 where none was typed and
+    // "v:count1" is 1 there, as Vim has them.
+    if (name == "v:count") {
+        const bool typed = g.mvcount != 0 || g.opcount != 0;
+        *result = VimValue(qlonglong(typed ? count() : 0));
+        return true;
+    }
+    if (name == "v:count1") { *result = VimValue(qlonglong(count())); return true; }
 
     // A bare scope name like "g:" is a dictionary of that scope, as used by
     // "get(g:, 'name', default)". This is a snapshot: assigning through it
@@ -10635,8 +10643,8 @@ static bool isBuiltinFunction(const QString &name)
         "fnamemodify", "funcref", "function", "get", "getbufvar", "getcurpos",
         "getcwd", "getline", "getpos", "has", "has_key", "iconv", "indent",
         "index", "insert", "isdirectory", "items", "join", "keys", "len",
-        "line", "map", "match", "matchlist", "matchstr", "max", "min", "mode",
-        "searchpair", "searchpairpos",
+        "line", "map", "match", "matchend", "matchlist", "matchstr", "max", "min",
+        "mode", "searchpair", "searchpairpos",
         "nr2char", "printf", "range", "readfile", "remove", "repeat", "reverse",
         "search", "setbufvar", "setline", "setpos", "shellescape", "sort",
         "split", "str2nr", "strftime", "stridx", "string", "strlen", "strpart",
@@ -10909,13 +10917,17 @@ bool FakeVimHandler::Private::callFunction(const QString &name,
     } else if (name == "char2nr") {
         const QString str = arg(0).toString();
         *result = VimValue(qlonglong(str.isEmpty() ? 0 : str.at(0).unicode()));
-    } else if (name == "matchstr" || name == "match") {
+    } else if (name == "matchstr" || name == "match" || name == "matchend") {
+        const QString subject = arg(0).toString();
+        const int from = args.size() > 2 ? int(arg(2).toNumber()) : 0;
         const QRegularExpressionMatch mm =
-            vimPatternToQtPattern(arg(1).toString()).match(arg(0).toString());
+            vimPatternToQtPattern(arg(1).toString()).match(subject, qMax(0, from));
         if (name == "matchstr")
             *result = VimValue(mm.hasMatch() ? mm.captured(0) : QString());
-        else
+        else if (name == "match")
             *result = VimValue(qlonglong(mm.hasMatch() ? mm.capturedStart() : -1));
+        else // "matchend" answers where the match leaves off
+            *result = VimValue(qlonglong(mm.hasMatch() ? mm.capturedEnd() : -1));
     } else if (name == "toupper") {
         *result = VimValue(arg(0).toString().toUpper());
     } else if (name == "tolower") {
@@ -11259,7 +11271,9 @@ bool FakeVimHandler::Private::callFunction(const QString &name,
             line = int(arg(0).toNumber());
             column = int(arg(1).toNumber());
         }
-        if (line <= 0 || line > document()->blockCount()) {
+        if (line == 0)
+            line = cursorBlockNumber() + 1; // 0 asks to stay on this line
+        if (line < 0 || line > document()->blockCount()) {
             *result = VimValue(qlonglong(-1));
         } else {
             setCursorPosition(CursorPosition(line - 1, qMax(0, column - 1)));

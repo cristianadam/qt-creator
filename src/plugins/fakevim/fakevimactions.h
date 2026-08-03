@@ -171,6 +171,10 @@ public:
     // every buffer here is; scripts check it before touching one.
     FvStringAspect bufType;
 
+    // The pairs "%" jumps between, as Vim writes them. Scripts read this to
+    // extend what they match; the jumping here does not consult it yet.
+    FvStringAspect matchPairs;
+
     // Which Vi compatibilities are in effect. None of the flags change anything
     // here, where the behavior is Vim's own, so this reports what Vim reports
     // and exists for the scripts that save it, set it and put it back.

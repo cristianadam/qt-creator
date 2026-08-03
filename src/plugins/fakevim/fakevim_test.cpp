@@ -236,6 +236,7 @@ private slots:
     void test_vim_script_block_abbreviations();
     void test_vim_command_line_ctrl_u();
     void test_vim_script_searchpair();
+    void test_vim9_matchit();
     void test_vim_softtabstop();
     void test_vim_script_mode();
     void test_vim_ex_command_own_selection();
@@ -7091,6 +7092,44 @@ void FakeVimTester::test_vim_script_searchpair()
     // Nothing to find.
     data.setText("i" X "f 1" N "after");
     QCOMPARE(echo("searchpair('\\<if\\>', '', '\\<endif\\>', 'W')"), QLatin1String("0"));
+}
+
+void FakeVimTester::test_vim9_matchit()
+{
+    // Vim 9.1's matchit plugin, which makes "%" jump between the words of a
+    // pair rather than only between brackets. Values taken from Vim 9.1 running
+    // the same plugin over the same lines.
+    const QString D = "/usr/share/vim/vim91/pack/dist/opt/matchit";
+    if (!QFileInfo::exists(D + "/plugin/matchit.vim"))
+        QSKIP("Vim 9.1's matchit plugin is not installed");
+    TestData data;
+    setup(&data);
+    data.doCommand("set runtimepath+=" + D);
+    data.doCommand("source " + D + "/plugin/matchit.vim");
+    const QLatin1String words("let b:match_words = '\\<if\\>:\\<else\\>:\\<endif\\>'");
+
+    // "%" walks the chain round, and "g%" walks it the other way.
+    const auto walk = [&](const char *keys) {
+        data.setText("i" X "f 1" N "else" N "endif" N "after");
+        data.doCommand(words);
+        QStringList lines;
+        for (int i = 0; i < 3; ++i) {
+            data.doKeys(keys);
+            lines << QString::number(data.handler->textCursor().blockNumber() + 1);
+        }
+        return lines.join(',');
+    };
+    QCOMPARE(walk("%"), QLatin1String("2,3,1"));
+    QCOMPARE(walk("g%"), QLatin1String("3,2,1"));
+
+    // Brackets still work, which the plugin takes from 'matchpairs'.
+    data.setText("x = (a" X " + b) * c");
+    data.doCommand(words);
+    data.doKeys("%");
+    QCOMPARE(data.handler->textCursor().positionInBlock(), 4);
+
+    data.doCommand("nunmap % | nunmap g% | xunmap % | xunmap g%");
+    data.doCommand("ounmap % | ounmap g%");
 }
 
 void FakeVimTester::test_vim_softtabstop()
