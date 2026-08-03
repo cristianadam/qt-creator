@@ -239,6 +239,7 @@ private slots:
     void test_vim9_matchit();
     void test_vim_script_range_function();
     void test_vim_ex_retab();
+    void test_vim_script_width_and_getline();
     void test_vim_softtabstop();
     void test_vim_script_mode();
     void test_vim_ex_command_own_selection();
@@ -7233,6 +7234,44 @@ void FakeVimTester::test_vim_ex_retab()
     QCOMPARE(ranged, QLatin1String("<T>one/        two"));
     QCOMPARE(newStop, QLatin1String("<T><T>a"));
     QCOMPARE(tabStopAfter, QLatin1String("4"));
+}
+
+void FakeVimTester::test_vim_script_width_and_getline()
+{
+    // strdisplaywidth() counts a tab to the next tab stop, from the column it is
+    // given; strwidth() counts it as one. getline() with two arguments answers
+    // with the lines between them. Values taken from Vim 9.1.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) {
+            if (!msg.startsWith("--"))
+                message = msg;
+        });
+    auto echo = [&](const char *expr) -> QString {
+        message.clear();
+        data.doCommand(QLatin1String("echo ") + QLatin1String(expr));
+        return message;
+    };
+
+    data.doCommand("set ts=8");
+    QCOMPARE(echo("strdisplaywidth('abc')"), QLatin1String("3"));
+    QCOMPARE(echo("strdisplaywidth(\"a\\tb\")"), QLatin1String("9"));
+    QCOMPARE(echo("strdisplaywidth(\"\\t\")"), QLatin1String("8"));
+    QCOMPARE(echo("strdisplaywidth(\"\\t\", 4)"), QLatin1String("4"));
+    QCOMPARE(echo("strdisplaywidth(\"\\t\", 8)"), QLatin1String("8"));
+    QCOMPARE(echo("strdisplaywidth('abc', 5)"), QLatin1String("3"));
+    QCOMPARE(echo("strwidth(\"a\\tb\")"), QLatin1String("3"));
+    data.doCommand("set ts=4");
+    QCOMPARE(echo("strdisplaywidth(\"\\t\")"), QLatin1String("4"));
+    data.doCommand("set ts=8");
+
+    data.setText("on" X "e" N "two" N "three");
+    QCOMPARE(echo("string(getline(1, '$'))"), QLatin1String("['one', 'two', 'three']"));
+    QCOMPARE(echo("string(getline(2, 3))"), QLatin1String("['two', 'three']"));
+    QCOMPARE(echo("getline('.')"), QLatin1String("one"));
+    QCOMPARE(echo("string(getline(1, 1))"), QLatin1String("['one']"));
 }
 
 void FakeVimTester::test_vim_softtabstop()

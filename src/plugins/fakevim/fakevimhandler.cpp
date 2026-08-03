@@ -10758,7 +10758,8 @@ static bool isBuiltinFunction(const QString &name)
         "mode", "searchpair", "searchpairpos",
         "nr2char", "printf", "range", "readfile", "remove", "repeat", "reverse",
         "search", "setbufvar", "setline", "setpos", "shellescape", "sort",
-        "split", "str2nr", "strftime", "stridx", "string", "strlen", "strpart",
+        "split", "str2nr", "strdisplaywidth", "strftime", "stridx", "string",
+        "strlen", "strpart", "strwidth",
         "submatch", "substitute", "synID", "synIDattr", "synstack", "system",
         "tolower", "toupper", "trim", "type", "values", "winrestview",
         "winsaveview", "writefile"
@@ -11049,6 +11050,23 @@ bool FakeVimHandler::Private::callFunction(const QString &name,
     } else if (name == "stridx") {
         const int start = args.size() > 2 ? int(arg(2).toNumber()) : 0;
         *result = VimValue(qlonglong(arg(0).toString().indexOf(arg(1).toString(), start)));
+    } else if (name == "strdisplaywidth" || name == "strwidth") {
+        // How wide the text stands on screen. For strdisplaywidth() a tab
+        // reaches to the next tab stop, counted from the column passed as the
+        // second argument; strwidth() knows nothing of tab stops and counts a
+        // tab as one.
+        const QString text = arg(0).toString();
+        const int from = args.size() > 1 ? int(arg(1).toNumber()) : 0;
+        const int ts = tabStop();
+        const bool useTabStops = name == "strdisplaywidth";
+        int column = from;
+        for (const QChar &ch : text) {
+            if (useTabStops && ch == '\t')
+                column = (column / ts + 1) * ts;
+            else
+                ++column;
+        }
+        *result = VimValue(qlonglong(column - from));
     } else if (name == "strpart") {
         const QString str = arg(0).toString();
         *result = args.size() > 2 ? VimValue(str.mid(int(arg(1).toNumber()), int(arg(2).toNumber())))
@@ -11317,9 +11335,26 @@ bool FakeVimHandler::Private::callFunction(const QString &name,
         }
         *result = VimValue(qlonglong(0));
     } else if (name == "getline") {
-        const QString a = arg(0).toString();
-        const int ln = a == "." ? cursorLine() + 1 : int(arg(0).toNumber());
-        *result = VimValue(lineContents(ln));
+        // getline({lnum}) is that line; getline({lnum}, {end}) is the lines from
+        // one to the other as a list, which is how a script reads a whole buffer.
+        const auto lineNumber = [this](const VimValue &v) {
+            const QString spec = v.toString();
+            if (spec == ".")
+                return cursorLine() + 1;
+            if (spec == "$")
+                return document()->blockCount();
+            return int(v.toNumber());
+        };
+        const int from = lineNumber(arg(0));
+        if (args.size() > 1) {
+            const int to = lineNumber(arg(1));
+            QList<VimValue> lines;
+            for (int line = qMax(1, from); line <= qMin(to, document()->blockCount()); ++line)
+                lines.append(VimValue(lineContents(line)));
+            *result = VimValue::list(lines);
+        } else {
+            *result = VimValue(lineContents(from));
+        }
     } else if (name == "setline") {
         // A list argument replaces consecutive lines starting at {lnum}.
         const int first = int(arg(0).toNumber());
