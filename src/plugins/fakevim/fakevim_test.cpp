@@ -235,6 +235,7 @@ private slots:
     void test_vim_pattern_lookbehind_limit();
     void test_vim_script_block_abbreviations();
     void test_vim_command_line_ctrl_u();
+    void test_vim_script_searchpair();
     void test_vim_softtabstop();
     void test_vim_script_mode();
     void test_vim_ex_command_own_selection();
@@ -7041,6 +7042,55 @@ void FakeVimTester::test_vim_command_line_ctrl_u()
     QCOMPARE(cleared, QLatin1String("cleared"));
     // The "'<,'>" the ":" put there is gone, so the command is reached.
     QCOMPARE(visual, QLatin1String("from visual"));
+}
+
+void FakeVimTester::test_vim_script_searchpair()
+{
+    // searchpair() answers where the other end of a nested pair is, counting
+    // the nesting on the way. Values taken from Vim 9.1.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) {
+            if (!msg.startsWith("--"))
+                message = msg;
+        });
+    auto echo = [&](const char *expr) -> QString {
+        message.clear();
+        data.doCommand(QLatin1String("echo ") + QLatin1String(expr));
+        return message;
+    };
+    const char *const chain = "i" X "f 1" N "else" N "endif" N "after";
+
+    // A {middle} met where nothing is open is an answer of its own.
+    data.setText(chain);
+    QCOMPARE(echo("searchpair('\\<if\\>', '\\<else\\>', '\\<endif\\>', 'W')"
+                  " . ' at ' . line('.')"),
+             QLatin1String("2 at 2"));
+    // With no {middle} it walks on to the end of the pair.
+    data.setText(chain);
+    QCOMPARE(echo("string(searchpairpos('\\<if\\>', '', '\\<endif\\>', 'W'))"),
+             QLatin1String("[3, 1]"));
+    // "n" answers without going there.
+    data.setText(chain);
+    QCOMPARE(echo("searchpair('\\<if\\>', '', '\\<endif\\>', 'Wn') . ' at ' . line('.')"),
+             QLatin1String("3 at 1"));
+    // Backwards from the end finds the start.
+    data.setText("if 1" N "else" N X "endif" N "after");
+    QCOMPARE(echo("searchpair('\\<if\\>', '', '\\<endif\\>', 'bW') . ' at ' . line('.')"),
+             QLatin1String("1 at 1"));
+    // From inside the "endif" that one counts as the way in, so the "if" that
+    // closes it is one level too far out and nothing is answered.
+    data.setText("if 1" N "else" N "en" X "dif" N "after");
+    QCOMPARE(echo("searchpair('\\<if\\>', '', '\\<endif\\>', 'bW') . ' at ' . line('.')"),
+             QLatin1String("0 at 3"));
+    // One nested inside another is passed over.
+    data.setText("i" X "f 1" N "if 2" N "endif" N "endif");
+    QCOMPARE(echo("searchpair('\\<if\\>', '', '\\<endif\\>', 'W')"), QLatin1String("4"));
+    // Nothing to find.
+    data.setText("i" X "f 1" N "after");
+    QCOMPARE(echo("searchpair('\\<if\\>', '', '\\<endif\\>', 'W')"), QLatin1String("0"));
 }
 
 void FakeVimTester::test_vim_softtabstop()

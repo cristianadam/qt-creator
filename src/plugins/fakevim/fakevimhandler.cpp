@@ -2955,6 +2955,8 @@ public:
     bool callFunction(const QString &name, const QList<VimValue> &args,
                       VimValue *result, QString *error);
     bool searchFunction(const QList<VimValue> &args, VimValue *result, QString *error);
+    bool searchPairFunction(const QList<VimValue> &args, bool wantPosition, VimValue *result,
+                            QString *error);
     CursorPosition lineColArg(const QString &spec) const;
     static VimValue deepCopy(const VimValue &value);
     static QString applyFileNameModifiers(const QString &fileName, const QString &mods);
@@ -10389,6 +10391,130 @@ QString FakeVimHandler::Private::expandKeyword(const QString &what) const
 // Returns the line the match starts on, or 0 when there is none. {skip} is
 // evaluated with the cursor on each candidate and rejects it when true, which
 // is how a caller ignores matches in, say, a comment.
+// searchpair({start}, {middle}, {end} [, {flags} [, {skip} [, {stopline}]]]) and
+// searchpairpos(), which answer where the other end of a nested pair is. Vim
+// counts the nesting as it goes: another {start} on the way in makes it deeper,
+// and the {end} that brings it back to nothing is the answer. A {middle} met at
+// no depth at all is one too, which is how "if"/"else"/"endif" is walked.
+bool FakeVimHandler::Private::searchPairFunction(const QList<VimValue> &args, bool wantPosition,
+                                                VimValue *result, QString *error)
+{
+    const auto answer = [&](int line, int column) {
+        if (!wantPosition) {
+            *result = VimValue(qlonglong(line));
+            return;
+        }
+        *result = VimValue::list({VimValue(qlonglong(line)), VimValue(qlonglong(column))});
+    };
+
+    if (args.size() < 3) {
+        *error = Tr::tr("E119: Not enough arguments for function: searchpair");
+        return false;
+    }
+    const QString flags = args.size() > 3 ? args.at(3).toString() : QString();
+    const bool backward = flags.contains('b');
+    const bool keepCursor = flags.contains('n');
+    const bool acceptAtCursor = flags.contains('c');
+    const bool noWrap = flags.contains('W');
+    const VimValue skip = args.size() > 4 ? args.at(4) : VimValue();
+    // "0" or an empty string both mean there is nothing to leave out.
+    const bool haveSkip = !skip.toString().isEmpty() && skip.toString() != QLatin1String("0");
+    const int stopLine = args.size() > 5 ? int(args.at(5).toNumber()) : 0;
+
+    // Where each of the three stands in the text, in the order they come.
+    enum Kind { Start, Middle, End };
+    QList<QPair<int, Kind>> found;
+    const QString text = document()->toPlainText();
+    const auto collect = [&](const QString &pattern, Kind kind) {
+        if (pattern.isEmpty())
+            return;
+        QRegularExpression re = vimPatternToQtPattern(pattern);
+        if (!re.isValid())
+            return;
+        re.setPatternOptions(re.patternOptions() | QRegularExpression::MultilineOption);
+        QRegularExpressionMatchIterator it = re.globalMatch(text);
+        while (it.hasNext())
+            found.append({it.next().capturedStart(), kind});
+    };
+    collect(args.at(0).toString(), Start);
+    collect(args.at(1).toString(), Middle);
+    collect(args.at(2).toString(), End);
+    std::sort(found.begin(), found.end(),
+              [](const QPair<int, Kind> &a, const QPair<int, Kind> &b) {
+                  return a.first < b.first;
+              });
+    if (backward)
+        std::reverse(found.begin(), found.end());
+
+    // Everything from where the cursor is, and then, unless "W" says not to,
+    // what lies on the other side of it.
+    const int from = position();
+    QList<QPair<int, Kind>> ahead;
+    QList<QPair<int, Kind>> behind;
+    for (const QPair<int, Kind> &one : std::as_const(found)) {
+        const bool atCursor = one.first == from;
+        const bool isAhead = backward ? one.first < from : one.first > from;
+        if (isAhead || (atCursor && acceptAtCursor))
+            ahead.append(one);
+        else
+            behind.append(one);
+    }
+    if (!noWrap)
+        ahead += behind;
+
+    const CursorPosition saved(m_cursor);
+    int depth = 0;
+    for (const QPair<int, Kind> &one : std::as_const(ahead)) {
+        const QTextBlock block = document()->findBlock(one.first);
+        const int line = block.blockNumber() + 1;
+        if (stopLine > 0 && (backward ? line < stopLine : line > stopLine))
+            break;
+
+        // Vim asks {skip} with the cursor on what it is asking about.
+        if (haveSkip) {
+            setCursorPosition(CursorPosition(block.blockNumber(), one.first - block.position()));
+            VimValue leaveOut;
+            const bool ok = skip.isFunc() ? invokeCallable(skip, {}, &leaveOut, error)
+                                          : evaluateExpression(skip.toString(), &leaveOut, error);
+            if (!ok) {
+                setCursorPosition(saved);
+                return false;
+            }
+            if (leaveOut.toBool())
+                continue;
+        }
+
+        const Kind deeper = backward ? End : Start;
+        const Kind shallower = backward ? Start : End;
+        if (one.second == deeper) {
+            ++depth;
+        } else if (one.second == shallower) {
+            if (depth == 0) {
+                if (keepCursor)
+                    setCursorPosition(saved);
+                else
+                    setCursorPosition(CursorPosition(block.blockNumber(),
+                                                     one.first - block.position()));
+                answer(line, one.first - block.position() + 1);
+                return true;
+            }
+            --depth;
+        } else if (depth == 0) { // a {middle} where nothing is open
+            if (keepCursor)
+                setCursorPosition(saved);
+            else
+                setCursorPosition(CursorPosition(block.blockNumber(),
+                                                 one.first - block.position()));
+            answer(line, one.first - block.position() + 1);
+            return true;
+        }
+    }
+
+    setCursorPosition(saved);
+    answer(0, 0);
+    return true;
+}
+
 bool FakeVimHandler::Private::searchFunction(const QList<VimValue> &args,
     VimValue *result, QString *error)
 {
@@ -10510,6 +10636,7 @@ static bool isBuiltinFunction(const QString &name)
         "getcwd", "getline", "getpos", "has", "has_key", "iconv", "indent",
         "index", "insert", "isdirectory", "items", "join", "keys", "len",
         "line", "map", "match", "matchlist", "matchstr", "max", "min", "mode",
+        "searchpair", "searchpairpos",
         "nr2char", "printf", "range", "readfile", "remove", "repeat", "reverse",
         "search", "setbufvar", "setline", "setpos", "shellescape", "sort",
         "split", "str2nr", "strftime", "stridx", "string", "strlen", "strpart",
@@ -11145,6 +11272,8 @@ bool FakeVimHandler::Private::callFunction(const QString &name,
             setTargetColumn();
             *result = VimValue(qlonglong(0));
         }
+    } else if (name == "searchpair" || name == "searchpairpos") {
+        return searchPairFunction(args, name == "searchpairpos", result, error);
     } else if (name == "search") {
         return searchFunction(args, result, error);
     } else if (name == "readfile") {
