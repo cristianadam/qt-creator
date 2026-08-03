@@ -36,6 +36,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QRegularExpression>
 
 using namespace Core;
 using namespace LanguageClient;
@@ -45,6 +46,40 @@ using namespace Utils;
 static Q_LOGGING_CATEGORY(logHost, "qtc.alien.host", QtWarningMsg)
 
 namespace Alien::Internal {
+
+// Translates a VS Code glob to a regular expression matched against a path
+// relative to the search root. "**" spans directory separators, "*" and "?" do
+// not, and "{a,b}" is an alternation.
+static QRegularExpression globToRegularExpression(const QString &glob)
+{
+    QString pattern;
+    for (int i = 0; i < glob.size(); ++i) {
+        const QChar c = glob.at(i);
+        if (c == '*') {
+            const bool isDoubleStar = i + 1 < glob.size() && glob.at(i + 1) == '*';
+            if (isDoubleStar && i + 2 < glob.size() && glob.at(i + 2) == '/') {
+                pattern += "(?:.*/)?"; // "**/" also matches nothing at all
+                i += 2;
+            } else if (isDoubleStar) {
+                pattern += ".*";
+                ++i;
+            } else {
+                pattern += "[^/]*";
+            }
+        } else if (c == '?') {
+            pattern += "[^/]";
+        } else if (c == '{') {
+            pattern += "(?:";
+        } else if (c == '}') {
+            pattern += ')';
+        } else if (c == ',') {
+            pattern += '|';
+        } else {
+            pattern += QRegularExpression::escape(c);
+        }
+    }
+    return QRegularExpression('^' + pattern + '$');
+}
 
 static Result<> extractResource(const QString &resourcePath, const FilePath &dest)
 {
@@ -159,6 +194,50 @@ void ExtensionHost::installHandlers()
             emit messageShown(message);
             // No message-box UI yet: report that no item was selected.
             respond(QJsonValue(QJsonValue::Null), {});
+        });
+
+    m_connection->setRequestHandler(
+        "workspace/findFiles",
+        [this](const QJsonValue &params, const HostConnection::Responder &respond) {
+            const QJsonObject object = params.toObject();
+            const QString include = object.value("include").toString();
+            const QString exclude = object.value("exclude").toString();
+            const int maxResults = object.value("maxResults").toInt();
+
+            // A RelativePattern carries its own base; a plain string pattern is
+            // searched under every workspace folder. Searching goes through
+            // FilePath, so a remote workspace works the same way.
+            FilePaths roots;
+            const QString base = object.value("base").toString();
+            if (!base.isEmpty()) {
+                roots << FilePath::fromUserInput(base);
+            } else {
+                for (const QJsonValue &folder : m_workspaceFolders)
+                    roots << FilePath::fromUserInput(folder.toObject().value("path").toString());
+            }
+
+            const QRegularExpression includeRe = globToRegularExpression(include);
+            const QRegularExpression excludeRe
+                = exclude.isEmpty() ? QRegularExpression() : globToRegularExpression(exclude);
+
+            QJsonArray found;
+            for (const FilePath &root : roots) {
+                root.iterateDirectory(
+                    [&](const FilePath &item) {
+                        const QString relative = item.relativePathFromDir(root);
+                        if (!includeRe.match(relative).hasMatch())
+                            return IterationPolicy::Continue;
+                        if (!exclude.isEmpty() && excludeRe.match(relative).hasMatch())
+                            return IterationPolicy::Continue;
+                        found.append(item.toFSPathString());
+                        return maxResults > 0 && found.size() >= maxResults
+                                   ? IterationPolicy::Stop : IterationPolicy::Continue;
+                    },
+                    FileFilter({}, DirFilterFlag::Files, DirIteratorFlag::Subdirectories));
+                if (maxResults > 0 && found.size() >= maxResults)
+                    break;
+            }
+            respond(found, {});
         });
 
     m_connection->setRequestHandler(
@@ -814,6 +893,37 @@ void ExtensionHost::syncActiveEditor()
     const QJsonValue uri = textDocument ? QJsonValue(textDocument->filePath().toFSPathString())
                                         : QJsonValue(QJsonValue::Null);
     m_connection->sendNotification("editor/didChangeActive", QJsonObject{{"uri", uri}});
+
+    // Follow the caret of whatever is now current. Extensions that keep a view
+    // aligned with the cursor - a preview scrolling along with the editor -
+    // need this; without it their scroll sync is silently inert.
+    disconnect(m_selectionConnection);
+    BaseTextEditor *editor = BaseTextEditor::currentTextEditor();
+    TextEditorWidget *widget = editor ? editor->editorWidget() : nullptr;
+    if (!widget)
+        return;
+    m_selectionConnection = connect(widget, &TextEditorWidget::cursorPositionChanged,
+                                    this, [this, widget] { sendSelection(widget); });
+    sendSelection(widget); // start out in sync, not at the next keystroke
+}
+
+void ExtensionHost::sendSelection(TextEditorWidget *widget)
+{
+    const TextDocument *document = widget->textDocument();
+    if (!document || document->filePath().isEmpty())
+        return;
+
+    const QTextCursor cursor = widget->textCursor();
+    QTextCursor anchor = cursor;
+    anchor.setPosition(cursor.anchor());
+
+    m_connection->sendNotification("editor/didChangeSelection", QJsonObject{
+        {"uri", document->filePath().toFSPathString()},
+        {"anchorLine", anchor.blockNumber()},
+        {"anchorCharacter", anchor.positionInBlock()},
+        {"activeLine", cursor.blockNumber()},
+        {"activeCharacter", cursor.positionInBlock()},
+    });
 }
 
 void ExtensionHost::publishDiagnostics(const QJsonValue &params)

@@ -165,6 +165,7 @@ private:
     void onDocumentOpened(Core::IDocument *document);
     void onDocumentClosed(Core::IDocument *document);
     void syncActiveEditor();
+    void sendSelection(TextEditor::TextEditorWidget *widget);
     QString languageIdFor(const Utils::FilePath &filePath) const;
 
     // Diagnostics (host -> Creator editor marks).
@@ -187,6 +188,8 @@ private:
     QHash<QString, QPointer<AlienClient>> m_lspClients;
 
     bool m_documentSyncStarted = false;
+    // Follows the current editor's caret; re-made whenever the editor changes.
+    QMetaObject::Connection m_selectionConnection;
     QHash<QString, QString> m_languageBySuffix; // "qml" -> "qml"
     QHash<Utils::FilePath, int> m_documentVersions;
 

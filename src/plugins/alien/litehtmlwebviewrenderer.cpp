@@ -5,18 +5,15 @@
 
 #include <coreplugin/icore.h>
 
+#include <utils/filepath.h>
+
 #include <qlitehtmlwidget.h>
 
 #include <QDockWidget>
 #include <QMainWindow>
+#include <QUrl>
 
 namespace Alien::Internal {
-
-struct LiteHtmlWebviewRenderer::Panel
-{
-    QPointer<QDockWidget> dock;
-    QPointer<QLiteHtmlWidget> view;
-};
 
 LiteHtmlWebviewRenderer::~LiteHtmlWebviewRenderer()
 {
@@ -36,6 +33,18 @@ void LiteHtmlWebviewRenderer::createPanel(const QString &id, const QString &view
         return;
 
     auto view = new QLiteHtmlWidget;
+    // Mandatory: litehtml calls this for every <link>, <img> and @import it
+    // meets, and an unset handler is an empty std::function - calling it
+    // throws bad_function_call and takes the whole application down.
+    // Extensions reference their own bundled assets, so only local files are
+    // served; anything else (network, custom schemes) resolves to nothing.
+    view->setResourceHandler([](const QUrl &url) -> QByteArray {
+        if (!url.isLocalFile())
+            return {};
+        const Utils::Result<QByteArray> contents
+            = Utils::FilePath::fromUrl(url).fileContents();
+        return contents ? *contents : QByteArray();
+    });
     auto dock = new QDockWidget(title.isEmpty() ? QString("Webview") : title, mainWindow);
     dock->setObjectName("Alien.Webview." + id);
     dock->setWidget(view);

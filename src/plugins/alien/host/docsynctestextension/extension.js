@@ -12,9 +12,13 @@ function activate(context) {
         report(doc);
 
     context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(report));
-    context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(event =>
+    context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(event => {
+        const change = event.contentChanges[0];
+        const hasRange = !!(change && change.range && change.range.start);
         vscode.window.showInformationMessage(
-            'changed:' + event.document.uri.fsPath + ':len=' + event.document.getText().length)));
+            'changed:' + event.document.uri.fsPath
+            + ':len=' + event.document.getText().length + ':range=' + hasRange);
+    }));
 }
 
 module.exports = { activate };

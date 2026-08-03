@@ -3,6 +3,7 @@
 
 #include "alientreeview.h"
 
+#include "codicons.h"
 #include "extensionhost.h"
 
 #include <QJsonArray>
@@ -62,9 +63,10 @@ private:
                 return; // reloaded meanwhile
             for (const QJsonValue &value : nodes) {
                 const QJsonObject node = value.toObject();
-                auto item = new QStandardItem(node.value("label").toString());
+                auto item = new QStandardItem(stripCodicons(node.value("label").toString()));
                 item->setEditable(false);
-                item->setToolTip(node.value("tooltip").toString());
+                item->setIcon(firstCodicon(node.value("label").toString()));
+                item->setToolTip(stripCodicons(node.value("tooltip").toString()));
                 item->setData(node.value("id").toString(), NodeIdRole);
 
                 if (node.value("collapsibleState").toInt() != 0) {

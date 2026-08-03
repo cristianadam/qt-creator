@@ -10,20 +10,25 @@
 
 QT_BEGIN_NAMESPACE
 class QDockWidget;
+class QWebEngineView;
 QT_END_NAMESPACE
-
-class QLiteHtmlWidget;
 
 namespace Alien::Internal {
 
-// The default, dependency-light webview backend: renders static HTML with the
-// in-tree qlitehtml widget in a dock. It has no JavaScript engine, so
-// postMessage and webview -> extension messaging are inert; interactive
-// webviews need a QtWebEngine backend (not implemented here).
-class LiteHtmlWebviewRenderer final : public WebviewRenderer
+class WebviewBridge;
+
+// The full webview backend: a QWebEngineView in a dock, with a QWebChannel
+// carrying messages both ways. Unlike the litehtml backend it runs the page's
+// JavaScript, which most extensions need - the common VS Code idiom is to set
+// the HTML once and then patch the DOM through postMessage.
+//
+// Constructing the first view is what starts a QtWebEngine render process, so
+// this is created on demand (see AutoWebviewRenderer), never at startup.
+class WebEngineWebviewRenderer final : public WebviewRenderer
 {
 public:
-    ~LiteHtmlWebviewRenderer() override;
+    WebEngineWebviewRenderer();
+    ~WebEngineWebviewRenderer() override;
 
     void createPanel(const QString &id, const QString &viewType, const QString &title) override;
     void setHtml(const QString &id, const QString &html) override;
@@ -36,7 +41,8 @@ private:
     struct Panel
     {
         QPointer<QDockWidget> dock;
-        QPointer<QLiteHtmlWidget> view;
+        QPointer<QWebEngineView> view;
+        WebviewBridge *bridge = nullptr; // owned by the channel, parented to the view
     };
 
     QHash<QString, Panel> m_panels;
