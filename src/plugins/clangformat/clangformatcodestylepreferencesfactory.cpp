@@ -168,6 +168,8 @@ void ClangFormatSelectorWidget::updateReadOnlyState()
 template<typename... Args>
 static void invokeMethodForLanguageClientManager(const char *method, Args &&...args)
 {
+    if (!ExtensionSystem::PluginManager::instance())
+        return; // shutdown: the object pool is already gone
     QObject *languageClientManager = ExtensionSystem::PluginManager::getObjectByName(
         "LanguageClientManager");
     if (!languageClientManager)
