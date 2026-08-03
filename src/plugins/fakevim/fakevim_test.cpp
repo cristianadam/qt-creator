@@ -234,6 +234,7 @@ private slots:
     void test_vim_script_error_numbers();
     void test_vim_pattern_lookbehind_limit();
     void test_vim_script_block_abbreviations();
+    void test_vim_command_line_ctrl_u();
     void test_vim_softtabstop();
     void test_vim_script_mode();
     void test_vim_ex_command_own_selection();
@@ -6995,6 +6996,51 @@ void FakeVimTester::test_vim_script_block_abbreviations()
     // A block that does not hold is still skipped, shortened or not.
     QCOMPARE(ran("if 0\n let g:hit = 1\nend\n"), QLatin1String("0"));
     data.doCommand("unlet g:hit | unlet! g:x | delfunction! F | delfunction! G");
+}
+
+void FakeVimTester::test_vim_command_line_ctrl_u()
+{
+    // ":<C-U>" takes away what is on the command line already, which is how a
+    // plugin drops the range visual mode puts there. Values taken from Vim 9.1.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) {
+            if (!msg.startsWith("--"))
+                message = msg;
+        });
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QFile f(dir.path() + "/m.vim");
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("function! Mark(t)\n"
+            "  let g:tag = a:t\n"
+            "endfunction\n"
+            "nnoremap Z1 :call Mark('plain')<CR>\n"
+            "nnoremap Z2 :<C-U>call Mark('cleared')<CR>\n"
+            "xnoremap Z3 :<C-U>call Mark('from visual')<CR>\n");
+    f.close();
+    data.doCommand("source " + dir.path() + "/m.vim");
+    const auto after = [&](const char *keys) {
+        data.setText("a" X "bc" N "def");
+        data.doCommand("let g:tag = 'none'");
+        data.doKeys(keys);
+        message.clear();
+        data.doCommand("echo g:tag");
+        return message;
+    };
+
+    const QString plain = after("Z1");
+    const QString cleared = after("Z2");
+    const QString visual = after("VZ3");
+    data.doCommand("nunmap Z1 | nunmap Z2 | xunmap Z3");
+    data.doCommand("delfunction Mark | unlet g:tag");
+
+    QCOMPARE(plain, QLatin1String("plain"));
+    QCOMPARE(cleared, QLatin1String("cleared"));
+    // The "'<,'>" the ":" put there is gone, so the command is reached.
+    QCOMPARE(visual, QLatin1String("from visual"));
 }
 
 void FakeVimTester::test_vim_softtabstop()

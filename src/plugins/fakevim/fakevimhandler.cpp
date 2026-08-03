@@ -1898,7 +1898,12 @@ public:
 
     bool handleInput(const Input &input)
     {
-        if (input.isShift(Key_Left)) {
+        if (input.isControl('u')) {
+            // Everything before the cursor goes. Plugins write ":<C-U>{command}"
+            // so that the range visual mode puts on the line is not part of it.
+            m_buffer.remove(0, m_pos);
+            m_anchor = m_userPos = m_pos = 0;
+        } else if (input.isShift(Key_Left)) {
             moveLeft();
         } else if (input.isShift(Key_Right)) {
             moveRight();
