@@ -13,6 +13,7 @@
 
 #include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/editormanager/editormanager.h>
+#include <coreplugin/idocument.h>
 #include <coreplugin/icore.h>
 #include <coreplugin/messagemanager.h>
 #include <coreplugin/statusbarmanager.h>
@@ -21,19 +22,34 @@
 
 #include <languageclient/languageclientmanager.h>
 
+#include <projectexplorer/project.h>
+#include <projectexplorer/projectmanager.h>
+
+#include <utils/fileutils.h>
+#include <utils/temporarydirectory.h>
+#include <utils/unarchiver.h>
+
+#include <QEventLoop>
 #include <QInputDialog>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPointer>
+#include <QSet>
 
+#include <functional>
 #include <memory>
 
 #ifdef WITH_TESTS
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+
+#include "vscodemanifest.h"
 #endif
 
 using namespace Core;
@@ -42,6 +58,28 @@ using namespace Utils;
 namespace Alien::Internal {
 
 #ifdef WITH_TESTS
+// Writes a minimal extension (package.json + extension.js) and returns its
+// parsed manifest. Free function so moc does not process it.
+static Result<VscodeManifest> writeMockExtension(
+    const FilePath &dir, const QString &name, const QString &js)
+{
+    if (const Result<> r = dir.ensureWritableDir(); !r)
+        return make_unexpected(r.error());
+    const QJsonObject pkg{
+        {"name", name},
+        {"publisher", "theqtcompany"},
+        {"main", "./extension.js"},
+        {"engines", QJsonObject{{"vscode", "^1.0.0"}}},
+        {"activationEvents", QJsonArray{"*"}},
+    };
+    const FilePath packageJson = dir / "package.json";
+    if (const Result<qint64> r = packageJson.writeFileContents(QJsonDocument(pkg).toJson()); !r)
+        return make_unexpected(r.error());
+    if (const Result<qint64> r = (dir / "extension.js").writeFileContents(js.toUtf8()); !r)
+        return make_unexpected(r.error());
+    return VscodeManifest::fromPackageJson(packageJson);
+}
+
 class AlienHostTest final : public QObject
 {
     Q_OBJECT
@@ -82,6 +120,29 @@ private slots:
 
         // The mock server answers "initialize", so the client becomes reachable.
         QTRY_VERIFY_WITH_TIMEOUT(client->reachable(), 15000);
+    }
+
+    void testDeactivateStopsLanguageClient()
+    {
+        const FilePath node = FilePath("node").searchInPath();
+        if (!node.isExecutableFile())
+            QSKIP("node.js not found in PATH");
+
+        ExtensionHost host(node);
+        QSignalSpy spy(&host, &ExtensionHost::languageClientStarted);
+
+        const Result<> result = host.activateBundledLspTestExtension();
+        QVERIFY2(result.has_value(), qPrintable(result ? QString() : result.error()));
+
+        QVERIFY(spy.wait(15000));
+        const QString id = spy.first().first().toString(); // "<extensionId>:<clientId>"
+        QVERIFY(host.languageClient(id));
+
+        // Deactivating the extension must stop the server it started.
+        const QString extensionId = id.left(id.indexOf(':'));
+        QVERIFY(!extensionId.isEmpty());
+        host.deactivate(extensionId);
+        QVERIFY(!host.languageClient(id));
     }
 
     void testDocumentSync()
@@ -377,6 +438,78 @@ private slots:
         };
         QTRY_VERIFY_WITH_TIMEOUT(sawGot(), 15000);
     }
+
+    void testConfigurationBridge()
+    {
+        const FilePath node = FilePath("node").searchInPath();
+        if (!node.isExecutableFile())
+            QSKIP("node.js not found in PATH");
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const Result<VscodeManifest> manifest = writeMockExtension(
+            FilePath::fromString(dir.path()) / "cfg", "alien-cfg-test",
+            "const vscode = require('vscode');\n"
+            "function activate() {\n"
+            "  vscode.window.showInformationMessage("
+            "'config:' + vscode.workspace.getConfiguration('alien').get('greeting', 'none'));\n"
+            "}\n"
+            "module.exports = { activate };\n");
+        QVERIFY2(manifest.has_value(), qPrintable(manifest ? QString() : manifest.error()));
+
+        ExtensionHost host(node);
+        host.setConfiguration(QJsonObject{{"alien.greeting", "hello"}});
+        QSignalSpy spy(&host, &ExtensionHost::messageShown);
+        host.activate(*manifest);
+
+        auto saw = [&spy] {
+            for (const QList<QVariant> &args : spy)
+                if (args.first().toString() == "config:hello")
+                    return true;
+            return false;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(saw(), 15000);
+    }
+
+    void testExtensionExports()
+    {
+        const FilePath node = FilePath("node").searchInPath();
+        if (!node.isExecutableFile())
+            QSKIP("node.js not found in PATH");
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const FilePath root = FilePath::fromString(dir.path());
+
+        const Result<VscodeManifest> base = writeMockExtension(
+            root / "base", "alien-base",
+            "function activate() { return { value: 'core-api' }; }\n"
+            "module.exports = { activate };\n");
+        QVERIFY(base.has_value());
+
+        const Result<VscodeManifest> dependent = writeMockExtension(
+            root / "dep", "alien-dep",
+            "const vscode = require('vscode');\n"
+            "function activate() {\n"
+            "  const ext = vscode.extensions.getExtension('theqtcompany.alien-base');\n"
+            "  vscode.window.showInformationMessage('dep:' + (ext && ext.exports && ext.exports.value));\n"
+            "}\n"
+            "module.exports = { activate };\n");
+        QVERIFY(dependent.has_value());
+
+        ExtensionHost host(node);
+        QSignalSpy spy(&host, &ExtensionHost::messageShown);
+        host.activate(*base);       // dependency first
+        host.activate(*dependent);
+
+        auto saw = [&spy] {
+            for (const QList<QVariant> &args : spy)
+                if (args.first().toString() == "dep:core-api")
+                    return true;
+            return false;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(saw(), 15000);
+    }
 };
 #endif
 
@@ -405,6 +538,10 @@ public:
         execute.setText(Tr::tr("Execute Alien Extension Command..."));
         execute.addOnTriggered(this, [this] { executeCommand(); });
 
+        ActionBuilder install(this, Constants::INSTALL_VSIX_ACTION_ID);
+        install.setText(Tr::tr("Install VS Code Extension (.vsix)..."));
+        install.addOnTriggered(this, [this] { installVsix(); });
+
 #ifdef WITH_TESTS
         addTest<AlienHostTest>();
 #endif
@@ -414,6 +551,7 @@ public:
     {
         reload();
         connect(&settings(), &AspectContainer::applied, this, &AlienPlugin::reload);
+        connect(&extensionSettings(), &AlienExtensionSettings::changed, this, &AlienPlugin::reload);
         return true;
     }
 
@@ -506,6 +644,14 @@ private:
             m_webviewRenderer = std::make_unique<LiteHtmlWebviewRenderer>();
             m_host->setWebviewRenderer(m_webviewRenderer.get());
 #endif
+
+            auto updateFolders = [this] { m_host->setWorkspaceFolders(workspaceFolders()); };
+            connect(ProjectExplorer::ProjectManager::instance(),
+                    &ProjectExplorer::ProjectManager::projectAdded, this, updateFolders);
+            connect(ProjectExplorer::ProjectManager::instance(),
+                    &ProjectExplorer::ProjectManager::projectRemoved, this, updateFolders);
+            connect(EditorManager::instance(), &EditorManager::currentEditorChanged,
+                    this, updateFolders);
         }
         return m_host;
     }
@@ -525,6 +671,54 @@ private:
             m_host->executeCommand(command);
     }
 
+    // Unpacks a .vsix (a zip whose "extension/" folder is the extension) into
+    // the extensions directory as <publisher>.<name>-<version>/, then rescans.
+    void installVsix()
+    {
+        const FilePath vsix = FileUtils::getOpenFilePath(
+            Tr::tr("Install VS Code Extension"), {}, Tr::tr("VS Code extensions (*.vsix)"));
+        if (vsix.isEmpty())
+            return;
+
+        Utils::TemporaryDirectory temp("alien-vsix");
+        Unarchiver unarchiver;
+        unarchiver.setArchive(vsix);
+        unarchiver.setDestination(temp.path());
+        QEventLoop loop;
+        connect(&unarchiver, &Unarchiver::done, &loop, [&loop] { loop.quit(); });
+        unarchiver.start();
+        loop.exec();
+        if (const Result<> r = unarchiver.result(); !r) {
+            MessageManager::writeFlashing(
+                Tr::tr("Cannot unpack \"%1\": %2").arg(vsix.toUserOutput(), r.error()));
+            return;
+        }
+
+        const FilePath extracted = temp.path() / "extension";
+        const Result<VscodeManifest> manifest
+            = VscodeManifest::fromPackageJson(extracted / "package.json");
+        if (!manifest) {
+            MessageManager::writeFlashing(
+                Tr::tr("\"%1\" is not a valid extension: %2")
+                    .arg(vsix.toUserOutput(), manifest.error()));
+            return;
+        }
+
+        const QString folderName = manifest->qualifiedId()
+            + (manifest->version.isEmpty() ? QString() : '-' + manifest->version);
+        const FilePath target = settings().extensionsDir() / folderName;
+        target.removeRecursively();
+        if (const Result<> r = extracted.copyRecursively(target); !r) {
+            MessageManager::writeFlashing(Tr::tr("Cannot install to \"%1\": %2")
+                                              .arg(target.toUserOutput(), r.error()));
+            return;
+        }
+
+        MessageManager::writeFlashing(
+            Tr::tr("Installed VS Code extension \"%1\".").arg(manifest->qualifiedId()));
+        reload();
+    }
+
     void reload()
     {
         for (const QPointer<AlienClient> &client : std::as_const(m_clients)) {
@@ -533,8 +727,10 @@ private:
         }
         m_clients.clear();
 
-        if (!settings().enable())
+        if (!settings().enable()) {
+            deactivateAll();
             return;
+        }
 
         QStringList errors;
         const QList<VscodeManifest> manifests
@@ -554,12 +750,153 @@ private:
             if (const std::optional<CommandLine> command = resolveServerCommand(manifest))
                 m_clients << new AlienClient(manifest, *command);
         }
+
+        // Activate extensions with a JS entry point in the host. Defer until a
+        // workspace folder exists (a project or an open document): extensions
+        // like qt-qml only start their language server for a folder, so they
+        // must see one at activation time.
+        m_activatable
+            = Utils::filtered(manifests, [](const VscodeManifest &m) { return !m.main.isEmpty(); });
+
+        if (!m_activationTriggersConnected) {
+            m_activationTriggersConnected = true;
+            connect(EditorManager::instance(), &EditorManager::currentEditorChanged,
+                    this, [this] { syncActivation(); });
+            connect(ProjectExplorer::ProjectManager::instance(),
+                    &ProjectExplorer::ProjectManager::projectAdded, this,
+                    [this] { syncActivation(); });
+        }
+        syncActivation();
+    }
+
+    // Reconciles the set of extensions running in the host with the desired set
+    // (enabled and activatable), once a workspace folder is available. Newly
+    // disabled extensions are deactivated, newly enabled ones are activated.
+    void syncActivation()
+    {
+        const QJsonArray folders = workspaceFolders();
+        if (folders.isEmpty())
+            return; // wait until a project or document provides a folder
+
+        const QList<VscodeManifest> desired = extensionsToActivate();
+        QSet<QString> desiredIds;
+        for (const VscodeManifest &manifest : desired)
+            desiredIds.insert(manifest.qualifiedId());
+
+        // Deactivate extensions the user turned off (or that disappeared).
+        for (const QString &id : m_activeIds.values()) {
+            if (!desiredIds.contains(id)) {
+                host()->deactivate(id);
+                m_activeIds.remove(id);
+            }
+        }
+
+        // Activate the ones not running yet.
+        const QList<VscodeManifest> toActivate
+            = Utils::filtered(desired, [this](const VscodeManifest &manifest) {
+                  return !m_activeIds.contains(manifest.qualifiedId());
+              });
+        if (!toActivate.isEmpty()) {
+            host()->setConfiguration(buildConfiguration(m_activatable));
+            host()->setWorkspaceFolders(folders);
+            // Resolve dependencies against every discovered extension so a listed
+            // extension can pull in a dependency that is not itself listed.
+            activateInDependencyOrder(toActivate, m_activatable);
+        }
+    }
+
+    void deactivateAll()
+    {
+        if (!m_host)
+            return;
+        for (const QString &id : m_activeIds.values())
+            m_host->deactivate(id);
+        m_activeIds.clear();
+    }
+
+    // The subset of discovered extensions the user wants activated: all of them
+    // except the ones disabled on the Extensions settings page.
+    QList<VscodeManifest> extensionsToActivate() const
+    {
+        const QStringList ids = extensionSettings().disabledIds();
+        const QSet<QString> disabled(ids.begin(), ids.end());
+        return Utils::filtered(m_activatable, [&](const VscodeManifest &manifest) {
+            return !disabled.contains(manifest.qualifiedId());
+        });
+    }
+
+    static QJsonArray workspaceFolders()
+    {
+        QJsonArray folders;
+        for (ProjectExplorer::Project *project : ProjectExplorer::ProjectManager::projects()) {
+            folders.append(QJsonObject{
+                {"path", project->projectDirectory().toFSPathString()},
+                {"name", project->displayName()},
+            });
+        }
+        // Fall back to the current document's directory so extensions that work
+        // per workspace folder (e.g. qt-qml's qmlls) also work on a lone file.
+        if (folders.isEmpty()) {
+            if (IDocument *document = EditorManager::currentDocument()) {
+                const FilePath dir = document->filePath().parentDir();
+                if (!dir.isEmpty())
+                    folders.append(QJsonObject{{"path", dir.toFSPathString()},
+                                               {"name", dir.fileName()}});
+            }
+        }
+        return folders;
+    }
+
+    // Configuration served to extensions through workspace.getConfiguration():
+    // defaults declared by each extension's contributes.configuration, with
+    // user overrides from a settings.json in the extensions directory on top.
+    QJsonObject buildConfiguration(const QList<VscodeManifest> &manifests) const
+    {
+        QJsonObject config;
+        for (const VscodeManifest &manifest : manifests) {
+            const QJsonObject defaults = manifest.configurationDefaults;
+            for (auto it = defaults.begin(); it != defaults.end(); ++it)
+                config.insert(it.key(), it.value());
+        }
+
+        const FilePath overrides = settings().extensionsDir() / "settings.json";
+        if (const Result<QByteArray> contents = overrides.fileContents()) {
+            const QJsonObject user = QJsonDocument::fromJson(*contents).object();
+            for (auto it = user.begin(); it != user.end(); ++it)
+                config.insert(it.key(), it.value());
+        }
+        return config;
+    }
+
+    void activateInDependencyOrder(const QList<VscodeManifest> &roots,
+                                   const QList<VscodeManifest> &all)
+    {
+        QHash<QString, VscodeManifest> byId;
+        for (const VscodeManifest &manifest : all)
+            byId.insert(manifest.qualifiedId(), manifest);
+
+        const std::function<void(const VscodeManifest &)> activate =
+            [&](const VscodeManifest &manifest) {
+                if (m_activeIds.contains(manifest.qualifiedId()))
+                    return;
+                m_activeIds.insert(manifest.qualifiedId());
+                for (const QString &dep : manifest.extensionDependencies) {
+                    if (byId.contains(dep))
+                        activate(byId.value(dep));
+                }
+                host()->activate(manifest);
+            };
+        for (const VscodeManifest &manifest : roots)
+            activate(manifest);
     }
 
     QList<QPointer<AlienClient>> m_clients;
     QPointer<ExtensionHost> m_host;
     QPointer<QLabel> m_statusMessage;
     QHash<QString, QLabel *> m_statusItems;
+    QList<VscodeManifest> m_activatable;
+    QSet<QString> m_activeIds; // extensions currently running in the host
+    bool m_activationTriggersConnected = false;
 #ifdef ALIEN_WITH_LITEHTML
     std::unique_ptr<LiteHtmlWebviewRenderer> m_webviewRenderer;
 #endif

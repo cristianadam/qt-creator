@@ -1,5 +1,5 @@
 add_qtc_plugin(Alien
-  PLUGIN_DEPENDS Core LanguageClient TextEditor
+  PLUGIN_DEPENDS Core LanguageClient ProjectExplorer TextEditor
   LONG_DESCRIPTION_MD Description.md
   SOURCES
     alien.qrc

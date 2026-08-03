@@ -109,6 +109,21 @@ function disposable(dispose) {
     return {dispose};
 }
 
+// vscode.Disposable is a real class: `new Disposable(fn)` plus a static from().
+class DisposableClass {
+    constructor(callOnDispose) { this._callOnDispose = callOnDispose; }
+    dispose() {
+        if (typeof this._callOnDispose === 'function')
+            this._callOnDispose();
+    }
+    static from(...items) {
+        return new DisposableClass(() => {
+            for (const item of items)
+                item && item.dispose && item.dispose();
+        });
+    }
+}
+
 // A vscode.Event: calling it registers a listener; .fire(arg) notifies them.
 function eventEmitter() {
     const listeners = new Set();
@@ -120,7 +135,9 @@ function eventEmitter() {
     event.fire = arg => {
         for (const listener of [...listeners]) {
             try {
-                listener(arg);
+                const result = listener(arg);
+                if (result && typeof result.then === 'function')
+                    result.catch(e => logToStderr('listener error', e));
             } catch (e) {
                 logToStderr('listener error', e);
             }
@@ -136,6 +153,7 @@ const onDidOpenTextDocument = eventEmitter();
 const onDidChangeTextDocument = eventEmitter();
 const onDidCloseTextDocument = eventEmitter();
 const onDidChangeActiveTextEditor = eventEmitter();
+const onDidChangeConfiguration = eventEmitter();
 
 function makeTextDocument(params) {
     return {
@@ -235,6 +253,128 @@ class CompletionItem {
     }
 }
 
+// Additional vscode types. Many are subclassed by vscode-languageclient's
+// protocol converter at module load, so they must exist as constructors.
+class CodeLens {
+    constructor(range, command) { this.range = range; this.command = command; }
+    get isResolved() { return !!this.command; }
+}
+class CodeAction {
+    constructor(title, kind) {
+        this.title = title;
+        this.kind = kind;
+        this.edit = undefined;
+        this.diagnostics = undefined;
+        this.command = undefined;
+    }
+}
+class DocumentLink {
+    constructor(range, target) { this.range = range; this.target = target; }
+}
+class InlayHint {
+    constructor(position, label, kind) {
+        this.position = position;
+        this.label = label;
+        this.kind = kind;
+    }
+}
+class SymbolInformation {
+    constructor(name, kind, containerName, location) {
+        this.name = name;
+        this.kind = kind;
+        this.containerName = containerName;
+        this.location = location;
+    }
+}
+class DocumentSymbol {
+    constructor(name, detail, kind, range, selectionRange) {
+        this.name = name;
+        this.detail = detail;
+        this.kind = kind;
+        this.range = range;
+        this.selectionRange = selectionRange;
+        this.children = [];
+    }
+}
+class CallHierarchyItem {
+    constructor(kind, name, detail, uri, range, selectionRange) {
+        Object.assign(this, {kind, name, detail, uri, range, selectionRange});
+    }
+}
+class TypeHierarchyItem {
+    constructor(kind, name, detail, uri, range, selectionRange) {
+        Object.assign(this, {kind, name, detail, uri, range, selectionRange});
+    }
+}
+class CancellationError extends Error {}
+class Selection extends Range {
+    constructor(a, b, c, d) {
+        super(a, b, c, d);
+        this.anchor = this.start;
+        this.active = this.end;
+    }
+}
+class TextEdit {
+    constructor(range, newText) { this.range = range; this.newText = newText; }
+    static replace(range, newText) { return new TextEdit(range, newText); }
+    static insert(position, newText) { return new TextEdit(new Range(position, position), newText); }
+    static delete(range) { return new TextEdit(range, ''); }
+}
+class WorkspaceEdit {
+    constructor() { this._edits = []; }
+    replace() {} insert() {} delete() {} set() {}
+    has() { return false; }
+    get() { return []; }
+    get size() { return 0; }
+    entries() { return []; }
+}
+class SelectionRange {
+    constructor(range, parent) { this.range = range; this.parent = parent; }
+}
+class FoldingRange {
+    constructor(start, end, kind) { this.start = start; this.end = end; this.kind = kind; }
+}
+class SignatureHelp {
+    constructor() { this.signatures = []; this.activeSignature = 0; this.activeParameter = 0; }
+}
+class SignatureInformation {
+    constructor(label, documentation) {
+        this.label = label;
+        this.documentation = documentation;
+        this.parameters = [];
+    }
+}
+class ParameterInformation {
+    constructor(label, documentation) { this.label = label; this.documentation = documentation; }
+}
+class DiagnosticRelatedInformation {
+    constructor(location, message) { this.location = location; this.message = message; }
+}
+class ThemeIcon {
+    constructor(id, color) { this.id = id; this.color = color; }
+}
+class ThemeColor {
+    constructor(id) { this.id = id; }
+}
+class RelativePattern {
+    constructor(base, pattern) {
+        this.baseUri = base;
+        this.base = (base && base.fsPath) || base;
+        this.pattern = pattern;
+    }
+}
+class CancellationTokenSource {
+    constructor() {
+        this.token = {isCancellationRequested: false, onCancellationRequested: () => disposable(() => {})};
+    }
+    cancel() {}
+    dispose() {}
+}
+
+function makeCodeActionKind(value) {
+    return {value, append: sub => makeCodeActionKind(value ? value + '.' + sub : sub)};
+}
+
 function uriToString(uri) {
     if (typeof uri === 'string')
         return uri;
@@ -278,6 +418,8 @@ const hoverProviders = [];
 const definitionProviders = [];
 const treeDataProviders = new Map(); // viewId -> {provider, elements: Map, counter}
 const webviews = new Map(); // id -> {onMessage, onDispose}
+const registeredExtensions = new Map(); // id -> {exports, path, packageJSON}
+let configuration = {}; // flat dotted-key configuration pushed from Qt Creator
 let nextStatusBarItemId = 1;
 let nextWebviewId = 1;
 
@@ -287,7 +429,10 @@ function registerTreeProvider(viewId, provider) {
     if (provider.onDidChangeTreeData)
         provider.onDidChangeTreeData(() => notify('treeview/refresh', {viewId}));
     notify('treeview/register', {viewId});
-    return disposable(() => treeDataProviders.delete(viewId));
+    return disposable(() => {
+        treeDataProviders.delete(viewId);
+        notify('treeview/unregister', {viewId});
+    });
 }
 
 async function treeChildren(viewId, id) {
@@ -433,7 +578,9 @@ const vscode = {
             const handler = commandHandlers.get(command);
             if (handler)
                 return Promise.resolve().then(() => handler(...args));
-            return Promise.reject(new Error('Unknown command: ' + command));
+            // Built-in commands (setContext, vscode.*, workbench.*, ...) are not
+            // implemented; resolve to undefined so extensions don't crash.
+            return Promise.resolve(undefined);
         },
     },
     window: {
@@ -514,10 +661,19 @@ const vscode = {
             };
         },
         createOutputChannel(name) {
+            const line = value => notify('output/append', {channel: name, value, line: true});
             return {
                 name,
                 append: value => notify('output/append', {channel: name, value, line: false}),
-                appendLine: value => notify('output/append', {channel: name, value, line: true}),
+                appendLine: line,
+                // LogOutputChannel methods.
+                trace: (...args) => line('[trace] ' + args.join(' ')),
+                debug: (...args) => line('[debug] ' + args.join(' ')),
+                info: (...args) => line('[info] ' + args.join(' ')),
+                warn: (...args) => line('[warn] ' + args.join(' ')),
+                error: (...args) => line('[error] ' + args.join(' ')),
+                logLevel: 1,
+                onDidChangeLogLevel: eventEmitter(),
                 clear() {},
                 show() {},
                 hide() {},
@@ -569,14 +725,23 @@ const vscode = {
         onDidChangeTextDocument,
         onDidCloseTextDocument,
         getConfiguration(section) {
+            const fullKey = key => (section ? section + '.' + key : key);
+            const lookup = key => {
+                const full = fullKey(key);
+                return Object.prototype.hasOwnProperty.call(configuration, full)
+                    ? configuration[full] : undefined;
+            };
             return {
-                get: (key, defaultValue) => defaultValue,
-                has: () => false,
+                get: (key, defaultValue) => {
+                    const value = lookup(key);
+                    return value === undefined ? defaultValue : value;
+                },
+                has: key => lookup(key) !== undefined,
                 update: () => Promise.resolve(),
-                inspect: () => undefined,
+                inspect: key => ({key: fullKey(key), globalValue: lookup(key)}),
             };
         },
-        onDidChangeConfiguration: () => disposable(() => {}),
+        onDidChangeConfiguration,
     },
     languages: {
         createDiagnosticCollection(name) {
@@ -660,9 +825,34 @@ const vscode = {
         registerCodeActionsProvider: () => disposable(() => {}),
         registerDocumentSymbolProvider: () => disposable(() => {}),
         registerDocumentFormattingEditProvider: () => disposable(() => {}),
+        registerDocumentRangeFormattingEditProvider: () => disposable(() => {}),
+        registerOnTypeFormattingEditProvider: () => disposable(() => {}),
         registerReferenceProvider: () => disposable(() => {}),
         registerRenameProvider: () => disposable(() => {}),
         registerSignatureHelpProvider: () => disposable(() => {}),
+        registerCodeLensProvider: () => disposable(() => {}),
+        registerInlayHintsProvider: () => disposable(() => {}),
+        registerDocumentLinkProvider: () => disposable(() => {}),
+        registerColorProvider: () => disposable(() => {}),
+        registerFoldingRangeProvider: () => disposable(() => {}),
+        registerSelectionRangeProvider: () => disposable(() => {}),
+        registerCallHierarchyProvider: () => disposable(() => {}),
+        registerTypeHierarchyProvider: () => disposable(() => {}),
+        registerImplementationProvider: () => disposable(() => {}),
+        registerTypeDefinitionProvider: () => disposable(() => {}),
+        registerDeclarationProvider: () => disposable(() => {}),
+        registerDocumentHighlightProvider: () => disposable(() => {}),
+        registerWorkspaceSymbolProvider: () => disposable(() => {}),
+        registerLinkedEditingRangeProvider: () => disposable(() => {}),
+        registerDocumentSemanticTokensProvider: () => disposable(() => {}),
+        registerDocumentRangeSemanticTokensProvider: () => disposable(() => {}),
+        registerEvaluatableExpressionProvider: () => disposable(() => {}),
+        registerInlineValuesProvider: () => disposable(() => {}),
+        registerInlineCompletionItemProvider: () => disposable(() => {}),
+        createLanguageStatusItem: () => ({dispose() {}}),
+        setLanguageConfiguration: () => disposable(() => {}),
+        getDiagnostics: () => [],
+        onDidChangeDiagnostics: () => disposable(() => {}),
         match: () => 10,
     },
     Uri: {
@@ -679,7 +869,55 @@ const vscode = {
     Hover,
     EventEmitter,
     TreeItem,
+    CodeLens,
+    CodeAction,
+    DocumentLink,
+    InlayHint,
+    SymbolInformation,
+    DocumentSymbol,
+    CallHierarchyItem,
+    TypeHierarchyItem,
+    CancellationError,
+    CancellationTokenSource,
+    Selection,
+    TextEdit,
+    WorkspaceEdit,
+    SelectionRange,
+    FoldingRange,
+    SignatureHelp,
+    SignatureInformation,
+    ParameterInformation,
+    DiagnosticRelatedInformation,
+    ThemeIcon,
+    ThemeColor,
+    RelativePattern,
     TreeItemCollapsibleState: {None: 0, Collapsed: 1, Expanded: 2},
+    CodeActionKind: {
+        Empty: makeCodeActionKind(''),
+        QuickFix: makeCodeActionKind('quickfix'),
+        Refactor: makeCodeActionKind('refactor'),
+        RefactorExtract: makeCodeActionKind('refactor.extract'),
+        RefactorInline: makeCodeActionKind('refactor.inline'),
+        RefactorRewrite: makeCodeActionKind('refactor.rewrite'),
+        Source: makeCodeActionKind('source'),
+        SourceOrganizeImports: makeCodeActionKind('source.organizeImports'),
+        SourceFixAll: makeCodeActionKind('source.fixAll'),
+    },
+    CodeActionTriggerKind: {Invoke: 1, Automatic: 2},
+    SymbolKind: {
+        File: 0, Module: 1, Namespace: 2, Package: 3, Class: 4, Method: 5, Property: 6,
+        Field: 7, Constructor: 8, Enum: 9, Interface: 10, Function: 11, Variable: 12,
+        Constant: 13, String: 14, Number: 15, Boolean: 16, Array: 17, Object: 18, Key: 19,
+        Null: 20, EnumMember: 21, Struct: 22, Event: 23, Operator: 24, TypeParameter: 25,
+    },
+    SymbolTag: {Deprecated: 1},
+    InlayHintKind: {Type: 1, Parameter: 2},
+    FoldingRangeKind: {Comment: 1, Imports: 2, Region: 3},
+    SignatureHelpTriggerKind: {Invoke: 1, TriggerCharacter: 2, ContentChange: 3},
+    ConfigurationTarget: {Global: 1, Workspace: 2, WorkspaceFolder: 3},
+    ProgressLocation: {SourceControl: 1, Window: 10, Notification: 15},
+    FileType: {Unknown: 0, File: 1, Directory: 2, SymbolicLink: 64},
+    UIKind: {Desktop: 1, Web: 2},
     DiagnosticSeverity: {Error: 0, Warning: 1, Information: 2, Hint: 3},
     DiagnosticTag: {Unnecessary: 1, Deprecated: 2},
     EndOfLine: {LF: 1, CRLF: 2},
@@ -693,7 +931,175 @@ const vscode = {
     CompletionTriggerKind: {Invoke: 0, TriggerCharacter: 1, TriggerForIncompleteCompletions: 2},
     StatusBarAlignment: {Left: 1, Right: 2},
     ViewColumn: {Active: -1, Beside: -2, One: 1, Two: 2, Three: 3},
-    Disposable: {from: (...items) => disposable(() => items.forEach(i => i && i.dispose && i.dispose()))},
+    Disposable: DisposableClass,
+};
+
+// Broaden the namespaces that real extensions touch at load/activate time.
+// These are stubs (no-ops, empty results, live events) so activation succeeds;
+// behaviour is filled in slice by slice.
+const noopDisposable = () => disposable(() => {});
+
+Object.assign(vscode.commands, {
+    registerTextEditorCommand(command, callback, thisArg) {
+        return vscode.commands.registerCommand(command, callback, thisArg);
+    },
+    getCommands: () => Promise.resolve([]),
+});
+
+Object.assign(vscode.workspace, {
+    name: undefined,
+    rootPath: undefined,
+    isTrusted: true,
+    onDidChangeWorkspaceFolders: eventEmitter(),
+    onDidSaveTextDocument: eventEmitter(),
+    onWillSaveTextDocument: eventEmitter(),
+    onDidCreateFiles: eventEmitter(),
+    onDidDeleteFiles: eventEmitter(),
+    onDidRenameFiles: eventEmitter(),
+    onDidGrantWorkspaceTrust: eventEmitter(),
+    getWorkspaceFolder: uri => {
+        const p = uriToString(uri);
+        const folders = vscode.workspace.workspaceFolders || [];
+        return folders.find(f => p.startsWith(f.uri.fsPath));
+    },
+    asRelativePath: (p, includeFolder) => {
+        const full = uriToString(p);
+        const folders = vscode.workspace.workspaceFolders || [];
+        for (const f of folders) {
+            if (full.startsWith(f.uri.fsPath + '/'))
+                return full.slice(f.uri.fsPath.length + 1);
+        }
+        return full;
+    },
+    findFiles: () => Promise.resolve([]),
+    saveAll: () => Promise.resolve(true),
+    applyEdit: () => Promise.resolve(true),
+    openTextDocument: () => Promise.reject(new Error('openTextDocument is not supported yet.')),
+    registerTextDocumentContentProvider: noopDisposable,
+    registerFileSystemProvider: noopDisposable,
+    registerTaskProvider: noopDisposable,
+    createFileSystemWatcher: () => ({
+        onDidCreate: eventEmitter(),
+        onDidChange: eventEmitter(),
+        onDidDelete: eventEmitter(),
+        dispose() {},
+    }),
+    fs: {
+        readFile: () => Promise.resolve(new Uint8Array()),
+        writeFile: () => Promise.resolve(),
+        stat: () => Promise.reject(new Error('not found')),
+        readDirectory: () => Promise.resolve([]),
+        createDirectory: () => Promise.resolve(),
+        delete: () => Promise.resolve(),
+        rename: () => Promise.resolve(),
+        copy: () => Promise.resolve(),
+    },
+});
+
+Object.assign(vscode.window, {
+    state: {focused: true, active: true},
+    terminals: [],
+    activeTerminal: undefined,
+    visibleTextEditors: [],
+    activeColorTheme: {kind: 2},
+    onDidChangeVisibleTextEditors: eventEmitter(),
+    onDidChangeTextEditorSelection: eventEmitter(),
+    onDidChangeTextEditorVisibleRanges: eventEmitter(),
+    onDidChangeWindowState: eventEmitter(),
+    onDidChangeActiveColorTheme: eventEmitter(),
+    onDidOpenTerminal: eventEmitter(),
+    onDidCloseTerminal: eventEmitter(),
+    showTextDocument: () => Promise.resolve(undefined),
+    showWorkspaceFolderPick: () => Promise.resolve(undefined),
+    showOpenDialog: () => Promise.resolve(undefined),
+    showSaveDialog: () => Promise.resolve(undefined),
+    registerWebviewViewProvider: noopDisposable,
+    registerWebviewPanelSerializer: noopDisposable,
+    registerCustomEditorProvider: noopDisposable,
+    registerUriHandler: noopDisposable,
+    registerTerminalLinkProvider: noopDisposable,
+    createTerminal: () => ({sendText() {}, show() {}, hide() {}, dispose() {}}),
+    withProgress: (options, task) =>
+        Promise.resolve(task({report() {}},
+                             {isCancellationRequested: false, onCancellationRequested: noopDisposable})),
+});
+
+// Some extensions gate features on the reported VS Code version.
+vscode.version = '1.96.0';
+
+vscode.env = {
+    appName: 'Qt Creator',
+    appHost: 'desktop',
+    appRoot: '',
+    uriScheme: 'vscode',
+    language: 'en',
+    machineId: 'alien',
+    sessionId: 'alien',
+    isNewAppInstall: false,
+    isTelemetryEnabled: false,
+    remoteName: undefined,
+    shell: '/bin/sh',
+    uiKind: 1,
+    onDidChangeTelemetryEnabled: eventEmitter(),
+    clipboard: {readText: () => Promise.resolve(''), writeText: () => Promise.resolve()},
+    openExternal: () => Promise.resolve(true),
+    asExternalUri: uri => Promise.resolve(uri),
+    createTelemetryLogger: () => ({
+        logUsage() {}, logError() {}, dispose() {},
+        onDidChangeEnableStates: eventEmitter(),
+    }),
+};
+
+function extensionApi(id) {
+    const entry = registeredExtensions.get(id);
+    if (!entry)
+        return undefined;
+    return {
+        id,
+        isActive: true,
+        extensionPath: entry.path,
+        extensionUri: vscode.Uri.file(entry.path),
+        extensionKind: 1, // UI
+        packageJSON: entry.packageJSON || {},
+        exports: entry.exports,
+        activate: () => Promise.resolve(entry.exports),
+    };
+}
+
+vscode.extensions = {
+    get all() { return [...registeredExtensions.keys()].map(extensionApi); },
+    getExtension: id => extensionApi(id),
+    onDidChange: eventEmitter(),
+};
+
+vscode.debug = {
+    activeDebugSession: undefined,
+    activeDebugConsole: {append() {}, appendLine() {}},
+    breakpoints: [],
+    onDidStartDebugSession: eventEmitter(),
+    onDidTerminateDebugSession: eventEmitter(),
+    onDidChangeActiveDebugSession: eventEmitter(),
+    onDidReceiveDebugSessionCustomEvent: eventEmitter(),
+    onDidChangeBreakpoints: eventEmitter(),
+    registerDebugConfigurationProvider: noopDisposable,
+    registerDebugAdapterDescriptorFactory: noopDisposable,
+    registerDebugAdapterTrackerFactory: noopDisposable,
+    startDebugging: () => Promise.resolve(false),
+    stopDebugging: () => Promise.resolve(),
+    addBreakpoints() {},
+    removeBreakpoints() {},
+    asDebugSourceUri: uri => uri,
+};
+
+vscode.tasks = {
+    taskExecutions: [],
+    registerTaskProvider: noopDisposable,
+    fetchTasks: () => Promise.resolve([]),
+    executeTask: () => Promise.resolve({terminate() {}}),
+    onDidStartTask: eventEmitter(),
+    onDidEndTask: eventEmitter(),
+    onDidStartTaskProcess: eventEmitter(),
+    onDidEndTaskProcess: eventEmitter(),
 };
 
 function flattenItems(items) {
@@ -847,31 +1253,84 @@ Module._load = function (request, parent, isMain) {
 
 const activated = new Map(); // extension id -> module exports
 
-onRequest('activate', async params => {
+// Activations run one at a time so a dependency finishes (and registers its
+// exports) before a dependent activates. Other messages - including responses
+// awaited during an activation - keep flowing concurrently.
+let activationChain = Promise.resolve();
+onRequest('activate', params => {
+    const result = activationChain.then(() => doActivate(params));
+    activationChain = result.catch(() => {});
+    return result;
+});
+
+async function doActivate(params) {
     const {id, main} = params;
     const langMap = new Map();
     for (const language of (params.languages || []))
         langMap.set(language.id, language.extensions || []);
 
     const exports = require(main);
+
+    const os = require('os');
+    const fs = require('fs');
+    const path = require('path');
+    const storageRoot = path.join(os.tmpdir(), 'alien-host', id.replace(/[^\w.-]/g, '_'));
+    const storageDir = path.join(storageRoot, 'storage');
+    const globalStorageDir = path.join(storageRoot, 'globalStorage');
+    const logDir = path.join(storageRoot, 'log');
+    for (const dir of [storageDir, globalStorageDir, logDir]) {
+        try { fs.mkdirSync(dir, {recursive: true}); } catch (e) { logToStderr('mkdir', e); }
+    }
+
+    const memento = () => ({
+        get: (k, d) => d, update: () => Promise.resolve(), keys: () => [], setKeysForSync() {},
+    });
     const context = {
         subscriptions: [],
         extensionPath: params.path,
         extensionUri: vscode.Uri.file(params.path),
-        globalState: {get: (k, d) => d, update: () => Promise.resolve(), keys: () => []},
-        workspaceState: {get: (k, d) => d, update: () => Promise.resolve(), keys: () => []},
-        asAbsolutePath: rel => require('path').join(params.path, rel),
+        extensionMode: 1, // Production
+        globalState: memento(),
+        workspaceState: memento(),
+        secrets: {
+            get: () => Promise.resolve(undefined),
+            store: () => Promise.resolve(),
+            delete: () => Promise.resolve(),
+            onDidChange: eventEmitter(),
+        },
+        storageUri: vscode.Uri.file(storageDir),
+        storagePath: storageDir,
+        globalStorageUri: vscode.Uri.file(globalStorageDir),
+        globalStoragePath: globalStorageDir,
+        logUri: vscode.Uri.file(logDir),
+        logPath: logDir,
+        environmentVariableCollection: {
+            persistent: true,
+            replace() {}, append() {}, prepend() {}, get() {}, forEach() {},
+            delete() {}, clear() {}, getScoped() { return this; },
+        },
+        extension: {
+            id,
+            extensionPath: params.path,
+            extensionUri: vscode.Uri.file(params.path),
+            isActive: true,
+            packageJSON: params.packageJSON || {},
+        },
+        asAbsolutePath: rel => path.join(params.path, rel),
     };
     activated.set(id, {exports, context});
     activating = {id, langMap};
+    let api;
     try {
         if (typeof exports.activate === 'function')
-            await exports.activate(context);
+            api = await exports.activate(context);
     } finally {
         activating = null;
     }
+    // The value activate() returns is the extension's public API (its exports).
+    registeredExtensions.set(id, {exports: api, path: params.path, packageJSON: params.packageJSON});
     return {ok: true};
-});
+}
 
 onRequest('executeCommand', async params => {
     return vscode.commands.executeCommand(params.command, ...(params.args || []));
@@ -882,15 +1341,38 @@ onRequest('deactivate', async params => {
     if (!entry)
         return null;
     activated.delete(params.id);
-    for (const d of entry.context.subscriptions) {
+    registeredExtensions.delete(params.id);
+    // VS Code calls the extension's deactivate() first, then disposes what it
+    // registered in context.subscriptions (in reverse registration order).
+    try {
+        if (typeof entry.exports.deactivate === 'function')
+            await entry.exports.deactivate();
+    } catch (e) { logToStderr('deactivate error', e); }
+    for (const d of entry.context.subscriptions.reverse()) {
         try { d && d.dispose && d.dispose(); } catch (e) { logToStderr('dispose error', e); }
     }
-    if (typeof entry.exports.deactivate === 'function')
-        await entry.exports.deactivate();
     return null;
 });
 
 onRequest('ping', async () => ({pong: true}));
+
+onRequest('configuration/update', params => {
+    configuration = (params && params.config) || {};
+    onDidChangeConfiguration.fire({affectsConfiguration: () => true});
+});
+
+onRequest('workspace/updateFolders', params => {
+    const folders = ((params && params.folders) || []).map((f, index) => ({
+        uri: vscode.Uri.file(f.path),
+        name: f.name || f.path,
+        index,
+    }));
+    vscode.workspace.workspaceFolders = folders.length ? folders : undefined;
+    vscode.workspace.name = folders.length ? folders[0].name : undefined;
+    vscode.workspace.onDidChangeWorkspaceFolders.fire({added: folders, removed: []});
+    // Let config-driven consumers (e.g. qt-core) re-read per-folder settings.
+    onDidChangeConfiguration.fire({affectsConfiguration: () => true});
+});
 
 // --- document sync (Qt Creator -> vscode.workspace) -------------------------
 

@@ -5,12 +5,18 @@
 
 #include "alienconstants.h"
 #include "alientr.h"
+#include "extensionregistry.h"
+#include "vscodemanifest.h"
 
 #include <coreplugin/coreconstants.h>
 #include <coreplugin/dialogs/ioptionspage.h>
 
 #include <utils/layoutbuilder.h>
 #include <utils/pathchooser.h>
+
+#include <QHeaderView>
+#include <QStandardItemModel>
+#include <QTreeView>
 
 using namespace Utils;
 
@@ -20,6 +26,12 @@ AlienSettings &settings()
 {
     static AlienSettings theSettings;
     return theSettings;
+}
+
+AlienExtensionSettings &extensionSettings()
+{
+    static AlienExtensionSettings theExtensionSettings;
+    return theExtensionSettings;
 }
 
 AlienSettings::AlienSettings()
@@ -41,13 +53,16 @@ AlienSettings::AlienSettings()
 
     extensionsDir.setSettingsKey("Alien.ExtensionsDir");
     extensionsDir.setExpectedKind(PathChooserKind::ExistingDirectory);
-    extensionsDir.setDefaultPathValue(
-        FilePath::fromUserInput("~/.qtcreator-vscode-extensions"));
+    // Reuse the VS Code extensions folder so already-installed extensions are
+    // picked up; new ones can be added with "Install VS Code Extension".
+    extensionsDir.setDefaultPathValue(FilePath::fromUserInput("~/.vscode/extensions"));
     extensionsDir.setLabelText(Tr::tr("Extensions directory:"));
     extensionsDir.setToolTip(Tr::tr("Directory scanned for installed VS Code "
                                     "extensions. Each extension lives in its own "
-                                    "subfolder containing a package.json file, "
-                                    "mirroring the ~/.vscode/extensions layout."));
+                                    "subfolder containing a package.json file "
+                                    "(the ~/.vscode/extensions layout). Per-extension "
+                                    "settings can be overridden in a settings.json "
+                                    "file in this directory."));
 
     assumeMainIsStdioServer.setSettingsKey("Alien.AssumeMainIsStdioServer");
     assumeMainIsStdioServer.setLabelText(
@@ -75,21 +90,135 @@ AlienSettings::AlienSettings()
     readSettings();
 }
 
+AlienExtensionSettings::AlienExtensionSettings()
+{
+    setAutoApply(false);
+    disabledExtensions.setSettingsKey("Alien.DisabledExtensions");
+    readSettings();
+}
+
+QStringList AlienExtensionSettings::disabledIds() const
+{
+    QStringList ids;
+    const QStringList lines = disabledExtensions().split('\n');
+    for (const QString &line : lines) {
+        const QString id = line.trimmed();
+        if (!id.isEmpty())
+            ids.append(id);
+    }
+    return ids;
+}
+
+void AlienExtensionSettings::setDisabledIds(const QStringList &ids)
+{
+    disabledExtensions.setValue(ids.join('\n'));
+}
+
+bool AlienExtensionSettings::isEnabled(const QString &id) const
+{
+    return !disabledIds().contains(id);
+}
+
+void AlienExtensionSettings::save()
+{
+    writeSettings();
+    emit changed();
+}
+
 class AlienSettingsPage final : public Core::IOptionsPage
 {
 public:
     AlienSettingsPage()
     {
         setId(Constants::SETTINGS_ID);
-        setDisplayName(Tr::tr("VS Code Extensions"));
-        setCategory(Core::Constants::SETTINGS_CATEGORY_AI);
+        setDisplayName(Tr::tr("General"));
+        setCategory(Constants::SETTINGS_CATEGORY);
         setSettingsProvider([] { return &settings(); });
+    }
+};
+
+// A checkable list of the discovered extensions; unchecked ones are stored as
+// the disabled set and skipped on activation.
+class AlienExtensionsWidget final : public Core::IOptionsPageWidget
+{
+public:
+    AlienExtensionsWidget()
+    {
+        m_model = new QStandardItemModel(this);
+        m_model->setHorizontalHeaderLabels(
+            {Tr::tr("Extension"), Tr::tr("Identifier"), Tr::tr("Version")});
+
+        const QList<VscodeManifest> manifests
+            = ExtensionRegistry::scan(settings().extensionsDir());
+        const QStringList disabledList = extensionSettings().disabledIds();
+        const QSet<QString> disabled(disabledList.begin(), disabledList.end());
+        for (const VscodeManifest &manifest : manifests) {
+            auto name = new QStandardItem(
+                manifest.displayName.isEmpty() ? manifest.name : manifest.displayName);
+            name->setCheckable(true);
+            name->setCheckState(
+                disabled.contains(manifest.qualifiedId()) ? Qt::Unchecked : Qt::Checked);
+            name->setData(manifest.qualifiedId(), Qt::UserRole);
+            name->setEditable(false);
+            auto id = new QStandardItem(manifest.qualifiedId());
+            id->setEditable(false);
+            auto version = new QStandardItem(manifest.version);
+            version->setEditable(false);
+            m_model->appendRow({name, id, version});
+        }
+
+        auto view = new QTreeView;
+        view->setModel(m_model);
+        view->setRootIsDecorated(false);
+        view->setUniformRowHeights(true);
+        view->setSelectionMode(QAbstractItemView::NoSelection);
+        view->header()->setSectionResizeMode(QHeaderView::ResizeToContents);
+        view->header()->setStretchLastSection(true);
+
+        using namespace Layouting;
+        Column {
+            Tr::tr("Enable the VS Code extensions to activate. Changes take "
+                   "effect immediately."),
+            view,
+        }.attachTo(this);
+    }
+
+    void apply() final
+    {
+        QStringList disabled;
+        for (int row = 0, n = m_model->rowCount(); row < n; ++row) {
+            const QStandardItem *item = m_model->item(row, 0);
+            if (item->checkState() != Qt::Checked)
+                disabled << item->data(Qt::UserRole).toString();
+        }
+        extensionSettings().setDisabledIds(disabled);
+        extensionSettings().save();
+    }
+
+private:
+    QStandardItemModel *m_model = nullptr;
+};
+
+class AlienExtensionsPage final : public Core::IOptionsPage
+{
+public:
+    AlienExtensionsPage()
+    {
+        setId(Constants::EXTENSIONS_SETTINGS_ID);
+        setDisplayName(Tr::tr("Extensions"));
+        setCategory(Constants::SETTINGS_CATEGORY);
+        setWidgetCreator([] { return new AlienExtensionsWidget; });
     }
 };
 
 void setupAlienSettings()
 {
+    Core::IOptionsPage::registerCategory(
+        Constants::SETTINGS_CATEGORY, Tr::tr("Alien"),
+        FilePath::fromString(":/core/images/settingscategory_ai.png"));
+
     static AlienSettingsPage theSettingsPage;
+    static AlienExtensionsPage theExtensionsPage;
 }
 
 } // namespace Alien::Internal
