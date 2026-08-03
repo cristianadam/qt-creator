@@ -62,6 +62,23 @@ static QList<VscodeLanguage> parseLanguages(const QJsonArray &array, const FileP
     return result;
 }
 
+static void collectConfigurationDefaults(const QJsonValue &configuration, QJsonObject &out)
+{
+    // "configuration" is a single object or an array of them; each has a
+    // "properties" map of dotted-key -> {"default": ...}.
+    const QJsonArray sections = configuration.isArray()
+                                    ? configuration.toArray()
+                                    : QJsonArray{configuration};
+    for (const QJsonValue &section : sections) {
+        const QJsonObject properties = section.toObject().value("properties").toObject();
+        for (auto it = properties.begin(); it != properties.end(); ++it) {
+            const QJsonObject property = it.value().toObject();
+            if (property.contains("default"))
+                out.insert(it.key(), property.value("default"));
+        }
+    }
+}
+
 static QList<VscodeCommand> parseCommands(const QJsonArray &array)
 {
     QList<VscodeCommand> result;
@@ -100,6 +117,8 @@ Result<VscodeManifest> VscodeManifest::fromPackageJson(const FilePath &packageJs
     manifest.description = root.value("description").toString();
     manifest.main = root.value("main").toString();
     manifest.activationEvents = toStringList(root.value("activationEvents"));
+    manifest.extensionDependencies = toStringList(root.value("extensionDependencies"));
+    manifest.rawPackageJson = root;
 
     if (manifest.name.isEmpty())
         return make_unexpected(Tr::tr("\"%1\" has no name field.").arg(packageJson.toUserOutput()));
@@ -109,6 +128,8 @@ Result<VscodeManifest> VscodeManifest::fromPackageJson(const FilePath &packageJs
     manifest.commands = parseCommands(contributes.value("commands").toArray());
     manifest.hasGrammars = contributes.contains("grammars");
     manifest.hasDebuggers = contributes.contains("debuggers");
+    collectConfigurationDefaults(contributes.value("configuration"),
+                                 manifest.configurationDefaults);
 
     return manifest;
 }

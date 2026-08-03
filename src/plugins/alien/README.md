@@ -2,6 +2,25 @@
 
 This plugin is the seed for running VS Code extensions inside Qt Creator.
 
+## Using it
+
+1. Enable the (experimental) Alien plugin and restart.
+2. In *Preferences > VS Code Extensions*, tick **Enable VS Code extension
+   support** and confirm the **Node.js path** (auto-detected from `PATH`).
+3. Point **Extensions directory** at a folder of installed extensions. It
+   defaults to `~/.vscode/extensions`, so extensions already installed in VS
+   Code are picked up. Add more with **Install VS Code Extension (.vsix)...**,
+   which unpacks a `.vsix` into that folder.
+4. Extensions with a JavaScript entry point are activated in the Node host
+   (dependencies first). Progress and errors appear in the General Messages
+   pane; **Rescan VS Code Extensions** re-reads the directory.
+
+Per-extension settings use the values an extension declares in its
+`contributes.configuration` defaults; override them in a `settings.json` file
+in the extensions directory (dotted keys, VS Code style), e.g.:
+
+    { "qt-qml.qmlls.customExePath": "/path/to/qmlls" }
+
 ## What a VS Code extension is
 
 An extension is a directory with a `package.json` manifest plus, usually, a
