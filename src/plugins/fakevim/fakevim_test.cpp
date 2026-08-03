@@ -237,6 +237,7 @@ private slots:
     void test_vim_command_line_ctrl_u();
     void test_vim_script_searchpair();
     void test_vim9_matchit();
+    void test_vim_script_range_function();
     void test_vim_softtabstop();
     void test_vim_script_mode();
     void test_vim_ex_command_own_selection();
@@ -7130,6 +7131,58 @@ void FakeVimTester::test_vim9_matchit()
 
     data.doCommand("nunmap % | nunmap g% | xunmap % | xunmap g%");
     data.doCommand("ounmap % | ounmap g%");
+}
+
+void FakeVimTester::test_vim_script_range_function()
+{
+    // A function declared "range" is handed the whole range and called once;
+    // one that is not is called for each line of it, with the cursor there.
+    // Either way it can read the range as a:firstline and a:lastline. Values
+    // taken from Vim 9.1.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) {
+            if (!msg.startsWith("--"))
+                message = msg;
+        });
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QFile f(dir.path() + "/r.vim");
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("function! WithRange() range\n"
+            "  call add(g:seen, 'first=' . a:firstline . ' last=' . a:lastline\n"
+            "        \\ . ' cursor=' . line('.'))\n"
+            "endfunction\n"
+            "function! NoRange()\n"
+            "  call add(g:seen, 'cursor=' . line('.') . ' first=' . a:firstline)\n"
+            "endfunction\n");
+    f.close();
+    data.doCommand("source " + dir.path() + "/r.vim");
+    const auto seen = [&](const char *command) {
+        data.setText("on" X "e" N "two" N "three" N "four" N "five");
+        data.doCommand("let g:seen = []");
+        data.doCommand(QLatin1String(command));
+        message.clear();
+        data.doCommand("echo join(g:seen, ' | ')");
+        return message;
+    };
+
+    // Once, with the range and the cursor on its first line.
+    QCOMPARE(seen("2,4call WithRange()"), QLatin1String("first=2 last=4 cursor=2"));
+    // Without a range both ends are the line the cursor is on.
+    QCOMPARE(seen("call WithRange()"), QLatin1String("first=1 last=1 cursor=1"));
+    // Once for each line, and the range is still there to be read.
+    QCOMPARE(seen("2,4call NoRange()"),
+             QLatin1String("cursor=2 first=2 | cursor=3 first=2 | cursor=4 first=2"));
+    // A call with no range leaves the cursor where it was.
+    data.setText("one" N "t" X "wo" N "three");
+    data.doCommand("let g:seen = []");
+    data.doCommand("call NoRange()");
+    QCOMPARE(data.handler->textCursor().positionInBlock(), 1);
+
+    data.doCommand("delfunction WithRange | delfunction NoRange | unlet g:seen");
 }
 
 void FakeVimTester::test_vim_softtabstop()

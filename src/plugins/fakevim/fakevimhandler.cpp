@@ -2753,6 +2753,9 @@ public:
         QString varargName; // Vim9 "...name": binds the extra arguments as a list
         QList<ExCommand> body;
         bool vim9 = false; // a :def function (bare-name args, Vim9 semantics)
+        // ":function F() range" is handed the whole range at once; without it
+        // Vim calls the function once for each line of the range.
+        bool takesRange = false;
     };
     struct AutoCommand {
         QString group; // the ":augroup" it belongs to, empty for none
@@ -2790,6 +2793,9 @@ public:
     VimValue m_returnValue;
     bool m_throwing = false; // an exception raised by :throw is in flight
     QString m_exception;
+    // The range a ":call" was given, for "a:firstline" and "a:lastline".
+    int m_callFirstLine = 0;
+    int m_callLastLine = 0;
     int m_tryDepth = 0; // how many ":try" bodies are being run
     bool m_finishing = false; // :finish - stop running the current command list
     int m_messageSilence = 0; // >0 while inside :silent
@@ -10142,10 +10148,39 @@ bool FakeVimHandler::Private::handleExCallCommand(const ExCommand &cmd)
     // :call {func}({args}) - evaluate a function call for its side effects.
     if (!cmd.matches("cal", "call"))
         return false;
+
+    // A function that asked for the range is handed all of it and called once;
+    // one that did not is called for each line in turn, with the cursor there.
+    // Either way it can read the range it was given.
+    const int first = cmd.hasRange ? blockAt(cmd.range.beginPos).blockNumber() + 1
+                                   : cursorBlockNumber() + 1;
+    const int last = cmd.hasRange ? blockAt(cmd.range.endPos).blockNumber() + 1 : first;
+    const int savedFirst = m_callFirstLine;
+    const int savedLast = m_callLastLine;
+    m_callFirstLine = first;
+    m_callLastLine = last;
+
+    static const QRegularExpression nameRe("^\\s*([A-Za-z_][A-Za-z0-9_:#]*)");
+    const QRegularExpressionMatch m = nameRe.match(cmd.args);
+    const QString name = m.hasMatch() ? m.captured(1) : QString();
+    const bool perLine = cmd.hasRange && g.userFunctions.contains(name)
+                         && !g.userFunctions.value(name).takesRange;
+
     VimValue result;
     QString error;
-    if (!evaluateExpression(cmd.args, &result, &error))
-        showMessage(MessageError, error);
+    for (int line = first; line <= (perLine ? last : first); ++line) {
+        // Only a range moves the cursor, to the line being worked on; without
+        // one the call leaves it where it is. Buffer lines, not screen lines.
+        if (cmd.hasRange)
+            setPosition(firstPositionInLine(line, false));
+        if (!evaluateExpression(cmd.args, &result, &error)) {
+            showMessage(MessageError, error);
+            break;
+        }
+    }
+
+    m_callFirstLine = savedFirst;
+    m_callLastLine = savedLast;
     return true;
 }
 
@@ -12393,6 +12428,10 @@ void FakeVimHandler::Private::collectFunction(const QList<ExCommand> &cmds,
     // matching :endfunction (functions do not nest in Vim).
     UserFunction fn;
     fn.vim9 = header.cmd == "def"; // :def uses bare-name args and Vim9 syntax
+    // What follows the parameters says how the function is to be called; only
+    // "range" changes anything here.
+    static const QRegularExpression rangeRe("\\)\\s*(?:[a-z]+\\s+)*range\\b");
+    fn.takesRange = rangeRe.match(header.args).hasMatch();
     static const QRegularExpression re(
         "^\\s*([A-Za-z_][A-Za-z0-9_:#]*)\\s*\\(([^)]*)\\)");
     const QRegularExpressionMatch m = re.match(header.args);
@@ -12481,6 +12520,10 @@ VimValue FakeVimHandler::Private::callUserFunction(const QString &name,
         frame.insert("a:" + QString::number(i - fn.params.size() + 1), args.at(i));
     }
     frame.insert("a:000", VimValue::list(varargs));
+    // The lines the call was given, which every function can read whether it
+    // asked for the range or not.
+    frame.insert("a:firstline", VimValue(qlonglong(m_callFirstLine)));
+    frame.insert("a:lastline", VimValue(qlonglong(m_callLastLine)));
     if (!fn.varargName.isEmpty())
         frame.insert(prefix + fn.varargName, VimValue::list(varargs));
 
