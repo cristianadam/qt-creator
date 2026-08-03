@@ -528,6 +528,10 @@ static QRegularExpression vimPatternToQtPattern(const QString &needle,
             positionOp = 0; // no position after all, so handle c below
         }
         if (lookaround != 0) {
+            // "\@123<=" says how far back Vim is to look, which
+            // QRegularExpression works out for itself: read it and pass it over.
+            if (lookaround == 1 && c.isDigit())
+                continue;
             if (lookaround == 1 && c == '<') {
                 lookaround = 2;
                 continue;

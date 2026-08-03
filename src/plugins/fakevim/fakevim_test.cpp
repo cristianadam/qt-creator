@@ -232,6 +232,7 @@ private slots:
     void test_vim_script_scriptlocal();
     void test_vim_script_if_chain();
     void test_vim_script_error_numbers();
+    void test_vim_pattern_lookbehind_limit();
     void test_vim_softtabstop();
     void test_vim_script_mode();
     void test_vim_ex_command_own_selection();
@@ -6907,6 +6908,48 @@ void FakeVimTester::test_vim_script_error_numbers()
     // "v:exception" holds it in the shape a script reports or matches on.
     QCOMPARE(echo("g:ex"), QLatin1String("Vim:E121: Undefined variable: g:nosuchvar"));
     data.doCommand("unlet g:hit | unlet g:ok | unlet g:ex");
+}
+
+void FakeVimTester::test_vim_pattern_lookbehind_limit()
+{
+    // "\@123<=" says how far back Vim is to look, which every plugin that skips
+    // an escaped character writes: matchit has "\\\@1<!\%(\\\\\)*". Driven from a
+    // script, where the pattern can be written as Vim writes it. Values taken
+    // from Vim 9.1.
+    TestData data;
+    setup(&data);
+    QString message;
+    data.handler->commandBufferChanged.set(
+        [&](const QString &msg, int, int, int) {
+            if (!msg.startsWith("--"))
+                message = msg;
+        });
+    auto echo = [&](const char *expr) -> QString {
+        message.clear();
+        data.doCommand(QLatin1String("echo ") + QLatin1String(expr));
+        return message;
+    };
+
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QFile f(dir.path() + "/p.vim");
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("let s:notslash = '\\\\\\@1<!\\%(\\\\\\\\\\)*'\n"
+            "let g:a = substitute('\\<if\\>:\\<else\\>', s:notslash . '\\zs:', 'X', 'g')\n"
+            "let g:b = match('a:b', s:notslash . ':')\n"
+            "let g:c = match('a:b', '\\\\\\@<!:')\n"
+            "let g:d = match('a\\:b', s:notslash . ':')\n");
+    f.close();
+    data.doCommand("source " + dir.path() + "/p.vim");
+
+    // The colon that is not escaped is the one it finds.
+    QCOMPARE(echo("g:a"), QLatin1String("\\<if\\>X\\<else\\>"));
+    QCOMPARE(echo("g:b"), QLatin1String("1"));
+    // Without a number it means the same thing here.
+    QCOMPARE(echo("g:c"), QLatin1String("1"));
+    // An escaped colon is passed over, which is the point of the pattern.
+    QCOMPARE(echo("g:d"), QLatin1String("-1"));
+    data.doCommand("unlet g:a | unlet g:b | unlet g:c | unlet g:d");
 }
 
 void FakeVimTester::test_vim_softtabstop()
