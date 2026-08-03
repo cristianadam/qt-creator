@@ -240,6 +240,7 @@ private slots:
     void test_vim_script_range_function();
     void test_vim_ex_retab();
     void test_vim_script_width_and_getline();
+    void test_vim9_justify();
     void test_vim_softtabstop();
     void test_vim_script_mode();
     void test_vim_ex_command_own_selection();
@@ -7272,6 +7273,39 @@ void FakeVimTester::test_vim_script_width_and_getline()
     QCOMPARE(echo("string(getline(2, 3))"), QLatin1String("['two', 'three']"));
     QCOMPARE(echo("getline('.')"), QLatin1String("one"));
     QCOMPARE(echo("string(getline(1, 1))"), QLatin1String("['one']"));
+}
+
+void FakeVimTester::test_vim9_justify()
+{
+    // Vim's justify plugin, which pads a line out to 'textwidth' through a
+    // ":Justify" command over a range. Values taken from Vim 9.1 running the
+    // same plugin over the same lines.
+    const QString D = "/usr/share/vim/vim91/pack/dist/opt/justify";
+    if (!QFileInfo::exists(D + "/plugin/justify.vim"))
+        QSKIP("Vim's justify plugin is not installed");
+    TestData data;
+    setup(&data);
+    data.doCommand("set runtimepath+=" + D);
+    data.doCommand("source " + D + "/plugin/justify.vim");
+    data.doCommand("set tw=40 | set noet | set ts=8 | set sw=8");
+    data.setText("" X "The quick brown fox jumps over the lazy dog and keeps on running far away" N
+                 "Short line here" N
+                 "Another line of words to justify nicely across the page width");
+    data.doCommand("1,3Justify");
+    const QString after = QString::fromUtf8(data.text()).replace(QLatin1Char('\n'),
+                                                                 QLatin1Char('/'));
+    // The plugin leaves mappings and a command behind, and the tables they live
+    // in are shared with every other test, so put them back before comparing.
+    data.doCommand("nunmap _j | vunmap _j | nunmap ,gq | vunmap ,gq");
+    data.doCommand("delcommand Justify");
+    data.doCommand("set tw=0 | set ts=8 | set sw=8 | set noet");
+
+    // Only the short line has room to be padded; the others are longer than the
+    // text width and are left as they are.
+    QCOMPARE(after,
+             QLatin1String("The quick brown fox jumps over the lazy dog and keeps on running far away"
+                           "/Short\t\t  line\t\t    here"
+                           "/Another line of words to justify nicely across the page width"));
 }
 
 void FakeVimTester::test_vim_softtabstop()
