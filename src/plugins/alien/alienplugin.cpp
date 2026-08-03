@@ -7,9 +7,9 @@
 #include "alienconstants.h"
 #include "aliensettings.h"
 #include "alientr.h"
-#ifdef ALIEN_WITH_LITEHTML
-#include "litehtmlwebviewrenderer.h"
-#endif
+#include "alienlocatorfilter.h"
+#include "autowebviewrenderer.h"
+#include "codicons.h"
 
 #include <coreplugin/actionmanager/actionmanager.h>
 #include <coreplugin/editormanager/editormanager.h>
@@ -26,6 +26,8 @@
 #include <projectexplorer/projectmanager.h>
 
 #include <utils/fileutils.h>
+#include <utils/layoutbuilder.h>
+#include <utils/stylehelper.h>
 #include <utils/temporarydirectory.h>
 #include <utils/unarchiver.h>
 
@@ -33,6 +35,7 @@
 #include <QInputDialog>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QApplication>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPointer>
@@ -42,12 +45,15 @@
 #include <memory>
 
 #ifdef WITH_TESTS
+#include <texteditor/textdocument.h>
+
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTextDocument>
 
 #include "vscodemanifest.h"
 #endif
@@ -56,6 +62,36 @@ using namespace Core;
 using namespace Utils;
 
 namespace Alien::Internal {
+
+// One VS Code status bar item. Its text carries icon markup ("$(gear) Build"),
+// which is split into an icon we know and the remaining label text.
+class StatusBarItem final : public QWidget
+{
+public:
+    StatusBarItem()
+    {
+        using namespace Layouting;
+        Row {
+            m_icon,
+            m_text,
+            noMargin,
+            spacing(StyleHelper::SpacingTokens::GapHXs),
+        }.attachTo(this);
+    }
+
+    void setContent(const QString &markedUpText)
+    {
+        const QIcon icon = firstCodicon(markedUpText);
+        const int size = QApplication::style()->pixelMetric(QStyle::PM_SmallIconSize);
+        m_icon->setPixmap(icon.pixmap(size, size));
+        m_icon->setVisible(!icon.isNull());
+        m_text->setText(stripCodicons(markedUpText));
+    }
+
+private:
+    QLabel *m_icon = new QLabel;
+    QLabel *m_text = new QLabel;
+};
 
 #ifdef WITH_TESTS
 // Writes a minimal extension (package.json + extension.js) and returns its
@@ -174,6 +210,22 @@ private slots:
             return false;
         };
         QTRY_VERIFY_WITH_TIMEOUT(sawOpened(), 15000);
+
+        // Editing must reach the extension as a change carrying a range (so
+        // vscode-languageclient works with incremental-sync servers).
+        TextEditor::TextDocument *textDocument
+            = TextEditor::TextDocument::textDocumentForFilePath(file);
+        QVERIFY(textDocument);
+        textDocument->document()->setPlainText("hello world");
+        auto sawChanged = [&spy] {
+            for (const QList<QVariant> &args : spy) {
+                const QString text = args.first().toString();
+                if (text.startsWith("changed:") && text.contains("range=true"))
+                    return true;
+            }
+            return false;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(sawChanged(), 15000);
 
         EditorManager::closeAllEditors(false);
     }
@@ -311,6 +363,23 @@ private slots:
             return false;
         };
         QTRY_VERIFY_WITH_TIMEOUT(sawPick(), 15000);
+    }
+
+    void testCodicons()
+    {
+        // Real markup seen from cmake-tools, redhat.java and cpptools.
+        QCOMPARE(stripCodicons("$(gear) Build"), QString("Build"));
+        QCOMPARE(stripCodicons("$(sync~spin) Java: Activating..."),
+                 QString("Java: Activating..."));
+        QCOMPARE(stripCodicons("$(play)"), QString());
+        QCOMPARE(stripCodicons("[ Ax ]"), QString("[ Ax ]"));
+
+        QVERIFY(!firstCodicon("$(gear) Build").isNull());
+        QVERIFY(!firstCodicon("$(sync~spin) Java: Activating...").isNull());
+        // Nothing of ours looks like a rocket, so only the markup goes.
+        QVERIFY(firstCodicon("$(rocket) Java: Lightweight Mode").isNull());
+        QCOMPARE(stripCodicons("$(rocket) Java: Lightweight Mode"),
+                 QString("Java: Lightweight Mode"));
     }
 
     void testStatusBar()
@@ -534,6 +603,13 @@ public:
                 MessageManager::writeFlashing(result.error());
         });
 
+        m_locatorFilter = std::make_unique<AlienLocatorFilter>(
+            [this] { return extensionCommands(); },
+            [this](const QString &id) {
+                if (m_host)
+                    m_host->executeCommand(id);
+            });
+
         ActionBuilder execute(this, Constants::EXECUTE_COMMAND_ACTION_ID);
         execute.setText(Tr::tr("Execute Alien Extension Command..."));
         execute.addOnTriggered(this, [this] { executeCommand(); });
@@ -551,7 +627,6 @@ public:
     {
         reload();
         connect(&settings(), &AspectContainer::applied, this, &AlienPlugin::reload);
-        connect(&extensionSettings(), &AlienExtensionSettings::changed, this, &AlienPlugin::reload);
         return true;
     }
 
@@ -616,34 +691,32 @@ private:
                             StatusBarManager::addStatusBarWidget(
                                 m_statusMessage, StatusBarManager::LastLeftAligned);
                         }
-                        m_statusMessage->setText(text);
+                        m_statusMessage->setText(stripCodicons(text));
                     });
 
             connect(m_host, &ExtensionHost::statusBarItemChanged, this,
                     [this](const QString &id, const QString &text, const QString &tooltip,
                            int alignment, bool visible) {
-                        QLabel *label = m_statusItems.value(id);
-                        if (!label) {
-                            label = new QLabel;
+                        StatusBarItem *item = m_statusItems.value(id);
+                        if (!item) {
+                            item = new StatusBarItem;
                             StatusBarManager::addStatusBarWidget(
-                                label, alignment == 2 ? StatusBarManager::RightCorner
-                                                      : StatusBarManager::First);
-                            m_statusItems.insert(id, label);
+                                item, alignment == 2 ? StatusBarManager::RightCorner
+                                                     : StatusBarManager::First);
+                            m_statusItems.insert(id, item);
                         }
-                        label->setText(text);
-                        label->setToolTip(tooltip);
-                        label->setVisible(visible);
+                        item->setContent(text);
+                        item->setToolTip(stripCodicons(tooltip));
+                        item->setVisible(visible);
                     });
 
             connect(m_host, &ExtensionHost::statusBarItemRemoved, this, [this](const QString &id) {
-                if (QLabel *label = m_statusItems.take(id))
-                    StatusBarManager::destroyStatusBarWidget(label);
+                if (StatusBarItem *item = m_statusItems.take(id))
+                    StatusBarManager::destroyStatusBarWidget(item);
             });
 
-#ifdef ALIEN_WITH_LITEHTML
-            m_webviewRenderer = std::make_unique<LiteHtmlWebviewRenderer>();
+            m_webviewRenderer = std::make_unique<AutoWebviewRenderer>();
             m_host->setWebviewRenderer(m_webviewRenderer.get());
-#endif
 
             auto updateFolders = [this] { m_host->setWorkspaceFolders(workspaceFolders()); };
             connect(ProjectExplorer::ProjectManager::instance(),
@@ -814,14 +887,42 @@ private:
         m_activeIds.clear();
     }
 
-    // The subset of discovered extensions the user wants activated: all of them
-    // except the ones disabled on the Extensions settings page.
+    // The commands the running extensions have registered, paired with the
+    // titles their manifests give them - the host only knows the ids.
+    QList<AlienCommand> extensionCommands() const
+    {
+        const QStringList ids = m_host ? m_host->registeredCommands() : QStringList();
+        QList<AlienCommand> result;
+        for (const QString &id : ids) {
+            AlienCommand command;
+            command.id = id;
+            for (const VscodeManifest &manifest : m_activatable) {
+                const auto it = std::find_if(manifest.commands.begin(), manifest.commands.end(),
+                                             [&id](const VscodeCommand &c) {
+                                                 return c.command == id;
+                                             });
+                if (it == manifest.commands.end())
+                    continue;
+                command.title = it->category.isEmpty()
+                                    ? it->title : it->category + ": " + it->title;
+                command.source = manifest.displayName.isEmpty() ? manifest.qualifiedId()
+                                                                : manifest.displayName;
+                break;
+            }
+            result.append(command);
+        }
+        return result;
+    }
+
+    // The subset of discovered extensions the user wants activated: the ones
+    // ticked on the Extensions settings page. Discovery alone activates
+    // nothing.
     QList<VscodeManifest> extensionsToActivate() const
     {
-        const QStringList ids = extensionSettings().disabledIds();
-        const QSet<QString> disabled(ids.begin(), ids.end());
+        const QStringList ids = settings().enabledExtensions.ids();
+        const QSet<QString> enabled(ids.begin(), ids.end());
         return Utils::filtered(m_activatable, [&](const VscodeManifest &manifest) {
-            return !disabled.contains(manifest.qualifiedId());
+            return enabled.contains(manifest.qualifiedId());
         });
     }
 
@@ -893,13 +994,12 @@ private:
     QList<QPointer<AlienClient>> m_clients;
     QPointer<ExtensionHost> m_host;
     QPointer<QLabel> m_statusMessage;
-    QHash<QString, QLabel *> m_statusItems;
+    QHash<QString, StatusBarItem *> m_statusItems;
     QList<VscodeManifest> m_activatable;
     QSet<QString> m_activeIds; // extensions currently running in the host
     bool m_activationTriggersConnected = false;
-#ifdef ALIEN_WITH_LITEHTML
-    std::unique_ptr<LiteHtmlWebviewRenderer> m_webviewRenderer;
-#endif
+    std::unique_ptr<AutoWebviewRenderer> m_webviewRenderer;
+    std::unique_ptr<AlienLocatorFilter> m_locatorFilter;
 };
 
 } // namespace Alien::Internal

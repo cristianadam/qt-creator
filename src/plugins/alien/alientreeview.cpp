@@ -3,6 +3,7 @@
 
 #include "alientreeview.h"
 
+#include "codicons.h"
 #include "extensionhost.h"
 
 #include <QJsonArray>
@@ -17,6 +18,8 @@ namespace Alien::Internal {
 enum TreeRoles {
     NodeIdRole = Qt::UserRole + 1,
     FetchedRole,
+    CommandRole,
+    CommandArgumentsRole,
 };
 
 // A lazily populated tree view for one in-host tree data provider.
@@ -27,6 +30,7 @@ public:
         : m_host(host)
         , m_viewId(viewId)
     {
+        setObjectName("alienTreeView." + viewId);
         setHeaderHidden(true);
         setModel(m_model);
 
@@ -34,6 +38,16 @@ public:
             QStandardItem *item = m_model->itemFromIndex(index);
             if (item && !item->data(FetchedRole).toBool())
                 fetchChildren(item);
+        });
+        // VS Code runs an item's command when it is picked, with a single
+        // click, so the dashboards these views are used for stay one click deep.
+        connect(this, &QTreeView::clicked, this, [this](const QModelIndex &index) {
+            const QString command = index.data(CommandRole).toString();
+            if (command.isEmpty())
+                return;
+            m_host->executeCommand(
+                command,
+                QJsonDocument::fromJson(index.data(CommandArgumentsRole).toByteArray()).array());
         });
         connect(m_host, &ExtensionHost::treeViewRefreshed, this, [this](const QString &viewId) {
             if (viewId == m_viewId)
@@ -43,11 +57,33 @@ public:
     }
 
 private:
+    // The ids the host hands out are per-request, so what was open is
+    // remembered by the labels leading to a row.
+    static QString pathOf(const QStandardItem *item)
+    {
+        QStringList labels;
+        for (const QStandardItem *i = item; i && i->parent(); i = i->parent())
+            labels.prepend(i->text());
+        return labels.join(QChar(0x1f));
+    }
+
     void reload()
     {
+        m_expanded.clear();
+        for (int row = 0; row < m_model->rowCount(); ++row)
+            collectExpanded(m_model->item(row));
         ++m_generation;
         m_model->clear();
         fetchChildren(m_model->invisibleRootItem());
+    }
+
+    void collectExpanded(const QStandardItem *item)
+    {
+        if (!item || !isExpanded(item->index()))
+            return;
+        m_expanded.insert(pathOf(item));
+        for (int row = 0; row < item->rowCount(); ++row)
+            collectExpanded(item->child(row));
     }
 
     void fetchChildren(QStandardItem *parent)
@@ -62,16 +98,25 @@ private:
                 return; // reloaded meanwhile
             for (const QJsonValue &value : nodes) {
                 const QJsonObject node = value.toObject();
-                auto item = new QStandardItem(node.value("label").toString());
+                auto item = new QStandardItem(stripCodicons(node.value("label").toString()));
                 item->setEditable(false);
-                item->setToolTip(node.value("tooltip").toString());
+                item->setIcon(firstCodicon(node.value("label").toString()));
+                item->setToolTip(stripCodicons(node.value("tooltip").toString()));
                 item->setData(node.value("id").toString(), NodeIdRole);
+                item->setData(node.value("command").toString(), CommandRole);
+                item->setData(QJsonDocument(node.value("commandArguments").toArray()).toJson(
+                                  QJsonDocument::Compact),
+                              CommandArgumentsRole);
 
                 if (node.value("collapsibleState").toInt() != 0) {
                     item->setData(false, FetchedRole);
                     item->appendRow(new QStandardItem); // placeholder to show the expander
                 }
                 parent->appendRow(item);
+                if (m_expanded.contains(pathOf(item))) {
+                    fetchChildren(item);
+                    setExpanded(item->index(), true);
+                }
             }
         });
     }
@@ -79,6 +124,7 @@ private:
     ExtensionHost *m_host;
     QString m_viewId;
     QStandardItemModel *m_model = new QStandardItemModel(this);
+    QSet<QString> m_expanded; // label paths that were open before a reload
     int m_generation = 0;
 };
 
