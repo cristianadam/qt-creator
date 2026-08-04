@@ -163,6 +163,10 @@ private:
     // It's being called only in Running state.
     virtual qint64 write(const QByteArray &data) = 0;
 
+    // It's being called in Running state. Returns the number of bytes queued for writing
+    // to the process but not yet handed over to it, or -1 if the backend cannot report it.
+    virtual qint64 bytesToWrite() const { return -1; }
+
     // It's being called in Starting or Running state.
     virtual void sendControlSignal(ControlSignal controlSignal) = 0;
 
