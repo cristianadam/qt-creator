@@ -484,6 +484,7 @@ public:
 
 private:
     qint64 write(const QByteArray &data) final { return m_process->write(data); }
+    qint64 bytesToWrite() const final { return m_process->bytesToWrite(); }
     void sendControlSignal(ControlSignal controlSignal) final {
         switch (controlSignal) {
         case ControlSignal::Terminate:
@@ -1577,6 +1578,21 @@ qint64 Process::writeRaw(const QByteArray &input)
     QMetaObject::invokeMethod(
         d->m_process.get(),
         [this, input] { return d->m_process->write(input); },
+        d->connectionType(),
+        &result);
+    return result;
+}
+
+qint64 Process::bytesToWrite() const
+{
+    QTC_ASSERT(processMode() == ProcessMode::Writer, return -1);
+    QTC_ASSERT(d->m_process, return -1);
+    QTC_ASSERT(state() == ProcessState::Running, return -1);
+    QTC_ASSERT(QThread::currentThread() == thread(), return -1);
+    qint64 result = -1;
+    QMetaObject::invokeMethod(
+        d->m_process.get(),
+        [this] { return d->m_process->bytesToWrite(); },
         d->connectionType(),
         &result);
     return result;
