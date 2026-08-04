@@ -5,6 +5,7 @@
 
 #include "flamegraphview.h"
 #include "qmlprofilerdashboardview.h"
+#include "qmlprofilerfindingsview.h"
 #include "profilertr.h"
 #include "qmlprofilerattachdialog.h"
 #include "qmlprofilerclientmanager.h"
@@ -101,6 +102,7 @@ public:
     QmlProfilerStatisticsView m_statisticsView{&m_profilerModelManager};
     FlameGraphView m_flameGraphView{&m_profilerModelManager};
     Quick3DFrameView m_quick3dView{&m_profilerModelManager};
+    QmlProfilerFindingsView m_findingsView{&m_profilerModelManager};
 
     void selectByTypeId(int typeId)
     {
@@ -108,6 +110,7 @@ public:
         m_statisticsView.selectByTypeId(typeId);
         m_flameGraphView.selectByTypeId(typeId);
         m_quick3dView.selectByTypeId(typeId);
+        m_findingsView.selectByTypeId(typeId);
     }
 
     QToolButton m_recordButton;
@@ -166,6 +169,7 @@ QmlProfilerTool::QmlProfilerTool()
     prepareEventsView(&d->m_statisticsView);
     prepareEventsView(&d->m_flameGraphView);
     prepareEventsView(&d->m_quick3dView);
+    prepareEventsView(&d->m_findingsView);
 
     d->m_perspective.setObjectName("QML Profiler View Manager");
     d->m_perspective.addWindow(&d->m_dashboardView, Perspective::SplitVertical, nullptr);
@@ -178,6 +182,8 @@ QmlProfilerTool::QmlProfilerTool()
     d->m_perspective.addWindow(&d->m_flameGraphView, Perspective::AddToTab, &d->m_traceView);
     d->m_perspective.addWindow(&d->m_quick3dView, Perspective::AddToTab, &d->m_flameGraphView);
     d->m_perspective.addWindow(&d->m_statisticsView, Perspective::AddToTab, &d->m_quick3dView);
+    d->m_perspective.addWindow(&d->m_findingsView, Perspective::AddToTab,
+                               &d->m_statisticsView);
     d->m_perspective.addWindow(&d->m_dashboardView, Perspective::Raise, nullptr);
 
     connect(&d->m_profilerState, &QmlProfilerStateManager::stateChanged,
@@ -217,6 +223,8 @@ QmlProfilerTool::QmlProfilerTool()
     connect(&d->m_flameGraphView, &QmlProfilerEventsView::gotoSourceLocation,
             this, &QmlProfilerTool::gotoSourceLocation);
     connect(&d->m_quick3dView, &QmlProfilerEventsView::gotoSourceLocation,
+            this, &QmlProfilerTool::gotoSourceLocation);
+    connect(&d->m_findingsView, &QmlProfilerEventsView::gotoSourceLocation,
             this, &QmlProfilerTool::gotoSourceLocation);
 
     //
