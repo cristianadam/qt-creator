@@ -5,6 +5,7 @@
 
 #include "profilertr.h"
 #include "qmlprofilermodelmanager.h"
+#include "qmlprofilersettings.h"
 
 #include <utils/qtcassert.h>
 
@@ -507,23 +508,23 @@ private:
 
 FindingRules defaultFindingRules()
 {
-    // Conservative defaults for desktop traces. They become configurable through
-    // QmlProfilerSettings once there is a reason to tune them per target.
-    constexpr qint64 compileThresholdNs = 50000000;  // 50 ms
-    constexpr qint64 syncLoadThresholdNs = 20000000; // 20 ms in total
-    constexpr int periodicMinCount = 50;
-    constexpr double periodicMaxDeviation = 0.25;    // of the mean interval
-    constexpr qint64 pixmapPixelThreshold = 2000000; // 2 megapixels
-    constexpr qint64 perFrameBudgetNs = 500000;      // 0.5 ms of a frame
+    // Thresholds are user settings: what counts as too slow depends on the target the
+    // application is meant to run on, not on the trace.
+    const QmlProfilerSettings &settings = globalSettings();
 
     FindingRules rules;
-    rules.push_back(std::make_unique<FirstUseCompileRule>(compileThresholdNs));
+    rules.push_back(std::make_unique<FirstUseCompileRule>(
+        settings.findingsCompileThresholdMs() * 1000000ll));
     rules.push_back(std::make_unique<PixmapLoadErrorRule>());
-    rules.push_back(std::make_unique<SyncViewLoadRule>(syncLoadThresholdNs));
-    rules.push_back(std::make_unique<PeriodicHandlerRule>(periodicMinCount,
-                                                          periodicMaxDeviation));
-    rules.push_back(std::make_unique<OversizedPixmapRule>(pixmapPixelThreshold));
-    rules.push_back(std::make_unique<PerFrameCostRule>(perFrameBudgetNs));
+    rules.push_back(std::make_unique<SyncViewLoadRule>(
+        settings.findingsSyncLoadThresholdMs() * 1000000ll));
+    rules.push_back(std::make_unique<PeriodicHandlerRule>(
+        settings.findingsPeriodicMinCount(),
+        settings.findingsPeriodicDeviationPercent() / 100.0));
+    rules.push_back(std::make_unique<OversizedPixmapRule>(
+        qint64(settings.findingsPixmapMegapixels() * 1000000.0)));
+    rules.push_back(std::make_unique<PerFrameCostRule>(
+        settings.findingsPerFrameBudgetUs() * 1000ll));
     return rules;
 }
 
