@@ -11,6 +11,9 @@
   <style name="DiffSourceChar" background="#afafaf"/>
   <style name="DiffDestLine" background="#d7d7d7"/>
   <style name="DiffDestChar" background="#afafaf"/>
+  <style name="MergeConflictCurrent" background="#cde2f9"/>
+  <style name="MergeConflictIncoming" background="#e6d8f5"/>
+  <style name="MergeConflictBase" background="#e8e8e2"/>
   <style name="Doxygen.Comment" foreground="#808080"/>
   <style name="Doxygen.Tag" foreground="#808080" italic="true"/>
   <style name="Field"/>
