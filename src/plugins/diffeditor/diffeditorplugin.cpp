@@ -373,6 +373,7 @@ private slots:
     void testInlineDiffCollapse();
     void testInlineDiffCollapseAddedLines();
     void testInlineDiffCollapseUnchangedFile();
+    void testInlineDiffIgnoreWhitespace();
 #endif // WITH_TESTS
 };
 
@@ -2168,6 +2169,100 @@ void DiffEditor::Internal::DiffEditorPlugin::testInlineDiffCollapseUnchangedFile
     QCOMPARE(baselineWidget->editorLayout()->lineCount(), 1);
     QCOMPARE(baselineWidget->viewport()
                  ->findChildren<QWidget *>("InlineDiffCollapsedRow").size(), 1);
+
+    const QPointer<QWidget> diffWidgetGuard = diffWidget;
+    QVERIFY(EditorManager::closeDocuments({sourceDocument.data()}, false));
+    QTRY_VERIFY(diffWidgetGuard.isNull());
+}
+
+// The "Ignore Whitespace" toggle: differences that are whitespace only produce
+// no hunk, no ghost row and no highlight, while the real changes stay.
+void DiffEditor::Internal::DiffEditorPlugin::testInlineDiffIgnoreWhitespace()
+{
+    using namespace TextEditor;
+
+    // line 2 is re-indented (whitespace only), line 4 is re-indented and
+    // really changed: the change stays, its re-indentation must not be
+    // highlighted along with it
+    const QString baselineText = "line 1\nline 2\nline 3\nline 4\nline 5\n";
+    const QString editorText = "line 1\n    line 2\nline 3\n    line 4 changed\nline 5\n";
+
+    QTemporaryDir temporaryDir;
+    QVERIFY(temporaryDir.isValid());
+    const FilePath sourceFile
+        = FilePath::fromString(temporaryDir.path()) / "testInlineDiffIgnoreWhitespace.txt";
+    QVERIFY(sourceFile.writeFileContents(editorText.toUtf8()));
+    IEditor *sourceEditor = EditorManager::openEditor(sourceFile);
+    QVERIFY(sourceEditor);
+    auto sourceTextEditor = qobject_cast<BaseTextEditor *>(sourceEditor);
+    QVERIFY(sourceTextEditor);
+    TextEditorWidget *sourceWidget = sourceTextEditor->editorWidget();
+    QVERIFY(sourceWidget);
+    const TextDocumentPtr sourceDocument = sourceWidget->textDocumentPtr();
+    QVERIFY(sourceDocument);
+
+    InlineDiffBaseline baseline;
+    baseline.id = "test";
+    baseline.displayName = "Test";
+    baseline.fetchText = [baselineText](const InlineDiffBaseline::TextCallback &callback) {
+        callback(baselineText);
+    };
+
+    IEditor *diffEditor = openInlineDiffEditor(sourceDocument, baseline,
+                                               "testInlineDiffIgnoreWhitespace.txt");
+    QVERIFY(diffEditor);
+    setInlineDiffViewMode(diffEditor, InlineDiffViewMode::Inline);
+    TextEditorWidget *diffWidget
+        = Utils::findOrDefault(diffEditor->widget()->findChildren<TextEditorWidget *>(),
+                               [&sourceDocument](TextEditorWidget *widget) {
+        return widget->document() == sourceDocument->document();
+    });
+    QVERIFY(diffWidget);
+    diffEditor->widget()->resize(800, 600);
+
+    // one ghost row block per changed run, holding the baseline lines it replaces
+    const auto ghostItemCount = [](TextEditorWidget *widget) {
+        int count = 0;
+        for (QTextBlock block = widget->document()->firstBlock(); block.isValid();
+             block = block.next()) {
+            count += widget->editorLayout()
+                         ->layoutItemsForCategory(block, inlineDiffGhostCategory())
+                         .size();
+        }
+        return count;
+    };
+
+    auto toolBar = qobject_cast<QToolBar *>(diffEditor->toolBar());
+    QVERIFY(toolBar);
+    QAction *whitespaceAction = Utils::findOrDefault(toolBar->actions(), [](QAction *action) {
+        return action->objectName() == "InlineDiffIgnoreWhitespaceAction";
+    });
+    QVERIFY(whitespaceAction);
+
+    const QString grabPath
+        = Utils::qtcEnvironmentVariable("QTC_INLINE_DIFF_WHITESPACE_TOOLBAR_GRAB");
+    if (!grabPath.isEmpty()) {
+        toolBar->resize(toolBar->sizeHint());
+        QCoreApplication::processEvents();
+        toolBar->grab().save(grabPath);
+    }
+
+    // off: both the re-indented and the really changed line show up
+    whitespaceAction->setChecked(false);
+    QTRY_COMPARE(ghostItemCount(diffWidget), 2);
+
+    // on: only the real change is left, and no highlight is whitespace only
+    whitespaceAction->setChecked(true);
+    QTRY_COMPARE(ghostItemCount(diffWidget), 1);
+    const QStringList changedTexts = inlineDiffChangedCharTexts(diffWidget);
+    QVERIFY(!changedTexts.isEmpty());
+    for (const QString &text : changedTexts)
+        QVERIFY(!text.trimmed().isEmpty());
+    QVERIFY(changedTexts.join(QString()).contains("changed"));
+
+    // and off again brings the whitespace change back
+    whitespaceAction->setChecked(false);
+    QTRY_COMPARE(ghostItemCount(diffWidget), 2);
 
     const QPointer<QWidget> diffWidgetGuard = diffWidget;
     QVERIFY(EditorManager::closeDocuments({sourceDocument.data()}, false));
