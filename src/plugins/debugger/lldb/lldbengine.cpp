@@ -475,6 +475,8 @@ void LldbEngine::handleResponse(const QString &response)
             notifyInferiorPid(item.toProcessHandle());
         else if (name == "breakpointmodified")
             handleInterpreterBreakpointModified(item);
+        else if (name == "interpreterasync")
+            handleInterpreterAsync(all, item);
         else if (name == "signal-received")
             handleSignalReceived(item);
         else if (name == "bridgemessage")
@@ -715,6 +717,36 @@ void LldbEngine::handleOutputNotification(const GdbMi &output)
     else if (channel == "stderr")
         ch = AppError;
     showMessage(data, ch);
+}
+
+// A pending QML breakpoint that resolved once the NativeQmlDebugger service
+// came up. Matched by modelid, not lldbid: there is no real lldb breakpoint
+// yet, so handleInterpreterBreakpointModified()'s responseId lookup cannot be
+// reused.
+//
+// The payload is not gdb MI, so updateFromGdbOutput() must not be used on it:
+// dumper.py echoes its own insert arguments back (resolvePendingInterpreter-
+// Breakpoint()), where resultToMi() serializes booleans as "1" while
+// updateFromGdbOutput() wants "y" for "enabled", treats the mere presence of a
+// "pending" child as pending regardless of its value, and reads only "cond",
+// never "condition" - leaving the breakpoint drawn disabled, still pending and
+// without its condition. updateBreakpointData() reads "enabled" correctly but
+// would hex-decode the condition a second time, insertInterpreterBreakpoint()
+// having already decoded it, so the few fields this payload carries are
+// applied directly.
+void LldbEngine::handleInterpreterAsync(const GdbMi &all, const GdbMi &item)
+{
+    if (all["asyncclass"].data() != "breakpointmodified")
+        return;
+
+    Breakpoint bp = breakHandler()->findBreakpointByModelId(item["modelid"].toInt());
+    QTC_ASSERT(bp, return);
+    bp->setEnabled(item["enabled"].toInt());
+    bp->setCondition(item["condition"].data());
+    bp->setIgnoreCount(item["ignorecount"].toInt());
+    bp->setTextPosition({item["line"].toInt(), -1});
+    bp->setPending(false);
+    bp->adjustMarker();
 }
 
 void LldbEngine::handleInterpreterBreakpointModified(const GdbMi &bpItem)

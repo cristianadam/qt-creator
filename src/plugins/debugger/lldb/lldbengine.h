@@ -95,6 +95,7 @@ private:
     void handleSignalReceived(const GdbMi &item);
     void handleLocationNotification(const GdbMi &location);
     void handleOutputNotification(const GdbMi &output);
+    void handleInterpreterAsync(const GdbMi &all, const GdbMi &item);
     void handleInterpreterBreakpointModified(const GdbMi &item);
     void handleTracepointHit(const GdbMi &item);
 
