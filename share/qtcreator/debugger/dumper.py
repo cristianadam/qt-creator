@@ -2894,8 +2894,13 @@ typename))
         self.reportInterpreterResult(resdict, args)
 
     def resolvePendingInterpreterBreakpoint(self, args):
-        self.callServiceFunction('qt_qmlDebugEnableService', ['NativeQmlDebugger'])
+        try:
+            enabled = self.callServiceFunction('qt_qmlDebugEnableService', ['NativeQmlDebugger'])
+            self.warn('qt_qmlDebugEnableService returned %s' % enabled)
+        except Exception as error:
+            self.warn('qt_qmlDebugEnableService raised %s: %s' % (type(error).__name__, error))
         response = self.sendInterpreterRequest('setbreakpoint', args)
+        self.warn('setbreakpoint response %s' % response)
         bp = None if response is None else response.get('breakpoint', None)
         resdict = args.copy()
         if bp:

@@ -1775,6 +1775,8 @@ class Dumper(DumperBase):
                     # Substring, not "==": demangled formatting can vary.
                     if "qt_qmlDebugConnectorOpen" in (functionName or ''):
                         self.report("RESOLVER HIT")
+                        self.warn('resolver hook hit, running %d resolver(s)'
+                                  % len(self.interpreterBreakpointResolvers))
                         for resolver in self.interpreterBreakpointResolvers:
                             resolver()
                         self.report("AUTO-CONTINUE AFTER RESOLVING")
@@ -2620,6 +2622,8 @@ class Dumper(DumperBase):
 
     def createResolvePendingBreakpointsHookBreakpoint(self, args):
         bp = self.target.BreakpointCreateByName('qt_qmlDebugConnectorOpen')
+        self.warn('resolver hook created for qt_qmlDebugConnectorOpen, %d location(s) so far'
+                  % bp.GetNumLocations())
         bp.SetOneShot(True)
         self.internalBreakpointIds.add(bp.GetID())
         self.interpreterBreakpointResolvers.append(
