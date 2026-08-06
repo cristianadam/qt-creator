@@ -70,6 +70,24 @@ class FakeVoidType(cdbext.Type):
         return []
 
 
+# Stands in for the value of a service variable read straight out of memory, with
+# only what fetchInterpreterResult() asks of one - see readServiceVariable().
+class RawServiceVariable:
+    def __init__(self, dumper, address: int):
+        self.dumper = dumper
+        self.rawAddress = address
+
+    def address(self) -> int:
+        return self.rawAddress
+
+    def pointer(self) -> int:
+        size = cdbext.pointerSize()
+        return int.from_bytes(self.dumper.readRawMemory(self.rawAddress, size), 'little')
+
+    def integer(self) -> int:
+        return int.from_bytes(self.dumper.readRawMemory(self.rawAddress, 4), 'little', signed=True)
+
+
 class Dumper(DumperBase):
     def __init__(self):
         DumperBase.__init__(self)
@@ -283,12 +301,31 @@ class Dumper(DumperBase):
         module = self.serviceModuleName()
         qualified = ('%s!%s' % (module, function)) if module else function
         pointers = ['(char *)0x%x' % self.marshalString(arg) for arg in (args or [])]
-        return cdbext.call('%s(%s)' % (qualified, ', '.join(pointers)))
+        call = '%s(%s)' % (qualified, ', '.join(pointers))
+        result = cdbext.call(call)
+        if result is None:
+            # No PDB for the module, so cdb's '.call' has no prototype to go by;
+            # the call is set up by hand instead, which needs only the address.
+            # Both service functions return bool, for which the x64 ABI defines
+            # only al - the rest of rax is whatever was there.
+            raw = cdbext.callRaw(call)
+            result = None if raw is None else raw & 0xff
+        return result
 
     def readServiceVariable(self, name):
         module = self.serviceModuleName()
         qualified = ('%s!%s' % (module, name)) if module else name
-        return self.fromNativeValue(cdbext.parseAndEvaluate(qualified))
+        value = cdbext.parseAndEvaluate(qualified)
+        if value is not None and value.address():
+            return self.fromNativeValue(value)
+        # No PDB for the module: parseAndEvaluate() still succeeds, but hands
+        # back a typeless value whose address is 0, so the bytes are read
+        # directly instead - both service variables this reads are a pointer
+        # and an int, which is all the caller asks of them.
+        address = cdbext.getAddressByName(qualified)
+        if not address:
+            raise RuntimeError('Cannot resolve %s' % qualified)
+        return RawServiceVariable(self, address)
 
     def createResolvePendingBreakpointsHookBreakpoint(self, args):
         # No-op for cdb. The gdb/lldb bridges set a Python-side breakpoint on
