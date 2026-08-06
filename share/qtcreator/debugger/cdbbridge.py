@@ -245,11 +245,8 @@ class Dumper(DumperBase):
         return cdbext.parseAndEvaluate(exp)
 
     # --- Native combined (C++/QML) service plumbing -----------------------
-    # Draft, UNTESTED. The cdb feasibility experiment (Stage C, green) showed
-    # the NativeQmlDebugger round-trip works via inferior .call, but cdb
-    # rejects string literals, so service-name and hex-payload arguments must
-    # be marshalled into target memory and passed by pointer. See
-    # tests/manual/debugger/qmlmix/cdb-reference.md.
+    # cdb rejects string literals in '.call', so the service name and the hex
+    # payload are marshalled into target memory and passed by pointer.
 
     def serviceModuleName(self) -> str:
         # The qmldbg_native plugin (debug builds: qmldbg_natived) hosts the
@@ -261,15 +258,18 @@ class Dumper(DumperBase):
         return candidates[0] if candidates else ''
 
     def marshalString(self, text: str) -> int:
-        # Write 'text' plus a terminating NUL into target memory and return
-        # its address (used as a char*). FIXME: qtcreatorcdbext exposes
-        # readRawMemory but no memory-write or allocation primitive, and
-        # '.call malloc(...)' has no usable prototype. This needs new
-        # extension APIs (e.g. cdbext.allocate(size) + cdbext.writeRawMemory(
-        # address, bytes)); the experiment used the '.dvalloc'/'eb' commands.
-        raise NotImplementedError(
-            'CDB string marshalling needs cdbext.allocate/writeRawMemory '
-            '(see cdb-reference.md)')
+        # Returns the address of 'text' plus a terminating NUL, written into
+        # target memory, for use as a char*.
+        encoded = text.encode('utf-8') + b'\0'
+        address = cdbext.allocate(len(encoded))
+        if not address:
+            raise RuntimeError('Could not allocate %d bytes in the debuggee'
+                               % len(encoded))
+        written = cdbext.writeRawMemory(address, encoded)
+        if written != len(encoded):
+            raise RuntimeError('Wrote only %s of %d bytes at 0x%x'
+                               % (written, len(encoded), address))
+        return address
 
     def callServiceFunction(self, function, args=None):
         module = self.serviceModuleName()
