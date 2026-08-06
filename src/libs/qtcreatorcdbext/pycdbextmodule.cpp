@@ -346,6 +346,42 @@ static PyObject *cdbext_createValue(PyObject *, PyObject *args)
     return createPythonObject(PyValue::createValue(address, *(type->impl)));
 }
 
+// The same call cdbext_call() makes, for a function whose module carries no PDB:
+// ".call" needs a prototype and has none there, so the call is set up by hand
+// (ExtensionContext::callWithoutPrototype()). Only the raw return value can be
+// reported - without type information there is nothing to build a Value from -
+// so this returns a plain integer rather than a cdbext.Value.
+// The address of a symbol, needing no type information for it: a module with no
+// PDB has its exports and nothing else, so an expression naming one of them
+// fails with "Type information missing" even though the address is known.
+static PyObject *cdbext_addressOf(PyObject *, PyObject *args)
+{
+    char *symbol = nullptr;
+    if (!PyArg_ParseTuple(args, "s", &symbol))
+        return NULL;
+
+    ULONG64 address = 0;
+    CIDebugSymbols *symbols = ExtensionCommandContext::instance()->symbols();
+    if (FAILED(symbols->GetOffsetByName(symbol, &address)))
+        Py_RETURN_NONE;
+    return Py_BuildValue("K", address);
+}
+
+static PyObject *cdbext_callRaw(PyObject *, PyObject *args)
+{
+    char *function = nullptr;
+    if (!PyArg_ParseTuple(args, "s", &function))
+        return NULL;
+
+    ULONG64 returnValue = 0;
+    std::string error;
+    if (!ExtensionContext::instance().callWithoutPrototype(function, &returnValue, &error)) {
+        DebugPrint() << "Failed to call function '" << function << "' error: " << error;
+        Py_RETURN_NONE;
+    }
+    return Py_BuildValue("K", returnValue);
+}
+
 static PyObject *cdbext_call(PyObject *, PyObject *args)
 {
     char *function;
@@ -421,6 +457,10 @@ static PyMethodDef cdbextMethods[] = {
      "Creates a value with the given type at the given address"},
     {"call",                cdbext_call,                METH_VARARGS,
      "Call a function and return a cdbext.Value representing the return value of that function."},
+    {"callRaw",             cdbext_callRaw,             METH_VARARGS,
+     "Call a function needing no prototype, returning its raw return value or None"},
+    {"addressOf",           cdbext_addressOf,           METH_VARARGS,
+     "Returns the address of a symbol, or None if it cannot be resolved"},
     {"reportResult",        cdbext_reportResult,        METH_VARARGS,
      "Adds a result"},
     {NULL,                  NULL,               0,
