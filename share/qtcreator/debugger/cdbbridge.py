@@ -254,10 +254,11 @@ class Dumper(DumperBase):
     def serviceModuleName(self) -> str:
         # The qmldbg_native plugin (debug builds: qmldbg_natived) hosts the
         # NativeQmlDebugger entry points; cdb needs the module prefix.
-        for module in cdbext.listOfModules():
-            if module.startswith('qmldbg_native'):
-                return module
-        return ''
+        # Exact match: 'qmldbg_nativedebugger[d]' matches that prefix too, and
+        # exports none of the entry points.
+        candidates = [module for module in cdbext.listOfModules()
+                      if module.lower() in ('qmldbg_native', 'qmldbg_natived')]
+        return candidates[0] if candidates else ''
 
     def marshalString(self, text: str) -> int:
         # Write 'text' plus a terminating NUL into target memory and return
