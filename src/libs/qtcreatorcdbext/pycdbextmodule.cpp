@@ -286,6 +286,54 @@ static PyObject *cdbext_readRawMemory(PyObject *, PyObject *args)
     return ret;
 }
 
+// Counterpart of readRawMemory above; a string argument for an inferior call is
+// marshalled with it (see cdbbridge.py's marshalString()). Returns the number of
+// bytes written, 0 on failure.
+static PyObject *cdbext_writeRawMemory(PyObject *, PyObject *args)
+{
+    ULONG64 address = 0;
+    const char *buffer = nullptr;
+    Py_ssize_t size = 0;
+    if (!PyArg_ParseTuple(args, "Ky#", &address, &buffer, &size))
+        Py_RETURN_NONE;
+
+    if (debugPyCdbextModule) {
+        DebugPrint() << "Write raw memory: " << size << "bytes to " << std::hex << std::showbase
+                     << address;
+    }
+
+    CIDebugDataSpaces *data = ExtensionCommandContext::instance()->dataSpaces();
+    ULONG bytesWritten = 0;
+    const HRESULT hr = data->WriteVirtual(address, const_cast<char *>(buffer), ULONG(size),
+                                          &bytesWritten);
+    if (FAILED(hr))
+        bytesWritten = 0;
+    return Py_BuildValue("k", bytesWritten);
+}
+
+// Reserves committed, writable memory in the debuggee and returns its address,
+// or 0 on failure - VirtualAllocEx on its process handle, the same thing cdb's
+// ".dvalloc" does. Never freed, matching ".dvalloc"'s own lifetime.
+static PyObject *cdbext_allocate(PyObject *, PyObject *args)
+{
+    ULONG64 size = 0;
+    if (!PyArg_ParseTuple(args, "K", &size))
+        Py_RETURN_NONE;
+
+    CIDebugSystemObjects *systemObjects = ExtensionCommandContext::instance()->systemObjects();
+    ULONG64 processHandle = 0;
+    if (FAILED(systemObjects->GetCurrentProcessHandle(&processHandle)))
+        return Py_BuildValue("K", ULONG64(0));
+
+    void *allocated = VirtualAllocEx(reinterpret_cast<HANDLE>(processHandle), nullptr, SIZE_T(size),
+                                     MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (debugPyCdbextModule) {
+        DebugPrint() << "Allocate: " << size << "bytes in the debuggee at " << std::hex
+                     << std::showbase << reinterpret_cast<ULONG64>(allocated);
+    }
+    return Py_BuildValue("K", reinterpret_cast<ULONG64>(allocated));
+}
+
 static PyObject *cdbext_createValue(PyObject *, PyObject *args)
 {
     ULONG64 address = 0;
@@ -365,6 +413,10 @@ static PyMethodDef cdbextMethods[] = {
      "Returns the size of a pointer"},
     {"readRawMemory",       cdbext_readRawMemory,       METH_VARARGS,
      "Read a block of data from the virtual address space"},
+    {"writeRawMemory",      cdbext_writeRawMemory,      METH_VARARGS,
+     "Write a block of data into the virtual address space, returning the bytes written"},
+    {"allocate",            cdbext_allocate,            METH_VARARGS,
+     "Allocate writable memory in the debuggee, returning its address or 0"},
     {"createValue",         cdbext_createValue,         METH_VARARGS,
      "Creates a value with the given type at the given address"},
     {"call",                cdbext_call,                METH_VARARGS,
