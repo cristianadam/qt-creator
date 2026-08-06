@@ -292,3 +292,6 @@ tmp/
 /*-debug/
 /*-release/
 /out/
+
+# Coin plugin site configuration (non-secret infrastructure endpoints)
+/share/qtcreator/lua-plugins/coin/coin.ini
