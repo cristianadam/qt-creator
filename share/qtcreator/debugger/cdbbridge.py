@@ -70,6 +70,19 @@ class FakeVoidType(cdbext.Type):
         return []
 
 
+# Stands in for the value of a service variable read straight out of memory, with
+# only what fetchInterpreterResult() asks of one - see readServiceVariable().
+class RawServiceVariable:
+    def __init__(self, raw: bytes):
+        self.raw = raw
+
+    def pointer(self) -> int:
+        return int.from_bytes(self.raw[:8], 'little')
+
+    def integer(self) -> int:
+        return int.from_bytes(self.raw[:4], 'little', signed=True)
+
+
 class Dumper(DumperBase):
     def __init__(self):
         DumperBase.__init__(self)
@@ -275,12 +288,28 @@ class Dumper(DumperBase):
         module = self.serviceModuleName()
         qualified = ('%s!%s' % (module, function)) if module else function
         pointers = ['0x%x' % self.marshalString(arg) for arg in (args or [])]
-        return cdbext.call('%s(%s)' % (qualified, ', '.join(pointers)))
+        call = '%s(%s)' % (qualified, ', '.join(pointers))
+        result = cdbext.call(call)
+        if result is None:
+            # No PDB for the module, so cdb's '.call' has no prototype to go by;
+            # the call is set up by hand instead, which needs only the address.
+            result = cdbext.callRaw(call)
+        return result
 
     def readServiceVariable(self, name):
         module = self.serviceModuleName()
         qualified = ('%s!%s' % (module, name)) if module else name
-        return self.fromNativeValue(cdbext.parseAndEvaluate(qualified))
+        value = cdbext.parseAndEvaluate(qualified)
+        if value is not None and value.address():
+            return self.fromNativeValue(value)
+        # No PDB for the module: the symbol has an address (it is exported) but no
+        # type, so evaluating it fails with "Type information missing". Its bytes
+        # are read directly instead - both service variables this reads are a
+        # pointer and an int, which is all the caller asks of them.
+        address = cdbext.addressOf(qualified)
+        if not address:
+            raise RuntimeError('Cannot resolve %s' % qualified)
+        return RawServiceVariable(cdbext.readRawMemory(address, 8))
 
     def isWindowsTarget(self) -> bool:
         return True
