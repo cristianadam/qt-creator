@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 //
 // Copyfile, symlink, rename, temp dir/file, chmod, createdir handlers.
-// Included by cmdbridge.c — do not compile separately.
+// Included by cmdbridge.c - do not compile separately.
 
 #include <fcntl.h>
 
@@ -63,7 +63,11 @@ static void h_createdir(value *cmd)
             if (wpath) {
                 MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, len);
                 wchar_t *resolved = (wchar_t *) malloc(4096 * sizeof(wchar_t));
-                if (resolved && GetLongPathNameW(wpath, resolved, 4096) > 0) {
+                /* GetLongPathNameW returns the size it needs when the buffer is
+                   too small, leaving it untouched - so a bare "> 0" accepted an
+                   uninitialised buffer as a resolved path. */
+                DWORD rn = resolved ? GetLongPathNameW(wpath, resolved, 4096) : 0;
+                if (rn > 0 && rn < 4096) {
                     char *utf8_resolved = (char *) malloc(4096);
                     if (utf8_resolved) {
                         int rlen = WideCharToMultiByte(
@@ -133,6 +137,16 @@ static void h_copyfile(value *cmd)
             }
             w += wn;
         }
+    }
+    /* A read that fails ends the loop just as end of file does. Reporting
+       success there left a silently truncated copy behind - and claimed a
+       directory had been copied, since reading one fails immediately. */
+    if (n < 0) {
+        int saved = errno;
+        plat_close(infd);
+        plat_close(outfd);
+        send_os_err(mkey(cmd, "Id"), strerror(saved), saved);
+        return;
     }
     plat_close(infd);
     plat_close(outfd);
@@ -258,7 +272,7 @@ static void h_mktmpfile(value *cmd)
 static void h_chmod(value *cmd)
 {
 #ifdef _WIN32
-    /* Windows has no POSIX permissions — no-op, matching os.Chmod on Windows */
+    /* Windows has no POSIX permissions - no-op, matching os.Chmod on Windows */
     send_void(mkey(cmd, "Id"), "setpermissionsresult");
 #else
     value *sp = mfind(cmd, "SetPermissions");
