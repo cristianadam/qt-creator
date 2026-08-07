@@ -2205,12 +2205,24 @@ void GdbEngine::handleInsertInterpreterBreakpoint(const DebuggerResponse &respon
     }
 }
 
+// The payload is not gdb MI, so updateFromGdbOutput() must not be used on it:
+// dumper.py echoes its own insert arguments back (resolvePendingInterpreter-
+// Breakpoint()), where resultToMi() serializes booleans as "1" while
+// updateFromGdbOutput() wants "y" for "enabled", treats the mere presence of a
+// "pending" child as pending regardless of its value, and reads only "cond",
+// never "condition" - leaving a resolved interpreter breakpoint drawn disabled,
+// still pending and without its condition.
 void GdbEngine::handleInterpreterBreakpointModified(const GdbMi &data)
 {
     int modelId = data["modelid"].toInt();
     Breakpoint bp = breakHandler()->findBreakpointByModelId(modelId);
     QTC_ASSERT(bp, return);
-    bp->updateFromGdbOutput(data, runParameters());
+    bp->setEnabled(data["enabled"].toInt());
+    bp->setCondition(data["condition"].data());
+    bp->setIgnoreCount(data["ignorecount"].toInt());
+    bp->setTextPosition({data["line"].toInt(), -1});
+    bp->setPending(false);
+    bp->adjustMarker();
 }
 
 void GdbEngine::handleWatchInsert(const DebuggerResponse &response, const Breakpoint &bp)
