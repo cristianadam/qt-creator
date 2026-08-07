@@ -3,7 +3,7 @@
 //
 // Windows file access layer: plat_* wrappers, UTF-16 path helpers and file
 // attribute helpers.
-// Included by fileaccess.c — do not compile separately.
+// Included by fileaccess.c -- do not compile separately.
 
 #ifdef _WIN32
 // clang-format off
@@ -75,6 +75,23 @@ typedef HANDLE file_t;
 #ifndef environ
 #define environ _environ
 #endif
+
+/* A FILETIME counts 100-ns intervals since 1601-01-01, the client reads every
+   time field as seconds since the Unix epoch (QDateTime::fromSecsSinceEpoch),
+   and the two are 11644473600 seconds apart. Dividing without subtracting that
+   put every Windows file in the year 2402, and made stat disagree with find,
+   which did convert. One helper for both keeps them from drifting again. */
+#define WIN_UNIX_EPOCH_IN_FILETIME 116444736000000000ULL
+
+static time_t win_filetime_to_unix(FILETIME ft)
+{
+    ULARGE_INTEGER ui;
+    ui.LowPart = ft.dwLowDateTime;
+    ui.HighPart = ft.dwHighDateTime;
+    if (ui.QuadPart < WIN_UNIX_EPOCH_IN_FILETIME)
+        return 0; /* before 1970: nothing the client can represent */
+    return (time_t) ((ui.QuadPart - WIN_UNIX_EPOCH_IN_FILETIME) / 10000000ULL);
+}
 
 /* Map Win32 GetLastError() to POSIX errno for strerror() compatibility. */
 static int win_to_errno(DWORD err)
@@ -171,7 +188,8 @@ static wchar_t *utf8_to_utf16_ex(const char *utf8, bool force)
             already_extended = TRUE;
         }
         /* Handle \\.\ device paths: \\.\C:\ ... -> \\?\C:\ ... */
-        else if (target[0] == L'\\' && target[1] == L'\\' && target[2] == L'.' && target[3] == L'\\') {
+        else if (target[0] == L'\\' && target[1] == L'\\' && target[2] == L'.'
+                 && target[3] == L'\\') {
             target[2] = L'?';
             already_extended = TRUE;
         }
@@ -384,10 +402,14 @@ static bool is_executable(const char *path)
     (void) path;
     return true;
 }
+static inline int plat_stat(const char *path, struct stat *st);
+
+/* Reported to the client as NumHardLinks, which it uses to spot hard links.
+   Returning a flat 0 claimed every file had none. */
 static int nlinks(const char *path)
 {
-    (void) path;
-    return 0;
+    struct stat st;
+    return (plat_stat(path, &st) == 0) ? (int) st.st_nlink : 0;
 }
 static char *fid(const char *path)
 {
@@ -395,7 +417,8 @@ static char *fid(const char *path)
     if (!wpath)
         return strdup("");
     HANDLE h = CreateFileW(
-        wpath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+        wpath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS, NULL);
     free(wpath);
     if (h == INVALID_HANDLE_VALUE)
         return strdup("");
@@ -461,6 +484,30 @@ static int fgroup_id(const char *path)
     return -2;
 }
 
+/* The part of stat() that does not depend on how the handle was opened. The
+   permission bits matter: the client turns them into QFile::Permissions, and
+   leaving them at zero made every file look unreadable. find_win.c derives them
+   from the same attribute, so the two agree. */
+static void win_fill_stat(struct stat *st, const BY_HANDLE_FILE_INFORMATION *info)
+{
+    memset(st, 0, sizeof(struct stat));
+    if (info->dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+        st->st_mode = S_IFLNK | 0777;
+    else if (info->dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+        st->st_mode = S_IFDIR | 0755;
+    else if (info->dwFileAttributes & FILE_ATTRIBUTE_READONLY)
+        st->st_mode = S_IFREG | 0444;
+    else
+        st->st_mode = S_IFREG | 0666;
+
+    /* Parenthesise the whole expression: the cast binds tighter than "|", so
+       the original truncated the high word wherever off_t is 32 bit. */
+    st->st_size = (off_t) (((uint64_t) info->nFileSizeHigh << 32) | info->nFileSizeLow);
+    st->st_mtime = win_filetime_to_unix(info->ftLastWriteTime);
+    /* No cast: the CRT spells st_nlink differently across toolchains. */
+    st->st_nlink = info->nNumberOfLinks ? info->nNumberOfLinks : 1;
+}
+
 /* Windows compatibility shims for POSIX functions */
 static inline int plat_lstat(const char *path, struct stat *st)
 {
@@ -488,19 +535,7 @@ static inline int plat_lstat(const char *path, struct stat *st)
     }
     CloseHandle(h);
 
-    memset(st, 0, sizeof(struct stat));
-    st->st_mode = S_IFREG;
-    if (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-        st->st_mode = S_IFDIR;
-    if (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
-        st->st_mode = S_IFLNK;
-
-    /* Parenthesise the whole expression: the cast binds tighter than "|", so
-       the original truncated the high word wherever off_t is 32 bit. */
-    st->st_size = (off_t) (((uint64_t) info.nFileSizeHigh << 32) | info.nFileSizeLow);
-    st->st_mtime = (time_t) (info.ftLastWriteTime.dwLowDateTime
-                             | ((uint64_t) info.ftLastWriteTime.dwHighDateTime << 32))
-                   / 10000000;
+    win_fill_stat(st, &info);
     return 0;
 }
 
@@ -530,19 +565,7 @@ static inline int plat_stat(const char *path, struct stat *st)
     }
     CloseHandle(h);
 
-    memset(st, 0, sizeof(struct stat));
-    st->st_mode = S_IFREG;
-    if (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-        st->st_mode = S_IFDIR;
-    if (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
-        st->st_mode = S_IFLNK;
-
-    /* Parenthesise the whole expression: the cast binds tighter than "|", so
-       the original truncated the high word wherever off_t is 32 bit. */
-    st->st_size = (off_t) (((uint64_t) info.nFileSizeHigh << 32) | info.nFileSizeLow);
-    st->st_mtime = (time_t) (info.ftLastWriteTime.dwLowDateTime
-                             | ((uint64_t) info.ftLastWriteTime.dwHighDateTime << 32))
-                   / 10000000;
+    win_fill_stat(st, &info);
     return 0;
 }
 
@@ -580,7 +603,8 @@ static inline ssize_t plat_readlink(const char *path, char *buf, size_t bufsiz)
         return -1;
     }
     REPARSE_DATA_BUFFER *rdb = (REPARSE_DATA_BUFFER *) reparseBuf;
-    if (rdb->ReparseTag != IO_REPARSE_TAG_SYMLINK && rdb->ReparseTag != IO_REPARSE_TAG_MOUNT_POINT) {
+    if (rdb->ReparseTag != IO_REPARSE_TAG_SYMLINK
+        && rdb->ReparseTag != IO_REPARSE_TAG_MOUNT_POINT) {
         errno = EACCES;
         return -1;
     }
@@ -592,7 +616,8 @@ static inline ssize_t plat_readlink(const char *path, char *buf, size_t bufsiz)
         return -1;
     }
     int utf8Len
-        = WideCharToMultiByte(CP_UTF8, 0, substituteName, wcsLen, buf, (int) bufsiz - 1, NULL, NULL);
+        = WideCharToMultiByte(
+            CP_UTF8, 0, substituteName, wcsLen, buf, (int) bufsiz - 1, NULL, NULL);
     if (utf8Len <= 0) {
         errno = EACCES;
         return -1;
