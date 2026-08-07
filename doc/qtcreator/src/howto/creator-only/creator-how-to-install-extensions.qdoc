@@ -13,7 +13,7 @@
     extensions from the \l{\QC extension registry} or from other external
     repositories, as well as activate and deactivate them.
 
-    \image {qtcreator-extension-mode.webp} {Browse tab in Extensions preferences}
+    \image {qtcreator-extensions-browse.webp} {Browse tab in Extensions preferences}
 
     When you \e {install} extensions, they are copied to the correct place on
     the computer and \e {activated} for use. \QC can also \e {load} extensions
@@ -80,7 +80,7 @@
 
     \list 1
         \li Go to \preferences > \uicontrol Extensions > \uicontrol Browse.
-            \image {qtcreator-extension-mode.webp} {Browse tab in Extensions preferences}
+            \image {qtcreator-extensions-browse.webp} {Browse tab in Extensions preferences}
         \li Select an extension.
         \li Select \uicontrol {Install}.
         \li Follow the instructions of the wizard to check the archive and to
