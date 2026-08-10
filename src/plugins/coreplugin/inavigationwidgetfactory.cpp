@@ -6,6 +6,9 @@
 
 #include "inavigationwidgetfactory.h"
 
+#include "coreplugin.h"
+#include "navigationwidget.h"
+
 #include <QIcon>
 #include <QKeySequence>
 
@@ -71,10 +74,19 @@ static QList<INavigationWidgetFactory *> g_navigationWidgetFactories;
 INavigationWidgetFactory::INavigationWidgetFactory()
 {
     g_navigationWidgetFactories.append(this);
+
+    // Id and display name are only set from the subclass constructor, so the
+    // sidebars are updated deferred.
+    static bool pending = false;
+    Internal::scheduleRegistryUpdate(pending, [] {
+        for (INavigationWidgetFactory *factory : allNavigationFactories())
+            NavigationWidget::addFactory(factory);
+    });
 }
 
 INavigationWidgetFactory::~INavigationWidgetFactory()
 {
+    NavigationWidget::removeFactory(this);
     g_navigationWidgetFactories.removeOne(this);
 }
 

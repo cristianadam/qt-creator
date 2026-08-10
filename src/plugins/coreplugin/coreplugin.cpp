@@ -26,6 +26,7 @@
 #include "loggingviewer.h"
 #include "mcp/mcpmanager.h"
 #include "modemanager.h"
+#include "registries_test.h"
 #include "session.h"
 #include "systemsettings.h"
 #include "themechooser.h"
@@ -60,6 +61,7 @@
 
 #include <QAuthenticator>
 #include <QCheckBox>
+#include <QCoreApplication>
 #include <QDialog>
 #include <QDateTime>
 #include <QDebug>
@@ -510,6 +512,7 @@ Result<> CorePlugin::initialize(const QStringList &arguments)
     addTestCreator(createActionManagerTest);
     addTestCreator(createDocumentManagerTest);
     addTestCreator(createExternalToolTest);
+    addTestCreator(createRegistriesTest);
     addTestCreator(createLocatorTest);
     addTestCreator(createVcsManagerTest);
     addTestCreator(createEditorManagerTest);
@@ -540,25 +543,69 @@ static Id generateOpenPageCommandId(IOptionsPage *page)
     return candidate.withSuffix(suffix);
 }
 
+// Set once the pages present at startup have been swept, since before that
+// their categories are not all known and the action texts name one.
+static bool s_optionsPageActionsRegistered = false;
+
 static void registerActionsForOptions()
 {
+    // Registering a page twice would append a numeric suffix to the command id
+    // and leave a duplicate menu entry behind.
+    static QHash<Id, std::pair<Id, QAction *>> registered; // page id -> command id, action
+
     QMap<Utils::Id, QString> categoryDisplay;
     for (IOptionsPage *page : IOptionsPage::allOptionsPages()) {
         if (!categoryDisplay.contains(page->category()) && !page->displayCategory().isEmpty())
             categoryDisplay[page->category()] = page->displayCategory();
     }
+    QSet<Id> current;
     for (IOptionsPage *page : IOptionsPage::allOptionsPages()) {
+        current.insert(page->id());
+        if (registered.contains(page->id()))
+            continue;
+
         const Id commandId = generateOpenPageCommandId(page);
         if (!commandId.isValid())
             continue;
 
-        ActionBuilder(ICore::instance(), commandId)
+        ActionBuilder builder(ICore::instance(), commandId);
+        builder
             .setText(Tr::tr("%1 > %2 Preferences...")
                          .arg(categoryDisplay.value(page->category()), page->displayName()))
             .addOnTriggered(ICore::instance(), [id = page->id()] {
                 ICore::showSettings(id);
             });
+        registered.insert(page->id(), {commandId, builder.contextAction()});
     }
+    for (auto it = registered.begin(); it != registered.end(); ) {
+        if (current.contains(it.key())) {
+            ++it;
+            continue;
+        }
+        ActionManager::unregisterAction(it->second, it->first);
+        delete it->second;
+        it = registered.erase(it);
+    }
+}
+
+void updateActionsForOptionsPages()
+{
+    if (s_optionsPageActionsRegistered)
+        registerActionsForOptions();
+}
+
+void scheduleRegistryUpdate(bool &pending, const std::function<void()> &update)
+{
+    if (pending)
+        return;
+    pending = true;
+    QMetaObject::invokeMethod(
+        QCoreApplication::instance(),
+        [&pending, update] {
+            pending = false;
+            update();
+        },
+        Qt::QueuedConnection);
 }
 
 void CorePlugin::extensionsInitialized()
@@ -569,6 +616,7 @@ void CorePlugin::extensionsInitialized()
     ICore::extensionsInitialized();
     checkSettings();
     registerActionsForOptions();
+    s_optionsPageActionsRegistered = true;
 }
 
 bool CorePlugin::delayedInitialize()
