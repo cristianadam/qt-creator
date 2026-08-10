@@ -170,15 +170,26 @@ void Locator::initialize()
     connect(ICore::instance(), &ICore::saveSettingsRequested, this, &Locator::saveSettings);
 }
 
-void Locator::extensionsInitialized()
+void Locator::updateFilters()
 {
-    m_filters = Utils::sorted(ILocatorFilter::allLocatorFilters(),
+    setFilters(Utils::sorted(ILocatorFilter::allLocatorFilters(),
                 [](const ILocatorFilter *first, const ILocatorFilter *second) -> bool {
         if (first->priority() != second->priority())
             return first->priority() < second->priority();
         return first->id().alphabeticallyBefore(second->id());
-    });
-    setFilters(m_filters);
+    }));
+}
+
+void Locator::extensionsInitialized()
+{
+    updateFilters();
+
+    // A plugin loaded at runtime - soft-loaded from About Plugins - registers
+    // its filters after the collection above, and they would otherwise stay
+    // invisible until the next start.
+    connect(ExtensionSystem::PluginManager::instance(),
+            &ExtensionSystem::PluginManager::pluginsChanged,
+            this, &Locator::updateFilters);
 
     Command *openCommand = ActionManager::command(Constants::OPEN);
     Command *locateCommand = ActionManager::command(Constants::LOCATE);

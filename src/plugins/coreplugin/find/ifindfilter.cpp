@@ -3,6 +3,15 @@
 
 #include "ifindfilter.h"
 
+#include "findplugin.h"
+
+#include <extensionsystem/pluginmanager.h>
+
+#include <utils/qtcassert.h>
+
+#include <QCoreApplication>
+#include <QPointer>
+
 #include "../coreicons.h"
 #include "../coreplugintr.h"
 
@@ -208,6 +217,20 @@ static QList<IFindFilter *> g_findFilters;
 IFindFilter::IFindFilter()
 {
     g_findFilters.append(this);
+
+    // A filter created once the Advanced Find menu was built - by a plugin
+    // soft-loaded later - has to add itself. id() and displayName() only
+    // answer once the subclass constructor has run, so this waits for the next
+    // event loop turn; filters present at startup are already there and are
+    // skipped.
+    const QPointer<IFindFilter> guarded(this);
+    QMetaObject::invokeMethod(
+        QCoreApplication::instance(),
+        [guarded] {
+            QTC_ASSERT(guarded, return);
+            Find::updateFindFilters();
+        },
+        Qt::QueuedConnection);
 }
 
 /*!
@@ -216,6 +239,10 @@ IFindFilter::IFindFilter()
 IFindFilter::~IFindFilter()
 {
     g_findFilters.removeOne(this);
+    // The find dialog keeps the filters by pointer, so it has to let go of
+    // this one before it is gone.
+    if (!ExtensionSystem::PluginManager::isShuttingDown())
+        Find::updateFindFilters();
 }
 
 /*!

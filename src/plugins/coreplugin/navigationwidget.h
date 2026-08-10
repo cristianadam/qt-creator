@@ -70,6 +70,11 @@ public:
 
     void setFactories(const QList<INavigationWidgetFactory*> &factories);
 
+    // Called from INavigationWidgetFactory, for factories that appear or go
+    // away while running.
+    static void addFactory(INavigationWidgetFactory *factory);
+    static void removeFactory(INavigationWidgetFactory *factory);
+
     Utils::Key settingsGroup() const;
     void saveSettings(Utils::QtcSettings *settings);
     void restoreSettings(Utils::QtcSettings *settings);
@@ -94,6 +99,7 @@ protected:
     void resizeEvent(QResizeEvent *) override;
 
 private:
+    void dropFactory(INavigationWidgetFactory *factory);
     void closeSubWidget(Internal::NavigationSubWidget *subWidget);
     bool toggleActionVisible() const;
     bool toggleActionEnabled() const;

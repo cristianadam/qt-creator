@@ -6,8 +6,14 @@
 
 #include "inavigationwidgetfactory.h"
 
+#include "navigationwidget.h"
+
+#include <utils/qtcassert.h>
+
+#include <QCoreApplication>
 #include <QIcon>
 #include <QKeySequence>
+#include <QPointer>
 
 /*!
     \class Core::INavigationWidgetFactory
@@ -71,10 +77,25 @@ static QList<INavigationWidgetFactory *> g_navigationWidgetFactories;
 INavigationWidgetFactory::INavigationWidgetFactory()
 {
     g_navigationWidgetFactories.append(this);
+
+    // A factory created once the sidebars are populated - by a soft-loaded
+    // plugin, or per extension while running - has to add itself. Id and
+    // display name are only set from the subclass constructor, so this waits
+    // for the next event loop turn; the factories present at startup are in
+    // the sidebars by then and are skipped.
+    const QPointer<INavigationWidgetFactory> guarded(this);
+    QMetaObject::invokeMethod(
+        QCoreApplication::instance(),
+        [guarded] {
+            QTC_ASSERT(guarded, return);
+            NavigationWidget::addFactory(guarded);
+        },
+        Qt::QueuedConnection);
 }
 
 INavigationWidgetFactory::~INavigationWidgetFactory()
 {
+    NavigationWidget::removeFactory(this);
     g_navigationWidgetFactories.removeOne(this);
 }
 

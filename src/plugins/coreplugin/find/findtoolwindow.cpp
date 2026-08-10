@@ -261,22 +261,45 @@ void FindToolWindow::updateFindFlags()
 
 void FindToolWindow::setFindFilters(const QList<IFindFilter *> &filters)
 {
-    qDeleteAll(m_configWidgets);
-    m_configWidgets.clear();
-    for (IFindFilter *filter : std::as_const(m_filters))
-        filter->disconnect(this);
-    m_filters = filters;
-    m_filterList->clear();
+    // A filter's config widget is built once and kept for as long as the filter
+    // is here. It adopts widgets owned by others - the search engines hand out
+    // theirs - so building a second one would have to work with widgets that
+    // the first one took down with it when it was deleted.
+    QWidgetList configWidgets;
     QStringList names;
     for (IFindFilter *filter : filters) {
+        const int previous = m_filters.indexOf(filter);
+        if (previous >= 0) {
+            configWidgets.append(m_configWidgets.at(previous));
+        } else {
+            configWidgets.append(filter->createConfigWidget());
+            connect(filter, &IFindFilter::displayNameChanged,
+                    this, [this, filter] { updateFindFilterName(filter); });
+        }
         names << filter->displayName();
-        m_configWidgets.append(filter->createConfigWidget());
-        connect(filter, &IFindFilter::displayNameChanged,
-                this, [this, filter] { updateFindFilterName(filter); });
     }
+
+    for (int i = 0; i < m_filters.size(); ++i) {
+        IFindFilter *filter = m_filters.at(i);
+        if (filters.contains(filter))
+            continue;
+        filter->disconnect(this);
+        if (m_currentFilter == filter) {
+            m_currentFilter = nullptr;
+            m_configWidget = nullptr;
+        }
+        delete m_configWidgets.at(i);
+    }
+
+    IFindFilter *previousFilter = m_currentFilter;
+    m_filters = filters;
+    m_configWidgets = configWidgets;
+    m_filterList->clear();
     m_filterList->addItems(names);
-    if (m_filters.size() > 0)
-        setCurrentFilterIndex(0);
+    if (!m_filters.isEmpty()) {
+        const int index = previousFilter ? m_filters.indexOf(previousFilter) : -1;
+        setCurrentFilterIndex(index >= 0 ? index : 0);
+    }
 }
 
 QList<IFindFilter *> FindToolWindow::findFilters() const

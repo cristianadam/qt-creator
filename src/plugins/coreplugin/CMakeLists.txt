@@ -308,6 +308,8 @@ extend_qtc_plugin(Core
     documentmanager_test.cpp
     documentmanager_test.h
     editormanager/editormanager_test.cpp
+    find/findfilter_test.cpp
+    find/findfilter_test.h
     locator/locator_test.cpp
     locator/locator_test.h
     locator/locatorfiltertest.cpp
