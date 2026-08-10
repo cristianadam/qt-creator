@@ -3,8 +3,13 @@
 
 #include "ifindfilter.h"
 
+#include "findplugin.h"
+
 #include "../coreicons.h"
+#include "../coreplugin.h"
 #include "../coreplugintr.h"
+
+#include <extensionsystem/pluginmanager.h>
 
 #include <utils/qtcsettings.h>
 
@@ -208,6 +213,11 @@ static QList<IFindFilter *> g_findFilters;
 IFindFilter::IFindFilter()
 {
     g_findFilters.append(this);
+
+    // id() and displayName() only answer once the subclass constructor has run,
+    // so the menu is updated deferred.
+    static bool pending = false;
+    Internal::scheduleRegistryUpdate(pending, [] { Find::updateFindFilters(); });
 }
 
 /*!
@@ -216,6 +226,9 @@ IFindFilter::IFindFilter()
 IFindFilter::~IFindFilter()
 {
     g_findFilters.removeOne(this);
+    // The find dialog holds the filters by pointer, so it has to let go.
+    if (!ExtensionSystem::PluginManager::isShuttingDown())
+        Find::updateFindFilters();
 }
 
 /*!

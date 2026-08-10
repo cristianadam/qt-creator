@@ -162,7 +162,7 @@ public:
     static void updateCompletion(const QString &text, QStringList &completions,
                                  QStringListModel *model);
     void setupMenu();
-    void setupFilterMenuItems();
+    void updateFilterMenuItems();
     void readSettings();
 
     Internal::CurrentDocumentFind *m_currentDocumentFind = nullptr;
@@ -174,15 +174,20 @@ public:
     QStringListModel m_replaceCompletionModel;
     QStringList m_replaceCompletions;
     QAction *m_openFindDialog = nullptr;
+    QHash<Utils::Id, QAction *> m_filterActions; // filter id -> its scope action
 };
 
 Find *m_instance = nullptr;
 FindPrivate *d = nullptr;
+// Before extensionsInitialized() the filters are not fully set up, so the menu
+// is built there in one pass and only updated afterwards.
+bool m_filterMenuBuilt = false;
 
 void Find::destroy()
 {
     delete m_instance;
     m_instance = nullptr;
+    m_filterMenuBuilt = false;
     if (d) {
         delete d->m_currentDocumentFind;
         delete d->m_findToolBar;
@@ -231,7 +236,14 @@ void Find::initialize()
 
 void Find::extensionsInitialized()
 {
-    d->setupFilterMenuItems();
+    m_filterMenuBuilt = true;
+    d->updateFilterMenuItems();
+}
+
+void Find::updateFindFilters()
+{
+    if (d)
+        d->updateFilterMenuItems();
 }
 
 void Find::aboutToShutdown()
@@ -298,25 +310,34 @@ static QString filterActionName(const IFindFilter *filter)
     return QLatin1String("    ") + filter->displayName();
 }
 
-void FindPrivate::setupFilterMenuItems()
+void FindPrivate::updateFilterMenuItems()
 {
+    if (!m_filterMenuBuilt)
+        return;
+
     bool haveEnabledFilters = false;
     const Id base("FindFilter.");
     const QList<IFindFilter *> sortedFilters = Utils::sorted(IFindFilter::allFindFilters(),
                                                              &IFindFilter::displayName);
+    QSet<Id> current;
     for (IFindFilter *filter : sortedFilters) {
-        ActionBuilder findScope(this, base.withSuffix(filter->id()));
-        findScope.setText(filterActionName(filter));
-        bool isEnabled = filter->isEnabled();
-        if (isEnabled)
+        if (filter->isEnabled())
             haveEnabledFilters = true;
-        findScope.setEnabled(isEnabled);
+        const Id id = base.withSuffix(filter->id());
+        current.insert(id);
+        if (m_filterActions.contains(id))
+            continue; // a filter that was already here keeps its action
+
+        ActionBuilder findScope(this, id);
+        findScope.setText(filterActionName(filter));
+        findScope.setEnabled(filter->isEnabled());
         findScope.setDefaultKeySequence(filter->defaultShortcut());
         findScope.setCommandAttribute(Command::CA_UpdateText);
         findScope.addToContainer(Constants::M_FIND_ADVANCED);
         findScope.addOnTriggered(this, [filter] { Find::openFindDialog(filter); });
 
         QAction *findScopeAction = findScope.contextAction();
+        m_filterActions.insert(id, findScopeAction);
         connect(filter, &IFindFilter::enabledChanged, this, [filter, findScopeAction] {
             findScopeAction->setEnabled(filter->isEnabled());
             d->m_openFindDialog->setEnabled(d->isAnyFilterEnabled());
@@ -324,6 +345,15 @@ void FindPrivate::setupFilterMenuItems()
         connect(filter, &IFindFilter::displayNameChanged, this, [filter, findScopeAction] {
             findScopeAction->setText(filterActionName(filter));
         });
+    }
+    for (auto it = m_filterActions.begin(); it != m_filterActions.end(); ) {
+        if (current.contains(it.key())) {
+            ++it;
+            continue;
+        }
+        ActionManager::unregisterAction(it.value(), it.key());
+        delete it.value();
+        it = m_filterActions.erase(it);
     }
     d->m_findDialog->setFindFilters(sortedFilters);
     d->m_openFindDialog->setEnabled(haveEnabledFilters);
