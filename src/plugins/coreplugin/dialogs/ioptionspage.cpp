@@ -6,6 +6,10 @@
 
 #include "ioptionspage.h"
 
+#include "../coreplugin.h"
+
+#include <extensionsystem/pluginmanager.h>
+
 #include <utils/algorithm.h>
 #include <utils/guiutils.h>
 #include <utils/layoutbuilder.h>
@@ -261,8 +265,14 @@ static QList<IOptionsPage *> &optionsPages()
 IOptionsPage::IOptionsPage(bool registerGlobally)
     : d(new Internal::IOptionsPagePrivate)
 {
-    if (registerGlobally)
-        optionsPages().append(this);
+    if (!registerGlobally)
+        return;
+
+    optionsPages().append(this);
+    // The page's own id and category only answer once the subclass constructor
+    // has run, so the actions are updated deferred.
+    static bool pending = false;
+    Internal::scheduleRegistryUpdate(pending, [] { Internal::updateActionsForOptionsPages(); });
 }
 
 /*!
@@ -271,6 +281,8 @@ IOptionsPage::IOptionsPage(bool registerGlobally)
 IOptionsPage::~IOptionsPage()
 {
     optionsPages().removeOne(this);
+    if (!ExtensionSystem::PluginManager::isShuttingDown())
+        Internal::updateActionsForOptionsPages();
 }
 
 /*!

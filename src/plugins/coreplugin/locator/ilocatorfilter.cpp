@@ -5,7 +5,10 @@
 
 #include "locator.h"
 
+#include "../coreplugin.h"
 #include "../coreplugintr.h"
+
+#include <extensionsystem/pluginmanager.h>
 
 #include <QtTaskTree/QSingleTaskTreeRunner>
 
@@ -474,11 +477,24 @@ ILocatorFilter::ILocatorFilter(QObject *parent)
     Internal::locatorSettings().ignoreGeneratedFiles.addOnChanged(this, [this] {
         emit ignoreGeneratedFilesChanged();
     });
+
+    // id() and priority() only answer once the subclass constructor has run, so
+    // the locator is updated deferred.
+    static bool pending = false;
+    Internal::scheduleRegistryUpdate(pending, [] {
+        if (Internal::Locator *locator = Internal::Locator::instance())
+            locator->updateFilters();
+    });
 }
 
 ILocatorFilter::~ILocatorFilter()
 {
     g_locatorFilters.removeOne(this);
+    // The locator holds the filters by pointer, so it has to let go at once.
+    if (!ExtensionSystem::PluginManager::isShuttingDown()) {
+        if (Internal::Locator *locator = Internal::Locator::instance())
+            locator->updateFilters();
+    }
 }
 
 /*!

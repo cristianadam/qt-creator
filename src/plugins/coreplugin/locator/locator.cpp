@@ -170,15 +170,24 @@ void Locator::initialize()
     connect(ICore::instance(), &ICore::saveSettingsRequested, this, &Locator::saveSettings);
 }
 
-void Locator::extensionsInitialized()
+void Locator::updateFilters()
 {
-    m_filters = Utils::sorted(ILocatorFilter::allLocatorFilters(),
+    // The custom filters keep their place at the end, where loading them put them.
+    const QList<ILocatorFilter *> filters
+        = Utils::filtered(ILocatorFilter::allLocatorFilters(), [this](ILocatorFilter *filter) {
+              return !m_customFilters.contains(filter);
+          });
+    setFilters(Utils::sorted(filters,
                 [](const ILocatorFilter *first, const ILocatorFilter *second) -> bool {
         if (first->priority() != second->priority())
             return first->priority() < second->priority();
         return first->id().alphabeticallyBefore(second->id());
-    });
-    setFilters(m_filters);
+    }) + m_customFilters);
+}
+
+void Locator::extensionsInitialized()
+{
+    updateFilters();
 
     Command *openCommand = ActionManager::command(Constants::OPEN);
     Command *locateCommand = ActionManager::command(Constants::LOCATE);
