@@ -61,6 +61,7 @@ public slots:
     void saveSettings() const;
 
 private:
+    void updateFilters();
     void loadSettings();
     void updateFilterActions();
     void updateEditorManagerPlaceholderText();

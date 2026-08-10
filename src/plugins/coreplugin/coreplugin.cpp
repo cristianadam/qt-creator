@@ -21,6 +21,7 @@
 #include "idocument.h"
 #include "iwizardfactory.h"
 #include "locator/locator.h"
+#include "find/findfilter_test.h"
 #include "locator/locator_test.h"
 #include "loggingviewer.h"
 #include "mcp/mcpmanager.h"
@@ -508,6 +509,7 @@ Result<> CorePlugin::initialize(const QStringList &arguments)
 #ifdef WITH_TESTS
     addTestCreator(createActionManagerTest);
     addTestCreator(createDocumentManagerTest);
+    addTestCreator(createFindFilterTest);
     addTestCreator(createLocatorTest);
     addTestCreator(createVcsManagerTest);
     addTestCreator(createTabbedEditorTest);
@@ -539,22 +541,43 @@ static Id generateOpenPageCommandId(IOptionsPage *page)
 
 static void registerActionsForOptions()
 {
+    // Pages come and go with soft-loadable plugins, so only the difference to
+    // what is registered is acted upon: registering twice would append a
+    // numeric suffix and leave a duplicate menu entry behind.
+    static QHash<Id, std::pair<Id, QAction *>> registered; // page id -> command id, action
+
     QMap<Utils::Id, QString> categoryDisplay;
     for (IOptionsPage *page : IOptionsPage::allOptionsPages()) {
         if (!categoryDisplay.contains(page->category()) && !page->displayCategory().isEmpty())
             categoryDisplay[page->category()] = page->displayCategory();
     }
+    QSet<Id> current;
     for (IOptionsPage *page : IOptionsPage::allOptionsPages()) {
+        current.insert(page->id());
+        if (registered.contains(page->id()))
+            continue;
+
         const Id commandId = generateOpenPageCommandId(page);
         if (!commandId.isValid())
             continue;
 
-        ActionBuilder(ICore::instance(), commandId)
+        ActionBuilder builder(ICore::instance(), commandId);
+        builder
             .setText(Tr::tr("%1 > %2 Preferences...")
                          .arg(categoryDisplay.value(page->category()), page->displayName()))
             .addOnTriggered(ICore::instance(), [id = page->id()] {
                 ICore::showSettings(id);
             });
+        registered.insert(page->id(), {commandId, builder.contextAction()});
+    }
+    for (auto it = registered.begin(); it != registered.end(); ) {
+        if (current.contains(it.key())) {
+            ++it;
+            continue;
+        }
+        ActionManager::unregisterAction(it->second, it->first);
+        delete it->second;
+        it = registered.erase(it);
     }
 }
 
@@ -566,6 +589,9 @@ void CorePlugin::extensionsInitialized()
     ICore::extensionsInitialized();
     checkSettings();
     registerActionsForOptions();
+    connect(ExtensionSystem::PluginManager::instance(),
+            &ExtensionSystem::PluginManager::pluginsChanged,
+            this, [] { registerActionsForOptions(); });
 }
 
 bool CorePlugin::delayedInitialize()

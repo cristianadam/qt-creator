@@ -12,6 +12,8 @@
 #include "modemanager.h"
 #include "navigationsubwidget.h"
 
+#include <extensionsystem/pluginmanager.h>
+
 #include <utils/fancymainwindow.h>
 #include <utils/utilsicons.h>
 
@@ -238,6 +240,60 @@ void NavigationWidget::setFactories(const QList<INavigationWidgetFactory *> &fac
         d->m_factoryModel->appendRow(newRow);
     }
     d->m_factoryModel->sort(0);
+    updateToggleAction();
+}
+
+void NavigationWidget::addFactory(INavigationWidgetFactory *factory)
+{
+    for (NavigationWidget *navigationWidget : {s_instanceLeft, s_instanceRight}) {
+        // The factories present at startup are added in one go, so anything
+        // already known here has just been through that.
+        if (navigationWidget && navigationWidget->factoryIndex(factory->id()) < 0)
+            navigationWidget->setFactories({factory});
+    }
+}
+
+void NavigationWidget::removeFactory(INavigationWidgetFactory *factory)
+{
+    if (ExtensionSystem::PluginManager::isShuttingDown())
+        return; // The whole sidebar is going away, and its state is saved already.
+    for (NavigationWidget *navigationWidget : {s_instanceLeft, s_instanceRight}) {
+        if (navigationWidget)
+            navigationWidget->dropFactory(factory);
+    }
+}
+
+void NavigationWidget::dropFactory(INavigationWidgetFactory *factory)
+{
+    const int row = factoryIndex(factory->id());
+    if (row < 0)
+        return;
+
+    // The views belong to the factory, and with it to the plugin that is
+    // unloading, so they have to go first.
+    const QList<Internal::NavigationSubWidget *> subWidgets = d->m_subWidgets;
+    for (Internal::NavigationSubWidget *subWidget : subWidgets) {
+        if (subWidget->factory() != factory)
+            continue;
+        if (d->m_subWidgets.size() > 1) {
+            closeSubWidget(subWidget);
+        } else {
+            // closeSubWidget() keeps the last one alive and just hides the
+            // sidebar, which would leave the view behind.
+            subWidget->saveSettings();
+            d->m_subWidgets.removeOne(subWidget);
+            delete subWidget;
+            setShown(false);
+        }
+    }
+
+    if (d->m_commandMap.remove(factory->id())) {
+        QAction *action = d->m_actionMap.key(factory->id());
+        d->m_actionMap.remove(action);
+        ActionManager::unregisterAction(action, factory->id().withPrefix("QtCreator.Sidebar."));
+        delete action;
+    }
+    d->m_factoryModel->removeRow(row);
     updateToggleAction();
 }
 
