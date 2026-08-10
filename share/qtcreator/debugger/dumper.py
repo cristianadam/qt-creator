@@ -3258,6 +3258,18 @@ typename))
         #self.warn('INAME: %s ' % self.currentIName)
         #self.warn('INAMES: %s ' % self.expandedINames)
         #self.warn('EXPANDED: %s ' % (self.currentIName in self.expandedINames))
+
+        # An incomplete type - an opaque forward-declared class, or a type whose
+        # debug information is not available (e.g. an uninstalled library debug
+        # package) - has no known size. Show that explicitly instead of an empty
+        # value with a misleading expander that leads nowhere. Enumerating its
+        # members would raise, so key off the size only. QTCREATORBUG-17590.
+        if value.type.size() == 0:
+            self.putType(typename)
+            self.putSpecialValue('incomplete')
+            self.putNumChild(0)
+            return
+
         self.putType(typename)
 
         if value.summary is not None and self.useFancy:
