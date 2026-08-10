@@ -45,6 +45,7 @@ public:
     void initialize();
     void extensionsInitialized();
     bool delayedInitialize();
+    void updateFilters();
 
     static QList<ILocatorFilter *> filters();
     QList<ILocatorFilter *> customFilters();
