@@ -355,6 +355,15 @@ void TrackPainterBase::buildNeutralGeometry(const Track &track, NeutralTrackGeom
 
         for (int i = first; i <= last; ++i) {
             const int row = rowCache[i];
+            // A model can report rows outside its current row count: per-event
+            // rows are assigned while events are loaded, but the row count is
+            // only published from finalize(). Between the two the track area
+            // can already paint (setModels() -> rebuildTracks() -> resize()
+            // paints synchronously). Skip such events rather than indexing the
+            // per-row arrays out of bounds; finalize() emits contentChanged,
+            // which rebuilds the tracks and this geometry with final rows.
+            if (row < 0 || row >= rowCount)
+                continue;
 
             double x1 = double(model->startTime(i) - m_rangeStart) * scale;
             double x2 = double(model->endTime(i) - m_rangeStart) * scale;
