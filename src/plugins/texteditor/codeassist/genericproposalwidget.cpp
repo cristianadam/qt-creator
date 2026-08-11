@@ -142,6 +142,7 @@ class GenericProposalListView : public QListView
 public:
     GenericProposalListView(QWidget *parent);
 
+    void setModel(QAbstractItemModel *model) override;
     QSize calculateSize() const;
     QPoint infoFramePos() const;
 
@@ -151,6 +152,9 @@ public:
     void selectRow(int row) { setCurrentIndex(model()->index(row, 0)); }
     void selectFirstRow() { selectRow(0); }
     void selectLastRow() { selectRow(model()->rowCount() - 1); }
+
+private:
+    mutable int m_cachedItemWidth = -1;
 };
 
 class ProposalItemDelegate : public QStyledItemDelegate
@@ -202,23 +206,29 @@ GenericProposalListView::GenericProposalListView(QWidget *parent)
     setItemDelegate(new ProposalItemDelegate(this));
 }
 
+void GenericProposalListView::setModel(QAbstractItemModel *model)
+{
+    m_cachedItemWidth = -1;
+    QListView::setModel(model);
+}
+
 QSize GenericProposalListView::calculateSize() const
 {
     static const int maxVisibleItems = 10;
 
-    // Determine size by calculating the space of the visible items
-    const int visibleItems = qMin(model()->rowCount(), maxVisibleItems);
-    const int firstVisibleRow = verticalScrollBar()->value();
+    const int rowCount = model()->rowCount();
+    const int visibleItems = qMin(rowCount, maxVisibleItems);
 
-    QSize shint;
-    for (int i = 0; i < visibleItems; ++i) {
-        QSize tmp = sizeHintForIndex(model()->index(i + firstVisibleRow, 0));
-        if (shint.width() < tmp.width())
-            shint = tmp;
+    // The width must accommodate the widest item in the whole list, not just the
+    // currently visible ones. Otherwise the popup keeps resizing while scrolling.
+    // It only depends on the model, so compute it once.
+    if (m_cachedItemWidth < 0) {
+        for (int i = 0; i < rowCount; ++i)
+            m_cachedItemWidth = qMax(m_cachedItemWidth, sizeHintForIndex(model()->index(i, 0)).width());
     }
-    shint.rheight() *= visibleItems;
 
-    return shint;
+    const int itemHeight = rowCount > 0 ? sizeHintForIndex(model()->index(0, 0)).height() : 0;
+    return QSize(m_cachedItemWidth, itemHeight * visibleItems);
 }
 
 QPoint GenericProposalListView::infoFramePos() const
