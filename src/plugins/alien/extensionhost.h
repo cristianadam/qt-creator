@@ -113,6 +113,13 @@ public:
     // is {"path": <fs path>, "name": <display name>}.
     void setWorkspaceFolders(const QJsonArray &folders);
 
+    // Paths crossing the protocol are the ones the host itself sees: it runs
+    // on the device node lives on, which need not be the local machine, so
+    // Qt Creator's own "/__qtc_devices__/..." rendering is meaningless there.
+    QString toHostPath(const Utils::FilePath &path) const;
+    Utils::FilePath fromHostPath(const QString &path) const;
+    bool isOnHostDevice(const Utils::FilePath &path) const;
+
     QStringList registeredCommands() const { return m_commands; }
     void executeCommand(const QString &command, const QJsonArray &arguments = {});
 
