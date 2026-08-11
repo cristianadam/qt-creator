@@ -38,6 +38,8 @@ private slots:
     void testCloseSplit();
     void testPinned();
     void testDisambiguateUnnamedDuplicates();
+    void testMoveEditorToNextSplit();
+    void testMoveEditorToNextSplitKeepsPrevious();
 };
 
 QObject *createTabbedEditorTest()
@@ -407,6 +409,60 @@ void TabbedEditorTest::testDisambiguateUnnamedDuplicates()
         QVERIFY2(!name.contains(") ("), qPrintable(name));
     // ... and they are all distinct.
     QCOMPARE(QSet<QString>(names.begin(), names.end()).size(), names.size());
+}
+
+/*
+    Move the current editor to the next split.
+    A! in first view, B! in second view, first view current.
+    After moving: first view empty, second view has A! (and B), second view current.
+*/
+void TabbedEditorTest::testMoveEditorToNextSplit()
+{
+    TestFile a;
+    TestFile b;
+    EMP::mainEditorArea()->findFirstView()->split(Qt::Vertical);
+    const QList<EditorView *> views = mainAreaViews();
+    QCOMPARE(views.size(), 2);
+    IEditor *editorB = EMP::openEditor(views.at(1), b.filePath());
+    IEditor *editorA = EMP::openEditor(views.at(0), a.filePath());
+    QCOMPARE(EMP::currentEditorView(), views.at(0));
+    QCOMPARE(views.at(0)->currentEditor(), editorA);
+
+    EMP::moveEditorToNextSplit();
+
+    QVERIFY(!views.at(0)->hasEditor(editorA));
+    QVERIFY(views.at(0)->editors().isEmpty());
+    QVERIFY(views.at(1)->hasEditor(editorA));
+    QVERIFY(views.at(1)->hasEditor(editorB));
+    QCOMPARE(views.at(1)->currentEditor(), editorA);
+    QCOMPARE(EMP::currentEditorView(), views.at(1));
+}
+
+/*
+    Moving the current editor out of a split shows the previously current editor there.
+    A and C! in first view, B! in second view, first view current.
+    After moving C to the next split: A! in first view, C! (and B) in second view.
+*/
+void TabbedEditorTest::testMoveEditorToNextSplitKeepsPrevious()
+{
+    TestFile a;
+    TestFile b;
+    TestFile c;
+    EMP::mainEditorArea()->findFirstView()->split(Qt::Vertical);
+    const QList<EditorView *> views = mainAreaViews();
+    QCOMPARE(views.size(), 2);
+    IEditor *editorA = EMP::openEditor(views.at(0), a.filePath());
+    EMP::openEditor(views.at(1), b.filePath());
+    IEditor *editorC = EMP::openEditor(views.at(0), c.filePath());
+    QCOMPARE(EMP::currentEditorView(), views.at(0));
+    QCOMPARE(views.at(0)->currentEditor(), editorC);
+
+    EMP::moveEditorToNextSplit();
+
+    QVERIFY(!views.at(0)->hasEditor(editorC));
+    QCOMPARE(views.at(0)->currentEditor(), editorA);
+    QCOMPARE(views.at(1)->currentEditor(), editorC);
+    QCOMPARE(EMP::currentEditorView(), views.at(1));
 }
 
 } // namespace Core::Internal
