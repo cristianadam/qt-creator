@@ -135,6 +135,21 @@ bool ExtensionHost::isRunning() const
     return m_connection && m_connection->isRunning();
 }
 
+QString ExtensionHost::toHostPath(const FilePath &path) const
+{
+    return path.path();
+}
+
+FilePath ExtensionHost::fromHostPath(const QString &path) const
+{
+    return m_nodePath.withNewPath(path);
+}
+
+bool ExtensionHost::isOnHostDevice(const FilePath &path) const
+{
+    return path.isSameDevice(m_nodePath);
+}
+
 Result<> ExtensionHost::ensureStarted()
 {
     if (m_connection)
@@ -158,7 +173,7 @@ Result<> ExtensionHost::ensureStarted()
 
     m_connection = new HostConnection(this);
     installHandlers();
-    m_connection->setCommand({m_nodePath, {hostJs.toFSPathString()}});
+    m_connection->setCommand({m_nodePath, {toHostPath(hostJs)}});
     m_connection->setWorkingDirectory(m_runtimeDir);
 
     connect(m_connection, &HostConnection::started, this, [this] {
@@ -174,6 +189,20 @@ Result<> ExtensionHost::ensureStarted()
     });
     connect(m_connection, &HostConnection::errorOccurred, this, [](const QString &message) {
         MessageManager::writeFlashing(Tr::tr("Alien host error: %1").arg(message));
+    });
+    connect(m_connection, &HostConnection::finished, this, [this] {
+        // Drop the dead connection: kept around, it would make ensureStarted()
+        // report a running host forever, and everything that waits for one
+        // would queue up behind a process that is not coming back.
+        m_connection->deleteLater();
+        m_connection = nullptr;
+        m_deferred.clear();
+        m_documentVersions.clear();
+        m_commands.clear();
+        qDeleteAll(m_treeFactories);
+        m_treeFactories.clear();
+        emit commandsChanged();
+        emit stopped();
     });
 
     m_connection->start();
@@ -226,10 +255,10 @@ void ExtensionHost::installHandlers()
             FilePaths roots;
             const QString base = object.value("base").toString();
             if (!base.isEmpty()) {
-                roots << FilePath::fromUserInput(base);
+                roots << fromHostPath(base);
             } else {
                 for (const QJsonValue &folder : m_workspaceFolders)
-                    roots << FilePath::fromUserInput(folder.toObject().value("path").toString());
+                    roots << fromHostPath(folder.toObject().value("path").toString());
             }
 
             const QRegularExpression includeRe = globToRegularExpression(include);
@@ -245,7 +274,7 @@ void ExtensionHost::installHandlers()
                             return IterationPolicy::Continue;
                         if (!exclude.isEmpty() && excludeRe.match(relative).hasMatch())
                             return IterationPolicy::Continue;
-                        found.append(item.toFSPathString());
+                        found.append(toHostPath(item));
                         return maxResults > 0 && found.size() >= maxResults
                                    ? IterationPolicy::Stop : IterationPolicy::Continue;
                     },
@@ -388,14 +417,14 @@ void ExtensionHost::installHandlers()
             QStringList args;
             for (const QJsonValue &arg : command.value("args").toArray())
                 args << arg.toString();
-            const CommandLine commandLine(FilePath::fromUserInput(command.value("path").toString()),
+            const CommandLine commandLine(fromHostPath(command.value("path").toString()),
                                           args);
 
             LanguageFilter filter;
             for (const QJsonValue &pattern : object.value("filePatterns").toArray())
                 filter.filePattern << pattern.toString();
 
-            const FilePath cwd = FilePath::fromUserInput(object.value("cwd").toString());
+            const FilePath cwd = fromHostPath(object.value("cwd").toString());
             const QJsonObject initOptions = object.value("initializationOptions").toObject();
 
             if (auto existing = m_lspClients.take(id))
@@ -485,8 +514,8 @@ void ExtensionHost::activate(const VscodeManifest &manifest)
 
     const QJsonObject params{
         {"id", id},
-        {"path", manifest.rootDir.toFSPathString()},
-        {"main", manifest.mainPath().toFSPathString()},
+        {"path", toHostPath(manifest.rootDir)},
+        {"main", toHostPath(manifest.mainPath())},
         {"languages", languages},
         {"packageJSON", manifest.rawPackageJson},
     };
@@ -868,9 +897,14 @@ void ExtensionHost::onDocumentOpened(IDocument *document)
     if (filePath.isEmpty())
         return;
 
+    // A document on another device is not reachable for the host, and its path
+    // would collide with a same-named one on the host's own device.
+    if (!isOnHostDevice(filePath))
+        return;
+
     m_documentVersions.insert(filePath, 1);
     m_connection->sendNotification("document/didOpen", QJsonObject{
-        {"uri", filePath.toFSPathString()},
+        {"uri", toHostPath(filePath)},
         {"languageId", languageIdFor(filePath)},
         {"version", 1},
         {"text", textDocument->plainText()},
@@ -884,7 +918,7 @@ void ExtensionHost::onDocumentOpened(IDocument *document)
                 const int version = m_documentVersions.value(path) + 1;
                 m_documentVersions.insert(path, version);
                 m_connection->sendNotification("document/didChange", QJsonObject{
-                    {"uri", path.toFSPathString()},
+                    {"uri", toHostPath(path)},
                     {"version", version},
                     {"text", textDocument->plainText()},
                 });
@@ -899,14 +933,14 @@ void ExtensionHost::onDocumentClosed(IDocument *document)
     const FilePath filePath = textDocument->filePath();
     m_documentVersions.remove(filePath);
     m_connection->sendNotification("document/didClose",
-                                   QJsonObject{{"uri", filePath.toFSPathString()}});
+                                   QJsonObject{{"uri", toHostPath(filePath)}});
 }
 
 void ExtensionHost::syncActiveEditor()
 {
     IDocument *document = EditorManager::currentDocument();
     auto textDocument = qobject_cast<TextDocument *>(document);
-    const QJsonValue uri = textDocument ? QJsonValue(textDocument->filePath().toFSPathString())
+    const QJsonValue uri = textDocument ? QJsonValue(toHostPath(textDocument->filePath()))
                                         : QJsonValue(QJsonValue::Null);
     m_connection->sendNotification("editor/didChangeActive", QJsonObject{{"uri", uri}});
 
@@ -934,7 +968,7 @@ void ExtensionHost::sendSelection(TextEditorWidget *widget)
     anchor.setPosition(cursor.anchor());
 
     m_connection->sendNotification("editor/didChangeSelection", QJsonObject{
-        {"uri", document->filePath().toFSPathString()},
+        {"uri", toHostPath(document->filePath())},
         {"anchorLine", anchor.blockNumber()},
         {"anchorCharacter", anchor.positionInBlock()},
         {"activeLine", cursor.blockNumber()},
@@ -953,7 +987,7 @@ void ExtensionHost::publishDiagnostics(const QJsonValue &params)
     // Replace the previous marks for this collection/uri.
     qDeleteAll(m_diagnosticMarks.take(key));
 
-    const FilePath filePath = FilePath::fromUserInput(uri);
+    const FilePath filePath = fromHostPath(uri);
     const TextMarkCategory category{Tr::tr("Alien"), "Alien.Diagnostics"};
 
     QList<TextMark *> marks;
@@ -1006,7 +1040,7 @@ void ExtensionHost::requestCompletion(const FilePath &uri, int line, int charact
         return;
     }
     const QJsonObject params{
-        {"uri", uri.toFSPathString()},
+        {"uri", toHostPath(uri)},
         {"position", QJsonObject{{"line", line}, {"character", character}}},
     };
     whenReady([this, params, callback] {
@@ -1029,7 +1063,7 @@ void ExtensionHost::requestHover(const FilePath &uri, int line, int character,
         return;
     }
     const QJsonObject params{
-        {"uri", uri.toFSPathString()},
+        {"uri", toHostPath(uri)},
         {"position", QJsonObject{{"line", line}, {"character", character}}},
     };
     whenReady([this, params, callback] {
@@ -1048,7 +1082,7 @@ void ExtensionHost::requestDefinition(const FilePath &uri, int line, int charact
         return;
     }
     const QJsonObject params{
-        {"uri", uri.toFSPathString()},
+        {"uri", toHostPath(uri)},
         {"position", QJsonObject{{"line", line}, {"character", character}}},
     };
     whenReady([this, params, callback] {
@@ -1110,7 +1144,7 @@ void ExtensionHost::attachEditorFeatures(IEditor *editor)
                     wordCursor.select(QTextCursor::WordUnderCursor);
 
                     requestDefinition(path, line, character,
-                        [callback, start = wordCursor.selectionStart(),
+                        [this, callback, start = wordCursor.selectionStart(),
                          end = wordCursor.selectionEnd()](const QJsonArray &locations) {
                             if (locations.isEmpty()) {
                                 callback(Utils::Link());
@@ -1120,7 +1154,7 @@ void ExtensionHost::attachEditorFeatures(IEditor *editor)
                             const QJsonObject startPos
                                 = location.value("range").toObject().value("start").toObject();
                             Utils::Link link(
-                                FilePath::fromUserInput(location.value("uri").toString()),
+                                fromHostPath(location.value("uri").toString()),
                                 startPos.value("line").toInt() + 1,
                                 startPos.value("character").toInt());
                             link.linkTextStart = start;

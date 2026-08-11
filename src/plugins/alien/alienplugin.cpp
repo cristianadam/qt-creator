@@ -684,6 +684,20 @@ private:
                         m_host->resolveInputBox(id, text, ok);
                     });
 
+            connect(m_host, &ExtensionHost::stopped, this, [this] {
+                // Nothing runs in a host that is gone, so the next activation
+                // trigger starts a fresh one and puts the extensions back.
+                m_activeIds.clear();
+                if (m_statusMessage)
+                    StatusBarManager::destroyStatusBarWidget(m_statusMessage);
+                for (StatusBarItem *item : std::as_const(m_statusItems))
+                    StatusBarManager::destroyStatusBarWidget(item);
+                m_statusItems.clear();
+                MessageManager::writeFlashing(
+                    Tr::tr("The VS Code extension host stopped. It restarts with the next "
+                           "activation, or on \"Rescan VS Code Extensions\"."));
+            });
+
             connect(m_host, &ExtensionHost::statusBarMessageChanged, this,
                     [this](const QString &text) {
                         if (!m_statusMessage) {
@@ -718,7 +732,7 @@ private:
             m_webviewRenderer = std::make_unique<AutoWebviewRenderer>();
             m_host->setWebviewRenderer(m_webviewRenderer.get());
 
-            auto updateFolders = [this] { m_host->setWorkspaceFolders(workspaceFolders()); };
+            auto updateFolders = [this] { m_host->setWorkspaceFolders(workspaceFolders(m_host)); };
             connect(ProjectExplorer::ProjectManager::instance(),
                     &ProjectExplorer::ProjectManager::projectAdded, this, updateFolders);
             connect(ProjectExplorer::ProjectManager::instance(),
@@ -805,6 +819,19 @@ private:
             return;
         }
 
+        // The host reads the extension files itself, so they have to sit on
+        // its own device. Without this the failure is a "Cannot find module"
+        // from node, which says nothing about the device mismatch.
+        if (!settings().extensionsDir().isSameDevice(settings().nodeJsPath())) {
+            MessageManager::writeFlashing(
+                Tr::tr("The extensions directory \"%1\" is not on the same device as Node.js "
+                       "(\"%2\"), so the extension host cannot read it.")
+                    .arg(settings().extensionsDir().toUserOutput(),
+                         settings().nodeJsPath().toUserOutput()));
+            deactivateAll();
+            return;
+        }
+
         QStringList errors;
         const QList<VscodeManifest> manifests
             = ExtensionRegistry::scan(settings().extensionsDir(), &errors);
@@ -847,7 +874,7 @@ private:
     // disabled extensions are deactivated, newly enabled ones are activated.
     void syncActivation()
     {
-        const QJsonArray folders = workspaceFolders();
+        const QJsonArray folders = workspaceFolders(host());
         if (folders.isEmpty())
             return; // wait until a project or document provides a folder
 
@@ -926,12 +953,15 @@ private:
         });
     }
 
-    static QJsonArray workspaceFolders()
+    static QJsonArray workspaceFolders(ExtensionHost *host)
     {
         QJsonArray folders;
         for (ProjectExplorer::Project *project : ProjectExplorer::ProjectManager::projects()) {
+            const FilePath dir = project->projectDirectory();
+            if (!host->isOnHostDevice(dir))
+                continue;
             folders.append(QJsonObject{
-                {"path", project->projectDirectory().toFSPathString()},
+                {"path", host->toHostPath(dir)},
                 {"name", project->displayName()},
             });
         }
@@ -940,8 +970,8 @@ private:
         if (folders.isEmpty()) {
             if (IDocument *document = EditorManager::currentDocument()) {
                 const FilePath dir = document->filePath().parentDir();
-                if (!dir.isEmpty())
-                    folders.append(QJsonObject{{"path", dir.toFSPathString()},
+                if (!dir.isEmpty() && host->isOnHostDevice(dir))
+                    folders.append(QJsonObject{{"path", host->toHostPath(dir)},
                                                {"name", dir.fileName()}});
             }
         }

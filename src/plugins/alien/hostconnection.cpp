@@ -3,6 +3,8 @@
 
 #include "hostconnection.h"
 
+#include "alientr.h"
+
 #include <utils/environment.h>
 #include <utils/qtcprocess.h>
 
@@ -59,6 +61,11 @@ void HostConnection::start()
     connect(m_process, &Process::done, this, [this] {
         if (m_process->result() != ProcessResult::FinishedWithSuccess)
             emit errorOccurred(m_process->exitMessage());
+        // Whoever is waiting for an answer will not get one, and has to be
+        // told rather than left hanging.
+        const QHash<int, ResponseCallback> pending = std::exchange(m_pending, {});
+        for (const ResponseCallback &callback : pending)
+            callback({}, Tr::tr("The extension host stopped."));
         emit finished();
     });
 
@@ -73,6 +80,10 @@ void HostConnection::start()
 
 void HostConnection::stop()
 {
+    // Stopping on purpose is not the host dying under us: nobody may see
+    // finished() for it, least of all while this object is being destroyed.
+    if (m_process)
+        m_process->disconnect(this);
     if (m_process && m_process->isRunning()) {
         m_process->kill();
         m_process->waitForFinished(QDeadlineTimer(3000));

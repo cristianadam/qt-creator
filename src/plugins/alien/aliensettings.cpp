@@ -156,6 +156,8 @@ AlienSettings::AlienSettings()
 
     nodeJsPath.setSettingsKey("NodeJsPath");
     nodeJsPath.setExpectedKind(PathChooserKind::ExistingCommand);
+    // The host runs wherever node is, so this may point at a device.
+    nodeJsPath.setAllowPathFromDevice(true);
     nodeJsPath.setDefaultPathValue(FilePath("node").searchInPath());
     nodeJsPath.setLabelText(Tr::tr("Node.js path:"));
     nodeJsPath.setToolTip(Tr::tr("Path to the node.js executable used to run "
@@ -163,6 +165,7 @@ AlienSettings::AlienSettings()
 
     extensionsDir.setSettingsKey("ExtensionsDir");
     extensionsDir.setExpectedKind(PathChooserKind::ExistingDirectory);
+    extensionsDir.setAllowPathFromDevice(true);
     // Reuse the VS Code extensions folder so already-installed extensions are
     // picked up; new ones can be added with "Install VS Code Extension".
     extensionsDir.setDefaultPathValue(FilePath::fromUserInput("~/.vscode/extensions"));
