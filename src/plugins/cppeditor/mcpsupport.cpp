@@ -162,7 +162,7 @@ static QJsonObject hierarchyToJson(const CppClass &cppClass)
     if (!cppClass.link.targetFilePath.isEmpty()) {
         node.insert("file", cppClass.link.targetFilePath.toUserOutput());
         node.insert("line", cppClass.link.target.line);
-        node.insert("column", cppClass.link.target.column);
+        node.insert("column", cppClass.link.target.column + 1); // Link column is 0-based.
     }
     QJsonArray bases;
     for (const CppClass &base : cppClass.bases)
@@ -290,7 +290,7 @@ void registerMcpTools()
                         {"name", item->symbolName()},
                         {"kind", itemKind(item->type())},
                         {"line", item->line()},
-                        {"column", item->column()}};
+                        {"column", item->column() + 1}}; // IndexItem::column() is 0-based.
                     if (!item->symbolScope().isEmpty())
                         obj.insert("scope", item->symbolScope());
                     if (!item->symbolType().isEmpty())
@@ -432,7 +432,7 @@ void registerMcpTools()
                 QJsonObject obj{
                     {"file", u.path.toUserOutput()},
                     {"line", u.line},
-                    {"column", u.col},
+                    {"column", u.col + 1}, // Usage::col is 0-based.
                     {"length", u.len},
                     {"kind", usageKind(u.tags)}};
                 const QString lineText = u.lineText.trimmed();
@@ -681,7 +681,7 @@ void registerMcpTools()
                 QJsonObject site{
                     {"file", u.path.toUserOutput()},
                     {"line", u.line},
-                    {"column", u.col}};
+                    {"column", u.col + 1}}; // Usage::col is 0-based.
                 const QString lineText = u.lineText.trimmed();
                 if (!lineText.isEmpty())
                     site.insert("line_text", lineText);
