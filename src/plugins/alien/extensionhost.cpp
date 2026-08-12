@@ -327,6 +327,9 @@ void ExtensionHost::installHandlers()
 
     m_connection->setNotificationHandler("treeview/register", [this](const QJsonValue &params) {
         const QString viewId = params.toObject().value("viewId").toString();
+        requestTreeMenu(viewId, {}, "view/title", [this, viewId](const QJsonArray &items) {
+            m_treeTitleMenus.insert(viewId, items);
+        });
         if (!m_treeFactories.contains(viewId))
             m_treeFactories.insert(viewId, new AlienTreeViewFactory(this, viewId, viewId));
         emit treeViewRegistered(viewId);
@@ -773,6 +776,43 @@ Result<> ExtensionHost::activateBundledTreeViewTestExtension()
 
     activate(*manifest);
     return {};
+}
+
+void ExtensionHost::requestTreeMenu(const QString &viewId, const QString &id, const QString &kind,
+                                    const std::function<void(const QJsonArray &)> &callback)
+{
+    if (!m_connection) {
+        callback({});
+        return;
+    }
+    whenReady([this, viewId, id, kind, callback] {
+        m_connection->sendRequest(
+            "treeview/menu", QJsonObject{{"viewId", viewId}, {"id", id}, {"kind", kind}},
+            [callback](const QJsonValue &result, const QString &error) {
+                callback(error.isEmpty() ? result.toObject().value("items").toArray()
+                                         : QJsonArray());
+            });
+    });
+}
+
+// The command gets the item's element, which only the host has, so it is
+// addressed by node id rather than shipping the element back and forth.
+void ExtensionHost::executeTreeItemCommand(const QString &viewId, const QString &id,
+                                           const QString &command)
+{
+    if (!m_connection)
+        return;
+    whenReady([this, viewId, id, command] {
+        m_connection->sendRequest(
+            "treeview/executeItemCommand",
+            QJsonObject{{"viewId", viewId}, {"id", id}, {"command", command}},
+            [command](const QJsonValue &, const QString &error) {
+                if (!error.isEmpty()) {
+                    MessageManager::writeFlashing(
+                        Tr::tr("Command \"%1\" failed: %2").arg(command, error));
+                }
+            });
+    });
 }
 
 void ExtensionHost::requestTreeChildren(const QString &viewId, const QString &id,

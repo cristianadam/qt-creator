@@ -41,6 +41,7 @@ QIcon firstCodicon(const QString &text)
         {"filter", &Icons::FILTER},
         {"folder", &Icons::DIR},
         {"gear", &Icons::SETTINGS},
+        {"history", &Icons::CLOCK_BLACK},
         {"info", &Icons::INFO},
         {"lock", &Icons::LOCKED},
         {"play", &Icons::RUN_SMALL},

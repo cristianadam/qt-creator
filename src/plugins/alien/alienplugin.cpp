@@ -666,11 +666,17 @@ private:
             connect(m_host, &ExtensionHost::quickPickRequested, this,
                     [this](int id, const QStringList &items, const QString &placeholder) {
                         bool ok = false;
+                        // Quick pick entries carry icon markup as well; the
+                        // answer is an index, so stripping it changes nothing
+                        // for the extension.
+                        const QStringList shown = Utils::transform(items, [](const QString &item) {
+                            return stripCodicons(item);
+                        });
                         const QString choice = QInputDialog::getItem(
                             ICore::dialogParent(), Tr::tr("Select"),
                             placeholder.isEmpty() ? Tr::tr("Select an item:") : placeholder,
-                            items, 0, false, &ok);
-                        m_host->resolveQuickPick(id, ok ? int(items.indexOf(choice)) : -1);
+                            shown, 0, false, &ok);
+                        m_host->resolveQuickPick(id, ok ? int(shown.indexOf(choice)) : -1);
                     });
 
             connect(m_host, &ExtensionHost::inputBoxRequested, this,
