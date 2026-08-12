@@ -190,6 +190,20 @@ Result<> ExtensionHost::ensureStarted()
     connect(m_connection, &HostConnection::errorOccurred, this, [](const QString &message) {
         MessageManager::writeFlashing(Tr::tr("Alien host error: %1").arg(message));
     });
+    connect(m_connection, &HostConnection::finished, this, [this] {
+        // Drop the dead connection: kept around, it would make ensureStarted()
+        // report a running host forever, and everything that waits for one
+        // would queue up behind a process that is not coming back.
+        m_connection->deleteLater();
+        m_connection = nullptr;
+        m_deferred.clear();
+        m_documentVersions.clear();
+        m_commands.clear();
+        qDeleteAll(m_treeFactories);
+        m_treeFactories.clear();
+        emit commandsChanged();
+        emit stopped();
+    });
 
     m_connection->start();
     return {};

@@ -144,6 +144,7 @@ public:
 
 signals:
     void commandsChanged();
+    void stopped();
     void activationFailed(const QString &id, const QString &error);
     void languageClientStarted(const QString &id);
     void messageShown(const QString &text);

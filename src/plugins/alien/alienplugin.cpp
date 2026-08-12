@@ -684,6 +684,20 @@ private:
                         m_host->resolveInputBox(id, text, ok);
                     });
 
+            connect(m_host, &ExtensionHost::stopped, this, [this] {
+                // Nothing runs in a host that is gone, so the next activation
+                // trigger starts a fresh one and puts the extensions back.
+                m_activeIds.clear();
+                if (m_statusMessage)
+                    StatusBarManager::destroyStatusBarWidget(m_statusMessage);
+                for (StatusBarItem *item : std::as_const(m_statusItems))
+                    StatusBarManager::destroyStatusBarWidget(item);
+                m_statusItems.clear();
+                MessageManager::writeFlashing(
+                    Tr::tr("The VS Code extension host stopped. It restarts with the next "
+                           "activation, or on \"Rescan VS Code Extensions\"."));
+            });
+
             connect(m_host, &ExtensionHost::statusBarMessageChanged, this,
                     [this](const QString &text) {
                         if (!m_statusMessage) {
