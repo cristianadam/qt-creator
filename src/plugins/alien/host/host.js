@@ -1934,6 +1934,76 @@ onRequest('definition/provide', async params => {
     return {locations};
 });
 
+// The interesting commands of a tree-view extension hang off the item context
+// menu ("view/item/context"), which VS Code fills by matching each entry's
+// "when" against the view and the item's contextValue. Only that subset is
+// evaluated here - "view == x", "viewItem == y", "viewItem =~ /re/", and && -
+// which is what these contributions actually use.
+async function contextValueOf(entry, element) {
+    try {
+        const item = await entry.provider.getTreeItem(element);
+        return (item && item.contextValue) || '';
+    } catch (e) {
+        logToStderr('getTreeItem for the context menu failed', e);
+        return '';
+    }
+}
+
+function whenMatches(when, viewId, contextValue) {
+    if (!when)
+        return true;
+    return when.split('&&').every(term => {
+        const clause = term.trim();
+        let m = /^view\s*==\s*'?([\w.-]+)'?$/.exec(clause);
+        if (m)
+            return m[1] === viewId;
+        m = /^viewItem\s*==\s*'?([\w.-]+)'?$/.exec(clause);
+        if (m)
+            return m[1] === contextValue;
+        m = /^viewItem\s*=~\s*\/(.*)\/$/.exec(clause);
+        if (m)
+            return new RegExp(m[1]).test(contextValue || '');
+        return false; // an unknown clause hides the entry rather than guessing
+    });
+}
+
+// kind is "view/item/context" for a row's menu, "view/title" for the buttons
+// and overflow menu of the view itself.
+onRequest('treeview/menu', async params => {
+    const kind = params.kind || 'view/item/context';
+    const entry = treeDataProviders.get(params.viewId);
+    const element = entry && params.id ? entry.elements.get(params.id) : undefined;
+    const contextValue = element ? await contextValueOf(entry, element) : '';
+    const items = [];
+    const seen = new Set(); // a manifest may list the same command twice
+    for (const registered of registeredExtensions.values()) {
+        const contributes = (registered.packageJSON || {}).contributes || {};
+        const commands = new Map();
+        for (const command of contributes.commands || [])
+            commands.set(command.command, command);
+        for (const menu of (contributes.menus || {})[kind] || []) {
+            if (!whenMatches(menu.when, params.viewId, contextValue))
+                continue;
+            if (!seen.add(menu.command))
+                continue;
+            const command = commands.get(menu.command) || {};
+            items.push({command: menu.command,
+                        title: command.title || menu.command,
+                        icon: typeof command.icon === 'string' ? command.icon : '',
+                        group: menu.group || ''});
+        }
+    }
+    return {items};
+});
+
+// The element itself is what VS Code hands a context menu command, and it
+// never leaves the host - the main side only knows the node id.
+onRequest('treeview/executeItemCommand', async params => {
+    const entry = treeDataProviders.get(params.viewId);
+    const element = entry ? entry.elements.get(params.id) : undefined;
+    return vscode.commands.executeCommand(params.command, element);
+});
+
 onRequest('treeview/getChildren', async params => {
     return {nodes: await treeChildren(params.viewId, params.id)};
 });

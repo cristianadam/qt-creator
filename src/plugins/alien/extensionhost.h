@@ -92,6 +92,13 @@ public:
 
     // Fetches the children of a tree node (empty id = roots) from the in-host
     // provider. Used by the tree view widget and by tests.
+    void requestTreeMenu(const QString &viewId, const QString &id, const QString &kind,
+                         const std::function<void(const QJsonArray &)> &callback);
+    // The buttons of a view are needed the moment it is built, so they are
+    // fetched when the view registers, well before anyone opens it.
+    QJsonArray treeTitleMenu(const QString &viewId) const { return m_treeTitleMenus.value(viewId); }
+    void executeTreeItemCommand(const QString &viewId, const QString &id,
+                                const QString &command);
     void requestTreeChildren(const QString &viewId, const QString &id,
                              const std::function<void(const QJsonArray &)> &callback);
 
@@ -218,6 +225,7 @@ private:
     QHash<int, std::function<void(const QJsonValue &, const QString &)>> m_pendingPrompts;
 
     QHash<QString, Core::INavigationWidgetFactory *> m_treeFactories;
+    QHash<QString, QJsonArray> m_treeTitleMenus;
 
     WebviewRenderer *m_webviewRenderer = nullptr;
     QJsonObject m_configuration;

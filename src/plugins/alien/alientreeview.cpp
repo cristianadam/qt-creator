@@ -6,8 +6,12 @@
 #include "codicons.h"
 #include "extensionhost.h"
 
+#include <utils/utilsicons.h>
+
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QMenu>
+#include <QToolButton>
 #include <QStandardItemModel>
 #include <QTreeView>
 
@@ -48,6 +52,35 @@ public:
             m_host->executeCommand(
                 command,
                 QJsonDocument::fromJson(index.data(CommandArgumentsRole).toByteArray()).array());
+        });
+        // The interesting commands of a tree-view extension are contributed to
+        // the item context menu, and are deliberately not in the command
+        // palette, so without this they cannot be reached at all.
+        setContextMenuPolicy(Qt::CustomContextMenu);
+        connect(this, &QTreeView::customContextMenuRequested, this, [this](const QPoint &pos) {
+            const QModelIndex index = indexAt(pos);
+            if (!index.isValid())
+                return;
+            const QString id = index.data(NodeIdRole).toString();
+            const QPoint global = viewport()->mapToGlobal(pos);
+            m_host->requestTreeMenu(m_viewId, id, "view/item/context", [this, id, global](const QJsonArray &items) {
+                if (items.isEmpty())
+                    return;
+                // Shown, not exec()ed: the menu has to outlive this call, since
+                // an action may be triggered from outside (a scripted run posts
+                // the trigger), and a menu on the stack would take its actions
+                // down with it first.
+                auto menu = new QMenu(this);
+                menu->setAttribute(Qt::WA_DeleteOnClose);
+                for (const QJsonValue &value : items) {
+                    const QJsonObject item = value.toObject();
+                    const QString command = item.value("command").toString();
+                    menu->addAction(item.value("title").toString(), this, [this, id, command] {
+                        m_host->executeTreeItemCommand(m_viewId, id, command);
+                    });
+                }
+                menu->popup(global);
+            });
         });
         connect(m_host, &ExtensionHost::treeViewRefreshed, this, [this](const QString &viewId) {
             if (viewId == m_viewId)
@@ -138,10 +171,45 @@ AlienTreeViewFactory::AlienTreeViewFactory(ExtensionHost *host, const QString &v
     setPriority(500);
 }
 
+// "view/title" contributions are the buttons of the view itself: the
+// "navigation" group sits in the dock toolbar, the "overflow" group behind a
+// single menu button, as VS Code shows them.
 Core::NavigationView AlienTreeViewFactory::createWidget()
 {
     Core::NavigationView view;
     view.widget = new AlienTreeView(m_host, m_viewId);
+
+    QMenu *overflow = nullptr;
+    for (const QJsonValue &value : m_host->treeTitleMenu(m_viewId)) {
+        const QJsonObject item = value.toObject();
+        const QString command = item.value("command").toString();
+        const QString title = stripCodicons(item.value("title").toString());
+        ExtensionHost *host = m_host;
+        const QIcon icon = firstCodicon(item.value("icon").toString());
+        // An entry we have no icon for would need a wide text button, which is
+        // not what a view's toolbar looks like, so it joins the overflow menu.
+        if (icon.isNull() || item.value("group").toString().startsWith("overflow")) {
+            if (!overflow) {
+                auto button = new QToolButton;
+                button->setObjectName("alienViewButton." + m_viewId + ".overflow");
+                button->setIcon(Utils::Icons::TOOLBAR_EXTENSION.icon());
+                button->setPopupMode(QToolButton::InstantPopup);
+                overflow = new QMenu(button);
+                button->setMenu(overflow);
+                view.dockToolBarWidgets.append(button);
+            }
+            overflow->addAction(title, host, [host, command] { host->executeCommand(command); });
+            continue;
+        }
+        auto button = new QToolButton;
+        button->setObjectName("alienViewButton." + command);
+        button->setIcon(icon);
+        button->setToolTip(title);
+        QObject::connect(button, &QToolButton::clicked, host, [host, command] {
+            host->executeCommand(command);
+        });
+        view.dockToolBarWidgets.append(button);
+    }
     return view;
 }
 
