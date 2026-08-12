@@ -102,7 +102,11 @@ static Group attachToProcessRecipe(RunControl *runControl, const DebuggerRunPara
         return debuggerRecipe(runControl, rp);
 
     const auto modifier = [runControl](Process &process) {
-        process.setCommand({QNX_DEBUG_EXECUTABLE, {QString::number(runControl->debugChannel().port())}});
+        // -f keeps pdebug in the foreground; without it pdebug daemonizes and the
+        // tracked process exits, leaving the forked child orphaned on stop
+        // (QTCREATORBUG-32505).
+        process.setCommand({QNX_DEBUG_EXECUTABLE,
+                            {"-f", QString::number(runControl->debugChannel().port())}});
     };
     return When (runControl->processTaskWithModifier(modifier), &Process::started) >> Do {
         debuggerRecipe(runControl, rp)
@@ -184,6 +188,10 @@ public:
                 if (runControl->usesDebugChannel()) {
                     const int pdebugPort = runControl->debugChannel().port();
                     cmd.setExecutable(runControl->device()->filePath(QNX_DEBUG_EXECUTABLE));
+                    // -f: keep pdebug in the foreground so Creator tracks its real
+                    // pid and can kill it on stop; otherwise it daemonizes and the
+                    // child orphans (QTCREATORBUG-32505).
+                    arguments.append("-f");
                     arguments.append(QString::number(pdebugPort));
                 } else if (runControl->usesQmlChannel()) {
                     arguments.append(qmlDebugTcpArguments(QmlDebuggerServices, runControl->qmlChannel()));
