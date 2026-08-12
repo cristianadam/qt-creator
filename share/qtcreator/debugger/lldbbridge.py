@@ -592,6 +592,32 @@ class Dumper(DumperBase):
     def nativeDynamicType(self, address, base_typeid):
         return self.nativeDynamicType_2(address, base_typeid)
 
+    def dynamic_type_and_address(self, base_typeid, address):
+        dynamic_typeid = self.dynamic_typeid_at_address(base_typeid, address)
+        if dynamic_typeid == base_typeid:
+            return base_typeid, address
+        # The resolved object is the complete object, which for a base that is
+        # not at offset 0 (multiple inheritance) sits before the base subobject
+        # the address points to. Shift by the vtable's offset-to-top (Itanium
+        # C++ ABI); leave the address alone if it looks implausible.
+        try:
+            process = self.target.GetProcess()
+            error = lldb.SBError()
+            ps = self.ptrSize()
+            vptr = process.ReadPointerFromMemory(address, error)
+            if not error.Success():
+                return dynamic_typeid, address
+            offsetToTop = process.ReadUnsignedFromMemory(vptr - 2 * ps, ps, error)
+            if not error.Success():
+                return dynamic_typeid, address
+            if offsetToTop >= (1 << (8 * ps - 1)):
+                offsetToTop -= (1 << (8 * ps))
+            if -(1 << 20) < offsetToTop <= 0:
+                return dynamic_typeid, address + offsetToTop
+        except Exception:
+            pass
+        return dynamic_typeid, address
+
     def nativeDynamicType_1(self, address, base_typeid):
         # Solutions 1: Breaks StdUniquePtr and QVariant1 test
         return base_typeid
