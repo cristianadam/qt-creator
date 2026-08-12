@@ -421,6 +421,10 @@ FlatModel::FlatModel(QObject *parent)
     connect(sm, &ProjectManager::projectAdded, this, &FlatModel::handleProjectAdded);
     connect(sm, &ProjectManager::startupProjectChanged, this, [this] { emit layoutChanged(); });
 
+    // A session restored before this model existed (startup) misses
+    // aboutToLoadSession, so load the expand state now.
+    loadExpandData();
+
     for (Project *project : ProjectManager::projects())
         handleProjectAdded(project);
 
