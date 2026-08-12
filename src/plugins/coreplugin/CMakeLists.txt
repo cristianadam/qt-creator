@@ -306,6 +306,8 @@ extend_qtc_plugin(Core
   CONDITION WITH_TESTS
   SOURCES
     editormanager/editormanager_test.cpp
+    find/findfilter_test.cpp
+    find/findfilter_test.h
     locator/locator_test.cpp
     locator/locator_test.h
     locator/locatorfiltertest.cpp

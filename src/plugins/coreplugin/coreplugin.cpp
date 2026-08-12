@@ -19,6 +19,7 @@
 #include "idocument.h"
 #include "iwizardfactory.h"
 #include "locator/locator.h"
+#include "find/findfilter_test.h"
 #include "locator/locator_test.h"
 #include "loggingviewer.h"
 #include "mcp/mcpmanager.h"
@@ -504,6 +505,7 @@ Result<> CorePlugin::initialize(const QStringList &arguments)
     }
 
 #ifdef WITH_TESTS
+    addTestCreator(createFindFilterTest);
     addTestCreator(createLocatorTest);
     addTestCreator(createVcsManagerTest);
     addTestCreator(createTabbedEditorTest);

@@ -283,6 +283,8 @@ QtcPlugin {
             "editormanager/editormanager_test.cpp",
             "locator/locatorfiltertest.cpp",
             "locator/locatorfiltertest.h",
+            "find/findfilter_test.cpp",
+            "find/findfilter_test.h",
             "locator/locator_test.cpp",
             "locator/locator_test.h"
         ]
