@@ -76,6 +76,8 @@ public:
     void onExpanded(const QModelIndex &idx);
     void onCollapsed(const QModelIndex &idx);
 
+    void emitInitialExpansion();
+
 signals:
     void renamed(const Utils::FilePath &oldName, const Utils::FilePath &newName);
 

@@ -421,6 +421,10 @@ FlatModel::FlatModel(QObject *parent)
     connect(sm, &ProjectManager::projectAdded, this, &FlatModel::handleProjectAdded);
     connect(sm, &ProjectManager::startupProjectChanged, this, [this] { emit layoutChanged(); });
 
+    // A session restored before this model existed (startup) misses
+    // aboutToLoadSession, so load the expand state now.
+    loadExpandData();
+
     for (Project *project : ProjectManager::projects())
         handleProjectAdded(project);
 
@@ -532,6 +536,18 @@ void FlatModel::onExpanded(const QModelIndex &idx)
     m_toExpand.insert(expandDataForNode(nodeForIndex(idx)));
 }
 
+void FlatModel::emitInitialExpansion()
+{
+    // At startup the projects are added while this model is constructed, i.e.
+    // before the view has connected to requestExpansion, so the emissions from
+    // addOrRebuildProjectModel() are lost. Re-emit them for the already-built
+    // tree once the view is connected.
+    rootItem()->forAllChildren([this](WrapperNode *node) {
+        if (!node->node() || m_toExpand.contains(expandDataForNode(node->node())))
+            emit requestExpansion(node->index());
+    });
+}
+
 ExpandData FlatModel::expandDataForNode(const Node *node) const
 {
     QTC_ASSERT(node, return {});
@@ -618,6 +634,9 @@ void FlatModel::loadExpandData()
     const QList<QVariant> data = SessionManager::value("ProjectTree.ExpandData").value<QList<QVariant>>();
     m_toExpand = Utils::transform<QSet>(data, &ExpandData::fromSettings);
     m_toExpand.remove(ExpandData());
+    // On startup the projects are added before the session's expand state is
+    // available here, so re-apply it to the already-built tree.
+    emitInitialExpansion();
 }
 
 void FlatModel::saveExpandData()
