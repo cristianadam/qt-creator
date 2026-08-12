@@ -1312,6 +1312,21 @@ class Dumper(DumperBase):
         nativeValue = gdb.Value(address).cast(nativeTypePointer).dereference()
         return self.from_native_type(nativeValue.dynamic_type)
 
+    def dynamic_type_and_address(self, base_typeid, address):
+        nativeType = self.type_nativetype_cache.get(base_typeid, None)
+        if nativeType is None:
+            return base_typeid, address
+        try:
+            basePtr = gdb.Value(address).cast(nativeType.pointer())
+            dynamicPtr = basePtr.dynamic_type
+            if dynamicPtr == basePtr.type:
+                return base_typeid, address
+            # dynamic_cast shifts the pointer to the complete object.
+            adjusted = basePtr.dynamic_cast(dynamicPtr)
+            return self.from_native_type(dynamicPtr.target()), int(adjusted)
+        except Exception:
+            return self.dynamic_typeid_at_address(base_typeid, address), address
+
     def enumExpression(self, enumType, enumValue):
         return self.qtNamespace() + 'Qt::' + enumValue
 
