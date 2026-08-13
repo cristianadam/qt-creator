@@ -123,6 +123,11 @@ public:
     // Paths crossing the protocol are the ones the host itself sees: it runs
     // on the device node lives on, which need not be the local machine, so
     // Qt Creator's own "/__qtc_devices__/..." rendering is meaningless there.
+    // Clients this host started for an extension. They belong to
+    // LanguageClientManager, so the plugin has to wait for them before its
+    // library may go.
+    QList<QPointer<AlienClient>> languageClients() const;
+
     QString toHostPath(const Utils::FilePath &path) const;
     Utils::FilePath fromHostPath(const QString &path) const;
     bool isOnHostDevice(const Utils::FilePath &path) const;

@@ -662,8 +662,23 @@ public:
         return true;
     }
 
+    // The status bar reparents what it is given, so these widgets belong to
+    // Qt Creator while their class lives in this library. They have to go
+    // before it does.
+    void removeStatusBarWidgets()
+    {
+        if (m_statusMessage)
+            StatusBarManager::destroyStatusBarWidget(m_statusMessage);
+        m_statusMessage = nullptr;
+        for (StatusBarItem *item : std::as_const(m_statusItems))
+            StatusBarManager::destroyStatusBarWidget(item);
+        m_statusItems.clear();
+    }
+
     ShutdownFlag aboutToShutdown() final
     {
+        removeStatusBarWidgets();
+
         // The clients belong to LanguageClientManager, not to this plugin, and
         // shutting one down only sends it the request. Reporting a synchronous
         // shutdown here lets this library be unloaded while they are still
@@ -671,9 +686,17 @@ public:
         // so the next opened document jumps into freed code. Wait for them to
         // be gone instead; the client's own 20s timer bounds the wait.
         QList<QPointer<AlienClient>> alive;
-        for (const QPointer<AlienClient> &client : std::as_const(m_clients)) {
-            if (client)
+        const auto keep = [&alive](const QPointer<AlienClient> &client) {
+            if (client && !alive.contains(client))
                 alive.append(client);
+        };
+        for (const QPointer<AlienClient> &client : std::as_const(m_clients))
+            keep(client);
+        // The host starts clients of its own, for extensions that bring a
+        // language server; those have to be waited for just the same.
+        if (m_host) {
+            for (const QPointer<AlienClient> &client : m_host->languageClients())
+                keep(client);
         }
         if (alive.isEmpty())
             return SynchronousShutdown;
@@ -726,11 +749,7 @@ private:
                 // Nothing runs in a host that is gone, so the next activation
                 // trigger starts a fresh one and puts the extensions back.
                 m_activeIds.clear();
-                if (m_statusMessage)
-                    StatusBarManager::destroyStatusBarWidget(m_statusMessage);
-                for (StatusBarItem *item : std::as_const(m_statusItems))
-                    StatusBarManager::destroyStatusBarWidget(item);
-                m_statusItems.clear();
+                removeStatusBarWidgets();
                 MessageManager::writeFlashing(
                     Tr::tr("The VS Code extension host stopped. It restarts with the next "
                            "activation, or on \"Rescan VS Code Extensions\"."));

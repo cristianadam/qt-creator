@@ -135,6 +135,16 @@ bool ExtensionHost::isRunning() const
     return m_connection && m_connection->isRunning();
 }
 
+QList<QPointer<AlienClient>> ExtensionHost::languageClients() const
+{
+    QList<QPointer<AlienClient>> clients;
+    for (const QPointer<AlienClient> &client : m_lspClients) {
+        if (client)
+            clients.append(client);
+    }
+    return clients;
+}
+
 QString ExtensionHost::toHostPath(const FilePath &path) const
 {
     return path.path();
