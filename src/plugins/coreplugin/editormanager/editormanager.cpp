@@ -3134,6 +3134,16 @@ void EditorManagerPrivate::addCopyFilePathActions(
                                          + QString::number(lineNumber);
                     setClipboardAndSelection(text);
                 });
+            addMenuAction(
+                contextMenu,
+                ::Core::Tr::tr("Copy Relative Path and Line Number"),
+                copyActionsEnabled,
+                d,
+                [filePath, lineNumber] {
+                    const QString text = ICore::pathRelativeToActiveProject(filePath).toUserOutput()
+                                         + ':' + QString::number(lineNumber);
+                    setClipboardAndSelection(text);
+                });
         }
     }
 
