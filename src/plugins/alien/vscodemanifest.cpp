@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only WITH Qt-GPL-exception-1.0
 
 #include "vscodemanifest.h"
+#include <QRegularExpression>
+#include <coreplugin/icore.h>
 
 #include "alientr.h"
 
@@ -93,6 +95,57 @@ static QList<VscodeCommand> parseCommands(const QJsonArray &array)
     return result;
 }
 
+// VS Code keeps translatable manifest strings out of package.json: a value of
+// "%some.key%" is looked up in package.nls.json, or in package.nls.<locale>.json
+// for the language the IDE runs in. Nothing else in the file is touched.
+static QJsonObject translationBundle(const FilePath &dir)
+{
+    const auto read = [](const FilePath &file) {
+        const Result<QByteArray> contents = file.fileContents();
+        return contents ? QJsonDocument::fromJson(*contents).object() : QJsonObject();
+    };
+    QJsonObject bundle = read(dir / "package.nls.json");
+    QString language = Core::ICore::userInterfaceLanguage();
+    while (!language.isEmpty()) {
+        const QJsonObject localized = read(dir / QString("package.nls.%1.json").arg(language));
+        if (!localized.isEmpty()) {
+            for (auto it = localized.begin(); it != localized.end(); ++it)
+                bundle.insert(it.key(), it.value());
+            break;
+        }
+        // "de_DE" also answers to a "de" bundle.
+        const qsizetype cut = language.lastIndexOf(QRegularExpression("[-_]"));
+        language = cut > 0 ? language.left(cut) : QString();
+    }
+    return bundle;
+}
+
+static QJsonValue translated(const QJsonValue &value, const QJsonObject &bundle)
+{
+    if (value.isString()) {
+        const QString string = value.toString();
+        if (string.size() > 2 && string.startsWith('%') && string.endsWith('%')) {
+            const QJsonValue message = bundle.value(string.mid(1, string.size() - 2));
+            // An unknown key keeps the placeholder, as VS Code does.
+            return message.isString() ? message : value;
+        }
+        return value;
+    }
+    if (value.isObject()) {
+        QJsonObject object = value.toObject();
+        for (auto it = object.begin(); it != object.end(); ++it)
+            *it = translated(*it, bundle);
+        return object;
+    }
+    if (value.isArray()) {
+        QJsonArray array = value.toArray();
+        for (QJsonValueRef item : array)
+            item = translated(item, bundle);
+        return array;
+    }
+    return value;
+}
+
 Result<VscodeManifest> VscodeManifest::fromPackageJson(const FilePath &packageJson)
 {
     const Result<QByteArray> contents = packageJson.fileContents();
@@ -106,7 +159,10 @@ Result<VscodeManifest> VscodeManifest::fromPackageJson(const FilePath &packageJs
                                    .arg(packageJson.toUserOutput(), error.errorString()));
     }
 
-    const QJsonObject root = document.object();
+    const QJsonObject bundle = translationBundle(packageJson.parentDir());
+    const QJsonObject root = bundle.isEmpty()
+                                 ? document.object()
+                                 : translated(document.object(), bundle).toObject();
 
     VscodeManifest manifest;
     manifest.rootDir = packageJson.parentDir();

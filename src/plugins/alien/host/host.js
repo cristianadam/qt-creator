@@ -639,12 +639,39 @@ function registerConfigurationDefaults(packageJson) {
 let nextStatusBarItemId = 1;
 let nextWebviewId = 1;
 
+// Looks up how a contributed view is presented: its name, and the title of the
+// container it lives in ("Gerrit AI" > "Dashboard").
+function viewContributionOf(viewId) {
+    for (const registered of registeredExtensions.values()) {
+        const contributes = (registered.packageJSON || {}).contributes || {};
+        for (const [containerId, views] of Object.entries(contributes.views || {})) {
+            for (const view of views) {
+                if (view.id !== viewId)
+                    continue;
+                let container = '';
+                for (const group of Object.values(contributes.viewsContainers || {})) {
+                    const match = group.find(c => c.id === containerId);
+                    if (match)
+                        container = match.title || '';
+                }
+                return {name: view.name || '', container};
+            }
+        }
+    }
+    return {name: '', container: ''};
+}
+
+function viewNameOf(viewId) { return viewContributionOf(viewId).name; }
+function viewContainerOf(viewId) { return viewContributionOf(viewId).container; }
+
 function registerTreeProvider(viewId, provider) {
     const entry = {provider, elements: new Map(), counter: 0};
     treeDataProviders.set(viewId, entry);
     if (provider.onDidChangeTreeData)
         provider.onDidChangeTreeData(() => notify('treeview/refresh', {viewId}));
-    notify('treeview/register', {viewId});
+    // The view's human name lives in the contributing manifest; the id is
+    // what the provider registers with.
+    notify('treeview/register', {viewId, name: viewNameOf(viewId), container: viewContainerOf(viewId)});
     return disposable(() => {
         treeDataProviders.delete(viewId);
         notify('treeview/unregister', {viewId});

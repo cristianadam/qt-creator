@@ -365,6 +365,38 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(sawPick(), 15000);
     }
 
+    // A manifest keeps its user-visible strings in package.nls.json, referred
+    // to as "%key%", so the IDE can show them in its own language.
+    void testManifestTranslation()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const FilePath root = FilePath::fromString(dir.path());
+
+        const QJsonObject pkg{
+            {"name", "nlsdemo"},
+            {"publisher", "theqtcompany"},
+            {"main", "./extension.js"},
+            {"displayName", "%ext.name%"},
+            {"description", "%ext.missing%"},
+            {"contributes",
+             QJsonObject{{"commands",
+                          QJsonArray{QJsonObject{{"command", "nls.hello"},
+                                                 {"title", "%cmd.title%"}}}}}},
+        };
+        QVERIFY((root / "package.json").writeFileContents(QJsonDocument(pkg).toJson()));
+        const QJsonObject nls{{"ext.name", "Translated Name"}, {"cmd.title", "Translated Title"}};
+        QVERIFY((root / "package.nls.json").writeFileContents(QJsonDocument(nls).toJson()));
+
+        const Result<VscodeManifest> manifest
+            = VscodeManifest::fromPackageJson(root / "package.json");
+        QVERIFY2(manifest.has_value(), qPrintable(manifest ? QString() : manifest.error()));
+        QCOMPARE(manifest->displayName, QString("Translated Name"));
+        QCOMPARE(manifest->commands.value(0).title, QString("Translated Title"));
+        // An unknown key keeps its placeholder rather than turning into nothing.
+        QCOMPARE(manifest->description, QString("%ext.missing%"));
+    }
+
     void testCodicons()
     {
         // Real markup seen from cmake-tools, redhat.java and cpptools.

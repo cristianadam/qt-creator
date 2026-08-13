@@ -326,12 +326,20 @@ void ExtensionHost::installHandlers()
     });
 
     m_connection->setNotificationHandler("treeview/register", [this](const QJsonValue &params) {
-        const QString viewId = params.toObject().value("viewId").toString();
+        const QJsonObject object = params.toObject();
+        const QString viewId = object.value("viewId").toString();
         requestTreeMenu(viewId, {}, "view/title", [this, viewId](const QJsonArray &items) {
             m_treeTitleMenus.insert(viewId, items);
         });
+        // "Gerrit AI: Dashboard" rather than "gerritAI.dashboard": the sidebar
+        // lists views from every source, so the container says whose it is.
+        const QString name = object.value("name").toString();
+        const QString container = object.value("container").toString();
+        QString displayName = viewId;
+        if (!name.isEmpty())
+            displayName = container.isEmpty() ? name : QString("%1: %2").arg(container, name);
         if (!m_treeFactories.contains(viewId))
-            m_treeFactories.insert(viewId, new AlienTreeViewFactory(this, viewId, viewId));
+            m_treeFactories.insert(viewId, new AlienTreeViewFactory(this, viewId, displayName));
         emit treeViewRegistered(viewId);
     });
 
