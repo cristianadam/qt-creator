@@ -133,6 +133,8 @@ static Result<QString> startDebugExecutable(const QJsonObject &args)
     for (const QJsonValue &v : args.value("arguments").toArray())
         arguments << v.toString();
 
+    const QString remoteChannel = args.value("remote_channel").toString();
+
     const Utils::Id runMode(ProjectExplorer::Constants::DEBUG_RUN_MODE);
     auto runControl = new ProjectExplorer::RunControl(runMode);
     runControl->setKit(kit);
@@ -143,13 +145,25 @@ static Result<QString> startDebugExecutable(const QJsonObject &args)
     inferior.workingDirectory = workingDir.isEmpty() ? executable.parentDir()
                                                      : FilePath::fromUserInput(workingDir);
     rp.setInferior(inferior);
-    rp.setStartMode(StartExternal);
     // Native combined C++/QML debugging additionally needs QML debugging on; with
     // QTC_DEBUGGER_NATIVE_MIXED set this makes isNativeMixedDebugging() true.
     rp.setQmlDebugging(args.value("qml_debugging").toBool(false));
-    rp.setDisplayName(QString("External: %1").arg(executable.fileName()));
+    if (remoteChannel.isEmpty()) {
+        rp.setStartMode(StartExternal);
+        rp.setDisplayName(QString("External: %1").arg(executable.fileName()));
+    } else {
+        // Attach to an already-running gdbserver/stub; the executable supplies symbols.
+        rp.setStartMode(AttachToRemoteServer);
+        rp.setRemoteChannel(remoteChannel);
+        rp.setCloseMode(KillAtClose);
+        rp.setUseContinueInsteadOfRun(true);
+        rp.setBreakOnMain(args.value("break_at_main").toBool(false));
+        rp.setDisplayName(QString("Attach to %1").arg(remoteChannel));
+    }
     runControl->setRunRecipe(debuggerRecipe(runControl, rp));
     runControl->start();
+    if (!remoteChannel.isEmpty())
+        return QString("Attach to remote server %1 requested.").arg(remoteChannel);
     return QString("Debug session start requested for %1.").arg(executable.toUserOutput());
 }
 
@@ -1405,7 +1419,10 @@ void registerMcpTools()
                 "current startup project using its active run configuration and kit (does not "
                 "build first - use the build tool beforehand if it may be out of date). If "
                 "\"executable\" is given, debugs that executable directly (no project or build "
-                "needed) with an optional kit, arguments, working directory and QML debugging.")
+                "needed) with an optional kit, arguments, working directory and QML debugging. "
+                "If \"remote_channel\" is also given, attaches to an already-running gdbserver "
+                "or stub at that channel (e.g. a bare-metal target) instead of launching the "
+                "executable locally; the executable then only supplies symbols.")
             .annotations(ToolAnnotations{}.readOnlyHint(false))
             .inputSchema(
                 Tool::InputSchema{}
@@ -1442,7 +1459,23 @@ void registerMcpTools()
                             {"default", false},
                             {"description",
                              "Enable QML debugging. With QTC_DEBUGGER_NATIVE_MIXED set this "
-                             "activates native combined C++/QML debugging."}}))
+                             "activates native combined C++/QML debugging."}})
+                    .addProperty(
+                        "remote_channel",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description",
+                             "Attach to an already-running gdbserver/stub at this channel "
+                             "(e.g. \"localhost:1234\" or \"tcp:localhost:1234\") instead of "
+                             "launching the executable. Requires \"executable\" for symbols."}})
+                    .addProperty(
+                        "break_at_main",
+                        QJsonObject{
+                            {"type", "boolean"},
+                            {"default", false},
+                            {"description",
+                             "When attaching to a remote server, set a temporary breakpoint at "
+                             "main and continue to it."}}))
             .outputSchema(
                 Tool::OutputSchema{}
                     .addProperty("message", QJsonObject{{"type", "string"}})
