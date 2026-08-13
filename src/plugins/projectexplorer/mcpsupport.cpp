@@ -22,6 +22,7 @@
 #include "projectmanager.h"
 #include "projectnodes.h"
 #include "runconfiguration.h"
+#include "runconfigurationaspects.h"
 #include "runcontrol.h"
 #include "target.h"
 #include "task.h"
@@ -676,6 +677,50 @@ static QJsonArray getRunConfigurations()
         result.append(obj);
     }
     return result;
+}
+
+static QJsonObject configureRunConfig(const QString &idOrName,
+                                      const QString &executable,
+                                      bool setActive)
+{
+    Project *project = ProjectManager::startupProject();
+    if (!project)
+        return {{"success", false}, {"reason", "no_project"}, {"message", "No startup project."}};
+    Target *target = project->activeTarget();
+    if (!target)
+        return {{"success", false}, {"reason", "no_target"}, {"message", "No active target."}};
+    BuildConfiguration *bc = target->activeBuildConfiguration();
+    if (!bc) {
+        return {{"success", false}, {"reason", "no_build_config"},
+                {"message", "No active build configuration."}};
+    }
+    RunConfiguration *match = nullptr;
+    for (RunConfiguration *rc : bc->runConfigurations()) {
+        if (rc->id().toString() == idOrName || rc->expandedDisplayName() == idOrName) {
+            match = rc;
+            break;
+        }
+    }
+    if (!match) {
+        return {{"success", false}, {"reason", "not_found"},
+                {"message", QString("No run configuration matching \"%1\".").arg(idOrName)}};
+    }
+    if (!executable.isEmpty()) {
+        auto aspect = match->aspect<ExecutableAspect>();
+        if (!aspect) {
+            return {{"success", false}, {"reason", "no_executable_aspect"},
+                    {"message", "Run configuration has no executable aspect."}};
+        }
+        aspect->setExecutable(FilePath::fromUserInput(executable));
+    }
+    if (setActive)
+        bc->setActiveRunConfiguration(match);
+    return {{"success", true},
+            {"reason", "ok"},
+            {"id", match->id().toString()},
+            {"name", match->expandedDisplayName()},
+            {"active", match == target->activeRunConfiguration()},
+            {"executable", match->runnable().command.executable().toUserOutput()}};
 }
 
 // Helper: compute FindFlags from regex/caseSensitive booleans
@@ -2538,6 +2583,54 @@ void registerMcpTools()
                     .addRequired("configurations")),
         wrap([](const QJsonObject &) {
             return QJsonObject{{"configurations", getRunConfigurations()}};
+        }));
+
+    ToolRegistry::registerTool(
+        Tool{}
+            .name("configure_run_config")
+            .title("Configure a run configuration")
+            .description(
+                "Selects an existing run configuration (by type id or display name, see "
+                "get_run_configurations) as the active one and/or sets its executable. Setting "
+                "the executable only works for run configurations that have one, such as the "
+                "bare-metal \"Custom Executable\" configuration. Then start_debug (with no "
+                "arguments) debugs it via its run configuration's own launch path.")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "id",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description",
+                             "Run configuration type id or display name."}})
+                    .addProperty(
+                        "executable",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description",
+                             "Executable to set on the run configuration (local path)."}})
+                    .addProperty(
+                        "set_active",
+                        QJsonObject{
+                            {"type", "boolean"},
+                            {"default", true},
+                            {"description", "Make this the active run configuration."}})
+                    .addRequired("id"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("success", QJsonObject{{"type", "boolean"}})
+                    .addProperty("reason", QJsonObject{{"type", "string"}})
+                    .addProperty("message", QJsonObject{{"type", "string"}})
+                    .addProperty("id", QJsonObject{{"type", "string"}})
+                    .addProperty("name", QJsonObject{{"type", "string"}})
+                    .addProperty("active", QJsonObject{{"type", "boolean"}})
+                    .addProperty("executable", QJsonObject{{"type", "string"}})
+                    .addRequired("success")),
+        wrap([](const QJsonObject &p) {
+            const bool setActive = p.contains("set_active") ? p.value("set_active").toBool() : true;
+            return configureRunConfig(
+                p.value("id").toString(), p.value("executable").toString(), setActive);
         }));
 
     // --- Device management tools -------------------------------------------
