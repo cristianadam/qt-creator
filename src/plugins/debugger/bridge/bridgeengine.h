@@ -70,6 +70,7 @@ private:
     void loadAllSymbols() override;
     void reloadModules() override;
     void handleFetchModulesResponse(const QJsonObject &response);
+    void handleExecuteCommandResponse(const QJsonObject &response);
     void reloadRegisters() override;
     void reloadSourceFiles() override {}
     void reloadFullStack() override;
