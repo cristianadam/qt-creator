@@ -217,9 +217,14 @@ void BridgeEngine::handleDapInitialize()
     // environment, which are the debugger's, not the debuggee's - a Qt
     // application then typically fails to start at all.
     const CommandLine &command = rp.inferior().command;
+    // One entry per argument, not the joined string: the bridge quotes them
+    // individually, so an argument containing spaces stays one argument.
+    QJsonArray inferiorArgs;
+    for (const QString &argument : command.splitArguments())
+        inferiorArgs.append(argument);
     QJsonObject args{{"noDebug", false},
                      {"program", command.executable().path()},
-                     {"args", command.arguments()}};
+                     {"args", inferiorArgs}};
     if (!rp.inferior().workingDirectory.isEmpty())
         args.insert("cwd", rp.inferior().workingDirectory.path());
     const QJsonArray environment = inferiorEnvironment(rp);
