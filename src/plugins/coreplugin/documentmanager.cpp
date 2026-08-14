@@ -645,6 +645,29 @@ void DocumentManager::unexpectFileChange(const FilePath &filePath)
         updateExpectedState(filePathKey(filePath, ResolveLinks));
 }
 
+/*!
+    Reloads \a document from disk when the file's content differs from the
+    document's, bypassing the time-stamp based change detection. Does nothing
+    when the document has unsaved modifications, so a caller's edits are never
+    lost.
+
+    This is meant for callers that know the file was just rewritten (for example
+    an external formatting tool) but where the rewrite may have preserved the
+    modification time, which the watcher-based detection would miss.
+*/
+void DocumentManager::reloadIfChangedOnDisk(IDocument *document)
+{
+    if (!document || document->isModified())
+        return;
+    const FilePath filePath = document->filePath();
+    if (filePath.isEmpty())
+        return;
+    const Result<QByteArray> contents = filePath.fileContents();
+    if (!contents || *contents == document->contents())
+        return;
+    document->reload(IDocument::FlagReload, IDocument::TypeContents);
+}
+
 static bool saveModifiedFilesHelper(const QList<IDocument *> &documents,
                                     const QString &message, bool *cancelled, bool silently,
                                     const QString &alwaysSaveMessage, bool *alwaysSave,

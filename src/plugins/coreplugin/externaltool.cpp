@@ -5,6 +5,7 @@
 
 #include "coreplugintr.h"
 #include "documentmanager.h"
+#include "editormanager/documentmodel.h"
 #include "editormanager/editormanager.h"
 #include "externaltoolmanager.h"
 #include "icore.h"
@@ -663,8 +664,15 @@ void ExternalTool::execute() const
                                     ? Tr::tr("\"%1\" finished").arg(data->m_resolvedExecutable.toUserOutput())
                                     : Tr::tr("\"%1\" finished with error").arg(data->m_resolvedExecutable.toUserOutput());
 
-        if (data->m_tool.modifiesCurrentDocument())
+        if (data->m_tool.modifiesCurrentDocument()) {
             DocumentManager::unexpectFileChange(data->m_expectedFilePath);
+            // The watcher-based detection can miss the tool's write when it kept
+            // the modification time of our own save above, so reload directly.
+            if (process.result() == ProcessResult::FinishedWithSuccess) {
+                DocumentManager::reloadIfChangedOnDisk(
+                    DocumentModel::documentForFilePath(data->m_expectedFilePath));
+            }
+        }
         const auto write = data->m_tool.outputHandling() == ExternalTool::ShowInPane
                                ? QOverload<const QString &>::of(MessageManager::writeFlashing)
                                : QOverload<const QString &>::of(MessageManager::writeSilently);

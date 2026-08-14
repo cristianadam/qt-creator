@@ -51,6 +51,23 @@ static bool modifyFileOnDisk(const FilePath &filePath, const QByteArray &content
     return ok;
 }
 
+// Changes a file's contents on disk while keeping its modification time, so the
+// time-stamp based detection cannot see the change - as happens when a fast
+// external tool rewrites a file within the same time-stamp tick as a preceding
+// save.
+static bool modifyFileKeepingTimestamp(const FilePath &filePath, const QByteArray &contents)
+{
+    const QDateTime originalTime = filePath.lastModified();
+    if (!filePath.writeFileContents(contents))
+        return false;
+    QFile file(filePath.path());
+    if (!file.open(QIODevice::ReadWrite))
+        return false;
+    const bool ok = file.setFileTime(originalTime, QFileDevice::FileModificationTime);
+    file.close();
+    return ok;
+}
+
 class DocumentManagerTest final : public QObject
 {
     Q_OBJECT
@@ -60,6 +77,7 @@ private slots:
     void cleanupTestCase();
 
     void testReloadUnmodifiedOnExternalChange();
+    void testReloadIfChangedOnDiskDetectsSameTimestampChange();
     void testAutoCloseOnExternalRemoval();
     void testAlwaysAskFlagsChangeAsConflicted();
     void testReloadAppliesToEveryChangedFile();
@@ -132,6 +150,38 @@ void DocumentManagerTest::testReloadUnmodifiedOnExternalChange()
 
     QCOMPARE(document->contents(), QByteArray("line1\naddedLine\n"));
     QVERIFY(!document->isModified());
+}
+
+void DocumentManagerTest::testReloadIfChangedOnDiskDetectsSameTimestampChange()
+{
+    setReloadSetting(IDocument::ReloadUnmodifiedImmediately);
+
+    TemporaryDirectory tempDir("qtc-documentmanager-XXXXXX");
+    QVERIFY(tempDir.isValid());
+    const QScopeGuard closeEditors([] { EditorManager::closeAllEditors(false); });
+    const FilePath filePath = tempDir.filePath("test.txt");
+    QVERIFY(filePath.writeFileContents("line1\n"));
+
+    IEditor *editor = EditorManager::openEditor(filePath);
+    QVERIFY(editor);
+    IDocument *document = editor->document();
+    QVERIFY(document);
+    QCOMPARE(document->contents(), QByteArray("line1\n"));
+
+    // A change that keeps the modification time slips past the watcher-based
+    // detection: the document still shows the old contents.
+    QVERIFY(modifyFileKeepingTimestamp(filePath, "line1\nformatted\n"));
+    triggerReloadCheck(filePath);
+    QCOMPARE(document->contents(), QByteArray("line1\n"));
+
+    // reloadIfChangedOnDisk() compares content instead, so it picks the change up.
+    DocumentManager::reloadIfChangedOnDisk(document);
+    QCOMPARE(document->contents(), QByteArray("line1\nformatted\n"));
+    QVERIFY(!document->isModified());
+
+    // When the file matches the document, it is a no-op (nothing to reload).
+    DocumentManager::reloadIfChangedOnDisk(document);
+    QCOMPARE(document->contents(), QByteArray("line1\nformatted\n"));
 }
 
 void DocumentManagerTest::testAutoCloseOnExternalRemoval()

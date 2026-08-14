@@ -51,6 +51,8 @@ public:
     static void expectFileChange(const Utils::FilePath &filePath);
     static void unexpectFileChange(const Utils::FilePath &filePath);
 
+    static void reloadIfChangedOnDisk(IDocument *document);
+
     // recent files
     static void addToRecentFiles(const Utils::FilePath &filePath, Utils::Id editorId = {});
     Q_SLOT void clearRecentFiles();
