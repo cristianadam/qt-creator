@@ -1391,6 +1391,20 @@ void LinuxDevicePrivate::setupFileAccess(
     // Make the process interface work even though we are not "connected". Must be reset in phase2
     q->setIsTesting(true);
 
+    if (!q->usesCmdBridge()) {
+        QFuture<void> future = Utils::asyncRun([this, rootPath = q->rootPath()] {
+            setOsTypeFromUnameResult(runUnameCommand(rootPath));
+        });
+        future.then(q, [this, cont] {
+            q->setIsTesting(false);
+            q->setFileAccess(std::make_shared<LinuxDeviceAccess>(this));
+            q->setDeviceState(IDevice::DeviceConnected);
+            setupFileAccessFinalize(ResultOk, cont);
+        });
+        Utils::futureSynchronizer()->addFuture(future);
+        return;
+    }
+
     // update OsType and try using the cmdbridge first
     QFuture<CmdBridgeDeployResult> future = Utils::asyncRun(
         [this, rootPath = q->rootPath()]() -> CmdBridgeDeployResult {
