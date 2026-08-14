@@ -95,3 +95,20 @@ install(DIRECTORY config
   COMPONENT Devel
   ${EXCLUDE_DOCS_FROM_ALL}
 )
+
+# Regenerate the auto-generated MCP tool list included by the documentation.
+# Run this (after a full build, so every tool-providing plugin is present)
+# whenever MCP tools change; CI enforces freshness with a build of this target
+# followed by "git diff --exit-code" on the committed file.
+if (TARGET qtcreator AND TARGET mcpserver)
+  add_custom_target(regenerate_mcp_tools_doc
+    COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen
+      $<TARGET_FILE:qtcreator> -load mcpserver
+      -mcp-dump-tools ${CMAKE_CURRENT_SOURCE_DIR}/qtcreator/src/mcp/mcp-tools.qdocinc
+      -settingspath ${CMAKE_CURRENT_BINARY_DIR}/mcp-dump-settings
+    DEPENDS qtcreator mcpserver
+    USES_TERMINAL
+    VERBATIM
+    COMMENT "Regenerating doc/qtcreator/src/mcp/mcp-tools.qdocinc from the MCP server"
+  )
+endif()
