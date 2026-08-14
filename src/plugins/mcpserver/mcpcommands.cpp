@@ -2314,11 +2314,11 @@ void McpCommands::registerCommands()
             .name("set_setting")
             .title("Change a setting on a settings page")
             .description(
-                "Sets a single aspect-based setting to a new value and persists it. The "
-                "change takes effect immediately (the aspect emits its change signal), so "
-                "this is the programmatic equivalent of toggling the setting in the "
-                "Preferences dialog. Identify the setting by its 'key' (settingsKey from "
-                "get_settings); the value is coerced to the setting's current type.")
+                "Sets a single aspect-based setting to a new value, then applies and persists "
+                "it - the equivalent of changing it in the Preferences dialog and pressing "
+                "Apply, so whatever reacts to the change actually runs. Identify the setting "
+                "by its 'key' (settingsKey from get_settings); the value is coerced to the "
+                "setting's current type.")
             .annotations(ToolAnnotations{}.readOnlyHint(false))
             .inputSchema(
                 Tool::InputSchema{}
@@ -2375,6 +2375,10 @@ void McpCommands::registerCommands()
                                  .arg(QString::fromUtf8(cur.typeName()))}};
             }
             target->setVariantValue(newValue);
+            // What the preferences dialog does on Apply, and what code that
+            // reacts to a settings change listens for. Without it the value is
+            // stored and nothing acts on it, while this reports success.
+            r.container->apply();
             r.container->writeSettings();
             return {{"applied", true},
                     {"key", key},
