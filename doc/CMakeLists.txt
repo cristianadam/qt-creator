@@ -95,3 +95,32 @@ install(DIRECTORY config
   COMPONENT Devel
   ${EXCLUDE_DOCS_FROM_ALL}
 )
+
+# The full MCP tool list is generated from the running server; the committed
+# mcp-tools.qdocinc is only a placeholder. A committed snapshot goes stale
+# whenever a tool is added in another commit, so the real list is produced at
+# doc-build time: regenerate_mcp_tools_doc rewrites it from the built server
+# and is made a prerequisite of the documentation targets. A doc build without
+# the application keeps the placeholder.
+#
+# "-load all" force-enables every plugin, so tools from plugins that are
+# disabled by default (the MCP server itself, and any future provider) are
+# captured too; the list is meant to be exhaustive.
+if (TARGET qtcreator AND TARGET mcpserver)
+  add_custom_target(regenerate_mcp_tools_doc
+    COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen
+      $<TARGET_FILE:qtcreator> -load all
+      -mcp-dump-tools ${CMAKE_CURRENT_SOURCE_DIR}/qtcreator/src/mcp/mcp-tools.qdocinc
+      -settingspath ${CMAKE_CURRENT_BINARY_DIR}/mcp-dump-settings
+    DEPENDS qtcreator mcpserver
+    USES_TERMINAL
+    VERBATIM
+    COMMENT "Regenerating the MCP tool list from the MCP server"
+  )
+  foreach(_doc_target html_docs_qtcreator qch_docs_qtcreator
+                      html_docs_qtcreator-online qch_docs_qtcreator-online)
+    if (TARGET ${_doc_target})
+      add_dependencies(${_doc_target} regenerate_mcp_tools_doc)
+    endif()
+  endforeach()
+endif()

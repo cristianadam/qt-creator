@@ -1,0 +1,10 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+// Placeholder for the generated MCP tool list. Building the documentation
+// regenerates this from a Qt Creator build (the regenerate_mcp_tools_doc
+// target); do not commit the generated version.
+
+//! [tools]
+The tool list is generated when the documentation is built from a \QC build.
+//! [tools]
