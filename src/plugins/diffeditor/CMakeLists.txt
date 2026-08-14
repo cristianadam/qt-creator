@@ -12,6 +12,7 @@ add_qtc_plugin(DiffEditor
     diffeditorplugin.cpp
     diffeditorwidgetcontroller.cpp diffeditorwidgetcontroller.h
     diffenums.h
+    diffsyntaxhighlighter.cpp diffsyntaxhighlighter.h
     diffutils.cpp diffutils.h
     inlinediff.cpp inlinediff.h
     selectabletexteditorwidget.cpp selectabletexteditorwidget.h

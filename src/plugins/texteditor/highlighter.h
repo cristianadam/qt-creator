@@ -12,7 +12,8 @@ namespace KSyntaxHighlighting { class Repository; }
 namespace TextEditor {
 class TextDocument;
 
-class Highlighter : public SyntaxHighlighter, public KSyntaxHighlighting::AbstractHighlighter
+class TEXTEDITOR_EXPORT Highlighter : public SyntaxHighlighter,
+                                      public KSyntaxHighlighting::AbstractHighlighter
 {
     Q_OBJECT
     Q_INTERFACES(KSyntaxHighlighting::AbstractHighlighter)

@@ -28,6 +28,8 @@ QtcPlugin {
         "diffeditorwidgetcontroller.cpp",
         "diffeditorwidgetcontroller.h",
         "diffenums.h",
+        "diffsyntaxhighlighter.cpp",
+        "diffsyntaxhighlighter.h",
         "diffutils.cpp",
         "diffutils.h",
         "inlinediff.cpp",

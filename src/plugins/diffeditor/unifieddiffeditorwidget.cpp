@@ -6,11 +6,13 @@
 #include "diffeditorconstants.h"
 #include "diffeditordocument.h"
 #include "diffeditortr.h"
+#include "diffsyntaxhighlighter.h"
 
 #include <coreplugin/icore.h>
 #include <coreplugin/progressmanager/progressmanager.h>
 
 #include <texteditor/fontsettings.h>
+#include <texteditor/highlighterhelper.h>
 #include <texteditor/textdocument.h>
 
 #include <utils/async.h>
@@ -453,6 +455,28 @@ static UnifiedDiffOutput diffOutput(QPromise<UnifiedShowResult> &promise, int pr
     return output;
 }
 
+void UnifiedDiffEditorWidget::installSyntaxHighlighter()
+{
+    QList<DiffSyntaxHighlighter::FileRegion> regions;
+    for (auto it = m_data.m_fileInfo.cbegin(), end = m_data.m_fileInfo.cend(); it != end; ++it) {
+        const DiffFileInfoArray &info = it.value();
+        const QString fileName = info[RightSide].fileName.isEmpty() ? info[LeftSide].fileName
+                                                                    : info[RightSide].fileName;
+        const HighlighterHelper::Definitions definitions = HighlighterHelper::definitionsForFileName(
+            FilePath::fromString(fileName));
+        regions.append({it.key(), definitions.isEmpty() ? HighlighterHelper::Definition()
+                                                        : definitions.first()});
+    }
+
+    const UnifiedDiffData data = m_data;
+    textDocument()->resetSyntaxHighlighter([regions, data] {
+        return new DiffSyntaxHighlighter(regions, [data](int blockNumber) {
+            return data.m_lineNumbers[LeftSide].contains(blockNumber)
+                   || data.m_lineNumbers[RightSide].contains(blockNumber);
+        });
+    });
+}
+
 void UnifiedDiffEditorWidget::showDiff()
 {
     if (m_controller.m_contextFileData.isEmpty()) {
@@ -476,6 +500,8 @@ void UnifiedDiffEditorWidget::showDiff()
                 setTextDocument(doc);
 
                 setReadOnly(true);
+
+                installSyntaxHighlighter();
             }
             setSelections(result.selections);
             setCurrentDiffFileIndex(m_controller.currentDiffFileIndex());

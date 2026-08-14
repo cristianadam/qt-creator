@@ -6,6 +6,7 @@
 #include "diffeditorconstants.h"
 #include "diffeditordocument.h"
 #include "diffeditortr.h"
+#include "diffsyntaxhighlighter.h"
 
 #include <coreplugin/find/highlightscrollbarcontroller.h>
 #include <coreplugin/find/minimapcontroller.h>
@@ -15,6 +16,7 @@
 
 #include <texteditor/displaysettings.h>
 #include <texteditor/fontsettings.h>
+#include <texteditor/highlighterhelper.h>
 #include <texteditor/textdocument.h>
 #include <texteditor/textdocumentlayout.h>
 
@@ -58,6 +60,7 @@ public:
 
     SideDiffData diffData() const { return m_data; }
     void setDiffData(const SideDiffData &data) { m_data = data; }
+    void installSyntaxHighlighter();
 
 signals:
     void jumpToOriginalFileRequested(int diffFileIndex,
@@ -162,6 +165,24 @@ void SideDiffEditorWidget::setFolded(int blockNumber, bool folded)
     auto documentLayout = qobject_cast<TextDocumentLayout*>(document()->documentLayout());
     documentLayout->requestUpdate();
     documentLayout->emitDocumentSizeChanged();
+}
+
+void SideDiffEditorWidget::installSyntaxHighlighter()
+{
+    QList<DiffSyntaxHighlighter::FileRegion> regions;
+    for (auto it = m_data.m_fileInfo.cbegin(), end = m_data.m_fileInfo.cend(); it != end; ++it) {
+        const HighlighterHelper::Definitions definitions = HighlighterHelper::definitionsForFileName(
+            FilePath::fromString(it.value().fileName));
+        regions.append({it.key(), definitions.isEmpty() ? HighlighterHelper::Definition()
+                                                         : definitions.first()});
+    }
+
+    const SideDiffData data = m_data;
+    textDocument()->resetSyntaxHighlighter([regions, data] {
+        return new DiffSyntaxHighlighter(regions, [data](int blockNumber) {
+            return data.m_lineNumbers.contains(blockNumber);
+        });
+    });
 }
 
 void SideDiffEditorWidget::setDisplaySettings(const DisplaySettingsData &displaySettings)
@@ -892,6 +913,9 @@ void SideBySideDiffEditorWidget::showDiff()
 
                 m_editor[LeftSide]->setReadOnly(true);
                 m_editor[RightSide]->setReadOnly(true);
+
+                m_editor[LeftSide]->installSyntaxHighlighter();
+                m_editor[RightSide]->installSyntaxHighlighter();
             }
             auto leftDocumentLayout = qobject_cast<TextDocumentLayout*>(
                         m_editor[LeftSide]->document()->documentLayout());

@@ -100,6 +100,7 @@ private:
     void setFontSettings(const TextEditor::FontSettingsData &fontSettings);
     void slotCursorPositionChangedInEditor();
     void showDiff();
+    void installSyntaxHighlighter();
     void jumpToOriginalFile(const QTextCursor &cursor);
     void addContextMenuActions(QMenu *menu, int fileIndex, int chunkIndex,
                                const ChunkSelection &selection);

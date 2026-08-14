@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "texteditor_global.h"
+
 #include <KSyntaxHighlighting/Definition>
 
 #include <QFuture>
@@ -24,7 +26,7 @@ Definition definitionForName(const QString &name);
 
 Definitions definitionsForDocument(const TextDocument *document);
 Definitions definitionsForMimeType(const QString &mimeType);
-Definitions definitionsForFileName(const Utils::FilePath &filePath);
+TEXTEDITOR_EXPORT Definitions definitionsForFileName(const Utils::FilePath &filePath);
 
 void rememberDefinitionForDocument(const Definition &definition, const TextDocument *document);
 void clearDefinitionForDocumentCache();
