@@ -252,15 +252,6 @@ void BridgeEngine::executeDebuggerCommand(const QString & /*command*/)
     QTC_ASSERT(state() == InferiorStopOk, qCDebug(logCategory()) << state());
 }
 
-void BridgeEngine::runCommand(const DebuggerCommand &cmd)
-{
-    if (state() == EngineSetupRequested) { // cmd has been triggered too early
-        showMessage("IGNORED COMMAND: " + cmd.function);
-        return;
-    }
-    QTC_ASSERT(m_dapClient->dataProvider()->isRunning(), notifyEngineIll());
-}
-
 void BridgeEngine::shutdownInferior()
 {
     QTC_ASSERT(state() == InferiorShutdownRequested, qCDebug(logCategory()) << state());
@@ -455,7 +446,29 @@ void BridgeEngine::loadAllSymbols()
 
 void BridgeEngine::reloadModules()
 {
-    runCommand({"listModules"});
+    if (state() == InferiorRunOk || state() == InferiorStopOk)
+        m_dapClient->postRequest("qtc/fetchModules", {});
+}
+
+void BridgeEngine::handleFetchModulesResponse(const QJsonObject &response)
+{
+    ModulesHandler *handler = modulesHandler();
+    handler->beginUpdateAll();
+    const FilePath inferior = runParameters().inferior().command.executable();
+    for (const QJsonValue &value : response.value("body").toObject().value("modules").toArray()) {
+        const QJsonObject item = value.toObject();
+        Module module;
+        // withNewPath(): the paths are the target's, which is not the host for
+        // a remote inferior.
+        module.modulePath = inferior.withNewPath(item.value("path").toString());
+        module.moduleName = module.modulePath.fileName();
+        module.startAddress = quint64(item.value("startAddress").toInteger());
+        module.endAddress = quint64(item.value("endAddress").toInteger());
+        module.symbolsRead = item.value("symbolsRead").toBool() ? Module::ReadOk
+                                                               : Module::ReadFailed;
+        handler->updateModule(module);
+    }
+    handler->endUpdateAll();
 }
 
 void BridgeEngine::refreshModules(const GdbMi &modules)
@@ -719,6 +732,8 @@ void BridgeEngine::handleResponse(DapResponseType type, const QJsonObject &respo
         }
         if (command == "qtc/fetchVariables")
             handleFetchVariablesResponse(response);
+        else if (command == "qtc/fetchModules")
+            handleFetchModulesResponse(response);
         else if (command == "qtc/fetchRegisters")
             handleFetchRegistersResponse(response);
         else if (command == "qtc/readMemory")
