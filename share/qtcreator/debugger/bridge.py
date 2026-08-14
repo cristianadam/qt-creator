@@ -318,6 +318,22 @@ class DapServer():
         programArgs = arguments.get('args', '')
         if programArgs:
             gdb.execute('set args %s' % programArgs, to_string=True)
+        # The debuggee runs where and how the run configuration says, not
+        # wherever gdb happens to sit. No quoting anywhere here: gdb takes the
+        # rest of the line verbatim, so a path with spaces works as is while
+        # quotes would become part of it.
+        cwd = arguments.get('cwd')
+        if cwd:
+            gdb.execute('set cwd %s' % cwd, to_string=True)
+        for item in arguments.get('env', []):
+            name = item.get('name', '')
+            if not name:
+                continue
+            if item.get('unset'):
+                gdb.execute('unset environment %s' % name, to_string=True)
+            else:
+                gdb.execute('set environment %s=%s' % (name, item.get('value', '')),
+                            to_string=True)
         # Do not run yet; wait for configurationDone so breakpoints are set.
         self.sendResponse(request)
 
