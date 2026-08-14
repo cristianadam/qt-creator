@@ -74,6 +74,8 @@ class DapServer():
         # and the arguments each was created for.
         self.breakpointById = {}
         self.breakpointArgsById = {}
+        # Extra gdb breakpoints belonging to one of ours (catch fork/vfork).
+        self.companionBreakpoints = {}
 
         # Rebuilt on every stop: maps a DAP frame id to a gdb.Frame.
         self.frameForId = {}
@@ -520,13 +522,51 @@ class DapServer():
     BP_BY_FILE_AND_LINE = 1
     BP_BY_FUNCTION = 2
     BP_BY_ADDRESS = 3
+    BP_AT_THROW = 4
+    BP_AT_CATCH = 5
+    BP_AT_MAIN = 6
+    BP_AT_FORK = 7
+    BP_AT_EXEC = 8
+    BP_AT_SYSCALL = 9
     BP_WATCH_ADDRESS = 10
     BP_WATCH_EXPRESSION = 11
+
+    # Throwing and catching are breaks in the C++ runtime, as in GdbEngine.
+    FUNCTION_FOR_TYPE = {BP_AT_THROW: '__cxa_throw',
+                         BP_AT_CATCH: '__cxa_begin_catch'}
+    # The rest are catchpoints, which gdb only creates from the CLI. A fork
+    # breakpoint means both flavours, again as in GdbEngine.
+    CATCH_KINDS = {BP_AT_FORK: ('fork', 'vfork'), BP_AT_EXEC: ('exec',),
+                   BP_AT_SYSCALL: ('syscall',)}
+
+    def _createCatchpoint(self, bptype):
+        # gdb has no Python constructor for catchpoints; make them with the CLI
+        # command and pick up what appeared.
+        created = []
+        for kind in self.CATCH_KINDS[bptype]:
+            known = {bp.number for bp in (gdb.breakpoints() or ())}
+            gdb.execute('catch %s' % kind, to_string=True)
+            created += [bp for bp in (gdb.breakpoints() or ())
+                        if bp.number not in known]
+        if not created:
+            raise gdb.error('gdb created no catchpoint')
+        if len(created) > 1:
+            # Only the first one is reported; the others go with it.
+            self.companionBreakpoints[str(created[0].number)] = created[1:]
+        return created[0]
 
     def _createGdbBreakpoint(self, args):
         bptype = args.get('type', self.BP_BY_FILE_AND_LINE)
         temporary = bool(args.get('oneshot'))
-        if bptype == self.BP_BY_FUNCTION:
+        if bptype in self.CATCH_KINDS:
+            return self._createCatchpoint(bptype)
+        if bptype in self.FUNCTION_FOR_TYPE:
+            bp = gdb.Breakpoint(function=self.FUNCTION_FOR_TYPE[bptype],
+                                temporary=temporary)
+        elif bptype == self.BP_AT_MAIN:
+            bp = gdb.Breakpoint(function=args.get('function') or 'main',
+                                temporary=temporary)
+        elif bptype == self.BP_BY_FUNCTION:
             bp = gdb.Breakpoint(function=args.get('function', ''),
                                 temporary=temporary)
         elif bptype == self.BP_BY_ADDRESS:
@@ -706,6 +746,11 @@ class DapServer():
         key = str(args.get('id'))
         self.breakpointArgsById.pop(key, None)
         bp = self.breakpointById.pop(key, None)
+        for companion in self.companionBreakpoints.pop(key, []):
+            try:
+                companion.delete()
+            except (gdb.error, RuntimeError):
+                pass
         if bp is not None:
             try:
                 bp.delete()
