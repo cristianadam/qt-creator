@@ -17,6 +17,7 @@
 #include "helpviewer.h"
 #include "helpwidget.h"
 #include "localhelpmanager.h"
+#include "mcpsupport.h"
 #include "openpagesmanager.h"
 #include "searchtaskhandler.h"
 #include "topicchooser.h"
@@ -654,6 +655,7 @@ private:
     void initialize() final
     {
         dd = new HelpPluginPrivate;
+        registerMcpTools();
 #ifdef WITH_TESTS
         addTestCreator(createBookmarkManagerTest);
         addTestCreator(createLocalHelpManagerTest);

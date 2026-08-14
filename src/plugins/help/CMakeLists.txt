@@ -1,6 +1,6 @@
 add_qtc_plugin(Help
   CONDITION TARGET Qt::Help
-  DEPENDS shared_help
+  DEPENDS shared_help McpServerLib
   PLUGIN_DEPENDS Core ProjectExplorer
   PLUGIN_RECOMMENDS TextEditor
   SOURCES
@@ -15,6 +15,7 @@ add_qtc_plugin(Help
     helpviewer.cpp helpviewer.h
     helpwidget.cpp helpwidget.h
     localhelpmanager.cpp localhelpmanager.h
+    mcpsupport.cpp mcpsupport.h
     offline-dark.css
     openpagesmanager.cpp openpagesmanager.h
     openpagesswitcher.cpp openpagesswitcher.h
