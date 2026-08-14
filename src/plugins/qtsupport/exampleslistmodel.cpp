@@ -524,9 +524,13 @@ void ExampleSetModel::updateQtVersionList()
     ExampleSetModel::ExampleSetType currentType = getType(currentIndex);
 
     if (currentType == ExampleSetModel::InvalidExampleSet) {
-        // select examples corresponding to 'highest' Qt version
-        QtVersion *highestQt = findHighestQtVersion(versions);
-        currentIndex = indexForQtVersion(highestQt);
+        // Nothing selected yet: default to the default kit's Qt version, falling
+        // back to the 'highest' Qt version.
+        QtVersion *defaultVersion = QtKitAspect::qtVersion(
+            ProjectExplorer::KitManager::defaultKit());
+        if (!defaultVersion || !versions.contains(defaultVersion))
+            defaultVersion = findHighestQtVersion(versions);
+        currentIndex = indexForQtVersion(defaultVersion);
     } else if (currentType == ExampleSetModel::QtExampleSet) {
         // try to select the previously selected Qt version, or
         // select examples corresponding to 'highest' Qt version
