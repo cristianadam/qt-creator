@@ -489,6 +489,103 @@ QObject *createSelectAllTest()
     return new SelectAllTest;
 }
 
+class ParagraphMovementTest final : public QObject
+{
+    Q_OBJECT
+
+private slots:
+    void testGotoParagraph_data();
+    void testGotoParagraph();
+    void testGotoParagraphKeepsSelection();
+};
+
+// Blocks: 0,1 = paragraph, 2 = blank, 3 = paragraph, 4,5 = blank, 6,7 = paragraph.
+static const char paragraphContent[] =
+    "para one line1\npara one line2\n\npara two\n\n\npara three line1\npara three line2";
+
+void ParagraphMovementTest::testGotoParagraph_data()
+{
+    QTest::addColumn<int>("startBlock");
+    QTest::addColumn<bool>("next");
+    QTest::addColumn<int>("expectedBlock"); // -1 means the document end
+
+    QTest::newRow("next from paragraph start") << 0 << true << 2;
+    QTest::newRow("next from paragraph middle") << 1 << true << 2;
+    QTest::newRow("next from blank skips paragraph") << 2 << true << 4;
+    QTest::newRow("next lands past trailing blanks at end") << 4 << true << -1;
+    QTest::newRow("next from last paragraph goes to end") << 6 << true << -1;
+    QTest::newRow("previous from paragraph") << 3 << false << 2;
+    QTest::newRow("previous from last line") << 7 << false << 5;
+    QTest::newRow("previous from blank skips paragraph to start") << 2 << false << 0;
+    QTest::newRow("previous from first paragraph goes to start") << 0 << false << 0;
+}
+
+void ParagraphMovementTest::testGotoParagraph()
+{
+    QFETCH(int, startBlock);
+    QFETCH(bool, next);
+    QFETCH(int, expectedBlock);
+
+    QString title = "paragraphs.txt";
+    Core::IEditor *editor = Core::EditorManager::openEditorWithContents(
+        Core::Constants::K_DEFAULT_TEXT_EDITOR_ID, &title, QByteArray(paragraphContent));
+    QVERIFY(editor);
+    auto baseEditor = qobject_cast<BaseTextEditor *>(editor);
+    QVERIFY(baseEditor);
+    TextEditorWidget *editorWidget = baseEditor->editorWidget();
+    QVERIFY(editorWidget);
+
+    QTextDocument *doc = editorWidget->document();
+    QTextCursor cursor(doc);
+    cursor.setPosition(doc->findBlockByNumber(startBlock).position());
+    editorWidget->setTextCursor(cursor);
+
+    if (next)
+        editorWidget->gotoNextParagraph();
+    else
+        editorWidget->gotoPreviousParagraph();
+
+    const int expectedPosition = expectedBlock < 0
+        ? doc->characterCount() - 1
+        : doc->findBlockByNumber(expectedBlock).position();
+    QCOMPARE(editorWidget->textCursor().position(), expectedPosition);
+    QVERIFY(!editorWidget->textCursor().hasSelection());
+
+    Core::EditorManager::closeEditors({editor}, false);
+}
+
+void ParagraphMovementTest::testGotoParagraphKeepsSelection()
+{
+    QString title = "paragraphs_sel.txt";
+    Core::IEditor *editor = Core::EditorManager::openEditorWithContents(
+        Core::Constants::K_DEFAULT_TEXT_EDITOR_ID, &title, QByteArray(paragraphContent));
+    QVERIFY(editor);
+    auto baseEditor = qobject_cast<BaseTextEditor *>(editor);
+    QVERIFY(baseEditor);
+    TextEditorWidget *editorWidget = baseEditor->editorWidget();
+    QVERIFY(editorWidget);
+
+    QTextDocument *doc = editorWidget->document();
+    const int anchor = doc->findBlockByNumber(0).position();
+    QTextCursor cursor(doc);
+    cursor.setPosition(anchor);
+    editorWidget->setTextCursor(cursor);
+
+    editorWidget->gotoNextParagraphWithSelection();
+
+    cursor = editorWidget->textCursor();
+    QVERIFY(cursor.hasSelection());
+    QCOMPARE(cursor.anchor(), anchor);
+    QCOMPARE(cursor.position(), doc->findBlockByNumber(2).position());
+
+    Core::EditorManager::closeEditors({editor}, false);
+}
+
+QObject *createParagraphMovementTest()
+{
+    return new ParagraphMovementTest;
+}
+
 class RevertToSavedTest final : public QObject
 {
     Q_OBJECT

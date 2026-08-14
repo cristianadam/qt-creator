@@ -104,6 +104,7 @@ void TextEditorPlugin::initialize()
     addTestCreator(createCleanWhitespaceTest);
     addTestCreator(createSortLinesTest);
     addTestCreator(createSelectAllTest);
+    addTestCreator(createParagraphMovementTest);
     addTestCreator(createRevertToSavedTest);
     addTestCreator(createFindReplaceTest);
     addTestCreator(createSnippetTest);
@@ -576,6 +577,8 @@ void TextEditorPlugin::createEditorCommands()
     TextActionBuilder(this, GOTO_PREVIOUS_WORD_CAMEL_CASE)
         .setText(Tr::tr("Go to Previous Word (Camel Case)"));
     TextActionBuilder(this, GOTO_NEXT_WORD_CAMEL_CASE).setText(Tr::tr("Go to Next Word (Camel Case)"));
+    TextActionBuilder(this, GOTO_PREVIOUS_PARAGRAPH).setText(Tr::tr("Go to Previous Paragraph"));
+    TextActionBuilder(this, GOTO_NEXT_PARAGRAPH).setText(Tr::tr("Go to Next Paragraph"));
 
     TextActionBuilder(this, GOTO_LINE_START_WITH_SELECTION)
         .setText(Tr::tr("Go to Line Start with Selection"));
@@ -597,6 +600,10 @@ void TextEditorPlugin::createEditorCommands()
         .setText(Tr::tr("Go to Previous Word (Camel Case) with Selection"));
     TextActionBuilder(this, GOTO_NEXT_WORD_CAMEL_CASE_WITH_SELECTION)
         .setText(Tr::tr("Go to Next Word (Camel Case) with Selection"));
+    TextActionBuilder(this, GOTO_PREVIOUS_PARAGRAPH_WITH_SELECTION)
+        .setText(Tr::tr("Go to Previous Paragraph with Selection"));
+    TextActionBuilder(this, GOTO_NEXT_PARAGRAPH_WITH_SELECTION)
+        .setText(Tr::tr("Go to Next Paragraph with Selection"));
 }
 
 } // namespace TextEditor::Internal

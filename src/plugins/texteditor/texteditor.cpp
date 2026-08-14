@@ -2545,6 +2545,68 @@ void TextEditorWidget::gotoNextWordCamelCaseWithSelection()
     setMultiTextCursor(cursor);
 }
 
+static bool isBlankBlock(const QTextBlock &block)
+{
+    return block.text().trimmed().isEmpty();
+}
+
+// Moves the cursor to the start of the blank line that borders the current
+// paragraph in the given direction: skip any blank lines the cursor sits in,
+// then skip the paragraph, landing on the next blank line. Clamps to the
+// document boundary when there is none.
+static void moveCursorToParagraph(QTextCursor &cursor, bool next, QTextCursor::MoveMode mode)
+{
+    const auto step = [next](const QTextBlock &b) { return next ? b.next() : b.previous(); };
+    QTextBlock block = cursor.block();
+    while (block.isValid() && isBlankBlock(block))
+        block = step(block);
+    while (block.isValid() && !isBlankBlock(block))
+        block = step(block);
+    const int position = block.isValid() ? block.position()
+                                         : (next ? cursor.document()->characterCount() - 1 : 0);
+    cursor.setPosition(position, mode);
+}
+
+void TextEditorWidget::gotoPreviousParagraph()
+{
+    MultiTextCursor multi = multiTextCursor();
+    QList<QTextCursor> cursors = multi.cursors();
+    for (QTextCursor &cursor : cursors)
+        moveCursorToParagraph(cursor, false, QTextCursor::MoveAnchor);
+    multi.setCursors(cursors);
+    setMultiTextCursor(multi);
+}
+
+void TextEditorWidget::gotoPreviousParagraphWithSelection()
+{
+    MultiTextCursor multi = multiTextCursor();
+    QList<QTextCursor> cursors = multi.cursors();
+    for (QTextCursor &cursor : cursors)
+        moveCursorToParagraph(cursor, false, QTextCursor::KeepAnchor);
+    multi.setCursors(cursors);
+    setMultiTextCursor(multi);
+}
+
+void TextEditorWidget::gotoNextParagraph()
+{
+    MultiTextCursor multi = multiTextCursor();
+    QList<QTextCursor> cursors = multi.cursors();
+    for (QTextCursor &cursor : cursors)
+        moveCursorToParagraph(cursor, true, QTextCursor::MoveAnchor);
+    multi.setCursors(cursors);
+    setMultiTextCursor(multi);
+}
+
+void TextEditorWidget::gotoNextParagraphWithSelection()
+{
+    MultiTextCursor multi = multiTextCursor();
+    QList<QTextCursor> cursors = multi.cursors();
+    for (QTextCursor &cursor : cursors)
+        moveCursorToParagraph(cursor, true, QTextCursor::KeepAnchor);
+    multi.setCursors(cursors);
+    setMultiTextCursor(multi);
+}
+
 bool TextEditorWidget::selectBlockUp()
 {
     if (multiTextCursor().hasMultipleCursors())
@@ -4741,6 +4803,14 @@ void TextEditorWidgetPrivate::registerActions()
         .setContext(m_editorContext)
         .addOnTriggered([this] { q->gotoNextWordCamelCase(); })
         .setScriptable(true);
+    ActionBuilder(this, GOTO_PREVIOUS_PARAGRAPH)
+        .setContext(m_editorContext)
+        .addOnTriggered([this] { q->gotoPreviousParagraph(); })
+        .setScriptable(true);
+    ActionBuilder(this, GOTO_NEXT_PARAGRAPH)
+        .setContext(m_editorContext)
+        .addOnTriggered([this] { q->gotoNextParagraph(); })
+        .setScriptable(true);
 
     ActionBuilder(this, GOTO_LINE_START_WITH_SELECTION)
         .setContext(m_editorContext)
@@ -4781,6 +4851,14 @@ void TextEditorWidgetPrivate::registerActions()
     ActionBuilder(this, GOTO_NEXT_WORD_CAMEL_CASE_WITH_SELECTION)
         .setContext(m_editorContext)
         .addOnTriggered([this] { q->gotoNextWordCamelCaseWithSelection(); })
+        .setScriptable(true);
+    ActionBuilder(this, GOTO_PREVIOUS_PARAGRAPH_WITH_SELECTION)
+        .setContext(m_editorContext)
+        .addOnTriggered([this] { q->gotoPreviousParagraphWithSelection(); })
+        .setScriptable(true);
+    ActionBuilder(this, GOTO_NEXT_PARAGRAPH_WITH_SELECTION)
+        .setContext(m_editorContext)
+        .addOnTriggered([this] { q->gotoNextParagraphWithSelection(); })
         .setScriptable(true);
 
     m_suggestionActions <<
