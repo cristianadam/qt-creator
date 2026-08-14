@@ -29,6 +29,7 @@
 #include <utils/qtcprocess.h>
 #include <utils/widgets.h>
 
+#include <projectexplorer/abi.h>
 #include <projectexplorer/projectexplorerconstants.h>
 
 #include <QJsonArray>
@@ -409,8 +410,22 @@ void BridgeEngine::selectThread(const Thread &thread)
 
 bool BridgeEngine::acceptsBreakpoint(const BreakpointParameters &bp) const
 {
-    if (bp.isWatchpoint() || bp.type == BreakpointByFunction || bp.type == BreakpointByAddress)
+    switch (bp.type) {
+    case BreakpointByFunction:
+    case BreakpointByAddress:
+    case BreakpointAtThrow:
+    case BreakpointAtCatch:
+    case BreakpointAtMain:
+    case BreakpointAtFork:
+    case BreakpointAtExec:
+    case BreakpointAtSysCall:
+    case WatchpointAtAddress:
+    case WatchpointAtExpression:
         return true;
+    default:
+        // By file and line, which needs a file the bridge can break in.
+        break;
+    }
     const auto mimeType = Utils::mimeTypeForFile(bp.fileName);
     return mimeType.matchesName(Utils::Constants::C_HEADER_MIMETYPE)
            || mimeType.matchesName(Utils::Constants::C_SOURCE_MIMETYPE)
@@ -429,6 +444,12 @@ void BridgeEngine::insertBreakpoint(const Breakpoint &bp)
 
     DebuggerCommand cmd("insertBreakpoint");
     bp->addToCommand(runParameters().buildDirectory(), &cmd);
+    if (bp->requestedParameters().type == BreakpointAtMain) {
+        // Which symbol main() is depends on the toolchain, as in GdbEngine.
+        const bool windowsEntryPoint = runParameters().toolChainAbi().os() == ProjectExplorer::Abi::WindowsOS
+                                       && !usesTerminal();
+        cmd.arg("function", windowsEntryPoint ? "qMain" : "main");
+    }
     m_dapClient->postRequest("qtc/insertBreakpoint", cmd.args.toObject());
 }
 
