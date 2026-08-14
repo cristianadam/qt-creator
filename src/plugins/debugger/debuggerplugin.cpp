@@ -1328,7 +1328,7 @@ bool DebuggerPluginPrivate::parseArgument(QStringList::const_iterator &it,
 {
     const QString &option = *it;
     // '-debug <pid>'
-    // '-debug <exe>[,server=<server:port>][,core=<core>][,kit=<kit>][,terminal={0,1}]'
+    // '-debug <exe>[,server=<server:port>][,core=<core>][,kit=<kit>][,terminal={0,1}][,args=<args>]'
     if (*it == "-debug") {
         ++it;
         if (it == cend) {
@@ -1344,6 +1344,7 @@ bool DebuggerPluginPrivate::parseArgument(QStringList::const_iterator &it,
         QString remoteChannel;
         FilePath coreFile;
         QString sysRoot;
+        QString inferiorArgs;
         bool useTerminal = false;
 
         if (!pid) {
@@ -1375,6 +1376,11 @@ bool DebuggerPluginPrivate::parseArgument(QStringList::const_iterator &it,
                     useTerminal = true;
                 } else if (key == "sysroot") {
                     sysRoot = val;
+                } else if (key == "args") {
+                    // Take the rest of the field so arguments may contain '='
+                    // (e.g. "--opt=value"). Commas cannot be used, as they
+                    // separate the options above.
+                    inferiorArgs = arg.section('=', 1);
                 }
             }
         }
@@ -1385,6 +1391,11 @@ bool DebuggerPluginPrivate::parseArgument(QStringList::const_iterator &it,
         runControl->setKit(kit);
         DebuggerRunParameters rp = DebuggerRunParameters::fromRunControl(runControl);
         rp.setInferiorExecutable(executable);
+        if (!inferiorArgs.isEmpty()) {
+            ProcessRunData inferior = rp.inferior();
+            inferior.command.setArguments(inferiorArgs);
+            rp.setInferior(inferior);
+        }
         if (!sysRoot.isEmpty())
             rp.setSysRoot(FilePath::fromUserInput(sysRoot));
         if (pid) {
