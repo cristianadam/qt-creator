@@ -28,8 +28,10 @@
 #include <utils/store.h>
 #include <utils/stringutils.h>
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 
 using namespace ProjectExplorer;
 using namespace Utils;
@@ -134,6 +136,40 @@ static SigningConfig signingConfigFromSettings(const Environment &env)
     return config;
 }
 
+// What a provisioning profile says about the package it is for. The profile is a PKCS#7
+// file whose signed content is plain JSON, so this reads it without touching the signature.
+class ProvisioningProfile
+{
+public:
+    QString bundleName;
+    QStringList allowedAcls;
+};
+
+static ProvisioningProfile readProvisioningProfile(const FilePath &profile)
+{
+    ProvisioningProfile result;
+    const Result<QByteArray> contents = profile.fileContents();
+    if (!contents)
+        return result;
+
+    const QString text = QString::fromLatin1(*contents);
+    const QString object = balancedBraces(text, 0);
+    if (object.isEmpty())
+        return result;
+    const QJsonObject json = QJsonDocument::fromJson(object.toUtf8()).object();
+    result.bundleName = json.value("bundle-info").toObject().value("bundle-name").toString();
+    for (const QJsonValue &acl : json.value("acls").toObject().value("allowed-acls").toArray())
+        result.allowedAcls.append(acl.toString());
+    return result;
+}
+
+// The permissions Qt asks for that a device only grants when the provisioning profile
+// allows them. A debug profile usually allows none.
+static QStringList aclPermissions()
+{
+    return {"ohos.permission.READ_PASTEBOARD"};
+}
+
 // Removes the requestPermissions entry for each named permission from the module
 // description. A device refuses to install a package that asks for a permission the
 // provisioning profile does not allow.
@@ -167,6 +203,29 @@ static Result<QStringList> dropPermissions(const FilePath &moduleJson, const QSt
     if (const Result<qint64> written = moduleJson.writeFileContents(text.toUtf8()); !written)
         return ResultError(written.error());
     return dropped;
+}
+
+// Sets the bundle name in the application description, and returns the one that was there.
+static Result<QString> setBundleName(const FilePath &appJson, const QString &bundleName)
+{
+    const Result<QByteArray> contents = appJson.fileContents();
+    if (!contents)
+        return ResultError(contents.error());
+
+    static const QRegularExpression re("(\"bundleName\"\\s*:\\s*\")([^\"]*)(\")");
+    QString text = QString::fromUtf8(*contents);
+    const QRegularExpressionMatch match = re.match(text);
+    if (!match.hasMatch())
+        return ResultError(Tr::tr("No bundle name in \"%1\".").arg(appJson.toUserOutput()));
+    const QString previous = match.captured(2);
+    if (previous == bundleName)
+        return previous;
+
+    text.replace(match.capturedStart(), match.capturedLength(),
+                 match.captured(1) + bundleName + match.captured(3));
+    if (const Result<qint64> written = appJson.writeFileContents(text.toUtf8()); !written)
+        return ResultError(written.error());
+    return previous;
 }
 
 // Where the built and signed packages are kept. The generated project does not
@@ -367,8 +426,29 @@ private:
         const auto onSetup = [this](Process &process) {
             if (!addAdditionalPackages())
                 return SetupResult::StopWithError;
-            const QStringList unwanted = settings().droppedPermissions().split(
-                ' ', Qt::SkipEmptyParts);
+            const ProvisioningProfile profile
+                = readProvisioningProfile(settings().signingProfile());
+
+            // A package can only be installed under the bundle name its profile is for.
+            if (!profile.bundleName.isEmpty()) {
+                const FilePath appJson = m_project.pathAppended("AppScope/app.json5");
+                const Result<QString> replaced = setBundleName(appJson, profile.bundleName);
+                if (!replaced) {
+                    emit addOutput(replaced.error(), OutputFormat::ErrorMessage);
+                    return SetupResult::StopWithError;
+                }
+                if (*replaced != profile.bundleName) {
+                    emit addOutput(Tr::tr("Packaging as \"%1\", which is the bundle name the "
+                                          "provisioning profile is for.").arg(profile.bundleName),
+                                   OutputFormat::Stdout);
+                }
+            }
+
+            QStringList unwanted;
+            for (const QString &name : aclPermissions()) {
+                if (!profile.allowedAcls.contains(name))
+                    unwanted.append(name);
+            }
             if (!unwanted.isEmpty()) {
                 const FilePath moduleJson = m_project.pathAppended(
                     "entry/src/main/module.json5");
@@ -378,8 +458,8 @@ private:
                     return SetupResult::StopWithError;
                 }
                 for (const QString &name : *dropped) {
-                    emit addOutput(Tr::tr("Dropped the request for %1 from the package.")
-                                       .arg(name),
+                    emit addOutput(Tr::tr("Dropped the request for %1, which the provisioning "
+                                          "profile does not allow.").arg(name),
                                    OutputFormat::Stdout);
                 }
             }
