@@ -31,6 +31,13 @@ except ImportError:  # not POSIX
 import gdb
 
 
+def quoteArgument(argument):
+    # Double quotes with backslash escapes are understood both by the shell gdb
+    # starts the inferior through and by gdb's own argument splitting, so an
+    # argument containing spaces survives either way.
+    return '"%s"' % argument.replace('\\', '\\\\').replace('"', '\\"')
+
+
 def warn(message):
     # Diagnostics must not go to stdout: that is the protocol stream. The C++
     # side reads stderr separately and shows it in the debugger log.
@@ -330,9 +337,10 @@ class DapServer():
         program = arguments.get('program', '')
         if program:
             gdb.execute('file "%s"' % program, to_string=True)
-        programArgs = arguments.get('args', '')
+        programArgs = arguments.get('args') or []
         if programArgs:
-            gdb.execute('set args %s' % programArgs, to_string=True)
+            gdb.execute('set args %s' % ' '.join(quoteArgument(a) for a in programArgs),
+                        to_string=True)
         # The debuggee runs where and how the run configuration says, not
         # wherever gdb happens to sit. No quoting anywhere here: gdb takes the
         # rest of the line verbatim, so a path with spaces works as is while
