@@ -431,7 +431,10 @@ void StartApplicationDialog::run(bool attachRemote)
     if (attachRemote) {
         rp.setStartMode(AttachToRemoteServer);
         rp.setCloseMode(KillAtClose);
-        rp.setUseContinueInsteadOfRun(true);
+        // With target extended-remote the program is launched by us (via run),
+        // so the command-line arguments are applied. Plain target remote has
+        // the program already started by gdbserver, so just continue.
+        rp.setUseContinueInsteadOfRun(!newParameters.useTargetExtendedRemote);
         rp.setDisplayName(Tr::tr("Attach to %1").arg(rp.remoteChannel()));
     }
 
