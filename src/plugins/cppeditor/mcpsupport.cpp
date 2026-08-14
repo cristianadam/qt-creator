@@ -25,6 +25,8 @@
 #include <coreplugin/editormanager/editormanager.h>
 
 #include <projectexplorer/headerpath.h>
+#include <projectexplorer/project.h>
+#include <projectexplorer/projectmanager.h>
 
 #include <texteditor/refactoringchanges.h>
 #include <texteditor/texteditor.h>
@@ -1121,8 +1123,8 @@ void registerMcpTools()
                 "column on an identifier, and the \"new_name\". By default this is a DRY "
                 "RUN: it returns the edits it would make (each with file, 1-based line and "
                 "column, length, and the old and new text) and changes nothing. Set "
-                "\"apply\" to true to write the edits. The file must belong to an open "
-                "project.")
+                "\"apply\" to true to write the edits. Only files belonging to the open "
+                "projects are edited, never Qt or system headers.")
             .annotations(ToolAnnotations{}.readOnlyHint(false).destructiveHint(true))
             .inputSchema(
                 Tool::InputSchema{}
@@ -1215,17 +1217,42 @@ void registerMcpTools()
                     QString("New name equals the current name \"%1\".").arg(oldName)));
             }
 
+            // Restrict edits to files inside an open project, so a rename never
+            // rewrites Qt or system headers that a usage may point into. When no
+            // project is open there is no such boundary (only explicitly parsed
+            // files are in the snapshot), so the filter falls back to all usages.
+            QList<FilePath> projectDirs;
+            for (const ProjectExplorer::Project *project : ProjectExplorer::ProjectManager::projects())
+                projectDirs.append(project->projectDirectory());
+            const auto inProject = [&projectDirs](const FilePath &path) {
+                if (projectDirs.isEmpty())
+                    return true;
+                for (const FilePath &dir : projectDirs) {
+                    if (path.isChildOf(dir))
+                        return true;
+                }
+                return false;
+            };
+
             // The occurrences to rewrite are exactly the symbol's usages; group
             // them by file (preserving first-seen order) so each file is edited
             // in one pass. Also drives the dry-run preview so it matches what
             // apply would do.
             QList<FilePath> fileOrder;
             QHash<FilePath, QList<CPlusPlus::Usage>> byFile;
-            const QList<CPlusPlus::Usage> usages = symbolUsages(symbol, context);
-            for (const CPlusPlus::Usage &u : usages) {
+            QList<CPlusPlus::Usage> usages;
+            for (const CPlusPlus::Usage &u : symbolUsages(symbol, context)) {
+                if (!inProject(u.path))
+                    continue;
+                usages.append(u);
                 if (!byFile.contains(u.path))
                     fileOrder.append(u.path);
                 byFile[u.path].append(u);
+            }
+            if (usages.isEmpty()) {
+                return CallToolResult{}.isError(true).addContent(TextContent{}.text(
+                    QString("No occurrences of \"%1\" in the open projects' files.")
+                        .arg(oldName)));
             }
 
             if (!apply) {
