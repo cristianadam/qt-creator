@@ -550,12 +550,7 @@ static Result<QList<QPointer<Internal::DebuggerEngine>>> createEngines(
     if (rp.isCppDebugging()) {
         switch (rp.cppEngineType()) {
         case GdbEngineType:
-            // Experimental opt-in: route gdb debugging through the DAP-shaped
-            // BridgeEngine instead, for testing it against a real gdb kit.
-            if (qtcEnvironmentVariableIsSet("QTC_DEBUGGER_USE_BRIDGE"))
-                engines << createBridgeEngine();
-            else
-                engines << createGdbEngine();
+            engines << createGdbEngine();
             break;
         case CdbEngineType:
             if (rp.debugger().command.executable().osType() != OsTypeWindows)
@@ -808,7 +803,13 @@ public:
     {
         setId(Constants::DEBUGGER_RUN_FACTORY);
         setRecipeProducer([](RunControl *runControl) {
-            const DebuggerRunParameters rp = DebuggerRunParameters::fromRunControl(runControl);
+            DebuggerRunParameters rp = DebuggerRunParameters::fromRunControl(runControl);
+            // Experimental opt-in: ask for the DAP-shaped BridgeEngine rather
+            // than GdbEngine, to try it against an existing gdb kit.
+            if (rp.cppEngineType() == GdbEngineType
+                && qtcEnvironmentVariableIsSet("QTC_DEBUGGER_USE_BRIDGE")) {
+                rp.setCppEngineType(BridgeEngineType);
+            }
             if (rp.isQmlDebugging()) {
                 const IDevice::ConstPtr device = runControl->device();
                 if (device && device->type() != ProjectExplorer::Constants::DESKTOP_DEVICE_TYPE)
