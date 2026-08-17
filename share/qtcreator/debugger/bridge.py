@@ -236,16 +236,6 @@ class DapServer():
             except gdb.error:
                 pass
 
-        # Register the Qt/stdlib type dumpers so qtc/fetchVariables produces
-        # Qt-aware output (the C++ engine no longer sends a separate
-        # loadDumpers command).
-        try:
-            # The return value lists the types the dumpers know and the display
-            # formats they offer; the C++ side needs it for the format menus.
-            self.dumperSetup = self.dumper.setupDumpers()
-        except Exception as error:
-            warn('setupDumpers failed: %s' % error)
-
         self._setupInferiorTty()
 
         self.running = True
@@ -349,6 +339,26 @@ class DapServer():
     #######################################################################
 
     def cmd_initialize(self, request):
+        # Set the Qt/stdlib type dumpers up here rather than at startup: the
+        # user's own dumper module has to be added before that happens, and it
+        # arrives with this request.
+        args = request.get('arguments', {})
+        extraFile = args.get('qtcDumperFile')
+        if extraFile:
+            try:
+                self.dumper.addDumperModule({'path': extraFile})
+            except Exception as error:
+                warn('cannot add the dumper module %s: %s' % (extraFile, error))
+        for command in (args.get('qtcDumperCommands') or '').splitlines():
+            if command.strip():
+                self._execute_quietly(command)
+        try:
+            # The return value lists the types the dumpers know and the display
+            # formats they offer; the C++ side needs it for the format menus.
+            self.dumperSetup = self.dumper.setupDumpers()
+        except Exception as error:
+            warn('setupDumpers failed: %s' % error)
+
         self.sendResponse(request, body={
             'supportsConfigurationDoneRequest': True,
             'supportsFunctionBreakpoints': True,
