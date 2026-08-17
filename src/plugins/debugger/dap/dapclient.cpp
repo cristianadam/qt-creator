@@ -172,6 +172,14 @@ void DapClient::readOutput()
         int pos1 = m_inbuffer.indexOf("Content-Length:");
         if (pos1 == -1)
             break;
+
+        // Whatever sits before a header is not part of the protocol: gdb's own
+        // console output before the bridge takes stdio over, or an adapter
+        // printing to stdout. It used to be dropped here without a trace.
+        const QByteArray unframed = m_inbuffer.left(pos1).trimmed();
+        if (!unframed.isEmpty())
+            emit unframedOutput(QString::fromUtf8(unframed));
+
         pos1 += 15;
 
         int pos2 = m_inbuffer.indexOf('\n', pos1);
