@@ -69,6 +69,7 @@ private:
     void loadSymbols(const Utils::FilePath &moduleName) override;
     void loadAllSymbols() override;
     void reloadModules() override;
+    void configureTarget();
     void handleFetchModulesResponse(const QJsonObject &response);
     void handleExecuteCommandResponse(const QJsonObject &response);
     void reloadRegisters() override;
