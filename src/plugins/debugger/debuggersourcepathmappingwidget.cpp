@@ -13,6 +13,7 @@
 #include <utils/layoutbuilder.h>
 #include <utils/pathchooser.h>
 #include <utils/qtcassert.h>
+#include <utils/macroexpander.h>
 #include <utils/qtcsettings.h>
 #include <utils/variablechooser.h>
 
@@ -422,6 +423,20 @@ void DebuggerSourcePathMappingWidget::slotEditTargetFieldChanged()
 }
 
 /* Merge settings for an installed Qt (unless another setting is already in the map. */
+SourcePathMap mergeStartParametersSourcePathMap(const DebuggerRunParameters &sp,
+                                                const SourcePathMap &in)
+{
+    // Do not overwrite user settings.
+    SourcePathMap rc = sp.sourcePathMap();
+    for (auto it = in.constBegin(), end = in.constEnd(); it != end; ++it) {
+        // Entries that start with parenthesis are handled in
+        // DebuggerEngine::validateRunParameters
+        if (!it.key().startsWith('('))
+            rc.insert(it.key(), sp.macroExpander()->expand(it.value()));
+    }
+    return rc;
+}
+
 SourcePathMap mergePlatformQtPath(const DebuggerRunParameters &sp, const SourcePathMap &in)
 {
     static const QString qglobal = "qtbase/src/corelib/global/qglobal.h";
