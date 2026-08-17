@@ -766,6 +766,29 @@ class DapServer():
 
         self.sendResponse(request, body={'dumperResult': captured.get('result', '')})
 
+    def cmd_qtc_configureTarget(self, request):
+        # Tell gdb where the target's sources and libraries are, before the
+        # program is loaded.
+        args = request.get('arguments', {})
+        for mapping in args.get('sourcePathMap', []):
+            self._execute_quietly('set substitute-path %s %s'
+                                  % (mapping.get('from', ''), mapping.get('to', '')))
+        for directory in args.get('sourceDirectories', []):
+            self._execute_quietly('directory %s' % directory)
+        sysroot = args.get('sysroot')
+        if sysroot:
+            self._execute_quietly('set sysroot %s' % sysroot)
+            # A sysroot alone does not locate the sources; relocate the most
+            # likely place for them too, as GdbEngine does.
+            self._execute_quietly('set substitute-path /usr/src %s/usr/src' % sysroot)
+        self.sendResponse(request)
+
+    def _execute_quietly(self, command):
+        try:
+            gdb.execute(command, to_string=True)
+        except gdb.error as error:
+            warn('%r failed: %s' % (command, error))
+
     def cmd_qtc_fetchModules(self, request):
         # gdb's Python API lists the objfiles but not where they are loaded or
         # whether their symbols are in, so 'info sharedlibrary' fills that in.
