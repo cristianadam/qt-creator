@@ -421,6 +421,8 @@ private slots:
     void testE2eInvalidResponseLine();
 
     // Tier 3: chat workflows against acptestserver (AcpChatController)
+    void testHybridInitializeParams();
+    void testInitializeDowngradeToV1();
     void testControllerConnectAndSession();
     void testControllerPromptStreaming();
     void testControllerAuthentication();
@@ -1389,6 +1391,40 @@ void AcpClientTest::testE2eInvalidResponseLine()
 }
 
 // --- Tier 3 ------------------------------------------------------------------
+
+// The initialize request negotiates protocol version 2 but stays parseable for
+// v1 agents: the v2 fields (info, capabilities) and the v1 fields (clientInfo,
+// clientCapabilities) are both present.
+void AcpClientTest::testHybridInitializeParams()
+{
+    const QJsonObject params = AcpChatController::buildInitializeParams();
+    QCOMPARE(params.value("protocolVersion").toInt(), 2);
+
+    const QJsonObject info = params.value("info").toObject();
+    QCOMPARE(info.value("name").toString(), "QtCreator");
+    QVERIFY(!info.value("version").toString().isEmpty());
+    QVERIFY(params.contains("capabilities"));
+
+    const QJsonObject clientInfo = params.value("clientInfo").toObject();
+    QCOMPARE(clientInfo.value("name").toString(), "QtCreator");
+    const QJsonObject clientCaps = params.value("clientCapabilities").toObject();
+    QVERIFY(clientCaps.value("terminal").toBool());
+    QVERIFY(clientCaps.value("fs").toObject().value("readTextFile").toBool());
+}
+
+// A v1-only agent answers the version-2 request with protocolVersion 1; the
+// controller continues on the v1 surface.
+void AcpClientTest::testInitializeDowngradeToV1()
+{
+    ControllerFixture fixture;
+    CONNECT_CONTROLLER(fixture, {});
+
+    QCOMPARE(fixture.agentName, "acptestserver");
+    QVERIFY(fixture.controller.isInitialized());
+
+    fixture.controller.createNewSession(Utils::FilePath::fromUserInput(QDir::currentPath()));
+    QTRY_COMPARE(fixture.createdSessions.size(), 1);
+}
 
 // Connecting emits agent info and asks for session selection; creating a session
 // reports its id, config options, and modes; mode and config changes round-trip
