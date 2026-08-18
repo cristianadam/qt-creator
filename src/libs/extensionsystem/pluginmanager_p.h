@@ -50,6 +50,7 @@ public:
     void checkForProblematicPlugins();
     void loadPlugins();
     void loadPluginsAtRuntime(const QSet<PluginSpec *> &plugins);
+    Utils::Result<> unloadPluginsAtRuntime(const QSet<PluginSpec *> &plugins);
     void addPlugins(const QList<PluginSpec *> &specs);
 
     void shutdown();

@@ -5,6 +5,7 @@
 #include <extensionsystem/pluginspec.h>
 #include <extensionsystem/iplugin.h>
 
+#include <utils/algorithm.h>
 #include <utils/qtcsettings_p.h>
 
 #include <QObject>
@@ -29,6 +30,8 @@ private slots:
     void getObjectAfterShutdown();
     void circularPlugins();
     void correctPlugins1();
+    void unloadSoftLoadable();
+    void unloadKeepsWhatWasNotOfferedForIt();
 
 private:
     PluginManager *m_pm;
@@ -163,6 +166,68 @@ void tst_PluginManager::getObjectAfterShutdown()
     PluginManager::addObject(&dummy);
     QCOMPARE(PluginManager::allObjects(), QObjectList());
     PluginManager::removeObject(&dummy);
+}
+
+// QVERIFY2 evaluates its message whether or not the check holds, and asking a
+// Result that succeeded for its error asserts.
+static QString errorOf(const Result<> &result)
+{
+    return result ? QString() : result.error();
+}
+
+static PluginSpec *specById(const QString &id)
+{
+    return findOrDefault(PluginManager::plugins(), [&id](PluginSpec *spec) {
+        return spec->id() == id;
+    });
+}
+
+void tst_PluginManager::unloadSoftLoadable()
+{
+    PluginManager::setPluginPaths({pluginFolder(QLatin1String("softloadableplugins"))});
+    PluginManager::loadPlugins();
+    PluginSpec *dependency = specById("softplugin2");
+    PluginSpec *dependent = specById("softplugin1");
+    QVERIFY(dependency && dependent);
+    QCOMPARE(dependency->state(), PluginSpec::Running);
+    QCOMPARE(dependent->state(), PluginSpec::Running);
+
+    // Taking out what something running still needs would leave that one with a
+    // dependency that is gone.
+    const Result<> refused = PluginManager::unloadPluginsAtRuntime({dependency});
+    QVERIFY(!refused);
+    QCOMPARE(dependency->state(), PluginSpec::Running);
+    QVERIFY2(!dependency->hasError(), qPrintable(dependency->errorString()));
+
+    const Result<> unloaded = PluginManager::unloadPluginsAtRuntime({dependent});
+    QVERIFY2(unloaded, qPrintable(errorOf(unloaded)));
+    QCOMPARE(dependent->state(), PluginSpec::Deleted);
+    QVERIFY(!Utils::contains(PluginManager::allObjects(), [](QObject *obj) {
+        return obj->objectName() == "MySoftPlugin1";
+    }));
+
+    // With nothing needing it any more, the dependency can follow.
+    const Result<> both = PluginManager::unloadPluginsAtRuntime({dependency});
+    QVERIFY2(both, qPrintable(errorOf(both)));
+    QCOMPARE(dependency->state(), PluginSpec::Deleted);
+}
+
+void tst_PluginManager::unloadKeepsWhatWasNotOfferedForIt()
+{
+    PluginManager::setPluginPaths({pluginFolder(QLatin1String("correctplugins1"))});
+    PluginManager::loadPlugins();
+    PluginSpec *spec = specById("plugin1");
+    QVERIFY(spec);
+    QCOMPARE(spec->state(), PluginSpec::Running);
+    QVERIFY(!spec->isSoftLoadable());
+
+    // Nothing depends on this one, so only its own metadata stands between it
+    // and being taken out. It is left as it was - in particular without an
+    // error of its own, which stopping it out of order would have given it.
+    const Result<> refused = PluginManager::unloadPluginsAtRuntime({spec});
+    QVERIFY(!refused);
+    QCOMPARE(spec->state(), PluginSpec::Running);
+    QVERIFY2(!spec->hasError(), qPrintable(spec->errorString()));
 }
 
 void tst_PluginManager::circularPlugins()

@@ -67,6 +67,12 @@ public:
     static QList<PluginSpec *> loadQueue();
     static void loadPlugins();
     static void loadPluginsAtRuntime(const QSet<PluginSpec *> &plugins);
+    // Takes running soft-loadable plugins back out: stops them and waits for
+    // the ones that shut down asynchronously, as shutting down does. Refuses
+    // while something still running depends on them, and says which. One way
+    // for the session: the library stays mapped and its plugin instance is
+    // gone, so the plugin cannot be started again without a restart.
+    static Utils::Result<> unloadPluginsAtRuntime(const QSet<PluginSpec *> &plugins);
     static Utils::FilePaths pluginPaths();
     static void setPluginPaths(const Utils::FilePaths &paths);
     static QString pluginIID();
