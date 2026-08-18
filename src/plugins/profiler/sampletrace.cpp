@@ -22,11 +22,10 @@
 #include <algorithm>
 
 using namespace CommonTraceFormat;
-using namespace Profiler;
 using namespace Utils;
 using namespace Qt::StringLiterals;
 
-namespace QmlProfiler::Internal {
+namespace Profiler::Internal {
 
 // Event class ids in the sampler stream.
 enum SamplerEventClass : quint64 { LabelEvent = 0, ThreadEvent = 1, SampleEvent = 2 };
@@ -349,4 +348,4 @@ FilePath uniqueTracePath(QLatin1StringView prefix, QLatin1StringView suffix)
     return path;
 }
 
-} // namespace QmlProfiler::Internal
+} // namespace Profiler::Internal

@@ -11,7 +11,7 @@
 #include <QSignalSpy>
 #include <QtTest>
 
-using namespace QmlProfiler::Internal;
+using namespace Profiler::Internal;
 
 // The timeline color helpers query Utils::creatorTheme(), which is null in a
 // bare unit test. Provide a minimal theme so colorByHue() does not dereference
