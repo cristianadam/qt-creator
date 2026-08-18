@@ -1,0 +1,11 @@
+{
+    "Id" : "softplugin1",
+    "Name" : "softplugin1",
+    "VendorId" : "theqtcompany",
+    "Version" : "1.0.0",
+    "CompatVersion" : "1.0.0",
+    "SoftLoadable" : true,
+    "Dependencies" : [
+        { "Id" : "softplugin2", "Version" : "1.0.0" }
+    ]
+}
