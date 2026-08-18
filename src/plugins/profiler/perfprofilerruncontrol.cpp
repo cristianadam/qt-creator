@@ -7,6 +7,7 @@
 #include "perfprofilerconstants.h"
 #include "perfprofilertracemanager.h"
 #include "perfprofilertool.h"
+#include "perfprofilertracebackend.h"
 #include "perfprofilertr.h"
 
 #include <coreplugin/icore.h>
@@ -53,7 +54,9 @@ static ExecutableItem perfParserRecipe(RunControl *runControl)
 {
     const auto onSetup = [runControl](PerfDataReader &reader) {
         auto tool = PerfProfilerTool::instance();
-        PerfProfilerTraceManager *traceManager = tool->traceManager();
+        PerfProfilerTraceBackend *backend = tool->liveBackend();
+        QTC_ASSERT(backend, return);
+        PerfProfilerTraceManager *traceManager = backend->traceManager();
 
         reader.setTraceManager(traceManager);
         reader.triggerRecordingStateChange(tool->isRecording());
@@ -140,9 +143,6 @@ public:
             // 3. QdbPerfProfilerWorkerFactory
 
             PerfProfilerTool::instance()->onWorkerCreation(runControl);
-            auto tool = PerfProfilerTool::instance();
-            QObject::connect(tool->stopAction(), &QAction::triggered,
-                             runControl, &RunControl::initiateStop);
             QObject::connect(runControl, &RunControl::started, PerfProfilerTool::instance(),
                              &PerfProfilerTool::onRunControlStarted);
             QObject::connect(runControl, &RunControl::stopped, PerfProfilerTool::instance(),
