@@ -1,0 +1,8 @@
+{
+    "Id" : "softplugin2",
+    "Name" : "softplugin2",
+    "VendorId" : "theqtcompany",
+    "Version" : "1.0.0",
+    "CompatVersion" : "1.0.0",
+    "SoftLoadable" : true
+}

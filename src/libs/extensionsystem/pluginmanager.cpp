@@ -345,6 +345,11 @@ void PluginManager::loadPluginsAtRuntime(const QSet<PluginSpec *> &plugins)
     d->loadPluginsAtRuntime(plugins);
 }
 
+Result<> PluginManager::unloadPluginsAtRuntime(const QSet<PluginSpec *> &plugins)
+{
+    return d->unloadPluginsAtRuntime(plugins);
+}
+
 void PluginManager::addPlugins(const PluginSpecs &specs)
 {
     d->addPlugins(specs);
@@ -1361,6 +1366,63 @@ void PluginManagerPrivate::loadPluginsAtRuntime(const QSet<PluginSpec *> &plugin
     emit q->pluginsChanged();
 }
 
+Result<> PluginManagerPrivate::unloadPluginsAtRuntime(const QSet<PluginSpec *> &plugins)
+{
+    const QList<PluginSpec *> notSoftLoadable = Utils::filtered(
+        plugins.values(), std::not_fn(&PluginSpec::isSoftLoadable));
+    if (!notSoftLoadable.isEmpty()) {
+        return ResultError(
+            Tr::tr("Cannot unload while running: %1.")
+                .arg(Utils::transform<QStringList>(notSoftLoadable, &PluginSpec::displayName)
+                         .join(", ")));
+    }
+
+    // Something still running that needs one of these would be left with a
+    // dependency that is gone, and a library it still holds pointers into.
+    QStringList blocking;
+    for (PluginSpec *spec : loadQueue()) {
+        if (spec->state() != PluginSpec::State::Running || plugins.contains(spec))
+            continue;
+        if (spec->requiresAny(plugins))
+            blocking.append(spec->displayName());
+    }
+    if (!blocking.isEmpty()) {
+        return ResultError(Tr::tr("Still needed by: %1.").arg(blocking.join(", ")));
+    }
+
+    const QList<PluginSpec *> queue = Utils::filtered(loadQueue(), [&plugins](PluginSpec *spec) {
+        return plugins.contains(spec) && spec->state() == PluginSpec::State::Running;
+    });
+    if (queue.isEmpty())
+        return ResultError(Tr::tr("Not running."));
+
+    // Dependents first, as shutdown does.
+    Utils::reverseForeach(queue, [this](PluginSpec *spec) {
+        loadPlugin(spec, PluginSpec::Stopped);
+    });
+    if (!asynchronousPlugins.isEmpty()) {
+        QEventLoop loop;
+        shutdownEventLoop = &loop;
+        loop.exec();
+        shutdownEventLoop = nullptr;
+    }
+    Utils::reverseForeach(queue, [this](PluginSpec *spec) {
+        loadPlugin(spec, PluginSpec::Deleted);
+    });
+
+    emit q->pluginsChanged();
+
+    const QList<PluginSpec *> left = Utils::filtered(queue, [](PluginSpec *spec) {
+        return spec->state() != PluginSpec::State::Deleted;
+    });
+    if (!left.isEmpty()) {
+        return ResultError(
+            Tr::tr("Did not come down: %1.")
+                .arg(Utils::transform<QStringList>(left, &PluginSpec::displayName).join(", ")));
+    }
+    return {};
+}
+
 /*!
     \internal
 */
@@ -1758,8 +1820,9 @@ void PluginManagerPrivate::loadPlugin(PluginSpec *spec, PluginSpec::State destSt
     default:
         break;
     }
-    // check if dependencies have loaded without error
-    if (!spec->isSoftLoadable()) {
+    // Check if dependencies have loaded without error. Stopping is the other
+    // direction: there the dependencies are still up, and are meant to be.
+    if (!spec->isSoftLoadable() && destState != PluginSpec::Stopped) {
         const QHash<PluginDependency, PluginSpec *> deps = spec->dependencySpecs();
         for (auto it = deps.cbegin(), end = deps.cend(); it != end; ++it) {
             if (it.key().type != PluginDependency::Required)
