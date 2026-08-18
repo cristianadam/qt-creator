@@ -6,6 +6,7 @@
 #include "qmlprofilerclientmanager.h"
 #include "qmlprofilerstatemanager.h"
 #include "qmlprofilertool.h"
+#include "qmlprofilertracebackend.h"
 
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/projectexplorericons.h>
@@ -30,44 +31,49 @@ Group qmlProfilerRecipe(RunControl *runControl)
 
     const auto onSetup = [runControl](QBarrier &barrier) {
         QmlProfilerTool::instance()->finalizeRunControl(runControl);
-        QmlProfilerClientManager *clientManager = QmlProfilerTool::instance()->clientManager();
+        QmlProfilerTraceBackend *backend = QmlProfilerTool::instance()->liveBackend();
+        QTC_ASSERT(backend, barrier.stopWithResult(DoneResult::Error); return);
+        QmlProfilerClientManager *clientManager = backend->clientManager();
         QObject::connect(clientManager, &QmlProfilerClientManager::connectionFailed,
                          &barrier, [barrier = &barrier] { barrier->stopWithResult(DoneResult::Error); });
         QObject::connect(clientManager, &QmlProfilerClientManager::connectionClosed,
                          &barrier, &QBarrier::advance);
         QObject::connect(runControl, &RunControl::canceled, &barrier, [barrier = &barrier] {
-            if (QmlProfilerTool::instance() == nullptr) {
+            QmlProfilerTool *tool = QmlProfilerTool::instance();
+            QmlProfilerTraceBackend *backend = tool ? tool->liveBackend() : nullptr;
+            if (!backend) {
                 barrier->stopWithResult(DoneResult::Error);
                 return;
             }
-            QmlProfilerStateManager *stateManager = QmlProfilerTool::instance()->stateManager();
-            if (stateManager) {
-                if (stateManager->currentState() == QmlProfilerStateManager::AppRunning)
-                    stateManager->setCurrentState(QmlProfilerStateManager::AppStopRequested);
-                QObject::connect(stateManager, &QmlProfilerStateManager::stateChanged,
-                                 barrier, [stateManager, barrier] {
-                    if (stateManager->currentState() == QmlProfilerStateManager::Idle) {
-                        QmlProfilerTool::instance()->handleStop();
-                        barrier->stopWithResult(DoneResult::Error);
-                    }
-                });
-            }
+            QmlProfilerStateManager *stateManager = backend->stateManager();
+            if (stateManager->currentState() == QmlProfilerStateManager::AppRunning)
+                stateManager->setCurrentState(QmlProfilerStateManager::AppStopRequested);
+            QObject::connect(stateManager, &QmlProfilerStateManager::stateChanged,
+                             barrier, [stateManager, barrier] {
+                if (stateManager->currentState() == QmlProfilerStateManager::Idle) {
+                    QmlProfilerTool::instance()->handleStop();
+                    barrier->stopWithResult(DoneResult::Error);
+                }
+            });
         });
         clientManager->setServer(runControl->qmlChannel());
         clientManager->connectToServer();
         runControl->reportStarted();
     };
     const auto onDone = [] {
-        if (QmlProfilerTool::instance() == nullptr)
+        QmlProfilerTool *tool = QmlProfilerTool::instance();
+        if (!tool)
             return;
-        QmlProfilerTool::instance()->handleStop();
-        QmlProfilerStateManager *stateManager = QmlProfilerTool::instance()->stateManager();
+        QmlProfilerTraceBackend *backend = tool->liveBackend();
+        tool->handleStop();
         // Reaching onDone still in AppRunning means the application went away on its
         // own: the user-cancel path has already advanced the state past AppRunning.
         // Route that through AppDying rather than AppStopRequested - there is no live
         // connection left to ask the server to stop recording.
-        if (stateManager && stateManager->currentState() == QmlProfilerStateManager::AppRunning)
-            stateManager->setCurrentState(QmlProfilerStateManager::AppDying);
+        if (backend
+            && backend->stateManager()->currentState() == QmlProfilerStateManager::AppRunning) {
+            backend->stateManager()->setCurrentState(QmlProfilerStateManager::AppDying);
+        }
     };
     return { QBarrierTask(onSetup, onDone) };
 }
