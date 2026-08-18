@@ -100,6 +100,21 @@ Result<> FileAccess::init(
     if (!startResult)
         return logError(Tr::tr("Could not start cmdbridge: %1").arg(startResult.error()));
 
+    // Starting the transport says nothing about the binary at the other end: where
+    // it cannot be executed, the process is gone and every later call asserts
+    // instead of the caller getting a chance to fall back. Have it answer once.
+    try {
+        const Result<QFuture<bool>> answer = m_client->is("/", Client::Is::Dir);
+        if (!answer)
+            return logError(Tr::tr("The bridge did not answer: %1").arg(answer.error()));
+        QFuture<bool> future = *answer;
+        future.waitForFinished();
+        if (future.isCanceled() || future.resultCount() == 0)
+            return logError(Tr::tr("The bridge did not answer."));
+    } catch (const std::exception &e) {
+        return logError(Tr::tr("The bridge did not answer: %1").arg(QString::fromLocal8Bit(e.what())));
+    }
+
     m_started = true;
     return ResultOk;
 }
