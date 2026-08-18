@@ -373,6 +373,7 @@ milliseconds WindowPrivate::activeTraceDuration() const
     case Format::Sampler: return samplerManager->traceDuration();
     case Format::Combined:
         return qMax(qmlManager->traceDuration(), samplerManager->traceDuration());
+    case Format::Perf: break; // No perf views here; doLoad() rejects the format.
     }
     Q_UNREACHABLE_RETURN(milliseconds{0});
 }
@@ -383,7 +384,9 @@ ViewGroup &WindowPrivate::groupFor(Format format)
     case Format::Qml: return qmlGroup;
     case Format::Ctf: return ctfGroup;
     case Format::Sampler: return samplerGroup;
-    case Format::Combined: break; // Combined spans several groups; use groupsFor().
+    case Format::Perf:      // No perf views here; doLoad() rejects the format.
+    case Format::Combined:  // Combined spans several groups; use groupsFor().
+        break;
     }
     Q_UNREACHABLE_RETURN(qmlGroup);
 }
@@ -397,6 +400,7 @@ QList<ViewGroup *> WindowPrivate::groupsFor(Format format)
     case Format::Ctf: return {&ctfGroup};
     case Format::Sampler: return {&samplerGroup};
     case Format::Combined: return {&qmlGroup, &samplerGroup};
+    case Format::Perf: return {}; // No perf views here; doLoad() rejects the format.
     }
     Q_UNREACHABLE_RETURN({});
 }
@@ -443,6 +447,8 @@ void WindowPrivate::ensureGroupBuilt(Format format)
         break;
     case Format::Combined:
         break; // Handled above by building the QML and sampler groups.
+    case Format::Perf:
+        break; // No perf views here; doLoad() rejects the format.
     }
 }
 
@@ -572,6 +578,12 @@ void WindowPrivate::doLoad(const FilePath &filePath)
     RPC::notifyTraceFileLoadingStarted(filePath);
 
     const TraceFile trace = identifyTrace(filePath);
+    if (trace.format == Format::Perf) {
+        // Perf traces need the Performance Analyzer's views, which only Qt
+        // Creator's Profile mode has.
+        onError(Tr::tr("Perf traces can only be opened in Qt Creator."));
+        return;
+    }
     setActiveFormat(trace.format);
     switch (trace.format) {
     case Format::Combined:
@@ -595,6 +607,8 @@ void WindowPrivate::doLoad(const FilePath &filePath)
     case Format::Qml:
         qmlManager->loadTraceFile(trace.path);
         break;
+    case Format::Perf:
+        break; // Rejected above.
     }
 }
 
