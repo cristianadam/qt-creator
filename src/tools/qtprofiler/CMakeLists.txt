@@ -33,8 +33,6 @@ add_qtc_executable(qtprofiler
     qtprofilerrpc.cpp qtprofilerrpc.h
     qtprofilersettings.cpp qtprofilersettings.h
     qtprofilerwindow.h qtprofilerwindow.cpp
-    recordingpage.cpp recordingpage.h
-    welcomepage.cpp welcomepage.h
     schema/api.h
 )
 

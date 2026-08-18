@@ -58,8 +58,12 @@ set(QMLPROFILER_CPP_SOURCES
   pixmapcachemodel.cpp pixmapcachemodel.h
   qmlnote.cpp qmlnote.h
   profilermode.cpp profilermode.h
+  profilerrecorder.cpp profilerrecorder.h
   profilertr.h
   profiler_global.h
+  recordingpage.cpp recordingpage.h
+  traceformat.cpp traceformat.h
+  welcomepage.cpp welcomepage.h
   qmlprofileranimationsmodel.cpp qmlprofileranimationsmodel.h
   qmlprofilerattachdialog.cpp qmlprofilerattachdialog.h
   qmlprofilerclientmanager.cpp qmlprofilerclientmanager.h

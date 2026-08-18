@@ -24,10 +24,6 @@ QtcTool {
         "qtprofilerwindow.h",
         "mainsidebar.cpp",
         "mainsidebar.h",
-        "recordingpage.cpp",
-        "recordingpage.h",
-        "welcomepage.cpp",
-        "welcomepage.h",
         "schema/api.h",
     ]
 
