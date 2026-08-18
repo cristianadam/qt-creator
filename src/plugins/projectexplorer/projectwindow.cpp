@@ -1880,6 +1880,11 @@ void ProjectWindow::activateBuildSettings()
     d->activateTargetTab(0);
 }
 
+void ProjectWindow::activateDeploySettings()
+{
+    d->activateTargetTab(1);
+}
+
 void ProjectWindow::activateRunSettings()
 {
     d->activateTargetTab(2);
