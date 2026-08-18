@@ -759,13 +759,25 @@ void EnginesDriver::showMessage(const QString &msg, int channel, int timeout)
 }
 
 // Experimental opt-in: ask for the DAP-shaped BridgeEngine rather than
-// GdbEngine, to try it against an existing gdb kit.
+// GdbEngine, to try it against an existing gdb kit. Only for what the bridge
+// can run: it launches the program or attaches to a local process, while a
+// core file or a remote server would take its launch path and debug the wrong
+// thing, and native mixed needs GdbEngine for both halves - the bridge would
+// silently debug only the C++ one.
 static void applyCppEngineOptIn(DebuggerRunParameters &rp)
 {
-    if (rp.cppEngineType() == GdbEngineType
-        && qtcEnvironmentVariableIsSet("QTC_DEBUGGER_USE_BRIDGE")) {
-        rp.setCppEngineType(BridgeEngineType);
+    if (rp.cppEngineType() != GdbEngineType
+        || !qtcEnvironmentVariableIsSet("QTC_DEBUGGER_USE_BRIDGE")) {
+        return;
     }
+    if (rp.isNativeMixedDebugging()) {
+        qWarning("Native mixed debugging: staying with GdbEngine.");
+        return;
+    }
+    const DebuggerStartMode mode = rp.startMode();
+    if (mode != StartInternal && mode != StartExternal && !rp.isLocalAttachEngine())
+        return;
+    rp.setCppEngineType(BridgeEngineType);
 }
 
 Group debuggerRecipe(RunControl *runControl, const DebuggerRunParameters &initialParameters,
