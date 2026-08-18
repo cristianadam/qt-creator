@@ -60,7 +60,7 @@
 #include <QVBoxLayout>
 #include <QWidgetAction>
 
-using namespace Acp;
+using namespace Acp::V2;
 using namespace Utils;
 using namespace Utils::StyleHelper::SpacingTokens;
 
@@ -610,7 +610,8 @@ ChatPanel::ChatPanel(QWidget *parent)
     m_modeCombo->setToolTip(Tr::tr("Switch Mode"));
     m_modeCombo->hide();
     connect(m_modeCombo, &QComboBox::activated, this, [this](int index) {
-        emit modeChanged(m_modeCombo->itemData(index).toString());
+        if (!m_modeConfigId.isEmpty())
+            emit configOptionChanged(m_modeConfigId, m_modeCombo->itemData(index).toString());
     });
     bottomRowLayout->addWidget(m_modeCombo, 0, Qt::AlignBottom);
 
@@ -750,7 +751,11 @@ void ChatPanel::showConfigMenu()
     menu->setAttribute(Qt::WA_DeleteOnClose);
     menu->setToolTipsVisible(true);
     for (const SessionConfigOption &option : std::as_const(m_configOptions)) {
-        const QString id = option.id();
+        // The mode selector is rendered as a dedicated combo box.
+        if (option.category().has_value() && *option.category() == SessionConfigOptionCategory::mode)
+            continue;
+
+        const QString id = option.configId();
         const bool isBoolean = option.additionalProperties().value("type").toString() == "boolean";
 
         if (isBoolean) {
@@ -759,7 +764,7 @@ void ChatPanel::showConfigMenu()
                 continue;
 
             QAction *a = menu->addAction(option.name());
-            if (auto description = option.description())
+            if (const auto &description = option.description(); description.has_value())
                 a->setToolTip(*description);
             a->setCheckable(true);
             a->setChecked(boolean->currentValue());
@@ -779,7 +784,7 @@ void ChatPanel::showConfigMenu()
 
         const auto addOption = [&](const SessionConfigSelectOption &opt, const QString &prefix) {
             QAction *a = sub->addAction(prefix + opt.name());
-            if (auto tooltip = opt.description())
+            if (const auto &tooltip = opt.description(); tooltip.has_value())
                 a->setToolTip(*tooltip);
             a->setCheckable(true);
             a->setChecked(opt.value() == currentValue);
@@ -820,22 +825,10 @@ void ChatPanel::showConfigMenu()
 void ChatPanel::setConfigOptions(const QList<SessionConfigOption> &configOptions)
 {
     m_configOptions = configOptions;
-}
-
-void ChatPanel::setSessionModes(const QList<SessionMode> &modes, const QString &currentModeId)
-{
-    m_sessionModes = modes;
-    m_currentModeId = currentModeId;
     updateModeButton();
 }
 
-void ChatPanel::setCurrentMode(const QString &modeId)
-{
-    m_currentModeId = modeId;
-    updateModeButton();
-}
-
-void ChatPanel::setUsage(const Acp::UsageUpdate &usage)
+void ChatPanel::setUsage(const Acp::V2::UsageUpdate &usage)
 {
     const int size = usage.size();
     const int used = usage.used();
@@ -847,7 +840,7 @@ void ChatPanel::setUsage(const Acp::UsageUpdate &usage)
     m_usageBar->setValue(used);
     const int percent = qRound(qreal(qBound(0, used, size)) / size * 100.0);
     QString tooltip = Tr::tr("Context usage: %1 / %2 tokens (%3%)").arg(used).arg(size).arg(percent);
-    if (usage.cost()) {
+    if (usage.cost().has_value()) {
         const Cost &cost = *usage.cost();
         tooltip += QLatin1Char('\n')
                    + Tr::tr("Cost: %1 %2")
@@ -860,17 +853,41 @@ void ChatPanel::setUsage(const Acp::UsageUpdate &usage)
 
 void ChatPanel::updateModeButton()
 {
-    if (m_sessionModes.isEmpty()) {
+    m_modeConfigId.clear();
+
+    const auto it = std::find_if(m_configOptions.cbegin(), m_configOptions.cend(),
+                                 [](const SessionConfigOption &option) {
+        return option.category().has_value()
+               && *option.category() == SessionConfigOptionCategory::mode;
+    });
+    std::optional<SessionConfigSelect> select;
+    if (it != m_configOptions.cend()) {
+        if (auto parsed = fromJson<SessionConfigSelect>(QJsonValue(toJson(*it))))
+            select = *parsed;
+    }
+    if (!select) {
         m_modeCombo->hide();
         return;
     }
 
+    m_modeConfigId = it->configId();
+
     QSignalBlocker blocker(m_modeCombo);
     m_modeCombo->clear();
-    for (const SessionMode &mode : std::as_const(m_sessionModes))
-        m_modeCombo->addItem(mode.name(), mode.id());
+    const auto addOption = [this](const SessionConfigSelectOption &opt) {
+        m_modeCombo->addItem(opt.name(), opt.value());
+    };
+    if (auto *flatOptions = std::get_if<QList<SessionConfigSelectOption>>(&select->options())) {
+        for (const SessionConfigSelectOption &opt : *flatOptions)
+            addOption(opt);
+    } else if (auto *groups = std::get_if<QList<SessionConfigSelectGroup>>(&select->options())) {
+        for (const SessionConfigSelectGroup &group : *groups) {
+            for (const SessionConfigSelectOption &opt : group.options())
+                addOption(opt);
+        }
+    }
 
-    const int idx = m_modeCombo->findData(m_currentModeId);
+    const int idx = m_modeCombo->findData(select->currentValue());
     m_modeCombo->setCurrentIndex(idx >= 0 ? idx : 0);
     m_modeCombo->show();
 }
@@ -885,8 +902,6 @@ void ChatPanel::clear()
 void ChatPanel::clearConfigOptions()
 {
     m_configOptions.clear();
-    m_sessionModes.clear();
-    m_currentModeId.clear();
     updateModeButton();
 }
 
@@ -905,17 +920,12 @@ void ChatPanel::appendAgentThought(const QString &text)
     m_messageView->appendAgentThought(text);
 }
 
-void ChatPanel::addToolCall(const ToolCall &toolCall)
-{
-    m_messageView->addToolCall(toolCall);
-}
-
 void ChatPanel::updateToolCall(const ToolCallUpdate &update)
 {
     m_messageView->updateToolCall(update);
 }
 
-void ChatPanel::addPlan(const Plan &plan)
+void ChatPanel::addPlan(const PlanUpdate &plan)
 {
     m_messageView->addPlan(plan);
 }
@@ -931,7 +941,7 @@ void ChatPanel::finishAgentMessage()
 }
 
 void ChatPanel::addPermissionRequest(const QJsonValue &id,
-                                     const Acp::RequestPermissionRequest &request)
+                                     const Acp::V2::RequestPermissionRequest &request)
 {
     m_messageView->addPermissionRequest(id, request);
     QApplication::alert(m_messageView);
@@ -947,7 +957,7 @@ void ChatPanel::cancelPermissionRequest(const QJsonValue &id)
     m_messageView->cancelPermissionRequest(id);
 }
 
-void ChatPanel::addAuthenticationRequest(const QList<Acp::AuthMethod> &methods)
+void ChatPanel::addAuthenticationRequest(const QList<Acp::V2::AuthMethod> &methods)
 {
     m_messageView->addAuthenticationRequest(methods);
     connect(m_messageView, &AcpMessageView::authenticateRequested,
@@ -974,7 +984,11 @@ void ChatPanel::updateAvailableCommands(const QList<AvailableCommand> &commands)
     QList<CommandInfo> commandInfos;
     commandInfos.reserve(commands.size());
     for (const AvailableCommand &cmd : commands) {
-        const QString hint = cmd.input() ? Acp::hint(*cmd.input()) : QString();
+        QString hint;
+        if (cmd.input().has_value()) {
+            if (const auto *textInput = std::get_if<TextCommandInput>(&*cmd.input()))
+                hint = textInput->hint();
+        }
         commandInfos.append({cmd.name(), cmd.description(), hint});
     }
     m_inputEdit->setAvailableCommands(commandInfos);
