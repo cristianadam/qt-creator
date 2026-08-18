@@ -902,8 +902,19 @@ def parse_union(name, spec, skip_to_json=False, skip_from_json=False, types=None
                         fj.append(f"        if (ok) co_return {name}(std::move(list));")
                         fj.append(f"    }}")
                     else:
-                        fj.append(f"    if (val.isArray())")
-                        fj.append(f"        co_return {name}(val.toArray());")
+                        item_t = item.get("items", {}).get("type")
+                        elem_cpp = cpp_type(item_t) if item_t else None
+                        elem_expr = _json_extract_expr(elem_cpp, "elem") if elem_cpp else None
+                        if elem_expr:
+                            fj.append(f"    if (val.isArray()) {{")
+                            fj.append(f"        QList<{elem_cpp}> list;")
+                            fj.append(f"        for (const auto &elem : val.toArray())")
+                            fj.append(f"            list.append({elem_expr});")
+                            fj.append(f"        co_return {name}(std::move(list));")
+                            fj.append(f"    }}")
+                        else:
+                            fj.append(f"    if (val.isArray())")
+                            fj.append(f"        co_return {name}(val.toArray());")
 
         elif ref_names:
             dispatch_field, dispatch_map = find_dispatch_field(ref_names, types) if types else (None, None)
@@ -995,6 +1006,9 @@ def parse_union(name, spec, skip_to_json=False, skip_from_json=False, types=None
                         fj.append(f"        if (result) co_return {name}(*result);")
                         fj.append(f"    }}")
 
+    if "QJsonObject" in variant_types:
+        fj.append(f"    if (val.isObject())")
+        fj.append(f"        co_return {name}(val.toObject());  // open union: preserve unknown variants raw")
     fj.append(f'    co_return Utils::ResultError("Invalid {name}");')
     fj.append("}")
     if not skip_from_json:
@@ -1061,10 +1075,11 @@ def parse_union(name, spec, skip_to_json=False, skip_from_json=False, types=None
                 for vt in variant_types:
                     if vt.startswith("QList<"):
                         elem_type = vt[len("QList<"):-1]
+                        elem_fn = "" if elem_type in ("QString", "int", "double", "bool") else "toJson"
                         lines.append(f"        if constexpr (std::is_same_v<T, {vt}>) {{")
                         lines.append(f"            QJsonArray arr;")
                         lines.append(f"            for (const auto &elem : v)")
-                        lines.append(f"                arr.append(toJson(elem));")
+                        lines.append(f"                arr.append({elem_fn}(elem));")
                         lines.append(f"            return arr;")
                         lines.append(f"        }} else")
             lines.append("        {")
@@ -1505,7 +1520,10 @@ def _emit_toJson(name, props, types, required, lines, has_additional_props,
             item_type = ref_type(_extract_ref(spec.get("items", {})))
             is_enum = is_enum_type(item_type, types)
             is_union = is_union_type_name(item_type, types)
-            arr_fn = "toJsonValue" if (is_enum or is_union) else "toJson"
+            if is_simple_type_alias(item_type, types):
+                arr_fn = ""  # plain QJsonValue-convertible alias
+            else:
+                arr_fn = "toJsonValue" if (is_enum or is_union) else "toJson"
             if is_optional:
                 post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value()) {{")
                 post_lines.append(f"        QJsonArray arr_{prop_name};")
@@ -1520,7 +1538,10 @@ def _emit_toJson(name, props, types, required, lines, has_additional_props,
             item_type = _nullable_ref_array_type(spec)
             is_enum = is_enum_type(item_type, types)
             is_union = is_union_type_name(item_type, types)
-            arr_fn = "toJsonValue" if (is_enum or is_union) else "toJson"
+            if is_simple_type_alias(item_type, types):
+                arr_fn = ""  # plain QJsonValue-convertible alias
+            else:
+                arr_fn = "toJsonValue" if (is_enum or is_union) else "toJson"
             post_lines.append(f"    if (data._{sanitize_identifier(prop)}.has_value()) {{")
             post_lines.append(f"        QJsonArray arr_{prop_name};")
             post_lines.append(f"        for (const auto &v : *data._{sanitize_identifier(prop)}) arr_{prop_name}.append({arr_fn}(v));")
