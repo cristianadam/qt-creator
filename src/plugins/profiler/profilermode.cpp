@@ -3,9 +3,13 @@
 
 #include "profilermode.h"
 
+#include "profilerrecorder.h"
+#include "profilerstarteditor.h"
 #include "profilertr.h"
+#include "profilertracedocument.h"
 
 #include <coreplugin/coreconstants.h>
+#include <coreplugin/editormanager/editormanager.h>
 #include <coreplugin/findplaceholder.h>
 #include <coreplugin/icontext.h>
 #include <coreplugin/imode.h>
@@ -13,90 +17,100 @@
 #include <coreplugin/modemanager.h>
 #include <coreplugin/navigationwidget.h>
 #include <coreplugin/outputpane.h>
-#include <coreplugin/perspective.h>
 #include <coreplugin/rightpane.h>
 
-#include <utils/fancymainwindow.h>
+#include <projectexplorer/projectexplorer.h>
+#include <projectexplorer/projectmanager.h>
+#include <projectexplorer/runconfiguration.h>
+
 #include <utils/icon.h>
+#include <utils/processinterface.h>
 #include <utils/qtcassert.h>
+#include <utils/stylehelper.h>
+#include <utils/widgets.h>
 #include <utils/theme/theme.h>
 
-#include <QMenu>
+#include <QHBoxLayout>
 #include <QPointer>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 using namespace Core;
+using namespace ProjectExplorer;
 using namespace Utils;
 
 namespace Profiler::Internal {
 
-const char MODE_PROFILER[]   = "Mode.Profiler";
-const char C_PROFILERMODE[]  = "Profiler.ProfilerMode";
-const char SETTINGS_GROUP[]  = "Profiler.MainWindow";
-const int  P_MODE_PROFILER   = 84; // Between Debug (85) and Projects (83).
+const char MODE_PROFILER[]  = "Mode.Profiler";
+const char C_PROFILERMODE[] = "Profiler.ProfilerMode";
+const int P_MODE_PROFILER   = 84; // Between Debug (85) and Projects (83).
 
-static PerspectivesView *theProfilerView = nullptr;
 static QPointer<IMode> theProfilerMode;
+static ProfilerRecorder *theRecorder = nullptr;
 
-PerspectivesView *profilerView()
-{
-    return theProfilerView;
-}
-
-// Layout mirrors the Debug mode's central widget, minus the debugger-specific
-// engine switchers.
+// Laid out like the Edit mode: the traces, and the page that starts one, are
+// documents in the shared editor area, so nothing here has to make room for
+// them.
 class ProfilerModeWidget final : public MiniSplitter
 {
 public:
     ProfilerModeWidget()
     {
-        PerspectivesView *view = profilerView();
-        QTC_ASSERT(view, return);
+        auto editorArea = new QWidget;
+        auto editorLayout = new QVBoxLayout(editorArea);
+        editorLayout->setContentsMargins(0, 0, 0, 0);
+        editorLayout->setSpacing(0);
+        editorLayout->addWidget(createToolBar());
+        editorLayout->addWidget(new EditorManagerPlaceHolder);
+        editorLayout->addWidget(new FindToolBarPlaceHolder(editorArea));
 
-        auto editorHolderLayout = new QVBoxLayout;
-        editorHolderLayout->setContentsMargins(0, 0, 0, 0);
-        editorHolderLayout->setSpacing(0);
+        auto editorAndRightPane = new MiniSplitter;
+        editorAndRightPane->addWidget(editorArea);
+        editorAndRightPane->addWidget(new RightPanePlaceHolder(MODE_PROFILER));
+        editorAndRightPane->setStretchFactor(0, 1);
+        editorAndRightPane->setStretchFactor(1, 0);
 
-        auto editorAndFindWidget = new QWidget;
-        editorAndFindWidget->setLayout(editorHolderLayout);
-        editorHolderLayout->addWidget(view->centralWidgetStack());
-        editorHolderLayout->addWidget(new FindToolBarPlaceHolder(editorAndFindWidget));
-
-        auto documentAndRightPane = new MiniSplitter;
-        documentAndRightPane->addWidget(editorAndFindWidget);
-        documentAndRightPane->addWidget(new RightPanePlaceHolder(MODE_PROFILER));
-        documentAndRightPane->setStretchFactor(0, 1);
-        documentAndRightPane->setStretchFactor(1, 0);
-
-        auto centralEditorWidget = view->mainWindow()->centralWidget();
-        auto centralLayout = new QVBoxLayout(centralEditorWidget);
-        centralEditorWidget->setLayout(centralLayout);
-        centralLayout->setContentsMargins(0, 0, 0, 0);
-        centralLayout->setSpacing(0);
-        centralLayout->addWidget(documentAndRightPane);
-        centralLayout->setStretch(0, 1);
-        centralLayout->setStretch(1, 0);
-
-        // Right-side window with editor, output etc.
-        auto mainWindowSplitter = new MiniSplitter;
-        mainWindowSplitter->addWidget(view->mainWindow());
-        mainWindowSplitter->addWidget(new OutputPanePlaceHolder(MODE_PROFILER, mainWindowSplitter));
-        auto outputPane = new OutputPanePlaceHolder(MODE_PROFILER, mainWindowSplitter);
+        auto outputPane = new OutputPanePlaceHolder(MODE_PROFILER);
         outputPane->setObjectName("ProfilerOutputPanePlaceHolder");
-        mainWindowSplitter->addWidget(outputPane);
-        mainWindowSplitter->setStretchFactor(0, 10);
-        mainWindowSplitter->setStretchFactor(1, 0);
-        mainWindowSplitter->setOrientation(Qt::Vertical);
+        auto editorAndOutputPane = new MiniSplitter;
+        editorAndOutputPane->setOrientation(Qt::Vertical);
+        editorAndOutputPane->addWidget(editorAndRightPane);
+        editorAndOutputPane->addWidget(outputPane);
+        editorAndOutputPane->setStretchFactor(0, 3);
+        editorAndOutputPane->setStretchFactor(1, 0);
 
-        // Navigation and right-side window.
-        setFocusProxy(view->centralWidgetStack());
         addWidget(new NavigationWidgetPlaceHolder(MODE_PROFILER, Side::Left));
-        addWidget(mainWindowSplitter);
+        addWidget(editorAndOutputPane);
         setStretchFactor(0, 0);
         setStretchFactor(1, 1);
         setObjectName("ProfilerModeWidget");
+        setFocusProxy(editorArea);
 
         IContext::attach(this, Context(Core::Constants::C_EDITORMANAGER));
+    }
+
+private:
+    // The mode's own actions, above the documents rather than in one of them.
+    // The mode button only reaches the start page from another mode, and the
+    // traces' toolbars belong to a trace, so without this there is no way back
+    // to the page from here.
+    static QWidget *createToolBar()
+    {
+        QAction *startPage = profilerStartPageAction();
+        QTC_ASSERT(startPage, return new StyledBar);
+        auto startPageButton = new QToolButton;
+        startPageButton->setDefaultAction(startPage);
+        startPageButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        StyleHelper::setPanelWidget(startPageButton);
+
+        auto toolBar = new StyledBar;
+        auto layout = new QHBoxLayout(toolBar);
+        using namespace StyleHelper::SpacingTokens;
+        layout->setContentsMargins(PaddingHS, 0, PaddingHS, 0);
+        layout->setSpacing(PrimitiveS);
+        layout->addWidget(startPageButton);
+        layout->addStretch();
+        return toolBar;
     }
 };
 
@@ -112,53 +126,72 @@ public:
         setIcon(Icon::sideBarIcon(flat, flat));
         setPriority(P_MODE_PROFILER);
         setId(MODE_PROFILER);
-
         setWidgetCreator([] { return new ProfilerModeWidget; });
-        setMainWindow(profilerView()->mainWindow());
-
-        setMenu([](QMenu *menu) { profilerView()->addPerspectiveMenu(menu); });
     }
 };
 
+void activateProfilerMode()
+{
+    ModeManager::activateMode(MODE_PROFILER);
+}
+
+ProfilerRecorder *profilerRecorder()
+{
+    return theRecorder;
+}
+
+// Points the backends at what the run button would run, so starting a
+// recording needs no configuration in the common case. Values the user has
+// edited are left alone (see ProfilerRecorder::seedLaunchTarget).
+static void seedLaunchTarget()
+{
+    RunConfiguration *runConfig = activeRunConfigForActiveProject();
+    if (!runConfig)
+        return;
+    const ProcessRunData runnable = runConfig->runnable();
+    theRecorder->seedLaunchTarget(runnable.command, runnable.workingDirectory,
+                                  runnable.environment);
+}
+
 void setupProfilerMode()
 {
-    QTC_ASSERT(!theProfilerView, return);
-    theProfilerView = PerspectivesView::createView(QLatin1String(SETTINGS_GROUP),
-                                                   C_PROFILERMODE,
-                                                   "ProfilerStatusLabel");
-
+    QTC_ASSERT(!theProfilerMode, return);
     theProfilerMode = new ProfilerMode;
 
-    // Selecting a profiler perspective switches to the Profiler mode ...
-    QObject::connect(theProfilerView, &PerspectivesView::modeActivationRequested,
-                     theProfilerMode, [] {
-        ModeManager::activateMode(MODE_PROFILER);
+    // Owned here rather than by the mode's widget or the start page: a
+    // recording has to survive closing either of them.
+    theRecorder = new ProfilerRecorder;
+    QObject::connect(ProjectManager::instance(), &ProjectManager::startupProjectChanged,
+                     theRecorder, &seedLaunchTarget);
+    QObject::connect(ProjectExplorerPlugin::instance(),
+                     &ProjectExplorerPlugin::runActionsUpdated, theRecorder, &seedLaunchTarget);
+    seedLaunchTarget();
+
+    // Entering the mode raises the page that starts a recording, so the mode
+    // button is a reliable way back to it however many traces are open. It is
+    // only opened when there is no trace to show instead, so recording one does
+    // not bring back a page that was deliberately closed.
+    QObject::connect(ModeManager::instance(), &ModeManager::currentModeChanged,
+                     theProfilerMode, [](Id mode, Id) {
+        if (mode == MODE_PROFILER && (isProfilerStartPageOpen() || !hasOpenTrace()))
+            openProfilerStartPage();
     });
 
-    // ... and entering/leaving the mode ramps the current perspective up/down.
-    QObject::connect(ModeManager::instance(), &ModeManager::currentModeAboutToChange,
-                     theProfilerMode, [] {
-        if (ModeManager::currentModeId() == MODE_PROFILER)
-            profilerView()->leave();
-    });
-    QObject::connect(ModeManager::instance(), &ModeManager::currentModeChanged,
-                     theProfilerMode, [](Utils::Id mode, Utils::Id oldMode) {
-        QTC_ASSERT(mode != oldMode, return);
-        if (mode == MODE_PROFILER)
-            profilerView()->enter();
+    // Closing the last trace leaves nothing to look at; offer a recording again.
+    // Closing the page itself is left alone, or it could not be closed at all.
+    QObject::connect(EditorManager::instance(), &EditorManager::documentClosed,
+                     theProfilerMode, [](IDocument *document) {
+        if (qobject_cast<ProfilerTraceDocument *>(document)
+                && ModeManager::currentModeId() == MODE_PROFILER && !hasOpenTrace()) {
+            openProfilerStartPage();
+        }
     });
 }
 
 void destroyProfilerMode()
 {
-    // Delete the view before the mode: the mode widget embeds the view's
-    // main window and central widget stack, which hold value-member widgets
-    // of the view (chooser, status label, ...). The view's destructor must
-    // remove them from the widget tree before the mode widget is deleted,
-    // otherwise Qt's parent-child deletion would double-free them. This
-    // mirrors the Debugger's shutdown order (doShutdown() before delete mode).
-    PerspectivesView::destroyView(theProfilerView);
-    theProfilerView = nullptr;
+    delete theRecorder;
+    theRecorder = nullptr;
     delete theProfilerMode;
     theProfilerMode = nullptr;
 }
