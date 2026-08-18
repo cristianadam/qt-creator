@@ -809,10 +809,15 @@ public:
         setRecipeProducer([](RunControl *runControl) {
             DebuggerRunParameters rp = DebuggerRunParameters::fromRunControl(runControl);
             // Experimental opt-in: ask for the DAP-shaped BridgeEngine rather
-            // than GdbEngine, to try it against an existing gdb kit.
+            // than GdbEngine, to try it against an existing gdb kit. Not for
+            // native mixed, which it cannot do yet: GdbEngine debugs both
+            // halves, the bridge would silently debug only the C++ one.
             if (rp.cppEngineType() == GdbEngineType
                 && qtcEnvironmentVariableIsSet("QTC_DEBUGGER_USE_BRIDGE")) {
-                rp.setCppEngineType(BridgeEngineType);
+                if (rp.isNativeMixedDebugging())
+                    qWarning("Native mixed debugging: staying with GdbEngine.");
+                else
+                    rp.setCppEngineType(BridgeEngineType);
             }
             if (rp.isQmlDebugging()) {
                 const IDevice::ConstPtr device = runControl->device();
