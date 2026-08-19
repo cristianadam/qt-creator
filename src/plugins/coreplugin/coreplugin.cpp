@@ -10,6 +10,7 @@
 #include "designmode.h"
 #include "dialogs/ioptionspage.h"
 #include "documentmanager.h"
+#include "actionmanager/actionmanager_test.h"
 #include "documentmanager_test.h"
 #include "editmode.h"
 #include "editormanager/editormanager_p.h"
@@ -505,6 +506,7 @@ Result<> CorePlugin::initialize(const QStringList &arguments)
     }
 
 #ifdef WITH_TESTS
+    addTestCreator(createActionManagerTest);
     addTestCreator(createDocumentManagerTest);
     addTestCreator(createLocatorTest);
     addTestCreator(createVcsManagerTest);
