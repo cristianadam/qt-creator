@@ -11,6 +11,7 @@ Project {
         "pluginview/pluginview.qbs",
         "proparser/testreader.qbs",
         "remotelinux/remotelinux.qbs",
+        "remotelinux-noexe/remotelinux-noexe.qbs",
         "sampler-testapp/sampler-testapp.qbs",
         "remotelinux-profiletransfer/remotelinux-profiletransfer.qbs",
         "scripts/scripts.qbs",
