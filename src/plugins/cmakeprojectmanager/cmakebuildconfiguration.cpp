@@ -40,6 +40,7 @@
 #include <projectexplorer/projectexplorer.h>
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/projectmanager.h>
+#include <projectexplorer/runconfigurationaspects.h>
 #include <projectexplorer/sysrootkitaspect.h>
 #include <projectexplorer/target.h>
 #include <projectexplorer/taskhub.h>
@@ -1771,6 +1772,10 @@ CMakeBuildConfiguration::CMakeBuildConfiguration(Target *target, Id id)
 
         setBuildPresetToBuildSteps();
     });
+
+    connect(this, &BuildConfiguration::runConfigurationsUpdated, this, [this] {
+        applyRunSettingsToRunConfigurations(static_cast<CMakeProject *>(project()));
+    });
 }
 
 CMakeBuildConfiguration::~CMakeBuildConfiguration() = default;
@@ -2205,6 +2210,140 @@ void CMakeBuildConfiguration::setBuildPresetToBuildSteps()
             if (vendor.contains("clearSystemEnvironment"))
                 cbs->setUseClearEnvironment(vendor.value("clearSystemEnvironment").toBool());
         }
+    }
+
+}
+
+void CMakeBuildConfiguration::applyRunSettingsToRunConfigurations(const CMakeProject *project)
+{
+    if (!project)
+        return;
+
+    const CMakeConfigItem presetItem = CMakeConfigurationKitAspect::cmakePresetConfigItem(kit());
+    if (presetItem.isNull())
+        return;
+
+    const QString presetName = presetItem.expandedValue(kit());
+    const auto &configurePresets = project->presetsData().configurePresets;
+    const PresetsDetails::ConfigurePreset *configurePreset = nullptr;
+    for (const auto &cp : configurePresets) {
+        if (cp.name == presetName) {
+            configurePreset = &cp;
+            break;
+        }
+    }
+    if (!configurePreset || configurePreset->runSettings.isEmpty())
+        return;
+
+    for (ProjectExplorer::RunConfiguration *rc : runConfigurations()) {
+        // Try matching by displayName first (for settings with explicit displayName)
+        const PresetsDetails::RunSettings *matchedSetting = nullptr;
+        for (const auto &rs : configurePreset->runSettings) {
+            if (rs.displayName && *rs.displayName == rc->displayName()) {
+                matchedSetting = &rs;
+                break;
+            }
+        }
+
+        // Fallback: match by buildKey for settings without displayName
+        if (!matchedSetting) {
+            const QString &buildKey = rc->buildKey();
+            for (const auto &rs : configurePreset->runSettings) {
+                if (rs.target == buildKey && !rs.displayName) {
+                    matchedSetting = &rs;
+                    break;
+                }
+            }
+        }
+
+        if (!matchedSetting)
+            continue;
+
+        if (matchedSetting->arguments) {
+            auto argsAspect = rc->aspect<ProjectExplorer::ArgumentsAspect>();
+            if (argsAspect) {
+                QString args = *matchedSetting->arguments;
+                CMakePresets::Macros::expand(
+                    *configurePreset, environment(), project->projectDirectory(), args);
+                if (!args.isEmpty())
+                    argsAspect->setArguments(args);
+            }
+        }
+
+        if (matchedSetting->workingDirectory) {
+            auto wda = rc->aspect<ProjectExplorer::WorkingDirectoryAspect>();
+            if (wda) {
+                QString dir = *matchedSetting->workingDirectory;
+                CMakePresets::Macros::expand(
+                    *configurePreset, environment(), project->projectDirectory(), dir);
+                if (!dir.isEmpty())
+                    wda->setDefaultWorkingDirectory(Utils::FilePath::fromUserInput(dir));
+            }
+        }
+
+        if (matchedSetting->executable) {
+            auto execAspect = rc->aspect<ProjectExplorer::ExecutableAspect>();
+            if (execAspect) {
+                QString exe = *matchedSetting->executable;
+                CMakePresets::Macros::expand(
+                    *configurePreset, environment(), project->projectDirectory(), exe);
+                if (!exe.isEmpty())
+                    execAspect->setExecutable(Utils::FilePath::fromUserInput(exe));
+            }
+        }
+
+        if (matchedSetting->useTerminal)
+            rc->aspect<ProjectExplorer::TerminalAspect>()
+                ->setVariantValue(*matchedSetting->useTerminal, BeQuiet);
+
+        if (matchedSetting->useLibraryPaths)
+            rc->aspect<ProjectExplorer::UseLibraryPathsAspect>()->setValue(
+                *matchedSetting->useLibraryPaths);
+
+        if (matchedSetting->useDyldSuffix)
+            rc->aspect<ProjectExplorer::UseDyldSuffixAspect>()->setValue(
+                *matchedSetting->useDyldSuffix);
+
+        if (matchedSetting->useVncDisplay)
+            rc->aspect<ProjectExplorer::UseVncDisplayAspect>()->setValue(
+                *matchedSetting->useVncDisplay);
+
+        if (matchedSetting->enableCategoriesFilter)
+            rc->aspect<ProjectExplorer::EnableCategoriesFilterAspect>()->setValue(
+                *matchedSetting->enableCategoriesFilter);
+
+        if (matchedSetting->x11Forwarding) {
+            auto x11Aspect = rc->aspect<ProjectExplorer::X11ForwardingAspect>();
+            if (x11Aspect)
+                x11Aspect->setValue(*matchedSetting->x11Forwarding);
+        }
+
+        if (matchedSetting->runAs) {
+            auto runAsAspect = rc->aspect<ProjectExplorer::RunAsAspect>();
+            if (runAsAspect) {
+                QVariantMap runAsMap;
+                if (*matchedSetting->runAs == "root") {
+                    runAsMap["RunConfiguration.RunAsRoot"] = 1; // Root
+                } else {
+                    runAsMap["RunConfiguration.RunAsRoot"] = 2; // Other
+                    runAsMap["RunConfiguration.RunAsName"] = *matchedSetting->runAs;
+                }
+                static_cast<BaseAspect *>(runAsAspect)->fromMap(Utils::storeFromVariant(runAsMap));
+            }
+        }
+
+        if (matchedSetting->environment) {
+            auto envAspect = rc->aspect<ProjectExplorer::EnvironmentAspect>();
+            if (envAspect) {
+                Utils::Environment env = *matchedSetting->environment;
+                CMakePresets::Macros::expand(*configurePreset, env, project->projectDirectory());
+                envAspect->setUserEnvironmentChanges(
+                    Utils::EnvironmentChanges(env.diff(envAspect->environment())));
+            }
+        }
+
+        if (matchedSetting->active && *matchedSetting->active)
+            setActiveRunConfiguration(rc);
     }
 }
 

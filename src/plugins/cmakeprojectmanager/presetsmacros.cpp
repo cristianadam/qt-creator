@@ -91,6 +91,22 @@ static void expandAllButEnv(const PresetsDetails::TestPreset &preset,
                   Utils::OsSpecificAspects::pathListSeparator(sourceDirectory.osType()));
 }
 
+static void expandAllButEnv(const PresetsDetails::RunSettings &preset,
+                            const Utils::FilePath &sourceDirectory,
+                            QString &value)
+{
+    value.replace("${dollar}", "$");
+
+    value.replace("${sourceDir}", sourceDirectory.path());
+    value.replace("${sourceParentDir}", sourceDirectory.parentDir().path());
+    value.replace("${sourceDirName}", sourceDirectory.fileName());
+
+    value.replace("${presetName}", preset.target);
+    value.replace("${hostSystemName}", getHostSystemName(sourceDirectory.osType()));
+    value.replace("${pathListSep}",
+                  Utils::OsSpecificAspects::pathListSeparator(sourceDirectory.osType()));
+}
+
 
 static QString expandMacroEnv(const QString &macroPrefix,
                               const QString &value,
@@ -439,5 +455,19 @@ template void expand<PresetsDetails::TestPreset>(const PresetsDetails::TestPrese
 
 template bool evaluatePresetCondition<PresetsDetails::TestPreset>(
     const PresetsDetails::TestPreset &preset, const Utils::FilePath &sourceDirectory);
+
+// Expand for PresetsDetails::RunSettings
+template void expand<PresetsDetails::RunSettings>(const PresetsDetails::RunSettings &preset,
+                                                Utils::Environment &env,
+                                                const Utils::FilePath &sourceDirectory);
+
+template void expand<PresetsDetails::RunSettings>(const PresetsDetails::RunSettings &preset,
+                                                 Utils::EnvironmentItems &envItems,
+                                                 const Utils::FilePath &sourceDirectory);
+
+template void expand<PresetsDetails::RunSettings>(const PresetsDetails::RunSettings &preset,
+                                                 const Utils::Environment &env,
+                                                 const Utils::FilePath &sourceDirectory,
+                                                 QString &value);
 
 } // namespace CMakeProjectManager::Internal::CMakePresets::Macros

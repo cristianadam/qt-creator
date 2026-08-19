@@ -160,6 +160,8 @@ struct Execution {
     std::optional<QString> noTestsAction;
 };
 
+class RunSettings;
+
 class ConfigurePreset {
 public:
     void inheritFrom(const ConfigurePreset &other);
@@ -186,6 +188,7 @@ public:
     std::optional<Debug> debug;
     std::optional<QString> graphviz;
     std::optional<Trace> trace;
+    QList<RunSettings> runSettings;
 };
 
 class BuildPreset {
@@ -231,6 +234,24 @@ public:
     std::optional<Output> output;
     std::optional<Filter> filter;
     std::optional<Execution> execution;
+};
+
+class RunSettings {
+public:
+    QString target;
+    std::optional<QString> displayName;
+    std::optional<QString> executable;
+    std::optional<QString> arguments;
+    std::optional<QString> workingDirectory;
+    std::optional<bool> useTerminal;
+    std::optional<bool> useLibraryPaths;
+    std::optional<bool> useDyldSuffix;
+    std::optional<bool> useVncDisplay;
+    std::optional<bool> enableCategoriesFilter;
+    std::optional<QString> x11Forwarding;
+    std::optional<QString> runAs;
+    std::optional<Utils::Environment> environment;
+    std::optional<bool> active;
 };
 
 } // namespace PresetsDetails

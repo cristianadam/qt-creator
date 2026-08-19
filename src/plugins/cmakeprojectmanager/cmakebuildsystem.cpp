@@ -2575,28 +2575,125 @@ static bool isTestTarget(const QString &targetName, const FilePath &buildDir)
     return false;
 }
 
+static BuildTargetInfo createBuildTargetInfo(
+    const CMakeBuildSystem *bs,
+    const CMakeBuildTarget &ct,
+    const FilePath &projectFilePath,
+    const PresetsDetails::RunSettings *runSetting = nullptr)
+{
+    BuildTargetInfo bti;
+    bti.displayName = runSetting && runSetting->displayName
+            ? *runSetting->displayName : ct.title;
+    bti.buildKey = ct.title;
+    bti.targetFilePath = ct.executable;
+    bti.projectFilePath = projectFilePath;
+    bti.usesTerminal = !ct.linksToQtGui;
+    bti.isQtcRunnable = ct.qtcRunnable;
+    bti.runEnvModifierHash = qHash(bti.buildKey);
+    if (runSetting)
+        bti.additionalData = runSetting->displayName.value_or(ct.title);
+    // Workaround for QTCREATORBUG-19354:
+    bti.runEnvModifier = [bs, buildKey = ct.title](Environment &env, bool enabled) {
+        if (enabled)
+            env.prependOrSetLibrarySearchPaths(librarySearchPaths(bs, buildKey));
+    };
+    return bti;
+}
+
+static BuildTargetInfo createUtilityBuildTargetInfo(
+    const CMakeBuildTarget &ct,
+    const FilePath &cmakeExecutable,
+    const FilePath &workingDirectory,
+    const FilePath &projectFilePath,
+    bool qtcRunnable,
+    const PresetsDetails::RunSettings *runSetting = nullptr)
+{
+    BuildTargetInfo bti;
+    const QString runSettingsKey = runSetting && runSetting->displayName
+            ? *runSetting->displayName : QString();
+    bti.displayName = runSettingsKey.isEmpty() ? ct.title : runSettingsKey;
+    bti.buildKey = ct.title;
+    bti.targetFilePath = cmakeExecutable;
+    bti.projectFilePath = projectFilePath;
+    bti.workingDirectory = workingDirectory;
+    bti.isQtcRunnable = qtcRunnable;
+    bti.additionalData = QVariantMap{
+        {"arguments", QStringList{"--build", ".", "--target", ct.title}},
+        {"runSettingsKey", runSettingsKey}};
+    return bti;
+}
+
+static BuildTargetInfo createStandaloneBuildTargetInfo(
+    const PresetsDetails::RunSettings &rs,
+    const FilePath &cmakeExecutable,
+    const FilePath &workingDirectory,
+    const FilePath &projectFilePath)
+{
+    BuildTargetInfo bti;
+    bti.displayName = rs.displayName.value_or(rs.target);
+    bti.buildKey = rs.target;
+    bti.targetFilePath = FilePath::fromUserInput(rs.executable.value_or(cmakeExecutable.path()));
+    bti.projectFilePath = projectFilePath;
+    bti.workingDirectory = workingDirectory;
+    bti.usesTerminal = rs.useTerminal.value_or(true);
+    bti.isQtcRunnable = true;
+    if (!rs.executable) {
+        bti.additionalData = QVariantMap{
+            {"arguments", QStringList{"--build", ".", "--target", rs.target}}};
+    }
+    return bti;
+}
+
 const QList<BuildTargetInfo> CMakeBuildSystem::appTargets() const
 {
     const CMakeConfig &cm = configurationFromCMake();
     QString emulator = cm.stringValueOf("CMAKE_CROSSCOMPILING_EMULATOR");
+
+    const FilePath cmakeExecutable = CMakeKitAspect::cmakeExecutable(kit());
+    const FilePath workingDirectory
+        = Utils::findOrDefault(m_buildTargets, [](const CMakeBuildTarget &bt) {
+              return bt.title == "clean";
+          }).workingDirectory;
 
     QList<BuildTargetInfo> appTargetList;
     // Android and HarmonyOS build applications as module libraries, not executables.
     const Utils::Id deviceType = RunDeviceTypeKitAspect::deviceTypeId(kit());
     const bool moduleLibraryIsApp = deviceType == Android::Constants::ANDROID_DEVICE_TYPE
                                     || deviceType == HarmonyOs::Constants::HARMONYOS_DEVICE_TYPE;
+
+    auto isAppTarget = [moduleLibraryIsApp](const CMakeBuildTarget &ct) {
+        return ct.targetType == ExecutableType
+               || (moduleLibraryIsApp && ct.targetType == DynamicLibraryType);
+    };
+
+    // Collect runSettings from presets, grouped by target name
+    QMap<QString, QList<const PresetsDetails::RunSettings *>> runSettingsByTarget;
+    const CMakeProject *cmakeProject = project();
+    if (cmakeProject && cmakeProject->presetsData().havePresets) {
+        const CMakeConfigItem presetItem = CMakeConfigurationKitAspect::cmakePresetConfigItem(kit());
+        if (!presetItem.isNull()) {
+            const QString presetName = presetItem.expandedValue(kit());
+            const auto &configurePresets = cmakeProject->presetsData().configurePresets;
+            for (const auto &configurePreset : configurePresets) {
+                if (configurePreset.name == presetName && !configurePreset.runSettings.isEmpty()) {
+                    for (const auto &rs : configurePreset.runSettings)
+                        runSettingsByTarget[rs.target].append(&rs);
+                    break;
+                }
+            }
+        }
+    }
+
     for (const CMakeBuildTarget &ct : m_buildTargets) {
         if (CMakeBuildSystem::filteredOutTarget(ct))
             continue;
 
         const FilePath projectFilePath = ct.sourceDirectory.cleanPath().pathAppended(
             Constants::CMAKE_LISTS_TXT);
-        if (ct.targetType == ExecutableType
-            || (moduleLibraryIsApp && ct.targetType == DynamicLibraryType)) {
-            const QString buildKey = ct.title;
 
-            BuildTargetInfo bti;
-            bti.displayName = ct.title;
+        if (isAppTarget(ct)) {
+            BuildTargetInfo bti = createBuildTargetInfo(this, ct, projectFilePath);
+
             if (ct.launchers.size() > 0)
                 bti.launchers = ct.launchers;
             else if (!emulator.isEmpty()) {
@@ -2606,11 +2703,6 @@ const QList<BuildTargetInfo> CMakeBuildSystem::appTargets() const
                 LauncherInfo launcherInfo = { "emulator", command, args };
                 bti.launchers.append(Launcher(launcherInfo, ct.sourceDirectory));
             }
-            bti.targetFilePath = ct.executable;
-            bti.projectFilePath = projectFilePath;
-            bti.buildKey = buildKey;
-            bti.usesTerminal = !ct.linksToQtGui;
-            bti.isQtcRunnable = ct.qtcRunnable;
 
             // Remove the test launchers if the target is not a test
             if (bti.launchers.size() > 0
@@ -2620,6 +2712,7 @@ const QList<BuildTargetInfo> CMakeBuildSystem::appTargets() const
                 });
             }
 
+<<<<<<< HEAD
             // Workaround for QTCREATORBUG-19354:
             const FilePath qtBinPath = [this] {
                 if (const QtSupport::QtVersion *qt = QtSupport::QtKitAspect::qtVersion(kit()))
@@ -2639,36 +2732,55 @@ const QList<BuildTargetInfo> CMakeBuildSystem::appTargets() const
                     env.prependOrSetPath(qtBinPath);
             };
 
+=======
+>>>>>>> 92ecc124e36 (CMakeProjectManager: add runSettings vendor extension for CMakePresets)
             appTargetList.append(bti);
-        } else if (ct.targetType == UtilityType && ct.qtcRunnable) {
-            const QString buildKey = ct.title;
-            const FilePath cmakeExecutable = CMakeKitAspect::cmakeExecutable(kit());
+
+            // Create additional targets for extra runSettings (skip first, applied to base target)
+            const auto rsIt = runSettingsByTarget.find(ct.title);
+            if (rsIt != runSettingsByTarget.end()) {
+                for (int idx = 1; idx < rsIt.value().size(); ++idx)
+                    appTargetList.append(createBuildTargetInfo(
+                        this, ct, projectFilePath, rsIt.value()[idx]));
+            }
+        } else if (ct.targetType == UtilityType) {
+            // Skip the "all", "clean", "install" special targets.
+            if (CMakeBuildStep::specialTargets(m_reader.usesAllCapsTargets()).contains(ct.title))
+                continue;
+
             if (cmakeExecutable.isEmpty())
                 continue;
 
-            // Skip the "all", "clean", "install" special targets.
-            if (CMakeBuildStep::specialTargets(m_reader.usesAllCapsTargets()).contains(buildKey))
-                continue;
+            const auto rsIt = runSettingsByTarget.find(ct.title);
+            // Create targets from runSettings if present, otherwise from CMake info
+            if (rsIt != runSettingsByTarget.end()) {
+                for (const auto *rs : rsIt.value())
+                    appTargetList.append(createUtilityBuildTargetInfo(
+                        ct, cmakeExecutable,
+                        workingDirectory.isEmpty() ? m_parameters.buildDirectory : workingDirectory,
+                        projectFilePath, true, rs));
+            } else if (ct.qtcRunnable) {
+                appTargetList.append(createUtilityBuildTargetInfo(
+                    ct, cmakeExecutable, workingDirectory, projectFilePath, ct.qtcRunnable));
+            }
+        }
+    }
 
-            BuildTargetInfo bti;
-            bti.displayName = ct.title;
+    // Handle runSettings without a matching CMake build target (standalone executables)
+    if (cmakeProject && !runSettingsByTarget.isEmpty() && !cmakeExecutable.isEmpty()) {
+        const FilePath projectFilePath = cmakeProject->projectFilePath();
+        QSet<QString> matchedTargets;
+        for (const CMakeBuildTarget &ct : m_buildTargets)
+            matchedTargets.insert(ct.title);
 
-            // We need the build directory, which is proper set to the "clean" target
-            // and "clean" doesn't differ between single and multi-config generators
-            const FilePath workingDirectory
-                = Utils::findOrDefault(m_buildTargets, [](const CMakeBuildTarget &bt) {
-                      return bt.title == "clean";
-                  }).workingDirectory;
-
-            bti.targetFilePath = cmakeExecutable;
-            bti.projectFilePath = projectFilePath;
-            bti.workingDirectory = workingDirectory;
-            bti.buildKey = buildKey;
-            bti.isQtcRunnable = ct.qtcRunnable;
-            bti.additionalData = QVariantMap{
-                {"arguments", QStringList{"--build", ".", "--target", buildKey}}};
-
-            appTargetList.append(bti);
+        for (auto it = runSettingsByTarget.constBegin(); it != runSettingsByTarget.constEnd(); ++it) {
+            if (!matchedTargets.contains(it.key())) {
+                for (const auto *rs : it.value())
+                    appTargetList.append(createStandaloneBuildTargetInfo(
+                        *rs, cmakeExecutable,
+                        workingDirectory.isEmpty() ? m_parameters.buildDirectory : workingDirectory,
+                        projectFilePath));
+            }
         }
     }
 

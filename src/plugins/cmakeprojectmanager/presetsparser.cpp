@@ -174,6 +174,67 @@ static bool parseVendor(const QJsonValue &jsonValue, std::optional<QVariantMap> 
     return true;
 }
 
+static bool parseRunSettings(
+    const QVariantMap &vendor, QList<PresetsDetails::RunSettings> &runSettings)
+{
+    if (!vendor.contains("runSettings"))
+        return true;
+
+    const QVariant runSettingsVariant = vendor.value("runSettings");
+    if (!runSettingsVariant.canConvert<QVariantList>())
+        return false;
+
+    const QVariantList runSettingsList = runSettingsVariant.toList();
+    for (const QVariant &rsVariant : runSettingsList) {
+        if (!rsVariant.canConvert<QVariantMap>())
+            continue;
+
+        QVariantMap rsMap = rsVariant.toMap();
+        PresetsDetails::RunSettings preset;
+        preset.target = rsMap.value("target").toString();
+        if (rsMap.contains("displayName"))
+            preset.displayName = rsMap.value("displayName").toString();
+
+        if (rsMap.contains("executable"))
+            preset.executable = rsMap.value("executable").toString();
+        if (rsMap.contains("arguments"))
+            preset.arguments = rsMap.value("arguments").toString();
+        if (rsMap.contains("workingDirectory"))
+            preset.workingDirectory = rsMap.value("workingDirectory").toString();
+        if (rsMap.contains("useTerminal"))
+            preset.useTerminal = rsMap.value("useTerminal").toBool();
+        if (rsMap.contains("useLibraryPaths"))
+            preset.useLibraryPaths = rsMap.value("useLibraryPaths").toBool();
+        if (rsMap.contains("useDyldSuffix"))
+            preset.useDyldSuffix = rsMap.value("useDyldSuffix").toBool();
+        if (rsMap.contains("useVncDisplay"))
+            preset.useVncDisplay = rsMap.value("useVncDisplay").toBool();
+        if (rsMap.contains("enableCategoriesFilter"))
+            preset.enableCategoriesFilter = rsMap.value("enableCategoriesFilter").toBool();
+        if (rsMap.contains("x11Forwarding"))
+            preset.x11Forwarding = rsMap.value("x11Forwarding").toString();
+        if (rsMap.contains("runAs"))
+            preset.runAs = rsMap.value("runAs").toString();
+        if (rsMap.contains("environment")) {
+            const QVariant envVariant = rsMap.value("environment");
+            if (envVariant.canConvert<QVariantMap>()) {
+                QVariantMap envMap = envVariant.toMap();
+                Utils::Environment env;
+                for (const QString &key : envMap.keys())
+                    env.set(key, envMap.value(key).toString());
+                preset.environment = env;
+            }
+        }
+
+        if (rsMap.contains("active"))
+            preset.active = rsMap.value("active").toBool();
+
+        runSettings.emplace_back(preset);
+    }
+
+    return true;
+}
+
 static std::optional<PresetsDetails::Trace> parseTrace(const QJsonValue &jsonValue)
 {
     if (jsonValue.isUndefined())
@@ -245,8 +306,11 @@ static bool parseConfigurePresets(const QJsonValue &jsonValue,
         if (object.contains("condition"))
             preset.condition = parseCondition(object.value("condition"));
 
-        if (object.contains("vendor"))
+        if (object.contains("vendor")) {
             parseVendor(object.value("vendor"), preset.vendor);
+            if (preset.vendor)
+                parseRunSettings(*preset.vendor, preset.runSettings);
+        }
 
         if (object.contains("displayName"))
             preset.displayName = object.value("displayName").toString();
