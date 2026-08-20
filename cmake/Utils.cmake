@@ -451,3 +451,31 @@ function(configure_qml_designer Qt6_VERSION)
         endif()
     endif()
 endfunction()
+
+# Signs `target`'s executable ad-hoc with `entitlements` after each link, so a
+# build from the source tree carries what a packaged one gets from
+# scripts/common.py. Does nothing when the entitlements file is not there, which
+# is the case for a build of a single component against an installed Qt Creator.
+#
+# The executable is signed as a copy outside its bundle and moved back in:
+# pointed at it in place, codesign signs the enclosing bundle instead, which
+# fails on the static libraries that share Contents/Frameworks -- and the bundle
+# is still gaining plugins and resources when this runs.
+function(qtc_sign_with_entitlements target entitlements)
+  if (NOT APPLE OR NOT TARGET ${target})
+    return()
+  endif()
+  if (NOT EXISTS "${entitlements}")
+    message(STATUS "No entitlements at \"${entitlements}\"; ${target} stays unsigned.")
+    return()
+  endif()
+  set(_signed_copy "${CMAKE_CURRENT_BINARY_DIR}/${target}-signed")
+  add_custom_command(TARGET ${target} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:${target}>" "${_signed_copy}"
+    COMMAND codesign --sign - --force --entitlements "${entitlements}" "${_signed_copy}"
+    COMMAND ${CMAKE_COMMAND} -E copy "${_signed_copy}" "$<TARGET_FILE:${target}>"
+    COMMAND ${CMAKE_COMMAND} -E rm -f "${_signed_copy}"
+    VERBATIM
+    COMMENT "Codesigning ${target} with ${entitlements}"
+  )
+endfunction()
