@@ -118,6 +118,28 @@ if (APPLE)
   set_target_properties(qtcreator PROPERTIES
       MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/app-Info.plist"
   )
+  # The profiler's call-stack sampler attaches with task_for_pid(), which the
+  # kernel only grants to a binary carrying the debugger entitlement. Packaging
+  # signs a release with the entitlements below (see scripts/common.py), but a
+  # local build is only signed ad-hoc and carries none, so native sampling does
+  # not work there. Give the executable the same entitlements after each link.
+  #
+  # Signed as a copy outside the bundle, and moved back in: pointed at the
+  # executable in place, codesign signs the enclosing bundle instead, which
+  # fails on the static libraries that share Contents/Frameworks. Only the
+  # executable is signed, not the bundle, which is still gaining plugins and
+  # resources when this runs.
+  set(qtcreator_signing_copy "${CMAKE_CURRENT_BINARY_DIR}/qtcreator-signed")
+  add_custom_command(TARGET qtcreator POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:qtcreator>" "${qtcreator_signing_copy}"
+    COMMAND codesign --sign - --force
+            --entitlements "${QtCreator_SOURCE_DIR}/dist/installer/mac/Qt Creator.entitlements"
+            "${qtcreator_signing_copy}"
+    COMMAND ${CMAKE_COMMAND} -E copy "${qtcreator_signing_copy}" "$<TARGET_FILE:qtcreator>"
+    COMMAND ${CMAKE_COMMAND} -E rm -f "${qtcreator_signing_copy}"
+    VERBATIM
+    COMMENT "Codesigning Qt Creator with the debugger entitlement"
+  )
   # icon
   ## Roughly check for Xcode 26 tools for the default icon generation method
   if(${CMAKE_C_COMPILER_ID} STREQUAL "AppleClang"
