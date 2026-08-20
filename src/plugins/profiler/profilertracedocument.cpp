@@ -4,6 +4,7 @@
 #include "profilertracedocument.h"
 
 #include "combinedsampler.h"
+#include "combinedtraceloader.h"
 #include "ctftracebackend.h"
 #include "perfprofilertracebackend.h"
 #include "profilertr.h"
@@ -51,6 +52,14 @@ ProfilerTraceDocument::ProfilerTraceDocument(Id editorId, TraceFormat format)
         // and shows both view sets at once.
         m_backends << new QmlProfilerTraceBackend(m_rangeDetails, this);
         m_backends << new SamplerTraceBackend(m_rangeDetails, this);
+        // What the sampler views show is the two traces merged into one. A
+        // bundle recorded here carries that already; one merged on the way in
+        // arrives later, off the GUI thread.
+        m_combinedLoader = new CombinedTraceLoader(this);
+        connect(m_combinedLoader, &CombinedTraceLoader::merged, this,
+                [this](const FilePath &mergedDir) { m_backends.at(1)->load(mergedDir); });
+        connect(m_combinedLoader, &CombinedTraceLoader::failed,
+                this, &QmlProfilerTool::showNonmodalWarning);
         break;
     }
 
@@ -114,9 +123,11 @@ void ProfilerTraceDocument::load(const FilePath &rawPath)
     const FilePath path = identifyTrace(rawPath).path;
 
     if (m_format == TraceFormat::Combined) {
-        // The QML views read the bundle's own .qtd; the sampler views wait for
-        // the merged native-mixed trace (see ProfilerTraceEditor).
+        // The QML views read the bundle's own .qtd; the sampler views take the
+        // merged native-mixed trace, which arrives asynchronously.
         m_backends.first()->load(path / combinedQmlFileName);
+        m_combinedLoader->cancel(); // Drop a merge still running for the last trace.
+        m_combinedLoader->load(path);
         return;
     }
     m_backends.first()->load(path);
