@@ -3212,11 +3212,12 @@ void registerMcpTools()
                     callback({{"success", false}, {"error", res.error()}});
                     return;
                 }
-                // Toolchain and debugger detection run synchronously here.
-                device->requestToolDetection(device->toolSearchPaths());
-                // On-device build tools (rsync, cmake, ...) are detected asynchronously;
-                // create the kits once that has finished.
-                GlobalTaskTree::start(device->autoDetectDeviceToolsRecipe(), {}, reportKits);
+                // Take the same path as the device configuration's "Run Auto-Detection Now"
+                // button rather than repeating what it does, so that steps a device type adds
+                // are not skipped - a remote Windows device registers the device's CDB there,
+                // and without it the kits come up with no debugger. Reports the kits when the
+                // asynchronous part (on-device build tools) has finished.
+                device->runAutoDetect({}, reportKits);
             };
 
             device->tryToConnect({Utils::shutdownGuard(), onConnected});
