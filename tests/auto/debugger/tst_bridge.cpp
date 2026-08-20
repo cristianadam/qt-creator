@@ -111,6 +111,7 @@ void tst_Bridge::protocol_data()
     QTest::newRow("a rejected argument fails the launch")
         << "a-rejected-argument-fails-the-launch";
     QTest::newRow("startup commands reach gdb") << "startup-commands-reach-gdb";
+    QTest::newRow("data requests use the dumpers") << "data-requests-use-the-dumpers";
 }
 
 void tst_Bridge::protocol()
