@@ -69,6 +69,7 @@ private:
     void loadSymbols(const Utils::FilePath &moduleName) override;
     void loadAllSymbols() override;
     void reloadModules() override;
+    void runStartupCommands();
     void configureTarget();
     void reloadRegisters() override;
     void reloadSourceFiles() override {}
