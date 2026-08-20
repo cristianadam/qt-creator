@@ -31,6 +31,13 @@ QtcPlugin {
         cpp.dynamicLibraries: ["dbghelp", "psapi"]
     }
 
+    // canSampleOtherProcesses() asks the Security framework what entitlements
+    // this process was granted (see macsampler.cpp).
+    Properties {
+        condition: qbs.targetOS.contains("macos")
+        cpp.frameworks: ["Security"]
+    }
+
     // Only part of the build on Windows: the sources use Windows APIs without
     // Q_OS_WIN guards.
     Group {
