@@ -143,16 +143,15 @@ class DapServer():
         }
         if message is not None:
             response['message'] = message
-        if body is None:
-            # A failure carries no payload of its own, but the modelid still has
-            # to travel back: it is how the C++ side finds the breakpoint a
-            # failed request belonged to. Harmless for other requests, which do
-            # not send one.
-            arguments = request.get('arguments', {})
-            for key in ('modelid', 'token'):
-                if arguments.get(key) is not None:
-                    body = body or {}
-                    body[key] = arguments[key]
+        # The modelid and the token travel back whether or not the request
+        # produced a payload of its own: they are how the C++ side finds the
+        # breakpoint or the agent a reply belongs to. Requests that send
+        # neither are unaffected.
+        arguments = request.get('arguments', {})
+        for key in ('modelid', 'token'):
+            if arguments.get(key) is not None and (body is None or key not in body):
+                body = body or {}
+                body[key] = arguments[key]
         if body is not None:
             response['body'] = body
         self._send(response)
@@ -332,12 +331,31 @@ class DapServer():
 
         thread = gdb.selected_thread()
         threadId = thread.global_num if thread is not None else 0
-        self.sendEvent('stopped', {
+        try:
+            pid = gdb.selected_inferior().pid
+        except Exception:
+            pid = 0
+        body = {
             'reason': reason,
             'threadId': threadId,
             'allThreadsStopped': True,
             'hitBreakpointIds': hitBreakpointIds,
-        })
+            'pid': pid,
+        }
+        # Where we stopped, so a client does not have to fetch a stack to find
+        # out; DAP leaves this to a stackTrace round trip.
+        try:
+            frame = gdb.newest_frame()
+        except gdb.error:
+            frame = None
+        if frame is not None and frame.is_valid():
+            sal = frame.find_sal()
+            if sal is not None and sal.symtab is not None:
+                body['source'] = {'path': sal.symtab.fullname()}
+                body['line'] = sal.line
+        if reason == 'exception':
+            body['description'] = getattr(event, 'stop_signal', '')
+        self.sendEvent('stopped', body)
 
     #######################################################################
     # Lifecycle requests
@@ -879,6 +897,58 @@ class DapServer():
             if line.strip():
                 self._execute_quietly(line)
         self.sendResponse(request)
+    def _captureDumperResult(self, name, request):
+        # The dumpers report through reportResult(), which would print to the
+        # protocol's own stdout; capture it and return it instead.
+        args = request.get('arguments', {})
+        captured = {}
+        original = self.dumper.reportResult
+
+        def capture(result, unused):
+            captured['result'] = result
+
+        self.dumper.reportResult = capture
+        try:
+            getattr(self.dumper, name)(dict(args))
+        finally:
+            self.dumper.reportResult = original
+        return captured.get('result', '')
+
+    def cmd_qtc_fetchStack(self, request):
+        # DebuggerEngineInterface addresses frames by index, so key them by
+        # level rather than by the id cmd_stackTrace hands out.
+        self.frameForId = {}
+        try:
+            frame = gdb.newest_frame()
+        except gdb.error:
+            frame = None
+        level = 0
+        while frame is not None and frame.is_valid():
+            self.frameForId[level] = frame
+            level += 1
+            frame = frame.older()
+
+        self.sendResponse(request, body={
+            'dumperResult': self._captureDumperResult('fetchStack', request)})
+
+    def cmd_qtc_assignValue(self, request):
+        args = request.get('arguments', {})
+        frame = self.frameForId.get(args.get('frameid'))
+        if frame is not None and frame.is_valid():
+            frame.select()
+        self.sendResponse(request, body={
+            'dumperResult': self._captureDumperResult('assignValue', request)})
+
+    def cmd_qtc_fetchThreads(self, request):
+        # gdb's Python API exposes threads but not in the MI shape the C++ side
+        # parses, and -thread-info does; its result record carries the payload.
+        try:
+            output = gdb.execute('interpreter-exec mi "-thread-info"', to_string=True)
+        except gdb.error as error:
+            self.sendResponse(request, success=False, message=str(error))
+            return
+        _, _, payload = output.partition(',')
+        self.sendResponse(request, body={'dumperResult': payload.strip()})
 
     def cmd_qtc_configureTarget(self, request):
         # Tell gdb where the target's sources and libraries are, before the
