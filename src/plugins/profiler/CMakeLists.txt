@@ -69,6 +69,7 @@ set(QMLPROFILER_CPP_SOURCES
   qmlnote.cpp qmlnote.h
   profilermode.cpp profilermode.h
   profilerrecorder.cpp profilerrecorder.h
+  profilersamplerruncontrol.cpp profilersamplerruncontrol.h
   profilerstarteditor.cpp profilerstarteditor.h
   profilertracebackend.cpp profilertracebackend.h
   profilertracedocument.cpp profilertracedocument.h
