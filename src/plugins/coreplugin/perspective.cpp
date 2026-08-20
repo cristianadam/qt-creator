@@ -1072,6 +1072,12 @@ void Perspective::select()
     if (view->d->m_currentPerspective == this)
         return;
 
+    // Switching perspectives adds and removes dock widgets. If the user is
+    // dragging a dock separator right now (e.g. resizing the debugger panel as
+    // a debug session starts), that would delete separator widgets the drag
+    // still references and crash (QTCREATORBUG-34874); end the drag first.
+    view->d->m_mainWindow.abortSeparatorDrag();
+
     if (view->d->m_currentPerspective)
         view->d->m_currentPerspective->rampDownAsCurrent();
     QTC_CHECK(view->d->m_currentPerspective == nullptr);

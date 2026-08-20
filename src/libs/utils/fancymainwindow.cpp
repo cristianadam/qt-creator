@@ -804,6 +804,20 @@ void FancyMainWindow::showCentralWidget(bool on)
     d->m_showCentralWidget.setChecked(on);
 }
 
+void FancyMainWindow::abortSeparatorDrag()
+{
+    // A dock-separator drag in progress makes QMainWindowLayout hold pointers
+    // into the current dock layout (its saved separator widgets). Mutating the
+    // docks meanwhile - e.g. switching perspectives while a debug session
+    // starts - deletes those separator widgets, and the deferred separator move
+    // then dereferences freed memory (QTCREATORBUG-34874). QMainWindow has no
+    // API to cancel the drag, so end it with a synthetic release, which drives
+    // the layout's endSeparatorMove(); it is a no-op when no drag is active.
+    QMouseEvent release(QEvent::MouseButtonRelease, QPointF(), QPointF(),
+                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(this, &release);
+}
+
 void FancyMainWindow::setDockAreaVisible(Qt::DockWidgetArea area, bool visible)
 {
     const auto orientationForArea = [](Qt::DockWidgetArea area) {

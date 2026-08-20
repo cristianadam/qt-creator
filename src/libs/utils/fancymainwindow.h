@@ -46,6 +46,7 @@ public:
 
     bool isCentralWidgetShown() const;
     void showCentralWidget(bool on);
+    void abortSeparatorDrag();
 
     void setDockAreaVisible(Qt::DockWidgetArea area, bool visible);
     bool isDockAreaVisible(Qt::DockWidgetArea area) const;
