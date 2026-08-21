@@ -1,0 +1,36 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page qtprofiler-toc.html
+
+    \title All topics
+
+    \note The following list has links to all the individual topics (HTML
+    files) in the \QP documentation. Use your browser's page search to find
+    a link to a particular topic in the list. For a more extensive search,
+    use the \uicontrol Search function in the
+    \l{https://doc.qt.io/qtprofiler/}{Qt documentation} portal.
+
+    \list
+        \li \l{Getting started}
+        \li \l{Record a trace}
+            {TODO: \generatelist qtprofiler-how-to-record - add the \group
+            page first, then replace this marker}
+        \li {TODO: add a \l{Reference} landing page that carries
+            \annotatedlist qtprofiler-reference, mirroring
+            qt-figma-plugin/doc/src/reference/figmatoqt-reference.qdoc,
+            then nest the entries below under it}
+            \list
+                \li \l{Command-line options}
+                \li {TODO: add \l{Settings} once the settings topic exists;
+                    the persisted aspects are in qtprofilersettings.h}
+                \li {TODO: decide whether trace formats deserve their own
+                    reference page. The title "Supported trace formats" is
+                    already taken by a \section1 in
+                    qtprofiler-getting-started.qdoc, so promoting it to a
+                    page means renaming one of the two - a duplicate title
+                    makes \l{Supported trace formats} ambiguous}
+            \endlist
+    \endlist
+*/

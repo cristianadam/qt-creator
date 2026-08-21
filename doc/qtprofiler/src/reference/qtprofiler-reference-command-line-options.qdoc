@@ -1,0 +1,65 @@
+// Copyright (C) 2026 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GFDL-1.3-no-invariants-only
+
+/*!
+    \page qtprofiler-reference-command-line-options.html
+    \previouspage qtprofiler-how-to-record-a-trace.html
+
+    \title Command-line options
+
+    \brief Profile commands from the command line.
+
+    {TODO: intro sentence - how to invoke \QP from a terminal, including
+    the macOS bundle path, which differs from the plain executable name.
+    See the bundle naming in src/tools/qtprofiler/CMakeLists.txt}
+
+    \section1 Synopsis
+
+    {TODO: \code block with the usage line. The positional argument is a
+    trace file: a QML trace, a Chrome Trace Format file, or a Common Trace
+    Format trace directory or its metadata file}
+
+    \section1 Options
+
+    {TODO: fill in the Description column for each row from the option help
+    strings in qtprofilermain.cpp. Keep every \row at or below 80 columns
+    and mark option names with \c}
+
+    \table
+        \header
+            \li Option
+            \li Description
+        \row
+            \li \c{-e}, \c{--exit-on-error}
+            \li {TODO: from the exitOnError help string}
+        \row
+            \li \c{-r}, \c{--rpc}
+            \li {TODO: activates JSON-RPC 2.0 over stdio. Cross-reference
+                the schema at src/tools/qtprofiler/schema/
+                qtprofilerapi.json.schema}
+        \row
+            \li \c{--rpc-schema}
+            \li {TODO: from the printRpcSchema help string - prints the
+                schema to stdout and exits}
+        \row
+            \li \c {-t, --title <title>}
+            \li {TODO: note that the default is the trace file name}
+        \row
+            \li \c {-l, --launch <command>}
+            \li {TODO: from the launch help string - takes a full command
+                line, such as "/path/to/app --arg"}
+        \row
+            \li \c {-b, --backend <name>}
+            \li {TODO: matched by name, case-insensitive substring match}
+        \row
+            \li \c {--record-for <seconds>}
+            \li {TODO: combine with \c{--launch} and optionally
+                \c{--backend}}
+    \endtable
+
+    {TODO: confirm whether \c{--help} and \c{--version} should be listed.
+    They come from addHelpOption() and addVersionOption(), so they exist
+    but carry no Qt Profiler-specific behavior}
+
+    \sa {Getting started}, {Record a trace}
+*/
