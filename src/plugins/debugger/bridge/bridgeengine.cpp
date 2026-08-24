@@ -583,6 +583,27 @@ void BridgeEngine::reloadModules()
         m_dapClient->postRequest("qtc/fetchModules", {});
 }
 
+// One library, as it is loaded or unloaded: the full list is only fetched when
+// someone asks for it, so without these the view lags behind the session.
+void BridgeEngine::handleLibraryEvent(const QJsonObject &body)
+{
+    const QString reported = body.value("path").toString();
+    const FilePath path = runParameters().inferior().command.executable().withNewPath(reported);
+    if (body.value("reason").toString() == "unloaded") {
+        modulesHandler()->removeModule(path);
+        showStatusMessage(Tr::tr("Library %1 unloaded.").arg(reported), 1000);
+        return;
+    }
+
+    Module module;
+    module.modulePath = path;
+    module.hostPath = FilePath::fromUserInput(reported);
+    module.moduleName = module.hostPath.baseName();
+    module.symbolsRead = Module::ReadOk;
+    modulesHandler()->updateModule(module);
+    showStatusMessage(Tr::tr("Library %1 loaded.").arg(reported), 1000);
+}
+
 void BridgeEngine::handleFetchModulesResponse(const QJsonObject &response)
 {
     ModulesHandler *handler = modulesHandler();

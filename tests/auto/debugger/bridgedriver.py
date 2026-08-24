@@ -146,7 +146,9 @@ def makeFakeGdb():
 
     module.execute = execute
     module.events = types.SimpleNamespace(stop=FakeEventRegistry(),
-                                          exited=FakeEventRegistry())
+                                          exited=FakeEventRegistry(),
+                                          new_objfile=FakeEventRegistry(),
+                                          free_objfile=FakeEventRegistry())
     module.breakpoints = lambda: tuple(module.breakpointObjects)
     module.objfiles = lambda: list(module.objfileList)
     module.selected_inferior = lambda: FakeInferior()
@@ -895,6 +897,28 @@ def check_an_unusable_program_fails_the_launch(bridge):
         "an executable was loaded anyway: %s" % gdb.commands
 
 
+def check_a_loaded_library_is_reported(bridge):
+    # Without this the modules view stays empty until the user asks for it;
+    # MI reports the same thing as =library-loaded.
+    peer = Peer(bridge)
+    objfile = types.SimpleNamespace(filename="/usr/lib/libc.so.6", owner=None)
+    for handler in gdb.events.new_objfile.handlers:
+        handler(types.SimpleNamespace(new_objfile=objfile))
+    events = eventsOf(peer.messages(), "qtc/library")
+    assert len(events) == 1, events
+    assert events[0]["body"] == {"reason": "loaded", "path": "/usr/lib/libc.so.6"}, events[0]
+
+    # Separate debug info belongs to an entry that was reported already.
+    owned = types.SimpleNamespace(filename="/usr/lib/debug/libc.so.6.debug",
+                                  owner=objfile)
+    for handler in gdb.events.new_objfile.handlers:
+        handler(types.SimpleNamespace(new_objfile=owned))
+    for handler in gdb.events.free_objfile.handlers:
+        handler(types.SimpleNamespace(objfile=objfile))
+    reasons = [e["body"]["reason"] for e in eventsOf(peer.messages(), "qtc/library")]
+    assert reasons == ["loaded", "unloaded"], reasons
+
+
 def check_a_rejected_argument_fails_the_launch(bridge):
     # Dropping the whole argument list would run the debuggee differently
     # instead of saying that it cannot be run as asked.
@@ -961,6 +985,7 @@ checks = {
         check_an_unusable_program_fails_the_launch,
     "a-rejected-argument-fails-the-launch":
         check_a_rejected_argument_fails_the_launch,
+    "a-loaded-library-is-reported": check_a_loaded_library_is_reported,
     "startup-commands-reach-gdb": check_startup_commands_reach_gdb,
     "data-requests-use-the-dumpers": check_data_requests_use_the_dumpers,
 }
