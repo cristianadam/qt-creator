@@ -71,6 +71,7 @@ private:
     void reloadModules() override;
     void runStartupCommands();
     void configureTarget();
+    void handleLibraryEvent(const QJsonObject &body);
     void reloadRegisters() override;
     void reloadSourceFiles() override {}
     void reloadFullStack() override;
