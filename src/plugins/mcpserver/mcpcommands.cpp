@@ -51,6 +51,8 @@
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QApplication>
+
+#include <algorithm>
 #include <QCursor>
 #include <QHeaderView>
 
@@ -833,6 +835,7 @@ struct WidgetQuery
     QString className;
     QString windowTitle;
     bool includeInvisible = false;
+    int index = -1;
 };
 
 static WidgetQuery widgetQueryFromJson(const QJsonObject &p)
@@ -843,6 +846,7 @@ static WidgetQuery widgetQueryFromJson(const QJsonObject &p)
     q.className = p.value("class_name").toString();
     q.windowTitle = p.value("window_title").toString();
     q.includeInvisible = p.value("include_invisible").toBool(false);
+    q.index = p.contains("index") ? p.value("index").toInt(-1) : -1;
     return q;
 }
 
@@ -925,6 +929,19 @@ static QList<QWidget *> resolveWidgets(const WidgetQuery &q)
         if (widgetMatches(w, q))
             result.append(w);
     }
+    // allWidgets() has no defined order, so order the matches as they appear on
+    // screen to make an index into them reproducible.
+    std::sort(result.begin(), result.end(), [](QWidget *l, QWidget *r) {
+        const QPoint lp = l->mapToGlobal(QPoint(0, 0));
+        const QPoint rp = r->mapToGlobal(QPoint(0, 0));
+        if (lp.y() != rp.y())
+            return lp.y() < rp.y();
+        if (lp.x() != rp.x())
+            return lp.x() < rp.x();
+        if (l->objectName() != r->objectName())
+            return l->objectName() < r->objectName();
+        return qstrcmp(l->metaObject()->className(), r->metaObject()->className()) < 0;
+    });
     return result;
 }
 
@@ -988,13 +1005,21 @@ static Result<QWidget *> resolveSingleWidget(const WidgetQuery &q)
     const QList<QWidget *> matches = resolveWidgets(q);
     if (matches.isEmpty())
         return ResultError(QString("No widget matched the query."));
+    if (q.index >= 0) {
+        if (q.index >= matches.size()) {
+            return ResultError(QString("Index %1 is out of range; the query matches %2 widgets.")
+                                   .arg(q.index)
+                                   .arg(matches.size()));
+        }
+        return matches.at(q.index);
+    }
     if (matches.size() > 1) {
         QStringList desc;
         for (QWidget *w : matches)
             desc << describeWidgetShort(w);
         return ResultError(
             QString("Ambiguous widget query: %1 matches [%2]. Narrow it with "
-                    "object_name, class_name or window_title.")
+                    "object_name, class_name or window_title, or pick one with index.")
                 .arg(matches.size())
                 .arg(desc.join(", ")));
     }
@@ -3033,7 +3058,14 @@ void McpCommands::registerCommands()
                 "include_invisible",
                 QJsonObject{
                     {"type", "boolean"},
-                    {"description", "Also match hidden widgets (default false)."}});
+                    {"description", "Also match hidden widgets (default false)."}})
+            .addProperty(
+                "index",
+                QJsonObject{
+                    {"type", "integer"},
+                    {"description", "Pick the nth match, 0-based and in on-screen order (top to "
+                                    "bottom, then left to right), instead of failing when the "
+                                    "query matches several widgets."}});
     };
 
     ToolRegistry::registerTool(
