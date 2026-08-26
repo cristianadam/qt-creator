@@ -1181,6 +1181,7 @@ static Result<OsArch> detectWindowsArchitecture(const Environment &env)
 // a multi-MB binary, so we use sftp, which ships with Windows OpenSSH.)
 static Result<DeviceFileAccessPtr> deployCmdBridge(const SshParameters &ssh,
                                                    const FilePath &rootPath,
+                                                   FilePath *bridgePath,
                                                    const std::function<void()> &errorExitHandler)
 {
     if (qtcEnvironmentVariableIsSet("QTC_DISABLE_CMDBRIDGE"))
@@ -1210,8 +1211,23 @@ static Result<DeviceFileAccessPtr> deployCmdBridge(const SshParameters &ssh,
         tempDir = "C:/Windows/Temp";
     tempDir.replace('\\', '/');
 
-    const FilePath remoteBridge = rootPath.withNewPath(
-        tempDir + "/qtc-cmdbridge-" + QUuid::createUuid().toString(QUuid::Id128) + ".exe");
+    // One binary per device object, reused by every reconnect, so repeated connects do not
+    // litter the device's temp directory. The name stays unique to this Creator, whose bridge
+    // is the only one it may reap below.
+    if (bridgePath->isEmpty()) {
+        *bridgePath = rootPath.withNewPath(
+            tempDir + "/qtc-cmdbridge-" + QUuid::createUuid().toString(QUuid::Id128) + ".exe");
+    }
+    const FilePath remoteBridge = *bridgePath;
+
+    // Sweep the binaries of earlier connections, whose Creator may have been killed before it
+    // could tidy up. Windows keeps a running image locked, so the ones still serving a live
+    // Creator - possibly another one than this - simply refuse to go and are left alone.
+    runPowerShell(
+        ssh,
+        "Get-ChildItem -LiteralPath " + psQuote(tempDir)
+            + " -Filter 'qtc-cmdbridge-*.exe' -ErrorAction SilentlyContinue"
+              " | Remove-Item -Force -ErrorAction SilentlyContinue");
 
     // Transfer the binary via sftp. Windows OpenSSH sftp wants an absolute remote path with a
     // leading slash before the drive letter, e.g. "/C:/Users/.../x.exe".
@@ -1256,6 +1272,8 @@ public:
     void setupFileAccess(const Continuation<> &cont);
 
     WindowsDevice *q = nullptr;
+    // The CmdBridge binary deployed to the device, kept so that a reconnect reuses it.
+    FilePath m_bridgeExe;
     QMutex m_systemDriveMutex;
     std::optional<QString> m_systemDrive;
 };
@@ -1283,11 +1301,12 @@ void WindowsDevicePrivate::setupFileAccess(const Continuation<> &cont)
 
     qCDebug(windowsDeviceLog) << "setupFileAccess: probing" << rootPath.toUserOutput();
     QFuture<Result<DeviceFileAccessPtr>> future = Utils::asyncRun(
-        [ssh, rootPath, onBridgeExit]() -> Result<DeviceFileAccessPtr> {
+        [ssh, rootPath, bridgeExe = &m_bridgeExe, onBridgeExit]() -> Result<DeviceFileAccessPtr> {
             if (const Result<> res = probeWindows(ssh); !res)
                 return ResultError(res.error());
             // Prefer the fast CmdBridge; a null result means "keep the slow access".
-            const Result<DeviceFileAccessPtr> bridge = deployCmdBridge(ssh, rootPath, onBridgeExit);
+            const Result<DeviceFileAccessPtr> bridge
+                = deployCmdBridge(ssh, rootPath, bridgeExe, onBridgeExit);
             if (bridge)
                 return bridge;
             qCDebug(windowsDeviceLog) << "CmdBridge unavailable, using slow access:"
