@@ -1228,6 +1228,24 @@ static Utils::Result<> sendMouseEventTo(QWidget *w, const QString &action, int x
 // Delivers text as key events so widgets that react to typing (line edits,
 // text editors) update as if the user typed. Sent synchronously so the
 // widget state is settled before the tool returns.
+static void sendKey(
+    QWidget *target, Qt::Key key, Qt::KeyboardModifiers modifiers, const QString &text = {})
+{
+    QKeyEvent press(QEvent::KeyPress, key, modifiers, text);
+    QKeyEvent release(QEvent::KeyRelease, key, modifiers, text);
+    QApplication::sendEvent(target, &press);
+    QApplication::sendEvent(target, &release);
+}
+
+// Empties the widget the way a user would, by selecting everything and deleting it. Line
+// edits and the editors all match Ctrl+A against QKeySequence::SelectAll, so this needs to
+// know nothing about the widget's type.
+static void clearText(QWidget *target)
+{
+    sendKey(target, Qt::Key_A, Qt::ControlModifier, "a");
+    sendKey(target, Qt::Key_Delete, Qt::NoModifier);
+}
+
 static void typeText(QWidget *target, const QString &text)
 {
     for (const QChar &ch : text) {
@@ -3151,6 +3169,16 @@ void McpCommands::registerCommands()
                         QJsonObject{
                             {"type", "string"},
                             {"description", "The text to type."}})
+                    .addProperty(
+                        "mode",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"enum", QJsonArray{"append", "set"}},
+                            {"description",
+                             "\"append\" (the default) types at the cursor and keeps what is "
+                             "already there. \"set\" replaces the content, so the widget ends up "
+                             "holding exactly the input - use it for a filter or a line edit that "
+                             "a previous call left non-empty. An empty input then clears it."}})
                     .addRequired("input")),
         [](const Schema::CallToolRequestParams &params) -> Utils::Result<CallToolResult> {
             const QJsonObject p = params.argumentsAsObject();
@@ -3163,6 +3191,8 @@ void McpCommands::registerCommands()
             if (QWidget *window = target->window())
                 window->activateWindow();
             target->setFocus(Qt::OtherFocusReason);
+            if (p.value("mode").toString() == "set")
+                clearText(target);
             typeText(target, input);
             return CallToolResult{}.isError(false).structuredContent(describeWidget(target));
         });
