@@ -30,6 +30,7 @@
 #include <utils/commandline.h>
 #include <utils/environment.h>
 #include <utils/filepath.h>
+#include <utils/processinfo.h>
 #include <utils/qtcprocess.h>
 
 #include <QElapsedTimer>
@@ -352,6 +353,72 @@ void WindowsDeviceDetectionTest::testDetectToolchainsAndCreateKit()
     QCOMPARE(run.result(), ProcessResult::FinishedWithSuccess);
     QVERIFY2(run.cleanedStdOut().contains("HELLO_FROM_DEVICE"),
              "The executable's output was not captured from the device.");
+}
+
+// Stopping a run must end the application on the device, not just the SSH connection that
+// carried it. The victim is a private copy of ping.exe, so the check cannot be confused by
+// another instance of a system binary, and killing it cannot disturb anything else.
+void WindowsDeviceDetectionTest::testStopKillsTheRemoteApplication()
+{
+    const SshParameters params = SshTest::getParameters("WIN");
+    if (!SshTest::checkParameters(params)) {
+        SshTest::printSetupHelp();
+        QSKIP("Set QTC_SSH_TEST_WIN_HOST/USER/... (or QTC_SSH_TEST_*) to a reachable "
+              "Windows-over-SSH host.");
+    }
+
+    auto windowsDeviceFactory
+        = Utils::findOrDefault(IDeviceFactory::allDeviceFactories(), [&](IDeviceFactory *f) {
+              return f->deviceType() == Constants::GenericWindowsOsType;
+          });
+    QVERIFY2(windowsDeviceFactory, "No Windows device factory was registered.");
+    const IDevicePtr device = windowsDeviceFactory->construct();
+    QVERIFY2(device, "Failed to construct a Windows device from the factory.");
+    device->sshParametersAspectContainer().setSshParameters(params);
+    DeviceManager::addDevice(device);
+
+    const Id deviceId = device->id();
+    const FilePath deviceRoot = device->rootPath();
+    const FilePath victim = deviceRoot.withNewPath(
+        "C:/Users/Public/qtc-stop-test-" + QUuid::createUuid().toString(QUuid::Id128) + ".exe");
+    const QScopeGuard cleanup([&] {
+        victim.removeFile();
+        DeviceManager::removeDevice(deviceId);
+    });
+
+    {
+        QEventLoop loop;
+        QTimer timeout;
+        timeout.setSingleShot(true);
+        QObject::connect(&timeout, &QTimer::timeout, &loop, [&] { loop.exit(1); });
+        timeout.start(60 * 1000);
+        device->tryToConnect(Continuation<>(this, [&](const Result<> &res) {
+            loop.exit(res ? 0 : 1);
+        }));
+        QCOMPARE(loop.exec(), 0);
+    }
+
+    const FilePath ping = deviceRoot.withNewPath("C:/Windows/System32/ping.exe");
+    QVERIFY2(ping.isExecutableFile(), "ping.exe was not found on the device.");
+    QVERIFY2(bool(ping.copyFile(victim)), "Failed to copy the test executable on the device.");
+
+    const auto victimRuns = [&] {
+        const Result<QList<ProcessInfo>> processes = ProcessInfo::processInfoList(deviceRoot);
+        return processes
+               && Utils::anyOf(*processes, [&](const ProcessInfo &info) {
+                      return info.executable.compare(victim.nativePath(), Qt::CaseInsensitive)
+                             == 0;
+                  });
+    };
+
+    Process app;
+    app.setCommand({victim, {"-n", "600", "127.0.0.1"}});
+    app.start();
+    QVERIFY2(waitFor(victimRuns, 90 * 1000), "The application never appeared on the device.");
+
+    app.stop();
+    QVERIFY2(waitFor([&] { return !victimRuns(); }, 90 * 1000),
+             "Stopping the run left the application running on the device.");
 }
 
 } // namespace Remote::Internal
