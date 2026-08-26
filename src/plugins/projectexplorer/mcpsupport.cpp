@@ -623,6 +623,74 @@ static QJsonObject addKitsToProject(
         {"results", results}};
 }
 
+// Makes a project's target for a kit the active one, as choosing it in the kit selector
+// does. A display name shared by several kits is refused rather than guessed at, since
+// nothing distinguishes them; the id from list_kits always identifies one.
+static QJsonObject setActiveKit(
+    const QString &projectName, const QString &projectPath, const QString &kitIdentifier)
+{
+    const ProjectResolution resolution = resolveTargetProject(projectName, projectPath, true);
+    if (!resolution.project)
+        return resolution.error;
+    Project *project = resolution.project;
+
+    if (kitIdentifier.isEmpty())
+        return {{"success", false}, {"reason", "no_kit"}, {"message", "No kit specified."}};
+
+    Kit *kit = KitManager::kit(Utils::Id::fromString(kitIdentifier));
+    if (!kit) {
+        const QList<Kit *> byName = Utils::filtered(
+            KitManager::kits(),
+            [&kitIdentifier](const Kit *k) { return k->displayName() == kitIdentifier; });
+        if (byName.size() > 1) {
+            QJsonArray candidates;
+            for (const Kit *k : byName)
+                candidates.append(kitInfoObject(k));
+            return {
+                {"success", false},
+                {"reason", "ambiguous_name"},
+                {"message", QString("%1 kits are called \"%2\"; pass a kit id instead.")
+                                .arg(byName.size())
+                                .arg(kitIdentifier)},
+                {"candidates", candidates}};
+        }
+        if (!byName.isEmpty())
+            kit = byName.first();
+    }
+    if (!kit) {
+        return {
+            {"success", false},
+            {"reason", "not_found"},
+            {"message", QString("No kit matching \"%1\".").arg(kitIdentifier)}};
+    }
+
+    Target * const target = project->target(kit);
+    if (!target) {
+        return {
+            {"success", false},
+            {"reason", "kit_not_configured"},
+            {"message", QString("Project \"%1\" is not configured for kit \"%2\"; add it with "
+                                "add_kits_to_project first.")
+                            .arg(project->displayName(), kit->displayName())}};
+    }
+
+    const bool wasActive = project->activeTarget() == target;
+    project->setActiveTarget(target, SetActive::Cascade);
+
+    const QString message
+        = (wasActive ? QString("Kit \"%1\" was already active for project \"%2\".")
+                     : QString("Kit \"%1\" is now active for project \"%2\"."))
+              .arg(kit->displayName(), project->displayName());
+
+    return {
+        {"success", true},
+        {"reason", "ok"},
+        {"message", message},
+        {"project", projectInfoObject(project)},
+        {"kit", kitInfoObject(kit)},
+        {"already_active", wasActive}};
+}
+
 // Removes kits identified by kit id or display name. SDK-provided kits are refused (as in
 // the Kits preferences page), and so is a display name shared by several kits, since
 // removal is not undoable. Reports per-kit results without aborting on the first error.
@@ -2455,6 +2523,57 @@ void registerMcpTools()
                 kits.append(v.toString());
             return addKitsToProject(
                 p.value("project_name").toString(), p.value("project_path").toString(), kits);
+        }));
+
+    ToolRegistry::registerTool(
+        Tool{}
+            .name("set_active_kit")
+            .title("Set the active kit of a project")
+            .description(
+                "Makes the project build and run with one of the kits it is configured for, "
+                "as choosing it in the kit selector does. The kit may be given by id or "
+                "display name (see list_kits, and list_project_kits for which are configured "
+                "and which is active); a display name that several kits share is refused, so "
+                "use the id to tell them apart. Defaults to the active startup project when "
+                "neither project_name nor project_path is given.")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "kit",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description", "Kit id or display name to make active."}})
+                    .addProperty(
+                        "project_name",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description",
+                             "Display name of the project. Optional; defaults to the active "
+                             "startup project."}})
+                    .addProperty(
+                        "project_path",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description",
+                             "Absolute path to the project file. Unambiguously identifies "
+                             "the project and takes precedence over project_name."}})
+                    .addRequired("kit"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("success", QJsonObject{{"type", "boolean"}})
+                    .addProperty("reason", QJsonObject{{"type", "string"}})
+                    .addProperty("message", QJsonObject{{"type", "string"}})
+                    .addProperty("project", QJsonObject{{"type", "object"}})
+                    .addProperty("kit", QJsonObject{{"type", "object"}})
+                    .addProperty("already_active", QJsonObject{{"type", "boolean"}})
+                    .addProperty("candidates", QJsonObject{{"type", "array"}})
+                    .addRequired("success")),
+        wrap([](const QJsonObject &p) {
+            return setActiveKit(
+                p.value("project_name").toString(),
+                p.value("project_path").toString(),
+                p.value("kit").toString());
         }));
 
     ToolRegistry::registerTool(
