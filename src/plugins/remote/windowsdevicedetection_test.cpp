@@ -3,6 +3,7 @@
 
 #include "windowsdevicedetection_test.h"
 
+#include "powershellutils.h"
 #include "windowsdevice.h"
 #include "remotelinux_constants.h"
 
@@ -328,6 +329,126 @@ void WindowsDeviceDetectionTest::testDetectToolchainsAndCreateKit()
     QCOMPARE(run.result(), ProcessResult::FinishedWithSuccess);
     QVERIFY2(run.cleanedStdOut().contains("HELLO_FROM_DEVICE"),
              "The executable's output was not captured from the device.");
+}
+
+// The session the given user is logged on to, as "<id> <state>", or an empty string when
+// they have none. Read from "query session", whose columns need no elevation - GetOwner() on
+// a Win32_Process does.
+static QString userSession(const FilePath &deviceRoot, const QString &user)
+{
+    Process query;
+    query.setCommand({deviceRoot.withNewPath("C:/Windows/System32/query.exe"), {"session", user}});
+    query.runBlocking(std::chrono::seconds(60));
+    for (const QString &line : query.cleanedStdOut().split('\n')) {
+        const QStringList columns = line.simplified().split(' ');
+        // "<sessionname> <user> <id> <state>", with the leading marker and name optional.
+        const int userColumn = columns.indexOf(user);
+        if (userColumn >= 0 && columns.size() > userColumn + 2)
+            return columns.at(userColumn + 1) + ' ' + columns.at(userColumn + 2);
+    }
+    return {};
+}
+
+// The sessions in which the given executable is running on the device.
+static QStringList processSessions(const FilePath &deviceRoot, const QString &imageName)
+{
+    Process query;
+    query.setCommand(
+        {deviceRoot.withNewPath("powershell.exe"),
+         {"-NoProfile", "-NonInteractive", "-EncodedCommand",
+          encodePowerShellCommand("Get-Process -Name " + imageName
+                                  + " -ErrorAction SilentlyContinue | ForEach-Object "
+                                    "{ $_.SessionId }")}});
+    query.runBlocking(std::chrono::seconds(60));
+    QStringList result;
+    for (const QString &line : query.cleanedStdOut().split('\n')) {
+        if (!line.trimmed().isEmpty())
+            result.append(line.trimmed());
+    }
+    return result;
+}
+
+// A GUI run must land in the desktop session of the device's own user - never in the
+// invisible services session 0, and never in a session belonging to somebody else.
+void WindowsDeviceDetectionTest::testRunsInTheDeviceUsersSession()
+{
+    const SshParameters params = SshTest::getParameters("WIN");
+    if (!SshTest::checkParameters(params)) {
+        SshTest::printSetupHelp();
+        QSKIP("Set QTC_SSH_TEST_WIN_HOST/USER/... (or QTC_SSH_TEST_*) to a reachable "
+              "Windows-over-SSH host.");
+    }
+
+    auto windowsDeviceFactory
+        = Utils::findOrDefault(IDeviceFactory::allDeviceFactories(), [&](IDeviceFactory *f) {
+              return f->deviceType() == Constants::GenericWindowsOsType;
+          });
+    QVERIFY2(windowsDeviceFactory, "No Windows device factory was registered.");
+    const IDevicePtr device = windowsDeviceFactory->construct();
+    QVERIFY2(device, "Failed to construct a Windows device from the factory.");
+    device->sshParametersAspectContainer().setSshParameters(params);
+    DeviceManager::addDevice(device);
+
+    const Id deviceId = device->id();
+    const FilePath deviceRoot = device->rootPath();
+    const QScopeGuard cleanup([&] { DeviceManager::removeDevice(deviceId); });
+
+    {
+        QEventLoop loop;
+        QTimer timeout;
+        timeout.setSingleShot(true);
+        QObject::connect(&timeout, &QTimer::timeout, &loop, [&] { loop.exit(1); });
+        timeout.start(60 * 1000);
+        device->tryToConnect(Continuation<>(this, [&](const Result<> &res) {
+            loop.exit(res ? 0 : 1);
+        }));
+        QCOMPARE(loop.exec(), 0);
+    }
+
+    // Whether the device user is logged on at all is a property of the machine, not of the
+    // code under test.
+    const QString user = params.userName().section('\\', -1);
+    const QString session = userSession(deviceRoot, user);
+    // A GUI run needs a session that is being looked at: launching into a disconnected one
+    // selects it but never produces a running application.
+    if (session.isEmpty())
+        QSKIP("The device user is not logged on, so there is no session to launch into.");
+    const QString desktopSession = session.section(' ', 0, 0);
+    qDebug().noquote() << "Device user" << user << "is logged on to session" << session;
+
+    // A private copy, so the sessions found below can only be this test's own process. It is
+    // a console application on purpose: which session it lands in is the point here, and a
+    // windowless program survives wherever it is put, while a copied GUI binary may hand off
+    // to a packaged app and exit at once.
+    const QString appName = "qtc-session-test-" + QUuid::createUuid().toString(QUuid::Id128);
+    const FilePath app3 = deviceRoot.withNewPath("C:/Users/Public/" + appName + ".exe");
+    QVERIFY2(bool(deviceRoot.withNewPath("C:/Windows/System32/ping.exe").copyFile(app3)),
+             "Failed to copy the test application onto the device.");
+
+    Process app;
+    app.setCommand({app3, {"-n", "600", "127.0.0.1"}});
+    app.setExtraData(Constants::RunInInteractiveSession, true);
+    app.start();
+    const QScopeGuard killApp([&] {
+        Process killer;
+        killer.setCommand(
+            {deviceRoot.withNewPath("powershell.exe"),
+             {"-NoProfile", "-NonInteractive", "-EncodedCommand",
+              encodePowerShellCommand("Get-Process -Name " + appName
+                                      + " -ErrorAction SilentlyContinue | Stop-Process -Force")}});
+        killer.runBlocking(std::chrono::seconds(60));
+        app3.removeFile();
+    });
+
+    const auto appSessions = [&] { return processSessions(deviceRoot, appName); };
+    const bool started = waitFor([&] { return !appSessions().isEmpty(); }, 90 * 1000);
+    if (!started)
+        qDebug().noquote() << "The launcher reported:" << app.allOutput();
+    QVERIFY2(started, "The application was not started on the device.");
+
+    const QString appSession = appSessions().first();
+    QVERIFY2(appSession != "0", "The application was left in the invisible services session.");
+    QCOMPARE(appSession, desktopSession);
 }
 
 // Stopping a run must end the application on the device, not just the SSH connection that
