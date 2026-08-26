@@ -125,6 +125,21 @@ public:
                 return toDoneResult(!pidStorage->isEmpty());
             };
 
+            // The application starts the platform a little after its own process appears, and
+            // attaching before it listens fails, so the port is waited for, not the process.
+            const auto onListeningSetup = [command](Process &process) {
+                process.setCommand(command({"shell", "netstat", "-ln"}));
+            };
+            const auto onListeningDone = [](const Process &process) {
+                const QString port = QString(":%1").arg(Constants::HARMONYOS_DEBUG_PORT);
+                const QStringList lines = process.cleanedStdOut().split('\n', Qt::SkipEmptyParts);
+                for (const QString &line : lines) {
+                    if (line.contains(port) && line.contains("LISTEN"))
+                        return toDoneResult(true);
+                }
+                return toDoneResult(false);
+            };
+
             const QString forward = QString("tcp:%1").arg(Constants::HARMONYOS_DEBUG_PORT);
             const auto onForwardSetup = [command, forward](Process &process) {
                 process.setCommand(command({"fport", forward, forward}));
@@ -151,6 +166,21 @@ public:
                     ProcessTask(onPidSetup, onPidDone),
                     timeoutTask(500ms)
                 }.withTimeout(10s),
+                Group {
+                    Forever {
+                        stopOnSuccess,
+                        ProcessTask(onListeningSetup, onListeningDone),
+                        timeoutTask(500ms)
+                    }.withTimeout(30s),
+                    onGroupDone([runControl](DoneWith result) {
+                        if (result != DoneWith::Success) {
+                            runControl->postMessage(
+                                Tr::tr("The application did not start a debug server on port %1.")
+                                    .arg(Constants::HARMONYOS_DEBUG_PORT),
+                                ErrorMessageFormat);
+                        }
+                    })
+                },
                 ProcessTask(onForwardSetup, onForwardDone),
                 debuggerRecipe(runControl, debuggerRunParameters(runControl), setAttachPid),
                 onGroupDone([command, forward] {
