@@ -1109,6 +1109,7 @@ class Dumper(DumperBase):
                                     % (self.attachPid_, error.GetCString()))
                         self.reportState('enginerunfailed')
                         return
+                    self.placeMappedModules()
                     # Attaching stops the process, and saying so is what keeps the
                     # engine's idea of the state and LLDB's the same.
                     self.report('pid="%s"' % self.process.GetProcessID())
@@ -1189,6 +1190,52 @@ class Dumper(DumperBase):
 
         s = threading.Thread(target=self.loop, args=[])
         s.start()
+
+    def execSearchPaths(self):
+        result = lldb.SBCommandReturnObject()
+        self.debugger.GetCommandInterpreter().HandleCommand(
+            'settings show target.exec-search-paths', result)
+        # The entries are printed as '[0]: /some/where  [1]: /elsewhere', all on one
+        # line, so the indices are what separates them rather than a newline.
+        entries = re.split(r'\[\d+\]:\s*', result.GetOutput() or '')[1:]
+        return [entry.strip() for entry in entries if entry.strip()]
+
+    # A platform that did not launch the process reports no module list for it, so
+    # nothing is loaded: no frame can be named and no breakpoint can be placed. The
+    # memory regions do say which file is mapped where, so the libraries that are
+    # available on this side are placed at the address the process has them at.
+    def placeMappedModules(self):
+        paths = self.execSearchPaths()
+        if not paths:
+            return
+
+        # A library is mapped in several parts; the lowest one is where it was loaded.
+        bases = {}
+        regions = self.process.GetMemoryRegions()
+        info = lldb.SBMemoryRegionInfo()
+        for index in range(regions.GetSize()):
+            if not regions.GetMemoryRegionAtIndex(index, info):
+                continue
+            name = info.GetName()
+            if not name or not name.endswith('.so'):
+                continue
+            base = info.GetRegionBase()
+            key = os.path.basename(name)
+            if base < bases.get(key, base + 1):
+                bases[key] = base
+
+        placed = 0
+        for key, base in bases.items():
+            for path in paths:
+                candidate = os.path.join(path, key)
+                if not os.path.exists(candidate):
+                    continue
+                module = self.target.AddModule(candidate, None, None)
+                if module and self.target.SetModuleLoadAddress(module, base).Success():
+                    placed += 1
+                break
+        if placed:
+            self.report('Placed %s module(s) from the memory map of the process.' % placed)
 
     def loop(self):
         event = lldb.SBEvent()
