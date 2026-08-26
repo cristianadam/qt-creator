@@ -426,6 +426,7 @@ QString WindowsProcessInterface::buildInteractiveRunRemoteCommand()
     script += "$done = " + psQuote((dir / "exit.txt").nativePath()) + "\n";
     script += "$started = " + psQuote((dir / "started.txt").nativePath()) + "\n";
     script += "$note = " + psQuote((dir / "note.txt").nativePath()) + "\n";
+    script += "$nodesk = " + psQuote((dir / "nodesktop.txt").nativePath()) + "\n";
     script += "$exe = " + psQuote(remoteCommand.executable().nativePath()) + "\n";
     script += "$tn = " + psQuote("qtc_run_" + id) + "\n";
     script += "$self = " + psQuote(self) + "\n\n";
@@ -512,8 +513,7 @@ QString WindowsProcessInterface::buildInteractiveRunRemoteCommand()
     script += "        }\n";
     script += "        [Qtc.Native]::WTSFreeMemory($pInfo)\n";
     script += "    }\n";
-    script += "    if ($sid -lt 0) { Add-Content -Path $err -Value ('qtc: " + sessionUser
-              + " is not logged on to the device, so there is no desktop to run on.'); return }\n";
+    script += "    if ($sid -lt 0) { Set-Content -Path $nodesk -Value 1; return }\n";
     script += "    if (-not $active) { Set-Content -Path $note -Value ('qtc: session ' + $sid + ' of "
               + sessionUser + " is disconnected. The application runs in it, but its window "
               "becomes visible only when that session is reconnected.') }\n";
@@ -561,7 +561,18 @@ QString WindowsProcessInterface::buildInteractiveRunRemoteCommand()
     // hanging forever. Once it has started, wait as long as the application keeps running.
     script += "$deadline = (Get-Date).AddSeconds(20)\n";
     script += "while (-not (Test-Path $started) -and -not (Test-Path $done)"
-              " -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 300 }\n";
+              " -and -not (Test-Path $nodesk) -and (Get-Date) -lt $deadline) "
+              "{ Start-Sleep -Milliseconds 300 }\n";
+    // Nobody is logged on, so there is no desktop to put the application on. Run it here, in
+    // the SSH session, rather than refusing: a console program does not care, and for a GUI
+    // one a run whose window cannot be seen still beats no run at all. Say which it was.
+    script += "if (Test-Path $nodesk) {\n";
+    script += "    schtasks /delete /f /tn $tn 2>&1 | Out-Null\n";
+    script += "    Set-Content -Path $note -Value ('qtc: " + sessionUser + " is not logged on to "
+              "the device, so the application runs without a desktop and a window of it would "
+              "not be visible.')\n";
+    script += "    & $self -Mode app\n";
+    script += "}\n";
     script += "if (-not (Test-Path $started) -and -not (Test-Path $done)) {\n";
     script += "    schtasks /delete /f /tn $tn 2>&1 | Out-Null\n";
     script += "    $msg = 'qtc: the GUI run did not start.'\n";
