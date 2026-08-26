@@ -22,6 +22,7 @@ add_qtc_plugin(CMakeProjectManager
     cmakekitaspect.cpp cmakekitaspect.h
     cmakelocatorfilter.cpp cmakelocatorfilter.h
     cmakeoutputparser.cpp cmakeoutputparser.h
+    cmakeparser.cpp cmakeparser.h
     cmakeproject.cpp cmakeproject.h
     cmakeproject.qrc
     cmakeprojectconstants.h

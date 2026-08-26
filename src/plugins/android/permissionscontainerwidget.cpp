@@ -5,8 +5,6 @@
 #include "androidtr.h"
 #include "androidmanifestutils.h"
 
-#include <cmakeprojectmanager/3rdparty/cmake/cmListFileCache.h>
-
 #include <projectexplorer/buildconfiguration.h>
 #include <projectexplorer/buildsystem.h>
 #include <projectexplorer/project.h>
@@ -17,6 +15,7 @@
 #include <texteditor/textdocument.h>
 #include <texteditor/texteditor.h>
 #include <cmakeprojectmanager/cmakeprojectconstants.h>
+#include <cmakeprojectmanager/cmakeparser.h>
 
 #include <QAbstractListModel>
 #include <QApplication>
@@ -49,19 +48,20 @@ struct ParsedPermission {
     QMap<QString, QString> attributes;
 };
 
-static std::optional<ParsedPermission> parsePermissionCall(const cmListFileFunction &func)
+using CMakeProjectManager::CMakeFunctionCall;
+
+static std::optional<ParsedPermission> parsePermissionCall(const CMakeFunctionCall &func)
 {
-    const std::vector<cmListFileArgument> &args = func.Arguments();
+    const auto &arguments = func.arguments;
     ParsedPermission result;
     bool inAttributes = false;
-    for (size_t i = 1; i < args.size(); ++i) {
-        if (args[i].Value == "NAME" && i + 1 < args.size()) {
-            result.name = QString::fromStdString(args[++i].Value);
-        } else if (args[i].Value == "ATTRIBUTES") {
+    for (qsizetype i = 1; i < arguments.size(); ++i) {
+        if (arguments.at(i) == "NAME" && i + 1 < arguments.size()) {
+            result.name = arguments.at(++i);
+        } else if (arguments.at(i) == "ATTRIBUTES") {
             inAttributes = true;
-        } else if (inAttributes && i + 1 < args.size()) {
-            result.attributes.insert(QString::fromStdString(args[i].Value),
-                                     QString::fromStdString(args[i + 1].Value));
+        } else if (inAttributes && i + 1 < arguments.size()) {
+            result.attributes.insert(arguments.at(i), arguments.at(i + 1));
             ++i;
         }
     }
@@ -70,32 +70,18 @@ static std::optional<ParsedPermission> parsePermissionCall(const cmListFileFunct
     return result;
 }
 
-static std::optional<cmListFile> parseCMakeFile(const Utils::FilePath &path,
-                                                QString &outContent)
+static bool isPermissionCallForTarget(const CMakeFunctionCall &func, const QString &target,
+                                        const QString &permission = {})
 {
-    QFile file(path.toFSPathString());
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-        return std::nullopt;
-    outContent = QTextStream(&file).readAll();
-    cmListFile result;
-    std::string error;
-    if (!result.ParseString(outContent.toStdString(), path.fileName().toStdString(), error))
-        return std::nullopt;
-    return result;
-}
-
-static bool isPermissionCallForTarget(const cmListFileFunction &func, const std::string &target,
-                                      const std::string &permission = {})
-{
-    if (func.LowerCaseName() != qtAddAndroidPermission.data())
+    if (func.name != qtAddAndroidPermission)
         return false;
-    const auto &args = func.Arguments();
-    if (args.empty() || args[0].Value != target)
+    const auto &arguments = func.arguments;
+    if (arguments.isEmpty() || arguments.first() != target)
         return false;
-    if (permission.empty())
+    if (permission.isEmpty())
         return true;
-    for (size_t i = 1; i + 1 < args.size(); ++i) {
-        if (args[i].Value == "NAME" && args[i + 1].Value == permission)
+    for (qsizetype i = 1; i + 1 < arguments.size(); ++i) {
+        if (arguments.at(i) == "NAME" && arguments.at(i + 1) == permission)
             return true;
     }
     return false;
@@ -105,14 +91,12 @@ static QMap<QString, QMap<QString, QString>> parseCMakePermissions(
     const Utils::FilePath &path, const QString &targetName)
 {
     QMap<QString, QMap<QString, QString>> permissions;
-    QString content;
-    const std::optional<cmListFile> cmakeFile = parseCMakeFile(path, content);
+    const auto cmakeFile = CMakeProjectManager::parseCMakeFile(path);
     if (!cmakeFile)
         return permissions;
 
-    const std::string target = targetName.toStdString();
-    for (const cmListFileFunction &func : cmakeFile->Functions) {
-        if (!isPermissionCallForTarget(func, target))
+    for (const CMakeFunctionCall &func : cmakeFile->functions) {
+        if (!isPermissionCallForTarget(func, targetName))
             continue;
         const std::optional<ParsedPermission> parsed = parsePermissionCall(func);
         if (!parsed)
@@ -145,24 +129,22 @@ static QMap<QString, QMap<QString, QString>> mergePermissions(
 
 static bool removeAllPermissionCalls(const Utils::FilePath &path, const QString &targetName)
 {
-    QString content;
-    const std::optional<cmListFile> cmakeFile = parseCMakeFile(path, content);
+    const auto cmakeFile = CMakeProjectManager::parseCMakeFile(path);
     if (!cmakeFile)
         return false;
 
-    const std::string target = targetName.toStdString();
-    QList<std::pair<long, long>> ranges; // 1-based, inclusive
-    for (const cmListFileFunction &func : cmakeFile->Functions) {
-        if (isPermissionCallForTarget(func, target))
-            ranges.append({func.Line(), func.LineEnd()});
+    QList<std::pair<int, int>> ranges; // 1-based, inclusive
+    for (const CMakeFunctionCall &func : cmakeFile->functions) {
+        if (isPermissionCallForTarget(func, targetName))
+            ranges.append({func.line, func.lineEnd});
     }
     if (ranges.isEmpty())
         return true;
 
-    QStringList lines = content.split('\n');
+    QStringList lines = cmakeFile->content.split('\n');
     for (auto it = ranges.crbegin(); it != ranges.crend(); ++it)
-        lines.remove(static_cast<qsizetype>(it->first) - 1,
-                     static_cast<qsizetype>(it->second - it->first) + 1);
+        lines.remove(it->first - 1,
+                     it->second - it->first + 1);
 
     Utils::FileSaver saver(path, QIODevice::Text);
     saver.write(lines.join('\n').toUtf8());
@@ -312,7 +294,7 @@ public:
     }
 
 private:
-    QMap<QString, QMap<QString, QString>> m_permissions; // key = permission, value = <attrName: Value>
+    QMap<QString, QMap<QString, QString>> m_permissions;
 };
 
 PermissionsContainerWidget::PermissionsContainerWidget(QWidget *parent)
@@ -886,23 +868,21 @@ void PermissionsContainerWidget::loadPermissionsFromManifest()
 void PermissionsContainerWidget::addCMakePermission(const QString &permission,
                                                     const QMap<QString, QString> &attributes)
 {
-    QString content;
-    const auto cmakeFile = parseCMakeFile(m_CMakeFilePath, content);
+    const auto cmakeFile = CMakeProjectManager::parseCMakeFile(m_CMakeFilePath);
     if (!cmakeFile)
         return;
 
-    const std::string targetName = m_CMakeTargetName.toStdString();
     const QString newCall = buildPermissionCall(m_CMakeTargetName, permission, attributes);
 
-    long lastLineEnd = -1;
-    for (const cmListFileFunction &func : cmakeFile->Functions) {
-        if (isPermissionCallForTarget(func, targetName))
-            lastLineEnd = func.LineEnd();
+    int lastLineEnd = -1;
+    for (const CMakeFunctionCall &func : cmakeFile->functions) {
+        if (isPermissionCallForTarget(func, m_CMakeTargetName))
+            lastLineEnd = func.lineEnd;
     }
 
-    QStringList lines = content.split('\n');
+    QStringList lines = cmakeFile->content.split('\n');
     if (lastLineEnd != -1) {
-        lines.insert(static_cast<qsizetype>(lastLineEnd), newCall);
+        lines.insert(lastLineEnd, newCall);
     } else {
         if (!lines.isEmpty() && lines.last().isEmpty())
             lines.last() = newCall;
@@ -966,16 +946,14 @@ void PermissionsContainerWidget::loadPermissionsFromCMake()
     if (!resolveCMakeProjectInfo())
         return;
 
-    QString content;
-    const auto cmakeFile = parseCMakeFile(m_CMakeFilePath, content);
+    const auto cmakeFile = CMakeProjectManager::parseCMakeFile(m_CMakeFilePath);
     if (!cmakeFile)
         return;
 
-    const std::string targetName = m_CMakeTargetName.toStdString();
     QMap<QString, QMap<QString, QString>> permissions;
 
-    for (const cmListFileFunction &func : cmakeFile->Functions) {
-        if (!isPermissionCallForTarget(func, targetName))
+    for (const CMakeFunctionCall &func : cmakeFile->functions) {
+        if (!isPermissionCallForTarget(func, m_CMakeTargetName))
             continue;
         auto result = parsePermissionCall(func);
         if (result) {
@@ -987,19 +965,15 @@ void PermissionsContainerWidget::loadPermissionsFromCMake()
 
 bool PermissionsContainerWidget::removeCMakePermission(const QString &permission)
 {
-    QString content;
-    const auto cmakeFile = parseCMakeFile(m_CMakeFilePath, content);
+    const auto cmakeFile = CMakeProjectManager::parseCMakeFile(m_CMakeFilePath);
     if (!cmakeFile)
         return false;
 
-    const std::string targetName = m_CMakeTargetName.toStdString();
-    const std::string permName = permission.toStdString();
-
-    long lineStart = -1, lineEnd = -1;
-    for (const cmListFileFunction &func : cmakeFile->Functions) {
-        if (isPermissionCallForTarget(func, targetName, permName)) {
-            lineStart = func.Line();
-            lineEnd = func.LineEnd();
+    int lineStart = -1, lineEnd = -1;
+    for (const CMakeFunctionCall &func : cmakeFile->functions) {
+        if (isPermissionCallForTarget(func, m_CMakeTargetName, permission)) {
+            lineStart = func.line;
+            lineEnd = func.lineEnd;
             break;
         }
     }
@@ -1007,9 +981,9 @@ bool PermissionsContainerWidget::removeCMakePermission(const QString &permission
     if (lineStart == -1)
         return false;
 
-    QStringList lines = content.split('\n');
-    lines.remove(static_cast<qsizetype>(lineStart) - 1,
-                 static_cast<qsizetype>(lineEnd - lineStart) + 1);
+    QStringList lines = cmakeFile->content.split('\n');
+    lines.remove(lineStart - 1,
+                 lineEnd - lineStart + 1);
 
     Utils::FileSaver saver(m_CMakeFilePath, QIODevice::Text);
     saver.write(lines.join('\n').toUtf8());
@@ -1090,22 +1064,18 @@ bool PermissionsContainerWidget::updateCMakePermission(const QString &permission
     if (m_CMakeFilePath.isEmpty())
         return false;
 
-    QString content;
-    const auto cmakeFile = parseCMakeFile(m_CMakeFilePath, content);
+    const auto cmakeFile = CMakeProjectManager::parseCMakeFile(m_CMakeFilePath);
     if (!cmakeFile)
         return false;
 
-    const std::string targetName = m_CMakeTargetName.toStdString();
-    const std::string permName = permission.toStdString();
-
-    long lineStart = -1, lineEnd = -1;
-    for (const cmListFileFunction &func : cmakeFile->Functions) {
-        if (isPermissionCallForTarget(func, targetName, permName)) {
+    int lineStart = -1, lineEnd = -1;
+    for (const CMakeFunctionCall &func : cmakeFile->functions) {
+        if (isPermissionCallForTarget(func, m_CMakeTargetName, permission)) {
             const std::optional<ParsedPermission> current = parsePermissionCall(func);
             if (current && current->attributes == attributes)
                 return true; // No change needed
-            lineStart = func.Line();
-            lineEnd = func.LineEnd();
+            lineStart = func.line;
+            lineEnd = func.lineEnd;
             break;
         }
     }
@@ -1113,10 +1083,10 @@ bool PermissionsContainerWidget::updateCMakePermission(const QString &permission
     if (lineStart == -1)
         return false;
 
-    QStringList lines = content.split('\n');
-    lines.remove(static_cast<qsizetype>(lineStart) - 1,
-                 static_cast<qsizetype>(lineEnd - lineStart) + 1);
-    lines.insert(static_cast<qsizetype>(lineStart) - 1,
+    QStringList lines = cmakeFile->content.split('\n');
+    lines.remove(lineStart - 1,
+                 lineEnd - lineStart + 1);
+    lines.insert(lineStart - 1,
                   buildPermissionCall(m_CMakeTargetName, permission, attributes));
 
     Utils::FileSaver saver(m_CMakeFilePath, QIODevice::Text);

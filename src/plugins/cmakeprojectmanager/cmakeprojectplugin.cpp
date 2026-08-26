@@ -11,6 +11,7 @@
 #include "cmakelocatorfilter.h"
 #include "cmakekitaspect.h"
 #include "cmakeoutputparser.h"
+#include "cmakeparser.h"
 #include "cmakeproject.h"
 #include "cmakeprojectconstants.h"
 #include "cmakeprojectimporter.h"
@@ -79,6 +80,7 @@ class CMakeProjectPlugin final : public ExtensionSystem::IPlugin
         addTestCreator(createCMakeProjectImporterTest);
         addTestCreator(createAddDependenciesTest);
         addTestCreator(createTestPresetsInheritanceTest);
+        addTestCreator(createCMakeParserTest);
 #endif
 
         FileIconProvider::registerIconOverlayForSuffix(Constants::Icons::FILE_OVERLAY, "cmake");

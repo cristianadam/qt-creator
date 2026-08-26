@@ -44,6 +44,8 @@ Project {
             "cmakelocatorfilter.h",
             "cmakeoutputparser.cpp",
             "cmakeoutputparser.h",
+            "cmakeparser.cpp",
+            "cmakeparser.h",
             "cmakeproject.cpp",
             "cmakeproject.h",
             "cmakeproject.qrc",
