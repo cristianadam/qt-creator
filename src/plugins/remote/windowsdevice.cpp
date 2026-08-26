@@ -48,6 +48,7 @@
 #include <utils/portlist.h>
 #include <utils/processinterface.h>
 #include <utils/qtcassert.h>
+#include <utils/hostosinfo.h>
 #include <utils/qtcprocess.h>
 #include <utils/shutdownguard.h>
 #include <utils/stringutils.h>
@@ -58,6 +59,7 @@
 #include <QProcess>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QDir>
 #include <QSet>
 #include <QThread>
 #include <QUuid>
@@ -75,6 +77,22 @@ static Q_LOGGING_CATEGORY(windowsDeviceLog, "qtc.remotewindows.device", QtWarnin
 // passed raw (unquoted): the -EncodedCommand base64 has no spaces or shell metacharacters,
 // and quoting it would be misinterpreted by the remote default shell (cmd.exe or PowerShell)
 // that OpenSSH wraps the command in.
+// Every command on the device gets its own SSH connection, and setting one up to a Windows
+// machine costs a few hundred milliseconds - a single device operation runs dozens of them.
+// Let ssh keep one connection and multiplex the rest through it. The Windows ssh client
+// cannot do that, so this applies to Unix hosts.
+static QStringList sharedConnectionOptions(const SshParameters &ssh)
+{
+    if (!HostOsInfo::isAnyUnixHost())
+        return {};
+
+    // The path has to stay short: a Unix domain socket's is limited, and ssh appends to it
+    // while setting the master up.
+    const QString socket = QDir::tempPath() + "/qtc-win-"
+                           + QString::number(qHash(ssh.userAtHostAndPort()), 16);
+    return {"-o", "ControlMaster=auto", "-o", "ControlPath=" + socket, "-o", "ControlPersist=60"};
+}
+
 static CommandLine sshCommandLine(const SshParameters &ssh, const QString &remoteCommand)
 {
     const FilePath sshBinary = sshSettings().sshFilePath();
@@ -83,6 +101,7 @@ static CommandLine sshCommandLine(const SshParameters &ssh, const QString &remot
     // turning a dropped connection into a silent, empty result. ssh's stderr is ignored
     // on success anyway.
     cmd.addArgs(ssh.connectionOptions(sshBinary));
+    cmd.addArgs(sharedConnectionOptions(ssh));
     cmd.addArg(ssh.host());
     cmd.addArg(remoteCommand);
     return cmd;
@@ -272,6 +291,8 @@ CommandLine WindowsProcessInterface::fullLocalCommandLine()
     }
 
     cmd.addArgs(sshParameters.connectionOptions(sshBinary));
+    if (forwardPort.isEmpty())
+        cmd.addArgs(sharedConnectionOptions(sshParameters));
     cmd.addArg(sshParameters.host());
 
     // Re-assemble the remote command without the "ssh://host" prefix. The remote
@@ -1237,6 +1258,7 @@ static Result<DeviceFileAccessPtr> deployCmdBridge(const SshParameters &ssh,
 
     CommandLine sftpCmd{sftpBinary};
     sftpCmd.addArgs(ssh.connectionOptions(sftpBinary));
+    sftpCmd.addArgs(sharedConnectionOptions(ssh));
     sftpCmd.addArgs({"-b", "-"}); // read the batch of commands from stdin
     sftpCmd.addArg(ssh.host());
 
