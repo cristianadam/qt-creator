@@ -7,6 +7,7 @@ import os
 import platform
 import re
 import sys
+import tempfile
 import threading
 import time
 import lldb
@@ -1110,6 +1111,7 @@ class Dumper(DumperBase):
                         self.reportState('enginerunfailed')
                         return
                     self.placeMappedModules()
+                    self.watchLoaderForMappedModules()
                     # Attaching stops the process, and saying so is what keeps the
                     # engine's idea of the state and LLDB's the same.
                     self.report('pid="%s"' % self.process.GetProcessID())
@@ -1210,32 +1212,74 @@ class Dumper(DumperBase):
             return
 
         # A library is mapped in several parts; the lowest one is where it was loaded.
-        bases = {}
+        mapped = {}
         regions = self.process.GetMemoryRegions()
         info = lldb.SBMemoryRegionInfo()
         for index in range(regions.GetSize()):
             if not regions.GetMemoryRegionAtIndex(index, info):
                 continue
             name = info.GetName()
-            if not name or not name.endswith('.so'):
+            # A versioned soname does not end in ".so", and the loader is one of those.
+            if not name or not (name.endswith('.so') or '.so.' in name):
                 continue
             base = info.GetRegionBase()
             key = os.path.basename(name)
-            if base < bases.get(key, base + 1):
-                bases[key] = base
+            if base < mapped.get(key, (base + 1, ''))[0]:
+                mapped[key] = (base, name)
 
         placed = 0
-        for key, base in bases.items():
+        for key, (base, remote) in mapped.items():
+            local = None
             for path in paths:
                 candidate = os.path.join(path, key)
-                if not os.path.exists(candidate):
-                    continue
-                module = self.target.AddModule(candidate, None, None)
-                if module and self.target.SetModuleLoadAddress(module, base).Success():
-                    placed += 1
-                break
+                if os.path.exists(candidate):
+                    local = candidate
+                    break
+            if not local and self.isLoader(key):
+                local = self.fetchedFromDevice(remote)
+            if not local:
+                continue
+            module = self.target.AddModule(local, None, None)
+            if module and self.target.SetModuleLoadAddress(module, base).Success():
+                placed += 1
         if placed:
             self.report('Placed %s module(s) from the memory map of the process.' % placed)
+
+    @staticmethod
+    def isLoader(basename):
+        return basename.startswith('ld-musl') or basename.startswith('ld-linux')
+
+    # The loader exists only on the device, and without it _dl_debug_state cannot be
+    # found, so that one file is worth fetching. The platform can read it even though
+    # it refuses the /proc entries of the process.
+    def fetchedFromDevice(self, remotePath):
+        directory = os.path.join(tempfile.gettempdir(), 'qtc-device-modules')
+        local = os.path.join(directory, os.path.basename(remotePath))
+        if os.path.exists(local):
+            return local
+        try:
+            os.makedirs(directory, exist_ok=True)
+        except OSError:
+            return None
+        error = self.target.GetPlatform().Get(lldb.SBFileSpec(remotePath),
+                                              lldb.SBFileSpec(local))
+        if error.Success() and os.path.exists(local):
+            return local
+        return None
+
+    # Placing them once only covers what was mapped at the time. The loader calls
+    # _dl_debug_state after it has mapped an object and before it runs that object's
+    # initializers, so stopping there is what lets a library loaded later be placed
+    # while a breakpoint in it can still be resolved.
+    def watchLoaderForMappedModules(self):
+        breakpoint = self.target.BreakpointCreateByName('_dl_debug_state')
+        if not breakpoint.GetNumLocations():
+            return
+        # Returning False keeps the stop here, so the engine never learns of it.
+        error = breakpoint.SetScriptCallbackBody(
+            'lldb.theDumper.placeMappedModules(); return False')
+        if error.Success():
+            self.report('Watching the loader for libraries mapped later.')
 
     def loop(self):
         event = lldb.SBEvent()
