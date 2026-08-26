@@ -49,6 +49,7 @@
 #include <utils/processinterface.h>
 #include <utils/qtcassert.h>
 #include <utils/qtcprocess.h>
+#include <utils/shutdownguard.h>
 #include <utils/stringutils.h>
 
 #include <QDateTime>
@@ -85,6 +86,13 @@ static CommandLine sshCommandLine(const SshParameters &ssh, const QString &remot
     cmd.addArg(ssh.host());
     cmd.addArg(remoteCommand);
     return cmd;
+}
+
+// Match the image path, not the file name, and let a missing process pass.
+static QString killByPathScript(const FilePath &path)
+{
+    return "Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -ieq "
+           + psPath(path) + " } | Stop-Process -Force";
 }
 
 static Result<RunResult> runPowerShell(const SshParameters &ssh, const QString &script,
@@ -157,6 +165,7 @@ private:
     void start() final;
     qint64 write(const QByteArray &data) final { return m_process.writeRaw(data); }
     void sendControlSignal(ControlSignal controlSignal) final;
+    void killRemoteApplication();
     CommandLine fullLocalCommandLine();
     QString buildInteractiveRunRemoteCommand();
 
@@ -201,16 +210,46 @@ void WindowsProcessInterface::start()
     m_process.start();
 }
 
+// Stops the application on the device. Ending the SSH connection does not: a GUI run is not
+// even a child of it, but was launched into the desktop session by a scheduled task. Kills
+// by image path, as the deploy step does, so another instance of the same executable goes
+// with it. Fire and forget - the run is being torn down and must not wait for another round
+// trip; the connection is ended by the caller regardless.
+void WindowsProcessInterface::killRemoteApplication()
+{
+    const FilePath executable = m_setup.m_commandLine.executable();
+    if (executable.isEmpty())
+        return;
+
+    auto killer = new Process(shutdownGuard());
+    QObject::connect(killer, &Process::done, killer, &QObject::deleteLater);
+    killer->setCommand(
+        {m_device->filePath("powershell.exe"),
+         {"-NoProfile", "-NonInteractive", "-EncodedCommand",
+          encodePowerShellCommand(killByPathScript(executable))}});
+    killer->start();
+}
+
 void WindowsProcessInterface::sendControlSignal(ControlSignal controlSignal)
 {
-    // For now we only act on the local ssh process. Tracking and signalling the
-    // remote process by pid is left for a later milestone.
     switch (controlSignal) {
-    case ControlSignal::CloseWriteChannel: m_process.closeWriteChannel(); break;
-    case ControlSignal::Terminate:         m_process.terminate();         break;
-    case ControlSignal::Kill:              m_process.kill();              break;
-    case ControlSignal::Interrupt:         m_process.interrupt();         break;
-    case ControlSignal::KickOff:           m_process.kickoffProcess();    break;
+    case ControlSignal::CloseWriteChannel:
+        m_process.closeWriteChannel();
+        break;
+    case ControlSignal::Terminate:
+        killRemoteApplication();
+        m_process.terminate();
+        break;
+    case ControlSignal::Kill:
+        killRemoteApplication();
+        m_process.kill();
+        break;
+    case ControlSignal::Interrupt:
+        m_process.interrupt();
+        break;
+    case ControlSignal::KickOff:
+        m_process.kickoffProcess();
+        break;
     }
 }
 
@@ -1308,9 +1347,7 @@ ExecutableItem WindowsDevice::signalOperationRecipeImpl(
     QString script;
     switch (data.mode) {
     case SignalOperationMode::KillByPath:
-        // Match the image path, not the file name, and let a missing process pass.
-        script = "Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -ieq "
-                 + psPath(data.filePath) + " } | Stop-Process -Force";
+        script = killByPathScript(data.filePath);
         break;
     case SignalOperationMode::KillByPid:
         script = QString("Stop-Process -Id %1 -Force").arg(data.pid);
