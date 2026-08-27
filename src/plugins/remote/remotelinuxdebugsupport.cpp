@@ -164,6 +164,46 @@ public:
     }
 };
 
+class WindowsQmlToolingWorkerFactory final : public RunWorkerFactory
+{
+public:
+    WindowsQmlToolingWorkerFactory()
+    {
+        setId("WindowsQmlToolingWorkerFactory");
+        setRecipeProducer([](RunControl *runControl) {
+            runControl->requestQmlChannel();
+
+            const auto modifier = [runControl](Process &process) {
+                const QmlDebugServicesPreset services = servicesForRunMode(runControl->runMode());
+
+                QUrl channel = runControl->qmlChannel();
+                channel.setHost("localhost");
+                runControl->setQmlChannel(channel);
+
+                CommandLine cmd = runControl->commandLine();
+                cmd.addArg(qmlDebugTcpArguments(services, channel));
+                process.setCommand(cmd);
+
+                process.setExtraData(Constants::RunInInteractiveSession, true);
+                // Windows blocks an incoming connection to the application's port.
+                process.setExtraData(Constants::SshForwardPort, channel.port());
+                process.setExtraData(Constants::DisableSharing, true);
+            };
+            const ProcessTask processTask(runControl->processTaskWithModifier(modifier));
+            return Group {
+                When (processTask, &Process::started, WorkflowPolicy::StopOnSuccessOrError) >> Do {
+                    runControl->createRecipe(runnerIdForRunMode(runControl->runMode()))
+                }
+            };
+        });
+        addSupportedRunMode(ProjectExplorer::Constants::QML_PROFILER_RUN_MODE);
+        addSupportedRunMode(ProjectExplorer::Constants::QML_PREVIEW_RUN_MODE);
+        addSupportedDeviceType(Constants::GenericWindowsOsType);
+        setSupportedRunConfigs(supportedRunConfigs());
+        setExecutionType(Constants::ExecutionType);
+    }
+};
+
 void setupRemoteLinuxRunAndDebugSupport()
 {
     static RemoteLinuxRunWorkerFactory runWorkerFactory;
@@ -171,6 +211,7 @@ void setupRemoteLinuxRunAndDebugSupport()
     static RemoteLinuxDebugWorkerFactory debugWorkerFactory;
     static RemoteLinuxQmlToolingWorkerFactory qmlToolingWorkerFactory;
     static WindowsDebugWorkerFactory windowsDebugWorkerFactory;
+    static WindowsQmlToolingWorkerFactory windowsQmlToolingWorkerFactory;
 }
 
 } // Remote::Internal
