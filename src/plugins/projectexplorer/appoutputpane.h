@@ -80,6 +80,9 @@ public:
     void prepareRunControlStart(RunControl *runControl);
     void showOutputPaneForRunControl(RunControl *runControl);
 
+    void clearForRunControl(const RunControl *runControl);
+    void setFilterTextForRunControl(const RunControl *runControl, const QString &text);
+
     void closeTabsWithoutPrompt();
 
 private:
@@ -121,6 +124,7 @@ private:
         QPointer<RunControl> runControl;
         QPointer<AppOutputWindow> window;
         AppOutputPaneMode behaviorOnOutput = AppOutputPaneMode::FlashOnOutput;
+        QString lastReportedFilterText;
     };
 
     void closeTab(int index, CloseTabMode cm = CloseTabWithPrompt);
@@ -170,6 +174,7 @@ private:
     QWidget *m_formatterWidget;
     ShowOutputTaskHandler * const m_handler;
     bool m_paneVisible = false;
+    bool m_injectingFilterText = false;
 };
 
 AppOutputPane &appOutputPane();

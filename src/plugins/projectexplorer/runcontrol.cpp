@@ -465,6 +465,16 @@ void RunControl::postMessage(const QString &msg, OutputFormat format, bool appen
     emit appendMessage((appendNewLine && !msg.endsWith('\n')) ? msg + '\n': msg, format);
 }
 
+void RunControl::clearOutput()
+{
+    appOutputPane().clearForRunControl(this);
+}
+
+void RunControl::setOutputFilterText(const QString &text)
+{
+    appOutputPane().setFilterTextForRunControl(this, text);
+}
+
 QUrl RunControlPrivate::getNextChannel(PortList *portList, const QList<Port> &usedPorts) const
 {
     QUrl result;

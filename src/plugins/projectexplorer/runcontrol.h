@@ -243,6 +243,11 @@ public:
     static bool canRun(
         Utils::Id runMode, Utils::Id deviceType, Utils::Id runConfigId, Utils::Id executionType);
     void postMessage(const QString &msg, Utils::OutputFormat format, bool appendNewLine = true);
+    // Clears the tab's view silently (see outputCleared()).
+    void clearOutput();
+    // Sets the App Output filter field text without triggering filtering;
+    // no-op unless this run control's tab is current.
+    void setOutputFilterText(const QString &text);
 
     void requestDebugChannel();
     bool usesDebugChannel() const;
@@ -279,6 +284,11 @@ public:
 
 signals:
     void appendMessage(const QString &msg, Utils::OutputFormat format);
+    // The user changed the pane's filter field text while this tab was current.
+    void outputFilterChanged(const QString &text);
+    // Pane-initiated clears only, not the owner's own clearOutput():
+    // a replay must not wipe its own source.
+    void outputCleared();
     void aboutToStart();
     void started();
     void canceled();
