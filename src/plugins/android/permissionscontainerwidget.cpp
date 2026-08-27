@@ -17,6 +17,7 @@
 #include <cmakeprojectmanager/cmakeprojectconstants.h>
 #include <cmakeprojectmanager/cmakeparser.h>
 #include <utils/filesystemwatcher.h>
+#include <utils/algorithm.h>
 
 #include <QAbstractListModel>
 #include <QApplication>
@@ -424,10 +425,18 @@ void PermissionsContainerWidget::revertCMakePermissionsCheckBox(Qt::CheckState s
 void PermissionsContainerWidget::updateCMakePermissionsCheckBoxState()
 {
     bool checked = false;
-    if (resolveCMakeProjectInfo()
-        && !parseCMakePermissions(m_CMakeFilePath, m_CMakeTargetName).isEmpty()) {
-        checked = true; // CMake already manages permissions
-    } else {
+    bool cmakeFileBroken = false;
+    if (resolveCMakeProjectInfo()) {
+        if (const auto cmakeFile = CMakeProjectManager::parseCMakeFile(m_CMakeFilePath)) {
+            checked = Utils::anyOf(cmakeFile->functions,
+                                   [this](const CMakeFunctionCall &func) {
+                                        return isPermissionCallForTarget(func, m_CMakeTargetName);
+                                   });
+        } else {
+            cmakeFileBroken = true;
+        }
+    }
+    if (!checked && !cmakeFileBroken) {
         Utils::FilePath manifestPath = m_textEditorWidget->textDocument()->filePath();
         checked = !hasPermissionsInManifest(manifestPath) && isCMakePermissionsSupported();
     }
