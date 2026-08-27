@@ -56,6 +56,26 @@ static QString banner(const QString &label, const QString &state)
     return QString("**** %1 - %2 ****\n").arg(label, state);
 }
 
+enum class LogcatLevel { Unknown, Verbose, Debug, Info, Warning, Error, Fatal };
+
+static LogcatLevel logcatLevel(QStringView text)
+{
+    static const std::pair<QLatin1String, LogcatLevel> levels[] = {
+        {QLatin1String("verbose"), LogcatLevel::Verbose},
+        {QLatin1String("debug"), LogcatLevel::Debug},
+        {QLatin1String("info"), LogcatLevel::Info},
+        {QLatin1String("warning"), LogcatLevel::Warning},
+        {QLatin1String("error"), LogcatLevel::Error},
+        {QLatin1String("fatal"), LogcatLevel::Fatal},
+        {QLatin1String("assert"), LogcatLevel::Fatal},
+    };
+    for (const auto &[name, level] : levels) {
+        if (name.startsWith(text, Qt::CaseInsensitive))
+            return level;
+    }
+    return LogcatLevel::Unknown;
+}
+
 struct LogcatEntry
 {
     QString line;
@@ -66,6 +86,7 @@ struct LogcatEntry
     qsizetype timestampLength = 0;
     qint32 pid = -1;
     qint32 tid = -1;
+    LogcatLevel level = LogcatLevel::Unknown;
     Utils::OutputFormat format = Utils::StdOutFormat;
     QChar levelLetter;
     bool bypassFilter = false;
@@ -92,9 +113,11 @@ LogcatEntry LogcatEntry::fromLine(const QString &raw)
     const QRegularExpressionMatch match = regExpLogcat.match(raw);
     entry.parsed = match.hasMatch();
     if (entry.parsed) {
+        const QStringView levelText = match.capturedView("level");
         entry.pid = match.capturedView("pid").toInt();
         entry.tid = match.capturedView("tid").toInt();
-        entry.levelLetter = match.capturedView("level").at(0);
+        entry.level = logcatLevel(levelText);
+        entry.levelLetter = levelText.at(0);
         entry.tag = match.captured("tag");
         entry.headerLength = match.capturedEnd();
         entry.colorLength = match.capturedStart("timestamp");
@@ -137,6 +160,7 @@ static bool matchesFreeText(const LogcatEntry &entry, const QString &term)
 }
 
 static constexpr QLatin1StringView packageKey("package");
+static constexpr QLatin1StringView levelKey("level");
 
 class LogcatFilter
 {
@@ -167,6 +191,11 @@ static LogcatFilter::FilterPredicate minePredicate(qint64 pid, const QString &pa
     };
 }
 
+static LogcatFilter::FilterPredicate levelPredicate(LogcatLevel min)
+{
+    return [min](const LogcatEntry &e) { return e.level >= min; };
+}
+
 void LogcatFilter::setFromText(const QString &text)
 {
     m_filterText = text;
@@ -176,13 +205,19 @@ void LogcatFilter::setFromText(const QString &text)
         const int colon = token.indexOf(u':');
         const QString key = colon > 0 ? token.left(colon).toLower() : QString();
         const QString value = colon > 0 ? token.mid(colon + 1) : QString();
-        const bool queryKey = key == packageKey;
+        const bool queryKey = key == packageKey || key == levelKey;
         if (queryKey && value.isEmpty())
             continue;
-        if (queryKey
+        if (key == packageKey
             && value.compare(QLatin1String("mine"), Qt::CaseInsensitive) == 0
             && (m_pid > 0 || !m_boundPackage.isEmpty())) {
             m_predicates.append(minePredicate(m_pid, m_boundPackage));
+        } else if (key == levelKey) {
+            const LogcatLevel level = logcatLevel(value);
+            if (level != LogcatLevel::Unknown)
+                m_predicates.append(levelPredicate(level));
+            else
+                m_predicates.append([](const LogcatEntry &) { return false; });
         } else {
             m_predicates.append([token](const LogcatEntry &e) {
                 return matchesFreeText(e, token);
