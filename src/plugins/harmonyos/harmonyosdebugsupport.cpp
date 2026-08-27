@@ -42,6 +42,10 @@ static DebuggerRunParameters debuggerRunParameters(RunControl *runControl)
     // The application starts a platform, not a bare server, so that the debugger can ask
     // it what the process has mapped: nothing else on this device can say.
     rp.setLldbPlatform("remote-ohos");
+    // The application waits for this before it loads its own library, so that what runs
+    // as it is loaded can be stopped in. The engine sends these once the breakpoints it
+    // has are in place, which is what makes releasing it here the right moment.
+    rp.setCommandsAfterConnect("expression -- qt_ohos_waitForDebugger = false");
     rp.setUseContinueInsteadOfRun(true);
     rp.setRemoteChannel(QString("127.0.0.1:%1").arg(Constants::HARMONYOS_DEBUG_PORT));
 
