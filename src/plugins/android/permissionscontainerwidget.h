@@ -15,9 +15,11 @@ class QCheckBox;
 class QComboBox;
 class QPushButton;
 class QListView;
+class QTimer;
 
 namespace ProjectExplorer { class Project; }
 namespace TextEditor { class TextEditorWidget; }
+namespace Utils { class FileSystemWatcher; }
 
 namespace Android::Internal {
 class PermissionsModel;
@@ -48,6 +50,7 @@ private:
     void revertCMakePermissionsCheckBox(Qt::CheckState state, const QString &error);
 
     bool hasPermissionsInManifest(Utils::FilePath &manifestPath);
+    void updateCMakeFileWatch();
     bool resolveCMakeProjectInfo();
     void loadPermissionsFromCMake();
     void addCMakePermission(const QString &permission, const QMap<QString, QString> &attributes = {});
@@ -69,6 +72,8 @@ private:
     QPushButton *m_editAttributesButton = nullptr;
     QTreeView *m_permissionsListView = nullptr;
     PermissionsModel *m_permissionsModel = nullptr;
+    Utils::FileSystemWatcher *m_cmakeWatcher = nullptr;
+    QTimer *m_cmakeRefreshTimer = nullptr;
 };
 
 } // namespace Android::Internal

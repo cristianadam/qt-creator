@@ -16,6 +16,7 @@
 #include <texteditor/texteditor.h>
 #include <cmakeprojectmanager/cmakeprojectconstants.h>
 #include <cmakeprojectmanager/cmakeparser.h>
+#include <utils/filesystemwatcher.h>
 
 #include <QAbstractListModel>
 #include <QApplication>
@@ -34,6 +35,7 @@
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QTimer>
 
 
 using namespace ProjectExplorer;
@@ -445,6 +447,20 @@ bool PermissionsContainerWidget::initialize(TextEditor::TextEditorWidget *textEd
     auto permissionsGroupBox = new QGroupBox(this);
     permissionsGroupBox->setTitle(Android::Tr::tr("Permissions"));
     auto layout = new QGridLayout(permissionsGroupBox);
+
+    m_cmakeWatcher = new Utils::FileSystemWatcher(this);
+    m_cmakeRefreshTimer = new QTimer(this);
+    m_cmakeRefreshTimer->setSingleShot(true);
+    m_cmakeRefreshTimer->setInterval(100);
+    connect(m_cmakeWatcher, &Utils::FileSystemWatcher::fileChanged,
+            m_cmakeRefreshTimer, qOverload<>(&QTimer::start));
+    connect(m_cmakeRefreshTimer, &QTimer::timeout, this, [this] {
+        if (QApplication::activeModalWidget()) {
+            m_cmakeRefreshTimer->start();
+            return;
+        }
+        refresh();
+    });
 
     m_defaultPermissonsCheckBox = new QCheckBox(this);
     m_defaultPermissonsCheckBox->setText(
@@ -896,6 +912,15 @@ void PermissionsContainerWidget::addCMakePermission(const QString &permission,
     saver.finalize();
 }
 
+void PermissionsContainerWidget::updateCMakeFileWatch()
+{
+    if (!m_cmakeWatcher || m_CMakeFilePath.isEmpty()
+        || m_cmakeWatcher->watchesFile(m_CMakeFilePath))
+        return;
+    m_cmakeWatcher->clear();
+    m_cmakeWatcher->addFile(m_CMakeFilePath, Utils::FileSystemWatcher::WatchModifiedDate);
+}
+
 bool PermissionsContainerWidget::resolveCMakeProjectInfo()
 {
     if (!m_textEditorWidget || !m_textEditorWidget->textDocument())
@@ -938,6 +963,7 @@ bool PermissionsContainerWidget::resolveCMakeProjectInfo()
     if (m_CMakeTargetName.isEmpty() || m_CMakeFilePath.isEmpty())
         return false;
 
+    updateCMakeFileWatch();
     return true;
 }
 
