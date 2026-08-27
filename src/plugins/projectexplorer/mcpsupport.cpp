@@ -623,6 +623,53 @@ static QJsonObject addKitsToProject(
         {"results", results}};
 }
 
+// Renames a kit, as editing its name on the Kits preferences page does. A display name
+// shared by several kits has to be told apart by id, which is the case renaming is for.
+static QJsonObject renameKit(const QString &kitIdentifier, const QString &name)
+{
+    if (kitIdentifier.isEmpty())
+        return {{"success", false}, {"reason", "no_kit"}, {"message", "No kit specified."}};
+    if (name.isEmpty())
+        return {{"success", false}, {"reason", "no_name"}, {"message", "No name specified."}};
+
+    Kit *kit = KitManager::kit(Utils::Id::fromString(kitIdentifier));
+    if (!kit) {
+        const QList<Kit *> byName = Utils::filtered(
+            KitManager::kits(),
+            [&kitIdentifier](const Kit *k) { return k->displayName() == kitIdentifier; });
+        if (byName.size() > 1) {
+            QJsonArray candidates;
+            for (const Kit *k : byName)
+                candidates.append(kitInfoObject(k));
+            return {
+                {"success", false},
+                {"reason", "ambiguous_name"},
+                {"message", QString("%1 kits are called \"%2\"; pass a kit id instead.")
+                                .arg(byName.size())
+                                .arg(kitIdentifier)},
+                {"candidates", candidates}};
+        }
+        if (!byName.isEmpty())
+            kit = byName.first();
+    }
+    if (!kit) {
+        return {
+            {"success", false},
+            {"reason", "not_found"},
+            {"message", QString("No kit matching \"%1\".").arg(kitIdentifier)}};
+    }
+
+    const QString previous = kit->displayName();
+    kit->setUnexpandedDisplayName(name);
+
+    return {
+        {"success", true},
+        {"reason", "ok"},
+        {"message", QString("Kit \"%1\" is now called \"%2\".").arg(previous, kit->displayName())},
+        {"previous_name", previous},
+        {"kit", kitInfoObject(kit)}};
+}
+
 // Makes a project's target for a kit the active one, as choosing it in the kit selector
 // does. A display name shared by several kits is refused rather than guessed at, since
 // nothing distinguishes them; the id from list_kits always identifies one.
@@ -2523,6 +2570,44 @@ void registerMcpTools()
                 kits.append(v.toString());
             return addKitsToProject(
                 p.value("project_name").toString(), p.value("project_path").toString(), kits);
+        }));
+
+    ToolRegistry::registerTool(
+        Tool{}
+            .name("rename_kit")
+            .title("Rename a kit")
+            .description(
+                "Gives a kit another display name, as editing it on the Kits preferences page "
+                "does. Worth knowing why it matters: the default build directory of a project "
+                "is derived from the kit name, so two kits that share one name also share one "
+                "build directory and overwrite each other's configuration. Kits generated per "
+                "Qt version collide that way when the versions carry the same version number "
+                "and ABI. The kit may be given by id or display name (see list_kits); a name "
+                "several kits share has to be told apart by id, which is the case this is for.")
+            .annotations(ToolAnnotations{}.readOnlyHint(false))
+            .inputSchema(
+                Tool::InputSchema{}
+                    .addProperty(
+                        "kit",
+                        QJsonObject{
+                            {"type", "string"},
+                            {"description", "Kit id or current display name."}})
+                    .addProperty(
+                        "name",
+                        QJsonObject{{"type", "string"}, {"description", "The new display name."}})
+                    .addRequired("kit")
+                    .addRequired("name"))
+            .outputSchema(
+                Tool::OutputSchema{}
+                    .addProperty("success", QJsonObject{{"type", "boolean"}})
+                    .addProperty("reason", QJsonObject{{"type", "string"}})
+                    .addProperty("message", QJsonObject{{"type", "string"}})
+                    .addProperty("previous_name", QJsonObject{{"type", "string"}})
+                    .addProperty("kit", QJsonObject{{"type", "object"}})
+                    .addProperty("candidates", QJsonObject{{"type", "array"}})
+                    .addRequired("success")),
+        wrap([](const QJsonObject &p) {
+            return renameKit(p.value("kit").toString(), p.value("name").toString());
         }));
 
     ToolRegistry::registerTool(
