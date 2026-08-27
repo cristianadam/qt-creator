@@ -843,9 +843,9 @@ QtSupport::ProFileReader *QmakeBuildSystem::createProFileReader(const QmakeProFi
         }
 
         QString rootProFileName = buildDir(rootProFile()->filePath()).path();
-        m_qmakeGlobals->setDirectories(rootProFile()->sourceDir().path(),
-                                       rootProFileName,
-                                       deviceRoot());
+        if (const IDeviceConstPtr buildDevice = BuildDeviceKitAspect::device(k))
+            m_qmakeGlobals->setDevice(deviceRoot(), buildDevice->osType() == OsTypeWindows);
+        m_qmakeGlobals->setDirectories(rootProFile()->sourceDir().path(), rootProFileName);
 
         env.forEachEntry([&](const QString &key, const QString &value, bool enabled) {
             if (enabled)
@@ -1430,11 +1430,11 @@ QString QmakeBuildSystem::deviceRoot() const
 {
     IDeviceConstPtr device = BuildDeviceKitAspect::device(kit());
     QTC_ASSERT(device, return {});
-    FilePath deviceRoot = device->rootPath();
-    if (!deviceRoot.isLocal())
-        return deviceRoot.toFSPathString();
+    const FilePath deviceRoot = device->rootPath();
+    if (deviceRoot.isLocal())
+        return {};
 
-    return {};
+    return deviceRoot.withNewPath("/").toFSPathString();
 }
 
 void QmakeBuildSystem::warnOnToolChainMismatch(const QmakeProFile *pro) const
