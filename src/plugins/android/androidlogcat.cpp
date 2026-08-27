@@ -227,6 +227,7 @@ private:
     QTimer m_filterDebounce;
     bool m_adbFailedBannered = false;
     bool m_pausedWhileHidden = false;
+    QString m_resumeTimestamp;
 
     CommandLine adbCommand(const QStringList &args) const
     {
@@ -359,6 +360,8 @@ void LogcatStream::start()
     const auto onSetup = [this](Process &process) {
         process.setStdOutLineCallback([this](const QString &line) {
             const LogcatEntry entry = LogcatEntry::fromLine(line);
+            if (entry.parsed)
+                m_resumeTimestamp = line.mid(entry.colorLength, entry.timestampLength);
             if (entry.pid > 0 && !m_tabContext.processNames.contains(entry.pid)
                 && !m_tabContext.askedPids.contains(entry.pid)) {
                 m_tabContext.askedPids.insert(entry.pid);
@@ -373,8 +376,9 @@ void LogcatStream::start()
                 return;
             postMessage(line, Utils::StdErrFormat);
         });
-        // -T 1 starts the tail at the current head, skipping the device's existing ring buffer (live tail only).
-        process.setCommand(adbCommand({"logcat", "-T", "1", "-v", "color", "-v", "threadtime", "-v", "year"}));
+        const QString since = m_resumeTimestamp.isEmpty() ? QString("1") : m_resumeTimestamp;
+        process.setCommand(
+            adbCommand({"logcat", "-T", since, "-v", "color", "-v", "threadtime", "-v", "year"}));
     };
     m_adbFailedBannered = false;
     // Pace the respawn so a persistently failing adb cannot busy-restart.
@@ -409,6 +413,7 @@ void LogcatStream::stop()
         if (!m_tabContext.streaming && m_task) {
             m_task.reset();
             m_pausedWhileHidden = true;
+            m_resumeTimestamp.clear();
         }
     });
 }
