@@ -1033,6 +1033,7 @@ void AppOutputPane::reRunRunControl()
     QTC_ASSERT(tab->runControl, return);
     QTC_ASSERT(!tab->runControl->isRunning(), return);
 
+    tab->window->flush();
     handleOldOutput(tab->window);
     tab->window->scrollToBottom();
     tab->runControl->initiateStart();
@@ -1357,6 +1358,60 @@ QVariant OutputMaxCharCountAspect::toSettingsValue(const QVariant &valueToSave) 
     return valueToSave.toInt() / 100;
 }
 
+LogcatSettings::LogcatSettings(AspectContainer *container)
+    : viewMode{container}
+    , showTimestamp{container}
+    , showPid{container}
+    , showTag{container}
+    , showPackage{container}
+    , bufferSize{container}
+{
+    viewMode.setSettingsKey("ProjectExplorer/Settings/LogcatViewMode");
+    viewMode.setDisplayStyle(SelectionAspect::DisplayStyle::ComboBox);
+    viewMode.setDefaultValue(StandardView);
+    viewMode.addOption(Tr::tr("Standard"), Tr::tr("The columns picked below."));
+    viewMode.addOption(Tr::tr("Compact"), Tr::tr("Time, level and message only."));
+    viewMode.setLabelText(Tr::tr("View mode:"));
+
+    showTimestamp.setSettingsKey("ProjectExplorer/Settings/LogcatShowTimestamp");
+    showTimestamp.setDefaultValue(true);
+    showTimestamp.setLabelText(Tr::tr("Show date and time"));
+    showTimestamp.setToolTip(Tr::tr("When the line was logged, as yyyy-MM-dd hh:mm:ss.zzz."));
+
+    showPid.setSettingsKey("ProjectExplorer/Settings/LogcatShowPid");
+    showPid.setDefaultValue(false);
+    showPid.setLabelText(Tr::tr("Show process and thread IDs"));
+    showPid.setToolTip(Tr::tr("The emitting process and thread, like \"1483-1507\"."));
+
+    showTag.setSettingsKey("ProjectExplorer/Settings/LogcatShowTag");
+    showTag.setDefaultValue(true);
+    showTag.setLabelText(Tr::tr("Show tag"));
+    showTag.setToolTip(Tr::tr("The line's log tag, like \"ActivityManager\"."));
+
+    showPackage.setSettingsKey("ProjectExplorer/Settings/LogcatShowPackage");
+    showPackage.setDefaultValue(true);
+    showPackage.setLabelText(Tr::tr("Show package name"));
+    showPackage.setToolTip(Tr::tr("The emitting app's package, like \"do.main.mypackage\"."));
+
+    bufferSize.setSettingsKey("ProjectExplorer/Settings/LogcatBufferSize");
+    bufferSize.setRange(1, 102400); // up to 100 MB
+    bufferSize.setDefaultValue(1024);
+    bufferSize.setSuffix(Tr::tr(" KB"));
+    bufferSize.setLabelText(Tr::tr("Logcat cycle buffer size:"));
+    bufferSize.setToolTip(
+        Tr::tr("Recent output kept per device, so filters can bring older lines back."));
+
+    QObject::connect(&viewMode, &BaseAspect::volatileValueChanged,
+                     &viewMode, [this] { updateColumnToggles(); });
+}
+
+void LogcatSettings::updateColumnToggles()
+{
+    const bool standard = viewMode.volatileValue() == StandardView;
+    for (BoolAspect *column : {&showTimestamp, &showPid, &showTag, &showPackage})
+        column->setEnabled(standard);
+}
+
 AppOutputSettings::AppOutputSettings()
 {
     setAutoApply(false);
@@ -1416,6 +1471,8 @@ AppOutputSettings::AppOutputSettings()
     backgroundColor.setEnabler(&overwriteBackground);
 
     setLayouter([this] {
+        const bool androidLoaded
+            = ExtensionSystem::PluginManager::specExistsAndIsEnabled("android");
         // clang-format off
         using namespace Layouting;
         const QString msg = Tr::tr("Limit output to %1 characters");
@@ -1431,12 +1488,23 @@ AppOutputSettings::AppOutputSettings()
             },
             Row { parts.at(0).trimmed(), maxCharCount, parts.at(1).trimmed(), st },
             Row { overwriteBackground, backgroundColor, st },
+            If (androidLoaded) >> Then {
+                Label { text(QString("<b>%1</b>").arg(Tr::tr("Android Logcat"))) },
+                Row { logcat.viewMode, st },
+                logcat.showTimestamp,
+                logcat.showPid,
+                logcat.showTag,
+                logcat.showPackage,
+                Row { logcat.bufferSize, st },
+            },
             st,
         };
         // clang-format on
     });
 
     readSettings();
+    // readSettings() is quiet: sync the graying with the loaded mode.
+    logcat.updateColumnToggles();
 }
 
 QColor AppOutputSettings::effectiveBackgroundColor() const
@@ -1465,5 +1533,14 @@ public:
 static const AppOutputSettingsPage settingsPage;
 
 } // namespace ProjectExplorer::Internal
+
+namespace ProjectExplorer {
+
+const Internal::LogcatSettings &logcatSettings()
+{
+    return Internal::AppOutputPane::settings().logcat;
+}
+
+} // namespace ProjectExplorer
 
 #include "appoutputpane.moc"
