@@ -425,8 +425,17 @@ void PermissionsContainerWidget::updateCMakePermissionsCheckBoxState()
     }
     if (!checked && !cmakeFileBroken) {
         Utils::FilePath manifestPath = m_textEditorWidget->textDocument()->filePath();
-        checked = !hasPermissionsInManifest(manifestPath) && isCMakePermissionsSupported();
+        if (hasPermissionsInManifest(manifestPath))
+            checked = false;
+        else if (m_checkBoxStateInitialized)
+            checked = m_CMakePermissionsCheckBox->isChecked();
+        else
+            checked = isCMakePermissionsSupported();
     }
+    const Utils::FilePath docPath = m_textEditorWidget->textDocument()
+        ? m_textEditorWidget->textDocument()->filePath() : Utils::FilePath();
+        if (!docPath.isEmpty() && ProjectManager::projectForFile(docPath))
+            m_checkBoxStateInitialized = true;
 
     const QSignalBlocker blocker(m_CMakePermissionsCheckBox);
     m_CMakePermissionsCheckBox->setCheckState(checked ? Qt::Checked : Qt::Unchecked);
