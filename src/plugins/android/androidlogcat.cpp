@@ -78,6 +78,8 @@ static LogcatLevel logcatLevel(QStringView text)
     return LogcatLevel::Unknown;
 }
 
+struct ColumnWidths;
+
 struct LogcatEntry
 {
     QString line;
@@ -95,7 +97,8 @@ struct LogcatEntry
     bool parsed = false;
 
     static LogcatEntry fromLine(const QString &raw);
-    QString displayText() const;
+    bool isSameRecordAs(const LogcatEntry &previous) const;
+    QString displayText(const LogcatEntry &previous, const ColumnWidths &widths) const;
 };
 
 // Matches adb's '-v threadtime -v year' line layout.
@@ -108,6 +111,78 @@ static const QRegularExpression regExpLogcat(
     "(?<tag>.*?) *: ");
 
 static constexpr qsizetype timeOfDayLength = 12; // hh:mm:ss.zzz
+
+struct ColumnWidths
+{
+    static constexpr int timestamp = 23;
+    static constexpr int minPidTid = 9;
+    static constexpr int minTag = 8;
+    static constexpr int minPackage = 8;
+    static constexpr int maxPidTid = 15;
+    static constexpr int maxTag = 23;
+    static constexpr int maxPackage = 35;
+
+    int pidTid = minPidTid;
+    int tag = minTag;
+    int package = minPackage;
+
+    bool widen(const LogcatEntry &entry);
+};
+
+static int digitCount(qint64 value)
+{
+    int digits = value < 0 ? 2 : 1;
+    for (qint64 rest = value / 10; rest != 0; rest /= 10)
+        ++digits;
+    return digits;
+}
+
+bool ColumnWidths::widen(const LogcatEntry &entry)
+{
+    if (!entry.parsed)
+        return false;
+    bool grew = false;
+    const auto raise = [&grew](int &width, qsizetype length, int cap) {
+        const int fitted = int(qMin<qsizetype>(length, cap));
+        if (fitted > width) {
+            width = fitted;
+            grew = true;
+        }
+    };
+    raise(pidTid, digitCount(entry.pid) + 1 + digitCount(entry.tid), maxPidTid);
+    raise(tag, entry.tag.size(), maxTag);
+    raise(package, entry.packageName.size(), maxPackage);
+    return grew;
+}
+
+static int displayPrefixWidth(const ColumnWidths &columns)
+{
+    const auto &settings = logcatSettings();
+    if (settings.compactView())
+        return int(timeOfDayLength) + 1 + 1 + 2;
+    int width = 1 + 2;
+    if (settings.showTimestamp())
+        width += columns.timestamp + 1;
+    if (settings.showPid())
+        width += columns.pidTid + 1;
+    if (settings.showTag())
+        width += columns.tag + 1;
+    if (settings.showPackage())
+        width += columns.package + 1;
+    return width;
+}
+
+static QString elideMiddle(const QString &text, int width)
+{
+    if (text.size() <= width)
+        return text;
+    return text.left(3) + "..." + text.right(width - 6);
+}
+
+static QString cell(const QString &value, int width)
+{
+    return elideMiddle(value, width).leftJustified(width);
+}
 
 LogcatEntry LogcatEntry::fromLine(const QString &raw)
 {
@@ -128,30 +203,45 @@ LogcatEntry LogcatEntry::fromLine(const QString &raw)
     return entry;
 }
 
-QString LogcatEntry::displayText() const
+bool LogcatEntry::isSameRecordAs(const LogcatEntry &previous) const
+{
+    return headerLength > 0 && headerLength == previous.headerLength
+           && QStringView(line).left(headerLength)
+                  == QStringView(previous.line).left(previous.headerLength);
+}
+
+QString LogcatEntry::displayText(const LogcatEntry &previous, const ColumnWidths &widths) const
 {
     if (bypassFilter || !parsed)
         return line;
+
+    const QStringView color = QStringView(line).left(colorLength);
+    const QStringView message = QStringView(line).sliced(headerLength);
+
+    if (isSameRecordAs(previous))
+        return color + QString(displayPrefixWidth(widths), QLatin1Char(' ')) + message;
+
     const auto &settings = logcatSettings();
-    QString result = line.left(colorLength);
+    QString result = color.toString();
     if (settings.compactView()) {
         result += QStringView(line).mid(colorLength, timestampLength).right(timeOfDayLength);
         result += QLatin1Char(' ') + levelLetter + QLatin1String("  ");
-        result += line.mid(headerLength);
+        result += message;
         return result;
     }
     if (settings.showTimestamp())
-        result += line.mid(colorLength, timestampLength) + QLatin1Char(' ');
-    if (settings.showPid()) {
-        result += QString::number(pid) + QLatin1Char('-') + QString::number(tid)
+        result += line.mid(colorLength, timestampLength).leftJustified(widths.timestamp)
                   + QLatin1Char(' ');
+    if (settings.showPid()) {
+        const QString pidTid = QString::number(pid) + QLatin1Char('-') + QString::number(tid);
+        result += cell(pidTid, widths.pidTid) + QLatin1Char(' ');
     }
     if (settings.showTag())
-        result += tag + QLatin1Char(' ');
-    if (settings.showPackage() && !packageName.isEmpty())
-        result += packageName + QLatin1Char(' ');
+        result += cell(tag, widths.tag) + QLatin1Char(' ');
+    if (settings.showPackage())
+        result += cell(packageName, widths.package) + QLatin1Char(' ');
     result += levelLetter + QLatin1String("  ");
-    result += line.mid(headerLength);
+    result += message;
     return result;
 }
 
@@ -326,11 +416,14 @@ private:
         qint64 bufferBudget = logcatBufferBudget();
         QHash<qint32, QString> processNames;
         QSet<qint32> askedPids;
+        LogcatEntry lastPosted;
         LogcatFilter filter;
+        ColumnWidths columns;
 
-        void appendEntry(const LogcatEntry &entry);
+        bool appendEntry(const LogcatEntry &entry);
         void enforceBudget();
-        void backfillPackageNames();
+        bool backfillPackageNames();
+        void postEntry(const LogcatEntry &entry);
         void renderFromBuffer();
     };
 
@@ -441,6 +534,8 @@ void LogcatStream::attachTab(RunControl *tab)
     QObject::connect(tab, &RunControl::outputCleared, this, [this] {
         m_tabContext.buffer.clear();
         m_tabContext.bufferedBytes = 0;
+        m_tabContext.columns = {};
+        m_tabContext.lastPosted = {};
     });
     QObject::connect(tab, &QObject::destroyed, this, [this] { onTabDestroyed(); });
     setStreaming(tab->isOutputVisible());
@@ -621,7 +716,8 @@ void LogcatStream::populateProcesses()
             if (ok)
                 m_tabContext.processNames.insert(pid, fields.last());
         }
-        m_tabContext.backfillPackageNames();
+        if (m_tabContext.backfillPackageNames())
+            m_filterDebounce.start();
     };
     // The timer paces ps to one per 5s; withTimeout cancels a ps hanging past it.
     m_psRunner.start({parallel,
@@ -653,7 +749,8 @@ void LogcatStream::start()
                 m_tabContext.askedPids.insert(entry.pid);
                 populateProcesses();
             }
-            m_tabContext.appendEntry(entry);
+            if (m_tabContext.appendEntry(entry))
+                m_filterDebounce.start();
             if (entry.parsed) {
                 for (const LineReader &reader : std::as_const(m_lineReaders)) {
                     if (reader.owner)
@@ -775,17 +872,27 @@ static qsizetype bufferedCost(const LogcatEntry &entry)
     return qsizetype(sizeof(LogcatEntry)) + textLength * qsizetype(sizeof(QChar));
 }
 
-void LogcatStream::TabContext::appendEntry(const LogcatEntry &entry)
+bool LogcatStream::TabContext::appendEntry(const LogcatEntry &entry)
 {
     if (!tab)
-        return;
+        return false;
     LogcatEntry stamped = entry;
     stamped.packageName = processNames.value(stamped.pid);
-    buffer.append(stamped);
+    bool realign = false;
+    if (filter.accepts(stamped)) {
+        realign = columns.widen(stamped);
+        postEntry(stamped);
+    }
     bufferedBytes += bufferedCost(stamped);
+    buffer.append(std::move(stamped));
     enforceBudget();
-    if (filter.accepts(stamped))
-        tab->postMessage(stamped.displayText(), stamped.format, false);
+    return realign;
+}
+
+void LogcatStream::TabContext::postEntry(const LogcatEntry &entry)
+{
+    tab->postMessage(entry.displayText(lastPosted, columns), entry.format, true);
+    lastPosted = entry;
 }
 
 void LogcatStream::TabContext::enforceBudget()
@@ -796,14 +903,19 @@ void LogcatStream::TabContext::enforceBudget()
     }
 }
 
-void LogcatStream::TabContext::backfillPackageNames()
+bool LogcatStream::TabContext::backfillPackageNames()
 {
+    bool filled = false;
     for (LogcatEntry &entry : buffer) {
         if (!entry.packageName.isEmpty())
             continue;
         entry.packageName = processNames.value(entry.pid);
+        if (entry.packageName.isEmpty())
+            continue;
         bufferedBytes += entry.packageName.size() * qsizetype(sizeof(QChar));
+        filled = true;
     }
+    return filled;
 }
 
 void LogcatStream::TabContext::renderFromBuffer()
@@ -812,9 +924,15 @@ void LogcatStream::TabContext::renderFromBuffer()
         return;
     tab->clearOutput();
     tab->setOutputFilterText(filter.filterText());
+    lastPosted = {};
+    columns = {};
     for (const LogcatEntry &entry : buffer) {
         if (filter.accepts(entry))
-            tab->postMessage(entry.displayText(), entry.format, false);
+            columns.widen(entry);
+    }
+    for (const LogcatEntry &entry : buffer) {
+        if (filter.accepts(entry))
+            postEntry(entry);
     }
 }
 
