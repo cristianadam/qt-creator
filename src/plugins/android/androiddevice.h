@@ -88,6 +88,7 @@ private:
 
 void setupDevicesWatcher();
 void updateAvdList();
+void markAvdDeviceReady(const QString &avdName, const QString &serialNumber);
 QtTaskTree::Group createAvdRecipe(const QtTaskTree::Storage<std::optional<QString>> &errorStorage,
                                const CreateAvdInfo &info, bool force);
 
