@@ -74,6 +74,7 @@ private:
     PermissionsModel *m_permissionsModel = nullptr;
     Utils::FileSystemWatcher *m_cmakeWatcher = nullptr;
     QTimer *m_cmakeRefreshTimer = nullptr;
+    bool m_checkBoxStateInitialized = false;
 };
 
 } // namespace Android::Internal
