@@ -243,6 +243,11 @@ public:
     static bool canRun(
         Utils::Id runMode, Utils::Id deviceType, Utils::Id runConfigId, Utils::Id executionType);
     void postMessage(const QString &msg, Utils::OutputFormat format, bool appendNewLine = true);
+    void clearOutput();
+    // Kept per tab and shown while this tab is current.
+    void setOutputFilterText(const QString &text);
+    void reportOutputFilterChanged(const QString &text);
+    void reportOutputCleared();
 
     void requestDebugChannel();
     bool usesDebugChannel() const;
@@ -279,6 +284,8 @@ public:
 
 signals:
     void appendMessage(const QString &msg, Utils::OutputFormat format);
+    void outputFilterChanged(const QString &text);
+    void outputCleared();
     void aboutToStart();
     void started();
     void canceled();
