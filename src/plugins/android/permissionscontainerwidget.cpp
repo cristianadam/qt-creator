@@ -19,6 +19,7 @@
 #include <texteditor/textdocument.h>
 #include <texteditor/texteditor.h>
 #include <utils/algorithm.h>
+#include <utils/filesystemwatcher.h>
 #include <utils/infolabel.h>
 
 #include <QAbstractListModel>
@@ -37,6 +38,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScopeGuard>
+#include <QTimer>
 #include <QTreeView>
 #include <QVersionNumber>
 
@@ -515,13 +517,31 @@ bool PermissionsContainerWidget::initialize(TextEditor::TextEditorWidget *textEd
     permissionsGroupBox->setTitle(Android::Tr::tr("Permissions"));
     auto layout = new QGridLayout(permissionsGroupBox);
 
+    m_cmakeWatcher = new FileSystemWatcher(this);
+    m_cmakeRefreshTimer = new QTimer(this);
+    m_cmakeRefreshTimer->setSingleShot(true);
+    m_cmakeRefreshTimer->setInterval(100);
+    connect(m_cmakeWatcher, &FileSystemWatcher::fileChanged,
+            m_cmakeRefreshTimer, qOverload<>(&QTimer::start));
+    connect(m_cmakeRefreshTimer, &QTimer::timeout, this, [this] {
+        if (m_lastCMakeWrite.isValid() && m_lastCMakeWrite.elapsed() < 500) {
+            m_lastCMakeWrite.invalidate();
+            return;
+        }
+        if (QApplication::activeModalWidget()) {
+            m_cmakeRefreshTimer->start();
+            return;
+        }
+        refresh();
+    });
+
     m_defaultPermissonsCheckBox = new QCheckBox(this);
     m_defaultPermissonsCheckBox->setText(
-        Android::Tr::tr("Include default permissions for Qt modules"));
+        Android::Tr::tr("Include default permissions for Qt modules."));
     layout->addWidget(m_defaultPermissonsCheckBox, 0, 0);
 
     m_defaultFeaturesCheckBox = new QCheckBox(this);
-    m_defaultFeaturesCheckBox->setText(Android::Tr::tr("Include default features for Qt modules"));
+    m_defaultFeaturesCheckBox->setText(Android::Tr::tr("Include default features for Qt modules."));
     layout->addWidget(m_defaultFeaturesCheckBox, 1, 0);
 
     m_CMakePermissionsCheckBox = new QCheckBox(this);
@@ -529,6 +549,7 @@ bool PermissionsContainerWidget::initialize(TextEditor::TextEditorWidget *textEd
     m_CMakePermissionsCheckBox->setToolTip(
         Tr::tr("Permissions will be added as qt_add_android_permission() calls in CMakeLists.txt "
                "instead of AndroidManifest.xml. This requires Qt 6.9 or newer."));
+
     layout->addWidget(m_CMakePermissionsCheckBox, 2, 0);
 
     m_permissionsComboBox = new QComboBox(permissionsGroupBox);
@@ -675,7 +696,6 @@ bool PermissionsContainerWidget::initialize(TextEditor::TextEditorWidget *textEd
 
     m_permissionsListView = new QTreeView(permissionsGroupBox);
     m_permissionsListView->setRootIsDecorated(false);
-    m_permissionsListView->header()->setStretchLastSection(true);
     m_permissionsListView->setModel(m_permissionsModel);
     m_permissionsListView->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     layout->addWidget(m_permissionsListView, 4, 0, 3, 1);
@@ -958,6 +978,7 @@ void PermissionsContainerWidget::refresh()
 {
     if (!m_textEditorWidget || m_updating)
         return;
+    m_lastCMakeWrite.invalidate();
     std::optional<Result<CMakeProjectManager::CMakeListFile>> cmakeFile;
     if (resolveCMakeProjectInfo())
         cmakeFile = parseCMakeFileOrDocument(m_CMakeFilePath);
@@ -1014,6 +1035,14 @@ Result<> PermissionsContainerWidget::addCMakePermission(
     return writeCMakeFile(lines.join('\n'));
 }
 
+void PermissionsContainerWidget::updateCMakeFileWatch()
+{
+    if (!m_cmakeWatcher || m_CMakeFilePath.isEmpty())
+        return;
+    m_cmakeWatcher->clear();
+    m_cmakeWatcher->addFile(m_CMakeFilePath, FileSystemWatcher::WatchModifiedDate);
+}
+
 bool PermissionsContainerWidget::resolveCMakeProjectInfo()
 {
     m_CMakeTargetName.clear();
@@ -1057,6 +1086,7 @@ bool PermissionsContainerWidget::resolveCMakeProjectInfo()
         return false;
     m_CMakeTargetName = matched->buildKey;
     m_CMakeFilePath = cmakeFile;
+    updateCMakeFileWatch();
     return true;
 }
 
@@ -1233,7 +1263,13 @@ Result<> PermissionsContainerWidget::updateCMakePermission(const QString &permis
 
 Result<> PermissionsContainerWidget::writeCMakeFile(const QString &content)
 {
-    return writeFileWithEditorReload(m_CMakeFilePath, content.toUtf8(), QIODevice::Text);
+    const Result<> result =
+        writeFileWithEditorReload(m_CMakeFilePath, content.toUtf8(), QIODevice::Text);
+    if (result) {
+        m_lastCMakeWrite.start();
+        updateCMakeFileWatch();
+    }
+    return result;
 }
 
 } // namespace Android::Internal

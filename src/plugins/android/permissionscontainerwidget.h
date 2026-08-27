@@ -8,6 +8,7 @@
 #include <utils/filepath.h>
 #include <utils/result.h>
 
+#include <QElapsedTimer>
 #include <QWidget>
 
 #include <optional>
@@ -15,11 +16,12 @@
 class QCheckBox;
 class QComboBox;
 class QPushButton;
+class QTimer;
 class QTreeView;
 
 namespace ProjectExplorer { class Project; }
 namespace TextEditor { class TextEditorWidget; }
-namespace Utils { class InfoLabel; }
+namespace Utils { class FileSystemWatcher; class InfoLabel; }
 namespace CMakeProjectManager { class CMakeListFile; }
 
 namespace Android::Internal {
@@ -59,6 +61,7 @@ private:
     ProjectExplorer::Project *currentProject() const;
     bool ensureCMakeInfo();
 
+    void updateCMakeFileWatch();
     bool resolveCMakeProjectInfo();
     void loadPermissionsFromCMake();
     void loadPermissionsFromCMake(
@@ -87,10 +90,13 @@ private:
     QPushButton *m_editAttributesButton = nullptr;
     QTreeView *m_permissionsListView = nullptr;
     PermissionsModel *m_permissionsModel = nullptr;
+    Utils::FileSystemWatcher *m_cmakeWatcher = nullptr;
+    QTimer *m_cmakeRefreshTimer = nullptr;
     bool m_checkBoxStateInitialized = false;
     bool m_updating = false;
     Utils::InfoLabel *m_CMakeErrorLabel = nullptr;
     bool m_CMakeFileBroken = false;
+    QElapsedTimer m_lastCMakeWrite;
 };
 
 } // namespace Android::Internal
