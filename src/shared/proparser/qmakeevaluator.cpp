@@ -1110,12 +1110,12 @@ bool QMakeEvaluator::prepareProject(const QString &inDir)
                     m_superfile = QDir::cleanPath(superfile);
                     break;
                 }
-                QFileInfo qdfi(superdir);
-                if (qdfi.isRoot()) {
+                const QString parent = IoUtils::parentPath(device, superdir);
+                if (parent.isEmpty()) {
                     superdir.clear();
                     break;
                 }
-                superdir = qdfi.path();
+                superdir = parent;
             }
             QString sdir = inDir;
             QString dir = m_outputDir;
@@ -1134,12 +1134,12 @@ bool QMakeEvaluator::prepareProject(const QString &inDir)
                 }
                 if (dir == superdir)
                     goto no_cache;
-                QFileInfo qsdfi(sdir);
-                QFileInfo qdfi(dir);
-                if (qsdfi.isRoot() || qdfi.isRoot())
+                const QString sparent = IoUtils::parentPath(device, sdir);
+                const QString parent = IoUtils::parentPath(device, dir);
+                if (sparent.isEmpty() || parent.isEmpty())
                     goto no_cache;
-                sdir = qsdfi.path();
-                dir = qdfi.path();
+                sdir = sparent;
+                dir = parent;
             }
         } else {
             m_buildRoot = QFileInfo(cachefile).path();
@@ -1156,10 +1156,10 @@ bool QMakeEvaluator::prepareProject(const QString &inDir)
             m_stashfile = QDir::cleanPath(stashfile);
             break;
         }
-        QFileInfo qdfi(dir);
-        if (qdfi.isRoot())
+        const QString parent = IoUtils::parentPath(deviceRoot(), dir);
+        if (parent.isEmpty())
             break;
-        dir = qdfi.path();
+        dir = parent;
     }
 
     return true;
