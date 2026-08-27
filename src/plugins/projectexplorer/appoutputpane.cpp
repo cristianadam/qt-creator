@@ -582,9 +582,11 @@ QList<QWidget *> AppOutputPane::toolBarWidgets() const
 
 void AppOutputPane::clearContents()
 {
-    auto *currentWindow = qobject_cast<Core::OutputWindow *>(m_tabWidget->currentWidget());
-    if (currentWindow)
-        currentWindow->clear();
+    RunControl * const runControl = currentRunControl();
+    if (!runControl)
+        return;
+    clearForRunControl(runControl);
+    runControl->reportOutputCleared();
 }
 
 bool AppOutputPane::hasFocus() const
@@ -608,11 +610,14 @@ void AppOutputPane::setFocus()
 
 void AppOutputPane::updateFilter()
 {
+    const QString filter = filterText();
     if (RunControlTab * const tab = currentTab()) {
         QTC_ASSERT(tab->window, return);
+        if (tab->sourceFilterText)
+            tab->sourceFilterText = filter;
         tab->window->updateCategoriesProperties(tab->window->registry()->categories());
         if (!tab->window->updateFilterProperties(
-                filterText(),
+                filter,
                 filterCaseSensitivity(),
                 filterUsesRegexp(),
                 filterIsInverted(),
@@ -621,6 +626,11 @@ void AppOutputPane::updateFilter()
             tab->window->filterNewContent();
         }
     }
+    if (filter == m_lastReportedFilterText)
+        return;
+    m_lastReportedFilterText = filter;
+    if (RunControl * const runControl = currentRunControl())
+        runControl->reportOutputFilterChanged(filter);
 }
 
 const QList<Core::OutputWindow *> AppOutputPane::outputWindows() const
@@ -631,6 +641,36 @@ const QList<Core::OutputWindow *> AppOutputPane::outputWindows() const
             windows << tab.window;
     }
     return windows;
+}
+
+void AppOutputPane::clearForRunControl(const RunControl *runControl)
+{
+    const RunControlTab * const tab = tabFor(runControl);
+    if (!tab || !tab->window)
+        return;
+    // clear() alone would leave already-queued chunks to drain in afterwards.
+    tab->window->flush();
+    tab->window->clear();
+}
+
+void AppOutputPane::setFilterTextForRunControl(const RunControl *runControl, const QString &text)
+{
+    RunControlTab * const tab = tabFor(runControl);
+    if (!tab)
+        return;
+    tab->sourceFilterText = text;
+    if (currentRunControl() == runControl)
+        setFilterFieldText(text);
+}
+
+void AppOutputPane::setFilterFieldText(const QString &text)
+{
+    auto * const edit = qobject_cast<QLineEdit *>(filterWidget());
+    QTC_ASSERT(edit, return);
+    if (edit->text() == text)
+        return;
+    m_lastReportedFilterText = text;
+    edit->setText(text);
 }
 
 void AppOutputPane::ensureWindowVisible(Core::OutputWindow *ow)
@@ -1173,6 +1213,8 @@ void AppOutputPane::tabChanged(int i)
     RunControlTab * const controlTab = tabFor(m_tabWidget->widget(i));
     if (i != -1 && controlTab && QTC_GUARD(controlTab->window)) {
         controlTab->window->updateCategoriesProperties(controlTab->window->registry()->categories());
+        if (controlTab->sourceFilterText)
+            setFilterFieldText(*controlTab->sourceFilterText);
         if (!controlTab->window->updateFilterProperties(filterText(), filterCaseSensitivity(),
                                                     filterUsesRegexp(), filterIsInverted(),
                                                     beforeContext(), afterContext()))
