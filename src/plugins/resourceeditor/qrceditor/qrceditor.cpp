@@ -12,18 +12,24 @@
 #include <utils/itemviews.h>
 #include <utils/layoutbuilder.h>
 
+#include <QButtonGroup>
+#include <QComboBox>
 #include <QDebug>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListView>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPoint>
 #include <QPushButton>
 #include <QScopedPointer>
+#include <QSlider>
+#include <QStackedWidget>
 #include <QString>
+#include <QToolButton>
 #include <QUndoCommand>
 
 using namespace Utils;
@@ -626,11 +632,32 @@ QrcEditor::QrcEditor(RelativeResourceModel *model, QWidget *parent)
   : Core::MiniSplitter(Qt::Vertical, parent),
     m_treeview(new ResourceView(model, &m_history))
 {
-    addWidget(m_treeview);
-    auto widget = new QWidget;
-    addWidget(widget);
+    m_model = model;
+
+    m_iconview = new ListView;
+    m_iconview->setModel(model);
+    m_iconview->setViewMode(QListView::IconMode);
+    m_iconview->setResizeMode(QListView::Adjust);
+    m_iconview->setMovement(QListView::Static);
+    m_iconview->setUniformItemSizes(true);
+    m_iconview->setWordWrap(true);
+    m_iconview->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    m_iconview->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_iconview->setFrameStyle(QFrame::NoFrame);
+    // Share the tree's selection model so the Properties group and the
+    // Remove actions operate on the same current item in both views.
+    m_iconview->setSelectionModel(m_treeview->selectionModel());
+
     m_treeview->setFrameStyle(QFrame::NoFrame);
     m_treeview->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Minimum);
+
+    m_viewStack = new QStackedWidget;
+    m_viewStack->addWidget(m_treeview); // List mode
+    m_viewStack->addWidget(m_iconview); // Icons mode
+
+    addWidget(m_viewStack);
+    auto widget = new QWidget;
+    addWidget(widget);
 
     auto addPrefixButton = new QPushButton(Tr::tr("Add Prefix"));
     m_addFilesButton = new QPushButton(Tr::tr("Add Files"));
@@ -644,6 +671,30 @@ QrcEditor::QrcEditor(RelativeResourceModel *model, QWidget *parent)
     m_languageLabel = new QLabel(Tr::tr("Language:"));
     m_languageText = new QLineEdit;
 
+    m_listModeButton = new QToolButton;
+    m_listModeButton->setText(Tr::tr("List"));
+    m_listModeButton->setCheckable(true);
+    m_listModeButton->setChecked(true);
+    m_listModeButton->setToolTip(Tr::tr("Show the resources as a list."));
+    m_iconModeButton = new QToolButton;
+    m_iconModeButton->setText(Tr::tr("Icons"));
+    m_iconModeButton->setCheckable(true);
+    m_iconModeButton->setToolTip(Tr::tr("Show the files of a prefix as image previews."));
+    auto viewModeGroup = new QButtonGroup(this);
+    viewModeGroup->addButton(m_listModeButton);
+    viewModeGroup->addButton(m_iconModeButton);
+
+    m_prefixComboLabel = new QLabel(Tr::tr("Prefix:"));
+    m_prefixCombo = new QComboBox;
+    m_prefixCombo->setToolTip(Tr::tr("Resource prefix whose files are shown as icons."));
+
+    m_previewSizeLabel = new QLabel(Tr::tr("Preview size:"));
+    m_previewSlider = new QSlider(Qt::Horizontal);
+    m_previewSlider->setRange(24, 256);
+    m_previewSlider->setValue(64);
+    m_previewSlider->setMaximumWidth(120);
+    m_previewSlider->setToolTip(Tr::tr("Size of the image previews in the icon view."));
+
     using namespace Layouting;
     Column {
         Row {
@@ -652,6 +703,12 @@ QrcEditor::QrcEditor(RelativeResourceModel *model, QWidget *parent)
             m_removeButton,
             m_removeNonExistingButton,
             st,
+            m_listModeButton,
+            m_iconModeButton,
+            m_prefixComboLabel,
+            m_prefixCombo,
+            m_previewSizeLabel,
+            m_previewSlider,
         },
         Group {
             title(Tr::tr("Properties")),
@@ -669,6 +726,36 @@ QrcEditor::QrcEditor(RelativeResourceModel *model, QWidget *parent)
     connect(m_removeButton, &QAbstractButton::clicked, this, &QrcEditor::onRemove);
     connect(m_removeNonExistingButton, &QPushButton::clicked,
             this, &QrcEditor::onRemoveNonExisting);
+
+    connect(m_iconModeButton, &QAbstractButton::toggled, this, &QrcEditor::setIconMode);
+
+    connect(m_prefixCombo, &QComboBox::currentIndexChanged, this, [this](int index) {
+        if (index >= 0)
+            m_iconview->setRootIndex(m_model->index(index, 0, QModelIndex()));
+    });
+
+    const auto applyPreviewSize = [this](int size) {
+        m_iconview->setIconSize(QSize(size, size));
+        m_iconview->setGridSize(QSize(size + 24, size + 28));
+    };
+    connect(m_previewSlider, &QSlider::valueChanged, this, applyPreviewSize);
+    applyPreviewSize(m_previewSlider->value());
+
+    connect(m_iconview, &QAbstractItemView::activated, this, [this](const QModelIndex &index) {
+        const FilePath filePath = m_model->file(index);
+        if (!filePath.isEmpty())
+            emit itemActivated(filePath);
+    });
+    connect(m_iconview, &QWidget::customContextMenuRequested, this, [this](const QPoint &pos) {
+        emit showContextMenu(m_iconview->mapToGlobal(pos), m_model->file(m_iconview->indexAt(pos)));
+    });
+
+    connect(m_model, &QAbstractItemModel::modelReset, this, &QrcEditor::rebuildPrefixCombo);
+    connect(m_model, &QAbstractItemModel::layoutChanged, this, &QrcEditor::rebuildPrefixCombo);
+    connect(m_model, &QAbstractItemModel::rowsInserted, this, &QrcEditor::rebuildPrefixCombo);
+    connect(m_model, &QAbstractItemModel::rowsRemoved, this, &QrcEditor::rebuildPrefixCombo);
+    rebuildPrefixCombo();
+    setIconMode(false);
 
     connect(m_treeview, &ResourceView::removeItem, this, &QrcEditor::onRemove);
     connect(m_treeview->selectionModel(), &QItemSelectionModel::currentChanged,
@@ -708,6 +795,38 @@ QrcEditor::QrcEditor(RelativeResourceModel *model, QWidget *parent)
 }
 
 QrcEditor::~QrcEditor() = default;
+
+void QrcEditor::rebuildPrefixCombo()
+{
+    const QString previous = m_prefixCombo->currentText();
+    QSignalBlocker blocker(m_prefixCombo);
+    m_prefixCombo->clear();
+    const int count = m_model->rowCount(QModelIndex());
+    for (int i = 0; i < count; ++i)
+        m_prefixCombo->addItem(m_model->index(i, 0, QModelIndex()).data().toString());
+    int index = m_prefixCombo->findText(previous);
+    if (index < 0 && m_prefixCombo->count() > 0)
+        index = 0;
+    m_prefixCombo->setCurrentIndex(index);
+    m_iconview->setRootIndex(index >= 0 ? m_model->index(index, 0, QModelIndex()) : QModelIndex());
+}
+
+void QrcEditor::setIconMode(bool on)
+{
+    m_viewStack->setCurrentWidget(on ? static_cast<QWidget *>(m_iconview) : m_treeview);
+    m_prefixComboLabel->setVisible(on);
+    m_prefixCombo->setVisible(on);
+    m_previewSizeLabel->setVisible(on);
+    m_previewSlider->setVisible(on);
+    if (!on)
+        return;
+    // Follow the current selection into the icon view: show its prefix.
+    const QModelIndex current = m_treeview->selectionModel()->currentIndex();
+    const QModelIndex prefix = current.parent().isValid() ? current.parent() : current;
+    if (prefix.isValid())
+        m_prefixCombo->setCurrentIndex(prefix.row());
+    m_iconview->setFocus();
+}
 
 void QrcEditor::loaded(bool success)
 {

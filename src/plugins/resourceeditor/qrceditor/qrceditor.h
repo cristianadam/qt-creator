@@ -10,10 +10,16 @@
 #include <QUndoStack>
 
 QT_BEGIN_NAMESPACE
+class QComboBox;
 class QLabel;
 class QLineEdit;
 class QPushButton;
+class QSlider;
+class QStackedWidget;
+class QToolButton;
 QT_END_NAMESPACE
+
+namespace Utils { class ListView; }
 
 namespace ResourceEditor::Internal {
 
@@ -62,8 +68,20 @@ private:
     void onAddFiles();
     void onAddPrefix();
 
+    void setIconMode(bool on);
+    void rebuildPrefixCombo();
+
     QUndoStack m_history;
+    RelativeResourceModel *m_model;
     ResourceView *m_treeview;
+    Utils::ListView *m_iconview;
+    QStackedWidget *m_viewStack;
+    QToolButton *m_listModeButton;
+    QToolButton *m_iconModeButton;
+    QLabel *m_prefixComboLabel;
+    QComboBox *m_prefixCombo;
+    QLabel *m_previewSizeLabel;
+    QSlider *m_previewSlider;
 
     QString m_currentAlias;
     QString m_currentPrefix;
