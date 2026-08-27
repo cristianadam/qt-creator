@@ -161,6 +161,9 @@ public:
     QString displayName() const;
     void setDisplayName(const QString &displayName);
 
+    QString toolTip() const;
+    void setToolTip(const QString &toolTip);
+
     bool isRunning() const;
     bool isStopped() const;
 
@@ -298,6 +301,7 @@ signals:
     void outputPaneActionsEnabledChanged();
     void stdOutData(const QByteArray &data);
     void outputVisibilityChanged(bool visible);
+    void toolTipChanged();
 
 private:
     void setDevice(const IDeviceConstPtr &device);
