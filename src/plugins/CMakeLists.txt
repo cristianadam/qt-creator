@@ -88,6 +88,7 @@ add_subdirectory(gitlab)
 add_subdirectory(qmljseditor)
 
 # Level 7:
+add_subdirectory(alien)
 add_subdirectory(android)
 add_subdirectory(autotest)
 add_subdirectory(axivion)

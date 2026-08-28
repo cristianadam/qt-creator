@@ -1,0 +1,10 @@
+{
+    "name": "alien-webview-test",
+    "publisher": "theqtcompany",
+    "displayName": "Alien Webview Test Extension",
+    "description": "Creates a webview panel and exchanges messages with it.",
+    "version": "0.0.1",
+    "engines": { "vscode": "^1.0.0" },
+    "main": "./extension.js",
+    "activationEvents": [ "*" ]
+}
