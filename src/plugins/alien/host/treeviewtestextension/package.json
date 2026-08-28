@@ -1,0 +1,52 @@
+{
+    "name": "alien-treeview-test",
+    "publisher": "theqtcompany",
+    "displayName": "Alien Tree View Test Extension",
+    "description": "Registers a tree data provider through vscode.window.",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.0.0"
+    },
+    "main": "./extension.js",
+    "activationEvents": [
+        "*"
+    ],
+    "contributes": {
+        "commands": [
+            {
+                "command": "alien.tree.always",
+                "title": "Always"
+            },
+            {
+                "command": "alien.tree.gated",
+                "title": "Gated"
+            },
+            {
+                "command": "alien.tree.setReady",
+                "title": "Set Ready"
+            }
+        ],
+        "menus": {
+            "view/item/context": [
+                {
+                    "command": "alien.tree.always",
+                    "when": "view == alienExplorer"
+                },
+                {
+                    "command": "alien.tree.gated",
+                    "when": "view == alienExplorer && alien.ready && !alien.busy"
+                }
+            ],
+            "commandPalette": [
+                {
+                    "command": "alien.tree.always",
+                    "when": "false"
+                },
+                {
+                    "command": "alien.tree.gated",
+                    "when": "alien.ready"
+                }
+            ]
+        }
+    }
+}

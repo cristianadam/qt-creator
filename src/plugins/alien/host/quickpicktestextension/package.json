@@ -1,0 +1,15 @@
+{
+    "name": "alien-quickpick-test",
+    "publisher": "theqtcompany",
+    "displayName": "Alien Quick Pick Test Extension",
+    "description": "Exercises window.showQuickPick and window.showInputBox.",
+    "version": "0.0.1",
+    "engines": { "vscode": "^1.0.0" },
+    "main": "./extension.js",
+    "activationEvents": [ "*" ],
+    "contributes": {
+        "commands": [
+            { "command": "alien.pick", "title": "Pick", "category": "Alien" }
+        ]
+    }
+}
