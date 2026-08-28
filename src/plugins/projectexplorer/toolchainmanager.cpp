@@ -6,6 +6,7 @@
 #include "abi.h"
 #include "devicesupport/devicemanager.h"
 #include "msvctoolchain.h"
+#include "projectexplorerconstants.h"
 #include "projectexplorertr.h"
 #include "toolchain.h"
 #include "toolchainsettingsaccessor.h"
@@ -14,9 +15,15 @@
 
 #include <utils/algorithm.h>
 #include <utils/environment.h>
+#include <utils/hostosinfo.h>
 #include <utils/qtcassert.h>
 
 #include <nanotrace/nanotrace.h>
+
+#ifdef WITH_TESTS
+#include <QTemporaryDir>
+#include <QTest>
+#endif // WITH_TESTS
 
 using namespace Utils;
 
@@ -450,4 +457,88 @@ bool ToolchainManager::isBetterToolchain(
     return pathString1.size() < pathString2.size();
 }
 
+#ifdef WITH_TESTS
+namespace Internal {
+
+class ValidityTestToolchain : public Toolchain
+{
+public:
+    ValidityTestToolchain()
+        : Toolchain("ProjectExplorer.ToolChain.ValidityTest")
+    {
+        setLanguage(Constants::CXX_LANGUAGE_ID);
+        setTypeDisplayName("Validity Test Toolchain");
+        setTargetAbiNoSignal(Abi::hostAbi());
+    }
+
+    MacroInspectionRunner createMacroInspectionRunner() const override { return {}; }
+    LanguageExtensions languageExtensions(const QStringList &) const override
+    { return LanguageExtension::None; }
+    WarningFlags warningFlags(const QStringList &) const override
+    { return WarningFlag::NoWarnings; }
+    BuiltInHeaderPathsRunner createBuiltInHeaderPathsRunner(const Environment &) const override
+    { return {}; }
+    void addToEnvironment(Environment &) const override {}
+    FilePath makeCommand(const Environment &) const override { return "make"; }
+    QList<OutputLineParser *> createOutputParsers() const override { return {}; }
+};
+
+class ToolchainManagerTest : public QObject
+{
+    Q_OBJECT
+
+private slots:
+    void testRevalidateOnDeviceUpdate()
+    {
+        const IDevice::ConstPtr desktop = DeviceManager::defaultDesktopDevice();
+        QVERIFY(desktop);
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const FilePath compiler = FilePath::fromString(dir.path())
+                                      .pathAppended(HostOsInfo::withExecutableSuffix("gcc"));
+
+        auto tc = new ValidityTestToolchain;
+        tc->setCompilerCommand(compiler);
+        QVERIFY(!tc->isValid());
+        QVERIFY(ToolchainManager::registerToolchains({tc}).isEmpty());
+        QCOMPARE(DeviceManager::deviceForPath(compiler), desktop);
+
+        int updates = 0;
+        connect(ToolchainManager::instance(), &ToolchainManager::toolchainUpdated,
+                this, [tc, &updates](Toolchain *updated) {
+            if (updated == tc)
+                ++updates;
+        });
+
+        QVERIFY(compiler.writeFileContents("int main() {}\n"));
+        QVERIFY(compiler.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        QVERIFY(!tc->isValid()); // The negative result is cached until the device reappears.
+
+        const IDevice::DeviceState state = DeviceManager::deviceState(desktop->id());
+        const IDevice::DeviceState otherState = state == IDevice::DeviceReadyToUse
+                                                    ? IDevice::DeviceStateUnknown
+                                                    : IDevice::DeviceReadyToUse;
+        DeviceManager::setDeviceState(desktop->id(), otherState);
+        DeviceManager::setDeviceState(desktop->id(), state);
+
+        QVERIFY(tc->isValid());
+        QCOMPARE(updates, 1);
+
+        ToolchainManager::deregisterToolchains({tc});
+    }
+};
+
+QObject *createToolchainManagerTest()
+{
+    return new ToolchainManagerTest;
+}
+
+} // namespace Internal
+#endif // WITH_TESTS
+
 } // namespace ProjectExplorer
+
+#ifdef WITH_TESTS
+#include <toolchainmanager.moc>
+#endif
