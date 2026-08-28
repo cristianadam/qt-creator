@@ -42,7 +42,7 @@ private:
     void updateAddRemovePermissionButtons();
     void updateCMakePermissionsCheckBoxState();
     void defaultPermissionOrFeatureCheckBoxClicked();
-    void updateManifestPermissions();
+    Utils::Result<> updateManifestPermissions();
     void loadPermissionsFromManifest();
     void showCMakePermissionsConsentDialog();
     void onCMakePermissionsCheckBoxChanged();
