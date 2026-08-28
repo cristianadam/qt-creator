@@ -333,11 +333,17 @@ void CompilerOptionsBuilder::insertWrappedHeaders(const QStringList &relPaths)
     if (relPaths.isEmpty())
         return;
 
+    const FilePath project = m_projectPart.topLevelProject;
+    const bool onDevice = !project.isEmpty() && !project.isLocal();
+
     QStringList args;
     for (const QString &relPath : relPaths) {
         static const FilePath baseDir = creatorResourcePath() / "cplusplus";
-        const FilePath fullPath = baseDir / relPath;
-        QTC_ASSERT(fullPath.exists(), continue);
+        const FilePath hostPath = baseDir / relPath;
+        QTC_ASSERT(hostPath.exists(), continue);
+        const FilePath fullPath = onDevice ? project.withNewPath(hostPath.path()) : hostPath;
+        if (onDevice && !fullPath.exists())
+            continue;
         args << (includeUserPathOption + fullPath.nativePath());
     }
 
