@@ -1420,12 +1420,25 @@ void registerMcpTools()
         case QMetaType::Int:
         case QMetaType::LongLong: return double(v.toLongLong());
         case QMetaType::Double: return v.toDouble();
+        case QMetaType::QStringList:
+        case QMetaType::QVariantList: {
+            QJsonArray arr;
+            for (const QVariant &item : v.toList())
+                arr.append(item.toString());
+            return arr;
+        }
         default: return v.toString();
         }
     };
     static const auto jsonToVariant = [](const QJsonValue &j) -> QVariant {
         if (j.isBool()) return j.toBool();
         if (j.isDouble()) return j.toDouble();
+        if (j.isArray()) {
+            QStringList list;
+            for (const QJsonValue &item : j.toArray())
+                list << item.toString();
+            return list;
+        }
         return j.toString();
     };
     static const auto kitAspectFactoryById = [](Utils::Id id) -> KitAspectFactory * {
@@ -2728,7 +2741,8 @@ void registerMcpTools()
             .description(
                 "Set a kit aspect to a value. Pass the value reported by get_kit_aspect_options "
                 "for item-backed aspects (the exact stored type is preserved); free-form aspects "
-                "take the value as-is.")
+                "take the value as-is. Aspects holding a list, such as the CMake configuration, "
+                "take an array of strings.")
             .annotations(ToolAnnotations{}.readOnlyHint(false))
             .inputSchema(
                 Tool::InputSchema{}
