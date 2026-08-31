@@ -1038,26 +1038,34 @@ void MsvcToolchain::handleEnvModResult()
 // re-probe the compiler if just the compiler probe failed.
 void MsvcToolchain::rescanWhenDeviceReady()
 {
-    if (m_deviceReadyConnection)
-        return; // Already waiting for the device.
+    m_awaitingDevice = true;
+}
 
-    m_deviceReadyConnection = connect(
-        DeviceManager::instance(), &DeviceManager::deviceUpdated, this, [this](Utils::Id id) {
-            const IDevice::ConstPtr device = DeviceManager::find(id);
-            if (!device || !isSameDevice(device->rootPath()) || !m_vcvarsBat.hasFileAccess())
-                return;
-            disconnect(m_deviceReadyConnection);
-            m_deviceReadyConnection = {};
-            if (m_environmentModifications.isEmpty()) {
-                // The environment capture failed while the device was offline. Re-run it;
-                // on success updateEnvironmentModifications() re-probes the compiler.
-                initEnvModWatcher(Utils::asyncRun(envModThreadPool(), &environmentModifications,
-                                                  m_vcvarsBat, m_varsBatArg));
-            } else if (compilerCommand().isEmpty()) {
-                rescanForCompiler();
-                toolChainUpdated();
-            }
-        });
+bool MsvcToolchain::handleDeviceUpdate(Utils::Id deviceId)
+{
+    if (!m_awaitingDevice)
+        return false;
+    const IDevice::ConstPtr device = DeviceManager::find(deviceId);
+    if (!device || !isSameDevice(device->rootPath()) || !m_vcvarsBat.hasFileAccess())
+        return false;
+
+    m_awaitingDevice = false;
+    // The base class caches validity on the compiler command; here it follows the
+    // vcvars script, which only now became readable.
+    m_isValid.reset();
+    if (m_environmentModifications.isEmpty()) {
+        // The environment capture failed while the device was offline. Re-run it; on
+        // success updateEnvironmentModifications() re-probes the compiler and reports
+        // the toolchain itself, so there is nothing to announce yet.
+        initEnvModWatcher(Utils::asyncRun(envModThreadPool(), &environmentModifications,
+                                          m_vcvarsBat, m_varsBatArg));
+        return false;
+    }
+    if (compilerCommand().isEmpty()) {
+        rescanForCompiler();
+        return true;
+    }
+    return false;
 }
 
 bool MsvcToolchain::canShareBundleImpl(const Toolchain &other) const

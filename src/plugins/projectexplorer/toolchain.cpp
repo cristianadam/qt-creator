@@ -4,6 +4,7 @@
 #include "toolchain.h"
 
 #include "abi.h"
+#include "devicesupport/devicemanager.h"
 #include "devicesupport/idevice.h"
 #include "gcctoolchain.h"
 #include "projectexplorerconstants.h"
@@ -243,6 +244,14 @@ bool Toolchain::refreshValid()
 {
     d->m_isValid.reset();
     return isValid();
+}
+
+bool Toolchain::handleDeviceUpdate(Id deviceId)
+{
+    if (isValid())
+        return false;
+    const IDevice::ConstPtr device = DeviceManager::deviceForPath(compilerCommand());
+    return device && device->id() == deviceId && refreshValid();
 }
 
 FilePaths Toolchain::includedFiles(const QStringList &flags, const FilePath &directory) const

@@ -155,13 +155,10 @@ void ToolchainManager::restoreToolchains()
     });
 
     connect(DeviceManager::instance(), &DeviceManager::deviceUpdated, m_instance, [](Id deviceId) {
-        // A device changed, e.g. reconnected. Retry toolchains on it that were invalid, so
-        // they heal (e.g. get recognized as valid again) without requiring a manual re-detect.
+        // A device changed, e.g. reconnected. Toolchains on it heal without a manual
+        // re-detect; what that takes is theirs to know - MSVC has to re-run vcvars.
         for (Toolchain *tc : std::as_const(d->m_toolChains)) {
-            if (tc->isValid())
-                continue;
-            const IDeviceConstPtr dev = DeviceManager::deviceForPath(tc->compilerCommand());
-            if (dev && dev->id() == deviceId && tc->refreshValid())
+            if (tc->handleDeviceUpdate(deviceId))
                 notifyAboutUpdate(tc);
         }
     });
@@ -483,6 +480,20 @@ public:
     QList<OutputLineParser *> createOutputParsers() const override { return {}; }
 };
 
+// What MSVC needs from the shared connection: the toolchain itself decides what a
+// device update means for it.
+class DeviceUpdateTestToolchain : public ValidityTestToolchain
+{
+public:
+    bool handleDeviceUpdate(Utils::Id) override
+    {
+        ++asked;
+        return asked == 1; // healed on the first update, nothing to say afterwards
+    }
+
+    int asked = 0;
+};
+
 class ToolchainManagerTest : public QObject
 {
     Q_OBJECT
@@ -523,6 +534,36 @@ private slots:
         DeviceManager::setDeviceState(desktop->id(), state);
 
         QVERIFY(tc->isValid());
+        QCOMPARE(updates, 1);
+
+        ToolchainManager::deregisterToolchains({tc});
+    }
+
+    void testDeviceUpdateReachesTheToolchain()
+    {
+        const IDevice::ConstPtr desktop = DeviceManager::defaultDesktopDevice();
+        QVERIFY(desktop);
+
+        auto tc = new DeviceUpdateTestToolchain;
+        QVERIFY(ToolchainManager::registerToolchains({tc}).isEmpty());
+
+        int updates = 0;
+        connect(ToolchainManager::instance(), &ToolchainManager::toolchainUpdated,
+                this, [tc, &updates](Toolchain *updated) {
+            if (updated == tc)
+                ++updates;
+        });
+
+        const IDevice::DeviceState state = DeviceManager::deviceState(desktop->id());
+        const IDevice::DeviceState otherState = state == IDevice::DeviceReadyToUse
+                                                    ? IDevice::DeviceStateUnknown
+                                                    : IDevice::DeviceReadyToUse;
+        DeviceManager::setDeviceState(desktop->id(), otherState);
+        DeviceManager::setDeviceState(desktop->id(), state);
+
+        // Asked every time, whatever it answered before, and only the update it
+        // reported is passed on.
+        QCOMPARE(tc->asked, 2);
         QCOMPARE(updates, 1);
 
         ToolchainManager::deregisterToolchains({tc});

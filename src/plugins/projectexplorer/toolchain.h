@@ -103,6 +103,10 @@ public:
     virtual bool isValid() const;
     bool refreshValid();
 
+    // A device the toolchain lives on has changed. Returns whether the
+    // toolchain became usable, so that the manager can say so.
+    virtual bool handleDeviceUpdate(Utils::Id deviceId);
+
     virtual Utils::LanguageExtensions languageExtensions(const QStringList &cxxflags) const = 0;
     virtual Utils::WarningFlags warningFlags(const QStringList &cflags) const = 0;
     virtual Utils::FilePaths includedFiles(const QStringList &flags, const Utils::FilePath &directory) const;

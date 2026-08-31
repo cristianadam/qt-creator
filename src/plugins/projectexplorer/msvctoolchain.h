@@ -29,6 +29,7 @@ public:
     ~MsvcToolchain() override;
 
     bool isValid() const override;
+    bool handleDeviceUpdate(Utils::Id deviceId) override;
 
     QString originalTargetTriple() const override;
 
@@ -122,7 +123,7 @@ private:
 
     mutable Utils::EnvironmentItems m_environmentModifications;
     mutable QFutureWatcher<GenerateEnvResult> m_envModWatcher;
-    QMetaObject::Connection m_deviceReadyConnection;
+    bool m_awaitingDevice = false;
 
     mutable Utils::Environment m_lastEnvironment;   // Last checked 'incoming' environment.
     mutable Utils::Environment m_resultEnvironment; // Resulting environment for VC
