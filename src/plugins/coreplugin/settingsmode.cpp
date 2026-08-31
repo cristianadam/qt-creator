@@ -43,6 +43,7 @@
 #include <QLabel>
 #include <QListView>
 #include <QMessageBox>
+#include <QScopeGuard>
 #include <QPointer>
 #include <QPushButton>
 #include <QResizeEvent>
@@ -532,6 +533,7 @@ private:
 
     bool m_isDirty = false;
     bool m_currentlySwitching = false;
+    bool m_askingAboutUnappliedChanges = false;
     Id m_previousPage;
 };
 
@@ -883,6 +885,11 @@ void SettingsWidget::switchBackIfNeeded()
     if (m_currentlySwitching)
         return;
 
+    // Every page change queues this, so one arriving while the question is up would stack a
+    // second dialog on the first. Both are modal, and the one below is then unreachable.
+    if (m_askingAboutUnappliedChanges)
+        return;
+
     QMessageBox dialog(dialogParent());
     dialog.setWindowTitle(Tr::tr("Unapplied Changes"));
     dialog.setIcon(QMessageBox::Warning);
@@ -903,12 +910,19 @@ void SettingsWidget::switchBackIfNeeded()
         = dialog.addButton(Tr::tr("Return to Previous Page"), QMessageBox::RejectRole);
     connect(backButton, &QAbstractButton::clicked, this, &SettingsWidget::switchBackLater);
 
+    m_askingAboutUnappliedChanges = true;
+    const QScopeGuard resetAsking([this] { m_askingAboutUnappliedChanges = false; });
     dialog.exec();
 }
 
 bool SettingsWidget::askToLeave(bool aboutToShutdown)
 {
     QTC_ASSERT(!m_currentlySwitching || aboutToShutdown, return false);
+
+    // Leaving is not on offer while the page change that is already being asked about waits
+    // for its answer.
+    if (m_askingAboutUnappliedChanges && !aboutToShutdown)
+        return false;
 
     QMessageBox dialog(dialogParent());
     dialog.setWindowTitle(Tr::tr("Unapplied Changes"));
