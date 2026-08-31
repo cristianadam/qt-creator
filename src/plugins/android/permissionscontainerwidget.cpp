@@ -704,8 +704,15 @@ void PermissionsContainerWidget::addPermission()
     if (m_CMakePermissionsCheckBox->isChecked()) {
         if (m_CMakeFilePath.isEmpty() && !resolveCMakeProjectInfo())
             return;
-        if (m_permissionsModel->addPermission(permission).isValid())
-            addCMakePermission(permission);
+        const QModelIndex added = m_permissionsModel->addPermission(permission);
+        if (added.isValid()) {
+            if (const Utils::Result<> result = addCMakePermission(permission); !result) {
+                m_permissionsModel->removePermission(added.row());
+                QMessageBox::warning(this, Tr::tr("Add Permission"),
+                                     Tr::tr("Cannot add permission: %1").arg(result.error()));
+                return;
+            }
+        }
     } else {
         m_permissionsModel->addPermission(permission);
         updateManifestPermissions();
@@ -904,12 +911,12 @@ void PermissionsContainerWidget::loadPermissionsFromManifest()
     m_defaultFeaturesCheckBox->setChecked(data.hasDefaultFeaturesComment);
 }
 
-void PermissionsContainerWidget::addCMakePermission(const QString &permission,
-                                                    const QMap<QString, QString> &attributes)
+Utils::Result<> PermissionsContainerWidget::addCMakePermission(
+    const QString &permission, const QMap<QString, QString> &attributes)
 {
     const auto cmakeFile = CMakeProjectManager::parseCMakeFile(m_CMakeFilePath);
     if (!cmakeFile)
-        return;
+        return Utils::ResultError(cmakeFile.error());
 
     const QString newCall = buildPermissionCall(m_CMakeTargetName, permission, attributes);
 
@@ -932,7 +939,7 @@ void PermissionsContainerWidget::addCMakePermission(const QString &permission,
 
     Utils::FileSaver saver(m_CMakeFilePath, QIODevice::Text);
     saver.write(lines.join('\n').toUtf8());
-    saver.finalize();
+    return saver.finalize();
 }
 
 void PermissionsContainerWidget::updateCMakeFileWatch()

@@ -53,7 +53,8 @@ private:
     void updateCMakeFileWatch();
     bool resolveCMakeProjectInfo();
     void loadPermissionsFromCMake();
-    void addCMakePermission(const QString &permission, const QMap<QString, QString> &attributes = {});
+    Utils::Result<> addCMakePermission(const QString &permission,
+                                       const QMap<QString, QString> &attributes = {});
     bool removeCMakePermission(const QString &permission);
     bool updateCMakePermission(const QString &permission, const QMap<QString, QString> &attributes);
     Utils::Result<> migratePermissionsManifestToCMake();
