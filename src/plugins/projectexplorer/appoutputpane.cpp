@@ -580,6 +580,11 @@ QList<QWidget *> AppOutputPane::toolBarWidgets() const
                 m_formatterWidget} + IOutputPane::toolBarWidgets();
 }
 
+static bool filtersAtSource(const RunControl *runControl)
+{
+    return runControl && runControl->filtersOutputAtSource();
+}
+
 void AppOutputPane::clearContents()
 {
     RunControl * const runControl = currentRunControl();
@@ -616,7 +621,8 @@ void AppOutputPane::updateFilter()
         if (tab->sourceFilterText)
             tab->sourceFilterText = filter;
         tab->window->updateCategoriesProperties(tab->window->registry()->categories());
-        if (!tab->window->updateFilterProperties(
+        if (!filtersAtSource(tab->runControl)
+            && !tab->window->updateFilterProperties(
                 filter,
                 filterCaseSensitivity(),
                 filterUsesRegexp(),
@@ -970,7 +976,8 @@ void AppOutputPane::appendMessage(RunControl *rc, const QString &out, OutputForm
     }
 
     QString stringToWrite;
-    if (format == NormalMessageFormat || format == ErrorMessageFormat) {
+    if (!filtersAtSource(tab->runControl)
+        && (format == NormalMessageFormat || format == ErrorMessageFormat)) {
         stringToWrite = QTime::currentTime().toString();
         stringToWrite += ": ";
     }
@@ -1039,6 +1046,8 @@ void AppOutputPane::reRunRunControl()
     QTC_ASSERT(!tab->runControl->isRunning(), return);
 
     handleOldOutput(tab->window);
+    if (settings().cleanOldOutput() && filtersAtSource(tab->runControl))
+        tab->runControl->reportOutputCleared();
     tab->window->scrollToBottom();
     tab->runControl->initiateStart();
 }
@@ -1215,10 +1224,16 @@ void AppOutputPane::tabChanged(int i)
         controlTab->window->updateCategoriesProperties(controlTab->window->registry()->categories());
         if (controlTab->sourceFilterText)
             setFilterFieldText(*controlTab->sourceFilterText);
-        if (!controlTab->window->updateFilterProperties(filterText(), filterCaseSensitivity(),
-                                                    filterUsesRegexp(), filterIsInverted(),
-                                                    beforeContext(), afterContext()))
+        if (!filtersAtSource(controlTab->runControl)
+            && !controlTab->window->updateFilterProperties(
+                filterText(),
+                filterCaseSensitivity(),
+                filterUsesRegexp(),
+                filterIsInverted(),
+                beforeContext(),
+                afterContext())) {
             controlTab->window->filterNewContent();
+        }
         enableButtons(controlTab->runControl);
     } else {
         enableDefaultButtons();
@@ -1325,6 +1340,9 @@ bool AppOutputPane::canNavigate() const
 
 bool AppOutputPane::hasFilterContext() const
 {
+    const RunControl * const runControl = currentRunControl();
+    if (runControl && runControl->filtersOutputAtSource())
+        return false;
     return true;
 }
 
