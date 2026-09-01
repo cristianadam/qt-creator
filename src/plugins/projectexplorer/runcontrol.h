@@ -248,6 +248,8 @@ public:
     void setOutputFilterText(const QString &text);
     void reportOutputFilterChanged(const QString &text);
     void reportOutputCleared();
+    void setFiltersOutputAtSource(bool enabled);
+    bool filtersOutputAtSource() const;
 
     void requestDebugChannel();
     bool usesDebugChannel() const;
