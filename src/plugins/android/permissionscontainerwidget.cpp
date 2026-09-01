@@ -363,6 +363,7 @@ bool PermissionsContainerWidget::isCMakePermissionsSupported()
 }
 
 static const Utils::Key suppressCMakeWarning{"Android.SuppressCMakePermissionsWarning"};
+static const Utils::Key manageViaCMakeKey{"Android.ManagePermissionsViaCMake"};
 
 void PermissionsContainerWidget::showCMakePermissionsConsentDialog()
 {
@@ -398,22 +399,34 @@ void PermissionsContainerWidget::showCMakePermissionsConsentDialog()
 
 void PermissionsContainerWidget::onCMakePermissionsCheckBoxChanged()
 {
+    Project *project = m_textEditorWidget && m_textEditorWidget->textDocument()
+        ? ProjectManager::projectForFile(m_textEditorWidget->textDocument()->filePath())
+        : nullptr;
+
     if (m_CMakePermissionsCheckBox->isChecked()) {
         m_CMakePermissionsCheckBox->blockSignals(true);
         showCMakePermissionsConsentDialog();
         m_CMakePermissionsCheckBox->blockSignals(false);
         if (!m_CMakePermissionsCheckBox->isChecked())
             return;
+        if (project)
+            project->setNamedSettings(manageViaCMakeKey, true);
         if (const Utils::Result<> result = migratePermissionsManifestToCMake()) {
             loadPermissionsFromCMake();
          } else {
+            if (project)
+                project->setNamedSettings(manageViaCMakeKey, false);
             revertCMakePermissionsCheckBox(Qt::Unchecked, result.error());
             loadPermissionsFromManifest();
         }
     } else {
+        if (project)
+            project->setNamedSettings(manageViaCMakeKey, false);
         if (const Utils::Result<> result = migratePermissionsCMakeToManifest())
             loadPermissionsFromManifest();
         else {
+            if (project)
+                project->setNamedSettings(manageViaCMakeKey, true);
             revertCMakePermissionsCheckBox(Qt::Checked, result.error());
             loadPermissionsFromCMake();
         }
@@ -445,12 +458,20 @@ void PermissionsContainerWidget::updateCMakePermissionsCheckBoxState()
     }
     if (!checked && !cmakeFileBroken) {
         Utils::FilePath manifestPath = m_textEditorWidget->textDocument()->filePath();
-        if (hasPermissionsInManifest(manifestPath))
+        if (hasPermissionsInManifest(manifestPath)) {
             checked = false;
-        else if (m_checkBoxStateInitialized)
-            checked = m_CMakePermissionsCheckBox->isChecked();
-        else
-            checked = isCMakePermissionsSupported();
+        } else  {
+            Project *project = ProjectManager::projectForFile(manifestPath);
+            const QVariant stored = project ? project->namedSettings(manageViaCMakeKey)
+                                            : QVariant();
+            if (stored.isValid()) {
+                checked = stored.toBool();
+            } else if (m_checkBoxStateInitialized) {
+                checked = m_CMakePermissionsCheckBox->isChecked();
+            } else {
+                checked = isCMakePermissionsSupported();
+            }
+        }
     }
     const Utils::FilePath docPath = m_textEditorWidget->textDocument()
         ? m_textEditorWidget->textDocument()->filePath() : Utils::FilePath();
