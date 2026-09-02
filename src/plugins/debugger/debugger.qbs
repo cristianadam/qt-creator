@@ -137,10 +137,12 @@ QtcPlugin {
         name: "dap"
         prefix: "dap/"
         files: [
+            "dapadapter.h",
             "dapclient.cpp", "dapclient.h",
             "dapdataproviders.cpp", "dapdataproviders.h",
             "dapengine.cpp", "dapengine.h",
             "dapengines.cpp",
+            "dapimpl.cpp", "dapimpl.h",
             "pydapengine.cpp", "pydapengine.h",
         ]
     }

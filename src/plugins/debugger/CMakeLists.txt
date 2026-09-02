@@ -23,10 +23,12 @@ add_qtc_plugin(Debugger
     console/consoleview.cpp console/consoleview.h
     bridge/bridgeengine.cpp bridge/bridgeengine.h
     bridge/bridgeimpl.cpp bridge/bridgeimpl.h
+    dap/dapadapter.h
     dap/dapclient.cpp dap/dapclient.h
     dap/dapdataproviders.cpp dap/dapdataproviders.h
     dap/dapengine.cpp dap/dapengine.h
     dap/dapengines.cpp
+    dap/dapimpl.cpp dap/dapimpl.h
     dap/pydapengine.cpp dap/pydapengine.h
     debugger_global.h
     debuggeractions.cpp debuggeractions.h
