@@ -27,6 +27,9 @@ inline constexpr char HARMONYOS_DEBUG_SERVER_PACKAGE[] = "lldbserver";
 inline constexpr char HARMONYOS_DEBUG_PLUGIN[] = "qtcdebug";
 // Where the packed debug server ends up in the application's own namespace, which is the
 // only place on the device a binary of ours may be executed from.
+// Where the platform installs what an application's native package carries, and the only
+// directory an application may execute a binary from.
+inline constexpr char HARMONYOS_NATIVE_PACKAGE_BIN[] = "/data/service/hnp/bin";
 inline constexpr char HARMONYOS_DEBUG_SERVER_PATH[] = "/data/service/hnp/bin/lldb-server";
 // The library that holds an application until the debugger releases it, and the byte it
 // spins on.
