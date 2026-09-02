@@ -25,6 +25,7 @@
 #include <projectexplorer/task.h>
 
 #include <utils/commandline.h>
+#include <utils/elfreader.h>
 #include <utils/qtcprocess.h>
 #include <utils/environment.h>
 #include <utils/outputformatter.h>
@@ -42,6 +43,7 @@ using namespace ProjectExplorer;
 using namespace Utils;
 
 #ifdef WITH_TESTS
+#include <QCoreApplication>
 #include <QTemporaryDir>
 #include <QTest>
 #endif
@@ -400,6 +402,104 @@ static bool packageIsCurrent(const FilePath &hap, const QString &content, const 
     return noted && QString::fromUtf8(*noted) == packageNoteFor(content, signing);
 }
 
+static FilePaths libraryDirectories(const FilePath &deploymentSettings)
+{
+    const Result<QByteArray> contents = deploymentSettings.fileContents();
+    if (!contents)
+        return {};
+    const QJsonObject object = QJsonDocument::fromJson(*contents).object();
+
+    FilePaths directories;
+    const QString qtLibs = object.value("qtLibsDirectory").toString();
+    if (!qtLibs.isEmpty())
+        directories.append(FilePath::fromUserInput(qtLibs));
+    for (const QJsonValue &value : object.value("extra-libs-dirs").toArray())
+        directories.append(FilePath::fromUserInput(value.toString()));
+    return directories;
+}
+
+static QSet<QString> deviceLibraries(const FilePath &sdkRoot)
+{
+    const FilePath sysroot = Sdk::sysrootPath(sdkRoot);
+    if (sysroot.isEmpty())
+        return {};
+    const FilePaths files = sysroot.pathAppended("usr/lib/aarch64-linux-ohos")
+                                .dirEntries(FileFilter({"*.so", "*.so.*"},
+                                                       DirFilterFlag::Files));
+    QSet<QString> names;
+    for (const FilePath &file : files)
+        names.insert(file.fileName());
+    return names;
+}
+
+static FilePath findLibrary(const QString &name, const FilePaths &directories)
+{
+    const qsizetype versioned = name.indexOf(".so.");
+    for (const FilePath &directory : directories) {
+        const FilePath exact = directory.pathAppended(name);
+        if (exact.isFile())
+            return exact;
+        if (versioned < 0)
+            continue;
+        const FilePath unversioned = directory.pathAppended(name.left(versioned + 3));
+        if (unversioned.isFile())
+            return unversioned;
+    }
+    return {};
+}
+
+class MissingLibrary
+{
+public:
+    QString name;
+    QString neededBy;
+};
+
+class LibraryWalk
+{
+public:
+    QStringList added;
+    QList<MissingLibrary> missing;
+    QString error;
+};
+
+static LibraryWalk completeLibraries(const FilePath &libraries, const FilePaths &directories,
+                                     const QSet<QString> &provided)
+{
+    LibraryWalk walk;
+    const FilePaths staged = libraries.dirEntries(
+        FileFilter({"*.so", "*.so.*"}, DirFilterFlag::Files, DirIteratorFlag::Subdirectories));
+
+    QSet<QString> met = provided;
+    for (const FilePath &file : staged) {
+        if (file.parentDir() == libraries)
+            met.insert(file.fileName());
+    }
+
+    FilePaths pending = staged;
+    while (!pending.isEmpty()) {
+        const FilePath binary = pending.takeFirst();
+        for (const QString &name : ElfReader(binary).neededLibraries()) {
+            if (met.contains(name))
+                continue;
+            met.insert(name);
+            const FilePath found = findLibrary(name, directories);
+            if (found.isEmpty()) {
+                walk.missing.append({name, binary.fileName()});
+                continue;
+            }
+            const FilePath target = libraries.pathAppended(name);
+            if (const Result<> copied = found.copyFile(target); !copied) {
+                walk.error = copied.error();
+                return walk;
+            }
+            walk.added.append(name);
+            pending.append(target);
+        }
+    }
+    return walk;
+}
+
 // Builds the .hap via the Qt-generated CMake "<target>_make_hap" target.
 class MakeHapStep final : public AbstractProcessStep
 {
@@ -705,6 +805,47 @@ private:
         return true;
     }
 
+    bool completeStagedLibraries()
+    {
+        const QSet<QString> provided = deviceLibraries(settings().sdkLocation());
+        if (provided.isEmpty()) {
+            emit addOutput(Tr::tr("No sysroot in the HarmonyOS SDK; the libraries the "
+                                  "package needs were not checked."), OutputFormat::Stdout);
+            return true;
+        }
+        const FilePaths directories = libraryDirectories(
+            deploymentSettings(buildConfiguration()->buildDirectory(), m_buildKey));
+        const LibraryWalk walk = completeLibraries(
+            m_project.pathAppended("entry/libs/arm64-v8a"), directories, provided);
+        if (!walk.error.isEmpty()) {
+            emit addOutput(walk.error, OutputFormat::ErrorMessage);
+            return false;
+        }
+        if (!walk.added.isEmpty()) {
+            emit addOutput(Tr::tr("Added %1, which the packaged binaries need.")
+                               .arg(walk.added.join(", ")), OutputFormat::Stdout);
+        }
+        if (!walk.missing.isEmpty()) {
+            QStringList names;
+            QStringList details;
+            for (const MissingLibrary &library : walk.missing) {
+                names.append(library.name);
+                details.append(Tr::tr("%1 is needed by %2.")
+                                   .arg(library.name, library.neededBy));
+            }
+            DeploymentTask task(
+                Task::Warning,
+                Tr::tr("Missing from the package: %1.").arg(names.join(", ")));
+            details.append(Tr::tr("The device does not provide them either, so whatever "
+                                  "needs them will fail to load. Name the directory they "
+                                  "are in in QT_ADDITIONAL_PACKAGES_PREFIX_PATH and "
+                                  "configure the project again."));
+            task.setDetails(details);
+            emit addTask(task);
+        }
+        return true;
+    }
+
     // Qt's project templates are copied from its source tree, which in an in-source build
     // holds CMake's own files as well. hvigor takes exception to them: with them present it
     // deletes the generated project mid-run and then reports the files it deleted as missing.
@@ -877,6 +1018,8 @@ private:
             const HarmonyOsExtras extras
                 = harmonyOsExtras(buildConfiguration()->buildDirectory(), m_buildKey);
             if (!shipResourceDirectories(extras.resourceDirectories))
+                return SetupResult::StopWithError;
+            if (!completeStagedLibraries())
                 return SetupResult::StopWithError;
 
             dropStaleModuleOutput();
@@ -1585,6 +1728,102 @@ private slots:
         QVERIFY(packagedContentFingerprint(project) != withServer);
     }
 
+    void testLibraryDirectories()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const FilePath settings = FilePath::fromString(dir.filePath("settings.json"));
+
+        QVERIFY(settings.writeFileContents("{}"));
+        QVERIFY(libraryDirectories(settings).isEmpty());
+
+        QVERIFY(settings.writeFileContents(
+            R"({ "qtLibsDirectory": "/qt/lib",
+                 "extra-libs-dirs": ["/deps/lib", "/more/lib"] })"));
+        QCOMPARE(libraryDirectories(settings),
+                 FilePaths({FilePath::fromString("/qt/lib"), FilePath::fromString("/deps/lib"),
+                            FilePath::fromString("/more/lib")}));
+    }
+
+    void testFindLibrary()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const FilePath root = FilePath::fromString(dir.path());
+        const FilePath one = root.pathAppended("one");
+        const FilePath two = root.pathAppended("two");
+        QVERIFY(one.ensureWritableDir());
+        QVERIFY(two.ensureWritableDir());
+        QVERIFY(two.pathAppended("libfoo.so").writeFileContents("x"));
+
+        QCOMPARE(findLibrary("libfoo.so", {one, two}), two.pathAppended("libfoo.so"));
+        QVERIFY(findLibrary("libbar.so", {one, two}).isEmpty());
+
+        QVERIFY(two.pathAppended("libicudata.so").writeFileContents("x"));
+        QCOMPARE(findLibrary("libicudata.so.78", {one, two}),
+                 two.pathAppended("libicudata.so"));
+        QVERIFY(two.pathAppended("libicudata.so.78").writeFileContents("x"));
+        QCOMPARE(findLibrary("libicudata.so.78", {one, two}),
+                 two.pathAppended("libicudata.so.78"));
+    }
+
+    void testNeededLibraries()
+    {
+        const FilePath self = elfHostBinary();
+        if (self.isEmpty())
+            QSKIP("Not an ELF platform.");
+        const QStringList needed = ElfReader(self).neededLibraries();
+        QVERIFY(!needed.isEmpty());
+
+        const Result<QByteArray> contents = self.fileContents();
+        QVERIFY(contents);
+        for (const QString &name : needed) {
+            QVERIFY2(name.startsWith("lib") && name.contains(".so"), qPrintable(name));
+            QVERIFY2(contents->contains(name.toUtf8()), qPrintable(name));
+        }
+    }
+
+    void testCompleteLibraries()
+    {
+        const FilePath self = elfHostBinary();
+        if (self.isEmpty())
+            QSKIP("Not an ELF platform.");
+        const QStringList needed = ElfReader(self).neededLibraries();
+        QVERIFY(!needed.isEmpty());
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const FilePath root = FilePath::fromString(dir.path());
+        const FilePath libraries = root.pathAppended("libs");
+        QVERIFY(libraries.pathAppended("plugins").ensureWritableDir());
+        QVERIFY(self.copyFile(libraries.pathAppended("plugins/libstaged.so")));
+
+        const QSet<QString> all(needed.begin(), needed.end());
+        LibraryWalk walk = completeLibraries(libraries, {}, all);
+        QVERIFY(walk.error.isEmpty());
+        QVERIFY(walk.added.isEmpty());
+        QVERIFY(walk.missing.isEmpty());
+
+        QSet<QString> withoutFirst = all;
+        withoutFirst.remove(needed.first());
+        walk = completeLibraries(libraries, {}, withoutFirst);
+        QCOMPARE(walk.missing.size(), 1);
+        QCOMPARE(walk.missing.first().name, needed.first());
+        QCOMPARE(walk.missing.first().neededBy, QString("libstaged.so"));
+
+        const FilePath source = root.pathAppended("source");
+        QVERIFY(source.ensureWritableDir());
+        QVERIFY(source.pathAppended(needed.first()).writeFileContents("no library at all"));
+        walk = completeLibraries(libraries, {source}, withoutFirst);
+        QVERIFY(walk.missing.isEmpty());
+        QCOMPARE(walk.added, QStringList(needed.first()));
+        QVERIFY(libraries.pathAppended(needed.first()).isFile());
+
+        walk = completeLibraries(libraries, {}, withoutFirst);
+        QVERIFY(walk.added.isEmpty());
+        QVERIFY(walk.missing.isEmpty());
+    }
+
     void testAddPermissionWithoutList()
     {
         QTemporaryDir dir;
@@ -1596,6 +1835,15 @@ private slots:
     }
 
 private:
+    static FilePath elfHostBinary()
+    {
+        const FilePath self = FilePath::fromString(QCoreApplication::applicationFilePath());
+        const Result<QByteArray> magic = self.fileContents(4);
+        if (!magic || *magic != QByteArray("\x7f" "ELF"))
+            return {};
+        return self;
+    }
+
     static QByteArray manifest()
     {
         return R"({
