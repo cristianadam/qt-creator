@@ -1047,7 +1047,9 @@ Result<> DesktopDeviceFileAccess::removeRecursively(const FilePath &filePath) co
 
     QFile::setPermissions(fileInfo.absoluteFilePath(), fileInfo.permissions() | QFile::WriteUser);
 
-    if (fileInfo.isDir()) {
+    // isDir() and canonicalPath() below both follow a symlink, so descending
+    // into one would delete the contents of wherever it points. Remove the link.
+    if (fileInfo.isDir() && !fileInfo.isSymLink()) {
         QDir dir(fileInfo.absoluteFilePath());
         dir.setPath(dir.canonicalPath());
         if (Result<> res = checkToRefuseRemoveDirectory(dir); !res)
