@@ -37,13 +37,28 @@ private slots:
     void testAlwaysSwitchToTab();
     void testCloseSplit();
     void testPinned();
-    void testDisambiguateUnnamedDuplicates();
-    void testNavigationHistoryDedup();
 };
 
 QObject *createTabbedEditorTest()
 {
     return new TabbedEditorTest;
+}
+
+class EditorManagerTest : public QObject
+{
+    Q_OBJECT
+
+private slots:
+    void init();
+    void cleanup();
+
+    void testDisambiguateUnnamedDuplicates();
+    void testNavigationHistoryDedup();
+};
+
+QObject *createEditorManagerTest()
+{
+    return new EditorManagerTest;
 }
 
 static int fileCount = 0;
@@ -382,7 +397,17 @@ void TabbedEditorTest::testPinned()
     QCOMPARE(view0->tabs().size(), 1);
 }
 
-void TabbedEditorTest::testDisambiguateUnnamedDuplicates()
+void EditorManagerTest::init()
+{
+    closeAll();
+}
+
+void EditorManagerTest::cleanup()
+{
+    closeAll();
+}
+
+void EditorManagerTest::testDisambiguateUnnamedDuplicates()
 {
     // Editors without a file path that share a display name must get stable,
     // distinct names. Re-running disambiguation (here by opening a third one)
@@ -412,7 +437,7 @@ void TabbedEditorTest::testDisambiguateUnnamedDuplicates()
 
 // Adding the current position again without moving must not create a duplicate
 // "Go Back" entry (e.g. Follow Symbol on the symbol's own declaration).
-void TabbedEditorTest::testNavigationHistoryDedup()
+void EditorManagerTest::testNavigationHistoryDedup()
 {
     TestFile a;
     TestFile b;
