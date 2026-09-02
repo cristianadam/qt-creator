@@ -23,16 +23,32 @@ QString HarmonyOsQtVersion::description() const
     return Tr::tr("HarmonyOS");
 }
 
+Abis HarmonyOsQtVersion::detectQtAbis() const
+{
+    Abis abis = QtVersion::detectQtAbis();
+    if (abis.isEmpty())
+        abis = Abi::abisOfBinary(libraryPath().pathAppended("libQt6Core.so"));
+
+    Abis harmonyOsAbis;
+    for (const Abi &abi : abis) {
+        if (abi.architecture() != Abi::UnknownArchitecture) {
+            harmonyOsAbis.append(Abi(abi.architecture(), Abi::LinuxOS,
+                                     Abi::OpenHarmonyLinuxFlavor, Abi::ElfFormat,
+                                     abi.wordWidth()));
+        }
+    }
+    return harmonyOsAbis;
+}
+
 QSet<Id> HarmonyOsQtVersion::targetDeviceTypes() const
 {
-    return {Constants::HARMONYOS_DEVICE_TYPE};
+    return {Constants::HARMONYOS_DEVICE_TYPE, Constants::HARMONYOS_BUILD_DEVICE_TYPE};
 }
 
 QSet<Id> HarmonyOsQtVersion::availableFeatures() const
 {
     QSet<Id> features = QtVersion::availableFeatures();
     features.insert(QtSupport::Constants::FEATURE_MOBILE);
-    features.remove(QtSupport::Constants::FEATURE_QT_CONSOLE);
     features.remove(QtSupport::Constants::FEATURE_QT_WEBKIT);
     return features;
 }
