@@ -475,8 +475,20 @@ void PermissionsContainerWidget::updateCMakePermissionsCheckBoxState()
     }
     const Utils::FilePath docPath = m_textEditorWidget->textDocument()
         ? m_textEditorWidget->textDocument()->filePath() : Utils::FilePath();
-        if (!docPath.isEmpty() && ProjectManager::projectForFile(docPath))
-            m_checkBoxStateInitialized = true;
+    Project *project = docPath.isEmpty() ? nullptr : ProjectManager::projectForFile(docPath);
+
+    if (project) {
+        m_checkBoxStateInitialized = true;
+        if (project != m_project) {
+            if (m_project)
+                disconnect(m_project, &Project::activeTargetChanged, this, nullptr);
+            m_project = project;
+            connect(project, &Project::activeTargetChanged, this, [this] {
+                m_checkBoxStateInitialized = false;
+                refresh();
+            });
+        }
+    }
 
     const QSignalBlocker blocker(m_CMakePermissionsCheckBox);
     m_CMakePermissionsCheckBox->setCheckState(checked ? Qt::Checked : Qt::Unchecked);

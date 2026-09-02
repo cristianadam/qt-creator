@@ -10,6 +10,7 @@
 #include <QWidget>
 #include <QStringList>
 #include <QTreeView>
+#include <QPointer>
 
 class QCheckBox;
 class QComboBox;
@@ -63,7 +64,7 @@ private:
     TextEditor::TextEditorWidget *m_textEditorWidget = nullptr;
     Utils::FilePath m_CMakeFilePath;
     QString m_CMakeTargetName;
-    ProjectExplorer::Project *m_project = nullptr;
+    QPointer<ProjectExplorer::Project> m_project = nullptr;
     QCheckBox *m_defaultPermissonsCheckBox = nullptr;
     QCheckBox *m_defaultFeaturesCheckBox = nullptr;
     QComboBox *m_permissionsComboBox = nullptr;
