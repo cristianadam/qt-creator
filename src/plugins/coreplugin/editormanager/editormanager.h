@@ -190,6 +190,10 @@ signals:
     void editorViewCreated(int viewId);
     void editorViewClosed(int viewId);
 
+    // A split having changed size, naming it the same way. Sent for each
+    // view whose size changed, so one layout change reports several.
+    void editorViewResized(int viewId);
+
 #ifdef WITH_TESTS
     void linkOpened();
 #endif

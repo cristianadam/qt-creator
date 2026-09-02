@@ -259,6 +259,7 @@ private:
     void keyPressEvent(QKeyEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void showEvent(QShowEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 };
 
 static QColor s_overrideColor;
@@ -1549,6 +1550,24 @@ void ICore::restartTrimmer()
 }
 
 namespace Internal {
+
+/*!
+    \fn void Core::ICore::mainWindowResized()
+
+    Indicates that the main window changed size.
+
+    Sent for every size change, so a window being dragged to a new size
+    reports many.
+*/
+
+void MainWindow::resizeEvent(QResizeEvent *event)
+{
+    AppMainWindow::resizeEvent(event);
+    // Sent before the core singleton is there, while the window is being set
+    // up, and after it has gone on the way out.
+    if (m_core)
+        emit m_core->mainWindowResized();
+}
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
