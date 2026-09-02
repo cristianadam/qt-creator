@@ -51,6 +51,35 @@ if (NOT TARGET qtcreator)
   return()
 endif()
 
+# A HAP has nothing next to the application: every library is flattened into libs/<arch>
+# and everything else lives among the module's resource files, while this build assumes
+# ../lib/qtcreator/plugins and ../share/qtcreator next to the executable. Qt Creator can be
+# told both, so the package carries its resources as a resource file directory and the run
+# passes the two paths as arguments. The deploy steps of the HarmonyOS plugin read this.
+if (OHOS)
+  # An IDE on the device has to reach the user's own files, which is what this permission
+  # is for; the provisioning profile has to allow it as well.
+  qt_add_harmonyos_permission(qtcreator
+    NAME ohos.permission.READ_WRITE_USER_FILE
+    REASON "Open and save the files you work on"
+    USED_SCENE_WHEN always
+  )
+
+  set(_harmonyos_resources "/data/storage/el1/bundle/entry/resources/resfile")
+  file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/qtcreator-harmonyos-extras.json"
+"{
+    \"resource-directories\": [
+        \"${PROJECT_BINARY_DIR}/${IDE_DATA_PATH}\"
+    ],
+    \"launch-arguments\": [
+        \"-pluginpath\", \"/data/storage/el1/bundle/libs/arm64\",
+        \"-resourcepath\", \"${_harmonyos_resources}/qtcreator\",
+        \"-load\", \"HarmonyOS\"
+    ]
+}
+")
+endif()
+
 if (QTC_STATIC_BUILD)
   set(plugins_to_import "")
   set(source_file_content "#include <QtPlugin>\n")
