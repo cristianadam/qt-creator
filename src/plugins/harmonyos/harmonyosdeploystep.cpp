@@ -309,9 +309,12 @@ static FilePath packageDir(const BuildConfiguration *bc)
     return bc->buildDirectory().pathAppended("harmonyos-package");
 }
 
+// harmonydeployqt generates into a directory beside the application target, which is the
+// top of the build directory only when the application is the whole project. Qt Creator's
+// own application lives in src/app, so the settings file is what says where to look.
 static FilePath projectDir(const BuildConfiguration *bc)
 {
-    return bc->buildDirectory().pathAppended("harmonyos-build");
+    return generatedProjectDir(bc->buildDirectory(), bc->activeBuildKey());
 }
 
 static bool addTreeToHash(QCryptographicHash &hash, const FilePath &root)
@@ -651,7 +654,8 @@ private:
         // Which library to leave out does not follow from what the constant said before:
         // the generated project is replaced on every run, so a second run would find the
         // runner named there already. harmonydeployqt's own settings say it instead.
-        const FilePath application = applicationLibrary(buildConfiguration()->buildDirectory());
+        const FilePath application
+            = applicationLibrary(buildConfiguration()->buildDirectory(), m_buildKey);
         const QString name = !application.isEmpty() ? application.fileName() : *previous;
         if (name != library.fileName() && !name.isEmpty())
             libraries.pathAppended(name).removeFile();
@@ -664,6 +668,40 @@ private:
         }
         emit addOutput(Tr::tr("Packaging a runner: the application is handed over at every "
                               "run instead of being installed."), OutputFormat::Stdout);
+        return true;
+    }
+
+    // What the project needs in the package that harmonydeployqt knows nothing about: whole
+    // directories that belong in the package as resource files. An application built for a
+    // desktop finds them next to itself; in a HAP there is no "next to itself", so they go
+    // where a HAP keeps resources and the application is told the path.
+    bool shipResourceDirectories(const FilePaths &directories)
+    {
+        if (directories.isEmpty())
+            return true;
+        const FilePath resources = m_project.pathAppended(
+            "entry/src/main/resources/resfile");
+        if (const Result<> created = resources.ensureWritableDir(); !created) {
+            emit addOutput(created.error(), OutputFormat::ErrorMessage);
+            return false;
+        }
+        for (const FilePath &directory : directories) {
+            if (!directory.isDir()) {
+                emit addOutput(Tr::tr("\"%1\" is not a directory; it was not packaged.")
+                                   .arg(directory.toUserOutput()), OutputFormat::Stdout);
+                continue;
+            }
+            const FilePath target = resources.pathAppended(directory.fileName());
+            if (target.exists() && !target.removeRecursively()) {
+                emit addOutput(Tr::tr("Cannot replace \"%1\".").arg(target.toUserOutput()),
+                               OutputFormat::ErrorMessage);
+                return false;
+            }
+            if (const Result<> copied = directory.copyRecursively(target); !copied) {
+                emit addOutput(copied.error(), OutputFormat::ErrorMessage);
+                return false;
+            }
+        }
         return true;
     }
 
@@ -836,6 +874,11 @@ private:
                 && !shipRunnerLibrary(m_project.pathAppended("entry/libs/arm64-v8a"))) {
                 return SetupResult::StopWithError;
             }
+            const HarmonyOsExtras extras
+                = harmonyOsExtras(buildConfiguration()->buildDirectory(), m_buildKey);
+            if (!shipResourceDirectories(extras.resourceDirectories))
+                return SetupResult::StopWithError;
+
             dropStaleModuleOutput();
             const ProvisioningProfile profile
                 = readProvisioningProfile(settings().signingProfile());
@@ -1186,7 +1229,7 @@ private:
 
         m_hap = packageDir(bc).pathAppended(buildKey + ".hap");
         m_project = projectDir(bc);
-        m_bundle = bundleName(bc->buildDirectory());
+        m_bundle = bundleName(bc->buildDirectory(), bc->activeBuildKey());
         m_serial.clear();
         if (const auto device = std::dynamic_pointer_cast<const HarmonyOsDevice>(
                 RunDeviceKitAspect::device(kit()))) {
@@ -1457,6 +1500,46 @@ private slots:
         const FilePath other = FilePath::fromString(dir.filePath("Other.ets"));
         QVERIFY(other.writeFileContents("export const LOG_TAG = 'nothing here';\n"));
         QVERIFY(!setApplicationLibrary(other, "libqtcrunner.so"));
+    }
+
+    void testGeneratedProjectDir()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const FilePath build = FilePath::fromString(dir.path());
+
+        // Nothing built yet: the guess is the top of the build directory.
+        QCOMPARE(generatedProjectDir(build, "app"), build.pathAppended("harmonyos-build"));
+
+        // An application in a subdirectory - Qt Creator's own is in src/app - is where
+        // harmonydeployqt was told to generate.
+        const FilePath nested = build.pathAppended("src/app");
+        QVERIFY(nested.ensureWritableDir());
+        QVERIFY(nested.pathAppended("app-harmony-deployment-settings.json")
+                    .writeFileContents("{}"));
+        QCOMPARE(generatedProjectDir(build, "app"), nested.pathAppended("harmonyos-build"));
+        // Another target's settings are not this target's.
+        QCOMPARE(generatedProjectDir(build, "other"), build.pathAppended("harmonyos-build"));
+    }
+
+    void testHarmonyOsExtras()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const FilePath build = FilePath::fromString(dir.path());
+        QVERIFY(build.pathAppended("app-harmony-deployment-settings.json").writeFileContents("{}"));
+
+        // A project that declares nothing gets nothing.
+        QVERIFY(harmonyOsExtras(build, "app").resourceDirectories.isEmpty());
+        QVERIFY(harmonyOsExtras(build, "app").launchArguments.isEmpty());
+
+        QVERIFY(build.pathAppended("app-harmonyos-extras.json").writeFileContents(
+            R"({ "resource-directories": ["/tmp/share/app"],
+                 "launch-arguments": ["-resourcepath", "/data/x"] })"));
+        const HarmonyOsExtras extras = harmonyOsExtras(build, "app");
+        QCOMPARE(extras.resourceDirectories.size(), 1);
+        QCOMPARE(extras.resourceDirectories.first(), FilePath::fromString("/tmp/share/app"));
+        QCOMPARE(extras.launchArguments, QStringList({"-resourcepath", "/data/x"}));
     }
 
     void testPackageNote()
