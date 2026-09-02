@@ -13,7 +13,10 @@
 #include "gdb/gdbengine.h"
 #include "registerhandler.h"
 
+#include <coreplugin/documentmanager.h>
 #include <coreplugin/editormanager/editormanager.h>
+#include <coreplugin/editormanager/ieditor.h>
+#include <coreplugin/idocument.h>
 
 #include <cppeditor/cpptoolstestcase.h>
 
@@ -69,6 +72,8 @@ private slots:
     void testRegisterValue();
 
     void testInferiorStartData();
+
+    void testScratchEditorAdoptsSavedName();
 
 private:
     CppEditor::Tests::TemporaryCopiedDir *m_tmpDir = nullptr;
@@ -435,6 +440,25 @@ void DebuggerUnitTests::testInferiorStartData()
         QCOMPARE(remoteData->attachPid.pid(), 4711);
         QVERIFY(remoteData->remoteExecutable.isEmpty());
     }
+}
+
+void DebuggerUnitTests::testScratchEditorAdoptsSavedName()
+{
+    const QScopeGuard cleanup([] { EditorManager::closeAllEditors(false); });
+
+    openTextEditor("Backtrace$", "line1\nline2\n");
+    IEditor *editor = EditorManager::currentEditor();
+    QVERIFY(editor);
+    IDocument *doc = editor->document();
+    QVERIFY(doc);
+    QVERIFY(doc->displayName().startsWith("Backtrace"));
+    QVERIFY(doc->isTemporary());
+
+    const FilePath target = FilePath::fromString(QDir::tempPath()) / "creator-backtrace-12276.txt";
+    const QScopeGuard removeFile([&] { target.removeFile(); });
+    QVERIFY(DocumentManager::saveDocument(doc, target));
+    QCOMPARE(doc->displayName(), target.fileName());
+    QVERIFY(!doc->isTemporary());
 }
 
 QObject *createDebuggerTest()
