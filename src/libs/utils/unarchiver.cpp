@@ -6,6 +6,7 @@
 #include "async.h"
 #include "utilstr.h"
 
+#include <QRegularExpression>
 #include <QSettings>
 
 #ifdef QTC_UTILS_WITH_LIBARCHIVE
@@ -113,6 +114,23 @@ static int64_t _seek(struct archive *a, void *client_data, int64_t request, int 
     return data->file.pos();
 }
 
+// Rejecting rather than sanitizing: callers treat success as "the archive's
+// contents, and nothing else, are below the destination", and a silently
+// rewritten path would not be that.
+static Result<> checkContained(const QString &path)
+{
+    if (path.isEmpty())
+        return ResultError(Tr::tr("The name is empty."));
+
+    if (path.startsWith('/') || path.startsWith('\\') || (path.size() > 1 && path.at(1) == ':'))
+        return ResultError(Tr::tr("The path \"%1\" is absolute.").arg(path));
+
+    if (path.split(QRegularExpression("[/\\\\]")).contains(".."))
+        return ResultError(Tr::tr("The path \"%1\" points outside the destination.").arg(path));
+
+    return ResultOk;
+}
+
 static Result<> unarchive(
     QPromise<Result<>> &promise, const Utils::FilePath &archive, const Utils::FilePath &destination)
 {
@@ -125,6 +143,10 @@ static Result<> unarchive(
     flags |= ARCHIVE_EXTRACT_PERM;
     flags |= ARCHIVE_EXTRACT_ACL;
     flags |= ARCHIVE_EXTRACT_FFLAGS;
+    // Not NOABSOLUTEPATHS: the pathname below is rewritten to an absolute path
+    // under the destination, which that flag would refuse.
+    flags |= ARCHIVE_EXTRACT_SECURE_NODOTDOT;
+    flags |= ARCHIVE_EXTRACT_SECURE_SYMLINKS;
 
     ReadData data{QFile(archive.toFSPathString()), {}};
     std::unique_ptr<struct archive, decltype(&readFree)> a(archive_read_new(), readFree);
@@ -182,9 +204,21 @@ static Result<> unarchive(
         promise.setProgressValueAndText(
             fileNumber, QString::fromUtf8(archive_entry_pathname_utf8(entry)));
 
-        archive_entry_set_pathname_utf8(
-            entry,
-            (destination / QString::fromUtf8(archive_entry_pathname_utf8(entry))).path().toUtf8());
+        const QString entryPath = QString::fromUtf8(archive_entry_pathname_utf8(entry));
+        if (const Result<> contained = checkContained(entryPath); !contained)
+            return ResultError(Tr::tr("Rejected archive entry: %1").arg(contained.error()));
+
+        const char *link = archive_entry_symlink_utf8(entry);
+        if (!link)
+            link = archive_entry_hardlink_utf8(entry);
+        if (link) {
+            if (const Result<> contained = checkContained(QString::fromUtf8(link)); !contained) {
+                return ResultError(
+                    Tr::tr("Rejected archive link target: %1").arg(contained.error()));
+            }
+        }
+
+        archive_entry_set_pathname_utf8(entry, (destination / entryPath).path().toUtf8());
 
         r = archive_write_header(ext.get(), entry);
         if (r < ARCHIVE_OK) {
