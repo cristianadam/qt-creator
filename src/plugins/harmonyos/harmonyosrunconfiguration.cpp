@@ -108,6 +108,8 @@ HarmonyOsExtras harmonyOsExtras(const FilePath &buildDir, const QString &buildKe
     const QJsonObject object = QJsonDocument::fromJson(*contents).object();
     for (const QJsonValue &value : object.value("resource-directories").toArray())
         extras.resourceDirectories.append(FilePath::fromUserInput(value.toString()));
+    for (const QJsonValue &value : object.value("native-package-files").toArray())
+        extras.nativePackageFiles.append(FilePath::fromUserInput(value.toString()));
     for (const QJsonValue &value : object.value("launch-arguments").toArray())
         extras.launchArguments.append(value.toString());
     return extras;
