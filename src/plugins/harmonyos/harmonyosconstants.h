@@ -50,6 +50,8 @@ inline constexpr char HARMONYOS_PACKAGE_HAP_STEP_ID[] = "HarmonyOS.PackageHapSte
 inline constexpr char HARMONYOS_SIGN_HAP_STEP_ID[] = "HarmonyOS.SignHapStep";
 inline constexpr char HARMONYOS_INSTALL_HAP_STEP_ID[] = "HarmonyOS.InstallHapStep";
 inline constexpr char HARMONYOS_RUNCONFIG_ID[] = "HarmonyOS.RunConfiguration";
+inline constexpr char HARMONYOS_BUILD_RUNCONFIG_ID[]
+    = "HarmonyOS.BuildDevice.RunConfiguration";
 
 // The ability and module the Qt for HarmonyOS template generates; used to launch.
 inline constexpr char HARMONYOS_ABILITY_NAME[] = "QAbility";
