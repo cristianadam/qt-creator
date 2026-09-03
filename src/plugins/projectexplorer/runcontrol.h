@@ -274,6 +274,8 @@ public:
     Utils::ProcessHandle attachPid() const;
 
     void showOutputPane();
+    // Removes and deletes this run control's pane tab; later output is dropped.
+    void detachOutputPaneTab();
 
     Canceler canceler();
     void handleProcessCancellation(Utils::Process *process);
@@ -293,6 +295,7 @@ signals:
     void canceled();
     void stopped();
     void applicationProcessHandleChanged(QPrivateSignal);
+    void outputPaneActionsEnabledChanged();
     void stdOutData(const QByteArray &data);
     void outputVisibilityChanged(bool visible);
 
