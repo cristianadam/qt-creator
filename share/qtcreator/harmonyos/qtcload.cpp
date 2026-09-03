@@ -84,6 +84,7 @@ private:
     bool readFile(const char *path);
     bool mapSegments();
     bool readDynamic();
+    void readStaticSymbols();
     bool loadDependencies();
     bool applyRelocations();
     bool applyRela(const Elf64_Rela *relocations, size_t count);
@@ -392,6 +393,37 @@ void Loader::registerFrames()
 // are kept because the process may hold them privately: an application library that was
 // itself dlopened with RTLD_LOCAL keeps its whole dependency tree out of the global scope,
 // and then RTLD_DEFAULT does not find a single Qt symbol.
+// An executable exports main() only when it was linked with -rdynamic, but an unstripped
+// build names it in .symtab, which is in the file and not in any segment.
+void Loader::readStaticSymbols()
+{
+    const Elf64_Ehdr *elf = header();
+    if (elf->e_shoff == 0 || elf->e_shentsize < sizeof(Elf64_Shdr))
+        return;
+    if (elf->e_shoff + size_t(elf->e_shnum) * elf->e_shentsize > m_file.size())
+        return;
+
+    const auto section = [this, elf](unsigned index) {
+        return reinterpret_cast<const Elf64_Shdr *>(
+            m_file.data() + elf->e_shoff + size_t(index) * elf->e_shentsize);
+    };
+    for (unsigned index = 0; index < elf->e_shnum; ++index) {
+        const Elf64_Shdr *symbols = section(index);
+        if (symbols->sh_type != SHT_SYMTAB || symbols->sh_link >= elf->e_shnum)
+            continue;
+        const Elf64_Shdr *strings = section(symbols->sh_link);
+        if (symbols->sh_offset + symbols->sh_size > m_file.size()
+                || strings->sh_offset + strings->sh_size > m_file.size()) {
+            return;
+        }
+        const Elf64_Sym *first =
+            reinterpret_cast<const Elf64_Sym *>(m_file.data() + symbols->sh_offset);
+        m_image->localSymbols.assign(first, first + symbols->sh_size / sizeof(Elf64_Sym));
+        m_image->localStrings.assign(m_file.data() + strings->sh_offset, strings->sh_size);
+        return;
+    }
+}
+
 bool Loader::loadDependencies()
 {
     for (Elf64_Xword offset : m_neededNames) {
@@ -568,6 +600,7 @@ bool Loader::load(const char *path)
             || !applyRelocations() || !protectSegments())
         return false;
     registerFrames();
+    readStaticSymbols();
     m_image->lowest = m_lowest;
     m_image->symbols = m_symbols;
     m_image->symbolCount = m_symbolCount;
@@ -590,14 +623,24 @@ bool load(const char *path, Image *image, std::string *error)
 
 void *lookup(const Image &image, const char *name)
 {
-    for (size_t index = 0; index < image.symbolCount; ++index) {
-        const Elf64_Sym &symbol = image.symbols[index];
-        if (symbol.st_shndx == SHN_UNDEF || symbol.st_value == 0)
-            continue;
-        if (::strcmp(image.strings + symbol.st_name, name) == 0)
-            return image.base + symbol.st_value - image.lowest;
-    }
-    return nullptr;
+    const auto search = [&image, name](const Elf64_Sym *symbols, size_t count,
+                                       const char *strings, size_t stringsSize) -> void * {
+        for (size_t index = 0; index < count; ++index) {
+            const Elf64_Sym &symbol = symbols[index];
+            if (symbol.st_shndx == SHN_UNDEF || symbol.st_value == 0)
+                continue;
+            if (symbol.st_name >= stringsSize)
+                continue;
+            if (::strcmp(strings + symbol.st_name, name) == 0)
+                return image.base + symbol.st_value - image.lowest;
+        }
+        return nullptr;
+    };
+
+    if (void *found = search(image.symbols, image.symbolCount, image.strings, SIZE_MAX))
+        return found;
+    return search(image.localSymbols.data(), image.localSymbols.size(),
+                  image.localStrings.data(), image.localStrings.size());
 }
 
 } // namespace QtcLoad
