@@ -65,11 +65,25 @@ if (OHOS)
     USED_SCENE_WHEN always
   )
 
+  set(QTC_HARMONYOS_NATIVE_PACKAGE_FILES "" CACHE STRING
+    "Files to put into the native package of Qt Creator's HarmonyOS package, \
+for example an ssh client and its libraries")
+  set(_harmonyos_native_files "")
+  foreach(_file IN LISTS QTC_HARMONYOS_NATIVE_PACKAGE_FILES)
+    if(_harmonyos_native_files)
+      string(APPEND _harmonyos_native_files ",\n        ")
+    endif()
+    string(APPEND _harmonyos_native_files "\"${_file}\"")
+  endforeach()
+
   set(_harmonyos_resources "/data/storage/el1/bundle/entry/resources/resfile")
   file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/qtcreator-harmonyos-extras.json"
 "{
     \"resource-directories\": [
         \"${PROJECT_BINARY_DIR}/${IDE_DATA_PATH}\"
+    ],
+    \"native-package-files\": [
+        ${_harmonyos_native_files}
     ],
     \"launch-arguments\": [
         \"-pluginpath\", \"/data/storage/el1/bundle/libs/arm64\",

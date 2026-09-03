@@ -500,6 +500,29 @@ static LibraryWalk completeLibraries(const FilePath &libraries, const FilePaths 
     return walk;
 }
 
+static Result<> stageNativePackageFiles(const FilePaths &files, const FilePath &binDir)
+{
+    if (const Result<> created = binDir.ensureWritableDir(); !created)
+        return created;
+    const QFile::Permissions permissions = QFile::ReadOwner | QFile::WriteOwner
+                                           | QFile::ExeOwner | QFile::ReadGroup
+                                           | QFile::ExeGroup | QFile::ReadOther
+                                           | QFile::ExeOther;
+    for (const FilePath &file : files) {
+        if (!file.isFile()) {
+            return ResultError(Tr::tr("\"%1\" is not a file, so it cannot go into the "
+                                      "native package.").arg(file.toUserOutput()));
+        }
+        const FilePath target = binDir.pathAppended(file.fileName());
+        target.removeFile();
+        if (const Result<> copied = file.copyFile(target); !copied)
+            return copied;
+        if (const Result<> set = target.setPermissions(permissions); !set)
+            return set;
+    }
+    return ResultOk;
+}
+
 // Builds the .hap via the Qt-generated CMake "<target>_make_hap" target.
 class MakeHapStep final : public AbstractProcessStep
 {
@@ -864,8 +887,7 @@ private:
 
     // Nothing can be launched under a debugger on the device, so a debugged application
     // starts the server itself, and both it and the plugin that starts it travel in the
-    // package. hvigor packages no native package, so the server is put in afterwards,
-    // but it has to be declared here, before the manifest is packaged.
+    // package.
     bool shipDebugPlugin()
     {
         if (!buildDebugPlugin(m_project.pathAppended("entry/libs/arm64-v8a/generic")))
@@ -879,12 +901,43 @@ private:
             emit addOutput(added.error(), OutputFormat::ErrorMessage);
             return false;
         }
+        return true;
+    }
 
-        m_debugServer = packDebugServer();
-        if (m_debugServer.isEmpty())
+    bool shipNativePackage(const FilePaths &files)
+    {
+        const FilePath source = stagingDir().pathAppended("server");
+        if (source.exists() && !source.removeRecursively()) {
+            emit addOutput(Tr::tr("Cannot replace \"%1\".").arg(source.toUserOutput()),
+                           OutputFormat::ErrorMessage);
+            return false;
+        }
+        FilePaths contents = files;
+        if (buildConfiguration()->buildType() == BuildConfiguration::Debug) {
+            const FilePath server = Sdk::lldbServerForDevice(settings().sdkLocation());
+            if (server.isEmpty()) {
+                emit addOutput(Tr::tr("No debug server in the HarmonyOS SDK; the package "
+                                      "will not be debuggable."), OutputFormat::Stdout);
+            } else {
+                contents.append(server);
+            }
+        }
+        if (contents.isEmpty())
             return true;
 
-        const Result<> declared = declareHnpPackage(moduleJson, m_debugServer.fileName());
+        if (const Result<> staged = stageNativePackageFiles(contents,
+                                                            source.pathAppended("bin"));
+            !staged) {
+            emit addOutput(staged.error(), OutputFormat::ErrorMessage);
+            return false;
+        }
+
+        m_nativePackage = packNativePackage(source);
+        if (m_nativePackage.isEmpty())
+            return false;
+
+        const FilePath moduleJson = m_project.pathAppended("entry/src/main/module.json5");
+        const Result<> declared = declareHnpPackage(moduleJson, m_nativePackage.fileName());
         if (!declared) {
             emit addOutput(declared.error(), OutputFormat::ErrorMessage);
             return false;
@@ -892,64 +945,49 @@ private:
         return true;
     }
 
-    // Returns the packed server, or nothing when the SDK does not have what it takes.
-    FilePath packDebugServer()
+    FilePath packNativePackage(const FilePath &source)
     {
-        const FilePath sdk = settings().sdkLocation();
-        const FilePath server = Sdk::lldbServerForDevice(sdk);
-        const FilePath hnpcli = Sdk::hnpcliCommand(sdk);
-        if (server.isEmpty() || hnpcli.isEmpty()) {
-            emit addOutput(Tr::tr("No debug server in the HarmonyOS SDK; the package will "
-                                  "not be debuggable."), OutputFormat::Stdout);
+        const FilePath hnpcli = Sdk::hnpcliCommand(settings().sdkLocation());
+        if (hnpcli.isEmpty()) {
+            emit addOutput(Tr::tr("No \"hnpcli\" in the HarmonyOS SDK to pack a native "
+                                  "package with."), OutputFormat::ErrorMessage);
             return {};
         }
-
-        // What is packed and what comes out are kept apart, so that only the package itself
-        // ends up in the application.
-        const FilePath source = stagingDir().pathAppended("server");
         const FilePath target = stagingDir().pathAppended("package").pathAppended(hnpDirectory());
-        for (const FilePath &dir : {source.pathAppended("bin"), target}) {
-            if (const Result<> created = dir.ensureWritableDir(); !created) {
-                emit addOutput(created.error(), OutputFormat::ErrorMessage);
-                return {};
-            }
-        }
-        const FilePath staged = source.pathAppended("bin").pathAppended(server.fileName());
-        staged.removeFile();
-        if (const Result<> copied = server.copyFile(staged); !copied) {
-            emit addOutput(copied.error(), OutputFormat::ErrorMessage);
+        if (const Result<> created = target.ensureWritableDir(); !created) {
+            emit addOutput(created.error(), OutputFormat::ErrorMessage);
             return {};
         }
 
         Process pack;
         pack.setCommand({hnpcli, {"pack", "-i", source.nativePath(), "-o", target.nativePath(),
-                                  "-n", Constants::HARMONYOS_DEBUG_SERVER_PACKAGE, "-v", "1.0"}});
+                                  "-n", Constants::HARMONYOS_NATIVE_PACKAGE, "-v", "1.0"}});
         pack.runBlocking();
         const FilePath packed
-            = target.pathAppended(QString(Constants::HARMONYOS_DEBUG_SERVER_PACKAGE) + ".hnp");
+            = target.pathAppended(QString(Constants::HARMONYOS_NATIVE_PACKAGE) + ".hnp");
         if (!packed.exists()) {
-            emit addOutput(Tr::tr("Packing the debug server failed: %1").arg(pack.allOutput()),
-                           OutputFormat::ErrorMessage);
+            emit addOutput(Tr::tr("Packing the native package failed: %1")
+                               .arg(pack.allOutput()), OutputFormat::ErrorMessage);
             return {};
         }
         return packed;
     }
 
-    // Puts the packed server into the package hvigor built, which leaves it out. Signing
-    // refuses a native package the manifest does not describe, and the device refuses to
-    // install one it cannot find, so this belongs with the declaration.
-    bool addDebugServerToPackage()
+    // Puts the packed native package into the package hvigor built, which leaves it out.
+    // Signing refuses a native package the manifest does not describe.
+    bool addNativePackageToPackage()
     {
-        if (m_debugServer.isEmpty())
+        if (m_nativePackage.isEmpty())
             return true;
 
         BuildConfiguration * const bc = buildConfiguration();
         QTC_ASSERT(bc, return false);
         const FilePath jar = bc->environment().searchInPath("jar");
         if (jar.isEmpty()) {
-            emit addOutput(Tr::tr("No \"jar\" to put the debug server into the package with; "
-                                  "the package will not be debuggable."), OutputFormat::Stdout);
-            return true;
+            emit addOutput(Tr::tr("No \"jar\" to put the native package into the package "
+                                  "with; nothing the application has to execute will be "
+                                  "there."), OutputFormat::ErrorMessage);
+            return false;
         }
 
         Process add;
@@ -957,7 +995,7 @@ private:
         add.setWorkingDirectory(stagingDir().pathAppended("package"));
         add.runBlocking();
         if (add.exitCode() != 0) {
-            emit addOutput(Tr::tr("Putting the debug server into the package failed: %1")
+            emit addOutput(Tr::tr("Putting the native package into the package failed: %1")
                                .arg(add.allOutput()), OutputFormat::ErrorMessage);
             return false;
         }
@@ -998,7 +1036,7 @@ private:
             emit addOutput(copied.error(), OutputFormat::ErrorMessage);
             return false;
         }
-        return addDebugServerToPackage();
+        return addNativePackageToPackage();
     }
 
     QtTaskTree::GroupItem runRecipe() final
@@ -1018,6 +1056,8 @@ private:
             const HarmonyOsExtras extras
                 = harmonyOsExtras(buildConfiguration()->buildDirectory(), m_buildKey);
             if (!shipResourceDirectories(extras.resourceDirectories))
+                return SetupResult::StopWithError;
+            if (!shipNativePackage(extras.nativePackageFiles))
                 return SetupResult::StopWithError;
             if (!completeStagedLibraries())
                 return SetupResult::StopWithError;
@@ -1114,7 +1154,7 @@ private:
     QString m_buildKey;
     FilePath m_project;
     FilePath m_package;
-    FilePath m_debugServer;
+    FilePath m_nativePackage;
 };
 
 class PackageHapStepFactory final : public BuildStepFactory
@@ -1678,11 +1718,42 @@ private slots:
 
         QVERIFY(build.pathAppended("app-harmonyos-extras.json").writeFileContents(
             R"({ "resource-directories": ["/tmp/share/app"],
+                 "native-package-files": ["/tmp/bin/ssh", "/tmp/lib/libcrypto.so.3"],
                  "launch-arguments": ["-resourcepath", "/data/x"] })"));
         const HarmonyOsExtras extras = harmonyOsExtras(build, "app");
         QCOMPARE(extras.resourceDirectories.size(), 1);
         QCOMPARE(extras.resourceDirectories.first(), FilePath::fromString("/tmp/share/app"));
+        QCOMPARE(extras.nativePackageFiles,
+                 FilePaths({FilePath::fromString("/tmp/bin/ssh"),
+                            FilePath::fromString("/tmp/lib/libcrypto.so.3")}));
         QCOMPARE(extras.launchArguments, QStringList({"-resourcepath", "/data/x"}));
+    }
+
+    void testStageNativePackageFiles()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const FilePath root = FilePath::fromString(dir.path());
+        const FilePath tools = root.pathAppended("tools");
+        QVERIFY(tools.ensureWritableDir());
+        const FilePath ssh = tools.pathAppended("ssh");
+        QVERIFY(ssh.writeFileContents("not really a client"));
+        QVERIFY(ssh.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner
+                                   | QFile::ReadGroup | QFile::ExeGroup));
+
+        const FilePath binDir = root.pathAppended("staging/bin");
+        QVERIFY(stageNativePackageFiles({ssh}, binDir));
+        const FilePath staged = binDir.pathAppended("ssh");
+        QVERIFY(staged.isFile());
+        QCOMPARE(staged.fileContents().value_or(QByteArray()), QByteArray("not really a client"));
+        const QFile::Permissions permissions = staged.permissions();
+        QVERIFY(permissions & QFile::ReadOther);
+        QVERIFY(permissions & QFile::ExeOther);
+
+        QVERIFY(stageNativePackageFiles({ssh}, binDir));
+
+        QVERIFY(!stageNativePackageFiles({tools.pathAppended("nothing")}, binDir));
+        QVERIFY(!stageNativePackageFiles({tools}, binDir));
     }
 
     void testPackageNote()

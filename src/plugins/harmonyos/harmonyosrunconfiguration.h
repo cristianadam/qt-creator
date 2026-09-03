@@ -30,6 +30,7 @@ class HarmonyOsExtras
 {
 public:
     Utils::FilePaths resourceDirectories;
+    Utils::FilePaths nativePackageFiles;
     QStringList launchArguments;
 };
 

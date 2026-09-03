@@ -23,7 +23,10 @@ inline constexpr int HARMONYOS_DEBUG_PORT = 8123;
 // leaves a listener there for as long as the debug run lasts, and the application asks
 // by connecting to it.
 inline constexpr int HARMONYOS_GATE_PORT = 8124;
-inline constexpr char HARMONYOS_DEBUG_SERVER_PACKAGE[] = "lldbserver";
+// The one native package in an application's own package. Its name is device-wide - a
+// "public" native package shares a namespace with every other application's - so two
+// applications deployed from Qt Creator still collide over it.
+inline constexpr char HARMONYOS_NATIVE_PACKAGE[] = "lldbserver";
 inline constexpr char HARMONYOS_DEBUG_PLUGIN[] = "qtcdebug";
 // Where the packed debug server ends up in the application's own namespace, which is the
 // only place on the device a binary of ours may be executed from.
