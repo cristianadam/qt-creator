@@ -10,11 +10,15 @@
 
 #include <coreplugin/icore.h>
 
+#include <projectexplorer/devicesupport/devicekitaspects.h>
 #include <projectexplorer/devicesupport/devicemanager.h>
 #include <projectexplorer/devicesupport/sshparameters.h>
+#include <projectexplorer/kit.h>
+#include <projectexplorer/kitmanager.h>
 
 #include <remote/sshdevicewizard.h>
 
+#include <utils/algorithm.h>
 #include <utils/environment.h>
 #include <utils/fileutils.h>
 #include <utils/qtcprocess.h>
@@ -205,6 +209,32 @@ static void detectLoopbackBuildDevice()
                               << "to ~/.ssh/authorized_keys on this device.";
 }
 
+static void detectToolsOnLoopbackDevice()
+{
+    const IDevice::Ptr device = DeviceManager::find(Utils::Id(loopbackDeviceId));
+    if (!device)
+        return;
+    const bool haveKit = Utils::anyOf(KitManager::kits(), [](const Kit *kit) {
+        return BuildDeviceKitAspect::deviceId(kit) == Utils::Id(loopbackDeviceId);
+    });
+    if (haveKit || !somethingSpeaksSshOnLoopback())
+        return;
+
+    const ToolDetectionLogger logger([](const QString &message) {
+        qCDebug(buildDeviceLog) << "detecting:" << message;
+    });
+    device->tryToConnect({device.get(), [device, logger](const Result<> &connected) {
+        if (!connected) {
+            qCWarning(buildDeviceLog) << "the build device refused the connection:"
+                                      << connected.error();
+            return;
+        }
+        device->runAutoDetect(logger, [] {
+            qCDebug(buildDeviceLog) << "detection done," << KitManager::kits().size() << "kits";
+        });
+    }});
+}
+
 #endif // Q_OS_OHOS
 
 HarmonyOsBuildDeviceFactory::HarmonyOsBuildDeviceFactory()
@@ -230,13 +260,17 @@ void setupHarmonyOsBuildDevice()
     addNativePackageToPath();
     // Adding a device before the saved ones are restored loses it: the restore replaces
     // the list. By the time this plugin is initialized they may or may not be there yet.
-    if (DeviceManager::isLoaded()) {
+    const auto whenRestored = [] {
+        if (!DeviceManager::isLoaded() || !KitManager::isLoaded())
+            return;
         detectLoopbackBuildDevice();
-    } else {
-        QObject::connect(DeviceManager::instance(), &DeviceManager::devicesLoaded,
-                         DeviceManager::instance(), &detectLoopbackBuildDevice,
-                         Qt::SingleShotConnection);
-    }
+        detectToolsOnLoopbackDevice();
+    };
+    QObject::connect(DeviceManager::instance(), &DeviceManager::devicesLoaded,
+                     DeviceManager::instance(), whenRestored, Qt::SingleShotConnection);
+    QObject::connect(KitManager::instance(), &KitManager::kitsLoaded,
+                     KitManager::instance(), whenRestored, Qt::SingleShotConnection);
+    whenRestored();
 #endif
 }
 
