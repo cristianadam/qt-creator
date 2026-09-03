@@ -708,6 +708,8 @@ void AppOutputPane::createNewOutputWindow(RunControl *rc)
     });
     connect(rc, &RunControl::applicationProcessHandleChanged,
             this, &AppOutputPane::enableDefaultButtons);
+    connect(rc, &RunControl::outputPaneActionsEnabledChanged,
+            this, &AppOutputPane::enableDefaultButtons);
     connect(rc, &RunControl::appendMessage,
             this, [this, rc](const QString &out, OutputFormat format) {
                 appendMessage(rc, out, format);
@@ -1024,6 +1026,16 @@ void AppOutputPane::showOutputPaneForRunControl(RunControl *runControl)
 void AppOutputPane::closeTabsWithoutPrompt()
 {
     closeTabs(CloseTabNoPrompt);
+}
+
+void AppOutputPane::detachTabForRunControl(RunControl *runControl)
+{
+    RunControlTab * const tab = tabFor(runControl);
+    if (!tab)
+        return;
+    tab->runControl = nullptr;
+    closeTab(m_tabWidget->indexOf(tab->window), CloseTabNoPrompt);
+    runControl->setOutputVisible(false);
 }
 
 void AppOutputPane::showTabFor(RunControl *rc)
@@ -1560,6 +1572,11 @@ static const AppOutputSettingsPage settingsPage;
 } // namespace ProjectExplorer::Internal
 
 namespace ProjectExplorer {
+
+bool appOutputPaneHasTab(RunControl *runControl)
+{
+    return Internal::appOutputPane().allRunControls().contains(runControl);
+}
 
 const Internal::LogcatSettings &logcatSettings()
 {

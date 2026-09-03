@@ -106,6 +106,7 @@ public:
     void setFilterTextForRunControl(const RunControl *runControl, const QString &text);
 
     void closeTabsWithoutPrompt();
+    void detachTabForRunControl(RunControl *runControl);
 
 private:
     void setFilterFieldText(const QString &text);
@@ -206,6 +207,9 @@ void setupAppOutputPane();
 void destroyAppOutputPane();
 
 } // namespace Internal
+
+// Whether the pane still lists a tab; a closing tab is unlisted before it stops.
+PROJECTEXPLORER_EXPORT bool appOutputPaneHasTab(RunControl *runControl);
 
 PROJECTEXPLORER_EXPORT const Internal::LogcatSettings &logcatSettings();
 
