@@ -226,7 +226,7 @@ static Result<> declareHnpPackage(const FilePath &moduleJson, const QString &fil
 
     text.insert(match.capturedEnd(),
                 "\n    \"hnpPackages\": [\n"
-                "      { \"package\": \"" + fileName + "\", \"type\": \"public\" }\n"
+                "      { \"package\": \"" + fileName + "\", \"type\": \"private\" }\n"
                 "    ],");
     if (const Result<qint64> written = moduleJson.writeFileContents(text.toUtf8()); !written)
         return ResultError(written.error());
@@ -691,7 +691,9 @@ private:
         Process compile;
         compile.setCommand({compiler, QStringList{"--target=aarch64-linux-ohos",
                                                   "--sysroot=" + sysroot.path(),
-                                                  "-fPIC", "-shared", "-std=c++17"}
+                                                  "-fPIC", "-shared", "-std=c++17",
+                                                  QString("-DQTC_SERVER_PATH=\"%1\"")
+                                                      .arg(Constants::HARMONYOS_DEBUG_SERVER_PATH)}
                                           << includes << "-I" + work.path()
                                           << "-L" + qt->libraryPath().path()
                                           << "-lQt6Core" << "-lQt6Gui"
@@ -961,7 +963,8 @@ private:
 
         Process pack;
         pack.setCommand({hnpcli, {"pack", "-i", source.nativePath(), "-o", target.nativePath(),
-                                  "-n", Constants::HARMONYOS_NATIVE_PACKAGE, "-v", "1.0"}});
+                                  "-n", Constants::HARMONYOS_NATIVE_PACKAGE,
+                                  "-v", Constants::HARMONYOS_NATIVE_PACKAGE_VERSION}});
         pack.runBlocking();
         const FilePath packed
             = target.pathAppended(QString(Constants::HARMONYOS_NATIVE_PACKAGE) + ".hnp");
@@ -1575,12 +1578,13 @@ private slots:
         const FilePath moduleJson = FilePath::fromString(dir.filePath("module.json5"));
         QVERIFY(moduleJson.writeFileContents(manifest()));
 
-        QVERIFY(declareHnpPackage(moduleJson, "lldbserver.hnp"));
+        QVERIFY(declareHnpPackage(moduleJson, "qtctools.hnp"));
         const QString once = text(moduleJson);
         QVERIFY(once.contains("\"hnpPackages\""));
-        QVERIFY(once.contains("\"package\": \"lldbserver.hnp\""));
+        QVERIFY(once.contains("\"package\": \"qtctools.hnp\""));
+        QVERIFY(once.contains("\"type\": \"private\""));
 
-        QVERIFY(declareHnpPackage(moduleJson, "lldbserver.hnp"));
+        QVERIFY(declareHnpPackage(moduleJson, "qtctools.hnp"));
         QCOMPARE(text(moduleJson).count("hnpPackages"), 1);
     }
 
@@ -1727,6 +1731,16 @@ private slots:
                  FilePaths({FilePath::fromString("/tmp/bin/ssh"),
                             FilePath::fromString("/tmp/lib/libcrypto.so.3")}));
         QCOMPARE(extras.launchArguments, QStringList({"-resourcepath", "/data/x"}));
+    }
+
+    void testNativePackagePath()
+    {
+        QCOMPARE(QString(Constants::HARMONYOS_NATIVE_PACKAGE_BIN),
+                 QString("/data/app/%1.org/%1_%2/bin")
+                     .arg(QString(Constants::HARMONYOS_NATIVE_PACKAGE),
+                          QString(Constants::HARMONYOS_NATIVE_PACKAGE_VERSION)));
+        QCOMPARE(QString(Constants::HARMONYOS_DEBUG_SERVER_PATH),
+                 QString(Constants::HARMONYOS_NATIVE_PACKAGE_BIN) + "/lldb-server");
     }
 
     void testStageNativePackageFiles()
