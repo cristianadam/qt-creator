@@ -54,6 +54,17 @@ HarmonyOsBuildDevice::HarmonyOsBuildDevice()
 
 // A binary reaching the device unsigned is refused by its code signing, and one
 // signed twice is refused as well, so an already signed binary is left alone.
+Result<> HarmonyOsBuildDevice::ensureReachable(const FilePath &other) const
+{
+#ifdef Q_OS_OHOS
+    if (other.isLocal() && sshParameters().host() == "127.0.0.1"
+        && other.path().startsWith(Constants::HARMONYOS_USER_STORAGE)) {
+        return ResultOk;
+    }
+#endif
+    return LinuxDevice::ensureReachable(other);
+}
+
 Result<QByteArray> HarmonyOsBuildDevice::prepareExecutableForUpload(const QByteArray &binary) const
 {
     const FilePath signTool = Sdk::binarySignTool(settings().sdkLocation());
