@@ -238,6 +238,8 @@ private slots:
 
     void testTerminateMessage();
 
+    void testCdbDisassemblyKeepsDecoratedNames();
+
 private:
     CppEditor::Tests::TemporaryCopiedDir *m_tmpDir = nullptr;
 };
@@ -4608,6 +4610,22 @@ void DebuggerUnitTests::testInspectorFollowsParentlessObjects()
             QFAIL(qPrintable(QString("the destroyed object %1 kept its watch").arg(id)));
     }
     QCOMPARE(agent.m_objectWatches.value(nestedId), nestedWatch);
+}
+
+void DebuggerUnitTests::testCdbDisassemblyKeepsDecoratedNames()
+{
+    const QString instruction =
+        "jmp     qword ptr "
+        "[QtCore4!_imp_?fromUtf8_helper@QString@@CA?AV1@PEBDH@Z (000007f6`25444360)]";
+    const QString output =
+        QString("QtCore4!QTextStreamPrivate::putString+0x34:\n"
+                "   10 00000000`6e5e7f64 48ff2534560000  %1\n").arg(instruction);
+
+    const DisassemblerLines lines = parseCdbDisassembler(output);
+    QCOMPARE(lines.size(), 2);
+    QCOMPARE(lines.at(1).address, quint64(0x6e5e7f64));
+    QCOMPARE(lines.at(1).rawData, QByteArray::fromHex("48ff2534560000"));
+    QCOMPARE(lines.at(1).data, instruction);
 }
 
 QObject *createDebuggerTest()

@@ -427,6 +427,8 @@ DisassemblerLines parseCdbDisassembler(const QString &a)
 
     const QStringList lines = a.split('\n');
     for (const QString &line : lines) {
+        if (QStringView(line).trimmed().isEmpty())
+            continue;
         // New function. Append as comment line.
         if (parseCdbDisassemblerFunctionLine(line, &currentFunction, &functionOffset, &sourceFile)) {
             functionAddress = 0;
