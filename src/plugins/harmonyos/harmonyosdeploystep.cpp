@@ -257,6 +257,79 @@ static Result<QString> setSdkVersion(const FilePath &buildProfile, const QString
     return previous;
 }
 
+// A package started from the device's home screen gets its arguments from nowhere else: a
+// run passes them in the Want, but nothing does when the user taps the icon. The ability
+// stage the template generates is where they belong. Returns what it carried before.
+static Result<QStringList> setLaunchArguments(const FilePath &abilityStage,
+                                              const QStringList &arguments)
+{
+    const Result<QByteArray> contents = abilityStage.fileContents();
+    if (!contents)
+        return ResultError(contents.error());
+
+    static const QRegularExpression re(
+        "( *)(?:private|public)( static appArgs\\?: Array<string>)(;|\\s*=\\s*\\[.*?\\];)\n",
+        QRegularExpression::DotMatchesEverythingOption);
+    QString text = QString::fromUtf8(*contents);
+    const QRegularExpressionMatch match = re.match(text);
+    if (!match.hasMatch()) {
+        return ResultError(Tr::tr("No argument list in \"%1\".")
+                               .arg(abilityStage.toUserOutput()));
+    }
+
+    static const QRegularExpression quoted("\"([^\"]*)\"");
+    QStringList previous;
+    QRegularExpressionMatchIterator it = quoted.globalMatch(match.captured(3));
+    while (it.hasNext())
+        previous.append(it.next().captured(1));
+    if (previous == arguments)
+        return previous;
+
+    const QString indent = match.captured(1);
+    QString block = indent + "public" + match.captured(2) + " = [\n";
+    for (const QString &argument : arguments)
+        block += indent + "  \"" + argument + "\",\n";
+    block += indent + "];\n";
+    text.replace(match.capturedStart(), match.capturedLength(), block);
+    if (const Result<qint64> written = abilityStage.writeFileContents(text.toUtf8()); !written)
+        return ResultError(written.error());
+    return previous;
+}
+
+// The platform hands a run's arguments to the application in the Want, but ignores them
+// once the package carries its own, and a package that is started from the home screen
+// needs its own. So the ability, which is where the Want arrives, appends them.
+static Result<> forwardWantArguments(const FilePath &ability)
+{
+    const Result<QByteArray> contents = ability.fileContents();
+    if (!contents)
+        return ResultError(contents.error());
+
+    QString text = QString::fromUtf8(*contents);
+    static const QRegularExpression re(
+        "( *)(QAbilityStage\\.initQtAppContextIfNeeded\\([^;]*;)\n");
+    const QRegularExpressionMatch match = re.match(text);
+    if (!match.hasMatch()) {
+        return ResultError(Tr::tr("No application context setup in \"%1\".")
+                               .arg(ability.toUserOutput()));
+    }
+    if (text.contains("io.qt.appArgsJson"))
+        return ResultOk;
+
+    const QString indent = match.captured(1);
+    const QString block
+        = indent + "const qtcArgs: string = want.parameters?.['io.qt.appArgsJson'] as string;\n"
+        + indent + "if (qtcArgs) {\n"
+        + indent + "  QAbilityStage.appArgs = (QAbilityStage.appArgs ?? [])\n"
+        + indent + "    .concat(JSON.parse(qtcArgs) as Array<string>);\n"
+        + indent + "}\n"
+        + match.captured(0);
+    text.replace(match.capturedStart(), match.capturedLength(), block);
+    if (const Result<qint64> written = ability.writeFileContents(text.toUtf8()); !written)
+        return ResultError(written.error());
+    return ResultOk;
+}
+
 static Result<QString> setBundleName(const FilePath &appJson, const QString &bundleName)
 {
     const Result<QByteArray> contents = appJson.fileContents();
@@ -1062,6 +1135,27 @@ private:
                 return SetupResult::StopWithError;
             if (!shipNativePackage(extras.nativePackageFiles))
                 return SetupResult::StopWithError;
+            if (!extras.launchArguments.isEmpty()) {
+                const Result<QStringList> before = setLaunchArguments(
+                    m_project.pathAppended(
+                        "entry/src/main/ets/qabilitystage/QAbilityStage.ets"),
+                    extras.launchArguments);
+                if (!before) {
+                    emit addOutput(before.error(), OutputFormat::ErrorMessage);
+                    return SetupResult::StopWithError;
+                }
+                if (*before != extras.launchArguments) {
+                    emit addOutput(Tr::tr("The application is started with %1.")
+                                       .arg(extras.launchArguments.join(' ')),
+                                   OutputFormat::Stdout);
+                }
+                const Result<> forwarded = forwardWantArguments(
+                    m_project.pathAppended("entry/src/main/ets/qability/QAbility.ets"));
+                if (!forwarded) {
+                    emit addOutput(forwarded.error(), OutputFormat::ErrorMessage);
+                    return SetupResult::StopWithError;
+                }
+            }
             if (!completeStagedLibraries())
                 return SetupResult::StopWithError;
 
@@ -1586,6 +1680,78 @@ private slots:
 
         QVERIFY(declareHnpPackage(moduleJson, "qtctools.hnp"));
         QCOMPARE(text(moduleJson).count("hnpPackages"), 1);
+    }
+
+    void testSetLaunchArguments()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const FilePath stage = FilePath::fromString(dir.filePath("QAbilityStage.ets"));
+        const QByteArray declaration =
+            "export default class QAbilityStage extends AbilityStage {\n"
+            "\n"
+            "  private static appArgs?: Array<string>;\n"
+            "\n"
+            "  private static setupQtApplicationCalled: boolean = false;\n"
+            "}\n";
+        QVERIFY(stage.writeFileContents(declaration));
+
+        const Result<QStringList> first
+            = setLaunchArguments(stage, {"-load", "HarmonyOS", "-pluginpath", "/data/x"});
+        QVERIFY(first);
+        QVERIFY(first->isEmpty());
+        // Public, because the ability has to reach it to add what a run passes.
+        QVERIFY(text(stage).contains("  public static appArgs?: Array<string> = [\n"
+                                     "    \"-load\",\n"
+                                     "    \"HarmonyOS\",\n"
+                                     "    \"-pluginpath\",\n"
+                                     "    \"/data/x\",\n"
+                                     "  ];\n"));
+        QVERIFY(!text(stage).contains("private static appArgs"));
+        QVERIFY(text(stage).contains("setupQtApplicationCalled"));
+
+        // A second run replaces what the first wrote instead of adding to it.
+        const Result<QStringList> second = setLaunchArguments(stage, {"-load", "Other"});
+        QVERIFY(second);
+        QCOMPARE(*second, QStringList({"-load", "HarmonyOS", "-pluginpath", "/data/x"}));
+        QCOMPARE(text(stage).count("appArgs"), 1);
+        QVERIFY(!text(stage).contains("HarmonyOS"));
+
+        QVERIFY(!setLaunchArguments(
+            FilePath::fromString(dir.filePath("nothing.ets")), {"-load"}));
+    }
+
+    void testForwardWantArguments()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const FilePath ability = FilePath::fromString(dir.filePath("QAbility.ets"));
+        const QByteArray onCreate =
+            "export default class QAbility extends UIAbility {\n"
+            "\n"
+            "  onCreate(want: Want, launchParam: AbilityConstant.LaunchParam) {\n"
+            "    QAbilityStage.initQtAppContextIfNeeded(this.context.getApplicationContext());\n"
+            "    qpa.handleAbilityOnCreate(this, want, launchParam);\n"
+            "  }\n"
+            "}\n";
+        QVERIFY(ability.writeFileContents(onCreate));
+
+        QVERIFY(forwardWantArguments(ability));
+        const QString once = text(ability);
+        QVERIFY(once.contains("want.parameters?.['io.qt.appArgsJson']"));
+        QVERIFY(once.contains("QAbilityStage.appArgs = (QAbilityStage.appArgs ?? [])"));
+        // The arguments have to be there before the context is set up, which is what
+        // hands them over.
+        QVERIFY(once.indexOf("io.qt.appArgsJson") < once.indexOf("initQtAppContextIfNeeded"));
+        QVERIFY(once.contains("handleAbilityOnCreate"));
+
+        QVERIFY(forwardWantArguments(ability));
+        QCOMPARE(text(ability).count("io.qt.appArgsJson"), 1);
+
+        QVERIFY(!forwardWantArguments(FilePath::fromString(dir.filePath("nothing.ets"))));
+        const FilePath other = FilePath::fromString(dir.filePath("other.ets"));
+        QVERIFY(other.writeFileContents("class X {}\n"));
+        QVERIFY(!forwardWantArguments(other));
     }
 
     void testAddPermission()
