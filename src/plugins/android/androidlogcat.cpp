@@ -14,8 +14,10 @@
 #include <coreplugin/outputpane.h>
 
 #include <projectexplorer/appoutputpane.h>
+#include <projectexplorer/buildconfiguration.h>
 #include <projectexplorer/devicesupport/devicemanager.h>
 #include <projectexplorer/projectexplorerconstants.h>
+#include <projectexplorer/projectmanager.h>
 #include <projectexplorer/runcontrol.h>
 
 #include <utils/algorithm.h>
@@ -159,6 +161,12 @@ static bool matchesFreeText(const LogcatEntry &entry, const QString &term)
            || entry.packageName.contains(term, Qt::CaseInsensitive);
 }
 
+static QString activeProjectPackage()
+{
+    const BuildConfiguration *bc = activeBuildConfigForActiveProject();
+    return bc ? packageName(bc) : QString();
+}
+
 static constexpr QLatin1StringView packageKey("package");
 static constexpr QLatin1StringView levelKey("level");
 static constexpr QLatin1StringView mineValue("mine");
@@ -211,8 +219,10 @@ void LogcatFilter::setFromText(const QString &text)
             continue;
         if (key == packageKey) {
             if (value.compare(mineValue, Qt::CaseInsensitive) == 0) {
-                if (m_pid > 0 || !m_boundPackage.isEmpty())
-                    m_predicates.append(minePredicate(m_pid, m_boundPackage));
+                const QString package = m_boundPackage.isEmpty() ? activeProjectPackage()
+                                                                 : m_boundPackage;
+                if (m_pid > 0 || !package.isEmpty())
+                    m_predicates.append(minePredicate(m_pid, package));
                 else
                     m_predicates.append([](const LogcatEntry &) { return false; });
             } else {
@@ -370,6 +380,12 @@ LogcatStream::LogcatStream(AndroidDevice::ConstPtr device)
     m_filterDebounce.setInterval(150ms);
     QObject::connect(&m_filterDebounce, &QTimer::timeout,
                      this, [this] { m_tabContext.renderFromBuffer(); });
+
+    QObject::connect(ProjectManager::instance(), &ProjectManager::activeBuildConfigurationChanged,
+                     this, [this] {
+        m_tabContext.filter.setFromText(m_tabContext.filter.filterText());
+        m_filterDebounce.start();
+    });
 
     DeviceManager *dm = DeviceManager::instance();
     QObject::connect(dm, &DeviceManager::deviceRemoved, this, &LogcatStream::onDeviceRemoved);
