@@ -28,6 +28,9 @@ public:
 
     bool isValid() const { return _ast != nullptr; }
     SourceFileAST *ast() const { return _ast; }
+
+    // The text the tokens of the AST point into.
+    QStringView source() const { return _engine.source(); }
     const QList<Diagnostic> &diagnostics() const { return _engine.diagnostics(); }
     QString errorString() const;
 
