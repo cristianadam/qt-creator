@@ -656,6 +656,7 @@ void VcsBaseEditorWidget::setParameters(const VcsBaseEditorParameters &parameter
 {
     d->m_parameters = parameters;
     setCursorPositionIndicatorVisible(parameters.type != LogOutput);
+    setLanguageClientToolbarEnabled(parameters.type != LogOutput);
 }
 
 static void regexpFromString(

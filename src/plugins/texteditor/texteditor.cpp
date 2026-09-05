@@ -934,6 +934,7 @@ public:
     QAction *m_stretchAction = nullptr;
     QAction *m_toolbarOutlineAction = nullptr;
     LineColumnButton *m_cursorPositionButton = nullptr;
+    bool m_languageClientToolbarEnabled = true;
     TabSettingsButton *m_tabSettingsButton = nullptr;
     QToolButton *m_fileEncodingButton = nullptr;
     QAction *m_fileEncodingLabelAction = nullptr;
@@ -10532,6 +10533,16 @@ const QWidget *TextEditorWidget::toolbarOutlineWidget()
 {
     return d->m_toolbarOutlineAction ? d->m_toolBar->widgetForAction(d->m_toolbarOutlineAction)
                                      : nullptr;
+}
+
+void TextEditorWidget::setLanguageClientToolbarEnabled(bool enabled)
+{
+    d->m_languageClientToolbarEnabled = enabled;
+}
+
+bool TextEditorWidget::languageClientToolbarEnabled() const
+{
+    return d->m_languageClientToolbarEnabled;
 }
 
 void TextEditorWidget::keepAutoCompletionHighlight(bool keepHighlight)

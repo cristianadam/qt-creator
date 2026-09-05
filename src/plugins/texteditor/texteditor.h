@@ -362,6 +362,8 @@ public:
     void insertExtraToolBarAction(Side side, QAction *action);
     void setToolbarOutline(QWidget* widget);
     const QWidget *toolbarOutlineWidget();
+    void setLanguageClientToolbarEnabled(bool enabled);
+    bool languageClientToolbarEnabled() const;
 
     // keep the auto completion even if the focus is lost
     void keepAutoCompletionHighlight(bool keepHighlight);

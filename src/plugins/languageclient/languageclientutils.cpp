@@ -219,12 +219,25 @@ void updateEditorToolBar(Core::IEditor *editor)
         return;
 
     TextDocument *document = widget->textDocument();
+    ClientExtras *extras = dynamic_cast<ClientExtras *>(
+        widget->findChild<QObject *>(clientExtrasName, Qt::FindDirectChildrenOnly));
+    if (!widget->languageClientToolbarEnabled()) {
+        if (extras) {
+            if (extras->m_outline && widget->toolbarOutlineWidget() == extras->m_outline)
+                widget->setToolbarOutline(nullptr);
+            if (extras->m_popupAction) {
+                widget->toolBar()->removeAction(extras->m_popupAction);
+                delete extras->m_popupAction;
+            }
+            delete extras;
+        }
+        return;
+    }
+
     Client *client = LanguageClientManager::clientForDocument(document);
     const QList<Client *> supportingClients
         = LanguageClientManager::clientsSupportingDocument(document, false);
 
-    ClientExtras *extras = dynamic_cast<ClientExtras *>(
-        widget->findChild<QObject *>(clientExtrasName, Qt::FindDirectChildrenOnly));
     if (!extras) {
         if (!client && supportingClients.isEmpty())
             return;
