@@ -655,6 +655,7 @@ VcsBaseEditorWidget::VcsBaseEditorWidget()
 void VcsBaseEditorWidget::setParameters(const VcsBaseEditorParameters &parameters)
 {
     d->m_parameters = parameters;
+    setCursorPositionIndicatorVisible(parameters.type != LogOutput);
 }
 
 static void regexpFromString(
