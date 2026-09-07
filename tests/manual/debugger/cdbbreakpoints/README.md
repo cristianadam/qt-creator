@@ -66,8 +66,9 @@ that.
 
 An expression that never resolves is re-checked for the whole run and is
 much more expensive: a single one took 198 s on the first run of a session
-and 6 s on later ones, with the plugin PDBs in the file cache by then. It can also end the session outright, because a file name alone can
-match ambiguously in a module that has nothing to do with the breakpoint:
+and 6 s on later ones, with the plugin PDBs in the file cache by then. It
+can also end the session outright, because a file name alone can match
+ambiguously in a module that has nothing to do with the breakpoint:
 
     Matched: Help!Help::Internal::createBookmarkManagerTest+0x6
     Matched: Help!Help::Internal::createBookmarkManagerTest+0x3b
@@ -78,7 +79,38 @@ Startup ended there, 89 modules short. Scoped to `Core!`, the same
 breakpoint stays unresolved, no module load can match it by accident, and
 startup completes.
 
-The debugger derives the module from the project (`moduleForSourceFile()` in
-`cdbengine.cpp`), which is why a breakpoint set in the editor now carries
-one. QTCREATORBUG-27058 and QTCREATORBUG-30265 have the reports this came
-from, including 42 s against 20 s application startup on a real project.
+A source file that is compiled into a static library needs the link graph
+to be scoped: its module is whatever links the library, and the path does
+not tell. Eight such breakpoints, all resolved, cost 15.0 s against 9.0 s
+scoped:
+
+| source                         | static library    | module          |
+|--------------------------------|-------------------|-----------------|
+| libvterm/src/screen.c          | libvterm          | TerminalLib     |
+| libptyqt/conptyprocess.cpp     | ptyqt             | Utils           |
+| qmldesignerutils/asset.cpp     | QmlDesignerUtils  | QmlDesigner     |
+| texteditor/tabsettingsdata.cpp | TextEditorSupport | QmlDesignerCore |
+
+Three of thirteen static library sources cannot be set by file and line at
+all, scoped or not, because the line has several addresses within one
+module:
+
+    Matched: Utils!PtyQt::createPtyProcess+0x34 (00007ff8`7834d734)
+    Matched: Utils!PtyQt::createPtyProcess+0x56 (00007ff8`7834d756)
+    Ambiguous symbol error at '`ptyqt.cpp:52 `'
+
+The engine answers that with one address breakpoint per match.
+
+A source that several binaries link becomes one scoped breakpoint per
+binary, eight for `asset.cpp`. Ten of them, the eight plus two for
+`tabsettingsdata.cpp`, are free: a `-test Core` startup that loads 100
+modules takes 4.12 s without breakpoints and 4.16 s with the ten, all
+still unresolved because none of their modules is among the 100. The two
+unscoped ones instead end the session after 96 modules.
+
+The debugger derives the modules from the project (`modulesForBreakpoint()`
+in `cdbengine.cpp`, `binariesForSourceFile()` in `cmakebuildsystem.cpp`),
+which is why a breakpoint set in the editor now carries one, and one
+breakpoint per binary when the source ends up in several.
+QTCREATORBUG-27058 and QTCREATORBUG-30265 have the reports this came from,
+including 42 s against 20 s application startup on a real project.
