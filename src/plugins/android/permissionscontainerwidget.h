@@ -44,6 +44,7 @@ private:
     void updateCMakePermissionsCheckBoxState();
     void defaultPermissionOrFeatureCheckBoxClicked();
     Utils::Result<> updateManifestPermissions();
+    Utils::Result<> updateManifestDefaultComments();
     void loadPermissionsFromManifest();
     void showCMakePermissionsConsentDialog();
     void onCMakePermissionsCheckBoxChanged();

@@ -31,6 +31,7 @@ public:
 
         bool shouldModifyPermissions = false;
         QSet<QString> permissionsToKeep;
+        bool shouldModifyDefaultsComments = false;
         bool writeDefaultPermissionsComment = false;
         bool writeDefaultFeaturesComment = false;
 
@@ -52,6 +53,9 @@ Utils::Result<void> updateManifestPermissions(const Utils::FilePath &manifestPat
                                               const QStringList &permissions,
                                               bool includeDefaultPermissions,
                                               bool includeDefaultFeatures);
+Utils::Result<void> updateManifestDefaultComments(const Utils::FilePath &manifestPath,
+                                                  bool includeDefaultPermissions,
+                                                  bool includeDefaultFeatures);
 
 Utils::Result<void> updateManifestActivityMetaData(const Utils::FilePath &manifestPath,
                                                    const QString &metaDataName,

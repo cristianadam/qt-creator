@@ -890,8 +890,29 @@ void PermissionsContainerWidget::updateAddRemovePermissionButtons()
 
 void PermissionsContainerWidget::defaultPermissionOrFeatureCheckBoxClicked()
 {
-    updateManifestPermissions();
+    if (m_CMakePermissionsCheckBox->isChecked())
+        updateManifestDefaultComments();
+    else
+        updateManifestPermissions();
     emit permissionsModified();
+}
+
+Utils::Result<> PermissionsContainerWidget::updateManifestDefaultComments()
+{
+    Utils::FilePath manifestPath = m_textEditorWidget->textDocument()->filePath();
+
+    if (manifestPath.isEmpty() || !manifestPath.exists())
+        return Utils::ResultError(Tr::tr("The manifest file does not exist."));
+
+    const Utils::Result<> result = Android::Internal::updateManifestDefaultComments(
+        manifestPath,
+        m_defaultPermissonsCheckBox->isChecked(),
+        m_defaultFeaturesCheckBox->isChecked());
+    if (!result)
+        return result;
+
+    m_textEditorWidget->textDocument()->reload();
+    return Utils::ResultOk;
 }
 
 Utils::Result<> PermissionsContainerWidget::updateManifestPermissions()
@@ -1050,6 +1071,15 @@ void PermissionsContainerWidget::loadPermissionsFromCMake()
         }
     }
     m_permissionsModel->setPermissions(permissions);
+
+    const auto manifestData = AndroidManifestParser::readManifest(
+        m_textEditorWidget->textDocument()->filePath());
+    if (manifestData) {
+        const QSignalBlocker blockPermissions(m_defaultPermissonsCheckBox);
+        const QSignalBlocker blockFeatures(m_defaultFeaturesCheckBox);
+        m_defaultPermissonsCheckBox->setChecked(manifestData->hasDefaultPermissionsComment);
+        m_defaultFeaturesCheckBox->setChecked(manifestData->hasDefaultFeaturesComment);
+    }
 }
 
 bool PermissionsContainerWidget::removeCMakePermission(const QString &permission)

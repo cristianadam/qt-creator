@@ -143,89 +143,94 @@ static bool hasExtraAttributes(const QDomElement &elem)
 static void modifyPermissions(QDomDocument &doc, QDomElement &manifest,
                               const AndroidManifestParser::ModifyParams &instructions)
 {
-    QSet<QString> permissionsToAdd = instructions.permissionsToKeep;
-    QDomElement lastPermissionElem;
-    QMap<QString, QDomElement> keptElements;
+    QDomElement applicationElement = manifest.firstChildElement(keyApplication);
 
-    QDomElement permissionElem = manifest.firstChildElement(keyUsesPermission);
-    while (!permissionElem.isNull()) {
-        QDomElement nextPermission = permissionElem.nextSiblingElement(keyUsesPermission);
-        QString permissionName = permissionElem.attribute(keyAndroidName);
+    if (instructions.shouldModifyPermissions) {
+        QSet<QString> permissionsToAdd = instructions.permissionsToKeep;
+        QDomElement lastPermissionElem;
+        QMap<QString, QDomElement> keptElements;
 
-        if (instructions.permissionsToKeep.contains(permissionName)) {
-            permissionsToAdd.remove(permissionName);
+        QDomElement permissionElem = manifest.firstChildElement(keyUsesPermission);
+        while (!permissionElem.isNull()) {
+            QDomElement nextPermission = permissionElem.nextSiblingElement(keyUsesPermission);
+            QString permissionName = permissionElem.attribute(keyAndroidName);
 
-            auto keptIt = keptElements.find(permissionName);
-            if (keptIt == keptElements.end()) {
-                keptElements.insert(permissionName, permissionElem);
-                lastPermissionElem = permissionElem;
-            } else if (hasExtraAttributes(permissionElem) && !hasExtraAttributes(keptIt.value())) {
-                // Prefer the duplicate that has attributes
-                manifest.removeChild(keptIt.value());
-                keptIt.value() = permissionElem;
-                lastPermissionElem = permissionElem;
+            if (instructions.permissionsToKeep.contains(permissionName)) {
+                permissionsToAdd.remove(permissionName);
+
+                auto keptIt = keptElements.find(permissionName);
+                if (keptIt == keptElements.end()) {
+                    keptElements.insert(permissionName, permissionElem);
+                    lastPermissionElem = permissionElem;
+                } else if (hasExtraAttributes(permissionElem) && !hasExtraAttributes(keptIt.value())) {
+                    // Prefer the duplicate that has attributes
+                    manifest.removeChild(keptIt.value());
+                    keptIt.value() = permissionElem;
+                    lastPermissionElem = permissionElem;
+                } else {
+                    manifest.removeChild(permissionElem);
+                }
             } else {
                 manifest.removeChild(permissionElem);
             }
-        } else {
-            manifest.removeChild(permissionElem);
+
+            permissionElem = nextPermission;
         }
 
-        permissionElem = nextPermission;
-    }
+        for (const QString &permission : std::as_const(permissionsToAdd)) {
+            QDomElement newPermission = doc.createElement(keyUsesPermission);
+            newPermission.setAttribute(keyAndroidName, permission);
 
-    QDomElement applicationElement = manifest.firstChildElement(keyApplication);
-    for (const QString &permission : std::as_const(permissionsToAdd)) {
-        QDomElement newPermission = doc.createElement(keyUsesPermission);
-        newPermission.setAttribute(keyAndroidName, permission);
-
-        if (!lastPermissionElem.isNull()) {
-            manifest.insertAfter(newPermission, lastPermissionElem);
-            lastPermissionElem = newPermission;
-        } else if (!applicationElement.isNull()) {
-            manifest.insertBefore(newPermission, applicationElement);
-        } else {
-            manifest.appendChild(newPermission);
-        }
-    }
-
-    bool hasPermissionsComment = false;
-    bool hasFeaturesComment = false;
-
-    QDomNodeList children = manifest.childNodes();
-    for (int i = children.size() - 1; i >= 0; --i) {
-        QDomNode child = children.at(i);
-        if (child.isComment()) {
-            QDomComment comment = child.toComment();
-            QString commentText = comment.data().trimmed();
-
-            if (commentText == QLatin1String("%%INSERT_PERMISSIONS")) {
-                if (!instructions.writeDefaultPermissionsComment)
-                    manifest.removeChild(child);
-                else
-                    hasPermissionsComment = true;
-            } else if (commentText == QLatin1String("%%INSERT_FEATURES")) {
-                if (!instructions.writeDefaultFeaturesComment)
-                    manifest.removeChild(child);
-                else
-                    hasFeaturesComment = true;
+            if (!lastPermissionElem.isNull()) {
+                manifest.insertAfter(newPermission, lastPermissionElem);
+                lastPermissionElem = newPermission;
+            } else if (!applicationElement.isNull()) {
+                manifest.insertBefore(newPermission, applicationElement);
+            } else {
+                manifest.appendChild(newPermission);
             }
         }
     }
 
-    if (instructions.writeDefaultPermissionsComment && !hasPermissionsComment) {
-        QDomComment permComment = doc.createComment(QLatin1String("%%INSERT_PERMISSIONS"));
-        if (!applicationElement.isNull())
-            manifest.insertBefore(permComment, applicationElement);
-        else
-            manifest.appendChild(permComment);
-    }
-    if (instructions.writeDefaultFeaturesComment && !hasFeaturesComment) {
-        QDomComment featComment = doc.createComment(QLatin1String("%%INSERT_FEATURES"));
-        if (!applicationElement.isNull())
-            manifest.insertBefore(featComment, applicationElement);
-        else
-            manifest.appendChild(featComment);
+    if (instructions.shouldModifyDefaultsComments) {
+        bool hasPermissionsComment = false;
+        bool hasFeaturesComment = false;
+
+        QDomNodeList children = manifest.childNodes();
+        for (int i = children.size() - 1; i >= 0; --i) {
+            QDomNode child = children.at(i);
+            if (child.isComment()) {
+                QDomComment comment = child.toComment();
+                QString commentText = comment.data().trimmed();
+
+                if (commentText == QLatin1String("%%INSERT_PERMISSIONS")) {
+                    if (!instructions.writeDefaultPermissionsComment)
+                        manifest.removeChild(child);
+                    else
+                        hasPermissionsComment = true;
+                } else if (commentText == QLatin1String("%%INSERT_FEATURES")) {
+                    if (!instructions.writeDefaultFeaturesComment)
+                        manifest.removeChild(child);
+                    else
+                        hasFeaturesComment = true;
+                }
+            }
+        }
+
+        if (instructions.writeDefaultPermissionsComment && !hasPermissionsComment) {
+            QDomComment permComment = doc.createComment(QLatin1String("%%INSERT_PERMISSIONS"));
+            if (!applicationElement.isNull())
+                manifest.insertBefore(permComment, applicationElement);
+            else
+                manifest.appendChild(permComment);
+        }
+        if (instructions.writeDefaultFeaturesComment && !hasFeaturesComment) {
+            QDomComment featComment = doc.createComment(QLatin1String("%%INSERT_FEATURES"));
+            if (!applicationElement.isNull())
+                manifest.insertBefore(featComment, applicationElement);
+            else
+                manifest.appendChild(featComment);
+        }
     }
 }
 
@@ -293,7 +298,7 @@ AndroidManifestParser::processAndWriteManifest(const FilePath &manifestPath,
     if (instructions.shouldModifyApplication)
         modifyApplicationAttributes(manifest, instructions);
 
-    if (instructions.shouldModifyPermissions)
+    if (instructions.shouldModifyPermissions || instructions.shouldModifyDefaultsComments)
         modifyPermissions(doc, manifest, instructions);
 
     if (instructions.shouldModifyActivityMetaData) {
@@ -328,6 +333,19 @@ Result<void> updateManifestPermissions(const FilePath &manifestPath, const QStri
     AndroidManifestParser::ModifyParams instructions;
     instructions.shouldModifyPermissions = true;
     instructions.permissionsToKeep = QSet<QString>(permissions.begin(), permissions.end());
+    instructions.shouldModifyDefaultsComments = true;
+    instructions.writeDefaultPermissionsComment = includeDefaultPermissions;
+    instructions.writeDefaultFeaturesComment = includeDefaultFeatures;
+
+    return AndroidManifestParser::processAndWriteManifest(manifestPath, instructions);
+}
+
+Result<void> updateManifestDefaultComments(const FilePath &manifestPath,
+                                           bool includeDefaultPermissions,
+                                           bool includeDefaultFeatures)
+{
+    AndroidManifestParser::ModifyParams instructions;
+    instructions.shouldModifyDefaultsComments = true;
     instructions.writeDefaultPermissionsComment = includeDefaultPermissions;
     instructions.writeDefaultFeaturesComment = includeDefaultFeatures;
 
