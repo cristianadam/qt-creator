@@ -74,6 +74,8 @@ struct Error {
     const int& code() const { return _code; }
     const std::optional<QJsonValue>& data() const { return _data; }
     const QString& message() const { return _message; }
+
+    bool operator==(const Error &other) const = default;
 };
 
 template<>
@@ -113,6 +115,8 @@ struct ErrorResponse {
 
     const Error& error() const { return _error; }
     const RequestId& id() const { return _id; }
+
+    bool operator==(const ErrorResponse &other) const = default;
 };
 
 template<>
@@ -163,6 +167,8 @@ struct OpenTraceFileResult {
 
     const bool& result() const { return _result; }
     const RequestId& id() const { return _id; }
+
+    bool operator==(const OpenTraceFileResult &other) const = default;
 };
 
 template<>
@@ -242,6 +248,7 @@ inline QJsonValue toJsonValue(const ApplicationResult &val) {
 }
 struct TraceDiscardedNotification {
 
+    bool operator==(const TraceDiscardedNotification &other) const = default;
 };
 
 template<>
@@ -289,6 +296,8 @@ struct TraceEventSelectedNotification {
         const int& columnNumber() const { return _columnNumber; }
         const std::optional<QString>& module() const { return _module; }
         const std::optional<QString>& offset() const { return _offset; }
+
+        bool operator==(const Params &other) const = default;
     };
 
     Params _params;
@@ -296,6 +305,8 @@ struct TraceEventSelectedNotification {
     TraceEventSelectedNotification& params(const Params & v) { _params = v; return *this; }
 
     const Params& params() const { return _params; }
+
+    bool operator==(const TraceEventSelectedNotification &other) const = default;
 };
 
 template<>
@@ -380,6 +391,8 @@ struct TraceFileLoadingFinishedNotification {
         const QString& traceFilePath() const { return _traceFilePath; }
         const bool& successful() const { return _successful; }
         const std::optional<QString>& errorMessage() const { return _errorMessage; }
+
+        bool operator==(const Params &other) const = default;
     };
 
     Params _params;
@@ -387,6 +400,8 @@ struct TraceFileLoadingFinishedNotification {
     TraceFileLoadingFinishedNotification& params(const Params & v) { _params = v; return *this; }
 
     const Params& params() const { return _params; }
+
+    bool operator==(const TraceFileLoadingFinishedNotification &other) const = default;
 };
 
 template<>
@@ -457,6 +472,8 @@ struct TraceFileLoadingStartedNotification {
         Params& traceFilePath(const QString & v) { _traceFilePath = v; return *this; }
 
         const QString& traceFilePath() const { return _traceFilePath; }
+
+        bool operator==(const Params &other) const = default;
     };
 
     Params _params;
@@ -464,6 +481,8 @@ struct TraceFileLoadingStartedNotification {
     TraceFileLoadingStartedNotification& params(const Params & v) { _params = v; return *this; }
 
     const Params& params() const { return _params; }
+
+    bool operator==(const TraceFileLoadingStartedNotification &other) const = default;
 };
 
 template<>
@@ -585,6 +604,8 @@ struct ExitRequest {
     ExitRequest& id(const RequestId & v) { _id = v; return *this; }
 
     const RequestId& id() const { return _id; }
+
+    bool operator==(const ExitRequest &other) const = default;
 };
 
 template<>
@@ -629,6 +650,8 @@ struct OpenTraceFileRequest {
         Params& traceFilePath(const QString & v) { _traceFilePath = v; return *this; }
 
         const QString& traceFilePath() const { return _traceFilePath; }
+
+        bool operator==(const Params &other) const = default;
     };
 
     std::optional<RequestId> _id;
@@ -639,6 +662,8 @@ struct OpenTraceFileRequest {
 
     const std::optional<RequestId>& id() const { return _id; }
     const std::optional<Params>& params() const { return _params; }
+
+    bool operator==(const OpenTraceFileRequest &other) const = default;
 };
 
 template<>
