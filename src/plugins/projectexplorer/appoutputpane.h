@@ -213,4 +213,6 @@ PROJECTEXPLORER_EXPORT bool appOutputPaneHasTab(RunControl *runControl);
 
 PROJECTEXPLORER_EXPORT const Internal::LogcatSettings &logcatSettings();
 
+PROJECTEXPLORER_EXPORT qint64 appOutputMaxCharCount();
+
 } // namespace ProjectExplorer

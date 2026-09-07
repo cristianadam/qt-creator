@@ -1591,6 +1591,11 @@ const Internal::LogcatSettings &logcatSettings()
     return Internal::AppOutputPane::settings().logcat;
 }
 
+qint64 appOutputMaxCharCount()
+{
+    return Internal::AppOutputPane::settings().maxCharCount();
+}
+
 } // namespace ProjectExplorer
 
 #include "appoutputpane.moc"

@@ -424,6 +424,7 @@ private:
         void enforceBudget();
         bool backfillPackageNames();
         void postEntry(const LogcatEntry &entry);
+        QList<qsizetype> acceptedTailIndices() const;
         void renderFromBuffer();
     };
 
@@ -918,6 +919,29 @@ bool LogcatStream::TabContext::backfillPackageNames()
     return filled;
 }
 
+static qint64 renderedCost(const LogcatEntry &entry, qint64 prefixLength)
+{
+    return prefixLength + entry.line.size() - entry.headerLength;
+}
+
+// The newest accepted lines that still fit the window budget, newest-first.
+QList<qsizetype> LogcatStream::TabContext::acceptedTailIndices() const
+{
+    qint64 budget = appOutputMaxCharCount();
+    qint64 scanBudget = qMin<qint64>(100 * budget, 4000000);
+    const qint64 prefixLength = displayPrefixWidth(columns);
+    QList<qsizetype> accepted;
+    for (qsizetype i = buffer.size() - 1; i >= 0 && budget > 0 && scanBudget > 0; --i) {
+        const LogcatEntry &entry = buffer.at(i);
+        scanBudget -= entry.line.size();
+        if (filter.accepts(entry)) {
+            accepted.append(i);
+            budget -= renderedCost(entry, prefixLength);
+        }
+    }
+    return accepted;
+}
+
 void LogcatStream::TabContext::renderFromBuffer()
 {
     if (!tab)
@@ -925,15 +949,13 @@ void LogcatStream::TabContext::renderFromBuffer()
     tab->clearOutput();
     tab->setOutputFilterText(filter.filterText());
     lastPosted = {};
+
+    const QList<qsizetype> indices = acceptedTailIndices();
     columns = {};
-    for (const LogcatEntry &entry : buffer) {
-        if (filter.accepts(entry))
-            columns.widen(entry);
-    }
-    for (const LogcatEntry &entry : buffer) {
-        if (filter.accepts(entry))
-            postEntry(entry);
-    }
+    for (qsizetype index : indices)
+        columns.widen(buffer.at(index));
+    for (auto it = indices.rbegin(); it != indices.rend(); ++it)
+        postEntry(buffer.at(*it));
 }
 
 void LogcatStream::onOutputFilterTextChanged(const QString &text)
