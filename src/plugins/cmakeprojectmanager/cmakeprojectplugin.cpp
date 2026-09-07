@@ -80,6 +80,7 @@ class CMakeProjectPlugin final : public ExtensionSystem::IPlugin
         addTestCreator(createCMakeAutogenParserTest);
         addTestCreator(createCMakeProjectImporterTest);
         addTestCreator(createAddDependenciesTest);
+        addTestCreator(createBinariesForSourceFileTest);
         addTestCreator(createQmlModuleFilesTest);
         addTestCreator(createTestPresetsInheritanceTest);
 #endif
