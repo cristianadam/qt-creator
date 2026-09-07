@@ -707,9 +707,8 @@ static QJsonObject projectKits(const QString &projectName, const QString &projec
 // Resolves a kit by id or, failing that, by display name. A name several kits share is
 // refused rather than resolved to the first match, since nothing tells them apart. The
 // error is the tool reply for the failure, so each tool reports the same way.
-class KitResolution
+struct KitResolution
 {
-public:
     Kit *kit = nullptr;
     QJsonObject error;
 };
@@ -776,12 +775,12 @@ static QJsonObject addKitsToProject(
     QJsonArray results;
     int addedCount = 0;
     for (const QString &identifier : kitIdentifiers) {
-        const KitResolution resolution = resolveKit(identifier);
-        if (!resolution.kit) {
-            results.append(kitResolutionResult(identifier, resolution.error));
+        const KitResolution kitResolution = resolveKit(identifier);
+        if (!kitResolution.kit) {
+            results.append(kitResolutionResult(identifier, kitResolution.error));
             continue;
         }
-        Kit * const kit = resolution.kit;
+        Kit * const kit = kitResolution.kit;
         if (project->target(kit)) {
             results.append(QJsonObject{
                 {"kit", kit->displayName()}, {"id", kit->id().toString()},
@@ -858,7 +857,7 @@ static QJsonObject renameKit(const QString &kitIdentifier, const QString &name)
 
 // Makes a project's target for a kit the active one, as choosing it in the kit selector
 // does. A display name shared by several kits is refused rather than guessed at, since
-// nothing distinguishes them; the id from list_kits always identifies one.
+// nothing distinguishes them; the id from kit_list always identifies one.
 static QJsonObject setActiveKit(
     const QString &projectName, const QString &projectPath, const QString &kitIdentifier)
 {
@@ -878,7 +877,7 @@ static QJsonObject setActiveKit(
             {"success", false},
             {"reason", "kit_not_configured"},
             {"message", QString("Project \"%1\" is not configured for kit \"%2\"; add it with "
-                                "add_kits_to_project first.")
+                                "kit_add_to_project first.")
                             .arg(project->displayName(), kit->displayName())}};
     }
 
@@ -3521,7 +3520,7 @@ void registerMcpTools()
                 "is derived from the kit name, so two kits that share one name also share one "
                 "build directory and overwrite each other's configuration. Kits generated per "
                 "Qt version collide that way when the versions carry the same version number "
-                "and ABI. The kit may be given by id or display name (see list_kits); a name "
+                "and ABI. The kit may be given by id or display name (see kit_list); a name "
                 "several kits share has to be told apart by id, which is the case this is for.")
             .annotations(ToolAnnotations{}.readOnlyHint(false))
             .inputSchema(
@@ -3553,12 +3552,12 @@ void registerMcpTools()
 
     ToolRegistry::registerTool(
         Tool{}
-            .name("set_active_kit")
+            .name("kit_set_active")
             .title("Set the active kit of a project")
             .description(
                 "Makes the project build and run with one of the kits it is configured for, "
                 "as choosing it in the kit selector does. The kit may be given by id or "
-                "display name (see list_kits, and list_project_kits for which are configured "
+                "display name (see kit_list, and kit_list_for_project for which are configured "
                 "and which is active); a display name that several kits share is refused, so "
                 "use the id to tell them apart. Defaults to the active startup project when "
                 "neither project_name nor project_path is given.")
@@ -3604,7 +3603,7 @@ void registerMcpTools()
 
     ToolRegistry::registerTool(
         Tool{}
-            .name("remove_kits")
+            .name("kit_remove")
             .title("Remove kits")
             .description(
                 "Removes kits from Qt Creator, identified by kit id or display name (see "
