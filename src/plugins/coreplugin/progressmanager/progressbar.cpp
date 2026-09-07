@@ -58,7 +58,7 @@ CloseButton::CloseButton(QWidget *parent)
     : QAbstractButton(parent)
 {
     setAttribute(Qt::WA_LayoutUsesWidgetRect);
-    setFixedSize(14, 10);
+    setFixedSize(StyleHelper::SpacingTokens::PrimitiveXl, StyleHelper::SpacingTokens::PrimitiveXl);
     setFocusPolicy(Qt::NoFocus);
 }
 
