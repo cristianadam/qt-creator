@@ -747,8 +747,15 @@ void PermissionsContainerWidget::addPermission()
             }
         }
     } else {
-        m_permissionsModel->addPermission(permission);
-        updateManifestPermissions();
+        const QModelIndex added = m_permissionsModel->addPermission(permission);
+        if (!added.isValid())
+            return;
+        if (const Utils::Result<> result = updateManifestPermissions(); !result) {
+            m_permissionsModel->removePermission(added.row());
+            QMessageBox::warning(this, Tr::tr("Add Permission"),
+                                 Tr::tr("Cannot add permission: %1").arg(result.error()));
+            return;
+        }
     }
 
     emit permissionsModified();
@@ -872,7 +879,12 @@ void PermissionsContainerWidget::removePermission()
             m_permissionsModel->removePermission(index.row());
     } else {
         m_permissionsModel->removePermission(index.row());
-        updateManifestPermissions();
+        if (const Utils::Result<> result = updateManifestPermissions(); !result) {
+            loadPermissionsFromManifest();
+            QMessageBox::warning(this, Tr::tr("Remove Permission"),
+                                 Tr::tr("Cannot remove permission: %1").arg(result.error()));
+            return;
+        }
     }
 
     emit permissionsModified();
@@ -890,10 +902,15 @@ void PermissionsContainerWidget::updateAddRemovePermissionButtons()
 
 void PermissionsContainerWidget::defaultPermissionOrFeatureCheckBoxClicked()
 {
-    if (m_CMakePermissionsCheckBox->isChecked())
-        updateManifestDefaultComments();
-    else
-        updateManifestPermissions();
+    const Utils::Result<> result = m_CMakePermissionsCheckBox->isChecked()
+        ? updateManifestDefaultComments()
+        : updateManifestPermissions();
+    if (!result) {
+        QMessageBox::warning(this, Tr::tr("Permissions"),
+                             Tr::tr("Cannot update the manifest: %1").arg(result.error()));
+        refresh();
+        return;
+    }
     emit permissionsModified();
 }
 
