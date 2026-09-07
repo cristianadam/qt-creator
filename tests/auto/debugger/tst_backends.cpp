@@ -146,6 +146,7 @@ static const char s_qtDeclarativeDebugInfoMissing[] =
 enum class Backend {
     Gdb,
     Bridge,
+    Dap,
     Lldb,
     Pdb,
     Qml,
@@ -448,6 +449,8 @@ static QString backendName(Backend backend)
         return "gdb";
     case Backend::Bridge:
         return "bridge";
+    case Backend::Dap:
+        return "dap";
     case Backend::Lldb:
         return "lldb";
     case Backend::Pdb:
@@ -496,6 +499,7 @@ static QList<ConfiguredOptionProbe> configuredOptionProbes(Backend backend,
     case Backend::Pdb:
     case Backend::Qml:
     case Backend::Bridge:
+    case Backend::Dap:
         break;
     }
     return {};
@@ -517,6 +521,7 @@ static InitFileProbe initFileProbe(Backend backend, const QString &marker)
     case Backend::Qml:
     case Backend::Cdb:
     case Backend::Bridge:
+    case Backend::Dap:
         break;
     }
     return {};
@@ -554,6 +559,7 @@ static QString disassemblyFlavorWireMarker(Backend backend)
     case Backend::Qml:
     case Backend::Cdb:
     case Backend::Bridge:
+    case Backend::Dap:
         break;
     }
     return {};
@@ -569,6 +575,7 @@ static QString disassemblyFlavorQuery(Backend backend)
     case Backend::Qml:
     case Backend::Cdb:
     case Backend::Bridge:
+    case Backend::Dap:
         break;
     }
     return {};
@@ -584,6 +591,7 @@ static QString debugInfoDaemonQuery(Backend backend)
     case Backend::Qml:
     case Backend::Cdb:
     case Backend::Bridge:
+    case Backend::Dap:
         break;
     }
     return {};
@@ -593,10 +601,13 @@ static QString debugInfoDaemonQuery(Backend backend)
 // so a depth limit cannot reach it yet.
 // Whether attaching leaves the inferior running: lldb resumes it itself, and
 // the bridge acknowledges the attach as a running inferior, while gdb reports
-// the stop that attaching causes.
+// the stop that attaching causes. A stock DAP adapter's answer to the attach
+// says neither, so the backend reports a running inferior and passes on
+// whatever the adapter does to the debuggee afterwards.
 static bool attachResumesInferior(Backend backend)
 {
     switch (backend) {
+    case Backend::Dap:
     case Backend::Lldb:
     case Backend::Bridge:
         return true;
@@ -630,9 +641,47 @@ static QString realTracepointMarker(Backend backend)
     case Backend::Cdb:
     case Backend::Pdb:
     case Backend::Qml:
+    case Backend::Dap:
         break;
     }
     return {};
+}
+
+// What a detach looks like in what a backend logs: DAP has no detach request,
+// it is a disconnect that leaves the debuggee alone.
+static QString detachMarker(Backend backend)
+{
+    switch (backend) {
+    case Backend::Dap:
+        return "terminateDebuggee\":false";
+    case Backend::Gdb:
+    case Backend::Lldb:
+    case Backend::Bridge:
+    case Backend::Cdb:
+    case Backend::Pdb:
+    case Backend::Qml:
+        break;
+    }
+    return "detach";
+}
+
+// What a breakpoint modification carries that the answer to setting it did not:
+// the gdb family counts the hits, while DAP has no hit count at all and what a
+// stock adapter reports is the address it bound the breakpoint to.
+static const char *breakpointModifiedField(Backend backend)
+{
+    switch (backend) {
+    case Backend::Dap:
+        return "addr";
+    case Backend::Gdb:
+    case Backend::Lldb:
+    case Backend::Bridge:
+    case Backend::Cdb:
+    case Backend::Pdb:
+    case Backend::Qml:
+        break;
+    }
+    return "times";
 }
 
 // The marker a backend logs per command when time stamps are configured.
@@ -646,6 +695,7 @@ static QString responseTimeMarker(Backend backend)
     case Backend::Pdb:
     case Backend::Qml:
     case Backend::Bridge:
+    case Backend::Dap:
         break;
     }
     return {};
@@ -661,6 +711,26 @@ static bool limitsStackDepth(Backend backend)
     case Backend::Pdb:
     case Backend::Qml:
     case Backend::Bridge:
+    case Backend::Dap:
+        break;
+    }
+    return false;
+}
+
+// Whether a function can be disassembled by name alone: DAP's disassemble
+// request takes a memory reference, and the protocol has no request that
+// resolves a name to one.
+static bool disassemblesByFunctionName(Backend backend)
+{
+    switch (backend) {
+    case Backend::Gdb:
+    case Backend::Lldb:
+    case Backend::Cdb:
+    case Backend::Pdb:
+    case Backend::Bridge:
+    case Backend::Qml:
+        return true;
+    case Backend::Dap:
         break;
     }
     return false;
@@ -679,6 +749,7 @@ static bool debuggingHelpersChangeContainerOutput(Backend backend)
     case Backend::Lldb:
     case Backend::Qml:
     case Backend::Bridge:
+    case Backend::Dap:
         break;
     }
     return false;
@@ -703,6 +774,7 @@ static QString watchdogProbeCommand(Backend backend, int seconds)
         return QString("import time; time.sleep(%1)").arg(seconds);
     case Backend::Qml:
     case Backend::Bridge:
+    case Backend::Dap:
         break;
     }
     return {};
@@ -714,6 +786,7 @@ static QString printCommand(Backend backend, const QString &expression)
     switch (backend) {
     case Backend::Gdb:
     case Backend::Bridge:
+    case Backend::Dap:
         return "print " + expression;
     case Backend::Lldb:
         return "expr " + expression;
@@ -732,6 +805,17 @@ static GdbMi findItemByIName(const GdbMi &data, const QString &iname)
         return data;
     for (const GdbMi &child : data) {
         if (const GdbMi found = findItemByIName(child, iname); found.isValid())
+            return found;
+    }
+    return {};
+}
+
+static GdbMi findItemByName(const GdbMi &data, const QString &name)
+{
+    if (data["name"].data() == name)
+        return data;
+    for (const GdbMi &child : data) {
+        if (const GdbMi found = findItemByName(child, name); found.isValid())
             return found;
     }
     return {};
@@ -1331,6 +1415,34 @@ std::unique_ptr<DebuggerBackend> tst_backends::createEngine(Backend backend,
                 ProcessRunData{{inferiorTestData(backend).executable, {}}, {}, Environment::systemEnvironment()}),
             .dumperScriptsDir = FilePath::fromUserInput(DUMPERDIR),
             .bridgeStartData = dapHostRecipe(false)}));
+    case Backend::Dap: {
+        const ProcessRunData debuggerRunData = debuggerRunDataOverride.value_or(
+            ProcessRunData{{m_backendData[backend].path, {}}, {},
+                           Environment::systemEnvironment()});
+        const ProcessRunData inferiorRunData = inferiorRunDataOverride.value_or(
+            ProcessRunData{{inferiorTestData(backend).executable, {}}, {},
+                           Environment::systemEnvironment()});
+        DapStartData startData;
+        startData.adapter.kind = DapAdapterDescriptor::Kind::Executable;
+        startData.adapter.command = CommandLine{debuggerRunData.command.executable(),
+                                                {"-i", "dap"}};
+        startData.adapter.runData = debuggerRunData;
+        startData.adapterId = "gdb";
+        // The launch body follows the adapter's own schema, so what the other
+        // backends take out of inferiorStartData is spelled out here.
+        QJsonObject environment;
+        for (const QString &entry : inferiorRunData.environment.toStringList()) {
+            const qsizetype separator = entry.indexOf('=');
+            if (separator > 0)
+                environment[entry.left(separator)] = entry.mid(separator + 1);
+        }
+        QJsonObject configuration{{"program", inferiorRunData.command.executable().path()},
+                                  {"env", environment}};
+        if (!inferiorRunData.workingDirectory.isEmpty())
+            configuration["cwd"] = inferiorRunData.workingDirectory.path();
+        startData.configuration = configuration;
+        return std::make_unique<DebuggerBackend>(std::make_unique<DapImpl>(startData));
+    }
     case Backend::Lldb:
         return std::make_unique<DebuggerBackend>(std::make_unique<LldbImpl>(LldbImplStartData{
             .debuggerRunData = debuggerRunDataOverride.value_or(
@@ -1438,6 +1550,7 @@ std::unique_ptr<DebuggerBackend> tst_backends::createFullyConfiguredEngine(
     case Backend::Pdb:
     case Backend::Qml:
     case Backend::Bridge:
+    case Backend::Dap:
         break;
     }
     return nullptr;
@@ -1508,6 +1621,22 @@ std::unique_ptr<DebuggerBackend> tst_backends::createAttachEngine(
                                               Environment::systemEnvironment()},
             .inferiorStartData = inferiorStartData,
             .dumperScriptsDir = FilePath::fromUserInput(DUMPERDIR)}));
+    case Backend::Dap: {
+        // The stock protocol carries the pid in the adapter's own attach body.
+        const auto *attachData = std::get_if<AttachToProcessData>(&inferiorStartData);
+        if (!attachData)
+            break;
+        DapStartData startData;
+        startData.adapter.kind = DapAdapterDescriptor::Kind::Executable;
+        startData.adapter.command = CommandLine{m_backendData[backend].path, {"-i", "dap"}};
+        startData.adapter.runData.environment = Environment::systemEnvironment();
+        startData.adapterId = "gdb";
+        startData.attach = true;
+        startData.configuration = QJsonObject{
+            {"pid", qint64(attachData->pid.pid())},
+            {"program", inferiorTestData(backend).executable.path()}};
+        return std::make_unique<DebuggerBackend>(std::make_unique<DapImpl>(startData));
+    }
     case Backend::Pdb:
         break;
     case Backend::Qml:
@@ -1933,6 +2062,11 @@ void tst_backends::initTestCase()
     }
 
     if (m_backendData.contains(Backend::Gdb)) {
+        // The stock protocol against gdb's own adapter: the same debugger and
+        // the same inferior as the gdb row, reached over DAP instead.
+        m_backendData[Backend::Dap] = m_backendData[Backend::Gdb];
+        m_backendData[Backend::Dap].inferiorData = cppInferiorData;
+
         m_backendData[Backend::Bridge] = m_backendData[Backend::Gdb];
         m_backendData[Backend::Bridge].inferiorData = cppInferiorData;
         m_backendData[Backend::Bridge].inferiorData.qmlBreakpointsUseServiceCasts = true;
@@ -3121,9 +3255,10 @@ void tst_backends::testDetachCapability()
         QTRY_VERIFY2_WITH_TIMEOUT(processFinished,
                                   "engine process never reported finishing after "
                                   "shutdownInferior(Detach)+shutdownEngine()", s_timeout);
-        QVERIFY2(std::any_of(messages.cbegin(), messages.cend(), [](const QString &text) {
-            return text.contains("detach");
-        }), "shutdownInferior(ShutdownMode::Detach) never sent \"detach\"");
+        const QString marker = detachMarker(backend);
+        QVERIFY2(std::any_of(messages.cbegin(), messages.cend(), [&marker](const QString &text) {
+            return text.contains(marker);
+        }), qPrintable("shutdownInferior(ShutdownMode::Detach) never sent \"" + marker + '"'));
     }
 }
 
@@ -3166,7 +3301,7 @@ void tst_backends::testDisassemblerCapability()
                                            .arg(testData.disassemblySourceMarker)));
     }
 
-    if (testData.functionMarker.isEmpty())
+    if (testData.functionMarker.isEmpty() || !disassemblesByFunctionName(backend))
         return;
     disassembly = {};
     disassemblyReceived = false;
@@ -4458,7 +4593,6 @@ void tst_backends::expandsContainerLocalWhenExpanded()
     const QString local = inferiorTestData(backend).expandableLocal;
     if (local.isEmpty())
         QSKIP("inferior declares no expandable container local");
-    const QString iname = "local." + local;
 
     Process helperInferior;
     std::unique_ptr<DebuggerBackend> debuggerBackend = stopAtBreakpoint(backend, helperInferior);
@@ -4476,8 +4610,12 @@ void tst_backends::expandsContainerLocalWhenExpanded()
     request.requestId = 120;
     engine->refresh(request);
     QTRY_VERIFY_WITH_TIMEOUT(responses.contains(int(RefreshKind::Locals)), s_timeout);
-    const QString collapsed = responses.value(int(RefreshKind::Locals)).toString();
-    QVERIFY2(collapsed.contains(iname), qPrintable("collapsed: " + collapsed));
+    const GdbMi collapsedData = responses.value(int(RefreshKind::Locals));
+    // The path an item is reached by is the backend's own: a dumper names a
+    // local after the variable, while what a stock adapter calls one can hold
+    // anything and is therefore only what it is displayed as.
+    const QString iname = findItemByName(collapsedData, local)["iname"].data();
+    QVERIFY2(!iname.isEmpty(), qPrintable("collapsed: " + collapsedData.toString()));
 
     responses.clear();
     request.requestId = 121;
@@ -5229,7 +5367,11 @@ void tst_backends::updatesEnablesAndRemovesBreakpoint()
     enableSubRequest.enabled = false;
     engine->changeBreakpoint(enableSubRequest);
     QTRY_VERIFY_WITH_TIMEOUT(results.contains(21), s_timeout);
-    QVERIFY(results.value(21));
+    // A backend that does not address the locations of a breakpoint
+    // individually has nothing to enable here and refuses; what it must not do
+    // is leave the request unanswered.
+    if (hasCapability(backend, Debugger::BreakIndividualLocationsCapability))
+        QVERIFY(results.value(21));
 
     BreakpointChangeRequest removeRequest;
     removeRequest.op = BreakpointOp::Remove;
@@ -5392,7 +5534,12 @@ void tst_backends::executesRawCommandAndAssignsValue()
 
     QStringList messages;
     connect(engine, &DebuggerEngineInterface::message, this,
-            [&messages](const QString &text, int, int) { messages.append(text); });
+            [&messages](const QString &text, int channel, int) {
+        // The command is logged as it goes out, so only what came back can
+        // stand for it having been answered.
+        if (channel != Debugger::LogInput)
+            messages.append(text);
+    });
     engine->executeDebuggerCommand(printCommand(backend, "123456789"), {});
     QTRY_VERIFY_WITH_TIMEOUT(std::any_of(messages.cbegin(), messages.cend(),
                                          [](const QString &text) {
@@ -5502,6 +5649,10 @@ void tst_backends::executesRunToLineFunctionAndJumpsToLine()
     QFETCH(Backend, backend);
 
     if (auto result = checkStartMode(backend, DebuggerStartModeFlag::Launch); !result)
+        QSKIP(qPrintable(result.error()));
+    if (auto result = checkCapability(backend, Debugger::JumpToLineCapability); !result)
+        QSKIP(qPrintable(result.error()));
+    if (auto result = checkCapability(backend, Debugger::RunToLineCapability); !result)
         QSKIP(qPrintable(result.error()));
 
     std::unique_ptr<DebuggerBackend> debuggerBackend = launchAndStopAtBreakpoint(backend);
@@ -7816,8 +7967,10 @@ void tst_backends::reportsBreakpointModifiedEvents()
 
     engine->start();
     QTRY_VERIFY_WITH_TIMEOUT(debuggerBackend->contains(InferiorEvent::SpontaneousStop), s_timeout);
-    QTRY_VERIFY_WITH_TIMEOUT(std::any_of(modified.cbegin(), modified.cend(), [](const GdbMi &data) {
-        return data.childAt(0)["times"].toInt() > 0;
+    const char *field = breakpointModifiedField(backend);
+    QTRY_VERIFY_WITH_TIMEOUT(std::any_of(modified.cbegin(), modified.cend(),
+                                         [field](const GdbMi &data) {
+        return data.childAt(0)[field].data().toULongLong(nullptr, 0) > 0;
     }), s_timeout);
 }
 
