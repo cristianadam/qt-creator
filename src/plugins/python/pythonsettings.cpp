@@ -1057,6 +1057,26 @@ QList<Interpreter> PythonSettings::detectPythonVenvs(const FilePath &path)
     return result;
 }
 
+static void pruneStalePylspInstallations(const QList<Interpreter> &interpreters)
+{
+    const FilePath pylspRoot = Core::ICore::userResourcePath("pylsp");
+    if (!pylspRoot.isDir())
+        return;
+
+    QStringList activeVersions;
+    for (const Interpreter &interpreter : interpreters) {
+        if (interpreter.command.isLocal() && interpreter.command.isExecutableFile())
+            activeVersions << pythonVersion(interpreter.command);
+    }
+
+    const FilePaths staleDirs = pylspRoot.dirEntries(DirFilterFlag::Dirs
+                                                      | DirFilterFlag::NoDotAndDotDot);
+    for (const FilePath &dir : staleDirs) {
+        if (!activeVersions.contains(dir.fileName()))
+            dir.removeRecursively();
+    }
+}
+
 void PythonSettings::initFromSettings(QtcSettings *settings)
 {
     settings->beginGroup(settingsGroupKey);
@@ -1099,6 +1119,7 @@ void PythonSettings::initFromSettings(QtcSettings *settings)
 
     const auto [valid, outdatedInterpreters] = Utils::partition(m_interpreters, keepInterpreter);
     m_interpreters = valid;
+    pruneStalePylspInstallations(m_interpreters);
 
     const bool kitsGenerated = settings->value(kitsGeneratedKey, false).toBool();
     if (kitsGenerated)
