@@ -57,8 +57,9 @@ private:
     void loadPermissionsFromCMake();
     Utils::Result<> addCMakePermission(const QString &permission,
                                        const QMap<QString, QString> &attributes = {});
-    bool removeCMakePermission(const QString &permission);
-    bool updateCMakePermission(const QString &permission, const QMap<QString, QString> &attributes);
+    Utils::Result<> removeCMakePermission(const QString &permission);
+    Utils::Result<> updateCMakePermission(const QString &permission,
+                                          const QMap<QString, QString> &attributes);
     Utils::Result<> migratePermissionsManifestToCMake();
     Utils::Result<> migratePermissionsCMakeToManifest();
 
