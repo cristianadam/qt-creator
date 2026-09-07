@@ -13,6 +13,7 @@
 #include <utils/guiutils.h>
 #include <utils/infolabel.h>
 #include <utils/layoutbuilder.h>
+#include <utils/macroexpander.h>
 #include <utils/pathchooser.h>
 #include <utils/qtcassert.h>
 #include <utils/utilsicons.h>
@@ -58,11 +59,23 @@ DockerDeviceWidget::DockerDeviceWidget(const IDevice::Ptr &device)
 
     auto pathListLabel = new InfoLabel(Tr::tr("Paths to mount:"));
     pathListLabel->setElideMode(Qt::ElideNone);
-    pathListLabel->setAdditionalToolTip(Tr::tr("Source directory list should not be empty."));
 
     auto markupMounts = [dockerDevice, pathListLabel] {
-        const bool isEmpty = dockerDevice->mounts.volatileValue().isEmpty();
-        pathListLabel->setType(isEmpty ? InfoLabelType::Warning : InfoLabelType::None);
+        const QStringList entries = dockerDevice->mounts.volatileValue();
+        MacroExpander *expander = dockerDevice->mounts.macroExpander();
+        QStringList warnings;
+        if (entries.isEmpty()) {
+            warnings.append(Tr::tr("Source directory list should not be empty."));
+        } else {
+            for (const QString &entry : entries) {
+                const QString expanded = expander ? expander->expand(entry) : entry;
+                const Result<> res = validateMount(parseMount(expanded));
+                if (!res)
+                    warnings.append(Tr::tr("\"%1\" is not mounted: %2").arg(entry, res.error()));
+            }
+        }
+        pathListLabel->setType(warnings.isEmpty() ? InfoLabelType::None : InfoLabelType::Warning);
+        pathListLabel->setAdditionalToolTip(warnings.join('\n'));
     };
     markupMounts();
 
