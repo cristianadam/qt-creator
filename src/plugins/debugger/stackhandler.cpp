@@ -330,6 +330,17 @@ void StackHandler::setFramesAndCurrentIndex(const GdbMi &frames, bool isFull)
     if (targetFrame == -1)
         targetFrame = 0;
 
+    if (targetFrame > 0 && !stackFrames.at(0).isUsable()) {
+        const StackFrame &frame = stackFrames.at(0);
+        m_engine->showMessage(
+            frame.file.isEmpty()
+                ? Tr::tr("No source file is known for \"%1\". Showing the caller instead.")
+                      .arg(frame.function)
+                : Tr::tr("Source file \"%1\" was not found. Showing the caller instead.")
+                      .arg(frame.file.toUserOutput()),
+            StatusBar);
+    }
+
     setCurrentIndex(targetFrame);
 }
 

@@ -1439,10 +1439,18 @@ void DebuggerEngine::gotoLocation(const Location &loc)
 {
      d->resetLocation();
 
-    if (loc.canBeDisassembled()
-            && ((hasCapability(OperateByInstructionCapability) && operatesByInstruction())
-                || !loc.hasDebugInfo()) )
-    {
+    const bool byInstruction
+        = hasCapability(OperateByInstructionCapability) && operatesByInstruction();
+
+    if (loc.canBeDisassembled() && (byInstruction || !loc.hasDebugInfo())) {
+        if (!byInstruction) {
+            showMessage(loc.fileName().isEmpty()
+                            ? Tr::tr("No source file is known for \"%1\". "
+                                     "Showing disassembly.").arg(loc.functionName())
+                            : Tr::tr("Source file \"%1\" was not found. Showing disassembly.")
+                                  .arg(loc.fileName().toUserOutput()),
+                        StatusBar);
+        }
         d->m_disassemblerAgent.setLocation(loc);
         return;
     }
