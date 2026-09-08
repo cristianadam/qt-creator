@@ -118,7 +118,8 @@ static DebuggerEngineSetupData bridgeImplSetupData()
                       | ShowModuleSymbolsCapability | RunToLineCapability | AddWatcherCapability
                       | RegisterCapability | ShowMemoryCapability | DisassemblerCapability
                       | OperateByInstructionCapability | JumpToLineCapability
-                      | WatchpointByAddressCapability | WatchpointByExpressionCapability;
+                      | WatchpointByAddressCapability | WatchpointByExpressionCapability
+                      | CreateFullBacktraceCapability;
     data.extraCapabilities = DebuggerExtraCapability::JumpTargetCheck
                            | DebuggerExtraCapability::PeripheralRegisters;
     data.startModes = DebuggerStartModeFlag::Launch | DebuggerStartModeFlag::AttachToProcess;
@@ -488,6 +489,10 @@ void BridgeImpl::refresh(const RefreshRequest &request)
         m_pendingRegistersRequestId = request.requestId;
         postRequest("qtc/fetchRegisters", QJsonObject{{"frameId", m_currentFrameId}});
         return;
+    case RefreshKind::FullBacktrace:
+        m_pendingBacktraceRequestId = request.requestId;
+        postRequest("qtc/fetchFullBacktrace", {});
+        return;
     case RefreshKind::PeripheralRegisters:
         for (const quint64 address : request.addresses) {
             const quint64 token = ++m_nextPeripheralToken;
@@ -686,6 +691,10 @@ void BridgeImpl::handleResponse(DapResponseType type, const QJsonObject &respons
         emit refreshDataReceived(m_pendingSymbolsRequestId, RefreshKind::ModuleSymbols, result);
     } else if (command == "terminate" || command == "disconnect") {
         emit inferiorEvent(InferiorEvent::ShutdownFinished);
+    } else if (command == "qtc/fetchFullBacktrace") {
+        emit refreshDataReceived(m_pendingBacktraceRequestId, RefreshKind::FullBacktrace,
+                                 constMi({}, response.value("body").toObject()
+                                                 .value("output").toString()));
     } else if (command == "qtc/executeCommand") {
         const QString output = response.value("body").toObject().value("output").toString();
         if (!output.isEmpty())
