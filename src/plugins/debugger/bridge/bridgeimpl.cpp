@@ -478,8 +478,11 @@ void BridgeImpl::refresh(const RefreshRequest &request)
         return;
     }
     case RefreshKind::FullStack:
-        if (const int seq = m_client->stackTrace(m_currentThreadId, 0); seq >= 0)
+        if (const int seq = m_client->stackTrace(m_currentThreadId,
+                                                 qMax(request.stackDepthLimit, 0));
+            seq >= 0) {
             m_stackTraceRequests.insert(seq, {false, request.requestId});
+        }
         return;
     case RefreshKind::Registers:
         m_pendingRegistersRequestId = request.requestId;
