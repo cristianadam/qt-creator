@@ -786,12 +786,12 @@ void BridgeImpl::handleStackTrace(const QJsonObject &response)
             frame.addChild(child);
         };
         add("level", QString::number(level++));
-        add("func", item.value("name").toString());
+        add("function", item.value("name").toString());
         const QString path = item.value("source").toObject().value("path").toString();
         add("file", path);
         add("fullname", path);
         add("line", QString::number(item.value("line").toInt()));
-        add("addr", QString::number(item.value("instructionPointerReference").toInteger()));
+        add("address", QString::number(item.value("instructionPointerReference").toInteger()));
         frameList.addChild(frame);
     }
     GdbMi stack;

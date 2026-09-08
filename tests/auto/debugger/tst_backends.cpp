@@ -8447,6 +8447,8 @@ void tst_backends::reportsTheStackOfASelectedThread()
     QVERIFY2(functions.contains("main"),
              qPrintable("the selected thread's stack does not reach main, only: "
                         + functions.join(", ")));
+    QVERIFY2(frames.childAt(0)["address"].toAddress() != 0,
+             qPrintable(frames.childAt(0).toString()));
 
     debuggerBackend->clearEvents();
     engine->shutdownInferior(ShutdownMode::Kill);
