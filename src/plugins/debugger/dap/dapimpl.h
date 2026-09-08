@@ -137,6 +137,8 @@ private:
     void sendDetach();
     void queueVariables(const QString &iname, int reference);
     void continueLocalsWalk();
+    void continueBacktrace();
+    void handleBacktraceFrames(const QJsonObject &response);
     void reportLocals();
     GdbMi localsItem(const QString &iname) const;
 
@@ -193,6 +195,13 @@ private:
     QQueue<QPair<QString, QString>> m_pendingWatchers;
     QHash<int, QString> m_variableRequests;
     QHash<int, QPair<QString, QString>> m_watcherRequests;
+    // A full backtrace is one stack per thread, and the protocol answers one
+    // request at a time, so the walk keeps what it has and what is still to come.
+    quint64 m_backtraceRequestId = 0;
+    int m_backtraceThreadsSeq = -1;
+    int m_backtraceFramesSeq = -1;
+    QQueue<QPair<int, QString>> m_backtraceThreads;
+    QString m_backtrace;
     QHash<int, quint64> m_threadRequests;
     QHash<int, quint64> m_sourceFilesRequests;
     QHash<int, quint64> m_moduleRequests;
