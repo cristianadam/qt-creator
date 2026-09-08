@@ -53,10 +53,11 @@ static DebuggerEngineSetupData dapImplSetupData()
     // Only what the protocol itself defines. Memory and disassembly are
     // optional in DAP, so they are offered here and refused per session if the
     // adapter turns out not to have them.
-    data.capabilities = BreakConditionCapability | ShowMemoryCapability
-                      | DisassemblerCapability | OperateByInstructionCapability
-                      | BreakOnThrowAndCatchCapability | TracePointCapability
-                      | ReloadModuleCapability;
+    data.capabilities = AddWatcherCapability | BreakConditionCapability
+                      | ShowMemoryCapability | DisassemblerCapability
+                      | OperateByInstructionCapability | BreakOnThrowAndCatchCapability
+                      | TracePointCapability | ReloadModuleCapability
+                      | WatchComplexExpressionsCapability;
     data.extraCapabilities = DebuggerExtraCapability::Detach
                            | DebuggerExtraCapability::LibraryEvent
                            | DebuggerExtraCapability::SourceFiles
@@ -653,6 +654,14 @@ void DapImpl::refresh(const RefreshRequest &request)
         m_localRoots.clear();
         m_pendingVariables.clear();
         m_variableRequests.clear();
+        m_pendingWatchers.clear();
+        m_watcherRequests.clear();
+        for (const QJsonValue &value : request.watchers) {
+            const QJsonObject watcher = value.toObject();
+            const QString expression = QString::fromUtf8(
+                QByteArray::fromHex(watcher.value("exp").toString().toUtf8()));
+            m_pendingWatchers.enqueue({watcher.value("iname").toString(), expression});
+        }
         if (m_currentFrameId < 0) {
             reportLocals();
             return;
@@ -777,6 +786,10 @@ void DapImpl::handleResponse(DapResponseType type, const QJsonObject &response)
             emit inferiorEvent(InferiorEvent::EngineRunFailed);
         return;
     case DapResponseType::Evaluate:
+        if (m_watcherRequests.contains(response.value("request_seq").toInt())) {
+            handleWatcher(response);
+            return;
+        }
         emit message(response.value("body").toObject().value("result").toString(),
                      LogMisc);
         return;
@@ -1118,6 +1131,17 @@ void DapImpl::continueLocalsWalk()
             return;
         }
     }
+    while (!m_pendingWatchers.isEmpty()) {
+        const QPair<QString, QString> next = m_pendingWatchers.dequeue();
+        const int seq = m_client->postRequest("evaluate",
+                                              QJsonObject{{"expression", next.second},
+                                                          {"frameId", m_currentFrameId},
+                                                          {"context", "watch"}});
+        if (seq >= 0) {
+            m_watcherRequests.insert(seq, next);
+            return;
+        }
+    }
     reportLocals();
 }
 
@@ -1194,6 +1218,31 @@ void DapImpl::handleVariables(const QJsonObject &response)
         if (local.hasChildren && m_expandedINames.contains(local.iname))
             queueVariables(local.iname, local.reference);
     }
+    continueLocalsWalk();
+}
+
+void DapImpl::handleWatcher(const QJsonObject &response)
+{
+    const QPair<QString, QString> watcher
+        = m_watcherRequests.take(response.value("request_seq").toInt());
+    const QJsonObject body = response.value("body").toObject();
+
+    Local local;
+    local.iname = watcher.first;
+    local.name = watcher.second;
+    local.type = body.value("type").toString().section('\n', 0, 0);
+    // An expression the adapter could not evaluate has no value of its own, so
+    // what it said about it takes its place.
+    local.value = response.value("success").toBool() ? body.value("result").toString()
+                                                     : response.value("message").toString();
+    local.reference = body.value("variablesReference").toInt();
+    local.hasChildren = local.reference != 0;
+    local.address = body.value("memoryReference").toString().toULongLong(nullptr, 0);
+    m_localRoots.append(local.iname);
+    m_locals.insert(local.iname, local);
+
+    if (local.hasChildren && m_expandedINames.contains(local.iname))
+        queueVariables(local.iname, local.reference);
     continueLocalsWalk();
 }
 
