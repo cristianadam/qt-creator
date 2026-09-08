@@ -1024,13 +1024,15 @@ Utils::Result<> PermissionsContainerWidget::addCMakePermission(
 
     Utils::FileSaver saver(m_CMakeFilePath, QIODevice::Text);
     saver.write(lines.join('\n').toUtf8());
-    return saver.finalize();
+    const Utils::Result<> result = saver.finalize();
+    if (result)
+        updateCMakeFileWatch();
+    return result;
 }
 
 void PermissionsContainerWidget::updateCMakeFileWatch()
 {
-    if (!m_cmakeWatcher || m_CMakeFilePath.isEmpty()
-        || m_cmakeWatcher->watchesFile(m_CMakeFilePath))
+    if (!m_cmakeWatcher || m_CMakeFilePath.isEmpty())
         return;
     m_cmakeWatcher->clear();
     m_cmakeWatcher->addFile(m_CMakeFilePath, Utils::FileSystemWatcher::WatchModifiedDate);
@@ -1139,7 +1141,10 @@ Utils::Result<> PermissionsContainerWidget::removeCMakePermission(const QString 
 
     Utils::FileSaver saver(m_CMakeFilePath, QIODevice::Text);
     saver.write(lines.join('\n').toUtf8());
-    return saver.finalize();
+    const Utils::Result<> result = saver.finalize();
+    if (result)
+        updateCMakeFileWatch();
+    return result;
 }
 
 Utils::Result<> PermissionsContainerWidget::migratePermissionsManifestToCMake()
@@ -1239,7 +1244,10 @@ Utils::Result<> PermissionsContainerWidget::updateCMakePermission(const QString 
 
     Utils::FileSaver saver(m_CMakeFilePath, QIODevice::Text);
     saver.write(lines.join('\n').toUtf8());
-    return saver.finalize();
+    const Utils::Result<> result = saver.finalize();
+    if (result)
+        updateCMakeFileWatch();
+    return result;
 }
 
 } // namespace Android::Internal
