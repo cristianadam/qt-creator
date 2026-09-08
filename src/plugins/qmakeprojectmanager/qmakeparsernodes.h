@@ -67,6 +67,7 @@ enum class Variable {
     PkgConfig,
     PrecompiledHeader,
     LibDirectories,
+    Libs,
     Config,
     Qt,
     QmlImportPath,
