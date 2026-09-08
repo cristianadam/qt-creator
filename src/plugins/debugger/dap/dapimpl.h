@@ -72,6 +72,7 @@ protected:
     void handleStackTrace(const QJsonObject &response);
     void handleScopes(const QJsonObject &response);
     void handleVariables(const QJsonObject &response);
+    void handleWatcher(const QJsonObject &response);
     void handleReadMemory(const QJsonObject &response);
     void handleDisassemble(const QJsonObject &response);
     void handleBreakpointsSet(const QJsonObject &response);
@@ -187,7 +188,11 @@ private:
     QMap<QString, Local> m_locals;
     QStringList m_localRoots;
     QQueue<QPair<QString, int>> m_pendingVariables;
+    // A watcher as the request named it: its iname and the expression to ask
+    // the adapter to evaluate for it.
+    QQueue<QPair<QString, QString>> m_pendingWatchers;
     QHash<int, QString> m_variableRequests;
+    QHash<int, QPair<QString, QString>> m_watcherRequests;
     QHash<int, quint64> m_threadRequests;
     QHash<int, quint64> m_sourceFilesRequests;
     QHash<int, quint64> m_moduleRequests;
