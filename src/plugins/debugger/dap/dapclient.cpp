@@ -136,11 +136,11 @@ void DapClient::evaluateVariable(const QString &expression, int frameId)
                             {"context", "variables"}});
 }
 
-int DapClient::stackTrace(int threadId)
+int DapClient::stackTrace(int threadId, int levels)
 {
     QTC_ASSERT(threadId != -1, return -1);
     return postRequest("stackTrace",
-                       QJsonObject{{"threadId", threadId}, {"startFrame", 0}, {"levels", 10}});
+                       QJsonObject{{"threadId", threadId}, {"startFrame", 0}, {"levels", levels}});
 }
 
 int DapClient::scopes(int frameId)

@@ -149,7 +149,8 @@ public:
 
     void evaluateVariable(const QString &expression, int frameId);
 
-    int stackTrace(int threadId);
+    // Levels 0 asks for every frame, as the protocol defines it.
+    int stackTrace(int threadId, int levels);
     int scopes(int frameId);
     void threads();
     void variables(int variablesReference);

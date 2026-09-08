@@ -660,8 +660,11 @@ void DapImpl::refresh(const RefreshRequest &request)
         m_scopesSeq = m_client->scopes(m_currentFrameId);
         return;
     case RefreshKind::FullStack:
-        if (const int seq = m_client->stackTrace(m_currentThreadId); seq >= 0)
+        if (const int seq = m_client->stackTrace(m_currentThreadId,
+                                                 qMax(request.stackDepthLimit, 0));
+            seq >= 0) {
             m_stackTraceRequests.insert(seq, {false, request.requestId});
+        }
         return;
     case RefreshKind::Threads:
         if (const int seq = m_client->postRequest("threads"); seq >= 0)
@@ -1000,7 +1003,7 @@ void DapImpl::handleStopped(const QJsonObject &event)
     }
 
     // Report the stop only once the location is known, as the other backends do.
-    const int seq = m_client->stackTrace(m_currentThreadId);
+    const int seq = m_client->stackTrace(m_currentThreadId, 0);
     if (seq < 0) {
         reportStop();
         return;
