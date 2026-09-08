@@ -55,7 +55,8 @@ static DebuggerEngineSetupData dapImplSetupData()
     // adapter turns out not to have them.
     data.capabilities = BreakConditionCapability | ShowMemoryCapability
                       | DisassemblerCapability | OperateByInstructionCapability
-                      | BreakOnThrowAndCatchCapability | TracePointCapability;
+                      | BreakOnThrowAndCatchCapability | TracePointCapability
+                      | ReloadModuleCapability;
     data.extraCapabilities = DebuggerExtraCapability::Detach
                            | DebuggerExtraCapability::LibraryEvent
                            | DebuggerExtraCapability::SourceFiles
@@ -666,6 +667,15 @@ void DapImpl::refresh(const RefreshRequest &request)
         if (const int seq = m_client->postRequest("threads"); seq >= 0)
             m_threadRequests.insert(seq, request.requestId);
         return;
+    case RefreshKind::Modules:
+        if (!m_client->capabilities().supportsModulesRequest) {
+            reportUnsupported(Tr::tr("the list of modules"));
+            emit refreshDataReceived(request.requestId, request.kind, {});
+            return;
+        }
+        if (const int seq = m_client->postRequest("modules"); seq >= 0)
+            m_moduleRequests.insert(seq, request.requestId);
+        return;
     case RefreshKind::SourceFiles:
         if (!m_client->capabilities().supportsLoadedSourcesRequest) {
             reportUnsupported(Tr::tr("the list of source files"));
@@ -687,9 +697,9 @@ void DapImpl::refresh(const RefreshRequest &request)
         refresh({request.requestId, RefreshKind::Locals});
         return;
     default:
-        // Modules, registers, symbols and snapshots have no counterpart the
-        // protocol defines, so the view is answered with nothing rather than
-        // being left waiting.
+        // Registers, symbols and snapshots have no counterpart the protocol
+        // defines, so the view is answered with nothing rather than being left
+        // waiting.
         emit refreshDataReceived(request.requestId, request.kind, {});
         return;
     }
@@ -791,6 +801,22 @@ void DapImpl::handleResponse(DapResponseType type, const QJsonObject &response)
         all.addChild(threads);
         all.addChild(constMi("current-thread-id", QString::number(m_currentThreadId)));
         emit refreshDataReceived(requestId, RefreshKind::Threads, all);
+        return;
+    }
+    if (command == "modules") {
+        const quint64 requestId = m_moduleRequests.take(response.value("request_seq").toInt());
+        GdbMi modules;
+        modules.m_type = GdbMi::List;
+        for (const QJsonValue &value : response.value("body").toObject()
+                                           .value("modules").toArray()) {
+            const QJsonObject item = value.toObject();
+            GdbMi module;
+            module.m_type = GdbMi::Tuple;
+            module.addChild(constMi("modulepath",
+                                    item.value("path").toString(item.value("name").toString())));
+            modules.addChild(module);
+        }
+        emit refreshDataReceived(requestId, RefreshKind::Modules, modules);
         return;
     }
     if (command == "loadedSources") {
