@@ -483,7 +483,7 @@ static QList<ConfiguredOptionProbe> configuredOptionProbes(Backend backend,
 {
     switch (backend) {
     case Backend::Gdb:
-        return {{"show index-cache", "The index cache is currently enabled."},
+        return {{"show index-cache", "The index cache is on."},
                 {"show detach-on-fork", "Whether gdb will detach the child of a fork is off."},
                 {"show mi-async", "Whether MI is in asynchronous mode is on."},
                 {"python print(theDumper.usePlainDumpers)", "True"},
@@ -1835,6 +1835,7 @@ void tst_backends::initTestCase()
         "#include <cstdio>",
         "#include <cstdlib>",
         "#include <cstring>",
+        "#include <functional>",
         "#include <thread>",
         "#include <string>",
         "#include <utility>",
@@ -1881,11 +1882,18 @@ void tst_backends::initTestCase()
         "    fflush(stdout);",
         "}",
         "",
+        "static int knownFrameTarget();",
+        "",
         "extern \"C\" void stepIntoKnownFrame()",
         "{",
-        "    std::string movable = \"skipped\";",
-        "    std::string moved = std::move(movable); // known frame step line",
-        "    (void) moved.size();",
+        "    std::function<int()> wrapped = knownFrameTarget;",
+        "    int value = wrapped(); // known frame step line",
+        "    (void) value;",
+        "}",
+        "",
+        "static int knownFrameTarget()",
+        "{",
+        "    return 1;",
         "}",
         "",
         "extern \"C\" void spin()",
@@ -5375,8 +5383,8 @@ void tst_backends::skipsKnownFramesWhenStepping()
     if (testData.knownFrameStepLine == 0)
         QSKIP("inferior has no line whose step lands in a standard header");
 
-    // Stepping into std::move() lands in a standard header, which is what the
-    // setting is about: unskipped the stop is reported there, skipped the
+    // Calling through a std::function lands in a standard header, which is what
+    // the setting is about: unskipped the stop is reported there, skipped the
     // debugger keeps going until it is back in the code the user wrote.
     const auto stepIntoTheHeader = [this, backend, testData](bool skipKnownFrames) {
         std::pair<FilePath, int> location;
@@ -5426,7 +5434,8 @@ void tst_backends::skipsKnownFramesWhenStepping()
     const auto [unskippedFile, unskippedLine] = stepIntoTheHeader(false);
     QVERIFY2(!unskippedFile.isEmpty(), "the unskipped step never reported a location");
     QVERIFY2(unskippedFile != testData.source,
-             qPrintable("stepping into std::move() stayed in " + unskippedFile.toUserOutput()
+             qPrintable("stepping into std::function stayed in "
+                        + unskippedFile.toUserOutput()
                         + ", so this toolchain has no known frame to skip"));
 
     const auto [skippedFile, skippedLine] = stepIntoTheHeader(true);
