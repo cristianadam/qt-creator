@@ -190,6 +190,7 @@ private:
     QHash<int, QString> m_variableRequests;
     QHash<int, quint64> m_threadRequests;
     QHash<int, quint64> m_sourceFilesRequests;
+    QHash<int, quint64> m_moduleRequests;
 
     class MemoryRequest
     {
