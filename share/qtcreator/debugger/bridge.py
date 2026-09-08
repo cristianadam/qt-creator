@@ -1110,20 +1110,10 @@ class DapServer():
             'dumperResult': self._captureDumperResult('assignValue', request)})
 
     def cmd_qtc_fetchThreads(self, request):
-        # gdb's Python API exposes threads but not in the MI shape the C++ side
-        # parses, and -thread-info does; its result record carries the payload.
-        try:
-            output = gdb.execute('interpreter-exec mi "-thread-info"', to_string=True)
-        except gdb.error as error:
-            self.sendResponse(request, success=False, message=str(error))
-            return
-        if not output.lstrip().startswith('^done'):
-            # An error record has the same shape; passing its message on as a
-            # result would have the C++ side parse it as threads.
-            self.sendResponse(request, success=False, message=output.strip())
-            return
-        _, _, payload = output.partition(',')
-        self.sendResponse(request, body={'dumperResult': payload.strip()})
+        self._sendMiResult(request, '-thread-info')
+
+    def cmd_qtc_fetchSourceFiles(self, request):
+        self._sendMiResult(request, '-file-list-exec-source-files')
 
     def cmd_qtc_loadSymbols(self, request):
         args = request.get('arguments', {})
@@ -1383,6 +1373,22 @@ class DapServer():
     #######################################################################
     # Helpers
     #######################################################################
+
+    def _sendMiResult(self, request, command):
+        # gdb's Python API does not expose everything in the shape the C++ side
+        # parses, and MI does; its result record carries the payload.
+        try:
+            output = gdb.execute('interpreter-exec mi "%s"' % command, to_string=True)
+        except gdb.error as error:
+            self.sendResponse(request, success=False, message=str(error))
+            return
+        if not output.lstrip().startswith('^done'):
+            # An error record has the same shape; passing its message on as a
+            # result would have the C++ side parse it as data.
+            self.sendResponse(request, success=False, message=output.strip())
+            return
+        _, _, payload = output.partition(',')
+        self.sendResponse(request, body={'dumperResult': payload.strip()})
 
     def _selectThread(self, threadId):
         for thread in gdb.selected_inferior().threads():

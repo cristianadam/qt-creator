@@ -123,6 +123,7 @@ static DebuggerEngineSetupData bridgeImplSetupData()
     data.extraCapabilities = DebuggerExtraCapability::JumpTargetCheck
                            | DebuggerExtraCapability::PeripheralRegisters
                            | DebuggerExtraCapability::ThreadEvent
+                           | DebuggerExtraCapability::SourceFiles
                            | DebuggerExtraCapability::Threads;
     data.startModes = DebuggerStartModeFlag::Launch | DebuggerStartModeFlag::AttachToProcess;
     data.toolTipHandling = ToolTipHandling::IfStoppedInferior;
@@ -507,6 +508,10 @@ void BridgeImpl::refresh(const RefreshRequest &request)
         m_pendingThreadsRequestId = request.requestId;
         postRequest("qtc/fetchThreads", {});
         return;
+    case RefreshKind::SourceFiles:
+        m_pendingSourceFilesRequestId = request.requestId;
+        postRequest("qtc/fetchSourceFiles", {});
+        return;
     case RefreshKind::FullBacktrace:
         m_pendingBacktraceRequestId = request.requestId;
         postRequest("qtc/fetchFullBacktrace", {});
@@ -719,6 +724,22 @@ void BridgeImpl::handleResponse(DapResponseType type, const QJsonObject &respons
         emit refreshDataReceived(m_pendingSymbolsRequestId, RefreshKind::ModuleSymbols, result);
     } else if (command == "terminate" || command == "disconnect") {
         emit inferiorEvent(InferiorEvent::ShutdownFinished);
+    } else if (command == "qtc/fetchSourceFiles") {
+        const GdbMi reported = dumperResultOf(response);
+        GdbMi files;
+        files.m_type = GdbMi::List;
+        for (const GdbMi &item : reported["files"]) {
+            const QString file = item["file"].data();
+            if (file.endsWith("<built-in>"))
+                continue;
+            GdbMi entry;
+            entry.m_type = GdbMi::Tuple;
+            entry.addChild(constMi("file", file));
+            if (const GdbMi fullName = item["fullname"]; fullName.isValid())
+                entry.addChild(constMi("fullname", fullName.data()));
+            files.addChild(entry);
+        }
+        emit refreshDataReceived(m_pendingSourceFilesRequestId, RefreshKind::SourceFiles, files);
     } else if (command == "qtc/fetchThreads") {
         emit refreshDataReceived(m_pendingThreadsRequestId, RefreshKind::Threads,
                                  dumperResultOf(response));
