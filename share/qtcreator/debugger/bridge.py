@@ -993,6 +993,8 @@ class DapServer():
         arguments = request.get('arguments', {})
         threadId = arguments.get('threadId', 0)
         self._selectThread(threadId)
+        # Zero levels asks for every frame, as the protocol defines it.
+        levels = arguments.get('levels') or 0
 
         self.frameForId = {}
         frames = []
@@ -1002,6 +1004,8 @@ class DapServer():
         except gdb.error:
             frame = None
         while frame is not None and frame.is_valid():
+            if levels and len(frames) == levels:
+                break
             self.frameForId[frameId] = frame
             entry = {'id': frameId, 'name': frame.name() or '??', 'line': 0,
                      'column': 0}
@@ -1014,8 +1018,10 @@ class DapServer():
             frameId += 1
             frame = frame.older()
 
-        self.sendResponse(request, body={'stackFrames': frames,
-                                         'totalFrames': len(frames)})
+        body = {'stackFrames': frames}
+        if frame is None or not frame.is_valid():
+            body['totalFrames'] = len(frames)
+        self.sendResponse(request, body=body)
 
     def _captureDumperResult(self, name, request):
         # The dumpers report through reportResult(), which would print to the

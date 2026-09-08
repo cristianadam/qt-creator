@@ -743,6 +743,7 @@ static UserCommandProbe userCommandProbe(Backend backend, UserCommandHook hook)
 static bool limitsStackDepth(Backend backend)
 {
     switch (backend) {
+    case Backend::Bridge:
     case Backend::Dap:
     case Backend::Gdb:
     case Backend::Lldb:
@@ -750,7 +751,6 @@ static bool limitsStackDepth(Backend backend)
         return true;
     case Backend::Pdb:
     case Backend::Qml:
-    case Backend::Bridge:
         break;
     }
     return false;
