@@ -647,6 +647,13 @@ static QString realTracepointMarker(Backend backend)
     return {};
 }
 
+// How a tracepoint's text ends: the dumpers print the string a char pointer
+// points to, an adapter prints what its debugger prints, pointer and all.
+static QString tracepointMessageTail(Backend backend)
+{
+    return backend == Backend::Dap ? QString("\"hi\"") : QString("globalMessage is \"hi\"");
+}
+
 // What a detach looks like in what a backend logs: DAP has no detach request,
 // it is a disconnect that leaves the debuggee alone.
 static QString detachMarker(Backend backend)
@@ -3961,7 +3968,7 @@ void tst_backends::testTracePointCapability()
     if (auto result = checkCapability(backend, Debugger::TracePointCapability); !result)
         QSKIP(qPrintable(result.error()));
 
-    std::unique_ptr<DebuggerBackend> debuggerBackend = launchAndStopAtBreakpoint(backend);
+    std::unique_ptr<DebuggerBackend> debuggerBackend = createEngine(backend);
     QVERIFY(debuggerBackend);
     DebuggerEngineInterface *engine = debuggerBackend->engine();
 
@@ -3980,26 +3987,33 @@ void tst_backends::testTracePointCapability()
     connect(engine, &DebuggerEngineInterface::breakpointModified, this,
             [&modified](const GdbMi &data) { modified.append(data); });
 
-    BreakpointChangeRequest tracepointRequest;
-    tracepointRequest.op = BreakpointOp::Insert;
-    tracepointRequest.requestId = 89;
-    tracepointRequest.params.type = BreakpointByFileAndLine;
-    tracepointRequest.params.fileName = inferiorTestData(backend).source;
-    tracepointRequest.params.textPosition.line = inferiorTestData(backend).breakpointLine;
-    tracepointRequest.params.textPosition.column = 0;
-    tracepointRequest.params.enabled = true;
-    tracepointRequest.params.tracepoint = true;
-    tracepointRequest.params.message = "globalValue is {globalValue}, globalMessage is {globalMessage}";
-    engine->changeBreakpoint(tracepointRequest);
+    // A tracepoint reports the line and lets the program run on, so it is set
+    // before the run and reports itself once the line is reached.
+    connect(engine, &DebuggerEngineInterface::inferiorEvent, debuggerBackend.get(),
+            [this, engine, backend](InferiorEvent event) {
+        if (event != InferiorEvent::EngineSetupOk)
+            return;
+        BreakpointChangeRequest tracepointRequest;
+        tracepointRequest.op = BreakpointOp::Insert;
+        tracepointRequest.requestId = 89;
+        tracepointRequest.params.type = BreakpointByFileAndLine;
+        tracepointRequest.params.fileName = inferiorTestData(backend).source;
+        tracepointRequest.params.textPosition.line = inferiorTestData(backend).breakpointLine;
+        tracepointRequest.params.textPosition.column = 0;
+        tracepointRequest.params.enabled = true;
+        tracepointRequest.params.tracepoint = true;
+        tracepointRequest.params.message
+            = "globalValue is {globalValue}, globalMessage is {globalMessage}";
+        engine->changeBreakpoint(tracepointRequest);
+    });
+
+    engine->start();
     QTRY_VERIFY_WITH_TIMEOUT(results.contains(89), s_timeout);
     QVERIFY2(results.value(89), "tracepoint insert failed");
 
-    debuggerBackend->clearEvents();
-    debuggerBackend->execute({ExecutionCommand::ResetInferior});
-    QTRY_VERIFY_WITH_TIMEOUT(debuggerBackend->contains(InferiorEvent::SpontaneousStop), s_timeout);
-
+    const QString messageTail = tracepointMessageTail(backend);
     QTRY_VERIFY_WITH_TIMEOUT(tracepointMessages.join('\n').contains("globalValue is 41")
-                             && tracepointMessages.join('\n').contains("globalMessage is \"hi\""),
+                             && tracepointMessages.join('\n').contains(messageTail),
                              s_timeout);
     QTRY_VERIFY_WITH_TIMEOUT(!modified.isEmpty() && modified.constFirst().childCount() > 0,
                              s_timeout);
