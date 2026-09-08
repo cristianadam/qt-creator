@@ -345,6 +345,12 @@ void DapClient::fillCapabilities(const QJsonObject &response)
         = body.value("supportsExceptionFilterOptions").toBool();
     m_capabilities.supportsSingleThreadExecutionRequests
         = body.value("supportsSingleThreadExecutionRequests").toBool();
+
+    m_capabilities.exceptionBreakpointFilters.clear();
+    for (const QJsonValue &filter : body.value("exceptionBreakpointFilters").toArray()) {
+        m_capabilities.exceptionBreakpointFilters
+            .append(filter.toObject().value("filter").toString());
+    }
 }
 
 } // namespace Debugger::Internal

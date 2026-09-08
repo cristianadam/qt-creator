@@ -54,7 +54,8 @@ static DebuggerEngineSetupData dapImplSetupData()
     // optional in DAP, so they are offered here and refused per session if the
     // adapter turns out not to have them.
     data.capabilities = BreakConditionCapability | ShowMemoryCapability
-                      | DisassemblerCapability | OperateByInstructionCapability;
+                      | DisassemblerCapability | OperateByInstructionCapability
+                      | BreakOnThrowAndCatchCapability;
     data.extraCapabilities = DebuggerExtraCapability::Detach
                            | DebuggerExtraCapability::Threads;
     data.startModes = DebuggerStartModeFlag::Launch | DebuggerStartModeFlag::AttachToProcess;
@@ -62,7 +63,8 @@ static DebuggerEngineSetupData dapImplSetupData()
     data.acceptsBreakpoint = [](const AcceptsBreakpointQuery &query) {
         if (query.startMode == AttachToCore)
             return false;
-        return query.type == BreakpointByFileAndLine || query.type == BreakpointByFunction;
+        return query.type == BreakpointByFileAndLine || query.type == BreakpointByFunction
+               || query.type == BreakpointAtThrow || query.type == BreakpointAtCatch;
     };
     return data;
 }
@@ -359,6 +361,41 @@ void DapImpl::sendBreakpointsFor(const FilePath &file)
         m_breakpointRequests.insert(seq, file);
 }
 
+// The adapter names the exceptions it can break on itself, so what to ask for
+// is picked out of what it offered: gdb calls them "throw" and "catch",
+// lldb-dap prefixes them with the language.
+static QString exceptionFilter(const QStringList &offered, BreakpointType type)
+{
+    const QString wanted = type == BreakpointAtThrow ? QString("throw") : QString("catch");
+    for (const QString &filter : offered) {
+        if (filter == wanted || filter.endsWith('_' + wanted))
+            return filter;
+    }
+    return {};
+}
+
+void DapImpl::sendExceptionBreakpoints()
+{
+    QTC_ASSERT(m_client, return);
+    const QStringList offered = m_client->capabilities().exceptionBreakpointFilters;
+    QJsonArray filters;
+    for (const Breakpoint &breakpoint : m_exceptionBreakpoints) {
+        if (!breakpoint.enabled)
+            continue;
+        const QString filter = exceptionFilter(offered, breakpoint.params.type);
+        if (filter.isEmpty()) {
+            // Nothing the adapter offered means what this breakpoint is.
+            reportUnsupported(breakpoint.params.type == BreakpointAtThrow
+                                  ? Tr::tr("breaking on a thrown exception")
+                                  : Tr::tr("breaking on a caught exception"));
+            emit breakpointEvent(breakpoint.requestId, breakpoint.op, false);
+            continue;
+        }
+        filters.append(filter);
+    }
+    m_client->postRequest("setExceptionBreakpoints", QJsonObject{{"filters", filters}});
+}
+
 void DapImpl::sendFunctionBreakpoints()
 {
     QTC_ASSERT(m_client, return);
@@ -397,6 +434,48 @@ void DapImpl::changeBreakpoint(const BreakpointChangeRequest &request)
     FilePath file = params.fileName;
     bool inArray = false;
 
+    // A change names the breakpoint by what the adapter called it and brings no
+    // location along, so which array has to go out again is looked up rather
+    // than taken from the request.
+    const auto named = [&request](const Breakpoint &breakpoint) {
+        if (!request.responseId.isEmpty())
+            return breakpoint.responseId == request.responseId;
+        return !request.params.fileName.isEmpty()
+               && breakpoint.modelId == request.modelId;
+    };
+
+    // An exception breakpoint has no location: what it is is one of the filters
+    // the adapter offered, and the set of them goes out as an array of its own.
+    if (params.type == BreakpointAtThrow || params.type == BreakpointAtCatch
+        || (request.op != BreakpointOp::Insert
+            && Utils::contains(m_exceptionBreakpoints, named))) {
+        if (request.op == BreakpointOp::Insert) {
+            m_exceptionBreakpoints.append({request.requestId, request.op, request.modelId, {},
+                                           params, params.enabled});
+        } else {
+            const auto it = std::find_if(m_exceptionBreakpoints.begin(),
+                                         m_exceptionBreakpoints.end(), named);
+            if (it == m_exceptionBreakpoints.end()) {
+                emit breakpointEvent(request.requestId, request.op, false);
+                return;
+            }
+            if (request.op == BreakpointOp::Remove) {
+                m_exceptionBreakpoints.erase(it);
+            } else {
+                it->enabled = params.enabled;
+                it->requestId = request.requestId;
+                it->op = request.op;
+            }
+        }
+        if (m_configured)
+            sendExceptionBreakpoints();
+        // Only what is in the array gets an answer of its own, and a filter
+        // that is off is expressed by leaving it out.
+        if (request.op == BreakpointOp::Remove || !params.enabled)
+            emit breakpointEvent(request.requestId, request.op, true);
+        return;
+    }
+
     if (request.op == BreakpointOp::Insert) {
         QList<Breakpoint> &list = byFunction ? m_functionBreakpoints
                                              : m_sourceBreakpoints[file];
@@ -404,15 +483,6 @@ void DapImpl::changeBreakpoint(const BreakpointChangeRequest &request)
                      params.enabled});
         inArray = params.enabled;
     } else {
-        // A change names the breakpoint by what the adapter called it and
-        // brings no location along, so which array has to go out again is
-        // looked up rather than taken from the request.
-        const auto named = [&request](const Breakpoint &breakpoint) {
-            if (!request.responseId.isEmpty())
-                return breakpoint.responseId == request.responseId;
-            return !request.params.fileName.isEmpty()
-                   && breakpoint.modelId == request.modelId;
-        };
         QList<Breakpoint> *list = nullptr;
         if (Utils::contains(m_functionBreakpoints, named)) {
             byFunction = true;
@@ -515,6 +585,10 @@ const DapImpl::Breakpoint *DapImpl::breakpointForResponseId(const QString &respo
         }
     }
     for (const Breakpoint &breakpoint : m_functionBreakpoints) {
+        if (breakpoint.responseId == responseId)
+            return &breakpoint;
+    }
+    for (const Breakpoint &breakpoint : m_exceptionBreakpoints) {
         if (breakpoint.responseId == responseId)
             return &breakpoint;
     }
@@ -703,6 +777,35 @@ void DapImpl::handleResponse(DapResponseType type, const QJsonObject &response)
         emit refreshDataReceived(requestId, RefreshKind::Threads, all);
         return;
     }
+    if (command == "setExceptionBreakpoints") {
+        // The answer lists the filters in the order they were asked for, if
+        // the adapter describes them at all - what it says about one of them
+        // is otherwise the outcome of the request as a whole.
+        const QStringList offered = m_client->capabilities().exceptionBreakpointFilters;
+        const QJsonArray reported = response.value("body").toObject()
+                                        .value("breakpoints").toArray();
+        int index = 0;
+        for (Breakpoint &breakpoint : m_exceptionBreakpoints) {
+            if (!breakpoint.enabled
+                || exceptionFilter(offered, breakpoint.params.type).isEmpty()) {
+                continue;
+            }
+            const QJsonObject item = reported.at(index++).toObject();
+            GdbMi data;
+            if (item.contains("id")) {
+                // How a later change to it is named, which is all there is to
+                // name it by: it has no location of its own.
+                breakpoint.responseId = QString::number(item.value("id").toInt());
+                GdbMi bkpt;
+                bkpt.m_type = GdbMi::Tuple;
+                bkpt.addChild(constMi("number", breakpoint.responseId));
+                data.m_type = GdbMi::List;
+                data.addChild(bkpt);
+            }
+            emit breakpointEvent(breakpoint.requestId, breakpoint.op, success, data);
+        }
+        return;
+    }
     if (command == "readMemory") {
         handleReadMemory(response);
         return;
@@ -745,6 +848,8 @@ void DapImpl::handleEvent(DapEventType type, const QJsonObject &event)
             sendBreakpointsFor(it.key());
         if (!m_functionBreakpoints.isEmpty())
             sendFunctionBreakpoints();
+        if (!m_exceptionBreakpoints.isEmpty())
+            sendExceptionBreakpoints();
         m_client->sendConfigurationDone();
         return;
     case DapEventType::Stopped:
