@@ -132,6 +132,7 @@ protected:
 private:
     void sendBreakpointsFor(const Utils::FilePath &file);
     void sendFunctionBreakpoints();
+    void sendExceptionBreakpoints();
     void sendDetach();
     void queueVariables(const QString &iname, int reference);
     void continueLocalsWalk();
@@ -154,6 +155,9 @@ private:
     };
     QHash<Utils::FilePath, QList<Breakpoint>> m_sourceBreakpoints;
     QList<Breakpoint> m_functionBreakpoints;
+    // Whichever of the adapter's exception filters are on, as breakpoints of
+    // their own: they have no location, and no answer of their own either.
+    QList<Breakpoint> m_exceptionBreakpoints;
     // Which file's answer a setBreakpoints reply is, routed by sequence number.
     QHash<int, Utils::FilePath> m_breakpointRequests;
     // The same for the function breakpoints, which are one array of their own.
