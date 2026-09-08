@@ -7,7 +7,10 @@
 #include "devicesupport/idevice.h"
 #include "kit.h"
 #include "kitmanager.h"
+#include "project.h"
 #include "projectexplorertr.h"
+#include "projectmanager.h"
+#include "target.h"
 
 #include <coreplugin/icore.h>
 
@@ -520,6 +523,19 @@ Result<QtTaskTree::ExecutableItem> KitAspectFactory::createAspectFromJson(
             .arg(id().toString()));
 }
 
+static void restoreVanishedTargets(Kit *kit)
+{
+    for (Project *project : ProjectManager::projects()) {
+        const QList<Store> vanished = project->vanishedTargets();
+        for (const Store &store : vanished) {
+            if (store.value(Target::displayNameKey()).toString() != kit->displayName())
+                continue;
+            if (project->copySteps(store, kit))
+                project->removeVanishedTarget(store);
+        }
+    }
+}
+
 using Group = QtTaskTree::Group; // trick lupdate, QTBUG-140636
 Group kitDetectionRecipe(
     const IDeviceConstPtr &device,
@@ -584,6 +600,8 @@ Group kitDetectionRecipe(
             // The kit registered in "setup" needs to update the kit aspects
             // found by "setupDetectorTree"
             (*kit)->fix();
+
+            restoreVanishedTargets(*kit);
 
             logCallback(Tr::tr("Found kit: %1.").arg((*kit)->displayName()));
         }),
