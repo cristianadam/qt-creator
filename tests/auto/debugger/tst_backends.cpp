@@ -2194,6 +2194,7 @@ void tst_backends::initTestCase()
         // the same inferior as the gdb row, reached over DAP instead.
         m_backendData[Backend::Dap] = m_backendData[Backend::Gdb];
         m_backendData[Backend::Dap].inferiorData = cppInferiorData;
+        m_backendData[Backend::Dap].inferiorData.moduleListMarker = "libc";
 
         m_backendData[Backend::Bridge] = m_backendData[Backend::Gdb];
         m_backendData[Backend::Bridge].inferiorData = cppInferiorData;

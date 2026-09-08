@@ -57,6 +57,7 @@ static DebuggerEngineSetupData dapImplSetupData()
                       | DisassemblerCapability | OperateByInstructionCapability
                       | BreakOnThrowAndCatchCapability;
     data.extraCapabilities = DebuggerExtraCapability::Detach
+                           | DebuggerExtraCapability::LibraryEvent
                            | DebuggerExtraCapability::Threads;
     data.startModes = DebuggerStartModeFlag::Launch | DebuggerStartModeFlag::AttachToProcess;
     data.toolTipHandling = ToolTipHandling::IfStoppedInferior;
@@ -894,6 +895,20 @@ void DapImpl::handleEvent(DapEventType type, const QJsonObject &event)
         const qint64 pid = event.value("body").toObject().value("systemProcessId").toInteger();
         if (pid != 0)
             emit inferiorPidKnown(ProcessHandle(pid));
+    } else if (name == "module") {
+        const QJsonObject body = event.value("body").toObject();
+        const QJsonObject module = body.value("module").toObject();
+        // A module the adapter did not locate is still named, and the name is
+        // all there is to tell one from another.
+        const QString path = module.value("path").toString(module.value("name").toString());
+        GdbMi data;
+        data.m_type = GdbMi::Tuple;
+        data.addChild(constMi("id", module.value("id").toVariant().toString()));
+        data.addChild(constMi("target-name", path));
+        data.addChild(constMi("host-name", path));
+        emit libraryEvent(body.value("reason").toString() == "removed" ? LibraryEvent::Unloaded
+                                                                       : LibraryEvent::Loaded,
+                          data);
     }
 }
 
