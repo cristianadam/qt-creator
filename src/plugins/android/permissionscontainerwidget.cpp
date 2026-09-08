@@ -37,6 +37,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QTimer>
+#include <QScopeGuard>
 
 
 using namespace ProjectExplorer;
@@ -402,6 +403,8 @@ void PermissionsContainerWidget::onCMakePermissionsCheckBoxChanged()
     Project *project = m_textEditorWidget && m_textEditorWidget->textDocument()
         ? ProjectManager::projectForFile(m_textEditorWidget->textDocument()->filePath())
         : nullptr;
+    m_updating = true;
+    const auto resetUpdating = qScopeGuard([this] { m_updating = false; });
 
     if (m_CMakePermissionsCheckBox->isChecked()) {
         m_CMakePermissionsCheckBox->blockSignals(true);
@@ -967,7 +970,7 @@ Utils::Result<> PermissionsContainerWidget::updateManifestPermissions()
 
 void PermissionsContainerWidget::refresh()
 {
-    if (!m_textEditorWidget)
+    if (!m_textEditorWidget || m_updating)
         return;
     updateCMakePermissionsCheckBoxState();
     if (m_CMakePermissionsCheckBox && m_CMakePermissionsCheckBox->isChecked())

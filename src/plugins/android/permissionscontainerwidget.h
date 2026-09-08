@@ -79,6 +79,7 @@ private:
     Utils::FileSystemWatcher *m_cmakeWatcher = nullptr;
     QTimer *m_cmakeRefreshTimer = nullptr;
     bool m_checkBoxStateInitialized = false;
+    bool m_updating = false;
 };
 
 } // namespace Android::Internal
