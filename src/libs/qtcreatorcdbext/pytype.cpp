@@ -214,6 +214,26 @@ static std::string getModuleName(ULONG64 module)
     return std::string();
 }
 
+static std::string getTypeName(ULONG64 module, unsigned long typeId)
+{
+    CIDebugSymbols *symbols = ExtensionCommandContext::instance()->symbols();
+    ULONG size = 0;
+    symbols->GetTypeName(module, typeId, NULL, 0, &size);
+    if (size == 0)
+        return std::string();
+
+    std::string name(size - 1, '\0');
+    if (FAILED(symbols->GetTypeName(module, typeId, &name[0], size, &size)))
+        return std::string();
+    return name;
+}
+
+static bool isPointerOrArrayType(ULONG64 module, unsigned long typeId)
+{
+    const std::string typeName = getTypeName(module, typeId);
+    return isPointerType(typeName) || isArrayType(typeName);
+}
+
 static std::unordered_map<std::string, PyType> &typeCache()
 {
     static std::unordered_map<std::string, PyType> cache;
@@ -257,17 +277,9 @@ PyType::PyType(const std::string &name, ULONG64 module)
 std::string PyType::name(bool withModule) const
 {
     if (m_name.empty() && m_resolved.value_or(false)) {
-        auto symbols = ExtensionCommandContext::instance()->symbols();
-        ULONG size = 0;
-        symbols->GetTypeName(m_module, m_typeId, NULL, 0, &size);
-        if (size == 0)
+        m_name = getTypeName(m_module, m_typeId);
+        if (m_name.empty())
             return std::string();
-
-        std::string typeName(size - 1, '\0');
-        if (FAILED(symbols->GetTypeName(m_module, m_typeId, &typeName[0], size, &size)))
-            return std::string();
-
-        m_name = typeName;
         typeCache()[m_name] = *this;
     }
 
@@ -486,30 +498,39 @@ bool PyType::resolve() const
                 DebugPrint() << "resolve '" << m_name << "'";
 
             CIDebugSymbols *symbols = ExtensionCommandContext::instance()->symbols();
-            ULONG typeId;
-            HRESULT result = S_FALSE;
+            // GetTypeId() also matches a symbol of that name, case
+            // insensitively, so a pointer or array answered for a plain type
+            // name is that symbol's type, not the type asked for.
+            const auto foundPlainType = [symbols](ULONG64 module, const std::string &name,
+                                                  ULONG *typeId) {
+                return symbols->GetTypeId(module, name.c_str(), typeId) == S_OK
+                       && !isPointerOrArrayType(module, *typeId);
+            };
+
+            ULONG typeId = 0;
+            bool found = false;
             if (m_module != 0 && !isIntegralType(m_name) && !isFloatType(m_name))
-                result = symbols->GetTypeId(m_module, m_name.c_str(), &typeId);
-            if (FAILED(result) || result == S_FALSE) {
-                ULONG64 module;
-                result = symbols->GetSymbolTypeId(m_name.c_str(), &typeId, &module);
-                if (FAILED(result) || result == S_FALSE) {
+                found = foundPlainType(m_module, m_name, &typeId);
+            if (!found) {
+                ULONG64 module = 0;
+                found = symbols->GetSymbolTypeId(m_name.c_str(), &typeId, &module) == S_OK
+                        && !isPointerOrArrayType(module, typeId);
+                if (!found) {
                     ULONG loaded = 0;
                     ULONG unloaded = 0;
                     symbols->GetNumberModules(&loaded, &unloaded);
-                    ULONG moduleCount = loaded + unloaded;
-                    for (ULONG moduleIndex = 0;
-                         (FAILED(result) || result == S_FALSE) && moduleIndex < moduleCount;
+                    const ULONG moduleCount = loaded + unloaded;
+                    for (ULONG moduleIndex = 0; !found && moduleIndex < moduleCount;
                          ++moduleIndex) {
                         symbols->GetModuleByIndex(moduleIndex, &module);
-                        result = symbols->GetTypeId(module, m_name.c_str(), &typeId);
+                        found = foundPlainType(module, m_name, &typeId);
                     }
                 }
 
-                m_module = SUCCEEDED(result) ? module : 0;
+                m_module = found ? module : 0;
             }
-            m_typeId = SUCCEEDED(result) ? typeId : 0;
-            m_resolved = SUCCEEDED(result);
+            m_typeId = found ? typeId : 0;
+            m_resolved = found;
             typeCache()[m_name] = *this;
         }
     }
