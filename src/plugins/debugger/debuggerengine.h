@@ -293,6 +293,7 @@ public:
     void populateQmlFileFinder(const ProjectExplorer::RunControl *runControl);
 
     Utils::FilePath mapToProjectPath(const QString &debuggerOutput) const;
+    Utils::FilePath mapToDebuggerDevice(const QString &debuggerOutput) const;
 
 private:
     Utils::ProcessHandle m_attachPid;

@@ -494,7 +494,21 @@ FilePath DebuggerRunParameters::mapToProjectPath(const QString &debuggerOutput) 
 
     const FilePath fullBuild = m_buildDirectory.resolvePath(debuggerOutput);
     const FilePath local = fullBuild.localSource().value_or(fullBuild);
-    return m_projectSourceDirectory.withNewMappedPath(local);
+    const FilePath mapped = m_projectSourceDirectory.withNewMappedPath(local);
+    if (mapped.isReadableFile())
+        return mapped;
+
+    const FilePath onDebuggerDevice = mapToDebuggerDevice(local.path());
+    if (onDebuggerDevice != mapped && onDebuggerDevice.isReadableFile())
+        return onDebuggerDevice;
+
+    return mapped;
+}
+
+// Sources that exist only where the debugger itself runs, e.g. inside a container.
+FilePath DebuggerRunParameters::mapToDebuggerDevice(const QString &debuggerOutput) const
+{
+    return m_debugger.command.executable().withNewPath(debuggerOutput).cleanPath();
 }
 
 namespace Internal {

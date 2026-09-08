@@ -1699,6 +1699,10 @@ FilePath GdbEngine::cleanupFullName(const QString &fileName)
     if (cleanFilePath.isReadableFile())
         return cleanFilePath;
 
+    const FilePath onDebuggerDevice = runParameters().mapToDebuggerDevice(fileName);
+    if (onDebuggerDevice != cleanFilePath && onDebuggerDevice.isReadableFile())
+        return onDebuggerDevice;
+
     const FilePath sysroot = runParameters().sysRoot();
     if (!sysroot.isEmpty() && fileName.startsWith('/')) {
         cleanFilePath = sysroot.pathAppended(fileName.mid(1));
