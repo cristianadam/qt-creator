@@ -122,7 +122,8 @@ static DebuggerEngineSetupData bridgeImplSetupData()
                       | CreateFullBacktraceCapability;
     data.extraCapabilities = DebuggerExtraCapability::JumpTargetCheck
                            | DebuggerExtraCapability::PeripheralRegisters
-                           | DebuggerExtraCapability::ThreadEvent;
+                           | DebuggerExtraCapability::ThreadEvent
+                           | DebuggerExtraCapability::Threads;
     data.startModes = DebuggerStartModeFlag::Launch | DebuggerStartModeFlag::AttachToProcess;
     data.toolTipHandling = ToolTipHandling::IfStoppedInferior;
     data.acceptsBreakpoint = [](const AcceptsBreakpointQuery &query) {
@@ -502,6 +503,10 @@ void BridgeImpl::refresh(const RefreshRequest &request)
         m_pendingRegistersRequestId = request.requestId;
         postRequest("qtc/fetchRegisters", QJsonObject{{"frameId", m_currentFrameId}});
         return;
+    case RefreshKind::Threads:
+        m_pendingThreadsRequestId = request.requestId;
+        postRequest("qtc/fetchThreads", {});
+        return;
     case RefreshKind::FullBacktrace:
         m_pendingBacktraceRequestId = request.requestId;
         postRequest("qtc/fetchFullBacktrace", {});
@@ -714,6 +719,9 @@ void BridgeImpl::handleResponse(DapResponseType type, const QJsonObject &respons
         emit refreshDataReceived(m_pendingSymbolsRequestId, RefreshKind::ModuleSymbols, result);
     } else if (command == "terminate" || command == "disconnect") {
         emit inferiorEvent(InferiorEvent::ShutdownFinished);
+    } else if (command == "qtc/fetchThreads") {
+        emit refreshDataReceived(m_pendingThreadsRequestId, RefreshKind::Threads,
+                                 dumperResultOf(response));
     } else if (command == "qtc/fetchFullBacktrace") {
         emit refreshDataReceived(m_pendingBacktraceRequestId, RefreshKind::FullBacktrace,
                                  constMi({}, response.value("body").toObject()

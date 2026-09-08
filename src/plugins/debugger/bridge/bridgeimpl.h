@@ -109,6 +109,7 @@ private:
     quint64 m_pendingSymbolsRequestId = 0;
     quint64 m_pendingRegistersRequestId = 0;
     quint64 m_pendingBacktraceRequestId = 0;
+    quint64 m_pendingThreadsRequestId = 0;
     // One memory request can end up as several reads: an unreadable range is
     // split until the readable part is known.
     class MemoryRequest
