@@ -16,6 +16,7 @@
 #include <utils/macroexpander.h>
 #include <utils/pathchooser.h>
 #include <utils/qtcassert.h>
+#include <utils/qtcprocess.h>
 #include <utils/utilsicons.h>
 
 #include <QCheckBox>
@@ -55,6 +56,22 @@ DockerDeviceWidget::DockerDeviceWidget(const IDevice::Ptr &device)
 
     connect(m_daemonReset, &QToolButton::clicked, this, [dockerDevice] {
         DockerApi::recheckDaemon(dockerDevice->type());
+    });
+
+    onFirstShow(this, [this, dockerDevice] {
+        const FilePath dockerExe = m_api->dockerClient();
+        if (dockerExe.isEmpty())
+            return;
+
+        const auto onSetup = [dockerExe, dockerDevice](Process &process) {
+            process.setCommand({dockerExe, {"images", "-q", dockerDevice->repoAndTag()}});
+        };
+        const auto onDone = [dockerDevice](const Process &process) {
+            const QString imageId = process.cleanedStdOut().trimmed();
+            if (process.exitCode() == 0 && !imageId.isEmpty())
+                dockerDevice->imageId.setValue(imageId);
+        };
+        m_imageIdRunner.start({ProcessTask(onSetup, onDone)});
     });
 
     auto pathListLabel = new InfoLabel(Tr::tr("Paths to mount:"));
