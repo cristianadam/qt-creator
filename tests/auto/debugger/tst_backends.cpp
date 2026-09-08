@@ -7943,6 +7943,11 @@ void tst_backends::reportsBreakpointModifiedEvents()
     if (auto result = checkStartMode(backend, DebuggerStartModeFlag::Launch); !result)
         QSKIP(qPrintable(result.error()));
 
+    // Something true wherever conditions are evaluated at all - C++, Python
+    // and JavaScript - so the breakpoint still hits.
+    const QString condition = hasCapability(backend, Debugger::BreakConditionCapability)
+                                  ? QString("1 == 1") : QString();
+
     std::unique_ptr<DebuggerBackend> debuggerBackend = createEngine(backend);
     DebuggerEngineInterface *engine = debuggerBackend->engine();
 
@@ -7951,7 +7956,7 @@ void tst_backends::reportsBreakpointModifiedEvents()
             [&modified](const GdbMi &data) { modified.append(data); });
 
     connect(engine, &DebuggerEngineInterface::inferiorEvent, debuggerBackend.get(),
-            [this, engine, backend](InferiorEvent event) {
+            [this, engine, backend, condition](InferiorEvent event) {
         if (event == InferiorEvent::EngineSetupOk) {
             BreakpointChangeRequest request;
             request.op = BreakpointOp::Insert;
@@ -7961,6 +7966,7 @@ void tst_backends::reportsBreakpointModifiedEvents()
             request.params.textPosition.line = inferiorTestData(backend).breakpointLine;
             request.params.textPosition.column = 0;
             request.params.enabled = true;
+            request.params.condition = condition;
             engine->changeBreakpoint(request);
         }
     });
@@ -7968,10 +7974,15 @@ void tst_backends::reportsBreakpointModifiedEvents()
     engine->start();
     QTRY_VERIFY_WITH_TIMEOUT(debuggerBackend->contains(InferiorEvent::SpontaneousStop), s_timeout);
     const char *field = breakpointModifiedField(backend);
-    QTRY_VERIFY_WITH_TIMEOUT(std::any_of(modified.cbegin(), modified.cend(),
-                                         [field](const GdbMi &data) {
+    const auto reportsHit = [field](const GdbMi &data) {
         return data.childAt(0)[field].data().toULongLong(nullptr, 0) > 0;
-    }), s_timeout);
+    };
+    QTRY_VERIFY_WITH_TIMEOUT(std::any_of(modified.cbegin(), modified.cend(), reportsHit),
+                             s_timeout);
+    // The model reads a modification as the whole state of the breakpoint, so
+    // a field left out of one counts as the default rather than as unchanged.
+    const GdbMi bkpt = std::find_if(modified.cbegin(), modified.cend(), reportsHit)->childAt(0);
+    QCOMPARE(bkpt["cond"].data(), condition);
 }
 
 void tst_backends::attachesToRunningProcess()
