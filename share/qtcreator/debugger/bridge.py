@@ -1093,6 +1093,16 @@ class DapServer():
         self.sendResponse(request, body={
             'dumperResult': self._captureDumperResult('fetchStack', request)})
 
+    def cmd_qtc_fetchFullBacktrace(self, request):
+        # Ascending, because the stack view lists thread 1 first and gdb walks
+        # them the other way round.
+        try:
+            output = gdb.execute('thread apply all -ascending bt full',
+                                 to_string=True) or ''
+        except gdb.error as error:
+            output = str(error)
+        self.sendResponse(request, body={'output': output})
+
     def cmd_qtc_assignValue(self, request):
         args = request.get('arguments', {})
         self._selectFrame(args.get('frameid'))
