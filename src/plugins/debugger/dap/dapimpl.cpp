@@ -58,6 +58,7 @@ static DebuggerEngineSetupData dapImplSetupData()
                       | BreakOnThrowAndCatchCapability | TracePointCapability;
     data.extraCapabilities = DebuggerExtraCapability::Detach
                            | DebuggerExtraCapability::LibraryEvent
+                           | DebuggerExtraCapability::ThreadEvent
                            | DebuggerExtraCapability::Threads;
     data.startModes = DebuggerStartModeFlag::Launch | DebuggerStartModeFlag::AttachToProcess;
     data.toolTipHandling = ToolTipHandling::IfStoppedInferior;
@@ -867,6 +868,16 @@ void DapImpl::handleEvent(DapEventType type, const QJsonObject &event)
         InferiorResultData result;
         result.exitCode = event.value("body").toObject().value("exitCode").toInt();
         reportInferiorDone(result);
+        return;
+    }
+    case DapEventType::DapThread: {
+        const QJsonObject body = event.value("body").toObject();
+        GdbMi data;
+        data.m_type = GdbMi::Tuple;
+        data.addChild(constMi("id", QString::number(body.value("threadId").toInt())));
+        emit threadEvent(body.value("reason").toString() == "exited" ? ThreadEvent::Exited
+                                                                     : ThreadEvent::Created,
+                         data);
         return;
     }
     case DapEventType::Output: {
