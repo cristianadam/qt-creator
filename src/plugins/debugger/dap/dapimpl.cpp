@@ -58,6 +58,7 @@ static DebuggerEngineSetupData dapImplSetupData()
                       | BreakOnThrowAndCatchCapability | TracePointCapability;
     data.extraCapabilities = DebuggerExtraCapability::Detach
                            | DebuggerExtraCapability::LibraryEvent
+                           | DebuggerExtraCapability::SourceFiles
                            | DebuggerExtraCapability::ThreadEvent
                            | DebuggerExtraCapability::Threads;
     data.startModes = DebuggerStartModeFlag::Launch | DebuggerStartModeFlag::AttachToProcess;
@@ -665,6 +666,15 @@ void DapImpl::refresh(const RefreshRequest &request)
         if (const int seq = m_client->postRequest("threads"); seq >= 0)
             m_threadRequests.insert(seq, request.requestId);
         return;
+    case RefreshKind::SourceFiles:
+        if (!m_client->capabilities().supportsLoadedSourcesRequest) {
+            reportUnsupported(Tr::tr("the list of source files"));
+            emit refreshDataReceived(request.requestId, request.kind, {});
+            return;
+        }
+        if (const int seq = m_client->postRequest("loadedSources"); seq >= 0)
+            m_sourceFilesRequests.insert(seq, request.requestId);
+        return;
     case RefreshKind::AllSymbols:
         // Nothing loads symbols over the protocol; what the caller is after is
         // what the adapter reads them for.
@@ -781,6 +791,25 @@ void DapImpl::handleResponse(DapResponseType type, const QJsonObject &response)
         all.addChild(threads);
         all.addChild(constMi("current-thread-id", QString::number(m_currentThreadId)));
         emit refreshDataReceived(requestId, RefreshKind::Threads, all);
+        return;
+    }
+    if (command == "loadedSources") {
+        const quint64 requestId
+            = m_sourceFilesRequests.take(response.value("request_seq").toInt());
+        GdbMi files;
+        files.m_type = GdbMi::List;
+        for (const QJsonValue &value : response.value("body").toObject()
+                                           .value("sources").toArray()) {
+            const QJsonObject item = value.toObject();
+            const QString path = item.value("path").toString();
+            GdbMi file;
+            file.m_type = GdbMi::Tuple;
+            file.addChild(constMi("file", item.value("name").toString()));
+            if (!path.isEmpty())
+                file.addChild(constMi("fullname", path));
+            files.addChild(file);
+        }
+        emit refreshDataReceived(requestId, RefreshKind::SourceFiles, files);
         return;
     }
     if (command == "setExceptionBreakpoints") {
