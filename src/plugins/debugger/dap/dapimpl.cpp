@@ -54,10 +54,10 @@ static DebuggerEngineSetupData dapImplSetupData()
     // optional in DAP, so they are offered here and refused per session if the
     // adapter turns out not to have them.
     data.capabilities = AddWatcherCapability | BreakConditionCapability
-                      | ShowMemoryCapability | DisassemblerCapability
-                      | OperateByInstructionCapability | BreakOnThrowAndCatchCapability
-                      | TracePointCapability | ReloadModuleCapability
-                      | WatchComplexExpressionsCapability;
+                      | CreateFullBacktraceCapability | ShowMemoryCapability
+                      | DisassemblerCapability | OperateByInstructionCapability
+                      | BreakOnThrowAndCatchCapability | TracePointCapability
+                      | ReloadModuleCapability | WatchComplexExpressionsCapability;
     data.extraCapabilities = DebuggerExtraCapability::Detach
                            | DebuggerExtraCapability::LibraryEvent
                            | DebuggerExtraCapability::SourceFiles
@@ -679,6 +679,13 @@ void DapImpl::refresh(const RefreshRequest &request)
         if (const int seq = m_client->postRequest("threads"); seq >= 0)
             m_threadRequests.insert(seq, request.requestId);
         return;
+    case RefreshKind::FullBacktrace:
+        m_backtraceRequestId = request.requestId;
+        m_backtrace.clear();
+        m_backtraceThreads.clear();
+        m_backtraceFramesSeq = -1;
+        m_backtraceThreadsSeq = m_client->postRequest("threads");
+        return;
     case RefreshKind::Modules:
         if (!m_client->capabilities().supportsModulesRequest) {
             reportUnsupported(Tr::tr("the list of modules"));
@@ -798,12 +805,23 @@ void DapImpl::handleResponse(DapResponseType type, const QJsonObject &response)
     }
 
     if (command == "threads") {
-        const quint64 requestId = m_threadRequests.take(response.value("request_seq").toInt());
+        const int seq = response.value("request_seq").toInt();
+        const QJsonArray items = response.value("body").toObject().value("threads").toArray();
+        if (seq == m_backtraceThreadsSeq) {
+            m_backtraceThreadsSeq = -1;
+            for (const QJsonValue &value : items) {
+                const QJsonObject item = value.toObject();
+                m_backtraceThreads.enqueue({item.value("id").toInt(),
+                                            item.value("name").toString()});
+            }
+            continueBacktrace();
+            return;
+        }
+        const quint64 requestId = m_threadRequests.take(seq);
         GdbMi threads;
         threads.m_type = GdbMi::List;
         threads.m_name = "threads";
-        for (const QJsonValue &value : response.value("body").toObject()
-                                           .value("threads").toArray()) {
+        for (const QJsonValue &value : items) {
             const QJsonObject item = value.toObject();
             GdbMi thread;
             thread.m_type = GdbMi::Tuple;
@@ -1054,8 +1072,14 @@ void DapImpl::reportStop()
 
 void DapImpl::handleStackTrace(const QJsonObject &response)
 {
-    const StackTraceRequest request
-        = m_stackTraceRequests.take(response.value("request_seq").toInt());
+    const int seq = response.value("request_seq").toInt();
+    if (seq == m_backtraceFramesSeq) {
+        handleBacktraceFrames(response);
+        return;
+    }
+    if (!m_stackTraceRequests.contains(seq))
+        return;
+    const StackTraceRequest request = m_stackTraceRequests.take(seq);
     const QJsonArray frames = response.value("body").toObject()
                                   .value("stackFrames").toArray();
 
@@ -1102,6 +1126,38 @@ void DapImpl::handleStackTrace(const QJsonObject &response)
     all.addChild(stack);
 
     emit refreshDataReceived(request.refreshRequestId, RefreshKind::FullStack, all);
+}
+
+void DapImpl::continueBacktrace()
+{
+    while (!m_backtraceThreads.isEmpty()) {
+        const QPair<int, QString> next = m_backtraceThreads.dequeue();
+        const int seq = m_client->stackTrace(next.first, 0);
+        if (seq >= 0) {
+            m_backtraceFramesSeq = seq;
+            m_backtrace += QString("Thread %1 (%2):\n").arg(next.first).arg(next.second);
+            return;
+        }
+    }
+    emit refreshDataReceived(m_backtraceRequestId, RefreshKind::FullBacktrace,
+                             constMi({}, m_backtrace));
+}
+
+void DapImpl::handleBacktraceFrames(const QJsonObject &response)
+{
+    m_backtraceFramesSeq = -1;
+    int level = 0;
+    for (const QJsonValue &value : response.value("body").toObject()
+                                       .value("stackFrames").toArray()) {
+        const QJsonObject item = value.toObject();
+        QString frame = QString("#%1  %2").arg(level++).arg(item.value("name").toString());
+        const QString path = item.value("source").toObject().value("path").toString();
+        if (!path.isEmpty())
+            frame += QString(" at %1:%2").arg(path).arg(item.value("line").toInt());
+        m_backtrace += frame + '\n';
+    }
+    m_backtrace += '\n';
+    continueBacktrace();
 }
 
 void DapImpl::selectThread(const QString &threadId)
