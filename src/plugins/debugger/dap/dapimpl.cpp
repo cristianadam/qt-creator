@@ -55,7 +55,7 @@ static DebuggerEngineSetupData dapImplSetupData()
     // adapter turns out not to have them.
     data.capabilities = BreakConditionCapability | ShowMemoryCapability
                       | DisassemblerCapability | OperateByInstructionCapability
-                      | BreakOnThrowAndCatchCapability;
+                      | BreakOnThrowAndCatchCapability | TracePointCapability;
     data.extraCapabilities = DebuggerExtraCapability::Detach
                            | DebuggerExtraCapability::LibraryEvent
                            | DebuggerExtraCapability::Threads;
@@ -348,8 +348,12 @@ void DapImpl::sendBreakpointsFor(const FilePath &file)
             item.insert("condition", params.condition);
         if (params.ignoreCount > 0)
             item.insert("hitCondition", QString::number(params.ignoreCount));
-        if (params.tracepoint && !params.message.isEmpty())
-            item.insert("logMessage", params.message);
+        if (params.tracepoint && !params.message.isEmpty()) {
+            if (m_client->capabilities().supportsLogPoints)
+                item.insert("logMessage", params.message);
+            else
+                reportUnsupported(Tr::tr("logging a message instead of stopping"));
+        }
         breakpoints.append(item);
     }
     const int seq = m_client->postRequest(
@@ -868,8 +872,11 @@ void DapImpl::handleEvent(DapEventType type, const QJsonObject &event)
     case DapEventType::Output: {
         const QJsonObject body = event.value("body").toObject();
         const QString category = body.value("category").toString();
-        emit message(body.value("output").toString(),
-                     category == "stderr" ? AppError : AppOutput);
+        // "console" is the adapter speaking, not the debuggee - what a log
+        // point prints comes that way.
+        const int channel = category == "stderr" ? AppError
+                          : category == "console" ? LogMisc : AppOutput;
+        emit message(body.value("output").toString(), channel);
         return;
     }
     default:
