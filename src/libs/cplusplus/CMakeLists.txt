@@ -64,6 +64,7 @@ add_qtc_library(CxxFrontendBridge STATIC
   PUBLIC_INCLUDES "${CMAKE_CURRENT_SOURCE_DIR}/.."
   SOURCES
     CxxFrontendLexer.cpp CxxFrontendLexer.h
+    CxxFrontendDocument.cpp CxxFrontendDocument.h
     CxxFrontendOverview.cpp CxxFrontendOverview.h
     CxxFrontendPreprocessor.cpp CxxFrontendPreprocessor.h
   SKIP_PCH
