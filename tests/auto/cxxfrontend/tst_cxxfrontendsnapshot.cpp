@@ -80,6 +80,12 @@ private slots:
     void aNameDeclaredTwoHeadersAwayResolves();
     void aNameThatIsNowhereResolvesToNothing();
     void aLocalNameStillWinsOverAHeader();
+    void aQualifiedNameFromAHeaderResolves();
+    void aNestedQualifiedNameResolves();
+    void theWrongQualifierResolvesToNothing();
+    void anUnqualifiedUseDoesNotReachIntoANamespace();
+    void aMemberOfABaseInAHeaderResolves();
+    void aMemberOfAnUnrelatedClassDoesNotResolve();
     void unsupportedLookups();
 };
 
@@ -381,14 +387,102 @@ void tst_cxxfrontendsnapshot::aLocalNameStillWinsOverAHeader()
     QCOMPARE(found.line, 2);
 }
 
+// N::x, where N is in a header. The name written says which scope it means,
+// which is the one thing about the surrounding scopes this search can be sure
+// of without applying the language's rules.
+void tst_cxxfrontendsnapshot::aQualifiedNameFromAHeaderResolves()
+{
+    Files files;
+    files.add("h.h", "namespace N { int v; }\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"h.h\"\nvoid f() { N::v = 1; }\n");
+
+    const CxxFrontendDocument::Declaration found = snapshot.declarationAt("a.cpp", 2, 15);
+    QVERIFY(found.isValid());
+    QCOMPARE(found.name, QString("v"));
+    QCOMPARE(found.filePath, QString("h.h"));
+}
+
+void tst_cxxfrontendsnapshot::aNestedQualifiedNameResolves()
+{
+    Files files;
+    files.add("h.h", "namespace A { namespace B { int v; } }\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"h.h\"\nvoid f() { A::B::v = 1; }\n");
+
+    const CxxFrontendDocument::Declaration found = snapshot.declarationAt("a.cpp", 2, 18);
+    QVERIFY(found.isValid());
+    QCOMPARE(found.filePath, QString("h.h"));
+}
+
+void tst_cxxfrontendsnapshot::theWrongQualifierResolvesToNothing()
+{
+    Files files;
+    files.add("h.h", "namespace N { int v; }\nnamespace M { }\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"h.h\"\nvoid f() { M::v = 1; }\n");
+
+    // There is a v in the header, and it is not this one.
+    QVERIFY(!snapshot.declarationAt("a.cpp", 2, 15).isValid());
+}
+
+void tst_cxxfrontendsnapshot::anUnqualifiedUseDoesNotReachIntoANamespace()
+{
+    Files files;
+    files.add("h.h", "namespace N { int v; }\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"h.h\"\nvoid f() { v = 1; }\n");
+
+    // Reaching inside N without saying so takes a using directive, which is
+    // a rule this search does not have. Saying nothing is the right answer.
+    QVERIFY(!snapshot.declarationAt("a.cpp", 2, 12).isValid());
+}
+
+// A class in one file, its base in another: the member is declared nowhere
+// this file can see, and the class names the base even so.
+void tst_cxxfrontendsnapshot::aMemberOfABaseInAHeaderResolves()
+{
+    Files files;
+    files.add("b.h", "struct B { int m; };\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"b.h\"\nstruct D : B { void f() { m = 1; } };\n");
+
+    const CxxFrontendDocument::Declaration found = snapshot.declarationAt("a.cpp", 2, 26);
+    QVERIFY(found.isValid());
+    QCOMPARE(found.name, QString("B::m"));
+    QCOMPARE(found.filePath, QString("b.h"));
+}
+
+void tst_cxxfrontendsnapshot::aMemberOfAnUnrelatedClassDoesNotResolve()
+{
+    Files files;
+    files.add("b.h", "struct B { int m; };\nstruct Other { int n; };\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"b.h\"\nstruct D : B { void f() { n = 1; } };\n");
+
+    // n belongs to a class D does not derive from.
+    QVERIFY(!snapshot.declarationAt("a.cpp", 2, 26).isValid());
+}
+
 // What this lookup does not do. Each is a rule about which declaration a name
 // means, and answering one of them wrongly is worse than saying nothing, so
 // they are written down rather than approximated.
 void tst_cxxfrontendsnapshot::unsupportedLookups()
 {
     const QStringList unsupported = CxxFrontendSnapshot::unsupportedLookups();
-    QVERIFY(unsupported.contains("inherited members across files"));
-    QVERIFY(unsupported.contains("qualified names across files"));
+    QVERIFY(unsupported.contains("indirect bases across files"));
     QVERIFY(unsupported.contains("overload resolution across files"));
     QVERIFY(unsupported.contains("using across files"));
 

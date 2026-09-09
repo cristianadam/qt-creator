@@ -660,6 +660,78 @@ QString CxxFrontendDocument::identifierAt(int line, int column) const
     return fromStd(d->unit.tokenText(location));
 }
 
+QStringList CxxFrontendDocument::qualifierAt(int line, int column) const
+{
+    const cxx::SourceLocation location = d->tokenAt(line, column);
+    if (!location)
+        return {};
+
+    // Walk back over the "name ::" pairs in front of the name.
+    QStringList qualifier;
+    unsigned index = location.index();
+    while (index >= 3) {
+        const cxx::SourceLocation colons{index - 1};
+        const cxx::SourceLocation name{index - 2};
+        if (d->unit.tokenAt(colons).kind() != cxx::TokenKind::T_COLON_COLON)
+            break;
+        if (d->unit.tokenAt(name).kind() != cxx::TokenKind::T_IDENTIFIER)
+            break;
+        qualifier.prepend(fromStd(d->unit.tokenText(name)));
+        index -= 2;
+    }
+    return qualifier;
+}
+
+QStringList CxxFrontendDocument::basesAt(int line, int column) const
+{
+    const cxx::SourceLocation location = d->tokenAt(line, column);
+    if (!location || !d->unit.ast())
+        return {};
+
+    // Read the base clause off the syntax tree rather than off the class
+    // symbol. A base declared in a header is not in this translation unit, so
+    // the parser had nothing to resolve the name to and the symbol has no
+    // bases at all -- but the name is still written here, which is the whole
+    // of what is needed to go and look for it.
+    QStringList bases;
+    unsigned innermost = 0;
+
+    for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot || !*slot)
+            continue;
+        auto *cls = dynamic_cast<cxx::ClassSpecifierAST *>(*slot);
+        if (!cls || !cls->baseSpecifierList)
+            continue;
+
+        const unsigned first = cls->firstSourceLocation().index();
+        const unsigned last = cls->lastSourceLocation().index();
+        if (location.index() < first || location.index() >= last)
+            continue;
+        // Nested classes: the one that starts latest is the one it is in.
+        if (first < innermost)
+            continue;
+        innermost = first;
+
+        bases.clear();
+        for (auto *node : cxx::ListView{cls->baseSpecifierList}) {
+            if (node && node->unqualifiedId)
+                bases.append(fromStd(d->unit.tokenText(node->unqualifiedId->firstSourceLocation())));
+        }
+    }
+    return bases;
+}
+
+QStringList CxxFrontendDocument::membersOf(const QString &className) const
+{
+    QStringList members;
+    for (const Symbol &symbol : d->symbols) {
+        if (symbol.qualified.size() == 1 && symbol.qualified.first() == className)
+            members.append(symbol.name);
+    }
+    return members;
+}
+
 QString CxxFrontendDocument::functionAt(int line, int column) const
 {
     if (line < 1 || column < 1)

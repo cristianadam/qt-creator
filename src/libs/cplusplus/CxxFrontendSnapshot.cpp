@@ -166,6 +166,11 @@ CxxFrontendDocument::Declaration CxxFrontendSnapshot::declarationAt(const QStrin
     if (identifier.isEmpty())
         return {};
 
+    // A name may be written with the path to it, and that path is the one
+    // thing about the surrounding scopes this search can be sure of: A::N::x
+    // means x in A::N and nothing else.
+    const QStringList qualifier = from->qualifierAt(line, column);
+
     // Otherwise it has to come from something the file includes. Nearest
     // first, which is the order allIncludesFor walks.
     for (const QString &included : allIncludesFor(filePath)) {
@@ -173,11 +178,33 @@ CxxFrontendDocument::Declaration CxxFrontendSnapshot::declarationAt(const QStrin
         if (!candidate)
             continue;
         for (const CxxFrontendDocument::Symbol &symbol : candidate->symbols()) {
-            // Only what the header declares at its top level: anything deeper
-            // needs the scoping rules this lookup does not have.
-            if (!symbol.qualified.isEmpty() || symbol.name != identifier)
+            if (symbol.name != identifier)
+                continue;
+            // Written unqualified, so only what the header declares at its
+            // top level: reaching inside a scope without saying so needs the
+            // rules this search does not have.
+            if (symbol.qualified != qualifier)
                 continue;
             return {symbol.name, included, symbol.line, symbol.column};
+        }
+    }
+
+    // Still nothing, and no path was written. It may be a member of a base
+    // the file cannot see: the class it is used in names its bases even when
+    // they are declared elsewhere.
+    if (!qualifier.isEmpty())
+        return {};
+
+    for (const QString &base : from->basesAt(line, column)) {
+        for (const QString &included : allIncludesFor(filePath)) {
+            const CxxFrontendDocument *candidate = document(included);
+            if (!candidate || !candidate->membersOf(base).contains(identifier))
+                continue;
+            for (const CxxFrontendDocument::Symbol &symbol : candidate->symbols()) {
+                if (symbol.name != identifier || symbol.qualified != QStringList(base))
+                    continue;
+                return {base + "::" + symbol.name, included, symbol.line, symbol.column};
+            }
         }
     }
     return {};
@@ -199,10 +226,8 @@ QStringList CxxFrontendSnapshot::unsupportedLookups()
     // saying nothing, because a wrong answer sends someone to the wrong line
     // and looks right doing it.
     return {
-        // A name a base declared in another file, seen from a derived class.
-        "inherited members across files",
-        // N::x, where N is declared elsewhere.
-        "qualified names across files",
+        // A base of a base, where the chain leaves this file more than once.
+        "indirect bases across files",
         // Which of several declarations in headers a call means.
         "overload resolution across files",
         // A using declaration or directive in one file, the name in another.

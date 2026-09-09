@@ -154,6 +154,21 @@ public:
     // snapshot needs in order to go looking elsewhere.
     QString identifierAt(int line, int column) const;
 
+    // The names written in front of it, so that the N and A of A::N::x come
+    // back as {"A", "N"}. Read off the tokens rather than the syntax tree,
+    // because a qualifier naming something this file cannot see is exactly
+    // the case the snapshot has to answer, and the parser did not resolve it.
+    QStringList qualifierAt(int line, int column) const;
+
+    // The bases of the innermost class written around a position, by name.
+    // A base this file cannot see is still named here, which is what lets
+    // the snapshot go and find it.
+    QStringList basesAt(int line, int column) const;
+
+    // The members this file declares in \a className, by name. What a
+    // snapshot asks a header once it knows the class is a base.
+    QStringList membersOf(const QString &className) const;
+
     // Document's questions that cannot be answered on this model yet, each
     // with what is missing. Asserted on in tests/auto/cxxfrontend so the list
     // cannot go stale.
