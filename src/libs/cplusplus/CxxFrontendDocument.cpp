@@ -666,6 +666,53 @@ QString CxxFrontendDocument::identifierAt(int line, int column) const
     return fromStd(d->unit.tokenText(location));
 }
 
+CxxFrontendDocument::ExpressionType CxxFrontendDocument::typeAt(int line, int column) const
+{
+    const cxx::SourceLocation location = d->tokenAt(line, column);
+    if (!location || !d->unit.ast())
+        return {};
+
+    // The innermost expression written around the token, taken as the one
+    // spanning fewest tokens. Standing on the b of a.b that is the member
+    // access, and standing on the a it is just a, which is what someone
+    // pointing at either one means.
+    //
+    // The cursor happens to reach children after their parents, so taking the
+    // last match would give the same answer today. Saying which one is wanted
+    // does not depend on that staying true.
+    cxx::ExpressionAST *innermost = nullptr;
+    unsigned innermostWidth = 0;
+
+    for (cxx::ASTCursor cursor(d->unit.ast(), "unit"); cursor; ++cursor) {
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot || !*slot)
+            continue;
+        auto *expression = dynamic_cast<cxx::ExpressionAST *>(*slot);
+        if (!expression || !expression->type)
+            continue;
+
+        const unsigned first = expression->firstSourceLocation().index();
+        const unsigned last = expression->lastSourceLocation().index();
+        if (location.index() < first || location.index() >= last)
+            continue;
+
+        const unsigned width = last - first;
+        if (innermost && width >= innermostWidth)
+            continue;
+        innermost = expression;
+        innermostWidth = width;
+    }
+
+    if (!innermost)
+        return {};
+
+    ExpressionType result;
+    result.type = fromStd(cxx::to_string(innermost->type, "",
+                                         {.omitEnclosingScope = true}));
+    result.isLvalue = innermost->valueCategory == cxx::ValueCategory::kLValue;
+    return result;
+}
+
 QStringList CxxFrontendDocument::qualifierAt(int line, int column) const
 {
     const cxx::SourceLocation location = d->tokenAt(line, column);

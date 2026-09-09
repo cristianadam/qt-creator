@@ -150,6 +150,23 @@ public:
     // so it does not resolve here, and the snapshot has to be asked instead.
     Declaration declarationAt(int line, int column) const;
 
+    // The type of the expression written at a position, and whether it is an
+    // lvalue. What a tooltip shows, and what completion needs before it can
+    // offer the members of something.
+    //
+    // The type checker worked this out while parsing and left it on the
+    // expression, so this reads it off, the same way declarationAt reads off
+    // what the parser resolved. Empty for a position that is not inside an
+    // expression, and for one whose type the checker could not settle.
+    struct ExpressionType
+    {
+        QString type;
+        bool isLvalue = false;
+
+        bool isValid() const { return !type.isEmpty(); }
+    };
+    ExpressionType typeAt(int line, int column) const;
+
     // The identifier written at a position, empty if there is none. What the
     // snapshot needs in order to go looking elsewhere.
     QString identifierAt(int line, int column) const;

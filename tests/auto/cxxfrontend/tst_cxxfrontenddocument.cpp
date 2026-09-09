@@ -153,6 +153,9 @@ private slots:
     void declarationAt_data();
     void declarationAt();
 
+    void typeAt_data();
+    void typeAt();
+
     void reportsDiagnostics();
     void unsupportedQueries();
 };
@@ -300,6 +303,63 @@ void tst_cxxfrontenddocument::declarationAt()
     QCOMPARE(found.name, name);
     QCOMPARE(found.line, declaration.line);
     QCOMPARE(found.column, declaration.column);
+}
+
+// The type of the expression at a position: what a tooltip shows, and what
+// completion has to know before it can offer anything after a dot.
+//
+// The answer is the innermost expression around the marker, so where the
+// marker sits decides which one is meant: on the g of g() it is the function,
+// on the ( it is the call; on the a of a + b it is a, on the + it is the sum.
+// That is what someone pointing at either one means.
+void tst_cxxfrontenddocument::typeAt_data()
+{
+    QTest::addColumn<QByteArray>("marked");
+    QTest::addColumn<QString>("type");
+
+    QTest::newRow("a variable")
+        << QByteArray("void f() { int x; int y = $x; }\n") << QString("int");
+    QTest::newRow("a pointer")
+        << QByteArray("void f() { char *p; char *q = $p; }\n") << QString("char*");
+    QTest::newRow("a literal")
+        << QByteArray("void f() { int y = $42; }\n") << QString("int");
+    QTest::newRow("a sum")
+        << QByteArray("void f() { int a; long b; long c = a $+ b; }\n") << QString("long");
+    QTest::newRow("a member")
+        << QByteArray("struct S { int m; };\nvoid f(S s) { int y = s.$m; }\n") << QString("int");
+    QTest::newRow("a member through a pointer")
+        << QByteArray("struct S { int m; };\nvoid f(S *s) { int y = s->$m; }\n") << QString("int");
+    QTest::newRow("the object of a member access")
+        << QByteArray("struct S { int m; };\nvoid f(S *s) { int y = $s->m; }\n") << QString("S*");
+    QTest::newRow("a call")
+        << QByteArray("int g();\nvoid f() { int y = g$(); }\n") << QString("int");
+    QTest::newRow("a comparison")
+        << QByteArray("void f() { int a; bool b = a $== 1; }\n") << QString("bool");
+    QTest::newRow("not an expression")
+        << QByteArray("$struct S {};\n") << QString();
+
+    // A statement that could be read as a declaration is one: x; declares
+    // nothing and is not an expression, so there is no type to give. Worth a
+    // case of its own, because it is why every row above puts the expression
+    // somewhere a declaration cannot go.
+    QTest::newRow("a statement that reads as a declaration")
+        << QByteArray("void f() { int x; $x; }\n") << QString();
+}
+
+void tst_cxxfrontenddocument::typeAt()
+{
+    QFETCH(QByteArray, marked);
+    QFETCH(QString, type);
+
+    QList<Position> positions;
+    const QByteArray source = takeMarkers(marked, positions);
+    QCOMPARE(positions.size(), 1);
+
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+    const CxxFrontendDocument::ExpressionType found
+        = document.typeAt(positions.first().line, positions.first().column);
+
+    QCOMPARE(found.type, type);
 }
 
 void tst_cxxfrontenddocument::reportsDiagnostics()
