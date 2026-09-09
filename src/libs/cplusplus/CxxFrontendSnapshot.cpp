@@ -166,45 +166,28 @@ CxxFrontendDocument::Declaration CxxFrontendSnapshot::declarationAt(const QStrin
     if (identifier.isEmpty())
         return {};
 
-    // A name may be written with the path to it, and that path is the one
-    // thing about the surrounding scopes this search can be sure of: A::N::x
-    // means x in A::N and nothing else.
+    // Two things about the surrounding code are written down where the name
+    // is used, and so survive the file boundary: the path in front of it, and
+    // the bases of the class it sits in. Everything past that is a rule about
+    // scopes, and each document applies those to itself.
     const QStringList qualifier = from->qualifierAt(line, column);
 
-    // Otherwise it has to come from something the file includes. Nearest
-    // first, which is the order allIncludesFor walks.
+    QList<QStringList> paths{qualifier};
+    if (qualifier.isEmpty()) {
+        // Unqualified: it may be a member of a base declared elsewhere.
+        for (const QString &base : from->basesAt(line, column))
+            paths.append(QStringList(base));
+    }
+
+    // Nearest first, which is the order allIncludesFor walks.
     for (const QString &included : allIncludesFor(filePath)) {
         const CxxFrontendDocument *candidate = document(included);
         if (!candidate)
             continue;
-        for (const CxxFrontendDocument::Symbol &symbol : candidate->symbols()) {
-            if (symbol.name != identifier)
-                continue;
-            // Written unqualified, so only what the header declares at its
-            // top level: reaching inside a scope without saying so needs the
-            // rules this search does not have.
-            if (symbol.qualified != qualifier)
-                continue;
-            return {symbol.name, included, symbol.line, symbol.column};
-        }
-    }
-
-    // Still nothing, and no path was written. It may be a member of a base
-    // the file cannot see: the class it is used in names its bases even when
-    // they are declared elsewhere.
-    if (!qualifier.isEmpty())
-        return {};
-
-    for (const QString &base : from->basesAt(line, column)) {
-        for (const QString &included : allIncludesFor(filePath)) {
-            const CxxFrontendDocument *candidate = document(included);
-            if (!candidate || !candidate->membersOf(base).contains(identifier))
-                continue;
-            for (const CxxFrontendDocument::Symbol &symbol : candidate->symbols()) {
-                if (symbol.name != identifier || symbol.qualified != QStringList(base))
-                    continue;
-                return {base + "::" + symbol.name, included, symbol.line, symbol.column};
-            }
+        for (const QStringList &path : paths) {
+            const CxxFrontendDocument::Declaration found = candidate->lookup(path, identifier);
+            if (found.isValid())
+                return found;
         }
     }
     return {};
@@ -212,27 +195,30 @@ CxxFrontendDocument::Declaration CxxFrontendSnapshot::declarationAt(const QStrin
 
 QStringList CxxFrontendSnapshot::unsupportedLookups()
 {
-    // What crossing a file boundary costs.
+    // What is left after each document looks names up for itself.
     //
-    // Inside one file the parser has already applied the rules -- inherited
-    // members, using declarations and directives, qualified names, members
-    // through a pointer, overloads -- and declarationAt reads its answer, so
-    // none of that is missing there. tst_cxxfrontenddocument has a case for
-    // each, which is how this list was arrived at rather than guessed.
+    // Inside one file the parser applies the rules and declarationAt reads
+    // its answer. Inside one header they are applied again, by that
+    // document's own lookup, which is why a base, a using declaration or a
+    // nested namespace in a header is reached from a file that includes it
+    // without any of that being written out here.
     //
-    // Between files there is no such answer, and what is here is a search of
-    // the include closure for a top-level name. Each entry below is a rule
-    // that search does not apply. Answering one of them wrongly is worse than
+    // What does not cross is a chain: this asks each document one question
+    // and takes the first answer. Every entry below is a case where one
+    // question is not enough, and answering it by guessing is worse than
     // saying nothing, because a wrong answer sends someone to the wrong line
     // and looks right doing it.
     return {
-        // A base of a base, where the chain leaves this file more than once.
-        "indirect bases across files",
-        // Which of several declarations in headers a call means.
+        // A base of a base, where the chain leaves a file more than once:
+        // the header naming the next base cannot resolve it either.
+        "base chains across more than one file",
+        // Which of several declarations a call means. Needs the argument
+        // types, which this does not look at.
         "overload resolution across files",
-        // A using declaration or directive in one file, the name in another.
-        "using across files",
-        // Which header wins when two of them declare the same name.
+        // A using directive in one file bringing a name into another.
+        "using directives across files",
+        // Which header wins when two declare the same name: this takes the
+        // nearest include, which is not the language's rule.
         "shadowing between headers",
     };
 }

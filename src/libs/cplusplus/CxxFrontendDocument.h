@@ -165,9 +165,19 @@ public:
     // the snapshot go and find it.
     QStringList basesAt(int line, int column) const;
 
-    // The members this file declares in \a className, by name. What a
-    // snapshot asks a header once it knows the class is a base.
-    QStringList membersOf(const QString &className) const;
+    // Looks a name up in what this file declares, through the front end's own
+    // lookup rather than by scanning what symbols() flattened.
+    //
+    // \a qualifier is the path written in front of the name, outermost first
+    // and possibly empty. The name is interned in this document's own
+    // control, which is what makes the front end's lookup usable here at all:
+    // a scope matches names by identity, and every document interns its own.
+    //
+    // Going through the real lookup means the rules that hold inside this
+    // file hold here too -- a base class, a using declaration, a class
+    // declared in one place and defined in another -- without any of them
+    // being written out a second time.
+    Declaration lookup(const QStringList &qualifier, const QString &name) const;
 
     // Document's questions that cannot be answered on this model yet, each
     // with what is missing. Asserted on in tests/auto/cxxfrontend so the list

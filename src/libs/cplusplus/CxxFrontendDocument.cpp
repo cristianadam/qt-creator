@@ -13,6 +13,7 @@
 #include <cxx/control.h>
 #include <cxx/diagnostics_client.h>
 #include <cxx/memory_layout.h>
+#include <cxx/name_lookup.h>
 #include <cxx/names.h>
 #include <cxx/preprocessor.h>
 #include <cxx/preprocessor_delegate.h>
@@ -722,14 +723,46 @@ QStringList CxxFrontendDocument::basesAt(int line, int column) const
     return bases;
 }
 
-QStringList CxxFrontendDocument::membersOf(const QString &className) const
+CxxFrontendDocument::Declaration CxxFrontendDocument::lookup(const QStringList &qualifier,
+                                                             const QString &name) const
 {
-    QStringList members;
-    for (const Symbol &symbol : d->symbols) {
-        if (symbol.qualified.size() == 1 && symbol.qualified.first() == className)
-            members.append(symbol.name);
+    cxx::ScopeSymbol *scope = d->unit.globalScope();
+    if (!scope || name.isEmpty())
+        return {};
+
+    cxx::Control *control = d->unit.control();
+
+    // Walk in along the path that was written, one name at a time, so that a
+    // namespace, a class or an alias each behave as the language says they
+    // do rather than as a string match would.
+    for (const QString &step : qualifier) {
+        const cxx::Name *stepName = control->getIdentifier(step.toStdString());
+        cxx::Symbol *found = cxx::qualifiedLookup(scope, stepName);
+        if (!found)
+            return {};
+        scope = found->asScopeSymbol();
+        if (!scope)
+            return {};
     }
-    return members;
+
+    const cxx::Name *target = control->getIdentifier(name.toStdString());
+    cxx::Symbol *symbol = cxx::qualifiedLookup(scope, target);
+    if (!symbol)
+        return {};
+
+    // Only what this file actually wrote: a symbol the front end synthesised,
+    // or one that came in from somewhere else, is not this document's to
+    // point at.
+    if (!d->isFromMainFile(symbol))
+        return {};
+
+    Declaration declaration;
+    declaration.name = qualifiedNameOf(symbol);
+    declaration.filePath = d->fileName;
+    const cxx::SourcePosition position = d->unit.tokenStartPosition(symbol->location());
+    declaration.line = int(position.line);
+    declaration.column = int(position.column);
+    return declaration;
 }
 
 QString CxxFrontendDocument::functionAt(int line, int column) const

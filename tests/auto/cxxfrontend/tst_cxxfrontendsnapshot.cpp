@@ -86,6 +86,10 @@ private slots:
     void anUnqualifiedUseDoesNotReachIntoANamespace();
     void aMemberOfABaseInAHeaderResolves();
     void aMemberOfAnUnrelatedClassDoesNotResolve();
+    void aMemberOfAnIndirectBaseInAHeaderResolves();
+    void aUsingDeclarationInsideAHeaderIsHonoured();
+    void aNameInANestedNamespaceInAHeaderResolves();
+    void aBaseChainThatLeavesTheFileTwiceDoesNotResolve();
     void unsupportedLookups();
 };
 
@@ -401,7 +405,7 @@ void tst_cxxfrontendsnapshot::aQualifiedNameFromAHeaderResolves()
 
     const CxxFrontendDocument::Declaration found = snapshot.declarationAt("a.cpp", 2, 15);
     QVERIFY(found.isValid());
-    QCOMPARE(found.name, QString("v"));
+    QCOMPARE(found.name, QString("N::v"));
     QCOMPARE(found.filePath, QString("h.h"));
 }
 
@@ -476,15 +480,80 @@ void tst_cxxfrontendsnapshot::aMemberOfAnUnrelatedClassDoesNotResolve()
     QVERIFY(!snapshot.declarationAt("a.cpp", 2, 26).isValid());
 }
 
+// Going through each document's own lookup means the rules that hold inside
+// a header hold across the boundary too, without any of them being written
+// out a second time here.
+void tst_cxxfrontendsnapshot::aMemberOfAnIndirectBaseInAHeaderResolves()
+{
+    Files files;
+    files.add("b.h", "struct A { int m; };\nstruct B : A {};\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"b.h\"\nstruct D : B { void f() { m = 1; } };\n");
+
+    // D names B, and B's own lookup reaches A.
+    const CxxFrontendDocument::Declaration found = snapshot.declarationAt("a.cpp", 2, 26);
+    QVERIFY(found.isValid());
+    QCOMPARE(found.name, QString("A::m"));
+    QCOMPARE(found.line, 1);
+}
+
+void tst_cxxfrontendsnapshot::aUsingDeclarationInsideAHeaderIsHonoured()
+{
+    Files files;
+    files.add("b.h", "struct A { int m; };\nstruct B : A { using A::m; };\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"b.h\"\nstruct D : B { void f() { m = 1; } };\n");
+
+    const CxxFrontendDocument::Declaration found = snapshot.declarationAt("a.cpp", 2, 26);
+    QVERIFY(found.isValid());
+    QCOMPARE(found.name, QString("A::m"));
+}
+
+void tst_cxxfrontendsnapshot::aNameInANestedNamespaceInAHeaderResolves()
+{
+    Files files;
+    files.add("h.h", "namespace A { namespace B { struct S { int m; }; } }\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"h.h\"\nvoid f() { A::B::S s; }\n");
+
+    const CxxFrontendDocument::Declaration found = snapshot.declarationAt("a.cpp", 2, 18);
+    QVERIFY(found.isValid());
+    QCOMPARE(found.name, QString("A::B::S"));
+}
+
+// And where it stops. A chain of bases is followed as far as one document can
+// see, and no further: the header that names the next base cannot resolve it
+// either, for exactly the reason the file using it could not.
+void tst_cxxfrontendsnapshot::aBaseChainThatLeavesTheFileTwiceDoesNotResolve()
+{
+    Files files;
+    files.add("a.h", "struct A { int m; };\n");
+    files.add("b.h", "#include \"a.h\"\nstruct B : A {};\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"b.h\"\nstruct D : B { void f() { m = 1; } };\n");
+
+    // D names B, b.h names A and cannot see it, and nothing chains the two
+    // searches together. Saying nothing is right; guessing would not be.
+    QVERIFY(!snapshot.declarationAt("a.cpp", 2, 26).isValid());
+}
+
 // What this lookup does not do. Each is a rule about which declaration a name
 // means, and answering one of them wrongly is worse than saying nothing, so
 // they are written down rather than approximated.
 void tst_cxxfrontendsnapshot::unsupportedLookups()
 {
     const QStringList unsupported = CxxFrontendSnapshot::unsupportedLookups();
-    QVERIFY(unsupported.contains("indirect bases across files"));
+    QVERIFY(unsupported.contains("base chains across more than one file"));
     QVERIFY(unsupported.contains("overload resolution across files"));
-    QVERIFY(unsupported.contains("using across files"));
+    QVERIFY(unsupported.contains("using directives across files"));
 
     // Every one of them is about crossing a file. Inside a file the parser
     // has already applied the rule, and tst_cxxfrontenddocument says so.
