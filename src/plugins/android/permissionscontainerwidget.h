@@ -48,10 +48,10 @@ private:
     void loadPermissionsFromManifest();
     void showCMakePermissionsConsentDialog();
     void onCMakePermissionsCheckBoxChanged();
-    bool isCMakePermissionsSupported();
+    bool isCMakePermissionsSupported() const;
     void revertCMakePermissionsCheckBox(Qt::CheckState state, const QString &error);
 
-    bool hasPermissionsInManifest(Utils::FilePath &manifestPath);
+    bool hasPermissionsInManifest(Utils::FilePath &manifestPath) const;
     void updateCMakeFileWatch();
     bool resolveCMakeProjectInfo();
     void loadPermissionsFromCMake();

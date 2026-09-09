@@ -5,6 +5,8 @@
 #include "androidtr.h"
 #include "androidmanifestutils.h"
 
+#include <cmakeprojectmanager/cmakeparser.h>
+#include <cmakeprojectmanager/cmakeprojectconstants.h>
 #include <projectexplorer/buildconfiguration.h>
 #include <projectexplorer/buildsystem.h>
 #include <projectexplorer/project.h>
@@ -14,15 +16,12 @@
 #include <qtsupport/qtkitaspect.h>
 #include <texteditor/textdocument.h>
 #include <texteditor/texteditor.h>
-#include <cmakeprojectmanager/cmakeprojectconstants.h>
-#include <cmakeprojectmanager/cmakeparser.h>
-#include <utils/filesystemwatcher.h>
 #include <utils/algorithm.h>
+#include <utils/filesystemwatcher.h>
 
 #include <QAbstractListModel>
 #include <QApplication>
 #include <QCheckBox>
-#include <QVersionNumber>
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -36,8 +35,9 @@
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPushButton>
-#include <QTimer>
 #include <QScopeGuard>
+#include <QTimer>
+#include <QVersionNumber>
 
 
 using namespace ProjectExplorer;
@@ -324,19 +324,13 @@ PermissionsContainerWidget::PermissionsContainerWidget(QWidget *parent)
 {
 }
 
-bool PermissionsContainerWidget::hasPermissionsInManifest(Utils::FilePath &manifestPath)
+bool PermissionsContainerWidget::hasPermissionsInManifest(Utils::FilePath &manifestPath) const
 {
-    if (!m_textEditorWidget || !m_textEditorWidget->textDocument())
-        return false;
-
     auto dataResult = AndroidManifestParser::readManifest(manifestPath);
-    if (!dataResult)
-        return false;
-
-    return !dataResult->permissions.isEmpty();
+    return dataResult && !dataResult->permissions.isEmpty();
 }
 
-bool PermissionsContainerWidget::isCMakePermissionsSupported()
+bool PermissionsContainerWidget::isCMakePermissionsSupported() const
 {
     if (!m_textEditorWidget || !m_textEditorWidget->textDocument())
         return false;
@@ -416,7 +410,7 @@ void PermissionsContainerWidget::onCMakePermissionsCheckBoxChanged()
             project->setNamedSettings(manageViaCMakeKey, true);
         if (const Utils::Result<> result = migratePermissionsManifestToCMake()) {
             loadPermissionsFromCMake();
-         } else {
+        } else {
             if (project)
                 project->setNamedSettings(manageViaCMakeKey, false);
             revertCMakePermissionsCheckBox(Qt::Unchecked, result.error());
@@ -461,9 +455,7 @@ void PermissionsContainerWidget::updateCMakePermissionsCheckBoxState()
     }
     if (!checked && !cmakeFileBroken) {
         Utils::FilePath manifestPath = m_textEditorWidget->textDocument()->filePath();
-        if (hasPermissionsInManifest(manifestPath)) {
-            checked = false;
-        } else  {
+        if (!hasPermissionsInManifest(manifestPath)) {
             Project *project = ProjectManager::projectForFile(manifestPath);
             const QVariant stored = project ? project->namedSettings(manageViaCMakeKey)
                                             : QVariant();

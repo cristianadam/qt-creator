@@ -62,7 +62,7 @@ static QMap<QString, QString> getExtraAttributes(const QDomElement &elem)
 {
     QMap<QString, QString> attributes;
     const QDomNamedNodeMap attrMap = elem.attributes();
-    for (int i = 0; i < attrMap.count(); ++i) {
+    for (int i = 0; i < attrMap.size(); ++i) {
         const QDomAttr attr = attrMap.item(i).toAttr();
         if (attr.name() != keyAndroidName)
             attributes.insert(attr.name(), attr.value());
