@@ -48,7 +48,7 @@ public:
     static void setDefaultCMakeTool(const Utils::Id &id);
     static CMakeTool *findByCommand(const Utils::FilePath &command);
     static CMakeTool *findById(const Utils::Id &id);
-    static Utils::Id idForExecutable(const Utils::FilePath &cmakeExecutable);
+    static CMakeTool *cmakeToolForPath(const Utils::FilePath &executable);
     static Utils::FilePath executableForId(const Utils::Id id);
 
     static void notifyAboutUpdate(CMakeTool *);
@@ -73,9 +73,6 @@ signals:
 private:
     static void saveCMakeTools();
     static void ensureDefaultCMakeToolIsValid();
-    void handleDeviceToolDetectionRequest(
-        Utils::Id devId, const Utils::FilePaths &searchPaths, quint64 token,
-        const ProjectExplorer::ToolDetectionLogger &logger);
 };
 
 namespace Internal { void setupCMakeToolManager(QObject *guard); }

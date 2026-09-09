@@ -577,9 +577,9 @@ void createAutomaticKits(const SettingsHandler::Ptr &settingsHandler)
                 return;
             }
 
-            if (CMakeProjectManager::CMakeToolManager::cmakeTools().isEmpty()) {
-                const QString message = Tr::tr("No CMake tool was detected. Add a CMake tool in Edit > Preferences > "
-                           "Kits > CMake.");
+            if (!CMakeProjectManager::CMakeToolManager::defaultCMakeTool()) {
+                const QString message = Tr::tr("No CMake tool was detected. Set a CMake path in "
+                           "Edit > Preferences > Devices.");
                 autoGenerationMessages.push_back({qtForMCUsPackage->label(), "", message});
                 printMessage(message, true);
                 return;

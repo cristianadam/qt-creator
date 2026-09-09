@@ -11,7 +11,6 @@
 #include "mcutarget.h"
 #include "settingshandler.h"
 
-#include <cmakeprojectmanager/cmakeprojectconstants.h>
 #include <cmakeprojectmanager/cmaketoolmanager.h>
 #include <coreplugin/icore.h>
 #include <projectexplorer/kitmanager.h>
@@ -82,7 +81,7 @@ McuSupportOptionsWidget::McuSupportOptionsWidget(McuSupportOptions &options,
         m_statusInfoLabel->setOpenExternalLinks(false);
         mainLayout->addWidget(m_statusInfoLabel);
         connect(m_statusInfoLabel, &QLabel::linkActivated, this, [] {
-            Core::ICore::showSettings(CMakeProjectManager::Constants::Settings::TOOLS_ID);
+            Core::ICore::showSettings(ProjectExplorer::Constants::DEVICE_SETTINGS_PAGE_ID);
         });
     }
 
@@ -187,7 +186,7 @@ void McuSupportOptionsWidget::updateStatus()
 {
     const McuTargetPtr mcuTarget = currentMcuTarget();
 
-    const bool cMakeAvailable = !CMakeProjectManager::CMakeToolManager::cmakeTools().isEmpty();
+    const bool cMakeAvailable = CMakeProjectManager::CMakeToolManager::defaultCMakeTool();
 
     // Page elements
     {
@@ -254,8 +253,8 @@ void McuSupportOptionsWidget::updateStatus()
         m_statusInfoLabel->setVisible(!cMakeAvailable);
         if (m_statusInfoLabel->isVisible()) {
             m_statusInfoLabel->setType(Utils::InfoLabelType::NotOk);
-            m_statusInfoLabel->setText(Tr::tr("No CMake tool was detected. Add a CMake tool in the "
-                                       "<a href=\"cmake\">CMake options</a> and select Apply."));
+            m_statusInfoLabel->setText(Tr::tr("No CMake tool was detected. Set a CMake path in "
+                                       "the <a href=\"cmake\">device options</a>."));
         }
     }
 }

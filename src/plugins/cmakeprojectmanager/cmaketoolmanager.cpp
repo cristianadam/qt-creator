@@ -16,14 +16,12 @@
 #include <coreplugin/icore.h>
 
 #include <projectexplorer/buildsystem.h>
-#include <projectexplorer/devicesupport/devicemanager.h>
 #include <projectexplorer/devicesupport/idevice.h>
 #include <projectexplorer/kitaspect.h>
 #include <projectexplorer/projectmanager.h>
 #include <projectexplorer/projecttree.h>
 #include <projectexplorer/target.h>
 
-#include <utils/async.h>
 #include <utils/environment.h>
 #include <utils/pointeralgorithm.h>
 #include <utils/qtcassert.h>
@@ -33,6 +31,7 @@
 #include <QCryptographicHash>
 #include <QStandardPaths>
 #include <stack>
+#include <unordered_map>
 
 #ifdef Q_OS_WIN
 #include <qt_windows.h>
@@ -88,6 +87,7 @@ class CMakeToolManagerPrivate
 public:
     Id m_defaultCMake;
     std::vector<std::unique_ptr<CMakeTool>> m_cmakeTools;
+    std::unordered_map<FilePath, std::unique_ptr<CMakeTool>> m_toolsForPath;
     Internal::CMakeToolSettingsAccessor m_accessor;
     FilePath m_junctionsDir;
     int m_junctionsHashLength = 32;
@@ -237,9 +237,6 @@ CMakeToolManager::CMakeToolManager()
     connect(ICore::instance(), &ICore::saveSettingsRequested,
             this, &CMakeToolManager::saveCMakeTools);
 
-    connect(DeviceManager::instance(), &DeviceManager::toolDetectionRequested,
-            this, &CMakeToolManager::handleDeviceToolDetectionRequest);
-
     setObjectName("CMakeToolManager");
     ExtensionSystem::PluginManager::addObject(this);
 }
@@ -372,16 +369,27 @@ CMakeTool *CMakeToolManager::findByCommand(const FilePath &command)
         Utils::equal(&CMakeTool::cmakeExecutable, CMakeTool::cmakeExecutable(command)));
 }
 
-Id CMakeToolManager::idForExecutable(const FilePath &cmakeExecutable)
-{
-    if (CMakeTool *tool = findByCommand(cmakeExecutable))
-        return tool->id();
-    return {};
-}
-
 CMakeTool *CMakeToolManager::findById(const Id &id)
 {
     return Utils::findOrDefault(d->m_cmakeTools, Utils::equal(&CMakeTool::id, id));
+}
+
+CMakeTool *CMakeToolManager::cmakeToolForPath(const FilePath &executable)
+{
+    if (executable.isEmpty())
+        return nullptr;
+
+    const FilePath canonical = CMakeTool::cmakeExecutable(executable);
+    if (CMakeTool *tool = findByCommand(canonical))
+        return tool;
+
+    std::unique_ptr<CMakeTool> &tool = d->m_toolsForPath[canonical];
+    if (!tool) {
+        tool = std::make_unique<CMakeTool>(DetectionSource::FromSystem, CMakeTool::createId());
+        tool->setFilePath(canonical);
+        tool->setDisplayName(canonical.toUserOutput());
+    }
+    return tool.get();
 }
 
 FilePath CMakeToolManager::executableForId(const Id id)
@@ -578,38 +586,6 @@ void CMakeToolManager::ensureDefaultCMakeToolIsValid()
     // signaling:
     if (oldId != d->m_defaultCMake)
         emit m_instance->defaultCMakeChanged();
-}
-
-void CMakeToolManager::handleDeviceToolDetectionRequest(
-    Utils::Id devId, const FilePaths &searchPaths, quint64 token,
-    const ProjectExplorer::ToolDetectionLogger &logger)
-{
-    const IDevicePtr dev = DeviceManager::find(devId);
-    QTC_ASSERT(dev, return);
-    dev->registerToolDetectionTask(token);
-    if (logger)
-        logger.logTopLevel(Tr::tr("Searching for CMake..."));
-    const auto future = Utils::asyncRun(autoDetectCMakeTools, searchPaths, dev->rootPath());
-    const auto cont = [devId, token, logger](auto &&future) {
-        const IDevicePtr dev = DeviceManager::find(devId);
-        if (!dev)
-            return;
-        auto detected = future.takeResult();
-        bool foundNew = false;
-        for (auto &&tool : detected) {
-            if (!CMakeToolManager::findByCommand(tool->cmakeExecutable())) {
-                foundNew = true;
-                if (logger)
-                    logger.logItem(
-                        Tr::tr("Found CMake: %1").arg(tool->cmakeExecutable().toUserOutput()));
-                CMakeToolManager::registerCMakeTool(std::move(tool));
-            }
-        }
-        if (logger && !foundNew)
-            logger.logItem(Tr::tr("No new CMake found."));
-        dev->deregisterToolDetectionTask(token);
-    };
-    Utils::onFinished(future, this, cont);
 }
 
 void Internal::setupCMakeToolManager(QObject *guard)

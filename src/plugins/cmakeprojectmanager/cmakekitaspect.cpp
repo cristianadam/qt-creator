@@ -15,6 +15,7 @@
 #include <ios/iosconstants.h>
 
 #include <projectexplorer/devicesupport/devicekitaspects.h>
+#include <projectexplorer/devicesupport/devicemanager.h>
 #include <projectexplorer/devicesupport/idevice.h>
 #include <projectexplorer/kitaspect.h>
 #include <projectexplorer/kitmanager.h>
@@ -29,17 +30,17 @@
 
 #include <utils/algorithm.h>
 #include <utils/async.h>
-#include <utils/utilsicons.h>
 #include <utils/commandline.h>
 #include <utils/elidinglabel.h>
 #include <utils/environment.h>
+#include <utils/guard.h>
 #include <utils/guiutils.h>
 #include <utils/layoutbuilder.h>
 #include <utils/macroexpander.h>
+#include <utils/pathchooser.h>
 #include <utils/qtcassert.h>
 #include <utils/variablechooser.h>
 
-#include <QAbstractListModel>
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -64,93 +65,6 @@ static bool isIos(const Kit *k)
            || deviceType == Ios::Constants::IOS_SIMULATOR_TYPE;
 }
 
-static FilePath defaultCMakeExecutable()
-{
-    CMakeTool *defaultTool = CMakeToolManager::defaultCMakeTool();
-    return defaultTool ? defaultTool->cmakeExecutable() : FilePath();
-}
-
-static const QList<CMakeTool *> toolsForBuildDevice(const Kit *k)
-{
-    if (const IDevice::ConstPtr dev = BuildDeviceKitAspect::device(k)) {
-        return Utils::filtered(
-            CMakeToolManager::cmakeTools(), [rootPath = dev->rootPath()](CMakeTool *t) {
-                return t->cmakeExecutable().isSameDevice(rootPath);
-            });
-    }
-
-    return {};
-}
-
-class CMakeToolListModel final : public QAbstractListModel
-{
-public:
-    CMakeToolListModel(const Kit &kit, QObject *parent)
-        : QAbstractListModel(parent)
-        , m_kit(kit)
-    {}
-
-    void reset()
-    {
-        beginResetModel();
-        m_tools = toolsForBuildDevice(&m_kit);
-        m_tools.append(nullptr); // "None"
-        endResetModel();
-    }
-
-    int rowCount(const QModelIndex &parent = {}) const override
-    {
-        return parent.isValid() ? 0 : m_tools.size();
-    }
-
-    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override
-    {
-        if (!index.isValid() || index.row() >= m_tools.size())
-            return {};
-        const CMakeTool *tool = m_tools.at(index.row());
-        if (!tool) {
-            if (role == Qt::DisplayRole)
-                return Tr::tr("None", "No CMake tool");
-            if (role == KitAspect::IsNoneRole)
-                return true;
-            return {};
-        }
-        const bool isDefault = (tool == CMakeToolManager::defaultCMakeTool());
-        switch (role) {
-        case Qt::DisplayRole: {
-            QString name = tool->displayName();
-            if (isDefault)
-                name += Tr::tr(" (Default)");
-            return name;
-        }
-        case Qt::FontRole: {
-            QFont font;
-            font.setItalic(isDefault);
-            return font;
-        }
-        case Qt::DecorationRole:
-            if (!tool->cmakeExecutable().isExecutableFile())
-                return Icons::CRITICAL.icon();
-            return {};
-        case Qt::ToolTipRole: {
-            QString tooltip = Tr::tr("Version: %1").arg(tool->versionDisplay());
-            tooltip += "<br>" + Tr::tr("Supports fileApi: %1")
-                                    .arg(tool->hasFileApi() ? Tr::tr("yes") : Tr::tr("no"));
-            tooltip += "<br>" + Tr::tr("Detection source: \"%1\"").arg(tool->detectionSource().id);
-            return tooltip;
-        }
-        case KitAspect::IdRole:
-            return tool->id().toSetting();
-        default:
-            return {};
-        }
-    }
-
-private:
-    const Kit &m_kit;
-    QList<CMakeTool *> m_tools;
-};
-
 // Factories
 
 class CMakeKitAspectFactory : public KitAspectFactory
@@ -160,26 +74,13 @@ public:
 
     // KitAspect interface
     Tasks validate(const Kit *k) const final;
-    void setup(Kit *k) final;
-    void fix(Kit *k) final;
+    void upgrade(Kit *k) final;
     ItemList toUserOutput(const Kit *k) const final;
     KitAspect *createKitAspect(Kit *k) const final;
 
     void addToMacroExpander(Kit *k, Utils::MacroExpander *expander) const final;
 
     QSet<Utils::Id> availableFeatures(const Kit *k) const final;
-
-    std::optional<QtTaskTree::ExecutableItem> autoDetect(
-        Kit *kit,
-        const Utils::FilePaths &searchPaths,
-        const DetectionSource &detectionSource,
-        const LogCallback &logCallback) const override;
-
-    std::optional<QtTaskTree::ExecutableItem> removeAutoDetected(
-        const QString &detectionSource, const LogCallback &logCallback) const override;
-
-    void listAutoDetected(
-        const QString &detectionSource, const LogCallback &logCallback) const override;
 
     Utils::Result<QtTaskTree::ExecutableItem> createAspectFromJson(
         const DetectionSource &detectionSource,
@@ -228,22 +129,55 @@ private:
 class CMakeKitAspectImpl final : public KitAspect
 {
 public:
-    CMakeKitAspectImpl(Kit *kit, const KitAspectFactory *factory)
-        : KitAspect(kit, factory)
+    CMakeKitAspectImpl(Kit *k, const KitAspectFactory *factory)
+        : KitAspect(k, factory)
+        , m_chooser(createSubWidget<PathChooser>())
     {
-        setManagingPage(Constants::Settings::TOOLS_ID);
+        setManagingPage(ProjectExplorer::Constants::DEVICE_SETTINGS_PAGE_ID);
 
-        const auto model = new CMakeToolListModel(*kit, this);
-        auto getter = [](const Kit &k) { return k.value(Constants::TOOL_ID); };
-        auto setter = [](Kit &k, const QVariant &id) { k.setValue(Constants::TOOL_ID, id); };
-        auto resetModel = [model] { model->reset(); };
-        addListAspectSpec({model, std::move(getter), std::move(setter), std::move(resetModel)});
+        m_chooser->setExpectedKind(PathChooserKind::ExistingCommand);
+        m_chooser->setAllowPathFromDevice(true);
+        m_chooser->setHistoryCompleter("CMake.Command.History");
+        refresh();
 
-        CMakeToolManager *cmakeMgr = CMakeToolManager::instance();
-        connect(cmakeMgr, &CMakeToolManager::cmakeAdded, this, &CMakeKitAspectImpl::refresh);
-        connect(cmakeMgr, &CMakeToolManager::cmakeRemoved, this, &CMakeKitAspectImpl::refresh);
-        connect(cmakeMgr, &CMakeToolManager::cmakeUpdated, this, &CMakeKitAspectImpl::refresh);
+        connect(m_chooser, &PathChooser::textChanged, this, [this] {
+            const GuardLocker locker(m_ignoreChanges);
+            CMakeKitAspect::setCMakeExecutable(kit(), m_chooser->filePath());
+        });
+        connect(DeviceManager::instance(), &DeviceManager::deviceUpdated,
+                this, &CMakeKitAspectImpl::refresh);
     }
+
+    ~CMakeKitAspectImpl() override { delete m_chooser; }
+
+private:
+    Id settingsPageItemToPreselect() const override
+    {
+        return BuildDeviceKitAspect::deviceId(kit());
+    }
+
+    void makeReadOnly(bool readOnly) override { m_chooser->setReadOnly(readOnly); }
+
+    void addToInnerLayout(Layouting::Layout &layout) override
+    {
+        addMutableAction(m_chooser);
+        layout.addItem(m_chooser);
+    }
+
+    void refresh() override
+    {
+        if (m_ignoreChanges.isLocked())
+            return;
+
+        const IDevice::ConstPtr device = BuildDeviceKitAspect::device(kit());
+        m_chooser->setBaseDirectory(device ? device->rootPath() : FilePath());
+        m_chooser->setPlaceholderText(
+            device ? device->deviceToolPath(Constants::CMAKE_TOOL_ID).toUserOutput() : QString());
+        m_chooser->setFilePath(FilePath::fromSettings(kit()->value(Constants::TOOL_ID)));
+    }
+
+    PathChooser * const m_chooser;
+    Guard m_ignoreChanges;
 };
 
 CMakeKitAspectFactory::CMakeKitAspectFactory()
@@ -252,35 +186,33 @@ CMakeKitAspectFactory::CMakeKitAspectFactory()
     setJsonKeys({"cmake", "cmake-tool"});
     setDisplayName(Tr::tr("CMake Tool"));
     setDescription(Tr::tr("The CMake Tool to use when building a project with CMake.<br>"
+                      "Leave empty to use the one configured for the build device.<br>"
                       "This setting is ignored when using other build systems."));
     setPriority(20000);
-
-    auto updateKits = [this] {
-        if (KitManager::isLoaded()) {
-            for (Kit *k : KitManager::kits())
-                fix(k);
-        }
-    };
-
-    //make sure the default value is set if a selected CMake is removed
-    connect(CMakeToolManager::instance(), &CMakeToolManager::cmakeRemoved, this, updateKits);
-
-    //make sure the default value is set if a new default CMake is set
-    connect(CMakeToolManager::instance(), &CMakeToolManager::defaultCMakeChanged,
-            this, updateKits);
 }
 
 } // Internal
 
 using namespace Internal;
 
-static CMakeTool *cmakeTool(const Kit *k)
+static FilePath effectiveCMakeExecutable(const Kit *k)
 {
     if (!k)
-        return nullptr;
+        return {};
     if (!k->isAspectRelevant(CMakeKitAspect::id()))
-        return nullptr;
-    return CMakeToolManager::findById(Id::fromSetting(k->value(Constants::TOOL_ID)));
+        return {};
+    const IDevice::ConstPtr device = BuildDeviceKitAspect::device(k);
+    const FilePath executable = FilePath::fromSettings(k->value(Constants::TOOL_ID));
+    if (executable.isEmpty())
+        return device ? device->deviceToolPath(Constants::CMAKE_TOOL_ID) : FilePath();
+    if (device && executable.isLocal())
+        return device->rootPath().withNewMappedPath(executable);
+    return executable;
+}
+
+static CMakeTool *cmakeTool(const Kit *k)
+{
+    return CMakeToolManager::cmakeToolForPath(effectiveCMakeExecutable(k));
 }
 
 Id CMakeKitAspect::id()
@@ -300,20 +232,14 @@ CMakeKeywords CMakeKitAspect::cmakeKeywords(const Kit *k)
     return tool ? tool->keywords() : CMakeKeywords();
 }
 
-static void setCMakeTool(Kit *k, const Id id)
-{
-    QTC_ASSERT(!id.isValid() || CMakeToolManager::findById(id), return);
-    if (!k)
-        return;
-    if (id.isValid())
-        k->setValue(Constants::TOOL_ID, id.toSetting());
-    else
-        k->removeKey(Constants::TOOL_ID);
-}
-
 void CMakeKitAspect::setCMakeExecutable(Kit *k, const FilePath &cmakeExecutable)
 {
-    setCMakeTool(k, CMakeToolManager::idForExecutable(cmakeExecutable));
+    if (!k)
+        return;
+    if (cmakeExecutable.isEmpty())
+        k->removeKey(Constants::TOOL_ID);
+    else
+        k->setValue(Constants::TOOL_ID, CMakeTool::cmakeExecutable(cmakeExecutable).toSettings());
 }
 
 Tasks CMakeKitAspectFactory::validate(const Kit *k) const
@@ -330,45 +256,17 @@ Tasks CMakeKitAspectFactory::validate(const Kit *k) const
     return result;
 }
 
-void CMakeKitAspectFactory::setup(Kit *k)
-{
-    if (cmakeTool(k))
-        return;
-
-    const QList<CMakeTool *> toolsForDevice = toolsForBuildDevice(k);
-    if (toolsForDevice.isEmpty())
-        return;
-
-    // Look for a suitable auto-detected one:
-    const DetectionSource kitSource = k->detectionSource();
-    if (kitSource.isAutoDetected()) {
-        for (CMakeTool *tool : toolsForDevice) {
-            const DetectionSource toolSource = tool->detectionSource();
-            if (toolSource == kitSource) {
-                CMakeKitAspect::setCMakeExecutable(k, tool->cmakeExecutable());
-                return;
-            }
-        }
-    }
-
-    if (toolsForDevice.contains(CMakeToolManager::defaultCMakeTool()))
-        CMakeKitAspect::setCMakeExecutable(k, defaultCMakeExecutable());
-    else
-        CMakeKitAspect::setCMakeExecutable(k, toolsForDevice.first()->cmakeExecutable());
-}
-
-void CMakeKitAspectFactory::fix(Kit *k)
+void CMakeKitAspectFactory::upgrade(Kit *k)
 {
     QTC_ASSERT(k, return);
-    // TODO: Differentiate (centrally?) between "nothing set" and "actively set to nothing".
-    const Id id = Id::fromSetting(k->value(Constants::TOOL_ID));
-    if (id.isValid()) {
-        CMakeTool * const tool = CMakeToolManager::findById(id);
-        if (!tool || !toolsForBuildDevice(k).contains(tool)) {
-            setCMakeTool(k, {});
-            setup(k);
-        }
-    }
+
+    const QVariant value = k->value(Constants::TOOL_ID);
+    if (!value.isValid())
+        return;
+
+    const FilePath executable = CMakeToolManager::executableForId(Id::fromSetting(value));
+    if (!executable.isEmpty())
+        k->setValue(Constants::TOOL_ID, executable.toSettings());
 }
 
 KitAspectFactory::ItemList CMakeKitAspectFactory::toUserOutput(const Kit *k) const
@@ -413,102 +311,27 @@ QSet<Id> CMakeKitAspectFactory::availableFeatures(const Kit *k) const
     return features;
 }
 
-std::optional<QtTaskTree::ExecutableItem> CMakeKitAspectFactory::autoDetect(
-    Kit *kit,
-    const Utils::FilePaths &searchPaths,
-    const DetectionSource &detectionSource,
-    const LogCallback &logCallback) const
-{
-    using namespace QtTaskTree;
-
-    using ResultType = std::vector<std::unique_ptr<CMakeTool>>;
-
-    const auto setup = [searchPaths, detectionSource](Async<ResultType> &async) {
-        async.setConcurrentCallData(
-            [](QPromise<ResultType> &promise,
-               const FilePaths &searchPaths,
-               const DetectionSource &detectionSource) {
-                const FilePath cmake = "cmake";
-                const FilePaths candidates = cmake.searchAllInDirectories(searchPaths);
-
-                ResultType result;
-
-                for (const auto &candidate : candidates) {
-                    Id id = Id::fromString(candidate.toUserOutput());
-
-                    auto newTool = std::make_unique<CMakeTool>(detectionSource, id);
-                    newTool->setFilePath(candidate);
-                    newTool->setDisplayName(candidate.toUserOutput());
-                    id = newTool->id();
-
-                    if (newTool->isValid())
-                        result.push_back(std::move(newTool));
-                }
-                promise.addResult(std::move(result));
-            },
-            searchPaths,
-            detectionSource);
-    };
-
-    const auto onDone = [kit, logCallback](const Async<ResultType> &async) {
-        ResultType tools = async.takeResult();
-
-        for (auto &tool : tools) {
-            const FilePath cmake = tool->cmakeExecutable();
-            CMakeToolManager::registerCMakeTool(std::move(tool));
-            logCallback(Tr::tr("Found CMake tool: \"%1\".").arg(cmake.toUserOutput()));
-            CMakeKitAspect::setCMakeExecutable(kit, cmake);
-        }
-    };
-
-    return AsyncTask<ResultType>(setup, onDone);
-}
-
-std::optional<QtTaskTree::ExecutableItem> CMakeKitAspectFactory::removeAutoDetected(
-    const QString &detectionSource, const LogCallback &logCallback) const
-{
-    using namespace QtTaskTree;
-
-    return QSyncTask([detectionSource, logCallback]() {
-        CMakeToolManager::instance()->removeDetectedCMake(detectionSource, logCallback);
-    });
-}
-
-void CMakeKitAspectFactory::listAutoDetected(
-    const QString &detectionSource, const LogCallback &logCallback) const
-{
-    for (const CMakeTool *tool : CMakeToolManager::cmakeTools()) {
-        if (tool->detectionSource().isAutoDetected()
-            && tool->detectionSource().id == detectionSource)
-            logCallback(Tr::tr("CMake tool: %1.").arg(tool->displayName()));
-    }
-}
-
 Utils::Result<QtTaskTree::ExecutableItem> CMakeKitAspectFactory::createAspectFromJson(
-    const DetectionSource &detectionSource,
+    const DetectionSource &,
     const Utils::FilePath &rootPath,
     Kit *kit,
     const QJsonValue &json,
     const LogCallback &logCallback) const
 {
-    using ResultType = Result<std::unique_ptr<CMakeTool>>;
+    using ResultType = Result<FilePath>;
 
-    const auto setup = [json, rootPath, detectionSource, logCallback](Async<ResultType> &async) {
+    const auto setup = [json, rootPath](Async<ResultType> &async) {
         async.setConcurrentCallData(
             [](QPromise<ResultType> &promise,
                const QJsonValue &json,
-               const DetectionSource &detectionSource,
                const Utils::FilePath &rootPath) {
-                ResultType result;
-
                 if (!json.isObject()) {
                     promise.addResult(ResultError(
                         Tr::tr("Expected JSON Object, got: \"%1\".").arg(json.toString())));
                     return;
                 }
 
-                const QJsonObject obj = json.toObject();
-                const QJsonValue binaryValue = obj.value("binary");
+                const QJsonValue binaryValue = json.toObject().value("binary");
                 if (!binaryValue.isString()) {
                     promise.addResult(ResultError(
                         Tr::tr("Expected JSON Object with key \"binary\" to be a string.")));
@@ -522,36 +345,22 @@ Utils::Result<QtTaskTree::ExecutableItem> CMakeKitAspectFactory::createAspectFro
                     return;
                 }
 
-                Id id = Id::fromString(cmakeExecutable.toUserOutput());
-
-                auto newTool = std::make_unique<CMakeTool>(detectionSource, id);
-                newTool->setFilePath(cmakeExecutable);
-                newTool->setDisplayName(cmakeExecutable.toUserOutput());
-                id = newTool->id();
-
-                if (newTool->isValid())
-                    promise.addResult(std::move(newTool));
-                else
-                    promise.addResult(ResultError(
-                        Tr::tr("CMake tool \"%1\" is not valid.").arg(cmakeExecutable.toUserOutput())));
+                promise.addResult(cmakeExecutable);
             },
             json,
-            detectionSource,
             rootPath);
     };
 
     const auto onDone = [logCallback, kit, json](const Async<ResultType> &async) {
-        ResultType tool = async.takeResult();
-        if (!tool) {
-            logCallback(Tr::tr("Cannot create CMake tool from JSON: %1").arg(tool.error()));
+        const ResultType cmake = async.takeResult();
+        if (!cmake) {
+            logCallback(Tr::tr("Cannot create CMake tool from JSON: %1").arg(cmake.error()));
             return;
         }
         const QJsonObject obj = json.toObject();
-        const FilePath cmake = (*tool)->cmakeExecutable();
 
-        CMakeToolManager::registerCMakeTool(std::move(*tool));
-        logCallback(Tr::tr("Found CMake tool: \"%1\".").arg(cmake.toUserOutput()));
-        CMakeKitAspect::setCMakeExecutable(kit, cmake);
+        logCallback(Tr::tr("Found CMake tool: \"%1\".").arg(cmake->toUserOutput()));
+        CMakeKitAspect::setCMakeExecutable(kit, *cmake);
 
         if (obj.contains("generator"))
             CMakeGeneratorKitAspect::setGenerator(kit, obj.value("generator").toString());
@@ -869,9 +678,7 @@ CMakeGeneratorKitAspectFactory::CMakeGeneratorKitAspectFactory()
         }
     };
 
-    //make sure the default value is set if a new default CMake is set
-    connect(CMakeToolManager::instance(), &CMakeToolManager::defaultCMakeChanged,
-            this, updateKits);
+    connect(DeviceManager::instance(), &DeviceManager::deviceUpdated, this, updateKits);
 }
 
 QString CMakeGeneratorKitAspect::generator(const Kit *k)

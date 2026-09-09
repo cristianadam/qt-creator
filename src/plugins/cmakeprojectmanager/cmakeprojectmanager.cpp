@@ -182,7 +182,7 @@ CMakeManager::CMakeManager()
     connect(ProjectManager::instance(), &ProjectManager::startupProjectChanged, this, [this] {
         if (BuildSystem *buildSystem = activeBuildSystemForActiveProject()) {
             FilePath cmakeExecutable = CMakeKitAspect::cmakeExecutable(buildSystem->kit());
-            const CMakeTool *tool = CMakeToolManager::findByCommand(cmakeExecutable);
+            const CMakeTool *tool = CMakeToolManager::cmakeToolForPath(cmakeExecutable);
             CMakeTool::Version version = tool ? tool->version() : CMakeTool::Version();
             m_canDebugCMake = (version.major == 3 && version.minor >= 27) || version.major > 3;
         }

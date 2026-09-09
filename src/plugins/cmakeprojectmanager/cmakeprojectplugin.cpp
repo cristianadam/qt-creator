@@ -19,6 +19,7 @@
 #include "cmakeprojectmanagertr.h"
 #include "cmakequickfixes.h"
 #include "cmakesettingspage.h"
+#include "cmaketool.h"
 #include "cmaketoolmanager.h"
 #include "conditionalsources.h"
 #include "mcptools.h"
@@ -29,6 +30,7 @@
 
 #include <projectexplorer/buildmanager.h>
 #include <projectexplorer/devicesupport/devicemanager.h>
+#include <projectexplorer/devicesupport/idevice.h>
 #include <projectexplorer/projectmanager.h>
 #include <projectexplorer/projecttree.h>
 #include <projectexplorer/toolchainkitaspect.h>
@@ -47,6 +49,38 @@ using namespace Utils;
 
 namespace CMakeProjectManager::Internal {
 
+class CMakeToolAspectFactory : public DeviceToolAspectFactory
+{
+public:
+    CMakeToolAspectFactory()
+    {
+        setToolId(Constants::CMAKE_TOOL_ID);
+        setToolType(DeviceToolAspect::BuildTool);
+        setFilePattern({"cmake",
+                        "/Applications/CMake.app/Contents/bin/cmake",
+                        "/opt/homebrew/bin/cmake",
+                        "/opt/local/bin/cmake",
+                        "C:/Program Files/CMake/bin/cmake",
+                        "C:/Program Files (x86)/CMake/bin/cmake"});
+        setLabelText(Tr::tr("CMake executable:"));
+        setDisplayName(Tr::tr("CMake"));
+        setChecker([](const DeviceConstRef &, const FilePath &candidate) -> Result<> {
+            CMakeTool cmake(DetectionSource::FromSystem, Id::generate());
+            cmake.setFilePath(candidate);
+            if (!cmake.isValid()) {
+                return ResultError(Tr::tr("CMake executable does not provide required IDE "
+                                          "integration features."));
+            }
+            return ResultOk;
+        });
+    }
+};
+
+static void setupCMakeToolAspect()
+{
+    static CMakeToolAspectFactory theCMakeToolAspectFactory;
+}
+
 class CMakeProjectPlugin final : public ExtensionSystem::IPlugin
 {
     Q_OBJECT
@@ -57,6 +91,7 @@ class CMakeProjectPlugin final : public ExtensionSystem::IPlugin
         IOptionsPage::registerCategory(
             Constants::Settings::CATEGORY, Tr::tr("CMake"), Constants::Icons::SETTINGS_CATEGORY);
 
+        setupCMakeToolAspect();
         setupCMakeToolManager(this);
 
         setupCMakeSettingsPage();
