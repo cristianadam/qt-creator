@@ -146,6 +146,9 @@ private slots:
 
     void corpusByLine_data();
     void corpusByLine();
+
+    void installingAScannerChangesWhatSimpleLexersCallersGet();
+    void anInstalledScannerCarriesTheStateAcrossLines();
 };
 
 void tst_cxxfrontendlexer::snippets_data()
@@ -296,6 +299,61 @@ void tst_cxxfrontendlexer::corpusByLine()
     if (const char *reason = knownDivergence(QTest::currentDataTag()))
         QEXPECT_FAIL("", reason, Abort);
     QVERIFY2(difference.isEmpty(), qPrintable(difference));
+}
+
+// Comparing the two lexers says they agree; it does not say that anything
+// reads the new one. Callers hold a SimpleLexer, so what has to be shown is
+// that installing the scanner changes what a SimpleLexer produces -- and that
+// taking it away brings the built-in answer back, since a switch that only
+// goes one way is not a switch.
+//
+// The input is the one case where the two are known to disagree, which is
+// exactly what makes it able to tell them apart. If SimpleLexer ever grows
+// hexadecimal floating point literals this test loses its grip, and
+// knownDivergence() above is what will say so.
+void tst_cxxfrontendlexer::installingAScannerChangesWhatSimpleLexersCallersGet()
+{
+    const QString source = "auto a = 0x1p3;";
+    const LanguageFeatures features = LanguageFeatures::defaultFeatures();
+
+    const QStringList builtIn = lexWhole<SimpleLexer>(source, features);
+    const QStringList replacement = lexWhole<CxxFrontendLexer>(source, features);
+    QVERIFY2(builtIn != replacement, "the input no longer tells the two scanners apart");
+    QVERIFY(!SimpleLexer::hasScanner());
+
+    useCxxFrontendLexer(true);
+    QVERIFY(SimpleLexer::hasScanner());
+    QCOMPARE(lexWhole<SimpleLexer>(source, features), replacement);
+
+    useCxxFrontendLexer(false);
+    QVERIFY(!SimpleLexer::hasScanner());
+    QCOMPARE(lexWhole<SimpleLexer>(source, features), builtIn);
+}
+
+// The scanner is a function, so everything a lexer would have remembered
+// between two lines travels through the request and back: the state, the raw
+// string delimiter still being looked for, and whether the line ended spliced.
+// Getting that plumbing wrong shows up here and nowhere else, because a single
+// chunk needs none of it.
+void tst_cxxfrontendlexer::anInstalledScannerCarriesTheStateAcrossLines()
+{
+    const LanguageFeatures features = LanguageFeatures::defaultFeatures();
+    const QStringList sources{"/* one\ntwo\nthree */ int x;",
+                              "auto a = R\"x(\none\n)x\"_L; int b;",
+                              "// one \\\ntwo\nint x;"};
+
+    for (const QString &source : sources) {
+        const QStringList direct = lexByLine<CxxFrontendLexer>(source, features);
+
+        useCxxFrontendLexer(true);
+        const QStringList throughScanner = lexByLine<SimpleLexer>(source, features);
+        useCxxFrontendLexer(false);
+
+        // Same argument order as everywhere else here, so that the labels in
+        // the failure say which side is which.
+        const QString difference = firstDifference(throughScanner, direct);
+        QVERIFY2(difference.isEmpty(), qPrintable(source + '\n' + difference));
+    }
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontendlexer)

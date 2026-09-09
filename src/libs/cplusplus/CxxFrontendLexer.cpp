@@ -4,6 +4,7 @@
 #include "CxxFrontendLexer.h"
 
 #include <cplusplus/Lexer.h>
+#include <cplusplus/SimpleLexer.h>
 
 #include <cxx/lexer.h>
 #include <cxx/token.h>
@@ -726,6 +727,32 @@ Tokens CxxFrontendLexer::operator()(const QString &text, int state)
     m_endedJoined = run.endedJoined();
 
     return tokens;
+}
+
+void useCxxFrontendLexer(bool enabled)
+{
+    if (!enabled) {
+        SimpleLexer::setScanner({});
+        return;
+    }
+
+    // A lexer per chunk rather than one kept alive: everything it would carry
+    // from one chunk to the next is in the request, which is what lets the
+    // scanner be a function and the caller keep holding a SimpleLexer.
+    SimpleLexer::setScanner([](const SimpleLexer::ScanRequest &request) {
+        CxxFrontendLexer lexer;
+        lexer.setLanguageFeatures(request.languageFeatures);
+        lexer.setSkipComments(request.skipComments);
+        lexer.setPreprocessorMode(request.preprocessorMode);
+        lexer.setExpectedRawStringSuffix(request.expectedRawStringSuffix);
+
+        SimpleLexer::ScanResult result;
+        result.tokens = lexer(request.text, request.state);
+        result.state = lexer.state();
+        result.expectedRawStringSuffix = lexer.expectedRawStringSuffix();
+        result.endedJoined = lexer.endedJoined();
+        return result;
+    });
 }
 
 } // namespace CPlusPlus

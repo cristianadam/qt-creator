@@ -60,7 +60,7 @@ endif()
 # differential tests in tests/auto/cxxfrontend uses it yet.
 add_qtc_library(CxxFrontendBridge STATIC
   CONDITION QTC_ENABLE_CXX_FRONTEND
-  DEPENDS 3rd_cplusplus cxx-frontend Qt::Core
+  DEPENDS 3rd_cplusplus CPlusPlus cxx-frontend Qt::Core
   PUBLIC_INCLUDES "${CMAKE_CURRENT_SOURCE_DIR}/.."
   SOURCES
     CxxFrontendLexer.cpp CxxFrontendLexer.h

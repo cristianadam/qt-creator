@@ -61,4 +61,13 @@ private:
     bool m_ppMode = false;
 };
 
+// Puts SimpleLexer on this scanner, and with it everything that reads the
+// tokens SimpleLexer hands out: the highlighter, the indenter, completion, the
+// test frameworks' parsers. None of them mention this class, which is the
+// point -- the scanner underneath them changes and they do not.
+//
+// \a enabled false hands them back to the built-in lexer, which is what makes
+// the swap something to try rather than something to commit to.
+void useCxxFrontendLexer(bool enabled);
+
 } // namespace CPlusPlus

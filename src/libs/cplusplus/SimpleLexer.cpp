@@ -11,6 +11,26 @@
 
 using namespace CPlusPlus;
 
+namespace {
+
+SimpleLexer::Scanner &installedScanner()
+{
+    static SimpleLexer::Scanner scanner;
+    return scanner;
+}
+
+} // namespace
+
+void SimpleLexer::setScanner(Scanner scanner)
+{
+    installedScanner() = std::move(scanner);
+}
+
+bool SimpleLexer::hasScanner()
+{
+    return bool(installedScanner());
+}
+
 SimpleLexer::SimpleLexer()
     : _lastState(0),
       _skipComments(false),
@@ -38,6 +58,21 @@ bool SimpleLexer::endedJoined() const
 
 Tokens SimpleLexer::operator()(const QString &text, int state)
 {
+    if (const Scanner &scanner = installedScanner()) {
+        const ScanResult result = scanner({.text = text,
+                                           .state = state,
+                                           .languageFeatures = _languageFeatures,
+                                           .expectedRawStringSuffix = _expectedRawStringSuffix,
+                                           .skipComments = _skipComments,
+                                           .preprocessorMode = _ppMode});
+        // What the caller reads next about this chunk, and what it will hand
+        // back for the one after it.
+        _lastState = result.state;
+        _expectedRawStringSuffix = result.expectedRawStringSuffix;
+        _endedJoined = result.endedJoined;
+        return result.tokens;
+    }
+
     Tokens tokens;
 
     const QByteArray bytes = text.toUtf8();
