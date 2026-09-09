@@ -104,6 +104,9 @@ public:
     // itself, each with the definition it saw -- an empty string where the
     // answer was that there was none. This is what the file's parse depends
     // on from outside, and so what decides whether it can be reused.
+    //
+    // Except the macro the file guards itself with, which is what makes it
+    // idempotent rather than something it branches on.
     QHash<QString, QString> consultedMacros() const;
 
     // Whether this document would come out the same under \a environment.

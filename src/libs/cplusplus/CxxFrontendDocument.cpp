@@ -203,6 +203,22 @@ public:
             note(fromStd(name), QString());
         }
 
+        // The macro the file guards itself with, reported before the first
+        // line is read. Asking about it is what makes the guard work, and the
+        // answer is the file's own doing rather than anything it depends on
+        // from outside: the second time round "#ifndef H_H" is false precisely
+        // because the first time defined H_H.
+        //
+        // Counted as a dependency, a guarded header would be reparsed the
+        // second time it is included -- and that reparse reads nothing at all,
+        // so its document would lose everything the header declares. Which is
+        // every header, and the second include is the one that comes through
+        // another header, so this is not an unusual case.
+        void includeGuardFound(std::uint32_t, std::string_view name) override
+        {
+            m_includeGuard = fromStd(name);
+        }
+
         // Scoped for the same reason: everything defined while it is on is
         // the environment, not the file.
         class Seeding
@@ -254,6 +270,8 @@ public:
 
         void note(const QString &name, const QString &definition)
         {
+            if (name == m_includeGuard)
+                return;
             if (m_ownDefines.contains(name) || m_consulted.contains(name))
                 return;
             m_consulted.insert(name, definition);
@@ -264,6 +282,7 @@ public:
         bool m_seeding = false;
         QHash<QString, QString> m_consulted;
         QSet<QString> m_ownDefines;
+        QString m_includeGuard;
     };
 
     class Diagnostics : public cxx::DiagnosticsClient

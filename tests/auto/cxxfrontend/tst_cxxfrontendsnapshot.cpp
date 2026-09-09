@@ -91,6 +91,10 @@ private slots:
     void anUnrelatedMacroDoesNotForceAReparse();
     void aHeaderThatAsksAboutNothingIsAlwaysReused();
 
+    void aGuardedHeaderIncludedTwiceKeepsWhatItDeclares();
+    void aGuardedHeaderReachedTwoWaysKeepsWhatItDeclares();
+    void aGuardIsNotAnExcuseToIgnoreOtherMacros();
+
     void aNameDeclaredInAHeaderResolvesFromTheSource();
     void aNameDeclaredTwoHeadersAwayResolves();
     void aNameThatIsNowhereResolvesToNothing();
@@ -354,6 +358,62 @@ void tst_cxxfrontendsnapshot::aHeaderThatAsksAboutNothingIsAlwaysReused()
 
     snapshot.process("two.cpp", "#define B 2\n#include \"h.h\"\n");
     QCOMPARE(snapshot.document("h.h"), first);
+}
+
+// Every header guards itself, so the reuse rule has to get this right or it
+// gets nothing right. A guard reads a macro and then defines it, which looks
+// exactly like a dependency on the includer -- and the second time round the
+// header does read differently: it reads nothing at all. Reparsing it then
+// replaces the document with an empty one and the header's declarations are
+// gone.
+void tst_cxxfrontendsnapshot::aGuardedHeaderIncludedTwiceKeepsWhatItDeclares()
+{
+    Files files;
+    files.add("h.h", "#ifndef H_H\n#define H_H\nint fromHeader;\n#endif\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"h.h\"\n#include \"h.h\"\nint x;\n");
+
+    QCOMPARE(symbolNames(snapshot.document("h.h")), QStringList("fromHeader"));
+}
+
+// And the way it really happens: included once directly and once through
+// another header, which is what every file in a project of any size does.
+void tst_cxxfrontendsnapshot::aGuardedHeaderReachedTwoWaysKeepsWhatItDeclares()
+{
+    Files files;
+    files.add("inner.h", "#ifndef INNER_H\n#define INNER_H\nint fromInner;\n#endif\n");
+    files.add("outer.h", "#ifndef OUTER_H\n#define OUTER_H\n#include \"inner.h\"\n#endif\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp",
+                     "#include \"inner.h\"\n#include \"outer.h\"\n"
+                     "void f() { fromInner = 1; }\n");
+
+    QCOMPARE(symbolNames(snapshot.document("inner.h")), QStringList("fromInner"));
+    QCOMPARE(snapshot.declarationAt("a.cpp", 3, 12).filePath, QString("inner.h"));
+}
+
+// The exemption is for the guard and nothing else: a header that branches on
+// a macro of its own accord still depends on it.
+void tst_cxxfrontendsnapshot::aGuardIsNotAnExcuseToIgnoreOtherMacros()
+{
+    Files files;
+    files.add("h.h",
+              "#ifndef H_H\n#define H_H\n"
+              "#ifdef FEATURE\nint withFeature;\n#else\nint withoutFeature;\n#endif\n"
+              "#endif\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+
+    snapshot.process("with.cpp", "#define FEATURE 1\n#include \"h.h\"\n");
+    QCOMPARE(symbolNames(snapshot.document("h.h")), QStringList("withFeature"));
+
+    snapshot.process("without.cpp", "#include \"h.h\"\n");
+    QCOMPARE(symbolNames(snapshot.document("h.h")), QStringList("withoutFeature"));
 }
 
 // The point of the whole arrangement, and the thing the per-file model makes

@@ -3364,6 +3364,20 @@ void Preprocessor::beginPreprocessing(std::string source, std::string fileName,
 
   d->mainSourceFileId_ = sourceFile->id;
 
+  // The guard is a fact about the file, not about how it was reached, and a
+  // tool preprocesses a header on its own as readily as a compiler includes
+  // it. Only the file's own bookkeeping is set here: whether including it
+  // again would produce nothing is a question about an include, and this file
+  // is not one.
+  sourceFile->headerGuardName = d->checkHeaderProtection(sourceFile->tokens);
+  if (!sourceFile->headerGuardName.empty()) {
+    sourceFile->headerProtectionLevel = int(d->evaluating_.size());
+    if (d->delegate_) {
+      d->delegate_->includeGuardFound(std::uint32_t(sourceFile->id),
+                                      sourceFile->headerGuardName);
+    }
+  }
+
   auto dirpath = fs::path(sourceFile->fileName).parent_path();
   if (dirpath.empty()) {
     dirpath = ".";
