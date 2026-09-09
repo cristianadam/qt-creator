@@ -2177,6 +2177,7 @@ class LabeledStatementAST final : public StatementAST {
  public:
   static constexpr ASTKind Kind = ASTKind::LabeledStatement;
 
+  List<AttributeSpecifierAST*>* attributeList = nullptr;
   SourceLocation identifierLoc;
   SourceLocation colonLoc;
   StatementAST* statement = nullptr;
@@ -2191,13 +2192,17 @@ class LabeledStatementAST final : public StatementAST {
 
   [[nodiscard]] static auto create(Arena* arena) -> LabeledStatementAST*;
 
-  [[nodiscard]] static auto create(Arena* arena, SourceLocation identifierLoc,
+  [[nodiscard]] static auto create(Arena* arena,
+                                   List<AttributeSpecifierAST*>* attributeList,
+                                   SourceLocation identifierLoc,
                                    SourceLocation colonLoc,
                                    StatementAST* statement,
                                    const Identifier* identifier)
       -> LabeledStatementAST*;
 
-  [[nodiscard]] static auto create(Arena* arena, StatementAST* statement,
+  [[nodiscard]] static auto create(Arena* arena,
+                                   List<AttributeSpecifierAST*>* attributeList,
+                                   StatementAST* statement,
                                    const Identifier* identifier)
       -> LabeledStatementAST*;
 
@@ -2209,6 +2214,7 @@ class CaseStatementAST final : public StatementAST {
  public:
   static constexpr ASTKind Kind = ASTKind::CaseStatement;
 
+  List<AttributeSpecifierAST*>* attributeList = nullptr;
   SourceLocation caseLoc;
   ExpressionAST* expression = nullptr;
   SourceLocation colonLoc;
@@ -2223,12 +2229,16 @@ class CaseStatementAST final : public StatementAST {
 
   [[nodiscard]] static auto create(Arena* arena) -> CaseStatementAST*;
 
-  [[nodiscard]] static auto create(Arena* arena, SourceLocation caseLoc,
+  [[nodiscard]] static auto create(Arena* arena,
+                                   List<AttributeSpecifierAST*>* attributeList,
+                                   SourceLocation caseLoc,
                                    ExpressionAST* expression,
                                    SourceLocation colonLoc,
                                    std::int64_t caseValue) -> CaseStatementAST*;
 
-  [[nodiscard]] static auto create(Arena* arena, ExpressionAST* expression,
+  [[nodiscard]] static auto create(Arena* arena,
+                                   List<AttributeSpecifierAST*>* attributeList,
+                                   ExpressionAST* expression,
                                    std::int64_t caseValue) -> CaseStatementAST*;
 
  protected:
@@ -2239,6 +2249,7 @@ class DefaultStatementAST final : public StatementAST {
  public:
   static constexpr ASTKind Kind = ASTKind::DefaultStatement;
 
+  List<AttributeSpecifierAST*>* attributeList = nullptr;
   SourceLocation defaultLoc;
   SourceLocation colonLoc;
 
@@ -2251,8 +2262,14 @@ class DefaultStatementAST final : public StatementAST {
 
   [[nodiscard]] static auto create(Arena* arena) -> DefaultStatementAST*;
 
-  [[nodiscard]] static auto create(Arena* arena, SourceLocation defaultLoc,
+  [[nodiscard]] static auto create(Arena* arena,
+                                   List<AttributeSpecifierAST*>* attributeList,
+                                   SourceLocation defaultLoc,
                                    SourceLocation colonLoc)
+      -> DefaultStatementAST*;
+
+  [[nodiscard]] static auto create(Arena* arena,
+                                   List<AttributeSpecifierAST*>* attributeList)
       -> DefaultStatementAST*;
 
  protected:

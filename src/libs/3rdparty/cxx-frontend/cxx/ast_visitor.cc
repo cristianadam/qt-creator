@@ -371,11 +371,25 @@ void ASTVisitor::visit(NewPlacementAST* ast) {
 
 void ASTVisitor::visit(NestedNamespaceSpecifierAST* ast) {}
 
-void ASTVisitor::visit(LabeledStatementAST* ast) { accept(ast->statement); }
+void ASTVisitor::visit(LabeledStatementAST* ast) {
+  for (auto node : ListView{ast->attributeList}) {
+    accept(node);
+  }
+  accept(ast->statement);
+}
 
-void ASTVisitor::visit(CaseStatementAST* ast) { accept(ast->expression); }
+void ASTVisitor::visit(CaseStatementAST* ast) {
+  for (auto node : ListView{ast->attributeList}) {
+    accept(node);
+  }
+  accept(ast->expression);
+}
 
-void ASTVisitor::visit(DefaultStatementAST* ast) {}
+void ASTVisitor::visit(DefaultStatementAST* ast) {
+  for (auto node : ListView{ast->attributeList}) {
+    accept(node);
+  }
+}
 
 void ASTVisitor::visit(ExpressionStatementAST* ast) {
   for (auto node : ListView{ast->attributeList}) {

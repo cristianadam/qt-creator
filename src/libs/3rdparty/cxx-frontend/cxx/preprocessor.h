@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include <cxx/preprocessor_delegate.h>
 #include <cxx/preprocessor_fwd.h>
 
 #include <functional>
@@ -63,7 +64,11 @@ class Preprocessor {
   [[nodiscard]] auto language() const -> LanguageKind;
   void setLanguage(LanguageKind lang);
 
+  // Set a delegate to be told what the preprocessor did on the way to its
+  // output: the macros, the skipped regions, the include guards. Nothing of
+  // that is worked out unless one is set.
   [[nodiscard]] auto preprocessorDelegate() const -> PreprocessorDelegate*;
+  void setPreprocessorDelegate(PreprocessorDelegate* delegate);
 
   [[nodiscard]] auto commentHandler() const -> CommentHandler*;
   void setCommentHandler(CommentHandler* commentHandler);

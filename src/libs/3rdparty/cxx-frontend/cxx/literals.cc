@@ -999,6 +999,10 @@ auto CharLiteral::Components::from(std::string_view text,
   components.prefix = text.substr(0, text.find_first_of('\''));
   components.value = !parser.value.empty() ? parser.value[0] : 0;
 
+  if (const auto quote = text.find_last_of('\''); quote != text.npos) {
+    components.suffix = text.substr(quote + 1);
+  }
+
   return components;
 }
 

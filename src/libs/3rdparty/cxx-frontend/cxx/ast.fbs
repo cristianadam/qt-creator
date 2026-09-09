@@ -1738,6 +1738,7 @@ table SplicerTypeSpecifier /* SpecifierAST */ {
 }
 
 table LabeledStatement /* StatementAST */ {
+  attribute_list: [AttributeSpecifier];
   statement: Statement;
   identifier: string;
   identifier_loc: uint32;
@@ -1745,12 +1746,14 @@ table LabeledStatement /* StatementAST */ {
 }
 
 table CaseStatement /* StatementAST */ {
+  attribute_list: [AttributeSpecifier];
   expression: Expression;
   case_loc: uint32;
   colon_loc: uint32;
 }
 
 table DefaultStatement /* StatementAST */ {
+  attribute_list: [AttributeSpecifier];
   default_loc: uint32;
   colon_loc: uint32;
 }

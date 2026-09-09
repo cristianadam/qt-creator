@@ -4,7 +4,10 @@
 #pragma once
 
 #include <QByteArray>
+#include <QHash>
+#include <QList>
 #include <QString>
+#include <QStringList>
 
 #include <functional>
 #include <memory>
@@ -14,17 +17,18 @@ namespace CPlusPlus {
 
 // Preprocessing through the cxx-frontend engine.
 //
-// Not yet a replacement for CPlusPlus::Preprocessor, and the header says so
-// rather than the call sites finding out: CppSourceProcessor wants a running
-// commentary as well as an output -- which macro was used at which offset,
-// which blocks #if skipped, what the include guard was -- and the cxx-frontend
-// preprocessor reports none of it. What it does have is the resolution of
-// includes, which it hands back to the caller rather than reading files
-// itself, and that is the part Qt Creator has always had to own.
+// Two things come out of it. One is the output the parser reads. The other is
+// the running commentary CppSourceProcessor needs to build a Document: which
+// macro was defined, which was used at which offset and with which arguments,
+// which blocks #if left out, what the include guard was. Qt Creator highlights
+// macros, follows them and dims inactive blocks out of the second.
 //
-// So this covers the output only, and is here to be measured against the
-// built-in engine while the rest is being added upstream. gaps() says what is
-// still missing; tests/auto/cxxfrontend asserts on it.
+// Includes are resolved by the caller rather than by the engine, which is the
+// part Qt Creator has always had to own: the working copy of what is open in
+// an editor, and its own search paths.
+//
+// gaps() says what CppSourceProcessor still could not get from here;
+// tests/auto/cxxfrontend asserts on it.
 //
 // Deliberately no cxx/ header is included here: those need C++23, and only
 // the implementation should have to.
@@ -44,12 +48,57 @@ public:
     void defineMacro(const QString &name, const QString &body);
     void undefMacro(const QString &name);
 
+    // A range of bytes in one of the files that were read. Pair fileName()
+    // with it to say where it is.
+    struct Range
+    {
+        int fileId = 0;
+        int offset = 0;
+        int length = 0;
+    };
+
+    struct MacroDefinition
+    {
+        QString name;
+        QString body;
+        QStringList parameters;
+        Range definition;
+        bool isFunctionLike = false;
+        bool isVariadic = false;
+    };
+
+    struct MacroUse
+    {
+        QString name;
+        Range range;
+        Range definition;
+        // Empty when the name was only asked about by defined() or #ifdef.
+        bool expanded = false;
+        QList<Range> arguments;
+    };
+
+    // What the engine did on the way to its output. Only filled in when a
+    // delegate is attached, which run() does.
+    struct Report
+    {
+        QList<MacroDefinition> definedMacros;
+        QList<MacroUse> macroUses;
+        QStringList undefinedMacroUses;
+        QList<Range> skippedRegions;
+        QHash<int, QString> includeGuards;
+        QList<Range> pragmas;
+    };
+
+    const Report &report() const;
+
+    // The file a Range belongs to, empty if there is no such file.
+    QString fileName(int fileId) const;
+
     // The preprocessed text of \a source, named \a fileName for the sake of
     // diagnostics and __FILE__.
     QString run(const QString &source, const QString &fileName);
 
-    // What CppSourceProcessor still could not get from this engine. Every one
-    // of them is a Client callback with nothing to feed it.
+    // What CppSourceProcessor still could not get from this engine.
     struct Gaps
     {
         bool reportsMacroUses = false;

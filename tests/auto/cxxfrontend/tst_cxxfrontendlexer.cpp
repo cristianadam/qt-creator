@@ -16,9 +16,9 @@
 //
 // The corpora are small enough to keep this test quick. They are not what the
 // two were actually reconciled against: that was every .cpp and .h under src/,
-// 11303 files, of which 9 disagreed -- 8 on 'c'_X and one on 0x0p+0, both of
-// them listed in knownDivergence() below. Point addCorpusRows() at src/ with a
-// QDirIterator to repeat it.
+// 11303 files, of which 9 disagreed. Eight of those were 'c'_X, fixed upstream
+// since; the one left is 0x0p+0, listed in knownDivergence() below. Point
+// addCorpusRows() at src/ with a QDirIterator to repeat it.
 
 #include <cplusplus/CxxFrontendLexer.h>
 #include <cplusplus/SimpleLexer.h>
@@ -113,23 +113,17 @@ QString firstDifference(const QStringList &expected, const QStringList &actual)
 }
 
 // Why the two are allowed to disagree on a given input, or nullptr if they
-// are not. Both entries below are cases where CxxFrontendLexer is the one in
-// the right; they are here so that the disagreement is written down and so
-// that the day it goes away is noticed. As in tst_cxxfrontend, the list is a
-// ratchet both ways -- an unlisted disagreement fails, and so does a listed
-// one that has stopped happening.
+// are not. The one entry left is a case where CxxFrontendLexer is in the
+// right; it is here so that the disagreement is written down and so that the
+// day it goes away is noticed. As in tst_cxxfrontend, the list is a ratchet
+// both ways -- an unlisted disagreement fails, and so does a listed one that
+// has stopped happening.
 const char *knownDivergence(const QString &row)
 {
     // The built-in lexer has no hexadecimal floating point literals, so it
     // reads the p of 0x1p3 as the start of a ud-suffix.
     if (row == "hex floating literal")
         return "SimpleLexer reads 0x1p3 as a user-defined literal";
-
-    // 'c'_X is lexed as a character literal followed by an identifier. Fixed
-    // upstream after the revision vendored in src/libs/3rdparty/cxx-frontend;
-    // drop this when that snapshot is refreshed.
-    if (row.startsWith("userDefinedLiterals."))
-        return "cxx-frontend: 'c'_X is not parsed as a user-defined literal";
 
     return nullptr;
 }

@@ -373,6 +373,14 @@ auto Lexer::readToken() -> TokenKind {
       consume();
     }
 
+    // A ud-suffix belongs to the literal, the same way the suffix of an
+    // integer or floating point literal does.
+    if (lang_ == LanguageKind::kCXX && (std::isalpha(LA()) || LA() == '_')) {
+      do {
+        consume();
+      } while (pos_ != end_ && is_idcont(LA()));
+    }
+
     return TokenKind::T_CHARACTER_LITERAL;
   }
 

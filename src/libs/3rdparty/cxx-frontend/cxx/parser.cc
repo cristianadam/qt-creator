@@ -3991,9 +3991,33 @@ auto Parser::parse_maybe_statement(StatementAST*& yyast) -> bool {
 
   match(TokenKind::T___EXTENSION__, extensionLoc);
 
-  if (parse_labeled_statement(yyast)) return true;
-  if (parse_case_statement(yyast)) return true;
-  if (parse_default_statement(yyast)) return true;
+  // In a labeled statement the attribute-specifier-seq comes before the label
+  // ([stmt.pre]), so the attributes have to be consumed before the label
+  // parsers get to look at anything. Commit to that reading only once a label
+  // is actually there, so that an attributed declaration or expression
+  // statement is left for the parsers further down to report on.
+  auto lookat_labeled_statement = [&](List<AttributeSpecifierAST*>*& attributes) {
+    LookaheadParser lookahead{this};
+
+    if (!parse_attribute_specifier_seq(attributes)) return false;
+
+    if (!lookat(TokenKind::T_IDENTIFIER, TokenKind::T_COLON) &&
+        !lookat(TokenKind::T_CASE) &&
+        !lookat(TokenKind::T_DEFAULT, TokenKind::T_COLON)) {
+      attributes = nullptr;
+      return false;
+    }
+
+    lookahead.commit();
+    return true;
+  };
+
+  List<AttributeSpecifierAST*>* labelAttributes = nullptr;
+  (void)lookat_labeled_statement(labelAttributes);
+
+  if (parse_labeled_statement(yyast, labelAttributes)) return true;
+  if (parse_case_statement(yyast, labelAttributes)) return true;
+  if (parse_default_statement(yyast, labelAttributes)) return true;
 
   auto lookat_declaration_statement = [&] {
     LookaheadParser lookahead{this};
@@ -4127,11 +4151,15 @@ void Parser::parse_condition(ExpressionAST*& yyast, const ExprContext& ctx) {
   parse_expression(yyast, ctx);
 }
 
-auto Parser::parse_labeled_statement(StatementAST*& yyast) -> bool {
+auto Parser::parse_labeled_statement(StatementAST*& yyast,
+                                     List<AttributeSpecifierAST*>* attributes)
+    -> bool {
   if (!lookat(TokenKind::T_IDENTIFIER, TokenKind::T_COLON)) return false;
 
   auto ast = LabeledStatementAST::create(pool_);
   yyast = ast;
+
+  ast->attributeList = attributes;
 
   expect(TokenKind::T_IDENTIFIER, ast->identifierLoc);
   expect(TokenKind::T_COLON, ast->colonLoc);
@@ -4145,7 +4173,9 @@ auto Parser::parse_labeled_statement(StatementAST*& yyast) -> bool {
   return true;
 }
 
-auto Parser::parse_case_statement(StatementAST*& yyast) -> bool {
+auto Parser::parse_case_statement(StatementAST*& yyast,
+                                  List<AttributeSpecifierAST*>* attributes)
+    -> bool {
   SourceLocation caseLoc;
 
   if (!match(TokenKind::T_CASE, caseLoc)) return false;
@@ -4164,6 +4194,7 @@ auto Parser::parse_case_statement(StatementAST*& yyast) -> bool {
   auto ast = CaseStatementAST::create(pool_);
   yyast = ast;
 
+  ast->attributeList = attributes;
   ast->caseLoc = caseLoc;
   ast->expression = expression;
   ast->colonLoc = colonLoc;
@@ -4180,7 +4211,9 @@ auto Parser::parse_case_statement(StatementAST*& yyast) -> bool {
   return true;
 }
 
-auto Parser::parse_default_statement(StatementAST*& yyast) -> bool {
+auto Parser::parse_default_statement(StatementAST*& yyast,
+                                     List<AttributeSpecifierAST*>* attributes)
+    -> bool {
   SourceLocation defaultLoc;
 
   if (!match(TokenKind::T_DEFAULT, defaultLoc)) return false;
@@ -4192,6 +4225,7 @@ auto Parser::parse_default_statement(StatementAST*& yyast) -> bool {
   auto ast = DefaultStatementAST::create(pool_);
   yyast = ast;
 
+  ast->attributeList = attributes;
   ast->defaultLoc = defaultLoc;
   ast->colonLoc = colonLoc;
 

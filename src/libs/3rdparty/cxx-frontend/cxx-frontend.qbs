@@ -134,6 +134,7 @@ QtcLibrary {
             "cxx/path.cc",
             "cxx/preprocessor.cc",
             "cxx/preprocessor.h",
+            "cxx/preprocessor_delegate.h",
             "cxx/preprocessor_fwd.h",
             "cxx/scope.cc",
             "cxx/scope.h",

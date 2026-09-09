@@ -430,9 +430,12 @@ class Parser final {
   void parse_init_statement(StatementAST*& yyast);
   void parse_condition(ExpressionAST*& yyast, const ExprContext& ctx);
 
-  [[nodiscard]] auto parse_labeled_statement(StatementAST*& yyast) -> bool;
-  [[nodiscard]] auto parse_case_statement(StatementAST*& yyast) -> bool;
-  [[nodiscard]] auto parse_default_statement(StatementAST*& yyast) -> bool;
+  [[nodiscard]] auto parse_labeled_statement(
+      StatementAST*& yyast, List<AttributeSpecifierAST*>* attributes) -> bool;
+  [[nodiscard]] auto parse_case_statement(
+      StatementAST*& yyast, List<AttributeSpecifierAST*>* attributes) -> bool;
+  [[nodiscard]] auto parse_default_statement(
+      StatementAST*& yyast, List<AttributeSpecifierAST*>* attributes) -> bool;
 
   [[nodiscard]] auto parse_expression_statement(
       StatementAST*& yyast, List<AttributeSpecifierAST*>* attributes) -> bool;

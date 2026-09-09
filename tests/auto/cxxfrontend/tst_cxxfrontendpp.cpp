@@ -9,11 +9,11 @@
 // parser makes of them, so both outputs are reduced to a stream of token
 // spellings, and that is what is compared.
 //
-// This is only half of what CppSourceProcessor asks a preprocessor for. The
-// other half is the Client callbacks -- which macro was used where, which
-// blocks #if skipped, what the include guard was -- and cxx::Preprocessor
-// reports none of that today. See preprocessorGaps() at the bottom, which
-// records the state of that rather than pretending it away.
+// The other half of what CppSourceProcessor asks for is the running commentary
+// -- which macro was used where, which blocks #if skipped, what the include
+// guard was -- which now arrives through the upstream PreprocessorDelegate and
+// is checked here too. preprocessorGaps() at the bottom records what is still
+// missing rather than pretending it away.
 //
 // The corpora here are small enough to keep the test quick. The two were also
 // run over every .cpp and .h under src/, 11303 files: 439 disagreed, 411 of
@@ -157,6 +157,11 @@ private slots:
     void corpus_data();
     void corpus();
 
+    void reportsMacroDefinitions();
+    void reportsMacroUses();
+    void reportsSkippedRegions();
+    void reportsUndefinedMacroUses();
+
     void preprocessorGaps();
 
 private:
@@ -245,25 +250,86 @@ void tst_cxxfrontendpp::corpus()
     QVERIFY2(difference.isEmpty(), qPrintable(difference));
 }
 
-// CppSourceProcessor wants more of a preprocessor than its output. This is
-// what is still missing, asserted so that the list cannot quietly go stale:
-// each of these is a Client callback that cxx::Preprocessor has no way to
-// feed, and until it does, Document cannot be built on it.
+// The commentary. Each of these is a Client callback that had nothing to feed
+// it before the delegate.
+
+void tst_cxxfrontendpp::reportsMacroDefinitions()
+{
+    CxxFrontendPreprocessor preprocessor;
+    preprocessor.run("#define ANSWER 42\n#define ADD(a, b) a + b\n", "<stdin>");
+
+    const auto &defined = preprocessor.report().definedMacros;
+    QCOMPARE(defined.size(), 2);
+    QCOMPARE(defined.at(0).name, QString("ANSWER"));
+    QCOMPARE(defined.at(0).body, QString("42"));
+    QVERIFY(!defined.at(0).isFunctionLike);
+    QCOMPARE(defined.at(1).name, QString("ADD"));
+    QVERIFY(defined.at(1).isFunctionLike);
+    QCOMPARE(defined.at(1).parameters, QStringList({"a", "b"}));
+}
+
+void tst_cxxfrontendpp::reportsMacroUses()
+{
+    const QString source = "#define ADD(a, b) a + b\nint x = ADD(1, y);\n";
+
+    CxxFrontendPreprocessor preprocessor;
+    preprocessor.run(source, "<stdin>");
+
+    const auto &uses = preprocessor.report().macroUses;
+    QCOMPARE(uses.size(), 1);
+    QCOMPARE(uses.at(0).name, QString("ADD"));
+    QVERIFY(uses.at(0).expanded);
+
+    // The offsets have to point back at the source that was handed in, since
+    // that is what an editor will highlight.
+    const CxxFrontendPreprocessor::Range &range = uses.at(0).range;
+    QCOMPARE(source.mid(range.offset, range.length), QString("ADD"));
+
+    QCOMPARE(uses.at(0).arguments.size(), 2);
+    QCOMPARE(source.mid(uses.at(0).arguments.at(0).offset,
+                        uses.at(0).arguments.at(0).length),
+             QString("1"));
+    QCOMPARE(source.mid(uses.at(0).arguments.at(1).offset,
+                        uses.at(0).arguments.at(1).length),
+             QString("y"));
+}
+
+void tst_cxxfrontendpp::reportsSkippedRegions()
+{
+    const QString source = "#if 0\nint skipped;\n#endif\nint kept;\n";
+
+    CxxFrontendPreprocessor preprocessor;
+    preprocessor.run(source, "<stdin>");
+
+    const auto &skipped = preprocessor.report().skippedRegions;
+    QCOMPARE(skipped.size(), 1);
+    QCOMPARE(source.mid(skipped.at(0).offset, skipped.at(0).length),
+             QString("\nint skipped;\n"));
+}
+
+void tst_cxxfrontendpp::reportsUndefinedMacroUses()
+{
+    CxxFrontendPreprocessor preprocessor;
+    preprocessor.run("#ifdef NOT_A_MACRO\n#endif\n", "<stdin>");
+
+    QCOMPARE(preprocessor.report().undefinedMacroUses, QStringList("NOT_A_MACRO"));
+    QVERIFY(preprocessor.report().macroUses.isEmpty());
+}
+
+// What is still missing, asserted so that the list cannot quietly go stale.
+// The three that arrived are asserted too, so that a snapshot that loses them
+// again is noticed.
 void tst_cxxfrontendpp::preprocessorGaps()
 {
     const CxxFrontendPreprocessor::Gaps gaps = CxxFrontendPreprocessor::gaps();
 
-    QVERIFY2(!gaps.reportsMacroUses,
-             "cxx::Preprocessor reports macro uses now: wire up notifyMacroReference "
-             "and startExpandingMacro, and drop this");
-    QVERIFY2(!gaps.reportsSkippedBlocks,
-             "cxx::Preprocessor reports skipped blocks now: wire up startSkippingBlocks, "
-             "and drop this");
-    QVERIFY2(!gaps.reportsIncludeGuards,
-             "cxx::Preprocessor reports include guards now: wire up markAsIncludeGuard, "
-             "and drop this");
+    QVERIFY(gaps.reportsMacroUses);
+    QVERIFY(gaps.reportsSkippedBlocks);
+    QVERIFY(gaps.reportsIncludeGuards);
+
     QVERIFY2(!gaps.marksExpandedTokens,
-             "cxx::Token says which tokens a macro produced now: mark them, and drop this");
+             "cxx::Token says which tokens a macro produced now: give Document the "
+             "expanded and generated flags it wants, and drop this");
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontendpp)

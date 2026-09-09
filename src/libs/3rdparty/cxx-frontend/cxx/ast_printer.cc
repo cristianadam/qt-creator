@@ -890,16 +890,43 @@ void ASTPrinter::visit(NestedNamespaceSpecifierAST* ast) {
 void ASTPrinter::visit(LabeledStatementAST* ast) {
   out_ << std::format("{}\n", "labeled-statement");
   accept(ast->identifier, "identifier");
+  if (ast->attributeList) {
+    ++indent_;
+    out_ << std::format("{:{}}", "", indent_ * 2);
+    out_ << std::format("{}\n", "attribute-list");
+    for (auto node : ListView{ast->attributeList}) {
+      accept(node);
+    }
+    --indent_;
+  }
   accept(ast->statement, "statement");
 }
 
 void ASTPrinter::visit(CaseStatementAST* ast) {
   out_ << std::format("{}\n", "case-statement");
+  if (ast->attributeList) {
+    ++indent_;
+    out_ << std::format("{:{}}", "", indent_ * 2);
+    out_ << std::format("{}\n", "attribute-list");
+    for (auto node : ListView{ast->attributeList}) {
+      accept(node);
+    }
+    --indent_;
+  }
   accept(ast->expression, "expression");
 }
 
 void ASTPrinter::visit(DefaultStatementAST* ast) {
   out_ << std::format("{}\n", "default-statement");
+  if (ast->attributeList) {
+    ++indent_;
+    out_ << std::format("{:{}}", "", indent_ * 2);
+    out_ << std::format("{}\n", "attribute-list");
+    for (auto node : ListView{ast->attributeList}) {
+      accept(node);
+    }
+    --indent_;
+  }
 }
 
 void ASTPrinter::visit(ExpressionStatementAST* ast) {

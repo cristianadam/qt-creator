@@ -1968,6 +1968,10 @@ void ASTPrettyPrinter::DeclarationVisitor::operator()(
 }
 
 void ASTPrettyPrinter::StatementVisitor::operator()(LabeledStatementAST* ast) {
+  for (auto it = ast->attributeList; it; it = it->next) {
+    accept(it->value);
+  }
+
   if (ast->identifierLoc) {
     accept.writeToken(ast->identifierLoc);
   }
@@ -1980,6 +1984,10 @@ void ASTPrettyPrinter::StatementVisitor::operator()(LabeledStatementAST* ast) {
 }
 
 void ASTPrettyPrinter::StatementVisitor::operator()(CaseStatementAST* ast) {
+  for (auto it = ast->attributeList; it; it = it->next) {
+    accept(it->value);
+  }
+
   if (ast->caseLoc) {
     accept.writeToken(ast->caseLoc);
   }
@@ -1992,6 +2000,10 @@ void ASTPrettyPrinter::StatementVisitor::operator()(CaseStatementAST* ast) {
 }
 
 void ASTPrettyPrinter::StatementVisitor::operator()(DefaultStatementAST* ast) {
+  for (auto it = ast->attributeList; it; it = it->next) {
+    accept(it->value);
+  }
+
   if (ast->defaultLoc) {
     accept.writeToken(ast->defaultLoc);
   }

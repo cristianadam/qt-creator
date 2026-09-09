@@ -2007,6 +2007,15 @@ auto ASTDecoder::decodeLabeledStatement(const io::LabeledStatement* node)
   if (!node) return nullptr;
 
   auto ast = new (pool_) LabeledStatementAST();
+  if (node->attribute_list()) {
+    auto inserter = &ast->attributeList;
+    for (std::uint32_t i = 0; i < node->attribute_list()->size(); ++i) {
+      *inserter = new (pool_) List(decodeAttributeSpecifier(
+          node->attribute_list()->Get(i),
+          io::AttributeSpecifier(node->attribute_list_type()->Get(i))));
+      inserter = &(*inserter)->next;
+    }
+  }
   ast->identifierLoc = SourceLocation(node->identifier_loc());
   ast->colonLoc = SourceLocation(node->colon_loc());
   ast->statement = decodeStatement(node->statement(), node->statement_type());
@@ -2022,6 +2031,15 @@ auto ASTDecoder::decodeCaseStatement(const io::CaseStatement* node)
   if (!node) return nullptr;
 
   auto ast = new (pool_) CaseStatementAST();
+  if (node->attribute_list()) {
+    auto inserter = &ast->attributeList;
+    for (std::uint32_t i = 0; i < node->attribute_list()->size(); ++i) {
+      *inserter = new (pool_) List(decodeAttributeSpecifier(
+          node->attribute_list()->Get(i),
+          io::AttributeSpecifier(node->attribute_list_type()->Get(i))));
+      inserter = &(*inserter)->next;
+    }
+  }
   ast->caseLoc = SourceLocation(node->case_loc());
   ast->expression =
       decodeExpression(node->expression(), node->expression_type());
@@ -2034,6 +2052,15 @@ auto ASTDecoder::decodeDefaultStatement(const io::DefaultStatement* node)
   if (!node) return nullptr;
 
   auto ast = new (pool_) DefaultStatementAST();
+  if (node->attribute_list()) {
+    auto inserter = &ast->attributeList;
+    for (std::uint32_t i = 0; i < node->attribute_list()->size(); ++i) {
+      *inserter = new (pool_) List(decodeAttributeSpecifier(
+          node->attribute_list()->Get(i),
+          io::AttributeSpecifier(node->attribute_list_type()->Get(i))));
+      inserter = &(*inserter)->next;
+    }
+  }
   ast->defaultLoc = SourceLocation(node->default_loc());
   ast->colonLoc = SourceLocation(node->colon_loc());
   return ast;

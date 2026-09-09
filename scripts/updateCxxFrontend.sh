@@ -29,13 +29,13 @@ fi
 revision=$(git -C "$upstream" rev-parse HEAD)
 date=$(git -C "$upstream" log -1 --format=%ad --date=short)
 
-before=$(cd "$vendored/cxx" && find . -name '*.cc' | sort)
+before=$(cd "$vendored/cxx" && find . \( -name '*.cc' -o -name '*.h' \) | sort)
 
 rm -rf "$vendored/cxx"
 cp -R "$upstream/src/parser/cxx" "$vendored/cxx"
 cp "$upstream/LICENSE" "$vendored/LICENSE"
 
-after=$(cd "$vendored/cxx" && find . -name '*.cc' | sort)
+after=$(cd "$vendored/cxx" && find . \( -name '*.cc' -o -name '*.h' \) | sort)
 
 # The revision is recorded in the README and in the attribution entry that
 # feeds the SBOM. Rewriting qt_attributions.json through the json module would

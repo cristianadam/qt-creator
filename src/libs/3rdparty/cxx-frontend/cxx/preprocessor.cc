@@ -234,6 +234,7 @@ struct SourceFile {
 struct ObjectMacro {
   std::string name;
   TokVector body;
+  PreprocessorRange definition;
 
   ObjectMacro(std::string name, TokVector body)
       : name(std::move(name)), body(std::move(body)) {}
@@ -243,6 +244,7 @@ struct FunctionMacro {
   std::string name;
   std::vector<std::string> formals;
   TokVector body;
+  PreprocessorRange definition;
   bool variadic = false;
 
   FunctionMacro(std::string name, std::vector<std::string> formals,
@@ -398,6 +400,9 @@ struct Preprocessor::Private {
   Control* control_ = nullptr;
   DiagnosticsClient* diagnosticsClient_ = nullptr;
   CommentHandler* commentHandler_ = nullptr;
+  PreprocessorDelegate* delegate_ = nullptr;
+  // Where the run of lines the conditionals are leaving out started.
+  PreprocessorRange skipRegionStart_;
   LanguageKind language_ = LanguageKind::kCXX;
   bool canResolveFiles_ = true;
   bool disableCurrentDirSearch_ = false;
@@ -564,6 +569,38 @@ struct Preprocessor::Private {
     return std::tuple(skipping_.back(), evaluating_.back());
   }
 
+  // The builtins are the preprocessor's own preamble, not part of anyone's
+  // translation unit, so the delegate does not hear about them -- the same
+  // choice getPreprocessedText() makes when it writes the output.
+  [[nodiscard]] auto reportable(std::uint32_t fileId) const -> bool {
+    return delegate_ && (!builtinsFileId_ || fileId != std::uint32_t(builtinsFileId_));
+  }
+
+  // The delegate is told about a macro in terms of where it is written, so
+  // these turn the internal tokens into the ranges it is given.
+  [[nodiscard]] static auto rangeOf(const Tok& tok) -> PreprocessorRange {
+    return {.fileId = tok.sourceFile, .offset = tok.offset, .length = tok.length};
+  }
+
+  [[nodiscard]] static auto rangeOf(const Tok* first, const Tok* last)
+      -> PreprocessorRange {
+    if (!first || first == last) return {};
+    const Tok& back = *(last - 1);
+    if (first->sourceFile != back.sourceFile) return rangeOf(*first);
+    return {.fileId = first->sourceFile,
+            .offset = first->offset,
+            .length = (back.offset + back.length) - first->offset};
+  }
+
+  // Everything the delegate is told about a macro. Built on demand: without a
+  // delegate none of this is worked out.
+  [[nodiscard]] auto macroInfoOf(const Macro& macro,
+                                 PreprocessorRange definition) const
+      -> MacroInfo;
+
+  void reportMacroUse(const Macro& macro, const Tok& name, bool expanded,
+                      std::span<const PreprocessorRange> arguments = {}) const;
+
   void pushState(std::tuple<bool, bool> state) {
     auto [skipping, evaluating] = state;
     skipping_.push_back(skipping);
@@ -661,6 +698,12 @@ struct Preprocessor::Private {
   void handleConditionalDirective(PreprocessorDirectiveKind kind, const Tok* ts,
                                   const Tok* lineEnd);
 
+  // Tells the delegate about a run of lines the conditional directives left
+  // out. Called once per directive, from the one place every directive goes
+  // through, because #if and #endif are handled apart from the rest.
+  void noteSkippingTransition(const Tok* directiveLine, const Tok* directiveEnd,
+                              bool wasSkipping);
+
   using TokRange = std::pair<const Tok*, const Tok*>;
 
   [[nodiscard]] auto substitute(const Tok& pointOfSubstitution,
@@ -752,8 +795,20 @@ struct Preprocessor::Private {
     return macros_.contains(id);
   }
 
+  // Asking whether a name is a macro is a use of it, whether or not it is
+  // one: #ifdef FOO and defined(FOO) both come through here, and a tool that
+  // shows the source wants to know about the name either way.
   [[nodiscard]] auto isDefined(const Tok& tok) const -> bool {
-    return tok.is(TokenKind::T_IDENTIFIER) && isDefined(getText(tok));
+    if (tok.isNot(TokenKind::T_IDENTIFIER)) return false;
+    const auto name = getText(tok);
+    const auto it = macros_.find(name);
+    if (it == macros_.end()) {
+      if (reportable(tok.sourceFile))
+        delegate_->undefinedMacroUsed(name, rangeOf(tok));
+      return false;
+    }
+    reportMacroUse(it->second, tok, /*expanded=*/false);
+    return true;
   }
 
   [[nodiscard]] auto isTainted(const cxx::Identifier* id) const -> bool {
@@ -1727,6 +1782,7 @@ auto Preprocessor::Private::expandMacro(Cursor& cursor) -> bool {
           .pos = cursor.pos + 1,
           .end = cursor.end,
       };
+      self.reportMacroUse(*macro, cursor.current(), /*expanded=*/true);
       auto expanded = m.expand(ctx);
       cursor.advance();
 
@@ -1775,6 +1831,8 @@ auto Preprocessor::Private::expandObjectLikeMacro(Cursor& cursor,
                                                   const cxx::Identifier* ident)
     -> bool {
   const auto& tk = cursor.current();
+
+  reportMacroUse(*m, tk, /*expanded=*/true);
 
   taint(ident);
 
@@ -2015,6 +2073,13 @@ auto Preprocessor::Private::expandFunctionLikeMacro(
 
   auto actuals = argsResult.args;
   auto rest = originalRest ? originalRest : argsResult.rest;
+
+  if (delegate_) {
+    std::vector<PreprocessorRange> argumentRanges;
+    argumentRanges.reserve(actuals.size());
+    for (const auto& [ab, ae] : actuals) argumentRanges.push_back(rangeOf(ab, ae));
+    reportMacroUse(*m, tk, /*expanded=*/true, argumentRanges);
+  }
 
   std::vector<TokRange> expandedArgs;
   expandedArgs.reserve(actuals.size());
@@ -2333,6 +2398,7 @@ auto Preprocessor::Private::parseDirective(SourceFile* source,
   ++ts;
 
   const auto [skipping, evaluating] = state();
+  const bool wasSkipping = skipping;
 
   switch (directiveKind) {
     case PreprocessorDirectiveKind::T_INCLUDE_NEXT:
@@ -2362,7 +2428,18 @@ auto Preprocessor::Private::parseDirective(SourceFile* source,
       if (ts->is(TokenKind::T_IDENTIFIER)) {
         auto name = getText(*ts);
         auto it = macros_.find(name);
-        if (it != macros_.end()) macros_.erase(it);
+        if (it != macros_.end()) {
+          if (reportable(ts->sourceFile)) {
+            PreprocessorRange definition;
+            if (const auto* object = std::get_if<ObjectMacro>(&it->second))
+              definition = object->definition;
+            else if (const auto* fn = std::get_if<FunctionMacro>(&it->second))
+              definition = fn->definition;
+            delegate_->macroUndefined(macroInfoOf(it->second, definition),
+                                      rangeOf(*ts));
+          }
+          macros_.erase(it);
+        }
       }
       break;
     }
@@ -2457,6 +2534,8 @@ auto Preprocessor::Private::parseDirective(SourceFile* source,
 
     case PreprocessorDirectiveKind::T_PRAGMA: {
       if (skipping) break;
+      if (reportable(ts < directiveEnd ? ts->sourceFile : 0))
+        delegate_->pragmaDirective(rangeOf(ts, directiveEnd));
       if (ts < directiveEnd && ts->is(TokenKind::T_IDENTIFIER) &&
           getText(*ts) == "pack") {
         ++ts;
@@ -2513,7 +2592,45 @@ auto Preprocessor::Private::parseDirective(SourceFile* source,
       break;
   }
 
+  noteSkippingTransition(directiveLine, directiveEnd, wasSkipping);
+
   return std::monostate{};
+}
+
+void Preprocessor::Private::noteSkippingTransition(const Tok* directiveLine,
+                                                   const Tok* directiveEnd,
+                                                   bool wasSkipping) {
+  if (!directiveLine || !reportable(directiveLine->sourceFile)) return;
+
+  // What the conditionals leave out is a run of lines, from the end of the
+  // directive that turned skipping on to the start of the one that turned it
+  // off. Nesting inside a region that is already skipped changes nothing, so
+  // only the outermost transition is reported.
+  const bool nowSkipping = !skipping_.empty() && skipping_.back();
+  if (wasSkipping == nowSkipping) return;
+
+  if (nowSkipping) {
+    const Tok* last = directiveEnd;
+    while (last > directiveLine &&
+           (last - 1)->sourceFile != directiveLine->sourceFile) {
+      --last;
+    }
+    const std::uint32_t from = last > directiveLine
+                                   ? (last - 1)->offset + (last - 1)->length
+                                   : directiveLine->offset;
+    skipRegionStart_ = {.fileId = directiveLine->sourceFile, .offset = from};
+    return;
+  }
+
+  if (!skipRegionStart_) return;
+  if (skipRegionStart_.fileId == directiveLine->sourceFile &&
+      directiveLine->offset >= skipRegionStart_.offset) {
+    delegate_->regionSkipped(
+        {.fileId = skipRegionStart_.fileId,
+         .offset = skipRegionStart_.offset,
+         .length = directiveLine->offset - skipRegionStart_.offset});
+  }
+  skipRegionStart_ = {};
 }
 
 auto Preprocessor::Private::parseIncludeDirective(const Tok* directive,
@@ -2965,11 +3082,68 @@ auto Preprocessor::Private::parseMacroDefinition(const Tok* ts,
   return ObjectMacro(name, std::move(body));
 }
 
+auto Preprocessor::Private::macroInfoOf(const Macro& macro,
+                                        PreprocessorRange definition) const
+    -> MacroInfo {
+  MacroInfo info;
+  info.name = getMacroName(macro);
+  info.definition = definition;
+
+  if (const auto* fn = std::get_if<FunctionMacro>(&macro)) {
+    info.parameters = fn->formals;
+    info.isFunctionLike = true;
+    info.isVariadic = fn->variadic;
+  } else if (std::holds_alternative<BuiltinFunctionMacro>(macro)) {
+    info.isFunctionLike = true;
+    info.isBuiltin = true;
+  } else if (std::holds_alternative<BuiltinObjectMacro>(macro)) {
+    info.isBuiltin = true;
+  }
+
+  // The replacement list as it is written, when it is written anywhere: a
+  // macro defined through the API, or a built-in, has no source to point at.
+  if (const auto* body = getMacroBody(macro); body && body->size() > 1) {
+    const auto range = rangeOf(body->data(), body->data() + body->size() - 1);
+    if (range.fileId && range.fileId <= sourceFiles_.size()) {
+      const std::string& text = sourceFiles_[range.fileId - 1]->source;
+      if (range.end() <= text.size())
+        info.body = std::string_view(text).substr(range.offset, range.length);
+    }
+  }
+
+  return info;
+}
+
+void Preprocessor::Private::reportMacroUse(
+    const Macro& macro, const Tok& name, bool expanded,
+    std::span<const PreprocessorRange> arguments) const {
+  if (!reportable(name.sourceFile)) return;
+
+  PreprocessorRange definition;
+  if (const auto* object = std::get_if<ObjectMacro>(&macro))
+    definition = object->definition;
+  else if (const auto* fn = std::get_if<FunctionMacro>(&macro))
+    definition = fn->definition;
+
+  const MacroInfo info = macroInfoOf(macro, definition);
+  delegate_->macroUsed({.macro = &info,
+                        .range = rangeOf(name),
+                        .expanded = expanded,
+                        .arguments = arguments});
+}
+
 void Preprocessor::Private::defineMacro(const Tok* ts, const Tok* lineEnd) {
   if (ts >= lineEnd || ts->isNot(TokenKind::T_IDENTIFIER)) return;
 
+  const Tok nameTok = *ts;
   auto macro = parseMacroDefinition(ts, lineEnd);
   auto name = std::string(getMacroName(macro));
+
+  const PreprocessorRange definition = rangeOf(nameTok);
+  if (auto* object = std::get_if<ObjectMacro>(&macro))
+    object->definition = definition;
+  else if (auto* fn = std::get_if<FunctionMacro>(&macro))
+    fn->definition = definition;
 
   if (auto body = getMacroBody(macro); body && !body->empty()) {
     // strip leading space/bol from first body token - but body is in the
@@ -2987,6 +3161,11 @@ void Preprocessor::Private::defineMacro(const Tok* ts, const Tok* lineEnd) {
   }
 
   macros_.insert_or_assign(name, std::move(macro));
+
+  if (reportable(definition.fileId)) {
+    delegate_->macroDefined(
+        macroInfoOf(macros_.find(name)->second, definition));
+  }
 }
 
 static auto wantSpace(TokenKind kind) -> bool {
@@ -3067,8 +3246,14 @@ auto Preprocessor::language() const -> LanguageKind { return d->language_; }
 
 void Preprocessor::setLanguage(LanguageKind lang) { d->language_ = lang; }
 
+PreprocessorDelegate::~PreprocessorDelegate() = default;
+
 auto Preprocessor::preprocessorDelegate() const -> PreprocessorDelegate* {
-  return nullptr;
+  return d->delegate_;
+}
+
+void Preprocessor::setPreprocessorDelegate(PreprocessorDelegate* delegate) {
+  d->delegate_ = delegate;
 }
 
 auto Preprocessor::commentHandler() const -> CommentHandler* {
@@ -3584,6 +3769,10 @@ void PendingFileContent::setContent(std::optional<std::string> content) const {
     sourceFile->headerProtectionLevel = int(d->evaluating_.size());
     d->ifndefProtectedFiles_.insert_or_assign(sourceFile->fileName,
                                               sourceFile->headerGuardName);
+    if (d->delegate_) {
+      d->delegate_->includeGuardFound(std::uint32_t(sourceFile->id),
+                                      sourceFile->headerGuardName);
+    }
   }
 
   auto dirpath = fs::path(sourceFile->fileName).parent_path();

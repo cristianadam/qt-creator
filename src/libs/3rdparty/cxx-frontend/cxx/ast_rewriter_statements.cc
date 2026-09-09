@@ -305,6 +305,13 @@ auto ASTRewriter::StatementVisitor::operator()(LabeledStatementAST* ast)
     -> StatementAST* {
   auto copy = LabeledStatementAST::create(arena());
 
+  for (auto attributeList = &copy->attributeList;
+       auto node : ListView{ast->attributeList}) {
+    auto value = rewrite.attributeSpecifier(node);
+    *attributeList = make_list_node(arena(), value);
+    attributeList = &(*attributeList)->next;
+  }
+
   copy->identifierLoc = ast->identifierLoc;
   copy->colonLoc = ast->colonLoc;
   copy->identifier = ast->identifier;
@@ -316,6 +323,13 @@ auto ASTRewriter::StatementVisitor::operator()(LabeledStatementAST* ast)
 auto ASTRewriter::StatementVisitor::operator()(CaseStatementAST* ast)
     -> StatementAST* {
   auto copy = CaseStatementAST::create(arena());
+
+  for (auto attributeList = &copy->attributeList;
+       auto node : ListView{ast->attributeList}) {
+    auto value = rewrite.attributeSpecifier(node);
+    *attributeList = make_list_node(arena(), value);
+    attributeList = &(*attributeList)->next;
+  }
 
   copy->caseLoc = ast->caseLoc;
   copy->expression = rewrite.expression(ast->expression);
@@ -339,6 +353,13 @@ auto ASTRewriter::StatementVisitor::operator()(CaseStatementAST* ast)
 auto ASTRewriter::StatementVisitor::operator()(DefaultStatementAST* ast)
     -> StatementAST* {
   auto copy = DefaultStatementAST::create(arena());
+
+  for (auto attributeList = &copy->attributeList;
+       auto node : ListView{ast->attributeList}) {
+    auto value = rewrite.attributeSpecifier(node);
+    *attributeList = make_list_node(arena(), value);
+    attributeList = &(*attributeList)->next;
+  }
 
   copy->defaultLoc = ast->defaultLoc;
   copy->colonLoc = ast->colonLoc;

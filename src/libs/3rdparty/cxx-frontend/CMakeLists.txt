@@ -86,6 +86,7 @@ add_qtc_library(cxx-frontend STATIC
     cxx/parser_lookup.h
     cxx/path.cc
     cxx/preprocessor.cc cxx/preprocessor.h
+    cxx/preprocessor_delegate.h
     cxx/preprocessor_fwd.h
     cxx/scope.cc cxx/scope.h
     cxx/source_location.cc cxx/source_location.h

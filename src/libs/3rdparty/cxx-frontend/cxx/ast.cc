@@ -936,6 +936,7 @@ auto NestedNamespaceSpecifierAST::lastSourceLocation() -> SourceLocation {
 }
 
 auto LabeledStatementAST::firstSourceLocation() -> SourceLocation {
+  if (auto loc = cxx::firstSourceLocation(attributeList)) return loc;
   if (auto loc = cxx::firstSourceLocation(identifierLoc)) return loc;
   if (auto loc = cxx::firstSourceLocation(colonLoc)) return loc;
   if (auto loc = cxx::firstSourceLocation(statement)) return loc;
@@ -946,10 +947,12 @@ auto LabeledStatementAST::lastSourceLocation() -> SourceLocation {
   if (auto loc = cxx::lastSourceLocation(statement)) return loc;
   if (auto loc = cxx::lastSourceLocation(colonLoc)) return loc;
   if (auto loc = cxx::lastSourceLocation(identifierLoc)) return loc;
+  if (auto loc = cxx::lastSourceLocation(attributeList)) return loc;
   return {};
 }
 
 auto CaseStatementAST::firstSourceLocation() -> SourceLocation {
+  if (auto loc = cxx::firstSourceLocation(attributeList)) return loc;
   if (auto loc = cxx::firstSourceLocation(caseLoc)) return loc;
   if (auto loc = cxx::firstSourceLocation(expression)) return loc;
   if (auto loc = cxx::firstSourceLocation(colonLoc)) return loc;
@@ -960,10 +963,12 @@ auto CaseStatementAST::lastSourceLocation() -> SourceLocation {
   if (auto loc = cxx::lastSourceLocation(colonLoc)) return loc;
   if (auto loc = cxx::lastSourceLocation(expression)) return loc;
   if (auto loc = cxx::lastSourceLocation(caseLoc)) return loc;
+  if (auto loc = cxx::lastSourceLocation(attributeList)) return loc;
   return {};
 }
 
 auto DefaultStatementAST::firstSourceLocation() -> SourceLocation {
+  if (auto loc = cxx::firstSourceLocation(attributeList)) return loc;
   if (auto loc = cxx::firstSourceLocation(defaultLoc)) return loc;
   if (auto loc = cxx::firstSourceLocation(colonLoc)) return loc;
   return {};
@@ -972,6 +977,7 @@ auto DefaultStatementAST::firstSourceLocation() -> SourceLocation {
 auto DefaultStatementAST::lastSourceLocation() -> SourceLocation {
   if (auto loc = cxx::lastSourceLocation(colonLoc)) return loc;
   if (auto loc = cxx::lastSourceLocation(defaultLoc)) return loc;
+  if (auto loc = cxx::lastSourceLocation(attributeList)) return loc;
   return {};
 }
 
@@ -6647,6 +6653,14 @@ auto NestedNamespaceSpecifierAST::create(Arena* arena,
 auto LabeledStatementAST::clone(Arena* arena) -> LabeledStatementAST* {
   auto node = create(arena);
 
+  if (attributeList) {
+    auto it = &node->attributeList;
+    for (auto node : ListView{attributeList}) {
+      *it = make_list_node<AttributeSpecifierAST>(arena, node->clone(arena));
+      it = &(*it)->next;
+    }
+  }
+
   node->identifierLoc = identifierLoc;
   node->colonLoc = colonLoc;
 
@@ -6662,12 +6676,15 @@ auto LabeledStatementAST::create(Arena* arena) -> LabeledStatementAST* {
   return node;
 }
 
-auto LabeledStatementAST::create(Arena* arena, SourceLocation identifierLoc,
+auto LabeledStatementAST::create(Arena* arena,
+                                 List<AttributeSpecifierAST*>* attributeList,
+                                 SourceLocation identifierLoc,
                                  SourceLocation colonLoc,
                                  StatementAST* statement,
                                  const Identifier* identifier)
     -> LabeledStatementAST* {
   auto node = new (arena) LabeledStatementAST();
+  node->attributeList = attributeList;
   node->identifierLoc = identifierLoc;
   node->colonLoc = colonLoc;
   node->statement = statement;
@@ -6675,10 +6692,13 @@ auto LabeledStatementAST::create(Arena* arena, SourceLocation identifierLoc,
   return node;
 }
 
-auto LabeledStatementAST::create(Arena* arena, StatementAST* statement,
+auto LabeledStatementAST::create(Arena* arena,
+                                 List<AttributeSpecifierAST*>* attributeList,
+                                 StatementAST* statement,
                                  const Identifier* identifier)
     -> LabeledStatementAST* {
   auto node = new (arena) LabeledStatementAST();
+  node->attributeList = attributeList;
   node->statement = statement;
   node->identifier = identifier;
   return node;
@@ -6686,6 +6706,14 @@ auto LabeledStatementAST::create(Arena* arena, StatementAST* statement,
 
 auto CaseStatementAST::clone(Arena* arena) -> CaseStatementAST* {
   auto node = create(arena);
+
+  if (attributeList) {
+    auto it = &node->attributeList;
+    for (auto node : ListView{attributeList}) {
+      *it = make_list_node<AttributeSpecifierAST>(arena, node->clone(arena));
+      it = &(*it)->next;
+    }
+  }
 
   node->caseLoc = caseLoc;
 
@@ -6702,11 +6730,13 @@ auto CaseStatementAST::create(Arena* arena) -> CaseStatementAST* {
   return node;
 }
 
-auto CaseStatementAST::create(Arena* arena, SourceLocation caseLoc,
-                              ExpressionAST* expression,
+auto CaseStatementAST::create(Arena* arena,
+                              List<AttributeSpecifierAST*>* attributeList,
+                              SourceLocation caseLoc, ExpressionAST* expression,
                               SourceLocation colonLoc, std::int64_t caseValue)
     -> CaseStatementAST* {
   auto node = new (arena) CaseStatementAST();
+  node->attributeList = attributeList;
   node->caseLoc = caseLoc;
   node->expression = expression;
   node->colonLoc = colonLoc;
@@ -6714,9 +6744,12 @@ auto CaseStatementAST::create(Arena* arena, SourceLocation caseLoc,
   return node;
 }
 
-auto CaseStatementAST::create(Arena* arena, ExpressionAST* expression,
-                              std::int64_t caseValue) -> CaseStatementAST* {
+auto CaseStatementAST::create(Arena* arena,
+                              List<AttributeSpecifierAST*>* attributeList,
+                              ExpressionAST* expression, std::int64_t caseValue)
+    -> CaseStatementAST* {
   auto node = new (arena) CaseStatementAST();
+  node->attributeList = attributeList;
   node->expression = expression;
   node->caseValue = caseValue;
   return node;
@@ -6724,6 +6757,14 @@ auto CaseStatementAST::create(Arena* arena, ExpressionAST* expression,
 
 auto DefaultStatementAST::clone(Arena* arena) -> DefaultStatementAST* {
   auto node = create(arena);
+
+  if (attributeList) {
+    auto it = &node->attributeList;
+    for (auto node : ListView{attributeList}) {
+      *it = make_list_node<AttributeSpecifierAST>(arena, node->clone(arena));
+      it = &(*it)->next;
+    }
+  }
 
   node->defaultLoc = defaultLoc;
   node->colonLoc = colonLoc;
@@ -6736,12 +6777,23 @@ auto DefaultStatementAST::create(Arena* arena) -> DefaultStatementAST* {
   return node;
 }
 
-auto DefaultStatementAST::create(Arena* arena, SourceLocation defaultLoc,
+auto DefaultStatementAST::create(Arena* arena,
+                                 List<AttributeSpecifierAST*>* attributeList,
+                                 SourceLocation defaultLoc,
                                  SourceLocation colonLoc)
     -> DefaultStatementAST* {
   auto node = new (arena) DefaultStatementAST();
+  node->attributeList = attributeList;
   node->defaultLoc = defaultLoc;
   node->colonLoc = colonLoc;
+  return node;
+}
+
+auto DefaultStatementAST::create(Arena* arena,
+                                 List<AttributeSpecifierAST*>* attributeList)
+    -> DefaultStatementAST* {
+  auto node = new (arena) DefaultStatementAST();
+  node->attributeList = attributeList;
   return node;
 }
 

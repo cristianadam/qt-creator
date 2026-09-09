@@ -171,6 +171,7 @@ class CharLiteral final : public Literal {
   struct Components {
     int value = 0;
     std::string_view prefix;
+    std::string_view suffix;
 
     [[nodiscard]] static auto from(std::string_view text,
                                    DiagnosticsClient* diagnostics = nullptr)
@@ -178,6 +179,11 @@ class CharLiteral final : public Literal {
   };
 
   [[nodiscard]] auto charValue() const -> int { return components_.value; }
+
+  // The ud-suffix of a user-defined character literal, empty otherwise.
+  [[nodiscard]] auto suffix() const -> std::string_view {
+    return components_.suffix;
+  }
 
   [[nodiscard]] auto components() const { return components_; }
 

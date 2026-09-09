@@ -72,18 +72,10 @@ struct NoIncludes
 };
 
 // The reason a corpus file does not parse, or nullptr if it is expected to.
-// Measured against upstream c4fd7a71c5e6465b3c8e7e084b66ed7a1a8132f5; revisit
+// Measured against upstream f78ee7e6ff899242255ebbb8f1123113e1f8ffa3; revisit
 // whenever the snapshot moves.
 const char *knownFailure(const QString &fileName)
 {
-    // A user-defined-literal suffix on a character literal is not parsed.
-    if (fileName == "userDefinedLiterals.1.cpp" || fileName == "userDefinedLiterals.2.cpp")
-        return "cxx-frontend: 'c'_X is not parsed as a user-defined literal";
-
-    // An attribute in front of a labeled statement is not parsed.
-    if (fileName == "statementAttributes.cpp")
-        return "cxx-frontend: [[likely]] before a case label is not parsed";
-
     // Ill-formed: an unnamed opaque enum, and enumerators redeclared in the
     // same scope. The built-in front end accepts both; cxx-frontend does not,
     // and is right to reject them.
@@ -200,15 +192,14 @@ void tst_cxxfrontend::parseCorpus()
     QVERIFY2(errors.isEmpty(), qPrintable(errors.join("\n")));
 }
 
-// The two gaps the corpus run turned up, reduced to the smallest input that
-// shows them, so that a snapshot refresh says which one was fixed.
+// The two gaps the first corpus run turned up, fixed upstream since and kept
+// here so that a snapshot refresh that loses them again is noticed.
 
 void tst_cxxfrontend::characterLiteralSuffix()
 {
     const QStringList errors = parse("int operator\"\"_X(char);\nint a = 'c'_X;\n",
                                      "characterLiteralSuffix.cpp",
                                      cxx::LanguageKind::kCXX);
-    QEXPECT_FAIL("", "cxx-frontend: 'c'_X is not parsed as a user-defined literal", Abort);
     QVERIFY2(errors.isEmpty(), qPrintable(errors.join("\n")));
 }
 
@@ -217,7 +208,6 @@ void tst_cxxfrontend::attributeOnLabeledStatement()
     const QStringList errors = parse("void f(int j) { switch (j) { [[likely]] case 1: break; } }\n",
                                      "attributeOnLabeledStatement.cpp",
                                      cxx::LanguageKind::kCXX);
-    QEXPECT_FAIL("", "cxx-frontend: [[likely]] before a case label is not parsed", Abort);
     QVERIFY2(errors.isEmpty(), qPrintable(errors.join("\n")));
 }
 

@@ -16,7 +16,7 @@ how the new parser copes with the corpora of the existing
 | | |
 |---|---|
 | Upstream | https://github.com/robertoraggi/cplusplus |
-| Revision | c4fd7a71c5e6465b3c8e7e084b66ed7a1a8132f5 (2026-08-31) |
+| Revision | f78ee7e6ff899242255ebbb8f1123113e1f8ffa3 (2026-09-09) |
 | Imported from | `src/parser/cxx` |
 | License | MIT, see `LICENSE` |
 

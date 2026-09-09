@@ -6,6 +6,7 @@
 #include <cxx/control.h>
 #include <cxx/diagnostics_client.h>
 #include <cxx/preprocessor.h>
+#include <cxx/preprocessor_delegate.h>
 
 #include <sstream>
 
@@ -22,7 +23,70 @@ public:
     void report(const cxx::Diagnostic &) override {}
 };
 
+CxxFrontendPreprocessor::Range toRange(const cxx::PreprocessorRange &range)
+{
+    return {int(range.fileId), int(range.offset), int(range.length)};
+}
+
 } // namespace
+
+// Collects what the engine reports into the Report the caller reads.
+class CxxFrontendReporter : public cxx::PreprocessorDelegate
+{
+public:
+    explicit CxxFrontendReporter(CxxFrontendPreprocessor::Report &report)
+        : m_report(report)
+    {}
+
+    void macroDefined(const cxx::MacroInfo &macro) override
+    {
+        CxxFrontendPreprocessor::MacroDefinition definition;
+        definition.name = QString::fromUtf8(macro.name.data(), macro.name.size());
+        definition.body = QString::fromUtf8(macro.body.data(), macro.body.size());
+        for (const std::string &parameter : macro.parameters)
+            definition.parameters.append(QString::fromStdString(parameter));
+        definition.definition = toRange(macro.definition);
+        definition.isFunctionLike = macro.isFunctionLike;
+        definition.isVariadic = macro.isVariadic;
+        m_report.definedMacros.append(definition);
+    }
+
+    void macroUsed(const cxx::MacroUse &use) override
+    {
+        CxxFrontendPreprocessor::MacroUse entry;
+        entry.name = QString::fromUtf8(use.macro->name.data(), use.macro->name.size());
+        entry.range = toRange(use.range);
+        entry.definition = toRange(use.macro->definition);
+        entry.expanded = use.expanded;
+        for (const cxx::PreprocessorRange &argument : use.arguments)
+            entry.arguments.append(toRange(argument));
+        m_report.macroUses.append(entry);
+    }
+
+    void undefinedMacroUsed(std::string_view name, cxx::PreprocessorRange) override
+    {
+        m_report.undefinedMacroUses.append(QString::fromUtf8(name.data(), name.size()));
+    }
+
+    void regionSkipped(cxx::PreprocessorRange range) override
+    {
+        m_report.skippedRegions.append(toRange(range));
+    }
+
+    void includeGuardFound(std::uint32_t fileId, std::string_view macroName) override
+    {
+        m_report.includeGuards.insert(int(fileId),
+                                      QString::fromUtf8(macroName.data(), macroName.size()));
+    }
+
+    void pragmaDirective(cxx::PreprocessorRange range) override
+    {
+        m_report.pragmas.append(toRange(range));
+    }
+
+private:
+    CxxFrontendPreprocessor::Report &m_report;
+};
 
 class CxxFrontendPreprocessor::Private
 {
@@ -35,12 +99,15 @@ public:
         // system on its own: Qt Creator has the working copy of what is open
         // in an editor, and its own idea of the search paths.
         preprocessor->setCanResolveFiles(false);
+        preprocessor->setPreprocessorDelegate(&reporter);
     }
 
     std::unique_ptr<cxx::Control> control;
     SilentDiagnostics diagnostics;
     std::unique_ptr<cxx::Preprocessor> preprocessor;
     HeaderResolver headerResolver;
+    CxxFrontendPreprocessor::Report report;
+    CxxFrontendReporter reporter{report};
 };
 
 // Answers the engine's requests out of the resolver, which is how Qt Creator
@@ -128,8 +195,22 @@ void CxxFrontendPreprocessor::undefMacro(const QString &name)
     d->preprocessor->undefMacro(name.toStdString());
 }
 
+const CxxFrontendPreprocessor::Report &CxxFrontendPreprocessor::report() const
+{
+    return d->report;
+}
+
+QString CxxFrontendPreprocessor::fileName(int fileId) const
+{
+    if (fileId <= 0)
+        return {};
+    return QString::fromStdString(d->preprocessor->sourceFileName(std::uint32_t(fileId)));
+}
+
 QString CxxFrontendPreprocessor::run(const QString &source, const QString &fileName)
 {
+    d->report = {};
+
     std::vector<cxx::Token> tokens;
     d->preprocessor->beginPreprocessing(source.toStdString(), fileName.toStdString(), tokens);
 
@@ -146,13 +227,16 @@ QString CxxFrontendPreprocessor::run(const QString &source, const QString &fileN
 
 auto CxxFrontendPreprocessor::gaps() -> Gaps
 {
-    // All false, and every one of them is a Client callback with nothing to
-    // feed it. cxx::Preprocessor keeps the skipping state internally but does
-    // not report it, has no notification for a macro being used, and
-    // cxx::Token has no room to say that a macro produced it. The
-    // PreprocessorDelegate its header forward-declares would be the place for
-    // the first three.
-    return {};
+    // What is left is the tokens. cxx::Token is a full 64 bits -- kind,
+    // startOfLine, leadingSpace, fileId, length, offset -- with no room to say
+    // that a macro produced it, so Document still cannot tell an expanded
+    // token from one that was written. The delegate covers the rest.
+    return {
+        .reportsMacroUses = true,
+        .reportsSkippedBlocks = true,
+        .reportsIncludeGuards = true,
+        .marksExpandedTokens = false,
+    };
 }
 
 } // namespace CPlusPlus
