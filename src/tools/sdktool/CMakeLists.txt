@@ -62,7 +62,6 @@ add_qtc_library(sdktoolLib
     ${CMAKE_CURRENT_BINARY_DIR}
   SOURCES
     addabiflavor.cpp addabiflavor.h
-    addcmakeoperation.cpp addcmakeoperation.h
     adddebuggeroperation.cpp adddebuggeroperation.h
     adddeviceoperation.cpp adddeviceoperation.h
     addkeysoperation.cpp addkeysoperation.h
@@ -74,7 +73,6 @@ add_qtc_library(sdktoolLib
     findvalueoperation.cpp findvalueoperation.h
     getoperation.cpp getoperation.h
     operation.cpp operation.h
-    rmcmakeoperation.cpp rmcmakeoperation.h
     rmdebuggeroperation.cpp rmdebuggeroperation.h
     rmdeviceoperation.cpp rmdeviceoperation.h
     rmkeysoperation.cpp rmkeysoperation.h

@@ -3,7 +3,6 @@
 
 #include "addkitoperation.h"
 
-#include "addcmakeoperation.h"
 #include "adddeviceoperation.h"
 #include "addkeysoperation.h"
 #include "addqtoperation.h"
@@ -87,7 +86,7 @@ QString AddKitOperation::argumentsHelpText() const
         "    --mkspec <PATH>                            mkspec of the new kit.\n"
         "    --env <VALUE>                              add a custom build (and run) environment setting. [may be repeated]\n"
         "    --run-env <VALUE>                          add a custom run environment setting. [may be repeated]\n"
-        "    --cmake <ID>                               set a cmake tool.\n"
+        "    --cmake <PATH>                             set the cmake executable.\n"
         "    --cmake-generator <GEN>:<EXTRA>:<TOOLSET>:<PLATFORM>\n"
         "                                               set a cmake generator.\n"
         "    --cmake-config <KEY:TYPE=VALUE>            set a cmake configuration value [may be "
@@ -243,7 +242,7 @@ bool AddKitOperation::setArguments(const QStringList &args)
             if (next.isNull())
                 return false;
             ++i;
-            m_cmakeId = next;
+            m_cmake = next;
             continue;
         }
 
@@ -388,7 +387,7 @@ void AddKitOperation::unittest()
 
     AddKitData kitData = baseData;
     kitData.m_tcs = tcs;
-    QVariantMap empty = kitData.addKit(map, tcMap, qtMap, devMap, {});
+    QVariantMap empty = kitData.addKit(map, tcMap, qtMap, devMap);
 
     QVERIFY(empty.isEmpty());
     // Do not fail if TC is an ABI:
@@ -396,14 +395,14 @@ void AddKitOperation::unittest()
     tcs.insert("C", "x86-linux-generic-elf-64bit");
     kitData = baseData;
     kitData.m_tcs = tcs;
-    empty = kitData.addKit(map, tcMap, qtMap, devMap, {});
+    empty = kitData.addKit(map, tcMap, qtMap, devMap);
     QVERIFY(!empty.isEmpty());
 
     // QTCREATORBUG-11983, mach_o was not covered by the first attempt to fix this.
     tcs.insert("D", "x86-macos-generic-mach_o-64bit");
     kitData = baseData;
     kitData.m_tcs = tcs;
-    empty = kitData.addKit(map, tcMap, qtMap, devMap, {});
+    empty = kitData.addKit(map, tcMap, qtMap, devMap);
     QVERIFY(!empty.isEmpty());
 
     tcs.clear();
@@ -414,7 +413,7 @@ void AddKitOperation::unittest()
 
     kitData = baseData;
     kitData.m_qt = "{qtXX-id}";
-    empty = kitData.addKit(map, tcMap, qtMap, devMap, {});
+    empty = kitData.addKit(map, tcMap, qtMap, devMap);
     QVERIFY(empty.isEmpty());
 
     // Fail if dev is not there:
@@ -422,13 +421,13 @@ void AddKitOperation::unittest()
 
     kitData = baseData;
     kitData.m_device = "{devXX-id}";
-    empty = kitData.addKit(map, tcMap, qtMap, devMap, {});
+    empty = kitData.addKit(map, tcMap, qtMap, devMap);
     QVERIFY(empty.isEmpty());
 
     // Profile 0:
     kitData = baseData;
     kitData.m_tcs = tcs;
-    map = kitData.addKit(map, tcMap, qtMap, devMap, {});
+    map = kitData.addKit(map, tcMap, qtMap, devMap);
 
     QCOMPARE(map.count(), 4);
     QVERIFY(map.contains(VERSION));
@@ -481,7 +480,7 @@ void AddKitOperation::unittest()
     kitData.m_icon = "/tmp/icon3.png";
     kitData.m_debugger = "/usr/bin/gdb-test3";
     kitData.m_tcs = tcs;
-    QVariantMap result = kitData.addKit(map, tcMap, qtMap, devMap, {});
+    QVariantMap result = kitData.addKit(map, tcMap, qtMap, devMap);
     QVERIFY(result.isEmpty());
 
     // Profile 1: Make sure name is unique:
@@ -493,7 +492,7 @@ void AddKitOperation::unittest()
     kitData.m_sysRoot = "/sys/root//";
     kitData.m_buildEnv = env;
     kitData.m_tcs = tcs;
-    map = kitData.addKit(map, tcMap, qtMap, devMap, {});
+    map = kitData.addKit(map, tcMap, qtMap, devMap);
 
     QCOMPARE(map.count(), 5);
     QVERIFY(map.contains(VERSION));
@@ -554,7 +553,7 @@ void AddKitOperation::unittest()
     kitData.m_debuggerId = "debugger Id";
     kitData.m_buildEnv = env;
 
-    map = kitData.addKit(map, tcMap, qtMap, devMap, {});
+    map = kitData.addKit(map, tcMap, qtMap, devMap);
     QCOMPARE(map.count(), 6);
     QVERIFY(map.contains(VERSION));
     QCOMPARE(map.value(VERSION).toInt(), 1);
@@ -595,16 +594,14 @@ QVariantMap AddKitData::addKit(const QVariantMap &map) const
     QVariantMap tcMap = Operation::load("ToolChains");
     QVariantMap qtMap = Operation::load("QtVersions");
     QVariantMap devMap = Operation::load("Devices");
-    QVariantMap cmakeMap = Operation::load("cmaketools");
 
-    return AddKitData::addKit(map, tcMap, qtMap, devMap, cmakeMap);
+    return AddKitData::addKit(map, tcMap, qtMap, devMap);
 }
 
 QVariantMap AddKitData::addKit(const QVariantMap &map,
                                const QVariantMap &tcMap,
                                const QVariantMap &qtMap,
-                               const QVariantMap &devMap,
-                               const QVariantMap &cmakeMap) const
+                               const QVariantMap &devMap) const
 {
     // Sanity check: Make sure autodetection source is not in use already:
     const QStringList valueKeys = FindValueOperation::findValue(map, QVariant(m_id));
@@ -652,11 +649,6 @@ QVariantMap AddKitData::addKit(const QVariantMap &map,
     if (!qtId.isNull() && qtId.isEmpty())
         qtId = "-1";
 
-    if (!m_cmakeId.isEmpty() && !AddCMakeData::exists(cmakeMap, m_cmakeId)) {
-        qCCritical(addkitlog) << "Error: CMake tool" << qPrintable(m_cmakeId) << "does not exist.";
-        return QVariantMap();
-    }
-
     // Find position to insert:
     bool ok;
     int count = GetOperation::get(map, COUNT).toInt(&ok);
@@ -703,8 +695,8 @@ QVariantMap AddKitData::addKit(const QVariantMap &map,
         data << KeyValuePair({kit, DATA, QT}, QVariant(qtId));
     if (!m_mkspec.isNull())
         data << KeyValuePair({kit, DATA, MKSPEC}, QVariant(m_mkspec));
-    if (!m_cmakeId.isNull())
-        data << KeyValuePair({kit, DATA, CMAKE_ID}, QVariant(m_cmakeId));
+    if (!m_cmake.isNull())
+        data << KeyValuePair({kit, DATA, CMAKE_ID}, QVariant(m_cmake));
     if (!m_cmakeGenerator.isNull()) {
         QVariantMap generatorMap;
         generatorMap.insert("Generator", m_cmakeGenerator);

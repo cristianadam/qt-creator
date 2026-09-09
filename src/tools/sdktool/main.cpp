@@ -5,7 +5,6 @@
 
 #include "operation.h"
 
-#include "addcmakeoperation.h"
 #include "adddebuggeroperation.h"
 #include "adddeviceoperation.h"
 #include "addabiflavor.h"
@@ -17,7 +16,6 @@
 #include "findkeyoperation.h"
 #include "findvalueoperation.h"
 #include "getoperation.h"
-#include "rmcmakeoperation.h"
 #include "rmdebuggeroperation.h"
 #include "rmdeviceoperation.h"
 #include "rmkeysoperation.h"
@@ -170,7 +168,6 @@ int main(int argc, char *argv[])
     operations.emplace_back(std::make_unique<AddKeysOperation>());
 
     operations.emplace_back(std::make_unique<AddAbiFlavor>());
-    operations.emplace_back(std::make_unique<AddCMakeOperation>());
     operations.emplace_back(std::make_unique<AddDebuggerOperation>());
     operations.emplace_back(std::make_unique<AddDeviceOperation>());
     operations.emplace_back(std::make_unique<AddQtOperation>());
@@ -181,7 +178,6 @@ int main(int argc, char *argv[])
 
     operations.emplace_back(std::make_unique<GetOperation>());
 
-    operations.emplace_back(std::make_unique<RmCMakeOperation>());
     operations.emplace_back(std::make_unique<RmKitOperation>());
     operations.emplace_back(std::make_unique<RmDebuggerOperation>());
     operations.emplace_back(std::make_unique<RmDeviceOperation>());

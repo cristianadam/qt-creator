@@ -35,14 +35,12 @@ ARGS:
 OPERATION:
     One of:
         addKeys         add settings to Qt Creator configuration
-        addCMake        add a CMake tool to Qt Creator
         addDebugger     add a debugger to Qt Creator
         addDev          add a device to Qt Creator
         addQt           add a Qt version to Qt Creator
         addTC           add a tool chain to Qt Creator
         addKit          add a kit to Qt Creator
         get             get settings from Qt Creator configuration
-        rmCMake         remove a CMake tool from Qt Creator
         rmKit           remove a kit from Qt Creator
         rmDebugger      remove a debugger from Qt Creator
         rmDev           remove a device from Qt Creator

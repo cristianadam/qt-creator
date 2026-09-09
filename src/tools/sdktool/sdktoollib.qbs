@@ -43,8 +43,6 @@ QtcLibrary {
     files: [
         "addabiflavor.cpp",
         "addabiflavor.h",
-        "addcmakeoperation.cpp",
-        "addcmakeoperation.h",
         "adddebuggeroperation.cpp",
         "adddebuggeroperation.h",
         "adddeviceoperation.cpp",
@@ -67,8 +65,6 @@ QtcLibrary {
         "getoperation.h",
         "operation.cpp",
         "operation.h",
-        "rmcmakeoperation.cpp",
-        "rmcmakeoperation.h",
         "rmdebuggeroperation.cpp",
         "rmdebuggeroperation.h",
         "rmdeviceoperation.cpp",

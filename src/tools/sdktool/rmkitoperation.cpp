@@ -140,7 +140,7 @@ void RmKitOperation::unittest()
     kitData.m_mkspec = "unsupported/mkspec";
     kitData.m_extra = {{"PE.Profile.Data/extraData", QVariant("extraValue")}};
 
-    QVariantMap map = kitData.addKit(AddKitData::initializeKits(), tcMap, qtMap, devMap, {});
+    QVariantMap map = kitData.addKit(AddKitData::initializeKits(), tcMap, qtMap, devMap);
 
     kitData.m_id = "testId2";
     kitData.m_icon = "/tmp/icon2.png";
@@ -148,7 +148,7 @@ void RmKitOperation::unittest()
     kitData.m_mkspec = "unsupported/mkspec2";
     kitData.m_extra = {{"PE.Profile.Data/extraData", QVariant("extraValue2")}};
 
-    map = kitData.addKit(map, tcMap, qtMap, devMap, {});
+    map = kitData.addKit(map, tcMap, qtMap, devMap);
 
     QTest::ignoreMessage(QtCriticalMsg, "Error: Could not find the default kit.");
     QVariantMap result = rmKit(map, "testId");

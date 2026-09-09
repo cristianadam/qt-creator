@@ -11,7 +11,6 @@
 #endif
 
 #include "addabiflavor.h"
-#include "addcmakeoperation.h"
 #include "adddebuggeroperation.h"
 #include "adddeviceoperation.h"
 #include "addkeysoperation.h"
@@ -21,7 +20,6 @@
 #include "findkeyoperation.h"
 #include "findvalueoperation.h"
 #include "getoperation.h"
-#include "rmcmakeoperation.h"
 #include "rmdebuggeroperation.h"
 #include "rmdeviceoperation.h"
 #include "rmkeysoperation.h"
@@ -36,7 +34,6 @@ class SdktoolTest : public QObject
 
 private slots:
     void test_AddAbiFlavorOperation() { AddAbiFlavor::unittest(); }
-    void test_AddCMakeOperation() { AddCMakeOperation::unittest(); }
     void test_AddDebuggerOperation() { AddDebuggerOperation::unittest(); }
     void test_AddDeviceOperation() { AddDeviceOperation::unittest(); }
     void test_AddKeysOperation() { AddKeysOperation::unittest(); }
@@ -47,7 +44,6 @@ private slots:
     void test_FindKeyOperation() { FindKeyOperation::unittest(); }
     void test_FindValueOperation() { FindValueOperation::unittest(); }
     void test_GetOperation() { GetOperation::unittest(); }
-    void test_RmCMakeOperation() { RmCMakeOperation::unittest(); }
     void test_RmDebuggerOperation() { RmDebuggerOperation::unittest(); }
     void test_RmDeviceOperation() { RmDeviceOperation::unittest(); }
     void test_RmKeysOperation() { RmKeysOperation::unittest(); }

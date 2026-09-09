@@ -32,11 +32,9 @@ QString Settings::getPath(const QString &file)
     QString result = sdkPath;
     const QString lowerFile = file.toLower();
     const QStringList identical = {
-        "android", "cmaketools", "debuggers", "devices", "profiles", "qtversions", "toolchains", "abi"
+        "android", "debuggers", "devices", "profiles", "qtversions", "toolchains", "abi"
     };
-    if (lowerFile == "cmake")
-        result += "/cmaketools";
-    else if (lowerFile == "kits")
+    if (lowerFile == "kits")
         result += "/profiles";
     else if (lowerFile == "qtversions")
         result += "/qtversion";

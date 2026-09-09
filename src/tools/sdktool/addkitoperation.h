@@ -12,8 +12,7 @@ class AddKitData
 public:
     QVariantMap addKit(const QVariantMap &map) const;
     QVariantMap addKit(const QVariantMap &map, const QVariantMap &tcMap,
-                       const QVariantMap &qtMap, const QVariantMap &devMap,
-                       const QVariantMap &cmakeMap) const;
+                       const QVariantMap &qtMap, const QVariantMap &devMap) const;
 
     static QVariantMap initializeKits();
 
@@ -30,7 +29,7 @@ public:
     QHash<QString, QString> m_tcs;
     QString m_qt;
     QString m_mkspec;
-    QString m_cmakeId;
+    QString m_cmake;
     QString m_cmakeGenerator;
     QString m_cmakeExtraGenerator;
     QString m_cmakeGeneratorToolset;

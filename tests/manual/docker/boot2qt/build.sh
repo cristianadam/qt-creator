@@ -60,7 +60,6 @@ ${SDKTOOL} rmQt --id ${BASEID}.qt || true
 ${SDKTOOL} rmTC --id ProjectExplorer.ToolChain.Gcc:${BASEID}.gcc || true
 ${SDKTOOL} rmTC --id ProjectExplorer.ToolChain.Gcc:${BASEID}.g++ || true
 ${SDKTOOL} rmDebugger --id ${BASEID}.gdb 2>/dev/null || true
-${SDKTOOL} rmCMake --id ${BASEID}.cmake 2>/dev/null || true
 ${SDKTOOL} rmDev --id "$repo:$tag" 2>/dev/null || true
 
 if [ -n "${REMOVEONLY}" ]; then
@@ -109,11 +108,6 @@ ${SDKTOOL} addQt \
     --qmake ${QMAKE} \
     --abis "${ABI}"
 
-${SDKTOOL} addCMake \
-    --id "${BASEID}.cmake" \
-    --name "CMake ${NAME}" \
-    --path ${CMAKE}
-
 ${SDKTOOL} addKit \
     --id "${BASEID}.kit" \
     --name "${NAME}" \
@@ -127,7 +121,7 @@ ${SDKTOOL} addKit \
     --Cxxtoolchain "ProjectExplorer.ToolChain.Gcc:${BASEID}.g++" \
     --icon ":/boot2qt/images/B2Qt_QtC_icon.png" \
     --mkspec "" \
-    --cmake "${BASEID}.cmake" \
+    --cmake "${CMAKE}" \
     --cmake-config "CMAKE_CXX_COMPILER:STRING=%{Compiler:Executable:Cxx}" \
     --cmake-config "CMAKE_C_COMPILER:STRING=%{Compiler:Executable:C}" \
     --cmake-config "CMAKE_PREFIX_PATH:STRING=%{Qt:QT_INSTALL_PREFIX}" \

@@ -93,9 +93,6 @@
        \row
             \li \l {addAbiFlavor}
             \li Add a system architecture (ABI).
-       \row
-            \li \l {addCMake}
-            \li Add the path to a CMake tool.
         \row
             \li \l {addDebugger}
             \li Add a debugger.
@@ -123,9 +120,6 @@
        \row
             \li \c {get}
             \li Get settings.
-        \row
-            \li \c {rmCMake}
-            \li Remove the path to a CMake tool.
         \row
             \li \c {rmDebugger}
             \li Remove a debugger.
@@ -178,59 +172,6 @@
     ./sdktool addAbiFlavor \
     --flavor poky \
     --oses linux
-    \endcode
-
-    \section1 Adding CMake tools
-
-    \section2 addCMake
-
-    \code [shell]
-    sdktool addCMake --id <ID> --name <NAME> --path <PATH> [<KEY> <TYPE:VALUE>]
-    \endcode
-
-    \section2 addCMake options
-
-    The following table summarizes the available options.
-
-    \table
-        \header
-            \li Option
-            \li Description
-            \li Required
-        \row
-            \li \c {--id <ID>}
-            \li ID of the CMake installation. Can be any ASCII (7-bit) string.
-
-                If you do not use a version number in the string, the registered
-                CMake keeps the ID when you update this CMake installation, and
-                therefore, all kits are automatically updated to use the new
-                version.
-            \li \inlineimage {ok.png} {Yes}
-        \row
-            \li \c {--name <NAME>}
-            \li Name of the CMake installation.
-            \li \inlineimage {ok.png} {Yes}
-        \row
-            \li \c {--path <PATH>}
-            \li Path to the CMake executable.
-            \li \inlineimage {ok.png} {Yes}
-        \row
-            \li \c {<KEY> <TYPE:VALUE>}
-            \li Additional settings as key-value pairs.
-            \li
-    \endtable
-
-    For more information, see \l{Add CMake tools}.
-
-    \section2 CMake configuration example
-
-    To add a CMake tool on Windows, enter:
-
-    \code [shell]
-    sdktool addCMake \
-    --id "my.custom.cmake" \
-    --name "Custom CMake" \
-    --path "C:\Program Files\CMake-3.30\bin\cmake.exe"
     \endcode
 
     \section1 Adding compilers
@@ -635,8 +576,8 @@
             \li The ID of the device to build applications on.
             \li
         \row
-            \li \c {--cmake <ID>}
-            \li The ID of the CMake executable to use for building the project.
+            \li \c {--cmake <PATH>}
+            \li Path to the CMake executable to use for building the project.
             \li
         \row
             \li \c {--cmake-config <KEY:TYPE=VALUE>}
