@@ -441,21 +441,48 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
 
 cxx::SourceLocation CxxFrontendDocument::Private::tokenAt(int line, int column) const
 {
-    // A scope's extent is a range of tokens and a position is a place in the
-    // text, so find the first token at or after the position.
+    // Where a cursor is, rather than where a token starts. Someone following
+    // a name has the cursor somewhere in the middle of it, and an editor that
+    // tidies the position first leaves it just after the word -- both of those
+    // mean that name.
+    //
+    // A position that is on no token at all falls through to the next one,
+    // which is what a question about a scope or a function needs: those are
+    // asked about a place in the whitespace as readily as about a name.
+    const auto before = [](int aLine, int aColumn, int bLine, int bColumn) {
+        return aLine < bLine || (aLine == bLine && aColumn < bColumn);
+    };
+
+    cxx::SourceLocation endsHere;
     for (unsigned i = 1; i < unit.tokenCount(); ++i) {
         const cxx::SourceLocation location{i};
         if (unit.tokenAt(location).fileId()
             != std::uint32_t(unit.preprocessor()->mainSourceFileId())) {
             continue;
         }
-        const cxx::SourcePosition position = unit.tokenStartPosition(location);
-        if (int(position.line) > line
-            || (int(position.line) == line && int(position.column) >= column)) {
+        const cxx::SourcePosition start = unit.tokenStartPosition(location);
+        const cxx::SourcePosition end = unit.tokenEndPosition(location);
+
+        // Inside it, its first character included.
+        if (!before(line, column, int(start.line), int(start.column))
+            && before(line, column, int(end.line), int(end.column))) {
             return location;
         }
+
+        // Ends exactly here. Only a name is taken this way: the position after
+        // a brace is not a question about the brace, but the position after a
+        // name is still about the name.
+        if (int(end.line) == line && int(end.column) == column
+            && unit.tokenAt(location).kind() == cxx::TokenKind::T_IDENTIFIER) {
+            endsHere = location;
+            continue;
+        }
+
+        // Past it, so nothing before this can contain the position either.
+        if (before(line, column, int(start.line), int(start.column)))
+            return endsHere ? endsHere : location;
     }
-    return {};
+    return endsHere;
 }
 
 QString CxxFrontendDocument::Private::scopeNameAt(int line, int column) const

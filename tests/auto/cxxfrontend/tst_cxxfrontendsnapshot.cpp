@@ -96,6 +96,7 @@ private slots:
     void aGuardIsNotAnExcuseToIgnoreOtherMacros();
 
     void aNameDeclaredInAHeaderResolvesFromTheSource();
+    void aCursorAnywhereInANameResolves();
     void aNameDeclaredTwoHeadersAwayResolves();
     void aNameThatIsNowhereResolvesToNothing();
     void aLocalNameStillWinsOverAHeader();
@@ -438,6 +439,32 @@ void tst_cxxfrontendsnapshot::aNameDeclaredInAHeaderResolvesFromTheSource()
     QCOMPARE(found.name, QString("fromHeader"));
     QCOMPARE(found.filePath, QString("h.h"));
     QCOMPARE(found.line, 1);
+}
+
+// Where a cursor actually is. Every test above points at the first character
+// of a name, and no editor does: someone following a name has the cursor
+// somewhere in the middle of it, and the ones that normalise first put it at
+// the end of the word.
+void tst_cxxfrontendsnapshot::aCursorAnywhereInANameResolves()
+{
+    Files files;
+    files.add("h.h", "int fromHeader;\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"h.h\"\nvoid f() { fromHeader = 1; }\n");
+
+    // fromHeader runs from column 12 to column 21, so 22 is where a cursor
+    // moved to the end of the word sits.
+    for (const int column : {12, 16, 21, 22}) {
+        const CxxFrontendDocument::Declaration found
+            = snapshot.declarationAt("a.cpp", 2, column);
+        QVERIFY2(found.isValid(), qPrintable(QString("column %1").arg(column)));
+        QCOMPARE(found.filePath, QString("h.h"));
+    }
+
+    // And a position that is on nothing still means nothing.
+    QVERIFY(!snapshot.declarationAt("a.cpp", 2, 23).isValid());
 }
 
 void tst_cxxfrontendsnapshot::aNameDeclaredTwoHeadersAwayResolves()
