@@ -153,6 +153,22 @@ bool PyValue::hasChildren()
     return childCount() != 0;
 }
 
+// dbgeng leaves a pointer whose pointee type only another module defines
+// without children. A cast naming that module completes the type.
+bool PyValue::completePointerType()
+{
+    const std::string pointerType = type().name();
+    if (!SymbolGroupValue::isPointerType(pointerType))
+        return false;
+    const std::string targetType = SymbolGroupValue::stripPointerType(pointerType);
+    if (targetType.empty() || targetType == "void")
+        return false;
+    const std::string qualifiedType = PyType::lookupType(targetType).name(true);
+    if (qualifiedType.find('!') == std::string::npos)
+        return false;
+    return SUCCEEDED(m_symbolGroup->OutputAsType(m_index, (qualifiedType + " *").c_str()));
+}
+
 bool PyValue::expand()
 {
     if (!m_symbolGroup)
@@ -162,6 +178,8 @@ bool PyValue::expand()
         return false;
     if (params.Flags & DEBUG_SYMBOL_EXPANDED)
         return true;
+    if (params.SubElements == 0)
+        completePointerType();
     dumpSymbolGroup(m_symbolGroup);
     if (FAILED(m_symbolGroup->ExpandSymbol(m_index, TRUE)))
         return false;

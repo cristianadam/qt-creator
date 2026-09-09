@@ -51,6 +51,10 @@ and no members come with it:
 
     LibProbe app 64 []
 
+The type is only half of it. The value the dumper expands is the pointer's
+entry in a symbol group, and dbgeng leaves that childless whatever the lookup
+answered, so the extension casts the entry to the module-qualified type too.
+
 ## The symbol group path
 
 The extension's `locals` command, which a cdb without Python reads locals

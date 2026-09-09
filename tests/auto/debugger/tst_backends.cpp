@@ -2143,11 +2143,6 @@ void tst_backends::initTestCase()
                                                      cdbCompileLib,
                                                      cdbCompileLibTimer.elapsed())));
         }
-        // The cdb backend reads locals through the extension's symbol group,
-        // where dbgeng leaves a pointer to a type another module brought in
-        // without children. Only a cast that names that module expands it.
-        msvcInferiorData.libraryTypeSymbol.clear();
-
         const FilePath pdbPath = FilePath::fromString(m_tempDir.path()) / "inferior_msvc.pdb";
         const QStringList cdbCompileArgs = {
             "/nologo", "/Zi", "/Od", "/EHsc",
