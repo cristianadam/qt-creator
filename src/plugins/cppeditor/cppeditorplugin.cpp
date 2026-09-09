@@ -8,6 +8,7 @@
 #include "cppcodestylesettingspage.h"
 #include "cppeditorconstants.h"
 #include "cppeditordocument.h"
+#include "cppeditorlogging.h"
 #include "cppeditortr.h"
 #include "cppeditorwidget.h"
 #include "cppfilesettingspage.h"
@@ -59,6 +60,10 @@
 #include <coreplugin/navigationwidget.h>
 #include <coreplugin/progressmanager/progressmanager.h>
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include <cplusplus/CxxFrontendLexer.h>
+#endif
+
 #include <extensionsystem/iplugin.h>
 
 #include <projectexplorer/devicesupport/idevice.h>
@@ -78,6 +83,7 @@
 #include <texteditor/texteditorconstants.h>
 
 #include <utils/clangutils.h>
+#include <utils/environment.h>
 #include <utils/fsengine/fileiconprovider.h>
 #include <utils/hostosinfo.h>
 #include <utils/macroexpander.h>
@@ -188,6 +194,13 @@ class CppEditorPlugin final : public ExtensionSystem::IPlugin
 public:
     ~CppEditorPlugin() final
     {
+        // The scanner initialize() installs is code in this plugin, held by a
+        // library that outlives it. Taking it out again is what keeps that
+        // from being a question about who is unloaded first.
+#ifdef QTC_WITH_CXX_FRONTEND
+        useCxxFrontendLexer(false);
+#endif
+
         destroyCppQuickFixFactories();
         delete d;
         d = nullptr;
@@ -241,6 +254,21 @@ static QFuture<QTextDocument *> highlightCode(const QString &code, const QString
 
 void CppEditorPlugin::initialize()
 {
+    // Which scanner the editor's C++ tokens come from, settled before anything
+    // asks for any. The build option makes the cxx-frontend one available; the
+    // environment says whether it is used, so that building the differential
+    // tests does not also change the editor of the person running them.
+    //
+    // Everything reads these tokens through SimpleLexer -- the highlighter,
+    // the indenter, completion, the test frameworks' parsers -- so this one
+    // call moves all of them, and leaving it out leaves them all as they were.
+#ifdef QTC_WITH_CXX_FRONTEND
+    if (qtcEnvironmentVariableIsSet("QTC_CXX_FRONTEND_LEXER")) {
+        useCxxFrontendLexer(true);
+        qCInfo(cxxFrontendLog) << "scanning C++ with the cxx-frontend lexer";
+    }
+#endif
+
     d = new CppEditorPluginPrivate;
 
     setupCppToolsSettings();

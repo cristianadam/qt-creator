@@ -93,6 +93,11 @@ Module {
 
     property bool preferSystemSyntaxHighlighting: true
 
+    // Mirrors the QTC_ENABLE_CXX_FRONTEND CMake option: whether the
+    // cxx-frontend parser, the bridge on top of it and their tests are built,
+    // and with them whether the editor can be asked to scan C++ with it.
+    property bool enableCxxFrontend: false
+
     property bool withAllTests: Environment.getEnv("TEST") || qbs.buildVariant === "debug"
     property bool withPluginTests: withAllTests
     property bool withAutotests: withAllTests

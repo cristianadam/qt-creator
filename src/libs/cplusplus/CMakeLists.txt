@@ -56,8 +56,9 @@ endif()
 
 # The pieces of the front end that have been moved onto cxx-frontend. A target
 # of its own rather than part of CPlusPlus, so that the C++23 that cxx-frontend
-# needs does not spread to everything that uses the front end. Nothing but the
-# differential tests in tests/auto/cxxfrontend uses it yet.
+# needs does not spread to everything that uses the front end. Used by the
+# differential tests in tests/auto/cxxfrontend, and by CppEditor, which can put
+# the editor's scanner on it.
 add_qtc_library(CxxFrontendBridge STATIC
   CONDITION QTC_ENABLE_CXX_FRONTEND
   DEPENDS 3rd_cplusplus CPlusPlus cxx-frontend Qt::Core

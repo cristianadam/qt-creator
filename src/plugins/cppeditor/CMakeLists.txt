@@ -164,6 +164,15 @@ extend_qtc_plugin(CppEditor
     quickfixes/cppquickfix_test.h
 )
 
+# The scanner behind SimpleLexer, which everything in this plugin that reads
+# C++ tokens goes through. Available when the option is on, used when the
+# environment asks for it; see CppEditorPlugin::initialize().
+extend_qtc_plugin(CppEditor
+  CONDITION QTC_ENABLE_CXX_FRONTEND
+  DEPENDS CxxFrontendBridge
+  DEFINES QTC_WITH_CXX_FRONTEND
+)
+
 qtc_add_resources(CppEditor "images"
   PREFIX "/cppeditor"
   BASE "."

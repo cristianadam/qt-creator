@@ -9,6 +9,11 @@ QtcPlugin {
     Depends { name: "CPlusPlus" }
     Depends { name: "Utils" }
 
+    // The scanner behind SimpleLexer, which everything here that reads C++
+    // tokens goes through. Available when the option is on, used when the
+    // environment asks for it; see CppEditorPlugin::initialize().
+    Depends { name: "CxxFrontendBridge"; condition: qtc.enableCxxFrontend }
+
     Depends { name: "Core" }
     Depends { name: "TextEditor" }
     Depends { name: "ProjectExplorer" }
@@ -23,6 +28,10 @@ QtcPlugin {
     Properties {
         condition: qbs.toolchain.contains("msvc")
         cpp.defines: "_SCL_SECURE_NO_WARNINGS"
+    }
+    Properties {
+        condition: qtc.enableCxxFrontend
+        cpp.defines: base.concat("QTC_WITH_CXX_FRONTEND")
     }
 
     files: [

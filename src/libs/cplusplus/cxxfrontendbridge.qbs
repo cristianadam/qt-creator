@@ -8,8 +8,9 @@ QtcLibrary {
     name: "CxxFrontendBridge"
     type: "staticlibrary"
 
-    // Mirrors the QTC_ENABLE_CXX_FRONTEND CMake option being off by default.
-    builtByDefault: false
+    // Mirrors the QTC_ENABLE_CXX_FRONTEND CMake option, which is off by
+    // default.
+    builtByDefault: qtc.enableCxxFrontend
 
     Depends { name: "CPlusPlus" }
     Depends { name: "cxx-frontend" }

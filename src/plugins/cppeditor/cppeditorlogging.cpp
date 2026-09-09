@@ -7,4 +7,8 @@ namespace CppEditor::Internal {
 
 Q_LOGGING_CATEGORY(highlighterLog, "qtc.cppeditor.syntaxhighlighter", QtWarningMsg)
 
+// At info, because which scanner is producing the editor's tokens is the one
+// thing worth being able to read back when comparing the two.
+Q_LOGGING_CATEGORY(cxxFrontendLog, "qtc.cppeditor.cxxfrontend", QtInfoMsg)
+
 } // namespace CppEditor::Internal

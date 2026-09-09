@@ -1,11 +1,11 @@
 import qbs
 
 Project {
-    // Both mirror the QTC_ENABLE_CXX_FRONTEND CMake option being off by
-    // default.
+    // All of them mirror the QTC_ENABLE_CXX_FRONTEND CMake option, which is
+    // off by default.
     QtcAutotest {
         name: "cxx-frontend autotest"
-        builtByDefault: false
+        builtByDefault: qtc.enableCxxFrontend
 
         Depends { name: "cxx-frontend" }
         files: "tst_cxxfrontend.cpp"
@@ -15,7 +15,7 @@ Project {
 
     QtcAutotest {
         name: "cxx-frontend lexer autotest"
-        builtByDefault: false
+        builtByDefault: qtc.enableCxxFrontend
 
         Depends { name: "CxxFrontendBridge" }
         Depends { name: "CPlusPlus" }
@@ -26,7 +26,7 @@ Project {
 
     QtcAutotest {
         name: "cxx-frontend preprocessor autotest"
-        builtByDefault: false
+        builtByDefault: qtc.enableCxxFrontend
 
         Depends { name: "CxxFrontendBridge" }
         Depends { name: "CPlusPlus" }
@@ -37,7 +37,7 @@ Project {
 
     QtcAutotest {
         name: "cxx-frontend overview autotest"
-        builtByDefault: false
+        builtByDefault: qtc.enableCxxFrontend
 
         Depends { name: "CxxFrontendBridge" }
         Depends { name: "CPlusPlus" }
@@ -48,7 +48,7 @@ Project {
 
     QtcAutotest {
         name: "cxx-frontend document autotest"
-        builtByDefault: false
+        builtByDefault: qtc.enableCxxFrontend
 
         Depends { name: "CxxFrontendBridge" }
         Depends { name: "CPlusPlus" }
@@ -59,7 +59,7 @@ Project {
 
     QtcAutotest {
         name: "cxx-frontend snapshot autotest"
-        builtByDefault: false
+        builtByDefault: qtc.enableCxxFrontend
 
         Depends { name: "CxxFrontendBridge" }
         Depends { name: "CPlusPlus" }

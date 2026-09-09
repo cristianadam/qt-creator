@@ -8,9 +8,9 @@ QtcLibrary {
     name: "cxx-frontend"
     type: "staticlibrary"
 
-    // Nothing in Qt Creator depends on this yet; it mirrors the
-    // QTC_ENABLE_CXX_FRONTEND CMake option being off by default.
-    builtByDefault: false
+    // Mirrors the QTC_ENABLE_CXX_FRONTEND CMake option, which is off by
+    // default.
+    builtByDefault: qtc.enableCxxFrontend
 
     useQt: false
 

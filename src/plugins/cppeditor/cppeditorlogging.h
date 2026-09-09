@@ -7,5 +7,6 @@
 namespace CppEditor::Internal {
 
 Q_DECLARE_LOGGING_CATEGORY(highlighterLog)
+Q_DECLARE_LOGGING_CATEGORY(cxxFrontendLog)
 
 } // namespace CppEditor::Internal
