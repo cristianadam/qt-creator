@@ -4177,6 +4177,9 @@ typename))
 
     def type_nativetype(self, typeid):
         native_type = self.type_nativetype_cache.get(typeid, None)
+        if native_type is not None and not self.nativeTypeIsUsable(native_type):
+            del self.type_nativetype_cache[typeid]
+            native_type = None
         if native_type is not None:
             return native_type
 
@@ -4250,9 +4253,7 @@ typename))
             return members
 
         members = []
-        native_type = self.type_nativetype_cache.get(typeid, None)
-        if native_type is None:
-            native_type = self.lookupNativeType(self.type_name(typeid))
+        native_type = self.type_nativetype(typeid)
         if not native_type is None:
             members = self.nativeListMembers(value, native_type, include_bases)
             #self.warn("FIELDS 2: %s" % ', '.join(str(f) for f in members))
