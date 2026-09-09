@@ -78,6 +78,41 @@ public:
                                                                  int line,
                                                                  int column) const;
 
+    // Every place in the snapshot that names the same declaration as the name
+    // at a position in \a filePath -- what find usages answers, and the
+    // question follow symbol is asked backwards.
+    //
+    // A usage is a place whose name resolves to the declaration being looked
+    // for, so this is declarationAt applied to each place a file writes that
+    // name, keeping the ones that answer with the same declaration. Nothing
+    // is matched by spelling alone: another declaration of the same name
+    // resolves elsewhere and is left out.
+    //
+    // The position may be a use or the declaration itself, since both are
+    // ways of pointing at the same thing.
+    //
+    // Only files whose includes reach the declaring file are searched: one
+    // that never included it cannot be naming it. So what comes back is as
+    // complete as the snapshot is -- a file Qt Creator has not processed is
+    // not searched, exactly as the built-in model's find usages depends on
+    // what is in its snapshot.
+    struct Usage
+    {
+        QString filePath;
+        int line = 0;
+        int column = 0;
+        int length = 0;
+        // The function it is written in, empty at file scope. What the usages
+        // view shows beside a line.
+        QString containingFunction;
+        // The declaration is a usage too, and the one someone is looking for
+        // when they ask where something comes from.
+        bool isDeclaration = false;
+    };
+
+    // In file order, and within a file in the order they are written.
+    [[nodiscard]] QList<Usage> findUsages(const QString &filePath, int line, int column) const;
+
     // What this lookup cannot answer, each with what is missing. Asserted on
     // in tests/auto/cxxfrontend so the list cannot go stale.
     [[nodiscard]] static QStringList unsupportedLookups();

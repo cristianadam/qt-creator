@@ -52,6 +52,21 @@ QStringList symbolNames(const CxxFrontendDocument *document)
     return result;
 }
 
+// Where the usages are, in one line each, so that a wrong answer says which
+// place it got wrong rather than only how many there were.
+QStringList placesOf(const QList<CxxFrontendSnapshot::Usage> &usages)
+{
+    QStringList result;
+    for (const CxxFrontendSnapshot::Usage &usage : usages) {
+        result.append(QString("%1:%2:%3%4")
+                          .arg(usage.filePath)
+                          .arg(usage.line)
+                          .arg(usage.column)
+                          .arg(usage.isDeclaration ? QString(" (declaration)") : QString()));
+    }
+    return result;
+}
+
 } // namespace
 
 class tst_cxxfrontendsnapshot : public QObject
@@ -92,6 +107,22 @@ private slots:
     void aBaseChainAcrossThreeFilesResolves();
     void aBaseChainAcrossFourFilesResolves();
     void aCycleInTheBasesTerminates();
+
+    void aUsageInTheSameFileIsFound();
+    void usagesCarryTheFunctionTheyAreIn();
+    void usagesOfSomethingInAHeaderReachItsIncluder();
+    void theDeclarationIsAPlaceToSearchFrom();
+    void aNameThatMeansSomethingElseIsNotAUsage();
+    void aFileThatDoesNotIncludeTheDeclarationIsNotSearched();
+    void aQualifiedUsageIsFound();
+    void aDefinitionApartFromItsDeclarationIsAUsage();
+    void aUsageThroughABaseIsFound();
+    void aUsageFromAMacroArgumentIsReportedOnce();
+    void aUsageFromAMacroBodyIsNotReported();
+    void anUnqualifiedRedeclarationIsNotReported();
+    void aPositionThatNamesNothingHasNoUsages();
+    void aMemberNamedThroughAnObjectAcrossFilesIsNotFound();
+
     void unsupportedLookups();
 };
 
@@ -576,6 +607,213 @@ void tst_cxxfrontendsnapshot::aCycleInTheBasesTerminates()
     snapshot.process("a.cpp", "#include \"b.h\"\nstruct D : B { void f() { nowhere = 1; } };\n");
 
     QVERIFY(!snapshot.declarationAt("a.cpp", 2, 26).isValid());
+}
+
+// Find usages is the lookup asked backwards: instead of which declaration one
+// name means, which names mean one declaration. So it is the same resolution
+// run over every place a file writes the name, and it reaches exactly as far.
+void tst_cxxfrontendsnapshot::aUsageInTheSameFileIsFound()
+{
+    CxxFrontendSnapshot snapshot;
+    snapshot.process("a.cpp", "int x;\nvoid f() { x = 1; }\n");
+
+    QCOMPARE(placesOf(snapshot.findUsages("a.cpp", 2, 12)),
+             QStringList({"a.cpp:1:5 (declaration)", "a.cpp:2:12"}));
+}
+
+void tst_cxxfrontendsnapshot::usagesCarryTheFunctionTheyAreIn()
+{
+    CxxFrontendSnapshot snapshot;
+    snapshot.process("a.cpp", "int x;\nvoid f() { x = 1; }\n");
+
+    const QList<CxxFrontendSnapshot::Usage> usages = snapshot.findUsages("a.cpp", 2, 12);
+    QCOMPARE(usages.size(), 2);
+    QCOMPARE(usages.first().containingFunction, QString());
+    QCOMPARE(usages.last().containingFunction, QString("f"));
+    QCOMPARE(usages.last().length, 1);
+}
+
+void tst_cxxfrontendsnapshot::usagesOfSomethingInAHeaderReachItsIncluder()
+{
+    Files files;
+    files.add("h.h", "int fromHeader;\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp",
+                     "#include \"h.h\"\n"
+                     "void f() { fromHeader = 1; }\n"
+                     "void g() { fromHeader = 2; }\n");
+
+    QCOMPARE(placesOf(snapshot.findUsages("a.cpp", 2, 12)),
+             QStringList({"a.cpp:2:12", "a.cpp:3:12", "h.h:1:5 (declaration)"}));
+}
+
+// The declaration is where anyone reading a header stands when they ask, and
+// there is nothing there for the parser to resolve -- the name is not a use of
+// something, it is where the something comes from.
+void tst_cxxfrontendsnapshot::theDeclarationIsAPlaceToSearchFrom()
+{
+    Files files;
+    files.add("h.h", "int fromHeader;\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"h.h\"\nvoid f() { fromHeader = 1; }\n");
+
+    QCOMPARE(placesOf(snapshot.findUsages("h.h", 1, 5)),
+             QStringList({"a.cpp:2:12", "h.h:1:5 (declaration)"}));
+}
+
+// Matching on the spelling would report this, and it would be wrong: the name
+// in a.cpp means a.cpp's own variable. Which is why every place is resolved
+// and compared against the declaration being searched for.
+void tst_cxxfrontendsnapshot::aNameThatMeansSomethingElseIsNotAUsage()
+{
+    Files files;
+    files.add("h.h", "int both;\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"h.h\"\nint both;\nvoid f() { both = 1; }\n");
+
+    QCOMPARE(placesOf(snapshot.findUsages("h.h", 1, 5)),
+             QStringList("h.h:1:5 (declaration)"));
+    QCOMPARE(placesOf(snapshot.findUsages("a.cpp", 3, 12)),
+             QStringList({"a.cpp:2:5 (declaration)", "a.cpp:3:12"}));
+}
+
+void tst_cxxfrontendsnapshot::aFileThatDoesNotIncludeTheDeclarationIsNotSearched()
+{
+    Files files;
+    files.add("h.h", "int fromHeader;\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("uses.cpp", "#include \"h.h\"\nvoid f() { fromHeader = 1; }\n");
+    // Declares its own, and never includes the header.
+    snapshot.process("other.cpp", "int fromHeader;\nvoid g() { fromHeader = 2; }\n");
+
+    QCOMPARE(placesOf(snapshot.findUsages("h.h", 1, 5)),
+             QStringList({"h.h:1:5 (declaration)", "uses.cpp:2:12"}));
+}
+
+void tst_cxxfrontendsnapshot::aQualifiedUsageIsFound()
+{
+    Files files;
+    files.add("h.h", "namespace N { int v; }\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"h.h\"\nvoid f() { N::v = 1; }\n");
+
+    QCOMPARE(placesOf(snapshot.findUsages("h.h", 1, 19)),
+             QStringList({"a.cpp:2:15", "h.h:1:19 (declaration)"}));
+}
+
+// Declared in a header, defined in a source file: the two are not in one
+// translation unit here, and the definition names the class in front of it,
+// which is what the search follows back to the declaration.
+void tst_cxxfrontendsnapshot::aDefinitionApartFromItsDeclarationIsAUsage()
+{
+    Files files;
+    files.add("b.h", "struct B { void f(); };\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"b.h\"\nvoid B::f() {}\n");
+
+    QCOMPARE(placesOf(snapshot.findUsages("b.h", 1, 17)),
+             QStringList({"a.cpp:2:9", "b.h:1:17 (declaration)"}));
+}
+
+void tst_cxxfrontendsnapshot::aUsageThroughABaseIsFound()
+{
+    Files files;
+    files.add("b.h", "struct B { int m; };\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"b.h\"\nstruct D : B { void f() { m = 1; } };\n");
+
+    QCOMPARE(placesOf(snapshot.findUsages("b.h", 1, 16)),
+             QStringList({"a.cpp:2:27", "b.h:1:16 (declaration)"}));
+}
+
+// A name handed to a macro is written once and comes out of the expansion as
+// many times as the macro repeats it. It is one place in the file, so it is
+// one usage, at the place it was written rather than at the expansion.
+void tst_cxxfrontendsnapshot::aUsageFromAMacroArgumentIsReportedOnce()
+{
+    CxxFrontendSnapshot snapshot;
+    snapshot.process("a.cpp", "int x;\n#define TWICE(v) v + v\nint y = TWICE(x);\n");
+
+    QCOMPARE(placesOf(snapshot.findUsages("a.cpp", 1, 5)),
+             QStringList({"a.cpp:1:5 (declaration)", "a.cpp:3:15"}));
+}
+
+// The other half of the same rule, and the built-in model's: a name the macro
+// body wrote is not in the text where the macro was used, so there is nothing
+// there to report or to click on.
+void tst_cxxfrontendsnapshot::aUsageFromAMacroBodyIsNotReported()
+{
+    CxxFrontendSnapshot snapshot;
+    snapshot.process("a.cpp", "int x;\n#define USE x + 1\nint y = USE;\n");
+
+    QCOMPARE(placesOf(snapshot.findUsages("a.cpp", 1, 5)),
+             QStringList("a.cpp:1:5 (declaration)"));
+}
+
+// The price of that rule, and the reason it is written down. "extern int x;"
+// looks exactly like a file's own variable, and saying that it is the header's
+// x is a question about linkage, not about scopes. So the two are two things
+// here: a search from either side finds that side's places, and neither
+// reaches the other.
+void tst_cxxfrontendsnapshot::anUnqualifiedRedeclarationIsNotReported()
+{
+    Files files;
+    files.add("h.h", "int shared;\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"h.h\"\nextern int shared;\nvoid f() { shared = 1; }\n");
+
+    QCOMPARE(placesOf(snapshot.findUsages("h.h", 1, 5)),
+             QStringList("h.h:1:5 (declaration)"));
+    QCOMPARE(placesOf(snapshot.findUsages("a.cpp", 2, 12)),
+             QStringList({"a.cpp:2:12 (declaration)", "a.cpp:3:12"}));
+    QVERIFY(CxxFrontendSnapshot::unsupportedLookups()
+                .contains("unqualified redeclarations across files"));
+}
+
+void tst_cxxfrontendsnapshot::aPositionThatNamesNothingHasNoUsages()
+{
+    CxxFrontendSnapshot snapshot;
+    snapshot.process("a.cpp", "int x;\nvoid f() { x = 1; }\n");
+
+    // On the type, which declares nothing and names nothing declared here.
+    QVERIFY(snapshot.findUsages("a.cpp", 1, 1).isEmpty());
+    QVERIFY(snapshot.findUsages("nowhere.cpp", 1, 1).isEmpty());
+}
+
+// The limit this shares with the lookup it is built on: reaching a member
+// through an object needs the type of that object, and the type is declared in
+// a file this one does not contain. Reporting only the declaration is the
+// honest answer; reporting the member because it is spelled the same would be
+// a wrong one.
+void tst_cxxfrontendsnapshot::aMemberNamedThroughAnObjectAcrossFilesIsNotFound()
+{
+    Files files;
+    files.add("b.h", "struct B { int m; };\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"b.h\"\nvoid f(B b) { b.m = 1; }\n");
+
+    QCOMPARE(placesOf(snapshot.findUsages("b.h", 1, 16)),
+             QStringList("b.h:1:16 (declaration)"));
+    QVERIFY(CxxFrontendSnapshot::unsupportedLookups()
+                .contains("members named through an object across files"));
 }
 
 // What this lookup does not do. Each is a rule about which declaration a name

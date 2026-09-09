@@ -785,6 +785,68 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::declarationAt(int line,
     return declaration;
 }
 
+CxxFrontendDocument::Declaration CxxFrontendDocument::declarationOfNameAt(int line,
+                                                                          int column) const
+{
+    // The declarations this file made are already collected, each with the
+    // position of its own name, so this is a question about that list rather
+    // than about the syntax tree. The innermost wins: a member and the class
+    // around it are never at the same place, but a symbol declared inside
+    // another one is later in the list, and taking the last match is what
+    // makes the narrower one the answer.
+    for (int i = d->symbols.size() - 1; i >= 0; --i) {
+        const Symbol &symbol = d->symbols.at(i);
+        if (symbol.line != line)
+            continue;
+        if (column < symbol.column || column >= symbol.column + int(symbol.name.size()))
+            continue;
+
+        Declaration declaration;
+        declaration.name = qualifiedNameOf(d->cxxSymbols.at(size_t(i)));
+        declaration.filePath = d->fileName;
+        declaration.line = symbol.line;
+        declaration.column = symbol.column;
+        return declaration;
+    }
+    return {};
+}
+
+QList<CxxFrontendDocument::Occurrence> CxxFrontendDocument::occurrencesOf(
+    const QString &name) const
+{
+    QList<Occurrence> result;
+    if (name.isEmpty())
+        return result;
+
+    const auto mainFileId = std::uint32_t(d->unit.preprocessor()->mainSourceFileId());
+    const std::string text = name.toStdString();
+
+    for (unsigned i = 1; i < d->unit.tokenCount(); ++i) {
+        const cxx::SourceLocation location{i};
+        const cxx::Token &token = d->unit.tokenAt(location);
+        if (token.fileId() != mainFileId || token.kind() != cxx::TokenKind::T_IDENTIFIER)
+            continue;
+        // Out of a macro's replacement list, so there is no text here to
+        // point at. An argument's tokens keep the position they were written
+        // at, and a macro using its argument twice hands back that one
+        // position twice.
+        if (token.macroGenerated())
+            continue;
+        if (d->unit.tokenText(location) != text)
+            continue;
+
+        const cxx::SourcePosition position = d->unit.tokenStartPosition(location);
+        const Occurrence occurrence{int(position.line), int(position.column),
+                                    int(token.length())};
+        if (!result.isEmpty() && result.last().line == occurrence.line
+            && result.last().column == occurrence.column) {
+            continue;
+        }
+        result.append(occurrence);
+    }
+    return result;
+}
+
 QString CxxFrontendDocument::identifierAt(int line, int column) const
 {
     const cxx::SourceLocation location = d->tokenAt(line, column);

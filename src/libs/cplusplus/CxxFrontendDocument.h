@@ -161,6 +161,34 @@ public:
     // so it does not resolve here, and the snapshot has to be asked instead.
     Declaration declarationAt(int line, int column) const;
 
+    // The declaration whose own name is written at a position, rather than
+    // the one a name at a position refers to.
+    //
+    // declarationAt answers for a *use*, and a declaration is not a use: the
+    // parser had nothing to resolve where the name was introduced, because
+    // that is the place a name comes from. Asking for the usages of something
+    // while standing on the line that declares it -- which is how anyone
+    // reading a header does it -- means this.
+    Declaration declarationOfNameAt(int line, int column) const;
+
+    // Every place this file writes \a name as an identifier, in the order
+    // they appear. What a search over the snapshot needs before it can ask, of
+    // each one, whether it means the declaration being looked for.
+    //
+    // Only what the file itself writes: a token a macro's replacement list
+    // produced is not here, since no text at that position corresponds to it,
+    // which is the rule the built-in model's find usages follows too. A token
+    // that came out of a macro argument is here, where the argument was
+    // written -- and a macro that repeats its argument produces that one
+    // place several times, so it is reported once.
+    struct Occurrence
+    {
+        int line = 0;
+        int column = 0;
+        int length = 0;
+    };
+    QList<Occurrence> occurrencesOf(const QString &name) const;
+
     // The type of the expression written at a position, and whether it is an
     // lvalue. What a tooltip shows, and what completion needs before it can
     // offer the members of something.

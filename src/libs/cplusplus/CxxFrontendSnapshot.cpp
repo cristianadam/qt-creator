@@ -263,6 +263,82 @@ CxxFrontendDocument::Declaration CxxFrontendSnapshot::declarationAt(const QStrin
     return {};
 }
 
+QList<CxxFrontendSnapshot::Usage> CxxFrontendSnapshot::findUsages(const QString &filePath,
+                                                                  int line, int column) const
+{
+    const CxxFrontendDocument *from = document(filePath);
+    if (!from)
+        return {};
+
+    // What the name at this position means, by the one rule this search reads
+    // every place by: a name introduced here without a scope written in front
+    // of it declares this file's own thing, and anything else is a use and
+    // resolves. So standing on "int x;" the search is for that x, standing on
+    // "void B::f() {}" it is for the f that b.h declared, and standing on a
+    // use it is for whatever the use means.
+    const CxxFrontendDocument::Declaration declaredHere
+        = from->declarationOfNameAt(line, column);
+    CxxFrontendDocument::Declaration target;
+    if (declaredHere.isValid() && from->qualifierAt(line, column).isEmpty())
+        target = declaredHere;
+    else if (const auto resolved = declarationAt(filePath, line, column); resolved.isValid())
+        target = resolved;
+    else
+        target = declaredHere;
+    if (!target.isValid())
+        return {};
+
+    // Written unqualified wherever it is used; the path in front of it is what
+    // each document resolves for itself.
+    const QString name = target.name.split("::").last();
+
+    const auto isTarget = [&](const CxxFrontendDocument::Declaration &declaration) {
+        return declaration.filePath == target.filePath && declaration.line == target.line
+               && declaration.column == target.column;
+    };
+
+    QList<Usage> usages;
+    for (const QString &file : files()) {
+        // A file that does not reach the declaring file cannot be naming what
+        // it declares.
+        if (file != target.filePath && !allIncludesFor(file).contains(target.filePath))
+            continue;
+
+        const CxxFrontendDocument *candidate = document(file);
+        for (const CxxFrontendDocument::Occurrence &occurrence : candidate->occurrencesOf(name)) {
+            // The same rule again. "int both;" in a source file that includes
+            // a header declaring both is that file's own variable and no usage
+            // of the header's -- and resolving it would say otherwise, because
+            // a lookup that finds nothing in this file goes on to the headers.
+            const CxxFrontendDocument::Declaration declared
+                = candidate->declarationOfNameAt(occurrence.line, occurrence.column);
+            const bool isDeclaration = isTarget(declared);
+            if (!isDeclaration && declared.isValid()
+                && candidate->qualifierAt(occurrence.line, occurrence.column).isEmpty()) {
+                continue;
+            }
+
+            // Everything else has to resolve to the same declaration. A name
+            // spelled the same and meaning something else answers with its own
+            // declaration, and is not a usage of this one.
+            if (!isDeclaration
+                && !isTarget(declarationAt(file, occurrence.line, occurrence.column))) {
+                continue;
+            }
+
+            Usage usage;
+            usage.filePath = file;
+            usage.line = occurrence.line;
+            usage.column = occurrence.column;
+            usage.length = occurrence.length;
+            usage.containingFunction = candidate->functionAt(occurrence.line, occurrence.column);
+            usage.isDeclaration = isDeclaration;
+            usages.append(usage);
+        }
+    }
+    return usages;
+}
+
 QStringList CxxFrontendSnapshot::unsupportedLookups()
 {
     // What is left after each document looks names up for itself.
@@ -287,6 +363,15 @@ QStringList CxxFrontendSnapshot::unsupportedLookups()
         // Which header wins when two declare the same name: this takes the
         // nearest include, which is not the language's rule.
         "shadowing between headers",
+        // b.m, where b's class is declared in a header. What crosses a file
+        // is what the using file writes down, and the type of an object is
+        // not written at the place it is used.
+        "members named through an object across files",
+        // Whether "extern int x;" here declares the x a header declared or
+        // one of this file's own. Needs linkage, where everything above is
+        // about scopes, so the two stay two things and a search from either
+        // one does not reach the other.
+        "unqualified redeclarations across files",
     };
 }
 
