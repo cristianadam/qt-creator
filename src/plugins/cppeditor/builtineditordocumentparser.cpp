@@ -5,6 +5,10 @@
 
 #include "cppsourceprocessor.h"
 
+#ifdef QTC_WITH_CXX_FRONTEND
+#include "cxxfrontendmodel.h"
+#endif
+
 #include <projectexplorer/projectexplorerconstants.h>
 #include <projectexplorer/projectmacro.h>
 
@@ -215,6 +219,15 @@ void BuiltinEditorDocumentParser::updateImpl(const QPromise<void> &promise,
         }
         state.snapshot = newSnapshot;
         state.snapshot.updateDependencyTable();
+
+        // The same file through the other model, with the includes this run
+        // just resolved. Off unless asked for; see cxxfrontendmodel.h.
+#ifdef QTC_WITH_CXX_FRONTEND
+        if (Internal::cxxFrontendModelRequested()) {
+            Internal::updateCxxFrontendModel(state.snapshot, filePath(), state.configFile,
+                                             workingCopy);
+        }
+#endif
     }
 
     setState(baseState);

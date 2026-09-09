@@ -164,13 +164,23 @@ extend_qtc_plugin(CppEditor
     quickfixes/cppquickfix_test.h
 )
 
-# The scanner behind SimpleLexer, which everything in this plugin that reads
-# C++ tokens goes through. Available when the option is on, used when the
-# environment asks for it; see CppEditorPlugin::initialize().
+# The cxx-frontend front end: the scanner behind SimpleLexer, which everything
+# in this plugin that reads C++ tokens goes through, and the model kept beside
+# the built-in one for the file being edited. Available when the option is on,
+# used when the environment asks for it; see CppEditorPlugin::initialize() and
+# cxxfrontendmodel.h.
 extend_qtc_plugin(CppEditor
   CONDITION QTC_ENABLE_CXX_FRONTEND
   DEPENDS CxxFrontendBridge
   DEFINES QTC_WITH_CXX_FRONTEND
+  SOURCES
+    cxxfrontendmodel.cpp cxxfrontendmodel.h
+)
+
+extend_qtc_plugin(CppEditor
+  CONDITION QTC_ENABLE_CXX_FRONTEND AND WITH_TESTS
+  SOURCES
+    cxxfrontendmodel_test.cpp cxxfrontendmodel_test.h
 )
 
 qtc_add_resources(CppEditor "images"

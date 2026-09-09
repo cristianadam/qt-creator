@@ -25,6 +25,10 @@
 #include "quickfixes/cppquickfix.h"
 #include "quickfixes/cppquickfixsettings.h"
 
+#if defined(WITH_TESTS) && defined(QTC_WITH_CXX_FRONTEND)
+#include "cxxfrontendmodel_test.h"
+#endif
+
 #ifdef WITH_TESTS
 #include "compileroptionsbuilder_test.h"
 #include "cppcodegen_test.h"
@@ -635,6 +639,9 @@ void CppEditorPlugin::registerTests()
 #ifdef WITH_TESTS
     addTest<CodegenTest>();
     addTest<CompilerOptionsBuilderTest>();
+#ifdef QTC_WITH_CXX_FRONTEND
+    addTest<CxxFrontendModelTest>();
+#endif
     addTest<CompletionTest>();
     addTest<CppMcpSupportTest>();
     addTestCreator(createFindParentImplTest);

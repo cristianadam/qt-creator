@@ -9,10 +9,30 @@ QtcPlugin {
     Depends { name: "CPlusPlus" }
     Depends { name: "Utils" }
 
-    // The scanner behind SimpleLexer, which everything here that reads C++
-    // tokens goes through. Available when the option is on, used when the
-    // environment asks for it; see CppEditorPlugin::initialize().
+    // The cxx-frontend front end: the scanner behind SimpleLexer, which
+    // everything here that reads C++ tokens goes through, and the model kept
+    // beside the built-in one for the file being edited. Available when the
+    // option is on, used when the environment asks for it; see
+    // CppEditorPlugin::initialize() and cxxfrontendmodel.h.
     Depends { name: "CxxFrontendBridge"; condition: qtc.enableCxxFrontend }
+
+    Group {
+        name: "CxxFrontend"
+        condition: qtc.enableCxxFrontend
+        files: [
+            "cxxfrontendmodel.cpp",
+            "cxxfrontendmodel.h",
+        ]
+    }
+
+    Group {
+        name: "CxxFrontendTests"
+        condition: qtc.enableCxxFrontend && qtc.withPluginTests
+        files: [
+            "cxxfrontendmodel_test.cpp",
+            "cxxfrontendmodel_test.h",
+        ]
+    }
 
     Depends { name: "Core" }
     Depends { name: "TextEditor" }
