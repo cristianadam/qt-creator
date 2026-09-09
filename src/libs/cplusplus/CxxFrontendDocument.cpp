@@ -610,6 +610,7 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::declarationAt(int line,
 
     Declaration declaration;
     declaration.name = qualifiedNameOf(symbol);
+    declaration.filePath = d->fileName;
 
     if (const cxx::SourceLocation location = symbol->location()) {
         const cxx::SourcePosition position = d->unit.tokenStartPosition(location);
@@ -617,6 +618,17 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::declarationAt(int line,
         declaration.column = int(position.column);
     }
     return declaration;
+}
+
+QString CxxFrontendDocument::identifierAt(int line, int column) const
+{
+    const cxx::SourceLocation location = d->tokenAt(line, column);
+    if (!location)
+        return {};
+    const cxx::Token &token = d->unit.tokenAt(location);
+    if (token.kind() != cxx::TokenKind::T_IDENTIFIER)
+        return {};
+    return fromStd(d->unit.tokenText(location));
 }
 
 QString CxxFrontendDocument::functionAt(int line, int column) const

@@ -75,6 +75,12 @@ private slots:
     void aHeaderIsReusedWhenTheEnvironmentAgrees();
     void anUnrelatedMacroDoesNotForceAReparse();
     void aHeaderThatAsksAboutNothingIsAlwaysReused();
+
+    void aNameDeclaredInAHeaderResolvesFromTheSource();
+    void aNameDeclaredTwoHeadersAwayResolves();
+    void aNameThatIsNowhereResolvesToNothing();
+    void aLocalNameStillWinsOverAHeader();
+    void unsupportedLookups();
 };
 
 void tst_cxxfrontendsnapshot::aHeaderGetsItsOwnDocument()
@@ -305,6 +311,86 @@ void tst_cxxfrontendsnapshot::aHeaderThatAsksAboutNothingIsAlwaysReused()
 
     snapshot.process("two.cpp", "#define B 2\n#include \"h.h\"\n");
     QCOMPARE(snapshot.document("h.h"), first);
+}
+
+// The point of the whole arrangement, and the thing the per-file model makes
+// hard: code uses what its headers declare, and a header's declarations are
+// not in the includer's translation unit at all. The document cannot answer
+// this and does not pretend to; the snapshot has to.
+void tst_cxxfrontendsnapshot::aNameDeclaredInAHeaderResolvesFromTheSource()
+{
+    Files files;
+    files.add("h.h", "int fromHeader;\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    const CxxFrontendDocument *document
+        = snapshot.process("a.cpp", "#include \"h.h\"\nvoid f() { fromHeader = 1; }\n");
+
+    QVERIFY2(!document->declarationAt(2, 12).isValid(),
+             "the document answered for a name it cannot see");
+
+    const CxxFrontendDocument::Declaration found = snapshot.declarationAt("a.cpp", 2, 12);
+    QVERIFY(found.isValid());
+    QCOMPARE(found.name, QString("fromHeader"));
+    QCOMPARE(found.filePath, QString("h.h"));
+    QCOMPARE(found.line, 1);
+}
+
+void tst_cxxfrontendsnapshot::aNameDeclaredTwoHeadersAwayResolves()
+{
+    Files files;
+    files.add("inner.h", "int deep;\n");
+    files.add("outer.h", "#include \"inner.h\"\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"outer.h\"\nvoid f() { deep = 1; }\n");
+
+    const CxxFrontendDocument::Declaration found = snapshot.declarationAt("a.cpp", 2, 12);
+    QVERIFY(found.isValid());
+    QCOMPARE(found.filePath, QString("inner.h"));
+}
+
+void tst_cxxfrontendsnapshot::aNameThatIsNowhereResolvesToNothing()
+{
+    Files files;
+    files.add("h.h", "int something;\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"h.h\"\nvoid f() { nowhere = 1; }\n");
+
+    QVERIFY(!snapshot.declarationAt("a.cpp", 2, 12).isValid());
+}
+
+void tst_cxxfrontendsnapshot::aLocalNameStillWinsOverAHeader()
+{
+    Files files;
+    files.add("h.h", "int both;\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#include \"h.h\"\nint both;\nvoid f() { both = 1; }\n");
+
+    // The file's own declaration is the one the parser resolved, and it is
+    // the one that is right.
+    const CxxFrontendDocument::Declaration found = snapshot.declarationAt("a.cpp", 3, 12);
+    QVERIFY(found.isValid());
+    QCOMPARE(found.filePath, QString("a.cpp"));
+    QCOMPARE(found.line, 2);
+}
+
+// What this lookup does not do. Each is a rule about which declaration a name
+// means, and answering one of them wrongly is worse than saying nothing, so
+// they are written down rather than approximated.
+void tst_cxxfrontendsnapshot::unsupportedLookups()
+{
+    const QStringList unsupported = CxxFrontendSnapshot::unsupportedLookups();
+    QVERIFY(unsupported.contains("overload resolution"));
+    QVERIFY(unsupported.contains("inherited members"));
+    QVERIFY(unsupported.contains("using"));
+    QVERIFY(unsupported.contains("qualified names across files"));
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontendsnapshot)

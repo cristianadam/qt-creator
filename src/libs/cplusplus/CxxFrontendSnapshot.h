@@ -64,6 +64,24 @@ public:
     // excluded.
     [[nodiscard]] QStringList allIncludesFor(const QString &filePath) const;
 
+    // Where the name used at a position in \a filePath was declared, looking
+    // beyond that file when it has to.
+    //
+    // A document holds one file, so a name a header declared is not in the
+    // includer's translation unit and the parser could not resolve it there.
+    // What crosses the gap is this: ask the file first, and if the name means
+    // nothing there, look through what it includes.
+    //
+    // This is the beginning of what LookupContext does over a snapshot and
+    // not the whole of it. unsupportedLookups() says what it does not do.
+    [[nodiscard]] CxxFrontendDocument::Declaration declarationAt(const QString &filePath,
+                                                                 int line,
+                                                                 int column) const;
+
+    // What this lookup cannot answer, each with what is missing. Asserted on
+    // in tests/auto/cxxfrontend so the list cannot go stale.
+    [[nodiscard]] static QStringList unsupportedLookups();
+
 private:
     class Private;
     std::unique_ptr<Private> d;

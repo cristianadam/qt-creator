@@ -147,4 +147,59 @@ QStringList CxxFrontendSnapshot::allIncludesFor(const QString &filePath) const
     return result;
 }
 
+CxxFrontendDocument::Declaration CxxFrontendSnapshot::declarationAt(const QString &filePath,
+                                                                    int line,
+                                                                    int column) const
+{
+    const CxxFrontendDocument *from = document(filePath);
+    if (!from)
+        return {};
+
+    // The parser resolved everything it could see, which is everything this
+    // file declares itself.
+    if (const CxxFrontendDocument::Declaration here = from->declarationAt(line, column);
+        here.isValid()) {
+        return here;
+    }
+
+    const QString identifier = from->identifierAt(line, column);
+    if (identifier.isEmpty())
+        return {};
+
+    // Otherwise it has to come from something the file includes. Nearest
+    // first, which is the order allIncludesFor walks.
+    for (const QString &included : allIncludesFor(filePath)) {
+        const CxxFrontendDocument *candidate = document(included);
+        if (!candidate)
+            continue;
+        for (const CxxFrontendDocument::Symbol &symbol : candidate->symbols()) {
+            // Only what the header declares at its top level: anything deeper
+            // needs the scoping rules this lookup does not have.
+            if (!symbol.qualified.isEmpty() || symbol.name != identifier)
+                continue;
+            return {symbol.name, included, symbol.line, symbol.column};
+        }
+    }
+    return {};
+}
+
+QStringList CxxFrontendSnapshot::unsupportedLookups()
+{
+    // Everything LookupContext does that this does not. Each is a rule about
+    // which declaration a name means, and getting one wrong is worse than
+    // saying nothing, so they are written down rather than approximated.
+    return {
+        // Which of several declarations of a name applies where.
+        "overload resolution",
+        // A name a base class declares, seen from a derived one.
+        "inherited members",
+        // using declarations and using directives.
+        "using",
+        // A name reached through a namespace or class prefix, N::x.
+        "qualified names across files",
+        // Which declaration wins when two headers declare the same name.
+        "shadowing between headers",
+    };
+}
+
 } // namespace CPlusPlus

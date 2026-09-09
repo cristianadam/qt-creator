@@ -137,13 +137,22 @@ public:
     // this reads it off rather than working it out again.
     struct Declaration
     {
-        QString name;   // fully qualified
+        QString name;      // fully qualified
+        QString filePath;  // the file it was declared in
         int line = 0;
         int column = 0;
 
         bool isValid() const { return line != 0; }
     };
+
+    // Only reaches what this file declares. A name a header declared is not
+    // in this translation unit at all -- the header's text is not taken in --
+    // so it does not resolve here, and the snapshot has to be asked instead.
     Declaration declarationAt(int line, int column) const;
+
+    // The identifier written at a position, empty if there is none. What the
+    // snapshot needs in order to go looking elsewhere.
+    QString identifierAt(int line, int column) const;
 
     // Document's questions that cannot be answered on this model yet, each
     // with what is missing. Asserted on in tests/auto/cxxfrontend so the list
