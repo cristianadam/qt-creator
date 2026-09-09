@@ -32,3 +32,10 @@ add_qtc_test(tst_cxxfrontenddocument
   DEFINES SRCDIR="${CMAKE_CURRENT_SOURCE_DIR}"
   SOURCES tst_cxxfrontenddocument.cpp
 )
+
+add_qtc_test(tst_cxxfrontendsnapshot
+  CONDITION QTC_ENABLE_CXX_FRONTEND
+  DEPENDS CxxFrontendBridge CPlusPlus
+  DEFINES SRCDIR="${CMAKE_CURRENT_SOURCE_DIR}"
+  SOURCES tst_cxxfrontendsnapshot.cpp
+)

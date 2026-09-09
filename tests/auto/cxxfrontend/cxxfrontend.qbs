@@ -56,4 +56,15 @@ Project {
 
         cpp.defines: base.concat(['SRCDIR="' + path + '"'])
     }
+
+    QtcAutotest {
+        name: "cxx-frontend snapshot autotest"
+        builtByDefault: false
+
+        Depends { name: "CxxFrontendBridge" }
+        Depends { name: "CPlusPlus" }
+        files: "tst_cxxfrontendsnapshot.cpp"
+
+        cpp.defines: base.concat(['SRCDIR="' + path + '"'])
+    }
 }

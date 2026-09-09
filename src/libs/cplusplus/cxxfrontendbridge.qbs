@@ -23,6 +23,8 @@ QtcLibrary {
         "CxxFrontendOverview.h",
         "CxxFrontendPreprocessor.cpp",
         "CxxFrontendPreprocessor.h",
+        "CxxFrontendSnapshot.cpp",
+        "CxxFrontendSnapshot.h",
     ]
 
     Export {

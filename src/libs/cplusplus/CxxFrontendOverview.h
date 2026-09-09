@@ -37,7 +37,7 @@ public:
     // first, each scope's members after it.
     QList<Symbol> parse(const QString &source, const QString &fileName) const
     {
-        return CxxFrontendDocument(source, fileName, settings).symbols();
+        return CxxFrontendDocument(source, fileName, {.settings = settings}).symbols();
     }
 
     // The Overview settings this printer does not honour yet. Asserted on in

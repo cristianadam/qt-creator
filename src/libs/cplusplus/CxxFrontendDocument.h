@@ -9,7 +9,9 @@
 #include <QString>
 #include <QStringList>
 
+#include <functional>
 #include <memory>
+#include <optional>
 
 namespace CPlusPlus {
 
@@ -31,10 +33,30 @@ namespace CPlusPlus {
 class CxxFrontendDocument
 {
 public:
+    struct Config
+    {
+        Overview settings;
+
+        // Macros in force before the first line, each written the way a
+        // #define is: "FOO 1", "ADD(a, b) a + b". What definedMacros()
+        // returns, so that what one file establishes can be handed to the
+        // next.
+        QStringList predefinedMacros;
+
+        // Called when the file includes a header, and answers with the macros
+        // that header established, or nothing if the header could not be
+        // found. The header's text is never taken into this document: Qt
+        // Creator keeps one translation unit per file, so the header gets a
+        // document of its own and only its macros cross over. Without a
+        // handler every include is treated as not found.
+        std::function<std::optional<QStringList>(const QString &name, bool isSystem)>
+            onInclude;
+    };
+
     // Parses \a source straight away; there is nothing useful to do with an
     // unparsed one.
     CxxFrontendDocument(const QString &source, const QString &fileName,
-                        const Overview &settings = {});
+                        const Config &config = {});
     ~CxxFrontendDocument();
 
     QString fileName() const;
@@ -49,6 +71,13 @@ public:
         int column = 0;
     };
     const QList<Symbol> &symbols() const;
+
+    // The macros this file defines, in the form Config::predefinedMacros
+    // takes, so that they can be handed to whatever includes it.
+    QStringList definedMacros() const;
+
+    // The headers it included, as they were written.
+    QStringList includedHeaders() const;
 
     struct Diagnostic
     {

@@ -12,6 +12,7 @@
 #include <cxx/memory_layout.h>
 #include <cxx/names.h>
 #include <cxx/preprocessor.h>
+#include <cxx/preprocessor_delegate.h>
 #include <cxx/symbols.h>
 #include <cxx/translation_unit.h>
 #include <cxx/types.h>
@@ -25,24 +26,65 @@ QString fromStd(std::string_view text)
     return QString::fromUtf8(text.data(), qsizetype(text.size()));
 }
 
-// Refuses every include: this holds one file, and resolving the rest is the
-// slice after this one.
-struct NoIncludes
+// Answers the engine's requests. An include never brings its text in: Qt
+// Creator keeps one translation unit per file, so the header is processed on
+// its own and only the macros it established are seeded here, which is what
+// the handler returns.
+struct IncludeState
 {
+    cxx::Preprocessor &preprocessor;
+    const std::function<std::optional<QStringList>(const QString &, bool)> &onInclude;
+    QStringList *includedHeaders = nullptr;
     bool done = false;
+
     explicit operator bool() const { return !done; }
 
     void operator()(const cxx::ProcessingComplete &) { done = true; }
     void operator()(const cxx::CanContinuePreprocessing &) {}
     void operator()(const cxx::EnteringFile &) {}
     void operator()(const cxx::LeavingFile &) {}
-    void operator()(const cxx::PendingInclude &state) { state.resolveWith(std::nullopt); }
+    // A header that was found contributes no tokens here, only its macros.
+    // Saying so with empty content rather than with no content is the
+    // difference between "included, and it added nothing" and "not found",
+    // which the engine would report.
+    void operator()(const cxx::PendingFileContent &state) { state.setContent(std::string{}); }
+
+    void operator()(const cxx::PendingInclude &state)
+    {
+        const auto [name, isSystem] = nameOf(state.include);
+        const std::optional<QStringList> macros = onInclude ? onInclude(name, isSystem)
+                                                            : std::nullopt;
+        if (!macros) {
+            state.resolveWith(std::nullopt);
+            return;
+        }
+
+        includedHeaders->append(name);
+
+        // defineMacro joins its two arguments with a space and parses the
+        // result as a #define, so handing it the whole line and an empty body
+        // defines exactly what the line says -- parameter list, spaces and
+        // all.
+        for (const QString &macro : *macros)
+            preprocessor.defineMacro(macro.toStdString(), {});
+
+        state.resolveWith(name.toStdString(), isSystem);
+    }
+
     void operator()(const cxx::PendingHasIncludes &state)
     {
-        for (const auto &request : state.requests)
-            request.setExists(false);
+        for (const auto &request : state.requests) {
+            const auto [name, isSystem] = nameOf(request.include);
+            request.setExists(onInclude && onInclude(name, isSystem).has_value());
+        }
     }
-    void operator()(const cxx::PendingFileContent &state) { state.setContent(std::nullopt); }
+
+    static std::pair<QString, bool> nameOf(const cxx::Include &include)
+    {
+        if (const auto *system = std::get_if<cxx::SystemInclude>(&include))
+            return {QString::fromStdString(system->fileName), true};
+        return {QString::fromStdString(std::get<cxx::QuoteInclude>(include).fileName), false};
+    }
 };
 
 // The printer always binds a star to the type name: "char* p". Qt Creator's
@@ -81,7 +123,46 @@ QString qualifiedNameOf(cxx::Symbol *symbol)
 class CxxFrontendDocument::Private
 {
 public:
-    Private(const QString &source, const QString &fileName, const Overview &settings);
+    Private(const QString &source, const QString &fileName,
+            const CxxFrontendDocument::Config &config);
+
+    // Collects the macros the file defines, written the way the #define was,
+    // so that an includer can be given them verbatim.
+    class MacroCollector : public cxx::PreprocessorDelegate
+    {
+    public:
+        explicit MacroCollector(QStringList &out)
+            : m_out(out)
+        {}
+
+        void macroDefined(const cxx::MacroInfo &macro) override
+        {
+            QString line = fromStd(macro.name);
+            if (macro.isFunctionLike) {
+                QStringList parameters;
+                for (const std::string &parameter : macro.parameters)
+                    parameters.append(QString::fromStdString(parameter));
+                if (macro.isVariadic)
+                    parameters.append("...");
+                line += '(' + parameters.join(", ") + ')';
+            }
+            if (!macro.body.empty())
+                line += ' ' + fromStd(macro.body);
+            m_out.append(line);
+        }
+
+        void macroUndefined(const cxx::MacroInfo &macro, cxx::PreprocessorRange) override
+        {
+            const QString name = fromStd(macro.name);
+            m_out.removeIf([&](const QString &line) {
+                return line == name || line.startsWith(name + ' ')
+                       || line.startsWith(name + '(');
+            });
+        }
+
+    private:
+        QStringList &m_out;
+    };
 
     class Diagnostics : public cxx::DiagnosticsClient
     {
@@ -136,7 +217,11 @@ public:
     [[nodiscard]] cxx::SourceLocation tokenAt(int line, int column) const;
 
     QString fileName;
-    Overview settings;
+    CxxFrontendDocument::Config config;
+
+    QStringList definedMacros;
+    QStringList includedHeaders;
+    MacroCollector macroCollector{definedMacros};
 
     QList<CxxFrontendDocument::Diagnostic> diagnostics;
     Diagnostics diagnosticsClient{diagnostics};
@@ -196,13 +281,13 @@ void CxxFrontendDocument::Private::describe(cxx::Symbol *member,
     // Overview prints a declaration as it would be written in the scope it
     // was written in, so the path to a name is not part of it.
     const cxx::TypePrintOptions options{
-        .omitFunctionReturnType = !settings.showReturnTypes,
+        .omitFunctionReturnType = !config.settings.showReturnTypes,
         .omitEnclosingScope = true,
     };
     symbol.type = member->type() ? applyStarBinding(fromStd(cxx::to_string(member->type(),
                                                                           name.toStdString(),
                                                                           options)),
-                                                    settings)
+                                                    config.settings)
                                  : name;
 
     if (const cxx::SourceLocation location = member->location()) {
@@ -283,18 +368,25 @@ int CxxFrontendDocument::Private::lastVisibleIndex(int line, int column) const
 }
 
 CxxFrontendDocument::Private::Private(const QString &source, const QString &fileName,
-                                      const Overview &settings)
+                                      const CxxFrontendDocument::Config &config)
     : fileName(fileName)
-    , settings(settings)
+    , config(config)
 {
     // A fixed layout rather than a host toolchain, so that what a type prints
     // as does not depend on the machine.
     diagnosticsClient.setFileName(fileName);
     unit.control()->setMemoryLayout(&memoryLayout);
-    unit.preprocessor()->setCanResolveFiles(false);
+
+    cxx::Preprocessor *preprocessor = unit.preprocessor();
+    preprocessor->setCanResolveFiles(false);
+    preprocessor->setPreprocessorDelegate(&macroCollector);
+
+    // What the includers established, before the first line of this file.
+    for (const QString &macro : this->config.predefinedMacros)
+        preprocessor->defineMacro(macro.toStdString(), {});
 
     unit.beginPreprocessing(source.toStdString(), fileName.toStdString());
-    NoIncludes state;
+    IncludeState state{*preprocessor, this->config.onInclude, &includedHeaders};
     while (state)
         std::visit(state, unit.continuePreprocessing());
     unit.endPreprocessing();
@@ -306,8 +398,8 @@ CxxFrontendDocument::Private::Private(const QString &source, const QString &file
 }
 
 CxxFrontendDocument::CxxFrontendDocument(const QString &source, const QString &fileName,
-                                         const Overview &settings)
-    : d(std::make_unique<Private>(source, fileName, settings))
+                                         const Config &config)
+    : d(std::make_unique<Private>(source, fileName, config))
 {}
 
 CxxFrontendDocument::~CxxFrontendDocument() = default;
@@ -320,6 +412,16 @@ QString CxxFrontendDocument::fileName() const
 const QList<CxxFrontendDocument::Symbol> &CxxFrontendDocument::symbols() const
 {
     return d->symbols;
+}
+
+QStringList CxxFrontendDocument::definedMacros() const
+{
+    return d->definedMacros;
+}
+
+QStringList CxxFrontendDocument::includedHeaders() const
+{
+    return d->includedHeaders;
 }
 
 const QList<CxxFrontendDocument::Diagnostic> &CxxFrontendDocument::diagnostics() const
@@ -362,8 +464,10 @@ QString CxxFrontendDocument::functionAt(int line, int column) const
 QStringList CxxFrontendDocument::unsupportedQueries()
 {
     return {
-        // Needs the whole include closure, which is the slice after this one.
-        "Snapshot",
+        // Whether an already parsed document can be reused under a different
+        // set of macros. Needs to know which macros this file's preprocessing
+        // actually consulted, which the delegate reports but nothing records
+        // here yet.
         "isValidForCurrentEnvironment",
     };
 }

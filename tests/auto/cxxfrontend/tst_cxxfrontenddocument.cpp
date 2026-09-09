@@ -244,7 +244,8 @@ void tst_cxxfrontenddocument::unsupportedQueries()
     const QStringList unsupported = CxxFrontendDocument::unsupportedQueries();
 
     QVERIFY(!unsupported.contains("scopeAt"));
-    QVERIFY(unsupported.contains("Snapshot"));
+    QVERIFY(!unsupported.contains("Snapshot"));
+    QVERIFY(unsupported.contains("isValidForCurrentEnvironment"));
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontenddocument)

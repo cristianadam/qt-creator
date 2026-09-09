@@ -67,6 +67,7 @@ add_qtc_library(CxxFrontendBridge STATIC
     CxxFrontendDocument.cpp CxxFrontendDocument.h
     CxxFrontendOverview.cpp CxxFrontendOverview.h
     CxxFrontendPreprocessor.cpp CxxFrontendPreprocessor.h
+    CxxFrontendSnapshot.cpp CxxFrontendSnapshot.h
   SKIP_PCH
   EXCLUDE_FROM_INSTALL
 )
