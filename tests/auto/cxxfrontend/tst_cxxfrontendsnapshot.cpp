@@ -69,6 +69,12 @@ private slots:
     void anUnresolvedIncludeIsNotAnError();
     void reportsWhatAFileIncludes();
     void predefinedMacrosReachEveryFile();
+
+    void aHeaderSeesTheMacrosOfItsIncluder();
+    void aHeaderIsNotReusedUnderADifferentEnvironment();
+    void aHeaderIsReusedWhenTheEnvironmentAgrees();
+    void anUnrelatedMacroDoesNotForceAReparse();
+    void aHeaderThatAsksAboutNothingIsAlwaysReused();
 };
 
 void tst_cxxfrontendsnapshot::aHeaderGetsItsOwnDocument()
@@ -213,6 +219,92 @@ void tst_cxxfrontendsnapshot::predefinedMacrosReachEveryFile()
 
     QVERIFY(snapshot.document("h.h"));
     QVERIFY(snapshot.document("h.h")->diagnostics().isEmpty());
+}
+
+// A header is preprocessed where it is included, so what the includer has
+// defined by that point is in force inside it. Getting this wrong does not
+// fail loudly: it gives the wrong half of an #ifdef, silently.
+void tst_cxxfrontendsnapshot::aHeaderSeesTheMacrosOfItsIncluder()
+{
+    Files files;
+    files.add("h.h", "#ifdef FEATURE\nint withFeature;\n#else\nint withoutFeature;\n#endif\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+    snapshot.process("a.cpp", "#define FEATURE 1\n#include \"h.h\"\n");
+
+    QCOMPARE(symbolNames(snapshot.document("h.h")), QStringList("withFeature"));
+}
+
+// And two includers can disagree about it, so a document parsed for one of
+// them cannot simply be handed to the other.
+void tst_cxxfrontendsnapshot::aHeaderIsNotReusedUnderADifferentEnvironment()
+{
+    Files files;
+    files.add("h.h", "#ifdef FEATURE\nint withFeature;\n#else\nint withoutFeature;\n#endif\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+
+    snapshot.process("with.cpp", "#define FEATURE 1\n#include \"h.h\"\n");
+    QCOMPARE(symbolNames(snapshot.document("h.h")), QStringList("withFeature"));
+
+    snapshot.process("without.cpp", "#include \"h.h\"\n");
+    QCOMPARE(symbolNames(snapshot.document("h.h")), QStringList("withoutFeature"));
+}
+
+// Reparsing whenever anything differs would be correct and useless: a header
+// is included by hundreds of files and reparsing it for each is what the
+// document per file exists to avoid. So the other half of the rule matters as
+// much as the first -- a document survives an environment it does not care
+// about. A document that survived is the same document, so the pointer says
+// whether it did.
+
+void tst_cxxfrontendsnapshot::aHeaderIsReusedWhenTheEnvironmentAgrees()
+{
+    Files files;
+    files.add("h.h", "#ifdef FEATURE\nint a;\n#else\nint b;\n#endif\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+
+    snapshot.process("one.cpp", "#define FEATURE 1\n#include \"h.h\"\n");
+    const CxxFrontendDocument *first = snapshot.document("h.h");
+
+    snapshot.process("two.cpp", "#define FEATURE 1\n#include \"h.h\"\n");
+    QCOMPARE(snapshot.document("h.h"), first);
+}
+
+void tst_cxxfrontendsnapshot::anUnrelatedMacroDoesNotForceAReparse()
+{
+    Files files;
+    files.add("h.h", "#ifdef FEATURE\nint a;\n#else\nint b;\n#endif\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+
+    snapshot.process("one.cpp", "#include \"h.h\"\n");
+    const CxxFrontendDocument *first = snapshot.document("h.h");
+
+    // The header never asks about SOMETHING_ELSE, so it cannot read
+    // differently because of it.
+    snapshot.process("two.cpp", "#define SOMETHING_ELSE 1\n#include \"h.h\"\n");
+    QCOMPARE(snapshot.document("h.h"), first);
+}
+
+void tst_cxxfrontendsnapshot::aHeaderThatAsksAboutNothingIsAlwaysReused()
+{
+    Files files;
+    files.add("h.h", "int fromHeader;\n");
+
+    CxxFrontendSnapshot snapshot;
+    snapshot.setHeaderResolver(files.resolver());
+
+    snapshot.process("one.cpp", "#define A 1\n#include \"h.h\"\n");
+    const CxxFrontendDocument *first = snapshot.document("h.h");
+
+    snapshot.process("two.cpp", "#define B 2\n#include \"h.h\"\n");
+    QCOMPARE(snapshot.document("h.h"), first);
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontendsnapshot)

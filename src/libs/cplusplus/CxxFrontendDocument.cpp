@@ -4,6 +4,7 @@
 #include "CxxFrontendDocument.h"
 
 #include <QRegularExpression>
+#include <QSet>
 
 #include <functional>
 
@@ -33,8 +34,12 @@ QString fromStd(std::string_view text)
 struct IncludeState
 {
     cxx::Preprocessor &preprocessor;
-    const std::function<std::optional<QStringList>(const QString &, bool)> &onInclude;
+    const std::function<std::optional<QStringList>(const QString &, bool,
+                                                   const QStringList &)> &onInclude;
     QStringList *includedHeaders = nullptr;
+    // What is defined at this moment, which is what a header included here
+    // is entitled to see.
+    const QStringList *inForce = nullptr;
     bool done = false;
 
     explicit operator bool() const { return !done; }
@@ -52,8 +57,8 @@ struct IncludeState
     void operator()(const cxx::PendingInclude &state)
     {
         const auto [name, isSystem] = nameOf(state.include);
-        const std::optional<QStringList> macros = onInclude ? onInclude(name, isSystem)
-                                                            : std::nullopt;
+        const std::optional<QStringList> macros
+            = onInclude ? onInclude(name, isSystem, *inForce) : std::nullopt;
         if (!macros) {
             state.resolveWith(std::nullopt);
             return;
@@ -75,7 +80,8 @@ struct IncludeState
     {
         for (const auto &request : state.requests) {
             const auto [name, isSystem] = nameOf(request.include);
-            request.setExists(onInclude && onInclude(name, isSystem).has_value());
+            request.setExists(onInclude
+                              && onInclude(name, isSystem, *inForce).has_value());
         }
     }
 
@@ -137,6 +143,64 @@ public:
 
         void macroDefined(const cxx::MacroInfo &macro) override
         {
+            const QString name = fromStd(macro.name);
+            const QString line = lineOf(macro);
+            replaceInForce(name, line);
+
+            // Handing the file the environment it was included under goes
+            // through the same #define machinery, but those are not the
+            // file's own definitions: it neither established them nor stops
+            // depending on them by being given them.
+            if (m_seeding)
+                return;
+
+            m_ownDefines.insert(name);
+            m_out.append(line);
+        }
+
+        void macroUndefined(const cxx::MacroInfo &macro, cxx::PreprocessorRange) override
+        {
+            const QString name = fromStd(macro.name);
+            m_ownDefines.insert(name);
+            removeFrom(m_out, name);
+            removeFrom(m_inForce, name);
+        }
+
+        // Asking about a macro is what makes a file depend on where it was
+        // included from -- but only until it defines the name itself, after
+        // which the answer is its own doing.
+        void macroUsed(const cxx::MacroUse &use) override
+        {
+            note(fromStd(use.macro->name), lineOf(*use.macro));
+        }
+
+        void undefinedMacroUsed(std::string_view name, cxx::PreprocessorRange) override
+        {
+            note(fromStd(name), QString());
+        }
+
+        // Scoped for the same reason: everything defined while it is on is
+        // the environment, not the file.
+        class Seeding
+        {
+        public:
+            explicit Seeding(MacroCollector &collector)
+                : m_collector(collector)
+            {
+                m_collector.m_seeding = true;
+            }
+            ~Seeding() { m_collector.m_seeding = false; }
+
+        private:
+            MacroCollector &m_collector;
+        };
+
+        const QStringList &inForce() const { return m_inForce; }
+        const QHash<QString, QString> &consulted() const { return m_consulted; }
+
+    private:
+        static QString lineOf(const cxx::MacroInfo &macro)
+        {
             QString line = fromStd(macro.name);
             if (macro.isFunctionLike) {
                 QStringList parameters;
@@ -148,20 +212,34 @@ public:
             }
             if (!macro.body.empty())
                 line += ' ' + fromStd(macro.body);
-            m_out.append(line);
+            return line;
         }
 
-        void macroUndefined(const cxx::MacroInfo &macro, cxx::PreprocessorRange) override
+        static void removeFrom(QStringList &lines, const QString &name)
         {
-            const QString name = fromStd(macro.name);
-            m_out.removeIf([&](const QString &line) {
-                return line == name || line.startsWith(name + ' ')
-                       || line.startsWith(name + '(');
+            lines.removeIf([&](const QString &line) {
+                return CxxFrontendDocument::macroNameOf(line) == name;
             });
         }
 
-    private:
+        void replaceInForce(const QString &name, const QString &line)
+        {
+            removeFrom(m_inForce, name);
+            m_inForce.append(line);
+        }
+
+        void note(const QString &name, const QString &definition)
+        {
+            if (m_ownDefines.contains(name) || m_consulted.contains(name))
+                return;
+            m_consulted.insert(name, definition);
+        }
+
         QStringList &m_out;
+        QStringList m_inForce;
+        bool m_seeding = false;
+        QHash<QString, QString> m_consulted;
+        QSet<QString> m_ownDefines;
     };
 
     class Diagnostics : public cxx::DiagnosticsClient
@@ -382,11 +460,15 @@ CxxFrontendDocument::Private::Private(const QString &source, const QString &file
     preprocessor->setPreprocessorDelegate(&macroCollector);
 
     // What the includers established, before the first line of this file.
-    for (const QString &macro : this->config.predefinedMacros)
-        preprocessor->defineMacro(macro.toStdString(), {});
+    {
+        MacroCollector::Seeding seeding(macroCollector);
+        for (const QString &macro : this->config.predefinedMacros)
+            preprocessor->defineMacro(macro.toStdString(), {});
+    }
 
     unit.beginPreprocessing(source.toStdString(), fileName.toStdString());
-    IncludeState state{*preprocessor, this->config.onInclude, &includedHeaders};
+    IncludeState state{*preprocessor, this->config.onInclude, &includedHeaders,
+                       &macroCollector.inForce()};
     while (state)
         std::visit(state, unit.continuePreprocessing());
     unit.endPreprocessing();
@@ -422,6 +504,57 @@ QStringList CxxFrontendDocument::definedMacros() const
 QStringList CxxFrontendDocument::includedHeaders() const
 {
     return d->includedHeaders;
+}
+
+QStringList CxxFrontendDocument::macrosInForce() const
+{
+    return d->macroCollector.inForce();
+}
+
+QHash<QString, QString> CxxFrontendDocument::consultedMacros() const
+{
+    return d->macroCollector.consulted();
+}
+
+QString CxxFrontendDocument::macroNameOf(const QString &defineLine)
+{
+    const qsizetype end = [&] {
+        for (qsizetype i = 0; i < defineLine.size(); ++i) {
+            if (defineLine.at(i) == '(' || defineLine.at(i).isSpace())
+                return i;
+        }
+        return defineLine.size();
+    }();
+    return defineLine.left(end);
+}
+
+bool CxxFrontendDocument::isValidFor(const QStringList &environment) const
+{
+    // One side of this comes from the delegate and the other from whatever
+    // the caller wrote, so compare what they say rather than how they are
+    // spaced: "ADD(a,b) a+b" and "ADD(a, b) a + b" are the same macro.
+    const auto normalized = [](const QString &line) {
+        return line.simplified().remove(' ');
+    };
+
+    QHash<QString, QString> byName;
+    byName.reserve(environment.size());
+    for (const QString &macro : environment)
+        byName.insert(macroNameOf(macro), normalized(macro));
+
+    const QHash<QString, QString> consulted = d->macroCollector.consulted();
+    for (auto it = consulted.cbegin(); it != consulted.cend(); ++it) {
+        const QString here = it.value();
+        // Consulted and not defined: it must still not be defined.
+        if (here.isEmpty()) {
+            if (byName.contains(it.key()))
+                return false;
+            continue;
+        }
+        if (byName.value(it.key()) != normalized(here))
+            return false;
+    }
+    return true;
 }
 
 const QList<CxxFrontendDocument::Diagnostic> &CxxFrontendDocument::diagnostics() const

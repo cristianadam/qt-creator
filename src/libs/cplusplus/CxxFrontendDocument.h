@@ -5,6 +5,7 @@
 
 #include <cplusplus/Overview.h>
 
+#include <QHash>
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -49,7 +50,12 @@ public:
         // Creator keeps one translation unit per file, so the header gets a
         // document of its own and only its macros cross over. Without a
         // handler every include is treated as not found.
-        std::function<std::optional<QStringList>(const QString &name, bool isSystem)>
+        //
+        // inForce is everything defined at the point of the include, which
+        // the header is entitled to see: it is preprocessed where it is
+        // included, not on its own.
+        std::function<std::optional<QStringList>(const QString &name, bool isSystem,
+                                                 const QStringList &inForce)>
             onInclude;
     };
 
@@ -78,6 +84,27 @@ public:
 
     // The headers it included, as they were written.
     QStringList includedHeaders() const;
+
+    // Every macro in force at the end of the file: what it was given plus
+    // what it defined, less what it undefined.
+    QStringList macrosInForce() const;
+
+    // The macros this file's preprocessing asked about before defining them
+    // itself, each with the definition it saw -- an empty string where the
+    // answer was that there was none. This is what the file's parse depends
+    // on from outside, and so what decides whether it can be reused.
+    QHash<QString, QString> consultedMacros() const;
+
+    // Whether this document would come out the same under \a environment.
+    // True when every macro it consulted resolves there exactly as it did
+    // here. A macro the file never asked about cannot change its parse, so
+    // an unrelated define does not force a reparse.
+    bool isValidFor(const QStringList &environment) const;
+
+    // The name a #define line declares, up to the parameter list if there is
+    // one. Public because a caller assembling an environment needs the same
+    // rule.
+    static QString macroNameOf(const QString &defineLine);
 
     struct Diagnostic
     {

@@ -404,6 +404,9 @@ struct Preprocessor::Private {
   PreprocessorDelegate* delegate_ = nullptr;
   // Where the run of lines the conditionals are leaving out started.
   PreprocessorRange skipRegionStart_;
+  // Bodies spelled out for macros that have no source to quote. MacroInfo
+  // only views its strings, so they have to outlive the call.
+  mutable std::unordered_set<std::string> bodyTexts_;
   LanguageKind language_ = LanguageKind::kCXX;
   bool canResolveFiles_ = true;
   bool disableCurrentDirSearch_ = false;
@@ -3112,14 +3115,31 @@ auto Preprocessor::Private::macroInfoOf(const Macro& macro,
     info.isBuiltin = true;
   }
 
-  // The replacement list as it is written, when it is written anywhere: a
-  // macro defined through the API, or a built-in, has no source to point at.
+  // The replacement list. Taken from the source where there is source to
+  // take it from, so that it reads as it was written; spelled out token by
+  // token otherwise, which is the case for a macro defined through the API,
+  // where an empty body would be indistinguishable from a different one.
   if (const auto* body = getMacroBody(macro); body && body->size() > 1) {
-    const auto range = rangeOf(body->data(), body->data() + body->size() - 1);
+    const Tok* first = body->data();
+    const Tok* last = first + body->size() - 1;
+    const auto range = rangeOf(first, last);
+
+    bool fromSource = false;
     if (range.fileId && range.fileId <= sourceFiles_.size()) {
       const std::string& text = sourceFiles_[range.fileId - 1]->source;
-      if (range.end() <= text.size())
+      if (range.end() <= text.size()) {
         info.body = std::string_view(text).substr(range.offset, range.length);
+        fromSource = true;
+      }
+    }
+
+    if (!fromSource) {
+      std::string spelled;
+      for (const Tok* tok = first; tok != last; ++tok) {
+        if (!spelled.empty()) spelled += ' ';
+        spelled += getText(*tok);
+      }
+      info.body = *bodyTexts_.insert(std::move(spelled)).first;
     }
   }
 

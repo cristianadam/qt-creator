@@ -10,10 +10,12 @@ namespace CPlusPlus {
 class CxxFrontendSnapshot::Private
 {
 public:
-    // Processes a file if it has not been processed already, and answers with
-    // the macros it establishes -- its own and those of everything it
-    // includes, since an includer sees all of them.
-    QStringList ensure(const QString &filePath, const QString &source);
+    // Processes a file under \a environment, unless the document already
+    // there would come out the same, and answers with the macros it
+    // establishes -- its own and those of everything it includes, since an
+    // includer sees all of them.
+    QStringList ensure(const QString &filePath, const QString &source,
+                       const QStringList &environment);
 
     HeaderResolver headerResolver;
     QStringList predefinedMacros;
@@ -28,10 +30,18 @@ public:
     QSet<QString> inProgress;
 };
 
-QStringList CxxFrontendSnapshot::Private::ensure(const QString &filePath, const QString &source)
+QStringList CxxFrontendSnapshot::Private::ensure(const QString &filePath,
+                                                 const QString &source,
+                                                 const QStringList &environment)
 {
-    if (const auto it = establishedMacros.constFind(filePath); it != establishedMacros.cend())
-        return *it;
+    // Reuse what is there only if it would come out the same. A header that
+    // reads an #ifdef gives a different answer to two includers that disagree
+    // about it, and handing the first answer to the second is how a code
+    // model quietly describes code that is not there.
+    if (const auto it = documents.constFind(filePath); it != documents.cend()) {
+        if ((*it)->isValidFor(environment))
+            return establishedMacros.value(filePath);
+    }
 
     // A cycle: whatever this file establishes is not known yet, and asking
     // again would not help.
@@ -43,9 +53,9 @@ QStringList CxxFrontendSnapshot::Private::ensure(const QString &filePath, const 
     QStringList included;
 
     CxxFrontendDocument::Config config;
-    config.predefinedMacros = predefinedMacros;
-    config.onInclude = [&](const QString &name,
-                           bool isSystem) -> std::optional<QStringList> {
+    config.predefinedMacros = environment;
+    config.onInclude = [&](const QString &name, bool isSystem,
+                           const QStringList &inForce) -> std::optional<QStringList> {
         if (!headerResolver)
             return std::nullopt;
         const std::optional<Header> header = headerResolver(name, isSystem, filePath);
@@ -53,7 +63,9 @@ QStringList CxxFrontendSnapshot::Private::ensure(const QString &filePath, const 
             return std::nullopt;
 
         included.append(header->filePath);
-        const QStringList macros = ensure(header->filePath, header->source);
+        // The header is preprocessed where it is included, so it sees what is
+        // defined at that point, not just what the project defines.
+        const QStringList macros = ensure(header->filePath, header->source, inForce);
         // What a header establishes is in force for the rest of this file,
         // and for whatever includes it in turn.
         fromIncludes.append(macros);
@@ -92,7 +104,7 @@ void CxxFrontendSnapshot::setPredefinedMacros(const QStringList &macros)
 const CxxFrontendDocument *CxxFrontendSnapshot::process(const QString &filePath,
                                                         const QString &source)
 {
-    d->ensure(filePath, source);
+    d->ensure(filePath, source, d->predefinedMacros);
     return document(filePath);
 }
 
