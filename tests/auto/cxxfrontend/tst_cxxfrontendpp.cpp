@@ -13,7 +13,8 @@
 // -- which macro was used where, which blocks #if skipped, what the include
 // guard was -- which now arrives through the upstream PreprocessorDelegate and
 // is checked here too. preprocessorGaps() at the bottom records what is still
-// missing rather than pretending it away.
+// missing rather than pretending it away -- which, as of the snapshot this
+// was written against, is nothing.
 //
 // The corpora here are small enough to keep the test quick. The two were also
 // run over every .cpp and .h under src/, 11303 files: 439 disagreed, 411 of
@@ -161,6 +162,8 @@ private slots:
     void reportsMacroUses();
     void reportsSkippedRegions();
     void reportsUndefinedMacroUses();
+
+    void marksTokensAMacroProduced();
 
     void preprocessorGaps();
 
@@ -316,6 +319,45 @@ void tst_cxxfrontendpp::reportsUndefinedMacroUses()
     QVERIFY(preprocessor.report().macroUses.isEmpty());
 }
 
+// The tokens say which of them a macro produced, which the commentary cannot:
+// it reports an invocation, not the tokens that came out of it.
+void tst_cxxfrontendpp::marksTokensAMacroProduced()
+{
+    const QString source = "#define ADD(a, b) a + b\nint x = ADD(p, q);\n";
+
+    CxxFrontendPreprocessor preprocessor;
+    preprocessor.run(source, "<stdin>");
+
+    int expanded = 0;
+    int generated = 0;
+    for (const CxxFrontendPreprocessor::Token &token : preprocessor.tokens()) {
+        if (!token.expanded)
+            continue;
+        ++expanded;
+        const QString text = source.mid(token.range.offset, token.range.length);
+        if (token.generated) {
+            ++generated;
+            // Nothing the caller wrote corresponds to it, so it points at the
+            // invocation.
+            QCOMPARE(text, QString("ADD"));
+        } else {
+            // An argument does have something the caller wrote, and points at
+            // that, which is what makes renaming through a macro possible.
+            QVERIFY2(text == "p" || text == "q", qPrintable(text));
+        }
+    }
+
+    // p, + and q came out of the expansion; only the + came out of the body.
+    QCOMPARE(expanded, 3);
+    QCOMPARE(generated, 1);
+
+    // And nothing outside an expansion is marked.
+    for (const CxxFrontendPreprocessor::Token &token : preprocessor.tokens()) {
+        if (!token.expanded)
+            QVERIFY(!token.generated);
+    }
+}
+
 // What is still missing, asserted so that the list cannot quietly go stale.
 // The three that arrived are asserted too, so that a snapshot that loses them
 // again is noticed.
@@ -326,10 +368,7 @@ void tst_cxxfrontendpp::preprocessorGaps()
     QVERIFY(gaps.reportsMacroUses);
     QVERIFY(gaps.reportsSkippedBlocks);
     QVERIFY(gaps.reportsIncludeGuards);
-
-    QVERIFY2(!gaps.marksExpandedTokens,
-             "cxx::Token says which tokens a macro produced now: give Document the "
-             "expanded and generated flags it wants, and drop this");
+    QVERIFY(gaps.marksExpandedTokens);
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontendpp)

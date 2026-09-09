@@ -108,6 +108,7 @@ public:
     HeaderResolver headerResolver;
     CxxFrontendPreprocessor::Report report;
     CxxFrontendReporter reporter{report};
+    QList<CxxFrontendPreprocessor::Token> tokens;
 };
 
 // Answers the engine's requests out of the resolver, which is how Qt Creator
@@ -200,6 +201,11 @@ const CxxFrontendPreprocessor::Report &CxxFrontendPreprocessor::report() const
     return d->report;
 }
 
+const QList<CxxFrontendPreprocessor::Token> &CxxFrontendPreprocessor::tokens() const
+{
+    return d->tokens;
+}
+
 QString CxxFrontendPreprocessor::fileName(int fileId) const
 {
     if (fileId <= 0)
@@ -210,6 +216,7 @@ QString CxxFrontendPreprocessor::fileName(int fileId) const
 QString CxxFrontendPreprocessor::run(const QString &source, const QString &fileName)
 {
     d->report = {};
+    d->tokens.clear();
 
     std::vector<cxx::Token> tokens;
     d->preprocessor->beginPreprocessing(source.toStdString(), fileName.toStdString(), tokens);
@@ -220,6 +227,14 @@ QString CxxFrontendPreprocessor::run(const QString &source, const QString &fileN
 
     d->preprocessor->endPreprocessing(tokens);
 
+    d->tokens.reserve(qsizetype(tokens.size()));
+    for (const cxx::Token &token : tokens) {
+        d->tokens.append({int(token.kind()),
+                          {int(token.fileId()), int(token.offset()), int(token.length())},
+                          token.macroExpanded(),
+                          token.macroGenerated()});
+    }
+
     std::ostringstream out;
     d->preprocessor->getPreprocessedText(tokens, out);
     return QString::fromStdString(out.str());
@@ -227,15 +242,15 @@ QString CxxFrontendPreprocessor::run(const QString &source, const QString &fileN
 
 auto CxxFrontendPreprocessor::gaps() -> Gaps
 {
-    // What is left is the tokens. cxx::Token is a full 64 bits -- kind,
-    // startOfLine, leadingSpace, fileId, length, offset -- with no room to say
-    // that a macro produced it, so Document still cannot tell an expanded
-    // token from one that was written. The delegate covers the rest.
+    // Nothing left open. The delegate covers the commentary, and cxx::Token
+    // now says which tokens a macro produced -- two bits taken out of its
+    // offset, which caps a source file at 8MB. Qt Creator warns above 5MB
+    // anyway.
     return {
         .reportsMacroUses = true,
         .reportsSkippedBlocks = true,
         .reportsIncludeGuards = true,
-        .marksExpandedTokens = false,
+        .marksExpandedTokens = true,
     };
 }
 

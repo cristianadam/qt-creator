@@ -71,6 +71,20 @@ class Token {
   [[nodiscard]] inline auto leadingSpace() const -> bool;
   inline void setLeadingSpace(bool leadingSpace);
 
+  // A macro produced this token. Its offset is the macro invocation, not the
+  // text it was replaced by, since that text is somewhere else.
+  [[nodiscard]] inline auto macroExpanded() const -> bool;
+  inline void setMacroExpanded(bool macroExpanded);
+
+  // ... and it came out of the macro's replacement list rather than out of an
+  // argument, so nothing the caller wrote corresponds to it.
+  [[nodiscard]] inline auto macroGenerated() const -> bool;
+  inline void setMacroGenerated(bool macroGenerated);
+
+  // The largest offset a token can carry, and so the largest source file the
+  // preprocessor can read.
+  static constexpr std::uint32_t kMaxSourceFileSize = (1u << 23) - 1;
+
   explicit operator bool() const;
   explicit operator TokenKind() const;
 
@@ -116,7 +130,9 @@ class Token {
       std::uint64_t leadingSpace_ : 1;
       std::uint64_t fileId_ : 12;
       std::uint64_t length_ : 17;
-      std::uint64_t offset_ : 25;
+      std::uint64_t macroExpanded_ : 1;
+      std::uint64_t macroGenerated_ : 1;
+      std::uint64_t offset_ : 23;
     };
     std::uint64_t raw_;
   };
@@ -130,6 +146,8 @@ inline Token::Token(TokenKind kind, unsigned offset, unsigned length,
       leadingSpace_(0),
       fileId_(0),
       length_(length),
+      macroExpanded_(0),
+      macroGenerated_(0),
       offset_(offset),
       value_(value) {}
 
@@ -163,6 +181,18 @@ inline auto Token::leadingSpace() const -> bool { return leadingSpace_; }
 
 inline void Token::setLeadingSpace(bool leadingSpace) {
   leadingSpace_ = leadingSpace;
+}
+
+inline auto Token::macroExpanded() const -> bool { return macroExpanded_; }
+
+inline void Token::setMacroExpanded(bool macroExpanded) {
+  macroExpanded_ = macroExpanded;
+}
+
+inline auto Token::macroGenerated() const -> bool { return macroGenerated_; }
+
+inline void Token::setMacroGenerated(bool macroGenerated) {
+  macroGenerated_ = macroGenerated;
 }
 
 inline Token::operator bool() const {

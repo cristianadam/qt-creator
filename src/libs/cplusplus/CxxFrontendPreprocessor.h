@@ -91,6 +91,20 @@ public:
 
     const Report &report() const;
 
+    // One token of the output, in Qt Creator's terms. The offsets of an
+    // expanded token point at the macro invocation: the text it was replaced
+    // by is in the macro's body and has no position here.
+    struct Token
+    {
+        int kind = 0;
+        Range range;
+        bool expanded = false;
+        bool generated = false;
+    };
+
+    // The tokens the last run() produced.
+    const QList<Token> &tokens() const;
+
     // The file a Range belongs to, empty if there is no such file.
     QString fileName(int fileId) const;
 
@@ -98,7 +112,9 @@ public:
     // diagnostics and __FILE__.
     QString run(const QString &source, const QString &fileName);
 
-    // What CppSourceProcessor still could not get from this engine.
+    // What CppSourceProcessor could not get from this engine when the move
+    // started. Kept, and asserted on, so that a snapshot refresh that loses
+    // any of it is noticed.
     struct Gaps
     {
         bool reportsMacroUses = false;

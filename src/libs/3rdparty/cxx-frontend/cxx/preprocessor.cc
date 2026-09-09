@@ -151,6 +151,7 @@ struct Tok {
   std::uint8_t space : 1 = false;
   std::uint8_t generated : 1 = false;
   std::uint8_t isFromMacroBody : 1 = false;
+  std::uint8_t expanded : 1 = false;
   std::uint8_t noexpand : 1 = false;
   std::uint8_t dirty : 1 = false;
 
@@ -1123,6 +1124,12 @@ auto Preprocessor::Private::createSourceFile(std::string fileName,
     cxx_runtime_error("too many source files");
   }
 
+  // A token carries its offset in 23 bits, so anything past that could not be
+  // pointed at. Say so rather than wrap around.
+  if (source.size() > Token::kMaxSourceFileSize) {
+    cxx_runtime_error("source file is too large");
+  }
+
   const int sourceFileId = static_cast<int>(sourceFiles_.size() + 1);
 
   SourceFile* sourceFile =
@@ -1589,15 +1596,14 @@ auto Preprocessor::Private::substitute(
   TokVector os;
 
   auto appendToken = [&](const Tok& tk) {
+    auto copyTk = tk;
+    copyTk.expanded = true;
     if (tk.isFromMacroBody) {
-      auto copyTk = tk;
       copyTk.sourceFile = pointOfSubstitution.sourceFile;
       copyTk.offset = pointOfSubstitution.offset;
       copyTk.length = pointOfSubstitution.length;
-      os.push_back(copyTk);
-    } else {
-      os.push_back(tk);
     }
+    os.push_back(copyTk);
   };
 
   auto appendTokens = [&](const Tok* begin, const Tok* end) {
@@ -1789,7 +1795,9 @@ auto Preprocessor::Private::expandMacro(Cursor& cursor) -> bool {
       if (!expanded.empty()) {
         Cursor ec;
         ec.kind = Cursor::ExpansionCursor;
-        ec.ownedTokens = std::move(expanded);
+        for (auto& t : expanded) t.expanded = true;
+        for (auto& t : expanded) t.expanded = true;
+  ec.ownedTokens = std::move(expanded);
         ec.initFromOwned();
         self.cursors_.push_back(std::move(ec));
       }
@@ -1815,7 +1823,9 @@ auto Preprocessor::Private::expandMacro(Cursor& cursor) -> bool {
       if (!expanded.empty()) {
         Cursor ec;
         ec.kind = Cursor::ExpansionCursor;
-        ec.ownedTokens = std::move(expanded);
+        for (auto& t : expanded) t.expanded = true;
+        for (auto& t : expanded) t.expanded = true;
+  ec.ownedTokens = std::move(expanded);
         ec.initFromOwned();
         self.cursors_.push_back(std::move(ec));
       }
@@ -1848,6 +1858,7 @@ auto Preprocessor::Private::expandObjectLikeMacro(Cursor& cursor,
   Cursor ec;
   ec.kind = Cursor::ExpansionCursor;
   ec.untaintOnPop = ident;
+  for (auto& t : expanded) t.expanded = true;
   ec.ownedTokens = std::move(expanded);
   ec.initFromOwned();
   cursors_.push_back(std::move(ec));
@@ -2106,6 +2117,7 @@ auto Preprocessor::Private::expandFunctionLikeMacro(
   Cursor ec;
   ec.kind = Cursor::ExpansionCursor;
   ec.untaintOnPop = ident;
+  for (auto& t : expanded) t.expanded = true;
   ec.ownedTokens = std::move(expanded);
   ec.initFromOwned();
   cursors_.push_back(std::move(ec));
@@ -2721,6 +2733,11 @@ void Preprocessor::Private::finalizeToken(std::vector<Token>& tokens,
                                           const Tok& tk) {
   auto kind = tk.kind;
   const auto fileId = tk.sourceFile;
+  // Whether a macro produced this, and whether it came out of the macro's
+  // body rather than out of an argument. A generated token has no counterpart
+  // in the text the caller wrote.
+  const bool macroExpanded = tk.expanded;
+  const bool macroGenerated = tk.isFromMacroBody || tk.generated;
   TokenValue value{};
   auto text = getText(tk);
 
@@ -2785,26 +2802,21 @@ void Preprocessor::Private::finalizeToken(std::vector<Token>& tokens,
       break;
   }
 
+  auto push = [&](Token token, bool leadingSpace, bool startOfLine) {
+    token.setFileId(fileId);
+    token.setLeadingSpace(leadingSpace);
+    token.setStartOfLine(startOfLine);
+    token.setMacroExpanded(macroExpanded);
+    token.setMacroGenerated(macroGenerated);
+    tokens.push_back(token);
+  };
+
   if (tk.kind == TokenKind::T_GREATER_GREATER) {
     value.tokenKindValue = tk.kind;
-
-    Token token(TokenKind::T_GREATER, tk.offset, 1);
-    token.setFileId(fileId);
-    token.setLeadingSpace(tk.space);
-    token.setStartOfLine(tk.bol);
-    tokens.push_back(token);
-
-    token = Token(TokenKind::T_GREATER, tk.offset + 1, 1);
-    token.setFileId(fileId);
-    token.setLeadingSpace(false);
-    token.setStartOfLine(false);
-    tokens.push_back(token);
+    push(Token(TokenKind::T_GREATER, tk.offset, 1), tk.space, tk.bol);
+    push(Token(TokenKind::T_GREATER, tk.offset + 1, 1), false, false);
   } else {
-    Token token(kind, tk.offset, tk.length, value);
-    token.setFileId(fileId);
-    token.setLeadingSpace(tk.space);
-    token.setStartOfLine(tk.bol);
-    tokens.push_back(token);
+    push(Token(kind, tk.offset, tk.length, value), tk.space, tk.bol);
   }
 }
 
