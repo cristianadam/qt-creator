@@ -248,7 +248,7 @@ class TypePrinter {
 
     for (std::size_t i = 0; i < params.size(); ++i) {
       const auto& param = params[i];
-      signature.append(to_string(param));
+      signature.append(to_string(param, "", options_));
 
       if (i != params.size() - 1) {
         signature.append(", ");
@@ -306,6 +306,7 @@ class TypePrinter {
   }
 
   void appendEnclosingScope(Symbol* symbol) {
+    if (options_.omitEnclosingScope) return;
     auto parent = symbol->parent();
     if (!parent) return;
     while (symbol_cast<TemplateParametersSymbol>(parent)) {
@@ -334,7 +335,7 @@ class TypePrinter {
       std::string_view sep = "";
       for (const auto& param :
            views::members(templDecl->templateParameters())) {
-        out += std::format("{}{}", sep, to_string(param->type()));
+        out += std::format("{}{}", sep, to_string(param->type(), "", options_));
         sep = ", ";
       }
       out += '>';
@@ -349,12 +350,14 @@ class TypePrinter {
   }
 
   void operator()(const MemberObjectPointerType* type) {
-    ptrOps_ = std::format(" {}::*", to_string(type->classType())) + ptrOps_;
+    ptrOps_ =
+        std::format(" {}::*", to_string(type->classType(), "", options_)) + ptrOps_;
     accept(type->elementType());
   }
 
   void operator()(const MemberFunctionPointerType* type) {
-    ptrOps_ = std::format("{}::*", to_string(type->classType())) + ptrOps_;
+    ptrOps_ =
+        std::format("{}::*", to_string(type->classType(), "", options_)) + ptrOps_;
     accept(type->functionType());
   }
 

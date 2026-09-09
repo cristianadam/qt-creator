@@ -2692,9 +2692,9 @@ void Binder::BuildRecordLayout::buildVTableLayout() {
 
   auto primaryBase = primaryBaseOf(classSymbol);
 
-  auto& slots = vtable->primary.slots;
+  auto& slots = vtable->primary.slotEntries;
   if (primaryBase && primaryBase->vtableLayout()) {
-    slots = primaryBase->vtableLayout()->primary.slots;
+    slots = primaryBase->vtableLayout()->primary.slotEntries;
   }
   const auto inheritedPrimarySlotCount = slots.size();
 
@@ -2920,20 +2920,20 @@ void Binder::BuildRecordLayout::buildVTableLayout() {
     }
 
     if (auto baseVtable = baseSym->vtableLayout()) {
-      group.slots = baseVtable->primary.slots;
+      group.slotEntries = baseVtable->primary.slotEntries;
     }
 
     std::vector<bool> inheritedVcallSlots;
-    inheritedVcallSlots.reserve(group.slots.size());
-    for (auto& slot : group.slots) {
+    inheritedVcallSlots.reserve(group.slotEntries.size());
+    for (auto& slot : group.slotEntries) {
       inheritedVcallSlots.push_back(slot.usesVcallOffset);
       slot.thisAdjustment = 0;
       slot.vcallOffsetIndex = -1;
     }
 
     std::unordered_map<FunctionSymbol*, Overrider> overrideOf;
-    for (std::size_t index = 0; index < group.slots.size(); ++index) {
-      auto& slot = group.slots[index];
+    for (std::size_t index = 0; index < group.slotEntries.size(); ++index) {
+      auto& slot = group.slotEntries[index];
       if (slot.kind == VTableLayout::SlotKind::kDeletingDtor) continue;
       auto virtualTarget = inheritedVcallSlots[index]
                                ? slot.vcallBase
@@ -2965,7 +2965,7 @@ void Binder::BuildRecordLayout::buildVTableLayout() {
       vcallIndexOf.emplace(group.vcallOffsets[i].first, static_cast<int>(i));
     }
 
-    for (auto& slot : group.slots) {
+    for (auto& slot : group.slotEntries) {
       auto it = overrideOf.find(slot.function);
       if (it == overrideOf.end()) continue;
       auto overrider = it->second;

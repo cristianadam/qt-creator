@@ -72,7 +72,7 @@ struct NoIncludes
 };
 
 // The reason a corpus file does not parse, or nullptr if it is expected to.
-// Measured against upstream db9d737f0efba9a265e08029df86d8365d080725; revisit
+// Measured against upstream 7bb37766914949e07f18ec8d02e3df126ef948ad; revisit
 // whenever the snapshot moves.
 const char *knownFailure(const QString &fileName)
 {

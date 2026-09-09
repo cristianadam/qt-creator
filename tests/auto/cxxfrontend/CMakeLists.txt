@@ -18,3 +18,10 @@ add_qtc_test(tst_cxxfrontendpp
   DEFINES SRCDIR="${CMAKE_CURRENT_SOURCE_DIR}"
   SOURCES tst_cxxfrontendpp.cpp
 )
+
+add_qtc_test(tst_cxxfrontendoverview
+  CONDITION QTC_ENABLE_CXX_FRONTEND
+  DEPENDS CxxFrontendBridge CPlusPlus
+  DEFINES SRCDIR="${CMAKE_CURRENT_SOURCE_DIR}"
+  SOURCES tst_cxxfrontendoverview.cpp
+)

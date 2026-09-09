@@ -700,14 +700,16 @@ class VTableLayout {
     std::uint64_t offset = 0;
     std::vector<std::pair<ClassSymbol*, std::int64_t>> vbaseOffsets;
     std::vector<std::pair<FunctionSymbol*, std::int64_t>> vcallOffsets;
-    std::vector<Slot> slots;
+    // Not named slots: Qt defines that as a macro unless QT_NO_KEYWORDS,
+    // and this is a public header.
+    std::vector<Slot> slotEntries;
 
     [[nodiscard]] auto headerWordCount() const -> std::size_t {
       return vbaseOffsets.size() + vcallOffsets.size() + 2;
     }
 
     [[nodiscard]] auto wordCount() const -> std::size_t {
-      return headerWordCount() + slots.size();
+      return headerWordCount() + slotEntries.size();
     }
   };
 

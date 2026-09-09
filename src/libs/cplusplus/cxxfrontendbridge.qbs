@@ -17,6 +17,8 @@ QtcLibrary {
     files: [
         "CxxFrontendLexer.cpp",
         "CxxFrontendLexer.h",
+        "CxxFrontendOverview.cpp",
+        "CxxFrontendOverview.h",
         "CxxFrontendPreprocessor.cpp",
         "CxxFrontendPreprocessor.h",
     ]

@@ -156,6 +156,12 @@ struct TypeParamInfo {
 
 struct TypePrintOptions {
   bool omitFunctionReturnType = false;
+
+  // Print a class, enum or namespace by its own name rather than by the path
+  // to it. What a name has to be qualified with depends on where it is being
+  // shown, which the printer cannot know; a tool showing a declaration in the
+  // scope it was written in wants the short form.
+  bool omitEnclosingScope = false;
 };
 
 auto to_string(const Type* type, const std::string& id = "",
