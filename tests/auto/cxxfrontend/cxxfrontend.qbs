@@ -17,9 +17,20 @@ Project {
         name: "cxx-frontend lexer autotest"
         builtByDefault: false
 
-        Depends { name: "CxxFrontendLexer" }
+        Depends { name: "CxxFrontendBridge" }
         Depends { name: "CPlusPlus" }
         files: "tst_cxxfrontendlexer.cpp"
+
+        cpp.defines: base.concat(['SRCDIR="' + path + '"'])
+    }
+
+    QtcAutotest {
+        name: "cxx-frontend preprocessor autotest"
+        builtByDefault: false
+
+        Depends { name: "CxxFrontendBridge" }
+        Depends { name: "CPlusPlus" }
+        files: "tst_cxxfrontendpp.cpp"
 
         cpp.defines: base.concat(['SRCDIR="' + path + '"'])
     }

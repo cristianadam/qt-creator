@@ -54,16 +54,17 @@ if(TARGET CPlusPlus)
   endif()
 endif()
 
-# SimpleLexer on top of the cxx-frontend scanner. A target of its own rather
-# than part of CPlusPlus, so that the C++23 that cxx-frontend needs does not
-# spread to everything that uses the front end. Nothing but the differential
-# test in tests/auto/cxxfrontend uses it yet.
-add_qtc_library(CxxFrontendLexer STATIC
+# The pieces of the front end that have been moved onto cxx-frontend. A target
+# of its own rather than part of CPlusPlus, so that the C++23 that cxx-frontend
+# needs does not spread to everything that uses the front end. Nothing but the
+# differential tests in tests/auto/cxxfrontend uses it yet.
+add_qtc_library(CxxFrontendBridge STATIC
   CONDITION QTC_ENABLE_CXX_FRONTEND
   DEPENDS 3rd_cplusplus cxx-frontend Qt::Core
   PUBLIC_INCLUDES "${CMAKE_CURRENT_SOURCE_DIR}/.."
   SOURCES
     CxxFrontendLexer.cpp CxxFrontendLexer.h
+    CxxFrontendPreprocessor.cpp CxxFrontendPreprocessor.h
   SKIP_PCH
   EXCLUDE_FROM_INSTALL
 )

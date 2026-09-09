@@ -11,7 +11,7 @@ Project {
         "cmakelang/cmakelang.qbs",
         "commontraceformat/commontraceformat.qbs",
         "cplusplus/cplusplus.qbs",
-        "cplusplus/cxxfrontendlexer.qbs",
+        "cplusplus/cxxfrontendbridge.qbs",
         "devcontainer/devcontainer.qbs",
         "extensionsystem/extensionsystem.qbs",
         "glsl/glsl.qbs",
