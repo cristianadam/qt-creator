@@ -6,6 +6,7 @@
 #include <utils/filepath.h>
 #include <utils/result.h>
 
+#include <QIODevice>
 #include <QMap>
 #include <QString>
 #include <QStringList>
@@ -15,6 +16,7 @@ namespace Android::Internal {
 class AndroidManifestParser
 {
 public:
+
     struct ManifestData {
         QString iconName;
         bool hasIcon = false;
@@ -22,7 +24,6 @@ public:
         bool hasDefaultPermissionsComment = false;
         bool hasDefaultFeaturesComment = false;
     };
-
     struct ModifyParams {
         bool shouldModifyApplication = false;
         QStringList applicationKeys;
@@ -65,5 +66,7 @@ Utils::Result<QString> readManifestActivityMetaData(const Utils::FilePath &manif
 Utils::Result<void> updateManifestPermissionAttributes(const Utils::FilePath &manifestPath,
                                                        const QString &permission,
                                                        const QMap<QString, QString> &attributes);
+Utils::Result<void> writeManifestContent(const Utils::FilePath &manifestPath, const QByteArray &content,
+                                         QIODevice::OpenMode mode);
 
 } // namespace Android::Internal

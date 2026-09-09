@@ -1175,7 +1175,20 @@ Utils::Result<> PermissionsContainerWidget::migratePermissionsManifestToCMake()
         return result;
 
     m_permissionsModel->setPermissions({});
-    return updateManifestPermissions();
+    if (const Utils::Result<> result = updateManifestPermissions(); !result) {
+        // Undo the CMake write
+        Utils::FileSaver saver(m_CMakeFilePath, QIODevice::Text);
+        saver.write(parsed->content.toUtf8());
+        if (const Utils::Result<> restored = saver.finalize(); !restored) {
+            return Utils::ResultError(Tr::tr("%1 Restoring \"%2\" also failed: %3")
+                                        .arg(result.error(),
+                                            m_CMakeFilePath.toUserOutput(),
+                                            restored.error()));
+        }
+        updateCMakeFileWatch();
+        return result;
+    }
+    return Utils::ResultOk;
 }
 
 Utils::Result<> PermissionsContainerWidget::migratePermissionsCMakeToManifest()
@@ -1190,6 +1203,20 @@ Utils::Result<> PermissionsContainerWidget::migratePermissionsCMakeToManifest()
     const auto manifestData = AndroidManifestParser::readManifest(manifestPath);
     if (!manifestData)
         return Utils::ResultError(manifestData.error());
+
+    const Utils::Result<QByteArray> manifestPreImage = manifestPath.fileContents();
+    if (!manifestPreImage)
+        return Utils::ResultError(manifestPreImage.error());
+
+    const auto restoreManifest = [&](const QString &error) -> Utils::Result<> {
+        if (const Utils::Result<> restored = writeManifestContent(
+                manifestPath, *manifestPreImage, QIODevice::NotOpen); !restored) {
+            return Utils::ResultError(Tr::tr("%1 Restoring \"%2\" also failed: %3")
+                                      .arg(error, manifestPath.toUserOutput(),
+                                           restored.error()));
+        }
+        return Utils::ResultError(error);
+    };
 
     const auto parsed = parseAllPermissionCalls(m_CMakeFilePath, m_CMakeTargetName);
     if (!parsed)
@@ -1207,9 +1234,12 @@ Utils::Result<> PermissionsContainerWidget::migratePermissionsCMakeToManifest()
             continue;
         if (const Utils::Result<> result = updateManifestPermissionAttributes(manifestPath,
                 it.key(), it.value()); !result)
-            return result;
+            return restoreManifest(result.error());
     }
-    return rewritePermissionCalls(m_CMakeFilePath, m_CMakeTargetName, *parsed, {});
+    if (const Utils::Result<> result = rewritePermissionCalls(m_CMakeFilePath, m_CMakeTargetName,
+                                                              *parsed, {}); !result)
+        return restoreManifest(result.error());
+    return Utils::ResultOk;
 }
 
 Utils::Result<> PermissionsContainerWidget::updateCMakePermission(const QString &permission,

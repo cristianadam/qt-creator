@@ -266,13 +266,15 @@ static Result<void> modifyActivityMetaData(QDomDocument &doc, QDomElement &manif
     return {};
 }
 
-static Result<void> saveDocument(const FilePath &manifestPath, const QDomDocument &doc)
+Result<void> writeManifestContent(const FilePath &manifestPath,
+                                         const QByteArray &content,
+                                         QIODevice::OpenMode mode)
 {
     QScopeGuard unexpect([&] { Core::DocumentManager::unexpectFileChange(manifestPath); });
     Core::DocumentManager::expectFileChange(manifestPath);
 
-    Utils::FileSaver saver(manifestPath, QIODevice::Text);
-    saver.write(doc.toString(4).toUtf8());
+    FileSaver saver(manifestPath, mode);
+    saver.write(content);
     if (!saver.finalize())
         return ResultError(QString("Cannot write to manifest file: %1").arg(saver.errorString()));
 
@@ -282,6 +284,11 @@ static Result<void> saveDocument(const FilePath &manifestPath, const QDomDocumen
             editorDocument->reload(Core::IDocument::FlagReload, Core::IDocument::TypeContents);
     }
     return {};
+}
+
+static Result<void> saveDocument(const FilePath &manifestPath, const QDomDocument &doc)
+{
+    return writeManifestContent(manifestPath, doc.toString(4).toUtf8(), QIODevice::Text);
 }
 
 Result<void>
