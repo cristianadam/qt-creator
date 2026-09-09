@@ -1,0 +1,198 @@
+// Copyright (c) 2026 Roberto Raggi <roberto.raggi@gmail.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+#pragma once
+
+#include <cxx/ast_fwd.h>
+#include <cxx/implicit_conversion_sequence.h>
+#include <cxx/standard_conversion.h>
+#include <cxx/symbols_fwd.h>
+#include <cxx/token.h>
+#include <cxx/type_traits.h>
+#include <cxx/types_fwd.h>
+
+#include <expected>
+#include <optional>
+#include <span>
+#include <string>
+#include <vector>
+
+namespace cxx {
+class Arena;
+class Control;
+class TranslationUnit;
+
+struct ImplicitObjectArgument {
+  const Type* type = nullptr;
+  CvQualifiers cv = CvQualifiers::kNone;
+  ValueCategory valueCategory = ValueCategory::kPrValue;
+};
+
+struct DeductionCandidateInfo {
+  bool fromDeductionGuide = false;
+  bool isCopyDeductionCandidate = false;
+  bool fromConstructorTemplate = false;
+  bool fromInheritedConstructor = false;
+};
+
+struct Candidate {
+  FunctionSymbol* symbol = nullptr;
+  std::optional<ImplicitConversionSequence> objectConversion;
+  std::vector<ImplicitConversionSequence> conversions;
+  bool viable = false;
+  bool fromTemplate = false;
+  List<TemplateArgumentAST*>* deducedTemplateArgs = nullptr;
+  DeductionCandidateInfo deduction;
+};
+
+struct OverloadResult {
+  Candidate* best = nullptr;
+  bool ambiguous = false;
+};
+
+struct BinaryOperatorCandidate {
+  FunctionSymbol* symbol = nullptr;
+  bool rewritten = false;
+  bool reversed = false;
+};
+
+[[nodiscard]] auto isExcludedInheritedConstructor(const TypeTraits& traits,
+                                                  FunctionSymbol* constructor,
+                                                  ClassSymbol* classSymbol,
+                                                  int argCount) -> bool;
+
+struct RejectedCandidate {
+  FunctionSymbol* symbol = nullptr;
+  std::string reason;
+};
+
+struct ConstructorResult {
+  std::vector<Candidate> candidates;
+  std::vector<RejectedCandidate> rejected;
+  Candidate* best = nullptr;
+  bool ambiguous = false;
+};
+
+[[nodiscard]] auto haveSameParameterTypes(FunctionSymbol* lhs,
+                                          FunctionSymbol* rhs) -> bool;
+
+[[nodiscard]] auto compareDeductionCandidates(const DeductionCandidateInfo& lhs,
+                                              const DeductionCandidateInfo& rhs,
+                                              bool parameterTypesMatch) -> int;
+
+[[nodiscard]] auto templateCandidateArityRejects(FunctionSymbol* pattern,
+                                                 int argCount) -> bool;
+
+[[nodiscard]] auto compareFunctionTemplateSpecializations(
+    TranslationUnit* unit, FunctionSymbol* candidate, FunctionSymbol* other)
+    -> int;
+
+class OverloadResolution {
+ public:
+  explicit OverloadResolution(TranslationUnit* unit);
+
+  [[nodiscard]] auto computeImplicitConversionSequence(ExpressionAST* expr,
+                                                       const Type* targetType)
+      -> ImplicitConversionSequence;
+
+  void applyImplicitConversion(const ImplicitConversionSequence& sequence,
+                               ExpressionAST*& expr);
+
+  [[nodiscard]] auto implicitObjectArgumentConversion(
+      FunctionSymbol* function, const ImplicitObjectArgument& object)
+      -> std::expected<ImplicitConversionSequence, std::string>;
+
+  [[nodiscard]] auto selectBestViableFunction(
+      std::vector<Candidate>& candidates, bool preferNonTemplate = false)
+      -> OverloadResult;
+
+  [[nodiscard]] auto resolveConstructor(
+      ClassSymbol* classSymbol, const std::vector<ExpressionAST*>& args,
+      InitializationKind initializationKind =
+          InitializationKind::kDirectInitialization) -> ConstructorResult;
+
+  [[nodiscard]] auto resolveInitializerListConstructor(
+      ClassSymbol* classSymbol, BracedInitListAST* bracedInitList,
+      InitializationKind initializationKind) -> ConstructorResult;
+
+  [[nodiscard]] auto findCandidates(ScopeSymbol* scope, const Name* name) const
+      -> std::vector<FunctionSymbol*>;
+
+  [[nodiscard]] auto buildCallCandidate(
+      FunctionSymbol* function, const FunctionType* type,
+      std::span<ExpressionAST* const> args,
+      std::vector<RejectedCandidate>* rejected = nullptr)
+      -> std::optional<Candidate>;
+
+  [[nodiscard]] auto resolveCall(const std::vector<FunctionSymbol*>& candidates,
+                                 std::span<ExpressionAST* const> args,
+                                 bool* ambiguous = nullptr) -> FunctionSymbol*;
+
+  [[nodiscard]] auto collectCandidates(Symbol* symbol) const
+      -> std::vector<FunctionSymbol*>;
+
+  [[nodiscard]] auto resolveBinaryOperator(
+      const std::vector<FunctionSymbol*>& candidates, const Type* leftType,
+      const Type* rightType, bool* ambiguous, ExpressionAST* leftExpr = nullptr,
+      ExpressionAST* rightExpr = nullptr) -> FunctionSymbol*;
+
+  [[nodiscard]] auto lookupOperator(const Type* type, TokenKind op,
+                                    const Type* rightType = nullptr,
+                                    ExpressionAST* leftExpr = nullptr,
+                                    ExpressionAST* rightExpr = nullptr)
+      -> FunctionSymbol*;
+
+  [[nodiscard]] auto isRewriteTarget(FunctionSymbol* equalityOperator,
+                                     const Type* firstOperandType) -> bool;
+
+  [[nodiscard]] auto wasLastLookupAmbiguous() const -> bool {
+    return lastLookupAmbiguous_;
+  }
+
+  [[nodiscard]] auto wasLastOperatorRewritten() const -> bool {
+    return lastOperatorRewritten_;
+  }
+
+  [[nodiscard]] auto wasLastOperatorReversed() const -> bool {
+    return lastOperatorReversed_;
+  }
+
+ private:
+  [[nodiscard]] auto resolveConstructor(ClassSymbol* classSymbol,
+                                        const std::vector<ExpressionAST*>& args,
+                                        InitializationKind initializationKind,
+                                        bool initializerListConstructorsOnly)
+      -> ConstructorResult;
+
+  [[nodiscard]] auto resolveBinaryOperator(
+      const std::vector<BinaryOperatorCandidate>& candidates,
+      const Type* leftType, const Type* rightType, bool* ambiguous,
+      ExpressionAST* leftExpr, ExpressionAST* rightExpr) -> FunctionSymbol*;
+
+  TranslationUnit* unit_;
+  TypeTraits traits;
+  Control* control_;
+  Arena* arena_;
+  StandardConversion stdconv_;
+  bool lastLookupAmbiguous_ = false;
+  bool lastOperatorRewritten_ = false;
+  bool lastOperatorReversed_ = false;
+};
+}  // namespace cxx

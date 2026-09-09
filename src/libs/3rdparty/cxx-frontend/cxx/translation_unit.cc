@@ -1,0 +1,337 @@
+// Copyright (c) 2026 Roberto Raggi <roberto.raggi@gmail.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+#include <cxx/arena.h>
+#include <cxx/control.h>
+#include <cxx/dependent_types.h>
+#include <cxx/lexer.h>
+#include <cxx/literals.h>
+#include <cxx/names.h>
+#include <cxx/parser.h>
+#include <cxx/preprocessor.h>
+#include <cxx/symbols.h>
+#include <cxx/translation_unit.h>
+#include <cxx/type_traits.h>
+
+#ifndef CXX_NO_FLATBUFFERS
+#include <cxx/private/ast_decoder.h>
+#include <cxx/private/ast_encoder.h>
+#endif
+
+#include <utf8/unchecked.h>
+
+#include <algorithm>
+#include <ostream>
+
+namespace cxx {
+TranslationUnit::TranslationUnit(DiagnosticsClient* diagnosticsClient)
+    : control_(std::make_unique<Control>()) {
+  diagnosticsClient_ = diagnosticsClient;
+  reportingDiagnosticsClient_ = diagnosticsClient;
+  arena_ = std::make_unique<Arena>();
+  globalNamespace_ = control_->newNamespaceSymbol(nullptr, {});
+
+  preprocessor_ =
+      std::make_unique<Preprocessor>(control_.get(), diagnosticsClient_);
+
+  if (diagnosticsClient_) {
+    diagnosticsClient_->setPreprocessor(preprocessor_.get());
+  }
+}
+
+TranslationUnit::~TranslationUnit() {}
+
+auto TranslationUnit::typeTraits() -> TypeTraits { return TypeTraits{this}; }
+
+auto TranslationUnit::diagnosticsClient() const -> DiagnosticsClient* {
+  return diagnosticsClient_;
+}
+
+auto TranslationUnit::changeDiagnosticsClient(
+    DiagnosticsClient* diagnosticsClient) -> DiagnosticsClient* {
+  std::swap(diagnosticsClient_, diagnosticsClient);
+
+  if (diagnosticsClient_) {
+    diagnosticsClient_->setPreprocessor(preprocessor_.get());
+    if (!diagnosticsClient_->isSfinae()) {
+      reportingDiagnosticsClient_ = diagnosticsClient_;
+    }
+  }
+
+  return diagnosticsClient;
+}
+
+void TranslationUnit::setSource(std::string source, std::string fileName) {
+  beginPreprocessing(std::move(source), std::move(fileName));
+  DefaultPreprocessorState state{*preprocessor_};
+  while (state) {
+    std::visit(state, continuePreprocessing());
+  }
+  endPreprocessing();
+}
+
+void TranslationUnit::beginPreprocessing(std::string source,
+                                         std::string fileName) {
+  fileName_ = std::move(fileName);
+  preprocessor_->beginPreprocessing(std::move(source), fileName_, tokens_);
+}
+
+auto TranslationUnit::continuePreprocessing() -> PreprocessingState {
+  return preprocessor_->continuePreprocessing(tokens_);
+}
+
+void TranslationUnit::endPreprocessing() {
+  preprocessor_->endPreprocessing(tokens_);
+}
+
+auto TranslationUnit::fatalErrors() const -> bool {
+  return diagnosticsClient_->fatalErrors();
+}
+
+void TranslationUnit::setFatalErrors(bool fatalErrors) {
+  diagnosticsClient_->setFatalErrors(fatalErrors);
+}
+
+auto TranslationUnit::blockErrors(bool blockErrors) -> bool {
+  return diagnosticsClient_->blockErrors(blockErrors);
+}
+
+void TranslationUnit::error(SourceLocation loc, std::string message) const {
+  diagnosticsClient_->report(tokenAt(loc), Severity::Error, std::move(message));
+}
+
+void TranslationUnit::warning(SourceLocation loc, std::string message) const {
+  TranslationUnit::diagnosticsClient_->report(tokenAt(loc), Severity::Warning,
+                                              std::move(message));
+}
+
+void TranslationUnit::note(SourceLocation loc, std::string message) const {
+  diagnosticsClient_->report(tokenAt(loc), Severity::Note, std::move(message));
+}
+
+auto TranslationUnit::tokenLength(SourceLocation loc) const -> int {
+  const auto& tk = tokenAt(loc);
+  if (tk.kind() == TokenKind::T_IDENTIFIER) {
+    const std::string* id = tk.value().stringValue;
+    return static_cast<int>(id->size());
+  }
+  return static_cast<int>(Token::spell(tk.kind()).size());
+}
+
+auto TranslationUnit::identifier(SourceLocation loc) const
+    -> const Identifier* {
+  const auto& tk = tokenAt(loc);
+  return tk.value().idValue;
+}
+
+auto TranslationUnit::literal(SourceLocation loc) const -> const Literal* {
+  const auto& tk = tokenAt(loc);
+  return tk.value().literalValue;
+}
+
+auto TranslationUnit::tokenText(SourceLocation loc) const
+    -> const std::string& {
+  const auto& tk = tokenAt(loc);
+  switch (tk.kind()) {
+    case TokenKind::T_IDENTIFIER:
+      return tk.value().idValue->name();
+
+    case TokenKind::T_STRING_LITERAL:
+    case TokenKind::T_WIDE_STRING_LITERAL:
+    case TokenKind::T_UTF8_STRING_LITERAL:
+    case TokenKind::T_UTF16_STRING_LITERAL:
+    case TokenKind::T_UTF32_STRING_LITERAL:
+    case TokenKind::T_USER_DEFINED_STRING_LITERAL:
+    case TokenKind::T_CHARACTER_LITERAL:
+    case TokenKind::T_INTEGER_LITERAL:
+      return tk.value().literalValue->value();
+
+    default:
+      return Token::spell(tk.kind());
+  }
+}
+
+auto TranslationUnit::tokenStartPosition(SourceLocation loc) const
+    -> SourcePosition {
+  return preprocessor_->tokenStartPosition(tokenAt(loc));
+}
+
+auto TranslationUnit::tokenEndPosition(SourceLocation loc) const
+    -> SourcePosition {
+  return preprocessor_->tokenEndPosition(tokenAt(loc));
+}
+
+void TranslationUnit::parse(ParserConfiguration config) {
+  beginParsing(std::move(config));
+
+  while (!std::holds_alternative<ParsingComplete>(continueParsing())) {
+  }
+
+  endParsing();
+}
+
+void TranslationUnit::beginParsing(ParserConfiguration config) {
+  if (ast_) {
+    cxx_runtime_error("translation unit already parsed");
+  }
+
+  config_ = std::move(config);
+
+  parser_ = std::make_unique<Parser>(this);
+  parser_->beginParsing(ast_);
+}
+
+auto TranslationUnit::continueParsing() -> ParsingState {
+  if (!parser_) return ParsingComplete{};
+  return parser_->continueParsing();
+}
+
+void TranslationUnit::endParsing() {
+  if (!parser_) return;
+  parser_->endParsing();
+  parser_.reset();
+}
+
+auto TranslationUnit::language() const -> LanguageKind {
+  return preprocessor_->language();
+}
+
+auto TranslationUnit::config() const -> const ParserConfiguration& {
+  return config_;
+}
+
+auto TranslationUnit::globalScope() const -> ScopeSymbol* {
+  if (!globalNamespace_) return nullptr;
+  return globalNamespace_;
+}
+
+void TranslationUnit::addPendingMemberInstantiation(ClassSymbol* instance) {
+  if (!instance) return;
+  if (std::ranges::contains(pendingMemberInstantiations_, instance)) return;
+  pendingMemberInstantiations_.push_back(instance);
+}
+
+void TranslationUnit::reopenMemberInstantiation(ClassSymbol* instance) {
+  if (!instance) return;
+  instantiatedMemberClasses_.erase(instance);
+  addPendingMemberInstantiation(instance);
+}
+
+auto TranslationUnit::beginMemberInstantiation(ClassSymbol* instance) -> bool {
+  if (!instance) return false;
+  return instantiatedMemberClasses_.insert(instance).second;
+}
+
+auto TranslationUnit::cachedConstraintSatisfaction(
+    Symbol* symbol, const std::vector<ExpressionAST*>& constraints,
+    const std::vector<TemplateArgument>& arguments) -> std::optional<bool> {
+  if (!symbol) return std::nullopt;
+  auto cacheIt = constraintSatisfactionCaches_.find(symbol);
+  if (cacheIt == constraintSatisfactionCaches_.end()) return std::nullopt;
+
+  auto& cache = cacheIt->second;
+  auto matches = [&](const ConstraintSatisfaction& entry) {
+    if (entry.constraints != constraints) return false;
+    return compare_args(this, entry.arguments, arguments);
+  };
+
+  if (cache.lastIndex) {
+    auto index = *cache.lastIndex;
+    if (index < cache.entries.size()) {
+      if (matches(cache.entries[index])) return cache.entries[index].value;
+    }
+  }
+
+  for (std::size_t i = 0; i < cache.entries.size(); ++i) {
+    if (cache.lastIndex) {
+      if (i == *cache.lastIndex) continue;
+    }
+    if (!matches(cache.entries[i])) continue;
+    cache.lastIndex = i;
+    return cache.entries[i].value;
+  }
+
+  return std::nullopt;
+}
+
+void TranslationUnit::cacheConstraintSatisfaction(
+    Symbol* symbol, std::vector<ExpressionAST*> constraints,
+    std::vector<TemplateArgument> arguments, bool value) {
+  if (!symbol) return;
+  auto& cache = constraintSatisfactionCaches_[symbol];
+  cache.entries.push_back(
+      {std::move(constraints), std::move(arguments), value});
+  cache.lastIndex = cache.entries.size() - 1;
+}
+
+auto TranslationUnit::takePendingMemberInstantiations()
+    -> std::vector<ClassSymbol*> {
+  auto pending = std::move(pendingMemberInstantiations_);
+  pendingMemberInstantiations_.clear();
+  return pending;
+}
+
+void TranslationUnit::addPendingBodyCompletion(FunctionSymbol* function) {
+  if (!function) return;
+  if (!function->hasPendingBody()) return;
+  if (!function->isDefinitionRequired()) return;
+  if (isEnclosedInDependentTemplate(this, function, true)) return;
+  if (std::ranges::contains(pendingBodyCompletions_, function)) return;
+  pendingBodyCompletions_.push_back(function);
+}
+
+auto TranslationUnit::takePendingBodyCompletions()
+    -> std::vector<FunctionSymbol*> {
+  auto pending = std::move(pendingBodyCompletions_);
+  pendingBodyCompletions_.clear();
+  return pending;
+}
+
+auto TranslationUnit::fileName() const -> const std::string& {
+  return fileName_;
+}
+
+auto TranslationUnit::load(std::span<const std::uint8_t> data) -> bool {
+#ifndef CXX_NO_FLATBUFFERS
+  ASTDecoder decode{this};
+  return decode(data);
+#else
+  return false;
+#endif
+}
+
+auto TranslationUnit::serialize(std::ostream& out) -> bool {
+  return serialize([&out](auto data) {
+    out.write(reinterpret_cast<const char*>(data.data()), data.size());
+  });
+}
+
+auto TranslationUnit::serialize(
+    const std::function<void(std::span<const std::uint8_t>)>& block) -> bool {
+#ifndef CXX_NO_FLATBUFFERS
+  ASTEncoder encode;
+  auto data = encode(this);
+  block(data);
+  return true;
+#else
+  return false;
+#endif
+}
+}  // namespace cxx

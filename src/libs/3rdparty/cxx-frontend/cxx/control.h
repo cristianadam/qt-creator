@@ -1,0 +1,272 @@
+// Copyright (c) 2026 Roberto Raggi <roberto.raggi@gmail.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+#pragma once
+
+#include <cxx/literals_fwd.h>
+#include <cxx/names_fwd.h>
+#include <cxx/source_location.h>
+#include <cxx/symbols_fwd.h>
+#include <cxx/token_fwd.h>
+#include <cxx/types_fwd.h>
+
+#include <memory>
+#include <span>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace cxx {
+class MemoryLayout;
+class TypeTraits;
+
+class Control {
+ public:
+  Control();
+  ~Control();
+
+  [[nodiscard]] auto memoryLayout() const -> MemoryLayout*;
+  void setMemoryLayout(MemoryLayout* memoryLayout);
+
+  [[nodiscard]] auto integerLiteral(std::string_view spelling)
+      -> const IntegerLiteral*;
+  [[nodiscard]] auto floatLiteral(std::string_view spelling)
+      -> const FloatLiteral*;
+  [[nodiscard]] auto stringLiteral(std::string_view spelling)
+      -> const StringLiteral*;
+  [[nodiscard]] auto charLiteral(std::string_view spelling)
+      -> const CharLiteral*;
+  [[nodiscard]] auto wideStringLiteral(std::string_view spelling)
+      -> const StringLiteral*;
+  [[nodiscard]] auto utf8StringLiteral(std::string_view spelling)
+      -> const StringLiteral*;
+  [[nodiscard]] auto utf16StringLiteral(std::string_view spelling)
+      -> const StringLiteral*;
+  [[nodiscard]] auto utf32StringLiteral(std::string_view spelling)
+      -> const StringLiteral*;
+  [[nodiscard]] auto commentLiteral(std::string_view spelling)
+      -> const CommentLiteral*;
+
+  [[nodiscard]] auto newAnonymousId(std::string_view base) -> const Identifier*;
+  [[nodiscard]] auto getIdentifier(std::string_view name) -> const Identifier*;
+
+  [[nodiscard]] auto getAbiTags(std::vector<const Identifier*> tags)
+      -> const std::vector<const Identifier*>*;
+  [[nodiscard]] auto getOperatorId(TokenKind op) -> const OperatorId*;
+  [[nodiscard]] auto getDestructorId(const Name*) -> const DestructorId*;
+  [[nodiscard]] auto getLiteralOperatorId(std::string_view name)
+      -> const LiteralOperatorId*;
+  [[nodiscard]] auto getConversionFunctionId(const Type* type)
+      -> const ConversionFunctionId*;
+  [[nodiscard]] auto getTemplateId(const Name* name,
+                                   std::vector<TemplateArgument> arguments)
+      -> const TemplateId*;
+
+  [[nodiscard]] auto getSizeType() -> const Type*;
+
+  [[nodiscard]] auto getBuiltinVaListType() -> const BuiltinVaListType*;
+  [[nodiscard]] auto getBuiltinMetaInfoType() -> const BuiltinMetaInfoType*;
+  [[nodiscard]] auto getVoidType() -> const VoidType*;
+  [[nodiscard]] auto getNullptrType() -> const NullptrType*;
+  [[nodiscard]] auto getDecltypeAutoType() -> const DecltypeAutoType*;
+  [[nodiscard]] auto getAutoType() -> const AutoType*;
+  [[nodiscard]] auto getBoolType() -> const BoolType*;
+  [[nodiscard]] auto getSignedCharType() -> const SignedCharType*;
+  [[nodiscard]] auto getShortIntType() -> const ShortIntType*;
+  [[nodiscard]] auto getIntType() -> const IntType*;
+  [[nodiscard]] auto getLongIntType() -> const LongIntType*;
+  [[nodiscard]] auto getLongLongIntType() -> const LongLongIntType*;
+  [[nodiscard]] auto getInt128Type() -> const Int128Type*;
+  [[nodiscard]] auto getUnsignedCharType() -> const UnsignedCharType*;
+  [[nodiscard]] auto getUnsignedShortIntType() -> const UnsignedShortIntType*;
+  [[nodiscard]] auto getUnsignedIntType() -> const UnsignedIntType*;
+  [[nodiscard]] auto getUnsignedLongIntType() -> const UnsignedLongIntType*;
+  [[nodiscard]] auto getUnsignedLongLongIntType()
+      -> const UnsignedLongLongIntType*;
+  [[nodiscard]] auto getUnsignedInt128Type() -> const UnsignedInt128Type*;
+  [[nodiscard]] auto getCharType() -> const CharType*;
+  [[nodiscard]] auto getChar8Type() -> const Char8Type*;
+  [[nodiscard]] auto getChar16Type() -> const Char16Type*;
+  [[nodiscard]] auto getChar32Type() -> const Char32Type*;
+  [[nodiscard]] auto getWideCharType() -> const WideCharType*;
+  [[nodiscard]] auto getFloatType() -> const FloatType*;
+  [[nodiscard]] auto getDoubleType() -> const DoubleType*;
+  [[nodiscard]] auto getLongDoubleType() -> const LongDoubleType*;
+  [[nodiscard]] auto getFloat16Type() -> const Float16Type*;
+  [[nodiscard]] auto getQualType(const Type* elementType,
+                                 CvQualifiers cvQualifiers) -> const QualType*;
+  [[nodiscard]] auto getBoundedArrayType(const Type* elementType,
+                                         std::size_t size)
+      -> const BoundedArrayType*;
+  [[nodiscard]] auto getUnboundedArrayType(const Type* elementType)
+      -> const UnboundedArrayType*;
+  [[nodiscard]] auto getPointerType(const Type* elementType)
+      -> const PointerType*;
+  [[nodiscard]] auto getLvalueReferenceType(const Type* elementType)
+      -> const LvalueReferenceType*;
+  [[nodiscard]] auto getRvalueReferenceType(const Type* elementType)
+      -> const RvalueReferenceType*;
+  [[nodiscard]] auto getOverloadSetType(OverloadSetSymbol* symbol)
+      -> const OverloadSetType*;
+  [[nodiscard]] auto getFunctionType(
+      const Type* returnType, std::vector<const Type*> parameterTypes,
+      bool isVariadic = false, CvQualifiers cvQualifiers = CvQualifiers::kNone,
+      RefQualifier refQualifier = RefQualifier::kNone, bool isNoexcept = false)
+      -> const FunctionType*;
+  [[nodiscard]] auto getMemberObjectPointerType(const Type* classType,
+                                                const Type* elementType)
+      -> const MemberObjectPointerType*;
+  [[nodiscard]] auto getMemberFunctionPointerType(
+      const Type* classType, const FunctionType* functionType)
+      -> const MemberFunctionPointerType*;
+  [[nodiscard]] auto getDependentType() -> const TypeParameterType*;
+
+  [[nodiscard]] auto getTypeParameterType(int index, int depth, bool isPack)
+      -> const TypeParameterType*;
+  [[nodiscard]] auto getTemplateTypeParameterType(
+      int index, int depth, bool isPack,
+      std::vector<const Type*> templateParameters)
+      -> const TemplateTypeParameterType*;
+  [[nodiscard]] auto getUnresolvedNameType(
+      TranslationUnit* unit, NestedNameSpecifierAST* nestedNameSpecifier,
+      UnqualifiedIdAST* unqualifiedId) -> const UnresolvedNameType*;
+  [[nodiscard]] auto getUnresolvedBoundedArrayType(
+      TranslationUnit* unit, const Type* elementType,
+      ExpressionAST* sizeExpression) -> const UnresolvedBoundedArrayType*;
+  [[nodiscard]] auto getUnresolvedUnderlyingType(TranslationUnit* unit,
+                                                 TypeIdAST* typeId)
+      -> const UnresolvedUnderlyingType*;
+  [[nodiscard]] auto getUnresolvedBuiltinType(TranslationUnit* unit,
+                                              UnaryBuiltinTypeKind builtinKind,
+                                              TypeIdAST* typeId)
+      -> const UnresolvedBuiltinType*;
+
+  [[nodiscard]] auto getClassType(ClassSymbol* symbol) -> const ClassType*;
+  [[nodiscard]] auto getNamespaceType(NamespaceSymbol* symbol)
+      -> const NamespaceType*;
+  [[nodiscard]] auto getEnumType(EnumSymbol* symbol) -> const EnumType*;
+  [[nodiscard]] auto getScopedEnumType(ScopedEnumSymbol* symbol)
+      -> const ScopedEnumType*;
+  [[nodiscard]] auto getBitIntType(int numBits) -> const BitIntType*;
+  [[nodiscard]] auto getUnsignedBitIntType(int numBits)
+      -> const UnsignedBitIntType*;
+  [[nodiscard]] auto getUnresolvedBitIntType(TranslationUnit* unit,
+                                             ExpressionAST* sizeExpression,
+                                             bool isUnsigned)
+      -> const UnresolvedBitIntType*;
+
+  [[nodiscard]] auto newNamespaceSymbol(ScopeSymbol* enclosingScope,
+                                        SourceLocation sourceLocation)
+      -> NamespaceSymbol*;
+  [[nodiscard]] auto newConceptSymbol(ScopeSymbol* enclosingScope,
+                                      SourceLocation sourceLocation)
+      -> ConceptSymbol*;
+  [[nodiscard]] auto newDeductionGuideSymbol(ScopeSymbol* enclosingScope,
+                                             SourceLocation sourceLocation)
+      -> DeductionGuideSymbol*;
+  [[nodiscard]] auto newBaseClassSymbol(ScopeSymbol* enclosingScope,
+                                        SourceLocation sourceLocation)
+      -> BaseClassSymbol*;
+  [[nodiscard]] auto newInjectedClassNameSymbol(ScopeSymbol* enclosingScope,
+                                                SourceLocation sourceLocation)
+      -> InjectedClassNameSymbol*;
+  [[nodiscard]] auto newClassSymbol(ScopeSymbol* enclosingScope,
+                                    SourceLocation sourceLocation)
+      -> ClassSymbol*;
+  [[nodiscard]] auto newUnresolvedSymbol(ScopeSymbol* enclosingScope,
+                                         SourceLocation sourceLocation)
+      -> UnresolvedSymbol*;
+  [[nodiscard]] auto newEnumSymbol(ScopeSymbol* enclosingScope,
+                                   SourceLocation sourceLocation)
+      -> EnumSymbol*;
+  [[nodiscard]] auto newScopedEnumSymbol(ScopeSymbol* enclosingScope,
+                                         SourceLocation sourceLocation)
+      -> ScopedEnumSymbol*;
+  [[nodiscard]] auto newOverloadSetSymbol(ScopeSymbol* enclosingScope,
+                                          SourceLocation sourceLocation)
+      -> OverloadSetSymbol*;
+  [[nodiscard]] auto newFunctionSymbol(ScopeSymbol* enclosingScope,
+                                       SourceLocation sourceLocation)
+      -> FunctionSymbol*;
+  [[nodiscard]] auto newLambdaSymbol(ScopeSymbol* enclosingScope,
+                                     SourceLocation sourceLocation)
+      -> LambdaSymbol*;
+  [[nodiscard]] auto newFunctionParametersSymbol(ScopeSymbol* enclosingScope,
+                                                 SourceLocation sourceLocation)
+      -> FunctionParametersSymbol*;
+  [[nodiscard]] auto newTemplateParametersSymbol(ScopeSymbol* enclosingScope,
+                                                 SourceLocation sourceLocation)
+      -> TemplateParametersSymbol*;
+  [[nodiscard]] auto newBlockSymbol(ScopeSymbol* enclosingScope,
+                                    SourceLocation sourceLocation)
+      -> BlockSymbol*;
+  [[nodiscard]] auto newTypeAliasSymbol(ScopeSymbol* enclosingScope,
+                                        SourceLocation sourceLocation)
+      -> TypeAliasSymbol*;
+  [[nodiscard]] auto newVariableSymbol(ScopeSymbol* enclosingScope,
+                                       SourceLocation sourceLocation)
+      -> VariableSymbol*;
+  [[nodiscard]] auto newFieldSymbol(ScopeSymbol* enclosingScope,
+                                    SourceLocation sourceLocation)
+      -> FieldSymbol*;
+  [[nodiscard]] auto newParameterSymbol(ScopeSymbol* enclosingScope,
+                                        SourceLocation sourceLocation)
+      -> ParameterSymbol*;
+  [[nodiscard]] auto newParameterPackSymbol(ScopeSymbol* enclosingScope,
+                                            SourceLocation sourceLocation)
+      -> ParameterPackSymbol*;
+  [[nodiscard]] auto newTypeParameterSymbol(ScopeSymbol* enclosingScope,
+                                            SourceLocation sourceLocation,
+                                            int index, int depth,
+                                            bool isParameterPack)
+      -> TypeParameterSymbol*;
+  [[nodiscard]] auto newNonTypeParameterSymbol(ScopeSymbol* enclosingScope,
+                                               SourceLocation sourceLocation)
+      -> NonTypeParameterSymbol*;
+  [[nodiscard]] auto newTemplateTypeParameterSymbol(
+      ScopeSymbol* enclosingScope, SourceLocation sourceLocation, int index,
+      int depth, bool isPack, std::vector<const Type*> parameters)
+      -> TemplateTypeParameterSymbol*;
+  [[nodiscard]] auto newConstraintTypeParameterSymbol(
+      ScopeSymbol* enclosingScope, SourceLocation sourceLocation, int index,
+      int depth, bool isParameterPack) -> ConstraintTypeParameterSymbol*;
+  [[nodiscard]] auto newEnumeratorSymbol(ScopeSymbol* enclosingScope,
+                                         SourceLocation sourceLocation)
+      -> EnumeratorSymbol*;
+  [[nodiscard]] auto newUsingDeclarationSymbol(ScopeSymbol* enclosingScope,
+                                               SourceLocation sourceLocation)
+      -> UsingDeclarationSymbol*;
+  [[nodiscard]] auto newNamespaceAliasSymbol(ScopeSymbol* enclosingScope,
+                                             SourceLocation sourceLocation)
+      -> NamespaceAliasSymbol*;
+
+  [[nodiscard]] auto beginCopyConstructorSelection(ClassSymbol* classSymbol)
+      -> bool;
+  void endCopyConstructorSelection(ClassSymbol* classSymbol);
+
+  [[nodiscard]] auto closureNameCount() const -> int;
+  void setClosureNameCount(int count);
+  [[nodiscard]] auto newClosureName() -> const Identifier*;
+
+ private:
+  struct Private;
+  std::unique_ptr<Private> d;
+};
+}  // namespace cxx

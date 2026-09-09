@@ -12,6 +12,7 @@ Project {
         "cmdbridge/cmdbridge.qbs",
         "commontraceformat/commontraceformat.qbs",
         "cplusplus/cplusplus.qbs",
+        "cxxfrontend/cxxfrontend.qbs",
         "debugger/debugger.qbs",
         "diff/diff.qbs",
         "environment/environment.qbs",

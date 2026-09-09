@@ -1,0 +1,173 @@
+// Copyright (c) 2026 Roberto Raggi <roberto.raggi@gmail.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+#pragma once
+
+#include <cxx/names_fwd.h>
+#include <cxx/symbols.h>
+#include <cxx/symbols_fwd.h>
+#include <cxx/token_fwd.h>
+#include <cxx/types.h>
+#include <cxx/types_fwd.h>
+#include <cxx/views/symbol_chain.h>
+
+#include <ranges>
+#include <vector>
+
+namespace cxx {
+class SymbolChainView;
+
+namespace views {
+constexpr auto class_or_namespaces =
+    std::views::filter(&Symbol::isClassOrNamespace) |
+    std::views::transform(
+        [](Symbol* s) { return static_cast<ScopeSymbol*>(s); });
+
+constexpr auto enum_or_scoped_enums =
+    std::views::filter(&Symbol::isEnumOrScopedEnum) |
+    std::views::transform(
+        [](Symbol* s) { return static_cast<ScopeSymbol*>(s); });
+
+constexpr const auto namespaces =
+    std::views::filter(&Symbol::isNamespace) |
+    std::views::transform(symbol_cast<NamespaceSymbol>);
+
+constexpr auto concepts = std::views::filter(&Symbol::isConcept) |
+                          std::views::transform(symbol_cast<ConceptSymbol>);
+
+constexpr auto classes = std::views::filter(&Symbol::isClass) |
+                         std::views::transform(symbol_cast<ClassSymbol>);
+
+constexpr auto enums = std::views::filter(&Symbol::isEnum) |
+                       std::views::transform(symbol_cast<EnumSymbol>);
+
+constexpr auto scoped_enums =
+    std::views::filter(&Symbol::isScopedEnum) |
+    std::views::transform(symbol_cast<ScopedEnumSymbol>);
+
+constexpr auto functions = std::views::filter(&Symbol::isFunction) |
+                           std::views::transform(symbol_cast<FunctionSymbol>);
+
+constexpr auto variables = std::views::filter(&Symbol::isVariable) |
+                           std::views::transform(symbol_cast<VariableSymbol>);
+
+inline auto members(ScopeSymbol* symbol) {
+  return std::views::all(symbol->members());
+}
+
+constexpr auto parameters = std::views::filter(&Symbol::isParameter) |
+                            std::views::transform(symbol_cast<ParameterSymbol>);
+
+constexpr auto named_symbol = std::views::filter(&Symbol::name);
+
+constexpr auto fields = std::views::filter(&Symbol::isField) |
+                        std::views::transform(symbol_cast<FieldSymbol>);
+
+constexpr auto non_static_fields =
+    fields | std::views::filter([](FieldSymbol* f) { return !f->isStatic(); });
+
+constexpr auto static_fields =
+    fields | std::views::filter(&FieldSymbol::isStatic);
+
+class each_function : public std::ranges::view_interface<each_function> {
+ public:
+  each_function() = default;
+
+  explicit each_function(Symbol* symbol) {
+    auto overloadSet = symbol_cast<OverloadSetSymbol>(symbol);
+    if (!overloadSet) {
+      function_ = symbol_cast<FunctionSymbol>(symbol);
+      return;
+    }
+
+    if (overloadSet->usingDeclarations().empty()) {
+      declaredFunctions_ = &overloadSet->declaredFunctions();
+      return;
+    }
+
+    composedFunctions_ = overloadSet->functions();
+  }
+
+  [[nodiscard]] auto begin() const -> FunctionSymbol* const* {
+    if (declaredFunctions_) return declaredFunctions_->data();
+    if (function_) return &function_;
+    return composedFunctions_.data();
+  }
+
+  [[nodiscard]] auto end() const -> FunctionSymbol* const* {
+    if (declaredFunctions_)
+      return declaredFunctions_->data() + declaredFunctions_->size();
+    if (function_) return &function_ + 1;
+    return composedFunctions_.data() + composedFunctions_.size();
+  }
+
+ private:
+  const std::vector<FunctionSymbol*>* declaredFunctions_ = nullptr;
+  FunctionSymbol* function_ = nullptr;
+  std::vector<FunctionSymbol*> composedFunctions_;
+};
+
+constexpr auto member_functions =
+    std::views::transform([](Symbol* s) { return each_function{s}; }) |
+    std::views::join | std::views::filter([](FunctionSymbol* f) {
+      return f->parent() && f->parent()->isClass();
+    });
+
+constexpr auto non_static_member_functions =
+    member_functions |
+    std::views::filter([](FunctionSymbol* f) { return !f->isStatic(); });
+
+constexpr auto static_member_functions =
+    member_functions | std::views::filter(&FunctionSymbol::isStatic);
+
+constexpr auto virtual_functions =
+    member_functions | std::views::filter(&FunctionSymbol::isVirtual);
+
+constexpr auto constructors =
+    member_functions | std::views::filter(&FunctionSymbol::isConstructor);
+
+constexpr auto converting_constructors =
+    constructors | std::views::filter([](FunctionSymbol* f) {
+      if (f->isExplicit()) return false;
+      auto funcType = type_cast<FunctionType>(f->type());
+      if (!funcType) return false;
+      return !funcType->parameterTypes().empty();
+    });
+
+template <std::ranges::input_range R, typename Pred>
+  requires std::convertible_to<std::ranges::range_value_t<R>, Symbol*> &&
+           std::predicate<Pred, FunctionSymbol*>
+auto find_function(R&& symbols, Pred pred) -> FunctionSymbol* {
+  for (auto sym : symbols) {
+    for (auto func : each_function(sym)) {
+      if (pred(func)) return func;
+    }
+  }
+  return nullptr;
+}
+
+template <std::ranges::input_range R, typename Pred>
+  requires std::convertible_to<std::ranges::range_value_t<R>, Symbol*> &&
+           std::predicate<Pred, FunctionSymbol*>
+auto any_function(R&& symbols, Pred pred) -> bool {
+  return find_function(std::forward<R>(symbols), std::move(pred)) != nullptr;
+}
+}  // namespace views
+}  // namespace cxx

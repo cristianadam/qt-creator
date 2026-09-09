@@ -1,0 +1,2205 @@
+// Copyright (c) 2026 Roberto Raggi <roberto.raggi@gmail.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+#include <cxx/ast.h>
+#include <cxx/control.h>
+#include <cxx/memory_layout.h>
+#include <cxx/names.h>
+#include <cxx/symbols.h>
+#include <cxx/template_equivalence.h>
+#include <cxx/types.h>
+#include <cxx/util.h>
+#include <cxx/views/symbols.h>
+
+#include <format>
+#include <unordered_set>
+
+namespace cxx {
+
+auto toAccessSpecifier(TokenKind accessSpecifierToken,
+                       AccessSpecifier defaultAccessSpecifier)
+    -> AccessSpecifier {
+  switch (accessSpecifierToken) {
+    case TokenKind::T_PRIVATE:
+      return AccessSpecifier::kPrivate;
+    case TokenKind::T_PROTECTED:
+      return AccessSpecifier::kProtected;
+    case TokenKind::T_PUBLIC:
+      return AccessSpecifier::kPublic;
+    default:
+      return defaultAccessSpecifier;
+  }
+}
+
+auto defaultAccessSpecifierOfClassKey(TokenKind classKey) -> AccessSpecifier {
+  if (classKey == TokenKind::T_CLASS) return AccessSpecifier::kPrivate;
+  return AccessSpecifier::kPublic;
+}
+
+namespace {
+[[nodiscard]] auto hasEquivalentParameterTypeList(FunctionSymbol* lhs,
+                                                  FunctionSymbol* rhs) -> bool {
+  auto lhsType = type_cast<FunctionType>(lhs->type());
+  auto rhsType = type_cast<FunctionType>(rhs->type());
+  if (!lhsType || !rhsType) return false;
+
+  return lhsType->parameterTypes() == rhsType->parameterTypes() &&
+         lhsType->isVariadic() == rhsType->isVariadic() &&
+         lhsType->cvQualifiers() == rhsType->cvQualifiers() &&
+         lhsType->refQualifier() == rhsType->refQualifier();
+}
+
+struct NonTypeParameterIdentity {
+  int depth;
+  int index;
+  bool isPack;
+
+  auto operator==(const NonTypeParameterIdentity&) const -> bool = default;
+};
+
+auto nonTypeParameterIdentity(Symbol* symbol)
+    -> std::optional<NonTypeParameterIdentity> {
+  auto parameter = symbol_cast<NonTypeParameterSymbol>(symbol);
+  if (!parameter) return std::nullopt;
+  return NonTypeParameterIdentity{parameter->depth(), parameter->index(),
+                                  parameter->isParameterPack()};
+}
+
+auto compare_symbols(TranslationUnit* unit, Symbol* lhs, Symbol* rhs) -> bool {
+  if (lhs == rhs) return true;
+  if (!lhs || !rhs) return false;
+
+  auto lhsParameter = nonTypeParameterIdentity(lhs);
+  auto rhsParameter = nonTypeParameterIdentity(rhs);
+  if (lhsParameter || rhsParameter) return lhsParameter == rhsParameter;
+
+  auto lhsPack = symbol_cast<ParameterPackSymbol>(lhs);
+  auto rhsPack = symbol_cast<ParameterPackSymbol>(rhs);
+  if (lhsPack || rhsPack) {
+    if (!lhsPack || !rhsPack) return false;
+    if (lhsPack->elements().size() != rhsPack->elements().size()) return false;
+    for (size_t i = 0; i < lhsPack->elements().size(); ++i) {
+      if (!compare_symbols(unit, lhsPack->elements()[i],
+                           rhsPack->elements()[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  auto lhsTemplateName = template_name_symbol(lhs);
+  auto rhsTemplateName = template_name_symbol(rhs);
+  if (lhsTemplateName || rhsTemplateName) {
+    return lhsTemplateName == rhsTemplateName;
+  }
+
+  auto lhsVar = symbol_cast<VariableSymbol>(lhs);
+  auto rhsVar = symbol_cast<VariableSymbol>(rhs);
+  if (lhsVar && rhsVar) {
+    if (lhsVar->constValue().has_value() != rhsVar->constValue().has_value())
+      return false;
+
+    if (lhsVar->constValue().has_value()) {
+      if (lhsVar->constValue().value() != rhsVar->constValue().value())
+        return false;
+    } else if (!areExpressionsEquivalent(unit, lhsVar->initializer(),
+                                         rhsVar->initializer())) {
+      return false;
+    }
+  }
+
+  return lhs->type() == rhs->type();
+}
+
+auto compare_symbol_and_type(Symbol* symbol, const Type* type) -> bool {
+  if (!symbol || !type) return false;
+  if (template_name_symbol(symbol)) return false;
+  return symbol->type() == type;
+}
+
+auto compare_symbol_and_const(Symbol* symbol, const ConstValue& value) -> bool {
+  auto variable = symbol_cast<VariableSymbol>(symbol);
+  if (!variable) return false;
+  if (!variable->constValue().has_value()) return false;
+  return variable->constValue().value() == value;
+}
+
+}  // namespace
+
+auto compare_single_arg(TranslationUnit* unit, const TemplateArgument& lhs,
+                        const TemplateArgument& rhs) -> bool {
+  if (auto lhsType = std::get_if<const Type*>(&lhs)) {
+    if (auto rhsType = std::get_if<const Type*>(&rhs)) {
+      return *lhsType == *rhsType;
+    }
+    if (auto rhsSymbol = std::get_if<Symbol*>(&rhs)) {
+      return compare_symbol_and_type(*rhsSymbol, *lhsType);
+    }
+    return false;
+  }
+
+  if (auto lhsSymbol = std::get_if<Symbol*>(&lhs)) {
+    if (auto rhsSymbol = std::get_if<Symbol*>(&rhs)) {
+      return compare_symbols(unit, *lhsSymbol, *rhsSymbol);
+    }
+    if (auto rhsType = std::get_if<const Type*>(&rhs)) {
+      return compare_symbol_and_type(*lhsSymbol, *rhsType);
+    }
+    if (auto rhsValue = std::get_if<ConstValue>(&rhs)) {
+      return compare_symbol_and_const(*lhsSymbol, *rhsValue);
+    }
+    return false;
+  }
+
+  if (auto lhsValue = std::get_if<ConstValue>(&lhs)) {
+    if (auto rhsValue = std::get_if<ConstValue>(&rhs)) {
+      return *lhsValue == *rhsValue;
+    }
+    if (auto rhsSymbol = std::get_if<Symbol*>(&rhs)) {
+      return compare_symbol_and_const(*rhsSymbol, *lhsValue);
+    }
+    return false;
+  }
+
+  if (auto lhsExpr = std::get_if<ExpressionAST*>(&lhs)) {
+    auto rhsExpr = std::get_if<ExpressionAST*>(&rhs);
+    if (!rhsExpr) return false;
+    if (*lhsExpr == *rhsExpr) return true;
+    return areExpressionsEquivalent(unit, *lhsExpr, *rhsExpr);
+  }
+
+  return false;
+}
+
+auto compare_args(TranslationUnit* unit,
+                  const std::vector<TemplateArgument>& args1,
+                  const std::vector<TemplateArgument>& args2) -> bool {
+  if (args1.size() != args2.size()) return false;
+
+  for (size_t i = 0; i < args1.size(); ++i) {
+    if (!compare_single_arg(unit, args1[i], args2[i])) return false;
+  }
+
+  return true;
+};
+
+auto expand_template_arguments(std::span<const TemplateArgument> arguments)
+    -> std::vector<TemplateArgument> {
+  std::vector<TemplateArgument> expanded;
+  for (auto& entry : expand_template_arguments_with_sources(arguments))
+    expanded.push_back(std::move(entry.value));
+  return expanded;
+}
+
+auto expand_template_arguments_with_sources(
+    std::span<const TemplateArgument> arguments)
+    -> std::vector<ExpandedTemplateArgument> {
+  std::vector<ExpandedTemplateArgument> expanded;
+  std::vector<ExpandedTemplateArgument> pending;
+  pending.reserve(arguments.size());
+
+  for (std::size_t index = arguments.size(); index > 0; --index)
+    pending.push_back({arguments[index - 1], index - 1});
+
+  while (!pending.empty()) {
+    auto entry = std::move(pending.back());
+    pending.pop_back();
+    if (auto symbol = std::get_if<Symbol*>(&entry.value)) {
+      if (auto pack = symbol_cast<ParameterPackSymbol>(*symbol)) {
+        auto& elements = pack->elements();
+        for (std::size_t index = elements.size(); index > 0; --index)
+          pending.push_back(
+              {TemplateArgument{elements[index - 1]}, entry.sourceIndex});
+        continue;
+      }
+    }
+    expanded.push_back(std::move(entry));
+  }
+
+  return expanded;
+}
+
+auto template_argument_type(const TemplateArgument& argument) -> const Type* {
+  if (auto type = std::get_if<const Type*>(&argument)) return *type;
+  if (auto symbol = std::get_if<Symbol*>(&argument)) return (*symbol)->type();
+  return nullptr;
+}
+
+auto template_argument_as_type(const TemplateArgument& argument)
+    -> const Type* {
+  if (auto type = std::get_if<const Type*>(&argument)) return *type;
+  auto symbol = std::get_if<Symbol*>(&argument);
+  if (!symbol || !is_type(*symbol)) return nullptr;
+  return (*symbol)->type();
+}
+
+auto template_argument_parameter_info(const TemplateArgument& argument)
+    -> std::optional<TypeParamInfo> {
+  if (auto symbol = std::get_if<Symbol*>(&argument))
+    return template_parameter_info(*symbol);
+  if (auto type = std::get_if<const Type*>(&argument))
+    return getTypeParamInfo(*type);
+  return std::nullopt;
+}
+
+auto class_template_of(ClassSymbol* classSymbol) -> ClassSymbol* {
+  if (!classSymbol) return nullptr;
+  if (classSymbol->isSpecialization())
+    return classSymbol->primaryTemplateSymbol();
+  if (classSymbol->templateDeclaration()) return classSymbol;
+  return nullptr;
+}
+
+auto class_template_arguments(ClassSymbol* classSymbol)
+    -> std::vector<TemplateArgument> {
+  if (!classSymbol) return {};
+
+  if (classSymbol->isSpecialization()) {
+    auto arguments = classSymbol->templateArguments();
+    return std::vector<TemplateArgument>{arguments.begin(), arguments.end()};
+  }
+
+  auto parameters = classSymbol->templateParameters();
+  if (!parameters) return {};
+
+  std::vector<TemplateArgument> arguments;
+  for (auto parameter : parameters->members()) arguments.push_back(parameter);
+  return arguments;
+}
+
+auto template_argument_value(const TemplateArgument& argument)
+    -> std::optional<ConstValue> {
+  if (auto value = std::get_if<ConstValue>(&argument)) return *value;
+
+  if (auto symbol = std::get_if<Symbol*>(&argument)) {
+    if (auto variable = symbol_cast<VariableSymbol>(*symbol)) {
+      if (auto value = variable->constValue()) return *value;
+    }
+  }
+
+  return std::nullopt;
+}
+
+auto template_name_symbol(Symbol* symbol) -> Symbol* {
+  if (!symbol) return nullptr;
+
+  if (auto alias = symbol_cast<TypeAliasSymbol>(symbol)) {
+    if (alias->isTemplatePattern()) return alias;
+    if (auto classType = unqualified_cast<ClassType>(alias->type())) {
+      return template_name_symbol(classType->symbol());
+    }
+    return nullptr;
+  }
+
+  if (auto classSymbol = symbol_cast<ClassSymbol>(symbol)) {
+    if (classSymbol->isSpecialization()) return nullptr;
+    return classSymbol->templateParameters() ? classSymbol : nullptr;
+  }
+
+  if (symbol_cast<TemplateTypeParameterSymbol>(symbol)) return symbol;
+
+  return nullptr;
+}
+
+auto resolve_using_declaration(Symbol* symbol) -> Symbol* {
+  while (auto usingDeclaration = symbol_cast<UsingDeclarationSymbol>(symbol)) {
+    symbol = usingDeclaration->target();
+  }
+  return symbol;
+}
+
+auto resolve_namespace_alias(Symbol* symbol) -> NamespaceSymbol* {
+  symbol = resolve_using_declaration(symbol);
+  while (auto alias = symbol_cast<NamespaceAliasSymbol>(symbol)) {
+    symbol = alias->namespaceSymbol();
+  }
+  return symbol_cast<NamespaceSymbol>(symbol);
+}
+
+auto templated_symbol(Symbol* symbol) -> Symbol* {
+  if (!symbol) return nullptr;
+
+  symbol = resolve_using_declaration(symbol);
+  if (!symbol) return nullptr;
+
+  if (auto overloadSet = symbol_cast<OverloadSetSymbol>(symbol)) {
+    for (auto function : overloadSet->functions()) {
+      if (auto result = templated_symbol(function)) return result;
+    }
+    return nullptr;
+  }
+
+  if (auto injected = symbol_cast<InjectedClassNameSymbol>(symbol)) {
+    auto classSymbol = injected->classSymbol();
+    if (!classSymbol) return nullptr;
+    if (auto primary = classSymbol->primaryTemplateSymbol())
+      classSymbol = primary;
+    return templated_symbol(classSymbol);
+  }
+
+  if (auto classSymbol = symbol_cast<ClassSymbol>(symbol)) {
+    if (classSymbol->isSpecialization())
+      return templated_symbol(classSymbol->primaryTemplateSymbol());
+  }
+
+  if (auto alias = symbol_cast<TypeAliasSymbol>(symbol)) {
+    if (alias->isSpecialization())
+      return templated_symbol(alias->primaryTemplateSymbol());
+  }
+
+  if (symbol_cast<TemplateTypeParameterSymbol>(symbol)) return symbol;
+  if (template_parameters_of(symbol) || template_declaration_of(symbol))
+    return symbol;
+  return nullptr;
+}
+
+auto Symbol::EnclosingSymbolIterator::operator++() -> EnclosingSymbolIterator& {
+  symbol_ = symbol_->parent();
+  return *this;
+}
+
+auto Symbol::EnclosingSymbolIterator::operator++(int)
+    -> EnclosingSymbolIterator {
+  auto it = *this;
+  symbol_ = symbol_->parent();
+  return it;
+}
+
+auto Symbol::hasEnclosingSymbol(Symbol* symbol) const -> bool {
+  for (auto enclosingSymbol : enclosingSymbols()) {
+    if (enclosingSymbol == symbol) return true;
+  }
+  return false;
+}
+
+auto Symbol::kind() const -> SymbolKind { return kind_; }
+
+auto Symbol::name() const -> const Name* { return name_; }
+
+void Symbol::setName(const Name* name) { name_ = name; }
+
+auto Symbol::type() const -> const Type* { return type_; }
+
+void Symbol::setType(const Type* type) { type_ = type; }
+
+auto Symbol::location() const -> SourceLocation { return location_; }
+
+void Symbol::setLocation(SourceLocation location) { location_ = location; }
+
+auto Symbol::parent() const -> ScopeSymbol* { return parent_; }
+
+auto Symbol::abiTags() const -> std::span<const Identifier* const> {
+  if (!abiTags_) return {};
+  return *abiTags_;
+}
+
+void Symbol::setAbiTags(const std::vector<const Identifier*>* abiTags) {
+  abiTags_ = abiTags;
+}
+
+void Symbol::setParent(ScopeSymbol* enclosingScope) {
+  if (enclosingScope && enclosingScope->isTemplateParameters()) {
+    switch (kind()) {
+      case SymbolKind::kTypeParameter:
+      case SymbolKind::kNonTypeParameter:
+      case SymbolKind::kTemplateTypeParameter:
+      case SymbolKind::kConstraintTypeParameter:
+      case SymbolKind::kFunctionParameters:
+      case SymbolKind::kTemplateParameters:
+        break;
+      default:
+        cxx_runtime_error(std::format(
+            "symbol kind '{}' may not have TemplateParametersSymbol as parent",
+            static_cast<int>(kind())));
+    }
+  }
+  parent_ = enclosingScope;
+}
+
+auto Symbol::next() const -> Symbol* {
+  for (auto sym = link_; sym; sym = sym->link_) {
+    if (sym->name_ == name_) return sym;
+  }
+  return nullptr;
+}
+
+auto Symbol::enclosingNamespace() const -> NamespaceSymbol* {
+  for (auto scope = parent(); scope; scope = scope->parent()) {
+    if (auto ns = symbol_cast<NamespaceSymbol>(scope)) {
+      return ns;
+    }
+  }
+  return nullptr;
+}
+
+auto Symbol::enclosingClass() const -> ClassSymbol* {
+  for (auto scope = parent(); scope; scope = scope->parent()) {
+    if (auto classSymbol = symbol_cast<ClassSymbol>(scope)) {
+      return classSymbol;
+    }
+  }
+  return nullptr;
+}
+
+auto Symbol::enclosingFunction() const -> FunctionSymbol* {
+  for (auto scope = parent(); scope; scope = scope->parent()) {
+    if (auto func = symbol_cast<FunctionSymbol>(scope)) {
+      return func;
+    }
+  }
+  return nullptr;
+}
+
+auto Symbol::canonical() const -> Symbol* {
+  switch (kind()) {
+    case SymbolKind::kClass:
+      return static_cast<const ClassSymbol*>(this)
+          ->MaybeRedecl<ClassSymbol>::canonical();
+    case SymbolKind::kFunction:
+      return static_cast<const FunctionSymbol*>(this)
+          ->MaybeRedecl<FunctionSymbol>::canonical();
+    case SymbolKind::kVariable:
+      return static_cast<const VariableSymbol*>(this)
+          ->MaybeRedecl<VariableSymbol>::canonical();
+    case SymbolKind::kTypeAlias:
+      return static_cast<const TypeAliasSymbol*>(this)
+          ->MaybeRedecl<TypeAliasSymbol>::canonical();
+    default:
+      return const_cast<Symbol*>(this);
+  }
+}
+
+namespace {
+template <typename S, typename D>
+void acceptsMaybeTemplate(const MaybeTemplate<S, D>&);
+
+template <typename S>
+concept Templatable = requires(const S& s) { acceptsMaybeTemplate(s); };
+
+struct GetTemplateDeclaration {
+  template <Templatable S>
+  auto operator()(S* symbol) const -> TemplateDeclarationAST* {
+    return symbol->templateDeclaration();
+  }
+
+  auto operator()(Symbol*) const -> TemplateDeclarationAST* { return nullptr; }
+};
+
+struct GetTemplateParameters {
+  template <Templatable S>
+  auto operator()(S* symbol) const -> TemplateParametersSymbol* {
+    return symbol->templateParameters();
+  }
+
+  auto operator()(Symbol*) const -> TemplateParametersSymbol* {
+    return nullptr;
+  }
+};
+
+struct GetTemplateDeclarationAST {
+  auto operator()(ClassSymbol* symbol) const -> AST* {
+    return symbol->declaration();
+  }
+
+  auto operator()(VariableSymbol* symbol) const -> AST* {
+    auto templateDeclaration = symbol->templateDeclaration();
+    return templateDeclaration ? templateDeclaration->declaration : nullptr;
+  }
+
+  auto operator()(TypeAliasSymbol* symbol) const -> AST* {
+    auto templateDeclaration = symbol->templateDeclaration();
+    return templateDeclaration ? templateDeclaration->declaration : nullptr;
+  }
+
+  auto operator()(FunctionSymbol* symbol) const -> AST* {
+    if (auto declaration = symbol->declaration()) return declaration;
+    if (auto templateDeclaration = symbol->templateDeclaration())
+      return templateDeclaration->declaration;
+    return nullptr;
+  }
+
+  auto operator()(Symbol*) const -> AST* { return nullptr; }
+};
+
+struct GetTemplateParameterInfo {
+  auto operator()(TypeParameterSymbol* symbol) const
+      -> std::optional<TypeParamInfo> {
+    return getTypeParamInfo(symbol->type());
+  }
+
+  auto operator()(TemplateTypeParameterSymbol* symbol) const
+      -> std::optional<TypeParamInfo> {
+    return getTypeParamInfo(symbol->type());
+  }
+
+  auto operator()(NonTypeParameterSymbol* symbol) const
+      -> std::optional<TypeParamInfo> {
+    return TypeParamInfo{symbol->index(), symbol->depth(),
+                         symbol->isParameterPack()};
+  }
+
+  auto operator()(ConstraintTypeParameterSymbol* symbol) const
+      -> std::optional<TypeParamInfo> {
+    return TypeParamInfo{symbol->index(), symbol->depth(),
+                         symbol->isParameterPack()};
+  }
+
+  auto operator()(TypeAliasSymbol* symbol) const
+      -> std::optional<TypeParamInfo> {
+    return getTypeParamInfo(symbol->type());
+  }
+
+  auto operator()(VariableSymbol* symbol) const
+      -> std::optional<TypeParamInfo> {
+    return getTypeParamInfo(symbol->type());
+  }
+
+  auto operator()(Symbol*) const -> std::optional<TypeParamInfo> {
+    return std::nullopt;
+  }
+};
+}  // namespace
+
+auto template_declaration_of(Symbol* symbol) -> TemplateDeclarationAST* {
+  if (!symbol) return nullptr;
+  return visit(GetTemplateDeclaration{}, symbol);
+}
+
+auto template_parameters_of(Symbol* symbol) -> TemplateParametersSymbol* {
+  if (!symbol) return nullptr;
+  return visit(GetTemplateParameters{}, symbol);
+}
+
+auto template_declaration_ast(Symbol* symbol) -> AST* {
+  if (!symbol) return nullptr;
+  return visit(GetTemplateDeclarationAST{}, symbol);
+}
+
+auto template_parameter_info(Symbol* symbol) -> std::optional<TypeParamInfo> {
+  if (!symbol) return std::nullopt;
+  return visit(GetTemplateParameterInfo{}, symbol);
+}
+
+auto is_member_template(Symbol* symbol) -> bool {
+  if (!template_declaration_of(symbol)) return false;
+  return symbol_cast<ClassSymbol>(symbol->parent()) != nullptr;
+}
+
+namespace {
+auto denotes_template_parameter(Symbol* symbol, Symbol* parameter) -> bool {
+  auto symbolInfo = template_parameter_info(symbol);
+  auto parameterInfo = template_parameter_info(parameter);
+  if (!symbolInfo || !parameterInfo) return false;
+  if (symbolInfo->depth != parameterInfo->depth) return false;
+  if (symbolInfo->index != parameterInfo->index) return false;
+  return symbolInfo->isPack == parameterInfo->isPack;
+}
+
+auto is_equivalent_to_template_parameter(TemplateArgumentAST* argument,
+                                         Symbol* parameter) -> bool {
+  if (auto typeArgument = ast_cast<TypeTemplateArgumentAST>(argument)) {
+    if (!typeArgument->typeId) return false;
+    return typeArgument->typeId->type == parameter->type();
+  }
+
+  if (auto expressionArgument =
+          ast_cast<ExpressionTemplateArgumentAST>(argument)) {
+    auto expression = expressionArgument->expression;
+    if (auto pack = ast_cast<PackExpansionExpressionAST>(expression))
+      expression = pack->expression;
+    auto idExpression = ast_cast<IdExpressionAST>(expression);
+    if (!idExpression) return false;
+    return denotes_template_parameter(idExpression->symbol, parameter);
+  }
+
+  return false;
+}
+}  // namespace
+
+auto names_template_head_parameters(SimpleTemplateIdAST* templateId,
+                                    ClassSymbol* classSymbol) -> bool {
+  auto templateParameters = classSymbol->templateParameters();
+  if (!templateParameters) return false;
+
+  const auto& parameters = templateParameters->members();
+
+  std::size_t index = 0;
+  for (auto argument : ListView{templateId->templateArgumentList}) {
+    if (index >= parameters.size()) return false;
+    if (!is_equivalent_to_template_parameter(argument, parameters[index]))
+      return false;
+    ++index;
+  }
+
+  return index == parameters.size();
+}
+
+auto names_current_instantiation(ClassSymbol* classSymbol, ScopeSymbol* scope)
+    -> bool {
+  if (!classSymbol) return false;
+
+  auto primary = classSymbol->resolvedDefinition();
+
+  for (auto enclosing = scope; enclosing; enclosing = enclosing->parent()) {
+    auto enclosingClass = symbol_cast<ClassSymbol>(enclosing);
+    if (!enclosingClass) continue;
+
+    auto candidate = enclosingClass->isSpecialization()
+                         ? enclosingClass->primaryTemplateSymbol()
+                         : enclosingClass;
+    if (!candidate) continue;
+    if (candidate->resolvedDefinition() == primary) return true;
+  }
+
+  return false;
+}
+
+auto Symbol::definition() const -> Symbol* {
+  switch (kind()) {
+    case SymbolKind::kClass:
+      return static_cast<const ClassSymbol*>(this)
+          ->MaybeRedecl<ClassSymbol>::definition();
+    case SymbolKind::kFunction:
+      return static_cast<const FunctionSymbol*>(this)
+          ->MaybeRedecl<FunctionSymbol>::definition();
+    case SymbolKind::kVariable:
+      return static_cast<const VariableSymbol*>(this)
+          ->MaybeRedecl<VariableSymbol>::definition();
+    case SymbolKind::kTypeAlias:
+      return static_cast<const TypeAliasSymbol*>(this)
+          ->MaybeRedecl<TypeAliasSymbol>::definition();
+    default:
+      return nullptr;
+  }
+}
+
+ScopeSymbol::ScopeSymbol(SymbolKind kind, ScopeSymbol* enclosingScope)
+    : Symbol(kind, enclosingScope) {}
+
+ScopeSymbol::~ScopeSymbol() {}
+
+void ScopeSymbol::addMember(Symbol* symbol) { addSymbol(symbol); }
+
+auto ScopeSymbol::members() const -> const std::vector<Symbol*>& {
+  return members_;
+}
+
+void ScopeSymbol::reset() {
+  truncate(0);
+  usingDirectives_.clear();
+}
+
+void ScopeSymbol::truncate(std::size_t count) {
+  if (count >= members_.size()) return;
+  for (std::size_t i = count; i < members_.size(); ++i) {
+    members_[i]->link_ = nullptr;
+    members_[i]->setParent(nullptr);
+  }
+  members_.resize(count);
+  buckets_.clear();
+  if (!members_.empty()) {
+    rehash();
+  }
+}
+
+auto ScopeSymbol::isTransparent() const -> bool {
+  if (isTemplateParameters()) return true;
+  if (isFunctionParameters()) return true;
+  return false;
+}
+
+void ScopeSymbol::addSymbol(Symbol* symbol) {
+  if (symbol->isTemplateParameters()) {
+    cxx_runtime_error("trying to add a template parameters symbol to a scope");
+    return;
+  }
+
+  if (isTemplateParameters()) {
+    if (!(symbol->isTypeParameter() || symbol->isTemplateTypeParameter() ||
+          symbol->isNonTypeParameter() ||
+          symbol->isConstraintTypeParameter())) {
+      cxx_runtime_error("invalid symbol in template parameters scope");
+    }
+  }
+
+  if (!symbol->parent_ || symbol->isFunctionParameters()) {
+    symbol->setParent(this);
+  }
+
+  members_.push_back(symbol);
+
+  if (3 * members_.size() >= 2 * buckets_.size()) {
+    rehash();
+  } else {
+    auto h = symbol->name() ? symbol->name()->hashValue() : 0;
+    h = h % buckets_.size();
+    symbol->link_ = buckets_[h];
+    buckets_[h] = symbol;
+  }
+}
+
+void ScopeSymbol::rehash() {
+  const auto newSize = std::max(std::size_t(8), buckets_.size() * 2);
+
+  buckets_ = std::vector<Symbol*>(newSize);
+
+  for (auto symbol : members_) {
+    auto h = symbol->name() ? symbol->name()->hashValue() : 0;
+    auto index = h % newSize;
+    symbol->link_ = buckets_[index];
+    buckets_[index] = symbol;
+  }
+}
+
+void ScopeSymbol::replaceSymbol(Symbol* symbol, Symbol* newSymbol) {
+  if (symbol == newSymbol) return;
+
+  auto it = std::find(members_.begin(), members_.end(), symbol);
+
+  if (it == members_.end()) return;
+
+  *it = newSymbol;
+
+  newSymbol->link_ = symbol->link_;
+
+  auto h = newSymbol->name() ? newSymbol->name()->hashValue() : 0;
+  h = h % buckets_.size();
+
+  if (buckets_[h] == symbol) {
+    buckets_[h] = newSymbol;
+  } else {
+    for (auto p = buckets_[h]; p; p = p->link_) {
+      if (p->link_ == symbol) {
+        p->link_ = newSymbol;
+        break;
+      }
+    }
+  }
+
+  symbol->link_ = nullptr;
+}
+
+void ScopeSymbol::addUsingDirective(ScopeSymbol* scope) {
+  usingDirectives_.push_back(scope);
+}
+
+auto ScopeSymbol::find(const Name* name) const -> SymbolChainView {
+  if (!members_.empty()) {
+    auto h = name ? name->hashValue() : 0;
+    h = h % buckets_.size();
+    for (auto symbol = buckets_[h]; symbol; symbol = symbol->link_) {
+      if (symbol->name() == name) {
+        return SymbolChainView{symbol};
+      }
+    }
+  }
+  return SymbolChainView{nullptr};
+}
+
+auto ScopeSymbol::find(TokenKind op) const -> SymbolChainView {
+  if (!members_.empty()) {
+    const auto h = OperatorId::hash(op) % buckets_.size();
+    for (auto symbol = buckets_[h]; symbol; symbol = symbol->link_) {
+      auto id = name_cast<OperatorId>(symbol->name());
+      if (id && id->op() == op) return SymbolChainView{symbol};
+    }
+  }
+  return SymbolChainView{nullptr};
+}
+
+auto ScopeSymbol::find(const std::string_view& name) const -> SymbolChainView {
+  if (!members_.empty()) {
+    const auto h = Identifier::hash(name) % buckets_.size();
+    for (auto symbol = buckets_[h]; symbol; symbol = symbol->link_) {
+      auto id = name_cast<Identifier>(symbol->name());
+      if (id && id->name() == name) return SymbolChainView{symbol};
+    }
+  }
+  return SymbolChainView{nullptr};
+}
+
+NamespaceSymbol::NamespaceSymbol(ScopeSymbol* enclosingScope)
+    : ScopeSymbol(Kind, enclosingScope) {}
+
+NamespaceSymbol::~NamespaceSymbol() {}
+
+auto NamespaceSymbol::isInline() const -> bool { return isInline_; }
+
+void NamespaceSymbol::setInline(bool isInline) { isInline_ = isInline; }
+
+auto NamespaceSymbol::hasInlineNamespaces() const -> bool {
+  return hasInlineNamespaces_;
+}
+
+void NamespaceSymbol::setHasInlineNamespaces(bool value) {
+  hasInlineNamespaces_ = value;
+}
+
+auto NamespaceSymbol::unnamedNamespace() const -> NamespaceSymbol* {
+  return unnamedNamespace_;
+}
+
+void NamespaceSymbol::setUnnamedNamespace(NamespaceSymbol* unnamedNamespace) {
+  unnamedNamespace_ = unnamedNamespace;
+}
+
+auto NamespaceSymbol::anonNamespaceIndex() const -> std::optional<int> {
+  if (anonNamespaceIndex_ < 0) return std::nullopt;
+  return anonNamespaceIndex_;
+}
+
+void NamespaceSymbol::setAnonNamespaceIndex(int index) {
+  anonNamespaceIndex_ = index;
+}
+
+ConceptSymbol::ConceptSymbol(ScopeSymbol* enclosingScope)
+    : Symbol(Kind, enclosingScope) {}
+
+ConceptSymbol::~ConceptSymbol() {}
+
+DeductionGuideSymbol::DeductionGuideSymbol(ScopeSymbol* enclosingScope)
+    : Symbol(Kind, enclosingScope) {}
+
+DeductionGuideSymbol::~DeductionGuideSymbol() {}
+
+auto DeductionGuideSymbol::isExplicit() const -> bool { return isExplicit_; }
+
+void DeductionGuideSymbol::setExplicit(bool isExplicit) {
+  isExplicit_ = isExplicit;
+}
+
+BaseClassSymbol::BaseClassSymbol(ScopeSymbol* enclosingScope)
+    : Symbol(Kind, enclosingScope) {}
+
+BaseClassSymbol::~BaseClassSymbol() {}
+
+auto BaseClassSymbol::isVirtual() const -> bool { return isVirtual_; }
+
+void BaseClassSymbol::setVirtual(bool isVirtual) { isVirtual_ = isVirtual; }
+
+auto BaseClassSymbol::symbol() const -> Symbol* { return symbol_; }
+
+void BaseClassSymbol::setSymbol(Symbol* symbol) { symbol_ = symbol; }
+
+InjectedClassNameSymbol::InjectedClassNameSymbol(ScopeSymbol* enclosingScope)
+    : Symbol(Kind, enclosingScope) {}
+
+InjectedClassNameSymbol::~InjectedClassNameSymbol() {}
+
+UnresolvedSymbol::UnresolvedSymbol(ScopeSymbol* enclosingScope)
+    : Symbol(Kind, enclosingScope) {}
+
+UnresolvedSymbol::~UnresolvedSymbol() {}
+
+void ClassLayout::setFieldInfo(FieldSymbol* field, const MemberInfo& info) {
+  fields_[field] = info;
+}
+
+void ClassLayout::setBaseInfo(ClassSymbol* base, const MemberInfo& info) {
+  bases_[base] = info;
+}
+
+auto ClassLayout::getFieldInfo(FieldSymbol* field) const
+    -> std::optional<MemberInfo> {
+  auto it = fields_.find(field);
+  if (it != fields_.end()) {
+    return it->second;
+  }
+  return std::nullopt;
+}
+
+auto ClassLayout::getBaseInfo(ClassSymbol* base) const
+    -> std::optional<MemberInfo> {
+  auto it = bases_.find(base);
+  if (it != bases_.end()) {
+    return it->second;
+  }
+  return std::nullopt;
+}
+
+ClassSymbol::ClassSymbol(ScopeSymbol* enclosingScope)
+    : ScopeSymbol(Kind, enclosingScope) {}
+
+ClassSymbol::~ClassSymbol() {}
+
+auto ClassSymbol::flags() const -> std::uint32_t { return flags_; }
+
+void ClassSymbol::setFlags(std::uint32_t flags) { flags_ = flags; }
+
+auto ClassSymbol::isUnion() const -> bool { return isUnion_; }
+
+void ClassSymbol::setIsUnion(bool isUnion) { isUnion_ = isUnion; }
+
+auto ClassSymbol::isFinal() const -> bool { return isFinal_; }
+
+void ClassSymbol::setFinal(bool isFinal) { isFinal_ = isFinal; }
+
+auto ClassSymbol::baseClasses() const -> const std::vector<BaseClassSymbol*>& {
+  return baseClasses_;
+}
+
+void ClassSymbol::addBaseClass(BaseClassSymbol* baseClass) {
+  baseClasses_.push_back(baseClass);
+}
+
+void ClassSymbol::addBefriendingClass(ClassSymbol* classSymbol) {
+  if (!classSymbol) return;
+  classSymbol = classSymbol->resolvedDefinition();
+  if (std::ranges::contains(befriendingClasses_, classSymbol)) return;
+  befriendingClasses_.push_back(classSymbol);
+}
+
+void ClassSymbol::addBefriendingClass(ClassSymbol* classSymbol,
+                                      std::vector<TemplateArgument> arguments) {
+  if (!classSymbol) return;
+  classSymbol = classSymbol->resolvedDefinition();
+  auto found = std::ranges::find_if(
+      templateFriendships_, [&](const TemplateFriendship& friendship) {
+        return friendship.befriendingClass == classSymbol &&
+               friendship.arguments == arguments;
+      });
+  if (found != templateFriendships_.end()) return;
+  templateFriendships_.push_back({std::move(arguments), classSymbol});
+}
+
+auto ClassSymbol::constructors() const -> std::vector<FunctionSymbol*> {
+  return constructorOverloadSet_->functions();
+}
+
+auto ClassSymbol::declaredConstructors() const
+    -> const std::vector<FunctionSymbol*>& {
+  return constructorOverloadSet_->declaredFunctions();
+}
+
+void ClassSymbol::addConstructor(FunctionSymbol* constructor) {
+  constructorOverloadSet_->addFunction(constructor);
+}
+
+auto ClassSymbol::deductionGuides() const
+    -> const std::vector<DeductionGuideSymbol*>& {
+  return deductionGuides_;
+}
+
+void ClassSymbol::addDeductionGuide(DeductionGuideSymbol* guide) {
+  deductionGuides_.push_back(guide);
+}
+
+auto ClassSymbol::isComplete() const -> bool { return isComplete_; }
+
+void ClassSymbol::setComplete(bool isComplete) { isComplete_ = isComplete; }
+
+auto ClassSymbol::isFriend() const -> bool { return isFriend_; }
+
+void ClassSymbol::setFriend(bool isFriend) { isFriend_ = isFriend; }
+
+auto ClassSymbol::isPolymorphic() const -> bool { return isPolymorphic_; }
+
+void ClassSymbol::setPolymorphic(bool isPolymorphic) {
+  isPolymorphic_ = isPolymorphic;
+}
+
+auto ClassSymbol::isAbstract() const -> bool { return isAbstract_; }
+
+void ClassSymbol::setAbstract(bool isAbstract) { isAbstract_ = isAbstract; }
+
+auto ClassSymbol::hasVirtualDestructor() const -> bool {
+  return hasVirtualDestructor_;
+}
+
+void ClassSymbol::setHasVirtualDestructor(bool hasVirtualDestructor) {
+  hasVirtualDestructor_ = hasVirtualDestructor;
+}
+
+auto ClassSymbol::sizeInBytes() const -> int { return sizeInBytes_; }
+
+void ClassSymbol::setSizeInBytes(int sizeInBytes) {
+  sizeInBytes_ = sizeInBytes;
+}
+
+auto ClassSymbol::alignment() const -> int { return std::max(alignment_, 1); }
+
+void ClassSymbol::setAlignment(int alignment) { alignment_ = alignment; }
+
+auto ClassSymbol::hasBaseClass(const Symbol* symbol) const -> bool {
+  std::unordered_set<const ClassSymbol*> processed;
+  return hasBaseClass(symbol, processed);
+}
+
+auto ClassSymbol::hasBaseClass(
+    const Symbol* symbol,
+    std::unordered_set<const ClassSymbol*>& processed) const -> bool {
+  if (!processed.insert(this).second) {
+    return false;
+  }
+
+  for (auto baseClass : baseClasses_) {
+    auto baseClassSymbol = baseClass->symbol();
+    if (baseClassSymbol == symbol) return true;
+    if (auto baseClassType = type_cast<ClassType>(baseClassSymbol->type())) {
+      if (baseClassType->symbol()->hasBaseClass(symbol, processed)) return true;
+    }
+  }
+  return false;
+}
+
+namespace {
+
+struct BaseSubobjectSearch {
+  ClassSymbol* base = nullptr;
+  ClassSymbol::BaseSubobjectInfo info;
+
+  void collect(const ClassSymbol* derived, std::uint64_t offset,
+               bool reachedVirtually, bool reachedPublicly) {
+    if (derived == base) {
+      ++info.pathCount;
+      if (!reachedVirtually) {
+        ++info.nonVirtualPathCount;
+        info.nonVirtualOffset = offset;
+      }
+      if (reachedPublicly) {
+        ++info.publicPathCount;
+        if (reachedVirtually) {
+          info.anyPublicPathIsVirtual = true;
+        } else {
+          info.publicNonVirtualOffset = offset;
+        }
+      }
+      return;
+    }
+
+    auto layout = derived->layout();
+    if (!layout) return;
+
+    for (auto baseClass : derived->baseClasses()) {
+      auto baseSymbol = symbol_cast<ClassSymbol>(baseClass->symbol());
+      if (!baseSymbol) continue;
+
+      auto baseDefinition = baseSymbol->resolvedDefinition();
+
+      const auto isPublic = reachedPublicly && baseClass->accessSpecifier() ==
+                                                   AccessSpecifier::kPublic;
+
+      if (baseClass->isVirtual()) {
+        collect(baseDefinition, 0, true, isPublic);
+        continue;
+      }
+
+      auto baseInfo = layout->getBaseInfo(baseDefinition);
+      if (!baseInfo) continue;
+
+      collect(baseDefinition, offset + baseInfo->offset, reachedVirtually,
+              isPublic);
+    }
+  }
+};
+
+struct BaseClassRepetitionSearch {
+  std::unordered_set<const ClassSymbol*> virtualBases;
+  std::unordered_set<const ClassSymbol*> nonVirtualBases;
+  ClassSymbol::BaseClassRepetition result;
+
+  void collect(const ClassSymbol* derived) {
+    for (auto baseClass : derived->baseClasses()) {
+      auto baseSymbol = symbol_cast<ClassSymbol>(baseClass->symbol());
+      if (!baseSymbol) continue;
+
+      auto baseDefinition = baseSymbol->resolvedDefinition();
+
+      if (baseClass->isVirtual()) {
+        if (!virtualBases.insert(baseDefinition).second) {
+          result.diamondShaped = true;
+        } else if (nonVirtualBases.contains(baseDefinition)) {
+          result.nonDiamondRepeat = true;
+        }
+      } else if (!nonVirtualBases.insert(baseDefinition).second) {
+        result.nonDiamondRepeat = true;
+      } else if (virtualBases.contains(baseDefinition)) {
+        result.nonDiamondRepeat = true;
+      }
+
+      collect(baseDefinition);
+    }
+  }
+};
+
+}  // namespace
+
+auto ClassSymbol::baseSubobjectInfo(ClassSymbol* base) const
+    -> BaseSubobjectInfo {
+  BaseSubobjectSearch search{.base = base->resolvedDefinition()};
+  search.collect(resolvedDefinition(), 0, false, true);
+  return search.info;
+}
+
+auto ClassSymbol::baseClassOffset(ClassSymbol* base) const
+    -> std::optional<std::uint64_t> {
+  auto info = baseSubobjectInfo(base);
+  if (info.pathCount != 1 || info.nonVirtualPathCount != 1) return std::nullopt;
+  return info.nonVirtualOffset;
+}
+
+auto ClassSymbol::baseClassRepetition() const -> BaseClassRepetition {
+  BaseClassRepetitionSearch search;
+  search.collect(resolvedDefinition());
+  return search.result;
+}
+
+auto ClassSymbol::hasVirtualBasePath(Symbol* symbol) const -> bool {
+  std::unordered_set<const ClassSymbol*> processed;
+  return hasVirtualBasePath(symbol, processed);
+}
+
+auto ClassSymbol::hasVirtualBasePath(
+    Symbol* symbol, std::unordered_set<const ClassSymbol*>& processed) const
+    -> bool {
+  if (!processed.insert(this).second) return false;
+
+  for (auto baseClass : baseClasses_) {
+    auto baseClassSymbol = baseClass->symbol();
+    auto baseClassType = type_cast<ClassType>(baseClassSymbol->type());
+    auto baseClassDefinition =
+        baseClassType ? baseClassType->symbol() : nullptr;
+
+    if (baseClass->isVirtual()) {
+      if (baseClassSymbol == symbol) return true;
+      if (baseClassDefinition && baseClassDefinition->hasBaseClass(symbol))
+        return true;
+    }
+
+    if (baseClassDefinition &&
+        baseClassDefinition->hasVirtualBasePath(symbol, processed)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+auto ClassSymbol::conversionFunctions() const -> std::vector<FunctionSymbol*> {
+  std::vector<FunctionSymbol*> result;
+  for (auto func : views::members(const_cast<ClassSymbol*>(this)) |
+                       views::member_functions) {
+    if (name_cast<ConversionFunctionId>(func->name())) result.push_back(func);
+  }
+  return result;
+}
+
+auto ClassSymbol::implicitConversionFunctions() const
+    -> std::vector<FunctionSymbol*> {
+  auto result = conversionFunctions();
+  std::erase_if(result,
+                [](FunctionSymbol* func) { return func->isExplicit(); });
+  return result;
+}
+
+auto ClassSymbol::destructor() const -> FunctionSymbol* {
+  return views::find_function(members(), [](FunctionSymbol* func) {
+    return name_cast<DestructorId>(func->name()) != nullptr;
+  });
+}
+
+auto ClassSymbol::defaultConstructor() const -> FunctionSymbol* {
+  for (auto ctor : constructors()) {
+    if (ctor->canonical() != ctor) continue;
+    auto funcType = type_cast<FunctionType>(ctor->type());
+    if (!funcType) continue;
+
+    const auto paramTypeCount = funcType->parameterTypes().size();
+    if (paramTypeCount == 0) return ctor;
+
+    std::size_t paramCount = 0;
+    bool allDefaulted = true;
+    if (auto fpScope = ctor->functionParameters()) {
+      for (auto member : fpScope->members()) {
+        auto param = symbol_cast<ParameterSymbol>(member);
+        if (!param) continue;
+        ++paramCount;
+        if (!param->defaultArgument()) {
+          allDefaulted = false;
+          break;
+        }
+      }
+    }
+    if (allDefaulted && paramCount == paramTypeCount) return ctor;
+  }
+  return nullptr;
+}
+
+namespace {
+
+template <typename Reference>
+[[nodiscard]] auto isSpecialMemberForClass(FunctionSymbol* function,
+                                           const ClassSymbol* classSymbol)
+    -> bool {
+  auto funcType = type_cast<FunctionType>(function->type());
+  if (!funcType) return false;
+  auto& params = funcType->parameterTypes();
+  if (params.size() != 1) return false;
+  auto ref = type_cast<Reference>(params[0]);
+  if (!ref) return false;
+  auto classType = unqualified_cast<ClassType>(ref->elementType());
+  return classType && classType->symbol() == classSymbol;
+}
+
+}  // namespace
+
+auto ClassSymbol::copyConstructor() const -> FunctionSymbol* {
+  for (auto ctor : constructors()) {
+    if (isSpecialMemberForClass<LvalueReferenceType>(ctor, this)) return ctor;
+  }
+  return nullptr;
+}
+
+auto ClassSymbol::moveConstructor() const -> FunctionSymbol* {
+  for (auto ctor : constructors()) {
+    if (isSpecialMemberForClass<RvalueReferenceType>(ctor, this)) return ctor;
+  }
+  return nullptr;
+}
+
+auto ClassSymbol::copyAssignmentOperator() const -> FunctionSymbol* {
+  return views::find_function(
+      find(TokenKind::T_EQUAL), [this](FunctionSymbol* func) {
+        return isSpecialMemberForClass<LvalueReferenceType>(func, this);
+      });
+}
+
+auto ClassSymbol::moveAssignmentOperator() const -> FunctionSymbol* {
+  return views::find_function(
+      find(TokenKind::T_EQUAL), [this](FunctionSymbol* func) {
+        return isSpecialMemberForClass<RvalueReferenceType>(func, this);
+      });
+}
+
+auto ClassSymbol::hasUserDeclaredConstructors() const -> bool {
+  return hasUserDeclaredConstructors_;
+}
+
+void ClassSymbol::setHasUserDeclaredConstructors(bool value) {
+  hasUserDeclaredConstructors_ = value;
+}
+
+auto ClassSymbol::hasInheritedConstructors() const -> bool {
+  return !constructorOverloadSet_->usingDeclarations().empty();
+}
+
+auto ClassSymbol::hasVirtualFunctions() const -> bool {
+  return views::any_function(
+      members(), [](FunctionSymbol* fn) { return fn->isVirtual(); });
+}
+
+auto ClassSymbol::hasVirtualBaseClasses() const -> bool {
+  for (auto base : baseClasses_) {
+    if (base->isVirtual()) return true;
+  }
+  return false;
+}
+
+auto ClassSymbol::convertingConstructors() const
+    -> std::vector<FunctionSymbol*> {
+  std::vector<FunctionSymbol*> result;
+  for (auto ctor : constructors()) {
+    if (ctor->isExplicit()) continue;
+    auto funcType = type_cast<FunctionType>(ctor->type());
+    if (!funcType) continue;
+    if (funcType->parameterTypes().empty()) continue;
+    result.push_back(ctor);
+  }
+  return result;
+}
+
+void ClassSymbol::setLayout(std::unique_ptr<ClassLayout> layout) {
+  layout_ = std::move(layout);
+}
+
+auto ClassSymbol::layout() const -> const ClassLayout* { return layout_.get(); }
+
+void ClassSymbol::setVTableLayout(std::unique_ptr<VTableLayout> vtableLayout) {
+  vtableLayout_ = std::move(vtableLayout);
+}
+
+auto ClassSymbol::vtableLayout() const -> const VTableLayout* {
+  return vtableLayout_.get();
+}
+
+auto ClassSymbol::isClosureType() const -> bool { return isClosureType_; }
+
+void ClassSymbol::setIsClosureType(bool isClosureType) {
+  isClosureType_ = isClosureType;
+}
+
+auto ClassSymbol::hasLambdaCapture() const -> bool { return hasLambdaCapture_; }
+
+void ClassSymbol::setHasLambdaCapture(bool hasLambdaCapture) {
+  hasLambdaCapture_ = hasLambdaCapture;
+}
+
+auto ClassSymbol::capturedThisField() const -> FieldSymbol* {
+  return capturedThisField_;
+}
+
+void ClassSymbol::setCapturedThisField(FieldSymbol* capturedThisField) {
+  capturedThisField_ = capturedThisField;
+}
+
+auto ClassSymbol::closureDiscriminator() const -> int {
+  return closureDiscriminator_;
+}
+
+void ClassSymbol::setClosureDiscriminator(int closureDiscriminator) {
+  closureDiscriminator_ = closureDiscriminator;
+}
+
+auto ClassSymbol::instantiationPattern() const -> ClassSymbol* {
+  return instantiationPattern_;
+}
+
+void ClassSymbol::setInstantiationPattern(ClassSymbol* instantiationPattern) {
+  instantiationPattern_ = instantiationPattern;
+}
+
+EnumSymbol::EnumSymbol(ScopeSymbol* enclosingScope)
+    : ScopeSymbol(Kind, enclosingScope) {}
+
+EnumSymbol::~EnumSymbol() {}
+
+auto EnumSymbol::hasFixedUnderlyingType() const -> bool {
+  return hasFixedUnderlyingType_;
+}
+
+void EnumSymbol::setHasFixedUnderlyingType(bool hasFixedUnderlyingType) {
+  hasFixedUnderlyingType_ = hasFixedUnderlyingType;
+}
+
+auto EnumSymbol::isDefined() const -> bool { return isDefined_; }
+
+void EnumSymbol::setDefined(bool isDefined) { isDefined_ = isDefined; }
+
+auto EnumSymbol::underlyingType() const -> const Type* {
+  return underlyingType_;
+}
+
+void EnumSymbol::setUnderlyingType(const Type* underlyingType) {
+  underlyingType_ = underlyingType;
+}
+
+ScopedEnumSymbol::ScopedEnumSymbol(ScopeSymbol* enclosingScope)
+    : ScopeSymbol(Kind, enclosingScope) {}
+
+ScopedEnumSymbol::~ScopedEnumSymbol() {}
+
+auto ScopedEnumSymbol::underlyingType() const -> const Type* {
+  return underlyingType_;
+}
+
+void ScopedEnumSymbol::setUnderlyingType(const Type* underlyingType) {
+  underlyingType_ = underlyingType;
+}
+
+auto ScopedEnumSymbol::isDefined() const -> bool { return isDefined_; }
+
+void ScopedEnumSymbol::setDefined(bool isDefined) { isDefined_ = isDefined; }
+
+FunctionSymbol::FunctionSymbol(ScopeSymbol* enclosingScope)
+    : ScopeSymbol(Kind, enclosingScope) {}
+
+FunctionSymbol::~FunctionSymbol() {}
+
+auto FunctionSymbol::isDefined() const -> bool { return isDefined_; }
+
+void FunctionSymbol::setDefined(bool isDefined) { isDefined_ = isDefined; }
+
+auto FunctionSymbol::isStatic() const -> bool { return isStatic_; }
+
+void FunctionSymbol::setStatic(bool isStatic) { isStatic_ = isStatic; }
+
+auto FunctionSymbol::isExtern() const -> bool { return isExtern_; }
+
+void FunctionSymbol::setExtern(bool isExtern) { isExtern_ = isExtern; }
+
+auto FunctionSymbol::isFriend() const -> bool { return isFriend_; }
+
+void FunctionSymbol::setFriend(bool isFriend) { isFriend_ = isFriend; }
+
+auto FunctionSymbol::isImplicitObjectMemberFunction() const -> bool {
+  if (hasExplicitObjectParameter()) return false;
+  return !isStatic() && !isFriend() && symbol_cast<ClassSymbol>(parent());
+}
+
+auto FunctionSymbol::hasExplicitObjectParameter() const -> bool {
+  return hasExplicitObjectParameter_;
+}
+
+void FunctionSymbol::setExplicitObjectParameter(
+    bool hasExplicitObjectParameter) {
+  hasExplicitObjectParameter_ = hasExplicitObjectParameter;
+}
+
+auto FunctionSymbol::explicitObjectParameter() const -> ParameterSymbol* {
+  if (!hasExplicitObjectParameter()) return nullptr;
+  auto parameters = functionParameters();
+  if (!parameters) return nullptr;
+  for (auto member : parameters->members()) {
+    if (auto parameter = symbol_cast<ParameterSymbol>(member)) return parameter;
+  }
+  return nullptr;
+}
+
+auto FunctionSymbol::parameters() const -> std::vector<ParameterSymbol*> {
+  std::vector<ParameterSymbol*> result;
+  auto scope = functionParameters();
+  if (!scope) return result;
+  for (auto parameter : views::members(scope) | views::parameters)
+    result.push_back(parameter);
+  return result;
+}
+
+auto FunctionSymbol::isConstexpr() const -> bool {
+  if (isConsteval_) return true;
+  return isConstexpr_;
+}
+
+void FunctionSymbol::setConstexpr(bool isConstexpr) {
+  isConstexpr_ = isConstexpr;
+}
+
+auto FunctionSymbol::isConsteval() const -> bool { return isConsteval_; }
+
+void FunctionSymbol::setConsteval(bool isConsteval) {
+  isConsteval_ = isConsteval;
+}
+
+auto FunctionSymbol::isInline() const -> bool { return isInline_; }
+
+void FunctionSymbol::setInline(bool isInline) { isInline_ = isInline; }
+
+auto FunctionSymbol::isVirtual() const -> bool { return isVirtual_; }
+
+void FunctionSymbol::setVirtual(bool isVirtual) { isVirtual_ = isVirtual; }
+
+void FunctionSymbol::addOverriddenFunction(FunctionSymbol* function) {
+  if (!function) return;
+  if (std::ranges::contains(overriddenFunctions_, function)) return;
+  overriddenFunctions_.push_back(function);
+}
+
+auto FunctionSymbol::overrides(FunctionSymbol* function) const -> bool {
+  if (!function) return false;
+
+  std::vector<const FunctionSymbol*> pending{this};
+  std::unordered_set<const FunctionSymbol*> visited;
+
+  while (!pending.empty()) {
+    auto current = pending.back();
+    pending.pop_back();
+    if (!visited.insert(current).second) continue;
+
+    for (auto overridden : current->overriddenFunctions_) {
+      if (overridden == function) return true;
+      pending.push_back(overridden);
+    }
+  }
+
+  return false;
+}
+
+void FunctionSymbol::addBefriendingClass(ClassSymbol* classSymbol) {
+  if (!classSymbol) return;
+  classSymbol = classSymbol->resolvedDefinition();
+  if (std::ranges::contains(befriendingClasses_, classSymbol)) return;
+  befriendingClasses_.push_back(classSymbol);
+}
+
+void FunctionSymbol::addBefriendingClass(
+    ClassSymbol* classSymbol, std::vector<TemplateArgument> arguments) {
+  if (!classSymbol) return;
+  classSymbol = classSymbol->resolvedDefinition();
+  auto found = std::ranges::find_if(
+      templateFriendships_, [&](const TemplateFriendship& friendship) {
+        return friendship.befriendingClass == classSymbol &&
+               friendship.arguments == arguments;
+      });
+  if (found != templateFriendships_.end()) return;
+  templateFriendships_.push_back({std::move(arguments), classSymbol});
+}
+
+auto FunctionSymbol::isExplicit() const -> bool { return isExplicit_; }
+
+void FunctionSymbol::setExplicit(bool isExplicit) { isExplicit_ = isExplicit; }
+
+auto FunctionSymbol::isDeleted() const -> bool { return isDeleted_; }
+
+void FunctionSymbol::setDeleted(bool isDeleted) { isDeleted_ = isDeleted; }
+
+auto FunctionSymbol::isDefaulted() const -> bool { return isDefaulted_; }
+
+void FunctionSymbol::setDefaulted(bool isDefaulted) {
+  isDefaulted_ = isDefaulted;
+}
+
+auto FunctionSymbol::isPure() const -> bool { return isPure_; }
+
+void FunctionSymbol::setPure(bool isPure) { isPure_ = isPure; }
+
+auto FunctionSymbol::isOverride() const -> bool { return isOverride_; }
+
+void FunctionSymbol::setOverride(bool isOverride) { isOverride_ = isOverride; }
+
+auto FunctionSymbol::isFinal() const -> bool { return isFinal_; }
+
+void FunctionSymbol::setFinal(bool isFinal) { isFinal_ = isFinal; }
+
+auto FunctionSymbol::hasNoPrototype() const -> bool { return hasNoPrototype_; }
+
+void FunctionSymbol::setNoPrototype(bool hasNoPrototype) {
+  hasNoPrototype_ = hasNoPrototype;
+}
+
+auto FunctionSymbol::hasExceptionSpecifier() const -> bool {
+  return hasExceptionSpecifier_;
+}
+
+void FunctionSymbol::setExceptionSpecifier(bool hasExceptionSpecifier) {
+  hasExceptionSpecifier_ = hasExceptionSpecifier;
+}
+
+auto FunctionSymbol::trailingRequiresClause() const -> RequiresClauseAST* {
+  return trailingRequiresClause_;
+}
+
+void FunctionSymbol::setTrailingRequiresClause(
+    RequiresClauseAST* requiresClause) {
+  trailingRequiresClause_ = requiresClause;
+}
+
+auto FunctionSymbol::isConstructor() const -> bool {
+  auto p = symbol_cast<ClassSymbol>(parent());
+  if (!p) return false;
+
+  auto functionType = type_cast<FunctionType>(type());
+  if (!functionType) return false;
+  if (!functionType->returnType()) return false;
+  if (functionType->returnType()->kind() != TypeKind::kVoid) {
+    return false;
+  }
+
+  auto id = name_cast<Identifier>(name());
+  if (!id) return false;
+
+  if (p->name() == id) return true;
+
+  if (auto pid = name_cast<Identifier>(p->name())) {
+    if (pid->name() == id->name()) return true;
+  }
+
+  return false;
+}
+
+auto FunctionSymbol::isDestructor() const -> bool {
+  if (name_cast<DestructorId>(name())) return true;
+  return false;
+}
+
+auto FunctionSymbol::languageLinkage() const -> LanguageKind {
+  return hasCLinkage_ ? LanguageKind::kC : LanguageKind::kCXX;
+}
+
+void FunctionSymbol::setLanguageLinkage(LanguageKind linkage) {
+  hasCLinkage_ = (linkage == LanguageKind::kC);
+}
+
+auto FunctionSymbol::hasCLinkage() const -> bool { return hasCLinkage_; }
+
+auto FunctionSymbol::isDefinitionRequired() const -> bool {
+  return isDefinitionRequired_;
+}
+
+void FunctionSymbol::setDefinitionRequired(bool isDefinitionRequired) {
+  isDefinitionRequired_ = isDefinitionRequired;
+}
+
+auto FunctionSymbol::externalName() const -> const Identifier* {
+  return externalName_;
+}
+
+void FunctionSymbol::setExternalName(const Identifier* externalName) {
+  externalName_ = externalName;
+}
+
+auto FunctionSymbol::aliasName() const -> const Identifier* {
+  return aliasName_;
+}
+
+void FunctionSymbol::setAliasName(const Identifier* aliasName) {
+  aliasName_ = aliasName;
+}
+
+auto FunctionSymbol::hasHiddenVisibility() const -> bool {
+  return hasHiddenVisibility_;
+}
+
+void FunctionSymbol::setHiddenVisibility(bool hasHiddenVisibility) {
+  hasHiddenVisibility_ = hasHiddenVisibility;
+}
+
+auto FunctionSymbol::hasPendingBody() const -> bool {
+  return pendingBody_ != nullptr;
+}
+
+auto FunctionSymbol::pendingBody() const -> PendingBodyInstantiation* {
+  return pendingBody_.get();
+}
+
+void FunctionSymbol::setPendingBody(
+    std::unique_ptr<PendingBodyInstantiation> pending) {
+  pendingBody_ = std::move(pending);
+}
+
+void FunctionSymbol::clearPendingBody() { pendingBody_.reset(); }
+
+auto FunctionSymbol::pendingExceptionSpecification() const
+    -> PendingExceptionSpecification* {
+  return pendingExceptionSpecification_.get();
+}
+
+void FunctionSymbol::setPendingExceptionSpecification(
+    std::unique_ptr<PendingExceptionSpecification> pending) {
+  pendingExceptionSpecification_ = std::move(pending);
+}
+
+auto FunctionSymbol::functionParameters() const -> FunctionParametersSymbol* {
+  for (auto member : members()) {
+    if (auto params = symbol_cast<FunctionParametersSymbol>(member))
+      return params;
+  }
+  return nullptr;
+}
+
+OverloadSetSymbol::OverloadSetSymbol(ScopeSymbol* enclosingScope)
+    : Symbol(Kind, enclosingScope) {}
+
+OverloadSetSymbol::~OverloadSetSymbol() {}
+
+auto OverloadSetSymbol::declaredFunctions() const
+    -> const std::vector<FunctionSymbol*>& {
+  return declaredFunctions_;
+}
+
+void OverloadSetSymbol::setFunctions(std::vector<FunctionSymbol*> functions) {
+  declaredFunctions_ = std::move(functions);
+}
+
+void OverloadSetSymbol::addFunction(FunctionSymbol* function) {
+  if (!function) return;
+
+  auto canonical = function->canonical();
+
+  for (auto existing : declaredFunctions_) {
+    if (!existing) continue;
+    if (existing->canonical() == canonical) return;
+  }
+
+  declaredFunctions_.push_back(function);
+}
+
+auto OverloadSetSymbol::usingDeclarations() const
+    -> const std::vector<UsingDeclarationSymbol*>& {
+  return usingDeclarations_;
+}
+
+void OverloadSetSymbol::addUsingDeclaration(
+    UsingDeclarationSymbol* usingDeclaration) {
+  if (!usingDeclaration) return;
+  if (std::ranges::contains(usingDeclarations_, usingDeclaration)) return;
+  usingDeclarations_.push_back(usingDeclaration);
+}
+
+auto OverloadSetSymbol::functions() const -> std::vector<FunctionSymbol*> {
+  if (usingDeclarations_.empty()) return declaredFunctions_;
+
+  auto result = declaredFunctions_;
+
+  for (auto usingDeclaration : usingDeclarations_) {
+    for (auto introduced : usingDeclaration->introducedFunctions()) {
+      auto canonical = introduced->canonical();
+
+      const auto isHidden =
+          std::ranges::any_of(result, [&](FunctionSymbol* declared) {
+            return declared->canonical() == canonical ||
+                   hasEquivalentParameterTypeList(declared, introduced);
+          });
+
+      if (!isHidden) result.push_back(introduced);
+    }
+  }
+
+  return result;
+}
+
+LambdaSymbol::LambdaSymbol(ScopeSymbol* enclosingScope)
+    : ScopeSymbol(Kind, enclosingScope) {}
+
+LambdaSymbol::~LambdaSymbol() {}
+
+auto LambdaSymbol::isConstexpr() const -> bool { return isConstexpr_; }
+
+void LambdaSymbol::setConstexpr(bool isConstexpr) {
+  isConstexpr_ = isConstexpr;
+}
+
+auto LambdaSymbol::isConsteval() const -> bool { return isConsteval_; }
+
+void LambdaSymbol::setConsteval(bool isConsteval) {
+  isConsteval_ = isConsteval;
+}
+
+auto LambdaSymbol::isMutable() const -> bool { return isMutable_; }
+
+void LambdaSymbol::setMutable(bool isMutable) { isMutable_ = isMutable; }
+
+auto LambdaSymbol::isStatic() const -> bool { return isStatic_; }
+
+void LambdaSymbol::setStatic(bool isStatic) { isStatic_ = isStatic; }
+
+auto LambdaSymbol::isTemplate() const -> bool { return isTemplate_; }
+
+void LambdaSymbol::setTemplate(bool isTemplate) { isTemplate_ = isTemplate; }
+
+auto LambdaSymbol::isInTemplate() const -> bool { return isInTemplate_; }
+
+void LambdaSymbol::setInTemplate(bool isInTemplate) {
+  isInTemplate_ = isInTemplate;
+}
+
+FunctionParametersSymbol::FunctionParametersSymbol(ScopeSymbol* enclosingScope)
+    : ScopeSymbol(Kind, enclosingScope) {}
+
+FunctionParametersSymbol::~FunctionParametersSymbol() {}
+
+TemplateParametersSymbol::TemplateParametersSymbol(ScopeSymbol* enclosingScope)
+    : ScopeSymbol(Kind, enclosingScope) {}
+
+TemplateParametersSymbol::~TemplateParametersSymbol() {}
+
+auto TemplateParametersSymbol::isExplicitTemplateSpecialization() const
+    -> bool {
+  return isExplicitTemplateSpecialization_;
+}
+
+void TemplateParametersSymbol::setExplicitTemplateSpecialization(
+    bool isExplicit) {
+  isExplicitTemplateSpecialization_ = isExplicit;
+}
+
+BlockSymbol::BlockSymbol(ScopeSymbol* enclosingScope)
+    : ScopeSymbol(Kind, enclosingScope) {}
+
+BlockSymbol::~BlockSymbol() {}
+
+TypeAliasSymbol::TypeAliasSymbol(ScopeSymbol* enclosingScope)
+    : Symbol(Kind, enclosingScope) {}
+
+TypeAliasSymbol::~TypeAliasSymbol() {}
+
+VariableSymbol::VariableSymbol(ScopeSymbol* enclosingScope)
+    : Symbol(Kind, enclosingScope) {}
+
+VariableSymbol::~VariableSymbol() {}
+
+auto VariableSymbol::isStatic() const -> bool { return isStatic_; }
+
+void VariableSymbol::setStatic(bool isStatic) { isStatic_ = isStatic; }
+
+auto VariableSymbol::isThreadLocal() const -> bool { return isThreadLocal_; }
+
+void VariableSymbol::setThreadLocal(bool isThreadLocal) {
+  isThreadLocal_ = isThreadLocal;
+}
+
+auto VariableSymbol::isExtern() const -> bool { return isExtern_; }
+
+void VariableSymbol::setExtern(bool isExtern) { isExtern_ = isExtern; }
+
+auto VariableSymbol::isConstexpr() const -> bool { return isConstexpr_; }
+
+void VariableSymbol::setConstexpr(bool isConstexpr) {
+  isConstexpr_ = isConstexpr;
+}
+
+auto VariableSymbol::isConstinit() const -> bool { return isConstinit_; }
+
+void VariableSymbol::setConstinit(bool isConstinit) {
+  isConstinit_ = isConstinit;
+}
+
+auto VariableSymbol::isInline() const -> bool { return isInline_; }
+
+void VariableSymbol::setInline(bool isInline) { isInline_ = isInline; }
+
+auto VariableSymbol::initializer() const -> ExpressionAST* {
+  return initializer_;
+}
+
+void VariableSymbol::setInitializer(ExpressionAST* initializer) {
+  initializer_ = initializer;
+}
+
+auto VariableSymbol::constructor() const -> FunctionSymbol* {
+  return constructor_;
+}
+
+void VariableSymbol::setConstructor(FunctionSymbol* constructor) {
+  constructor_ = constructor;
+}
+
+auto VariableSymbol::constValue() const -> const std::optional<ConstValue>& {
+  return constValue_;
+}
+
+void VariableSymbol::setConstValue(std::optional<ConstValue> value) {
+  constValue_ = std::move(value);
+}
+
+auto FieldSymbol::constValue() const -> const std::optional<ConstValue>& {
+  return constValue_;
+}
+
+void FieldSymbol::setConstValue(std::optional<ConstValue> value) {
+  constValue_ = std::move(value);
+}
+
+FieldSymbol::FieldSymbol(ScopeSymbol* enclosingScope)
+    : Symbol(Kind, enclosingScope) {}
+
+auto FieldSymbol::pendingInitializer() const
+    -> PendingFieldInitializerInstantiation* {
+  return pendingInitializer_.get();
+}
+
+void FieldSymbol::setPendingInitializer(
+    std::unique_ptr<PendingFieldInitializerInstantiation> pending) {
+  pendingInitializer_ = std::move(pending);
+}
+
+void FieldSymbol::clearPendingInitializer() { pendingInitializer_.reset(); }
+
+FieldSymbol::~FieldSymbol() {}
+
+auto FieldSymbol::isBitField() const -> bool { return isBitField_; }
+
+void FieldSymbol::setBitField(bool isBitField) { isBitField_ = isBitField; }
+
+auto FieldSymbol::bitFieldOffset() const -> int { return bitFieldOffset_; }
+
+void FieldSymbol::setBitFieldOffset(int bitFieldOffset) {
+  bitFieldOffset_ = bitFieldOffset;
+}
+
+auto FieldSymbol::bitFieldWidth() const -> const std::optional<ConstValue>& {
+  return bitFieldWidth_;
+}
+
+void FieldSymbol::setBitFieldWidth(std::optional<ConstValue> bitFieldWidth) {
+  bitFieldWidth_ = std::move(bitFieldWidth);
+}
+
+auto FieldSymbol::isStatic() const -> bool { return isStatic_; }
+
+auto FieldSymbol::isExtern() const -> bool {
+  if (!isStatic_) return false;
+  if (isInline_) return false;
+  return !isConstexpr_;
+}
+
+void FieldSymbol::setStatic(bool isStatic) { isStatic_ = isStatic; }
+
+auto FieldSymbol::isThreadLocal() const -> bool { return isThreadLocal_; }
+
+void FieldSymbol::setThreadLocal(bool isThreadLocal) {
+  isThreadLocal_ = isThreadLocal;
+}
+
+auto FieldSymbol::isConstexpr() const -> bool { return isConstexpr_; }
+
+void FieldSymbol::setConstexpr(bool isConstexpr) { isConstexpr_ = isConstexpr; }
+
+auto FieldSymbol::isConstinit() const -> bool { return isConstinit_; }
+
+void FieldSymbol::setConstinit(bool isConstinit) { isConstinit_ = isConstinit; }
+
+auto FieldSymbol::isInline() const -> bool { return isInline_; }
+
+void FieldSymbol::setInline(bool isInline) { isInline_ = isInline; }
+
+auto FieldSymbol::isMutable() const -> bool { return isMutable_; }
+
+void FieldSymbol::setMutable(bool isMutable) { isMutable_ = isMutable; }
+
+auto FieldSymbol::isNoUniqueAddress() const -> bool {
+  return isNoUniqueAddress_;
+}
+
+void FieldSymbol::setNoUniqueAddress(bool isNoUniqueAddress) {
+  isNoUniqueAddress_ = isNoUniqueAddress;
+}
+
+auto FieldSymbol::offsetInClass() const -> std::optional<std::uint64_t> {
+  if (isStatic()) return std::nullopt;
+  auto classSymbol = symbol_cast<ClassSymbol>(parent());
+  if (!classSymbol) return std::nullopt;
+  auto layout = classSymbol->layout();
+  if (!layout) return std::nullopt;
+  auto info = layout->getFieldInfo(const_cast<FieldSymbol*>(this));
+  if (!info) return std::nullopt;
+  return info->offset;
+}
+
+auto FieldSymbol::localOffset() const -> int { return localOffset_; }
+
+void FieldSymbol::setLocalOffset(int offset) { localOffset_ = offset; }
+
+auto FieldSymbol::alignment() const -> int { return alignment_; }
+
+void FieldSymbol::setAlignment(int alignment) { alignment_ = alignment; }
+
+auto FieldSymbol::initializer() const -> ExpressionAST* { return initializer_; }
+
+void FieldSymbol::setInitializer(ExpressionAST* initializer) {
+  initializer_ = initializer;
+}
+
+auto FieldSymbol::constructor() const -> FunctionSymbol* {
+  return constructor_;
+}
+
+void FieldSymbol::setConstructor(FunctionSymbol* constructor) {
+  constructor_ = constructor;
+}
+
+ParameterSymbol::ParameterSymbol(ScopeSymbol* enclosingScope)
+    : Symbol(Kind, enclosingScope) {}
+
+ParameterSymbol::~ParameterSymbol() {}
+
+auto ParameterSymbol::defaultArgument() const -> ExpressionAST* {
+  return defaultArgument_;
+}
+
+auto ParameterSymbol::isExplicitObject() const -> bool {
+  return isExplicitObject_;
+}
+
+void ParameterSymbol::setExplicitObject(bool isExplicitObject) {
+  isExplicitObject_ = isExplicitObject;
+}
+
+void ParameterSymbol::setDefaultArgument(ExpressionAST* expr) {
+  defaultArgument_ = expr;
+}
+
+ParameterPackSymbol::ParameterPackSymbol(ScopeSymbol* enclosingScope)
+    : Symbol(Kind, enclosingScope) {}
+
+ParameterPackSymbol::~ParameterPackSymbol() {}
+
+auto ParameterPackSymbol::elements() const -> const std::vector<Symbol*>& {
+  return elements_;
+}
+
+void ParameterPackSymbol::addElement(Symbol* element) {
+  if (auto pack = symbol_cast<ParameterPackSymbol>(element)) {
+    for (auto nested : pack->elements()) addElement(nested);
+    return;
+  }
+  elements_.push_back(element);
+}
+
+TypeParameterSymbol::TypeParameterSymbol(ScopeSymbol* enclosingScope)
+    : Symbol(Kind, enclosingScope) {}
+
+TypeParameterSymbol::~TypeParameterSymbol() {}
+
+NonTypeParameterSymbol::NonTypeParameterSymbol(ScopeSymbol* enclosingScope)
+    : Symbol(Kind, enclosingScope) {}
+
+NonTypeParameterSymbol::~NonTypeParameterSymbol() {}
+
+auto NonTypeParameterSymbol::index() const -> int { return index_; }
+
+void NonTypeParameterSymbol::setIndex(int index) { index_ = index; }
+
+auto NonTypeParameterSymbol::depth() const -> int { return depth_; }
+
+void NonTypeParameterSymbol::setDepth(int depth) { depth_ = depth; }
+
+auto NonTypeParameterSymbol::objectType() const -> const Type* {
+  return objectType_;
+}
+
+void NonTypeParameterSymbol::setObjectType(const Type* objectType) {
+  objectType_ = objectType;
+}
+
+auto NonTypeParameterSymbol::isParameterPack() const -> bool {
+  return isParameterPack_;
+}
+
+void NonTypeParameterSymbol::setParameterPack(bool isParameterPack) {
+  isParameterPack_ = isParameterPack;
+}
+
+TemplateTypeParameterSymbol::TemplateTypeParameterSymbol(
+    ScopeSymbol* enclosingScope)
+    : Symbol(Kind, enclosingScope) {}
+
+TemplateTypeParameterSymbol::~TemplateTypeParameterSymbol() {}
+
+ConstraintTypeParameterSymbol::ConstraintTypeParameterSymbol(
+    ScopeSymbol* enclosingScope)
+    : Symbol(Kind, enclosingScope) {}
+
+ConstraintTypeParameterSymbol::~ConstraintTypeParameterSymbol() {}
+
+auto ConstraintTypeParameterSymbol::index() const -> int { return index_; }
+
+void ConstraintTypeParameterSymbol::setIndex(int index) { index_ = index; }
+
+auto ConstraintTypeParameterSymbol::depth() const -> int { return depth_; }
+
+void ConstraintTypeParameterSymbol::setDepth(int depth) { depth_ = depth; }
+
+auto ConstraintTypeParameterSymbol::isParameterPack() const -> bool {
+  return isParameterPack_;
+}
+
+void ConstraintTypeParameterSymbol::setParameterPack(bool isParameterPack) {
+  isParameterPack_ = isParameterPack;
+}
+
+EnumeratorSymbol::EnumeratorSymbol(ScopeSymbol* enclosingScope)
+    : Symbol(Kind, enclosingScope) {}
+
+EnumeratorSymbol::~EnumeratorSymbol() {}
+
+auto EnumeratorSymbol::value() const -> const std::optional<ConstValue>& {
+  return value_;
+}
+
+void EnumeratorSymbol::setValue(const std::optional<ConstValue>& value) {
+  value_ = value;
+}
+
+NamespaceAliasSymbol::NamespaceAliasSymbol(ScopeSymbol* enclosingScope)
+    : Symbol(Kind, enclosingScope) {}
+
+NamespaceAliasSymbol::~NamespaceAliasSymbol() {}
+
+auto NamespaceAliasSymbol::namespaceSymbol() const -> NamespaceSymbol* {
+  return namespaceSymbol_;
+}
+
+void NamespaceAliasSymbol::setNamespaceSymbol(
+    NamespaceSymbol* namespaceSymbol) {
+  namespaceSymbol_ = namespaceSymbol;
+}
+
+UsingDeclarationSymbol::UsingDeclarationSymbol(ScopeSymbol* enclosingScope)
+    : Symbol(Kind, enclosingScope) {}
+
+UsingDeclarationSymbol::~UsingDeclarationSymbol() {}
+
+auto UsingDeclarationSymbol::target() const -> Symbol* { return target_; }
+
+void UsingDeclarationSymbol::setTarget(Symbol* symbol) { target_ = symbol; }
+
+auto UsingDeclarationSymbol::introducedFunctions() const
+    -> std::vector<FunctionSymbol*> {
+  if (auto overloadSet = symbol_cast<OverloadSetSymbol>(target_))
+    return overloadSet->functions();
+  if (auto function = symbol_cast<FunctionSymbol>(target_)) return {function};
+  return {};
+}
+
+auto UsingDeclarationSymbol::declarator() const -> UsingDeclaratorAST* {
+  return declarator_;
+}
+
+void UsingDeclarationSymbol::setDeclarator(UsingDeclaratorAST* declarator) {
+  declarator_ = declarator;
+}
+
+auto is_class_or_enum_declaration(Symbol* symbol) -> bool {
+  if (!symbol) return false;
+  switch (symbol->kind()) {
+    case SymbolKind::kClass:
+    case SymbolKind::kInjectedClassName:
+    case SymbolKind::kEnum:
+    case SymbolKind::kScopedEnum:
+      return true;
+    case SymbolKind::kUsingDeclaration: {
+      auto usingDeclaration = symbol_cast<UsingDeclarationSymbol>(symbol);
+      return is_class_or_enum_declaration(usingDeclaration->target());
+    }
+    default:
+      return false;
+  }
+}
+
+bool is_type(Symbol* symbol) {
+  if (!symbol) return false;
+  switch (symbol->kind()) {
+    case SymbolKind::kTypeParameter:
+    case SymbolKind::kConstraintTypeParameter:
+    case SymbolKind::kTemplateTypeParameter:
+    case SymbolKind::kTypeAlias:
+    case SymbolKind::kClass:
+    case SymbolKind::kInjectedClassName:
+    case SymbolKind::kEnum:
+    case SymbolKind::kScopedEnum:
+      return true;
+    case SymbolKind::kUsingDeclaration: {
+      auto usingDeclaration = symbol_cast<UsingDeclarationSymbol>(symbol);
+      return is_type(usingDeclaration->target());
+    }
+    default:
+      return false;
+  }
+}
+
+auto isDeclaredConstant(Symbol* symbol) -> bool {
+  auto isConstQualified = [](const Type* type) {
+    auto qualType = type_cast<QualType>(type);
+    return qualType && qualType->isConst();
+  };
+
+  if (auto var = symbol_cast<VariableSymbol>(symbol))
+    return var->isConstexpr() || isConstQualified(var->type());
+
+  if (auto field = symbol_cast<FieldSymbol>(symbol))
+    return field->isConstexpr() || isConstQualified(field->type());
+
+  return false;
+}
+
+auto isUsableInConstantExpressions(Symbol* symbol) -> bool {
+  auto var = symbol_cast<VariableSymbol>(symbol);
+  if (!var || !var->constValue().has_value()) return false;
+  return isDeclaredConstant(var);
+}
+}  // namespace cxx

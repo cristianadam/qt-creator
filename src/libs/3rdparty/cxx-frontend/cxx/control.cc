@@ -1,0 +1,856 @@
+// Copyright (c) 2026 Roberto Raggi <roberto.raggi@gmail.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+#include <cxx/ast.h>
+#include <cxx/control.h>
+#include <cxx/literals.h>
+#include <cxx/memory_layout.h>
+#include <cxx/names.h>
+#include <cxx/symbols.h>
+#include <cxx/translation_unit.h>
+#include <cxx/types.h>
+
+#include <cstdlib>
+#include <format>
+#include <forward_list>
+#include <set>
+#include <unordered_set>
+
+namespace cxx {
+namespace {
+[[nodiscard]] auto appendNestedNameSpecifier(
+    TranslationUnit* unit, NestedNameSpecifierAST* nestedNameSpecifier,
+    UnqualifiedIdAST* unqualifiedId) -> NestedNameSpecifierAST* {
+  if (auto nameId = ast_cast<NameIdAST>(unqualifiedId)) {
+    auto result = SimpleNestedNameSpecifierAST::create(unit->arena());
+    result->nestedNameSpecifier = nestedNameSpecifier;
+    result->identifierLoc = nameId->identifierLoc;
+    result->identifier = nameId->identifier;
+    return result;
+  }
+
+  if (auto templateId = ast_cast<SimpleTemplateIdAST>(unqualifiedId)) {
+    auto result = TemplateNestedNameSpecifierAST::create(unit->arena());
+    result->nestedNameSpecifier = nestedNameSpecifier;
+    result->templateId = templateId;
+    return result;
+  }
+
+  return nullptr;
+}
+
+template <typename Literal>
+struct LiteralHash {
+  using is_transparent = void;
+  auto operator()(const Literal& literal) const -> std::size_t {
+    return std::hash<std::string_view>{}(literal.value());
+  }
+  auto operator()(std::string_view sv) const -> std::size_t {
+    return std::hash<std::string_view>{}(sv);
+  }
+};
+
+template <typename Literal>
+struct LiteralEqualTo {
+  using is_transparent = void;
+  auto operator()(const Literal& lhs, const Literal& rhs) const -> bool {
+    return lhs.value() == rhs.value();
+  }
+  auto operator()(const Literal& lhs, std::string_view rhs) const -> bool {
+    return lhs.value() == rhs;
+  }
+  auto operator()(std::string_view lhs, const Literal& rhs) const -> bool {
+    return lhs == rhs.value();
+  }
+};
+
+template <typename Literal>
+using LiteralSet =
+    std::unordered_set<Literal, LiteralHash<Literal>, LiteralEqualTo<Literal>>;
+}  // namespace
+
+struct Control::Private {
+  explicit Private(Control*) {}
+
+  std::unordered_set<ClassSymbol*> copyConstructorSelections;
+
+  int closureNameCount = 0;
+
+  MemoryLayout* memoryLayout = nullptr;
+  LiteralSet<IntegerLiteral> integerLiterals;
+  LiteralSet<FloatLiteral> floatLiterals;
+  LiteralSet<StringLiteral> stringLiterals;
+  LiteralSet<CharLiteral> charLiterals;
+  LiteralSet<StringLiteral> wideStringLiterals;
+  LiteralSet<StringLiteral> utf8StringLiterals;
+  LiteralSet<StringLiteral> utf16StringLiterals;
+  LiteralSet<StringLiteral> utf32StringLiterals;
+  LiteralSet<CommentLiteral> commentLiterals;
+
+  std::unordered_set<Identifier> identifiers;
+  std::unordered_set<OperatorId> operatorIds;
+  std::unordered_set<DestructorId> destructorIds;
+  std::unordered_set<LiteralOperatorId> literalOperatorIds;
+  std::unordered_set<ConversionFunctionId> conversionFunctionIds;
+  std::unordered_set<TemplateId> templateIds;
+
+  BuiltinVaListType builtinVaListType;
+  BuiltinMetaInfoType builtinMetaInfoType;
+  VoidType voidType;
+  NullptrType nullptrType;
+  DecltypeAutoType decltypeAutoType;
+  AutoType autoType;
+  BoolType boolType;
+  SignedCharType signedCharType;
+  ShortIntType shortIntType;
+  IntType intType;
+  LongIntType longIntType;
+  LongLongIntType longLongIntType;
+  Int128Type int128Type;
+  UnsignedCharType unsignedCharType;
+  UnsignedShortIntType unsignedShortIntType;
+  UnsignedIntType unsignedIntType;
+  UnsignedLongIntType unsignedLongIntType;
+  UnsignedLongLongIntType unsignedLongLongIntType;
+  UnsignedInt128Type unsignedInt128Type;
+  CharType charType;
+  Char8Type char8Type;
+  Char16Type char16Type;
+  Char32Type char32Type;
+  WideCharType wideCharType;
+  FloatType floatType;
+  DoubleType doubleType;
+  LongDoubleType longDoubleType;
+  Float16Type float16Type;
+
+  std::set<QualType> qualTypes;
+  std::set<BoundedArrayType> boundedArrayTypes;
+  std::set<UnboundedArrayType> unboundedArrayTypes;
+  std::set<PointerType> pointerTypes;
+  std::set<LvalueReferenceType> lvalueReferenceTypes;
+  std::set<RvalueReferenceType> rvalueReferenceTypes;
+  std::set<OverloadSetType> overloadSetTypes;
+  std::set<FunctionType> functionTypes;
+  std::set<MemberObjectPointerType> memberObjectPointerTypes;
+  std::set<MemberFunctionPointerType> memberFunctionPointerTypes;
+  std::set<TypeParameterType> typeParameterTypes;
+  std::set<TemplateTypeParameterType> templateTypeParameterTypes;
+  std::set<UnresolvedNameType> unresolvedNameTypes;
+  std::set<UnresolvedBoundedArrayType> unresolvedBoundedArrayTypes;
+  std::set<UnresolvedUnderlyingType> unresolvedUnderlyingTypes;
+  std::set<UnresolvedBuiltinType> unresolvedBuiltinTypes;
+  std::set<ClassType> classTypes;
+  std::set<NamespaceType> namespaceTypes;
+  std::set<EnumType> enumTypes;
+  std::set<ScopedEnumType> scopedEnumTypes;
+  std::set<BitIntType> bitIntTypes;
+  std::set<UnsignedBitIntType> unsignedBitIntTypes;
+  std::set<UnresolvedBitIntType> unresolvedBitIntTypes;
+
+  std::set<std::vector<const Identifier*>> abiTags;
+  std::forward_list<NamespaceSymbol> namespaceSymbols;
+  std::forward_list<ConceptSymbol> conceptSymbols;
+  std::forward_list<DeductionGuideSymbol> deductionGuideSymbols;
+  std::forward_list<BaseClassSymbol> baseClassSymbols;
+  std::forward_list<InjectedClassNameSymbol> injectedClassNameSymbols;
+  std::forward_list<UnresolvedSymbol> unresolvedSymbols;
+  std::forward_list<ClassSymbol> classSymbols;
+  std::forward_list<EnumSymbol> enumSymbols;
+  std::forward_list<ScopedEnumSymbol> scopedEnumSymbols;
+  std::forward_list<OverloadSetSymbol> overloadSetSymbols;
+  std::forward_list<FunctionSymbol> functionSymbols;
+  std::forward_list<LambdaSymbol> lambdaSymbols;
+  std::forward_list<FunctionParametersSymbol> functionParametersSymbol;
+  std::forward_list<TemplateParametersSymbol> templateParametersSymbol;
+  std::forward_list<BlockSymbol> blockSymbols;
+  std::forward_list<TypeAliasSymbol> typeAliasSymbols;
+  std::forward_list<VariableSymbol> variableSymbols;
+  std::forward_list<FieldSymbol> fieldSymbols;
+  std::forward_list<ParameterSymbol> parameterSymbols;
+  std::forward_list<ParameterPackSymbol> parameterPackSymbols;
+  std::forward_list<TypeParameterSymbol> typeParameterSymbols;
+  std::forward_list<NonTypeParameterSymbol> nonTypeParameterSymbols;
+  std::forward_list<TemplateTypeParameterSymbol> templateTypeParameterSymbols;
+  std::forward_list<ConstraintTypeParameterSymbol>
+      constraintTypeParameterSymbols;
+  std::forward_list<EnumeratorSymbol> enumeratorSymbols;
+  std::forward_list<UsingDeclarationSymbol> usingDeclarationSymbols;
+  std::forward_list<NamespaceAliasSymbol> namespaceAliasSymbols;
+
+  std::forward_list<TypeTraitIdentifierInfo> typeTraitIdentifierInfos;
+  std::forward_list<UnaryBuiltinTypeInfo> unaryBuiltinTypeInfos;
+  std::forward_list<BuiltinFunctionIdentifierInfo> builtinFunctionInfos;
+  std::forward_list<BuiltinTemplateIdentifierInfo> builtinTemplateInfos;
+
+  int anonymousIdCount = 0;
+
+  [[nodiscard]] auto getIdentifier(std::string_view name) -> const Identifier* {
+    if (auto it = identifiers.find(name); it != identifiers.end()) return &*it;
+    return &*identifiers.emplace(std::string(name)).first;
+  }
+
+  void initBuiltinTypeTraits() {
+#define PROCESS_BUILTIN(id, name) \
+  getIdentifier(name)->setInfo(   \
+      &typeTraitIdentifierInfos.emplace_front(BuiltinTypeTraitKind::T_##id));
+
+    FOR_EACH_BUILTIN_TYPE_TRAIT(PROCESS_BUILTIN)
+
+#undef PROCESS_BUILTIN
+
+#define PROCESS_UNARY_BUILTIN(id, name) \
+  getIdentifier(name)->setInfo(         \
+      &unaryBuiltinTypeInfos.emplace_front(UnaryBuiltinTypeKind::T_##id));
+    FOR_EACH_UNARY_BUILTIN_TYPE_TRAIT(PROCESS_UNARY_BUILTIN)
+#undef PROCESS_UNARY_BUILTIN
+  }
+
+  void initBuiltinFunctions() {
+#define PROCESS_BUILTIN_FUNCTION(id, name) \
+  getIdentifier(name)->setInfo(            \
+      &builtinFunctionInfos.emplace_front(BuiltinFunctionKind::T_##id));
+
+    FOR_EACH_BUILTIN_FUNCTION(PROCESS_BUILTIN_FUNCTION)
+
+#undef PROCESS_BUILTIN_FUNCTION
+  }
+
+  void initBuiltinTemplates() {
+#define PROCESS_BUILTIN_TEMPLATE(id, name) \
+  getIdentifier(name)->setInfo(            \
+      &builtinTemplateInfos.emplace_front(BuiltinTemplateKind::T_##id));
+
+    FOR_EACH_BUILTIN_TEMPLATE(PROCESS_BUILTIN_TEMPLATE)
+
+#undef PROCESS_BUILTIN_TEMPLATE
+  }
+};
+
+Control::Control() : d(std::make_unique<Private>(this)) {
+  d->initBuiltinTypeTraits();
+  d->initBuiltinFunctions();
+  d->initBuiltinTemplates();
+}
+
+Control::~Control() = default;
+
+auto Control::integerLiteral(std::string_view spelling)
+    -> const IntegerLiteral* {
+  if (auto it = d->integerLiterals.find(spelling);
+      it != d->integerLiterals.end())
+    return &*it;
+  auto it = d->integerLiterals.emplace(std::string(spelling)).first;
+  it->initialize();
+  return &*it;
+}
+
+auto Control::floatLiteral(std::string_view spelling) -> const FloatLiteral* {
+  if (auto it = d->floatLiterals.find(spelling); it != d->floatLiterals.end())
+    return &*it;
+  auto it = d->floatLiterals.emplace(std::string(spelling)).first;
+  it->initialize();
+  return &*it;
+}
+
+auto Control::stringLiteral(std::string_view spelling) -> const StringLiteral* {
+  if (auto it = d->stringLiterals.find(spelling); it != d->stringLiterals.end())
+    return &*it;
+  auto it = d->stringLiterals.emplace(std::string(spelling)).first;
+  it->initialize(StringLiteralEncoding::kNone);
+  return &*it;
+}
+
+auto Control::charLiteral(std::string_view spelling) -> const CharLiteral* {
+  if (auto it = d->charLiterals.find(spelling); it != d->charLiterals.end())
+    return &*it;
+  auto it = d->charLiterals.emplace(std::string(spelling)).first;
+  it->initialize();
+  return &*it;
+}
+
+auto Control::wideStringLiteral(std::string_view spelling)
+    -> const StringLiteral* {
+  if (auto it = d->wideStringLiterals.find(spelling);
+      it != d->wideStringLiterals.end())
+    return &*it;
+  auto it = d->wideStringLiterals.emplace(std::string(spelling)).first;
+  it->initialize(StringLiteralEncoding::kWide);
+  return &*it;
+}
+
+auto Control::utf8StringLiteral(std::string_view spelling)
+    -> const StringLiteral* {
+  if (auto it = d->utf8StringLiterals.find(spelling);
+      it != d->utf8StringLiterals.end())
+    return &*it;
+  auto it = d->utf8StringLiterals.emplace(std::string(spelling)).first;
+  it->initialize(StringLiteralEncoding::kUtf8);
+  return &*it;
+}
+
+auto Control::utf16StringLiteral(std::string_view spelling)
+    -> const StringLiteral* {
+  if (auto it = d->utf16StringLiterals.find(spelling);
+      it != d->utf16StringLiterals.end())
+    return &*it;
+  auto it = d->utf16StringLiterals.emplace(std::string(spelling)).first;
+  it->initialize(StringLiteralEncoding::kUtf16);
+  return &*it;
+}
+
+auto Control::utf32StringLiteral(std::string_view spelling)
+    -> const StringLiteral* {
+  if (auto it = d->utf32StringLiterals.find(spelling);
+      it != d->utf32StringLiterals.end())
+    return &*it;
+  auto it = d->utf32StringLiterals.emplace(std::string(spelling)).first;
+  it->initialize(StringLiteralEncoding::kUtf32);
+  return &*it;
+}
+
+auto Control::commentLiteral(std::string_view spelling)
+    -> const CommentLiteral* {
+  if (auto it = d->commentLiterals.find(spelling);
+      it != d->commentLiterals.end())
+    return &*it;
+  return &*d->commentLiterals.emplace(std::string(spelling)).first;
+}
+
+auto Control::memoryLayout() const -> MemoryLayout* { return d->memoryLayout; }
+
+void Control::setMemoryLayout(MemoryLayout* memoryLayout) {
+  d->memoryLayout = memoryLayout;
+}
+
+auto Control::newAnonymousId(std::string_view base) -> const Identifier* {
+  auto id = std::string("$") + std::string(base) +
+            std::to_string(++d->anonymousIdCount);
+  return getIdentifier(id.c_str());
+}
+
+auto Control::getIdentifier(std::string_view name) -> const Identifier* {
+  return d->getIdentifier(name);
+}
+
+auto Control::getOperatorId(TokenKind op) -> const OperatorId* {
+  return &*d->operatorIds.emplace(op).first;
+}
+
+auto Control::getDestructorId(const Name* name) -> const DestructorId* {
+  return &*d->destructorIds.emplace(name).first;
+}
+
+auto Control::getLiteralOperatorId(std::string_view name)
+    -> const LiteralOperatorId* {
+  return &*d->literalOperatorIds.emplace(std::string(name)).first;
+}
+
+auto Control::getConversionFunctionId(const Type* type)
+    -> const ConversionFunctionId* {
+  return &*d->conversionFunctionIds.emplace(type).first;
+}
+
+auto Control::getTemplateId(const Name* name,
+                            std::vector<TemplateArgument> arguments)
+    -> const TemplateId* {
+  return &*d->templateIds.emplace(name, std::move(arguments)).first;
+}
+
+auto Control::getSizeType() -> const Type* { return getUnsignedLongIntType(); }
+
+auto Control::getBuiltinVaListType() -> const BuiltinVaListType* {
+  return &d->builtinVaListType;
+}
+
+auto Control::getBuiltinMetaInfoType() -> const BuiltinMetaInfoType* {
+  return &d->builtinMetaInfoType;
+}
+
+auto Control::getVoidType() -> const VoidType* { return &d->voidType; }
+
+auto Control::getNullptrType() -> const NullptrType* { return &d->nullptrType; }
+
+auto Control::getDecltypeAutoType() -> const DecltypeAutoType* {
+  return &d->decltypeAutoType;
+}
+
+auto Control::getAutoType() -> const AutoType* { return &d->autoType; }
+
+auto Control::getBoolType() -> const BoolType* { return &d->boolType; }
+
+auto Control::getSignedCharType() -> const SignedCharType* {
+  return &d->signedCharType;
+}
+
+auto Control::getShortIntType() -> const ShortIntType* {
+  return &d->shortIntType;
+}
+
+auto Control::getIntType() -> const IntType* { return &d->intType; }
+
+auto Control::getLongIntType() -> const LongIntType* { return &d->longIntType; }
+
+auto Control::getLongLongIntType() -> const LongLongIntType* {
+  return &d->longLongIntType;
+}
+
+auto Control::getInt128Type() -> const Int128Type* { return &d->int128Type; }
+
+auto Control::getUnsignedCharType() -> const UnsignedCharType* {
+  return &d->unsignedCharType;
+}
+
+auto Control::getUnsignedShortIntType() -> const UnsignedShortIntType* {
+  return &d->unsignedShortIntType;
+}
+
+auto Control::getUnsignedIntType() -> const UnsignedIntType* {
+  return &d->unsignedIntType;
+}
+
+auto Control::getUnsignedLongIntType() -> const UnsignedLongIntType* {
+  return &d->unsignedLongIntType;
+}
+
+auto Control::getUnsignedLongLongIntType() -> const UnsignedLongLongIntType* {
+  return &d->unsignedLongLongIntType;
+}
+
+auto Control::getUnsignedInt128Type() -> const UnsignedInt128Type* {
+  return &d->unsignedInt128Type;
+}
+
+auto Control::getCharType() -> const CharType* { return &d->charType; }
+
+auto Control::getChar8Type() -> const Char8Type* { return &d->char8Type; }
+
+auto Control::getChar16Type() -> const Char16Type* { return &d->char16Type; }
+
+auto Control::getChar32Type() -> const Char32Type* { return &d->char32Type; }
+
+auto Control::getWideCharType() -> const WideCharType* {
+  return &d->wideCharType;
+}
+
+auto Control::getFloatType() -> const FloatType* { return &d->floatType; }
+
+auto Control::getDoubleType() -> const DoubleType* { return &d->doubleType; }
+
+auto Control::getLongDoubleType() -> const LongDoubleType* {
+  return &d->longDoubleType;
+}
+
+auto Control::getFloat16Type() -> const Float16Type* { return &d->float16Type; }
+
+auto Control::getQualType(const Type* elementType, CvQualifiers cvQualifiers)
+    -> const QualType* {
+  if (auto qualType = type_cast<QualType>(elementType)) {
+    cvQualifiers |= qualType->cvQualifiers();
+    elementType = qualType->elementType();
+  }
+
+  return &*d->qualTypes.emplace(elementType, cvQualifiers).first;
+}
+
+auto Control::getBoundedArrayType(const Type* elementType, std::size_t size)
+    -> const BoundedArrayType* {
+  return &*d->boundedArrayTypes.emplace(elementType, size).first;
+}
+
+auto Control::getUnboundedArrayType(const Type* elementType)
+    -> const UnboundedArrayType* {
+  return &*d->unboundedArrayTypes.emplace(elementType).first;
+}
+
+auto Control::getPointerType(const Type* elementType) -> const PointerType* {
+  return &*d->pointerTypes.emplace(elementType).first;
+}
+
+auto Control::getLvalueReferenceType(const Type* elementType)
+    -> const LvalueReferenceType* {
+  return &*d->lvalueReferenceTypes.emplace(elementType).first;
+}
+
+auto Control::getRvalueReferenceType(const Type* elementType)
+    -> const RvalueReferenceType* {
+  return &*d->rvalueReferenceTypes.emplace(elementType).first;
+}
+
+auto Control::getOverloadSetType(OverloadSetSymbol* symbol)
+    -> const OverloadSetType* {
+  return &*d->overloadSetTypes.emplace(symbol).first;
+}
+
+auto Control::getFunctionType(const Type* returnType,
+                              std::vector<const Type*> parameterTypes,
+                              bool isVariadic, CvQualifiers cvQualifiers,
+                              RefQualifier refQualifier, bool isNoexcept)
+    -> const FunctionType* {
+  return &*d->functionTypes
+               .emplace(returnType, std::move(parameterTypes), isVariadic,
+                        cvQualifiers, refQualifier, isNoexcept)
+               .first;
+}
+
+auto Control::getMemberObjectPointerType(const Type* classType,
+                                         const Type* elementType)
+    -> const MemberObjectPointerType* {
+  return &*d->memberObjectPointerTypes.emplace(classType, elementType).first;
+}
+
+auto Control::getMemberFunctionPointerType(const Type* classType,
+                                           const FunctionType* functionType)
+    -> const MemberFunctionPointerType* {
+  return &*d->memberFunctionPointerTypes.emplace(classType, functionType).first;
+}
+
+auto Control::getDependentType() -> const TypeParameterType* {
+  return getTypeParameterType(-1, -1, false);
+}
+
+auto Control::getTypeParameterType(int index, int depth, bool isParameterPack)
+    -> const TypeParameterType* {
+  return &*d->typeParameterTypes.emplace(index, depth, isParameterPack).first;
+}
+
+auto Control::getTemplateTypeParameterType(
+    int index, int depth, bool isPack,
+    std::vector<const Type*> templateParameters)
+    -> const TemplateTypeParameterType* {
+  return &*d->templateTypeParameterTypes
+               .emplace(index, depth, isPack, std::move(templateParameters))
+               .first;
+}
+
+auto Control::getUnresolvedNameType(TranslationUnit* unit,
+                                    NestedNameSpecifierAST* nestedNameSpecifier,
+                                    UnqualifiedIdAST* unqualifiedId)
+    -> const UnresolvedNameType* {
+  while (nestedNameSpecifier) {
+    auto alias = symbol_cast<TypeAliasSymbol>(nestedNameSpecifier->symbol);
+    auto expansion =
+        alias ? type_cast<UnresolvedNameType>(alias->type()) : nullptr;
+    if (!expansion) break;
+    auto expandedQualifier = appendNestedNameSpecifier(
+        unit, expansion->nestedNameSpecifier(), expansion->unqualifiedId());
+    if (!expandedQualifier) break;
+    nestedNameSpecifier = expandedQualifier;
+  }
+
+  return &*d->unresolvedNameTypes
+               .emplace(unit, nestedNameSpecifier, unqualifiedId)
+               .first;
+}
+
+auto Control::getUnresolvedBoundedArrayType(TranslationUnit* unit,
+                                            const Type* elementType,
+                                            ExpressionAST* sizeExpression)
+    -> const UnresolvedBoundedArrayType* {
+  return &*d->unresolvedBoundedArrayTypes
+               .emplace(unit, elementType, sizeExpression)
+               .first;
+}
+
+auto Control::getUnresolvedUnderlyingType(TranslationUnit* unit,
+                                          TypeIdAST* typeId)
+    -> const UnresolvedUnderlyingType* {
+  return &*d->unresolvedUnderlyingTypes.emplace(unit, typeId).first;
+}
+
+auto Control::getUnresolvedBuiltinType(TranslationUnit* unit,
+                                       UnaryBuiltinTypeKind builtinKind,
+                                       TypeIdAST* typeId)
+    -> const UnresolvedBuiltinType* {
+  return &*d->unresolvedBuiltinTypes.emplace(unit, builtinKind, typeId).first;
+}
+
+auto Control::getClassType(ClassSymbol* symbol) -> const ClassType* {
+  return &*d->classTypes.emplace(symbol).first;
+}
+
+auto Control::getNamespaceType(NamespaceSymbol* symbol)
+    -> const NamespaceType* {
+  return &*d->namespaceTypes.emplace(symbol).first;
+}
+
+auto Control::getEnumType(EnumSymbol* symbol) -> const EnumType* {
+  return &*d->enumTypes.emplace(symbol).first;
+}
+
+auto Control::getScopedEnumType(ScopedEnumSymbol* symbol)
+    -> const ScopedEnumType* {
+  return &*d->scopedEnumTypes.emplace(symbol).first;
+}
+
+auto Control::getBitIntType(int numBits) -> const BitIntType* {
+  return &*d->bitIntTypes.emplace(numBits).first;
+}
+
+auto Control::getUnsignedBitIntType(int numBits) -> const UnsignedBitIntType* {
+  return &*d->unsignedBitIntTypes.emplace(numBits).first;
+}
+
+auto Control::getUnresolvedBitIntType(TranslationUnit* unit,
+                                      ExpressionAST* sizeExpression,
+                                      bool isUnsigned)
+    -> const UnresolvedBitIntType* {
+  return &*d->unresolvedBitIntTypes.emplace(unit, sizeExpression, isUnsigned)
+               .first;
+}
+
+auto Control::newNamespaceSymbol(ScopeSymbol* enclosingScope,
+                                 SourceLocation loc) -> NamespaceSymbol* {
+  auto symbol = &d->namespaceSymbols.emplace_front(enclosingScope);
+  symbol->setType(getNamespaceType(symbol));
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newConceptSymbol(ScopeSymbol* enclosingScope, SourceLocation loc)
+    -> ConceptSymbol* {
+  auto symbol = &d->conceptSymbols.emplace_front(enclosingScope);
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newDeductionGuideSymbol(ScopeSymbol* enclosingScope,
+                                      SourceLocation loc)
+    -> DeductionGuideSymbol* {
+  auto symbol = &d->deductionGuideSymbols.emplace_front(enclosingScope);
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newBaseClassSymbol(ScopeSymbol* enclosingScope,
+                                 SourceLocation loc) -> BaseClassSymbol* {
+  auto symbol = &d->baseClassSymbols.emplace_front(enclosingScope);
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newInjectedClassNameSymbol(ScopeSymbol* enclosingScope,
+                                         SourceLocation loc)
+    -> InjectedClassNameSymbol* {
+  auto symbol = &d->injectedClassNameSymbols.emplace_front(enclosingScope);
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newUnresolvedSymbol(ScopeSymbol* enclosingScope,
+                                  SourceLocation loc) -> UnresolvedSymbol* {
+  auto symbol = &d->unresolvedSymbols.emplace_front(enclosingScope);
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newClassSymbol(ScopeSymbol* enclosingScope, SourceLocation loc)
+    -> ClassSymbol* {
+  auto symbol = &d->classSymbols.emplace_front(enclosingScope);
+  symbol->setType(getClassType(symbol));
+  symbol->setLocation(loc);
+  symbol->setConstructorOverloadSet(newOverloadSetSymbol(symbol, loc));
+  return symbol;
+}
+
+auto Control::newEnumSymbol(ScopeSymbol* enclosingScope, SourceLocation loc)
+    -> EnumSymbol* {
+  auto symbol = &d->enumSymbols.emplace_front(enclosingScope);
+  symbol->setType(getEnumType(symbol));
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newScopedEnumSymbol(ScopeSymbol* enclosingScope,
+                                  SourceLocation loc) -> ScopedEnumSymbol* {
+  auto symbol = &d->scopedEnumSymbols.emplace_front(enclosingScope);
+  symbol->setType(getScopedEnumType(symbol));
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newOverloadSetSymbol(ScopeSymbol* enclosingScope,
+                                   SourceLocation loc) -> OverloadSetSymbol* {
+  auto symbol = &d->overloadSetSymbols.emplace_front(enclosingScope);
+  symbol->setType(getOverloadSetType(symbol));
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newFunctionSymbol(ScopeSymbol* enclosingScope, SourceLocation loc)
+    -> FunctionSymbol* {
+  auto symbol = &d->functionSymbols.emplace_front(enclosingScope);
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newLambdaSymbol(ScopeSymbol* enclosingScope, SourceLocation loc)
+    -> LambdaSymbol* {
+  auto symbol = &d->lambdaSymbols.emplace_front(enclosingScope);
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newFunctionParametersSymbol(ScopeSymbol* enclosingScope,
+                                          SourceLocation loc)
+    -> FunctionParametersSymbol* {
+  auto symbol = &d->functionParametersSymbol.emplace_front(enclosingScope);
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newTemplateParametersSymbol(ScopeSymbol* enclosingScope,
+                                          SourceLocation loc)
+    -> TemplateParametersSymbol* {
+  auto symbol = &d->templateParametersSymbol.emplace_front(enclosingScope);
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newBlockSymbol(ScopeSymbol* enclosingScope, SourceLocation loc)
+    -> BlockSymbol* {
+  auto symbol = &d->blockSymbols.emplace_front(enclosingScope);
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newTypeAliasSymbol(ScopeSymbol* enclosingScope,
+                                 SourceLocation loc) -> TypeAliasSymbol* {
+  auto symbol = &d->typeAliasSymbols.emplace_front(enclosingScope);
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newVariableSymbol(ScopeSymbol* enclosingScope, SourceLocation loc)
+    -> VariableSymbol* {
+  auto symbol = &d->variableSymbols.emplace_front(enclosingScope);
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::getAbiTags(std::vector<const Identifier*> tags)
+    -> const std::vector<const Identifier*>* {
+  if (tags.empty()) return nullptr;
+  return &*d->abiTags.insert(std::move(tags)).first;
+}
+
+auto Control::newFieldSymbol(ScopeSymbol* enclosingScope, SourceLocation loc)
+    -> FieldSymbol* {
+  auto symbol = &d->fieldSymbols.emplace_front(enclosingScope);
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newParameterSymbol(ScopeSymbol* enclosingScope,
+                                 SourceLocation loc) -> ParameterSymbol* {
+  auto symbol = &d->parameterSymbols.emplace_front(enclosingScope);
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newParameterPackSymbol(ScopeSymbol* enclosingScope,
+                                     SourceLocation loc)
+    -> ParameterPackSymbol* {
+  auto symbol = &d->parameterPackSymbols.emplace_front(enclosingScope);
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newTypeParameterSymbol(ScopeSymbol* enclosingScope,
+                                     SourceLocation loc, int index, int depth,
+                                     bool isParameterPack)
+    -> TypeParameterSymbol* {
+  auto symbol = &d->typeParameterSymbols.emplace_front(enclosingScope);
+  symbol->setType(getTypeParameterType(index, depth, isParameterPack));
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newTemplateTypeParameterSymbol(
+    ScopeSymbol* enclosingScope, SourceLocation loc, int index, int depth,
+    bool isPack, std::vector<const Type*> parameters)
+    -> TemplateTypeParameterSymbol* {
+  auto symbol = &d->templateTypeParameterSymbols.emplace_front(enclosingScope);
+  symbol->setType(getTemplateTypeParameterType(index, depth, isPack,
+                                               std::move(parameters)));
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newNonTypeParameterSymbol(ScopeSymbol* enclosingScope,
+                                        SourceLocation loc)
+    -> NonTypeParameterSymbol* {
+  auto symbol = &d->nonTypeParameterSymbols.emplace_front(enclosingScope);
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newConstraintTypeParameterSymbol(ScopeSymbol* enclosingScope,
+                                               SourceLocation loc, int index,
+                                               int depth, bool isParameterPack)
+    -> ConstraintTypeParameterSymbol* {
+  auto symbol =
+      &d->constraintTypeParameterSymbols.emplace_front(enclosingScope);
+  symbol->setIndex(index);
+  symbol->setDepth(depth);
+  symbol->setParameterPack(isParameterPack);
+  symbol->setType(getTypeParameterType(index, depth, isParameterPack));
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newEnumeratorSymbol(ScopeSymbol* enclosingScope,
+                                  SourceLocation loc) -> EnumeratorSymbol* {
+  auto symbol = &d->enumeratorSymbols.emplace_front(enclosingScope);
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newUsingDeclarationSymbol(ScopeSymbol* enclosingScope,
+                                        SourceLocation loc)
+    -> UsingDeclarationSymbol* {
+  auto symbol = &d->usingDeclarationSymbols.emplace_front(enclosingScope);
+  symbol->setLocation(loc);
+  return symbol;
+}
+
+auto Control::newNamespaceAliasSymbol(ScopeSymbol* enclosingScope,
+                                      SourceLocation loc)
+    -> NamespaceAliasSymbol* {
+  auto symbol = &d->namespaceAliasSymbols.emplace_front(enclosingScope);
+  symbol->setLocation(loc);
+  return symbol;
+}
+auto Control::beginCopyConstructorSelection(ClassSymbol* classSymbol) -> bool {
+  return d->copyConstructorSelections.insert(classSymbol).second;
+}
+
+void Control::endCopyConstructorSelection(ClassSymbol* classSymbol) {
+  d->copyConstructorSelections.erase(classSymbol);
+}
+
+auto Control::closureNameCount() const -> int { return d->closureNameCount; }
+
+void Control::setClosureNameCount(int count) { d->closureNameCount = count; }
+
+auto Control::newClosureName() -> const Identifier* {
+  return getIdentifier(std::format("__lambda_{}", d->closureNameCount++));
+}
+
+}  // namespace cxx

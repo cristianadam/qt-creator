@@ -1,0 +1,12102 @@
+// Copyright (c) 2026 Roberto Raggi <roberto.raggi@gmail.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+#include <cxx/ast.h>
+#include <cxx/ast_interpreter.h>
+#include <cxx/ast_rewriter.h>
+#include <cxx/control.h>
+#include <cxx/decl.h>
+#include <cxx/decl_specs.h>
+#include <cxx/dependent_types.h>
+#include <cxx/literals.h>
+#include <cxx/memory_layout.h>
+#include <cxx/name_lookup.h>
+#include <cxx/names.h>
+#include <cxx/parser.h>
+#include <cxx/parser_lookup.h>
+#include <cxx/preprocessor.h>
+#include <cxx/substitution.h>
+#include <cxx/symbols.h>
+#include <cxx/template_equivalence.h>
+#include <cxx/token.h>
+#include <cxx/type_checker.h>
+#include <cxx/type_traits.h>
+#include <cxx/types.h>
+#include <cxx/util.h>
+#include <cxx/views/symbol_chain.h>
+#include <cxx/views/symbols.h>
+
+#include <algorithm>
+#include <cstring>
+#include <format>
+#include <limits>
+#include <ranges>
+
+namespace cxx {
+namespace {
+class RecordingDiagnosticsClient : public DiagnosticsClient {
+ public:
+  void reset() { messages_.clear(); }
+
+  void reportTo(DiagnosticsClient* client) {
+    for (const auto& message : messages_) {
+      client->report(message);
+    }
+  }
+
+  auto messages() const -> const std::vector<Diagnostic>& { return messages_; }
+
+  auto takeMessages() -> std::vector<Diagnostic> {
+    return std::move(messages_);
+  }
+
+  void report(const Diagnostic& message) override {
+    messages_.push_back(message);
+  }
+
+ private:
+  std::vector<Diagnostic> messages_;
+};
+}  // namespace
+
+struct Parser::LookaheadParser {
+  Parser* p;
+  SourceLocation loc;
+  RecordingDiagnosticsClient client;
+  DiagnosticsClient* previousClient = nullptr;
+  bool committed = false;
+
+  LookaheadParser(const LookaheadParser&) = delete;
+  auto operator=(const LookaheadParser&) -> LookaheadParser& = delete;
+
+  explicit LookaheadParser(Parser* p) : p(p), loc(p->currentLocation()) {
+    previousClient = p->unit_->changeDiagnosticsClient(&client);
+  }
+
+  ~LookaheadParser() {
+    (void)p->unit_->changeDiagnosticsClient(previousClient);
+
+    if (!committed) {
+      p->record_failed_parse(loc, client.takeMessages());
+      p->rewind(loc);
+    } else {
+      client.reportTo(p->unit_->diagnosticsClient());
+    }
+  }
+
+  void commit() { committed = true; }
+};
+
+struct Parser::LoopParser {
+  Parser* p;
+  std::optional<SourceLocation> startLocation;
+  bool recovering = false;
+
+  LoopParser(const LoopParser&) = delete;
+  auto operator=(const LoopParser&) -> LoopParser& = delete;
+
+  explicit LoopParser(Parser* p) : p(p) {}
+
+  ~LoopParser() {}
+
+  void start() {
+    auto loc = p->currentLocation();
+
+    if (startLocation == loc) {
+      if (!recovering) {
+        recovering = true;
+        p->parse_error("skip spurious token");
+      }
+      loc = p->consumeToken();
+    } else {
+      recovering = false;
+    }
+
+    startLocation = loc;
+  }
+};
+
+struct Parser::TopLevelDeclarationSequence {
+  LoopParser loop;
+  List<DeclarationAST*>** it;
+  bool skipping = false;
+
+  TopLevelDeclarationSequence(Parser* p, List<DeclarationAST*>** it)
+      : loop(p), it(it) {}
+};
+
+struct Parser::ExprContext {
+  bool templParam = false;
+  bool templArg = false;
+  bool isConstantEvaluated = false;
+  bool inRequiresClause = false;
+  bool inConstraintExpression = false;
+  mutable ObjectLiteralExpressionAST* pendingObjectLiteral = nullptr;
+};
+
+struct Parser::TemplateHeadContext {
+  TemplateHeadContext(const TemplateHeadContext&) = delete;
+  auto operator=(const TemplateHeadContext&) -> TemplateHeadContext& = delete;
+
+  Parser* p;
+
+  explicit TemplateHeadContext(Parser* p) : p(p) {
+    ++p->templateParameterDepth_;
+  }
+
+  ~TemplateHeadContext() { --p->templateParameterDepth_; }
+};
+
+struct Parser::ClassSpecifierContext {
+  ClassSpecifierContext(const ClassSpecifierContext&) = delete;
+  auto operator=(const ClassSpecifierContext&)
+      -> ClassSpecifierContext& = delete;
+
+  Parser* p;
+
+  Binder::ClassBodyGuard classBody;
+
+  ClassSpecifierContext(Parser* p, ClassSymbol* classSymbol,
+                        AccessSpecifier defaultAccessSpecifier)
+      : p(p), classBody(&p->binder_, classSymbol, defaultAccessSpecifier) {
+    ++p->classDepth_;
+  }
+
+  ~ClassSpecifierContext() {
+    if (--p->classDepth_ == 0) p->completePendingFunctionDefinitions();
+  }
+};
+
+struct Parser::UncheckedInitializerContext {
+  UncheckedInitializerContext(const UncheckedInitializerContext&) = delete;
+  auto operator=(const UncheckedInitializerContext&)
+      -> UncheckedInitializerContext& = delete;
+
+  Parser* p;
+  bool active;
+  ScopeSymbol* savedBinderScope = nullptr;
+  Scope* savedLexicalScope = nullptr;
+  Binder::ClosureNamingState savedClosureNaming;
+
+  UncheckedInitializerContext(Parser* p, bool active) : p(p), active(active) {
+    if (!active) return;
+    ++p->uncheckedInitializerDepth_;
+    savedBinderScope = p->binder_.scope();
+    savedLexicalScope = p->lexicalScope_;
+    savedClosureNaming = p->binder_.closureNamingState();
+    auto blockParent = savedBinderScope;
+    if (blockParent && blockParent->isTemplateParameters()) {
+      blockParent = p->control()->newFunctionParametersSymbol(
+          blockParent, p->currentLocation());
+    }
+    p->setScope(
+        p->control()->newBlockSymbol(blockParent, p->currentLocation()));
+  }
+
+  ~UncheckedInitializerContext() {
+    if (!active) return;
+    --p->uncheckedInitializerDepth_;
+    p->binder_.setClosureNamingState(std::move(savedClosureNaming));
+    p->binder_.setScope(savedBinderScope);
+    p->lexicalScope_ = savedLexicalScope;
+  }
+};
+
+struct Parser::CombinedScopeGuard {
+  CombinedScopeGuard(const CombinedScopeGuard&) = delete;
+  auto operator=(const CombinedScopeGuard&) -> CombinedScopeGuard& = delete;
+
+  Parser* parser;
+  ScopeSymbol* savedBinderScope;
+  Scope* savedLexicalScope;
+
+  explicit CombinedScopeGuard(Parser* p)
+      : parser(p),
+        savedBinderScope(p->binder_.scope()),
+        savedLexicalScope(p->lexicalScope_) {}
+
+  CombinedScopeGuard(Parser* p, ScopeSymbol* scope)
+      : parser(p),
+        savedBinderScope(p->binder_.scope()),
+        savedLexicalScope(p->lexicalScope_) {
+    if (scope) p->setScope(scope);
+  }
+
+  ~CombinedScopeGuard() {
+    parser->binder_.setScope(savedBinderScope);
+    parser->lexicalScope_ = savedLexicalScope;
+  }
+};
+
+struct Parser::RestoredScopeChain {
+  CombinedScopeGuard guard;
+  Parser* parser;
+  int savedTemplateParameterDepth;
+
+  RestoredScopeChain(Parser* parser, ScopeSymbol* scope)
+      : guard(parser),
+        parser(parser),
+        savedTemplateParameterDepth(parser->templateParameterDepth_) {
+    parser->enterScopeChain(scope);
+    parser->templateParameterDepth_ = templateParameterDepthOf(scope);
+  }
+
+  ~RestoredScopeChain() {
+    parser->templateParameterDepth_ = savedTemplateParameterDepth;
+  }
+};
+
+struct Parser::ExplicitTemplateHeadGuard {
+  ExplicitTemplateHeadGuard(const ExplicitTemplateHeadGuard&) = delete;
+  auto operator=(const ExplicitTemplateHeadGuard&)
+      -> ExplicitTemplateHeadGuard& = delete;
+
+  Parser* parser;
+  bool active = true;
+
+  explicit ExplicitTemplateHeadGuard(Parser* p) : parser(p) {
+    parser->binder_.enterExplicitTemplateHead();
+  }
+
+  void leaveForExplicitSpecialization() {
+    if (!active) return;
+    active = false;
+    parser->binder_.leaveExplicitTemplateHead();
+  }
+
+  ~ExplicitTemplateHeadGuard() {
+    if (active) parser->binder_.leaveExplicitTemplateHead();
+  }
+};
+
+struct Parser::EnclosingTemplateHeadGuard {
+  Parser* parser;
+  TemplateDeclarationAST* savedTemplateHead;
+
+  EnclosingTemplateHeadGuard(Parser* parser,
+                             TemplateDeclarationAST* templateHead)
+      : parser(parser),
+        savedTemplateHead(std::exchange(parser->enclosingExplicitTemplateHead_,
+                                        templateHead)) {}
+
+  ~EnclosingTemplateHeadGuard() {
+    parser->enclosingExplicitTemplateHead_ = savedTemplateHead;
+  }
+};
+
+struct Parser::UnevaluatedOperandGuard {
+  Parser* parser;
+  TranslationUnit::PotentiallyEvaluatedScope unevaluated;
+
+  explicit UnevaluatedOperandGuard(Parser* parser)
+      : parser(parser), unevaluated(parser->unit_, false) {
+    ++parser->unevaluatedOperandDepth_;
+  }
+
+  ~UnevaluatedOperandGuard() { --parser->unevaluatedOperandDepth_; }
+};
+
+Parser::Parser(TranslationUnit* unit)
+    : unit_(unit), traits(unit), binder_(unit) {
+  control_ = unit_->control();
+  diagnosticClient_ = unit->diagnosticsClient();
+  lang_ = unit_->language();
+  pool_ = unit_->arena();
+  globalScope_ = unit_->globalScope();
+
+  cursor_ = 1;
+
+  moduleId_ = control_->getIdentifier("module");
+  importId_ = control_->getIdentifier("import");
+  finalId_ = control_->getIdentifier("final");
+  overrideId_ = control_->getIdentifier("override");
+
+  setScope(globalScope_);
+}
+
+Parser::~Parser() = default;
+
+auto Parser::prec(TokenKind tk) -> Parser::Prec {
+  switch (tk) {
+    default:
+      cxx_runtime_error(std::format("expected a binary operator, found {}",
+                                    Token::spell(tk)));
+
+    case TokenKind::T_DOT_STAR:
+    case TokenKind::T_MINUS_GREATER_STAR:
+      return Prec::kPm;
+
+    case TokenKind::T_STAR:
+    case TokenKind::T_SLASH:
+    case TokenKind::T_PERCENT:
+      return Prec::kMultiplicative;
+
+    case TokenKind::T_PLUS:
+    case TokenKind::T_MINUS:
+      return Prec::kAdditive;
+
+    case TokenKind::T_LESS_LESS:
+    case TokenKind::T_GREATER_GREATER:
+      return Prec::kShift;
+
+    case TokenKind::T_LESS_EQUAL_GREATER:
+      return Prec::kCompare;
+
+    case TokenKind::T_LESS_EQUAL:
+    case TokenKind::T_GREATER_EQUAL:
+    case TokenKind::T_LESS:
+    case TokenKind::T_GREATER:
+      return Prec::kRelational;
+
+    case TokenKind::T_EQUAL_EQUAL:
+    case TokenKind::T_EXCLAIM_EQUAL:
+      return Prec::kEquality;
+
+    case TokenKind::T_AMP:
+      return Prec::kAnd;
+
+    case TokenKind::T_CARET:
+      return Prec::kExclusiveOr;
+
+    case TokenKind::T_BAR:
+      return Prec::kInclusiveOr;
+
+    case TokenKind::T_AMP_AMP:
+      return Prec::kLogicalAnd;
+
+    case TokenKind::T_BAR_BAR:
+      return Prec::kLogicalOr;
+  }
+}
+
+auto Parser::LA(int n) const -> const Token& {
+  return unit_->tokenAt(SourceLocation(cursor_ + n));
+}
+
+auto Parser::match(TokenKind tk, SourceLocation& location) -> bool {
+  if (lookat(tk)) {
+    location = consumeToken();
+    return true;
+  }
+
+  location = {};
+  return false;
+}
+
+auto Parser::expect(TokenKind tk, SourceLocation& location) -> bool {
+  if (match(tk, location)) return true;
+  parse_error(std::format("expected '{}'", Token::spell(tk)));
+  return false;
+}
+
+auto Parser::config() const -> const ParserConfiguration& {
+  return unit_->config();
+}
+
+void Parser::parse_warn(std::string message) {
+  unit_->warning(SourceLocation(cursor_), std::move(message));
+}
+
+void Parser::parse_warn(SourceLocation loc, std::string message) {
+  unit_->warning(loc, std::move(message));
+}
+
+void Parser::parse_error(std::string message) {
+  if (uncheckedInitializerDepth_) return;
+  if (lastErrorCursor_ == cursor_) return;
+  lastErrorCursor_ = cursor_;
+  unit_->error(SourceLocation(cursor_), std::move(message));
+}
+
+void Parser::parse_error(SourceLocation loc, std::string message) {
+  if (uncheckedInitializerDepth_) return;
+  unit_->error(loc, std::move(message));
+}
+
+void Parser::record_failed_parse(SourceLocation start,
+                                 std::vector<Diagnostic> messages) {
+  if (messages.empty()) return;
+
+  const auto obsolete = deepestFailedParse_.reach <= start.index();
+
+  if (!obsolete && cursor_ <= deepestFailedParse_.reach) return;
+
+  deepestFailedParse_.messages = std::move(messages);
+  deepestFailedParse_.start = start.index();
+  deepestFailedParse_.reach = cursor_;
+}
+
+void Parser::report_failed_parse(std::string message) {
+  auto failedParse = std::exchange(deepestFailedParse_, {});
+
+  if (uncheckedInitializerDepth_) return;
+
+  if (failedParse.start < cursor_ || failedParse.reach <= cursor_) {
+    parse_error(std::move(message));
+    return;
+  }
+
+  if (lastErrorCursor_ == cursor_) return;
+  lastErrorCursor_ = cursor_;
+
+  for (const auto& diagnostic : failedParse.messages) {
+    const auto& token = diagnostic.token();
+    if (!reportedDiagnostics_.emplace(token.offset(), diagnostic.message())
+             .second)
+      continue;
+    unit_->diagnosticsClient()->report(diagnostic);
+  }
+}
+
+void Parser::type_error(SourceLocation loc, std::string message) {
+  if (!config().checkTypes) return;
+  unit_->error(loc, std::move(message));
+}
+
+void Parser::warning(std::string message) {
+  warning(currentLocation(), std::move(message));
+}
+
+void Parser::error(std::string message) { error(currentLocation(), message); }
+
+void Parser::warning(SourceLocation loc, std::string message) {
+  auto savedDiagnosticClient =
+      unit_->changeDiagnosticsClient(diagnosticClient_);
+  unit_->warning(loc, std::move(message));
+  (void)unit_->changeDiagnosticsClient(savedDiagnosticClient);
+}
+
+void Parser::error(SourceLocation loc, std::string message) {
+  auto savedDiagnosticClient =
+      unit_->changeDiagnosticsClient(diagnosticClient_);
+  unit_->error(loc, std::move(message));
+  (void)unit_->changeDiagnosticsClient(savedDiagnosticClient);
+}
+
+auto Parser::parse_id(const Identifier* id, SourceLocation& loc) -> bool {
+  loc = {};
+  if (!lookat(TokenKind::T_IDENTIFIER)) return false;
+  if (unit_->identifier(currentLocation()) != id) return false;
+  loc = consumeToken();
+  return true;
+}
+
+auto Parser::parse_nospace() -> bool {
+  const auto& tk = unit_->tokenAt(currentLocation());
+  return !tk.leadingSpace() && !tk.startOfLine();
+}
+
+auto Parser::parse_greater_greater() -> bool {
+  const auto saved = currentLocation();
+
+  SourceLocation greaterLoc;
+  SourceLocation secondGreaterLoc;
+
+  if (match(TokenKind::T_GREATER, greaterLoc) && parse_nospace() &&
+      match(TokenKind::T_GREATER, secondGreaterLoc)) {
+    return true;
+  }
+
+  rewind(saved);
+
+  return false;
+}
+
+auto Parser::parse_header_name(SourceLocation& loc) -> bool {
+  if (match(TokenKind::T_STRING_LITERAL, loc)) return true;
+
+  return false;
+}
+
+auto Parser::parse_export_keyword(SourceLocation& loc) -> bool {
+  if (!moduleUnit_) return false;
+  return match(TokenKind::T_EXPORT, loc);
+}
+
+auto Parser::parse_import_keyword(SourceLocation& loc) -> bool {
+  if (!moduleUnit_) return false;
+  if (match(TokenKind::T_IMPORT, loc)) return true;
+  if (!parse_id(importId_, loc)) return false;
+  unit_->setTokenKind(loc, TokenKind::T_IMPORT);
+  return true;
+}
+
+auto Parser::parse_module_keyword(SourceLocation& loc) -> bool {
+  if (!moduleUnit_) return false;
+
+  if (match(TokenKind::T_MODULE, loc)) return true;
+
+  if (!parse_id(moduleId_, loc)) return false;
+
+  unit_->setTokenKind(loc, TokenKind::T_MODULE);
+  return true;
+}
+
+auto Parser::parse_final(SourceLocation& loc) -> bool {
+  return parse_id(finalId_, loc);
+}
+
+auto Parser::parse_override(SourceLocation& loc) -> bool {
+  return parse_id(overrideId_, loc);
+}
+
+auto Parser::parse_type_name(UnqualifiedIdAST*& yyast,
+                             NestedNameSpecifierAST* nestedNameSpecifier,
+                             bool isTemplateIntroduced, TypeNameContext context)
+    -> bool {
+  auto lookat_simple_template_id = [&] {
+    LookaheadParser lookahead{this};
+    SimpleTemplateIdAST* templateId = nullptr;
+    if (!parse_simple_template_id(templateId, nestedNameSpecifier,
+                                  isTemplateIntroduced, {}, context))
+      return false;
+    yyast = templateId;
+    lookahead.commit();
+    return true;
+  };
+
+  if (lookat_simple_template_id()) return true;
+
+  NameIdAST* nameId = nullptr;
+  if (!parse_name_id(nameId)) return false;
+
+  yyast = nameId;
+  return true;
+}
+
+auto Parser::parse_name_id(NameIdAST*& yyast) -> bool {
+  SourceLocation identifierLoc;
+
+  if (!match(TokenKind::T_IDENTIFIER, identifierLoc)) return false;
+
+  auto ast = NameIdAST::create(pool_);
+  yyast = ast;
+
+  ast->identifierLoc = identifierLoc;
+  ast->identifier = unit_->identifier(ast->identifierLoc);
+
+  return true;
+}
+
+auto Parser::parse_literal(ExpressionAST*& yyast) -> bool {
+  switch (TokenKind(LA())) {
+    case TokenKind::T_CHARACTER_LITERAL: {
+      auto ast = CharLiteralExpressionAST::create(pool_);
+      yyast = ast;
+
+      ast->literalLoc = consumeToken();
+      ast->literal =
+          static_cast<const CharLiteral*>(unit_->literal(ast->literalLoc));
+
+      auto prefix = ast->literal->components().prefix;
+
+      if (isCxx()) {
+        if (prefix == "u8")
+          ast->type = control_->getChar8Type();
+        else if (prefix == "u")
+          ast->type = control_->getChar16Type();
+        else if (prefix == "U")
+          ast->type = control_->getChar32Type();
+        else if (prefix == "L")
+          ast->type = control_->getWideCharType();
+        else
+          ast->type = control_->getCharType();
+      } else {
+        ast->type = control_->getIntType();
+      }
+
+      return true;
+    }
+
+    case TokenKind::T_TRUE:
+    case TokenKind::T_FALSE: {
+      auto ast = BoolLiteralExpressionAST::create(pool_);
+      yyast = ast;
+
+      const auto isTrue = lookat(TokenKind::T_TRUE);
+
+      ast->literalLoc = consumeToken();
+      ast->isTrue = isTrue;
+      ast->type = control_->getBoolType();
+
+      return true;
+    }
+
+    case TokenKind::T_INTEGER_LITERAL: {
+      auto ast = IntLiteralExpressionAST::create(pool_);
+      yyast = ast;
+
+      ast->literalLoc = consumeToken();
+
+      ast->literal =
+          static_cast<const IntegerLiteral*>(unit_->literal(ast->literalLoc));
+
+      const auto& components = ast->literal->components();
+
+      if (components.isWB) {
+        if (components.isUnsigned)
+          ast->type = control_->getUnsignedBitIntType(components.bitIntWidth);
+        else
+          ast->type = control_->getBitIntType(components.bitIntWidth);
+      } else if (components.isLongLong && components.isUnsigned)
+        ast->type = control_->getUnsignedLongLongIntType();
+      else if (components.isLongLong)
+        ast->type = control_->getLongLongIntType();
+      else if (components.isLong && components.isUnsigned)
+        ast->type = control_->getUnsignedLongIntType();
+      else if (components.isLong)
+        ast->type = control_->getLongIntType();
+      else if (components.isUnsigned) {
+        const auto v = ast->literal->integerValue();
+        if (v <= std::numeric_limits<unsigned int>::max())
+          ast->type = control_->getUnsignedIntType();
+        else if (v <= std::numeric_limits<unsigned long>::max())
+          ast->type = control_->getUnsignedLongIntType();
+        else
+          ast->type = control_->getUnsignedLongLongIntType();
+      } else {
+        const auto v = ast->literal->integerValue();
+        const bool isDecimal =
+            components.radix == IntegerLiteral::Radix::kDecimal;
+        if (v <= static_cast<uint64_t>(std::numeric_limits<int>::max()))
+          ast->type = control_->getIntType();
+        else if (!isDecimal && v <= std::numeric_limits<unsigned int>::max())
+          ast->type = control_->getUnsignedIntType();
+        else if (v <= static_cast<uint64_t>(std::numeric_limits<long>::max()))
+          ast->type = control_->getLongIntType();
+        else if (!isDecimal && v <= std::numeric_limits<unsigned long>::max())
+          ast->type = control_->getUnsignedLongIntType();
+        else if (v <=
+                 static_cast<uint64_t>(std::numeric_limits<long long>::max()))
+          ast->type = control_->getLongLongIntType();
+        else
+          ast->type = control_->getUnsignedLongLongIntType();
+      }
+
+      return true;
+    }
+
+    case TokenKind::T_FLOATING_POINT_LITERAL: {
+      auto ast = FloatLiteralExpressionAST::create(pool_);
+      yyast = ast;
+
+      ast->literalLoc = consumeToken();
+
+      ast->literal =
+          static_cast<const FloatLiteral*>(unit_->literal(ast->literalLoc));
+
+      const auto& components = ast->literal->components();
+
+      if (components.isLongDouble)
+        ast->type = control_->getLongDoubleType();
+      else if (components.isDouble)
+        ast->type = control_->getDoubleType();
+      else if (components.isFloat)
+        ast->type = control_->getFloatType();
+      else
+        ast->type = control_->getDoubleType();
+
+      return true;
+    }
+
+    case TokenKind::T_NULLPTR: {
+      auto ast = NullptrLiteralExpressionAST::create(pool_);
+      yyast = ast;
+
+      ast->literalLoc = consumeToken();
+      ast->literal = unit_->tokenKind(ast->literalLoc);
+      ast->type = control_->getNullptrType();
+
+      return true;
+    }
+
+    case TokenKind::T_USER_DEFINED_STRING_LITERAL: {
+      auto ast = UserDefinedStringLiteralExpressionAST::create(pool_);
+      yyast = ast;
+
+      ast->literalLoc = consumeToken();
+
+      ast->literal =
+          static_cast<const StringLiteral*>(unit_->literal(ast->literalLoc));
+
+      return true;
+    }
+
+    case TokenKind::T_WIDE_STRING_LITERAL:
+    case TokenKind::T_UTF8_STRING_LITERAL:
+    case TokenKind::T_UTF16_STRING_LITERAL:
+    case TokenKind::T_UTF32_STRING_LITERAL:
+    case TokenKind::T_STRING_LITERAL: {
+      auto literalLoc = consumeToken();
+      auto tokenKind = unit_->tokenKind(literalLoc);
+
+      auto ast = StringLiteralExpressionAST::create(pool_);
+      yyast = ast;
+
+      ast->literalLoc = literalLoc;
+      ast->literal =
+          static_cast<const StringLiteral*>(unit_->literal(literalLoc));
+      ast->encoding = tokenKind;
+
+      const Type* elementType = nullptr;
+      std::size_t extent = 0;
+
+      switch (tokenKind) {
+        case TokenKind::T_STRING_LITERAL:
+          elementType = control_->getCharType();
+          extent = ast->literal->charCount() + 1;
+          break;
+        case TokenKind::T_UTF8_STRING_LITERAL:
+          elementType = control_->getChar8Type();
+          extent = ast->literal->charCount() + 1;
+          break;
+        case TokenKind::T_UTF16_STRING_LITERAL:
+          elementType = control_->getChar16Type();
+          extent = ast->literal->charCount() + 1;
+          break;
+        case TokenKind::T_UTF32_STRING_LITERAL:
+          elementType = control_->getChar32Type();
+          extent = ast->literal->charCount() + 1;
+          break;
+        case TokenKind::T_WIDE_STRING_LITERAL: {
+          if (isC()) {
+            elementType = control_->getIntType();
+          } else {
+            elementType = control_->getWideCharType();
+          }
+          extent = ast->literal->charCount() + 1;
+          break;
+        }
+        default:
+          elementType = control_->getCharType();
+          extent = ast->literal->charCount() + 1;
+          break;
+      }
+
+      if (isCxx()) elementType = traits.add_const(elementType);
+
+      ast->type = control_->getBoundedArrayType(elementType, extent);
+      ast->valueCategory = ValueCategory::kLValue;
+
+      return true;
+    }
+
+    default:
+      return false;
+  }
+}
+
+void Parser::beginParsing(UnitAST*& yyast) {
+  if (parse_module_unit(yyast)) return;
+
+  auto ast = TranslationUnitAST::create(pool_);
+  yyast = ast;
+
+  moduleUnit_ = false;
+
+  topLevelDeclarationSequence_ = std::make_unique<TopLevelDeclarationSequence>(
+      this, &ast->declarationList);
+}
+
+auto Parser::continueParsing() -> ParsingState {
+  if (!topLevelDeclarationSequence_) return ParsingComplete{};
+
+  auto& sequence = *topLevelDeclarationSequence_;
+
+  if (!LA()) return ParsingComplete{};
+  if (shouldStopParsing()) return ParsingComplete{};
+
+  sequence.loop.start();
+
+  DeclarationAST* declaration = nullptr;
+
+  if (!parse_declaration(declaration, BindingContext::kNamespace)) {
+    parse_skip_declaration(sequence.skipping);
+    return CanContinueParsing{};
+  }
+
+  sequence.skipping = false;
+
+  if (declaration) {
+    *sequence.it = make_list_node(pool_, declaration);
+    sequence.it = &(*sequence.it)->next;
+  }
+
+  return CanContinueParsing{};
+}
+
+void Parser::endParsing() {
+  topLevelDeclarationSequence_.reset();
+  ASTRewriter::completePendingMemberInstantiations(unit_);
+}
+
+auto Parser::parse_module_head() -> bool {
+  const auto start = currentLocation();
+
+  SourceLocation exportLoc;
+
+  match(TokenKind::T_EXPORT, exportLoc);
+
+  SourceLocation moduleLoc;
+
+  const auto is_module = parse_id(moduleId_, moduleLoc);
+
+  rewind(start);
+
+  return is_module;
+}
+
+auto Parser::parse_module_unit(UnitAST*& yyast) -> bool {
+  moduleUnit_ = true;
+
+  if (!parse_module_head()) return false;
+
+  auto ast = ModuleUnitAST::create(pool_);
+  yyast = ast;
+
+  parse_global_module_fragment(ast->globalModuleFragment);
+
+  if (!parse_module_declaration(ast->moduleDeclaration)) {
+    parse_error("expected a module declaration");
+  }
+
+  parse_declaration_seq(ast->declarationList);
+
+  parse_private_module_fragment(ast->privateModuleFragment);
+
+  SourceLocation eofLoc;
+
+  expect(TokenKind::T_EOF_SYMBOL, eofLoc);
+
+  return true;
+}
+
+void Parser::parse_declaration_seq(List<DeclarationAST*>*& yyast) {
+  auto it = &yyast;
+
+  LoopParser loop(this);
+
+  bool skipping = false;
+
+  while (LA()) {
+    if (shouldStopParsing()) break;
+
+    if (lookat(TokenKind::T_RBRACE)) break;
+
+    if (parse_maybe_module()) break;
+
+    loop.start();
+
+    DeclarationAST* declaration = nullptr;
+
+    if (parse_declaration(declaration, BindingContext::kNamespace)) {
+      skipping = false;
+
+      if (declaration) {
+        *it = make_list_node(pool_, declaration);
+        it = &(*it)->next;
+      }
+    } else {
+      parse_skip_declaration(skipping);
+    }
+  }
+}
+
+void Parser::parse_skip_declaration(bool& skipping) {
+  if (lookat(TokenKind::T_RBRACE)) return;
+  if (lookat(TokenKind::T_MODULE)) return;
+  if (moduleUnit_ && lookat(TokenKind::T_EXPORT)) return;
+  if (lookat(TokenKind::T_IMPORT)) return;
+  if (!skipping) report_failed_parse("expected a declaration");
+  int depth = 0;
+  for (; LA(); consumeToken()) {
+    if (lookat(TokenKind::T_LBRACE)) {
+      ++depth;
+    } else if (lookat(TokenKind::T_RBRACE)) {
+      if (depth == 0) break;
+      --depth;
+    } else if (depth == 0 && lookat(TokenKind::T_SEMICOLON)) {
+      consumeToken();
+      break;
+    }
+  }
+  skipping = true;
+}
+
+void Parser::parse_skip_member_declaration(bool& skipping) {
+  if (!LA()) return;
+  if (lookat(TokenKind::T_RBRACE)) return;
+  if (!skipping) report_failed_parse("expected a declaration");
+  int depth = 0;
+  for (; LA(); consumeToken()) {
+    if (lookat(TokenKind::T_LBRACE)) {
+      ++depth;
+    } else if (lookat(TokenKind::T_RBRACE)) {
+      if (depth == 0) break;
+      --depth;
+    } else if (depth == 0 && lookat(TokenKind::T_SEMICOLON)) {
+      consumeToken();
+      break;
+    }
+  }
+  skipping = true;
+}
+
+auto Parser::parse_completion(SourceLocation& loc) -> bool {
+  if (didAcceptCompletionToken_) return false;
+
+  if (!config().complete) return false;
+
+  if (!match(TokenKind::T_CODE_COMPLETION, loc)) return false;
+
+  didAcceptCompletionToken_ = true;
+
+  return true;
+}
+
+namespace {
+
+auto functionCandidatesOf(Symbol* symbol) -> std::vector<FunctionSymbol*> {
+  auto functions = views::each_function(symbol);
+  return std::vector<FunctionSymbol*>(functions.begin(), functions.end());
+}
+
+auto calleeCandidatesOf(ExpressionAST* callee) -> std::vector<FunctionSymbol*> {
+  if (auto idExpression = ast_cast<IdExpressionAST>(callee)) {
+    return functionCandidatesOf(idExpression->symbol);
+  }
+
+  if (auto memberExpression = ast_cast<MemberExpressionAST>(callee)) {
+    return functionCandidatesOf(memberExpression->symbol);
+  }
+
+  return {};
+}
+
+auto isOpeningDelimiter(TokenKind kind) -> bool {
+  switch (kind) {
+    case TokenKind::T_LPAREN:
+    case TokenKind::T_LBRACKET:
+    case TokenKind::T_LBRACE:
+      return true;
+    default:
+      return false;
+  }
+}
+
+auto isClosingDelimiter(TokenKind kind) -> bool {
+  switch (kind) {
+    case TokenKind::T_RPAREN:
+    case TokenKind::T_RBRACKET:
+    case TokenKind::T_RBRACE:
+      return true;
+    default:
+      return false;
+  }
+}
+
+auto typeOfSymbol(Symbol* symbol) -> const Type* {
+  if (!symbol) return nullptr;
+  return symbol->type();
+}
+
+}  // namespace
+
+auto Parser::isCompletionRequested() const -> bool {
+  if (!config().complete) return false;
+  return unit_->preprocessor()->hasCodeCompletionRequest();
+}
+
+auto Parser::findCompletionToken(int startOffset, TokenKind closingDelimiter)
+    -> std::optional<CompletionTokenPosition> {
+  if (!isCompletionRequested()) return std::nullopt;
+
+  CompletionTokenPosition position;
+
+  int depth = 0;
+  bool atStartOfArgument = true;
+  bool afterLeadingDot = false;
+
+  for (int n = startOffset;; ++n) {
+    const auto kind = LA(n).kind();
+
+    if (kind == TokenKind::T_EOF_SYMBOL) return std::nullopt;
+
+    if (kind == TokenKind::T_CODE_COMPLETION && depth == 0) {
+      position.isDesignator = afterLeadingDot;
+      return position;
+    }
+
+    const auto startsArgument = atStartOfArgument;
+
+    atStartOfArgument = false;
+    afterLeadingDot = false;
+
+    if (isOpeningDelimiter(kind)) {
+      ++depth;
+      continue;
+    }
+
+    if (isClosingDelimiter(kind)) {
+      if (depth == 0) return std::nullopt;
+      --depth;
+      continue;
+    }
+
+    if (depth != 0) continue;
+
+    if (kind == closingDelimiter) return std::nullopt;
+
+    if (kind == TokenKind::T_COMMA) {
+      ++position.argumentIndex;
+      atStartOfArgument = true;
+      continue;
+    }
+
+    if (kind == TokenKind::T_DOT) afterLeadingDot = startsArgument;
+  }
+}
+
+void Parser::checkSignatureHelp(ExpressionAST* callee) {
+  if (!callee) return;
+
+  auto position = findCompletionToken(0, TokenKind::T_RPAREN);
+  if (!position) return;
+
+  checkSignatureHelp(calleeCandidatesOf(callee), position->argumentIndex);
+}
+
+void Parser::checkSignatureHelp(std::vector<FunctionSymbol*> candidates,
+                                int activeParameter) {
+  if (candidates.empty()) return;
+
+  config().complete(ArgumentHintsContext{
+      .candidates = std::move(candidates),
+      .activeParameter = activeParameter,
+  });
+}
+
+void Parser::checkTemplateSignatureHelp(Symbol* templateSymbol) {
+  if (!templateSymbol) return;
+
+  auto position = findCompletionToken(0, TokenKind::T_GREATER);
+  if (!position) return;
+
+  config().complete(TemplateArgumentHintsContext{
+      .templateSymbol = templateSymbol,
+      .activeParameter = position->argumentIndex,
+  });
+}
+
+auto Parser::constructorCandidatesOf(const Type* type)
+    -> std::vector<FunctionSymbol*> {
+  if (!type) return {};
+
+  auto classType = unqualified_cast<ClassType>(type);
+  if (!classType) return {};
+
+  auto classSymbol = classType->symbol();
+  if (!classSymbol) return {};
+
+  unit_->typeTraits().requireCompleteClass(classSymbol);
+
+  return classSymbol->resolvedDefinition()->constructors();
+}
+
+void Parser::checkInitializerCompletion(const Type* targetType) {
+  checkParenInitializerCompletion(targetType);
+  checkBracedInitializerCompletion(targetType);
+}
+
+void Parser::checkParenInitializerCompletion(const Type* targetType) {
+  if (!targetType) return;
+  if (!lookat(TokenKind::T_LPAREN)) return;
+
+  auto position = findCompletionToken(1, TokenKind::T_RPAREN);
+  if (!position) return;
+
+  checkSignatureHelp(constructorCandidatesOf(targetType),
+                     position->argumentIndex);
+}
+
+void Parser::checkMemInitializerCompletion(
+    NestedNameSpecifierAST* nestedNameSpecifier,
+    UnqualifiedIdAST* unqualifiedId) {
+  if (!isCompletionRequested()) return;
+
+  checkInitializerCompletion(
+      memInitializerTargetType(nestedNameSpecifier, unqualifiedId));
+}
+
+auto Parser::completionTargetType(SpecifierAST* typeSpecifier) -> const Type* {
+  if (!isCompletionRequested()) return nullptr;
+  if (!typeSpecifier) return nullptr;
+
+  DeclSpecs specs{unit_};
+  specs.accept(typeSpecifier);
+  specs.finish();
+
+  return specs.type();
+}
+
+auto Parser::memInitializerTargetType(
+    NestedNameSpecifierAST* nestedNameSpecifier,
+    UnqualifiedIdAST* unqualifiedId) -> const Type* {
+  auto name = get_name(control_, unqualifiedId);
+  if (!name) return nullptr;
+
+  if (nestedNameSpecifier) {
+    if (!nestedNameSpecifier->symbol) return nullptr;
+    return typeOfSymbol(qualifiedLookup(nestedNameSpecifier->symbol, name));
+  }
+
+  auto enclosingClass = scope()->enclosingClass();
+  if (!enclosingClass) return nullptr;
+
+  return typeOfSymbol(
+      qualifiedLookup(enclosingClass->resolvedDefinition(), name));
+}
+
+void Parser::checkBracedInitializerCompletion(const Type* targetType) {
+  if (!targetType) return;
+  if (!lookat(TokenKind::T_LBRACE)) return;
+
+  auto position = findCompletionToken(1, TokenKind::T_RBRACE);
+  if (!position) return;
+
+  if (position->isDesignator) {
+    config().complete(DesignatorCompletionContext{
+        .objectType = targetType,
+        .accessingScope = scope(),
+    });
+    return;
+  }
+
+  checkSignatureHelp(constructorCandidatesOf(targetType),
+                     position->argumentIndex);
+}
+
+auto Parser::parse_primary_expression(ExpressionAST*& yyast,
+                                      const ExprContext& ctx) -> bool {
+  if (SourceLocation completionLoc; parse_completion(completionLoc)) {
+    config().complete(UnqualifiedCompletionContext{.scope = scope()});
+    return false;
+  }
+
+  if (parse_pack_index_expression(yyast, ctx)) return true;
+  if (parse_builtin_call_expression(yyast, ctx)) return true;
+  if (parse_builtin_offsetof_expression(yyast, ctx)) return true;
+  if (parse_generic_selection_expression(yyast, ctx)) return true;
+  if (parse_this_expression(yyast)) return true;
+  if (parse_literal(yyast)) return true;
+  if (parse_lambda_expression(yyast)) return true;
+  if (parse_requires_expression(yyast)) return true;
+  if (lookat(TokenKind::T_LPAREN, TokenKind::T_RPAREN)) return false;
+  if (parse_fold_expression(yyast, ctx)) return true;
+  if (parse_nested_expession(yyast, ctx)) return true;
+  auto idExpressionContext = IdExpressionContext::kExpression;
+  if (ctx.inRequiresClause)
+    idExpressionContext = IdExpressionContext::kRequiresClause;
+
+  if (IdExpressionAST* idExpression = nullptr;
+      parse_id_expression(idExpression, idExpressionContext)) {
+    yyast = idExpression;
+    if (!ctx.inConstraintExpression)
+      yyast = fold_concept_id(unit_, idExpression);
+    return true;
+  }
+
+  if (parse_splicer_expression(yyast, ctx)) return true;
+  return false;
+}
+
+auto Parser::parse_splicer(SplicerAST*& yyast) -> bool {
+  if (!lookat(TokenKind::T_LBRACKET, TokenKind::T_COLON)) return false;
+
+  auto ast = SplicerAST::create(pool_);
+  yyast = ast;
+  ast->lbracketLoc = consumeToken();
+  ast->colonLoc = consumeToken();
+  match(TokenKind::T_DOT_DOT_DOT, ast->ellipsisLoc);
+  std::optional<ConstValue> value;
+  if (!parse_constant_expression(ast->expression, value)) {
+    parse_error("expected a constant expression");
+  }
+  expect(TokenKind::T_COLON, ast->secondColonLoc);
+  expect(TokenKind::T_RBRACKET, ast->rbracketLoc);
+  return true;
+}
+
+auto Parser::parse_splicer_expression(ExpressionAST*& yyast,
+                                      const ExprContext& ctx) -> bool {
+  SplicerAST* splicer = nullptr;
+  if (!parse_splicer(splicer)) return false;
+  auto ast = SpliceExpressionAST::create(pool_);
+  yyast = ast;
+  ast->splicer = splicer;
+  check(ast);
+  return true;
+}
+
+auto Parser::parse_reflect_expression(ExpressionAST*& yyast,
+                                      const ExprContext& ctx) -> bool {
+  SourceLocation caretCaretLoc;
+
+  if (!match(TokenKind::T_CARET_CARET, caretCaretLoc)) return false;
+
+  auto lookat_namespace_name = [&] {
+    LookaheadParser lookahead{this};
+    SourceLocation identifierLoc;
+    if (!match(TokenKind::T_IDENTIFIER, identifierLoc)) return false;
+    auto identifier = unit_->identifier(identifierLoc);
+    auto symbol = symbol_cast<NamespaceSymbol>(
+        unqualifiedLookup(lexicalScope(), identifier));
+    if (!symbol) return false;
+    lookahead.commit();
+
+    auto ast = NamespaceReflectExpressionAST::create(pool_);
+    yyast = ast;
+    ast->caretCaretLoc = caretCaretLoc;
+    ast->identifierLoc = identifierLoc;
+    ast->identifier = identifier;
+    ast->symbol = symbol;
+    check(ast);
+    return true;
+  };
+
+  auto lookat_type_id = [&] {
+    LookaheadParser lookahead{this};
+    TypeIdAST* typeId = nullptr;
+    if (!parse_type_id(typeId)) return false;
+    lookahead.commit();
+
+    auto ast = TypeIdReflectExpressionAST::create(pool_);
+    yyast = ast;
+    ast->caretCaretLoc = caretCaretLoc;
+    ast->typeId = typeId;
+    check(ast);
+    return true;
+  };
+
+  auto lookat_expression = [&] {
+    LookaheadParser lookahead{this};
+    ExpressionAST* expression = nullptr;
+    if (!parse_cast_expression(expression, ctx)) return false;
+    lookahead.commit();
+
+    auto ast = ReflectExpressionAST::create(pool_);
+    yyast = ast;
+    ast->caretCaretLoc = caretCaretLoc;
+    ast->expression = expression;
+    check(ast);
+    return true;
+  };
+
+  if (SourceLocation scopeLoc; match(TokenKind::T_COLON_COLON, scopeLoc)) {
+    auto ast = GlobalScopeReflectExpressionAST::create(pool_);
+    yyast = ast;
+    ast->caretCaretLoc = caretCaretLoc;
+    ast->scopeLoc = scopeLoc;
+    check(ast);
+    return true;
+  }
+
+  if (lookat_namespace_name()) return true;
+  if (lookat_type_id()) return true;
+  if (lookat_expression()) return true;
+
+  parse_error("expected a reflacted expression");
+
+  return true;
+}
+
+auto Parser::parse_id_expression(IdExpressionAST*& yyast,
+                                 IdExpressionContext ctx) -> bool {
+  LookaheadParser lookahead{this};
+
+  NestedNameSpecifierAST* nestedNameSpecifier = nullptr;
+  parse_optional_nested_name_specifier(
+      nestedNameSpecifier, NestedNameSpecifierContext::kNonDeclarative);
+
+  SourceLocation templateLoc;
+  const auto isTemplateIntroduced = match(TokenKind::T_TEMPLATE, templateLoc);
+
+  const auto inRequiresClause = ctx == IdExpressionContext::kRequiresClause;
+
+  UnqualifiedIdAST* unqualifiedId = nullptr;
+  if (!parse_unqualified_id(unqualifiedId, nestedNameSpecifier,
+                            isTemplateIntroduced, inRequiresClause))
+    return false;
+
+  lookahead.commit();
+
+  auto ast = IdExpressionAST::create(pool_);
+  yyast = ast;
+
+  ast->nestedNameSpecifier = nestedNameSpecifier;
+  ast->templateLoc = templateLoc;
+  ast->unqualifiedId = unqualifiedId;
+  ast->isTemplateIntroduced = isTemplateIntroduced;
+
+  if (!nestedNameSpecifier) {
+    auto name = get_name(control_, ast->unqualifiedId);
+    const Name* componentName = name;
+    if (auto templateId = name_cast<TemplateId>(name)) {
+      componentName = templateId->name();
+    }
+
+    if (ctx == IdExpressionContext::kExpression) {
+      auto nonTagSymbol = unqualifiedLookup(
+          lexicalScope_, componentName,
+          [](Symbol* s) { return !symbol_cast<ClassSymbol>(s); });
+      ast->symbol = nonTagSymbol
+                        ? nonTagSymbol
+                        : unqualifiedLookup(lexicalScope_, componentName);
+    } else {
+      ast->symbol = unqualifiedLookup(lexicalScope_, componentName);
+    }
+  }
+
+  const auto mayUseArgumentDependentLookup =
+      ctx == IdExpressionContext::kExpression && lookat(TokenKind::T_LPAREN);
+
+  binder_.bind(ast, mayUseArgumentDependentLookup);
+
+  if (ctx == IdExpressionContext::kExpression) {
+    check(ast);
+  }
+
+  return true;
+}
+
+auto Parser::memberAccess(ExpressionAST* objectExpression, TokenKind accessOp)
+    -> MemberAccess {
+  MemberAccess access;
+  access.isMember = true;
+  if (!objectExpression || !config().checkTypes) return access;
+
+  auto traits = unit_->typeTraits();
+  access.isDependent = isDependent(unit_, objectExpression->type);
+
+  auto objectType = traits.remove_cvref(objectExpression->type);
+  if (accessOp == TokenKind::T_MINUS_GREATER) {
+    auto pointerType = type_cast<PointerType>(objectType);
+    if (!pointerType) return access;
+    objectType = traits.remove_cv(pointerType->elementType());
+  }
+
+  auto classType = type_cast<ClassType>(objectType);
+  if (classType) access.lookupScope = classType->symbol();
+  return access;
+}
+
+auto Parser::parse_unqualified_id(UnqualifiedIdAST*& yyast,
+                                  NestedNameSpecifierAST* nestedNameSpecifier,
+                                  bool isTemplateIntroduced,
+                                  bool inRequiresClause,
+                                  MemberAccess memberAccess) -> bool {
+  if (nestedNameSpecifier) {
+    if (SourceLocation completionLoc; parse_completion(completionLoc)) {
+      if (auto symbol = nestedNameSpecifier->symbol) {
+        if (auto scope = symbol->asScopeSymbol()) {
+          config().complete(ScopeCompletionContext{
+              .scope = scope,
+              .accessingScope = this->scope(),
+          });
+        }
+      }
+    }
+  }
+
+  if (isCxx()) {
+    if (SourceLocation tildeLoc; match(TokenKind::T_TILDE, tildeLoc)) {
+      if (DecltypeSpecifierAST* decltypeSpecifier = nullptr;
+          parse_decltype_specifier(decltypeSpecifier)) {
+        auto decltypeName = DecltypeIdAST::create(pool_);
+        decltypeName->decltypeSpecifier = decltypeSpecifier;
+
+        auto ast = DestructorIdAST::create(pool_);
+        yyast = ast;
+        ast->tildeLoc = tildeLoc;
+        ast->id = decltypeName;
+
+        return true;
+      }
+
+      UnqualifiedIdAST* name = nullptr;
+      if (!parse_type_name(name, nestedNameSpecifier, isTemplateIntroduced,
+                           TypeNameContext::kTypeOnly))
+        return false;
+
+      auto ast = DestructorIdAST::create(pool_);
+      yyast = ast;
+      ast->tildeLoc = tildeLoc;
+      ast->id = name;
+
+      return true;
+    }
+  }
+
+  auto lookat_template_id = [&] {
+    if (!isCxx()) return false;
+
+    LookaheadParser lookahead{this};
+    if (!parse_template_id(yyast, nestedNameSpecifier, isTemplateIntroduced,
+                           memberAccess))
+      return false;
+    lookahead.commit();
+    return true;
+  };
+
+  if (lookat_template_id()) return true;
+
+  if (LiteralOperatorIdAST* literalOperatorName = nullptr;
+      parse_literal_operator_id(literalOperatorName)) {
+    yyast = literalOperatorName;
+    return true;
+  }
+
+  if (ConversionFunctionIdAST* conversionFunctionName = nullptr;
+      parse_conversion_function_id(conversionFunctionName)) {
+    yyast = conversionFunctionName;
+    return true;
+  }
+
+  if (OperatorFunctionIdAST* functionOperatorName = nullptr;
+      parse_operator_function_id(functionOperatorName)) {
+    yyast = functionOperatorName;
+    return true;
+  }
+
+  NameIdAST* nameId = nullptr;
+  if (!parse_name_id(nameId)) return false;
+
+  yyast = nameId;
+  return true;
+}
+
+void Parser::parse_optional_nested_name_specifier(
+    NestedNameSpecifierAST*& yyast, NestedNameSpecifierContext ctx) {
+  if (!isCxx()) return;
+
+  LookaheadParser lookahead(this);
+  if (!parse_nested_name_specifier(yyast, ctx)) return;
+  lookahead.commit();
+}
+
+auto Parser::parse_decltype_nested_name_specifier(
+    NestedNameSpecifierAST*& yyast, NestedNameSpecifierContext ctx) -> bool {
+  if (!isCxx()) return false;
+
+  LookaheadParser lookahead{this};
+
+  SourceLocation decltypeLoc;
+  if (!match(TokenKind::T_DECLTYPE, decltypeLoc)) return false;
+  if (!lookat(TokenKind::T_LPAREN)) return false;
+  if (!parse_skip_balanced()) return false;
+  if (!lookat(TokenKind::T_COLON_COLON)) return false;
+
+  rewind(decltypeLoc);
+
+  DecltypeSpecifierAST* decltypeSpecifier = nullptr;
+  if (!parse_decltype_specifier(decltypeSpecifier)) return false;
+
+  SourceLocation scopeLoc;
+  if (!match(TokenKind::T_COLON_COLON, scopeLoc)) return false;
+
+  lookahead.commit();
+
+  auto ast = DecltypeNestedNameSpecifierAST::create(pool_);
+  yyast = ast;
+
+  ast->decltypeSpecifier = decltypeSpecifier;
+  ast->scopeLoc = scopeLoc;
+
+  if (decltypeSpecifier) {
+    Symbol* symbol = nullptr;
+    if (auto classsType = type_cast<ClassType>(decltypeSpecifier->type)) {
+      symbol = classsType->symbol();
+    } else if (auto enumType = type_cast<EnumType>(decltypeSpecifier->type)) {
+      symbol = enumType->symbol();
+    } else if (auto scopedEnumType =
+                   type_cast<ScopedEnumType>(decltypeSpecifier->type)) {
+      symbol = scopedEnumType->symbol();
+    }
+    ast->symbol = binder_.resolveNestedNameSpecifier(symbol);
+  }
+
+  return true;
+}
+
+auto Parser::parse_type_nested_name_specifier(NestedNameSpecifierAST*& yyast,
+                                              NestedNameSpecifierContext ctx)
+    -> bool {
+  if (!lookat(TokenKind::T_IDENTIFIER, TokenKind::T_COLON_COLON)) return false;
+
+  auto identifierLoc = consumeToken();
+  auto identifier = unit_->identifier(identifierLoc);
+  auto scopeLoc = consumeToken();
+  Symbol* symbol = nullptr;
+  if (yyast && yyast->symbol)
+    symbol = qualifiedLookupType(yyast->symbol, identifier);
+  else
+    symbol = unqualifiedLookupType(lexicalScope(), identifier);
+
+  auto ast = SimpleNestedNameSpecifierAST::create(pool_);
+  ast->nestedNameSpecifier = yyast;
+  yyast = ast;
+
+  ast->identifierLoc = identifierLoc;
+  ast->identifier = identifier;
+  ast->scopeLoc = scopeLoc;
+  ast->symbol = binder_.resolveNestedNameSpecifier(symbol);
+
+  if (!ast->symbol) {
+    if (symbol_cast<TypeParameterSymbol>(symbol) ||
+        symbol_cast<ConstraintTypeParameterSymbol>(symbol) ||
+        symbol_cast<TemplateTypeParameterSymbol>(symbol)) {
+      ast->symbol = symbol;
+    }
+  }
+
+  return true;
+}
+
+namespace {
+struct IsReferencingTemplateParameter {
+  Parser& p;
+  int depth = 0;
+  int index = 0;
+
+  auto operator()(TypeTemplateArgumentAST* ast) const -> bool {
+    auto typeId = ast->typeId;
+    if (!typeId) return false;
+
+    if (checkTypeParam(typeId->type)) return true;
+
+    return false;
+  }
+
+  [[nodiscard]] auto checkTypeParam(const Type* type) const -> bool {
+    auto info = getTypeParamInfo(type);
+    if (!info) return false;
+
+    if (info->depth != depth) return false;
+    if (info->index != index) return false;
+
+    return true;
+  }
+
+  auto operator()(ExpressionTemplateArgumentAST* ast) const -> bool {
+    return false;
+  }
+};
+}  // namespace
+
+auto Parser::parse_template_nested_name_specifier(
+    NestedNameSpecifierAST*& yyast, NestedNameSpecifierContext ctx, int depth)
+    -> bool {
+  LookaheadParser lookahead{this};
+
+  SourceLocation templateLoc;
+  const auto isTemplateIntroduced = match(TokenKind::T_TEMPLATE, templateLoc);
+
+  SimpleTemplateIdAST* templateId = nullptr;
+  if (!parse_simple_template_id(templateId, yyast, isTemplateIntroduced))
+    return false;
+
+  SourceLocation scopeLoc;
+  if (!match(TokenKind::T_COLON_COLON, scopeLoc)) return false;
+
+  lookahead.commit();
+
+  auto ast = TemplateNestedNameSpecifierAST::create(pool_);
+  ast->nestedNameSpecifier = yyast;
+  yyast = ast;
+
+  ast->templateLoc = templateLoc;
+  ast->templateId = templateId;
+  ast->scopeLoc = scopeLoc;
+  ast->isTemplateIntroduced = isTemplateIntroduced;
+
+  if (config().checkTypes) {
+    bool hasDependentArgs = false;
+    if (binder_.inTemplate()) {
+      for (auto arg : ListView{templateId->templateArgumentList}) {
+        if (auto typeArg = ast_cast<TypeTemplateArgumentAST>(arg)) {
+          if (isDependent(unit_, typeArg->typeId)) {
+            hasDependentArgs = true;
+            break;
+          }
+        }
+        if (auto exprArg = ast_cast<ExpressionTemplateArgumentAST>(arg)) {
+          if (isDependent(unit_, exprArg->expression)) {
+            hasDependentArgs = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!hasDependentArgs) {
+      if (auto classSymbol = symbol_cast<ClassSymbol>(templateId->symbol)) {
+        auto instance =
+            ASTRewriter::instantiate(unit_, templateId->templateArgumentList,
+                                     classSymbol, templateId->identifierLoc);
+
+        ast->symbol = symbol_cast<ClassSymbol>(instance);
+      } else if (symbol_cast<TypeAliasSymbol>(templateId->symbol)) {
+        auto instance =
+            binder_.resolve(ast->nestedNameSpecifier, templateId, true);
+
+        if (auto alias = symbol_cast<TypeAliasSymbol>(instance)) {
+          if (auto classType = unqualified_cast<ClassType>(alias->type())) {
+            ast->symbol = classType->symbol();
+          }
+        } else {
+          ast->symbol = symbol_cast<ScopeSymbol>(instance);
+        }
+      } else if (!templateId->symbol) {
+        auto resolved = binder_.resolve(nullptr, templateId, true);
+        ast->symbol = symbol_cast<ScopeSymbol>(resolved);
+      }
+
+      if (auto cls = symbol_cast<ClassSymbol>(ast->symbol)) {
+        traits.requireCompleteClass(cls);
+      }
+    }
+
+    if (hasDependentArgs && !ast->symbol) {
+      if (auto classSymbol = symbol_cast<ClassSymbol>(templateId->symbol)) {
+        ast->symbol = classSymbol;
+
+        if (ctx == NestedNameSpecifierContext::kDeclarative) {
+          if (auto pattern = ASTRewriter::findPartialSpecializationPattern(
+                  unit_, classSymbol, templateId->templateArgumentList)) {
+            ast->symbol = pattern;
+          }
+        }
+      }
+    }
+  }
+
+  if (!ast->symbol) {
+    if (auto classSymbol = symbol_cast<ClassSymbol>(templateId->symbol)) {
+      ast->symbol = classSymbol;
+      if (ctx == NestedNameSpecifierContext::kDeclarative) {
+        if (auto pattern = ASTRewriter::findPartialSpecializationPattern(
+                unit_, classSymbol, templateId->templateArgumentList)) {
+          ast->symbol = pattern;
+        }
+      }
+    } else if (auto alias = symbol_cast<TypeAliasSymbol>(templateId->symbol)) {
+      if (auto classType = unqualified_cast<ClassType>(alias->type()))
+        ast->symbol = classType->symbol();
+    }
+  }
+
+  return true;
+}
+
+auto Parser::parse_nested_name_specifier(NestedNameSpecifierAST*& yyast,
+                                         NestedNameSpecifierContext ctx)
+    -> bool {
+  if (!isCxx()) return false;
+
+  if (SourceLocation scopeLoc; match(TokenKind::T_COLON_COLON, scopeLoc)) {
+    auto ast = GlobalNestedNameSpecifierAST::create(pool_);
+    yyast = ast;
+    ast->scopeLoc = scopeLoc;
+    ast->symbol = globalScope_;
+  } else if (parse_decltype_nested_name_specifier(yyast, ctx)) {
+  }
+
+  int depth = 0;
+
+  while (true) {
+    if (parse_type_nested_name_specifier(yyast, ctx)) {
+      continue;
+    }
+
+    if (parse_template_nested_name_specifier(yyast, ctx, depth)) {
+      ++depth;
+      continue;
+    }
+
+    break;
+  }
+
+  const auto parsed = yyast != nullptr;
+
+  return parsed;
+}
+
+auto Parser::parse_lambda_expression(ExpressionAST*& yyast) -> bool {
+  if (!isCxx()) return false;
+
+  if (lookat(TokenKind::T_LBRACKET, TokenKind::T_LBRACKET)) return false;
+  if (lookat(TokenKind::T_LBRACKET, TokenKind::T_COLON)) return false;
+  if (!lookat(TokenKind::T_LBRACKET)) return false;
+
+  auto _ = CombinedScopeGuard{this};
+
+  TemplateHeadContext templateHeadContext{this};
+
+  auto ast = LambdaExpressionAST::create(pool_);
+  yyast = ast;
+
+  expect(TokenKind::T_LBRACKET, ast->lbracketLoc);
+
+  binder_.bind(ast);
+
+  if (!match(TokenKind::T_RBRACKET, ast->rbracketLoc)) {
+    if (!parse_lambda_capture(ast->captureDefaultLoc, ast->captureList)) {
+      parse_error("expected a lambda capture");
+    }
+
+    expect(TokenKind::T_RBRACKET, ast->rbracketLoc);
+  }
+
+  if (ast->captureDefaultLoc)
+    ast->captureDefault = unit_->tokenKind(ast->captureDefaultLoc);
+
+  CombinedScopeGuard templateScopeGuard{this};
+
+  if (match(TokenKind::T_LESS, ast->lessLoc)) {
+    ExplicitTemplateHeadGuard explicitTemplateHeadGuard{this};
+    pushScope(ast->symbol);
+
+    parse_template_parameter_list(ast->templateParameterList);
+
+    expect(TokenKind::T_GREATER, ast->greaterLoc);
+
+    ast->symbol->setTemplate(true);
+
+    (void)parse_requires_clause(ast->templateRequiresClause);
+  }
+
+  parse_optional_attribute_specifier_seq(ast->expressionAttributeList);
+
+  if (match(TokenKind::T_LPAREN, ast->lparenLoc)) {
+    if (!match(TokenKind::T_RPAREN, ast->rparenLoc)) {
+      if (!parse_parameter_declaration_clause(ast->parameterDeclarationClause,
+                                              TypeNameContext::kTypeOnly)) {
+        parse_error("expected a parameter declaration clause");
+      }
+
+      expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+      if (ast->parameterDeclarationClause) {
+        synthesizeLambdaAbbreviatedTemplateParams(ast);
+        setScope(ast->parameterDeclarationClause->functionParametersSymbol);
+      }
+    }
+
+    parse_optional_attribute_specifier_seq(ast->gnuAtributeList,
+                                           AllowedAttributes::kGnuAttribute);
+  }
+
+  (void)parse_lambda_specifier_seq(ast->lambdaSpecifierList, ast->symbol);
+
+  (void)parse_noexcept_specifier(ast->exceptionSpecifier);
+
+  parse_optional_attribute_specifier_seq(ast->attributeList,
+                                         AllowedAttributes::kAll);
+
+  (void)parse_trailing_return_type(ast->trailingReturnType);
+
+  if (ast->lparenLoc) (void)parse_requires_clause(ast->requiresClause);
+
+  if (!lookat(TokenKind::T_LBRACE)) return false;
+
+  binder_.complete(ast);
+
+  if (auto classType = type_cast<ClassType>(ast->type)) {
+    pushScope(classType->symbol());
+  } else if (ast->symbol) {
+    pushScope(ast->symbol);
+  }
+
+  if (!parse_compound_statement(ast->statement, /*attributes=*/nullptr,
+                                /*skip=*/false)) {
+    parse_error("expected a compound statement");
+  }
+
+  binder_.completeLambdaBody(ast);
+
+  return true;
+}
+
+auto Parser::parse_lambda_specifier_seq(List<LambdaSpecifierAST*>*& yyast,
+                                        LambdaSymbol* symbol) -> bool {
+  yyast = nullptr;
+
+  auto it = &yyast;
+
+  while (true) {
+    if (lookat(TokenKind::T_CONSTEVAL))
+      symbol->setConsteval(true);
+    else if (lookat(TokenKind::T_CONSTEXPR))
+      symbol->setConstexpr(true);
+    else if (lookat(TokenKind::T_MUTABLE))
+      symbol->setMutable(true);
+    else if (lookat(TokenKind::T_STATIC))
+      symbol->setStatic(true);
+    else
+      break;
+
+    auto specifier = LambdaSpecifierAST::create(pool_);
+    specifier->specifierLoc = consumeToken();
+    specifier->specifier = unit_->tokenKind(specifier->specifierLoc);
+    *it = make_list_node(pool_, specifier);
+    it = &(*it)->next;
+  }
+  return yyast != nullptr;
+}
+
+auto Parser::parse_lambda_capture(SourceLocation& captureDefaultLoc,
+                                  List<LambdaCaptureAST*>*& captureList)
+    -> bool {
+  if (parse_capture_default(captureDefaultLoc)) {
+    if (SourceLocation commaLoc; match(TokenKind::T_COMMA, commaLoc)) {
+      if (!parse_capture_list(captureList)) parse_error("expected a capture");
+    }
+
+    return true;
+  }
+
+  return parse_capture_list(captureList);
+}
+
+auto Parser::parse_capture_default(SourceLocation& opLoc) -> bool {
+  if (!LA().isOneOf(TokenKind::T_AMP, TokenKind::T_EQUAL)) return false;
+  if (!LA(1).isOneOf(TokenKind::T_COMMA, TokenKind::T_RBRACKET)) return false;
+
+  opLoc = consumeToken();
+
+  return true;
+}
+
+auto Parser::parse_capture_list(List<LambdaCaptureAST*>*& yyast) -> bool {
+  auto it = &yyast;
+
+  LambdaCaptureAST* capture = nullptr;
+
+  if (!parse_capture(capture)) return false;
+
+  if (capture) {
+    *it = make_list_node(pool_, capture);
+    it = &(*it)->next;
+  }
+
+  SourceLocation commaLoc;
+
+  while (match(TokenKind::T_COMMA, commaLoc)) {
+    LambdaCaptureAST* capture = nullptr;
+
+    if (!parse_capture(capture)) parse_error("expected a capture");
+
+    if (capture) {
+      *it = make_list_node(pool_, capture);
+      it = &(*it)->next;
+    }
+  }
+
+  return true;
+}
+
+auto Parser::parse_capture(LambdaCaptureAST*& yyast) -> bool {
+  if (parse_simple_capture(yyast)) return true;
+  if (parse_init_capture(yyast)) return true;
+  return false;
+}
+
+auto Parser::parse_simple_capture(LambdaCaptureAST*& yyast) -> bool {
+  if (SourceLocation thisLoc; match(TokenKind::T_THIS, thisLoc)) {
+    auto ast = ThisLambdaCaptureAST::create(pool_);
+    yyast = ast;
+
+    ast->thisLoc = thisLoc;
+
+    return true;
+  } else if (lookat(TokenKind::T_STAR, TokenKind::T_THIS)) {
+    auto ast = DerefThisLambdaCaptureAST::create(pool_);
+    yyast = ast;
+
+    ast->starLoc = consumeToken();
+    ast->thisLoc = consumeToken();
+
+    return true;
+  }
+
+  auto lookat_simple_capture = [&] {
+    LookaheadParser lookahead{this};
+
+    SourceLocation identifierLoc;
+    if (!match(TokenKind::T_IDENTIFIER, identifierLoc)) return false;
+
+    SourceLocation ellipsisLoc;
+    match(TokenKind::T_DOT_DOT_DOT, ellipsisLoc);
+
+    if (!LA().isOneOf(TokenKind::T_COMMA, TokenKind::T_RBRACKET)) return false;
+
+    auto ast = SimpleLambdaCaptureAST::create(pool_);
+    yyast = ast;
+
+    ast->identifierLoc = identifierLoc;
+    ast->identifier = unit_->identifier(ast->identifierLoc);
+    ast->ellipsisLoc = ellipsisLoc;
+
+    lookahead.commit();
+
+    return true;
+  };
+
+  if (lookat_simple_capture()) return true;
+
+  LookaheadParser lookahead{this};
+
+  SourceLocation ampLoc;
+  if (!match(TokenKind::T_AMP, ampLoc)) return false;
+
+  SourceLocation identifierLoc;
+  expect(TokenKind::T_IDENTIFIER, identifierLoc);
+
+  SourceLocation ellipsisLoc;
+  match(TokenKind::T_DOT_DOT_DOT, ellipsisLoc);
+
+  if (!LA().isOneOf(TokenKind::T_COMMA, TokenKind::T_RBRACKET)) return false;
+
+  lookahead.commit();
+
+  auto ast = RefLambdaCaptureAST::create(pool_);
+  yyast = ast;
+
+  ast->ampLoc = ampLoc;
+  ast->identifierLoc = identifierLoc;
+  ast->identifier = unit_->identifier(ast->identifierLoc);
+  ast->ellipsisLoc = ellipsisLoc;
+
+  return true;
+}
+
+auto Parser::parse_init_capture(LambdaCaptureAST*& yyast) -> bool {
+  auto lookat_init_capture = [&] {
+    LookaheadParser lookahead{this};
+
+    SourceLocation ampLoc;
+    match(TokenKind::T_AMP, ampLoc);
+
+    if (LA().isOneOf(TokenKind::T_DOT_DOT_DOT, TokenKind::T_IDENTIFIER))
+      return true;
+
+    return false;
+  };
+
+  if (!lookat_init_capture()) return false;
+
+  if (SourceLocation ampLoc; match(TokenKind::T_AMP, ampLoc)) {
+    SourceLocation ellipsisLoc;
+
+    match(TokenKind::T_DOT_DOT_DOT, ellipsisLoc);
+
+    SourceLocation identifierLoc;
+
+    expect(TokenKind::T_IDENTIFIER, identifierLoc);
+
+    ExpressionAST* initializer = nullptr;
+
+    if (!parse_initializer(initializer, ExprContext{})) {
+      parse_error("expected an initializer");
+    }
+
+    auto ast = RefInitLambdaCaptureAST::create(pool_);
+    yyast = ast;
+
+    ast->ampLoc = ampLoc;
+    ast->ellipsisLoc = ellipsisLoc;
+    ast->identifierLoc = identifierLoc;
+    ast->identifier = unit_->identifier(ast->identifierLoc);
+    ast->initializer = initializer;
+
+    return true;
+  }
+
+  SourceLocation ellipsisLoc;
+
+  match(TokenKind::T_DOT_DOT_DOT, ellipsisLoc);
+
+  SourceLocation identifierLoc;
+
+  expect(TokenKind::T_IDENTIFIER, identifierLoc);
+
+  ExpressionAST* initializer = nullptr;
+
+  if (!parse_initializer(initializer, ExprContext{})) {
+    parse_error("expected an initializer");
+  }
+
+  auto ast = InitLambdaCaptureAST::create(pool_);
+  yyast = ast;
+
+  ast->ellipsisLoc = ellipsisLoc;
+  ast->identifierLoc = identifierLoc;
+  ast->identifier = unit_->identifier(ast->identifierLoc);
+  ast->initializer = initializer;
+
+  return true;
+}
+
+auto Parser::parse_left_fold_expression(ExpressionAST*& yyast,
+                                        const ExprContext& ctx) -> bool {
+  if (!lookat(TokenKind::T_LPAREN, TokenKind::T_DOT_DOT_DOT)) return false;
+
+  auto ast = LeftFoldExpressionAST::create(pool_);
+  yyast = ast;
+
+  expect(TokenKind::T_LPAREN, ast->lparenLoc);
+  expect(TokenKind::T_DOT_DOT_DOT, ast->ellipsisLoc);
+
+  if (!parse_fold_operator(ast->opLoc, ast->op)) {
+    parse_error("expected fold operator");
+  }
+
+  if (!parse_cast_expression(ast->expression, ctx)) {
+    report_failed_parse("expected an expression");
+  }
+
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  return true;
+}
+
+auto Parser::parse_this_expression(ExpressionAST*& yyast) -> bool {
+  SourceLocation thisLoc;
+
+  if (!match(TokenKind::T_THIS, thisLoc)) return false;
+
+  auto ast = ThisExpressionAST::create(pool_);
+  yyast = ast;
+  ast->thisLoc = thisLoc;
+  ast->valueCategory = ValueCategory::kPrValue;
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_generic_selection_expression(ExpressionAST*& yyast,
+                                                const ExprContext&) -> bool {
+  SourceLocation genericLoc;
+  if (!match(TokenKind::T__GENERIC, genericLoc)) return false;
+
+  auto ast = GenericSelectionExpressionAST::create(pool_);
+  yyast = ast;
+
+  expect(TokenKind::T_LPAREN, ast->lparenLoc);
+  ast->genericLoc = genericLoc;
+
+  parse_assignment_expression(ast->expression, ExprContext{});
+
+  expect(TokenKind::T_COMMA, ast->commaLoc);
+
+  auto it = &ast->genericAssociationList;
+
+  GenericAssociationAST* association = nullptr;
+  parse_generic_association(association);
+
+  if (association) {
+    *it = make_list_node(pool_, association);
+    it = &(*it)->next;
+  }
+
+  SourceLocation commaLoc;
+  while (match(TokenKind::T_COMMA, commaLoc)) {
+    GenericAssociationAST* association = nullptr;
+    parse_generic_association(association);
+
+    if (association) {
+      *it = make_list_node(pool_, association);
+      it = &(*it)->next;
+    }
+  }
+
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  check(ast);
+
+  return true;
+}
+
+void Parser::parse_generic_association(GenericAssociationAST*& yyast) {
+  if (SourceLocation defaultLoc; match(TokenKind::T_DEFAULT, defaultLoc)) {
+    auto ast = DefaultGenericAssociationAST::create(pool_);
+    yyast = ast;
+
+    ast->defaultLoc = defaultLoc;
+    expect(TokenKind::T_COLON, ast->colonLoc);
+    parse_assignment_expression(ast->expression, ExprContext{});
+
+    return;
+  }
+
+  auto ast = TypeGenericAssociationAST::create(pool_);
+  yyast = ast;
+
+  if (!parse_type_id(ast->typeId)) {
+    report_failed_parse("expected a type id");
+  }
+
+  expect(TokenKind::T_COLON, ast->colonLoc);
+
+  parse_assignment_expression(ast->expression, ExprContext{});
+}
+
+auto Parser::parse_nested_expession(ExpressionAST*& yyast,
+                                    const ExprContext& ctx) -> bool {
+  SourceLocation lparenLoc;
+
+  if (!match(TokenKind::T_LPAREN, lparenLoc)) return false;
+
+  if (lookat(TokenKind::T_LBRACE)) {
+    auto ast = NestedStatementExpressionAST::create(pool_);
+    yyast = ast;
+
+    ast->lparenLoc = lparenLoc;
+
+    if (!parse_compound_statement(ast->statement, /*attributes=*/nullptr,
+                                  /*skip=*/false)) {
+      parse_error("expected a compound statement");
+    }
+
+    expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+    check(ast);
+
+    return true;
+  }
+
+  auto ast = NestedExpressionAST::create(pool_);
+  yyast = ast;
+
+  ast->lparenLoc = lparenLoc;
+
+  parse_expression(ast->expression, ctx);
+
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_fold_expression(ExpressionAST*& yyast,
+                                   const ExprContext& ctx) -> bool {
+  if (!isCxx()) return false;
+
+  if (!lookat(TokenKind::T_LPAREN)) return false;
+
+  if (parse_left_fold_expression(yyast, ctx)) return true;
+
+  SourceLocation lparenLoc;
+  ExpressionAST* expression = nullptr;
+  SourceLocation opLoc;
+  TokenKind op = TokenKind::T_EOF_SYMBOL;
+  SourceLocation ellipsisLoc;
+  bool isNestedExpression = false;
+
+  auto lookat_fold_or_nested_expression = [&] {
+    LookaheadParser lookahead{this};
+    if (!match(TokenKind::T_LPAREN, lparenLoc)) return false;
+    if (!parse_cast_expression(expression, ctx)) return false;
+    if (lookat(TokenKind::T_RPAREN)) {
+      isNestedExpression = true;
+      lookahead.commit();
+      return true;
+    }
+    if (!parse_fold_operator(opLoc, op)) return false;
+    if (!match(TokenKind::T_DOT_DOT_DOT, ellipsisLoc)) return false;
+    lookahead.commit();
+    return true;
+  };
+
+  if (!lookat_fold_or_nested_expression()) return false;
+
+  if (isNestedExpression) {
+    auto ast = NestedExpressionAST::create(pool_);
+    yyast = ast;
+    ast->lparenLoc = lparenLoc;
+    ast->expression = expression;
+    expect(TokenKind::T_RPAREN, ast->rparenLoc);
+    check(ast);
+    return true;
+  }
+
+  if (SourceLocation rparenLoc; match(TokenKind::T_RPAREN, rparenLoc)) {
+    auto ast = RightFoldExpressionAST::create(pool_);
+    yyast = ast;
+
+    ast->lparenLoc = lparenLoc;
+    ast->expression = expression;
+    ast->opLoc = opLoc;
+    ast->op = op;
+    ast->ellipsisLoc = ellipsisLoc;
+    ast->rparenLoc = rparenLoc;
+
+    return true;
+  }
+
+  auto ast = FoldExpressionAST::create(pool_);
+  yyast = ast;
+
+  ast->lparenLoc = lparenLoc;
+  ast->leftExpression = expression;
+  ast->opLoc = opLoc;
+  ast->op = op;
+  ast->ellipsisLoc = ellipsisLoc;
+
+  if (!parse_fold_operator(ast->foldOpLoc, ast->foldOp)) {
+    parse_error("expected a fold operator");
+  }
+
+  if (!parse_cast_expression(ast->rightExpression, ctx)) {
+    report_failed_parse("expected an expression");
+  }
+
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  return true;
+}
+
+auto Parser::parse_fold_operator(SourceLocation& loc, TokenKind& op) -> bool {
+  loc = currentLocation();
+
+  switch (TokenKind(LA())) {
+    case TokenKind::T_GREATER: {
+      if (parse_greater_greater()) {
+        op = TokenKind::T_GREATER_GREATER;
+        return true;
+      }
+
+      op = TokenKind::T_GREATER;
+
+      consumeToken();
+
+      return true;
+    }
+
+    case TokenKind::T_GREATER_GREATER_EQUAL:
+    case TokenKind::T_GREATER_GREATER:
+    case TokenKind::T_GREATER_EQUAL:
+    case TokenKind::T_PLUS:
+    case TokenKind::T_MINUS:
+    case TokenKind::T_STAR:
+    case TokenKind::T_SLASH:
+    case TokenKind::T_PERCENT:
+    case TokenKind::T_CARET:
+    case TokenKind::T_AMP:
+    case TokenKind::T_BAR:
+    case TokenKind::T_LESS_LESS:
+    case TokenKind::T_PLUS_EQUAL:
+    case TokenKind::T_MINUS_EQUAL:
+    case TokenKind::T_STAR_EQUAL:
+    case TokenKind::T_SLASH_EQUAL:
+    case TokenKind::T_PERCENT_EQUAL:
+    case TokenKind::T_CARET_EQUAL:
+    case TokenKind::T_AMP_EQUAL:
+    case TokenKind::T_BAR_EQUAL:
+    case TokenKind::T_LESS_LESS_EQUAL:
+    case TokenKind::T_EQUAL:
+    case TokenKind::T_EQUAL_EQUAL:
+    case TokenKind::T_EXCLAIM_EQUAL:
+    case TokenKind::T_LESS:
+    case TokenKind::T_LESS_EQUAL:
+    case TokenKind::T_AMP_AMP:
+    case TokenKind::T_BAR_BAR:
+    case TokenKind::T_COMMA:
+    case TokenKind::T_DOT_STAR:
+    case TokenKind::T_MINUS_GREATER_STAR: {
+      op = LA().kind();
+      consumeToken();
+      return true;
+    }
+
+    default:
+      return false;
+  }
+}
+
+auto Parser::parse_requires_expression(ExpressionAST*& yyast) -> bool {
+  SourceLocation requiresLoc;
+
+  if (!match(TokenKind::T_REQUIRES, requiresLoc)) return false;
+
+  auto ast = RequiresExpressionAST::create(pool_);
+  yyast = ast;
+
+  ast->requiresLoc = requiresLoc;
+
+  if (!lookat(TokenKind::T_LBRACE)) {
+    if (!parse_requirement_parameter_list(
+            ast->lparenLoc, ast->parameterDeclarationClause, ast->rparenLoc)) {
+      parse_error("expected a requirement parameter");
+    }
+  }
+
+  auto _ = CombinedScopeGuard{
+      this, ast->parameterDeclarationClause
+                ? ast->parameterDeclarationClause->functionParametersSymbol
+                : nullptr};
+
+  expect(TokenKind::T_LBRACE, ast->lbraceLoc);
+  parse_requirement_seq(ast->requirementList);
+  expect(TokenKind::T_RBRACE, ast->rbraceLoc);
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_requirement_parameter_list(
+    SourceLocation& lparenLoc,
+    ParameterDeclarationClauseAST*& parameterDeclarationClause,
+    SourceLocation& rparenLoc) -> bool {
+  if (!match(TokenKind::T_LPAREN, lparenLoc)) return false;
+
+  if (!match(TokenKind::T_RPAREN, rparenLoc)) {
+    if (!parse_parameter_declaration_clause(parameterDeclarationClause,
+                                            TypeNameContext::kTypeOnly)) {
+      parse_error("expected a parmater declaration");
+    }
+
+    expect(TokenKind::T_RPAREN, rparenLoc);
+  }
+
+  return true;
+}
+
+void Parser::parse_requirement_seq(List<RequirementAST*>*& yyast) {
+  auto it = &yyast;
+
+  bool skipping = false;
+
+  RequirementAST* requirement = nullptr;
+
+  parse_requirement(requirement);
+
+  *it = make_list_node(pool_, requirement);
+  it = &(*it)->next;
+
+  LoopParser loop(this);
+
+  while (LA()) {
+    if (lookat(TokenKind::T_RBRACE)) break;
+
+    loop.start();
+
+    RequirementAST* requirement = nullptr;
+    parse_requirement(requirement);
+
+    *it = make_list_node(pool_, requirement);
+    it = &(*it)->next;
+  }
+}
+
+void Parser::parse_requirement(RequirementAST*& yyast) {
+  if (parse_nested_requirement(yyast)) return;
+  if (parse_compound_requirement(yyast)) return;
+  if (parse_type_requirement(yyast)) return;
+  parse_simple_requirement(yyast);
+}
+
+void Parser::parse_simple_requirement(RequirementAST*& yyast) {
+  ExpressionAST* expression = nullptr;
+
+  auto _ = UnevaluatedOperandGuard{this};
+  parse_expression(expression, ExprContext{});
+
+  SourceLocation semicolonLoc;
+
+  expect(TokenKind::T_SEMICOLON, semicolonLoc);
+
+  auto ast = SimpleRequirementAST::create(pool_);
+  yyast = ast;
+
+  ast->expression = expression;
+  ast->semicolonLoc = semicolonLoc;
+}
+
+auto Parser::parse_type_requirement(RequirementAST*& yyast) -> bool {
+  SourceLocation typenameLoc;
+
+  if (!match(TokenKind::T_TYPENAME, typenameLoc)) return false;
+
+  auto ast = TypeRequirementAST::create(pool_);
+  yyast = ast;
+
+  ast->typenameLoc = typenameLoc;
+
+  parse_optional_nested_name_specifier(
+      ast->nestedNameSpecifier, NestedNameSpecifierContext::kNonDeclarative);
+
+  ast->isTemplateIntroduced = match(TokenKind::T_TEMPLATE, ast->templateLoc);
+
+  if (!parse_type_name(ast->unqualifiedId, ast->nestedNameSpecifier,
+                       ast->isTemplateIntroduced, TypeNameContext::kTypeOnly)) {
+    parse_error("expected a type name");
+  }
+
+  expect(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+
+  return true;
+}
+
+auto Parser::parse_compound_requirement(RequirementAST*& yyast) -> bool {
+  SourceLocation lbraceLoc;
+
+  if (!match(TokenKind::T_LBRACE, lbraceLoc)) return false;
+
+  auto _ = CombinedScopeGuard{this};
+  auto unevaluated = UnevaluatedOperandGuard{this};
+
+  ExpressionAST* expression = nullptr;
+
+  parse_expression(expression, ExprContext{});
+
+  SourceLocation rbraceLoc;
+
+  expect(TokenKind::T_RBRACE, rbraceLoc);
+
+  auto ast = CompoundRequirementAST::create(pool_);
+  yyast = ast;
+
+  ast->lbraceLoc = lbraceLoc;
+  ast->expression = expression;
+  ast->rbraceLoc = rbraceLoc;
+
+  match(TokenKind::T_NOEXCEPT, ast->noexceptLoc);
+
+  if (!match(TokenKind::T_SEMICOLON, ast->semicolonLoc)) {
+    if (!parse_return_type_requirement(ast->minusGreaterLoc,
+                                       ast->typeConstraint)) {
+      parse_error("expected return type requirement");
+    }
+
+    expect(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+  }
+
+  return true;
+}
+
+auto Parser::parse_return_type_requirement(SourceLocation& minusGreaterLoc,
+                                           TypeConstraintAST*& typeConstraint)
+    -> bool {
+  if (!match(TokenKind::T_MINUS_GREATER, minusGreaterLoc)) return false;
+
+  if (!parse_type_constraint(typeConstraint, false)) {
+    parse_error("expected type constraint");
+  }
+
+  return true;
+}
+
+auto Parser::parse_nested_requirement(RequirementAST*& yyast) -> bool {
+  SourceLocation requiresLoc;
+
+  if (!match(TokenKind::T_REQUIRES, requiresLoc)) return false;
+
+  auto ast = NestedRequirementAST::create(pool_);
+  yyast = ast;
+
+  ast->requiresLoc = requiresLoc;
+
+  auto _ = UnevaluatedOperandGuard{this};
+  if (!parse_constraint_expression(ast->expression)) {
+    report_failed_parse("expected an expression");
+  }
+
+  expect(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+
+  return true;
+}
+
+auto Parser::parse_postfix_expression(ExpressionAST*& yyast,
+                                      const ExprContext& ctx) -> bool {
+  if (!parse_start_of_postfix_expression(yyast, ctx)) return false;
+
+  parse_rest_of_postfix_expression(yyast, ctx);
+
+  return true;
+}
+
+void Parser::parse_rest_of_postfix_expression(ExpressionAST*& yyast,
+                                              const ExprContext& ctx) {
+  while (true) {
+    LookaheadParser lookahead{this};
+
+    if (parse_member_expression(yyast)) {
+    } else if (parse_subscript_expression(yyast, ctx)) {
+    } else if (parse_call_expression(yyast, ctx)) {
+    } else if (parse_postincr_expression(yyast, ctx)) {
+    } else {
+      break;
+    }
+
+    lookahead.commit();
+  }
+}
+
+auto Parser::parse_start_of_postfix_expression(ExpressionAST*& yyast,
+                                               const ExprContext& ctx) -> bool {
+  if (parse_va_arg_expression(yyast, ctx)) return true;
+  if (parse_cpp_cast_expression(yyast, ctx)) return true;
+  if (parse_typeid_expression(yyast, ctx)) return true;
+  if (parse_typename_expression(yyast, ctx)) return true;
+  if (parse_cpp_type_cast_expression(yyast, ctx)) return true;
+  if (parse_builtin_bit_cast_expression(yyast, ctx)) return true;
+  return parse_primary_expression(yyast, ctx);
+}
+
+auto Parser::parse_member_expression(ExpressionAST*& yyast) -> bool {
+  SourceLocation accessLoc;
+
+  if (!match(TokenKind::T_DOT, accessLoc) &&
+      !match(TokenKind::T_MINUS_GREATER, accessLoc)) {
+    return false;
+  }
+
+  auto lookat_splice_member = [&] {
+    LookaheadParser lookahead{this};
+    SourceLocation templateLoc;
+    const auto isTemplateIntroduced = match(TokenKind::T_TEMPLATE, templateLoc);
+    SplicerAST* splicer = nullptr;
+    if (!parse_splicer(splicer)) return false;
+    lookahead.commit();
+
+    auto ast = SpliceMemberExpressionAST::create(pool_);
+    ast->baseExpression = yyast;
+    ast->accessLoc = accessLoc;
+    ast->accessOp = unit_->tokenKind(ast->accessLoc);
+    ast->templateLoc = templateLoc;
+    ast->isTemplateIntroduced = isTemplateIntroduced;
+    ast->splicer = splicer;
+    yyast = ast;
+
+    check(ast);
+
+    return true;
+  };
+
+  if (lookat_splice_member()) return true;
+
+  auto ast = MemberExpressionAST::create(pool_);
+  ast->baseExpression = yyast;
+  ast->accessLoc = accessLoc;
+  ast->accessOp = unit_->tokenKind(accessLoc);
+
+  parse_optional_nested_name_specifier(
+      ast->nestedNameSpecifier, NestedNameSpecifierContext::kNonDeclarative);
+
+  ast->isTemplateIntroduced = match(TokenKind::T_TEMPLATE, ast->templateLoc);
+
+  SourceLocation completionLoc;
+  const auto requestedMemberCompletion = parse_completion(completionLoc);
+
+  if (!parse_unqualified_id(ast->unqualifiedId, ast->nestedNameSpecifier,
+                            ast->isTemplateIntroduced,
+                            /*inRequiresClause*/ false,
+                            memberAccess(ast->baseExpression, ast->accessOp)))
+    parse_error("expected an unqualified id");
+
+  check(ast);
+
+  if (requestedMemberCompletion && ast->baseExpression) {
+    config().complete(MemberCompletionContext{
+        .objectType = ast->baseExpression->type,
+        .accessOp = ast->accessOp,
+        .accessingScope = scope(),
+    });
+  }
+
+  yyast = ast;
+
+  return true;
+}
+
+auto Parser::parse_subscript_expression(ExpressionAST*& yyast,
+                                        const ExprContext& ctx) -> bool {
+  SourceLocation lbracketLoc;
+
+  if (!match(TokenKind::T_LBRACKET, lbracketLoc)) return false;
+
+  auto ast = SubscriptExpressionAST::create(pool_);
+
+  ast->baseExpression = yyast;
+  ast->lbracketLoc = lbracketLoc;
+
+  yyast = ast;
+
+  parse_expr_or_braced_init_list(ast->indexExpression, ctx);
+
+  expect(TokenKind::T_RBRACKET, ast->rbracketLoc);
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_call_expression(ExpressionAST*& yyast,
+                                   const ExprContext& ctx) -> bool {
+  SourceLocation lparenLoc;
+
+  if (!match(TokenKind::T_LPAREN, lparenLoc)) return false;
+
+  auto ast = CallExpressionAST::create(pool_);
+  ast->baseExpression = yyast;
+  ast->lparenLoc = lparenLoc;
+
+  yyast = ast;
+
+  checkSignatureHelp(ast->baseExpression);
+
+  if (!match(TokenKind::T_RPAREN, ast->rparenLoc)) {
+    if (!parse_expression_list(ast->expressionList, ctx)) {
+      report_failed_parse("expected an expression");
+    }
+
+    expect(TokenKind::T_RPAREN, ast->rparenLoc);
+  }
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_postincr_expression(ExpressionAST*& yyast,
+                                       const ExprContext& ctx) -> bool {
+  SourceLocation opLoc;
+
+  if (!match(TokenKind::T_MINUS_MINUS, opLoc) &&
+      !match(TokenKind::T_PLUS_PLUS, opLoc)) {
+    return false;
+  }
+
+  auto ast = PostIncrExpressionAST::create(pool_);
+  ast->baseExpression = yyast;
+  ast->opLoc = opLoc;
+  ast->op = unit_->tokenKind(ast->opLoc);
+  yyast = ast;
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_cpp_cast_head(SourceLocation& castLoc) -> bool {
+  if (LA().isOneOf(TokenKind::T_CONST_CAST, TokenKind::T_DYNAMIC_CAST,
+                   TokenKind::T_REINTERPRET_CAST, TokenKind::T_STATIC_CAST)) {
+    castLoc = consumeToken();
+    return true;
+  }
+  return false;
+}
+
+auto Parser::parse_cpp_cast_expression(ExpressionAST*& yyast,
+                                       const ExprContext& ctx) -> bool {
+  SourceLocation castLoc;
+
+  if (!parse_cpp_cast_head(castLoc)) return false;
+
+  auto ast = CppCastExpressionAST::create(pool_);
+  yyast = ast;
+
+  ast->castLoc = castLoc;
+  ast->castOp = unit_->tokenKind(ast->castLoc);
+
+  expect(TokenKind::T_LESS, ast->lessLoc);
+
+  if (!parse_type_id(ast->typeId, TypeNameContext::kTypeOnly))
+    report_failed_parse("expected a type id");
+
+  expect(TokenKind::T_GREATER, ast->greaterLoc);
+
+  expect(TokenKind::T_LPAREN, ast->lparenLoc);
+
+  parse_expression(ast->expression, ctx);
+
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_builtin_bit_cast_expression(ExpressionAST*& yyast,
+                                               const ExprContext& ctx) -> bool {
+  SourceLocation castLoc;
+  if (!match(TokenKind::T___BUILTIN_BIT_CAST, castLoc)) return false;
+
+  auto ast = BuiltinBitCastExpressionAST::create(pool_);
+  yyast = ast;
+
+  ast->castLoc = castLoc;
+  expect(TokenKind::T_LPAREN, ast->lparenLoc);
+
+  if (!parse_type_id(ast->typeId, TypeNameContext::kTypeOnly))
+    report_failed_parse("expected a type id");
+
+  expect(TokenKind::T_COMMA, ast->commaLoc);
+  parse_expression(ast->expression, ctx);
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_builtin_offsetof_expression(ExpressionAST*& yyast,
+                                               const ExprContext& ctx) -> bool {
+  SourceLocation offsetofLoc;
+  if (!match(TokenKind::T___BUILTIN_OFFSETOF, offsetofLoc)) return false;
+
+  auto ast = BuiltinOffsetofExpressionAST::create(pool_);
+  yyast = ast;
+
+  ast->offsetofLoc = offsetofLoc;
+  expect(TokenKind::T_LPAREN, ast->lparenLoc);
+
+  if (!parse_type_id(ast->typeId)) report_failed_parse("expected a type id");
+
+  expect(TokenKind::T_COMMA, ast->commaLoc);
+  expect(TokenKind::T_IDENTIFIER, ast->identifierLoc);
+  ast->identifier = unit_->identifier(ast->identifierLoc);
+
+  auto it = &ast->designatorList;
+  while (lookat_designator()) {
+    DesignatorAST* designator = nullptr;
+
+    parse_designator(designator);
+
+    if (!designator) continue;
+
+    *it = make_list_node(pool_, designator);
+    it = &(*it)->next;
+  }
+
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_cpp_type_cast_expression(ExpressionAST*& yyast,
+                                            const ExprContext& ctx) -> bool {
+  if (!isCxx()) return false;
+
+  auto lookat_function_call = [&] {
+    LookaheadParser lookahead{this};
+
+    SpecifierAST* typeSpecifier = nullptr;
+    DeclSpecs specs{unit_};
+
+    if (!parse_simple_type_specifier(typeSpecifier, specs)) return false;
+
+    if (!lookat(TokenKind::T_LPAREN)) return false;
+
+    if (auto namedTypeSpec = ast_cast<NamedTypeSpecifierAST>(typeSpecifier)) {
+      if (!config().checkTypes) {
+        if (!namedTypeSpec->symbol || !is_type(namedTypeSpec->symbol)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  };
+
+  auto lookat_braced_type_construction = [&] {
+    LookaheadParser lookahead{this};
+
+    SpecifierAST* typeSpecifier = nullptr;
+    DeclSpecs specs{unit_};
+
+    if (!parse_simple_type_specifier(typeSpecifier, specs)) return false;
+
+    checkBracedInitializerCompletion(completionTargetType(typeSpecifier));
+
+    BracedInitListAST* bracedInitList = nullptr;
+
+    if (!parse_braced_init_list(bracedInitList, ctx)) return false;
+
+    lookahead.commit();
+
+    auto ast = BracedTypeConstructionAST::create(pool_);
+    yyast = ast;
+
+    ast->typeSpecifier = typeSpecifier;
+    ast->bracedInitList = bracedInitList;
+
+    check(ast);
+
+    return true;
+  };
+
+  if (lookat_function_call()) return false;
+  if (lookat_braced_type_construction()) return true;
+
+  LookaheadParser lookahead{this};
+
+  SpecifierAST* typeSpecifier = nullptr;
+  DeclSpecs specs{unit_};
+
+  if (!parse_simple_type_specifier(typeSpecifier, specs)) return false;
+
+  checkParenInitializerCompletion(completionTargetType(typeSpecifier));
+
+  SourceLocation lparenLoc;
+
+  if (!match(TokenKind::T_LPAREN, lparenLoc)) return false;
+
+  SourceLocation rparenLoc;
+
+  List<ExpressionAST*>* expressionList = nullptr;
+
+  if (!match(TokenKind::T_RPAREN, rparenLoc)) {
+    if (!parse_expression_list(expressionList, ctx)) return false;
+
+    if (!match(TokenKind::T_RPAREN, rparenLoc)) return false;
+  }
+
+  lookahead.commit();
+
+  auto ast = TypeConstructionAST::create(pool_);
+  yyast = ast;
+
+  ast->typeSpecifier = typeSpecifier;
+  ast->lparenLoc = lparenLoc;
+  ast->expressionList = expressionList;
+  ast->rparenLoc = rparenLoc;
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_typeid_expression(ExpressionAST*& yyast,
+                                     const ExprContext& ctx) -> bool {
+  SourceLocation typeidLoc;
+
+  if (!match(TokenKind::T_TYPEID, typeidLoc)) return false;
+
+  SourceLocation lparenLoc;
+  expect(TokenKind::T_LPAREN, lparenLoc);
+
+  auto lookat_typeid_of_type = [&] {
+    LookaheadParser lookahead{this};
+
+    TypeIdAST* typeId = nullptr;
+    if (!parse_type_id(typeId)) return false;
+
+    SourceLocation rparenLoc;
+    if (!match(TokenKind::T_RPAREN, rparenLoc)) return false;
+
+    lookahead.commit();
+
+    auto ast = TypeidOfTypeExpressionAST::create(pool_);
+    yyast = ast;
+
+    ast->typeidLoc = typeidLoc;
+    ast->lparenLoc = lparenLoc;
+    ast->typeId = typeId;
+    ast->rparenLoc = rparenLoc;
+
+    check(ast);
+
+    return true;
+  };
+
+  if (lookat_typeid_of_type()) return true;
+
+  auto ast = TypeidExpressionAST::create(pool_);
+  yyast = ast;
+
+  ast->typeidLoc = typeidLoc;
+  ast->lparenLoc = lparenLoc;
+
+  {
+    auto unevaluated = UnevaluatedOperandGuard{this};
+    parse_expression(ast->expression, ctx);
+  }
+
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  if (ast->expression && ast->expression->type &&
+      ast->expression->valueCategory != ValueCategory::kPrValue &&
+      traits.is_polymorphic(traits.remove_cvref(ast->expression->type))) {
+    check(ast->expression);
+  }
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_typename_expression(ExpressionAST*& yyast,
+                                       const ExprContext& ctx) -> bool {
+  LookaheadParser lookahead{this};
+
+  SpecifierAST* typenameSpecifier = nullptr;
+  DeclSpecs specs{unit_};
+  if (!parse_typename_specifier(typenameSpecifier, specs)) return false;
+
+  checkInitializerCompletion(completionTargetType(typenameSpecifier));
+
+  if (BracedInitListAST* bracedInitList = nullptr;
+      parse_braced_init_list(bracedInitList, ctx)) {
+    lookahead.commit();
+
+    auto ast = BracedTypeConstructionAST::create(pool_);
+    yyast = ast;
+
+    ast->typeSpecifier = typenameSpecifier;
+    ast->bracedInitList = bracedInitList;
+
+    check(ast);
+
+    return true;
+  }
+
+  SourceLocation lparenLoc;
+
+  if (!match(TokenKind::T_LPAREN, lparenLoc)) return false;
+
+  SourceLocation rparenLoc;
+
+  List<ExpressionAST*>* expressionList = nullptr;
+
+  if (!match(TokenKind::T_RPAREN, rparenLoc)) {
+    if (!parse_expression_list(expressionList, ctx)) return false;
+
+    if (!match(TokenKind::T_RPAREN, rparenLoc)) return false;
+  }
+
+  lookahead.commit();
+
+  auto ast = TypeConstructionAST::create(pool_);
+  yyast = ast;
+
+  ast->typeSpecifier = typenameSpecifier;
+  ast->lparenLoc = lparenLoc;
+  ast->expressionList = expressionList;
+  ast->rparenLoc = rparenLoc;
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_unary_builtin_type_op(SourceLocation& loc,
+                                         UnaryBuiltinTypeKind& builtinKind)
+    -> bool {
+  if (!lookat(TokenKind::T_IDENTIFIER, TokenKind::T_LPAREN)) return false;
+
+  auto identifier = unit_->identifier(currentLocation());
+
+  auto info = identifier->info();
+  if (!info) return false;
+
+  if (info->kind() != IdentifierInfoKind::kUnaryBuiltinType) return false;
+
+  auto builtin = static_cast<const UnaryBuiltinTypeInfo*>(info);
+
+  if (builtin->builtinKind() == UnaryBuiltinTypeKind::T_NONE) return false;
+
+  builtinKind = builtin->builtinKind();
+  loc = consumeToken();
+
+  return true;
+}
+
+auto Parser::parse_type_traits_op(SourceLocation& loc,
+                                  BuiltinTypeTraitKind& builtinKind) -> bool {
+  const auto builtin = LA().builtinTypeTrait();
+  if (builtin == BuiltinTypeTraitKind::T_NONE) return false;
+  builtinKind = builtin;
+  loc = consumeToken();
+  return true;
+}
+
+auto Parser::parse_va_arg_expression(ExpressionAST*& yyast,
+                                     const ExprContext& ctx) -> bool {
+  SourceLocation vaArgLoc;
+  if (!match(TokenKind::T___BUILTIN_VA_ARG, vaArgLoc)) return false;
+  auto ast = VaArgExpressionAST::create(pool_);
+  yyast = ast;
+  ast->vaArgLoc = vaArgLoc;
+  expect(TokenKind::T_LPAREN, ast->lparenLoc);
+  parse_assignment_expression(ast->expression, ExprContext{});
+  expect(TokenKind::T_COMMA, ast->commaLoc);
+  if (!parse_type_id(ast->typeId)) report_failed_parse("expected a type id");
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_pack_index_expression(ExpressionAST*& yyast,
+                                         const ExprContext& ctx) -> bool {
+  if (!lookat(TokenKind::T_IDENTIFIER, TokenKind::T_DOT_DOT_DOT,
+              TokenKind::T_LBRACKET))
+    return false;
+
+  auto ast = PackIndexExpressionAST::create(pool_);
+  yyast = ast;
+
+  (void)parse_id_expression(ast->packExpression,
+                            IdExpressionContext::kExpression);
+
+  expect(TokenKind::T_DOT_DOT_DOT, ast->ellipsisLoc);
+
+  expect(TokenKind::T_LBRACKET, ast->lbracketLoc);
+
+  if (!parse_constant_expression(ast->indexExpression)) {
+    parse_error("expected a constant expression");
+  }
+
+  expect(TokenKind::T_RBRACKET, ast->rbracketLoc);
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_builtin_call_expression(ExpressionAST*& yyast,
+                                           const ExprContext& ctx) -> bool {
+  SourceLocation typeTraitLoc;
+  BuiltinTypeTraitKind builtinKind = BuiltinTypeTraitKind::T_NONE;
+  if (!parse_type_traits_op(typeTraitLoc, builtinKind)) return false;
+
+  auto ast = TypeTraitExpressionAST::create(pool_);
+  yyast = ast;
+
+  ast->typeTraitLoc = typeTraitLoc;
+  ast->typeTrait = builtinKind;
+
+  expect(TokenKind::T_LPAREN, ast->lparenLoc);
+
+  auto it = &ast->typeIdList;
+
+  if (TypeIdAST* typeId = nullptr; parse_type_id(typeId)) {
+    *it = make_list_node(pool_, typeId);
+    it = &(*it)->next;
+  } else {
+    report_failed_parse("expected a type id");
+  }
+
+  SourceLocation commaLoc;
+
+  while (match(TokenKind::T_COMMA, commaLoc)) {
+    if (TypeIdAST* typeId = nullptr; parse_type_id(typeId)) {
+      *it = make_list_node(pool_, typeId);
+      it = &(*it)->next;
+    } else {
+      report_failed_parse("expected a type id");
+    }
+  }
+
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_expression_list(List<ExpressionAST*>*& yyast,
+                                   const ExprContext& ctx) -> bool {
+  return parse_initializer_list(yyast, ctx);
+}
+
+auto Parser::parse_unary_expression(ExpressionAST*& yyast,
+                                    const ExprContext& ctx) -> bool {
+  if (parse_unop_expression(yyast, ctx)) return true;
+  if (parse_complex_expression(yyast, ctx)) return true;
+  if (parse_await_expression(yyast, ctx)) return true;
+  if (parse_sizeof_expression(yyast, ctx)) return true;
+  if (parse_alignof_expression(yyast, ctx)) return true;
+  if (parse_noexcept_expression(yyast, ctx)) return true;
+  if (parse_new_expression(yyast, ctx)) return true;
+  if (parse_delete_expression(yyast, ctx)) return true;
+  if (parse_reflect_expression(yyast, ctx)) return true;
+  if (parse_label_address(yyast, ctx)) return true;
+  return parse_postfix_expression(yyast, ctx);
+}
+
+auto Parser::parse_label_address(ExpressionAST*& yyast, const ExprContext& ctx)
+    -> bool {
+  LookaheadParser lookahead{this};
+
+  SourceLocation ampAmpLoc;
+  if (!match(TokenKind::T_AMP_AMP, ampAmpLoc)) return false;
+
+  SourceLocation identifierLoc;
+  if (!match(TokenKind::T_IDENTIFIER, identifierLoc)) return false;
+
+  auto identifier = unit_->identifier(identifierLoc);
+
+  auto symbol = unqualifiedLookup(lexicalScope(), identifier);
+  if (symbol) {
+    return false;
+  }
+
+  lookahead.commit();
+
+  auto ast = LabelAddressExpressionAST::create(pool_);
+  yyast = ast;
+  ast->ampAmpLoc = ampAmpLoc;
+  ast->identifierLoc = identifierLoc;
+  ast->identifier = identifier;
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_unop_expression(ExpressionAST*& yyast,
+                                   const ExprContext& ctx) -> bool {
+  LookaheadParser lookahead{this};
+
+  SourceLocation opLoc;
+  if (!parse_unary_operator(opLoc)) return false;
+
+  ExpressionAST* expression = nullptr;
+  if (!parse_cast_expression(expression, ctx)) return false;
+
+  lookahead.commit();
+
+  auto ast = UnaryExpressionAST::create(pool_);
+  yyast = ast;
+
+  ast->opLoc = opLoc;
+  ast->op = unit_->tokenKind(opLoc);
+  ast->expression = expression;
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_complex_expression(ExpressionAST*& yyast,
+                                      const ExprContext& ctx) -> bool {
+  SourceLocation opLoc;
+
+  if (!match(TokenKind::T___IMAG__, opLoc) &&
+      !match(TokenKind::T___REAL__, opLoc)) {
+    return false;
+  }
+
+  ExpressionAST* expression = nullptr;
+
+  if (!parse_cast_expression(expression, ctx))
+    report_failed_parse("expected an expression");
+
+  auto ast = UnaryExpressionAST::create(pool_);
+  yyast = ast;
+
+  ast->opLoc = opLoc;
+  ast->op = unit_->tokenKind(opLoc);
+  ast->expression = expression;
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_sizeof_expression(ExpressionAST*& yyast,
+                                     const ExprContext& ctx) -> bool {
+  SourceLocation sizeofLoc;
+
+  if (!match(TokenKind::T_SIZEOF, sizeofLoc)) return false;
+
+  if (SourceLocation ellipsisLoc;
+      match(TokenKind::T_DOT_DOT_DOT, ellipsisLoc)) {
+    auto ast = SizeofPackExpressionAST::create(pool_);
+    yyast = ast;
+
+    ast->sizeofLoc = sizeofLoc;
+    ast->ellipsisLoc = ellipsisLoc;
+
+    expect(TokenKind::T_LPAREN, ast->lparenLoc);
+
+    expect(TokenKind::T_IDENTIFIER, ast->identifierLoc);
+    ast->identifier = unit_->identifier(ast->identifierLoc);
+    ast->symbol = unqualifiedLookup(lexicalScope(), ast->identifier);
+
+    expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+    check(ast);
+
+    return true;
+  }
+
+  auto lookat_sizeof_type_id = [&] {
+    LookaheadParser lookahead{this};
+
+    SourceLocation lparenLoc;
+    if (!match(TokenKind::T_LPAREN, lparenLoc)) return false;
+
+    TypeIdAST* typeId = nullptr;
+    if (!parse_type_id(typeId)) return false;
+
+    SourceLocation rparenLoc;
+    if (!match(TokenKind::T_RPAREN, rparenLoc)) return false;
+
+    lookahead.commit();
+
+    auto ast = SizeofTypeExpressionAST::create(pool_);
+    yyast = ast;
+
+    ast->sizeofLoc = sizeofLoc;
+    ast->lparenLoc = lparenLoc;
+    ast->typeId = typeId;
+    ast->rparenLoc = rparenLoc;
+
+    check(ast);
+
+    return true;
+  };
+
+  if (lookat_sizeof_type_id()) return true;
+
+  auto ast = SizeofExpressionAST::create(pool_);
+  yyast = ast;
+
+  ast->sizeofLoc = sizeofLoc;
+
+  auto _ = UnevaluatedOperandGuard{this};
+  if (!parse_unary_expression(ast->expression, ctx)) {
+    report_failed_parse("expected an expression");
+  }
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_alignof_expression(ExpressionAST*& yyast,
+                                      const ExprContext& ctx) -> bool {
+  SourceLocation alignofLoc;
+
+  if (!match(TokenKind::T_ALIGNOF, alignofLoc)) return false;
+
+  auto lookat_alignof_type_id = [&] {
+    LookaheadParser lookahead{this};
+
+    SourceLocation lparenLoc;
+    if (!match(TokenKind::T_LPAREN, lparenLoc)) return false;
+
+    TypeIdAST* typeId = nullptr;
+    if (!parse_type_id(typeId)) return false;
+
+    SourceLocation rparenLoc;
+    if (!match(TokenKind::T_RPAREN, rparenLoc)) return false;
+
+    lookahead.commit();
+
+    auto ast = AlignofTypeExpressionAST::create(pool_);
+    yyast = ast;
+
+    ast->alignofLoc = alignofLoc;
+    ast->lparenLoc = lparenLoc;
+    ast->typeId = typeId;
+    ast->rparenLoc = rparenLoc;
+
+    check(ast);
+
+    return true;
+  };
+
+  if (lookat_alignof_type_id()) return true;
+
+  auto ast = AlignofExpressionAST::create(pool_);
+  yyast = ast;
+
+  ast->alignofLoc = alignofLoc;
+
+  if (!parse_unary_expression(ast->expression, ctx)) {
+    report_failed_parse("expected an expression");
+  }
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_unary_operator(SourceLocation& opLoc) -> bool {
+  switch (TokenKind(LA())) {
+    case TokenKind::T_STAR:
+    case TokenKind::T_AMP:
+    case TokenKind::T_PLUS:
+    case TokenKind::T_MINUS:
+    case TokenKind::T_EXCLAIM:
+    case TokenKind::T_TILDE:
+    case TokenKind::T_MINUS_MINUS:
+    case TokenKind::T_PLUS_PLUS:
+      opLoc = consumeToken();
+      return true;
+
+    default:
+      return false;
+  }
+}
+
+auto Parser::parse_await_expression(ExpressionAST*& yyast,
+                                    const ExprContext& ctx) -> bool {
+  SourceLocation awaitLoc;
+
+  if (!match(TokenKind::T_CO_AWAIT, awaitLoc)) return false;
+
+  auto ast = AwaitExpressionAST::create(pool_);
+  yyast = ast;
+
+  ast->awaitLoc = awaitLoc;
+
+  if (!parse_cast_expression(ast->expression, ctx))
+    report_failed_parse("expected an expression");
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_noexcept_expression(ExpressionAST*& yyast,
+                                       const ExprContext& ctx) -> bool {
+  SourceLocation noexceptLoc;
+
+  if (!match(TokenKind::T_NOEXCEPT, noexceptLoc)) return false;
+
+  auto ast = NoexceptExpressionAST::create(pool_);
+  yyast = ast;
+
+  expect(TokenKind::T_LPAREN, ast->lparenLoc);
+
+  auto _ = UnevaluatedOperandGuard{this};
+  parse_expression(ast->expression, ctx);
+
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_new_expression(ExpressionAST*& yyast, const ExprContext& ctx)
+    -> bool {
+  if (!lookat(TokenKind::T_NEW) &&
+      !lookat(TokenKind::T_COLON_COLON, TokenKind::T_NEW))
+    return false;
+
+  auto ast = NewExpressionAST::create(pool_);
+  yyast = ast;
+
+  match(TokenKind::T_COLON_COLON, ast->scopeLoc);
+  expect(TokenKind::T_NEW, ast->newLoc);
+
+  parse_optional_new_placement(ast->newPlacement, ctx);
+
+  const auto after_new_placement = currentLocation();
+
+  auto lookat_nested_type_id = [&] {
+    LookaheadParser lookahead{this};
+
+    SourceLocation lparenLoc;
+    if (!match(TokenKind::T_LPAREN, lparenLoc)) return false;
+
+    List<SpecifierAST*>* typeSpecifierList = nullptr;
+    DeclSpecs specs{unit_};
+    if (!parse_type_specifier_seq(typeSpecifierList, specs,
+                                  TypeNameContext::kTypeOnly))
+      return false;
+
+    DeclaratorAST* declarator = nullptr;
+    Decl decl{specs};
+    parse_optional_abstract_declarator(declarator, decl);
+
+    SourceLocation rparenLoc;
+    if (!match(TokenKind::T_RPAREN, rparenLoc)) return false;
+
+    lookahead.commit();
+
+    NewInitializerAST* newInitializer = nullptr;
+    parse_optional_new_initializer(newInitializer, decl, ctx, declarator);
+
+    ast->lparenLoc = lparenLoc;
+    ast->typeSpecifierList = typeSpecifierList;
+    ast->rparenLoc = rparenLoc;
+    ast->newInitalizer = newInitializer;
+
+    ast->objectType = getDeclaratorType(unit_, declarator, decl.specs.type());
+
+    check(ast);
+
+    return true;
+  };
+
+  if (lookat_nested_type_id()) return true;
+
+  DeclSpecs specs{unit_};
+  if (!parse_type_specifier_seq(ast->typeSpecifierList, specs,
+                                TypeNameContext::kTypeOnly)) {
+    parse_error("expected a type specifier");
+    specs.finish();
+  }
+
+  Decl decl{specs};
+
+  (void)parse_declarator(ast->declarator, decl, DeclaratorKind::kNewDeclarator);
+
+  parse_optional_new_initializer(ast->newInitalizer, decl, ctx,
+                                 ast->declarator);
+
+  ast->objectType =
+      getDeclaratorType(unit_, ast->declarator, decl.specs.type());
+
+  check(ast);
+
+  return true;
+}
+
+void Parser::parse_optional_new_placement(NewPlacementAST*& yyast,
+                                          const ExprContext& ctx) {
+  LookaheadParser lookahead{this};
+
+  SourceLocation lparenLoc;
+  if (!match(TokenKind::T_LPAREN, lparenLoc)) return;
+
+  List<ExpressionAST*>* expressionList = nullptr;
+  if (!parse_expression_list(expressionList, ctx)) return;
+
+  SourceLocation rparenLoc;
+  if (!match(TokenKind::T_RPAREN, rparenLoc)) return;
+
+  lookahead.commit();
+
+  auto ast = NewPlacementAST::create(pool_);
+  yyast = ast;
+
+  ast->lparenLoc = lparenLoc;
+  ast->expressionList = expressionList;
+  ast->rparenLoc = rparenLoc;
+}
+
+void Parser::parse_optional_new_initializer(NewInitializerAST*& yyast,
+                                            Decl& decl, const ExprContext& ctx,
+                                            DeclaratorAST* declarator) {
+  if (isCompletionRequested()) {
+    checkInitializerCompletion(
+        getDeclaratorType(unit_, declarator, decl.specs.type()));
+  }
+
+  if (BracedInitListAST* bracedInitList = nullptr;
+      parse_braced_init_list(bracedInitList, ctx)) {
+    auto ast = NewBracedInitializerAST::create(pool_);
+    yyast = ast;
+
+    ast->bracedInitList = bracedInitList;
+    return;
+  }
+
+  LookaheadParser lookahead{this};
+
+  SourceLocation lparenLoc;
+  List<ExpressionAST*>* expressionList = nullptr;
+  SourceLocation rparenLoc;
+
+  if (!match(TokenKind::T_LPAREN, lparenLoc)) return;
+  if (!match(TokenKind::T_RPAREN, rparenLoc)) {
+    if (!parse_expression_list(expressionList, ctx)) return;
+    if (!match(TokenKind::T_RPAREN, rparenLoc)) return;
+  }
+
+  lookahead.commit();
+
+  auto ast = NewParenInitializerAST::create(pool_);
+  yyast = ast;
+
+  ast->lparenLoc = lparenLoc;
+  ast->expressionList = expressionList;
+  ast->rparenLoc = rparenLoc;
+}
+
+auto Parser::parse_delete_expression(ExpressionAST*& yyast,
+                                     const ExprContext& ctx) -> bool {
+  if (!lookat(TokenKind::T_DELETE) &&
+      !lookat(TokenKind::T_COLON_COLON, TokenKind::T_DELETE))
+    return false;
+
+  auto ast = DeleteExpressionAST::create(pool_);
+  yyast = ast;
+
+  match(TokenKind::T_COLON_COLON, ast->scopeLoc);
+  expect(TokenKind::T_DELETE, ast->deleteLoc);
+
+  if (match(TokenKind::T_LBRACKET, ast->lbracketLoc)) {
+    expect(TokenKind::T_RBRACKET, ast->rbracketLoc);
+  }
+
+  if (!parse_cast_expression(ast->expression, ctx)) {
+    report_failed_parse("expected an expression");
+  }
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_cast_expression(ExpressionAST*& yyast,
+                                   const ExprContext& ctx) -> bool {
+  const auto start = currentLocation();
+
+  auto lookat_cast_expression = [&] {
+    LookaheadParser lookahead{this};
+    if (!parse_cast_expression_helper(yyast, ctx)) return false;
+    lookahead.commit();
+
+    return true;
+  };
+
+  if (lookat_cast_expression()) return true;
+
+  return parse_unary_expression(yyast, ctx);
+}
+
+auto Parser::parse_cast_expression_helper(ExpressionAST*& yyast,
+                                          const ExprContext& ctx) -> bool {
+  SourceLocation lparenLoc;
+
+  if (!match(TokenKind::T_LPAREN, lparenLoc)) return false;
+
+  TypeIdAST* typeId = nullptr;
+
+  if (!parse_type_id(typeId, TypeNameContext::kTypeOnly)) return false;
+
+  SourceLocation rparenLoc;
+
+  if (!match(TokenKind::T_RPAREN, rparenLoc)) return false;
+
+  if (BracedInitListAST* bracedInitList = nullptr;
+      parse_braced_init_list(bracedInitList, ctx)) {
+    auto ast = ObjectLiteralExpressionAST::create(pool_);
+    yyast = ast;
+
+    ast->lparenLoc = lparenLoc;
+    ast->typeId = typeId;
+    ast->rparenLoc = rparenLoc;
+    ast->bracedInitList = bracedInitList;
+    check(ast);
+
+    parse_rest_of_postfix_expression(yyast, ctx);
+
+    return true;
+  }
+
+  ExpressionAST* expression = nullptr;
+  if (!parse_cast_expression(expression, ctx)) {
+    return false;
+  }
+
+  auto ast = CastExpressionAST::create(pool_);
+  yyast = ast;
+
+  ast->lparenLoc = lparenLoc;
+  ast->typeId = typeId;
+  ast->rparenLoc = rparenLoc;
+  ast->expression = expression;
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_binary_operator(SourceLocation& loc, TokenKind& tk,
+                                   const ExprContext& exprContext) -> bool {
+  const auto start = currentLocation();
+
+  loc = start;
+  tk = TokenKind::T_EOF_SYMBOL;
+
+  switch (TokenKind(LA())) {
+    case TokenKind::T_GREATER: {
+      if (parse_greater_greater()) {
+        if (exprContext.templArg) {
+          rewind(start);
+          return false;
+        }
+
+        tk = TokenKind::T_GREATER_GREATER;
+        return true;
+      }
+
+      if (exprContext.templArg || exprContext.templParam) {
+        rewind(start);
+        return false;
+      }
+
+      consumeToken();
+      tk = TokenKind::T_GREATER;
+      return true;
+    }
+
+    case TokenKind::T_AMP_AMP:
+    case TokenKind::T_AMP:
+    case TokenKind::T_BAR_BAR:
+    case TokenKind::T_BAR:
+    case TokenKind::T_CARET:
+    case TokenKind::T_DOT_STAR:
+    case TokenKind::T_EQUAL_EQUAL:
+    case TokenKind::T_EXCLAIM_EQUAL:
+    case TokenKind::T_GREATER_EQUAL:
+    case TokenKind::T_LESS_EQUAL_GREATER:
+    case TokenKind::T_LESS_EQUAL:
+    case TokenKind::T_LESS_LESS:
+    case TokenKind::T_LESS:
+    case TokenKind::T_MINUS_GREATER_STAR:
+    case TokenKind::T_MINUS:
+    case TokenKind::T_PERCENT:
+    case TokenKind::T_PLUS:
+    case TokenKind::T_SLASH:
+    case TokenKind::T_STAR:
+      tk = LA().kind();
+      consumeToken();
+      return true;
+
+    default:
+      return false;
+  }
+}
+
+auto Parser::parse_binary_expression(ExpressionAST*& yyast,
+                                     const ExprContext& exprContext) -> bool {
+  if (!parse_cast_expression(yyast, exprContext)) return false;
+
+  LookaheadParser lookahead{this};
+
+  if (parse_binary_expression_helper(yyast, Prec::kLogicalOr, exprContext)) {
+    lookahead.commit();
+  }
+
+  return true;
+}
+
+auto Parser::parse_lookahead_binary_operator(SourceLocation& loc, TokenKind& tk,
+                                             const ExprContext& exprContext)
+    -> bool {
+  LookaheadParser lookahead{this};
+
+  return parse_binary_operator(loc, tk, exprContext);
+}
+
+auto Parser::parse_binary_expression_helper(ExpressionAST*& yyast, Prec minPrec,
+                                            const ExprContext& exprContext)
+    -> bool {
+  bool parsed = false;
+
+  SourceLocation opLoc;
+  TokenKind op = TokenKind::T_EOF_SYMBOL;
+
+  while (parse_lookahead_binary_operator(opLoc, op, exprContext) &&
+         prec(op) >= minPrec) {
+    const auto saved = currentLocation();
+
+    ExpressionAST* rhs = nullptr;
+
+    (void)parse_binary_operator(opLoc, op, exprContext);
+
+    if (!parse_cast_expression(rhs, exprContext)) {
+      rewind(saved);
+      break;
+    }
+
+    parsed = true;
+
+    SourceLocation nextOpLoc;
+    TokenKind nextOp = TokenKind::T_EOF_SYMBOL;
+
+    while (parse_lookahead_binary_operator(nextOpLoc, nextOp, exprContext) &&
+           prec(nextOp) > prec(op)) {
+      if (!parse_binary_expression_helper(
+              rhs, static_cast<Prec>(static_cast<int>(prec(op)) + 1),
+              exprContext)) {
+        break;
+      }
+    }
+
+    auto ast = BinaryExpressionAST::create(pool_);
+    ast->leftExpression = yyast;
+    ast->opLoc = opLoc;
+    ast->rightExpression = rhs;
+    ast->op = op;
+
+    if (op == TokenKind::T_LESS_EQUAL_GREATER) {
+      auto comparison = ThreeWayComparisonExpressionAST::create(pool_);
+      comparison->comparison = ast;
+      check(comparison);
+      yyast = comparison;
+      continue;
+    }
+
+    check(ast);
+    yyast = ast;
+  }
+
+  return parsed;
+}
+
+auto Parser::parse_logical_or_expression(ExpressionAST*& yyast,
+                                         const ExprContext& exprContext)
+    -> bool {
+  return parse_binary_expression(yyast, exprContext);
+}
+
+auto Parser::parse_conditional_expression(ExpressionAST*& yyast,
+                                          const ExprContext& exprContext)
+    -> bool {
+  if (!parse_logical_or_expression(yyast, exprContext)) return false;
+
+  SourceLocation questionLoc;
+  if (!match(TokenKind::T_QUESTION, questionLoc)) return true;
+
+  auto ast = ConditionalExpressionAST::create(pool_);
+  ast->condition = yyast;
+  ast->questionLoc = questionLoc;
+
+  yyast = ast;
+
+  parse_expression(ast->iftrueExpression, exprContext);
+
+  expect(TokenKind::T_COLON, ast->colonLoc);
+
+  if (exprContext.templArg || exprContext.templParam) {
+    if (!parse_conditional_expression(ast->iffalseExpression, exprContext)) {
+      report_failed_parse("expected an expression");
+    }
+  } else {
+    parse_assignment_expression(ast->iffalseExpression, exprContext);
+  }
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_yield_expression(ExpressionAST*& yyast,
+                                    const ExprContext& ctx) -> bool {
+  SourceLocation yieldLoc;
+
+  if (!match(TokenKind::T_CO_YIELD, yieldLoc)) return false;
+
+  auto ast = YieldExpressionAST::create(pool_);
+  yyast = ast;
+
+  ast->yieldLoc = yieldLoc;
+  parse_expr_or_braced_init_list(ast->expression, ctx);
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_throw_expression(ExpressionAST*& yyast,
+                                    const ExprContext& ctx) -> bool {
+  SourceLocation throwLoc;
+
+  if (!match(TokenKind::T_THROW, throwLoc)) return false;
+
+  auto ast = ThrowExpressionAST::create(pool_);
+  yyast = ast;
+
+  ast->throwLoc = throwLoc;
+
+  LookaheadParser lookahead{this};
+
+  if (parse_maybe_assignment_expression(ast->expression, ctx)) {
+    lookahead.commit();
+  }
+
+  check(ast);
+
+  return true;
+}
+
+void Parser::parse_assignment_expression(ExpressionAST*& yyast,
+                                         const ExprContext& exprContext) {
+  if (!parse_maybe_assignment_expression(yyast, exprContext)) {
+    report_failed_parse("expected an expression");
+  }
+}
+
+auto Parser::parse_maybe_assignment_expression(ExpressionAST*& yyast,
+                                               const ExprContext& exprContext)
+    -> bool {
+  if (parse_yield_expression(yyast, exprContext)) return true;
+
+  if (parse_throw_expression(yyast, exprContext)) return true;
+
+  if (!parse_conditional_expression(yyast, exprContext)) return false;
+
+  SourceLocation opLoc;
+  TokenKind op = TokenKind::T_EOF_SYMBOL;
+
+  if (parse_assignment_operator(opLoc, op)) {
+    ExpressionAST* expression = nullptr;
+
+    if (!parse_initializer_clause(expression, exprContext)) {
+      report_failed_parse("expected an expression");
+    }
+
+    if (op == TokenKind::T_EQUAL) {
+      auto ast = AssignmentExpressionAST::create(pool_);
+
+      ast->leftExpression = yyast;
+      ast->opLoc = opLoc;
+      ast->rightExpression = expression;
+      ast->op = op;
+      yyast = ast;
+    } else {
+      auto ast = CompoundAssignmentExpressionAST::create(pool_);
+      ast->leftExpression = TargetExpressionAST::create(pool_);
+      ast->adjustExpression = RightExpressionAST::create(pool_);
+
+      ast->targetExpression = yyast;
+      ast->opLoc = opLoc;
+      ast->rightExpression = expression;
+      ast->op = op;
+      yyast = ast;
+    }
+
+    check(yyast);
+  }
+
+  return true;
+}
+
+auto Parser::parse_assignment_operator(SourceLocation& loc, TokenKind& op)
+    -> bool {
+  switch (TokenKind(LA())) {
+    case TokenKind::T_EQUAL:
+    case TokenKind::T_STAR_EQUAL:
+    case TokenKind::T_SLASH_EQUAL:
+    case TokenKind::T_PERCENT_EQUAL:
+    case TokenKind::T_PLUS_EQUAL:
+    case TokenKind::T_MINUS_EQUAL:
+    case TokenKind::T_LESS_LESS_EQUAL:
+    case TokenKind::T_AMP_EQUAL:
+    case TokenKind::T_CARET_EQUAL:
+    case TokenKind::T_BAR_EQUAL:
+    case TokenKind::T_GREATER_GREATER_EQUAL: {
+      op = LA().kind();
+      loc = consumeToken();
+      return true;
+    }
+
+    default:
+      return false;
+  }
+}
+
+void Parser::parse_expression(ExpressionAST*& yyast, const ExprContext& ctx) {
+  if (!parse_maybe_expression(yyast, ctx)) {
+    report_failed_parse("expected an expression");
+  }
+}
+
+auto Parser::parse_maybe_expression(ExpressionAST*& yyast,
+                                    const ExprContext& ctx) -> bool {
+  if (!parse_maybe_assignment_expression(yyast, ExprContext{})) return false;
+
+  SourceLocation commaLoc;
+
+  while (match(TokenKind::T_COMMA, commaLoc)) {
+    ExpressionAST* expression = nullptr;
+
+    parse_assignment_expression(expression, ctx);
+
+    auto ast = BinaryExpressionAST::create(pool_);
+    ast->leftExpression = yyast;
+    ast->opLoc = commaLoc;
+    ast->op = TokenKind::T_COMMA;
+    ast->rightExpression = expression;
+    if (ast->rightExpression) {
+      ast->type = ast->rightExpression->type;
+    }
+
+    check(ast);
+
+    yyast = ast;
+  }
+
+  return true;
+}
+
+auto Parser::parse_constant_expression(ExpressionAST*& yyast,
+                                       std::optional<ConstValue>& value)
+    -> bool {
+  ExprContext exprContext;
+  exprContext.isConstantEvaluated = true;
+  if (!parse_conditional_expression(yyast, exprContext)) return false;
+  value = evaluate_constant_expression(yyast);
+  return true;
+}
+
+auto Parser::parse_constant_expression(ExpressionAST*& yyast) -> bool {
+  ExprContext exprContext;
+  exprContext.isConstantEvaluated = true;
+  if (!parse_conditional_expression(yyast, exprContext)) return false;
+  return true;
+}
+
+auto Parser::parse_template_argument_constant_expression(ExpressionAST*& yyast)
+    -> bool {
+  ExprContext exprContext;
+  exprContext.templArg = true;
+  return parse_conditional_expression(yyast, exprContext);
+}
+
+void Parser::parse_statement(StatementAST*& yyast) {
+  if (!parse_maybe_statement(yyast)) {
+    report_failed_parse("expected a statement");
+  }
+}
+
+auto Parser::parse_maybe_statement(StatementAST*& yyast) -> bool {
+  SourceLocation extensionLoc;
+
+  match(TokenKind::T___EXTENSION__, extensionLoc);
+
+  if (parse_labeled_statement(yyast)) return true;
+  if (parse_case_statement(yyast)) return true;
+  if (parse_default_statement(yyast)) return true;
+
+  auto lookat_declaration_statement = [&] {
+    LookaheadParser lookahead{this};
+    auto currentScope = scope();
+    const auto initialMemberCount =
+        currentScope ? currentScope->members().size() : 0;
+    if (!parse_declaration_statement(yyast)) {
+      if (currentScope) currentScope->truncate(initialMemberCount);
+      return false;
+    }
+    lookahead.commit();
+    return true;
+  };
+
+  if (lookat_declaration_statement()) return true;
+
+  List<AttributeSpecifierAST*>* attributes = nullptr;
+  parse_optional_attribute_specifier_seq(attributes);
+
+  if (!extensionLoc) {
+    match(TokenKind::T___EXTENSION__, extensionLoc);
+  }
+
+  if (parse_while_statement(yyast, attributes)) return true;
+  if (parse_do_statement(yyast, attributes)) return true;
+  if (parse_for_statement(yyast, attributes)) return true;
+  if (parse_if_statement(yyast, attributes)) return true;
+  if (parse_switch_statement(yyast, attributes)) return true;
+  if (parse_break_statement(yyast, attributes)) return true;
+  if (parse_continue_statement(yyast, attributes)) return true;
+  if (parse_return_statement(yyast, attributes)) return true;
+  if (parse_goto_statement(yyast, attributes)) return true;
+  if (parse_coroutine_return_statement(yyast, attributes)) return true;
+  if (parse_try_block(yyast, attributes)) return true;
+  if (parse_maybe_compound_statement(yyast, attributes)) return true;
+
+  return parse_expression_statement(yyast, attributes);
+}
+
+void Parser::parse_init_statement(StatementAST*& yyast) {
+  auto lookat_simple_declaration = [&] {
+    LookaheadParser lookahead{this};
+    DeclarationAST* declaration = nullptr;
+
+    if (!scope()->isBlock()) {
+      cxx_runtime_error("not a block scope");
+    }
+
+    if (!scope()->empty()) {
+      cxx_runtime_error("enclosing scope of init statement is not empty");
+    }
+
+    if (parse_alias_declaration(declaration)) {
+    } else if (!parse_simple_declaration(declaration,
+                                         BindingContext::kInitStatement)) {
+      scope()->reset();
+      return false;
+    }
+
+    lookahead.commit();
+
+    auto ast = DeclarationStatementAST::create(pool_);
+    yyast = ast;
+    ast->declaration = declaration;
+    return true;
+  };
+
+  if (lookat_simple_declaration()) return;
+
+  LookaheadParser lookahead{this};
+
+  ExpressionAST* expression = nullptr;
+  if (!parse_maybe_expression(expression, ExprContext{})) return;
+
+  SourceLocation semicolonLoc;
+  if (!match(TokenKind::T_SEMICOLON, semicolonLoc)) return;
+
+  lookahead.commit();
+
+  auto ast = ExpressionStatementAST::create(pool_);
+  yyast = ast;
+  ast->expression = expression;
+  ast->semicolonLoc = semicolonLoc;
+}
+
+void Parser::parse_condition(ExpressionAST*& yyast, const ExprContext& ctx) {
+  auto lookat_condition = [&] {
+    if (!isCxx()) return false;
+
+    LookaheadParser lookahead{this};
+
+    List<AttributeSpecifierAST*>* attributes = nullptr;
+
+    parse_optional_attribute_specifier_seq(attributes);
+
+    List<SpecifierAST*>* declSpecifierList = nullptr;
+
+    DeclSpecs specs{unit_};
+
+    if (!parse_decl_specifier_seq(declSpecifierList, specs)) return false;
+
+    DeclaratorAST* declarator = nullptr;
+    Decl decl{specs};
+
+    if (!parse_declarator(declarator, decl)) return false;
+
+    auto symbol = binder_.declareVariable(declarator, decl,
+                                          /*addSymbolToParentScope=*/true);
+
+    ExpressionAST* initializer = nullptr;
+
+    if (!parse_brace_or_equal_initializer(initializer)) return false;
+
+    lookahead.commit();
+
+    auto ast = ConditionExpressionAST::create(pool_);
+    yyast = ast;
+    ast->attributeList = attributes;
+    ast->declSpecifierList = declSpecifierList;
+    ast->declarator = declarator;
+    ast->initializer = initializer;
+    ast->symbol = symbol;
+
+    check(ast);
+
+    return true;
+  };
+
+  if (lookat_condition()) return;
+
+  parse_expression(yyast, ctx);
+}
+
+auto Parser::parse_labeled_statement(StatementAST*& yyast) -> bool {
+  if (!lookat(TokenKind::T_IDENTIFIER, TokenKind::T_COLON)) return false;
+
+  auto ast = LabeledStatementAST::create(pool_);
+  yyast = ast;
+
+  expect(TokenKind::T_IDENTIFIER, ast->identifierLoc);
+  expect(TokenKind::T_COLON, ast->colonLoc);
+
+  ast->identifier = unit_->identifier(ast->identifierLoc);
+
+  if (!lookat(TokenKind::T_RBRACE)) {
+    parse_statement(ast->statement);
+  }
+
+  return true;
+}
+
+auto Parser::parse_case_statement(StatementAST*& yyast) -> bool {
+  SourceLocation caseLoc;
+
+  if (!match(TokenKind::T_CASE, caseLoc)) return false;
+
+  ExpressionAST* expression = nullptr;
+  std::optional<ConstValue> value;
+
+  if (!parse_constant_expression(expression, value)) {
+    report_failed_parse("expected an expression");
+  }
+
+  SourceLocation colonLoc;
+
+  expect(TokenKind::T_COLON, colonLoc);
+
+  auto ast = CaseStatementAST::create(pool_);
+  yyast = ast;
+
+  ast->caseLoc = caseLoc;
+  ast->expression = expression;
+  ast->colonLoc = colonLoc;
+
+  if (value.has_value()) {
+    auto interp = ASTInterpreter{unit_};
+    if (traits.is_unsigned(expression->type)) {
+      ast->caseValue = *interp.toUInt(*value);
+    } else {
+      ast->caseValue = *interp.toInt(*value);
+    }
+  }
+
+  return true;
+}
+
+auto Parser::parse_default_statement(StatementAST*& yyast) -> bool {
+  SourceLocation defaultLoc;
+
+  if (!match(TokenKind::T_DEFAULT, defaultLoc)) return false;
+
+  SourceLocation colonLoc;
+
+  expect(TokenKind::T_COLON, colonLoc);
+
+  auto ast = DefaultStatementAST::create(pool_);
+  yyast = ast;
+
+  ast->defaultLoc = defaultLoc;
+  ast->colonLoc = colonLoc;
+
+  return true;
+}
+
+auto Parser::parse_expression_statement(
+    StatementAST*& yyast, List<AttributeSpecifierAST*>* attributes) -> bool {
+  SourceLocation semicolonLoc;
+
+  ExpressionAST* expression = nullptr;
+
+  if (!match(TokenKind::T_SEMICOLON, semicolonLoc)) {
+    if (!parse_maybe_expression(expression, ExprContext{})) return false;
+
+    expect(TokenKind::T_SEMICOLON, semicolonLoc);
+  }
+
+  auto ast = ExpressionStatementAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeList = attributes;
+  ast->expression = expression;
+  ast->semicolonLoc = semicolonLoc;
+
+  return true;
+}
+
+auto Parser::parse_maybe_compound_statement(
+    StatementAST*& yyast, List<AttributeSpecifierAST*>* attributes) -> bool {
+  CompoundStatementAST* statement = nullptr;
+  if (parse_compound_statement(statement, attributes, /*skip=*/false)) {
+    yyast = statement;
+    return true;
+  }
+  return false;
+}
+
+auto Parser::parse_compound_statement(CompoundStatementAST*& yyast,
+                                      List<AttributeSpecifierAST*>* attributes,
+                                      bool skip) -> bool {
+  SourceLocation lbraceLoc;
+
+  if (!match(TokenKind::T_LBRACE, lbraceLoc)) return false;
+
+  FunctionSymbol* functionSymbol = symbol_cast<FunctionSymbol>(scope());
+
+  if (!functionSymbol && scope()->isFunctionParameters()) {
+    functionSymbol = symbol_cast<FunctionSymbol>(scope()->parent());
+  }
+
+  auto _ = CombinedScopeGuard{this};
+
+  auto blockSymbol = binder_.enterBlock(lbraceLoc);
+
+  if (functionSymbol) {
+    auto functionName = to_string(functionSymbol->name());
+
+    auto func = control()->newVariableSymbol(scope(), lbraceLoc);
+    func->setName(control()->getIdentifier("__func__"));
+
+    const Type* elementType = control()->getCharType();
+    if (isCxx()) {
+      elementType = control()->getQualType(elementType, CvQualifiers::kConst);
+    }
+
+    func->setType(
+        control()->getBoundedArrayType(elementType, functionName.size() + 1));
+    func->setStatic(true);
+    func->setConstexpr(true);
+    func->setConstValue(control()->stringLiteral("\"" + functionName + "\""));
+    scope()->addSymbol(func);
+  }
+
+  auto ast = CompoundStatementAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeList = attributes;
+
+  ast->symbol = blockSymbol;
+  ast->lbraceLoc = lbraceLoc;
+
+  if (skip) {
+    int depth = 1;
+
+    while (const auto& tok = LA()) {
+      if (tok.is(TokenKind::T_LBRACE)) {
+        ++depth;
+      } else if (tok.is(TokenKind::T_RBRACE)) {
+        if (!--depth) {
+          break;
+        }
+      }
+
+      consumeToken();
+    }
+
+    expect(TokenKind::T_RBRACE, ast->rbraceLoc);
+
+    return true;
+  }
+
+  finish_compound_statement(ast);
+
+  if (!expect(TokenKind::T_RBRACE, ast->rbraceLoc)) return false;
+
+  return true;
+}
+
+void Parser::finish_compound_statement(CompoundStatementAST* ast) {
+  auto _ = CombinedScopeGuard{this};
+
+  setScope(ast->symbol);
+
+  bool skipping = false;
+
+  auto it = &ast->statementList;
+
+  LoopParser loop{this};
+
+  while (LA()) {
+    if (shouldStopParsing()) break;
+    if (lookat(TokenKind::T_RBRACE)) break;
+
+    loop.start();
+
+    StatementAST* statement = nullptr;
+
+    if (parse_maybe_statement(statement)) {
+      *it = make_list_node(pool_, statement);
+      it = &(*it)->next;
+      skipping = false;
+    } else {
+      parse_skip_statement(skipping);
+    }
+  }
+}
+
+void Parser::parse_skip_statement(bool& skipping) {
+  if (!LA()) return;
+  if (lookat(TokenKind::T_RBRACE)) return;
+  if (!skipping) report_failed_parse("expected a statement");
+  for (; LA(); consumeToken()) {
+    if (lookat(TokenKind::T_SEMICOLON)) break;
+    if (lookat(TokenKind::T_LBRACE)) break;
+    if (lookat(TokenKind::T_RBRACE)) break;
+  }
+  skipping = true;
+}
+
+auto Parser::parse_if_statement(StatementAST*& yyast,
+                                List<AttributeSpecifierAST*>* attributes)
+    -> bool {
+  SourceLocation ifLoc;
+
+  if (!match(TokenKind::T_IF, ifLoc)) return false;
+
+  auto _ = CombinedScopeGuard{this};
+
+  auto blockSymbol = binder_.enterBlock(ifLoc);
+
+  pushScope(blockSymbol);
+
+  if (LA().isOneOf(TokenKind::T_EXCLAIM, TokenKind::T_CONSTEVAL)) {
+    auto ast = ConstevalIfStatementAST::create(pool_);
+    yyast = ast;
+
+    ast->attributeList = attributes;
+    ast->ifLoc = ifLoc;
+
+    ast->isNot = match(TokenKind::T_EXCLAIM, ast->exclaimLoc);
+
+    expect(TokenKind::T_CONSTEVAL, ast->constvalLoc);
+
+    if (CompoundStatementAST* statement = nullptr; parse_compound_statement(
+            statement, /*sattributes*/ nullptr, /*skip=*/false)) {
+      ast->statement = statement;
+    } else {
+      parse_error("expected compound statement");
+    }
+
+    if (match(TokenKind::T_ELSE, ast->elseLoc)) {
+      parse_statement(ast->elseStatement);
+    }
+
+    return true;
+  }
+
+  auto ast = IfStatementAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeList = attributes;
+  ast->ifLoc = ifLoc;
+
+  match(TokenKind::T_CONSTEXPR, ast->constexprLoc);
+
+  expect(TokenKind::T_LPAREN, ast->lparenLoc);
+
+  parse_init_statement(ast->initializer);
+
+  parse_condition(ast->condition, ExprContext{});
+  check_bool_condition(ast->condition);
+
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  parse_statement(ast->statement);
+
+  if (!match(TokenKind::T_ELSE, ast->elseLoc)) return true;
+
+  parse_statement(ast->elseStatement);
+
+  ast->symbol = blockSymbol;
+
+  return true;
+}
+
+auto Parser::parse_switch_statement(StatementAST*& yyast,
+                                    List<AttributeSpecifierAST*>* attributes)
+    -> bool {
+  SourceLocation switchLoc;
+
+  if (!match(TokenKind::T_SWITCH, switchLoc)) return false;
+
+  auto _ = CombinedScopeGuard{this};
+
+  auto blockSymbol = binder_.enterBlock(switchLoc);
+
+  pushScope(blockSymbol);
+
+  auto ast = SwitchStatementAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeList = attributes;
+  ast->switchLoc = switchLoc;
+
+  expect(TokenKind::T_LPAREN, ast->lparenLoc);
+
+  parse_init_statement(ast->initializer);
+
+  parse_condition(ast->condition, ExprContext{});
+  check_integral_condition(ast->condition);
+
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  parse_statement(ast->statement);
+
+  ast->symbol = blockSymbol;
+
+  return true;
+}
+
+auto Parser::parse_while_statement(StatementAST*& yyast,
+                                   List<AttributeSpecifierAST*>* attributes)
+    -> bool {
+  SourceLocation whileLoc;
+
+  if (!match(TokenKind::T_WHILE, whileLoc)) return false;
+
+  auto _ = CombinedScopeGuard{this};
+
+  auto blockSymbol = binder_.enterBlock(whileLoc);
+
+  pushScope(blockSymbol);
+
+  auto ast = WhileStatementAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeList = attributes;
+  ast->whileLoc = whileLoc;
+
+  expect(TokenKind::T_LPAREN, ast->lparenLoc);
+
+  parse_condition(ast->condition, ExprContext{});
+  check_bool_condition(ast->condition);
+
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  parse_statement(ast->statement);
+
+  ast->symbol = blockSymbol;
+
+  return true;
+}
+
+auto Parser::parse_do_statement(StatementAST*& yyast,
+                                List<AttributeSpecifierAST*>* attributes)
+    -> bool {
+  SourceLocation doLoc;
+
+  if (!match(TokenKind::T_DO, doLoc)) return false;
+
+  auto _ = CombinedScopeGuard{this};
+
+  auto ast = DoStatementAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeList = attributes;
+  ast->doLoc = doLoc;
+
+  parse_statement(ast->statement);
+
+  expect(TokenKind::T_WHILE, ast->whileLoc);
+
+  expect(TokenKind::T_LPAREN, ast->lparenLoc);
+
+  parse_expression(ast->expression, ExprContext{});
+  check_bool_condition(ast->expression);
+
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  expect(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+
+  return true;
+}
+
+auto Parser::parse_for_statement(StatementAST*& yyast,
+                                 List<AttributeSpecifierAST*>* attributes)
+    -> bool {
+  SourceLocation forLoc;
+  if (!match(TokenKind::T_FOR, forLoc)) return false;
+
+  auto _ = CombinedScopeGuard{this};
+
+  auto blockSymbol = binder_.enterBlock(forLoc);
+
+  setScope(blockSymbol);
+
+  SourceLocation lparenLoc;
+  expect(TokenKind::T_LPAREN, lparenLoc);
+
+  StatementAST* initializer = nullptr;
+  parse_init_statement(initializer);
+
+  DeclarationAST* rangeDeclaration = nullptr;
+  SourceLocation colonLoc;
+  DeclSpecs rangeSpecs{unit_};
+
+  auto lookat_for_range_declaration = [&] {
+    if (!isCxx()) return false;
+
+    LookaheadParser lookahead{this};
+
+    if (!parse_for_range_declaration(rangeDeclaration, rangeSpecs))
+      return false;
+
+    if (!match(TokenKind::T_COLON, colonLoc)) return false;
+
+    lookahead.commit();
+
+    return true;
+  };
+
+  if (lookat_for_range_declaration()) {
+    auto ast = ForRangeStatementAST::create(pool_);
+    yyast = ast;
+
+    ast->attributeList = attributes;
+    ast->forLoc = forLoc;
+    ast->rangeDeclaration = rangeDeclaration;
+    ast->lparenLoc = lparenLoc;
+    ast->initializer = initializer;
+    ast->colonLoc = colonLoc;
+    ast->symbol = blockSymbol;
+
+    parse_for_range_initializer(ast->rangeInitializer);
+
+    binder_.finishForRangeDeclaration(ast, rangeSpecs);
+
+    expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+    parse_statement(ast->statement);
+
+    return true;
+  }
+
+  auto ast = ForStatementAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeList = attributes;
+  ast->forLoc = forLoc;
+  ast->lparenLoc = lparenLoc;
+  ast->initializer = initializer;
+
+  if (!match(TokenKind::T_SEMICOLON, ast->semicolonLoc)) {
+    parse_condition(ast->condition, ExprContext{});
+    check_bool_condition(ast->condition);
+    expect(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+  }
+
+  if (!match(TokenKind::T_RPAREN, ast->rparenLoc)) {
+    parse_expression(ast->expression, ExprContext{});
+    expect(TokenKind::T_RPAREN, ast->rparenLoc);
+  }
+
+  parse_statement(ast->statement);
+
+  ast->symbol = blockSymbol;
+
+  return true;
+}
+
+auto Parser::parse_for_range_declaration(DeclarationAST*& yyast,
+                                         DeclSpecs& specs) -> bool {
+  List<AttributeSpecifierAST*>* attributeList = nullptr;
+
+  parse_optional_attribute_specifier_seq(attributeList);
+
+  List<SpecifierAST*>* declSpecifierList = nullptr;
+
+  if (!parse_decl_specifier_seq(declSpecifierList, specs)) return false;
+
+  if (parse_structured_binding(yyast, attributeList, declSpecifierList, specs,
+                               BindingContext::kCondition)) {
+    return true;
+  }
+
+  DeclaratorAST* declarator = nullptr;
+  Decl decl{specs};
+  if (!parse_declarator(declarator, decl)) return false;
+
+  auto symbol = binder_.declareVariable(declarator, decl,
+                                        /*addSymbolToParentScope=*/true);
+
+  auto initDeclarator = InitDeclaratorAST::create(pool_);
+  initDeclarator->declarator = declarator;
+  initDeclarator->symbol = symbol;
+
+  auto ast = SimpleDeclarationAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeList = attributeList;
+  ast->declSpecifierList = declSpecifierList;
+  ast->initDeclaratorList = make_list_node(pool_, initDeclarator);
+
+  return true;
+}
+
+void Parser::parse_for_range_initializer(ExpressionAST*& yyast) {
+  parse_expr_or_braced_init_list(yyast, ExprContext{});
+}
+
+auto Parser::parse_break_statement(StatementAST*& yyast,
+                                   List<AttributeSpecifierAST*>* attributes)
+    -> bool {
+  SourceLocation breakLoc;
+
+  if (!match(TokenKind::T_BREAK, breakLoc)) return false;
+
+  auto ast = BreakStatementAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeList = attributes;
+  ast->breakLoc = breakLoc;
+
+  expect(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+
+  return true;
+}
+
+auto Parser::parse_continue_statement(StatementAST*& yyast,
+                                      List<AttributeSpecifierAST*>* attributes)
+    -> bool {
+  SourceLocation continueLoc;
+
+  if (!match(TokenKind::T_CONTINUE, continueLoc)) return false;
+
+  auto ast = ContinueStatementAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeList = attributes;
+  ast->continueLoc = continueLoc;
+
+  expect(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+
+  return true;
+}
+
+auto Parser::parse_return_statement(StatementAST*& yyast,
+                                    List<AttributeSpecifierAST*>* attributes)
+    -> bool {
+  SourceLocation returnLoc;
+
+  if (!match(TokenKind::T_RETURN, returnLoc)) return false;
+
+  auto ast = ReturnStatementAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeList = attributes;
+  ast->returnLoc = returnLoc;
+
+  if (!match(TokenKind::T_SEMICOLON, ast->semicolonLoc)) {
+    parse_expr_or_braced_init_list(ast->expression, ExprContext{});
+
+    expect(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+
+    check(ast);
+  }
+
+  return true;
+}
+
+auto Parser::parse_goto_statement(StatementAST*& yyast,
+                                  List<AttributeSpecifierAST*>* attributes)
+    -> bool {
+  SourceLocation gotoLoc;
+
+  if (!match(TokenKind::T_GOTO, gotoLoc)) return false;
+
+  auto ast = GotoStatementAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeList = attributes;
+  ast->gotoLoc = gotoLoc;
+
+  ast->isIndirect = match(TokenKind::T_STAR, ast->starLoc);
+
+  if (ast->isIndirect) {
+    parse_assignment_expression(ast->expression, ExprContext{});
+  } else {
+    expect(TokenKind::T_IDENTIFIER, ast->identifierLoc);
+    ast->identifier = unit_->identifier(ast->identifierLoc);
+  }
+
+  expect(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+
+  return true;
+}
+
+auto Parser::parse_coroutine_return_statement(
+    StatementAST*& yyast, List<AttributeSpecifierAST*>* attributes) -> bool {
+  SourceLocation coreturnLoc;
+
+  if (!match(TokenKind::T_CO_RETURN, coreturnLoc)) return false;
+
+  auto ast = CoroutineReturnStatementAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeList = attributes;
+  ast->coreturnLoc = coreturnLoc;
+
+  if (!match(TokenKind::T_SEMICOLON, ast->semicolonLoc)) {
+    parse_expr_or_braced_init_list(ast->expression, ExprContext{});
+
+    expect(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+  }
+
+  return true;
+}
+
+auto Parser::parse_declaration_statement(StatementAST*& yyast) -> bool {
+  DeclarationAST* declaration = nullptr;
+
+  if (!parse_block_declaration(declaration, BindingContext::kBlock))
+    return false;
+
+  auto ast = DeclarationStatementAST::create(pool_);
+  yyast = ast;
+
+  ast->declaration = declaration;
+
+  return true;
+}
+
+auto Parser::parse_maybe_module() -> bool {
+  if (!moduleUnit_) return false;
+
+  const auto start = currentLocation();
+
+  SourceLocation exportLoc;
+
+  match(TokenKind::T_EXPORT, exportLoc);
+
+  SourceLocation moduleLoc;
+
+  const auto is_module = parse_module_keyword(moduleLoc);
+
+  rewind(start);
+
+  return is_module;
+}
+
+auto Parser::parse_template_declaration_body(
+    DeclarationAST*& yyast, TemplateDeclarationAST* templateHead) -> bool {
+  if (parse_deduction_guide(yyast, templateHead)) return true;
+  if (parse_export_declaration(yyast, templateHead)) return true;
+  if (parse_opaque_enum_declaration(yyast, templateHead)) return true;
+  if (parse_alias_declaration(yyast, templateHead)) return true;
+  return parse_simple_declaration(yyast, BindingContext::kTemplate,
+                                  templateHead);
+}
+
+auto Parser::parse_declaration(DeclarationAST*& yyast, BindingContext ctx)
+    -> bool {
+  if (lookat(TokenKind::T_RBRACE)) return false;
+  if (lookat(TokenKind::T_SEMICOLON)) return parse_empty_declaration(yyast);
+  if (parse_explicit_instantiation(yyast)) return true;
+  if (TemplateDeclarationAST* templateDeclaration = nullptr;
+      parse_template_declaration(templateDeclaration)) {
+    yyast = templateDeclaration;
+    return true;
+  }
+  if (parse_linkage_specification(yyast)) return true;
+  if (parse_namespace_definition(yyast)) return true;
+  if (parse_deduction_guide(yyast)) return true;
+  if (parse_export_declaration(yyast)) return true;
+  if (parse_module_import_declaration(yyast)) return true;
+  if (parse_attribute_declaration(yyast)) return true;
+  return parse_block_declaration(yyast, ctx);
+}
+
+auto Parser::parse_block_declaration(DeclarationAST*& yyast, BindingContext ctx)
+    -> bool {
+  if (parse_asm_declaration(yyast)) return true;
+  if (parse_namespace_alias_definition(yyast)) return true;
+  if (parse_static_assert_declaration(yyast)) return true;
+  if (parse_opaque_enum_declaration(yyast)) return true;
+  if (parse_using_enum_declaration(yyast)) return true;
+  if (parse_using_directive(yyast)) return true;
+  if (parse_alias_declaration(yyast)) return true;
+  if (parse_using_declaration(yyast)) return true;
+  return parse_simple_declaration(yyast, ctx);
+}
+
+auto Parser::parse_alias_declaration(DeclarationAST*& yyast,
+                                     TemplateDeclarationAST* templateHead)
+    -> bool {
+  SourceLocation usingLoc;
+  SourceLocation identifierLoc;
+  const Identifier* identifier = nullptr;
+  List<AttributeSpecifierAST*>* attributes = nullptr;
+  SourceLocation equalLoc;
+
+  auto lookat_alias_declaration = [&] {
+    LookaheadParser lookhead{this};
+
+    if (!match(TokenKind::T_USING, usingLoc)) return false;
+
+    if (!match(TokenKind::T_IDENTIFIER, identifierLoc)) return false;
+
+    identifier = unit_->identifier(identifierLoc);
+
+    parse_optional_attribute_specifier_seq(attributes);
+
+    if (!match(TokenKind::T_EQUAL, equalLoc)) return false;
+
+    lookhead.commit();
+
+    return true;
+  };
+
+  if (!lookat_alias_declaration()) return false;
+
+  List<AttributeSpecifierAST*>* gnuAttributeList = nullptr;
+  parse_optional_attribute_specifier_seq(gnuAttributeList,
+                                         AllowedAttributes::kGnuAttribute);
+
+  TypeIdAST* typeId = nullptr;
+
+  if (!parse_defining_type_id(typeId))
+    report_failed_parse("expected a type id");
+
+  SourceLocation semicolonLoc;
+
+  expect(TokenKind::T_SEMICOLON, semicolonLoc);
+
+  auto symbol = binder_.declareTypeAlias(identifierLoc, typeId);
+  symbol->setTemplateDeclaration(templateHead);
+  if (templateHead) symbol->setTemplateParameters(templateHead->symbol);
+
+  auto ast = AliasDeclarationAST::create(pool_);
+  yyast = ast;
+
+  ast->usingLoc = usingLoc;
+  ast->identifierLoc = identifierLoc;
+  ast->identifier = identifier;
+  ast->attributeList = attributes;
+  ast->equalLoc = equalLoc;
+  ast->gnuAttributeList = gnuAttributeList;
+  ast->typeId = typeId;
+  ast->semicolonLoc = semicolonLoc;
+  ast->symbol = symbol;
+  symbol->setDeclaration(ast);
+
+  return true;
+}
+
+auto Parser::enterOrCreateNamespace(const Identifier* identifier,
+                                    SourceLocation identifierLoc, bool isInline)
+    -> NamespaceSymbol* {
+  auto parentScope = scope();
+  auto parentNamespace = symbol_cast<NamespaceSymbol>(parentScope);
+
+  NamespaceSymbol* namespaceSymbol = nullptr;
+
+  if (!identifier) {
+    namespaceSymbol = parentNamespace->unnamedNamespace();
+  } else {
+    auto resolved = parentScope->find(identifier) | views::namespaces;
+    if (std::ranges::distance(resolved) == 1) {
+      namespaceSymbol =
+          symbol_cast<NamespaceSymbol>(*std::ranges::begin(resolved));
+    }
+  }
+
+  if (!namespaceSymbol) {
+    namespaceSymbol = control_->newNamespaceSymbol(parentScope, identifierLoc);
+
+    if (identifier) {
+      namespaceSymbol->setName(identifier);
+    } else {
+      const auto anonNamespaceIndex = anonNamespaceCount_++;
+      namespaceSymbol->setAnonNamespaceIndex(anonNamespaceIndex);
+      parentNamespace->setUnnamedNamespace(namespaceSymbol);
+    }
+
+    namespaceSymbol->setInline(isInline);
+
+    parentScope->addSymbol(namespaceSymbol);
+
+    if (isInline || !namespaceSymbol->name()) {
+      parentNamespace->addUsingDirective(namespaceSymbol);
+      parentNamespace->setHasInlineNamespaces(true);
+    }
+  }
+
+  setScope(namespaceSymbol);
+
+  return namespaceSymbol;
+}
+
+void Parser::enterFunctionScope(
+    FunctionDeclaratorChunkAST* functionDeclarator) {}
+
+auto Parser::parse_empty_or_attribute_declaration(
+    DeclarationAST*& yyast, List<AttributeSpecifierAST*>* attributes,
+    BindingContext ctx) -> auto {
+  LookaheadParser lookahead{this};
+
+  SourceLocation semicolonLoc;
+
+  if (!match(TokenKind::T_SEMICOLON, semicolonLoc)) return false;
+
+  lookahead.commit();
+
+  if (attributes) {
+    auto ast = AttributeDeclarationAST::create(pool_);
+    yyast = ast;
+    ast->attributeList = attributes;
+    ast->semicolonLoc = semicolonLoc;
+    return true;
+  }
+
+  auto ast = EmptyDeclarationAST::create(pool_);
+  yyast = ast;
+  ast->semicolonLoc = semicolonLoc;
+  return true;
+}
+
+auto Parser::parse_notypespec_function_definition(
+    DeclarationAST*& yyast, List<AttributeSpecifierAST*>* atributes,
+    BindingContext ctx, TemplateDeclarationAST* templateHead) -> bool {
+  if (!isCxx()) return false;
+  if (!context_allows_function_definition(ctx)) return false;
+
+  LookaheadParser lookahead{this};
+
+  DeclSpecs specs{unit_};
+  specs.templateHead = templateHead;
+  List<SpecifierAST*>* declSpecifierList = nullptr;
+
+  auto parse_optional_decl_specifier_seq_no_typespecs = [&] {
+    LookaheadParser lookahead{this};
+    if (!parse_decl_specifier_seq_no_typespecs(declSpecifierList, specs)) {
+      specs = DeclSpecs{unit_};
+      specs.templateHead = templateHead;
+      return;
+    }
+    lookahead.commit();
+  };
+
+  parse_optional_decl_specifier_seq_no_typespecs();
+
+  specs.finish();
+
+  if (!parse_notypespec_function_definition(yyast, declSpecifierList, specs,
+                                            atributes))
+    return false;
+
+  lookahead.commit();
+
+  return true;
+}
+
+auto Parser::parse_type_or_forward_declaration(
+    DeclarationAST*& yyast, List<AttributeSpecifierAST*>* attributes,
+    List<SpecifierAST*>* declSpecifierList, const DeclSpecs& specs,
+    BindingContext ctx, TemplateDeclarationAST* templateHead) -> bool {
+  if (ctx == BindingContext::kInitStatement) return false;
+
+  LookaheadParser lookahead{this};
+
+  List<AttributeSpecifierAST*>* trailingAttributes = nullptr;
+  (void)parse_attribute_specifier_seq(trailingAttributes);
+
+  if (!specs.hasClassOrElaboratedTypeSpecifier()) return false;
+
+  SourceLocation semicolonLoc;
+  if (!match(TokenKind::T_SEMICOLON, semicolonLoc)) return false;
+
+  lookahead.commit();
+
+  if (!declSpecifierList) cxx_runtime_error("no specs");
+
+  auto ast = SimpleDeclarationAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeList = attributes;
+  ast->declSpecifierList = declSpecifierList;
+  ast->semicolonLoc = semicolonLoc;
+
+  recordFriendDeclaration(specs, declSpecifierList, nullptr,
+                          FriendDeclarationKind::kType);
+
+  return true;
+}
+
+auto Parser::parse_structured_binding(DeclarationAST*& yyast,
+                                      List<AttributeSpecifierAST*>* attributes,
+                                      List<SpecifierAST*>* declSpecifierList,
+                                      const DeclSpecs& specs,
+                                      BindingContext ctx) -> bool {
+  if (!isCxx()) return false;
+
+  LookaheadParser lookahead{this};
+
+  if (!context_allows_structured_bindings(ctx)) {
+    return false;
+  }
+
+  SourceLocation refLoc;
+  (void)parse_ref_qualifier(refLoc);
+
+  SourceLocation lbracketLoc;
+  if (!match(TokenKind::T_LBRACKET, lbracketLoc)) return false;
+
+  List<NameIdAST*>* bindings = nullptr;
+  if (!parse_identifier_list(bindings)) return false;
+
+  SourceLocation rbracketLoc;
+  if (!match(TokenKind::T_RBRACKET, rbracketLoc)) return false;
+
+  ExpressionAST* initializer = nullptr;
+  SourceLocation semicolonLoc;
+
+  if (ctx != BindingContext::kCondition) {
+    if (!parse_initializer(initializer, ExprContext{})) return false;
+    if (!match(TokenKind::T_SEMICOLON, semicolonLoc)) return false;
+  }
+
+  lookahead.commit();
+
+  auto ast = StructuredBindingDeclarationAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeList = attributes;
+  ast->declSpecifierList = declSpecifierList;
+  ast->refQualifierLoc = refLoc;
+  ast->lbracketLoc = lbracketLoc;
+  ast->bindingList = bindings;
+  ast->rbracketLoc = rbracketLoc;
+  ast->initializer = initializer;
+  ast->semicolonLoc = semicolonLoc;
+
+  binder_.bindStructuredBindings(ast, specs);
+
+  return true;
+}
+
+auto Parser::parse_simple_declaration(DeclarationAST*& yyast,
+                                      BindingContext ctx,
+                                      TemplateDeclarationAST* templateHead)
+    -> bool {
+  auto templateHeadGuard = EnclosingTemplateHeadGuard{this, templateHead};
+
+  SourceLocation extensionLoc;
+
+  match(TokenKind::T___EXTENSION__, extensionLoc);
+
+  List<AttributeSpecifierAST*>* attributes = nullptr;
+  parse_optional_attribute_specifier_seq(attributes);
+
+  if (SourceLocation semicolonLoc;
+      ctx != BindingContext::kTemplate && attributes &&
+      match(TokenKind::T_SEMICOLON, semicolonLoc)) {
+    auto ast = AttributeDeclarationAST::create(pool_);
+    yyast = ast;
+
+    ast->attributeList = attributes;
+    ast->semicolonLoc = semicolonLoc;
+    return true;
+  }
+
+  if (parse_empty_or_attribute_declaration(yyast, attributes, ctx)) return true;
+
+  if (parse_notypespec_function_definition(yyast, attributes, ctx,
+                                           templateHead))
+    return true;
+
+  DeclSpecs specs{unit_};
+  specs.templateHead = templateHead;
+  List<SpecifierAST*>* declSpecifierList = nullptr;
+
+  auto lookat_decl_specifiers = [&] {
+    LookaheadParser lookahead{this};
+
+    auto typeNameContext = ctx == BindingContext::kBlock ||
+                                   ctx == BindingContext::kInitStatement ||
+                                   ctx == BindingContext::kCondition
+                               ? TypeNameContext::kGeneral
+                               : TypeNameContext::kTypeOnly;
+    if (!parse_decl_specifier_seq(declSpecifierList, specs, typeNameContext))
+      return false;
+
+    if (!specs.hasTypeOrSizeSpecifier()) return false;
+    lookahead.commit();
+    return true;
+  };
+
+  if (!lookat_decl_specifiers()) return false;
+
+  if (parse_type_or_forward_declaration(yyast, attributes, declSpecifierList,
+                                        specs, ctx, templateHead))
+    return true;
+
+  if (!templateHead && parse_structured_binding(yyast, attributes,
+                                                declSpecifierList, specs, ctx))
+    return true;
+
+  return parse_simple_declaration(yyast, attributes, declSpecifierList, specs,
+                                  ctx, templateHead);
+}
+
+auto Parser::is_ambiguous_with_expression_statement() const -> bool {
+  return LA().isOneOf(TokenKind::T_LPAREN, TokenKind::T_LBRACE);
+}
+
+auto Parser::parse_simple_declaration(
+    DeclarationAST*& yyast, List<AttributeSpecifierAST*>* attributes,
+    List<SpecifierAST*>* declSpecifierList, const DeclSpecs& specs,
+    BindingContext ctx, TemplateDeclarationAST* templateHead) -> bool {
+  DeclaratorAST* declarator = nullptr;
+  Decl decl{specs};
+  const bool parsed = parse_declarator(declarator, decl);
+
+  if (!parsed) {
+    if (!is_ambiguous_with_expression_statement())
+      parse_error("expected a declarator");
+    return false;
+  }
+
+  auto lookat_function_definition = [&] {
+    if (!context_allows_function_definition(ctx)) return false;
+
+    LookaheadParser lookahead{this};
+
+    auto functionDeclarator = getFunctionPrototype(declarator);
+    if (!functionDeclarator) return false;
+
+    RequiresClauseAST* requiresClause = nullptr;
+    (void)parse_trailing_requires_clause(functionDeclarator, requiresClause);
+
+    if (!lookat_function_body()) return false;
+
+    auto abbreviatedHead = takeAbbreviatedTemplateHead(decl);
+    templateHead = decl.specs.templateHead;
+
+    auto _ = CombinedScopeGuard{this};
+
+    if (abbreviatedHead) {
+      setScope(abbreviatedHead->symbol);
+    } else if (templateHead && ctx != BindingContext::kTemplate) {
+      setScope(templateHead->symbol);
+    }
+
+    auto functionType = getDeclaratorType(unit_, declarator, decl.specs.type());
+
+    auto q = decl.getNestedNameSpecifier();
+
+    if (auto scope = decl.getScope()) {
+      enterScopeChain(scope);
+      auto currentInstantiation = binder_.currentInstantiationOf(scope);
+      if (binder_.resolveMembersOfCurrentInstantiation(declSpecifierList,
+                                                       currentInstantiation)) {
+        DeclSpecs rebound{unit_};
+        for (auto specifier : ListView{declSpecifierList}) {
+          rebound.accept(specifier);
+        }
+        rebound.finish();
+        decl.specs.setType(rebound.type());
+        functionType = getDeclaratorType(unit_, declarator, rebound.type());
+      }
+      functionType =
+          type_cast<FunctionType>(binder_.resolveMemberOfCurrentInstantiation(
+              functionType, currentInstantiation));
+    } else if (q) {
+      type_error(q->firstSourceLocation(),
+                 std::format("unresolved class or namespace"));
+    }
+
+    const Name* functionName = decl.getName();
+
+    if (q) {
+      auto existing = binder_.getFunction(scope(), functionName, functionType,
+                                          templateHead, requiresClause);
+      if (!existing) {
+        type_error(q->firstSourceLocation(),
+                   std::format("class or namespace has no member named '{}'",
+                               to_string(functionName)));
+      }
+    }
+
+    decl.trailingRequiresClause = requiresClause;
+
+    auto functionSymbol = binder_.declareFunction(declarator, decl);
+    associatePendingNoexceptSpecifier(declarator, functionSymbol);
+
+    if (auto canon = functionSymbol->canonical(); canon != functionSymbol) {
+      canon->setDefinition(functionSymbol);
+    }
+
+    functionSymbol->setDefined(true);
+
+    if (classDepth_) functionSymbol->setInline(true);
+
+    if (auto params = functionDeclarator->parameterDeclarationClause) {
+      auto functionScope = functionSymbol;
+      functionScope->addSymbol(params->functionParametersSymbol);
+      setScope(params->functionParametersSymbol);
+    } else {
+      setScope(functionSymbol);
+    }
+
+    if (templateHead) {
+      functionSymbol->setTemplateDeclaration(templateHead);
+      functionSymbol->setTemplateParameters(templateHead->symbol);
+    }
+
+    FunctionBodyAST* functionBody = nullptr;
+    if (!parse_function_body(functionBody))
+      parse_error("expected function body");
+
+    lookahead.commit();
+
+    binder_.applyFunctionDefinitionKind(functionSymbol, functionBody);
+
+    binder_.applyAbiTags(functionSymbol, attributes);
+
+    auto ast = FunctionDefinitionAST::create(pool_);
+    yyast = ast;
+
+    ast->attributeList = attributes;
+    ast->declSpecifierList = declSpecifierList;
+    ast->declarator = declarator;
+    ast->requiresClause = requiresClause;
+    ast->functionBody = functionBody;
+    ast->symbol = functionSymbol;
+    ast->symbol->setDeclaration(ast);
+    if (abbreviatedHead) abbreviatedHead->declaration = ast;
+
+    if (classDepth_) {
+      pendingFunctionDefinitions_.push_back(ast);
+    } else if (!binder_.inTemplate() &&
+               ast_cast<CompoundStatementFunctionBodyAST>(functionBody)) {
+      binder_.finishAutoReturnType(functionSymbol);
+    }
+    if (!classDepth_ && !binder_.inTemplate())
+      binder_.synthesizeDefaultedMemberBody(functionSymbol);
+    check_mem_initializers(ast);
+
+    return true;
+  };
+
+  if (lookat_function_definition()) return true;
+
+  List<InitDeclaratorAST*>* initDeclaratorList = nullptr;
+  auto declIt = &initDeclaratorList;
+
+  InitDeclaratorAST* initDeclarator = nullptr;
+  if (!parse_init_declarator(initDeclarator, declarator, decl, ctx,
+                             templateHead))
+    return false;
+
+  *declIt = make_list_node(pool_, initDeclarator);
+  declIt = &(*declIt)->next;
+
+  if (ctx != BindingContext::kTemplate) {
+    SourceLocation commaLoc;
+
+    while (match(TokenKind::T_COMMA, commaLoc)) {
+      InitDeclaratorAST* initDeclarator = nullptr;
+      if (!parse_init_declarator(initDeclarator, specs, ctx, templateHead))
+        return false;
+
+      *declIt = make_list_node(pool_, initDeclarator);
+      declIt = &(*declIt)->next;
+    }
+  }
+
+  SourceLocation semicolonLoc;
+  if (!match(TokenKind::T_SEMICOLON, semicolonLoc)) return false;
+
+  auto ast = SimpleDeclarationAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeList = attributes;
+  ast->declSpecifierList = declSpecifierList;
+  ast->initDeclaratorList = initDeclaratorList;
+  ast->semicolonLoc = semicolonLoc;
+
+  recordFriendDeclaration(specs, declSpecifierList,
+                          decl.getNestedNameSpecifier(),
+                          FriendDeclarationKind::kDeclarator);
+
+  binder_.applyAbiTags(ast);
+
+  attachFunctionTemplateDeclarations(ast);
+
+  return true;
+}
+
+auto Parser::parse_notypespec_function_definition(
+    DeclarationAST*& yyast, List<SpecifierAST*>* declSpecifierList,
+    const DeclSpecs& specs, List<AttributeSpecifierAST*>* attributes) -> bool {
+  CoreDeclaratorAST* declaratorId = nullptr;
+
+  Decl decl{specs};
+  if (!parse_declarator_id(declaratorId, decl, DeclaratorKind::kDeclarator))
+    return false;
+
+  auto _ = CombinedScopeGuard{this};
+
+  auto nestedNameSpecifier = decl.getNestedNameSpecifier();
+
+  if (auto scope = decl.getScope()) {
+    enterScopeChain(scope);
+  } else if (auto q = decl.getNestedNameSpecifier()) {
+    type_error(q->firstSourceLocation(),
+               std::format("unresolved class or namespace"));
+  }
+
+  FunctionDeclaratorChunkAST* functionDeclarator = nullptr;
+  if (!parse_function_declarator(functionDeclarator)) return false;
+
+  auto declarator = DeclaratorAST::create(pool_);
+  declarator->coreDeclarator = declaratorId;
+
+  declarator->declaratorChunkList =
+      make_list_node<DeclaratorChunkAST>(pool_, functionDeclarator);
+
+  RequiresClauseAST* requiresClause = nullptr;
+
+  const auto has_requires_clause =
+      parse_trailing_requires_clause(functionDeclarator, requiresClause);
+
+  if (!has_requires_clause) parse_virt_specifier_seq(functionDeclarator);
+
+  parse_optional_attribute_specifier_seq(functionDeclarator->attributeList);
+
+  auto returnType = decl.getReturnType(scope());
+
+  auto functionType = getDeclaratorType(unit_, declarator, returnType);
+
+  SourceLocation equalLoc;
+  SourceLocation zeroLoc;
+
+  const auto isPure = parse_pure_specifier(equalLoc, zeroLoc);
+
+  functionDeclarator->isPure = isPure;
+
+  const auto isDeclaration = isPure || lookat(TokenKind::T_SEMICOLON);
+  const auto isDefinition = lookat_function_body();
+
+  if (!isDeclaration && !isDefinition) return false;
+
+  auto abbreviatedHead = takeAbbreviatedTemplateHead(decl);
+  auto templateHead = decl.specs.templateHead;
+  if (abbreviatedHead) setScope(abbreviatedHead->symbol);
+
+  decl.trailingRequiresClause = requiresClause;
+
+  auto functionSymbol = binder_.declareFunction(declarator, decl);
+  associatePendingNoexceptSpecifier(declarator, functionSymbol);
+
+  binder_.applyAbiTags(functionSymbol, attributes);
+
+  if (templateHead) {
+    functionSymbol->setTemplateDeclaration(templateHead);
+    functionSymbol->setTemplateParameters(templateHead->symbol);
+  }
+
+  SourceLocation semicolonLoc;
+
+  if (isPure) {
+    expect(TokenKind::T_SEMICOLON, semicolonLoc);
+  }
+
+  if (isDeclaration) {
+    if (auto params = functionDeclarator->parameterDeclarationClause) {
+      functionSymbol->addSymbol(params->functionParametersSymbol);
+    }
+
+    auto initDeclarator = InitDeclaratorAST::create(pool_);
+    initDeclarator->declarator = declarator;
+    initDeclarator->symbol = functionSymbol;
+
+    auto ast = SimpleDeclarationAST::create(pool_);
+    yyast = ast;
+    ast->attributeList = attributes;
+    ast->declSpecifierList = declSpecifierList;
+    ast->initDeclaratorList = make_list_node(pool_, initDeclarator);
+    ast->requiresClause = requiresClause;
+    ast->semicolonLoc = semicolonLoc;
+
+    attachFunctionTemplateDeclarations(ast);
+
+    return true;
+  }
+
+  functionSymbol->setDefined(true);
+
+  if (classDepth_) functionSymbol->setInline(true);
+
+  if (auto canon = functionSymbol->canonical(); canon != functionSymbol) {
+    canon->setDefinition(functionSymbol);
+  }
+
+  if (auto params = functionDeclarator->parameterDeclarationClause) {
+    auto functionScope = functionSymbol;
+    functionScope->addSymbol(params->functionParametersSymbol);
+    setScope(params->functionParametersSymbol);
+  } else {
+    setScope(functionSymbol);
+  }
+
+  FunctionBodyAST* functionBody = nullptr;
+
+  if (!parse_function_body(functionBody)) parse_error("expected function body");
+
+  binder_.applyFunctionDefinitionKind(functionSymbol, functionBody);
+
+  auto ast = FunctionDefinitionAST::create(pool_);
+  yyast = ast;
+
+  ast->declSpecifierList = declSpecifierList;
+  ast->declarator = declarator;
+  ast->functionBody = functionBody;
+  ast->symbol = functionSymbol;
+  ast->symbol->setDeclaration(ast);
+  if (abbreviatedHead) abbreviatedHead->declaration = ast;
+
+  if (classDepth_) pendingFunctionDefinitions_.push_back(ast);
+  if (!classDepth_ && !binder_.inTemplate())
+    binder_.synthesizeDefaultedMemberBody(functionSymbol);
+  check_mem_initializers(ast);
+
+  return true;
+}
+
+auto Parser::parse_static_assert_declaration(DeclarationAST*& yyast) -> bool {
+  SourceLocation staticAssertLoc;
+
+  if (!match(TokenKind::T_STATIC_ASSERT, staticAssertLoc)) return false;
+
+  auto ast = StaticAssertDeclarationAST::create(pool_);
+  yyast = ast;
+
+  ast->staticAssertLoc = staticAssertLoc;
+
+  expect(TokenKind::T_LPAREN, ast->lparenLoc);
+
+  if (!parse_constant_expression(ast->expression)) {
+    report_failed_parse("expected an expression");
+  }
+
+  if (match(TokenKind::T_COMMA, ast->commaLoc)) {
+    expect(TokenKind::T_STRING_LITERAL, ast->literalLoc);
+    ast->literal = unit_->literal(ast->literalLoc);
+  }
+
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  expect(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::match_string_literal(SourceLocation& loc) -> bool {
+  switch (TokenKind(LA())) {
+    case TokenKind::T_WIDE_STRING_LITERAL:
+    case TokenKind::T_UTF8_STRING_LITERAL:
+    case TokenKind::T_UTF16_STRING_LITERAL:
+    case TokenKind::T_UTF32_STRING_LITERAL:
+    case TokenKind::T_STRING_LITERAL:
+      loc = consumeToken();
+      return true;
+    default:
+      return false;
+  }
+}
+
+auto Parser::parse_empty_declaration(DeclarationAST*& yyast) -> bool {
+  SourceLocation semicolonLoc;
+
+  if (!match(TokenKind::T_SEMICOLON, semicolonLoc)) return false;
+
+  auto ast = EmptyDeclarationAST::create(pool_);
+  yyast = ast;
+
+  ast->semicolonLoc = semicolonLoc;
+
+  return true;
+}
+
+auto Parser::parse_attribute_declaration(DeclarationAST*& yyast) -> bool {
+  List<AttributeSpecifierAST*>* attributes = nullptr;
+  SourceLocation semicolonLoc;
+
+  auto lookat_attribute_declaration = [&] {
+    LookaheadParser lookahead{this};
+    if (!parse_attribute_specifier_seq(attributes)) return false;
+
+    if (!match(TokenKind::T_SEMICOLON, semicolonLoc)) return false;
+
+    lookahead.commit();
+    return true;
+  };
+
+  if (!lookat_attribute_declaration()) return false;
+
+  auto ast = AttributeDeclarationAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeList = attributes;
+  ast->semicolonLoc = semicolonLoc;
+
+  return true;
+}
+
+auto Parser::parse_decl_specifier(SpecifierAST*& yyast, DeclSpecs& specs,
+                                  TypeNameContext context) -> bool {
+  switch (TokenKind(LA())) {
+    case TokenKind::T_TYPEDEF: {
+      auto ast = TypedefSpecifierAST::create(pool_);
+      yyast = ast;
+      ast->typedefLoc = consumeToken();
+      specs.isTypedef = true;
+      return true;
+    }
+
+    case TokenKind::T_FRIEND: {
+      auto ast = FriendSpecifierAST::create(pool_);
+      yyast = ast;
+      ast->friendLoc = consumeToken();
+      specs.isFriend = true;
+      return true;
+    }
+
+    case TokenKind::T_CONSTEXPR: {
+      auto ast = ConstexprSpecifierAST::create(pool_);
+      yyast = ast;
+      ast->constexprLoc = consumeToken();
+      specs.isConstexpr = true;
+      return true;
+    }
+
+    case TokenKind::T_CONSTEVAL: {
+      auto ast = ConstevalSpecifierAST::create(pool_);
+      yyast = ast;
+      ast->constevalLoc = consumeToken();
+      specs.isConsteval = true;
+      return true;
+    }
+
+    case TokenKind::T_CONSTINIT: {
+      auto ast = ConstinitSpecifierAST::create(pool_);
+      yyast = ast;
+      ast->constinitLoc = consumeToken();
+      specs.isConstinit = true;
+      return true;
+    }
+
+    case TokenKind::T_INLINE: {
+      auto ast = InlineSpecifierAST::create(pool_);
+      yyast = ast;
+      ast->inlineLoc = consumeToken();
+      specs.isInline = true;
+      return true;
+    }
+
+    case TokenKind::T__NORETURN: {
+      auto ast = NoreturnSpecifierAST::create(pool_);
+      yyast = ast;
+      ast->noreturnLoc = consumeToken();
+      specs.isNoreturn = true;
+      return true;
+    }
+
+    default:
+      if (parse_storage_class_specifier(yyast, specs)) return true;
+
+      if (parse_function_specifier(yyast, specs)) return true;
+
+      if (!specs.no_typespecs) {
+        return parse_defining_type_specifier(yyast, specs, context);
+      }
+
+      return false;
+  }
+}
+
+auto Parser::parse_decl_specifier_seq(List<SpecifierAST*>*& yyast,
+                                      DeclSpecs& specs, TypeNameContext context)
+    -> bool {
+  auto it = &yyast;
+
+  specs.no_typespecs = false;
+
+  SpecifierAST* specifier = nullptr;
+  if (!parse_decl_specifier(specifier, specs, context)) return false;
+
+  List<AttributeSpecifierAST*>* attributes = nullptr;
+  parse_optional_attribute_specifier_seq(attributes);
+
+  *it = make_list_node(pool_, specifier);
+  it = &(*it)->next;
+
+  specifier = nullptr;
+
+  while (parse_decl_specifier(specifier, specs, context)) {
+    List<AttributeSpecifierAST*>* attributes = nullptr;
+    parse_optional_attribute_specifier_seq(attributes);
+
+    *it = make_list_node(pool_, specifier);
+    it = &(*it)->next;
+
+    specifier = nullptr;
+  }
+
+  specs.finish();
+
+  return true;
+}
+
+auto Parser::parse_decl_specifier_seq_no_typespecs(List<SpecifierAST*>*& yyast,
+                                                   DeclSpecs& specs) -> bool {
+  auto it = &yyast;
+
+  specs.no_typespecs = true;
+
+  SpecifierAST* specifier = nullptr;
+
+  if (!parse_decl_specifier(specifier, specs)) return false;
+
+  List<AttributeSpecifierAST*>* attributes = nullptr;
+
+  parse_optional_attribute_specifier_seq(attributes);
+
+  *it = make_list_node(pool_, specifier);
+  it = &(*it)->next;
+
+  specifier = nullptr;
+
+  while (parse_decl_specifier(specifier, specs)) {
+    List<AttributeSpecifierAST*>* attributes = nullptr;
+
+    parse_optional_attribute_specifier_seq(attributes);
+
+    *it = make_list_node(pool_, specifier);
+    it = &(*it)->next;
+
+    specifier = nullptr;
+  }
+
+  return true;
+}
+
+auto Parser::parse_storage_class_specifier(SpecifierAST*& yyast,
+                                           DeclSpecs& specs) -> bool {
+  SourceLocation loc;
+
+  if (match(TokenKind::T_STATIC, loc)) {
+    auto ast = StaticSpecifierAST::create(pool_);
+    yyast = ast;
+    ast->staticLoc = loc;
+    specs.isStatic = true;
+    return true;
+  }
+  if (match(TokenKind::T_THREAD_LOCAL, loc)) {
+    auto ast = ThreadLocalSpecifierAST::create(pool_);
+    yyast = ast;
+    ast->threadLocalLoc = loc;
+    specs.isThreadLocal = true;
+    return true;
+  }
+  if (match(TokenKind::T_EXTERN, loc)) {
+    auto ast = ExternSpecifierAST::create(pool_);
+    yyast = ast;
+    ast->externLoc = loc;
+    specs.isExtern = true;
+    return true;
+  }
+  if (match(TokenKind::T_REGISTER, loc)) {
+    auto ast = RegisterSpecifierAST::create(pool_);
+    yyast = ast;
+    ast->registerLoc = loc;
+    specs.isRegister = true;
+    return true;
+  }
+  if (match(TokenKind::T_MUTABLE, loc)) {
+    auto ast = MutableSpecifierAST::create(pool_);
+    yyast = ast;
+    ast->mutableLoc = loc;
+    specs.isMutable = true;
+    return true;
+  }
+  if (match(TokenKind::T___THREAD, loc)) {
+    auto ast = ThreadSpecifierAST::create(pool_);
+    yyast = ast;
+    ast->threadLoc = loc;
+    specs.isThread = true;
+    return true;
+  }
+
+  return false;
+}
+
+auto Parser::parse_function_specifier(SpecifierAST*& yyast, DeclSpecs& specs)
+    -> bool {
+  SourceLocation virtualLoc;
+
+  if (match(TokenKind::T_VIRTUAL, virtualLoc)) {
+    auto ast = VirtualSpecifierAST::create(pool_);
+    yyast = ast;
+    ast->virtualLoc = virtualLoc;
+    specs.isVirtual = true;
+    return true;
+  }
+
+  return parse_explicit_specifier(yyast, specs);
+}
+
+auto Parser::parse_explicit_specifier(SpecifierAST*& yyast, DeclSpecs& specs)
+    -> bool {
+  SourceLocation explicitLoc;
+
+  if (!match(TokenKind::T_EXPLICIT, explicitLoc)) return false;
+
+  auto ast = ExplicitSpecifierAST::create(pool_);
+  yyast = ast;
+
+  ast->explicitLoc = explicitLoc;
+
+  if (match(TokenKind::T_LPAREN, ast->lparenLoc)) {
+    std::optional<ConstValue> value;
+
+    if (!parse_constant_expression(ast->expression, value)) {
+      parse_error("expected a expression");
+    }
+
+    expect(TokenKind::T_RPAREN, ast->rparenLoc);
+  }
+
+  specs.accept(ast);
+
+  return true;
+}
+
+auto Parser::parse_type_specifier(SpecifierAST*& yyast, DeclSpecs& specs,
+                                  TypeNameContext context) -> bool {
+  if (parse_cv_qualifier(yyast, specs)) return true;
+  if (parse_simple_type_specifier(yyast, specs, context)) return true;
+  if (parse_elaborated_type_specifier(yyast, specs)) return true;
+  if (parse_splicer_specifier(yyast, specs)) return true;
+  if (parse_typename_specifier(yyast, specs)) return true;
+  return false;
+}
+
+auto Parser::parse_type_specifier_seq(List<SpecifierAST*>*& yyast,
+                                      DeclSpecs& specs, TypeNameContext context)
+    -> bool {
+  auto it = &yyast;
+
+  specs.no_class_or_enum_specs = true;
+
+  SpecifierAST* typeSpecifier = nullptr;
+  if (!parse_type_specifier(typeSpecifier, specs, context)) return false;
+
+  List<AttributeSpecifierAST*>* attributes = nullptr;
+  parse_optional_attribute_specifier_seq(attributes);
+
+  *it = make_list_node(pool_, typeSpecifier);
+  it = &(*it)->next;
+
+  typeSpecifier = nullptr;
+
+  LoopParser loop{this};
+
+  while (LA()) {
+    loop.start();
+
+    const auto before_type_specifier = currentLocation();
+
+    typeSpecifier = nullptr;
+
+    if (!parse_type_specifier(typeSpecifier, specs, context)) {
+      rewind(before_type_specifier);
+      break;
+    }
+
+    List<AttributeSpecifierAST*>* attributes = nullptr;
+    parse_optional_attribute_specifier_seq(attributes);
+
+    *it = make_list_node(pool_, typeSpecifier);
+    it = &(*it)->next;
+  }
+
+  specs.finish();
+
+  return true;
+}
+
+void Parser::parse_optional_type_qualifier_seq(List<SpecifierAST*>*& yyast,
+                                               DeclSpecs& specs) {
+  if (!isC()) {
+    return;
+  }
+
+  auto it = &yyast;
+
+  while (true) {
+    if (SpecifierAST* cv = nullptr; parse_cv_qualifier(cv, specs)) {
+      *it = make_list_node(pool_, cv);
+      it = &(*it)->next;
+    } else if (SourceLocation staticLoc;
+               match(TokenKind::T_STATIC, staticLoc)) {
+      auto spec = StaticSpecifierAST::create(pool_);
+      *it = make_list_node<SpecifierAST>(pool_, spec);
+      it = &(*it)->next;
+    } else {
+      break;
+    }
+  }
+
+  specs.finish();
+}
+
+auto Parser::parse_defining_type_specifier(SpecifierAST*& yyast,
+                                           DeclSpecs& specs,
+                                           TypeNameContext context) -> bool {
+  if (!specs.no_class_or_enum_specs && !specs.hasTypeSpecifier()) {
+    LookaheadParser lookahead{this};
+
+    if (parse_enum_specifier(yyast, specs)) {
+      lookahead.commit();
+
+      if (auto enumSpec = ast_cast<EnumSpecifierAST>(yyast)) {
+        specs.accept(enumSpec);
+      }
+
+      return true;
+    }
+
+    if (ClassSpecifierAST* classSpecifier = nullptr;
+        parse_class_specifier(classSpecifier, specs)) {
+      lookahead.commit();
+
+      specs.accept(classSpecifier);
+
+      yyast = classSpecifier;
+
+      return true;
+    }
+  }
+
+  return parse_type_specifier(yyast, specs, context);
+}
+
+auto Parser::parse_defining_type_specifier_seq(List<SpecifierAST*>*& yyast,
+                                               DeclSpecs& specs) -> bool {
+  auto it = &yyast;
+
+  SpecifierAST* typeSpecifier = nullptr;
+
+  if (!parse_defining_type_specifier(typeSpecifier, specs,
+                                     TypeNameContext::kTypeOnly))
+    return false;
+
+  List<AttributeSpecifierAST*>* attributes = nullptr;
+
+  parse_optional_attribute_specifier_seq(attributes);
+
+  *it = make_list_node(pool_, typeSpecifier);
+  it = &(*it)->next;
+
+  LoopParser loop{this};
+
+  while (LA()) {
+    loop.start();
+
+    const auto before_type_specifier = currentLocation();
+
+    typeSpecifier = nullptr;
+
+    if (!parse_defining_type_specifier(typeSpecifier, specs,
+                                       TypeNameContext::kTypeOnly)) {
+      rewind(before_type_specifier);
+      break;
+    }
+
+    List<AttributeSpecifierAST*>* attributes = nullptr;
+    parse_optional_attribute_specifier_seq(attributes);
+
+    *it = make_list_node(pool_, typeSpecifier);
+    it = &(*it)->next;
+  }
+
+  specs.finish();
+
+  return true;
+}
+
+auto Parser::parse_simple_type_specifier(SpecifierAST*& yyast, DeclSpecs& specs,
+                                         TypeNameContext context) -> bool {
+  if (parse_size_type_specifier(yyast, specs)) return true;
+  if (parse_sign_type_specifier(yyast, specs)) return true;
+  if (parse_complex_type_specifier(yyast, specs)) return true;
+
+  if (specs.hasTypeSpecifier()) return false;
+
+  if (parse_primitive_type_specifier(yyast, specs)) return true;
+  if (parse_placeholder_type_specifier(yyast, specs)) return true;
+  if (parse_underlying_type_specifier(yyast, specs)) return true;
+  if (parse_unary_builtin_type_specifier(yyast, specs)) return true;
+  if (parse_atomic_type_specifier(yyast, specs)) return true;
+  if (parse_bitint_type_specifier(yyast, specs)) return true;
+  if (parse_named_type_specifier(yyast, specs, context)) return true;
+  if (parse_decltype_specifier_type_specifier(yyast, specs)) return true;
+
+  return false;
+}
+
+auto Parser::parse_size_type_specifier(SpecifierAST*& yyast, DeclSpecs& specs)
+    -> bool {
+  if (SourceLocation specifierLoc; match(TokenKind::T_LONG, specifierLoc)) {
+    auto ast = SizeTypeSpecifierAST::create(pool_);
+    yyast = ast;
+    ast->specifierLoc = specifierLoc;
+    ast->specifier = unit_->tokenKind(specifierLoc);
+
+    if (specs.isLong)
+      specs.isLongLong = true;
+    else
+      specs.isLong = true;
+
+    return true;
+  }
+
+  if (SourceLocation specifierLoc; match(TokenKind::T_SHORT, specifierLoc)) {
+    auto ast = SizeTypeSpecifierAST::create(pool_);
+    yyast = ast;
+    ast->specifierLoc = specifierLoc;
+    ast->specifier = unit_->tokenKind(specifierLoc);
+
+    specs.isShort = true;
+
+    return true;
+  }
+
+  return false;
+}
+
+auto Parser::parse_sign_type_specifier(SpecifierAST*& yyast, DeclSpecs& specs)
+    -> bool {
+  if (SourceLocation specifierLoc; match(TokenKind::T_UNSIGNED, specifierLoc)) {
+    auto ast = SignTypeSpecifierAST::create(pool_);
+    yyast = ast;
+    ast->specifierLoc = specifierLoc;
+    ast->specifier = unit_->tokenKind(specifierLoc);
+
+    specs.isUnsigned = true;
+
+    return true;
+  }
+
+  if (SourceLocation specifierLoc; match(TokenKind::T_SIGNED, specifierLoc)) {
+    auto ast = SignTypeSpecifierAST::create(pool_);
+    yyast = ast;
+    ast->specifierLoc = specifierLoc;
+    ast->specifier = unit_->tokenKind(specifierLoc);
+
+    specs.isSigned = true;
+
+    return true;
+  }
+
+  return false;
+}
+
+auto Parser::parse_complex_type_specifier(SpecifierAST*& yyast,
+                                          DeclSpecs& specs) -> bool {
+  if (!LA().isOneOf(TokenKind::T__COMPLEX, TokenKind::T___COMPLEX__))
+    return false;
+  auto ast = ComplexTypeSpecifierAST::create(pool_);
+  yyast = ast;
+  ast->complexLoc = consumeToken();
+  specs.isComplex = true;
+
+  return true;
+}
+
+auto Parser::parse_named_type_specifier(SpecifierAST*& yyast, DeclSpecs& specs,
+                                        TypeNameContext context) -> bool {
+  if (specs.isUnsigned || specs.isSigned || specs.isShort || specs.isLong)
+    return false;
+
+  LookaheadParser lookahead{this};
+
+  NestedNameSpecifierAST* nestedNameSpecifier = nullptr;
+  parse_optional_nested_name_specifier(
+      nestedNameSpecifier, NestedNameSpecifierContext::kNonDeclarative);
+
+  SourceLocation templateLoc;
+  const auto isTemplateIntroduced = match(TokenKind::T_TEMPLATE, templateLoc);
+
+  if (!lookat(TokenKind::T_IDENTIFIER)) return false;
+
+  auto id = unit_->identifier(currentLocation());
+
+  UnqualifiedIdAST* unqualifiedId = nullptr;
+  if (!parse_type_name(unqualifiedId, nestedNameSpecifier, isTemplateIntroduced,
+                       context)) {
+    return false;
+  }
+
+  auto templateId = ast_cast<SimpleTemplateIdAST>(unqualifiedId);
+
+  if (templateId) {
+    auto conceptSymbol = symbol_cast<ConceptSymbol>(templateId->symbol);
+
+    if (conceptSymbol && !lookat(TokenKind::T_AUTO)) return false;
+  }
+
+  const auto checkTemplates = config().checkTypes;
+
+  Symbol* symbol = nullptr;
+
+  if (templateId) {
+    symbol = templateId->symbol;
+
+    symbol =
+        binder_.resolve(nestedNameSpecifier, unqualifiedId, checkTemplates);
+
+  } else {
+    Symbol* resolvedType = nullptr;
+    if (auto nameId = ast_cast<NameIdAST>(unqualifiedId)) {
+      if (nestedNameSpecifier && nestedNameSpecifier->symbol) {
+        resolvedType =
+            qualifiedLookup(nestedNameSpecifier->symbol, nameId->identifier);
+      } else {
+        resolvedType =
+            unqualifiedLookupType(lexicalScope_, nameId->identifier, isCxx(),
+                                  context == TypeNameContext::kGeneral);
+      }
+    }
+    symbol = binder_.resolve(nestedNameSpecifier, unqualifiedId, checkTemplates,
+                             resolvedType);
+    if (!symbol) symbol = resolvedType;
+  }
+
+  const auto dependentTypeOnlyName =
+      !symbol && context == TypeNameContext::kTypeOnly &&
+      ((nestedNameSpecifier && isDependent(unit_, nestedNameSpecifier)) ||
+       (templateId && hasDependentTemplateArguments(unit_, templateId)));
+
+  if (!is_type(symbol) && !dependentTypeOnlyName && config().checkTypes) {
+    auto name = get_name(control_, unqualifiedId);
+    parse_error(unqualifiedId->firstSourceLocation(),
+                std::format("'{}' is not a type", to_string(name)));
+    return false;
+  }
+
+  lookahead.commit();
+
+  auto ast = NamedTypeSpecifierAST::create(pool_);
+  yyast = ast;
+
+  ast->nestedNameSpecifier = nestedNameSpecifier;
+  ast->templateLoc = templateLoc;
+  ast->unqualifiedId = unqualifiedId;
+  ast->isTemplateIntroduced = isTemplateIntroduced;
+  ast->symbol = symbol;
+
+  specs.accept(ast);
+
+  return true;
+}
+
+auto Parser::parse_decltype_specifier_type_specifier(SpecifierAST*& yyast,
+                                                     DeclSpecs& specs) -> bool {
+  DecltypeSpecifierAST* decltypeSpecifier = nullptr;
+  if (!parse_decltype_specifier(decltypeSpecifier)) return false;
+
+  specs.accept(decltypeSpecifier);
+
+  yyast = decltypeSpecifier;
+
+  return true;
+}
+
+auto Parser::parse_underlying_type_specifier(SpecifierAST*& yyast,
+                                             DeclSpecs& specs) -> bool {
+  SourceLocation underlyingTypeLoc;
+  if (!match(TokenKind::T___UNDERLYING_TYPE, underlyingTypeLoc)) return false;
+
+  auto ast = UnderlyingTypeSpecifierAST::create(pool_);
+  yyast = ast;
+
+  ast->underlyingTypeLoc = underlyingTypeLoc;
+
+  expect(TokenKind::T_LPAREN, ast->lparenLoc);
+
+  if (!parse_type_id(ast->typeId)) parse_error("expected type id");
+
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  specs.accept(ast);
+
+  return true;
+}
+
+auto Parser::parse_unary_builtin_type_specifier(SpecifierAST*& yyast,
+                                                DeclSpecs& specs) -> bool {
+  SourceLocation builtinLoc;
+  UnaryBuiltinTypeKind builtinKind = UnaryBuiltinTypeKind::T_NONE;
+
+  if (!parse_unary_builtin_type_op(builtinLoc, builtinKind)) return false;
+
+  auto ast = UnaryBuiltinTypeSpecifierAST::create(pool_);
+  yyast = ast;
+
+  ast->builtinLoc = builtinLoc;
+  ast->builtinKind = builtinKind;
+
+  expect(TokenKind::T_LPAREN, ast->lparenLoc);
+
+  if (!parse_type_id(ast->typeId)) parse_error("expected type id");
+
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  specs.accept(ast);
+
+  return true;
+}
+
+auto Parser::parse_atomic_type_specifier(SpecifierAST*& yyast, DeclSpecs& specs)
+    -> bool {
+  SourceLocation atomicLoc;
+  if (!match(TokenKind::T__ATOMIC, atomicLoc)) return false;
+
+  auto ast = AtomicTypeSpecifierAST::create(pool_);
+  yyast = ast;
+
+  ast->atomicLoc = atomicLoc;
+
+  expect(TokenKind::T_LPAREN, ast->lparenLoc);
+
+  if (!parse_type_id(ast->typeId)) parse_error("expected type id");
+
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  specs.accept(ast);
+
+  return true;
+}
+
+auto Parser::parse_bitint_type_specifier(SpecifierAST*& yyast, DeclSpecs& specs)
+    -> bool {
+  SourceLocation bitintLoc;
+  if (!match(TokenKind::T__BITINT, bitintLoc)) return false;
+
+  auto ast = BitIntTypeSpecifierAST::create(pool_);
+  yyast = ast;
+
+  ast->bitintLoc = bitintLoc;
+
+  expect(TokenKind::T_LPAREN, ast->lparenLoc);
+
+  std::optional<ConstValue> value;
+  if (!parse_constant_expression(ast->sizeExpression, value)) {
+    parse_error("expected a constant expression");
+  }
+
+  if (value)
+    if (auto v = std::get_if<std::intmax_t>(&*value))
+      ast->bitCount = static_cast<int>(*v);
+
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  specs.accept(ast);
+
+  return true;
+}
+
+auto Parser::parse_primitive_type_specifier(SpecifierAST*& yyast,
+                                            DeclSpecs& specs) -> bool {
+  auto makeIntegralTypeSpecifier = [&] {
+    auto ast = IntegralTypeSpecifierAST::create(pool_);
+    yyast = ast;
+    ast->specifierLoc = consumeToken();
+    ast->specifier = unit_->tokenKind(ast->specifierLoc);
+  };
+
+  auto makeFloatingPointTypeSpecifier = [&] {
+    auto ast = FloatingPointTypeSpecifierAST::create(pool_);
+    yyast = ast;
+    ast->specifierLoc = consumeToken();
+    ast->specifier = unit_->tokenKind(ast->specifierLoc);
+  };
+
+  switch (auto tk = LA(); tk.kind()) {
+    case TokenKind::T___BUILTIN_VA_LIST:
+    case TokenKind::T___BUILTIN_META_INFO: {
+      auto ast = BuiltinTypeSpecifierAST::create(pool_);
+      yyast = ast;
+      ast->specifierLoc = consumeToken();
+      ast->specifier = unit_->tokenKind(ast->specifierLoc);
+      specs.accept(ast);
+      return true;
+    }
+
+    case TokenKind::T_CHAR:
+    case TokenKind::T_CHAR8_T:
+    case TokenKind::T_CHAR16_T:
+    case TokenKind::T_CHAR32_T:
+    case TokenKind::T_WCHAR_T:
+    case TokenKind::T_BOOL:
+    case TokenKind::T_INT:
+    case TokenKind::T___INT64:
+    case TokenKind::T___INT128:
+    case TokenKind::T___INT128_T:
+    case TokenKind::T___UINT128_T:
+      makeIntegralTypeSpecifier();
+      specs.accept(yyast);
+      return true;
+
+    case TokenKind::T_FLOAT:
+    case TokenKind::T_DOUBLE:
+    case TokenKind::T__FLOAT16:
+    case TokenKind::T___FLOAT80:
+    case TokenKind::T___FLOAT128:
+      makeFloatingPointTypeSpecifier();
+      specs.accept(yyast);
+      return true;
+
+    case TokenKind::T_VOID: {
+      auto ast = VoidTypeSpecifierAST::create(pool_);
+      yyast = ast;
+      ast->voidLoc = consumeToken();
+      specs.accept(ast);
+      return true;
+    }
+
+    default:
+      return false;
+  }
+}
+
+auto abbreviatedPlaceholderSpecifier(ParameterDeclarationAST* param)
+    -> SpecifierAST* {
+  for (auto s = param->typeSpecifierList; s; s = s->next) {
+    if (ast_cast<AutoTypeSpecifierAST>(s->value)) return s->value;
+    if (ast_cast<PlaceholderTypeSpecifierAST>(s->value)) return s->value;
+  }
+  return nullptr;
+}
+
+auto abbreviatedTypeConstraint(SpecifierAST* specifier) -> TypeConstraintAST* {
+  auto placeholder = ast_cast<PlaceholderTypeSpecifierAST>(specifier);
+  if (!placeholder) return nullptr;
+  return placeholder->typeConstraint;
+}
+
+void Parser::synthesizeAbbreviatedTemplateParams(
+    ParameterDeclarationClauseAST* params) {
+  if (!params) return;
+
+  auto hasAutoSpec = [](ParameterDeclarationAST* param) -> bool {
+    return abbreviatedPlaceholderSpecifier(param) != nullptr;
+  };
+
+  int autoCount = 0;
+  for (auto it = params->parameterDeclarationList; it; it = it->next) {
+    if (hasAutoSpec(it->value)) ++autoCount;
+  }
+
+  if (autoCount == 0) return;
+
+  SourceLocation loc;
+  ScopeSymbol* enclosingScope = scope();
+  if (params->functionParametersSymbol) {
+    loc = params->functionParametersSymbol->location();
+    enclosingScope = params->functionParametersSymbol->parent();
+  }
+  if (!enclosingScope) enclosingScope = scope();
+
+  TemplateDeclarationAST* templDecl;
+  int paramIndex;
+
+  auto explicitFunctionHead =
+      ownFunctionTemplateHead(unit_, symbol_cast<ClassSymbol>(enclosingScope),
+                              enclosingExplicitTemplateHead_);
+  if (explicitFunctionHead) {
+    templDecl = explicitFunctionHead;
+    paramIndex = 0;
+    for (auto it = templDecl->templateParameterList; it; it = it->next)
+      ++paramIndex;
+  } else {
+    auto templParamsSymbol =
+        control_->newTemplateParametersSymbol(enclosingScope, loc);
+    templDecl = TemplateDeclarationAST::create(pool_);
+    templDecl->symbol = templParamsSymbol;
+    templDecl->depth = templateParameterDepth_ + 1;
+    abbreviatedTemplateHead_ = templDecl;
+    paramIndex = 0;
+  }
+
+  auto parameterSymbols =
+      params->functionParametersSymbol->members() | views::parameters;
+  auto parameters = ListView{params->parameterDeclarationList};
+  for (auto [parameter, parameterSymbol] :
+       std::views::zip(parameters, parameterSymbols)) {
+    if (!hasAutoSpec(parameter)) continue;
+
+    auto syntheticName =
+        control_->getIdentifier(std::format("__auto_{}", paramIndex));
+
+    auto placeholder = abbreviatedPlaceholderSpecifier(parameter);
+    auto typeConstraint = abbreviatedTypeConstraint(placeholder);
+
+    TemplateParameterAST* tyParam = nullptr;
+
+    if (typeConstraint) {
+      auto constrained = ConstraintTypeParameterAST::create(pool_);
+      constrained->typeConstraint = typeConstraint;
+      constrained->identifier = syntheticName;
+      if (parameter->isPack) constrained->ellipsisLoc = parameter->thisLoc;
+      tyParam = constrained;
+    } else {
+      auto typeParameter = TypenameTypeParameterAST::create(pool_);
+      typeParameter->isPack = parameter->isPack;
+      typeParameter->identifier = syntheticName;
+      tyParam = typeParameter;
+    }
+
+    {
+      auto scopeGuard = CombinedScopeGuard{this};
+      setScope(templDecl->symbol);
+      if (auto constrained = ast_cast<ConstraintTypeParameterAST>(tyParam))
+        binder_.bind(constrained, paramIndex, templDecl->depth);
+      else
+        binder_.bind(ast_cast<TypenameTypeParameterAST>(tyParam), paramIndex,
+                     templDecl->depth);
+    }
+
+    auto node = make_list_node<TemplateParameterAST>(pool_, tyParam);
+    if (!templDecl->templateParameterList) {
+      templDecl->templateParameterList = node;
+    } else {
+      auto tail = templDecl->templateParameterList;
+      while (tail->next) tail = tail->next;
+      tail->next = node;
+    }
+
+    for (auto s = parameter->typeSpecifierList; s; s = s->next) {
+      if (s->value != placeholder) continue;
+      auto namedSpec = NamedTypeSpecifierAST::create(pool_);
+      namedSpec->symbol = tyParam->symbol;
+      s->value = namedSpec;
+      break;
+    }
+
+    auto newParamType = getDeclaratorType(unit_, parameter->declarator,
+                                          tyParam->symbol->type());
+    parameter->type = newParamType;
+
+    parameterSymbol->setType(newParamType);
+
+    ++paramIndex;
+  }
+}
+
+auto Parser::takeAbbreviatedTemplateHead(Decl& decl)
+    -> TemplateDeclarationAST* {
+  auto templateHead = std::exchange(abbreviatedTemplateHead_, nullptr);
+  if (templateHead) decl.specs.templateHead = templateHead;
+  return templateHead;
+}
+
+void Parser::attachFunctionTemplateDeclarations(
+    SimpleDeclarationAST* declaration) {
+  if (!declaration) return;
+
+  for (auto initDeclarator : ListView{declaration->initDeclaratorList}) {
+    auto function = symbol_cast<FunctionSymbol>(initDeclarator->symbol);
+    if (!function) continue;
+
+    auto templateHead = function->templateDeclaration();
+    if (!templateHead || templateHead->declaration) continue;
+
+    auto functionDeclaration = SimpleDeclarationAST::create(
+        pool_, declaration->attributeList, declaration->declSpecifierList,
+        make_list_node(pool_, initDeclarator), declaration->requiresClause,
+        declaration->semicolonLoc);
+    templateHead->declaration = functionDeclaration;
+  }
+}
+
+void Parser::synthesizeLambdaAbbreviatedTemplateParams(
+    LambdaExpressionAST* ast) {
+  auto params = ast->parameterDeclarationClause;
+  if (!params) return;
+
+  auto hasAutoSpec = [](ParameterDeclarationAST* param) -> bool {
+    return abbreviatedPlaceholderSpecifier(param) != nullptr;
+  };
+
+  bool any = false;
+  for (auto it = params->parameterDeclarationList; it; it = it->next) {
+    if (hasAutoSpec(it->value)) {
+      any = true;
+      break;
+    }
+  }
+
+  if (!any) return;
+
+  int paramIndex = 0;
+  for (auto p = ast->templateParameterList; p; p = p->next) ++paramIndex;
+
+  auto parameterSymbols =
+      params->functionParametersSymbol->members() | views::parameters;
+  auto parameters = ListView{params->parameterDeclarationList};
+  for (auto [parameter, parameterSymbol] :
+       std::views::zip(parameters, parameterSymbols)) {
+    if (!hasAutoSpec(parameter)) continue;
+
+    auto syntheticName =
+        control_->getIdentifier(std::format("__auto_{}", paramIndex));
+
+    auto placeholder = abbreviatedPlaceholderSpecifier(parameter);
+    auto typeConstraint = abbreviatedTypeConstraint(placeholder);
+
+    TemplateParameterAST* tyParam = nullptr;
+
+    if (typeConstraint) {
+      auto constrained = ConstraintTypeParameterAST::create(pool_);
+      constrained->typeConstraint = typeConstraint;
+      constrained->identifier = syntheticName;
+      if (parameter->isPack) constrained->ellipsisLoc = parameter->thisLoc;
+      tyParam = constrained;
+      binder_.bind(constrained, paramIndex, templateParameterDepth_);
+    } else {
+      auto typeParameter = TypenameTypeParameterAST::create(pool_);
+      typeParameter->isPack = parameter->isPack;
+      typeParameter->identifier = syntheticName;
+      tyParam = typeParameter;
+      binder_.bind(typeParameter, paramIndex, templateParameterDepth_);
+    }
+
+    auto node = make_list_node<TemplateParameterAST>(pool_, tyParam);
+    if (!ast->templateParameterList) {
+      ast->templateParameterList = node;
+    } else {
+      auto tail = ast->templateParameterList;
+      while (tail->next) tail = tail->next;
+      tail->next = node;
+    }
+
+    for (auto s = parameter->typeSpecifierList; s; s = s->next) {
+      if (s->value != placeholder) continue;
+      auto namedSpec = NamedTypeSpecifierAST::create(pool_);
+      namedSpec->symbol = tyParam->symbol;
+      s->value = namedSpec;
+      break;
+    }
+
+    auto newParamType = getDeclaratorType(unit_, parameter->declarator,
+                                          tyParam->symbol->type());
+    parameter->type = newParamType;
+
+    parameterSymbol->setType(newParamType);
+
+    ++paramIndex;
+  }
+
+  ast->symbol->setTemplate(true);
+}
+
+void Parser::check_type_traits() {
+  SourceLocation typeTraitLoc;
+  BuiltinTypeTraitKind builtinKind = BuiltinTypeTraitKind::T_NONE;
+  if (!parse_type_traits_op(typeTraitLoc, builtinKind)) return;
+
+  if (auto id = unit_->identifier(typeTraitLoc)) {
+    id->setInfo(nullptr);
+  }
+
+#if false
+
+  parse_warn(
+      typeTraitLoc,
+      std::format("keyword '{}' will be made available as an identifier for "
+                  "the remainder of the translation unit",
+                  Token::spell(builtinKind)));
+#endif
+
+  rewind(typeTraitLoc);
+}
+
+auto Parser::evaluate_constant_expression(ExpressionAST* expr)
+    -> std::optional<ConstValue> {
+  auto interp = ASTInterpreter{unit_};
+  return interp.evaluate(expr);
+}
+
+auto Parser::parse_elaborated_enum_specifier(SpecifierAST*& yyast,
+                                             DeclSpecs& specs) -> bool {
+  SourceLocation enumLoc;
+  if (!match(TokenKind::T_ENUM, enumLoc)) return false;
+
+  NestedNameSpecifierAST* nestedNameSpecifier = nullptr;
+  parse_optional_nested_name_specifier(
+      nestedNameSpecifier, NestedNameSpecifierContext::kDeclarative);
+
+  NameIdAST* name = nullptr;
+  if (!parse_name_id(name)) {
+    parse_error("expected a name");
+    return false;
+  }
+
+  Symbol* symbol = nullptr;
+
+  if (name->identifier) {
+    if (nestedNameSpecifier && nestedNameSpecifier->symbol)
+      symbol = qualifiedLookup(nestedNameSpecifier->symbol, name->identifier,
+                               &Symbol::isEnum);
+    else
+      symbol =
+          unqualifiedLookup(lexicalScope(), name->identifier, &Symbol::isEnum);
+  }
+
+  auto ast = ElaboratedTypeSpecifierAST::create(pool_);
+  yyast = ast;
+
+  ast->classLoc = enumLoc;
+  ast->nestedNameSpecifier = nestedNameSpecifier;
+  ast->unqualifiedId = name;
+  ast->classKey = TokenKind::T_ENUM;
+  ast->symbol = symbol;
+
+  specs.accept(ast);
+
+  return true;
+}
+
+auto Parser::parse_elaborated_type_specifier(SpecifierAST*& yyast,
+                                             DeclSpecs& specs) -> bool {
+  if (specs.hasTypeOrSizeSpecifier()) return false;
+
+  if (parse_elaborated_enum_specifier(yyast, specs)) return true;
+
+  SourceLocation classLoc;
+  if (!parse_class_key(classLoc)) return false;
+
+  auto globalScopeGuard = CombinedScopeGuard{this};
+
+  if (isC()) {
+    setScope(getCurrentNonClassScope());
+  }
+
+  List<AttributeSpecifierAST*>* attributes = nullptr;
+  parse_optional_attribute_specifier_seq(attributes);
+
+  NestedNameSpecifierAST* nestedNameSpecifier = nullptr;
+  parse_optional_nested_name_specifier(
+      nestedNameSpecifier, NestedNameSpecifierContext::kDeclarative);
+
+  SourceLocation templateLoc;
+  const auto isTemplateIntroduced = match(TokenKind::T_TEMPLATE, templateLoc);
+
+  if (!lookat(TokenKind::T_IDENTIFIER)) return false;
+
+  const auto classKey = unit_->tokenKind(classLoc);
+
+  auto ast = ElaboratedTypeSpecifierAST::create(pool_);
+  yyast = ast;
+
+  ast->classLoc = classLoc;
+  ast->attributeList = attributes;
+  ast->nestedNameSpecifier = nestedNameSpecifier;
+  ast->templateLoc = templateLoc;
+  ast->classKey = unit_->tokenKind(classLoc);
+  ast->isTemplateIntroduced = isTemplateIntroduced;
+
+  if (SimpleTemplateIdAST* templateId = nullptr;
+      parse_simple_template_id(templateId)) {
+    ast->unqualifiedId = templateId;
+
+  } else {
+    NameIdAST* nameId = nullptr;
+    (void)parse_name_id(nameId);
+
+    ast->unqualifiedId = nameId;
+  }
+
+  const auto isDeclaration = lookat(TokenKind::T_SEMICOLON) &&
+                             !ast_cast<SimpleTemplateIdAST>(ast->unqualifiedId);
+
+  specs.accept(ast);
+
+  Symbol* unqualifiedCandidate = nullptr;
+  if (!nestedNameSpecifier) {
+    const Identifier* name = nullptr;
+    if (auto templateId = ast_cast<SimpleTemplateIdAST>(ast->unqualifiedId))
+      name = templateId->identifier;
+    else if (auto nameId = ast_cast<NameIdAST>(ast->unqualifiedId))
+      name = nameId->identifier;
+
+    if (name &&
+        (classKey == TokenKind::T_CLASS || classKey == TokenKind::T_STRUCT ||
+         classKey == TokenKind::T_UNION)) {
+      unqualifiedCandidate = unqualifiedLookup(
+          lexicalScope_, name, [](Symbol* s) { return s->isClass(); });
+    }
+  }
+
+  binder_.bind(ast, specs, isDeclaration, unqualifiedCandidate);
+
+  return true;
+}
+
+auto Parser::parse_decl_specifier_seq_no_typespecs(List<SpecifierAST*>*& yyast)
+    -> bool {
+  DeclSpecs specs{unit_};
+  return parse_decl_specifier_seq_no_typespecs(yyast, specs);
+}
+
+auto Parser::parse_decltype_specifier(DecltypeSpecifierAST*& yyast) -> bool {
+  SourceLocation decltypeLoc;
+  if (!match(TokenKind::T_DECLTYPE, decltypeLoc) &&
+      !match(TokenKind::T_TYPEOF, decltypeLoc) &&
+      !match(TokenKind::T_TYPEOF_UNQUAL, decltypeLoc))
+    return false;
+
+  SourceLocation lparenLoc;
+  if (!match(TokenKind::T_LPAREN, lparenLoc)) return false;
+
+  if (lookat(TokenKind::T_AUTO)) return false;
+
+  auto ast = DecltypeSpecifierAST::create(pool_);
+  yyast = ast;
+
+  ast->decltypeLoc = decltypeLoc;
+  ast->lparenLoc = lparenLoc;
+
+  auto _ = UnevaluatedOperandGuard{this};
+  parse_expression(ast->expression, ExprContext{});
+
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  binder_.bind(ast);
+
+  return true;
+}
+
+auto Parser::parse_placeholder_type_specifier(SpecifierAST*& yyast,
+                                              DeclSpecs& specs) -> bool {
+  TypeConstraintAST* typeConstraint = nullptr;
+
+  auto lookat_placeholder_type_specifier = [&] {
+    LookaheadParser lookahead{this};
+
+    (void)parse_type_constraint(typeConstraint, true);
+
+    if (!lookat(TokenKind::T_AUTO) &&
+        !lookat(TokenKind::T_DECLTYPE, TokenKind::T_LPAREN, TokenKind::T_AUTO))
+      return false;
+
+    lookahead.commit();
+
+    return true;
+  };
+
+  if (!lookat_placeholder_type_specifier()) return false;
+
+  if (SourceLocation autoLoc; match(TokenKind::T_AUTO, autoLoc)) {
+    auto ast = AutoTypeSpecifierAST::create(pool_);
+    yyast = ast;
+    ast->autoLoc = autoLoc;
+
+    specs.accept(ast);
+  } else {
+    auto ast = DecltypeAutoSpecifierAST::create(pool_);
+    yyast = ast;
+
+    expect(TokenKind::T_DECLTYPE, ast->decltypeLoc);
+    expect(TokenKind::T_LPAREN, ast->lparenLoc);
+    expect(TokenKind::T_AUTO, ast->autoLoc);
+    expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+    specs.accept(ast);
+  }
+
+  if (typeConstraint) {
+    auto ast = PlaceholderTypeSpecifierAST::create(pool_);
+
+    ast->typeConstraint = typeConstraint;
+    ast->specifier = yyast;
+
+    specs.accept(ast);
+
+    yyast = ast;
+  }
+
+  return true;
+}
+
+auto Parser::parse_init_declarator(InitDeclaratorAST*& yyast,
+                                   const DeclSpecs& specs, BindingContext ctx,
+                                   TemplateDeclarationAST* templateHead)
+    -> bool {
+  DeclaratorAST* declarator = nullptr;
+  Decl decl{specs};
+  if (!parse_declarator(declarator, decl)) return false;
+
+  return parse_init_declarator(yyast, declarator, decl, ctx, templateHead);
+}
+
+auto Parser::parse_init_declarator(InitDeclaratorAST*& yyast,
+                                   DeclaratorAST* declarator, Decl& decl,
+                                   BindingContext ctx,
+                                   TemplateDeclarationAST* templateHead)
+    -> bool {
+  auto scopeGuard = CombinedScopeGuard{this};
+  if (getFunctionPrototype(declarator)) {
+    auto abbreviatedHead = takeAbbreviatedTemplateHead(decl);
+    templateHead = decl.specs.templateHead;
+    if (abbreviatedHead) setScope(abbreviatedHead->symbol);
+  }
+
+  Symbol* symbol = nullptr;
+
+  if (auto declId = decl.declaratorId; declId) {
+    if (decl.specs.isTypedef) {
+      auto typedefSymbol = binder_.declareTypedef(declarator, decl);
+      symbol = typedefSymbol;
+    } else if (getFunctionPrototype(declarator) ||
+               type_cast<FunctionType>(
+                   getDeclaratorType(unit_, declarator, decl.specs.type()))) {
+      auto functionSymbol = binder_.declareFunction(declarator, decl);
+      associatePendingNoexceptSpecifier(declarator, functionSymbol);
+      functionSymbol->setTemplateDeclaration(templateHead);
+      if (templateHead)
+        functionSymbol->setTemplateParameters(templateHead->symbol);
+      if (auto functionDeclarator = getFunctionPrototype(declarator)) {
+        if (auto params = functionDeclarator->parameterDeclarationClause)
+          functionSymbol->addSymbol(params->functionParametersSymbol);
+      }
+      symbol = functionSymbol;
+    } else {
+      auto variableSymbol = binder_.declareVariable(
+          declarator, decl, /*addSymbolToParentScope=*/true);
+      variableSymbol->setTemplateDeclaration(templateHead);
+      if (templateHead)
+        variableSymbol->setTemplateParameters(templateHead->symbol);
+
+      if (!variableSymbol->isExtern()) {
+        if (auto canon = variableSymbol->canonical(); canon != variableSymbol) {
+          canon->setDefinition(variableSymbol);
+        }
+      }
+
+      if (templateHead) {
+        if (auto templateId =
+                ast_cast<SimpleTemplateIdAST>(declId->unqualifiedId)) {
+          for (auto candidate :
+               binder_.declaringScope()->find(templateId->identifier) |
+                   views::variables) {
+            if (candidate != variableSymbol &&
+                candidate->templateDeclaration()) {
+              auto templateArguments =
+                  Substitution(unit_, candidate->templateDeclaration(),
+                               templateId->templateArgumentList)
+                      .templateArguments();
+              candidate->addSpecialization(unit_, std::move(templateArguments),
+                                           variableSymbol);
+              break;
+            }
+          }
+        }
+      }
+
+      symbol = variableSymbol;
+    }
+  }
+
+  RequiresClauseAST* requiresClause = nullptr;
+  ExpressionAST* initializer = nullptr;
+
+  {
+    auto scopeGuard = CombinedScopeGuard{this};
+    if (auto memberScope = decl.getScope()) enterScopeChain(memberScope);
+
+    LookaheadParser lookahead{this};
+    const Type* declaredType = nullptr;
+    if (symbol) declaredType = symbol->type();
+
+    if (parse_declarator_initializer(requiresClause, initializer,
+                                     declaredType)) {
+      lookahead.commit();
+    }
+  }
+
+  auto ast = InitDeclaratorAST::create(pool_);
+  yyast = ast;
+
+  ast->declarator = declarator;
+  ast->requiresClause = requiresClause;
+  ast->initializer = initializer;
+  ast->symbol = symbol;
+
+  {
+    auto scopeGuard = CombinedScopeGuard{this};
+    if (auto memberScope = decl.getScope()) enterScopeChain(memberScope);
+
+    check_init_declarator(ast, decl.specs.typeSpecifier());
+  }
+
+  return true;
+}
+
+auto Parser::parse_declarator_initializer(RequiresClauseAST*& requiresClause,
+                                          ExpressionAST*& yyast,
+                                          const Type* declaredType) -> bool {
+  if (parse_requires_clause(requiresClause)) return true;
+
+  checkInitializerCompletion(declaredType);
+
+  return parse_initializer(yyast, ExprContext{});
+}
+
+void Parser::parse_optional_declarator_or_abstract_declarator(
+    DeclaratorAST*& yyast, Decl& decl) {
+  (void)parse_declarator(yyast, decl,
+                         DeclaratorKind::kDeclaratorOrAbstractDeclarator);
+}
+
+auto Parser::parse_declarator(DeclaratorAST*& yyast, Decl& decl,
+                              DeclaratorKind declaratorKind) -> bool {
+  if (declaratorKind == DeclaratorKind::kDeclaratorOrAbstractDeclarator) {
+    if (Decl tempDecl{decl};
+        parse_declarator(yyast, tempDecl, DeclaratorKind::kDeclarator)) {
+      decl = tempDecl;
+      return true;
+    }
+
+    if (Decl tempDecl{decl}; parse_declarator(
+            yyast, tempDecl, DeclaratorKind::kAbstractDeclarator)) {
+      decl = tempDecl;
+      return true;
+    }
+
+    return false;
+  }
+
+  LookaheadParser lookahead{this};
+
+  List<PtrOperatorAST*>* ptrOpList = nullptr;
+  (void)parse_ptr_operator_seq(ptrOpList);
+
+  CoreDeclaratorAST* coreDeclarator = nullptr;
+  if (!parse_core_declarator(coreDeclarator, decl, declaratorKind)) {
+    return false;
+  }
+
+  auto _ = CombinedScopeGuard{this};
+
+  auto q = decl.getNestedNameSpecifier();
+
+  if (auto scope = decl.getScope()) {
+    enterScopeChain(scope);
+  } else if (q) {
+    type_error(q->firstSourceLocation(),
+               std::format("unresolved class or namespace"));
+  }
+
+  List<DeclaratorChunkAST*>* declaratorChunkList = nullptr;
+  auto it = &declaratorChunkList;
+
+  while (LA().isOneOf(TokenKind::T_LPAREN, TokenKind::T_LBRACKET)) {
+    if (ArrayDeclaratorChunkAST* arrayDeclaratorChunk = nullptr;
+        parse_array_declarator(arrayDeclaratorChunk)) {
+      *it = make_list_node<DeclaratorChunkAST>(pool_, arrayDeclaratorChunk);
+      it = &(*it)->next;
+    } else if (FunctionDeclaratorChunkAST* functionDeclaratorChunk = nullptr;
+               declaratorKind != DeclaratorKind::kNewDeclarator &&
+               parse_function_declarator(functionDeclaratorChunk)) {
+      *it = make_list_node<DeclaratorChunkAST>(pool_, functionDeclaratorChunk);
+      it = &(*it)->next;
+      if (declaratorKind == DeclaratorKind::kAbstractDeclarator &&
+          functionDeclaratorChunk->trailingReturnType) {
+        break;
+      }
+    } else {
+      break;
+    }
+  }
+
+  if (!ptrOpList && !coreDeclarator && !declaratorChunkList) {
+    return false;
+  }
+
+  lookahead.commit();
+
+  yyast = DeclaratorAST::create(pool_);
+  yyast->ptrOpList = ptrOpList;
+  yyast->coreDeclarator = coreDeclarator;
+  yyast->declaratorChunkList = declaratorChunkList;
+
+  return true;
+}
+
+void Parser::parse_optional_abstract_declarator(DeclaratorAST*& yyast,
+                                                Decl& decl) {
+  LookaheadParser lookahead{this};
+  if (!parse_declarator(yyast, decl, DeclaratorKind::kAbstractDeclarator))
+    return;
+  lookahead.commit();
+}
+
+auto Parser::parse_ptr_operator_seq(List<PtrOperatorAST*>*& yyast) -> bool {
+  auto it = &yyast;
+
+  PtrOperatorAST* ptrOp = nullptr;
+
+  if (!parse_ptr_operator(ptrOp)) return false;
+
+  *it = make_list_node(pool_, ptrOp);
+  it = &(*it)->next;
+
+  ptrOp = nullptr;
+
+  while (parse_ptr_operator(ptrOp)) {
+    *it = make_list_node(pool_, ptrOp);
+    it = &(*it)->next;
+    ptrOp = nullptr;
+  }
+
+  return true;
+}
+
+auto Parser::parse_core_declarator(CoreDeclaratorAST*& yyast, Decl& decl,
+                                   DeclaratorKind declaratorKind) -> bool {
+  if (parse_declarator_id(yyast, decl, declaratorKind)) return true;
+  if (parse_nested_declarator(yyast, decl, declaratorKind)) return true;
+  if (declaratorKind != DeclaratorKind::kDeclarator) return true;
+  return false;
+}
+
+auto Parser::parse_array_declarator(ArrayDeclaratorChunkAST*& yyast) -> bool {
+  LookaheadParser lookahead{this};
+
+  SourceLocation lbracketLoc;
+  if (!match(TokenKind::T_LBRACKET, lbracketLoc)) return false;
+
+  List<SpecifierAST*>* typeQualifierList = nullptr;
+  DeclSpecs specs{unit_};
+  parse_optional_type_qualifier_seq(typeQualifierList, specs);
+
+  SourceLocation rbracketLoc;
+  ExpressionAST* expression = nullptr;
+
+  if (!match(TokenKind::T_RBRACKET, rbracketLoc)) {
+    if (!parse_constant_expression(expression)) return false;
+    if (!match(TokenKind::T_RBRACKET, rbracketLoc)) return false;
+  }
+
+  List<AttributeSpecifierAST*>* attributes = nullptr;
+  parse_optional_attribute_specifier_seq(attributes);
+
+  lookahead.commit();
+
+  auto modifier = ArrayDeclaratorChunkAST::create(pool_);
+  yyast = modifier;
+
+  modifier->lbracketLoc = lbracketLoc;
+  modifier->typeQualifierList = typeQualifierList;
+  modifier->expression = expression;
+  modifier->rbracketLoc = rbracketLoc;
+  modifier->attributeList = attributes;
+
+  return true;
+}
+
+auto Parser::parse_function_declarator(FunctionDeclaratorChunkAST*& yyast,
+                                       bool acceptTrailingReturnType) -> bool {
+  LookaheadParser lookahead{this};
+
+  SourceLocation lparenLoc;
+  if (!match(TokenKind::T_LPAREN, lparenLoc)) return false;
+
+  auto savedAbbreviatedHead = abbreviatedTemplateHead_;
+  abbreviatedTemplateHead_ = nullptr;
+
+  auto restoreAbbreviated = [&] {
+    abbreviatedTemplateHead_ = savedAbbreviatedHead;
+  };
+
+  auto _ = CombinedScopeGuard{this};
+
+  SourceLocation rparenLoc;
+  ParameterDeclarationClauseAST* parameterDeclarationClause = nullptr;
+  auto parameterTypeNameContext = TypeNameContext::kGeneral;
+  if (symbol_cast<ClassSymbol>(binder_.declaringScope())) {
+    parameterTypeNameContext = TypeNameContext::kTypeOnly;
+  }
+
+  if (!match(TokenKind::T_RPAREN, rparenLoc)) {
+    if (!parse_parameter_declaration_clause(parameterDeclarationClause,
+                                            parameterTypeNameContext)) {
+      restoreAbbreviated();
+      return false;
+    }
+
+    if (!match(TokenKind::T_RPAREN, rparenLoc)) {
+      restoreAbbreviated();
+      return false;
+    }
+
+    setScope(parameterDeclarationClause->functionParametersSymbol);
+  }
+
+  lookahead.commit();
+
+  auto ast = FunctionDeclaratorChunkAST::create(pool_);
+  yyast = ast;
+
+  ast->lparenLoc = lparenLoc;
+  ast->parameterDeclarationClause = parameterDeclarationClause;
+  ast->rparenLoc = rparenLoc;
+
+  synthesizeAbbreviatedTemplateParams(parameterDeclarationClause);
+
+  DeclSpecs cvQualifiers{unit_};
+
+  (void)parse_cv_qualifier_seq(ast->cvQualifierList, cvQualifiers);
+
+  (void)parse_ref_qualifier(ast->refLoc);
+
+  const auto deferredNoexceptSpecifier = isDeferredNoexceptSpecifier();
+  {
+    UncheckedInitializerContext uncheckedContext{this,
+                                                 deferredNoexceptSpecifier};
+    (void)parse_noexcept_specifier(ast->exceptionSpecifier);
+  }
+  if (deferredNoexceptSpecifier) {
+    auto noexceptSpecifier =
+        ast_cast<NoexceptSpecifierAST>(ast->exceptionSpecifier);
+    if (noexceptSpecifier && noexceptSpecifier->expression)
+      pendingNoexceptSpecifiers_.push_back({ast, scope()});
+  }
+
+  if (acceptTrailingReturnType) {
+    (void)parse_trailing_return_type(ast->trailingReturnType);
+  }
+
+  parse_optional_attribute_specifier_seq(ast->attributeList,
+                                         AllowedAttributes::kAll);
+
+  return true;
+}
+
+auto Parser::parse_cv_qualifier_seq(List<SpecifierAST*>*& yyast,
+                                    DeclSpecs& declSpecs) -> bool {
+  auto it = &yyast;
+
+  SpecifierAST* specifier = nullptr;
+
+  if (!parse_cv_qualifier(specifier, declSpecs)) return false;
+
+  *it = make_list_node(pool_, specifier);
+  it = &(*it)->next;
+
+  specifier = nullptr;
+
+  while (parse_cv_qualifier(specifier, declSpecs)) {
+    *it = make_list_node(pool_, specifier);
+    it = &(*it)->next;
+
+    specifier = nullptr;
+  }
+
+  return true;
+}
+
+auto Parser::parse_trailing_return_type(TrailingReturnTypeAST*& yyast) -> bool {
+  SourceLocation minusGreaterLoc;
+
+  if (!match(TokenKind::T_MINUS_GREATER, minusGreaterLoc)) return false;
+
+  auto ast = TrailingReturnTypeAST::create(pool_);
+  yyast = ast;
+
+  ast->minusGreaterLoc = minusGreaterLoc;
+
+  if (!parse_type_id(ast->typeId, TypeNameContext::kTypeOnly))
+    report_failed_parse("expected a type id");
+
+  return true;
+}
+
+auto Parser::parse_ptr_operator(PtrOperatorAST*& yyast) -> bool {
+  if (SourceLocation starLoc; match(TokenKind::T_STAR, starLoc)) {
+    auto ast = PointerOperatorAST::create(pool_);
+    yyast = ast;
+
+    ast->starLoc = starLoc;
+
+    parse_optional_attribute_specifier_seq(ast->attributeList);
+
+    DeclSpecs cvQualifiers{unit_};
+    (void)parse_cv_qualifier_seq(ast->cvQualifierList, cvQualifiers);
+
+    return true;
+  } else if (SourceLocation refLoc; parse_ref_qualifier(refLoc)) {
+    auto ast = ReferenceOperatorAST::create(pool_);
+    yyast = ast;
+
+    ast->refLoc = refLoc;
+    ast->refOp = unit_->tokenKind(refLoc);
+
+    parse_optional_attribute_specifier_seq(ast->attributeList);
+
+    return true;
+  }
+
+  LookaheadParser lookahead{this};
+
+  NestedNameSpecifierAST* nestedNameSpecifier = nullptr;
+  if (!parse_nested_name_specifier(nestedNameSpecifier,
+                                   NestedNameSpecifierContext::kNonDeclarative))
+    return false;
+
+  SourceLocation starLoc;
+  if (!match(TokenKind::T_STAR, starLoc)) return false;
+
+  lookahead.commit();
+
+  auto ast = PtrToMemberOperatorAST::create(pool_);
+  yyast = ast;
+
+  ast->nestedNameSpecifier = nestedNameSpecifier;
+  ast->starLoc = starLoc;
+
+  parse_optional_attribute_specifier_seq(ast->attributeList);
+
+  DeclSpecs cvQualifiers{unit_};
+  (void)parse_cv_qualifier_seq(ast->cvQualifierList, cvQualifiers);
+
+  return true;
+}
+
+auto Parser::parse_cv_qualifier(SpecifierAST*& yyast, DeclSpecs& declSpecs)
+    -> bool {
+  SourceLocation loc;
+
+  if (match(TokenKind::T_CONST, loc)) {
+    auto ast = ConstQualifierAST::create(pool_);
+    yyast = ast;
+    ast->constLoc = loc;
+    declSpecs.isConst = true;
+    return true;
+  }
+  if (match(TokenKind::T_VOLATILE, loc)) {
+    auto ast = VolatileQualifierAST::create(pool_);
+    yyast = ast;
+    ast->volatileLoc = loc;
+    declSpecs.isVolatile = true;
+    return true;
+  }
+  if (match(TokenKind::T___RESTRICT__, loc)) {
+    auto ast = RestrictQualifierAST::create(pool_);
+    yyast = ast;
+    ast->restrictLoc = loc;
+    declSpecs.isRestrict = true;
+    return true;
+  }
+  if (isC() && lookat(TokenKind::T__ATOMIC) &&
+      LA(1).isNot(TokenKind::T_LPAREN)) {
+    auto ast = AtomicQualifierAST::create(pool_);
+    yyast = ast;
+    ast->atomicLoc = consumeToken();
+    declSpecs.isAtomic = true;
+    return true;
+  }
+
+  return false;
+}
+
+auto Parser::parse_ref_qualifier(SourceLocation& refLoc) -> bool {
+  if (!isCxx()) return false;
+  if (match(TokenKind::T_AMP, refLoc)) return true;
+  if (match(TokenKind::T_AMP_AMP, refLoc)) return true;
+  return false;
+}
+
+auto Parser::parse_declarator_id(CoreDeclaratorAST*& yyast, Decl& decl,
+                                 DeclaratorKind declaratorKind) -> bool {
+  LookaheadParser lookahead{this};
+
+  SourceLocation ellipsisLoc;
+
+  const auto isPack = match(TokenKind::T_DOT_DOT_DOT, ellipsisLoc);
+
+  if (isPack && (declaratorKind == DeclaratorKind::kAbstractDeclarator ||
+                 declaratorKind == DeclaratorKind::kNewDeclarator)) {
+    lookahead.commit();
+
+    decl.isPack = isPack;
+
+    auto ast = ParameterPackAST::create(pool_);
+    ast->ellipsisLoc = ellipsisLoc;
+    yyast = ast;
+
+    return true;
+  }
+
+  if (declaratorKind != DeclaratorKind::kDeclarator) return false;
+
+  NestedNameSpecifierAST* nestedNameSpecifier = nullptr;
+  parse_optional_nested_name_specifier(
+      nestedNameSpecifier, NestedNameSpecifierContext::kDeclarative);
+
+  SourceLocation templateLoc;
+  const auto isTemplateIntroduced = match(TokenKind::T_TEMPLATE, templateLoc);
+
+  check_type_traits();
+
+  UnqualifiedIdAST* unqualifiedId = nullptr;
+  if (!parse_unqualified_id(unqualifiedId, nestedNameSpecifier,
+                            isTemplateIntroduced,
+                            /*inRequiresClause*/ false))
+    return false;
+
+  lookahead.commit();
+
+  auto ast = IdDeclaratorAST::create(pool_);
+  yyast = ast;
+
+  decl.declaratorId = ast;
+  decl.isPack = isPack;
+
+  ast->nestedNameSpecifier = nestedNameSpecifier;
+  ast->templateLoc = templateLoc;
+  ast->unqualifiedId = unqualifiedId;
+  ast->isTemplateIntroduced = isTemplateIntroduced;
+
+  parse_optional_attribute_specifier_seq(ast->attributeList,
+                                         AllowedAttributes::kAll);
+
+  if (isPack) {
+    auto ast = ParameterPackAST::create(pool_);
+    ast->ellipsisLoc = ellipsisLoc;
+    ast->coreDeclarator = yyast;
+    yyast = ast;
+  }
+
+  return true;
+}
+
+auto Parser::parse_type_id(TypeIdAST*& yyast, TypeNameContext context) -> bool {
+  List<SpecifierAST*>* specifierList = nullptr;
+  DeclSpecs specs{unit_};
+  if (!parse_type_specifier_seq(specifierList, specs, context)) return false;
+
+  yyast = TypeIdAST::create(pool_);
+  yyast->typeSpecifierList = specifierList;
+
+  Decl decl{specs};
+  parse_optional_abstract_declarator(yyast->declarator, decl);
+
+  binder_.bind(yyast, decl);
+
+  return true;
+}
+
+auto Parser::parse_defining_type_id(TypeIdAST*& yyast) -> bool {
+  DeclSpecs specs{unit_};
+
+  if (binder_.currentTemplateParameters()) {
+    specs.no_class_or_enum_specs = true;
+  }
+
+  List<SpecifierAST*>* typeSpecifierList = nullptr;
+
+  if (!parse_defining_type_specifier_seq(typeSpecifierList, specs)) {
+    return false;
+  }
+
+  DeclaratorAST* declarator = nullptr;
+  Decl decl{specs};
+  parse_optional_abstract_declarator(declarator, decl);
+
+  auto ast = TypeIdAST::create(pool_);
+  yyast = ast;
+
+  ast->typeSpecifierList = typeSpecifierList;
+  ast->declarator = declarator;
+
+  binder_.bind(ast, decl);
+
+  return true;
+}
+
+auto Parser::parse_nested_declarator(CoreDeclaratorAST*& yyast, Decl& decl,
+                                     DeclaratorKind declaratorKind) -> bool {
+  LookaheadParser lookahead{this};
+
+  SourceLocation lparenLoc;
+  if (!match(TokenKind::T_LPAREN, lparenLoc)) return false;
+
+  DeclaratorAST* declarator = nullptr;
+  if (!parse_declarator(declarator, decl, declaratorKind)) return false;
+
+  SourceLocation rparenLoc;
+
+  if (!match(TokenKind::T_RPAREN, rparenLoc)) return false;
+
+  lookahead.commit();
+
+  auto ast = NestedDeclaratorAST::create(pool_);
+  yyast = ast;
+
+  ast->lparenLoc = lparenLoc;
+  ast->declarator = declarator;
+  ast->rparenLoc = rparenLoc;
+
+  return true;
+}
+
+auto Parser::parse_parameter_declaration_clause(
+    ParameterDeclarationClauseAST*& yyast, TypeNameContext context) -> bool {
+  const auto start = currentLocation();
+
+  if (auto entry = parameter_declaration_clauses_.get(start)) {
+    auto [cursor, ast, parsed, hit] = *entry;
+    rewind(cursor);
+    yyast = ast;
+    return parsed;
+  }
+
+  auto _ = CombinedScopeGuard{this};
+
+  auto ast = ParameterDeclarationClauseAST::create(pool_);
+
+  binder_.bind(ast);
+
+  if (match(TokenKind::T_DOT_DOT_DOT, ast->ellipsisLoc)) {
+    yyast = ast;
+
+    ast->isVariadic = true;
+  } else if (parse_parameter_declaration_list(ast, context)) {
+    yyast = ast;
+
+    match(TokenKind::T_COMMA, ast->commaLoc);
+    ast->isVariadic = match(TokenKind::T_DOT_DOT_DOT, ast->ellipsisLoc);
+  }
+
+  const auto parsed = yyast != nullptr;
+
+  parameter_declaration_clauses_.set(start, currentLocation(), yyast, parsed);
+
+  return parsed;
+}
+
+auto Parser::parse_parameter_declaration_list(
+    ParameterDeclarationClauseAST* ast, TypeNameContext context) -> bool {
+  if (lookat(TokenKind::T_VOID, TokenKind::T_RPAREN)) {
+    consumeToken();
+    return true;
+  }
+
+  auto it = &ast->parameterDeclarationList;
+
+  auto _ = CombinedScopeGuard{this};
+
+  setScope(ast->functionParametersSymbol);
+
+  ParameterDeclarationAST* declaration = nullptr;
+
+  if (!parse_parameter_declaration(declaration, /*templParam*/ false,
+                                   context)) {
+    return false;
+  }
+
+  *it = make_list_node(pool_, declaration);
+  it = &(*it)->next;
+
+  SourceLocation commaLoc;
+
+  while (match(TokenKind::T_COMMA, commaLoc)) {
+    ParameterDeclarationAST* declaration = nullptr;
+
+    if (!parse_parameter_declaration(declaration, /*templParam*/ false,
+                                     context)) {
+      rewind(commaLoc);
+      break;
+    }
+
+    *it = make_list_node(pool_, declaration);
+    it = &(*it)->next;
+  }
+
+  return true;
+}
+
+auto Parser::parse_parameter_declaration(ParameterDeclarationAST*& yyast,
+                                         bool templParam,
+                                         TypeNameContext context) -> bool {
+  auto ast = ParameterDeclarationAST::create(pool_);
+  yyast = ast;
+
+  parse_optional_attribute_specifier_seq(ast->attributeList);
+
+  DeclSpecs specs{unit_};
+
+  specs.no_class_or_enum_specs = true;
+
+  ast->isThisIntroduced = match(TokenKind::T_THIS, ast->thisLoc);
+
+  if (!parse_decl_specifier_seq(ast->typeSpecifierList, specs, context))
+    return false;
+
+  Decl decl{specs};
+  parse_optional_declarator_or_abstract_declarator(ast->declarator, decl);
+
+  ast->isPack = decl.isPack;
+
+  binder_.bind(ast, decl, templParam);
+
+  if (match(TokenKind::T_EQUAL, ast->equalLoc)) {
+    ExprContext ctx;
+    ctx.templParam = templParam;
+
+    const auto deferred = isDeferredDefaultArgument(templParam);
+
+    {
+      UncheckedInitializerContext uncheckedContext{this, deferred};
+      if (!parse_initializer_clause(ast->expression, ctx)) {
+        if (templParam) return false;
+
+        parse_error("expected an initializer");
+      }
+    }
+
+    if (auto paramsScope = symbol_cast<FunctionParametersSymbol>(scope())) {
+      const auto& members = paramsScope->members();
+      if (!members.empty()) {
+        if (auto parameterSymbol =
+                symbol_cast<ParameterSymbol>(members.back())) {
+          parameterSymbol->setDefaultArgument(ast->expression);
+          if (deferred)
+            pendingDefaultArguments_.push_back(
+                {ast, parameterSymbol, paramsScope});
+        }
+      }
+    }
+  }
+
+  return true;
+}
+
+auto Parser::parse_initializer(ExpressionAST*& yyast, const ExprContext& ctx)
+    -> bool {
+  SourceLocation lparenLoc;
+
+  if (match(TokenKind::T_LPAREN, lparenLoc)) {
+    if (lookat(TokenKind::T_RPAREN)) return false;
+
+    auto ast = ParenInitializerAST::create(pool_);
+    yyast = ast;
+
+    ast->lparenLoc = lparenLoc;
+
+    if (!parse_expression_list(ast->expressionList, ctx)) {
+      report_failed_parse("expected an expression");
+    }
+
+    expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+    check(ast);
+
+    return true;
+  }
+
+  return parse_brace_or_equal_initializer(yyast);
+}
+
+auto Parser::parse_brace_or_equal_initializer(ExpressionAST*& yyast) -> bool {
+  BracedInitListAST* bracedInitList = nullptr;
+
+  if (lookat(TokenKind::T_LBRACE)) {
+    if (!parse_braced_init_list(bracedInitList, ExprContext{})) return false;
+    yyast = bracedInitList;
+    return true;
+  }
+
+  SourceLocation equalLoc;
+
+  if (!match(TokenKind::T_EQUAL, equalLoc)) return false;
+
+  auto ast = EqualInitializerAST::create(pool_);
+  yyast = ast;
+
+  ast->equalLoc = equalLoc;
+
+  if (!parse_initializer_clause(ast->expression, ExprContext{})) {
+    parse_error("expected an initializer");
+    return true;
+  }
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_initializer_clause(ExpressionAST*& yyast,
+                                      const ExprContext& ctx) -> bool {
+  BracedInitListAST* bracedInitList = nullptr;
+  if (parse_braced_init_list(bracedInitList, ctx)) {
+    yyast = bracedInitList;
+    return true;
+  }
+
+  parse_assignment_expression(yyast, ctx);
+  return yyast != nullptr;
+}
+
+auto Parser::parse_braced_init_list(BracedInitListAST*& ast,
+                                    const ExprContext& ctx) -> bool {
+  SourceLocation lbraceLoc;
+  if (!match(TokenKind::T_LBRACE, lbraceLoc)) return false;
+
+  if (!ast) {
+    ast = BracedInitListAST::create(pool_);
+  }
+
+  ast->lbraceLoc = lbraceLoc;
+
+  if (isCxx() && lookat_designator()) {
+    auto it = &ast->expressionList;
+
+    DesignatedInitializerClauseAST* designatedInitializerClause = nullptr;
+
+    if (!parse_designated_initializer_clause(designatedInitializerClause)) {
+      parse_error("expected designated initializer clause");
+    }
+
+    if (designatedInitializerClause) {
+      *it = make_list_node<ExpressionAST>(pool_, designatedInitializerClause);
+      it = &(*it)->next;
+    }
+
+    SourceLocation commaLoc;
+
+    while (match(TokenKind::T_COMMA, commaLoc)) {
+      if (lookat(TokenKind::T_RBRACE)) break;
+
+      DesignatedInitializerClauseAST* designatedInitializerClause = nullptr;
+
+      if (!parse_designated_initializer_clause(designatedInitializerClause)) {
+        parse_error("expected designated initializer clause");
+      }
+
+      if (designatedInitializerClause) {
+        *it = make_list_node<ExpressionAST>(pool_, designatedInitializerClause);
+        it = &(*it)->next;
+      }
+    }
+
+    expect(TokenKind::T_RBRACE, ast->rbraceLoc);
+
+  } else if (match(TokenKind::T_COMMA, ast->commaLoc)) {
+    expect(TokenKind::T_RBRACE, ast->rbraceLoc);
+
+  } else if (!match(TokenKind::T_RBRACE, ast->rbraceLoc)) {
+    if (!parse_initializer_list(ast->expressionList, ctx)) {
+      parse_error("expected initializer list");
+    }
+
+    expect(TokenKind::T_RBRACE, ast->rbraceLoc);
+  }
+
+  check(ast);
+
+  return true;
+}
+
+auto Parser::parse_initializer_list(List<ExpressionAST*>*& yyast,
+                                    const ExprContext& ctx) -> bool {
+  auto it = &yyast;
+
+  ExpressionAST* expression = nullptr;
+
+  if (isC() && lookat_designator()) {
+    DesignatedInitializerClauseAST* designatedInitializerClause = nullptr;
+
+    if (!parse_designated_initializer_clause(designatedInitializerClause)) {
+      parse_error("expected designated initializer clause");
+    }
+
+    expression = designatedInitializerClause;
+  } else if (!parse_initializer_clause(expression, ctx)) {
+    return false;
+  }
+
+  if (!expression) return false;
+
+  SourceLocation ellipsisLoc;
+
+  if (match(TokenKind::T_DOT_DOT_DOT, ellipsisLoc)) {
+    auto pack = PackExpansionExpressionAST::create(pool_);
+    pack->expression = expression;
+    pack->ellipsisLoc = ellipsisLoc;
+    expression = pack;
+  }
+
+  *it = make_list_node(pool_, expression);
+  it = &(*it)->next;
+
+  SourceLocation commaLoc;
+
+  while (match(TokenKind::T_COMMA, commaLoc)) {
+    if (lookat(TokenKind::T_RBRACE)) break;
+
+    ExpressionAST* expression = nullptr;
+
+    if (isC() && lookat_designator()) {
+      DesignatedInitializerClauseAST* designatedInitializerClause = nullptr;
+
+      if (!parse_designated_initializer_clause(designatedInitializerClause)) {
+        parse_error("expected designated initializer clause");
+      }
+
+      expression = designatedInitializerClause;
+    } else if (!parse_initializer_clause(expression, ctx)) {
+      return false;
+    }
+
+    if (!expression) return false;
+
+    SourceLocation ellipsisLoc;
+
+    if (match(TokenKind::T_DOT_DOT_DOT, ellipsisLoc)) {
+      auto pack = PackExpansionExpressionAST::create(pool_);
+      pack->expression = expression;
+      pack->ellipsisLoc = ellipsisLoc;
+      expression = pack;
+    }
+
+    *it = make_list_node(pool_, expression);
+    it = &(*it)->next;
+  }
+
+  return true;
+}
+
+auto Parser::lookat_designator() -> bool {
+  if (lookat(TokenKind::T_DOT)) return true;
+
+  if (isC() && lookat(TokenKind::T_LBRACKET)) return true;
+
+  return false;
+}
+
+void Parser::parse_designator(DesignatorAST*& yyast) {
+  if (lookat(TokenKind::T_DOT)) {
+    parse_dot_designator(yyast);
+  } else if (lookat(TokenKind::T_LBRACKET)) {
+    parse_subscript_designator(yyast);
+  }
+}
+
+void Parser::parse_dot_designator(DesignatorAST*& yyast) {
+  auto ast = DotDesignatorAST::create(pool_);
+  yyast = ast;
+
+  expect(TokenKind::T_DOT, ast->dotLoc);
+
+  if (SourceLocation completionLoc; parse_completion(completionLoc)) return;
+
+  expect(TokenKind::T_IDENTIFIER, ast->identifierLoc);
+  ast->identifier = unit_->identifier(ast->identifierLoc);
+}
+
+void Parser::parse_subscript_designator(DesignatorAST*& yyast) {
+  auto ast = SubscriptDesignatorAST::create(pool_);
+  yyast = ast;
+
+  expect(TokenKind::T_LBRACKET, ast->lbracketLoc);
+
+  std::optional<ConstValue> index;
+  if (!parse_constant_expression(ast->expression, index)) {
+    parse_error("expected expression after '['");
+  }
+
+  expect(TokenKind::T_RBRACKET, ast->rbracketLoc);
+}
+
+auto Parser::parse_designated_initializer_clause(
+    DesignatedInitializerClauseAST*& yyast) -> bool {
+  auto ast = DesignatedInitializerClauseAST::create(pool_);
+  yyast = ast;
+
+  auto it = &ast->designatorList;
+
+  DesignatorAST* designator = nullptr;
+  parse_designator(designator);
+
+  *it = make_list_node(pool_, designator);
+  it = &(*it)->next;
+
+  if (isC()) {
+    while (lookat_designator()) {
+      DesignatorAST* designator = nullptr;
+      parse_designator(designator);
+
+      *it = make_list_node(pool_, designator);
+      it = &(*it)->next;
+    }
+  }
+
+  if (!parse_brace_or_equal_initializer(ast->initializer)) {
+    parse_error("expected an initializer");
+  }
+
+  return true;
+}
+
+void Parser::parse_expr_or_braced_init_list(ExpressionAST*& yyast,
+                                            const ExprContext& ctx) {
+  if (BracedInitListAST* bracedInitList = nullptr;
+      parse_braced_init_list(bracedInitList, ctx)) {
+    yyast = bracedInitList;
+  } else {
+    parse_expression(yyast, ctx);
+  }
+}
+
+void Parser::parse_virt_specifier_seq(
+    FunctionDeclaratorChunkAST* functionDeclarator) {
+  while (parse_virt_specifier(functionDeclarator)) {
+  }
+}
+
+auto Parser::lookat_function_body() -> bool {
+  switch (TokenKind(LA())) {
+    case TokenKind::T_TRY:
+      return true;
+    case TokenKind::T_LBRACE:
+      return true;
+    case TokenKind::T_COLON:
+      return true;
+    case TokenKind::T_EQUAL:
+      return LA(1).isNot(TokenKind::T_INTEGER_LITERAL);
+    default:
+      return false;
+  }
+}
+
+auto Parser::parse_function_body(FunctionBodyAST*& yyast) -> bool {
+  if (lookat(TokenKind::T_SEMICOLON)) return false;
+
+  if (parse_function_try_block(yyast)) return true;
+
+  SourceLocation equalLoc;
+
+  if (match(TokenKind::T_EQUAL, equalLoc)) {
+    SourceLocation defaultLoc;
+
+    if (match(TokenKind::T_DEFAULT, defaultLoc)) {
+      auto ast = DefaultFunctionBodyAST::create(pool_);
+      yyast = ast;
+
+      ast->equalLoc = equalLoc;
+      ast->defaultLoc = defaultLoc;
+
+      expect(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+
+      return true;
+    }
+
+    SourceLocation deleteLoc;
+
+    if (match(TokenKind::T_DELETE, deleteLoc)) {
+      auto ast = DeleteFunctionBodyAST::create(pool_);
+      yyast = ast;
+
+      ast->equalLoc = equalLoc;
+      ast->deleteLoc = deleteLoc;
+
+      expect(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+
+      return true;
+    }
+
+    return false;
+  }
+
+  SourceLocation colonLoc;
+  List<MemInitializerAST*>* memInitializerList = nullptr;
+
+  (void)parse_ctor_initializer(colonLoc, memInitializerList);
+
+  if (!lookat(TokenKind::T_LBRACE)) return false;
+
+  auto ast = CompoundStatementFunctionBodyAST::create(pool_);
+  yyast = ast;
+
+  ast->colonLoc = colonLoc;
+  ast->memInitializerList = memInitializerList;
+
+  const bool skip = skipFunctionBody_ || classDepth_ > 0;
+
+  if (!parse_compound_statement(ast->statement, /*attributes=*/nullptr, skip)) {
+    parse_error("expected a compound statement");
+  }
+
+  return true;
+}
+
+auto Parser::parse_enum_specifier(SpecifierAST*& yyast, DeclSpecs& specs)
+    -> bool {
+  LookaheadParser lookahead{this};
+
+  SourceLocation enumLoc;
+  SourceLocation classLoc;
+
+  if (!parse_enum_key(enumLoc, classLoc)) return false;
+
+  auto globalScopeGuard = CombinedScopeGuard{this};
+
+  if (isC()) {
+    setScope(getCurrentNonClassScope());
+  }
+
+  List<AttributeSpecifierAST*>* attributes = nullptr;
+
+  parse_optional_attribute_specifier_seq(attributes);
+
+  NestedNameSpecifierAST* nestedNameSpecifier = nullptr;
+  NameIdAST* name = nullptr;
+
+  (void)parse_enum_head_name(nestedNameSpecifier, name);
+
+  SourceLocation colonLoc;
+  List<SpecifierAST*>* typeSpecifierList = nullptr;
+
+  DeclSpecs underlyingTypeSpecs{unit_};
+  (void)parse_enum_base(colonLoc, typeSpecifierList, underlyingTypeSpecs);
+
+  SourceLocation lbraceLoc;
+  if (!match(TokenKind::T_LBRACE, lbraceLoc)) return false;
+
+  lookahead.commit();
+
+  auto _ = CombinedScopeGuard{this};
+
+  auto ast = EnumSpecifierAST::create(pool_);
+  yyast = ast;
+
+  ast->enumLoc = enumLoc;
+  ast->classLoc = classLoc;
+  ast->attributeList = attributes;
+  ast->nestedNameSpecifier = nestedNameSpecifier;
+  ast->unqualifiedId = name;
+  ast->colonLoc = colonLoc;
+  ast->typeSpecifierList = typeSpecifierList;
+  ast->lbraceLoc = lbraceLoc;
+
+  binder_.bind(ast, underlyingTypeSpecs);
+
+  if (auto enumScope = ast->symbol ? ast->symbol->asScopeSymbol() : nullptr)
+    pushScope(enumScope);
+
+  if (!match(TokenKind::T_RBRACE, ast->rbraceLoc)) {
+    parse_enumerator_list(ast->enumeratorList,
+                          enumeratorTypeInEnumSpecifier(ast->symbol));
+
+    match(TokenKind::T_COMMA, ast->commaLoc);
+
+    expect(TokenKind::T_RBRACE, ast->rbraceLoc);
+
+    for (auto enumerator : ListView{ast->enumeratorList}) {
+      if (enumerator->symbol) enumerator->symbol->setType(ast->symbol->type());
+    }
+  }
+
+  if (isCxx()) {
+    if (auto enumSym = symbol_cast<EnumSymbol>(ast->symbol)) {
+      if (!enumSym->hasFixedUnderlyingType() && ast->enumeratorList) {
+        bool hasNegative = false;
+        for (auto it = ast->enumeratorList; it; it = it->next) {
+          auto sym = it->value ? it->value->symbol : nullptr;
+          if (!sym) continue;
+          if (const auto& val = sym->value()) {
+            if (auto iv = std::get_if<std::intmax_t>(&*val)) {
+              if (*iv < 0) {
+                hasNegative = true;
+                break;
+              }
+            }
+          }
+        }
+        if (!hasNegative) {
+          enumSym->setUnderlyingType(control_->getUnsignedIntType());
+        }
+      }
+    }
+  }
+
+  return true;
+}
+
+auto Parser::parse_enum_head_name(NestedNameSpecifierAST*& nestedNameSpecifier,
+                                  NameIdAST*& name) -> bool {
+  parse_optional_nested_name_specifier(
+      nestedNameSpecifier, NestedNameSpecifierContext::kDeclarative);
+
+  SourceLocation identifierLoc;
+
+  if (!match(TokenKind::T_IDENTIFIER, identifierLoc)) return false;
+
+  auto id = NameIdAST::create(pool_);
+  id->identifierLoc = identifierLoc;
+  id->identifier = unit_->identifier(id->identifierLoc);
+
+  name = id;
+
+  return true;
+}
+
+auto Parser::parse_opaque_enum_declaration(DeclarationAST*& yyast,
+                                           TemplateDeclarationAST* templateHead)
+    -> bool {
+  SourceLocation enumLoc;
+  SourceLocation classLoc;
+  List<AttributeSpecifierAST*>* attributes = nullptr;
+  NestedNameSpecifierAST* nestedNameSpecifier = nullptr;
+  NameIdAST* name = nullptr;
+  SourceLocation colonLoc;
+  DeclSpecs underlyingTypeSpecs{unit_};
+  List<SpecifierAST*>* typeSpecifierList = nullptr;
+  SourceLocation semicolonLoc;
+
+  auto lookat_opaque_enum_declaration = [&] {
+    LookaheadParser lookahead{this};
+    parse_optional_attribute_specifier_seq(attributes);
+    if (!parse_enum_key(enumLoc, classLoc)) return false;
+    if (!parse_enum_head_name(nestedNameSpecifier, name)) return false;
+    (void)parse_enum_base(colonLoc, typeSpecifierList, underlyingTypeSpecs);
+    if (!match(TokenKind::T_SEMICOLON, semicolonLoc)) return false;
+    lookahead.commit();
+    return true;
+  };
+
+  if (!lookat_opaque_enum_declaration()) return false;
+
+  auto ast = OpaqueEnumDeclarationAST::create(pool_);
+  yyast = ast;
+
+  ast->enumLoc = enumLoc;
+  ast->classLoc = classLoc;
+  ast->attributeList = attributes;
+  ast->nestedNameSpecifier = nestedNameSpecifier;
+  ast->unqualifiedId = name;
+  ast->colonLoc = colonLoc;
+  ast->typeSpecifierList = typeSpecifierList;
+  ast->emicolonLoc = semicolonLoc;
+
+  binder_.bind(ast, underlyingTypeSpecs);
+
+  return true;
+}
+
+auto Parser::parse_enum_key(SourceLocation& enumLoc, SourceLocation& classLoc)
+    -> bool {
+  if (!match(TokenKind::T_ENUM, enumLoc)) return false;
+
+  if (match(TokenKind::T_CLASS, classLoc)) {
+  } else if (match(TokenKind::T_STRUCT, classLoc)) {
+  }
+
+  return true;
+}
+
+auto Parser::parse_enum_base(SourceLocation& colonLoc,
+                             List<SpecifierAST*>*& typeSpecifierList,
+                             DeclSpecs& specs) -> bool {
+  if (!match(TokenKind::T_COLON, colonLoc)) return false;
+
+  if (!parse_type_specifier_seq(typeSpecifierList, specs)) {
+    parse_error("expected a type specifier");
+  }
+
+  return true;
+}
+
+auto Parser::enumeratorTypeInEnumSpecifier(Symbol* enumSymbol) -> const Type* {
+  if (auto scopedEnum = symbol_cast<ScopedEnumSymbol>(enumSymbol))
+    return scopedEnum->underlyingType();
+
+  if (auto unscopedEnum = symbol_cast<EnumSymbol>(enumSymbol);
+      unscopedEnum && unscopedEnum->hasFixedUnderlyingType()) {
+    return unscopedEnum->underlyingType();
+  }
+
+  return enumSymbol->type();
+}
+
+void Parser::parse_enumerator_list(List<EnumeratorAST*>*& yyast,
+                                   const Type* type) {
+  auto it = &yyast;
+
+  EnumeratorAST* enumerator = nullptr;
+  parse_enumerator(enumerator, type);
+
+  *it = make_list_node(pool_, enumerator);
+  it = &(*it)->next;
+
+  std::optional<ConstValue> lastValue;
+  ASTInterpreter interp{unit_};
+
+  if (enumerator->expression) {
+    lastValue = enumerator->symbol->value();
+  } else {
+    lastValue = std::intmax_t{0};
+    enumerator->symbol->setValue(*lastValue);
+  }
+
+  SourceLocation commaLoc;
+
+  while (match(TokenKind::T_COMMA, commaLoc)) {
+    if (lookat(TokenKind::T_RBRACE)) {
+      rewind(commaLoc);
+      break;
+    }
+
+    EnumeratorAST* enumerator = nullptr;
+    parse_enumerator(enumerator, type);
+
+    if (!enumerator->expression) {
+      if (lastValue.has_value()) {
+        lastValue = Binder::nextEnumeratorValue(unit_, type, lastValue);
+        enumerator->symbol->setValue(lastValue);
+      }
+    } else {
+      lastValue = enumerator->symbol->value();
+    }
+
+    *it = make_list_node(pool_, enumerator);
+    it = &(*it)->next;
+  }
+}
+
+void Parser::parse_enumerator(EnumeratorAST*& yyast, const Type* type) {
+  auto ast = EnumeratorAST::create(pool_);
+  yyast = ast;
+
+  expect(TokenKind::T_IDENTIFIER, ast->identifierLoc);
+
+  ast->identifier = unit_->identifier(ast->identifierLoc);
+
+  parse_optional_attribute_specifier_seq(ast->attributeList);
+
+  std::optional<ConstValue> value;
+
+  if (match(TokenKind::T_EQUAL, ast->equalLoc)) {
+    if (!parse_constant_expression(ast->expression, value)) {
+      report_failed_parse("expected an expression");
+    }
+  }
+
+  binder_.bind(ast, type, std::move(value));
+}
+
+auto Parser::parse_using_enum_declaration(DeclarationAST*& yyast) -> bool {
+  if (!lookat(TokenKind::T_USING, TokenKind::T_ENUM)) return false;
+
+  auto ast = UsingEnumDeclarationAST::create(pool_);
+  yyast = ast;
+
+  expect(TokenKind::T_USING, ast->usingLoc);
+  SourceLocation enumLoc;
+  expect(TokenKind::T_ENUM, enumLoc);
+
+  NestedNameSpecifierAST* nestedNameSpecifier = nullptr;
+  parse_optional_nested_name_specifier(
+      nestedNameSpecifier, NestedNameSpecifierContext::kNonDeclarative);
+
+  UnqualifiedIdAST* unqualifiedId = nullptr;
+  if (!parse_unqualified_id(unqualifiedId, nestedNameSpecifier,
+                            /*isTemplateIntroduced=*/false,
+                            /*inRequiresClause=*/false)) {
+    parse_error("expected an enum name");
+    return false;
+  }
+
+  auto name = get_name(control_, unqualifiedId);
+  Symbol* target = nullptr;
+  if (nestedNameSpecifier && nestedNameSpecifier->symbol)
+    target = qualifiedLookupIncludingInlineNamespaces(
+        control_, nestedNameSpecifier->symbol, name);
+  else
+    target = unqualifiedLookup(lexicalScope(), name);
+
+  auto enumSpecifier = ElaboratedTypeSpecifierAST::create(pool_);
+  enumSpecifier->classLoc = enumLoc;
+  enumSpecifier->nestedNameSpecifier = nestedNameSpecifier;
+  enumSpecifier->unqualifiedId = unqualifiedId;
+  enumSpecifier->classKey = TokenKind::T_ENUM;
+  enumSpecifier->symbol = target;
+
+  ast->enumTypeSpecifier = enumSpecifier;
+
+  expect(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+
+  binder_.bind(ast);
+
+  return true;
+}
+
+auto Parser::parse_namespace_definition(DeclarationAST*& yyast) -> bool {
+  if (lookat(TokenKind::T_NAMESPACE, TokenKind::T_IDENTIFIER,
+             TokenKind::T_EQUAL)) {
+    return false;
+  }
+
+  if (!lookat(TokenKind::T_NAMESPACE) &&
+      !lookat(TokenKind::T_INLINE, TokenKind::T_NAMESPACE)) {
+    return false;
+  }
+
+  auto _ = CombinedScopeGuard{this};
+
+  auto ast = NamespaceDefinitionAST::create(pool_);
+  yyast = ast;
+
+  ast->isInline = match(TokenKind::T_INLINE, ast->inlineLoc);
+
+  expect(TokenKind::T_NAMESPACE, ast->namespaceLoc);
+
+  parse_optional_attribute_specifier_seq(ast->attributeList);
+
+  if (lookat(TokenKind::T_IDENTIFIER, TokenKind::T_COLON_COLON)) {
+    auto it = &ast->nestedNamespaceSpecifierList;
+
+    auto name = NestedNamespaceSpecifierAST::create(pool_);
+
+    expect(TokenKind::T_IDENTIFIER, name->identifierLoc);
+    expect(TokenKind::T_COLON_COLON, name->scopeLoc);
+
+    name->identifier = unit_->identifier(name->identifierLoc);
+
+    *it = make_list_node(pool_, name);
+    it = &(*it)->next;
+
+    auto namepaceSymbol = enterOrCreateNamespace(
+        name->identifier, name->identifierLoc, /*isInline*/ false);
+
+    LoopParser loop{this};
+
+    while (true) {
+      loop.start();
+
+      const auto saved = currentLocation();
+
+      SourceLocation inlineLoc;
+
+      auto isInline = match(TokenKind::T_INLINE, inlineLoc);
+
+      SourceLocation identifierLoc;
+
+      if (!match(TokenKind::T_IDENTIFIER, identifierLoc)) {
+        rewind(saved);
+        break;
+      }
+
+      SourceLocation scopeLoc;
+
+      if (!match(TokenKind::T_COLON_COLON, scopeLoc)) {
+        rewind(saved);
+        break;
+      }
+
+      auto namespaceName = unit_->identifier(identifierLoc);
+
+      auto namepaceSymbol =
+          enterOrCreateNamespace(namespaceName, identifierLoc, isInline);
+
+      auto name = NestedNamespaceSpecifierAST::create(pool_);
+      name->inlineLoc = inlineLoc;
+      name->identifierLoc = identifierLoc;
+      name->scopeLoc = scopeLoc;
+      name->identifier = namespaceName;
+      name->isInline = isInline;
+
+      *it = make_list_node(pool_, name);
+      it = &(*it)->next;
+    }
+  }
+
+  if (ast->nestedNamespaceSpecifierList) {
+    ast->isInline = match(TokenKind::T_INLINE, ast->inlineLoc);
+    expect(TokenKind::T_IDENTIFIER, ast->identifierLoc);
+  } else {
+    match(TokenKind::T_IDENTIFIER, ast->identifierLoc);
+  }
+
+  ast->identifier = unit_->identifier(ast->identifierLoc);
+
+  auto location = ast->identifierLoc ? ast->identifierLoc : currentLocation();
+
+  auto namespaceSymbol =
+      enterOrCreateNamespace(ast->identifier, location, ast->isInline);
+
+  parse_optional_attribute_specifier_seq(ast->extraAttributeList);
+
+  expect(TokenKind::T_LBRACE, ast->lbraceLoc);
+
+  parse_namespace_body(ast);
+
+  expect(TokenKind::T_RBRACE, ast->rbraceLoc);
+
+  return true;
+}
+
+void Parser::parse_namespace_body(NamespaceDefinitionAST* yyast) {
+  auto it = &yyast->declarationList;
+
+  LoopParser loop{this};
+
+  bool skipping = false;
+
+  while (LA()) {
+    if (shouldStopParsing()) break;
+
+    if (lookat(TokenKind::T_RBRACE)) break;
+
+    loop.start();
+
+    DeclarationAST* declaration = nullptr;
+
+    if (parse_declaration(declaration, BindingContext::kNamespace)) {
+      skipping = false;
+
+      if (declaration) {
+        *it = make_list_node(pool_, declaration);
+        it = &(*it)->next;
+      }
+    } else {
+      parse_skip_declaration(skipping);
+    }
+  }
+}
+
+auto Parser::parse_namespace_alias_definition(DeclarationAST*& yyast) -> bool {
+  if (!lookat(TokenKind::T_NAMESPACE, TokenKind::T_IDENTIFIER,
+              TokenKind::T_EQUAL)) {
+    return false;
+  }
+
+  auto ast = NamespaceAliasDefinitionAST::create(pool_);
+  yyast = ast;
+
+  expect(TokenKind::T_NAMESPACE, ast->namespaceLoc);
+  expect(TokenKind::T_IDENTIFIER, ast->identifierLoc);
+  expect(TokenKind::T_EQUAL, ast->equalLoc);
+
+  ast->identifier = unit_->identifier(ast->identifierLoc);
+
+  if (!parse_qualified_namespace_specifier(ast->nestedNameSpecifier,
+                                           ast->unqualifiedId)) {
+    parse_error("expected a namespace name");
+  } else {
+    NamespaceSymbol* resolvedNamespace = nullptr;
+    if (!ast->nestedNameSpecifier && ast->unqualifiedId &&
+        ast->unqualifiedId->identifier) {
+      resolvedNamespace = unqualifiedLookupNamespace(
+          lexicalScope_, ast->unqualifiedId->identifier);
+    }
+    binder_.bind(ast, resolvedNamespace);
+  }
+
+  expect(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+
+  return true;
+}
+
+auto Parser::parse_qualified_namespace_specifier(
+    NestedNameSpecifierAST*& nestedNameSpecifier, NameIdAST*& name) -> bool {
+  parse_optional_nested_name_specifier(
+      nestedNameSpecifier, NestedNameSpecifierContext::kNonDeclarative);
+
+  SourceLocation identifierLoc;
+
+  if (!match(TokenKind::T_IDENTIFIER, identifierLoc)) return false;
+
+  auto id = NameIdAST::create(pool_);
+  id->identifierLoc = identifierLoc;
+  id->identifier = unit_->identifier(id->identifierLoc);
+
+  name = id;
+
+  return true;
+}
+
+auto Parser::parse_using_directive(DeclarationAST*& yyast) -> bool {
+  List<AttributeSpecifierAST*>* attributes = nullptr;
+  SourceLocation usingLoc;
+  SourceLocation namespaceLoc;
+
+  auto lookat_using_directive = [&] {
+    LookaheadParser lookahead{this};
+
+    parse_optional_attribute_specifier_seq(attributes);
+
+    if (!match(TokenKind::T_USING, usingLoc)) return false;
+
+    if (!match(TokenKind::T_NAMESPACE, namespaceLoc)) return false;
+
+    lookahead.commit();
+
+    return true;
+  };
+
+  if (!lookat_using_directive()) return false;
+
+  auto ast = UsingDirectiveAST::create(pool_);
+  yyast = ast;
+
+  ast->usingLoc = usingLoc;
+  ast->namespaceLoc = namespaceLoc;
+
+  parse_optional_nested_name_specifier(
+      ast->nestedNameSpecifier, NestedNameSpecifierContext::kDeclarative);
+
+  if (!parse_name_id(ast->unqualifiedId)) {
+    parse_error("expected a namespace name");
+  } else {
+    NamespaceSymbol* resolvedNs = nullptr;
+    if (!ast->nestedNameSpecifier && ast->unqualifiedId &&
+        ast->unqualifiedId->identifier) {
+      resolvedNs = unqualifiedLookupNamespace(lexicalScope_,
+                                              ast->unqualifiedId->identifier);
+    }
+    binder_.bind(ast, resolvedNs);
+  }
+
+  expect(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+
+  return true;
+}
+
+auto Parser::parse_using_declaration(DeclarationAST*& yyast) -> bool {
+  SourceLocation usingLoc;
+
+  if (!match(TokenKind::T_USING, usingLoc)) return false;
+
+  auto ast = UsingDeclarationAST::create(pool_);
+  yyast = ast;
+
+  ast->usingLoc = usingLoc;
+
+  if (!parse_using_declarator_list(ast->usingDeclaratorList)) {
+    parse_error("expected a using declarator");
+  }
+
+  match(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+
+  return true;
+}
+
+auto Parser::parse_using_declarator_list(List<UsingDeclaratorAST*>*& yyast)
+    -> bool {
+  auto it = &yyast;
+
+  UsingDeclaratorAST* declarator = nullptr;
+
+  if (!parse_using_declarator(declarator)) return false;
+
+  *it = make_list_node(pool_, declarator);
+  it = &(*it)->next;
+
+  SourceLocation commaLoc;
+
+  while (match(TokenKind::T_COMMA, commaLoc)) {
+    if (UsingDeclaratorAST* declarator = nullptr;
+        parse_using_declarator(declarator)) {
+      *it = make_list_node(pool_, declarator);
+      it = &(*it)->next;
+    } else {
+      parse_error("expected a using declarator");
+    }
+  }
+
+  return true;
+}
+
+auto Parser::parse_using_declarator(UsingDeclaratorAST*& yyast) -> bool {
+  SourceLocation typenameLoc;
+
+  match(TokenKind::T_TYPENAME, typenameLoc);
+
+  NestedNameSpecifierAST* nestedNameSpecifier = nullptr;
+
+  parse_optional_nested_name_specifier(
+      nestedNameSpecifier, NestedNameSpecifierContext::kNonDeclarative);
+
+  UnqualifiedIdAST* unqualifiedId = nullptr;
+
+  if (!parse_unqualified_id(unqualifiedId, nestedNameSpecifier,
+                            /*isTemplateIntroduced*/ false,
+                            /*inRequiresClause*/ false))
+    return false;
+
+  auto name = get_name(control_, unqualifiedId);
+  Symbol* target = nullptr;
+  if (nestedNameSpecifier && nestedNameSpecifier->symbol)
+    target = qualifiedLookupIncludingInlineNamespaces(
+        control_, nestedNameSpecifier->symbol, name);
+  else
+    target = unqualifiedLookup(lexicalScope(), name);
+
+  SourceLocation ellipsisLoc;
+  auto isPack = match(TokenKind::T_DOT_DOT_DOT, ellipsisLoc);
+
+  yyast = UsingDeclaratorAST::create(pool_);
+  yyast->typenameLoc = typenameLoc;
+  yyast->nestedNameSpecifier = nestedNameSpecifier;
+  yyast->unqualifiedId = unqualifiedId;
+  yyast->ellipsisLoc = ellipsisLoc;
+  yyast->isPack = isPack;
+
+  binder_.bind(yyast, target);
+
+  return true;
+}
+
+auto Parser::parse_asm_operand(AsmOperandAST*& yyast) -> bool {
+  if (!LA().isOneOf(TokenKind::T_LBRACKET, TokenKind::T_STRING_LITERAL))
+    return false;
+
+  auto ast = AsmOperandAST::create(pool_);
+  yyast = ast;
+
+  if (match(TokenKind::T_LBRACKET, ast->lbracketLoc)) {
+    expect(TokenKind::T_IDENTIFIER, ast->symbolicNameLoc);
+    ast->symbolicName = unit_->identifier(ast->symbolicNameLoc);
+    expect(TokenKind::T_RBRACKET, ast->rbracketLoc);
+  }
+
+  expect(TokenKind::T_STRING_LITERAL, ast->constraintLiteralLoc);
+
+  ast->constraintLiteral = static_cast<const StringLiteral*>(
+      unit_->literal(ast->constraintLiteralLoc));
+
+  expect(TokenKind::T_LPAREN, ast->lparenLoc);
+  parse_expression(ast->expression, ExprContext{});
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  return true;
+}
+
+auto Parser::parse_asm_declaration(DeclarationAST*& yyast) -> bool {
+  List<AttributeSpecifierAST*>* attributes = nullptr;
+  SourceLocation asmLoc;
+
+  auto lookat_asm_declaration = [&] {
+    LookaheadParser lookahead{this};
+
+    parse_optional_attribute_specifier_seq(attributes);
+
+    if (!match(TokenKind::T_ASM, asmLoc)) return false;
+
+    lookahead.commit();
+
+    return true;
+  };
+
+  if (!lookat_asm_declaration()) return false;
+
+  auto ast = AsmDeclarationAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeList = attributes;
+  ast->asmLoc = asmLoc;
+
+  auto it = &ast->asmQualifierList;
+  while (LA().isOneOf(TokenKind::T_INLINE, TokenKind::T_VOLATILE,
+                      TokenKind::T_GOTO)) {
+    auto qualifier = AsmQualifierAST::create(pool_);
+    qualifier->qualifierLoc = consumeToken();
+    *it = make_list_node(pool_, qualifier);
+    it = &(*it)->next;
+  }
+
+  expect(TokenKind::T_LPAREN, ast->lparenLoc);
+  expect(TokenKind::T_STRING_LITERAL, ast->literalLoc);
+
+  if (SourceLocation colonLoc; match(TokenKind::T_COLON, colonLoc)) {
+    if (AsmOperandAST* operand = nullptr; parse_asm_operand(operand)) {
+      auto it = &ast->outputOperandList;
+      *it = make_list_node(pool_, operand);
+      it = &(*it)->next;
+      SourceLocation commaLoc;
+      while (match(TokenKind::T_COMMA, commaLoc)) {
+        if (AsmOperandAST* operand = nullptr; parse_asm_operand(operand)) {
+          *it = make_list_node(pool_, operand);
+          it = &(*it)->next;
+        } else {
+          parse_error("expected an asm operand");
+        }
+      }
+    }
+  }
+  if (SourceLocation colonLoc; match(TokenKind::T_COLON, colonLoc)) {
+    if (AsmOperandAST* operand = nullptr; parse_asm_operand(operand)) {
+      auto it = &ast->inputOperandList;
+      *it = make_list_node(pool_, operand);
+      it = &(*it)->next;
+      SourceLocation commaLoc;
+      while (match(TokenKind::T_COMMA, commaLoc)) {
+        if (AsmOperandAST* operand = nullptr; parse_asm_operand(operand)) {
+          *it = make_list_node(pool_, operand);
+          it = &(*it)->next;
+        } else {
+          parse_error("expected an asm operand");
+        }
+      }
+    }
+  }
+
+  if (SourceLocation colonLoc; match(TokenKind::T_COLON, colonLoc)) {
+    if (SourceLocation literalLoc;
+        match(TokenKind::T_STRING_LITERAL, literalLoc)) {
+      auto it = &ast->clobberList;
+      auto clobber = AsmClobberAST::create(pool_);
+      clobber->literalLoc = literalLoc;
+      clobber->literal =
+          static_cast<const StringLiteral*>(unit_->literal(literalLoc));
+      *it = make_list_node(pool_, clobber);
+      it = &(*it)->next;
+      SourceLocation commaLoc;
+      while (match(TokenKind::T_COMMA, commaLoc)) {
+        SourceLocation literalLoc;
+        expect(TokenKind::T_STRING_LITERAL, literalLoc);
+        if (!literalLoc) continue;
+        auto clobber = AsmClobberAST::create(pool_);
+        clobber->literalLoc = literalLoc;
+        clobber->literal =
+            static_cast<const StringLiteral*>(unit_->literal(literalLoc));
+        *it = make_list_node(pool_, clobber);
+        it = &(*it)->next;
+      }
+    }
+  }
+
+  if (SourceLocation colonLoc; match(TokenKind::T_COLON, colonLoc)) {
+    if (SourceLocation identifierLoc;
+        match(TokenKind::T_IDENTIFIER, identifierLoc)) {
+      auto it = &ast->gotoLabelList;
+      auto label = AsmGotoLabelAST::create(pool_);
+      label->identifierLoc = identifierLoc;
+      label->identifier = unit_->identifier(label->identifierLoc);
+      *it = make_list_node(pool_, label);
+      it = &(*it)->next;
+      SourceLocation commaLoc;
+      while (match(TokenKind::T_COMMA, commaLoc)) {
+        SourceLocation identifierLoc;
+        expect(TokenKind::T_IDENTIFIER, identifierLoc);
+        if (!identifierLoc) continue;
+        auto label = AsmGotoLabelAST::create(pool_);
+        label->identifierLoc = identifierLoc;
+        label->identifier = unit_->identifier(label->identifierLoc);
+        *it = make_list_node(pool_, label);
+        it = &(*it)->next;
+      }
+    }
+  }
+
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+  expect(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+
+  ast->literal = unit_->literal(ast->literalLoc);
+
+  return true;
+}
+
+auto Parser::parse_linkage_specification(DeclarationAST*& yyast) -> bool {
+  SourceLocation externLoc;
+  List<AttributeSpecifierAST*>* attributes = nullptr;
+  SourceLocation stringLiteralLoc;
+  LanguageKind languageLinkage = LanguageKind::kCXX;
+
+  auto lookat_linkage_specification = [&] {
+    LookaheadParser lookahead{this};
+
+    if (!match(TokenKind::T_EXTERN, externLoc)) return false;
+
+    parse_optional_attribute_specifier_seq(attributes);
+
+    if (!match(TokenKind::T_STRING_LITERAL, stringLiteralLoc)) return false;
+
+    lookahead.commit();
+
+    if (unit_->literal(stringLiteralLoc)->value() == "\"C\"") {
+      languageLinkage = LanguageKind::kC;
+    } else if (unit_->literal(stringLiteralLoc)->value() != "\"C++\"") {
+      parse_error(stringLiteralLoc,
+                  std::format("unknown language linkage: {}",
+                              unit_->literal(stringLiteralLoc)->value()));
+    }
+
+    return true;
+  };
+
+  if (!lookat_linkage_specification()) return false;
+
+  auto savedLanguageLinkage = binder_.changeLanguageLinkage(languageLinkage);
+
+  if (SourceLocation lbraceLoc; match(TokenKind::T_LBRACE, lbraceLoc)) {
+    SourceLocation rbraceLoc;
+
+    auto ast = LinkageSpecificationAST::create(pool_);
+    yyast = ast;
+
+    ast->externLoc = externLoc;
+    ast->stringliteralLoc = stringLiteralLoc;
+    ast->stringLiteral = static_cast<const StringLiteral*>(
+        unit_->literal(ast->stringliteralLoc));
+    ast->lbraceLoc = lbraceLoc;
+
+    if (!match(TokenKind::T_RBRACE, ast->rbraceLoc)) {
+      parse_declaration_seq(ast->declarationList);
+      expect(TokenKind::T_RBRACE, ast->rbraceLoc);
+    }
+
+  } else {
+    DeclarationAST* declaration = nullptr;
+
+    if (!parse_declaration(declaration, BindingContext::kNamespace))
+      return false;
+
+    auto ast = LinkageSpecificationAST::create(pool_);
+    yyast = ast;
+
+    ast->externLoc = externLoc;
+    ast->stringliteralLoc = stringLiteralLoc;
+    ast->stringLiteral = static_cast<const StringLiteral*>(
+        unit_->literal(ast->stringliteralLoc));
+    ast->declarationList = make_list_node(pool_, declaration);
+  }
+
+  (void)binder_.changeLanguageLinkage(savedLanguageLinkage);
+
+  return true;
+}
+
+void Parser::rewrite_keyword_as_identifier() {
+  if (!is_keyword(LA().kind())) return;
+  auto id = control()->getIdentifier(Token::spell(LA().kind()));
+  auto loc = currentLocation();
+  unit_->setTokenKind(loc, TokenKind::T_IDENTIFIER);
+  unit_->setTokenValue(loc, {id});
+}
+
+void Parser::parse_optional_attribute_specifier_seq(
+    List<AttributeSpecifierAST*>*& yyast, AllowedAttributes allowedAttributes) {
+  if (!parse_attribute_specifier_seq(yyast, allowedAttributes)) {
+    yyast = nullptr;
+  }
+}
+
+auto Parser::parse_attribute_specifier_seq(List<AttributeSpecifierAST*>*& yyast,
+                                           AllowedAttributes allowedAttributes)
+    -> bool {
+  auto it = &yyast;
+  AttributeSpecifierAST* attribute = nullptr;
+
+  if (!parse_attribute_specifier(attribute, allowedAttributes)) return false;
+
+  *it = make_list_node(pool_, attribute);
+  it = &(*it)->next;
+
+  attribute = nullptr;
+
+  while (parse_attribute_specifier(attribute, allowedAttributes)) {
+    *it = make_list_node(pool_, attribute);
+    it = &(*it)->next;
+    attribute = nullptr;
+  }
+
+  return true;
+}
+
+auto Parser::parse_attribute_specifier(AttributeSpecifierAST*& yyast,
+                                       AllowedAttributes allowedAttributes)
+    -> bool {
+  auto is_allowed = [allowedAttributes](AllowedAttributes attr) {
+    return static_cast<int>(attr) & static_cast<int>(allowedAttributes);
+  };
+
+  if (is_allowed(AllowedAttributes::kCxxAttribute) &&
+      parse_cxx_attribute_specifier(yyast))
+    return true;
+
+  if (is_allowed(AllowedAttributes::kGnuAttribute) &&
+      parse_gcc_attribute(yyast))
+    return true;
+
+  if (is_allowed(AllowedAttributes::kAlignasSpecifier) &&
+      parse_alignment_specifier(yyast))
+    return true;
+
+  if (is_allowed(AllowedAttributes::kAsmSpecifier) &&
+      parse_asm_specifier(yyast))
+    return true;
+
+  return false;
+}
+
+auto Parser::lookat_cxx_attribute_specifier() -> bool {
+  if (!lookat(TokenKind::T_LBRACKET)) return false;
+  if (LA(1).isNot(TokenKind::T_LBRACKET)) return false;
+  return true;
+}
+
+auto Parser::parse_cxx_attribute_specifier(AttributeSpecifierAST*& yyast)
+    -> bool {
+  if (!lookat_cxx_attribute_specifier()) return false;
+
+  auto ast = CxxAttributeAST::create(pool_);
+  yyast = ast;
+  ast->lbracketLoc = consumeToken();
+  ast->lbracket2Loc = consumeToken();
+  (void)parse_attribute_using_prefix(ast->attributeUsingPrefix);
+  (void)parse_attribute_list(ast->attributeList);
+  expect(TokenKind::T_RBRACKET, ast->rbracketLoc);
+  expect(TokenKind::T_RBRACKET, ast->rbracket2Loc);
+  return true;
+}
+
+auto Parser::parse_asm_specifier(AttributeSpecifierAST*& yyast) -> bool {
+  SourceLocation asmLoc;
+
+  if (!match(TokenKind::T_ASM, asmLoc)) return false;
+
+  auto ast = AsmAttributeAST::create(pool_);
+  yyast = ast;
+
+  ast->asmLoc = asmLoc;
+
+  expect(TokenKind::T_LPAREN, ast->lparenLoc);
+  expect(TokenKind::T_STRING_LITERAL, ast->literalLoc);
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+  ast->literal = unit_->literal(ast->literalLoc);
+
+  return true;
+}
+
+auto Parser::parse_gcc_attribute(AttributeSpecifierAST*& yyast) -> bool {
+  if (!lookat(TokenKind::T___ATTRIBUTE__, TokenKind::T_LPAREN,
+              TokenKind::T_LPAREN))
+    return false;
+
+  SourceLocation attributeLoc;
+
+  auto ast = GccAttributeAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeLoc = consumeToken();
+  ast->lparenLoc = consumeToken();
+  ast->lparen2Loc = currentLocation();
+
+  if (parse_skip_balanced()) {
+    ast->rparenLoc = currentLocation().previous();
+  }
+
+  expect(TokenKind::T_RPAREN, ast->rparen2Loc);
+
+  return true;
+}
+
+auto Parser::parse_skip_balanced() -> bool {
+  if (lookat(TokenKind::T_EOF_SYMBOL)) {
+    return false;
+  }
+
+  if (SourceLocation lbraceLoc; match(TokenKind::T_LBRACE, lbraceLoc)) {
+    while (!lookat(TokenKind::T_EOF_SYMBOL)) {
+      if (SourceLocation rbraceLoc; match(TokenKind::T_RBRACE, rbraceLoc)) {
+        break;
+      }
+      if (!parse_skip_balanced()) return false;
+    }
+  } else if (SourceLocation lbracketLoc;
+             match(TokenKind::T_LBRACKET, lbracketLoc)) {
+    while (!lookat(TokenKind::T_EOF_SYMBOL)) {
+      if (SourceLocation rbracketLoc;
+          match(TokenKind::T_RBRACKET, rbracketLoc)) {
+        break;
+      }
+      if (!parse_skip_balanced()) return false;
+    }
+  } else if (SourceLocation lparenLoc; match(TokenKind::T_LPAREN, lparenLoc)) {
+    while (!lookat(TokenKind::T_EOF_SYMBOL)) {
+      if (SourceLocation rparenLoc; match(TokenKind::T_RPAREN, rparenLoc)) {
+        break;
+      }
+      if (!parse_skip_balanced()) return false;
+    }
+  } else {
+    (void)consumeToken();
+  }
+
+  return true;
+}
+
+auto Parser::parse_alignment_specifier(AttributeSpecifierAST*& yyast) -> bool {
+  SourceLocation alignasLoc;
+  if (!match(TokenKind::T_ALIGNAS, alignasLoc)) return false;
+
+  auto lookat_type_id = [&] {
+    LookaheadParser lookahead{this};
+
+    SourceLocation lparenLoc;
+    if (!match(TokenKind::T_LPAREN, lparenLoc)) return false;
+
+    TypeIdAST* typeId = nullptr;
+    if (!parse_type_id(typeId)) return false;
+
+    SourceLocation ellipsisLoc;
+    const auto isPack = match(TokenKind::T_DOT_DOT_DOT, ellipsisLoc);
+
+    SourceLocation rparenLoc;
+    if (!match(TokenKind::T_RPAREN, rparenLoc)) return false;
+
+    lookahead.commit();
+
+    auto ast = AlignasTypeAttributeAST::create(pool_);
+    yyast = ast;
+
+    ast->alignasLoc = alignasLoc;
+    ast->lparenLoc = lparenLoc;
+    ast->typeId = typeId;
+    ast->ellipsisLoc = ellipsisLoc;
+    ast->rparenLoc = rparenLoc;
+
+    ast->isPack = isPack;
+
+    return true;
+  };
+
+  if (lookat_type_id()) return true;
+
+  auto ast = AlignasAttributeAST::create(pool_);
+  yyast = ast;
+
+  ast->alignasLoc = alignasLoc;
+
+  expect(TokenKind::T_LPAREN, ast->lparenLoc);
+
+  std::optional<ConstValue> value;
+
+  if (!parse_constant_expression(ast->expression, value)) {
+    report_failed_parse("expected an expression");
+  }
+
+  ast->isPack = match(TokenKind::T_DOT_DOT_DOT, ast->ellipsisLoc);
+
+  expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+  return true;
+}
+
+auto Parser::parse_attribute_using_prefix(AttributeUsingPrefixAST*& yyast)
+    -> bool {
+  SourceLocation usingLoc;
+  if (!match(TokenKind::T_USING, usingLoc)) return false;
+
+  SourceLocation attributeNamespaceLoc;
+
+  if (!parse_attribute_namespace(attributeNamespaceLoc)) {
+    parse_error("expected an attribute namespace");
+  }
+
+  SourceLocation colonLoc;
+
+  expect(TokenKind::T_COLON, colonLoc);
+
+  auto ast = AttributeUsingPrefixAST::create(pool_);
+  yyast = ast;
+
+  ast->usingLoc = usingLoc;
+  ast->attributeNamespaceLoc = attributeNamespaceLoc;
+  ast->colonLoc = colonLoc;
+
+  return true;
+}
+
+auto Parser::parse_attribute_list(List<AttributeAST*>*& yyast) -> bool {
+  auto it = &yyast;
+
+  AttributeAST* attribute = nullptr;
+  (void)parse_attribute(attribute);
+
+  SourceLocation ellipsisLoc;
+  match(TokenKind::T_DOT_DOT_DOT, ellipsisLoc);
+
+  if (attribute) {
+    attribute->ellipsisLoc = ellipsisLoc;
+
+    *it = make_list_node(pool_, attribute);
+    it = &(*it)->next;
+  }
+
+  SourceLocation commaLoc;
+
+  while (match(TokenKind::T_COMMA, commaLoc)) {
+    AttributeAST* attribute = nullptr;
+    (void)parse_attribute(attribute);
+
+    SourceLocation ellipsisLoc;
+    match(TokenKind::T_DOT_DOT_DOT, ellipsisLoc);
+
+    if (attribute) {
+      attribute->ellipsisLoc = ellipsisLoc;
+
+      *it = make_list_node(pool_, attribute);
+      it = &(*it)->next;
+    }
+  }
+
+  return true;
+}
+
+auto Parser::parse_attribute(AttributeAST*& yyast) -> bool {
+  AttributeTokenAST* attributeToken = nullptr;
+
+  if (!parse_attribute_token(attributeToken)) return false;
+
+  AttributeArgumentClauseAST* attributeArgumentClause = nullptr;
+
+  (void)parse_attribute_argument_clause(attributeArgumentClause);
+
+  auto ast = AttributeAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeToken = attributeToken;
+  ast->attributeArgumentClause = attributeArgumentClause;
+
+  return true;
+}
+
+auto Parser::parse_attribute_token(AttributeTokenAST*& yyast) -> bool {
+  if (parse_attribute_scoped_token(yyast)) return true;
+
+  rewrite_keyword_as_identifier();
+
+  SourceLocation identifierLoc;
+
+  if (!match(TokenKind::T_IDENTIFIER, identifierLoc)) return false;
+
+  auto ast = SimpleAttributeTokenAST::create(pool_);
+  yyast = ast;
+
+  ast->identifierLoc = identifierLoc;
+  ast->identifier = unit_->identifier(ast->identifierLoc);
+
+  return true;
+}
+
+auto Parser::parse_attribute_scoped_token(AttributeTokenAST*& yyast) -> bool {
+  LookaheadParser lookahead{this};
+
+  SourceLocation attributeNamespaceLoc;
+
+  if (!parse_attribute_namespace(attributeNamespaceLoc)) return false;
+
+  SourceLocation scopeLoc;
+
+  if (!match(TokenKind::T_COLON_COLON, scopeLoc)) return false;
+
+  lookahead.commit();
+
+  rewrite_keyword_as_identifier();
+
+  SourceLocation identifierLoc;
+
+  expect(TokenKind::T_IDENTIFIER, identifierLoc);
+
+  auto ast = ScopedAttributeTokenAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeNamespaceLoc = attributeNamespaceLoc;
+  ast->scopeLoc = scopeLoc;
+  ast->identifierLoc = identifierLoc;
+  ast->attributeNamespace = unit_->identifier(ast->attributeNamespaceLoc);
+  ast->identifier = unit_->identifier(ast->identifierLoc);
+
+  return true;
+}
+
+auto Parser::parse_attribute_namespace(SourceLocation& attributeNamespaceLoc)
+    -> bool {
+  rewrite_keyword_as_identifier();
+
+  if (!match(TokenKind::T_IDENTIFIER, attributeNamespaceLoc)) return false;
+
+  return true;
+}
+
+auto Parser::parse_attribute_argument_clause(AttributeArgumentClauseAST*& yyast)
+    -> bool {
+  const SourceLocation lparenLoc = currentLocation();
+
+  if (!lookat(TokenKind::T_LPAREN)) return false;
+
+  SourceLocation rparenLoc;
+  if (parse_skip_balanced()) {
+    rparenLoc = currentLocation().previous();
+  } else {
+    expect(TokenKind::T_RPAREN, rparenLoc);
+  }
+
+  auto ast = AttributeArgumentClauseAST::create(pool_);
+  yyast = ast;
+
+  ast->lparenLoc = lparenLoc;
+  ast->rparenLoc = rparenLoc;
+
+  return true;
+}
+
+auto Parser::parse_module_declaration(ModuleDeclarationAST*& yyast) -> bool {
+  SourceLocation exportLoc;
+  SourceLocation moduleLoc;
+
+  auto lookat_module_declaration = [&] {
+    LookaheadParser lookahead{this};
+
+    (void)parse_export_keyword(exportLoc);
+
+    if (!parse_module_keyword(moduleLoc)) return false;
+
+    lookahead.commit();
+    return true;
+  };
+
+  if (!lookat_module_declaration()) return false;
+
+  yyast = ModuleDeclarationAST::create(pool_);
+
+  yyast->exportLoc = exportLoc;
+  yyast->moduleLoc = moduleLoc;
+  parse_module_name(yyast->moduleName);
+
+  (void)parse_module_partition(yyast->modulePartition);
+
+  parse_optional_attribute_specifier_seq(yyast->attributeList);
+
+  expect(TokenKind::T_SEMICOLON, yyast->semicolonLoc);
+
+  return true;
+}
+
+void Parser::parse_module_name(ModuleNameAST*& yyast) {
+  auto ast = ModuleNameAST::create(pool_);
+  yyast = ast;
+
+  if (lookat(TokenKind::T_IDENTIFIER, TokenKind::T_DOT)) {
+    ast->moduleQualifier = ModuleQualifierAST::create(pool_);
+    ast->moduleQualifier->identifierLoc = consumeToken();
+    ast->moduleQualifier->identifier =
+        unit_->identifier(ast->moduleQualifier->identifierLoc);
+    ast->moduleQualifier->dotLoc = consumeToken();
+
+    while (lookat(TokenKind::T_IDENTIFIER, TokenKind::T_DOT)) {
+      auto baseModuleQualifier = ast->moduleQualifier;
+      ast->moduleQualifier = ModuleQualifierAST::create(pool_);
+      ast->moduleQualifier->moduleQualifier = baseModuleQualifier;
+      ast->moduleQualifier->identifierLoc = consumeToken();
+      ast->moduleQualifier->identifier =
+          unit_->identifier(ast->moduleQualifier->identifierLoc);
+      ast->moduleQualifier->dotLoc = consumeToken();
+    }
+  }
+
+  expect(TokenKind::T_IDENTIFIER, ast->identifierLoc);
+  ast->identifier = unit_->identifier(ast->identifierLoc);
+}
+
+auto Parser::parse_module_partition(ModulePartitionAST*& yyast) -> bool {
+  SourceLocation colonLoc;
+
+  if (!match(TokenKind::T_COLON, colonLoc)) return false;
+
+  yyast = ModulePartitionAST::create(pool_);
+
+  yyast->colonLoc = colonLoc;
+
+  parse_module_name(yyast->moduleName);
+
+  return true;
+}
+
+auto Parser::parse_export_declaration(DeclarationAST*& yyast,
+                                      TemplateDeclarationAST* templateHead)
+    -> bool {
+  SourceLocation exportLoc;
+
+  if (!match(TokenKind::T_EXPORT, exportLoc)) return false;
+
+  SourceLocation lbraceLoc;
+
+  if (match(TokenKind::T_LBRACE, lbraceLoc)) {
+    auto ast = ExportCompoundDeclarationAST::create(pool_);
+    yyast = ast;
+
+    ast->exportLoc = exportLoc;
+    ast->lbraceLoc = lbraceLoc;
+
+    if (!match(TokenKind::T_RBRACE, ast->rbraceLoc)) {
+      parse_declaration_seq(ast->declarationList);
+      expect(TokenKind::T_RBRACE, ast->rbraceLoc);
+    }
+
+    return true;
+  }
+
+  auto ast = ExportDeclarationAST::create(pool_);
+  yyast = ast;
+
+  ast->exportLoc = exportLoc;
+
+  if (parse_maybe_import()) {
+    if (!parse_module_import_declaration(ast->declaration)) {
+      parse_error("expected a module import declaration");
+    }
+
+    return true;
+  }
+
+  if (!parse_declaration(ast->declaration, BindingContext::kNamespace)) {
+    report_failed_parse("expected a declaration");
+  }
+
+  return true;
+}
+
+auto Parser::parse_maybe_import() -> bool {
+  if (!moduleUnit_) return false;
+
+  LookaheadParser lookahead{this};
+
+  SourceLocation importLoc;
+
+  return parse_import_keyword(importLoc);
+}
+
+auto Parser::parse_module_import_declaration(DeclarationAST*& yyast) -> bool {
+  SourceLocation importLoc;
+
+  if (!parse_import_keyword(importLoc)) return false;
+
+  auto ast = ModuleImportDeclarationAST::create(pool_);
+  yyast = ast;
+
+  ast->importLoc = importLoc;
+
+  if (!parse_import_name(ast->importName)) {
+    parse_error("expected a module name");
+  }
+
+  parse_optional_attribute_specifier_seq(ast->attributeList);
+
+  expect(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+
+  return true;
+}
+
+auto Parser::parse_import_name(ImportNameAST*& yyast) -> bool {
+  SourceLocation headerLoc;
+
+  if (parse_header_name(headerLoc)) return true;
+
+  yyast = ImportNameAST::create(pool_);
+
+  yyast->headerLoc = headerLoc;
+
+  if (parse_module_partition(yyast->modulePartition)) return true;
+
+  parse_module_name(yyast->moduleName);
+
+  return true;
+}
+
+void Parser::parse_global_module_fragment(GlobalModuleFragmentAST*& yyast) {
+  SourceLocation moduleLoc;
+  SourceLocation semicolonLoc;
+
+  auto lookat_global_module_fragment = [&] {
+    LookaheadParser lookahead{this};
+
+    if (!parse_module_keyword(moduleLoc)) return false;
+    if (!match(TokenKind::T_SEMICOLON, semicolonLoc)) return false;
+
+    lookahead.commit();
+    return true;
+  };
+
+  if (!lookat_global_module_fragment()) return;
+
+  yyast = GlobalModuleFragmentAST::create(pool_);
+  yyast->moduleLoc = moduleLoc;
+  yyast->semicolonLoc = semicolonLoc;
+
+  parse_declaration_seq(yyast->declarationList);
+}
+
+void Parser::parse_private_module_fragment(PrivateModuleFragmentAST*& yyast) {
+  SourceLocation moduleLoc;
+  SourceLocation colonLoc;
+  SourceLocation privateLoc;
+
+  auto lookat_private_module_fragment = [&] {
+    LookaheadParser lookahead{this};
+    if (!parse_module_keyword(moduleLoc)) return false;
+    if (!match(TokenKind::T_COLON, colonLoc)) return false;
+    if (!match(TokenKind::T_PRIVATE, privateLoc)) return false;
+    lookahead.commit();
+    return true;
+  };
+
+  if (!lookat_private_module_fragment()) return;
+
+  yyast = PrivateModuleFragmentAST::create(pool_);
+
+  yyast->moduleLoc = moduleLoc;
+  yyast->colonLoc = colonLoc;
+  yyast->privateLoc = privateLoc;
+
+  expect(TokenKind::T_SEMICOLON, yyast->semicolonLoc);
+
+  parse_declaration_seq(yyast->declarationList);
+}
+
+auto Parser::parse_class_specifier(ClassSpecifierAST*& yyast, DeclSpecs& specs)
+    -> bool {
+  SourceLocation classLoc;
+  if (!parse_class_key(classLoc)) return false;
+
+  List<AttributeSpecifierAST*>* attributeList = nullptr;
+  NestedNameSpecifierAST* nestedNameSpecifier = nullptr;
+  UnqualifiedIdAST* unqualifiedId = nullptr;
+  SourceLocation finalLoc;
+
+  auto lookat_class_head = [&] {
+    LookaheadParser lookahead{this};
+
+    parse_optional_attribute_specifier_seq(attributeList);
+
+    parse_optional_nested_name_specifier(
+        nestedNameSpecifier, NestedNameSpecifierContext::kDeclarative);
+
+    if (lookat(TokenKind::T_IDENTIFIER)) {
+      check_type_traits();
+
+      if (SimpleTemplateIdAST* templateId = nullptr;
+          parse_simple_template_id(templateId)) {
+        unqualifiedId = templateId;
+      } else {
+        NameIdAST* nameId = nullptr;
+        (void)parse_name_id(nameId);
+        unqualifiedId = nameId;
+      }
+
+      (void)parse_class_virt_specifier(finalLoc);
+    }
+
+    if (nestedNameSpecifier && !unqualifiedId) {
+      parse_error("expected class name");
+    }
+
+    if (!LA().isOneOf(TokenKind::T_COLON, TokenKind::T_LBRACE)) {
+      return false;
+    }
+
+    lookahead.commit();
+    return true;
+  };
+
+  if (!lookat_class_head()) return false;
+
+  auto globalScopeGuard = CombinedScopeGuard{this};
+
+  if (isC()) {
+    if (unqualifiedId) {
+      setScope(getCurrentNonClassScope());
+    }
+  }
+
+  auto ast = ClassSpecifierAST::create(pool_);
+  yyast = ast;
+
+  ast->classLoc = classLoc;
+  ast->attributeList = attributeList;
+  ast->nestedNameSpecifier = nestedNameSpecifier;
+  ast->unqualifiedId = unqualifiedId;
+  ast->finalLoc = finalLoc;
+
+  ast->classKey = unit_->tokenKind(ast->classLoc);
+
+  if (finalLoc) {
+    ast->isFinal = true;
+  }
+
+  auto _ = CombinedScopeGuard{this};
+
+  binder_.bind(ast, specs);
+
+  enterScopeChain(ast->symbol);
+
+  ClassSpecifierContext classContext(
+      this, ast->symbol, defaultAccessSpecifierOfClassKey(ast->classKey));
+
+  (void)parse_base_clause(ast);
+
+  expect(TokenKind::T_LBRACE, ast->lbraceLoc);
+
+  const auto pendingFieldInitializersMark = pendingFieldInitializers_.size();
+  const auto pendingDefaultArgumentsMark = pendingDefaultArguments_.size();
+  const auto pendingNoexceptSpecifiersMark = pendingNoexceptSpecifiers_.size();
+
+  if (!match(TokenKind::T_RBRACE, ast->rbraceLoc)) {
+    parse_class_body(ast->declarationList);
+    expect(TokenKind::T_RBRACE, ast->rbraceLoc);
+  }
+
+  if (classDepth_ == 1) {
+    while (pendingDefaultArguments_.size() > pendingDefaultArgumentsMark ||
+           pendingFieldInitializers_.size() > pendingFieldInitializersMark ||
+           pendingNoexceptSpecifiers_.size() > pendingNoexceptSpecifiersMark) {
+      completePendingDefaultArguments(pendingDefaultArgumentsMark);
+      completePendingFieldInitializers(pendingFieldInitializersMark);
+      completePendingNoexceptSpecifiers(pendingNoexceptSpecifiersMark);
+    }
+  }
+
+  const bool deferExceptionSpecificationChecks =
+      hasPendingNoexceptSpecifier(ast->symbol, pendingNoexceptSpecifiersMark);
+  binder_.complete(ast, deferExceptionSpecificationChecks);
+
+  return true;
+}
+
+void Parser::parse_class_body(List<DeclarationAST*>*& yyast) {
+  auto it = &yyast;
+
+  LoopParser loop{this};
+
+  bool skipping = false;
+
+  while (LA()) {
+    if (shouldStopParsing()) break;
+
+    if (lookat(TokenKind::T_RBRACE)) break;
+
+    loop.start();
+
+    const auto saved = currentLocation();
+
+    DeclarationAST* declaration = nullptr;
+
+    if (parse_member_specification(declaration)) {
+      if (declaration) {
+        *it = make_list_node(pool_, declaration);
+        it = &(*it)->next;
+      }
+      skipping = false;
+    } else {
+      parse_skip_member_declaration(skipping);
+    }
+  }
+}
+
+auto Parser::parse_class_virt_specifier(SourceLocation& finalLoc) -> bool {
+  if (!parse_final(finalLoc)) return false;
+
+  return true;
+}
+
+auto Parser::parse_class_key(SourceLocation& classLoc) -> bool {
+  if (LA().isOneOf(TokenKind::T_CLASS, TokenKind::T_STRUCT,
+                   TokenKind::T_UNION)) {
+    classLoc = consumeToken();
+    return true;
+  }
+
+  return false;
+}
+
+auto Parser::parse_member_specification(DeclarationAST*& yyast) -> bool {
+  return parse_member_declaration(yyast);
+}
+
+auto Parser::parse_member_declaration(DeclarationAST*& yyast) -> bool {
+  SourceLocation accessLoc;
+
+  if (parse_access_specifier(accessLoc)) {
+    auto ast = AccessDeclarationAST::create(pool_);
+    yyast = ast;
+
+    ast->accessLoc = accessLoc;
+    expect(TokenKind::T_COLON, ast->colonLoc);
+
+    ast->accessSpecifier = unit_->tokenKind(ast->accessLoc);
+
+    binder_.setCurrentAccessSpecifier(toAccessSpecifier(
+        ast->accessSpecifier, binder_.defaultAccessSpecifier()));
+
+    return true;
+  }
+
+  if (parse_empty_declaration(yyast)) return true;
+  if (parse_using_enum_declaration(yyast)) return true;
+  if (parse_alias_declaration(yyast)) return true;
+  if (parse_using_declaration(yyast)) return true;
+  if (parse_static_assert_declaration(yyast)) return true;
+  if (parse_deduction_guide(yyast)) return true;
+  if (parse_opaque_enum_declaration(yyast)) return true;
+  if (TemplateDeclarationAST* templateDeclaration = nullptr;
+      parse_template_declaration(templateDeclaration)) {
+    yyast = templateDeclaration;
+    return true;
+  }
+  return parse_member_declaration_helper(yyast);
+}
+
+auto Parser::parse_maybe_template_member() -> bool {
+  if (lookat(TokenKind::T_TEMPLATE) ||
+      lookat(TokenKind::T_EXPLICIT, TokenKind::T_TEMPLATE))
+    return true;
+
+  return false;
+}
+
+auto Parser::hasNoUniqueAddressAttribute(
+    List<AttributeSpecifierAST*>* attributes) const -> bool {
+  for (auto spec : ListView{attributes}) {
+    auto cxxAttr = ast_cast<CxxAttributeAST>(spec);
+    if (!cxxAttr) continue;
+    for (auto attr : ListView{cxxAttr->attributeList}) {
+      auto token = ast_cast<SimpleAttributeTokenAST>(attr->attributeToken);
+      if (!token || !token->identifier) continue;
+      const auto& name = token->identifier->name();
+      if (name == "no_unique_address" || name == "__no_unique_address__")
+        return true;
+    }
+  }
+  return false;
+}
+
+auto Parser::parse_member_declaration_helper(DeclarationAST*& yyast) -> bool {
+  SourceLocation extensionLoc;
+  match(TokenKind::T___EXTENSION__, extensionLoc);
+
+  List<AttributeSpecifierAST*>* attributes = nullptr;
+  parse_optional_attribute_specifier_seq(attributes);
+
+  List<SpecifierAST*>* declSpecifierList = nullptr;
+  DeclSpecs specs{unit_};
+  if (hasNoUniqueAddressAttribute(attributes)) specs.isNoUniqueAddress = true;
+  (void)parse_decl_specifier_seq_no_typespecs(declSpecifierList, specs);
+
+  auto lookat_notypespec_function_definition = [&] {
+    auto declSpecs = specs;
+    declSpecs.finish();
+
+    LookaheadParser lookahead{this};
+
+    if (!parse_notypespec_function_definition(yyast, declSpecifierList,
+                                              declSpecs, attributes))
+      return false;
+
+    lookahead.commit();
+
+    return true;
+  };
+
+  if (lookat_notypespec_function_definition()) return true;
+
+  auto lastDeclSpecifier = &declSpecifierList;
+  while (*lastDeclSpecifier) {
+    lastDeclSpecifier = &(*lastDeclSpecifier)->next;
+  }
+
+  (void)parse_decl_specifier_seq(*lastDeclSpecifier, specs,
+                                 TypeNameContext::kTypeOnly);
+
+  if (!specs.hasTypeOrSizeSpecifier()) return false;
+
+  if (SourceLocation semicolonLoc;
+      match(TokenKind::T_SEMICOLON, semicolonLoc)) {
+    if (auto classSpec = ast_cast<ClassSpecifierAST>(specs.typeSpecifier())) {
+      if (classSpec->symbol && !classSpec->symbol->name()) {
+        binder_.declareAnonymousField(classSpec);
+      }
+    }
+
+    auto ast = SimpleDeclarationAST::create(pool_);
+    ast->attributeList = attributes;
+    ast->declSpecifierList = declSpecifierList;
+    ast->semicolonLoc = semicolonLoc;
+    yyast = ast;
+    recordFriendDeclaration(specs, declSpecifierList, nullptr,
+                            FriendDeclarationKind::kType);
+    return true;
+  }
+
+  Decl decl{specs};
+
+  DeclaratorAST* declarator = nullptr;
+  InitDeclaratorAST* initDeclarator = nullptr;
+  if (!parse_bitfield_declarator(initDeclarator, specs)) {
+    (void)parse_declarator(declarator, decl);
+  }
+
+  auto lookat_function_definition = [&] {
+    if (!isCxx()) return false;
+
+    LookaheadParser lookahead{this};
+
+    auto functionDeclarator = getFunctionPrototype(declarator);
+    if (!functionDeclarator) return false;
+
+    RequiresClauseAST* requiresClause = nullptr;
+    if (!parse_trailing_requires_clause(functionDeclarator, requiresClause)) {
+      parse_virt_specifier_seq(functionDeclarator);
+    }
+
+    parse_optional_attribute_specifier_seq(functionDeclarator->attributeList);
+
+    if (!lookat_function_body()) return false;
+
+    auto abbreviatedHead = takeAbbreviatedTemplateHead(decl);
+    auto templateHead = decl.specs.templateHead;
+
+    lookahead.commit();
+
+    auto templateScopeGuard = CombinedScopeGuard{this};
+    if (abbreviatedHead) setScope(abbreviatedHead->symbol);
+
+    decl.trailingRequiresClause = requiresClause;
+
+    auto functionSymbol = binder_.declareFunction(declarator, decl);
+    associatePendingNoexceptSpecifier(declarator, functionSymbol);
+
+    if (templateHead) {
+      functionSymbol->setTemplateDeclaration(templateHead);
+      functionSymbol->setTemplateParameters(templateHead->symbol);
+    }
+
+    auto _ = CombinedScopeGuard{this};
+
+    if (auto params = functionDeclarator->parameterDeclarationClause) {
+      auto functionScope = functionSymbol;
+      functionScope->addSymbol(params->functionParametersSymbol);
+      setScope(params->functionParametersSymbol);
+    } else {
+      setScope(functionSymbol);
+    }
+
+    FunctionBodyAST* functionBody = nullptr;
+    if (!parse_function_body(functionBody)) {
+      parse_error("expected function body");
+    }
+
+    functionSymbol->setDefined(true);
+
+    if (classDepth_) functionSymbol->setInline(true);
+
+    binder_.applyFunctionDefinitionKind(functionSymbol, functionBody);
+
+    binder_.applyAbiTags(functionSymbol, attributes);
+
+    auto ast = FunctionDefinitionAST::create(pool_);
+    yyast = ast;
+
+    ast->declSpecifierList = declSpecifierList;
+    ast->declarator = declarator;
+    ast->requiresClause = requiresClause;
+    ast->functionBody = functionBody;
+    ast->symbol = functionSymbol;
+    ast->symbol->setDeclaration(ast);
+    if (abbreviatedHead) abbreviatedHead->declaration = ast;
+
+    if (classDepth_) pendingFunctionDefinitions_.push_back(ast);
+    if (!classDepth_ && !binder_.inTemplate())
+      binder_.synthesizeDefaultedMemberBody(functionSymbol);
+    check_mem_initializers(ast);
+
+    return true;
+  };
+
+  if (lookat_function_definition()) return true;
+
+  auto ast = SimpleDeclarationAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeList = attributes;
+  ast->declSpecifierList = declSpecifierList;
+
+  if (!initDeclarator) {
+    if (!parse_member_declarator(initDeclarator, declarator, decl)) {
+      report_failed_parse("expected a member declarator");
+    }
+  }
+
+  auto it = &ast->initDeclaratorList;
+
+  if (initDeclarator) {
+    *it = make_list_node(pool_, initDeclarator);
+    it = &(*it)->next;
+  }
+
+  SourceLocation commaLoc;
+
+  while (match(TokenKind::T_COMMA, commaLoc)) {
+    InitDeclaratorAST* initDeclarator = nullptr;
+
+    if (!parse_member_declarator(initDeclarator, specs)) {
+      parse_error("expected a declarator");
+    }
+
+    if (initDeclarator) {
+      *it = make_list_node(pool_, initDeclarator);
+      it = &(*it)->next;
+    }
+  }
+
+  expect(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+
+  recordFriendDeclaration(specs, ast->declSpecifierList,
+                          decl.getNestedNameSpecifier(),
+                          FriendDeclarationKind::kDeclarator);
+
+  binder_.applyAbiTags(ast);
+
+  attachFunctionTemplateDeclarations(ast);
+
+  return true;
+}
+
+void Parser::recordFriendDeclaration(
+    const DeclSpecs& specs, List<SpecifierAST*>* specifierList,
+    NestedNameSpecifierAST* declaratorQualifier, FriendDeclarationKind kind) {
+  if (!specs.isFriend) return;
+
+  ClassSymbol* befriendingClass = nullptr;
+  for (auto symbol = static_cast<Symbol*>(scope()); symbol;
+       symbol = symbol->parent()) {
+    befriendingClass = symbol_cast<ClassSymbol>(symbol);
+    if (befriendingClass) break;
+  }
+  if (!befriendingClass) return;
+
+  for (auto specifier : ListView{specifierList}) {
+    auto elaborated = ast_cast<ElaboratedTypeSpecifierAST>(specifier);
+    if (!elaborated) continue;
+    binder_.disableAccessControlForUnsupportedFriend(
+        elaborated->nestedNameSpecifier, befriendingClass);
+  }
+  binder_.disableAccessControlForUnsupportedFriend(declaratorQualifier,
+                                                   befriendingClass);
+
+  if (kind != FriendDeclarationKind::kType) return;
+  for (auto specifier : ListView{specifierList}) {
+    auto elaborated = ast_cast<ElaboratedTypeSpecifierAST>(specifier);
+    if (!elaborated) continue;
+    auto templateId = ast_cast<SimpleTemplateIdAST>(elaborated->unqualifiedId);
+    if (!templateId || isDependent(unit_, elaborated->nestedNameSpecifier) ||
+        hasDependentTemplateArguments(unit_, templateId))
+      continue;
+    auto primary = symbol_cast<ClassSymbol>(templateId->symbol);
+    if (!primary) continue;
+    auto substitution =
+        Substitution::make(unit_, primary->templateDeclaration(),
+                           templateId->templateArgumentList);
+    if (!substitution) continue;
+    primary->canonical()->addBefriendingClass(
+        befriendingClass, std::move(*substitution).templateArguments());
+    return;
+  }
+
+  auto friendType = traits.remove_cv(specs.type());
+  auto classType = type_cast<ClassType>(friendType);
+  if (classType) classType->definition()->addBefriendingClass(befriendingClass);
+}
+
+auto Parser::parse_bitfield_declarator(InitDeclaratorAST*& yyast,
+                                       const DeclSpecs& declSpecs) -> bool {
+  LookaheadParser lookahead{this};
+
+  SourceLocation identifierLoc;
+  match(TokenKind::T_IDENTIFIER, identifierLoc);
+
+  auto identifier = unit_->identifier(identifierLoc);
+
+  List<AttributeSpecifierAST*>* attributes = nullptr;
+  parse_optional_attribute_specifier_seq(attributes);
+
+  SourceLocation colonLoc;
+  if (!match(TokenKind::T_COLON, colonLoc)) return false;
+
+  lookahead.commit();
+
+  ExpressionAST* sizeExpression = nullptr;
+  std::optional<ConstValue> bitfieldWidth;
+
+  if (!parse_constant_expression(sizeExpression, bitfieldWidth)) {
+    report_failed_parse("expected an expression");
+  }
+
+  auto nameId = NameIdAST::create(pool_);
+  nameId->identifierLoc = identifierLoc;
+  nameId->identifier = identifier;
+
+  auto bitfieldDeclarator = BitfieldDeclaratorAST::create(pool_);
+  bitfieldDeclarator->unqualifiedId = nameId;
+  bitfieldDeclarator->colonLoc = colonLoc;
+  bitfieldDeclarator->sizeExpression = sizeExpression;
+
+  auto declarator = DeclaratorAST::create(pool_);
+  declarator->coreDeclarator = bitfieldDeclarator;
+
+  Decl decl{declSpecs, declarator};
+
+  auto symbol = binder_.declareField(declarator, decl);
+  symbol->setBitFieldWidth(std::move(bitfieldWidth));
+
+  auto ast = InitDeclaratorAST::create(pool_);
+  yyast = ast;
+
+  ast->declarator = declarator;
+  ast->symbol = symbol;
+
+  {
+    UncheckedInitializerContext uncheckedContext{
+        this, isDeferredFieldInitializer(symbol)};
+    (void)parse_brace_or_equal_initializer(ast->initializer);
+  }
+
+  recordFieldInitializer(ast, declSpecs.typeSpecifier());
+
+  return true;
+}
+
+auto Parser::parse_member_declarator(InitDeclaratorAST*& yyast,
+                                     const DeclSpecs& specs) -> bool {
+  if (parse_bitfield_declarator(yyast, specs)) {
+    return true;
+  }
+
+  LookaheadParser lookahead{this};
+
+  DeclaratorAST* declarator = nullptr;
+  Decl decl{specs};
+  if (!parse_declarator(declarator, decl)) return false;
+
+  lookahead.commit();
+
+  return parse_member_declarator(yyast, declarator, decl);
+}
+
+auto Parser::parse_member_declarator(InitDeclaratorAST*& yyast,
+                                     DeclaratorAST* declarator, Decl decl)
+    -> bool {
+  if (!declarator) {
+    return false;
+  }
+
+  auto scopeGuard = CombinedScopeGuard{this};
+  auto abbreviatedHead = takeAbbreviatedTemplateHead(decl);
+  if (abbreviatedHead) setScope(abbreviatedHead->symbol);
+
+  auto symbol = binder_.declareMemberSymbol(declarator, decl);
+
+  if (auto funcSym = symbol_cast<FunctionSymbol>(symbol)) {
+    associatePendingNoexceptSpecifier(declarator, funcSym);
+    auto templateHead = decl.specs.templateHead;
+    if (templateHead) {
+      funcSym->setTemplateDeclaration(templateHead);
+      funcSym->setTemplateParameters(templateHead->symbol);
+    }
+    if (auto functionDeclarator = getFunctionPrototype(declarator)) {
+      if (auto params = functionDeclarator->parameterDeclarationClause)
+        funcSym->addSymbol(params->functionParametersSymbol);
+    }
+  }
+
+  auto ast = InitDeclaratorAST::create(pool_);
+  yyast = ast;
+
+  ast->declarator = declarator;
+  ast->symbol = symbol;
+
+  if (isCxx()) {
+    if (auto functionDeclarator = getFunctionPrototype(declarator)) {
+      RequiresClauseAST* requiresClause = nullptr;
+
+      if (parse_trailing_requires_clause(functionDeclarator, requiresClause)) {
+        ast->requiresClause = requiresClause;
+        if (auto funcSym = symbol_cast<FunctionSymbol>(symbol))
+          funcSym->setTrailingRequiresClause(requiresClause);
+      } else {
+        parse_virt_specifier_seq(functionDeclarator);
+
+        if (!functionDeclarator->attributeList) {
+          parse_optional_attribute_specifier_seq(
+              functionDeclarator->attributeList);
+        }
+
+        SourceLocation equalLoc;
+        SourceLocation zeroLoc;
+
+        const auto isPure = parse_pure_specifier(equalLoc, zeroLoc);
+
+        functionDeclarator->isPure = isPure;
+
+        if (isPure) {
+          if (auto funcSym = symbol_cast<FunctionSymbol>(symbol)) {
+            funcSym->setPure(true);
+            funcSym->setVirtual(true);
+          }
+        }
+      }
+
+      return true;
+    }
+
+    {
+      UncheckedInitializerContext uncheckedContext{
+          this, isDeferredFieldInitializer(ast->symbol)};
+      if (symbol) checkBracedInitializerCompletion(symbol->type());
+      (void)parse_brace_or_equal_initializer(ast->initializer);
+    }
+
+    recordFieldInitializer(ast, decl.specs.typeSpecifier());
+  }
+
+  return true;
+}
+
+auto Parser::parse_virt_specifier(
+    FunctionDeclaratorChunkAST* functionDeclarator) -> bool {
+  SourceLocation loc;
+
+  if (parse_final(loc)) {
+    functionDeclarator->isFinal = true;
+    return true;
+  }
+
+  if (parse_override(loc)) {
+    functionDeclarator->isOverride = true;
+    return true;
+  }
+
+  return false;
+}
+
+auto Parser::parse_pure_specifier(SourceLocation& equalLoc,
+                                  SourceLocation& zeroLoc) -> bool {
+  LookaheadParser lookahead{this};
+
+  if (!match(TokenKind::T_EQUAL, equalLoc)) return false;
+
+  if (!match(TokenKind::T_INTEGER_LITERAL, zeroLoc)) return false;
+
+  const auto& number = unit_->tokenText(zeroLoc);
+
+  if (number != "0") return false;
+
+  lookahead.commit();
+
+  return true;
+}
+
+auto Parser::parse_conversion_function_id(ConversionFunctionIdAST*& yyast)
+    -> bool {
+  LookaheadParser lookahead{this};
+
+  SourceLocation operatorLoc;
+
+  if (!match(TokenKind::T_OPERATOR, operatorLoc)) return false;
+
+  List<SpecifierAST*>* typeSpecifierList = nullptr;
+  DeclSpecs specs{unit_};
+  if (!parse_type_specifier_seq(typeSpecifierList, specs,
+                                TypeNameContext::kTypeOnly))
+    return false;
+
+  lookahead.commit();
+
+  auto declarator = DeclaratorAST::create(pool_);
+
+  (void)parse_ptr_operator_seq(declarator->ptrOpList);
+
+  auto typeId = TypeIdAST::create(pool_);
+  typeId->typeSpecifierList = typeSpecifierList;
+  typeId->declarator = declarator;
+
+  Decl decl{specs};
+
+  binder_.bind(typeId, decl);
+
+  auto ast = ConversionFunctionIdAST::create(pool_);
+  yyast = ast;
+
+  ast->operatorLoc = operatorLoc;
+  ast->typeId = typeId;
+
+  return true;
+}
+
+auto Parser::parse_base_clause(ClassSpecifierAST* ast) -> bool {
+  if (!isCxx()) return false;
+
+  if (!match(TokenKind::T_COLON, ast->colonLoc)) return false;
+
+  if (!parse_base_specifier_list(ast)) {
+    parse_error("expected a base class specifier");
+  }
+
+  return true;
+}
+
+auto Parser::parse_base_specifier_list(ClassSpecifierAST* ast) -> bool {
+  auto it = &ast->baseSpecifierList;
+
+  BaseSpecifierAST* baseSpecifier = nullptr;
+
+  parse_base_specifier(baseSpecifier);
+
+  SourceLocation ellipsisLoc;
+
+  match(TokenKind::T_DOT_DOT_DOT, ellipsisLoc);
+
+  if (baseSpecifier && ellipsisLoc) {
+    baseSpecifier->ellipsisLoc = ellipsisLoc;
+    baseSpecifier->isVariadic = true;
+  }
+
+  if (baseSpecifier && baseSpecifier->symbol) {
+    ast->symbol->addBaseClass(baseSpecifier->symbol);
+  }
+
+  *it = make_list_node(pool_, baseSpecifier);
+  it = &(*it)->next;
+
+  SourceLocation commaLoc;
+
+  while (match(TokenKind::T_COMMA, commaLoc)) {
+    BaseSpecifierAST* baseSpecifier = nullptr;
+
+    parse_base_specifier(baseSpecifier);
+
+    SourceLocation ellipsisLoc;
+
+    match(TokenKind::T_DOT_DOT_DOT, ellipsisLoc);
+
+    if (baseSpecifier && ellipsisLoc) {
+      baseSpecifier->ellipsisLoc = ellipsisLoc;
+      baseSpecifier->isVariadic = true;
+    }
+
+    if (baseSpecifier && baseSpecifier->symbol) {
+      ast->symbol->addBaseClass(baseSpecifier->symbol);
+    }
+
+    *it = make_list_node(pool_, baseSpecifier);
+    it = &(*it)->next;
+  }
+
+  return true;
+}
+
+void Parser::parse_base_specifier(BaseSpecifierAST*& yyast) {
+  auto ast = BaseSpecifierAST::create(pool_);
+  yyast = ast;
+
+  parse_optional_attribute_specifier_seq(ast->attributeList);
+
+  SourceLocation virtualLoc;
+  SourceLocation accessLoc;
+
+  if (match(TokenKind::T_VIRTUAL, virtualLoc)) {
+    ast->isVirtual = true;
+    (void)parse_access_specifier(accessLoc);
+  } else if (parse_access_specifier(accessLoc)) {
+    ast->isVirtual = match(TokenKind::T_VIRTUAL, virtualLoc);
+  }
+
+  if (accessLoc) {
+    ast->accessSpecifier = unit_->tokenKind(accessLoc);
+  }
+
+  ast->virtualOrAccessLoc = std::min(virtualLoc, accessLoc);
+  ast->otherVirtualOrAccessLoc = std::max(virtualLoc, accessLoc);
+
+  if (!parse_class_or_decltype(ast->nestedNameSpecifier, ast->templateLoc,
+                               ast->unqualifiedId)) {
+    parse_error("expected a class name");
+    return;
+  }
+
+  if (ast->templateLoc) {
+    ast->isTemplateIntroduced = true;
+  }
+
+  Symbol* resolvedType = nullptr;
+  if (!ast->nestedNameSpecifier) {
+    if (auto nameId = ast_cast<NameIdAST>(ast->unqualifiedId)) {
+      resolvedType =
+          unqualifiedLookupType(lexicalScope_, nameId->identifier, isCxx());
+    }
+  }
+
+  binder_.bind(ast, resolvedType);
+}
+
+auto Parser::parse_class_or_decltype(
+    NestedNameSpecifierAST*& yynestedNameSpecifier,
+    SourceLocation& yytemplateLoc, UnqualifiedIdAST*& yyast) -> bool {
+  NestedNameSpecifierAST* nestedNameSpecifier = nullptr;
+  parse_optional_nested_name_specifier(
+      nestedNameSpecifier, NestedNameSpecifierContext::kNonDeclarative);
+
+  if (!nestedNameSpecifier) {
+    DecltypeSpecifierAST* decltypeSpecifier = nullptr;
+    if (parse_decltype_specifier(decltypeSpecifier)) {
+      DecltypeIdAST* decltypeName = DecltypeIdAST::create(pool_);
+      decltypeName->decltypeSpecifier = decltypeSpecifier;
+      yynestedNameSpecifier = nullptr;
+      yyast = decltypeName;
+      return true;
+    }
+  }
+
+  SourceLocation templateLoc;
+  const auto isTemplateIntroduced = match(TokenKind::T_TEMPLATE, templateLoc);
+
+  UnqualifiedIdAST* unqualifiedName = nullptr;
+  if (!parse_type_name(unqualifiedName, nestedNameSpecifier,
+                       isTemplateIntroduced, TypeNameContext::kTypeOnly)) {
+    parse_error("expected a class name");
+    return false;
+  }
+
+  yytemplateLoc = templateLoc;
+  yynestedNameSpecifier = nestedNameSpecifier;
+  yyast = unqualifiedName;
+
+  return true;
+}
+
+auto Parser::parse_access_specifier(SourceLocation& loc) -> bool {
+  if (LA().isOneOf(TokenKind::T_PRIVATE, TokenKind::T_PROTECTED,
+                   TokenKind::T_PUBLIC)) {
+    loc = consumeToken();
+    return true;
+  }
+
+  return false;
+}
+
+auto Parser::parse_ctor_initializer(
+    SourceLocation& colonLoc, List<MemInitializerAST*>*& memInitializerList)
+    -> bool {
+  if (!match(TokenKind::T_COLON, colonLoc)) return false;
+
+  parse_mem_initializer_list(memInitializerList);
+
+  return true;
+}
+
+void Parser::parse_mem_initializer_list(List<MemInitializerAST*>*& yyast) {
+  auto it = &yyast;
+
+  MemInitializerAST* mem_initializer = nullptr;
+
+  parse_mem_initializer(mem_initializer);
+
+  *it = make_list_node(pool_, mem_initializer);
+  it = &(*it)->next;
+
+  SourceLocation commaLoc;
+
+  while (match(TokenKind::T_COMMA, commaLoc)) {
+    MemInitializerAST* mem_initializer = nullptr;
+
+    parse_mem_initializer(mem_initializer);
+    *it = make_list_node(pool_, mem_initializer);
+    it = &(*it)->next;
+  }
+}
+
+void Parser::parse_mem_initializer(MemInitializerAST*& yyast) {
+  NestedNameSpecifierAST* nestedNameSpecifier = nullptr;
+  UnqualifiedIdAST* name = nullptr;
+
+  parse_mem_initializer_id(nestedNameSpecifier, name);
+
+  checkMemInitializerCompletion(nestedNameSpecifier, name);
+
+  if (lookat(TokenKind::T_LBRACE)) {
+    auto ast = BracedMemInitializerAST::create(pool_);
+    yyast = ast;
+
+    ast->nestedNameSpecifier = nestedNameSpecifier;
+    ast->unqualifiedId = name;
+
+    if (classDepth_) {
+      ast->bracedInitList = BracedInitListAST::create(pool_);
+      ast->bracedInitList->lbraceLoc = currentLocation();
+      if (parse_skip_balanced()) {
+        ast->bracedInitList->rbraceLoc = currentLocation().previous();
+      }
+    } else {
+      if (!parse_braced_init_list(ast->bracedInitList, ExprContext{})) {
+        parse_error("expected an initializer");
+      }
+    }
+
+    match(TokenKind::T_DOT_DOT_DOT, ast->ellipsisLoc);
+
+    return;
+  }
+
+  auto ast = ParenMemInitializerAST::create(pool_);
+  yyast = ast;
+
+  ast->nestedNameSpecifier = nestedNameSpecifier;
+  ast->unqualifiedId = name;
+
+  if (classDepth_) {
+    if (lookat(TokenKind::T_LPAREN)) {
+      ast->lparenLoc = currentLocation();
+
+      if (parse_skip_balanced()) {
+        ast->rparenLoc = currentLocation().previous();
+      }
+    } else {
+      expect(TokenKind::T_LPAREN, ast->lparenLoc);
+    }
+  } else {
+    expect(TokenKind::T_LPAREN, ast->lparenLoc);
+
+    if (!match(TokenKind::T_RPAREN, ast->rparenLoc)) {
+      if (!parse_expression_list(ast->expressionList, ExprContext{})) {
+        report_failed_parse("expected an expression");
+      }
+
+      expect(TokenKind::T_RPAREN, ast->rparenLoc);
+    }
+  }
+
+  match(TokenKind::T_DOT_DOT_DOT, ast->ellipsisLoc);
+}
+
+void Parser::parse_mem_initializer_id(
+    NestedNameSpecifierAST*& yynestedNameSpecifier, UnqualifiedIdAST*& yyast) {
+  if (lookat(TokenKind::T_IDENTIFIER) &&
+      LA(1).isOneOf(TokenKind::T_LPAREN, TokenKind::T_LBRACE)) {
+    NameIdAST* nameId = nullptr;
+    if (!parse_name_id(nameId)) {
+      parse_error("expected a name");
+    } else {
+      yynestedNameSpecifier = nullptr;
+      yyast = nameId;
+    }
+    return;
+  }
+
+  NestedNameSpecifierAST* nestedNameSpecifier = nullptr;
+  SourceLocation templateLoc;
+  if (!parse_class_or_decltype(nestedNameSpecifier, templateLoc, yyast)) {
+    parse_error("expected a name");
+  }
+}
+
+auto Parser::parse_operator_function_id(OperatorFunctionIdAST*& yyast) -> bool {
+  SourceLocation operatorLoc;
+
+  if (!match(TokenKind::T_OPERATOR, operatorLoc)) return false;
+
+  TokenKind op = TokenKind::T_EOF_SYMBOL;
+  SourceLocation opLoc;
+  SourceLocation openLoc;
+  SourceLocation closeLoc;
+
+  if (!parse_operator(op, opLoc, openLoc, closeLoc)) return false;
+
+  auto ast = OperatorFunctionIdAST::create(pool_);
+  yyast = ast;
+
+  ast->operatorLoc = operatorLoc;
+  ast->opLoc = opLoc;
+  ast->openLoc = openLoc;
+  ast->closeLoc = closeLoc;
+  ast->op = op;
+
+  return true;
+}
+
+auto Parser::parse_operator(TokenKind& op, SourceLocation& opLoc,
+                            SourceLocation& openLoc, SourceLocation& closeLoc)
+    -> bool {
+  op = TokenKind(LA());
+  switch (op) {
+    case TokenKind::T_LPAREN:
+      openLoc = consumeToken();
+      expect(TokenKind::T_RPAREN, closeLoc);
+      return true;
+
+    case TokenKind::T_LBRACKET:
+      openLoc = consumeToken();
+      expect(TokenKind::T_RBRACKET, closeLoc);
+      return true;
+
+    case TokenKind::T_GREATER: {
+      opLoc = currentLocation();
+      if (parse_greater_greater()) {
+        op = TokenKind::T_GREATER_GREATER;
+        return true;
+      }
+      consumeToken();
+      return true;
+    }
+
+    case TokenKind::T_NEW:
+      opLoc = consumeToken();
+      if (match(TokenKind::T_LBRACKET, openLoc)) {
+        expect(TokenKind::T_RBRACKET, closeLoc);
+        op = TokenKind::T_NEW_ARRAY;
+      }
+      return true;
+
+    case TokenKind::T_DELETE:
+      opLoc = consumeToken();
+      if (match(TokenKind::T_LBRACKET, openLoc)) {
+        expect(TokenKind::T_RBRACKET, closeLoc);
+        op = TokenKind::T_DELETE_ARRAY;
+      }
+      return true;
+
+    case TokenKind::T_CO_AWAIT:
+    case TokenKind::T_MINUS_GREATER:
+    case TokenKind::T_MINUS_GREATER_STAR:
+    case TokenKind::T_TILDE:
+    case TokenKind::T_EXCLAIM:
+    case TokenKind::T_PLUS:
+    case TokenKind::T_MINUS:
+    case TokenKind::T_STAR:
+    case TokenKind::T_SLASH:
+    case TokenKind::T_PERCENT:
+    case TokenKind::T_CARET:
+    case TokenKind::T_AMP:
+    case TokenKind::T_BAR:
+    case TokenKind::T_EQUAL:
+    case TokenKind::T_PLUS_EQUAL:
+    case TokenKind::T_MINUS_EQUAL:
+    case TokenKind::T_STAR_EQUAL:
+    case TokenKind::T_SLASH_EQUAL:
+    case TokenKind::T_PERCENT_EQUAL:
+    case TokenKind::T_CARET_EQUAL:
+    case TokenKind::T_AMP_EQUAL:
+    case TokenKind::T_BAR_EQUAL:
+    case TokenKind::T_EQUAL_EQUAL:
+    case TokenKind::T_EXCLAIM_EQUAL:
+    case TokenKind::T_LESS:
+    case TokenKind::T_LESS_EQUAL:
+    case TokenKind::T_GREATER_GREATER_EQUAL:
+    case TokenKind::T_GREATER_GREATER:
+    case TokenKind::T_GREATER_EQUAL:
+    case TokenKind::T_LESS_EQUAL_GREATER:
+    case TokenKind::T_AMP_AMP:
+    case TokenKind::T_BAR_BAR:
+    case TokenKind::T_LESS_LESS:
+    case TokenKind::T_LESS_LESS_EQUAL:
+    case TokenKind::T_PLUS_PLUS:
+    case TokenKind::T_MINUS_MINUS:
+    case TokenKind::T_COMMA:
+      opLoc = consumeToken();
+      return true;
+
+    default:
+      return false;
+  }
+}
+
+auto Parser::parse_literal_operator_id(LiteralOperatorIdAST*& yyast) -> bool {
+  SourceLocation operatorLoc;
+
+  auto lookat_literal_operator_id = [&] {
+    LookaheadParser lookahead{this};
+
+    if (!match(TokenKind::T_OPERATOR, operatorLoc)) return false;
+
+    if (!lookat(TokenKind::T_USER_DEFINED_STRING_LITERAL) &&
+        !lookat(TokenKind::T_STRING_LITERAL, TokenKind::T_IDENTIFIER))
+      return false;
+
+    lookahead.commit();
+
+    return true;
+  };
+
+  if (!lookat_literal_operator_id()) return false;
+
+  auto ast = LiteralOperatorIdAST::create(pool_);
+  yyast = ast;
+
+  ast->operatorLoc = operatorLoc;
+
+  if (match(TokenKind::T_STRING_LITERAL, ast->literalLoc)) {
+    expect(TokenKind::T_IDENTIFIER, ast->identifierLoc);
+    ast->literal = unit_->literal(ast->literalLoc);
+    ast->identifier = unit_->identifier(ast->identifierLoc);
+  } else {
+    expect(TokenKind::T_USER_DEFINED_STRING_LITERAL, ast->literalLoc);
+    ast->literal = unit_->literal(ast->literalLoc);
+  }
+
+  return true;
+}
+
+auto Parser::parse_template_declaration(TemplateDeclarationAST*& yyast)
+    -> bool {
+  if (!lookat(TokenKind::T_TEMPLATE, TokenKind::T_LESS)) return false;
+
+  auto _ = CombinedScopeGuard{this};
+  TemplateHeadContext templateHeadContext{this};
+  ExplicitTemplateHeadGuard explicitTemplateHeadGuard{this};
+
+  auto ast = TemplateDeclarationAST::create(pool_);
+  yyast = ast;
+
+  ast->depth = templateParameterDepth_;
+
+  auto templateHead = ast;
+
+  expect(TokenKind::T_TEMPLATE, ast->templateLoc);
+  expect(TokenKind::T_LESS, ast->lessLoc);
+
+  ast->symbol =
+      control_->newTemplateParametersSymbol(scope(), ast->templateLoc);
+
+  setScope(ast->symbol);
+
+  if (!match(TokenKind::T_GREATER, ast->greaterLoc)) {
+    parse_template_parameter_list(ast->templateParameterList);
+    if (!expect(TokenKind::T_GREATER, ast->greaterLoc)) return true;
+  } else {
+    ast->symbol->setExplicitTemplateSpecialization(true);
+    explicitTemplateHeadGuard.leaveForExplicitSpecialization();
+  }
+
+  (void)parse_requires_clause(ast->requiresClause);
+
+  if (lookat(TokenKind::T_TEMPLATE, TokenKind::T_LESS)) {
+    TemplateDeclarationAST* templateDeclaration = nullptr;
+    (void)parse_template_declaration(templateDeclaration);
+    ast->declaration = templateDeclaration;
+    return true;
+  }
+
+  if (parse_concept_definition(ast->declaration)) {
+    if (auto conceptDefinition =
+            ast_cast<ConceptDefinitionAST>(ast->declaration);
+        conceptDefinition && conceptDefinition->symbol) {
+      conceptDefinition->symbol->setDeclaration(conceptDefinition);
+      conceptDefinition->symbol->setTemplateDeclaration(ast);
+    }
+    return true;
+  }
+
+  if (!parse_template_declaration_body(ast->declaration, templateHead))
+    report_failed_parse("expected a declaration");
+
+  return true;
+}
+
+void Parser::parse_template_parameter_list(
+    List<TemplateParameterAST*>*& yyast) {
+  auto it = &yyast;
+
+  int templateParameterCount = 0;
+  std::swap(templateParameterCount_, templateParameterCount);
+
+  TemplateParameterAST* parameter = nullptr;
+  parse_template_parameter(parameter);
+
+  if (parameter) {
+    ++templateParameterCount_;
+
+    *it = make_list_node(pool_, parameter);
+    it = &(*it)->next;
+  }
+
+  SourceLocation commaLoc;
+
+  while (match(TokenKind::T_COMMA, commaLoc)) {
+    TemplateParameterAST* parameter = nullptr;
+    parse_template_parameter(parameter);
+
+    if (!parameter) continue;
+
+    ++templateParameterCount_;
+
+    *it = make_list_node(pool_, parameter);
+    it = &(*it)->next;
+  }
+
+  std::swap(templateParameterCount_, templateParameterCount);
+}
+
+auto Parser::parse_trailing_requires_clause(
+    FunctionDeclaratorChunkAST* functionDeclarator, RequiresClauseAST*& yyast)
+    -> bool {
+  if (!lookat(TokenKind::T_REQUIRES)) return false;
+
+  auto parametersSymbol =
+      functionDeclarator && functionDeclarator->parameterDeclarationClause
+          ? functionDeclarator->parameterDeclarationClause
+                ->functionParametersSymbol
+          : nullptr;
+
+  auto _ = CombinedScopeGuard{this, parametersSymbol};
+
+  return parse_requires_clause(yyast);
+}
+
+auto Parser::parse_requires_clause(RequiresClauseAST*& yyast) -> bool {
+  SourceLocation requiresLoc;
+
+  if (!match(TokenKind::T_REQUIRES, requiresLoc)) return false;
+
+  yyast = RequiresClauseAST::create(pool_);
+
+  yyast->requiresLoc = requiresLoc;
+
+  ExprContext ctx;
+  ctx.inRequiresClause = true;
+  ctx.inConstraintExpression = true;
+
+  auto _ = UnevaluatedOperandGuard{this};
+  if (!parse_constraint_logical_or_expression(yyast->expression, ctx)) {
+    parse_error("expected a requirement expression");
+  }
+
+  return true;
+}
+
+auto Parser::parse_constraint_logical_or_expression(ExpressionAST*& yyast,
+                                                    const ExprContext& ctx)
+    -> bool {
+  if (!parse_constraint_logical_and_expression(yyast, ctx)) return false;
+
+  SourceLocation opLoc;
+
+  while (match(TokenKind::T_BAR_BAR, opLoc)) {
+    ExpressionAST* expression = nullptr;
+
+    if (!parse_constraint_logical_and_expression(expression, ctx)) {
+      parse_error("expected a requirement expression");
+    }
+
+    auto ast = BinaryExpressionAST::create(pool_);
+    ast->leftExpression = yyast;
+    ast->opLoc = opLoc;
+    ast->op = TokenKind::T_BAR_BAR;
+    ast->rightExpression = expression;
+    yyast = ast;
+
+    check(ast);
+  }
+
+  return true;
+}
+
+auto Parser::parse_constraint_logical_and_expression(ExpressionAST*& yyast,
+                                                     const ExprContext& ctx)
+    -> bool {
+  if (!parse_primary_expression(yyast, ctx)) return false;
+
+  SourceLocation opLoc;
+
+  while (match(TokenKind::T_AMP_AMP, opLoc)) {
+    ExpressionAST* expression = nullptr;
+
+    if (!parse_primary_expression(expression, ctx)) {
+      report_failed_parse("expected an expression");
+    }
+
+    auto ast = BinaryExpressionAST::create(pool_);
+    ast->leftExpression = yyast;
+    ast->opLoc = opLoc;
+    ast->op = TokenKind::T_AMP_AMP;
+    ast->rightExpression = expression;
+    yyast = ast;
+
+    check(ast);
+  }
+
+  return true;
+}
+
+void Parser::parse_template_parameter(TemplateParameterAST*& yyast) {
+  auto lookat_constraint_type_parameter = [&] {
+    LookaheadParser lookahead{this};
+
+    if (!parse_constraint_type_parameter(yyast)) return false;
+
+    if (!LA().isOneOf(TokenKind::T_GREATER, TokenKind::T_COMMA)) return false;
+
+    lookahead.commit();
+
+    return true;
+  };
+
+  auto lookat_type_parameter = [&] {
+    LookaheadParser lookahead{this};
+
+    if (!parse_type_parameter(yyast)) return false;
+
+    lookahead.commit();
+
+    return true;
+  };
+
+  if (lookat_constraint_type_parameter()) return;
+  if (lookat_type_parameter()) return;
+
+  LookaheadParser lookahead{this};
+
+  ParameterDeclarationAST* parameter = nullptr;
+
+  if (!parse_parameter_declaration(parameter, /*templParam*/ true,
+                                   TypeNameContext::kTypeOnly))
+    return;
+
+  lookahead.commit();
+
+  auto ast = NonTypeTemplateParameterAST::create(pool_);
+  yyast = ast;
+
+  ast->declaration = parameter;
+
+  binder_.bind(ast, templateParameterCount_, templateParameterDepth_);
+}
+
+auto Parser::parse_type_parameter(TemplateParameterAST*& yyast) -> bool {
+  if (lookat(TokenKind::T_TEMPLATE, TokenKind::T_LESS)) {
+    parse_template_type_parameter(yyast);
+    return true;
+  }
+
+  if (parse_typename_type_parameter(yyast)) return true;
+
+  return false;
+}
+
+auto Parser::parse_typename_type_parameter(TemplateParameterAST*& yyast)
+    -> bool {
+  auto maybe_elaborated_type_spec = [this]() {
+    if (!lookat(TokenKind::T_TYPENAME, TokenKind::T_IDENTIFIER)) return false;
+
+    if (!LA(2).isOneOf(TokenKind::T_COLON_COLON, TokenKind::T_LESS))
+      return false;
+
+    return true;
+  };
+
+  if (maybe_elaborated_type_spec()) return false;
+
+  SourceLocation classKeyLoc;
+
+  if (!parse_type_parameter_key(classKeyLoc)) return false;
+
+  auto ast = TypenameTypeParameterAST::create(pool_);
+  yyast = ast;
+
+  ast->classKeyLoc = classKeyLoc;
+
+  const auto isPack = match(TokenKind::T_DOT_DOT_DOT, ast->ellipsisLoc);
+
+  ast->isPack = isPack;
+
+  match(TokenKind::T_IDENTIFIER, ast->identifierLoc);
+
+  ast->identifier = unit_->identifier(ast->identifierLoc);
+
+  binder_.bind(ast, templateParameterCount_, templateParameterDepth_);
+
+  if (match(TokenKind::T_EQUAL, ast->equalLoc)) {
+    if (!parse_type_id(ast->typeId, TypeNameContext::kTypeOnly))
+      report_failed_parse("expected a type id");
+  }
+
+  return true;
+}
+
+void Parser::parse_template_type_parameter(TemplateParameterAST*& yyast) {
+  auto _ = CombinedScopeGuard{this};
+
+  auto ast = TemplateTypeParameterAST::create(pool_);
+  yyast = ast;
+
+  expect(TokenKind::T_TEMPLATE, ast->templateLoc);
+  expect(TokenKind::T_LESS, ast->lessLoc);
+
+  if (!match(TokenKind::T_GREATER, ast->greaterLoc)) {
+    TemplateHeadContext templateHeadContext{this};
+
+    auto parameters =
+        control_->newTemplateParametersSymbol(scope(), ast->templateLoc);
+
+    setScope(parameters);
+
+    parse_template_parameter_list(ast->templateParameterList);
+
+    expect(TokenKind::T_GREATER, ast->greaterLoc);
+
+    setScope(parameters->parent());
+  }
+
+  (void)parse_requires_clause(ast->requiresClause);
+
+  if (!parse_type_parameter_key(ast->classKeyLoc)) {
+    parse_error("expected a type parameter");
+  }
+
+  ast->isPack = match(TokenKind::T_DOT_DOT_DOT, ast->ellipsisLoc);
+
+  if (match(TokenKind::T_IDENTIFIER, ast->identifierLoc)) {
+    ast->identifier = unit_->identifier(ast->identifierLoc);
+  }
+
+  binder_.bind(ast, templateParameterCount_, templateParameterDepth_);
+
+  if (match(TokenKind::T_EQUAL, ast->equalLoc)) {
+    if (!parse_id_expression(ast->idExpression,
+                             IdExpressionContext::kTemplateParameter)) {
+      parse_error("expected an id-expression");
+    }
+  }
+}
+
+auto Parser::parse_constraint_type_parameter(TemplateParameterAST*& yyast)
+    -> bool {
+  TypeConstraintAST* typeConstraint = nullptr;
+
+  if (!parse_type_constraint(typeConstraint, false)) {
+    return false;
+  }
+
+  SourceLocation ellipsisLoc;
+
+  match(TokenKind::T_DOT_DOT_DOT, ellipsisLoc);
+
+  SourceLocation identifierLoc;
+  match(TokenKind::T_IDENTIFIER, identifierLoc);
+
+  SourceLocation equalLoc;
+  TypeIdAST* typeId = nullptr;
+
+  if (match(TokenKind::T_EQUAL, equalLoc)) {
+    if (!parse_type_id(typeId, TypeNameContext::kTypeOnly)) {
+      return false;
+    }
+  }
+
+  auto ast = ConstraintTypeParameterAST::create(pool_);
+  yyast = ast;
+
+  ast->typeConstraint = typeConstraint;
+  ast->ellipsisLoc = ellipsisLoc;
+  ast->identifierLoc = identifierLoc;
+  ast->identifier = unit_->identifier(identifierLoc);
+  ast->equalLoc = equalLoc;
+  ast->typeId = typeId;
+
+  binder_.bind(ast, templateParameterCount_, templateParameterDepth_);
+
+  return true;
+}
+
+auto Parser::parse_type_parameter_key(SourceLocation& classKeyLoc) -> bool {
+  if (!match(TokenKind::T_CLASS, classKeyLoc) &&
+      !match(TokenKind::T_TYPENAME, classKeyLoc)) {
+    return false;
+  }
+
+  return true;
+}
+
+auto Parser::parse_type_constraint(TypeConstraintAST*& yyast,
+                                   bool parsingPlaceholderTypeSpec) -> bool {
+  NestedNameSpecifierAST* nestedNameSpecifier = nullptr;
+  SourceLocation identifierLoc;
+  const Identifier* identifier = nullptr;
+  ConceptSymbol* conceptSymbol = nullptr;
+
+  auto lookat_type_constraint = [&] {
+    LookaheadParser lookahead{this};
+
+    parse_optional_nested_name_specifier(
+        nestedNameSpecifier, NestedNameSpecifierContext::kNonDeclarative);
+
+    if (!match(TokenKind::T_IDENTIFIER, identifierLoc)) return false;
+
+    identifier = unit_->identifier(identifierLoc);
+
+    Symbol* symbol = nullptr;
+    if (nestedNameSpecifier && nestedNameSpecifier->symbol) {
+      symbol = qualifiedLookup(
+          nestedNameSpecifier->symbol, identifier, [](Symbol* symbol) {
+            return symbol_cast<ConceptSymbol>(symbol) != nullptr;
+          });
+    } else {
+      symbol =
+          unqualifiedLookup(lexicalScope(), identifier, [](Symbol* symbol) {
+            return symbol_cast<ConceptSymbol>(symbol) != nullptr;
+          });
+    }
+
+    if (!symbol) return false;
+
+    conceptSymbol = symbol_cast<ConceptSymbol>(symbol);
+
+    lookahead.commit();
+
+    return true;
+  };
+
+  if (!lookat_type_constraint()) return false;
+
+  auto ast = TypeConstraintAST::create(pool_);
+  yyast = ast;
+
+  ast->nestedNameSpecifier = nestedNameSpecifier;
+  ast->identifierLoc = identifierLoc;
+  ast->identifier = identifier;
+  ast->symbol = conceptSymbol;
+
+  if (match(TokenKind::T_LESS, ast->lessLoc)) {
+    if (!parse_template_argument_list(ast->templateArgumentList)) {
+      parse_error("expected a template argument");
+    }
+
+    expect(TokenKind::T_GREATER, ast->greaterLoc);
+  }
+
+  return true;
+}
+
+namespace {
+auto findTemplatedSymbolInLookupScope(Symbol* candidate, const Name* name)
+    -> Symbol* {
+  if (!candidate || !name) return nullptr;
+  while (auto usingDeclaration =
+             symbol_cast<UsingDeclarationSymbol>(candidate)) {
+    candidate = usingDeclaration->target();
+    if (!candidate) return nullptr;
+  }
+  auto declaringScope = candidate->parent();
+  if (!declaringScope) return templated_symbol(candidate);
+  for (auto symbol : declaringScope->find(name)) {
+    if (symbol->isHidden()) continue;
+    if (auto result = templated_symbol(symbol)) return result;
+  }
+  return nullptr;
+}
+}  // namespace
+
+auto Parser::parse_simple_template_id(SimpleTemplateIdAST*& yyast) -> bool {
+  if (!lookat(TokenKind::T_IDENTIFIER, TokenKind::T_LESS)) return false;
+
+  auto lookupTemplate = [&](const Identifier* identifier) {
+    return findTemplatedSymbolInLookupScope(
+        unqualifiedLookup(lexicalScope(), identifier), identifier);
+  };
+
+  auto signatureHelpSymbol = [&]() -> Symbol* {
+    if (!isCompletionRequested()) return nullptr;
+    return lookupTemplate(unit_->identifier(currentLocation()));
+  }();
+
+  if (!parse_unresolved_simple_template_id(yyast, signatureHelpSymbol))
+    return false;
+
+  yyast->symbol = lookupTemplate(yyast->identifier);
+
+  return true;
+}
+
+auto Parser::parse_unresolved_simple_template_id(SimpleTemplateIdAST*& yyast,
+                                                 Symbol* signatureHelpSymbol)
+    -> bool {
+  if (!lookat(TokenKind::T_IDENTIFIER, TokenKind::T_LESS)) return false;
+
+  auto ast = SimpleTemplateIdAST::create(pool_);
+  yyast = ast;
+
+  ast->identifierLoc = consumeToken();
+  ast->lessLoc = consumeToken();
+  ast->identifier = unit_->identifier(ast->identifierLoc);
+
+  checkTemplateSignatureHelp(signatureHelpSymbol);
+
+  if (!match(TokenKind::T_GREATER, ast->greaterLoc)) {
+    if (!parse_template_argument_list(ast->templateArgumentList)) {
+      parse_error("expected a template argument");
+    }
+
+    expect(TokenKind::T_GREATER, ast->greaterLoc);
+  }
+
+  return true;
+}
+
+auto Parser::parse_simple_template_id(
+    SimpleTemplateIdAST*& yyast, NestedNameSpecifierAST* nestedNameSpecifier,
+    bool isTemplateIntroduced, MemberAccess memberAccess,
+    TypeNameContext context) -> bool {
+  if (!lookat(TokenKind::T_IDENTIFIER, TokenKind::T_LESS)) return false;
+
+  auto lookupCandidate = [&](const Identifier* identifier) -> Symbol* {
+    if (memberAccess.isMember) {
+      if (!memberAccess.lookupScope) return nullptr;
+      return qualifiedLookup(memberAccess.lookupScope, identifier);
+    }
+    if (nestedNameSpecifier) {
+      if (!nestedNameSpecifier->symbol) return nullptr;
+      return qualifiedLookup(nestedNameSpecifier->symbol, identifier);
+    }
+    return unqualifiedLookup(lexicalScope(), identifier);
+  };
+
+  auto signatureHelpSymbol = [&]() -> Symbol* {
+    if (!isCompletionRequested()) return nullptr;
+    auto identifier = unit_->identifier(currentLocation());
+    return findTemplatedSymbolInLookupScope(lookupCandidate(identifier),
+                                            identifier);
+  }();
+
+  LookaheadParser lookahead{this};
+
+  SimpleTemplateIdAST* templateId = nullptr;
+  if (!parse_unresolved_simple_template_id(templateId, signatureHelpSymbol))
+    return false;
+  if (!templateId->greaterLoc) return false;
+
+  const auto dependentQualifier =
+      memberAccess.isDependent ||
+      (binder_.inTemplate() && isDependent(unit_, nestedNameSpecifier));
+
+  Symbol* candidate = lookupCandidate(templateId->identifier);
+
+  if (symbol_cast<NonTypeParameterSymbol>(candidate)) return false;
+
+  auto primaryTemplateSymbol =
+      findTemplatedSymbolInLookupScope(candidate, templateId->identifier);
+
+  if (!isTemplateIntroduced && context != TypeNameContext::kTypeOnly &&
+      dependentQualifier && !primaryTemplateSymbol)
+    return false;
+
+  if (candidate && !primaryTemplateSymbol && !isTemplateIntroduced)
+    return false;
+
+  templateId->symbol = primaryTemplateSymbol;
+
+  yyast = templateId;
+
+  lookahead.commit();
+
+  return true;
+}
+
+auto Parser::parse_literal_operator_template_id(
+    LiteralOperatorTemplateIdAST*& yyast,
+    NestedNameSpecifierAST* nestedNameSpecifier) -> bool {
+  if (!lookat(TokenKind::T_OPERATOR)) return false;
+
+  LookaheadParser lookahead{this};
+
+  LiteralOperatorIdAST* literalOperatorName = nullptr;
+  if (!parse_literal_operator_id(literalOperatorName)) return false;
+
+  if (!lookat(TokenKind::T_LESS)) return false;
+
+  lookahead.commit();
+
+  auto ast = LiteralOperatorTemplateIdAST::create(pool_);
+  yyast = ast;
+
+  ast->literalOperatorId = literalOperatorName;
+  expect(TokenKind::T_LESS, ast->lessLoc);
+  if (!match(TokenKind::T_GREATER, ast->greaterLoc)) {
+    if (!parse_template_argument_list(ast->templateArgumentList))
+      parse_error("expected a template argument");
+    expect(TokenKind::T_GREATER, ast->greaterLoc);
+  }
+
+  return true;
+}
+
+auto Parser::parse_function_operator_template_id(
+    OperatorFunctionTemplateIdAST*& yyast,
+    NestedNameSpecifierAST* nestedNameSpecifier) -> bool {
+  if (!lookat(TokenKind::T_OPERATOR)) return false;
+
+  LookaheadParser lookahead{this};
+
+  OperatorFunctionIdAST* operatorFunctionName = nullptr;
+  if (!parse_operator_function_id(operatorFunctionName)) return false;
+
+  if (!lookat(TokenKind::T_LESS)) return false;
+
+  lookahead.commit();
+
+  auto ast = OperatorFunctionTemplateIdAST::create(pool_);
+  yyast = ast;
+
+  ast->operatorFunctionId = operatorFunctionName;
+  expect(TokenKind::T_LESS, ast->lessLoc);
+  if (!match(TokenKind::T_GREATER, ast->greaterLoc)) {
+    if (!parse_template_argument_list(ast->templateArgumentList))
+      parse_error("expected a template argument");
+    expect(TokenKind::T_GREATER, ast->greaterLoc);
+  }
+
+  return true;
+}
+
+auto Parser::parse_template_id(UnqualifiedIdAST*& yyast,
+                               NestedNameSpecifierAST* nestedNameSpecifier,
+                               bool isTemplateIntroduced,
+                               MemberAccess memberAccess) -> bool {
+  if (!isCxx()) return false;
+
+  if (LiteralOperatorTemplateIdAST* templateName = nullptr;
+      parse_literal_operator_template_id(templateName, nestedNameSpecifier)) {
+    yyast = templateName;
+    return true;
+  }
+
+  if (OperatorFunctionTemplateIdAST* templateName = nullptr;
+      parse_function_operator_template_id(templateName, nestedNameSpecifier)) {
+    yyast = templateName;
+    return true;
+  }
+
+  SimpleTemplateIdAST* templateName = nullptr;
+  if (!parse_simple_template_id(templateName, nestedNameSpecifier,
+                                isTemplateIntroduced, memberAccess))
+    return false;
+
+  yyast = templateName;
+  return true;
+}
+
+auto Parser::parse_template_argument_list(List<TemplateArgumentAST*>*& yyast)
+    -> bool {
+  auto it = &yyast;
+
+  TemplateArgumentAST* templateArgument = nullptr;
+
+  if (!parse_template_argument(templateArgument)) return false;
+
+  *it = make_list_node(pool_, templateArgument);
+  it = &(*it)->next;
+
+  SourceLocation commaLoc;
+
+  while (match(TokenKind::T_COMMA, commaLoc)) {
+    TemplateArgumentAST* templateArgument = nullptr;
+
+    if (!parse_template_argument(templateArgument)) {
+      return false;
+    }
+
+    *it = make_list_node(pool_, templateArgument);
+    it = &(*it)->next;
+  }
+
+  return true;
+}
+
+auto Parser::parse_template_argument(TemplateArgumentAST*& yyast) -> bool {
+  const auto start = currentLocation();
+
+  if (auto entry = template_arguments_.get(start)) {
+    auto [loc, ast, parsed, hit] = *entry;
+    rewind(loc);
+    yyast = ast;
+    return parsed;
+  }
+
+  auto check = [&]() -> bool {
+    return LA().isOneOf(TokenKind::T_COMMA, TokenKind::T_GREATER,
+                        TokenKind::T_DOT_DOT_DOT);
+  };
+
+  auto templateArgumentName = [&]() -> Symbol* {
+    if (LA().isNot(TokenKind::T_IDENTIFIER)) return nullptr;
+    if (!LA(1).isOneOf(TokenKind::T_COMMA, TokenKind::T_GREATER,
+                       TokenKind::T_DOT_DOT_DOT)) {
+      return nullptr;
+    }
+    return unqualifiedLookup(lexicalScope(),
+                             unit_->identifier(currentLocation()));
+  };
+
+  auto startsDependentQualifiedName = [&]() -> bool {
+    LookaheadParser lookahead{this};
+    NestedNameSpecifierAST* nestedNameSpecifier = nullptr;
+    parse_optional_nested_name_specifier(
+        nestedNameSpecifier, NestedNameSpecifierContext::kNonDeclarative);
+    return nestedNameSpecifier && lookat(TokenKind::T_IDENTIFIER) &&
+           isDependent(unit_, nestedNameSpecifier);
+  };
+
+  auto lookat_type_id = [&] {
+    LookaheadParser lookahead{this};
+
+    TypeIdAST* typeId = nullptr;
+
+    if (!parse_type_id(typeId)) return false;
+
+    if (!check()) return false;
+
+    lookahead.commit();
+
+    auto ast = TypeTemplateArgumentAST::create(pool_);
+    yyast = ast;
+
+    ast->typeId = typeId;
+
+    return true;
+  };
+
+  auto lookat_template_argument_constant_expression = [&] {
+    LookaheadParser lookahead{this};
+
+    ExpressionAST* expression = nullptr;
+
+    if (!parse_template_argument_constant_expression(expression)) return false;
+
+    if (!check()) return false;
+
+    lookahead.commit();
+
+    if (SourceLocation ellipsisLoc;
+        match(TokenKind::T_DOT_DOT_DOT, ellipsisLoc)) {
+      auto pack = PackExpansionExpressionAST::create(pool_);
+      pack->expression = expression;
+      pack->ellipsisLoc = ellipsisLoc;
+      expression = pack;
+    }
+
+    auto ast = ExpressionTemplateArgumentAST::create(pool_);
+    yyast = ast;
+
+    ast->expression = expression;
+
+    return true;
+  };
+
+  auto lookat_template_name = [&] {
+    LookaheadParser lookahead{this};
+
+    NestedNameSpecifierAST* nestedNameSpecifier = nullptr;
+    parse_optional_nested_name_specifier(
+        nestedNameSpecifier, NestedNameSpecifierContext::kNonDeclarative);
+    if (!nestedNameSpecifier) return false;
+
+    SourceLocation templateLoc;
+    if (!match(TokenKind::T_TEMPLATE, templateLoc)) return false;
+
+    SourceLocation identifierLoc;
+    if (!match(TokenKind::T_IDENTIFIER, identifierLoc)) return false;
+
+    if (!check()) return false;
+
+    lookahead.commit();
+
+    auto identifier = unit_->identifier(identifierLoc);
+    auto nameId = NameIdAST::create(pool_, identifierLoc, identifier);
+
+    auto namedTypeSpecifier = NamedTypeSpecifierAST::create(pool_);
+    namedTypeSpecifier->nestedNameSpecifier = nestedNameSpecifier;
+    namedTypeSpecifier->templateLoc = templateLoc;
+    namedTypeSpecifier->unqualifiedId = nameId;
+    namedTypeSpecifier->isTemplateIntroduced = true;
+    if (nestedNameSpecifier->symbol) {
+      namedTypeSpecifier->symbol =
+          qualifiedLookup(nestedNameSpecifier->symbol, identifier);
+    }
+
+    auto typeId = TypeIdAST::create(pool_);
+    typeId->typeSpecifierList =
+        make_list_node<SpecifierAST>(pool_, namedTypeSpecifier);
+
+    auto ast = TypeTemplateArgumentAST::create(pool_);
+    yyast = ast;
+
+    ast->typeId = typeId;
+
+    return true;
+  };
+
+  const auto name = templateArgumentName();
+  bool parsed = false;
+  if (startsDependentQualifiedName() || (name && !is_type(name))) {
+    parsed = lookat_template_argument_constant_expression() ||
+             lookat_type_id() || lookat_template_name();
+  } else {
+    parsed = lookat_type_id() || lookat_template_name() ||
+             lookat_template_argument_constant_expression();
+  }
+
+  if (parsed) {
+    template_arguments_.set(start, currentLocation(), yyast, true);
+
+    return true;
+  }
+
+  return false;
+}
+
+auto Parser::parse_constraint_expression(ExpressionAST*& yyast) -> bool {
+  ExprContext exprContext;
+  exprContext.inConstraintExpression = true;
+  return parse_logical_or_expression(yyast, exprContext);
+}
+
+auto Parser::parse_deduction_guide(DeclarationAST*& yyast,
+                                   TemplateDeclarationAST* templateHead)
+    -> bool {
+  if (!isCxx()) return false;
+
+  List<AttributeSpecifierAST*>* attributeList = nullptr;
+  SpecifierAST* explicitSpecifier = nullptr;
+  SourceLocation identifierLoc;
+  SourceLocation lparenLoc;
+
+  auto lookat_deduction_guide = [&] {
+    LookaheadParser lookahead{this};
+
+    parse_optional_attribute_specifier_seq(attributeList);
+
+    DeclSpecs specs{unit_};
+    (void)parse_explicit_specifier(explicitSpecifier, specs);
+
+    if (!match(TokenKind::T_IDENTIFIER, identifierLoc)) return false;
+
+    if (!match(TokenKind::T_LPAREN, lparenLoc)) return false;
+
+    const SourceLocation saved = currentLocation();
+
+    while (!lookat(TokenKind::T_EOF_SYMBOL) && !lookat(TokenKind::T_RPAREN)) {
+      if (!parse_skip_balanced()) return false;
+    }
+
+    if (!lookat(TokenKind::T_RPAREN, TokenKind::T_MINUS_GREATER)) return false;
+
+    rewind(saved);
+    lookahead.commit();
+    return true;
+  };
+
+  if (!lookat_deduction_guide()) return false;
+
+  auto ast = DeductionGuideAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeList = attributeList;
+  ast->explicitSpecifier = explicitSpecifier;
+  ast->identifierLoc = identifierLoc;
+  ast->identifier = unit_->identifier(identifierLoc);
+  ast->lparenLoc = lparenLoc;
+
+  {
+    auto _ = CombinedScopeGuard{this};
+
+    if (!match(TokenKind::T_RPAREN, ast->rparenLoc)) {
+      if (!parse_parameter_declaration_clause(
+              ast->parameterDeclarationClause)) {
+        parse_error("expected a parameter declaration");
+      }
+
+      expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+      if (ast->parameterDeclarationClause) {
+        setScope(ast->parameterDeclarationClause->functionParametersSymbol);
+      }
+    }
+
+    expect(TokenKind::T_MINUS_GREATER, ast->arrowLoc);
+
+    if (!parse_simple_template_id(ast->templateId,
+                                  /*nestedNameSpecifier=*/nullptr)) {
+      parse_error("expected a template id");
+    }
+  }
+
+  expect(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+
+  binder_.bind(ast, templateHead);
+
+  return true;
+}
+
+auto Parser::parse_concept_definition(DeclarationAST*& yyast) -> bool {
+  SourceLocation conceptLoc;
+
+  if (!match(TokenKind::T_CONCEPT, conceptLoc)) return false;
+
+  auto ast = ConceptDefinitionAST::create(pool_);
+  yyast = ast;
+
+  ast->conceptLoc = conceptLoc;
+
+  expect(TokenKind::T_IDENTIFIER, ast->identifierLoc);
+  ast->identifier = unit_->identifier(ast->identifierLoc);
+
+  binder_.bind(ast);
+
+  expect(TokenKind::T_EQUAL, ast->equalLoc);
+
+  auto _ = UnevaluatedOperandGuard{this};
+  if (!parse_constraint_expression(ast->expression)) {
+    parse_error("expected a constraint expression");
+  }
+
+  expect(TokenKind::T_SEMICOLON, ast->semicolonLoc);
+
+  return true;
+}
+
+auto Parser::parse_splicer_specifier(SpecifierAST*& yyast, DeclSpecs& specs)
+    -> bool {
+  if (specs.hasTypeOrSizeSpecifier()) return false;
+  LookaheadParser lookahead{this};
+  SourceLocation typenameLoc;
+  match(TokenKind::T_TYPENAME, typenameLoc);
+  SplicerAST* splicer = nullptr;
+  if (!parse_splicer(splicer)) return false;
+  lookahead.commit();
+  auto ast = SplicerTypeSpecifierAST::create(pool_);
+  yyast = ast;
+  ast->typenameLoc = typenameLoc;
+  ast->splicer = splicer;
+  specs.accept(ast);
+  return true;
+}
+
+auto Parser::parse_typename_specifier(SpecifierAST*& yyast, DeclSpecs& specs)
+    -> bool {
+  if (specs.hasTypeOrSizeSpecifier()) return false;
+
+  SourceLocation typenameLoc;
+  NestedNameSpecifierAST* nestedNameSpecifier = nullptr;
+  SourceLocation templateLoc;
+  UnqualifiedIdAST* unqualifiedId = nullptr;
+  bool isTemplateIntroduced = false;
+
+  auto lookat_typename_specifier = [&] {
+    LookaheadParser lookahead{this};
+    if (!match(TokenKind::T_TYPENAME, typenameLoc)) return false;
+
+    if (!parse_nested_name_specifier(
+            nestedNameSpecifier, NestedNameSpecifierContext::kNonDeclarative))
+      return false;
+
+    isTemplateIntroduced = match(TokenKind::T_TEMPLATE, templateLoc);
+
+    if (!lookat(TokenKind::T_IDENTIFIER)) return false;
+
+    lookahead.commit();
+
+    return true;
+  };
+
+  if (!lookat_typename_specifier()) return false;
+
+  SimpleTemplateIdAST* templateId = nullptr;
+  if (parse_simple_template_id(templateId, nestedNameSpecifier,
+                               isTemplateIntroduced, {},
+                               TypeNameContext::kTypeOnly)) {
+    unqualifiedId = templateId;
+  } else {
+    NameIdAST* nameId = nullptr;
+    (void)parse_name_id(nameId);
+    unqualifiedId = nameId;
+  }
+
+  auto ast = TypenameSpecifierAST::create(pool_);
+  yyast = ast;
+
+  ast->typenameLoc = typenameLoc;
+  ast->nestedNameSpecifier = nestedNameSpecifier;
+  ast->templateLoc = templateLoc;
+  ast->unqualifiedId = unqualifiedId;
+  ast->isTemplateIntroduced = isTemplateIntroduced;
+
+  ast->symbol = binder_.resolveMemberOfCurrentInstantiation(
+      nestedNameSpecifier, unqualifiedId,
+      binder_.currentInstantiationOf(binder_.scope()));
+
+  specs.accept(ast);
+
+  return true;
+}
+
+auto Parser::parse_explicit_instantiation(DeclarationAST*& yyast) -> bool {
+  auto lookat_explicit_instantiation = [&] {
+    LookaheadParser _{this};
+
+    SourceLocation externLoc;
+    match(TokenKind::T_EXTERN, externLoc);
+
+    SourceLocation templateLoc;
+    if (!match(TokenKind::T_TEMPLATE, templateLoc)) return false;
+
+    if (lookat(TokenKind::T_LESS)) return false;
+
+    return true;
+  };
+
+  if (!lookat_explicit_instantiation()) return false;
+
+  auto ast = ExplicitInstantiationAST::create(pool_);
+  yyast = ast;
+
+  match(TokenKind::T_EXTERN, ast->externLoc);
+  expect(TokenKind::T_TEMPLATE, ast->templateLoc);
+
+  if (!parse_declaration(ast->declaration, BindingContext::kTemplate))
+    report_failed_parse("expected a declaration");
+
+  auto check_elaborated_type_specifier = [&]() -> bool {
+    auto simpleDecl = ast_cast<SimpleDeclarationAST>(ast->declaration);
+    if (!simpleDecl) return false;
+
+    if (!simpleDecl->declSpecifierList) return false;
+
+    auto elabSpec = ast_cast<ElaboratedTypeSpecifierAST>(
+        simpleDecl->declSpecifierList->value);
+    if (!elabSpec) {
+      return false;
+    }
+
+    if (elabSpec->nestedNameSpecifier) {
+      auto templateId = ast_cast<SimpleTemplateIdAST>(elabSpec->unqualifiedId);
+      if (!templateId) {
+        type_error(elabSpec->unqualifiedId->firstSourceLocation(),
+                   "expected a template id");
+        return true;
+      }
+
+      auto candidate = qualifiedLookup(elabSpec->nestedNameSpecifier->symbol,
+                                       templateId->identifier);
+
+      if (!templated_symbol(candidate)) {
+        type_error(elabSpec->unqualifiedId->firstSourceLocation(),
+                   std::format("expected a template"));
+        return true;
+      }
+
+      auto classSymbol = symbol_cast<ClassSymbol>(candidate);
+      if (!classSymbol) {
+        type_error(
+            elabSpec->unqualifiedId->firstSourceLocation(),
+            std::format("expected a class template, got '{}'",
+                        to_string(candidate->type(), candidate->name())));
+        return true;
+      }
+
+      if (config().checkTypes) {
+        if (!ast->externLoc) {
+          auto instance = ASTRewriter::instantiate(
+              unit_, templateId->templateArgumentList, classSymbol);
+
+          (void)instance;
+        } else {
+          ASTRewriter::markExplicitInstantiationDeclared(
+              unit_, templateId->templateArgumentList, classSymbol);
+        }
+      }
+
+      return true;
+    }
+
+    auto templateId = ast_cast<SimpleTemplateIdAST>(elabSpec->unqualifiedId);
+    if (!templateId) {
+      type_error(elabSpec->unqualifiedId->firstSourceLocation(),
+                 "expected a template id");
+      return true;
+    }
+
+    auto classSymbol = symbol_cast<ClassSymbol>(templateId->symbol);
+    if (!classSymbol) {
+      type_error(
+          templateId->identifierLoc,
+          "explicit instantiation of this template is not yet supported");
+      return true;
+    }
+
+    if (config().checkTypes) {
+      if (!ast->externLoc) {
+        auto instance = ASTRewriter::instantiate(
+            unit_, templateId->templateArgumentList, classSymbol);
+
+        (void)instance;
+      } else {
+        ASTRewriter::markExplicitInstantiationDeclared(
+            unit_, templateId->templateArgumentList, classSymbol);
+      }
+    }
+
+    return true;
+  };
+
+  auto check_function_template = [&]() -> bool {
+    auto simpleDecl = ast_cast<SimpleDeclarationAST>(ast->declaration);
+    if (!simpleDecl) return false;
+    if (!simpleDecl->initDeclaratorList) return false;
+    auto initDecl = simpleDecl->initDeclaratorList->value;
+    if (!initDecl || !initDecl->declarator) return false;
+    if (!getFunctionPrototype(initDecl->declarator)) return false;
+
+    return true;
+  };
+
+  auto check_static_data_member = [&]() -> bool {
+    auto simpleDecl = ast_cast<SimpleDeclarationAST>(ast->declaration);
+    if (!simpleDecl) return false;
+    if (!simpleDecl->initDeclaratorList) return false;
+    auto initDecl = simpleDecl->initDeclaratorList->value;
+    if (!initDecl || !initDecl->declarator) return false;
+    if (getFunctionPrototype(initDecl->declarator)) return false;
+    return true;
+  };
+
+  if (check_elaborated_type_specifier()) return true;
+
+  if (check_function_template()) return true;
+
+  if (check_static_data_member()) return true;
+
+  type_error(ast->firstSourceLocation(), "failed to instantiate template");
+
+  return true;
+}
+
+auto Parser::parse_try_block(StatementAST*& yyast,
+                             List<AttributeSpecifierAST*>* attributes) -> bool {
+  SourceLocation tryLoc;
+
+  if (!match(TokenKind::T_TRY, tryLoc)) return false;
+
+  auto ast = TryBlockStatementAST::create(pool_);
+  yyast = ast;
+
+  ast->attributeList = attributes;
+  ast->tryLoc = tryLoc;
+
+  if (!parse_compound_statement(ast->statement, /*attributes=*/nullptr,
+                                /*skip=*/false)) {
+    parse_error("expected a compound statement");
+  }
+
+  if (!parse_handler_seq(ast->handlerList)) {
+    parse_error("expected an exception handler");
+  }
+
+  return true;
+}
+
+auto Parser::parse_function_try_block(FunctionBodyAST*& yyast) -> bool {
+  SourceLocation tryLoc;
+
+  if (!match(TokenKind::T_TRY, tryLoc)) return false;
+
+  auto ast = TryStatementFunctionBodyAST::create(pool_);
+  yyast = ast;
+
+  ast->tryLoc = tryLoc;
+
+  if (!lookat(TokenKind::T_LBRACE)) {
+    if (!parse_ctor_initializer(ast->colonLoc, ast->memInitializerList)) {
+      parse_error("expected a ctor initializer");
+    }
+  }
+
+  if (!parse_compound_statement(ast->statement, /*attributes=*/nullptr,
+                                /*skip=*/false)) {
+    parse_error("expected a compound statement");
+  }
+
+  if (!parse_handler_seq(ast->handlerList)) {
+    parse_error("expected an exception handler");
+  }
+
+  return true;
+}
+
+auto Parser::parse_handler(HandlerAST*& yyast) -> bool {
+  SourceLocation catchLoc;
+
+  if (!match(TokenKind::T_CATCH, catchLoc)) return false;
+
+  yyast = HandlerAST::create(pool_);
+
+  yyast->catchLoc = catchLoc;
+
+  expect(TokenKind::T_LPAREN, yyast->lparenLoc);
+
+  if (!parse_exception_declaration(yyast->exceptionDeclaration)) {
+    parse_error("expected an exception declaration");
+  }
+
+  expect(TokenKind::T_RPAREN, yyast->rparenLoc);
+
+  if (!parse_compound_statement(yyast->statement, /*attributes=*/nullptr,
+                                /*skip=*/false)) {
+    parse_error("expected a compound statement");
+  }
+
+  return true;
+}
+
+auto Parser::parse_handler_seq(List<HandlerAST*>*& yyast) -> bool {
+  if (!lookat(TokenKind::T_CATCH)) return false;
+
+  auto it = &yyast;
+
+  HandlerAST* handler = nullptr;
+  while (parse_handler(handler)) {
+    *it = make_list_node(pool_, handler);
+    it = &(*it)->next;
+  }
+
+  return true;
+}
+
+auto Parser::parse_exception_declaration(ExceptionDeclarationAST*& yyast)
+    -> bool {
+  SourceLocation ellipsisLoc;
+
+  if (match(TokenKind::T_DOT_DOT_DOT, ellipsisLoc)) {
+    auto ast = EllipsisExceptionDeclarationAST::create(pool_);
+    yyast = ast;
+
+    ast->ellipsisLoc = ellipsisLoc;
+    return true;
+  }
+
+  auto ast = TypeExceptionDeclarationAST::create(pool_);
+  yyast = ast;
+
+  parse_optional_attribute_specifier_seq(ast->attributeList);
+
+  DeclSpecs specs{unit_};
+  if (!parse_type_specifier_seq(ast->typeSpecifierList, specs)) {
+    parse_error("expected a type specifier");
+  }
+
+  if (lookat(TokenKind::T_RPAREN)) return true;
+
+  Decl decl{specs};
+  parse_optional_declarator_or_abstract_declarator(ast->declarator, decl);
+
+  return true;
+}
+
+auto Parser::parse_noexcept_specifier(ExceptionSpecifierAST*& yyast) -> bool {
+  SourceLocation throwLoc;
+
+  if (match(TokenKind::T_THROW, throwLoc)) {
+    auto ast = ThrowExceptionSpecifierAST::create(pool_);
+    yyast = ast;
+
+    ast->throwLoc = throwLoc;
+    expect(TokenKind::T_LPAREN, ast->lparenLoc);
+    expect(TokenKind::T_RPAREN, ast->rparenLoc);
+
+    return true;
+  }
+
+  SourceLocation noexceptLoc;
+
+  if (!match(TokenKind::T_NOEXCEPT, noexceptLoc)) return false;
+
+  auto ast = NoexceptSpecifierAST::create(pool_);
+  yyast = ast;
+
+  ast->noexceptLoc = noexceptLoc;
+
+  if (match(TokenKind::T_LPAREN, ast->lparenLoc)) {
+    std::optional<ConstValue> constValue;
+
+    if (!parse_constant_expression(ast->expression, constValue)) {
+      report_failed_parse("expected an expression");
+    }
+
+    expect(TokenKind::T_RPAREN, ast->rparenLoc);
+  }
+
+  return true;
+}
+
+auto Parser::parse_identifier_list(List<NameIdAST*>*& yyast) -> bool {
+  auto it = &yyast;
+
+  if (NameIdAST* id = nullptr; parse_name_id(id)) {
+    *it = make_list_node(pool_, id);
+    it = &(*it)->next;
+  } else {
+    return false;
+  }
+
+  SourceLocation commaLoc;
+
+  while (match(TokenKind::T_COMMA, commaLoc)) {
+    if (NameIdAST* id = nullptr; parse_name_id(id)) {
+      *it = make_list_node(pool_, id);
+      it = &(*it)->next;
+    } else {
+      parse_error("expected an identifier");
+    }
+  }
+
+  return true;
+}
+
+auto Parser::isDeferredFieldInitializer(Symbol* symbol) const -> bool {
+  auto field = symbol_cast<FieldSymbol>(symbol);
+  return field && !field->isStatic();
+}
+
+void Parser::recordFieldInitializer(InitDeclaratorAST* ast,
+                                    SpecifierAST* typeSpecifier) {
+  auto field = symbol_cast<FieldSymbol>(ast->symbol);
+  if (!field) return;
+  if (!ast->initializer) {
+    if (field->isStatic() && field->isInline())
+      check_init_declarator(ast, typeSpecifier);
+    return;
+  }
+  field->setInitializer(ast->initializer);
+  if (!field->isStatic()) {
+    pendingFieldInitializers_.push_back({ast, scope()});
+    return;
+  }
+  check_init_declarator(ast, typeSpecifier);
+}
+
+auto Parser::isDeferredDefaultArgument(bool templParam) const -> bool {
+  return classDepth_ > 0 && !uncheckedInitializerDepth_ && !templParam;
+}
+
+auto Parser::isDeferredNoexceptSpecifier() const -> bool {
+  return classDepth_ > 0 && !uncheckedInitializerDepth_;
+}
+
+auto Parser::hasPendingNoexceptSpecifier(ClassSymbol* classSymbol,
+                                         std::size_t mark) const -> bool {
+  for (std::size_t index = mark; index < pendingNoexceptSpecifiers_.size();
+       ++index) {
+    auto symbol = pendingNoexceptSpecifiers_[index].symbol;
+    if (symbol && symbol->parent() == classSymbol) return true;
+  }
+  return false;
+}
+
+void Parser::associatePendingNoexceptSpecifier(DeclaratorAST* declarator,
+                                               FunctionSymbol* symbol) {
+  auto functionDeclarator = getFunctionPrototype(declarator);
+  if (!functionDeclarator) return;
+
+  for (auto it = pendingNoexceptSpecifiers_.rbegin();
+       it != pendingNoexceptSpecifiers_.rend(); ++it) {
+    if (it->ast != functionDeclarator) continue;
+    it->symbol = symbol;
+    return;
+  }
+}
+
+void Parser::completePendingNoexceptSpecifiers(std::size_t mark) {
+  while (pendingNoexceptSpecifiers_.size() > mark) {
+    std::vector<PendingNoexceptSpecifier> pending{
+        pendingNoexceptSpecifiers_.begin() + mark,
+        pendingNoexceptSpecifiers_.end()};
+
+    pendingNoexceptSpecifiers_.resize(mark);
+    completeNoexceptSpecifiers(pending);
+  }
+}
+
+void Parser::completeNoexceptSpecifiers(
+    const std::vector<PendingNoexceptSpecifier>& pending) {
+  const auto saved = currentLocation();
+  std::unordered_set<ClassSymbol*> affectedClasses;
+
+  for (const auto& entry : pending) {
+    auto scopeGuard = RestoredScopeChain{this, entry.scope};
+
+    auto oldSpecifier = entry.ast->exceptionSpecifier;
+    rewind(oldSpecifier->firstSourceLocation());
+
+    ExceptionSpecifierAST* specifier = nullptr;
+    if (!parse_noexcept_specifier(specifier)) {
+      parse_error("expected a noexcept-specifier");
+      continue;
+    }
+    entry.ast->exceptionSpecifier = specifier;
+
+    if (!entry.symbol) continue;
+    if (auto classSymbol = symbol_cast<ClassSymbol>(entry.symbol->parent()))
+      affectedClasses.insert(classSymbol);
+    const bool isNoexcept = exceptionSpecifierIsNoexcept(unit_, specifier);
+    setFunctionNoexcept(control(), entry.symbol, isNoexcept);
+  }
+
+  for (auto classSymbol : affectedClasses) {
+    if (classSymbol->isComplete())
+      binder_.finalizeExceptionSpecifications(classSymbol);
+  }
+
+  rewind(saved);
+}
+
+void Parser::completePendingDefaultArguments(std::size_t mark) {
+  while (pendingDefaultArguments_.size() > mark) {
+    std::vector<PendingDefaultArgument> pending{
+        pendingDefaultArguments_.begin() + mark,
+        pendingDefaultArguments_.end()};
+
+    pendingDefaultArguments_.resize(mark);
+    completeDefaultArguments(pending);
+  }
+}
+
+void Parser::completeDefaultArguments(
+    const std::vector<PendingDefaultArgument>& pending) {
+  const auto saved = currentLocation();
+
+  for (const auto& entry : pending) {
+    auto scopeGuard = RestoredScopeChain{this, entry.scope};
+
+    rewind(entry.ast->equalLoc.next());
+    entry.ast->expression = nullptr;
+    if (!parse_initializer_clause(entry.ast->expression, ExprContext{})) {
+      parse_error("expected an initializer");
+      continue;
+    }
+    entry.symbol->setDefaultArgument(entry.ast->expression);
+  }
+
+  rewind(saved);
+}
+
+void Parser::completePendingFieldInitializers(std::size_t mark) {
+  while (pendingFieldInitializers_.size() > mark) {
+    std::vector<PendingFieldInitializer> pending{
+        pendingFieldInitializers_.begin() + mark,
+        pendingFieldInitializers_.end()};
+
+    pendingFieldInitializers_.resize(mark);
+    completeFieldInitializers(pending);
+  }
+}
+
+void Parser::completeFieldInitializers(
+    const std::vector<PendingFieldInitializer>& pending) {
+  const auto saved = currentLocation();
+  std::unordered_set<ClassSymbol*> affectedClasses;
+
+  for (const auto& entry : pending) {
+    auto scopeGuard = RestoredScopeChain{this, entry.scope};
+    auto ast = entry.ast;
+    if (auto field = symbol_cast<FieldSymbol>(ast->symbol)) {
+      if (auto classSymbol = symbol_cast<ClassSymbol>(field->parent()))
+        affectedClasses.insert(classSymbol);
+    }
+    if (auto equal = ast_cast<EqualInitializerAST>(ast->initializer)) {
+      rewind(equal->equalLoc.next());
+      equal->expression = nullptr;
+      if (!parse_initializer_clause(equal->expression, ExprContext{})) {
+        parse_error("expected an initializer");
+        continue;
+      }
+      check(equal);
+    } else if (auto braced = ast_cast<BracedInitListAST>(ast->initializer)) {
+      rewind(braced->lbraceLoc);
+      if (ast->symbol) checkBracedInitializerCompletion(ast->symbol->type());
+      BracedInitListAST* reparsed = nullptr;
+      if (!parse_braced_init_list(reparsed, ExprContext{})) {
+        parse_error("expected a braced-init-list");
+        continue;
+      }
+      ast->initializer = reparsed;
+      symbol_cast<FieldSymbol>(ast->symbol)->setInitializer(reparsed);
+    }
+  }
+
+  for (auto classSymbol : affectedClasses)
+    binder_.refreshImplicitExceptionSpecifications(classSymbol);
+
+  rewind(saved);
+}
+
+void Parser::completePendingFunctionDefinitions() {
+  if (pendingFunctionDefinitions_.empty()) return;
+
+  std::vector<FunctionDefinitionAST*> functions;
+
+  std::swap(pendingFunctionDefinitions_, functions);
+
+  for (const auto& function : functions) {
+    completeFunctionDefinition(function);
+  }
+}
+
+auto Parser::templateParameterDepthOf(Symbol* symbol) -> int {
+  for (auto current = symbol; current; current = current->parent()) {
+    if (auto templateDecl = template_declaration_of(current))
+      return templateDecl->depth;
+  }
+  return -1;
+}
+
+auto Parser::getCurrentNonClassScope() const -> ScopeSymbol* {
+  for (auto current = scope(); current; current = current->parent()) {
+    if (current->isClassOrNamespace()) continue;
+    return current;
+  }
+
+  return globalScope_;
+}
+
+auto Parser::scope() const -> ScopeSymbol* { return binder_.scope(); }
+
+void Parser::setScope(ScopeSymbol* scope) {
+  binder_.setScope(scope);
+  pushScope(scope);
+}
+
+void Parser::pushScope(ScopeSymbol* symbol) {
+  lexicalScope_ = Scope::create(pool_, symbol, lexicalScope_);
+}
+
+auto Parser::isOnLexicalScopeChain(ScopeSymbol* symbol) const -> bool {
+  for (auto scope = lexicalScope_; scope; scope = scope->parent) {
+    if (scope->symbol == symbol) return true;
+  }
+  return false;
+}
+
+void Parser::enterScopeChain(ScopeSymbol* scope) {
+  if (!scope) return;
+
+  std::vector<ScopeSymbol*> scopesToPush;
+
+  for (auto sc = scope; sc && !isOnLexicalScopeChain(sc); sc = sc->parent()) {
+    if (sc->isTemplateParameters()) {
+      if (sc == scope) scopesToPush.push_back(sc);
+      continue;
+    }
+    scopesToPush.push_back(sc);
+    if (auto templateParameters = template_parameters_of(sc);
+        templateParameters && !isOnLexicalScopeChain(templateParameters)) {
+      scopesToPush.push_back(templateParameters);
+    }
+  }
+
+  for (auto it = scopesToPush.rbegin(); it != scopesToPush.rend(); ++it) {
+    setScope(*it);
+  }
+}
+
+void Parser::completeFunctionDefinition(FunctionDefinitionAST* ast) {
+  if (!ast->functionBody) return;
+
+  auto functionBody =
+      ast_cast<CompoundStatementFunctionBodyAST>(ast->functionBody);
+
+  if (!functionBody) return;
+
+  if (!functionBody->statement || !functionBody->statement->lbraceLoc) return;
+
+  auto _ = RestoredScopeChain{this, ast->symbol};
+
+  for (auto member : ast->symbol->members()) {
+    if (auto params = symbol_cast<FunctionParametersSymbol>(member)) {
+      setScope(params);
+      break;
+    }
+  }
+
+  const auto saved = currentLocation();
+
+  for (auto memInitializer : ListView{functionBody->memInitializerList}) {
+    if (auto parenMemInitializer =
+            ast_cast<ParenMemInitializerAST>(memInitializer)) {
+      if (!parenMemInitializer->lparenLoc) {
+        continue;
+      }
+
+      if (isCompletionRequested()) {
+        rewind(parenMemInitializer->lparenLoc);
+        checkMemInitializerCompletion(parenMemInitializer->nestedNameSpecifier,
+                                      parenMemInitializer->unqualifiedId);
+      }
+
+      rewind(parenMemInitializer->lparenLoc.next());
+
+      if (SourceLocation rparenLoc; !match(TokenKind::T_RPAREN, rparenLoc)) {
+        if (!parse_expression_list(parenMemInitializer->expressionList,
+                                   ExprContext{})) {
+          report_failed_parse("expected an expression");
+        }
+
+        expect(TokenKind::T_RPAREN, rparenLoc);
+      }
+    }
+
+    if (auto bracedMemInitializer =
+            ast_cast<BracedMemInitializerAST>(memInitializer)) {
+      rewind(bracedMemInitializer->bracedInitList->lbraceLoc);
+
+      checkMemInitializerCompletion(bracedMemInitializer->nestedNameSpecifier,
+                                    bracedMemInitializer->unqualifiedId);
+
+      if (!parse_braced_init_list(bracedMemInitializer->bracedInitList,
+                                  ExprContext{})) {
+        parse_error("expected a braced-init-list");
+      }
+    }
+  }
+
+  {
+    TypeChecker check{unit_};
+    check.setScope(ast->symbol);
+    check.setReportErrors(config().checkTypes);
+    if (binder_.inTemplate())
+      check.bind_template_parameter_base_initializers(functionBody);
+    else
+      check.check_mem_initializers(functionBody);
+  }
+
+  rewind(functionBody->statement->lbraceLoc.next());
+
+  finish_compound_statement(functionBody->statement);
+
+  if (!binder_.inTemplate()) binder_.finishAutoReturnType(ast->symbol);
+
+  rewind(saved);
+}
+
+void Parser::check(ExpressionAST* ast) {
+  if (uncheckedInitializerDepth_) return;
+  TranslationUnit::PotentiallyEvaluatedScope evaluated{
+      unit_, unevaluatedOperandDepth_ == 0};
+  TypeChecker check{unit_};
+  check.setScope(scope());
+  check.setReportErrors(config().checkTypes);
+  check(ast);
+}
+
+void Parser::check_mem_initializers(FunctionDefinitionAST* ast) {
+  if (classDepth_) return;
+
+  auto functionBody =
+      ast_cast<CompoundStatementFunctionBodyAST>(ast->functionBody);
+  if (!functionBody) return;
+
+  TypeChecker check{unit_};
+  check.setScope(ast->symbol);
+  check.setReportErrors(config().checkTypes);
+
+  if (binder_.inTemplate()) {
+    check.bind_template_parameter_base_initializers(functionBody);
+    return;
+  }
+
+  check.check_mem_initializers(functionBody);
+}
+
+void Parser::check(StatementAST* ast) {
+  if (uncheckedInitializerDepth_) return;
+  auto returnStatement = ast_cast<ReturnStatementAST>(ast);
+  if (!returnStatement) return;
+
+  TypeChecker check{unit_};
+  check.setScope(scope());
+  check.setReportErrors(config().checkTypes);
+  check.check_return_statement(returnStatement);
+}
+
+void Parser::check(DeclarationAST* ast) {
+  if (uncheckedInitializerDepth_) return;
+  TypeChecker check{unit_};
+  check.setScope(scope());
+  check.setReportErrors(config().checkTypes);
+  check.check(ast);
+
+  if (!config().checkTypes) return;
+
+  auto simpleDecl = ast_cast<SimpleDeclarationAST>(ast);
+  if (!simpleDecl) return;
+
+  for (auto initDecl : ListView{simpleDecl->initDeclaratorList}) {
+    if (!initDecl || initDecl->initializer) continue;
+
+    auto var = symbol_cast<VariableSymbol>(initDecl->symbol);
+    if (!var) continue;
+    if (!traits.is_reference(var->type())) continue;
+
+    unit_->error(var->location(),
+                 std::format("reference variable of type '{}' must be "
+                             "initialized",
+                             to_string(var->type())));
+  }
+}
+
+void Parser::check_init_declarator(InitDeclaratorAST* ast,
+                                   SpecifierAST* typeSpecifier) {
+  TypeChecker check{unit_};
+  check.setScope(scope());
+  check.setReportErrors(config().checkTypes);
+  check.check_init_declarator(ast, typeSpecifier);
+
+  if (!config().checkTypes) return;
+  if (!ast || ast->initializer) return;
+
+  auto var = symbol_cast<VariableSymbol>(ast->symbol);
+  if (!var) return;
+  if (!traits.is_reference(var->type())) return;
+
+  unit_->error(var->location(),
+               std::format("reference variable of type '{}' must be "
+                           "initialized",
+                           to_string(var->type())));
+}
+
+void Parser::check_bool_condition(ExpressionAST*& ast) {
+  TypeChecker check{unit_};
+  check.setScope(scope());
+  check.setReportErrors(config().checkTypes);
+  check.check_bool_condition(ast);
+}
+
+void Parser::check_integral_condition(ExpressionAST*& ast) {
+  TypeChecker check{unit_};
+  check.setScope(scope());
+  check.setReportErrors(config().checkTypes);
+  check.check_integral_condition(ast);
+}
+}  // namespace cxx

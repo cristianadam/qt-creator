@@ -1,0 +1,269 @@
+// Copyright (c) 2026 Roberto Raggi <roberto.raggi@gmail.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+#pragma once
+
+#include <cxx/types_fwd.h>
+
+#include <array>
+#include <cstdint>
+#include <span>
+#include <utility>
+#include <vector>
+
+namespace cxx {
+class ClassSymbol;
+class Control;
+class ExpressionAST;
+class FieldSymbol;
+class FunctionSymbol;
+class Symbol;
+class TranslationUnit;
+class Type;
+
+class TypeTraits {
+  TranslationUnit* unit_;
+
+ public:
+  explicit TypeTraits(TranslationUnit* unit);
+
+  [[nodiscard]] auto unit() const -> TranslationUnit* { return unit_; }
+  [[nodiscard]] auto control() const -> Control*;
+
+  auto requireCompleteClass(ClassSymbol* classSymbol) -> bool;
+
+  [[nodiscard]] auto is_void(const Type* type) const -> bool;
+  [[nodiscard]] auto is_null_pointer(const Type* type) const -> bool;
+  [[nodiscard]] auto is_integral(const Type* type) const -> bool;
+  [[nodiscard]] auto is_floating_point(const Type* type) const -> bool;
+  [[nodiscard]] auto is_array(const Type* type) const -> bool;
+  [[nodiscard]] auto is_enum(const Type* type) const -> bool;
+  [[nodiscard]] auto is_union(const Type* type) const -> bool;
+  [[nodiscard]] auto is_class(const Type* type) const -> bool;
+  [[nodiscard]] auto is_function(const Type* type) const -> bool;
+  [[nodiscard]] auto is_pointer(const Type* type) const -> bool;
+  [[nodiscard]] auto is_lvalue_reference(const Type* type) const -> bool;
+  [[nodiscard]] auto is_rvalue_reference(const Type* type) const -> bool;
+  [[nodiscard]] auto is_member_object_pointer(const Type* type) const -> bool;
+  [[nodiscard]] auto is_member_function_pointer(const Type* type) const -> bool;
+  [[nodiscard]] auto is_complete(const Type* type) const -> bool;
+
+  [[nodiscard]] auto is_integer(const Type* type) const -> bool;
+  [[nodiscard]] auto is_integral_or_unscoped_enum(const Type* type) const
+      -> bool;
+  [[nodiscard]] auto is_integral_or_enum(const Type* type) const -> bool;
+  [[nodiscard]] auto is_fundamental(const Type* type) const -> bool;
+  [[nodiscard]] auto is_arithmetic(const Type* type) const -> bool;
+  [[nodiscard]] auto is_scalar(const Type* type) const -> bool;
+  [[nodiscard]] auto is_object(const Type* type) const -> bool;
+  [[nodiscard]] auto is_compound(const Type* type) const -> bool;
+  [[nodiscard]] auto is_reference(const Type* type) const -> bool;
+  [[nodiscard]] auto is_member_pointer(const Type* type) const -> bool;
+
+  [[nodiscard]] auto is_const(const Type* type) const -> bool;
+  [[nodiscard]] auto is_volatile(const Type* type) const -> bool;
+  [[nodiscard]] auto is_signed(const Type* type) const -> bool;
+  [[nodiscard]] auto is_unsigned(const Type* type) const -> bool;
+  [[nodiscard]] auto is_bounded_array(const Type* type) const -> bool;
+  [[nodiscard]] auto is_unbounded_array(const Type* type) const -> bool;
+  [[nodiscard]] auto is_scoped_enum(const Type* type) const -> bool;
+
+  [[nodiscard]] auto remove_reference(const Type* type) const -> const Type*;
+  [[nodiscard]] auto add_lvalue_reference(const Type* type) const
+      -> const Type*;
+  [[nodiscard]] auto add_rvalue_reference(const Type* type) const
+      -> const Type*;
+
+  [[nodiscard]] auto decltype_of(ExpressionAST* expr) const -> const Type*;
+
+  [[nodiscard]] auto remove_extent(const Type* type) const -> const Type*;
+  [[nodiscard]] auto get_element_type(const Type* type) const -> const Type*;
+
+  [[nodiscard]] auto underlying_type(const Type* type) const -> const Type*;
+
+  [[nodiscard]] auto remove_cv(const Type* type) const -> const Type*;
+  [[nodiscard]] auto remove_cvref(const Type* type) const -> const Type*;
+  [[nodiscard]] auto add_const_ref(const Type* type) const -> const Type*;
+  [[nodiscard]] auto add_const(const Type* type) const -> const Type*;
+  [[nodiscard]] auto add_volatile(const Type* type) const -> const Type*;
+
+  [[nodiscard]] auto remove_pointer(const Type* type) const -> const Type*;
+  [[nodiscard]] auto add_pointer(const Type* type) const -> const Type*;
+
+  [[nodiscard]] auto make_signed(const Type* type) const -> const Type*;
+  [[nodiscard]] auto make_unsigned(const Type* type) const -> const Type*;
+
+  [[nodiscard]] auto is_compatible(const Type* a, const Type* b) const -> bool;
+  [[nodiscard]] auto is_same(const Type* a, const Type* b) const -> bool;
+  [[nodiscard]] auto decay(const Type* type) const -> const Type*;
+
+  [[nodiscard]] auto is_class_or_union(const Type* type) const -> bool;
+  [[nodiscard]] auto is_arithmetic_or_unscoped_enum(const Type* type) const
+      -> bool;
+  [[nodiscard]] auto is_narrow_char_type(const Type* type) const -> bool;
+  [[nodiscard]] auto is_char_type(const Type* type) const -> bool;
+  [[nodiscard]] auto is_narrowing_conversion(const Type* from,
+                                             const Type* to) const -> bool;
+  [[nodiscard]] auto is_narrowing_list_element(ExpressionAST* expr,
+                                               const Type* targetType) const
+      -> bool;
+  [[nodiscard]] auto integer_constant_fits_in_type(std::uint64_t value,
+                                                   const Type* targetType) const
+      -> bool;
+
+  [[nodiscard]] auto initializer_list_element_type(const Type* targetType)
+      -> const Type*;
+
+  [[nodiscard]] auto remove_all_extents(const Type* type) const -> const Type*;
+  [[nodiscard]] auto remove_const(const Type* type) const -> const Type*;
+  [[nodiscard]] auto remove_volatile(const Type* type) const -> const Type*;
+  [[nodiscard]] auto add_cv(const Type* type, CvQualifiers cv) const
+      -> const Type*;
+  [[nodiscard]] auto remove_noexcept(const Type* type) const -> const Type*;
+  [[nodiscard]] auto replace_placeholder_types(const Type* type,
+                                               const Type* replacement) const
+      -> const Type*;
+  [[nodiscard]] auto is_member_of_object_type(const Type* objectType,
+                                              Symbol* member) const -> bool;
+
+  [[nodiscard]] auto is_base_of(const Type* base, const Type* derived) const
+      -> bool;
+
+  [[nodiscard]] auto is_known_complete_object(ExpressionAST* expression) const
+      -> bool;
+
+  [[nodiscard]] auto is_virtual_member_dispatch(
+      FunctionSymbol* function, ExpressionAST* objectExpression) const -> bool;
+
+  [[nodiscard]] auto adjusted_cv_type(const Type* type) const -> const Type*;
+
+  [[nodiscard]] auto is_similar(const Type* lhs, const Type* rhs) const -> bool;
+
+  [[nodiscard]] auto qualification_combined_type(const Type* lhs,
+                                                 const Type* rhs) const
+      -> const Type*;
+
+  [[nodiscard]] auto is_qualification_convertible(const Type* from,
+                                                  const Type* to) const -> bool;
+
+  [[nodiscard]] auto is_reference_related(const Type* lhs,
+                                          const Type* rhs) const -> bool;
+
+  [[nodiscard]] auto is_reference_compatible(const Type* target,
+                                             const Type* source) const -> bool;
+
+  [[nodiscard]] auto promoted_integer_type(const Type* type) const
+      -> const Type*;
+
+  [[nodiscard]] auto promoted_enumeration_types(const EnumType* enumType) const
+      -> std::pair<const Type*, const Type*>;
+
+  [[nodiscard]] auto is_integral_promotion(const Type* from,
+                                           const Type* to) const -> bool;
+
+  [[nodiscard]] auto is_floating_point_promotion(const Type* from,
+                                                 const Type* to) const -> bool;
+
+  [[nodiscard]] auto representsAllValuesOf(const Type* target,
+                                           const Type* source) const -> bool;
+
+  [[nodiscard]] auto is_virtual_base_of(const Type* base,
+                                        const Type* derived) const -> bool;
+
+  [[nodiscard]] auto is_corresponding_overrider(
+      const FunctionSymbol* overrider, const FunctionSymbol* overridden) const
+      -> bool;
+
+  [[nodiscard]] auto is_covariant_return_type(
+      const Type* overriddenReturnType, const Type* overriderReturnType) const
+      -> bool;
+  [[nodiscard]] auto is_convertible(const Type* from, const Type* to) const
+      -> bool;
+  [[nodiscard]] auto reference_constructs_from_temporary(const Type* to,
+                                                         const Type* from) const
+      -> bool;
+  [[nodiscard]] auto reference_converts_from_temporary(const Type* to,
+                                                       const Type* from) const
+      -> bool;
+
+  auto is_pod(const Type* type) -> bool;
+  auto is_trivial(const Type* type) -> bool;
+  auto is_standard_layout(const Type* type) -> bool;
+  auto is_literal_type(const Type* type) -> bool;
+  auto is_aggregate(const Type* type) -> bool;
+  [[nodiscard]] auto aggregate_elements(ClassSymbol* classSymbol) const
+      -> std::vector<Symbol*>;
+  [[nodiscard]] auto aggregate_element_type(Symbol* element) const
+      -> const Type*;
+  auto is_empty(const Type* type) -> bool;
+  [[nodiscard]] auto is_zero_size_subobject(FieldSymbol* field) -> bool;
+  auto is_polymorphic(const Type* type) -> bool;
+  auto is_final(const Type* type) -> bool;
+  auto selectConstructor(ClassSymbol* classSymbol,
+                         std::span<const Type* const> argTypes)
+      -> FunctionSymbol*;
+  auto is_constructible(const Type* type, std::span<const Type* const> argTypes)
+      -> bool;
+  auto is_nothrow_constructible(const Type* type,
+                                std::span<const Type* const> argTypes) -> bool;
+  auto is_trivially_constructible(const Type* type,
+                                  std::span<const Type* const> argTypes = {})
+      -> bool;
+  auto selectAssignmentOperator(const Type* to, const Type* from)
+      -> FunctionSymbol*;
+  auto is_assignable(const Type* to, const Type* from) -> bool;
+  auto is_nothrow_assignable(const Type* to, const Type* from) -> bool;
+  auto is_trivially_assignable(const Type* to, const Type* from) -> bool;
+  auto is_trivially_copyable(const Type* type) -> bool;
+  auto is_abstract(const Type* type) -> bool;
+  auto is_destructible(const Type* type) -> bool;
+  auto is_nothrow_destructible(const Type* type) -> bool;
+  auto has_trivial_destructor(const Type* type) -> bool;
+  auto is_trivially_destructible(const Type* type) -> bool;
+  auto has_virtual_destructor(const Type* type) -> bool;
+
+ private:
+  [[nodiscard]] auto integralPromotionCandidates() const
+      -> std::array<const Type*, 6>;
+
+  [[nodiscard]] auto can_initialize(const Type* to, const Type* from,
+                                    bool directInitialization) const -> bool;
+  [[nodiscard]] auto reference_binds_to_temporary(
+      const Type* to, const Type* from, bool directInitialization) const
+      -> bool;
+  [[nodiscard]] auto is_accessible_from_unrelated_context(
+      FunctionSymbol* function) const -> bool;
+  [[nodiscard]] auto is_nothrow_function(FunctionSymbol* function) const
+      -> bool;
+  [[nodiscard]] auto is_nothrow_initialization(const Type* to, const Type* from,
+                                               bool directInitialization) const
+      -> bool;
+  [[nodiscard]] auto is_trivial_initialization(const Type* to, const Type* from,
+                                               bool directInitialization) const
+      -> bool;
+  [[nodiscard]] auto apply_sign(const Type* type, bool isUnsigned) const
+      -> const Type*;
+  [[nodiscard]] auto corresponding_integer_type(const Type* type,
+                                                bool isUnsigned) const
+      -> const Type*;
+  [[nodiscard]] auto integer_type_of_size(std::size_t size,
+                                          bool isUnsigned) const -> const Type*;
+};
+}  // namespace cxx

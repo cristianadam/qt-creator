@@ -1,0 +1,103 @@
+// Copyright (c) 2026 Roberto Raggi <roberto.raggi@gmail.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+#pragma once
+
+#include <cxx/ast_fwd.h>
+#include <cxx/types_fwd.h>
+
+namespace cxx {
+class Control;
+class TranslationUnit;
+class ASTRewriter;
+
+class [[nodiscard]] DeclSpecs {
+  struct Visitor;
+
+  TranslationUnit* unit_ = nullptr;
+  const Type* type_ = nullptr;
+  SpecifierAST* typeSpecifier_ = nullptr;
+  ASTRewriter* rewriter_ = nullptr;
+  bool finished_ = false;
+
+ public:
+  explicit DeclSpecs(TranslationUnit* unit);
+
+  auto translationUnit() const -> TranslationUnit*;
+  auto control() const -> Control*;
+
+  void finish();
+
+  auto type() const -> const Type*;
+  void setType(const Type* type);
+
+  auto hasTypeSpecifier() const -> bool;
+
+  auto typeSpecifier() const -> SpecifierAST*;
+  void setTypeSpecifier(SpecifierAST* specifier);
+
+  auto hasTypeOrSizeSpecifier() const -> bool;
+  auto hasClassOrElaboratedTypeSpecifier() const -> bool;
+  auto hasPlaceholderTypeSpecifier() const -> bool;
+
+  void accept(SpecifierAST* specifier);
+
+  TemplateDeclarationAST* templateHead = nullptr;
+
+  bool isTypedef = false;
+  bool isFriend = false;
+  bool isConstexpr = false;
+  bool isConsteval = false;
+  bool isConstinit = false;
+  bool isInline = false;
+  bool isNoUniqueAddress = false;
+  bool isNoreturn = false;
+
+  bool isConst = false;
+  bool isVolatile = false;
+  bool isRestrict = false;
+  bool isAtomic = true;
+
+  bool isStatic = false;
+  bool isThreadLocal = false;
+  bool isExtern = false;
+  bool isMutable = false;
+  bool isThread = false;
+  bool isRegister = false;
+
+  bool isVirtual = false;
+  bool isExplicit = false;
+
+  bool isSigned = false;
+  bool isUnsigned = false;
+
+  bool isShort = false;
+  bool isLong = false;
+  bool isLongLong = false;
+
+  bool isComplex = false;
+
+  bool isAuto = false;
+  bool isDecltypeAuto = false;
+
+  bool no_typespecs = false;
+  bool no_class_or_enum_specs = false;
+};
+}  // namespace cxx

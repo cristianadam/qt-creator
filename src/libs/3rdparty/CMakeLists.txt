@@ -1,4 +1,14 @@
 add_subdirectory(cplusplus)
+
+# The successor to the cplusplus front end, vendored so that the built-in code
+# model can be moved over to it step by step. Nothing depends on it yet, and it
+# needs a C++23 compiler, so it stays off unless asked for.
+option(QTC_ENABLE_CXX_FRONTEND "Build the cxx-frontend C++ parser" OFF)
+if(QTC_ENABLE_CXX_FRONTEND)
+    add_subdirectory(cxx-frontend)
+endif()
+add_feature_info("cxx-frontend parser" QTC_ENABLE_CXX_FRONTEND "")
+
 add_subdirectory(quickjs)
 add_subdirectory(syntax-highlighting)
 add_subdirectory(libvterm)

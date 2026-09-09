@@ -370,6 +370,34 @@
         "Copyright": "Copyright (c) 2005 Roberto Raggi"
     },
     {
+        "Id": "cxx-frontend",
+        "Name": "C++ Compiler Front End",
+        "QDocModule": "qtcreator",
+        "QtParts": ["tools"],
+        "QtUsage": "Successor to the fallback C++ model; not yet used at runtime.",
+        "Path": "@SOURCE_DIR@/src/libs/3rdparty/cxx-frontend",
+        "Homepage": "https://github.com/robertoraggi/cplusplus",
+        "Version": "c4fd7a71c5e6465b3c8e7e084b66ed7a1a8132f5",
+        "Description": "Compiler front end for C++26 and C23",
+        "License": "MIT License",
+        "LicenseFile": "@SOURCE_DIR@/src/libs/3rdparty/cxx-frontend/LICENSE",
+        "Copyright": "Copyright (c) 2026 Roberto Raggi"
+    },
+    {
+        "Id": "utfcpp",
+        "Name": "UTF8-CPP",
+        "QDocModule": "qtcreator",
+        "QtParts": ["tools"],
+        "QtUsage": "UTF-8 handling in the cxx-frontend C++ parser.",
+        "Path": "@SOURCE_DIR@/src/libs/3rdparty/utfcpp",
+        "Homepage": "https://github.com/nemtrif/utfcpp",
+        "Version": "4.0.8",
+        "Description": "UTF-8 with C++ in a portable way",
+        "License": "Boost Software License 1.0",
+        "LicenseFile": "@SOURCE_DIR@/src/libs/3rdparty/utfcpp/LICENSE",
+        "Copyright": "Copyright 2006-2018 Nemanja Trifunovic"
+    },
+    {
         "Id": "cpp-keywordgen",
         "Name": "Open Source Tool for Generating C++ Code That Classifies Keywords",
         "QDocModule": "qtcreator",

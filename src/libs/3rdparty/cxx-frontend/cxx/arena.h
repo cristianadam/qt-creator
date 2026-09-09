@@ -1,0 +1,72 @@
+// Copyright (c) 2026 Roberto Raggi <roberto.raggi@gmail.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+#pragma once
+
+#include <cxx/cxx_fwd.h>
+
+#include <memory>
+#include <memory_resource>
+#include <new>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
+namespace cxx {
+class Arena : public std::pmr::monotonic_buffer_resource {
+ public:
+  using monotonic_buffer_resource::monotonic_buffer_resource;
+
+  ~Arena() {
+    while (!cleanups_.empty()) {
+      auto cleanup = cleanups_.back();
+      cleanups_.pop_back();
+      cleanup.destroy(cleanup.object);
+    }
+  }
+
+  template <typename T, typename... Args>
+  [[nodiscard]] auto make(Args&&... args) -> T* {
+    auto object = static_cast<T*>(allocate(sizeof(T), alignof(T)));
+    std::construct_at(object, std::forward<Args>(args)...);
+    if constexpr (!std::is_trivially_destructible_v<T>) {
+      cleanups_.push_back(
+          {[](void* ptr) { std::destroy_at(static_cast<T*>(ptr)); }, object});
+    }
+    return object;
+  }
+
+ private:
+  struct Cleanup {
+    void (*destroy)(void*);
+    void* object;
+  };
+
+  std::vector<Cleanup> cleanups_;
+};
+
+struct Managed {
+  auto operator new(std::size_t size, Arena* arena) noexcept -> void* {
+    return arena->allocate(size);
+  }
+  void operator delete(void* ptr, std::size_t) {}
+  void operator delete(void* ptr, Arena*) noexcept {}
+};
+}  // namespace cxx

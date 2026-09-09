@@ -1,0 +1,1408 @@
+// Copyright (c) 2026 Roberto Raggi <roberto.raggi@gmail.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+#include <cxx/ast.h>
+#include <cxx/ast_rewriter.h>
+#include <cxx/ast_validator.h>
+#include <cxx/binder.h>
+#include <cxx/control.h>
+#include <cxx/decl.h>
+#include <cxx/decl_specs.h>
+#include <cxx/name_lookup.h>
+#include <cxx/names.h>
+#include <cxx/symbols.h>
+#include <cxx/template_equivalence.h>
+#include <cxx/translation_unit.h>
+#include <cxx/type_checker.h>
+
+namespace cxx {
+struct ASTRewriter::DeclarationVisitor {
+  ASTRewriter& rewrite;
+  TemplateDeclarationAST* templateHead = nullptr;
+
+  DeclarationVisitor(ASTRewriter& rewrite, TemplateDeclarationAST* templateHead)
+      : rewrite(rewrite), templateHead(templateHead) {}
+
+  [[nodiscard]] auto translationUnit() const -> TranslationUnit* {
+    return rewrite.unit_;
+  }
+
+  [[nodiscard]] auto control() const -> Control* { return rewrite.control(); }
+  [[nodiscard]] auto arena() const -> Arena* { return rewrite.arena(); }
+  [[nodiscard]] auto rewriter() const -> ASTRewriter* { return &rewrite; }
+  [[nodiscard]] auto binder() const -> Binder* { return &rewrite.binder_; }
+
+  [[nodiscard]] auto operator()(SimpleDeclarationAST* ast) -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(AsmDeclarationAST* ast) -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(NamespaceAliasDefinitionAST* ast)
+      -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(UsingDeclarationAST* ast) -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(UsingEnumDeclarationAST* ast)
+      -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(UsingDirectiveAST* ast) -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(StaticAssertDeclarationAST* ast)
+      -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(AliasDeclarationAST* ast) -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(OpaqueEnumDeclarationAST* ast)
+      -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(FunctionDefinitionAST* ast) -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(TemplateDeclarationAST* ast) -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(ConceptDefinitionAST* ast) -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(DeductionGuideAST* ast) -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(ExplicitInstantiationAST* ast)
+      -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(ExportDeclarationAST* ast) -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(ExportCompoundDeclarationAST* ast)
+      -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(LinkageSpecificationAST* ast)
+      -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(NamespaceDefinitionAST* ast) -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(EmptyDeclarationAST* ast) -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(AttributeDeclarationAST* ast)
+      -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(ModuleImportDeclarationAST* ast)
+      -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(ParameterDeclarationAST* ast)
+      -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(AccessDeclarationAST* ast) -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(ForRangeDeclarationAST* ast) -> DeclarationAST*;
+
+  [[nodiscard]] auto operator()(StructuredBindingDeclarationAST* ast)
+      -> DeclarationAST*;
+};
+
+struct ASTRewriter::TemplateParameterVisitor {
+  ASTRewriter& rewrite;
+  [[nodiscard]] auto translationUnit() const -> TranslationUnit* {
+    return rewrite.unit_;
+  }
+
+  [[nodiscard]] auto control() const -> Control* { return rewrite.control(); }
+  [[nodiscard]] auto arena() const -> Arena* { return rewrite.arena(); }
+  [[nodiscard]] auto rewriter() const -> ASTRewriter* { return &rewrite; }
+  [[nodiscard]] auto binder() const -> Binder* { return &rewrite.binder_; }
+
+  [[nodiscard]] auto operator()(TemplateTypeParameterAST* ast)
+      -> TemplateParameterAST*;
+
+  [[nodiscard]] auto operator()(NonTypeTemplateParameterAST* ast)
+      -> TemplateParameterAST*;
+
+  [[nodiscard]] auto operator()(TypenameTypeParameterAST* ast)
+      -> TemplateParameterAST*;
+
+  [[nodiscard]] auto operator()(ConstraintTypeParameterAST* ast)
+      -> TemplateParameterAST*;
+};
+
+struct ASTRewriter::FunctionBodyVisitor {
+  ASTRewriter& rewrite;
+  [[nodiscard]] auto translationUnit() const -> TranslationUnit* {
+    return rewrite.unit_;
+  }
+
+  [[nodiscard]] auto control() const -> Control* { return rewrite.control(); }
+  [[nodiscard]] auto arena() const -> Arena* { return rewrite.arena(); }
+  [[nodiscard]] auto rewriter() const -> ASTRewriter* { return &rewrite; }
+  [[nodiscard]] auto binder() const -> Binder* { return &rewrite.binder_; }
+
+  [[nodiscard]] auto operator()(DefaultFunctionBodyAST* ast)
+      -> FunctionBodyAST*;
+
+  [[nodiscard]] auto operator()(CompoundStatementFunctionBodyAST* ast)
+      -> FunctionBodyAST*;
+
+  [[nodiscard]] auto operator()(TryStatementFunctionBodyAST* ast)
+      -> FunctionBodyAST*;
+
+  [[nodiscard]] auto operator()(DeleteFunctionBodyAST* ast) -> FunctionBodyAST*;
+};
+
+struct ASTRewriter::RequirementVisitor {
+  ASTRewriter& rewrite;
+  [[nodiscard]] auto translationUnit() const -> TranslationUnit* {
+    return rewrite.unit_;
+  }
+
+  [[nodiscard]] auto control() const -> Control* { return rewrite.control(); }
+  [[nodiscard]] auto arena() const -> Arena* { return rewrite.arena(); }
+  [[nodiscard]] auto rewriter() const -> ASTRewriter* { return &rewrite; }
+  [[nodiscard]] auto binder() const -> Binder* { return &rewrite.binder_; }
+
+  [[nodiscard]] auto operator()(SimpleRequirementAST* ast) -> RequirementAST*;
+
+  [[nodiscard]] auto operator()(CompoundRequirementAST* ast) -> RequirementAST*;
+
+  [[nodiscard]] auto operator()(TypeRequirementAST* ast) -> RequirementAST*;
+
+  [[nodiscard]] auto operator()(NestedRequirementAST* ast) -> RequirementAST*;
+};
+
+auto ASTRewriter::declaration(DeclarationAST* ast,
+                              TemplateDeclarationAST* templateHead)
+    -> DeclarationAST* {
+  if (!ast) return {};
+  return visit(DeclarationVisitor{*this, templateHead}, ast);
+}
+
+auto ASTRewriter::templateParameter(TemplateParameterAST* ast)
+    -> TemplateParameterAST* {
+  if (!ast) return {};
+  return visit(TemplateParameterVisitor{*this}, ast);
+}
+
+auto ASTRewriter::rewriteTemplateHead(TemplateDeclarationAST* ast)
+    -> TemplateDeclarationAST* {
+  if (!ast) return nullptr;
+
+  auto copy = TemplateDeclarationAST::create(arena());
+  copy->templateLoc = ast->templateLoc;
+  copy->lessLoc = ast->lessLoc;
+  copy->symbol = control()->newTemplateParametersSymbol(
+      binder_.scope(), ast->symbol->location());
+  copy->symbol->setExplicitTemplateSpecialization(
+      ast->symbol->isExplicitTemplateSpecialization());
+  copy->depth = ast->depth;
+
+  binder_.setScope(copy->symbol);
+
+  auto templateParameterList = &copy->templateParameterList;
+  for (auto parameter : ListView{ast->templateParameterList}) {
+    auto value = templateParameter(parameter);
+    *templateParameterList = make_list_node(arena(), value);
+    templateParameterList = &(*templateParameterList)->next;
+  }
+
+  copy->greaterLoc = ast->greaterLoc;
+  copy->requiresClause = requiresClause(ast->requiresClause);
+  return copy;
+}
+
+auto ASTRewriter::rewriteMemberTemplateHead(Symbol* patternSymbol)
+    -> TemplateDeclarationAST* {
+  if (!patternSymbol || binder_.instantiatingSymbol() == patternSymbol) {
+    return nullptr;
+  }
+
+  auto enclosingClass = symbol_cast<ClassSymbol>(patternSymbol->parent());
+  auto patternTemplateHead = ownFunctionTemplateHead(
+      unit_, enclosingClass, template_declaration_of(patternSymbol));
+  if (patternTemplateHead == currentTemplatePatternHead_) {
+    return currentTemplateHead_;
+  }
+  if (!patternTemplateHead) return nullptr;
+
+  auto scopeGuard = Binder::ScopeGuard{&binder_};
+  return rewriteTemplateHead(patternTemplateHead);
+}
+
+auto ASTRewriter::functionBody(FunctionBodyAST* ast) -> FunctionBodyAST* {
+  if (!ast) return {};
+  BodyErrorScope bodyErrors{*this};
+  return visit(FunctionBodyVisitor{*this}, ast);
+}
+
+auto ASTRewriter::lambdaBody(StatementAST* ast) -> CompoundStatementAST* {
+  if (!ast) return {};
+  BodyErrorScope bodyErrors{*this};
+  return ast_cast<CompoundStatementAST>(statement(ast));
+}
+
+auto ASTRewriter::requirement(RequirementAST* ast) -> RequirementAST* {
+  if (!ast) return {};
+  TranslationUnit::PotentiallyEvaluatedScope unevaluated{unit_, false};
+  return visit(RequirementVisitor{*this}, ast);
+}
+
+auto ASTRewriter::typeConstraint(TypeConstraintAST* ast) -> TypeConstraintAST* {
+  if (!ast) return {};
+
+  auto copy = TypeConstraintAST::create(arena());
+
+  copy->nestedNameSpecifier = nestedNameSpecifier(ast->nestedNameSpecifier);
+  copy->identifierLoc = ast->identifierLoc;
+  copy->lessLoc = ast->lessLoc;
+
+  for (auto templateArgumentList = &copy->templateArgumentList;
+       auto node : ListView{ast->templateArgumentList}) {
+    auto value = templateArgument(node);
+    *templateArgumentList = make_list_node(arena(), value);
+    templateArgumentList = &(*templateArgumentList)->next;
+  }
+
+  copy->greaterLoc = ast->greaterLoc;
+  copy->identifier = ast->identifier;
+  copy->symbol = ast->symbol;
+
+  return copy;
+}
+
+auto ASTRewriter::nestedNamespaceSpecifier(NestedNamespaceSpecifierAST* ast)
+    -> NestedNamespaceSpecifierAST* {
+  if (!ast) return {};
+
+  auto copy = NestedNamespaceSpecifierAST::create(arena());
+
+  copy->inlineLoc = ast->inlineLoc;
+  copy->identifierLoc = ast->identifierLoc;
+  copy->scopeLoc = ast->scopeLoc;
+  copy->identifier = ast->identifier;
+  copy->isInline = ast->isInline;
+
+  return copy;
+}
+
+auto ASTRewriter::usingDeclarator(UsingDeclaratorAST* ast)
+    -> UsingDeclaratorAST* {
+  if (!ast) return {};
+
+  auto copy = UsingDeclaratorAST::create(arena());
+
+  copy->typenameLoc = ast->typenameLoc;
+  copy->nestedNameSpecifier = nestedNameSpecifier(ast->nestedNameSpecifier);
+  copy->unqualifiedId = unqualifiedId(ast->unqualifiedId);
+  copy->ellipsisLoc = ast->ellipsisLoc;
+  copy->symbol = ast->symbol;
+  copy->isPack = ast->isPack;
+
+  if (auto nns =
+          ast_cast<SimpleNestedNameSpecifierAST>(copy->nestedNameSpecifier)) {
+    if (nns->symbol) {
+      if (auto remapped = remapSymbol(nns->symbol); remapped != nns->symbol) {
+        if (auto scope = binder_.resolveNestedNameSpecifier(remapped)) {
+          nns->symbol = scope;
+        }
+      }
+    } else if (nns->identifier && !nns->nestedNameSpecifier) {
+      auto resolved = qualifiedLookup(binder_.scope(), nns->identifier,
+                                      [](Symbol* s) { return is_type(s); });
+      nns->symbol = binder_.resolveNestedNameSpecifier(resolved);
+    }
+  }
+
+  if (copy->nestedNameSpecifier && copy->nestedNameSpecifier->symbol) {
+    auto name = get_name(control(), copy->unqualifiedId);
+    auto target = qualifiedLookup(copy->nestedNameSpecifier->symbol, name);
+    binder_.bind(copy, target);
+  }
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(SimpleDeclarationAST* ast)
+    -> DeclarationAST* {
+  auto copy = SimpleDeclarationAST::create(arena());
+
+  for (auto attributeList = &copy->attributeList;
+       auto node : ListView{ast->attributeList}) {
+    auto value = rewrite.attributeSpecifier(node);
+    *attributeList = make_list_node(arena(), value);
+    attributeList = &(*attributeList)->next;
+  }
+
+  auto declSpecifierListCtx = DeclSpecs{rewrite.unit_};
+  declSpecifierListCtx.templateHead = templateHead;
+  for (auto declSpecifierList = &copy->declSpecifierList;
+       auto node : ListView{ast->declSpecifierList}) {
+    auto value = rewrite.specifier(node, templateHead);
+    *declSpecifierList = make_list_node(arena(), value);
+    declSpecifierList = &(*declSpecifierList)->next;
+    declSpecifierListCtx.accept(value);
+  }
+  declSpecifierListCtx.finish();
+
+  if (declSpecifierListCtx.isFriend) {
+    auto friendType =
+        rewrite.unit_->typeTraits().remove_cv(declSpecifierListCtx.type());
+    auto classType = type_cast<ClassType>(friendType);
+    auto befriendingClass =
+        symbol_cast<ClassSymbol>(rewrite.binder().declaringScope());
+    if (classType && befriendingClass)
+      classType->definition()->addBefriendingClass(befriendingClass);
+  }
+
+  if (!ast->initDeclaratorList) {
+    for (auto spec : ListView{copy->declSpecifierList}) {
+      auto elab = ast_cast<ElaboratedTypeSpecifierAST>(spec);
+      if (!elab || elab->symbol || elab->nestedNameSpecifier) continue;
+      if (elab->classKey != TokenKind::T_CLASS &&
+          elab->classKey != TokenKind::T_STRUCT &&
+          elab->classKey != TokenKind::T_UNION) {
+        continue;
+      }
+      rewrite.binder().bind(elab, declSpecifierListCtx,
+                            /*isDeclaration=*/true);
+    }
+
+    if (auto classSpec =
+            ast_cast<ClassSpecifierAST>(declSpecifierListCtx.typeSpecifier())) {
+      if (classSpec->symbol && !classSpec->symbol->name()) {
+        rewrite.binder().declareAnonymousField(classSpec);
+      }
+    }
+  }
+
+  for (auto initDeclaratorList = &copy->initDeclaratorList;
+       auto node : ListView{ast->initDeclaratorList}) {
+    auto value = rewrite.initDeclarator(node, declSpecifierListCtx);
+    *initDeclaratorList = make_list_node(arena(), value);
+    initDeclaratorList = &(*initDeclaratorList)->next;
+  }
+
+  copy->requiresClause = rewrite.requiresClause(ast->requiresClause);
+  copy->semicolonLoc = ast->semicolonLoc;
+
+  for (auto initDeclarator : ListView{copy->initDeclaratorList}) {
+    auto function = symbol_cast<FunctionSymbol>(initDeclarator->symbol);
+    if (!function) continue;
+
+    auto functionTemplateHead = function->templateDeclaration();
+    if (!functionTemplateHead || functionTemplateHead->declaration) continue;
+
+    functionTemplateHead->declaration = SimpleDeclarationAST::create(
+        arena(), copy->attributeList, copy->declSpecifierList,
+        make_list_node(arena(), initDeclarator), copy->requiresClause,
+        copy->semicolonLoc);
+  }
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(AsmDeclarationAST* ast)
+    -> DeclarationAST* {
+  auto copy = AsmDeclarationAST::create(arena());
+
+  for (auto attributeList = &copy->attributeList;
+       auto node : ListView{ast->attributeList}) {
+    auto value = rewrite.attributeSpecifier(node);
+    *attributeList = make_list_node(arena(), value);
+    attributeList = &(*attributeList)->next;
+  }
+
+  for (auto asmQualifierList = &copy->asmQualifierList;
+       auto node : ListView{ast->asmQualifierList}) {
+    auto value = rewrite.asmQualifier(node);
+    *asmQualifierList =
+        make_list_node(arena(), ast_cast<AsmQualifierAST>(value));
+    asmQualifierList = &(*asmQualifierList)->next;
+  }
+
+  copy->asmLoc = ast->asmLoc;
+  copy->lparenLoc = ast->lparenLoc;
+  copy->literalLoc = ast->literalLoc;
+
+  for (auto outputOperandList = &copy->outputOperandList;
+       auto node : ListView{ast->outputOperandList}) {
+    auto value = rewrite.asmOperand(node);
+    *outputOperandList =
+        make_list_node(arena(), ast_cast<AsmOperandAST>(value));
+    outputOperandList = &(*outputOperandList)->next;
+  }
+
+  for (auto inputOperandList = &copy->inputOperandList;
+       auto node : ListView{ast->inputOperandList}) {
+    auto value = rewrite.asmOperand(node);
+    *inputOperandList = make_list_node(arena(), ast_cast<AsmOperandAST>(value));
+    inputOperandList = &(*inputOperandList)->next;
+  }
+
+  for (auto clobberList = &copy->clobberList;
+       auto node : ListView{ast->clobberList}) {
+    auto value = rewrite.asmClobber(node);
+    *clobberList = make_list_node(arena(), ast_cast<AsmClobberAST>(value));
+    clobberList = &(*clobberList)->next;
+  }
+
+  for (auto gotoLabelList = &copy->gotoLabelList;
+       auto node : ListView{ast->gotoLabelList}) {
+    auto value = rewrite.asmGotoLabel(node);
+    *gotoLabelList = make_list_node(arena(), ast_cast<AsmGotoLabelAST>(value));
+    gotoLabelList = &(*gotoLabelList)->next;
+  }
+
+  copy->rparenLoc = ast->rparenLoc;
+  copy->semicolonLoc = ast->semicolonLoc;
+  copy->literal = ast->literal;
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(
+    NamespaceAliasDefinitionAST* ast) -> DeclarationAST* {
+  auto copy = NamespaceAliasDefinitionAST::create(arena());
+
+  copy->namespaceLoc = ast->namespaceLoc;
+  copy->identifierLoc = ast->identifierLoc;
+  copy->equalLoc = ast->equalLoc;
+  copy->nestedNameSpecifier =
+      rewrite.nestedNameSpecifier(ast->nestedNameSpecifier);
+  copy->unqualifiedId =
+      ast_cast<NameIdAST>(rewrite.unqualifiedId(ast->unqualifiedId));
+  copy->semicolonLoc = ast->semicolonLoc;
+  copy->identifier = ast->identifier;
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(UsingDeclarationAST* ast)
+    -> DeclarationAST* {
+  auto copy = UsingDeclarationAST::create(arena());
+
+  copy->usingLoc = ast->usingLoc;
+
+  auto append = [&](List<UsingDeclaratorAST*>**& out,
+                    UsingDeclaratorAST* value) {
+    *out = make_list_node(arena(), value);
+    out = &(*out)->next;
+  };
+
+  for (auto usingDeclaratorList = &copy->usingDeclaratorList;
+       auto node : ListView{ast->usingDeclaratorList}) {
+    if (node->isPack) {
+      auto pack =
+          rewrite.findReferencedParameterPack(node->nestedNameSpecifier);
+      if (!pack)
+        pack = rewrite.findReferencedParameterPack(node->unqualifiedId);
+
+      if (pack) {
+        rewrite.forEachPackElement(
+            node, node->ellipsisLoc,
+            [&] {
+              auto value = rewrite.usingDeclarator(node);
+              value->ellipsisLoc = {};
+              value->isPack = false;
+              append(usingDeclaratorList, value);
+            },
+            pack);
+
+        continue;
+      }
+    }
+
+    append(usingDeclaratorList, rewrite.usingDeclarator(node));
+  }
+
+  copy->semicolonLoc = ast->semicolonLoc;
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(UsingEnumDeclarationAST* ast)
+    -> DeclarationAST* {
+  auto copy = UsingEnumDeclarationAST::create(arena());
+
+  copy->usingLoc = ast->usingLoc;
+  copy->enumTypeSpecifier = ast_cast<ElaboratedTypeSpecifierAST>(
+      rewrite.specifier(ast->enumTypeSpecifier));
+  if (copy->enumTypeSpecifier && ast->enumTypeSpecifier)
+    copy->enumTypeSpecifier->symbol =
+        rewrite.remapSymbol(ast->enumTypeSpecifier->symbol);
+  copy->semicolonLoc = ast->semicolonLoc;
+
+  binder()->bind(copy);
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(UsingDirectiveAST* ast)
+    -> DeclarationAST* {
+  auto copy = UsingDirectiveAST::create(arena());
+
+  for (auto attributeList = &copy->attributeList;
+       auto node : ListView{ast->attributeList}) {
+    auto value = rewrite.attributeSpecifier(node);
+    *attributeList = make_list_node(arena(), value);
+    attributeList = &(*attributeList)->next;
+  }
+
+  copy->usingLoc = ast->usingLoc;
+  copy->namespaceLoc = ast->namespaceLoc;
+  copy->nestedNameSpecifier =
+      rewrite.nestedNameSpecifier(ast->nestedNameSpecifier);
+  copy->unqualifiedId =
+      ast_cast<NameIdAST>(rewrite.unqualifiedId(ast->unqualifiedId));
+  copy->semicolonLoc = ast->semicolonLoc;
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(
+    StaticAssertDeclarationAST* ast) -> DeclarationAST* {
+  auto copy = StaticAssertDeclarationAST::create(arena());
+
+  copy->staticAssertLoc = ast->staticAssertLoc;
+  copy->lparenLoc = ast->lparenLoc;
+  copy->expression = rewrite.expression(ast->expression);
+  copy->commaLoc = ast->commaLoc;
+  copy->literalLoc = ast->literalLoc;
+  copy->literal = ast->literal;
+  copy->rparenLoc = ast->rparenLoc;
+  copy->semicolonLoc = ast->semicolonLoc;
+
+  if (binder()->instantiatingSymbol()) {
+    auto checker = rewrite.typeChecker();
+    checker.check(copy);
+  }
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(AliasDeclarationAST* ast)
+    -> DeclarationAST* {
+  auto copy = AliasDeclarationAST::create(arena());
+  const auto pendingExceptionSpecifierMark =
+      rewrite.pendingExceptionSpecifierMark();
+
+  copy->usingLoc = ast->usingLoc;
+  copy->identifierLoc = ast->identifierLoc;
+
+  for (auto attributeList = &copy->attributeList;
+       auto node : ListView{ast->attributeList}) {
+    auto value = rewrite.attributeSpecifier(node);
+    *attributeList = make_list_node(arena(), value);
+    attributeList = &(*attributeList)->next;
+  }
+
+  copy->equalLoc = ast->equalLoc;
+
+  for (auto gnuAttributeList = &copy->gnuAttributeList;
+       auto node : ListView{ast->gnuAttributeList}) {
+    auto value = rewrite.attributeSpecifier(node);
+    *gnuAttributeList = make_list_node(arena(), value);
+    gnuAttributeList = &(*gnuAttributeList)->next;
+  }
+
+  copy->typeId = rewrite.typeId(ast->typeId);
+  copy->semicolonLoc = ast->semicolonLoc;
+  copy->identifier = ast->identifier;
+
+  const auto addSymbolToParentScope =
+      rewrite.binder().instantiatingSymbol() != ast->symbol;
+
+  auto symbol = binder()->declareTypeAlias(copy->identifierLoc, copy->typeId,
+                                           addSymbolToParentScope);
+  if (!addSymbolToParentScope && !rewrite.substitutionFailed() &&
+      !rewrite.retainsEnclosingTemplateLevels()) {
+    ast->symbol->addSpecialization(translationUnit(),
+                                   rewrite.templateArguments(), symbol);
+  }
+
+  if (templateHead && addSymbolToParentScope) {
+    symbol->setTemplateDeclaration(templateHead);
+    symbol->setTemplateParameters(templateHead->symbol);
+  }
+
+  copy->symbol = symbol;
+  symbol->setDeclaration(copy);
+  symbol->setExpansionTypeId(copy->typeId);
+  rewrite.addSymbolRemap(ast->symbol, symbol);
+
+  rewrite.associatePendingExceptionSpecifiers(
+      pendingExceptionSpecifierMark, nullptr, nullptr, nullptr,
+      [copy, symbol] { symbol->setType(copy->typeId->type); });
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(OpaqueEnumDeclarationAST* ast)
+    -> DeclarationAST* {
+  auto copy = OpaqueEnumDeclarationAST::create(arena());
+
+  copy->enumLoc = ast->enumLoc;
+  copy->classLoc = ast->classLoc;
+
+  for (auto attributeList = &copy->attributeList;
+       auto node : ListView{ast->attributeList}) {
+    auto value = rewrite.attributeSpecifier(node);
+    *attributeList = make_list_node(arena(), value);
+    attributeList = &(*attributeList)->next;
+  }
+
+  copy->nestedNameSpecifier =
+      rewrite.nestedNameSpecifier(ast->nestedNameSpecifier);
+  copy->unqualifiedId =
+      ast_cast<NameIdAST>(rewrite.unqualifiedId(ast->unqualifiedId));
+  copy->colonLoc = ast->colonLoc;
+
+  auto typeSpecifierListCtx = DeclSpecs{rewrite.unit_};
+  for (auto typeSpecifierList = &copy->typeSpecifierList;
+       auto node : ListView{ast->typeSpecifierList}) {
+    auto value = rewrite.specifier(node);
+    *typeSpecifierList = make_list_node(arena(), value);
+    typeSpecifierList = &(*typeSpecifierList)->next;
+    typeSpecifierListCtx.accept(value);
+  }
+  typeSpecifierListCtx.finish();
+
+  copy->emicolonLoc = ast->emicolonLoc;
+  copy->symbol = rewrite.remapSymbol(ast->symbol);
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(FunctionDefinitionAST* ast)
+    -> DeclarationAST* {
+  auto copy = FunctionDefinitionAST::create(arena());
+  auto functionTemplateHead = templateHead;
+  if (!functionTemplateHead) {
+    auto patternFunction = symbol_cast<FunctionSymbol>(ast->symbol);
+    functionTemplateHead = rewrite.rewriteMemberTemplateHead(patternFunction);
+  }
+
+  for (auto attributeList = &copy->attributeList;
+       auto node : ListView{ast->attributeList}) {
+    auto value = rewrite.attributeSpecifier(node);
+    *attributeList = make_list_node(arena(), value);
+    attributeList = &(*attributeList)->next;
+  }
+
+  auto declSpecifierListCtx = DeclSpecs{rewrite.unit_};
+  declSpecifierListCtx.templateHead = functionTemplateHead;
+  for (auto declSpecifierList = &copy->declSpecifierList;
+       auto node : ListView{ast->declSpecifierList}) {
+    auto value = rewrite.specifier(node);
+    *declSpecifierList = make_list_node(arena(), value);
+    declSpecifierList = &(*declSpecifierList)->next;
+    declSpecifierListCtx.accept(value);
+  }
+  declSpecifierListCtx.finish();
+
+  const auto pendingExceptionSpecifierMark =
+      rewrite.pendingExceptionSpecifierMark();
+  copy->declarator = rewrite.declarator(ast->declarator);
+
+  auto declaratorDecl = Decl{declSpecifierListCtx, copy->declarator};
+  auto declaratorType = getDeclaratorType(translationUnit(), copy->declarator,
+                                          declSpecifierListCtx.type());
+
+  copy->requiresClause = rewrite.requiresClause(ast->requiresClause);
+  declaratorDecl.trailingRequiresClause = copy->requiresClause;
+
+  const bool isTemplateInstantiation =
+      ast->symbol && ast->symbol->templateDeclaration() &&
+      rewrite.binder().instantiatingSymbol() == ast->symbol;
+
+  auto _ = Binder::ScopeGuard{binder()};
+
+  auto declaratorScope = declaratorDecl.getScope();
+  if (auto remappedScope =
+          symbol_cast<ScopeSymbol>(rewrite.remapSymbol(declaratorScope))) {
+    declaratorScope = remappedScope;
+  }
+  const auto isOutOfClassMemberDef =
+      declaratorScope && declaratorScope->isClass();
+  if (declaratorScope) binder()->setScope(declaratorScope);
+
+  const bool isFunctionTemplateSpecialization =
+      rewrite.instantiatingFunctionTemplateSpecialization_;
+  rewrite.instantiatingFunctionTemplateSpecialization_ = false;
+
+  FunctionSymbol* functionSymbol = nullptr;
+  if ((!isTemplateInstantiation || isOutOfClassMemberDef) &&
+      !isFunctionTemplateSpecialization) {
+    functionSymbol = binder()->getFunction(
+        binder()->scope(), declaratorDecl.getName(), declaratorType,
+        functionTemplateHead, copy->requiresClause);
+  }
+  if (!functionSymbol) {
+    const bool addSymbolToParentScope =
+        !isFunctionTemplateSpecialization && !isTemplateInstantiation;
+    functionSymbol = binder()->declareFunction(copy->declarator, declaratorDecl,
+                                               addSymbolToParentScope);
+  }
+
+  if (ast->symbol && ast->symbol->isFriend()) functionSymbol->setFriend(true);
+
+  if (ast->symbol && ast->symbol->isInline()) functionSymbol->setInline(true);
+
+  if (ast->symbol && ast->symbol->isStatic()) functionSymbol->setStatic(true);
+
+  if (ast->symbol && ast->symbol->isConsteval())
+    functionSymbol->setConsteval(true);
+
+  if (ast->symbol && ast->symbol->isConstexpr())
+    functionSymbol->setConstexpr(true);
+
+  if (isOutOfClassMemberDef) {
+    functionSymbol->setDefined(true);
+    if (auto canon = functionSymbol->canonical(); canon != functionSymbol) {
+      canon->setDefinition(functionSymbol);
+    }
+  }
+
+  auto functionDeclarator = getFunctionPrototype(copy->declarator);
+
+  if (auto params = functionDeclarator->parameterDeclarationClause) {
+    auto newParams = params->functionParametersSymbol;
+    if (auto oldParams = functionSymbol->functionParameters()) {
+      auto& oldMembers = oldParams->members();
+      auto& newMembers = newParams->members();
+      auto n = std::min(oldMembers.size(), newMembers.size());
+      for (std::size_t i = 0; i < n; ++i) {
+        auto oldParam = symbol_cast<ParameterSymbol>(oldMembers[i]);
+        auto newParam = symbol_cast<ParameterSymbol>(newMembers[i]);
+        if (oldParam && newParam && oldParam->defaultArgument() &&
+            !newParam->defaultArgument()) {
+          newParam->setDefaultArgument(oldParam->defaultArgument());
+        }
+      }
+
+      functionSymbol->replaceSymbol(oldParams, newParams);
+      newParams->setParent(functionSymbol);
+    } else {
+      functionSymbol->addSymbol(newParams);
+    }
+    binder()->setScope(newParams);
+  } else {
+    binder()->setScope(functionSymbol);
+  }
+
+  copy->symbol = functionSymbol;
+  copy->symbol->setDeclaration(copy);
+  if (functionTemplateHead && !functionTemplateHead->declaration) {
+    functionTemplateHead->declaration = copy;
+  }
+
+  rewrite.associatePendingExceptionSpecifiers(
+      pendingExceptionSpecifierMark, functionSymbol,
+      symbol_cast<FunctionSymbol>(ast->symbol),
+      functionDeclarator->exceptionSpecifier,
+      [this, copy, functionSymbol, baseType = declSpecifierListCtx.type()] {
+        auto type = getDeclaratorType(rewrite.translationUnit(),
+                                      copy->declarator, baseType);
+        functionSymbol->setType(type);
+      });
+
+  if (ast_cast<DefaultFunctionBodyAST>(ast->functionBody))
+    functionSymbol->setDefaulted(true);
+  if (ast_cast<DeleteFunctionBodyAST>(ast->functionBody))
+    functionSymbol->setDeleted(true);
+
+  if (ast->symbol) functionSymbol->setAbiTags(ast->symbol->abiTagList());
+
+  if (ast->symbol && ast->symbol->templateDeclaration() &&
+      (!isOutOfClassMemberDef || isFunctionTemplateSpecialization)) {
+    auto instSym =
+        symbol_cast<FunctionSymbol>(rewrite.binder().instantiatingSymbol());
+    auto primaryForThis = ast->symbol->canonical();
+    if (instSym && (instSym == ast->symbol || instSym == primaryForThis ||
+                    instSym->canonical() == primaryForThis ||
+                    (isFunctionTemplateSpecialization &&
+                     instSym->templateDeclaration()))) {
+      instSym->addSpecialization(translationUnit(), rewrite.templateArguments(),
+                                 functionSymbol);
+    }
+  }
+
+  if (!isTemplateInstantiation && !isFunctionTemplateSpecialization) {
+    if (functionTemplateHead) {
+      functionSymbol->setTemplateDeclaration(functionTemplateHead);
+      functionSymbol->setTemplateParameters(functionTemplateHead->symbol);
+    } else if (ast->symbol && ast->symbol->templateParameters()) {
+      functionSymbol->setTemplateDeclaration(
+          ast->symbol->templateDeclaration());
+      functionSymbol->setTemplateParameters(ast->symbol->templateParameters());
+    }
+  }
+
+  if (!rewrite.restrictedToDeclarations()) {
+    if (auto oldFunc = symbol_cast<FunctionSymbol>(ast->symbol)) {
+      auto oldClass = symbol_cast<ClassSymbol>(oldFunc->parent());
+      auto newClass = symbol_cast<ClassSymbol>(functionSymbol->parent());
+      if (oldClass && newClass && oldClass != newClass) {
+        rewrite.remapScopeMembers(oldClass, newClass);
+      }
+
+      if (auto oldParams = oldFunc->functionParameters()) {
+        if (auto newParams = functionSymbol->functionParameters()) {
+          rewrite.remapFunctionParameters(getFunctionPrototype(ast->declarator),
+                                          functionDeclarator, oldParams,
+                                          newParams);
+        }
+      }
+    }
+
+    copy->functionBody = rewrite.functionBody(ast->functionBody);
+
+    binder()->synthesizeCompleteObjectCtor(functionSymbol);
+
+    if (auto compoundBody =
+            ast_cast<CompoundStatementFunctionBodyAST>(copy->functionBody)) {
+      rewrite.checkMemInitializers(functionSymbol, compoundBody);
+      binder()->finishAutoReturnType(functionSymbol);
+    }
+
+    binder()->synthesizeDefaultedMemberBody(functionSymbol);
+    validateCompletedInstantiation(rewrite.unit_, functionSymbol, copy);
+  }
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(TemplateDeclarationAST* ast)
+    -> DeclarationAST* {
+  auto _ = Binder::ScopeGuard{binder()};
+  auto copy = rewrite.rewriteTemplateHead(ast);
+  auto savedPatternHead =
+      std::exchange(rewrite.currentTemplatePatternHead_, ast);
+  auto savedTemplateHead = std::exchange(rewrite.currentTemplateHead_, copy);
+  copy->declaration = rewrite.declaration(ast->declaration, copy);
+  rewrite.currentTemplateHead_ = savedTemplateHead;
+  rewrite.currentTemplatePatternHead_ = savedPatternHead;
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(ConceptDefinitionAST* ast)
+    -> DeclarationAST* {
+  auto copy = ConceptDefinitionAST::create(arena());
+
+  copy->conceptLoc = ast->conceptLoc;
+  copy->identifierLoc = ast->identifierLoc;
+  copy->equalLoc = ast->equalLoc;
+  copy->expression = rewrite.unevaluatedExpression(ast->expression);
+  copy->semicolonLoc = ast->semicolonLoc;
+  copy->identifier = ast->identifier;
+  copy->symbol = ast->symbol;
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(DeductionGuideAST* ast)
+    -> DeclarationAST* {
+  auto copy = DeductionGuideAST::create(arena());
+
+  copy->explicitSpecifier = rewrite.specifier(ast->explicitSpecifier);
+  copy->identifierLoc = ast->identifierLoc;
+  copy->lparenLoc = ast->lparenLoc;
+  copy->parameterDeclarationClause =
+      rewrite.parameterDeclarationClause(ast->parameterDeclarationClause);
+  copy->rparenLoc = ast->rparenLoc;
+  copy->arrowLoc = ast->arrowLoc;
+  copy->templateId =
+      ast_cast<SimpleTemplateIdAST>(rewrite.unqualifiedId(ast->templateId));
+  copy->semicolonLoc = ast->semicolonLoc;
+  copy->identifier = ast->identifier;
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(ExplicitInstantiationAST* ast)
+    -> DeclarationAST* {
+  auto copy = ExplicitInstantiationAST::create(arena());
+
+  copy->externLoc = ast->externLoc;
+  copy->templateLoc = ast->templateLoc;
+  copy->declaration = rewrite.declaration(ast->declaration);
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(ExportDeclarationAST* ast)
+    -> DeclarationAST* {
+  auto copy = ExportDeclarationAST::create(arena());
+
+  copy->exportLoc = ast->exportLoc;
+  copy->declaration = rewrite.declaration(ast->declaration);
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(
+    ExportCompoundDeclarationAST* ast) -> DeclarationAST* {
+  auto copy = ExportCompoundDeclarationAST::create(arena());
+
+  copy->exportLoc = ast->exportLoc;
+  copy->lbraceLoc = ast->lbraceLoc;
+
+  for (auto declarationList = &copy->declarationList;
+       auto node : ListView{ast->declarationList}) {
+    auto value = rewrite.declaration(node);
+    *declarationList = make_list_node(arena(), value);
+    declarationList = &(*declarationList)->next;
+  }
+
+  copy->rbraceLoc = ast->rbraceLoc;
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(LinkageSpecificationAST* ast)
+    -> DeclarationAST* {
+  auto copy = LinkageSpecificationAST::create(arena());
+
+  copy->externLoc = ast->externLoc;
+  copy->stringliteralLoc = ast->stringliteralLoc;
+  copy->lbraceLoc = ast->lbraceLoc;
+
+  for (auto declarationList = &copy->declarationList;
+       auto node : ListView{ast->declarationList}) {
+    auto value = rewrite.declaration(node);
+    *declarationList = make_list_node(arena(), value);
+    declarationList = &(*declarationList)->next;
+  }
+
+  copy->rbraceLoc = ast->rbraceLoc;
+  copy->stringLiteral = ast->stringLiteral;
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(NamespaceDefinitionAST* ast)
+    -> DeclarationAST* {
+  auto copy = NamespaceDefinitionAST::create(arena());
+
+  copy->inlineLoc = ast->inlineLoc;
+  copy->namespaceLoc = ast->namespaceLoc;
+
+  for (auto attributeList = &copy->attributeList;
+       auto node : ListView{ast->attributeList}) {
+    auto value = rewrite.attributeSpecifier(node);
+    *attributeList = make_list_node(arena(), value);
+    attributeList = &(*attributeList)->next;
+  }
+
+  for (auto nestedNamespaceSpecifierList = &copy->nestedNamespaceSpecifierList;
+       auto node : ListView{ast->nestedNamespaceSpecifierList}) {
+    auto value = rewrite.nestedNamespaceSpecifier(node);
+    *nestedNamespaceSpecifierList = make_list_node(arena(), value);
+    nestedNamespaceSpecifierList = &(*nestedNamespaceSpecifierList)->next;
+  }
+
+  copy->identifierLoc = ast->identifierLoc;
+
+  for (auto extraAttributeList = &copy->extraAttributeList;
+       auto node : ListView{ast->extraAttributeList}) {
+    auto value = rewrite.attributeSpecifier(node);
+    *extraAttributeList = make_list_node(arena(), value);
+    extraAttributeList = &(*extraAttributeList)->next;
+  }
+
+  copy->lbraceLoc = ast->lbraceLoc;
+
+  for (auto declarationList = &copy->declarationList;
+       auto node : ListView{ast->declarationList}) {
+    auto value = rewrite.declaration(node);
+    *declarationList = make_list_node(arena(), value);
+    declarationList = &(*declarationList)->next;
+  }
+
+  copy->rbraceLoc = ast->rbraceLoc;
+  copy->identifier = ast->identifier;
+  copy->isInline = ast->isInline;
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(EmptyDeclarationAST* ast)
+    -> DeclarationAST* {
+  auto copy = EmptyDeclarationAST::create(arena());
+
+  copy->semicolonLoc = ast->semicolonLoc;
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(AttributeDeclarationAST* ast)
+    -> DeclarationAST* {
+  auto copy = AttributeDeclarationAST::create(arena());
+
+  for (auto attributeList = &copy->attributeList;
+       auto node : ListView{ast->attributeList}) {
+    auto value = rewrite.attributeSpecifier(node);
+    *attributeList = make_list_node(arena(), value);
+    attributeList = &(*attributeList)->next;
+  }
+
+  copy->semicolonLoc = ast->semicolonLoc;
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(
+    ModuleImportDeclarationAST* ast) -> DeclarationAST* {
+  auto copy = ModuleImportDeclarationAST::create(arena());
+
+  copy->importLoc = ast->importLoc;
+  copy->importName = rewrite.importName(ast->importName);
+
+  for (auto attributeList = &copy->attributeList;
+       auto node : ListView{ast->attributeList}) {
+    auto value = rewrite.attributeSpecifier(node);
+    *attributeList = make_list_node(arena(), value);
+    attributeList = &(*attributeList)->next;
+  }
+
+  copy->semicolonLoc = ast->semicolonLoc;
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(ParameterDeclarationAST* ast)
+    -> DeclarationAST* {
+  auto copy = ParameterDeclarationAST::create(arena());
+
+  for (auto attributeList = &copy->attributeList;
+       auto node : ListView{ast->attributeList}) {
+    auto value = rewrite.attributeSpecifier(node);
+    *attributeList = make_list_node(arena(), value);
+    attributeList = &(*attributeList)->next;
+  }
+
+  copy->thisLoc = ast->thisLoc;
+
+  auto typeSpecifierListCtx = DeclSpecs{rewrite.unit_};
+  for (auto typeSpecifierList = &copy->typeSpecifierList;
+       auto node : ListView{ast->typeSpecifierList}) {
+    auto value = rewrite.specifier(node);
+    *typeSpecifierList = make_list_node(arena(), value);
+    typeSpecifierList = &(*typeSpecifierList)->next;
+    typeSpecifierListCtx.accept(value);
+  }
+  typeSpecifierListCtx.finish();
+
+  const auto pendingExceptionSpecifierMark =
+      rewrite.pendingExceptionSpecifierMark();
+  copy->declarator = rewrite.declarator(ast->declarator);
+
+  auto declaratorDecl = Decl{typeSpecifierListCtx, copy->declarator};
+  auto declaratorType = getDeclaratorType(translationUnit(), copy->declarator,
+                                          typeSpecifierListCtx.type());
+  copy->type = declaratorType;
+  copy->equalLoc = ast->equalLoc;
+  copy->identifier = ast->identifier;
+  copy->isThisIntroduced = ast->isThisIntroduced;
+  copy->isPack = ast->isPack;
+
+  const bool inTemplateParameters = binder()->scope()->isTemplateParameters();
+
+  copy->expression = rewrite.expression(ast->expression);
+
+  binder()->bind(copy, declaratorDecl, inTemplateParameters);
+
+  ParameterSymbol* parameter = nullptr;
+  if (!binder()->scope()->members().empty())
+    parameter =
+        symbol_cast<ParameterSymbol>(binder()->scope()->members().back());
+
+  rewrite.associatePendingExceptionSpecifiers(
+      pendingExceptionSpecifierMark, nullptr, nullptr, nullptr,
+      [this, copy, parameter, baseType = typeSpecifierListCtx.type()] {
+        copy->type = getDeclaratorType(rewrite.translationUnit(),
+                                       copy->declarator, baseType);
+        if (parameter) parameter->setType(copy->type);
+      });
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(AccessDeclarationAST* ast)
+    -> DeclarationAST* {
+  auto copy = AccessDeclarationAST::create(arena());
+
+  copy->accessLoc = ast->accessLoc;
+  copy->colonLoc = ast->colonLoc;
+  copy->accessSpecifier = ast->accessSpecifier;
+
+  binder()->setCurrentAccessSpecifier(toAccessSpecifier(
+      copy->accessSpecifier, binder()->defaultAccessSpecifier()));
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(ForRangeDeclarationAST* ast)
+    -> DeclarationAST* {
+  auto copy = ForRangeDeclarationAST::create(arena());
+
+  return copy;
+}
+
+auto ASTRewriter::DeclarationVisitor::operator()(
+    StructuredBindingDeclarationAST* ast) -> DeclarationAST* {
+  auto copy = StructuredBindingDeclarationAST::create(arena());
+
+  for (auto attributeList = &copy->attributeList;
+       auto node : ListView{ast->attributeList}) {
+    auto value = rewrite.attributeSpecifier(node);
+    *attributeList = make_list_node(arena(), value);
+    attributeList = &(*attributeList)->next;
+  }
+
+  auto declSpecifierListCtx = DeclSpecs{rewrite.unit_};
+  for (auto declSpecifierList = &copy->declSpecifierList;
+       auto node : ListView{ast->declSpecifierList}) {
+    auto value = rewrite.specifier(node);
+    *declSpecifierList = make_list_node(arena(), value);
+    declSpecifierList = &(*declSpecifierList)->next;
+    declSpecifierListCtx.accept(value);
+  }
+  declSpecifierListCtx.finish();
+
+  copy->refQualifierLoc = ast->refQualifierLoc;
+  copy->lbracketLoc = ast->lbracketLoc;
+
+  for (auto bindingList = &copy->bindingList;
+       auto node : ListView{ast->bindingList}) {
+    auto value = rewrite.unqualifiedId(node);
+    *bindingList = make_list_node(arena(), ast_cast<NameIdAST>(value));
+    bindingList = &(*bindingList)->next;
+  }
+
+  copy->rbracketLoc = ast->rbracketLoc;
+  copy->initializer = rewrite.expression(ast->initializer);
+  copy->semicolonLoc = ast->semicolonLoc;
+
+  rewrite.binder().bindStructuredBindings(copy, declSpecifierListCtx);
+
+  rewrite.remapStructuredBindingSymbols(ast, copy);
+
+  return copy;
+}
+
+auto ASTRewriter::TemplateParameterVisitor::operator()(
+    TemplateTypeParameterAST* ast) -> TemplateParameterAST* {
+  auto copy = TemplateTypeParameterAST::create(arena());
+
+  copy->depth = ast->depth;
+  copy->index = ast->index;
+  copy->templateLoc = ast->templateLoc;
+  copy->lessLoc = ast->lessLoc;
+
+  {
+    auto _ = Binder::ScopeGuard{binder()};
+    auto parameters = control()->newTemplateParametersSymbol(binder()->scope(),
+                                                             ast->templateLoc);
+    binder()->setScope(parameters);
+
+    for (auto templateParameterList = &copy->templateParameterList;
+         auto node : ListView{ast->templateParameterList}) {
+      auto value = rewrite.templateParameter(node);
+      *templateParameterList = make_list_node(arena(), value);
+      templateParameterList = &(*templateParameterList)->next;
+    }
+
+    copy->requiresClause = rewrite.requiresClause(ast->requiresClause);
+  }
+
+  copy->greaterLoc = ast->greaterLoc;
+  copy->classKeyLoc = ast->classKeyLoc;
+  copy->ellipsisLoc = ast->ellipsisLoc;
+  copy->identifierLoc = ast->identifierLoc;
+  copy->equalLoc = ast->equalLoc;
+  copy->identifier = ast->identifier;
+  copy->isPack = ast->isPack;
+
+  binder()->bind(copy, copy->index, copy->depth);
+  rewrite.addSymbolRemap(ast->symbol, copy->symbol);
+
+  copy->idExpression =
+      ast_cast<IdExpressionAST>(rewrite.expression(ast->idExpression));
+
+  return copy;
+}
+
+auto ASTRewriter::TemplateParameterVisitor::operator()(
+    NonTypeTemplateParameterAST* ast) -> TemplateParameterAST* {
+  auto copy = NonTypeTemplateParameterAST::create(arena());
+
+  copy->depth = ast->depth;
+  copy->index = ast->index;
+  copy->declaration =
+      ast_cast<ParameterDeclarationAST>(rewrite.declaration(ast->declaration));
+
+  binder()->bind(copy, copy->index, copy->depth);
+  rewrite.addSymbolRemap(ast->symbol, copy->symbol);
+
+  return copy;
+}
+
+auto ASTRewriter::TemplateParameterVisitor::operator()(
+    TypenameTypeParameterAST* ast) -> TemplateParameterAST* {
+  auto copy = TypenameTypeParameterAST::create(arena());
+
+  copy->depth = ast->depth;
+  copy->index = ast->index;
+  copy->classKeyLoc = ast->classKeyLoc;
+  copy->ellipsisLoc = ast->ellipsisLoc;
+  copy->identifierLoc = ast->identifierLoc;
+  copy->equalLoc = ast->equalLoc;
+  copy->typeId = rewrite.typeId(ast->typeId);
+  copy->identifier = ast->identifier;
+  copy->isPack = ast->isPack;
+
+  binder()->bind(copy, copy->index, copy->depth);
+  rewrite.addSymbolRemap(ast->symbol, copy->symbol);
+
+  return copy;
+}
+
+auto ASTRewriter::TemplateParameterVisitor::operator()(
+    ConstraintTypeParameterAST* ast) -> TemplateParameterAST* {
+  auto copy = ConstraintTypeParameterAST::create(arena());
+
+  copy->depth = ast->depth;
+  copy->index = ast->index;
+  copy->typeConstraint = rewrite.typeConstraint(ast->typeConstraint);
+  copy->ellipsisLoc = ast->ellipsisLoc;
+  copy->identifierLoc = ast->identifierLoc;
+  copy->equalLoc = ast->equalLoc;
+  copy->typeId = rewrite.typeId(ast->typeId);
+  copy->identifier = ast->identifier;
+
+  binder()->bind(copy, copy->index, copy->depth);
+  rewrite.addSymbolRemap(ast->symbol, copy->symbol);
+
+  return copy;
+}
+
+auto ASTRewriter::FunctionBodyVisitor::operator()(DefaultFunctionBodyAST* ast)
+    -> FunctionBodyAST* {
+  auto copy = DefaultFunctionBodyAST::create(arena());
+
+  copy->equalLoc = ast->equalLoc;
+  copy->defaultLoc = ast->defaultLoc;
+  copy->semicolonLoc = ast->semicolonLoc;
+
+  return copy;
+}
+
+auto ASTRewriter::FunctionBodyVisitor::operator()(
+    CompoundStatementFunctionBodyAST* ast) -> FunctionBodyAST* {
+  auto copy = CompoundStatementFunctionBodyAST::create(arena());
+
+  copy->colonLoc = ast->colonLoc;
+
+  copy->memInitializerList =
+      rewrite.rewriteMemInitializerList(ast->memInitializerList);
+
+  copy->statement =
+      ast_cast<CompoundStatementAST>(rewrite.statement(ast->statement));
+
+  return copy;
+}
+
+auto ASTRewriter::FunctionBodyVisitor::operator()(
+    TryStatementFunctionBodyAST* ast) -> FunctionBodyAST* {
+  auto copy = TryStatementFunctionBodyAST::create(arena());
+
+  copy->tryLoc = ast->tryLoc;
+  copy->colonLoc = ast->colonLoc;
+
+  copy->memInitializerList =
+      rewrite.rewriteMemInitializerList(ast->memInitializerList);
+
+  copy->statement =
+      ast_cast<CompoundStatementAST>(rewrite.statement(ast->statement));
+
+  for (auto handlerList = &copy->handlerList;
+       auto node : ListView{ast->handlerList}) {
+    auto value = rewrite.handler(node);
+    *handlerList = make_list_node(arena(), value);
+    handlerList = &(*handlerList)->next;
+  }
+
+  return copy;
+}
+
+auto ASTRewriter::FunctionBodyVisitor::operator()(DeleteFunctionBodyAST* ast)
+    -> FunctionBodyAST* {
+  auto copy = DeleteFunctionBodyAST::create(arena());
+
+  copy->equalLoc = ast->equalLoc;
+  copy->deleteLoc = ast->deleteLoc;
+  copy->semicolonLoc = ast->semicolonLoc;
+
+  return copy;
+}
+
+auto ASTRewriter::RequirementVisitor::operator()(SimpleRequirementAST* ast)
+    -> RequirementAST* {
+  auto copy = SimpleRequirementAST::create(arena());
+
+  copy->expression = rewrite.unevaluatedExpression(ast->expression);
+  copy->semicolonLoc = ast->semicolonLoc;
+
+  return copy;
+}
+
+auto ASTRewriter::RequirementVisitor::operator()(CompoundRequirementAST* ast)
+    -> RequirementAST* {
+  auto copy = CompoundRequirementAST::create(arena());
+
+  copy->lbraceLoc = ast->lbraceLoc;
+  copy->expression = rewrite.unevaluatedExpression(ast->expression);
+  copy->rbraceLoc = ast->rbraceLoc;
+  copy->noexceptLoc = ast->noexceptLoc;
+  copy->minusGreaterLoc = ast->minusGreaterLoc;
+  copy->typeConstraint = rewrite.typeConstraint(ast->typeConstraint);
+  copy->semicolonLoc = ast->semicolonLoc;
+
+  return copy;
+}
+
+auto ASTRewriter::RequirementVisitor::operator()(TypeRequirementAST* ast)
+    -> RequirementAST* {
+  auto copy = TypeRequirementAST::create(arena());
+
+  copy->typenameLoc = ast->typenameLoc;
+  copy->nestedNameSpecifier =
+      rewrite.nestedNameSpecifier(ast->nestedNameSpecifier);
+  copy->templateLoc = ast->templateLoc;
+  copy->unqualifiedId = rewrite.unqualifiedId(ast->unqualifiedId);
+  copy->semicolonLoc = ast->semicolonLoc;
+  copy->isTemplateIntroduced = ast->isTemplateIntroduced;
+
+  return copy;
+}
+
+auto ASTRewriter::RequirementVisitor::operator()(NestedRequirementAST* ast)
+    -> RequirementAST* {
+  auto copy = NestedRequirementAST::create(arena());
+
+  copy->requiresLoc = ast->requiresLoc;
+  copy->expression = rewrite.unevaluatedExpression(ast->expression);
+  copy->semicolonLoc = ast->semicolonLoc;
+
+  return copy;
+}
+}  // namespace cxx
