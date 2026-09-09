@@ -117,6 +117,30 @@ std::optional<QByteArray> rawStringDelimiter(QByteArrayView text)
     return QByteArray(text.mid(quote + 1, paren - quote - 1));
 }
 
+// One past \a what, searching from \a from, or -1.
+qsizetype afterMatch(QByteArrayView text, QByteArrayView what, qsizetype from)
+{
+    const qsizetype at = text.indexOf(what, from);
+    return at < 0 ? -1 : at + what.size();
+}
+
+// One past the end of a raw string whose delimiter is not known: the first
+// quote that follows a closing parenthesis, which is the rule the built-in
+// lexer uses when it has nothing better. It ends "...)..." on the ", so a
+// literal whose body contains a parenthesis and a quote ends early -- and
+// that is the answer the callers already read.
+qsizetype looseRawStringEnd(QByteArrayView text, qsizetype from)
+{
+    bool passedParen = false;
+    for (qsizetype i = from; i < text.size(); ++i) {
+        if (text[i] == ')')
+            passedParen = true;
+        else if (passedParen && text[i] == '"')
+            return i + 1;
+    }
+    return -1;
+}
+
 int stringLiteralKind(QByteArrayView text, bool raw)
 {
     const QByteArrayView prefix = text.left(text.indexOf(raw ? 'R' : '"'));
@@ -408,7 +432,13 @@ void CxxFrontendLexerRun::recordEndState(int kind, QByteArrayView text)
     } else if (isRawString(kind)) {
         if (literalEnd(text, '"', true) < 0) {
             m_state.kind = kind;
-            m_expectedRawStringSuffix = rawStringDelimiter(text).value_or(QByteArray());
+            // The terminator this literal is waiting for, ")delim", rather
+            // than the delimiter on its own. That is what SimpleLexer reports
+            // and what a caller carrying it from one line to the next reads:
+            // the highlighter uses it both to tell that the next line
+            // continues a raw string and to find the closing delimiter in it.
+            if (const std::optional<QByteArray> delimiter = rawStringDelimiter(text))
+                m_expectedRawStringSuffix = ')' + *delimiter + '"';
         }
     } else if (kind >= T_FIRST_STRING_LITERAL && kind <= T_LAST_STRING_LITERAL) {
         if (literalEnd(text, '"', false) < 0)
@@ -473,10 +503,14 @@ qsizetype CxxFrontendLexerRun::resumeUnfinishedToken(ResumeState resume, Tokens 
         // unless the chunk is spliced again.
         finished = !m_bytes.endsWith('\\');
     } else if (isRawString(resume.kind)) {
-        const QByteArray terminator = ')' + m_expectedRawStringSuffix + '"';
-        const qsizetype close = m_bytes.indexOf(terminator, begin);
+        // The terminator the caller carried over. Without one -- a caller can
+        // resume knowing only that a raw string is open -- the built-in lexer
+        // falls back to matching a ')' and, after it, a '"', and so does this.
+        const qsizetype close = m_expectedRawStringSuffix.isEmpty()
+                                    ? looseRawStringEnd(m_bytes, begin)
+                                    : afterMatch(m_bytes, m_expectedRawStringSuffix, begin);
         if (close >= 0) {
-            end = close + terminator.size();
+            end = close;
             finished = true;
         }
     } else {

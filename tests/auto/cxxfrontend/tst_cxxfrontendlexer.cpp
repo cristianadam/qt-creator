@@ -62,24 +62,36 @@ QStringList describe(const Tokens &tokens)
     return result;
 }
 
-// Drives a lexer the way the highlighter does: one line at a time, carrying
-// the state and the pending raw string delimiter across.
+// Drives a lexer the way the highlighter does: a lexer per line, with the
+// state and the pending raw string terminator carried across by the caller,
+// which is what CppHighlighter keeps in the block's data. Not one lexer kept
+// alive, because then a lexer could carry something across that it never
+// reported, and the caller reading the same code from its own state would get
+// something else -- which is exactly what happened.
 template<typename LexerType>
 QStringList lexByLine(const QString &text, LanguageFeatures features)
 {
-    LexerType lexer;
-    lexer.setLanguageFeatures(features);
-
     QStringList result;
     int state = 0;
+    QByteArray rawStringSuffix;
+
     for (const QString &line : text.split('\n')) {
-        lexer.setExpectedRawStringSuffix(lexer.expectedRawStringSuffix());
+        LexerType lexer;
+        lexer.setLanguageFeatures(features);
+        lexer.setExpectedRawStringSuffix(rawStringSuffix);
+
         const Tokens tokens = lexer(line, state);
         state = lexer.state();
+        rawStringSuffix = lexer.expectedRawStringSuffix();
+
         result.append(describe(tokens));
-        result.append(QString("| state %1%2")
+        // The terminator is part of the answer, not scratch space: the
+        // highlighter reads it to know that the next line continues a raw
+        // string, and formats the closing delimiter from it.
+        result.append(QString("| state %1%2 suffix %3")
                           .arg(state)
-                          .arg(lexer.endedJoined() ? " joined" : ""));
+                          .arg(lexer.endedJoined() ? " joined" : "")
+                          .arg(QString::fromUtf8(rawStringSuffix)));
     }
     return result;
 }
@@ -212,6 +224,13 @@ void tst_cxxfrontendlexer::resumedSnippets_data()
     QTest::newRow("spliced string") << "auto a = \"one \\\ntwo\"; int b;";
     QTest::newRow("trailing backslash") << "int a \\\n= 1;";
     QTest::newRow("comment then code") << "/* c */ int x;\nint y;";
+    // What the highlighter's own test case is made of, and what the corpora
+    // have none of: a blank line inside a raw string, a line of one that
+    // looks like it opens another, and a quote in the middle of one.
+    QTest::newRow("blank line in a raw string") << "auto a = R\"(one\n\ntwo)\";";
+    QTest::newRow("raw string looking like a prefix")
+        << "auto a = R\"(foo\n\n        R\"notaprefix!(\n    barfoobar)\";";
+    QTest::newRow("quote inside a raw string") << "auto a = uR\"(\"o\n     ne\")\"_w;";
 }
 
 void tst_cxxfrontendlexer::resumedSnippets()
