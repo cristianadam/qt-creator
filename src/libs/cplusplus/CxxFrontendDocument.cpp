@@ -444,18 +444,38 @@ cxx::Symbol *CxxFrontendDocument::Private::resolvedSymbolAt(int line, int column
     if (!location || !unit.ast())
         return nullptr;
 
-    // The parser wrote the answer onto the id-expression it resolved, so the
-    // question is only which id-expression is at this token.
+    // The parser wrote the answer onto the node it resolved, so the question
+    // is only which node is at this token. Every node that names something
+    // and knows what it named has the same two members, whether the name was
+    // used as a value, a type or a base to initialize.
+    const auto resolved = [&](auto *node) -> cxx::Symbol * {
+        if (!node || !node->unqualifiedId)
+            return nullptr;
+        if (node->unqualifiedId->firstSourceLocation() != location)
+            return nullptr;
+        return node->symbol;
+    };
+
     for (cxx::ASTCursor cursor(unit.ast(), "unit"); cursor; ++cursor) {
-        auto *node = std::get_if<cxx::AST *>(&(*cursor).node);
-        if (!node || !*node)
+        auto *slot = std::get_if<cxx::AST *>(&(*cursor).node);
+        if (!slot || !*slot)
             continue;
-        auto *idExpression = dynamic_cast<cxx::IdExpressionAST *>(*node);
-        if (!idExpression || !idExpression->unqualifiedId)
-            continue;
-        if (idExpression->unqualifiedId->firstSourceLocation() != location)
-            continue;
-        return idExpression->symbol;
+        cxx::AST *node = *slot;
+
+        if (auto *symbol = resolved(dynamic_cast<cxx::IdExpressionAST *>(node)))
+            return symbol;
+        if (auto *symbol = resolved(dynamic_cast<cxx::MemberExpressionAST *>(node)))
+            return symbol;
+        if (auto *symbol = resolved(dynamic_cast<cxx::NamedTypeSpecifierAST *>(node)))
+            return symbol;
+        if (auto *symbol = resolved(dynamic_cast<cxx::ElaboratedTypeSpecifierAST *>(node)))
+            return symbol;
+        if (auto *symbol = resolved(dynamic_cast<cxx::TypenameSpecifierAST *>(node)))
+            return symbol;
+        if (auto *symbol = resolved(dynamic_cast<cxx::ParenMemInitializerAST *>(node)))
+            return symbol;
+        if (auto *symbol = resolved(dynamic_cast<cxx::BracedMemInitializerAST *>(node)))
+            return symbol;
     }
     return nullptr;
 }
@@ -607,6 +627,15 @@ CxxFrontendDocument::Declaration CxxFrontendDocument::declarationAt(int line,
     cxx::Symbol *symbol = d->resolvedSymbolAt(line, column);
     if (!symbol)
         return {};
+
+    // Naming a base in a member initializer resolves to the base-specifier
+    // that established the relationship, which sits in the derived class.
+    // Someone following the name means the class, not the colon it was
+    // mentioned after.
+    if (auto *base = dynamic_cast<cxx::BaseClassSymbol *>(symbol)) {
+        if (cxx::Symbol *target = base->symbol())
+            symbol = target;
+    }
 
     Declaration declaration;
     declaration.name = qualifiedNameOf(symbol);

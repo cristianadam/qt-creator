@@ -253,6 +253,29 @@ void tst_cxxfrontenddocument::declarationAt_data()
         << QString("N::v");
     QTest::newRow("an enumerator")
         << QByteArray("enum E { $A };\nint x = $A;\n") << QString("E::A");
+    QTest::newRow("a member inherited from a base")
+        << QByteArray("struct B { int $m; };\nstruct D : B { void f() { $m = 1; } };\n")
+        << QString("B::m");
+    QTest::newRow("a member inherited two levels up")
+        << QByteArray("struct A { int $m; };\nstruct B : A {};\n"
+                      "struct C : B { void f() { $m = 1; } };\n")
+        << QString("A::m");
+    QTest::newRow("a name brought in by a using declaration")
+        << QByteArray("namespace N { int $v; }\nusing N::v;\nvoid f() { $v = 1; }\n")
+        << QString("N::v");
+    QTest::newRow("a name found through a using directive")
+        << QByteArray("namespace N { int $v; }\nusing namespace N;\nvoid f() { $v = 1; }\n")
+        << QString("N::v");
+    QTest::newRow("a type name")
+        << QByteArray("struct $S {};\nvoid f() { $S s; }\n") << QString("S");
+    QTest::newRow("a member through a pointer")
+        << QByteArray("struct S { int $m; };\nvoid f(S *s) { s->$m = 1; }\n")
+        << QString("S::m");
+    QTest::newRow("a base in a member initializer")
+        << QByteArray("struct $B { B(int); };\nstruct D : B { D() : $B(1) {} };\n")
+        << QString("B");
+    QTest::newRow("an elaborated type")
+        << QByteArray("struct $S {};\nvoid f(struct $S *s);\n") << QString("S");
     QTest::newRow("the second use of the same name")
         << QByteArray("int $g;\nvoid f() { g = 1; $g = 2; }\n") << QString("g");
 }

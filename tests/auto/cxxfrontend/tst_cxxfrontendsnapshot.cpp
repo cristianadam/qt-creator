@@ -387,10 +387,17 @@ void tst_cxxfrontendsnapshot::aLocalNameStillWinsOverAHeader()
 void tst_cxxfrontendsnapshot::unsupportedLookups()
 {
     const QStringList unsupported = CxxFrontendSnapshot::unsupportedLookups();
-    QVERIFY(unsupported.contains("overload resolution"));
-    QVERIFY(unsupported.contains("inherited members"));
-    QVERIFY(unsupported.contains("using"));
+    QVERIFY(unsupported.contains("inherited members across files"));
     QVERIFY(unsupported.contains("qualified names across files"));
+    QVERIFY(unsupported.contains("overload resolution across files"));
+    QVERIFY(unsupported.contains("using across files"));
+
+    // Every one of them is about crossing a file. Inside a file the parser
+    // has already applied the rule, and tst_cxxfrontenddocument says so.
+    for (const QString &entry : unsupported) {
+        QVERIFY2(entry.contains("across") || entry.contains("between"),
+                 qPrintable("not a cross-file limit: " + entry));
+    }
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontendsnapshot)

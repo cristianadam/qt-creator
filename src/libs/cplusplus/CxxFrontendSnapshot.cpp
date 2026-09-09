@@ -185,19 +185,29 @@ CxxFrontendDocument::Declaration CxxFrontendSnapshot::declarationAt(const QStrin
 
 QStringList CxxFrontendSnapshot::unsupportedLookups()
 {
-    // Everything LookupContext does that this does not. Each is a rule about
-    // which declaration a name means, and getting one wrong is worse than
-    // saying nothing, so they are written down rather than approximated.
+    // What crossing a file boundary costs.
+    //
+    // Inside one file the parser has already applied the rules -- inherited
+    // members, using declarations and directives, qualified names, members
+    // through a pointer, overloads -- and declarationAt reads its answer, so
+    // none of that is missing there. tst_cxxfrontenddocument has a case for
+    // each, which is how this list was arrived at rather than guessed.
+    //
+    // Between files there is no such answer, and what is here is a search of
+    // the include closure for a top-level name. Each entry below is a rule
+    // that search does not apply. Answering one of them wrongly is worse than
+    // saying nothing, because a wrong answer sends someone to the wrong line
+    // and looks right doing it.
     return {
-        // Which of several declarations of a name applies where.
-        "overload resolution",
-        // A name a base class declares, seen from a derived one.
-        "inherited members",
-        // using declarations and using directives.
-        "using",
-        // A name reached through a namespace or class prefix, N::x.
+        // A name a base declared in another file, seen from a derived class.
+        "inherited members across files",
+        // N::x, where N is declared elsewhere.
         "qualified names across files",
-        // Which declaration wins when two headers declare the same name.
+        // Which of several declarations in headers a call means.
+        "overload resolution across files",
+        // A using declaration or directive in one file, the name in another.
+        "using across files",
+        // Which header wins when two of them declare the same name.
         "shadowing between headers",
     };
 }
