@@ -165,6 +165,7 @@ private slots:
 
     void reportsDiagnostics();
     void unsupportedQueries();
+    void anOverloadedCallIsNotResolved();
 };
 
 void tst_cxxfrontenddocument::functionAt_data()
@@ -483,6 +484,37 @@ void tst_cxxfrontenddocument::unsupportedQueries()
                                        "<stdin>");
     QVERIFY(document.isValidFor({}));
     QVERIFY(!document.isValidFor({"FEATURE 1"}));
+}
+
+// Which of several functions a call means. The front end resolves a member
+// call to one of the candidates without looking at the arguments, so both of
+// these answer the same, and the answer is right for at most one of them.
+// Written down so that a consumer knows not to ask this about a call -- and
+// as a ratchet: the day the two answers differ, this fails and the limit comes
+// off the list.
+void tst_cxxfrontenddocument::anOverloadedCallIsNotResolved()
+{
+    const QByteArray source =
+        "struct B {\n"
+        "    int f(int) {}\n"
+        "};\n"
+        "class D : public B {\n"
+        "public:\n"
+        "    using B::f;\n"
+        "    double f(double) {}\n"
+        "};\n"
+        "void g(D *pd) {\n"
+        "    pd->f(2);\n"
+        "    pd->f(2.3);\n"
+        "}\n";
+    const CxxFrontendDocument document(QString::fromUtf8(source), "<stdin>");
+
+    const CxxFrontendDocument::Declaration fromInt = document.declarationAt(10, 9);
+    const CxxFrontendDocument::Declaration fromDouble = document.declarationAt(11, 9);
+    QVERIFY(fromInt.isValid());
+    QCOMPARE(fromInt.line, fromDouble.line);
+
+    QVERIFY(CxxFrontendDocument::unsupportedQueries().contains("which overload a call means"));
 }
 
 QTEST_GUILESS_MAIN(tst_cxxfrontenddocument)

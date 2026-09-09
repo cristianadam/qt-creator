@@ -30,6 +30,15 @@ public:
     {
         const QMutexLocker locker(&m_mutex);
         m_snapshots.insert(filePath, snapshot);
+        m_order.removeOne(filePath);
+        m_order.append(filePath);
+
+        // A model holds a document for every file its file includes, which for
+        // one editor is a few thousand of them. Keeping one per file ever
+        // parsed is how a session runs out of memory, so only the last few
+        // stay -- the ones someone is working in.
+        while (m_order.size() > 4)
+            m_snapshots.remove(m_order.takeFirst());
     }
 
     std::shared_ptr<CxxFrontendSnapshot> get(const FilePath &filePath) const
@@ -38,9 +47,17 @@ public:
         return m_snapshots.value(filePath);
     }
 
+    void forget(const FilePath &filePath)
+    {
+        const QMutexLocker locker(&m_mutex);
+        m_snapshots.remove(filePath);
+        m_order.removeOne(filePath);
+    }
+
 private:
     mutable QMutex m_mutex;
     QHash<FilePath, std::shared_ptr<CxxFrontendSnapshot>> m_snapshots;
+    FilePaths m_order;
 };
 
 Models &models()
@@ -132,6 +149,41 @@ void updateCxxFrontendModel(const Snapshot &builtinSnapshot,
 std::shared_ptr<const CxxFrontendSnapshot> cxxFrontendModel(const FilePath &filePath)
 {
     return models().get(filePath);
+}
+
+void forgetCxxFrontendModel(const FilePath &filePath)
+{
+    models().forget(filePath);
+}
+
+Link cxxFrontendFollowSymbol(const FilePath &filePath, int line, int column,
+                             int linkTextStart, int linkTextEnd)
+{
+    const std::shared_ptr<const CxxFrontendSnapshot> model = models().get(filePath);
+    if (!model)
+        return {};
+    const CxxFrontendDocument *document = model->document(filePath.toFSPathString());
+    if (!document)
+        return {};
+
+    // The document rather than the snapshot: what the parser resolved while
+    // reading this file, and not the snapshot's search through the headers.
+    // That search guesses where the language would have rules -- a using
+    // directive, which of two headers declaring the same name wins -- and a
+    // guess that comes back as an answer sends someone to the wrong place with
+    // no sign that anything was guessed. Names it cannot see this way get no
+    // answer here, and the built-in lookup gives them the one it always did.
+    //
+    // The editor counts columns from zero and the model from one.
+    const CxxFrontendDocument::Declaration found = document->declarationAt(line, column + 1);
+    if (!found.isValid())
+        return {};
+
+    // And a link counts from zero again, the way Symbol::toLink() does it.
+    Link link(FilePath::fromUserInput(found.filePath), found.line, found.column - 1);
+    link.linkTextStart = linkTextStart;
+    link.linkTextEnd = linkTextEnd;
+    return link;
 }
 
 } // namespace CppEditor::Internal

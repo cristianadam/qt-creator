@@ -7,6 +7,7 @@
 #include "cppworkingcopy.h"
 
 #include <utils/filepath.h>
+#include <utils/link.h>
 
 #include <memory>
 
@@ -58,5 +59,27 @@ void updateCxxFrontendModel(const CPlusPlus::Snapshot &builtinSnapshot,
 // this returns for as long as the answers are needed.
 std::shared_ptr<const CPlusPlus::CxxFrontendSnapshot> cxxFrontendModel(
     const Utils::FilePath &filePath);
+
+// Drops what was kept for \a filePath, for when its parser lets go of its
+// resources. Only the last few files parsed are kept in any case: a model
+// holds a document per file in the include closure, and one per file ever
+// edited is how a session runs out of memory.
+void forgetCxxFrontendModel(const Utils::FilePath &filePath);
+
+// Where the name at a position was declared, as a link the editor can follow.
+// The first consumer, and a small one on purpose: a link is a file and a
+// place, which is the whole of what the model has to produce.
+//
+// \a line is one-based and \a column zero-based, the way the editor counts.
+// \a linkTextStart and \a linkTextEnd are the extent of the name in the
+// document, which is what gets underlined; the model does not work them out,
+// the caller already has them.
+//
+// An invalid link means the model has nothing to say -- it was never run over
+// this file, or the name is one of the things it cannot resolve
+// (CxxFrontendSnapshot::unsupportedLookups()) -- and then the caller answers
+// the way it did before. So this can only add answers, never change one.
+Utils::Link cxxFrontendFollowSymbol(const Utils::FilePath &filePath, int line, int column,
+                                    int linkTextStart, int linkTextEnd);
 
 } // namespace CppEditor::Internal

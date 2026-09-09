@@ -243,6 +243,10 @@ void BuiltinEditorDocumentParser::releaseResources()
     s.snapshot = Snapshot();
     s.forceSnapshotInvalidation = true;
     setExtraState(s);
+
+#ifdef QTC_WITH_CXX_FRONTEND
+    Internal::forgetCxxFrontendModel(filePath());
+#endif
 }
 
 Document::Ptr BuiltinEditorDocumentParser::document() const

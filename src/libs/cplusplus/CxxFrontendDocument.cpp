@@ -1100,6 +1100,11 @@ QString CxxFrontendDocument::functionAt(int line, int column) const
 QStringList CxxFrontendDocument::unsupportedQueries()
 {
     return {
+        // Which of several functions a call means. The front end resolves a
+        // member call to a candidate without weighing the arguments, so the
+        // answer for an overloaded one can be the wrong declaration -- worse
+        // than none, since it looks like an answer.
+        "which overload a call means",
         // Where each #include is written. Document carries a line for every
         // one of them, which is what the include hierarchy is built from and
         // how anything can be said about an include that is not used; this

@@ -181,4 +181,50 @@ void CxxFrontendModelTest::testWithoutTheProjectsDefines()
     QCOMPARE(parsed.symbolNames(), QStringList("withoutFeature"));
 }
 
+// A link in the units the editor speaks: the cursor is somewhere in a name,
+// one-based line and zero-based column, and the answer has a zero-based column
+// of its own. An off-by-one here sends someone to the wrong character of the
+// right line, which is the kind of wrong that looks right.
+void CxxFrontendModelTest::testFollowsANameToItsDeclaration()
+{
+    const Parsed parsed({{"main.cpp", "int here;\nvoid f() { here = 1; }\n"}}, "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    // "here" is at column 12 counting from one, so 11 from zero, and the
+    // cursor may be anywhere in it or just after it.
+    for (const int column : {11, 13, 15}) {
+        const Link link = cxxFrontendFollowSymbol(parsed.mainFilePath(), 2, column, 100, 110);
+        QVERIFY2(link.hasValidTarget(), qPrintable(QString("column %1").arg(column)));
+        QCOMPARE(link.targetFilePath, parsed.mainFilePath());
+        QCOMPARE(link.target.line, 1);
+        // "int here;" declares it at the fifth character, the fourth from zero.
+        QCOMPARE(link.target.column, 4);
+        // Whatever the caller measured, handed back untouched.
+        QCOMPARE(link.linkTextStart, 100);
+        QCOMPARE(link.linkTextEnd, 110);
+    }
+}
+
+// And nothing where it has nothing, which the caller then answers as it always
+// did. The last of these is the interesting one: the snapshot would offer a
+// place for a name declared in a header, by searching the headers for the name
+// -- a search that guesses where the language has rules. A guess returned as
+// an answer is worse than no answer, so a link only comes from what the parser
+// itself resolved while reading this file.
+void CxxFrontendModelTest::testFollowsNothingItCannotAnswerFor()
+{
+    const Parsed parsed({{"h.h", "int fromHeader;\n"},
+                         {"main.cpp", "#include \"h.h\"\nvoid f() { fromHeader = 1; }\n"}},
+                        "main.cpp");
+    QVERIFY(parsed.isValid());
+
+    // A file the model never ran over.
+    QVERIFY(!cxxFrontendFollowSymbol(parsed.path("elsewhere.cpp"), 1, 0, 0, 0).hasValidTarget());
+    // A position on no name at all.
+    QVERIFY(!cxxFrontendFollowSymbol(parsed.mainFilePath(), 2, 8, 0, 0).hasValidTarget());
+    // A name from a header: the model has the header, and this still declines.
+    QVERIFY(parsed.model()->contains(parsed.path("h.h").toFSPathString()));
+    QVERIFY(!cxxFrontendFollowSymbol(parsed.mainFilePath(), 2, 11, 0, 0).hasValidTarget());
+}
+
 } // namespace CppEditor::Internal

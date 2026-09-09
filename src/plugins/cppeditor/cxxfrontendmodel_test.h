@@ -17,6 +17,8 @@ private slots:
     void testResolvesANameDeclaredInAnInclude();
     void testTakesTheProjectsDefines();
     void testWithoutTheProjectsDefines();
+    void testFollowsANameToItsDeclaration();
+    void testFollowsNothingItCannotAnswerFor();
 };
 
 } // namespace CppEditor::Internal
