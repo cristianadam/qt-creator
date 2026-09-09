@@ -141,57 +141,30 @@
 
     \title Add CMake tools
 
-    \QC automatically detects the CMake executable that you specify in the
-    \c PATH. You can add paths to other CMake executables and use them in
-    different build and run \l{Managing kits}{kits}.
+    Each device carries the CMake executable to use on it, so a build on a
+    remote Linux device or in Docker runs the CMake of that device.
 
-    To see the CMake installations that \QC automatically detects:
+    To set the CMake executable of a device:
 
     \list 1
 
-        \li Select \preferences > \uicontrol CMake > \uicontrol Tools.
+        \li Go to \preferences > \uicontrol Devices > \uicontrol Devices.
 
-            \image {qtcreator-preferences-cmake-tools.webp} {Tools tab in CMake preferences}
+        \li Select the device in \uicontrol Device.
 
-        \li The \uicontrol Name field displays a name for the CMake
-            installation.
-
-        \li The \uicontrol Path field displays the path to the CMake
-            executable.
-
-        \li The \uicontrol {Help file} field displays the path to the
-            CMake help file (.qch) that comes with CMake.
+        \li Set the path in \uicontrol {CMake executable} in
+            \uicontrol {Source and Build Tools on This Device}.
 
     \endlist
 
-    To refresh the list of automatically detected CMake executables, select
-    \uicontrol {Re-detect}.
-
-    \section1 Add or remove CMake tools
-
-    To add a path to a CMake executable that \QC does not detect automatically,
-    and to specify settings for it, select \uicontrol Add.
-
-    To add a CMake executable on a remote Linux device or in Docker, select
-    \uicontrol Remote in the dropdown menu in \uicontrol Browse
-    (\uicontrol Choose on \macos) in the \uicontrol Path field.
-
-    To make changes to automatically detected installations, select
-    \uicontrol Clone.
-
-    To remove the selected CMake executable from the list, select
-    \uicontrol Remove.
-
-    \section1 Set the default CMake tool
-
-    \QC uses the \e {default CMake} if it does not have enough information
-    to choose the CMake to use. To set the selected CMake executable as the
-    default, select \uicontrol {Make Default}.
+    \QC looks for a CMake executable in the \c PATH of the device, so usually
+    the field is already filled in. To search again, for example after
+    installing CMake, select \uicontrol {Run Auto-Detection Now}.
 
     \section1 Add CMake tools to kits
 
-    To add the CMake tool to a build and run kit, select \preferences >
-    \uicontrol Kits.
+    A kit uses the CMake of its build device. To use another one, select
+    \preferences > \uicontrol Kits and set \uicontrol CMake there.
     The kit also specifies the CMake generator that is used for producing
     project files for \QC and the initial configuration parameters:
 

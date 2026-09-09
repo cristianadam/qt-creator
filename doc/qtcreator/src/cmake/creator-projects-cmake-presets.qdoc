@@ -173,8 +173,7 @@
     \endcode
 
     This example assumes that the CMake executable path is set in
-    \preferences > \uicontrol CMake >
-    \uicontrol Tools.
+    \preferences > \uicontrol Devices > \uicontrol Devices.
 
     \section1 MSVC example
 

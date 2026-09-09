@@ -32,11 +32,9 @@ add_qtc_plugin(CMakeProjectManager
     cmakeprojectplugin.cpp
     cmakequickfixes.cpp cmakequickfixes.h
     mcptools.cpp mcptools.h
-    cmakesettingspage.cpp cmakesettingspage.h
     cmakespecificsettings.cpp cmakespecificsettings.h
     cmaketool.cpp cmaketool.h
     cmaketoolmanager.cpp cmaketoolmanager.h
-    cmaketoolsettingsaccessor.cpp cmaketoolsettingsaccessor.h
     cmakeutils.cpp cmakeutils.h
     conditionalsources.cpp conditionalsources.h
     configmodel.cpp configmodel.h

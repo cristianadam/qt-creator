@@ -186,9 +186,9 @@
             For more information, see \l {Edit Qbs profiles}.
     \row
         \li \uicontrol {CMake Tool}
-        \li CMake executable to use for building the project. Select
-            \uicontrol Manage to add installed CMake executables to
-            the list. For more information, see \l{Add CMake Tools}.
+        \li CMake executable to use for building the project. Leave it empty
+            to use the one of the build device. Select \uicontrol Manage to
+            set that one. For more information, see \l{Add CMake Tools}.
     \row
         \li \uicontrol {CMake generator}
         \li Select \uicontrol Change to edit the CMake Generator to use for

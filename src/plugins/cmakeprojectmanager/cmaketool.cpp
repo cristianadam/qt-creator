@@ -141,7 +141,7 @@ void CMakeTool::setFilePath(const FilePath &executable)
     if (m_qchFilePath.isEmpty())
         m_qchFilePath = searchQchFile(m_executable);
 
-    CMakeToolManager::notifyAboutUpdate(this);
+    CMakeToolManager::updateDocumentation();
 }
 
 FilePath CMakeTool::filePath() const
@@ -336,7 +336,6 @@ QString CMakeTool::displayName() const
 void CMakeTool::setDisplayName(const QString &displayName)
 {
     m_displayName = displayName;
-    CMakeToolManager::notifyAboutUpdate(this);
 }
 
 FilePath CMakeTool::searchQchFile(const FilePath &executable)

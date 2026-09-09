@@ -1284,6 +1284,13 @@ FilePath IDevice::deviceToolPath(Id toolId) const
     return filePath;
 }
 
+void IDevice::setDeviceToolPath(Id toolId, const FilePath &path)
+{
+    DeviceToolAspect *toolAspect = d->deviceToolAspects.value(toolId);
+    QTC_ASSERT(toolAspect, return);
+    toolAspect->setValue(path);
+}
+
 FilePath IDevice::deviceToolPath(Id toolId, const FilePath &deviceHint)
 {
     IDevice::ConstPtr dev = DeviceManager::deviceForPath(deviceHint);

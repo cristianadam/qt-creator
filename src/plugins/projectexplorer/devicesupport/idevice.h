@@ -281,6 +281,7 @@ public:
 
     static Utils::FilePath deviceToolPath(Utils::Id toolId, const Utils::FilePath &deviceHint);
     Utils::FilePath deviceToolPath(Utils::Id toolId) const;
+    void setDeviceToolPath(Utils::Id toolId, const Utils::FilePath &path);
     QList<DeviceToolAspect *> deviceToolAspects(DeviceToolAspect::ToolTypes supportType) const;
 
     std::function<void(Layouting::Layout *)> deviceToolsGui();

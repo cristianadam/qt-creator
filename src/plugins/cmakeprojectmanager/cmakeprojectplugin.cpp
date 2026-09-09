@@ -18,7 +18,6 @@
 #include "cmakeprojectmanager.h"
 #include "cmakeprojectmanagertr.h"
 #include "cmakequickfixes.h"
-#include "cmakesettingspage.h"
 #include "cmaketool.h"
 #include "cmaketoolmanager.h"
 #include "conditionalsources.h"
@@ -94,7 +93,6 @@ class CMakeProjectPlugin final : public ExtensionSystem::IPlugin
         setupCMakeToolAspect();
         setupCMakeToolManager(this);
 
-        setupCMakeSettingsPage();
         setupCMakeKitAspects();
 
         setupCMakeBuildConfiguration();
@@ -149,9 +147,9 @@ class CMakeProjectPlugin final : public ExtensionSystem::IPlugin
 
     void extensionsInitialized() final
     {
-        // Delay the restoration to allow the devices to load first.
+        // The migration needs the devices, but must run before the kits are restored.
         connect(DeviceManager::instance(), &DeviceManager::devicesLoaded, this, [] {
-            CMakeToolManager::restoreCMakeTools();
+            CMakeToolManager::migrateLegacyTools();
         });
 
         setupOnlineHelpManager();

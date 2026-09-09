@@ -10,12 +10,8 @@
         \li Go to \preferences > \uicontrol Devices > \uicontrol Devices, and
             then select \uicontrol Add to add a \1.
 
-        \li Go to \uicontrol {Preferences} > \uicontrol CMake >
-            \uicontrol Tools, and then select \uicontrol Add.
-
-        \li In \uicontrol Path, select \uicontrol Remote in the dropdown
-            menu in \uicontrol Browse (\uicontrol Choose on \macos) to
-            add the path to the CMake executable on the \1.
+        \li In \uicontrol {CMake executable}, check the path to the CMake
+            executable on the \1.
 
         \li Go to \uicontrol {Preferences} > \uicontrol Kits >
             \uicontrol {Qt Versions}, and then select and hold \key Shift and select the
@@ -32,8 +28,7 @@
         \li Go to \uicontrol {Preferences} > \uicontrol Kits
             to add a kit for building on the device.
 
-        \li Select the device, CMake tool, Qt version, and compiler that you
-            added above.
+        \li Select the device, Qt version, and compiler that you added above.
 
         \li In \uicontrol {Type} in \uicontrol {Run device} and
             \uicontrol {Build device}, select \uicontrol {\1}. Select
